@@ -47,6 +47,22 @@ from eden.storage.postgres import get_postgres_client
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
+
+class WebhookNotReadyError(RuntimeError):
+    """A referenced row has not been created yet; ask for redelivery.
+
+    Clerk events arrive without ordering guarantees, so a membership
+    event can beat the user.created that owns its user. The handlers
+    used to log this and return, and the route then answered HTTP 200.
+
+    Svix (which Clerk uses for delivery) redelivers on non-2xx ONLY — a
+    200 is a permanent acknowledgement. So every out-of-order event was
+    silently discarded, and the row it would have written never
+    appeared. Raising instead produces a 503 and Svix retries on its
+    own backoff schedule, which spans hours: far more than enough for
+    the ordering gap this absorbs.
+    """
+
 _settings = get_settings()
 # Public alias for tests that need to monkeypatch the secret at runtime
 # (the private ``_settings`` is captured at import time, so direct
@@ -88,6 +104,7 @@ def _verify_svix_signature(
     except (TypeError, ValueError):
         return False
     import time as _time
+
     if abs(_time.time() - ts) > 300:
         return False
     if not secret.startswith("whsec_"):
@@ -188,7 +205,7 @@ async def _upsert_user(data: dict[str, Any]) -> None:
         msg = str(exc).lower()
         if "users_email_key" not in msg and "duplicate key" not in msg:
             raise
-        await client.execute(
+        status = await client.execute(
             """
             UPDATE users SET
                 clerk_id   = $1,
@@ -202,6 +219,22 @@ async def _upsert_user(data: dict[str, Any]) -> None:
             full,
             avatar,
         )
+        # The WHERE only matches a SOFT-DELETED row. When the conflicting
+        # row is active this updates nothing — and the docstring above
+        # promised to "log and bail", but nothing was ever logged and the
+        # route answered 200. So a genuine identity collision looked
+        # exactly like a successful sync, and the user row was never
+        # created. Say so, loudly.
+        if str(status).strip().upper() in {"UPDATE 0", "UPDATE"}:
+            logger.error(
+                "_upsert_user: email already belongs to a DIFFERENT ACTIVE "
+                "user; refusing to overwrite. clerk_id=%s. An operator must "
+                "resolve this collision manually.",
+                clerk_id,
+            )
+            raise WebhookNotReadyError(
+                "email is already claimed by an active user"
+            ) from exc
 
 
 async def _deactivate_user(data: dict[str, Any]) -> None:
@@ -303,6 +336,20 @@ async def _upsert_org(data: dict[str, Any]) -> None:
     # ``owner_id`` is NOT NULL — skip INSERT when we cannot resolve
     # the creator yet; ``/auth/me`` self-heal or the membership
     # webhook will create the row once a user exists.
+    if not eden_owner_id:
+        # owner_id is NOT NULL, so we genuinely cannot insert yet. But
+        # skipping used to fall through to a 200, which permanently
+        # dropped the organization.created event. Ask for redelivery
+        # instead — by then user.created will have landed.
+        logger.warning(
+            "_upsert_org: creator not in users yet for clerk_org=%s; "
+            "asking Clerk to redeliver",
+            clerk_id,
+        )
+        raise WebhookNotReadyError(
+            "organization creator has not been created yet"
+        )
+
     if eden_owner_id:
         await client.execute(
             """
@@ -330,11 +377,10 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
     Eden's ``org_members.org_id`` / ``user_id`` columns are UUIDs
     with FKs to ``organizations(id)`` and ``users(id)``, so we
     translate via ``organizations.clerk_org_id`` and
-    ``users.clerk_id`` before writing. If either lookup misses,
-    the function returns silently — the ``user.created`` /
-    ``organization.created`` webhook that owns the missing side
-    will trigger a Clerk re-delivery, and the next pass finds the
-    row.
+    ``users.clerk_id`` before writing. If either lookup misses we
+    raise :class:`WebhookNotReadyError` so the route answers 503 and
+    Svix redelivers. Returning silently here answered 200, which Svix
+    treats as a permanent ack — the event was then dropped for good.
 
     Role-write conflict resolution: the initial ``organizationMembership.created``
     webhook can fire within milliseconds of Eden's local
@@ -378,13 +424,28 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
         clerk_org_id,
     )
     if not eden_user or not eden_org:
-        logger.info(
+        # This used to `return`, and the route then answered HTTP 200.
+        # The old comment here claimed "Clerk will redeliver after
+        # user.created or organization.created lands" — that is simply
+        # not how Svix works. Svix redelivers on non-2xx only; a 200 is
+        # a permanent acknowledgement, so the event was lost forever and
+        # the membership row was never written. Two production orgs have
+        # zero members as a direct result.
+        #
+        # Raising makes the route answer 503, which Svix retries with
+        # backoff (roughly 5s, 5m, 30m, 2h, 5h, 10h) — far longer than
+        # the ordering gap this is trying to absorb.
+        logger.warning(
             "_upsert_membership: missing side (user=%s org=%s) for "
-            "clerk_user=%s clerk_org=%s; skipping — Clerk will redeliver "
-            "after user.created or organization.created lands",
-            bool(eden_user), bool(eden_org), clerk_user_id, clerk_org_id,
+            "clerk_user=%s clerk_org=%s; asking Clerk to redeliver",
+            bool(eden_user),
+            bool(eden_org),
+            clerk_user_id,
+            clerk_org_id,
         )
-        return
+        raise WebhookNotReadyError(
+            "referenced user or organization has not been created yet"
+        )
 
     eden_org_id = eden_org["id"]
     eden_user_id = eden_user["id"]
@@ -456,7 +517,9 @@ async def clerk_webhook(
 ) -> dict[str, Any]:
     secret = getattr(_settings, "clerk_webhook_signing_secret", "")
     if not secret:
-        logger.warning("Clerk webhook received but CLERK_WEBHOOK_SIGNING_SECRET is unset; rejecting.")
+        logger.warning(
+            "Clerk webhook received but CLERK_WEBHOOK_SIGNING_SECRET is unset; rejecting."
+        )
         raise HTTPException(status_code=503, detail="Clerk webhook signing secret not configured")
 
     body = await request.body()

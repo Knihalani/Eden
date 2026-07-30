@@ -85,7 +85,7 @@ class UpdateMemberRoleRequest(BaseModel):
 
 def slugify(name: str) -> str:
     """Convert org name to URL-safe slug."""
-    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return slug[:50]
 
 
@@ -169,11 +169,15 @@ async def check_domain_restriction(client, org_id: str, email: str) -> tuple[boo
     if allowed:
         return True, None
 
-    return False, f"Email domain '{domain}' is not allowed for this organization. Only members with emails at allowed domains can be invited."
+    return (
+        False,
+        f"Email domain '{domain}' is not allowed for this organization. Only members with emails at allowed domains can be invited.",
+    )
 
 
 class CreateOrgRequest:
     """Request schema for org creation."""
+
     def __init__(self, name: str, make_default: bool = True):
         self.name = name
         self.make_default = make_default
@@ -181,6 +185,7 @@ class CreateOrgRequest:
 
 class OrgResponse:
     """Response schema for org."""
+
     def __init__(self, id: str, name: str, slug: str, role: str, is_owner: bool, member_count: int):
         self.id = id
         self.name = name
@@ -192,6 +197,7 @@ class OrgResponse:
 
 class CreateOrgResponse:
     """Response for org creation."""
+
     def __init__(self, org_id: str, name: str, slug: str, role: str):
         self.org_id = org_id
         self.name = name
@@ -291,11 +297,14 @@ async def create_org(
     except ClerkAPIError as exc:
         logger.warning(
             "Clerk org create failed for slug=%s: %s; continuing with backend-only org",
-            slug, redact_all(str(exc)),
+            slug,
+            redact_all(str(exc)),
         )
         degraded = True
     except Exception as exc:  # noqa: BLE001 — defensive
-        logger.exception("Unexpected Clerk error on create_org slug=%s: %s", slug, redact_all(str(exc)))
+        logger.exception(
+            "Unexpected Clerk error on create_org slug=%s: %s", slug, redact_all(str(exc))
+        )
         degraded = True
 
     # Create org (Eden row). We write the clerk_org_id we got from
@@ -332,9 +341,7 @@ async def create_org(
                 VALUES ($1, $2, $3, $4, $5, '{}')
                 RETURNING id
             """
-            row = await client.fetchrow(
-                query, org_id, clerk_org_id, name, slug, user_id
-            )
+            row = await client.fetchrow(query, org_id, clerk_org_id, name, slug, user_id)
             is_personal = False
         # The caller almost always resolves this org id on the very next
         # request; a negative entry cached before this INSERT would 403
@@ -347,9 +354,10 @@ async def create_org(
         # on some plans and auto-delete is riskier than the leak).
         msg = str(exc).lower()
         logger.exception(
-            "Failed to write Eden org row after Clerk create "
-            "(org_id=%s clerk_org_id=%s): %s",
-            org_id, clerk_org_id, redact_all(str(exc)),
+            "Failed to write Eden org row after Clerk create " "(org_id=%s clerk_org_id=%s): %s",
+            org_id,
+            clerk_org_id,
+            redact_all(str(exc)),
         )
         if "unique" in msg or "duplicate" in msg:
             raise HTTPException(
@@ -563,7 +571,18 @@ async def list_user_orgs(
     client = await get_postgres_client()
     user_id = await eden_user_id_from_auth(user)
     if not user_id:
-        return []
+        # A user whose Eden row has not landed yet is NOT a user with
+        # zero organizations. Returning [] made the portal render the
+        # "Create workspace" empty state, and a customer who clicks it
+        # ends up with a second, duplicate org.
+        #
+        # 401 is what resolve_path_org_access already raises for this
+        # exact condition (deps.py), and the portal maps it to the
+        # re-auth / provisioning UX rather than the generic empty state.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is still provisioning. Please refresh.",
+        )
 
     personal_col = await organizations_have_is_personal(client)
     personal_select = ", o.is_personal" if personal_col else ""
@@ -798,9 +817,7 @@ async def accept_org_invitation(
     re-queries the invite, validates status + expiry, and inserts
     the row idempotently.
     """
-    await _assert_invitation_for_caller(
-        org_id=org_id, invitation_id=invitation_id, user=user
-    )
+    await _assert_invitation_for_caller(org_id=org_id, invitation_id=invitation_id, user=user)
 
     try:
         result = await accept_invitation(invitation_id, user["user_id"])
@@ -844,9 +861,7 @@ async def decline_org_invitation(
     Mirror accept: invitees are not members yet, so do NOT
     ``require_org_member``. Verify path org + invitee email instead.
     """
-    await _assert_invitation_for_caller(
-        org_id=org_id, invitation_id=invitation_id, user=user
-    )
+    await _assert_invitation_for_caller(org_id=org_id, invitation_id=invitation_id, user=user)
 
     try:
         await decline_invitation(invitation_id, user["user_id"])
@@ -925,9 +940,7 @@ async def remove_member(
             user_id,
         )
         clerk_user_id = (
-            str(member_row["clerk_id"])
-            if member_row and member_row.get("clerk_id")
-            else None
+            str(member_row["clerk_id"]) if member_row and member_row.get("clerk_id") else None
         )
         if clerk_org_id and clerk_user_id:
             await delete_membership(clerk_org_id, clerk_user_id)
@@ -999,9 +1012,7 @@ async def update_member_role(
             user_id,
         )
         clerk_user_id = (
-            str(member_row["clerk_id"])
-            if member_row and member_row.get("clerk_id")
-            else None
+            str(member_row["clerk_id"]) if member_row and member_row.get("clerk_id") else None
         )
         if clerk_org_id and clerk_user_id:
             await update_membership(clerk_org_id, clerk_user_id, body.role)
@@ -1339,6 +1350,7 @@ async def transfer_ownership(
 # SCIM Configuration (admin-only)
 # ============================================================================
 
+
 @router.get("/{org_id}/scim/config", response_model=dict)
 async def get_scim_config(
     org_id: str,
@@ -1545,13 +1557,16 @@ async def rotate_scim_token(
 # DOMAIN RESTRICTION MANAGEMENT
 # ============================================================================
 
+
 class DomainRestrictionSettings(BaseModel):
     """Request schema for updating domain restriction settings."""
+
     domain_restriction_enforced: bool
 
 
 class AddAllowedDomainRequest(BaseModel):
     """Request schema for adding an allowed domain."""
+
     domain: str
 
 
@@ -1606,7 +1621,7 @@ async def add_allowed_domain(
         )
 
     # Basic domain validation
-    if not re.match(r'^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$', domain):
+    if not re.match(r"^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$", domain):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid domain format",
@@ -1786,8 +1801,10 @@ async def update_domain_restriction_settings(
 # 2FA ENFORCEMENT MANAGEMENT
 # ============================================================================
 
+
 class EnforceTwoFARequest(BaseModel):
     """Request schema for 2FA enforcement toggle."""
+
     enforce: bool
 
 

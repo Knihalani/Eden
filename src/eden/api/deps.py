@@ -120,6 +120,7 @@ def _cache_put(
             cache.pop(next(iter(cache)), None)
     cache[key] = (expires_at, value)
 
+
 # API-key scope families (Wave 1). Empty / legacy references-jobs-only
 # keys fail closed — callers must mint explicit ingest/gateway scopes.
 INGEST_SCOPES = frozenset({"ingest:write", "ingest:read", "ingest:*", "*"})
@@ -254,9 +255,7 @@ async def _resolve_token_payload(
     # B-6 (Session 23): verify_clerk_token is now async — the JWKS
     # path performs a non-blocking httpx round-trip inside.
     if bearer and bearer.scheme.lower() == "bearer":
-        clerk_payload = await verify_clerk_token_for_request(
-            request, bearer.credentials
-        )
+        clerk_payload = await verify_clerk_token_for_request(request, bearer.credentials)
         if clerk_payload:
             request.state.eden_jwt_payload = clerk_payload
             return clerk_payload
@@ -272,6 +271,7 @@ async def _resolve_token_payload(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated",
     )
+
 
 # Permission map: role -> set of permissions
 PERMISSION_MAP: dict[str, set[str]] = {
@@ -618,6 +618,7 @@ async def get_current_user(
         # optimization/overview, and onboarding/state routes when
         # the user was signed in but the DB SELECT failed.)
         from eden.storage.postgres import get_postgres_client
+
         try:
             client = await get_postgres_client()
             row = await client.fetchrow(
@@ -628,7 +629,8 @@ async def get_current_user(
             logger.warning(
                 "get_current_user: token_version SELECT failed for user=%s: %s — "
                 "proceeding without version check (defensive)",
-                user_id, exc,
+                user_id,
+                exc,
             )
             row = None
         # User vanished (or never existed) — treat as unauthenticated.
@@ -652,6 +654,7 @@ async def get_current_user(
         # below slides the window forward on each successful auth
         # call so an active user never sees this 401.
         from datetime import datetime, timedelta
+
         idle_window = timedelta(minutes=30)
         last_seen = row.get("last_seen_at")
         iat = payload.get("iat")
@@ -670,6 +673,7 @@ async def get_current_user(
         # Slide the window: best-effort update, debounced ≥60s (B1).
         # A failure here must not break the auth flow.
         import time as _time
+
         now_mono = _time.monotonic()
         last_bump = _last_seen_bumped_at.get(user_id, 0.0)
         if now_mono - last_bump >= _LAST_SEEN_DEBOUNCE_S:
@@ -687,16 +691,12 @@ async def get_current_user(
                 # ``_LAST_SEEN_DEBOUNCE_S`` after it is written.
                 if len(_last_seen_bumped_at) >= _LAST_SEEN_CACHE_MAX:
                     cutoff = now_mono - _LAST_SEEN_DEBOUNCE_S
-                    for stale in [
-                        k for k, ts in _last_seen_bumped_at.items() if ts <= cutoff
-                    ]:
+                    for stale in [k for k, ts in _last_seen_bumped_at.items() if ts <= cutoff]:
                         _last_seen_bumped_at.pop(stale, None)
                     # Still full after the sweep (a burst of distinct users
                     # inside one debounce window): drop oldest-inserted.
                     while len(_last_seen_bumped_at) >= _LAST_SEEN_CACHE_MAX:
-                        _last_seen_bumped_at.pop(
-                            next(iter(_last_seen_bumped_at)), None
-                        )
+                        _last_seen_bumped_at.pop(next(iter(_last_seen_bumped_at)), None)
                 _last_seen_bumped_at[user_id] = now_mono
             except Exception:
                 pass  # noqa: BLE001 — best-effort, never block auth
@@ -718,9 +718,7 @@ async def _try_resolve_token_payload(
 ) -> dict | None:
     """Same as ``_resolve_token_payload`` but returns None instead of raising."""
     try:
-        return await _resolve_token_payload(
-            request, authorization_cookie, bearer
-        )
+        return await _resolve_token_payload(request, authorization_cookie, bearer)
     except HTTPException:
         return None
 
@@ -748,6 +746,7 @@ async def resolve_eden_user_id(user_id: str | None) -> str | None:
     if not user_id:
         return None
     import time as _time
+
     now_mono = _time.monotonic()
     cached = _user_id_cache.get(user_id)
     if cached is not None:
@@ -768,8 +767,7 @@ async def resolve_eden_user_id(user_id: str | None) -> str | None:
         _cache_put(
             _user_id_cache,
             user_id,
-            now_mono
-            + (_USER_ID_CACHE_TTL_S if value else _NEGATIVE_ID_CACHE_TTL_S),
+            now_mono + (_USER_ID_CACHE_TTL_S if value else _NEGATIVE_ID_CACHE_TTL_S),
             value,
         )
         return value
@@ -794,6 +792,7 @@ async def resolve_eden_org_id(org_id: str | None) -> str | None:
     if not org_id:
         return None
     import time as _time
+
     now_mono = _time.monotonic()
     cached = _org_id_cache.get(org_id)
     if cached is not None:
@@ -918,9 +917,7 @@ async def resolve_path_org_access(
 
     if not org_row and payload and _is_clerk_payload_public(payload):
         # Path id may be a Clerk org that Eden hasn't ingested yet.
-        clerk_org = extract_org_id(payload) or (
-            org_id if str(org_id).startswith("org_") else None
-        )
+        clerk_org = extract_org_id(payload) or (org_id if str(org_id).startswith("org_") else None)
         if clerk_org:
             healed = await ensure_clerk_org_from_session(
                 clerk_org,
@@ -953,9 +950,7 @@ async def resolve_path_org_access(
                 detail="Path org_id does not match session organization",
             )
         if jwt_org == eden_org_id:
-            await ensure_clerk_membership(
-                user_id, eden_org_id, extract_org_role(payload)
-            )
+            await ensure_clerk_membership(user_id, eden_org_id, extract_org_role(payload))
 
     try:
         membership = await client.fetchrow(
@@ -964,9 +959,7 @@ async def resolve_path_org_access(
             user_id,
         )
     except Exception as exc:
-        logger.warning(
-            "resolve_path_org_access membership query failed: %s", exc
-        )
+        logger.warning("resolve_path_org_access membership query failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Membership lookup failed",
@@ -1103,13 +1096,52 @@ async def ensure_clerk_membership(
     row. Role authority stays with ``clerk_webhooks._upsert_membership``
     and local writers (``create_org`` / ``accept_invitation``).
 
-    When ``clerk_role`` is missing/empty, skip the write entirely —
-    mapping ``None`` → ``viewer`` must not insert a spurious viewer row.
+    When ``clerk_role`` is missing/empty we must NOT map ``None`` →
+    ``viewer``; that would insert a spurious, wrongly-demoted row.
+
+    But skipping the write entirely (the previous behaviour) was worse.
+    The condition is not transient — a JWT without an ``o.rol`` claim
+    re-fails on every single request, forever — while ``get_current_org``
+    still grants access through a synthesized ``_pending_sync`` context.
+    The result is an org that works for its creator but has NO rows in
+    ``org_members``, and both ``GET /orgs`` and ``/auth/me`` INNER JOIN
+    that table. So the customer mints API keys and ingests traces into
+    an org that is invisible in their own org switcher, and the docs
+    then tell them "No organization yet — create one in the portal
+    first." Two orgs in production reached exactly that state, one of
+    them holding 6 API keys and 31 telemetry events.
+
+    Membership itself is not in doubt here: the caller only reaches this
+    point because Clerk's own JWT asserts this user is in this org. Only
+    the *role* is unknown, so resolve it from data we already hold —
+    owner if they own the org, otherwise ``member``, which is the same
+    default ``clerk_webhooks._upsert_membership`` applies. ``ON CONFLICT
+    DO NOTHING`` still means this can never demote an existing row.
     """
-    if not clerk_role:
-        return False
-    eden_role = clerk_role_to_eden_role(clerk_role)
     client = await get_postgres_client()
+    if not clerk_role:
+        try:
+            owner_id = await client.fetchval(
+                "SELECT owner_id::text FROM organizations WHERE id = $1",
+                eden_org_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "membership self-heal: owner lookup failed for org %s: %s",
+                eden_org_id,
+                exc,
+            )
+            return False
+        eden_role = "owner" if owner_id == str(eden_user_id) else "member"
+        logger.info(
+            "membership self-heal: JWT had no role claim; inserting %s "
+            "for user %s in org %s",
+            eden_role,
+            eden_user_id,
+            eden_org_id,
+        )
+    else:
+        eden_role = clerk_role_to_eden_role(clerk_role)
     # Column is ``joined_at`` (migration 001), not ``created_at``.
     # ``ON CONFLICT DO NOTHING``: never demote via self-heal.
     insert_with_writer = """
@@ -1192,7 +1224,9 @@ async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None
     except Exception as exc:
         logger.warning(
             "get_user_by_id: users SELECT failed for user=%s lookup=%s: %s",
-            user_id, lookup_column, exc,
+            user_id,
+            lookup_column,
+            exc,
         )
         return None
 
@@ -1307,7 +1341,9 @@ async def get_current_org(
             logger.warning(
                 "get_current_org: org_members SELECT failed for user=%s org=%s: %s — "
                 "falling through to synthesised pending_sync entry",
-                eden_user_id, eden_org_id, exc,
+                eden_user_id,
+                eden_org_id,
+                exc,
             )
         if not row and session_matches:
             await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
@@ -1360,11 +1396,7 @@ async def get_current_org(
     if x_org_id and cookie_org:
         resolved_header = await resolve_eden_org_id(x_org_id)
         resolved_cookie = await resolve_eden_org_id(cookie_org)
-        if (
-            resolved_header
-            and resolved_cookie
-            and resolved_header != resolved_cookie
-        ):
+        if resolved_header and resolved_cookie and resolved_header != resolved_cookie:
             return None
     org_id = await resolve_eden_org_id(cookie_org or x_org_id)
     user_id = await resolve_eden_user_id(user_id)
@@ -1435,7 +1467,8 @@ async def require_org_member(
         logger.warning(
             "require_org_member: get_current_org raised for x_org=%s: %s — "
             "falling back to synthesized entry if JWT carries one",
-            x_org_id, exc,
+            x_org_id,
+            exc,
         )
         # Try the synthesize path so Clerk-trusted users still pass.
         clerk_org = extract_org_id(payload) if isinstance(payload, dict) else None
@@ -1484,7 +1517,6 @@ async def require_path_org_member(
             detail="Path org_id does not match authenticated org",
         )
     return member
-
 
 
 def require_org_permission_dep(permission: str):
@@ -1541,6 +1573,7 @@ def require_org_permission_dep(permission: str):
         return org
 
     return _dependency
+
 
 async def require_org_admin(
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
@@ -1725,6 +1758,7 @@ def require_org_permission_or_api_key(permission: str):
     For user auth, checks role-based permissions.
     For API key auth, checks scopes directly.
     """
+
     async def dependency(
         x_org_id: str | None = Header(None, alias="X-Org-Id"),
         x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
@@ -1767,6 +1801,7 @@ def require_org_permission_or_api_key(permission: str):
 # ============================================================================
 # API Key Authentication
 # ============================================================================
+
 
 async def get_current_org_api_key(
     x_org_id: str = Header(..., alias="X-Org-Id"),
@@ -1838,9 +1873,9 @@ async def get_current_org_api_key(
         # outages stay 503 so clients can Retry-After.
         exc_name = type(exc).__name__
         msg = str(exc).lower()
-        if (
-            "invalid input syntax for type uuid" in msg
-            or exc_name in ("DataError", "InvalidTextRepresentation")
+        if "invalid input syntax for type uuid" in msg or exc_name in (
+            "DataError",
+            "InvalidTextRepresentation",
         ):
             logger.warning(
                 "get_current_org_api_key: auth-input fault for org=%s: %s",
@@ -1889,10 +1924,7 @@ async def get_current_org_api_key(
         # the coercion here rather than import from a service module:
         # the helper is a single expression and the api layer
         # shouldn't depend on ``services/``.
-        cmp_expires = (
-            expires_at if expires_at.tzinfo
-            else expires_at.replace(tzinfo=UTC)
-        )
+        cmp_expires = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=UTC)
         if cmp_expires < datetime.now(UTC):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -1948,10 +1980,7 @@ async def get_current_org_api_key(
             len(_api_key_auth_cache) >= _API_KEY_AUTH_CACHE_MAX
             and cache_key not in _api_key_auth_cache
         ):
-            stale = [
-                k for k, (exp, _) in _api_key_auth_cache.items()
-                if exp <= _now_mono
-            ]
+            stale = [k for k, (exp, _) in _api_key_auth_cache.items() if exp <= _now_mono]
             for k in stale:
                 _api_key_auth_cache.pop(k, None)
             while len(_api_key_auth_cache) >= _API_KEY_AUTH_CACHE_MAX:
@@ -1994,6 +2023,7 @@ async def get_optional_org(
 # ============================================================================
 # Audit Logging
 # ============================================================================
+
 
 async def log_audit_event(
     client,
@@ -2060,6 +2090,7 @@ def require_feature_flag(flag_name: str):
 # Ingestion Auth (Phase 7.0)
 # ============================================================================
 
+
 async def _ingestion_auth_impl(
     *,
     x_org_id: str | None,
@@ -2079,8 +2110,7 @@ async def _ingestion_auth_impl(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
-                    "API key missing required scope "
-                    f"(need one of: {sorted(required_scopes)})"
+                    "API key missing required scope " f"(need one of: {sorted(required_scopes)})"
                 ),
             )
         return org
