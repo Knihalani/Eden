@@ -40,6 +40,26 @@ logger = logging.getLogger(__name__)
 _LOCAL_FALLBACK_DIR = "/tmp/eden-exports"
 
 
+class ExportDependencyMissingError(RuntimeError):
+    """A cloud destination's SDK is not installed.
+
+    The S3 and GCS branches used to catch ImportError, write the payload
+    to ``_LOCAL_FALLBACK_DIR`` and return ``len(payload)`` — a value the
+    caller cannot distinguish from a successful upload. So the route
+    recorded ``status="success"`` and an ``export.run`` audit row with a
+    byte count, while the bytes sat on the container's local disk and
+    vanished at the next restart.
+
+    That is worse than a plain outage on two counts: the exported
+    catalogs carry PII (audit log lines, judge rationales), so this
+    wrote unencrypted PII to a container filesystem; and the audit trail
+    positively asserted delivery that never happened.
+
+    google-cloud-storage is not in pyproject.toml or uv.lock, so the GCS
+    branch took the fallback every single time.
+    """
+
+
 async def _fetch_rows(org_id: str, data_type: str) -> list[dict]:
     """Pull rows for the given data type / org.
 
@@ -122,13 +142,11 @@ def _push_to_destination(
                 raise ValueError("S3 destination missing 'bucket'")
             s3.put_object(Bucket=bucket, Key=destination_name, Body=payload)
             return len(payload)
-        except ImportError:
-            logger.warning("boto3 not installed; falling back to local write for s3")
-            os.makedirs(_LOCAL_FALLBACK_DIR, exist_ok=True)
-            path = os.path.join(_LOCAL_FALLBACK_DIR, f"s3-{destination_name}")
-            with open(path, "wb") as f:
-                f.write(payload)
-            return len(payload)
+        except ImportError as exc:
+            raise ExportDependencyMissingError(
+                "boto3 is not installed, so this export cannot be delivered "
+                "to S3. Install boto3 or remove the S3 destination."
+            ) from exc
 
     if destination_type == "gcs":
         try:
@@ -143,13 +161,13 @@ def _push_to_destination(
             blob = bucket.blob(destination_name)
             blob.upload_from_string(payload)
             return len(payload)
-        except ImportError:
-            logger.warning("google-cloud-storage not installed; falling back to local write for gcs")
-            os.makedirs(_LOCAL_FALLBACK_DIR, exist_ok=True)
-            path = os.path.join(_LOCAL_FALLBACK_DIR, f"gcs-{destination_name}")
-            with open(path, "wb") as f:
-                f.write(payload)
-            return len(payload)
+        except ImportError as exc:
+            raise ExportDependencyMissingError(
+                "google-cloud-storage is not installed, so this export "
+                "cannot be delivered to GCS. It is not declared in "
+                "pyproject.toml, so this fires for every GCS destination. "
+                "Add the dependency or remove the GCS destination."
+            ) from exc
 
     raise ValueError(f"unsupported destination_type: {destination_type!r}")
 
@@ -172,5 +190,8 @@ async def run_export(
     rows = await _fetch_rows(org_id, data_type)
     payload = _serialise(rows, format)
     return _push_to_destination(
-        destination_type, destination_name, destination_config, payload,
+        destination_type,
+        destination_name,
+        destination_config,
+        payload,
     )
