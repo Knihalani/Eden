@@ -8,6 +8,7 @@ import {
   buildHubRedirectUrl,
   labToProductPath,
   LIVE_PRODUCT_PREFIXES,
+  resolveHubTarget,
   STUB_LAND,
   STUB_PREFIXES,
 } from "@/lib/portal-hub-redirect";
@@ -50,6 +51,43 @@ describe("product portal routes", () => {
     expect(buildHubRedirectUrl("/onboarding", "")).toBe(
       "/home?onboarding=1",
     );
+  });
+
+  // Which mechanism serves each mapping is a behavioural contract, not
+  // an implementation detail: a rewrite keeps the URL (and therefore
+  // skips a second pass through the middleware), a redirect changes it.
+  it("serves removed surfaces with a rewrite and moved ones with a redirect", () => {
+    // Gone, not moved — the "Page moved" body belongs at the URL the
+    // user asked for, so the address bar still names the dead link.
+    expect(resolveHubTarget("/marketplace", "")).toEqual({
+      destination: "/unavailable",
+      mode: "rewrite",
+    });
+    expect(resolveHubTarget("/analytics/deep", "")).toEqual({
+      destination: "/unavailable",
+      mode: "rewrite",
+    });
+
+    // Moved. `/lab/*` and `/dashboard` must land on the canonical URL —
+    // the shell keys the sidebar's active item, PortalCatalogSync's
+    // route-scoped prefetch and useQueryPatch off `usePathname()`.
+    expect(resolveHubTarget("/lab/traces", "?id=tr_01")).toEqual({
+      destination: "/traces?id=tr_01",
+      mode: "redirect",
+    });
+    expect(resolveHubTarget("/dashboard", "")).toEqual({
+      destination: "/home",
+      mode: "redirect",
+    });
+
+    // Changes visible state: OnboardingOverlay reads `?onboarding=1`
+    // from the browser URL, which a rewrite would never expose.
+    expect(resolveHubTarget("/onboarding", "")).toEqual({
+      destination: "/home?onboarding=1",
+      mode: "redirect",
+    });
+
+    expect(resolveHubTarget("/traces", "")).toBeNull();
   });
 
   it("sends auth fallback to home; sign-up opens tour", () => {

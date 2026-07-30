@@ -228,7 +228,7 @@ function MemberDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/75 p-3 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-[var(--scrim)] p-3 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="member-dialog-title"
