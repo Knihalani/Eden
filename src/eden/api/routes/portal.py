@@ -301,25 +301,37 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
     error_message: str | None = None
     if outcome and str(outcome).lower() in _ERROR_OUTCOMES:
         error_message = str(
-            attrs.get("error")
-            or payload.get("error")
-            or node.get("finish_reason")
-            or outcome
+            attrs.get("error") or payload.get("error") or node.get("finish_reason") or outcome
         )
 
-    tokens_in = metrics.get("input_tokens") if metrics.get("input_tokens") is not None else payload.get("input_tokens")
-    tokens_out = metrics.get("output_tokens") if metrics.get("output_tokens") is not None else payload.get("output_tokens")
+    tokens_in = (
+        metrics.get("input_tokens")
+        if metrics.get("input_tokens") is not None
+        else payload.get("input_tokens")
+    )
+    tokens_out = (
+        metrics.get("output_tokens")
+        if metrics.get("output_tokens") is not None
+        else payload.get("output_tokens")
+    )
     cost = (
         metrics.get("cost_usd")
         if metrics.get("cost_usd") is not None
-        else (payload.get("cost_usd") if payload.get("cost_usd") is not None else attrs.get("cost_usd"))
+        else (
+            payload.get("cost_usd")
+            if payload.get("cost_usd") is not None
+            else attrs.get("cost_usd")
+        )
     )
-    model = attrs.get("model") or attrs.get("openai.model") or attrs.get("anthropic.model") or node.get("model_version")
+    model = (
+        attrs.get("model")
+        or attrs.get("openai.model")
+        or attrs.get("anthropic.model")
+        or node.get("model_version")
+    )
     provider = attrs.get("provider")
 
-    safe_attrs = {
-        k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))
-    } or None
+    safe_attrs = {k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))} or None
 
     return TranscriptStep(
         id=span_id or str(node.get("timestamp") or name),
@@ -431,9 +443,12 @@ async def list_portal_agents(
                 return list(
                     await client.fetch(
                         """
+                        -- agent_registry tracks lifecycle as
+                        -- first_seen / last_seen; it has no created_at or
+                        -- updated_at. Aliased so the response keys are unchanged.
                         SELECT agent_id, display_name AS name, tier AS framework,
                                NULL AS repo_url, last_seen AS last_seen_at,
-                               created_at, updated_at
+                               first_seen AS created_at, last_seen AS updated_at
                         FROM agent_registry
                         WHERE org_id = $1
                         ORDER BY last_seen DESC NULLS LAST
@@ -539,9 +554,7 @@ async def list_portal_agents(
         issues = issues_by_id.get(agent_id) or {}
         runs = int(metrics.get("runs") or 0)
         success = float(
-            metrics.get("success_rate")
-            if metrics.get("success_rate") is not None
-            else 1.0
+            metrics.get("success_rate") if metrics.get("success_rate") is not None else 1.0
         )
         success = max(0.0, min(1.0, success))
         open_issues = int(issues.get("open_issues") or 0)
@@ -619,7 +632,16 @@ async def list_portal_traces(
     window_secs = int(delta.total_seconds())
     client = await _pg()
     if client is None:
-        return []
+        # "The database is down" and "you have not sent a trace yet"
+        # must not render as the same empty state. A new customer who
+        # sees an empty trace list concludes their SDK is misconfigured
+        # and goes off debugging their own code — the worst possible
+        # failure mode during onboarding.
+        raise HTTPException(
+            status_code=503,
+            detail="Trace storage is temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     try:
         # Id discovery scans a bounded recent event sample, then
@@ -668,7 +690,14 @@ async def list_portal_traces(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal traces: query failed: %s", redact_all(str(exc)))
-        return []
+        # As above: a failed query is not an empty account. An empty
+        # `rows` is still returned as [] below, which is the honest
+        # answer for a customer who genuinely has no traces yet.
+        raise HTTPException(
+            status_code=503,
+            detail="Could not load traces; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     items: list[TraceListItem] = []
     for r in rows:
@@ -744,9 +773,7 @@ async def get_portal_trace(
         # Portal transcript needs span structure + timing; skip expensive
         # per-span message_store reconstruct (full bodies stay on
         # observability tree routes).
-        return await collector.get_trace_tree(
-            org_id, trace_id, hydrate_bodies=False
-        )
+        return await collector.get_trace_tree(org_id, trace_id, hydrate_bodies=False)
 
     try:
         row, tree = await asyncio.gather(
@@ -960,14 +987,12 @@ async def list_portal_signals(
         agent_id = scope.get("agent_id") or scope.get("agentId")
         condition = ""
         if rule.get("metric"):
-            condition = f"{rule.get('metric')} {rule.get('op', '')} {rule.get('threshold', '')}".strip()
+            condition = (
+                f"{rule.get('metric')} {rule.get('op', '')} {rule.get('threshold', '')}".strip()
+            )
         notify = bool(rule.get("notify", False))
         raw_channel = rule.get("channel") or rule.get("notify_channel")
-        channel = (
-            _normalize_notify_channel(raw_channel)
-            if raw_channel not in (None, "")
-            else None
-        )
+        channel = _normalize_notify_channel(raw_channel) if raw_channel not in (None, "") else None
         out.append(
             SignalCard(
                 id=str(r["id"]),
@@ -980,7 +1005,8 @@ async def list_portal_signals(
                 enabled=bool(r.get("enabled", True)),
                 notify=notify,
                 channel=channel,  # type: ignore[arg-type]
-                destination=str(rule.get("destination") or rule.get("notify_destination") or "") or None,
+                destination=str(rule.get("destination") or rule.get("notify_destination") or "")
+                or None,
                 hits24h=int(r.get("match_count") or 0),
                 lastHit=_iso(r.get("updated_at")) or None,
                 relatedIssueIds=[],
@@ -1094,7 +1120,9 @@ async def list_portal_cost_drivers(
         summary = str(data.get("summary") or "")
         # Prefer cost / performance / regression flavored insights.
         blob = f"{detector} {summary}".lower()
-        if not any(k in blob for k in ("cost", "token", "latency", "waste", "regress", "model", "tool")):
+        if not any(
+            k in blob for k in ("cost", "token", "latency", "waste", "regress", "model", "tool")
+        ):
             continue
         conf = float(data.get("confidence") or 0)
         meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
@@ -1174,20 +1202,14 @@ async def get_portal_workspace(
     notify_ch = settings.get("default_notify_channel") or settings.get("notify_channel")
     prefs = WorkspacePrefs(
         timezone=str(settings.get("timezone") or defaults.timezone),
-        density=(
-            density_raw
-            if density_raw in ("comfortable", "compact")
-            else defaults.density
-        ),
+        density=(density_raw if density_raw in ("comfortable", "compact") else defaults.density),
         retention_days=(
             retention_raw  # type: ignore[arg-type]
             if retention_raw in (7, 30, 90, 365)
             else defaults.retention_days
         ),
         pii_redaction=bool(
-            settings["pii_redaction"]
-            if "pii_redaction" in settings
-            else defaults.pii_redaction
+            settings["pii_redaction"] if "pii_redaction" in settings else defaults.pii_redaction
         ),
         default_notify_channel=(
             _normalize_notify_channel(notify_ch)  # type: ignore[arg-type]
@@ -1727,16 +1749,8 @@ async def list_portal_improve_plans(
                 agentId=str(p["agent_id"]) if p.get("agent_id") else None,
                 issueIds=[str(x) for x in issue_ids],
                 caseIds=[str(x) for x in case_ids],
-                baselineId=(
-                    str(evidence["baseline_id"])
-                    if evidence.get("baseline_id")
-                    else None
-                ),
-                compareId=(
-                    str(evidence["compare_id"])
-                    if evidence.get("compare_id")
-                    else None
-                ),
+                baselineId=(str(evidence["baseline_id"]) if evidence.get("baseline_id") else None),
+                compareId=(str(evidence["compare_id"]) if evidence.get("compare_id") else None),
             )
         )
     return out
@@ -1812,10 +1826,7 @@ async def list_portal_ab_experiments(
             AbExperimentCard(
                 id=str(data.get("test_id") or data.get("experiment_id") or data.get("id") or ""),
                 name=str(
-                    data.get("prompt_name")
-                    or data.get("experiment_name")
-                    or data.get("name")
-                    or ""
+                    data.get("prompt_name") or data.get("experiment_name") or data.get("name") or ""
                 ),
                 status=status,
                 agentId=str(data["agent_id"]) if data.get("agent_id") else None,
@@ -1904,9 +1915,7 @@ async def list_portal_guardrail_policies(
 
     # These two queries are independent of each other (match counts only
     # need ``org_id``, not the fetched policy rows), so run them concurrently.
-    rows, match_counts = await asyncio.gather(
-        _fetch_policy_rows(), _fetch_match_counts()
-    )
+    rows, match_counts = await asyncio.gather(_fetch_policy_rows(), _fetch_match_counts())
     if rows is None:
         return []
 
@@ -1972,9 +1981,7 @@ async def list_portal_debugger_sessions(
                 title=str(data.get("title") or ""),
                 agentId=agent_id,
                 sourceTraceId=(
-                    str(data["source_trace_id"])
-                    if data.get("source_trace_id")
-                    else None
+                    str(data["source_trace_id"]) if data.get("source_trace_id") else None
                 ),
                 compareTraceId=str(compare_id) if compare_id else None,
                 modeHint=mode,  # type: ignore[arg-type]
@@ -2051,16 +2058,18 @@ async def list_portal_assistant_threads(
             try:
                 crows = await client.fetch(
                     """
-                    SELECT session_id::text AS cid, COUNT(*)::int AS cnt
+                    SELECT conversation_id::text AS cid, COUNT(*)::int AS cnt
                     FROM ai_messages
-                    WHERE session_id = ANY($1::text[])
-                    GROUP BY session_id
+                    WHERE conversation_id::text = ANY($1::text[])
+                    GROUP BY conversation_id
                     """,
                     ids,
                 )
                 counts = {str(c["cid"]): int(c["cnt"] or 0) for c in crows}
             except Exception as exc:  # noqa: BLE001
-                logger.warning("portal assistant threads: message counts failed: %s", redact_all(str(exc)))
+                logger.warning(
+                    "portal assistant threads: message counts failed: %s", redact_all(str(exc))
+                )
 
     out: list[AssistantThreadCard] = []
     for r in rows:
@@ -2075,4 +2084,3 @@ async def list_portal_assistant_threads(
             )
         )
     return out
-
