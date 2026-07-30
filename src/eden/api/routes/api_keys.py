@@ -36,7 +36,11 @@ from eden.storage.postgres import get_postgres_client
 from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orgs/{org_id}/api-keys", tags=["api-keys"], dependencies=[Depends(require_path_org_access)])
+router = APIRouter(
+    prefix="/orgs/{org_id}/api-keys",
+    tags=["api-keys"],
+    dependencies=[Depends(require_path_org_access)],
+)
 
 # Valid scopes for API keys.
 # Portal KeyScope aliases (ingest, traces:*, evals:run, datasets:read) are
@@ -147,6 +151,7 @@ async def _parse_create_api_key_body(request: Request) -> CreateApiKeyBody:
             detail=str(exc),
         ) from exc
 
+
 # B-11 (Session 24): per-(org, user) sliding-window rate limit on
 # ``POST /orgs/{org_id}/api-keys``. Audit 2026-07-03 — distributed
 # via Redis sorted set when REDIS_URL is configured so multi-worker
@@ -179,10 +184,7 @@ def _check_api_key_create_rate_limit_local(
     now = time.time()
     window_sec = _API_KEY_CREATE_WINDOW_SEC
     # Evict any bucket whose newest entry is outside the window.
-    stale = [
-        k for k, b in _api_key_create_log.items()
-        if not b or now - b[-1] >= window_sec
-    ]
+    stale = [k for k, b in _api_key_create_log.items() if not b or now - b[-1] >= window_sec]
     for k in stale:
         _api_key_create_log.pop(k, None)
     # Hard cap on dict cardinality.
@@ -192,7 +194,8 @@ def _check_api_key_create_rate_limit_local(
         ]:
             _api_key_create_log.pop(k, None)
     bucket = _api_key_create_log.setdefault(
-        (org_id, user_id), deque(maxlen=_API_KEY_CREATE_MAX),
+        (org_id, user_id),
+        deque(maxlen=_API_KEY_CREATE_MAX),
     )
     while bucket and now - bucket[0] >= window_sec:
         bucket.popleft()
@@ -243,9 +246,7 @@ async def _check_api_key_create_rate_limit(
                 with contextlib.suppress(Exception):
                     await redis.zrem(redis_key, member)
                 # Compute wait from the oldest surviving entry.
-                oldest = await redis.zrange(
-                    redis_key, 0, 0, withscores=True
-                )
+                oldest = await redis.zrange(redis_key, 0, 0, withscores=True)
                 if oldest:
                     wait = max(
                         1.0,
@@ -259,8 +260,8 @@ async def _check_api_key_create_rate_limit(
             return None
         except Exception as exc:
             logger.warning(
-                "apikey-create rate limit Redis path failed; "
-                "falling back to in-memory: %s", redact_all(str(exc)),
+                "apikey-create rate limit Redis path failed; " "falling back to in-memory: %s",
+                redact_all(str(exc)),
             )
 
     return _check_api_key_create_rate_limit_local(org_id, user_id)
@@ -468,7 +469,10 @@ async def create_api_key_from_body(
 async def list_api_keys(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
-    cursor: str | None = Query(None, description='Opaque pagination cursor from the ``X-Next-Cursor`` response header. Omit for the first page.'),
+    cursor: str | None = Query(
+        None,
+        description="Opaque pagination cursor from the ``X-Next-Cursor`` response header. Omit for the first page.",
+    ),
     response: Response = None,  # FastAPI injects Response regardless of default
     user: dict = Depends(get_current_user),
     payload: dict | None = Depends(_try_resolve_token_payload),
@@ -509,16 +513,11 @@ async def list_api_keys(
         except (ValueError, AttributeError):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "Invalid cursor; expected ``<created_at_iso>|<id>``."
-                ),
+                detail=("Invalid cursor; expected ``<created_at_iso>|<id>``."),
             ) from None
 
     # Soft-revoke filter + text org compare (non-UUID org ids → clean miss).
-    active_clause = (
-        "AND (active IS TRUE OR active IS NULL) "
-        "AND revoked_at IS NULL"
-    )
+    active_clause = "AND (active IS TRUE OR active IS NULL) " "AND revoked_at IS NULL"
     try:
         if cursor_created_at is not None and cursor_id is not None:
             query = f"""
@@ -582,9 +581,7 @@ async def list_api_keys(
 
     if has_more and page_rows and response is not None:
         last = page_rows[-1]
-        response.headers["X-Next-Cursor"] = (
-            f"{last['created_at'].isoformat()}|{last['id']}"
-        )
+        response.headers["X-Next-Cursor"] = f"{last['created_at'].isoformat()}|{last['id']}"
     return items
 
 
@@ -680,6 +677,19 @@ async def validate_org_api_key(org_id: str, key: str) -> dict | None:
         FROM org_api_keys oak
         JOIN organizations o ON o.id = oak.org_id
         WHERE oak.key_hash = $1 AND oak.org_id::text = $2
+          -- Revoked, disabled and expired keys were all still accepted
+          -- here. revoke_api_key only sets active=FALSE + revoked_at, so
+          -- a revoked key kept validating; all three columns exist and
+          -- the sibling deps.get_current_org_api_key checks every one.
+          --
+          -- Latent rather than live: the only consumer is
+          -- mcp_server/verify.py, behind mcp_http_transport_v1 which
+          -- defaults False. It becomes an auth bypass the moment that
+          -- flag is turned on, which is exactly when nobody would be
+          -- looking for it.
+          AND (oak.active IS TRUE OR oak.active IS NULL)
+          AND oak.revoked_at IS NULL
+          AND (oak.expires_at IS NULL OR oak.expires_at > NOW())
     """
     try:
         client = await get_postgres_client()

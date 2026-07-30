@@ -339,29 +339,45 @@ async def signup(request: SignupRequest, response: Response, req: Request):
 
     # Audit 2026-06-22 B1.23 — mint a verification token and dispatch email.
     # The session cookie is only issued AFTER /auth/verify-email succeeds.
-    try:
-        import secrets
-        from datetime import datetime, timedelta
+    # Email verification is OFF (2026-07-30) because it does not exist,
+    # in three independent ways:
+    #   * ``email_verification_tokens`` is not in the database, so the
+    #     INSERT below raises UndefinedTable on every signup;
+    #   * ``send_verification_email`` is not defined in email_service;
+    #   * there is no ``/auth/verify-email`` route anywhere — only a
+    #     string in default_deny.py's allowlist.
+    # All three were swallowed by the except, so every signup issued a
+    # doomed write and then told the user to check their email.
+    #
+    # ``login`` does not check ``email_verified``, so accounts are
+    # usable — the only damage was the instruction being a lie, and a
+    # failing DB write per signup. See docs/ops/disabled-features.md.
+    verification_sent = False
+    if getattr(get_settings(), "email_verification_enabled", False):
+        try:
+            import secrets
+            from datetime import datetime, timedelta
 
-        verify_token = secrets.token_urlsafe(32)
-        expires = datetime.now(UTC) + timedelta(hours=24)
-        await client.execute(
-            """
-            INSERT INTO email_verification_tokens (user_id, token, expires_at, used_at, created_at)
-            VALUES ($1, $2, $3, NULL, $3)
-            """,
-            user_id,
-            verify_token,
-            expires,
-        )
-        from eden.services.email_service import send_verification_email
+            verify_token = secrets.token_urlsafe(32)
+            expires = datetime.now(UTC) + timedelta(hours=24)
+            await client.execute(
+                """
+                INSERT INTO email_verification_tokens (user_id, token, expires_at, used_at, created_at)
+                VALUES ($1, $2, $3, NULL, $3)
+                """,
+                user_id,
+                verify_token,
+                expires,
+            )
+            from eden.services.email_service import send_verification_email
 
-        await send_verification_email(to_email=request.email, token=verify_token)
-    except Exception as exc:
-        # F66 — defensive PII redaction. The upstream
-        # email service error can include the request
-        # email in the message; scrub it defensively.
-        logger.warning(f"verification email dispatch failed: {redact_email(str(exc))}")
+            await send_verification_email(to_email=request.email, token=verify_token)
+            verification_sent = True
+        except Exception as exc:
+            # F66 — defensive PII redaction. The upstream
+            # email service error can include the request
+            # email in the message; scrub it defensively.
+            logger.warning(f"verification email dispatch failed: {redact_email(str(exc))}")
 
     # Audit 2026-06-22 B1.23 — return 202; no session cookie until verified.
     # Security audit (enumeration): use the same generic message as the
@@ -371,10 +387,19 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={
+            # The enumeration-safe "If that email is not already
+            # registered" prefix is deliberate and preserved — it makes
+            # this indistinguishable from the already-exists path above.
+            # Only the verification instruction is conditional, because
+            # telling someone to check an email that was never sent is
+            # how you strand them on their first minute with the product.
             "message": (
                 "If that email is not already registered, an account "
                 "has been created. Check your email to verify before "
                 "signing in."
+                if verification_sent
+                else "If that email is not already registered, an "
+                "account has been created. You can now sign in."
             ),
         },
         # F69 — apply OWASP security headers (defense-in-depth).

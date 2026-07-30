@@ -253,6 +253,15 @@ def _build_settings_class():
         # latter, so SCIM could never be enabled either.
         # See docs/ops/disabled-features.md.
         sso_enabled: bool = False
+        # Email verification on password signup. OFF since 2026-07-30
+        # because none of it exists: email_verification_tokens is not a
+        # table, send_verification_email is not a function, and there is
+        # no /auth/verify-email route. Every signup issued a doomed
+        # INSERT and then told the user to check their email. login()
+        # does not check email_verified, so accounts work regardless.
+        # Enabling requires all three pieces to ship together.
+        # See docs/ops/disabled-features.md.
+        email_verification_enabled: bool = False
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
         # require this + the per-action two-stage opt-in. OFF by
