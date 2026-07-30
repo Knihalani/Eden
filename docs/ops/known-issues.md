@@ -11,25 +11,25 @@ Ordered by live impact.
 
 ## Live, unfixed
 
-### 1. ClickHouse/Tinybird mirror discards write failures
+### 1. ~~ClickHouse mirror discards write failures~~ — PARTLY FIXED 2026-07-30
 
-`observability/telemetry_collector.py:1317` calls `sink.insert(...)` and
-throws away the returned `IngestionReport`;
-`data_platform/clickhouse_sink.py:1080` returns `rows_failed=N` rather
-than raising. A 100%-failing columnar sink is indistinguishable from a
-healthy one.
+`sink.insert` does not raise on a failed write; it returns an
+`IngestionReport` with `rows_failed` set and parks the rows in
+`clickhouse_fallback`. The collector discarded that value, so a
+100%-failing mirror looked identical to a healthy one.
 
-Evidence: 82 rows in `clickhouse_fallback`, all `retry_count=0`, with
-`last_retry_at` / `resolved_at` / `dead_at` all NULL, spanning Jul 6 →
-Jul 24. All 82 have a NULL `error_message` because `_fallback_to_postgres`
-(`:1100`) never writes one — so there is no diagnostic at all.
+**Fixed:** the collector now reads `rows_failed`, counts the drop, and
+logs at ERROR with the sink's own error text. `_fallback_to_postgres`
+now records `error_message` — the column existed all along, which is
+why all 82 parked rows (Jul 6 → Jul 24) carry a NULL reason.
 
-**Not customer-facing.** The durable write is Postgres `telemetry_events`,
-and the portal trace list reads that same table. This is the analytics
-mirror only.
+**Still open:** the `clickhouse_fallback` drain is not advancing
+(`n_tup_upd` and `n_tup_del` both 0 since Jul 6). The 82 existing rows
+remain unreplayed and, being pre-fix, have no `error_message` to
+diagnose from.
 
-Related: the `clickhouse_fallback` drain is not advancing (`n_tup_upd`
-and `n_tup_del` both 0 since Jul 6).
+**Never customer-facing.** The durable write is Postgres
+`telemetry_events`, and the portal trace list reads that same table.
 
 ### 2. Silver ETL reports every event as passing when validation fails
 
