@@ -14,7 +14,6 @@ from uuid import uuid4
 
 import pytest
 
-
 # ── Leader lock / run_if_leader ─────────────────────────────────────
 
 
@@ -59,10 +58,10 @@ async def test_run_if_leader_survives_acquire_exception() -> None:
         self._token = "tok"
         return True
 
-    with patch("eden.workers.leader.Lock.acquire", _flaky_acquire), patch(
-        "eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.extend", new=AsyncMock(return_value=True)
+    with (
+        patch("eden.workers.leader.Lock.acquire", _flaky_acquire),
+        patch("eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.extend", new=AsyncMock(return_value=True)),
     ):
         await asyncio.wait_for(
             run_if_leader("w8-flaky", _work, interval=0.01, stop=stop),
@@ -99,19 +98,14 @@ async def test_run_if_leader_cancels_inflight_work_on_lost_lock() -> None:
 
     # Renewal cadence is a fixed module constant, decoupled from the
     # tick ``interval`` — shrink it so the test doesn't wait 20s.
-    with patch.object(
-        leader_module, "_DEFAULT_LOCK_RENEW_SECONDS", 0.01
-    ), patch(
-        "eden.workers.leader.Lock.acquire", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.extend", new=AsyncMock(return_value=False)
+    with (
+        patch.object(leader_module, "_DEFAULT_LOCK_RENEW_SECONDS", 0.01),
+        patch("eden.workers.leader.Lock.acquire", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.extend", new=AsyncMock(return_value=False)),
     ):
         await asyncio.wait_for(
-            leader_module.run_if_leader(
-                "w-split-brain", _work, interval=10.0, stop=stop
-            ),
+            leader_module.run_if_leader("w-split-brain", _work, interval=10.0, stop=stop),
             timeout=2.0,
         )
 
@@ -142,17 +136,14 @@ async def test_run_if_leader_ttl_decoupled_from_large_interval() -> None:
     async def _work() -> None:
         stop.set()
 
-    with patch.object(RealLock, "__init__", _spy_init), patch(
-        "eden.workers.leader.Lock.acquire", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.extend", new=AsyncMock(return_value=True)
+    with (
+        patch.object(RealLock, "__init__", _spy_init),
+        patch("eden.workers.leader.Lock.acquire", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.extend", new=AsyncMock(return_value=True)),
     ):
         await asyncio.wait_for(
-            leader_module.run_if_leader(
-                "w-ttl-large", _work, interval=3600.0, stop=stop
-            ),
+            leader_module.run_if_leader("w-ttl-large", _work, interval=3600.0, stop=stop),
             timeout=2.0,
         )
 
@@ -176,12 +167,10 @@ async def test_run_if_leader_logs_work_failure_and_continues() -> None:
             raise ValueError("tick boom")
         stop.set()
 
-    with patch(
-        "eden.workers.leader.Lock.acquire", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)
-    ), patch(
-        "eden.workers.leader.Lock.extend", new=AsyncMock(return_value=True)
+    with (
+        patch("eden.workers.leader.Lock.acquire", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.release", new=AsyncMock(return_value=True)),
+        patch("eden.workers.leader.Lock.extend", new=AsyncMock(return_value=True)),
     ):
         await asyncio.wait_for(
             run_if_leader("w8-work-fail", _work, interval=0.01, stop=stop),
@@ -210,9 +199,7 @@ async def test_supervise_restarts_after_crash() -> None:
         stop_event.set()
 
     await asyncio.wait_for(
-        worker_main._supervise(
-            "test-loop", _factory, stop, backoff=0.01
-        ),
+        worker_main._supervise("test-loop", _factory, stop, backoff=0.01),
         timeout=2.0,
     )
     assert attempts == 2
@@ -249,14 +236,11 @@ async def test_run_forever_starts_and_stops_sidecars() -> None:
     def _capture_handlers(stop: asyncio.Event) -> None:
         stop_holder.append(stop)
 
-    with patch.object(
-        worker_main, "_start_sidecar_workers", _fake_start
-    ), patch.object(
-        worker_main, "_stop_sidecar_workers", _fake_stop
-    ), patch.object(
-        worker_main, "_supervise", _noop_supervise
-    ), patch.object(
-        worker_main, "_install_signal_handlers", _capture_handlers
+    with (
+        patch.object(worker_main, "_start_sidecar_workers", _fake_start),
+        patch.object(worker_main, "_stop_sidecar_workers", _fake_stop),
+        patch.object(worker_main, "_supervise", _noop_supervise),
+        patch.object(worker_main, "_install_signal_handlers", _capture_handlers),
     ):
         task = asyncio.create_task(worker_main._run_forever())
         for _ in range(50):
@@ -279,15 +263,19 @@ async def test_start_sidecar_workers_calls_quality_and_evolution() -> None:
 
     sidecars_module._reset_state_for_tests()
     try:
-        with patch(
-            "eden.observability.quality_pipeline.worker.start_worker",
-            new_callable=AsyncMock,
-        ) as start_q, patch(
-            "eden.agents.evolution.loop.start_evolution_loop",
-            new_callable=AsyncMock,
-        ) as start_e, patch(
-            "eden.workers.sidecars._acquire_guard",
-            new=AsyncMock(return_value=True),
+        with (
+            patch(
+                "eden.observability.quality_pipeline.worker.start_worker",
+                new_callable=AsyncMock,
+            ) as start_q,
+            patch(
+                "eden.agents.evolution.loop.start_evolution_loop",
+                new_callable=AsyncMock,
+            ) as start_e,
+            patch(
+                "eden.workers.sidecars._acquire_guard",
+                new=AsyncMock(return_value=True),
+            ),
         ):
             await worker_main._start_sidecar_workers()
 
@@ -313,25 +301,33 @@ async def test_leader_self_obs_probes_registered_via_run_if_leader() -> None:
     stop = asyncio.Event()
     calls: list[tuple[str, float, bool]] = []
 
-    async def _fake_run_if_leader(
-        lock_name, work, *, interval, stop=None, ttl=None, align=False
-    ):
+    async def _fake_run_if_leader(lock_name, work, *, interval, stop=None, ttl=None, align=False):
         calls.append((lock_name, interval, align))
         await work()
 
-    with patch(
-        "eden.workers.leader.run_if_leader", _fake_run_if_leader
-    ), patch(
-        "eden.self_obs.scheduler.run_scheduled_probes",
-        new=AsyncMock(return_value={"orgs_scanned": 0, "degraded_orgs": []}),
-    ) as fake_probes:
+    with (
+        patch("eden.workers.leader.run_if_leader", _fake_run_if_leader),
+        patch(
+            "eden.self_obs.scheduler.run_scheduled_probes",
+            new=AsyncMock(return_value={"orgs_scanned": 0, "degraded_orgs": []}),
+        ) as fake_probes,
+    ):
         await worker_main._leader_self_obs_probes(stop)
 
     # align=True is load-bearing, not cosmetic: these probes query
     # organizations and write heartbeats on every tick with no empty-poll
     # cooldown, so an unaligned phase splits the fleet's DB-quiet window
     # and stops Neon from ever reaching its suspend timeout.
-    assert calls == [("self_obs_probes", 600.0, True)]
+    #
+    # The interval is read from settings rather than hardcoded — it was
+    # pinned at 600.0 and had to be edited when the default moved to
+    # 3600.0 (self-obs was 95.2% of all DB writes at zero users). The
+    # alignment flag is the property worth pinning; the cadence is a
+    # tuning knob.
+    from eden.config import get_settings
+
+    expected_interval = float(get_settings().self_obs_probe_interval_seconds)
+    assert calls == [("self_obs_probes", expected_interval, True)]
     fake_probes.assert_awaited_once()
 
 
@@ -350,14 +346,11 @@ async def test_run_forever_hosts_self_obs_probes_loop() -> None:
     def _capture_handlers(stop: asyncio.Event) -> None:
         stop_holder.append(stop)
 
-    with patch.object(
-        worker_main, "_start_sidecar_workers", new=AsyncMock()
-    ), patch.object(
-        worker_main, "_stop_sidecar_workers", new=AsyncMock()
-    ), patch.object(
-        worker_main, "_supervise", _noop_supervise
-    ), patch.object(
-        worker_main, "_install_signal_handlers", _capture_handlers
+    with (
+        patch.object(worker_main, "_start_sidecar_workers", new=AsyncMock()),
+        patch.object(worker_main, "_stop_sidecar_workers", new=AsyncMock()),
+        patch.object(worker_main, "_supervise", _noop_supervise),
+        patch.object(worker_main, "_install_signal_handlers", _capture_handlers),
     ):
         task = asyncio.create_task(worker_main._run_forever())
         for _ in range(50):
@@ -475,14 +468,11 @@ async def test_run_forever_populates_and_clears_loop_tasks() -> None:
         stop_holder.append(stop)
 
     worker_main._loop_tasks.clear()
-    with patch.object(
-        worker_main, "_start_sidecar_workers", _fake_start
-    ), patch.object(
-        worker_main, "_stop_sidecar_workers", _fake_stop
-    ), patch.object(
-        worker_main, "_supervise", _noop_supervise
-    ), patch.object(
-        worker_main, "_install_signal_handlers", _capture_handlers
+    with (
+        patch.object(worker_main, "_start_sidecar_workers", _fake_start),
+        patch.object(worker_main, "_stop_sidecar_workers", _fake_stop),
+        patch.object(worker_main, "_supervise", _noop_supervise),
+        patch.object(worker_main, "_install_signal_handlers", _capture_handlers),
     ):
         task = asyncio.create_task(worker_main._run_forever())
         for _ in range(50):
@@ -534,24 +524,23 @@ async def test_insights_holds_watermark_when_persist_fails() -> None:
     mock_pg.execute = AsyncMock(return_value="OK")
 
     service = MagicMock()
-    service.persist_insight_to_postgres = AsyncMock(
-        side_effect=RuntimeError("db write failed")
-    )
+    service.persist_insight_to_postgres = AsyncMock(side_effect=RuntimeError("db write failed"))
 
-    with patch(
-        "eden.insights.detector_loop.get_postgres_client",
-        AsyncMock(return_value=mock_pg),
-    ), patch(
-        "eden.insights.insights_service.InsightsService",
-        return_value=service,
+    with (
+        patch(
+            "eden.insights.detector_loop.get_postgres_client",
+            AsyncMock(return_value=mock_pg),
+        ),
+        patch(
+            "eden.insights.insights_service.InsightsService",
+            return_value=service,
+        ),
     ):
         loop = loop_module.InsightsDetectorLoop(batch_size=10)
         result = await loop.tick_once()
 
     assert result == {tenant: 0}
     watermark_writes = [
-        c
-        for c in mock_pg.execute.await_args_list
-        if "judge_scores_processed" in str(c.args[0])
+        c for c in mock_pg.execute.await_args_list if "judge_scores_processed" in str(c.args[0])
     ]
     assert watermark_writes == []

@@ -276,6 +276,46 @@ async def create_org(
             detail="Org name must be 2-100 characters",
         )
 
+    # Idempotency guard. A double-submitted form, a retried request, or
+    # a customer clicking "Create workspace" twice used to mint a second
+    # identical org — and there is no UI for deleting one. One production
+    # user accumulated seven orgs all named "Kaiav's Organization".
+    #
+    # Deliberately narrow: same owner, same name, recent, not archived.
+    # A user who genuinely wants two identically-named orgs a minute
+    # apart is not a real case; a duplicate submit is.
+    recent_duplicate = await client.fetchrow(
+        """
+        SELECT id::text AS id, name, slug, clerk_org_id
+        FROM organizations
+        WHERE owner_id = $1::uuid
+          AND lower(name) = lower($2)
+          AND archived_at IS NULL
+          AND created_at > NOW() - INTERVAL '60 seconds'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        user_id,
+        name,
+    )
+    if recent_duplicate:
+        logger.info(
+            "create_org: returning existing org %s for duplicate submit "
+            "(owner=%s name=%r)",
+            recent_duplicate["id"],
+            user_id,
+            name,
+        )
+        return {
+            "org_id": recent_duplicate["id"],
+            "name": recent_duplicate["name"],
+            "slug": recent_duplicate["slug"],
+            "role": "owner",
+            "clerk_org_id": recent_duplicate["clerk_org_id"],
+            "org_degraded": False,
+            "is_personal": False,
+        }
+
     slug = slugify(name)
 
     # Check slug uniqueness

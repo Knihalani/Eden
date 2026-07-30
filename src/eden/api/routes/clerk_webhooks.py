@@ -337,10 +337,25 @@ async def _upsert_org(data: dict[str, Any]) -> None:
     # the creator yet; ``/auth/me`` self-heal or the membership
     # webhook will create the row once a user exists.
     if not eden_owner_id:
-        # owner_id is NOT NULL, so we genuinely cannot insert yet. But
-        # skipping used to fall through to a 200, which permanently
-        # dropped the organization.created event. Ask for redelivery
-        # instead — by then user.created will have landed.
+        # owner_id is NOT NULL, so we cannot INSERT without a creator.
+        # But the UPDATE above may already have handled this event: for
+        # an org row that exists, refreshing name/slug IS the whole job
+        # and there is nothing left to do. Only a genuinely absent row
+        # is unfinished work.
+        exists = await client.fetchrow(
+            """
+            SELECT 1 FROM organizations
+            WHERE clerk_org_id = $1 OR id::text = $1
+            """,
+            clerk_id,
+        )
+        if exists:
+            return
+
+        # No row, and no creator to hang one off. Skipping used to fall
+        # through to a 200, which Svix treats as a permanent ack — the
+        # organization.created event was dropped for good. Ask for
+        # redelivery instead; by then user.created will have landed.
         logger.warning(
             "_upsert_org: creator not in users yet for clerk_org=%s; "
             "asking Clerk to redeliver",
