@@ -388,6 +388,120 @@ def _preview(value: Any, limit: int = 400) -> str | None:
     return text[:limit]
 
 
+def _message_content_text(content: Any) -> str:
+    """Flatten OpenAI/Anthropic message ``content`` (str or parts list)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                if part.get("type") == "text" or "text" in part:
+                    parts.append(str(part.get("text") or ""))
+                elif part.get("type") == "output_text":
+                    parts.append(str(part.get("text") or ""))
+        return "\n".join(p for p in parts if p)
+    return str(content)
+
+
+def _strip_think_blocks(text: str) -> str:
+    """Drop model chain-of-thought wrappers (MiniMax ``<think>…</think>``)."""
+    import re
+
+    cleaned = re.sub(
+        r"<think\b[^>]*>[\s\S]*?</think>",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip()
+
+
+def _humanize_io_preview(value: Any, *, limit: int = 800) -> str | None:
+    """Readable transcript preview — messages/content, not raw JSON dumps."""
+    if value is None:
+        return None
+
+    parsed: Any = value
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = value.decode("utf-8")
+        except Exception:  # noqa: BLE001
+            return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text[0] in "{[":
+            try:
+                parsed = json.loads(text)
+            except Exception:  # noqa: BLE001
+                return _strip_think_blocks(text)[:limit]
+        else:
+            return _strip_think_blocks(text)[:limit]
+
+    if isinstance(parsed, list):
+        if parsed and isinstance(parsed[0], dict) and (
+            "role" in parsed[0] or "content" in parsed[0]
+        ):
+            lines: list[str] = []
+            for msg in parsed:
+                if not isinstance(msg, dict):
+                    continue
+                role = str(msg.get("role") or "message")
+                body = _strip_think_blocks(_message_content_text(msg.get("content")))
+                if body:
+                    lines.append(f"{role}: {body}")
+            if lines:
+                return "\n\n".join(lines)[:limit]
+        return _preview(parsed, limit=limit)
+
+    if not isinstance(parsed, dict):
+        return _preview(parsed, limit=limit)
+
+    choices = parsed.get("choices")
+    if isinstance(choices, list) and choices:
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        msg = first.get("message") if isinstance(first.get("message"), dict) else {}
+        content = _strip_think_blocks(_message_content_text(msg.get("content")))
+        if content:
+            return content[:limit]
+        text = first.get("text")
+        if isinstance(text, str) and text.strip():
+            return _strip_think_blocks(text.strip())[:limit]
+
+    messages = parsed.get("messages")
+    if isinstance(messages, list) and messages:
+        humanized = _humanize_io_preview(messages, limit=limit)
+        if humanized:
+            return humanized
+
+    for key in (
+        "content",
+        "output",
+        "completion",
+        "response",
+        "text",
+        "prompt",
+        "input",
+        "output_text",
+    ):
+        raw = parsed.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return _strip_think_blocks(raw.strip())[:limit]
+        if isinstance(raw, (dict, list)):
+            nested = _humanize_io_preview(raw, limit=limit)
+            if nested:
+                return nested
+
+    # Last resort — still better than blank; callers may prefer this over None.
+    return _preview(parsed, limit=limit)
+
+
 def _coerce_token_count(value: Any) -> int | None:
     """Token metrics often land as ``198.0`` / ``\"198.0\"`` — never bare ``int``."""
     if value is None:
@@ -396,6 +510,33 @@ def _coerce_token_count(value: Any) -> int | None:
         return int(float(value))
     except (TypeError, ValueError):
         return None
+
+
+def _usage_token_counts(*sources: Any) -> tuple[int | None, int | None]:
+    """Pull prompt/completion tokens from OpenAI-style ``usage`` blocks."""
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        usage = source.get("usage")
+        if not isinstance(usage, dict):
+            nested = source.get("openai")
+            if isinstance(nested, dict) and isinstance(nested.get("usage"), dict):
+                usage = nested["usage"]
+            else:
+                continue
+        tin = _coerce_token_count(
+            usage.get("prompt_tokens")
+            if usage.get("prompt_tokens") is not None
+            else usage.get("input_tokens")
+        )
+        tout = _coerce_token_count(
+            usage.get("completion_tokens")
+            if usage.get("completion_tokens") is not None
+            else usage.get("output_tokens")
+        )
+        if tin is not None or tout is not None:
+            return tin, tout
+    return None, None
 
 
 def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
@@ -415,6 +556,15 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
             attrs.get("error") or payload.get("error") or node.get("finish_reason") or outcome
         )
 
+    # Bodies may also arrive as JSON strings — parse when possible so
+    # nested message/content previews still resolve.
+    request_body = node.get("request_body")
+    response_body = node.get("response_body")
+    if isinstance(request_body, str):
+        request_body = _as_dict(request_body) or request_body
+    if isinstance(response_body, str):
+        response_body = _as_dict(response_body) or response_body
+
     tokens_in = (
         metrics.get("input_tokens")
         if metrics.get("input_tokens") is not None
@@ -425,6 +575,17 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         if metrics.get("output_tokens") is not None
         else payload.get("output_tokens")
     )
+    tokens_in_i = _coerce_token_count(tokens_in)
+    tokens_out_i = _coerce_token_count(tokens_out)
+    if tokens_in_i is None and tokens_out_i is None:
+        usage_in, usage_out = _usage_token_counts(
+            response_body if isinstance(response_body, dict) else None,
+            payload,
+            request_body if isinstance(request_body, dict) else None,
+        )
+        tokens_in_i = usage_in
+        tokens_out_i = usage_out
+
     cost = (
         metrics.get("cost_usd")
         if metrics.get("cost_usd") is not None
@@ -437,6 +598,16 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
     # Nested provider payloads (OpenAI-compatible) often stash the model
     # under payload.openai.model when top-level model fields are empty.
     nested_openai = payload.get("openai") if isinstance(payload.get("openai"), dict) else {}
+    req_model = (
+        request_body.get("model")
+        if isinstance(request_body, dict)
+        else None
+    )
+    resp_model = (
+        response_body.get("model")
+        if isinstance(response_body, dict)
+        else None
+    )
     model = (
         attrs.get("model")
         or attrs.get("openai.model")
@@ -444,12 +615,20 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         or payload.get("model_normalized")
         or payload.get("model")
         or nested_openai.get("model")
+        or req_model
+        or resp_model
         or node.get("model_version")
     )
+    # Ignore placeholder / tier labels that poison pricing lookup.
+    if isinstance(model, str) and model.strip().lower() in {"", "standard", "default", "unknown"}:
+        model = (
+            req_model
+            or resp_model
+            or nested_openai.get("model")
+            or payload.get("model")
+            or None
+        )
     provider = attrs.get("provider")
-
-    tokens_in_i = _coerce_token_count(tokens_in)
-    tokens_out_i = _coerce_token_count(tokens_out)
 
     # Estimate per-span cost when ingest never stamped cost_usd but
     # tokens are present — otherwise the header and step chips stay $0.
@@ -475,15 +654,6 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
 
     safe_attrs = {k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))} or None
 
-    # Bodies may also arrive as JSON strings — parse when possible so
-    # nested message/content previews still resolve.
-    request_body = node.get("request_body")
-    response_body = node.get("response_body")
-    if isinstance(request_body, str):
-        request_body = _as_dict(request_body) or request_body
-    if isinstance(response_body, str):
-        response_body = _as_dict(response_body) or response_body
-
     return TranscriptStep(
         id=span_id or str(node.get("timestamp") or name),
         kind=_step_kind(node.get("event_type"), name),  # type: ignore[arg-type]
@@ -501,14 +671,17 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         attributes=safe_attrs,
         # Prefer dedicated bodies; fall back to payload fields when the
         # portal path skips message_store / body-zstd hydrate.
-        inputPreview=_preview(request_body)
-        or _preview(payload.get("messages") or payload.get("input") or payload.get("prompt")),
-        outputPreview=_preview(response_body)
-        or _preview(
+        inputPreview=_humanize_io_preview(request_body)
+        or _humanize_io_preview(
+            payload.get("messages") or payload.get("input") or payload.get("prompt")
+        ),
+        outputPreview=_humanize_io_preview(response_body)
+        or _humanize_io_preview(
             payload.get("output")
             or payload.get("content")
             or payload.get("completion")
             or payload.get("response")
+            or payload.get("openai")
         ),
         errorMessage=error_message,
         metadata=None,
