@@ -216,6 +216,30 @@ def _build_settings_class():
         # ``/gateway/v1/*`` record cacheability metadata for
         # fork-and-replay. Failures never break the LLM response.
         time_travel_recording_enabled: bool = True
+        # Cat 20 — the /time-travel/replay endpoint. TURNED OFF
+        # 2026-07-30 because it does not do what it reports doing, and
+        # a feature that lies is worse than one that is absent.
+        #
+        # The recorder never stores prompt content: both call sites
+        # (llmops/ai_gateway.py and api/routes/gateway.py) pass a request
+        # dict of model/temperature metadata only. The replayer looks for
+        # payload["messages"], then payload["prompt"], finds neither,
+        # and short-circuits — returning the RECORDED response hash and
+        # reporting re_executed=True without ever reaching the gateway.
+        # A second, independent bug guarantees the same outcome even if
+        # the payload were fixed: _apply_edits_to_step writes edits onto
+        # the step dict while _re_execute_step reads from step["payload"],
+        # so user edits never reach the prompt.
+        #
+        # Net effect: a user changes a prompt, gets an identical response
+        # hash back, and concludes their edit had no effect on the model.
+        # The tokens_saved / cost_saved_usd figures are fiction.
+        #
+        # Recording stays ON (it is harmless and its data is needed to
+        # fix this properly). Re-enable once the recorder persists real
+        # message content AND edits are applied to payload.
+        # See docs/ops/disabled-features.md.
+        time_travel_replay_enabled: bool = False
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
         # require this + the per-action two-stage opt-in. OFF by
@@ -554,8 +578,15 @@ def _build_settings_class():
         ingestion_per_tenant_rpm: int = 600
         ingestion_per_api_key_rpm: int = 300
         ingestion_allowed_formats: list[str] = [
-            "otel", "helicone", "langfuse", "openai", "anthropic",
-            "bedrock", "gemini", "framework", "webhook",
+            "otel",
+            "helicone",
+            "langfuse",
+            "openai",
+            "anthropic",
+            "bedrock",
+            "gemini",
+            "framework",
+            "webhook",
         ]
         ingestion_chunks_max_per_request: int = 1000
         # W9 — load shed when in-process buffer / lag pressure is high.
@@ -885,9 +916,25 @@ def _build_settings_class():
         # autosuspend; the previous hard-coded 30s kept compute warm
         # forever. Override via ``QUALITY_PIPELINE_EMPTY_BACKOFF_MAX_S``.
         quality_pipeline_empty_backoff_max_s: float = 600.0
-        # Self-obs probe cadence (worker leader loop). Default 10 min so
-        # heartbeats/synthetics do not pin Neon above autosuspend.
-        self_obs_probe_interval_seconds: float = 600.0
+        # Self-obs probe cadence (worker leader loop). Raised 600 -> 3600
+        # on 2026-07-30 after measuring the write mix on production:
+        #
+        #   eden_synthetic_runs        10,327 inserts
+        #   eden_component_heartbeats   7,892 inserts
+        #   eden_leader_leases          1,236 inserts / 1,955 updates
+        #   ---------------------------------------------------------
+        #   19,576 of 20,553 total inserts = 95.2%
+        #
+        # Everything else in the database combined was 977 rows. At zero
+        # users, essentially the entire write load was Eden watching
+        # itself — 8,321 rows/day, and one of the loops forcing Neon
+        # awake. At 1h this drops to ~1,387 rows/day.
+        #
+        # The cost is that a degraded/failing component pages up to an
+        # hour later. At launch scale you notice from the portal long
+        # before the probe does, so this is the right trade; revisit once
+        # real traffic makes self-obs a minority of writes again.
+        self_obs_probe_interval_seconds: float = 3600.0
         # Webhook outbox drain floor. Empty polls skip PG for this many
         # seconds after a zero-row claim (see webhook_delivery). Real work
         # is not delayed by this: enqueue paths publish a Redis signal that
@@ -1204,7 +1251,9 @@ def _build_settings_class():
             "coalesce_step": True,
         }
 
-        def get_action_default(self, action_class: str) -> bool:  # ponytail: instance helper — sets are instance-scoped (Pydantic model_config doesn't allow dict defaults at class level on BaseSettings)
+        def get_action_default(
+            self, action_class: str
+        ) -> bool:  # ponytail: instance helper — sets are instance-scoped (Pydantic model_config doesn't allow dict defaults at class level on BaseSettings)
             """Return the default kill-switch state for ``action_class``.
 
             Audit 2026-07-02 — mutating classes default False;
@@ -1214,11 +1263,8 @@ def _build_settings_class():
             """
             return self._KILL_SWITCH_DEFAULT.get(action_class, False)
 
-
-
     _settings_class = Settings
     return _settings_class
-
 
 
 __all__ = ["Settings", "get_settings"]  # noqa: F822
@@ -1253,7 +1299,9 @@ def get_settings() -> "Settings":  # noqa: F821
     placeholder = "change-me-in-production"
     if settings.jwt_secret == placeholder:
         testing = os.environ.get("EDEN_TESTING", "").lower() in (
-            "1", "true", "yes",
+            "1",
+            "true",
+            "yes",
         ) or os.environ.get("PYTEST_CURRENT_TEST")
         if testing:
             logger.debug("jwt_secret using placeholder (test mode)")
@@ -1268,9 +1316,7 @@ def get_settings() -> "Settings":  # noqa: F821
     # HS256 — anything shorter weakens the signature against brute
     # force. We skip the check in test mode because fixtures use a
     # short placeholder.
-    if not os.environ.get("PYTEST_CURRENT_TEST") and len(
-        settings.jwt_secret
-    ) < 32:
+    if not os.environ.get("PYTEST_CURRENT_TEST") and len(settings.jwt_secret) < 32:
         raise RuntimeError(
             "jwt_secret must be at least 32 characters. Generate one "
             "with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"

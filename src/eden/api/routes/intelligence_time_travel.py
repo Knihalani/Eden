@@ -47,13 +47,10 @@ router = APIRouter(
 
 
 class ForkRequest(BaseModel):
-    parent_trace_id: str = Field(
-        ..., description="The trace being forked."
-    )
+    parent_trace_id: str = Field(..., description="The trace being forked.")
     fork_at_step: int = Field(
         ...,
-        description="The step index to fork at. "
-        "Steps 1..fork_at_step-1 are served from cache.",
+        description="The step index to fork at. " "Steps 1..fork_at_step-1 are served from cache.",
     )
     name: str = Field(..., description="Customer-facing fork name.")
     parent_fork_id: str | None = Field(
@@ -74,6 +71,7 @@ class RecordSnapshotRequest(BaseModel):
     ``trace_fork_branches`` table as a synthetic fork with
     ``fork_at_step = -1`` (sentinel for "record only, no replay yet").
     """
+
     trace_id: str = Field(..., min_length=1, max_length=128)
     label: str | None = Field(None, max_length=128)
     parent_fork_id: str | None = Field(
@@ -189,6 +187,26 @@ async def replay(
     N live through the AIGateway. Emits the side-by-side
     diff + the tokens_saved / cost_saved_usd metrics.
     """
+    from eden.config import get_settings
+
+    if not getattr(get_settings(), "time_travel_replay_enabled", False):
+        # Disabled 2026-07-30. This endpoint never re-executed anything:
+        # the recorder stores no prompt content, so the replayer
+        # short-circuits and hands back the ORIGINAL response hash while
+        # reporting re_executed=True. Answering 503 is strictly better
+        # than answering confidently and wrongly — a user who sees an
+        # unchanged hash concludes their prompt edit had no effect.
+        # See config.time_travel_replay_enabled and
+        # docs/ops/disabled-features.md.
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Time-travel replay is temporarily disabled while the "
+                "recorder is fixed to persist prompt content. Forks and "
+                "recorded timelines are unaffected."
+            ),
+        )
+
     from eden.time_travel import TraceReplayer
 
     return await TraceReplayer().replay_from(
@@ -238,9 +256,7 @@ async def list_forks(
         raise HTTPException(status_code=503, detail="Postgres unavailable")
 
     try:
-        forks = await _list_forks_for_trace(
-            parent_trace_id=parent_trace_id, org_id=org_id
-        )
+        forks = await _list_forks_for_trace(parent_trace_id=parent_trace_id, org_id=org_id)
     except AttributeError as exc:
         raise HTTPException(status_code=503, detail="Postgres unavailable") from exc
     except Exception as exc:
