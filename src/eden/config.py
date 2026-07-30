@@ -240,6 +240,19 @@ def _build_settings_class():
         # message content AND edits are applied to payload.
         # See docs/ops/disabled-features.md.
         time_travel_replay_enabled: bool = False
+        # SSO routes. OFF since 2026-07-30: all 11 handlers in
+        # api/routes/sso.py query ``org_sso_providers``, which does not
+        # exist — the live schema has ``org_sso_settings`` and
+        # ``sso_configurations``. GET /sso/providers was an unhandled
+        # 500; POST returned 503. Endpoints that can only fail should
+        # not be in the OpenAPI surface.
+        #
+        # Re-enabling needs more than creating the table: the SCIM token
+        # is written to org_sso_providers.scim_token_hash but read from
+        # org_scim_config.scim_token_hash, and nothing writes the
+        # latter, so SCIM could never be enabled either.
+        # See docs/ops/disabled-features.md.
+        sso_enabled: bool = False
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
         # require this + the per-action two-stage opt-in. OFF by

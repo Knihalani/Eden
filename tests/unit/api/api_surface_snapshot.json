@@ -97,10 +97,6 @@
       "200:application/json",
       "422:application/json"
     ],
-    "DELETE /sso/providers/{provider_id}/scim/token": [
-      "200:application/json",
-      "422:application/json"
-    ],
     "GET /api/v1/me/data": [
       "200:application/json",
       "422:application/json"
@@ -1317,14 +1313,6 @@
     "GET /ready": [
       "200:application/json"
     ],
-    "GET /sso/login/{provider_id}": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "GET /sso/providers": [
-      "200:application/json",
-      "422:application/json"
-    ],
     "GET /subprocessors": [
       "200:application/json"
     ],
@@ -1524,10 +1512,6 @@
       "422:application/json"
     ],
     "PATCH /orgs/{org_id}/webhooks/{webhook_id}": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "PATCH /sso/providers/{provider_id}": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2537,30 +2521,6 @@
       "200:application/json",
       "422:application/json"
     ],
-    "POST /sso/callback/{provider_id}": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "POST /sso/providers": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "POST /sso/providers/{provider_id}/disable": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "POST /sso/providers/{provider_id}/enable": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "POST /sso/providers/{provider_id}/enforce": [
-      "200:application/json",
-      "422:application/json"
-    ],
-    "POST /sso/providers/{provider_id}/scim/token": [
-      "200:application/json",
-      "422:application/json"
-    ],
     "POST /support/tickets": [
       "200:application/json",
       "422:application/json"
@@ -2690,7 +2650,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 688,
+  "route_count": 678,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -2718,7 +2678,6 @@
     "DELETE /orgs/{org_id}/shares/{share_id}",
     "DELETE /orgs/{org_id}/tool-calls/{span_id}/label",
     "DELETE /orgs/{org_id}/webhooks/{webhook_id}",
-    "DELETE /sso/providers/{provider_id}/scim/token",
     "GET /api/v1/me/data",
     "GET /api/v1/me/data/jobs/{job_id}",
     "GET /auth/2fa/enforcement-status",
@@ -3032,8 +2991,6 @@
     "GET /public/traces/{token}",
     "GET /ready",
     "GET /redoc",
-    "GET /sso/login/{provider_id}",
-    "GET /sso/providers",
     "GET /subprocessors",
     "GET /v1/a2a/{org_id}/invocations/{trace_id}",
     "GET /v1/computer_use/{org_id}/screenshots/tombstoned/{trace_id}",
@@ -3087,7 +3044,6 @@
     "PATCH /orgs/{org_id}/settings/detection",
     "PATCH /orgs/{org_id}/signals/library/{template_id}",
     "PATCH /orgs/{org_id}/webhooks/{webhook_id}",
-    "PATCH /sso/providers/{provider_id}",
     "POST /api/v1/dsar",
     "POST /api/v1/feedback/tokens/{token_id}",
     "POST /api/v1/me/do-not-sell",
@@ -3341,12 +3297,6 @@
     "POST /orgs/{org_id}/webhooks",
     "POST /orgs/{org_id}/webhooks/dlq/{dlq_id}/replay",
     "POST /orgs/{org_id}/webhooks/{webhook_id}/test",
-    "POST /sso/callback/{provider_id}",
-    "POST /sso/providers",
-    "POST /sso/providers/{provider_id}/disable",
-    "POST /sso/providers/{provider_id}/enable",
-    "POST /sso/providers/{provider_id}/enforce",
-    "POST /sso/providers/{provider_id}/scim/token",
     "POST /support/tickets",
     "POST /v1/a2a/{org_id}/links",
     "POST /v1/a2a/{org_id}/links/{link_id}/fail",
@@ -3381,7 +3331,7 @@
     "PUT /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
     "PUT /orgs/{org_id}/sidebar-prefs"
   ],
-  "schema_count": 418,
+  "schema_count": 416,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -3667,8 +3617,6 @@
     "SCIMPatchOp",
     "SCIMPatchOperation",
     "SCIMUser",
-    "SSOProviderConfig",
-    "SSOProviderResponse",
     "SaveAsSignalRequest",
     "SavedSearchListResponse",
     "SavedSearchResponse",
