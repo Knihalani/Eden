@@ -145,9 +145,30 @@ export function ConnectRepoPanel({
     );
   }
 
-  const agentHint = agentId
-    ? `Issues and Improve plans for ${agentId} open PRs on this repo. Other agents can link different repos.`
-    : "Select an agent to link a repo — each agent has its own PR target.";
+  // Repo linking is per-agent. Do not show a connect CTA when no agent is
+  // selected (empty Agents dashboard / connect page without ?agent=).
+  if (!agentId) {
+    return (
+      <div
+        className={cn(
+          "border border-[var(--line)] bg-[var(--bg)]",
+          compact ? "p-4" : "p-5 sm:p-6",
+        )}
+        data-testid="connect-repo-panel-no-agent"
+      >
+        <p className="type-ui">Select an agent first</p>
+        <p className="type-meta mt-1 max-w-xl">
+          Each agent has its own PR target. Open an agent from the fleet list,
+          then connect the GitHub repo that holds that agent’s code.
+        </p>
+        <Link href="/agents" className="ds-btn ds-btn-outline ds-btn-sm mt-3">
+          Back to Agents
+        </Link>
+      </div>
+    );
+  }
+
+  const agentHint = `Issues and Improve plans for ${agentId} open PRs on this repo. Other agents can link different repos.`;
 
   return (
     <div
@@ -161,9 +182,7 @@ export function ConnectRepoPanel({
         <div className="min-w-0 space-y-1">
           <h3 className="type-ui">
             {active
-              ? agentId
-                ? `Repository for ${agentId}`
-                : "Repository for fix PRs"
+              ? `Repository for ${agentId}`
               : "Connect a repository"}
           </h3>
           <p className="type-meta max-w-xl">

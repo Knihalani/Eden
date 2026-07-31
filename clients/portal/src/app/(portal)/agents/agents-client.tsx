@@ -231,20 +231,19 @@ function AgentDetail({ agent }: { agent: AgentFixture | null }) {
       <div className="space-y-4 p-5">
         <EmptyState
           title="No agents yet"
-          body="Ingest traffic with the SDK or gateway, then connect a GitHub repo so Eden can open fix PRs."
+          body="Send traffic with the SDK using an agent_id (or project id). Agents appear here automatically from traces — connect a GitHub repo later from an agent’s detail view when you want Improve to open fix PRs."
         />
         <div className="flex flex-wrap gap-2">
-          <Link href="/agents/connect" className="ds-btn ds-btn-primary ds-btn-sm">
-            Connect repo
+          <Link href="/settings?mode=keys" className="ds-btn ds-btn-primary ds-btn-sm">
+            API keys
           </Link>
           <Link href="/gateway" className="ds-btn ds-btn-outline ds-btn-sm">
             Gateway usage
           </Link>
-          <Link href="/settings?mode=keys" className="ds-btn ds-btn-ghost ds-btn-sm">
-            API keys
+          <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">
+            Traces
           </Link>
         </div>
-        <ConnectRepoPanel compact />
       </div>
     );
   }

@@ -6,9 +6,9 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/dashboard":
     "One-glance view of agents, traces, costs, and alerts for the active org. Start here.",
   "/agents":
-    "Every AI agent connected to this org. Connect a repo, edit prompts, view fleet health.",
+    "Every AI agent seen in this org. Agents appear from SDK agent_id on ingest. Connect a repo from an agent’s detail view when you want Improve to open fix PRs.",
   "/agents/connect":
-    "Link the GitHub repo that holds your agent code. Eden opens Improve fix PRs on that repo.",
+    "Link the GitHub repo that holds a selected agent’s code. Eden opens Improve fix PRs on that repo.",
   "/gateway":
     "Gateway spend, tokens, models, providers, and cache hit rates for this workspace.",
   "/traces":
