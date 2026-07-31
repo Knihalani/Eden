@@ -122,9 +122,7 @@ async def _run_self_obs_retention(*, dry_run: bool) -> dict[str, object]:
             except Exception as exc:
                 # A table that has not been migrated yet must not abort
                 # the rest of the daily batch.
-                logger.warning(
-                    "[cron_tick] self_obs retention %s failed: %s", table, exc
-                )
+                logger.warning("[cron_tick] self_obs retention %s failed: %s", table, exc)
                 deleted[table] = f"error: {str(exc)[:120]}"
         return deleted
     except Exception as exc:
@@ -141,9 +139,7 @@ async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
         "typesense_ttl_cleanup": {},
         "self_obs_retention": {},
     }
-    out["retention_cron"] = await _safe_step(
-        "retention_cron", retention_run(dry_run=dry_run)
-    )
+    out["retention_cron"] = await _safe_step("retention_cron", retention_run(dry_run=dry_run))
     out["typesense_ttl_cleanup"] = await _safe_step(
         "typesense_ttl_cleanup", _run_typesense_ttl_cleanup(dry_run=dry_run)
     )
@@ -188,30 +184,65 @@ async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
         return _err(exc)
 
 
+#: Max orgs curated concurrently per tick. Each org runs its own sequential
+#: chain of Postgres queries, so this is also the peak number of pool
+#: connections the step holds.
+_AUTO_CURATOR_CONCURRENCY = 8
+
+
 async def _run_auto_curator() -> dict[str, object]:
     """Per-org auto-curator; one org failure must not abort the rest."""
+    from eden.async_tasks import bounded_gather
     from eden.evaluation.auto_curator import AutoCurator
     from eden.storage.postgres import get_postgres_client
 
     pg = await get_postgres_client()
     if pg is None:
         return {"skipped": True, "reason": "postgres_unavailable"}
-    org_rows = await pg.fetch(
-        "SELECT id::text AS org_id FROM organizations LIMIT 50"
-    )
-    curator_out: list[dict[str, object]] = []
+    org_rows = await pg.fetch("SELECT id::text AS org_id FROM organizations LIMIT 50")
     curator = AutoCurator()
+    org_ids = [str(orow["org_id"]) for orow in org_rows]
+
+    # Was a strictly sequential ``for`` over up to 50 orgs, each of which
+    # issues several Postgres round-trips (``_top_agents``, one
+    # ``_sample_traces`` + ``_upsert_slices`` per agent, ``_record_run``).
+    # The tick's wall clock was therefore the *sum* of every org's latency
+    # while the pool sat idle. ``bounded_gather`` overlaps them under the
+    # shared process-local semaphore so a slow org cannot monopolise the
+    # tick and the fan-out still cannot exceed ``limit`` concurrent orgs.
+    #
+    # The limit is deliberately well below the pool size: each org runs its
+    # own sequential chain, so ``limit`` is also the peak number of pool
+    # connections this step holds. ``_run_auto_curator`` is reached only
+    # from ``run_tick`` (the cron worker), never from a request handler, so
+    # there is no request-pinned connection in the context here — the
+    # single-operation-per-connection rule that would otherwise forbid a
+    # concurrent fan-out does not apply. The route-level entry point
+    # (``routes/learn.py``) calls ``AutoCurator.run_for_org`` directly for a
+    # single org and is unaffected.
+    #
+    # ``bounded_gather`` preserves input order, so ``runs`` still lines up
+    # with ``org_rows``.
+    settled = await bounded_gather(
+        *(curator.run_for_org(oid) for oid in org_ids),
+        limit=_AUTO_CURATOR_CONCURRENCY,
+        return_exceptions=True,
+    )
+
+    curator_out: list[dict[str, object]] = []
     errors = 0
-    for orow in org_rows:
-        oid = str(orow["org_id"])
-        try:
-            curator_out.append(await curator.run_for_org(oid))
-        except Exception as exc:
+    for oid, outcome in zip(org_ids, settled, strict=True):
+        if isinstance(outcome, BaseException):
             errors += 1
             logger.exception(
-                "[cron_tick] auto_curator failed org=%s: %s", oid, exc
+                "[cron_tick] auto_curator failed org=%s: %s",
+                oid,
+                outcome,
+                exc_info=outcome,
             )
-            curator_out.append({"org_id": oid, "errors": [str(exc)]})
+            curator_out.append({"org_id": oid, "errors": [str(outcome)]})
+        else:
+            curator_out.append(outcome)
     result: dict[str, object] = {
         "orgs": len(curator_out),
         "runs": curator_out[:5],
@@ -261,6 +292,12 @@ async def _once_per_window(key: str, *, ttl_seconds: int) -> bool:
             return True
         return False
     except Exception as exc:
+        try:
+            from eden.storage.redis import note_redis_quota_exhausted
+
+            note_redis_quota_exhausted(exc)
+        except Exception:  # noqa: BLE001
+            pass
         logger.warning("[cron_tick] once_per_window %s failed: %s", key, exc)
         return True
 
@@ -275,6 +312,12 @@ async def _release_window(key: str) -> None:
             return
         await r.delete(f"eden:maint:{key}")
     except Exception as exc:
+        try:
+            from eden.storage.redis import note_redis_quota_exhausted
+
+            note_redis_quota_exhausted(exc)
+        except Exception:  # noqa: BLE001
+            pass
         logger.warning("[cron_tick] release_window %s failed: %s", key, exc)
 
 
@@ -338,9 +381,7 @@ async def run_maintenance_due(
         if await _once_per_window(hour_key, ttl_seconds=55 * 60):
             _queue(
                 "columnar_compaction",
-                _safe_step(
-                    "columnar_compaction", _run_columnar_compaction(dry_run=dry_run)
-                ),
+                _safe_step("columnar_compaction", _run_columnar_compaction(dry_run=dry_run)),
                 claim=hour_key,
             )
         else:
@@ -421,6 +462,25 @@ async def run_maintenance_due(
             }
 
     if not dry_run and now.minute % 10 < 5:
+        # Its own slot rather than sharing the signal claim: a failing
+        # signal backfill must not stop the fallback backlog draining,
+        # and vice versa. Every 10 minutes because the table this drains
+        # is written on every ClickHouse insert failure and, until this
+        # step existed, was never read or deleted by anything.
+        drain_key = _slot_key("ch_fallback_drain", now, minutes=10)
+        if await _once_per_window(drain_key, ttl_seconds=9 * 60):
+            _queue(
+                "clickhouse_fallback_drain",
+                _safe_step("clickhouse_fallback_drain", _run_clickhouse_fallback_drain()),
+                claim=drain_key,
+            )
+        else:
+            out["clickhouse_fallback_drain"] = {
+                "skipped": True,
+                "reason": "already_ran_this_slot",
+            }
+
+    if not dry_run and now.minute % 10 < 5:
         sig_key = _slot_key("signal", now, minutes=10)
         if await _once_per_window(sig_key, ttl_seconds=9 * 60):
             _queue(
@@ -445,15 +505,11 @@ async def run_maintenance_due(
 
     if pending:
         names = list(pending.keys())
-        results = await asyncio.gather(
-            *(pending[n] for n in names), return_exceptions=True
-        )
+        results = await asyncio.gather(*(pending[n] for n in names), return_exceptions=True)
         failed_claims: set[str] = set()
         for name, result in zip(names, results, strict=True):
             if isinstance(result, BaseException):
-                logger.exception(
-                    "[cron_tick] %s failed after gather: %s", name, result
-                )
+                logger.exception("[cron_tick] %s failed after gather: %s", name, result)
                 out[name] = _err(result)
                 if name in claim_keys:
                     failed_claims.add(claim_keys[name])
@@ -477,6 +533,13 @@ async def _run_shadow_outcome_join() -> dict[str, object]:
     from eden.nudges.shadow_outcomes import ShadowOutcomeJoiner
 
     return await ShadowOutcomeJoiner().run_once()
+
+
+async def _run_clickhouse_fallback_drain() -> dict[str, object]:
+    """Replay rows that a failed ClickHouse insert parked in Postgres."""
+    from eden.data_platform.clickhouse_fallback_drain import run_once
+
+    return await run_once()
 
 
 async def _run_signal_backfill() -> dict[str, object]:

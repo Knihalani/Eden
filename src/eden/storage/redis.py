@@ -26,10 +26,12 @@ from eden.util.jsonx import loads as _jsonx_loads
 logger = logging.getLogger(__name__)
 settings = None
 
+
 def _get_settings():
     global settings
     if settings is None:
         from eden.config import get_settings as _gs
+
         settings = _gs()
     return settings
 
@@ -49,6 +51,43 @@ _redis_init_lock: asyncio.Lock | None = None
 #: bounds the coroutine, not the socket, and exists because the socket
 #: timeout demonstrably did not fire in production.
 _CLIENT_INIT_TIMEOUT_SECONDS = 10.0
+
+# Upstash Free monthly command cap (500k). Once hit, every SET/PING
+# still bills an attempt and floods logs. Circuit-open returns None from
+# get_redis_client so cron / leader fall through to Postgres or skip.
+_redis_quota_blocked_until_mono: float = 0.0
+_REDIS_QUOTA_COOLDOWN_SECONDS = 6 * 3600.0
+
+
+def redis_quota_exhausted() -> bool:
+    """True while the Upstash max-requests circuit is open."""
+    return time.monotonic() < _redis_quota_blocked_until_mono
+
+
+def note_redis_quota_exhausted(exc: BaseException | str | None = None) -> bool:
+    """Trip the quota circuit when Upstash returns max-requests.
+
+    Returns True if this exception (or an unconditional trip) opened /
+    refreshed the circuit. Callers that pass ``None`` force a trip
+    (e.g. after a known quota failure without the original exception).
+    """
+    global _redis_quota_blocked_until_mono, _redis_client, _redis_stream_client
+    if exc is not None:
+        msg = str(exc).lower()
+        if "max requests" not in msg and "max_requests" not in msg:
+            return False
+    was_open = redis_quota_exhausted()
+    _redis_quota_blocked_until_mono = time.monotonic() + _REDIS_QUOTA_COOLDOWN_SECONDS
+    # Drop clients so reconnect is attempted only after cooldown.
+    _redis_client = None
+    _redis_stream_client = None
+    if not was_open:
+        logger.error(
+            "Upstash Redis max-requests limit hit — circuit-open for %.0fs "
+            "(cron/leader will skip Redis; upgrade or wait for monthly reset).",
+            _REDIS_QUOTA_COOLDOWN_SECONDS,
+        )
+    return True
 
 
 def _redis_lock() -> asyncio.Lock:
@@ -77,14 +116,20 @@ def _resolve_redis_url() -> str | None:
 async def get_redis_client() -> Redis | None:
     """Get the singleton Redis client (short socket timeout — API path).
 
-    Returns None if REDIS_URL is not configured.
+    Returns None if REDIS_URL is not configured or the Upstash
+    max-requests circuit is open.
     """
     global _redis_client
+
+    if redis_quota_exhausted():
+        return None
 
     if _redis_client is not None:
         return _redis_client
 
     async with _redis_lock():
+        if redis_quota_exhausted():
+            return None
         if _redis_client is not None:
             return _redis_client
 
@@ -98,15 +143,9 @@ async def get_redis_client() -> Redis | None:
             # On Upstash Free (500k cmds/month) a 30s ping per connection
             # alone burns ~86k cmds/month — and rate-limit Lua was worse.
             settings = _get_settings()
-            health_interval = int(
-                getattr(settings, "redis_health_check_interval", 0) or 0
-            )
-            socket_timeout = float(
-                getattr(settings, "redis_socket_timeout", 2.0) or 2.0
-            )
-            max_connections = int(
-                getattr(settings, "redis_max_connections", 32) or 32
-            )
+            health_interval = int(getattr(settings, "redis_health_check_interval", 0) or 0)
+            socket_timeout = float(getattr(settings, "redis_socket_timeout", 2.0) or 2.0)
+            max_connections = int(getattr(settings, "redis_max_connections", 32) or 32)
             # NOTE: this await is inside ``_redis_lock()``. redis-py's
             # asyncio client connects when awaited, so a connect that
             # hangs holds the init lock — and every other caller queues
@@ -137,6 +176,8 @@ async def get_redis_client() -> Redis | None:
             )
             return _redis_client
         except Exception as e:
+            if note_redis_quota_exhausted(e):
+                return None
             logger.warning(f"Redis connection failed: {e}")
             return None
 
@@ -152,10 +193,15 @@ async def get_redis_stream_client() -> Redis | None:
     """
     global _redis_stream_client
 
+    if redis_quota_exhausted():
+        return None
+
     if _redis_stream_client is not None:
         return _redis_stream_client
 
     async with _redis_lock():
+        if redis_quota_exhausted():
+            return None
         if _redis_stream_client is not None:
             return _redis_stream_client
 
@@ -165,12 +211,8 @@ async def get_redis_stream_client() -> Redis | None:
 
         try:
             settings = _get_settings()
-            health_interval = int(
-                getattr(settings, "redis_health_check_interval", 0) or 0
-            )
-            block_ms = int(
-                getattr(settings, "redis_stream_block_ms", 300_000) or 300_000
-            )
+            health_interval = int(getattr(settings, "redis_health_check_interval", 0) or 0)
+            block_ms = int(getattr(settings, "redis_stream_block_ms", 300_000) or 300_000)
             # Must exceed block; +30s headroom for network RTT.
             socket_timeout = max(35.0, (block_ms / 1000.0) + 30.0)
             max_connections = min(
@@ -188,13 +230,14 @@ async def get_redis_stream_client() -> Redis | None:
                 max_connections=max_connections,
             )
             logger.info(
-                "Redis stream client connected "
-                "(socket_timeout=%ss, block_ms=%s).",
+                "Redis stream client connected " "(socket_timeout=%ss, block_ms=%s).",
                 socket_timeout,
                 block_ms,
             )
             return _redis_stream_client
         except Exception as e:
+            if note_redis_quota_exhausted(e):
+                return None
             logger.warning("Redis stream client connection failed: %s", e)
             return None
 
@@ -204,10 +247,7 @@ def redis_stream_block_ms() -> int:
     try:
         return max(
             1_000,
-            int(
-                getattr(_get_settings(), "redis_stream_block_ms", 300_000)
-                or 300_000
-            ),
+            int(getattr(_get_settings(), "redis_stream_block_ms", 300_000) or 300_000),
         )
     except Exception:
         return 300_000
@@ -218,12 +258,7 @@ def redis_stream_autoclaim_interval_s() -> int:
     try:
         return max(
             30,
-            int(
-                getattr(
-                    _get_settings(), "redis_stream_autoclaim_interval_s", 300
-                )
-                or 300
-            ),
+            int(getattr(_get_settings(), "redis_stream_autoclaim_interval_s", 300) or 300),
         )
     except Exception:
         return 300
@@ -246,6 +281,7 @@ async def close_redis_client() -> None:
 # ============================================================================
 # Cache helpers
 # ============================================================================
+
 
 class Cache:
     """Async Redis-backed cache with TTL, key namespacing, and an L0 layer.
@@ -417,13 +453,9 @@ class Cache:
         raw = _jsonx_dumps(value) if not isinstance(value, (str, bytes)) else value
         try:
             if nx:
-                result = await client.set(
-                    self._key(key), raw, ex=effective_ttl, nx=True
-                )
+                result = await client.set(self._key(key), raw, ex=effective_ttl, nx=True)
             else:
-                result = await client.set(
-                    self._key(key), raw, ex=effective_ttl
-                )
+                result = await client.set(self._key(key), raw, ex=effective_ttl)
             return result is not None
         except Exception as e:
             logger.warning(f"Cache set failed for {key}: {e}")
@@ -456,9 +488,7 @@ class Cache:
         return {
             **self._stats,
             "l0_size": len(self._l0),
-            "l0_hit_rate": (
-                round(self._stats["l0_hits"] / total, 4) if total else 0.0
-            ),
+            "l0_hit_rate": (round(self._stats["l0_hits"] / total, 4) if total else 0.0),
         }
 
     async def exists(self, key: str) -> bool:
@@ -505,6 +535,7 @@ cache = Cache(prefix="eden:cache", default_ttl=300)
 # ============================================================================
 # Cache decorator
 # ============================================================================
+
 
 def cached(
     ttl: int = 300,
@@ -567,6 +598,7 @@ def cached(
 # Session store
 # ============================================================================
 
+
 class SessionStore:
     """Redis-backed session store for ephemeral user state.
 
@@ -587,12 +619,15 @@ class SessionStore:
         if client is None:
             return False
         try:
-            return await client.set(
-                self._key(session_id),
-                _jsonx_dumps(data),
-                ex=ttl or self.default_ttl,
-                nx=True,
-            ) is not None
+            return (
+                await client.set(
+                    self._key(session_id),
+                    _jsonx_dumps(data),
+                    ex=ttl or self.default_ttl,
+                    nx=True,
+                )
+                is not None
+            )
         except Exception as e:
             logger.warning("Session create soft-failed for %s: %s", session_id, e)
             return False
@@ -651,11 +686,14 @@ class SessionStore:
         if client is None:
             return False
         try:
-            return await client.set(
-                self._key(session_id),
-                _jsonx_dumps(data),
-                ex=ttl or self.default_ttl,
-            ) is not None
+            return (
+                await client.set(
+                    self._key(session_id),
+                    _jsonx_dumps(data),
+                    ex=ttl or self.default_ttl,
+                )
+                is not None
+            )
         except Exception as e:
             logger.warning("Session update soft-failed for %s: %s", session_id, e)
             return False
@@ -690,6 +728,7 @@ session_store = SessionStore(prefix="eden:session", default_ttl=3600)
 # ============================================================================
 # Lock helpers (distributed locking)
 # ============================================================================
+
 
 class Lock:
     """Redis-backed distributed lock with automatic expiry.
@@ -728,6 +767,29 @@ class Lock:
             logger.debug("lock holder read failed for %s: %s", self._key, exc)
             return None
 
+    async def holder_state(self) -> str:
+        """``"held"`` | ``"unheld"`` | ``"unknown"``.
+
+        :meth:`holder` collapses three outcomes into ``None``: the key is
+        absent, the client is unavailable, and the read raised. A caller that
+        wants to conclude *"nobody holds this lock"* cannot use it — a replica
+        whose own Redis access is broken (bad URL, exhausted pool, DNS failure,
+        one-sided partition) reads ``None`` and would conclude the lock is free
+        while a healthy peer legitimately holds it.
+
+        ``"unknown"`` is the honest answer in those cases, and it must not be
+        treated as ``"unheld"``.
+        """
+        client = await get_redis_client()
+        if client is None:
+            return "unknown"
+        try:
+            value = await client.get(self._key)
+        except Exception as exc:
+            logger.debug("lock holder probe failed for %s: %s", self._key, exc)
+            return "unknown"
+        return "held" if value else "unheld"
+
     async def acquire(self, token: str | None = None) -> bool:
         """Try to acquire the lock.
 
@@ -749,15 +811,11 @@ class Lock:
 
         self._token = token or f"{time.time()}"
         try:
-            result = await client.set(
-                self._key, self._token, nx=True, ex=self.ttl
-            )
+            result = await client.set(self._key, self._token, nx=True, ex=self.ttl)
         except Exception as exc:
             # Fail-closed on Redis blips so singleton loops stay idle
             # instead of crashing the worker process.
-            logger.warning(
-                "leader lock acquire failed: %s (%s)", self._key, exc
-            )
+            logger.warning("leader lock acquire failed: %s (%s)", self._key, exc)
             self._token = None
             return False
         return result is not None
@@ -783,9 +841,7 @@ class Lock:
         try:
             result = await client.eval(lua, 1, self._key, self._token)
         except Exception as exc:
-            logger.warning(
-                "leader lock release failed: %s (%s)", self._key, exc
-            )
+            logger.warning("leader lock release failed: %s (%s)", self._key, exc)
             return False
         return bool(result)
 
@@ -806,12 +862,8 @@ class Lock:
             end
         """
         try:
-            result = await client.eval(
-                lua, 1, self._key, self._token, str(additional_ttl)
-            )
+            result = await client.eval(lua, 1, self._key, self._token, str(additional_ttl))
         except Exception as exc:
-            logger.warning(
-                "leader lock extend failed: %s (%s)", self._key, exc
-            )
+            logger.warning("leader lock extend failed: %s (%s)", self._key, exc)
             return False
         return bool(result)
