@@ -92,9 +92,7 @@ def test_coerce_outcome_case_insensitive():
 @pytest.mark.asyncio
 async def test_normalize_minimal_raw_dict():
     attr = Attribution(tenant_id="org_abc", source_format="otel")
-    event = await normalize_to_telemetry_event(
-        {"event_type": "otel.chat"}, attr
-    )
+    event = await normalize_to_telemetry_event({"event_type": "otel.chat"}, attr)
     assert event.tenant_id == "org_abc"
     assert event.source_format == "otel"
     assert event.event_type == "otel.chat"
@@ -137,36 +135,28 @@ async def test_normalize_preserves_explicit_ids():
 @pytest.mark.asyncio
 async def test_normalize_invalid_realm_defaults_to_production():
     attr = Attribution(tenant_id="org_abc")
-    event = await normalize_to_telemetry_event(
-        {"event_type": "x", "realm": "weird"}, attr
-    )
+    event = await normalize_to_telemetry_event({"event_type": "x", "realm": "weird"}, attr)
     assert event.realm == "production"
 
 
 @pytest.mark.asyncio
 async def test_normalize_uppercase_realm_lowercased():
     attr = Attribution(tenant_id="org_abc")
-    event = await normalize_to_telemetry_event(
-        {"event_type": "x", "realm": "PRODUCTION"}, attr
-    )
+    event = await normalize_to_telemetry_event({"event_type": "x", "realm": "PRODUCTION"}, attr)
     assert event.realm == "production"
 
 
 @pytest.mark.asyncio
 async def test_normalize_coerces_outcome():
     attr = Attribution(tenant_id="org_abc")
-    event = await normalize_to_telemetry_event(
-        {"event_type": "x", "outcome": "ok"}, attr
-    )
+    event = await normalize_to_telemetry_event({"event_type": "x", "outcome": "ok"}, attr)
     assert event.outcome == "success"
 
 
 @pytest.mark.asyncio
 async def test_normalize_uses_attribution_project_id():
     attr = Attribution(tenant_id="org_abc", project_id="my_project", source_format="otel")
-    event = await normalize_to_telemetry_event(
-        {"event_type": "x"}, attr
-    )
+    event = await normalize_to_telemetry_event({"event_type": "x"}, attr)
     assert event.project_id == "my_project"
 
 
@@ -174,11 +164,30 @@ async def test_normalize_uses_attribution_project_id():
 async def test_normalize_empty_payload_metrics_attributes():
     attr = Attribution(tenant_id="org_abc")
     event = await normalize_to_telemetry_event(
-        {"event_type": "x", "payload": None, "metrics": None,
-         "attributes": None, "tags": None},
+        {"event_type": "x", "payload": None, "metrics": None, "attributes": None, "tags": None},
         attr,
     )
     assert event.payload == {}
     assert event.metrics == {}
     assert event.attributes == {}
     assert event.tags == []
+
+
+@pytest.mark.asyncio
+async def test_normalize_lifts_outcome_and_error_from_payload():
+    attr = Attribution(tenant_id="org_abc", source_format="openai")
+    event = await normalize_to_telemetry_event(
+        {
+            "event_type": "llm_completion",
+            "trace_id": "t1",
+            "payload": {
+                "status": "error",
+                "error_message": "boom",
+                "error_type": "RuntimeError",
+            },
+        },
+        attr,
+    )
+    assert event.outcome == "failure"
+    assert event.attributes.get("error") == "boom"
+    assert event.attributes.get("error_type") == "RuntimeError"

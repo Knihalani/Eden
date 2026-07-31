@@ -18,6 +18,7 @@
 import { getDefaultClient } from "../client.js";
 import { errorClass, errorMessage, randomId, traceIdOrRandom } from "../ids.js";
 import { extractUsage, normalizeModelName } from "../tokens.js";
+import { currentTrace } from "../trace.js";
 import {
   SOURCE_FORMATS,
   type StreamChunk,
@@ -464,6 +465,8 @@ function _emitCompletion(args: {
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
     traceId: args.traceId,
+    spanId: randomId(),
+    parentSpanId: currentTrace()?.spanId,
     realm: config.realm,
     eventType: "llm_completion",
     timestamp: new Date().toISOString(),
@@ -476,6 +479,9 @@ function _emitCompletion(args: {
       error_type: args.errorType,
       ...(args.errorMessage !== undefined ? { error_message: args.errorMessage } : {}),
       environment_id: args.opts.environmentId,
+      ...(args.errorMessage !== undefined
+        ? { error: args.errorMessage }
+        : {}),
     },
     metrics: { duration_ms: args.durationMs, ...usageFields },
     modelNormalized: args.model ? (normalizeModelName(args.model) ?? undefined) : undefined,

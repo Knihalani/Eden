@@ -149,13 +149,27 @@ async def normalize_to_telemetry_event(
     # not mirrored into attributes yet — fold them in so portal SQL and
     # transcript extractors always see a message on failure outcomes.
     top_err = raw.get("error_message") or raw.get("error")
-    top_err_type = raw.get("error_type")
+    if isinstance(top_err, dict):
+        top_err = top_err.get("message") or top_err.get("msg")
+    if top_err is None:
+        nested_err = payload.get("error_message") or payload.get("error")
+        if isinstance(nested_err, dict):
+            top_err = nested_err.get("message") or nested_err.get("msg")
+        else:
+            top_err = nested_err
+    top_err_type = raw.get("error_type") or payload.get("error_type")
     if top_err and not attributes.get("eden.error") and not attributes.get("error"):
         attributes["error"] = str(top_err)
         attributes["eden.error"] = str(top_err)
     if top_err_type and not attributes.get("error_type") and not attributes.get("error.type"):
         attributes["error_type"] = str(top_err_type)
         attributes["error.type"] = str(top_err_type)
+
+    outcome = _coerce_outcome(
+        raw.get("outcome")
+        or payload.get("outcome")
+        or payload.get("status")
+    )
 
     if settings.ingestion_pii_pre_mask:
         # Mask payload + attributes concurrently (policy resolve is cached).
@@ -211,7 +225,7 @@ async def normalize_to_telemetry_event(
         metrics=metrics,
         attributes=attributes,
         tags=tags,
-        outcome=_coerce_outcome(raw.get("outcome")),
+        outcome=outcome,
         source_format=attribution.source_format,
         request_body=raw.get("request_body"),
         response_body=raw.get("response_body"),

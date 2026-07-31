@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import secrets
 import time
 from typing import Any
 
@@ -43,7 +44,7 @@ from eden_sdk._instrumentation_ids import _get_attr, _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
-from eden_sdk.trace import TraceContext, current_trace
+from eden_sdk.trace import TraceContext, current_span, current_trace
 
 logger = logging.getLogger("eden_sdk.instrumentation.mistral")
 
@@ -200,6 +201,17 @@ def _enqueue_mistral_event(
                 payload["tool_names"] = tool_names
 
     payload.setdefault("trace_id", _trace_id_or_random())
+    payload.setdefault("span_id", secrets.token_hex(8))
+    _cur = current_span()
+    if _cur is not None:
+        payload.setdefault("parent_span_id", _cur.span_id)
+    if error is not None:
+        attrs = payload.get("attributes")
+        if not isinstance(attrs, dict):
+            attrs = {}
+            payload["attributes"] = attrs
+        attrs.setdefault("error", error)
+        attrs.setdefault("eden.error", error)
     trace_ctx: TraceContext | None = current_trace()
     if trace_ctx is not None:
         name = (trace_ctx.name or "").strip()

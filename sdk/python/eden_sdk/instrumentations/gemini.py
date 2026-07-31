@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import secrets
 import time
 import uuid
 from typing import Any
@@ -17,6 +18,7 @@ from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
+from eden_sdk.trace import current_span
 
 logger = logging.getLogger("eden_sdk.instrumentation.gemini")
 
@@ -179,6 +181,7 @@ def _enqueue(
     payload: dict[str, Any] = {
         "event_id": f"eden_gemini_{uuid.uuid4().hex[:16]}",
         "trace_id": _trace_id_or_random(),
+        "span_id": secrets.token_hex(8),
         "event_type": "llm_completion",
         "name": f"{provider}.generate_content",
         "model": model,
@@ -192,11 +195,17 @@ def _enqueue(
         "cache_read_input_tokens": usage["cache_read_tokens"],
         "cache_creation_input_tokens": usage["cache_creation_tokens"],
     }
+    _cur = current_span()
+    if _cur is not None:
+        payload["parent_span_id"] = _cur.span_id
     if total_tokens is not None:
         payload["total_tokens"] = total_tokens
     if error:
         payload["error"] = error
         payload["outcome"] = "error"
+        attrs = payload["attributes"]
+        attrs.setdefault("error", error)
+        attrs.setdefault("eden.error", error)
     else:
         payload["outcome"] = "success"
     get_default_client().enqueue(TraceEvent(payload=payload, source_format="gemini"))

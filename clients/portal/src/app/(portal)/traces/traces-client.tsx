@@ -1617,7 +1617,9 @@ function LabTracesInner() {
                 {tab === "trace" ? (
                   <div className="ml-auto flex items-center gap-1">
                     <span className="type-label mr-1 hidden sm:inline">
-                      {selected.steps.length} spans
+                      {selected.steps.length === 1
+                        ? "1 span · single-step run"
+                        : `${selected.steps.length} spans`}
                     </span>
                     <button
                       type="button"
