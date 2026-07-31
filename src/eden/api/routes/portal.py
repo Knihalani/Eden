@@ -1210,9 +1210,19 @@ async def get_portal_trace(
                 trace_id,
                 redact_all(str(exc)),
             )
-            return []
+            # Propagate so the empty-transcript retry / 503 path runs —
+            # never return steps=[] on a flatten fault (looks like "no spans").
+            raise
 
-    steps = _steps_from_tree(tree)
+    steps: list[TranscriptStep] = []
+    try:
+        steps = _steps_from_tree(tree)
+    except Exception as exc:  # noqa: BLE001 — flatten fault; retry/503 below
+        logger.warning(
+            "portal trace detail: steps from tree failed for %s: %s",
+            trace_id,
+            redact_all(str(exc)),
+        )
     if isinstance(tree, BaseException):
         logger.warning(
             "portal trace detail: get_trace_tree failed for %s: %s",
@@ -1609,7 +1619,11 @@ async def list_portal_alert_rules(
         rules = await alerts_repo.list_nl_rules(org_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal alert rules: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Alert rules temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[AlertRuleCard] = []
     for r in rules:
@@ -1645,7 +1659,11 @@ async def list_portal_alert_events(
         events, _total = await alerts_repo.list_alert_events(org_id, limit=limit, offset=0)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal alert events: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Alert events temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[AlertEventCard] = []
     for e in events:
@@ -1689,7 +1707,11 @@ async def list_portal_cost_drivers(
         insights = list(raw or [])
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal cost drivers: insights unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Cost drivers temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[CostDriverCard] = []
     for item in insights:
@@ -2021,7 +2043,11 @@ async def list_portal_members(
     """Members + pending invites (invited) as portal ``MemberCard``s."""
     client = await _pg()
     if client is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Members temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     async def _fetch_members() -> list[dict]:
         try:
@@ -2040,7 +2066,11 @@ async def list_portal_members(
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("portal members: query failed: %s", redact_all(str(exc)))
-            return []
+            raise HTTPException(
+                status_code=503,
+                detail="Members temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            ) from exc
 
     async def _fetch_invites() -> list[dict]:
         try:
@@ -2094,7 +2124,11 @@ async def list_portal_audit_events(
     """Audit events from ``org_audit_log`` when available."""
     client = await _pg()
     if client is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Audit events temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
     try:
         rows = await client.fetch(
             """
@@ -2113,7 +2147,11 @@ async def list_portal_audit_events(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal audit events: query failed: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Audit events temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[AuditEventCard] = []
     for r in rows:

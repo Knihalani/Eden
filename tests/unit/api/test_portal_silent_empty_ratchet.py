@@ -5,28 +5,22 @@ and "you have no data yet" the same screen. During onboarding that is
 the worst possible failure mode, because the customer's rational
 response is to go debug their own code.
 
-Four handlers were converted to 503 on 2026-07-30 — the ones where an
-empty list actively misleads and where the portal demonstrably renders
-an error state:
+Converted to 503 (must not regress):
 
-    list_portal_traces      (list + detail)
-    list_user_orgs          (routes/orgs.py)
-    list_portal_api_keys
+    list_portal_traces / get_portal_trace
+    list_portal_api_keys / list_portal_keys
+    list_portal_agents
+    list_portal_sessions
+    list_portal_issues
+    list_portal_signals
+    list_portal_alert_rules / list_portal_alert_events
+    list_portal_cost_drivers
+    list_portal_members (client + members query)
+    list_portal_audit_events
 
-The rest are recorded below rather than converted, deliberately. Two
-reasons, both real:
-
-  * Three are helpers (`_load_registry`, `_fetch_members`,
-    `_fetch_invites`) composed into a larger response, where [] is a
-    legitimate partial rather than a lie.
-  * The portal does not check `isError` on every page yet — the agents
-    detail view renders an EmptyState regardless. Converting those to
-    503 before the client handles it would turn a degraded-but-readable
-    page into a hard error, which is a net loss.
-
-So this is a RATCHET, not a pass/fail on the existing set: the known
-sites are allowed, and any NEW one fails. It cannot be satisfied by
-adding an entry — shrinking the list is the only way it moves.
+Remaining known soft-empties are either partial composers (invites)
+or secondary pages not yet on the error-panel contract. Shrinking
+this list is the only way the ratchet moves.
 """
 
 from __future__ import annotations
@@ -38,25 +32,8 @@ _REPO = Path(__file__).resolve().parents[3]
 _PORTAL = _REPO / "src" / "eden" / "api" / "routes" / "portal.py"
 
 #: (handler, kind) pairs that currently return [] on a failure path.
-#: Line numbers are deliberately excluded — they churn on every edit and
-#: would make this a maintenance tax rather than a guard.
 KNOWN_SILENT_EMPTY: set[tuple[str, str]] = {
-    ("list_portal_agents", "no-client"),
-    ("list_portal_agents", "except"),
-    ("_load_registry", "except"),
-    ("list_portal_sessions", "except"),
-    ("list_portal_issues", "except"),
-    ("list_portal_signals", "no-client"),
-    ("list_portal_signals", "except"),
-    ("list_portal_alert_rules", "except"),
-    ("list_portal_alert_events", "except"),
-    ("list_portal_cost_drivers", "except"),
-    ("list_portal_members", "no-client"),
-    ("list_portal_members", "except"),
-    ("_fetch_members", "except"),
     ("_fetch_invites", "except"),
-    ("list_portal_audit_events", "no-client"),
-    ("list_portal_audit_events", "except"),
     ("list_portal_audit_packs", "except"),
     ("list_portal_datasets", "except"),
     ("list_portal_playgrounds", "except"),
@@ -67,6 +44,36 @@ KNOWN_SILENT_EMPTY: set[tuple[str, str]] = {
     ("list_portal_assistant_threads", "except"),
 }
 
+_CONVERTED = (
+    "list_portal_traces",
+    "get_portal_trace",
+    "list_portal_api_keys",
+    "list_portal_keys",
+    "list_portal_agents",
+    "list_portal_sessions",
+    "list_portal_issues",
+    "list_portal_signals",
+    "list_portal_alert_rules",
+    "list_portal_alert_events",
+    "list_portal_cost_drivers",
+    "list_portal_members",
+    "list_portal_audit_events",
+)
+
+
+def _walk_excluding_nested_fns(node: ast.AST):
+    """Walk ``node`` but do not descend into nested function defs.
+
+    Without this, a parent like ``list_portal_members`` inherits
+    ``return []`` from nested ``_fetch_invites``, which is already
+    tracked under its own name.
+    """
+    yield node
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        yield from _walk_excluding_nested_fns(child)
+
 
 def _find_silent_empty() -> set[tuple[str, str]]:
     tree = ast.parse(_PORTAL.read_text())
@@ -74,7 +81,7 @@ def _find_silent_empty() -> set[tuple[str, str]]:
     for fn in ast.walk(tree):
         if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        for node in ast.walk(fn):
+        for node in _walk_excluding_nested_fns(fn):
             if isinstance(node, ast.If):
                 for st in node.body:
                     if (
@@ -86,7 +93,7 @@ def _find_silent_empty() -> set[tuple[str, str]]:
                         if "None" in test and "client" in test:
                             found.add((fn.name, "no-client"))
             if isinstance(node, ast.ExceptHandler):
-                for st in ast.walk(node):
+                for st in _walk_excluding_nested_fns(node):
                     if (
                         isinstance(st, ast.Return)
                         and isinstance(st.value, ast.List)
@@ -118,9 +125,9 @@ class TestSilentEmptyRatchet:
         )
 
     def test_the_converted_handlers_stayed_converted(self):
-        """The four already fixed must not regress."""
+        """Already-fixed handlers must not regress to silent empty."""
         found = _find_silent_empty()
-        for handler in ("list_portal_traces", "list_portal_api_keys"):
+        for handler in _CONVERTED:
             assert (handler, "no-client") not in found, (
                 f"{handler} regressed to returning [] on a dead database"
             )
