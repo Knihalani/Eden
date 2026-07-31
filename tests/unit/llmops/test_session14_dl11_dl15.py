@@ -572,13 +572,13 @@ class TestDl14QuotaFailClosed:
             mw._check_hard_limits = AsyncMock(  # type: ignore[method-assign]
                 side_effect=RuntimeError("postgres unreachable"),
             )
-            # Cache has a recent value so fail-closed can use it.
+            # Cache has a recent credits breach so GLOBAL fail-closed fires.
             mw._record_hard_limits(
                 "org-x",
                 {
-                    "cost_usd": {
-                        "used": 100.0,
-                        "hard_limit": 50.0,
+                    "credits": {
+                        "used": 10000.0,
+                        "hard_limit": 10000.0,
                         "status": "hard_exceeded",
                     },
                 },

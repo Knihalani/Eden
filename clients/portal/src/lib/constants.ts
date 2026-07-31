@@ -18,15 +18,22 @@ export const SUPPORT_EMAIL = "kaiav@edenobservability.com";
 /** Canonical OpenAI-compatible gateway base URL (production). */
 export const GATEWAY_URL = "https://api.edenobservability.com/gateway/v1";
 
-/** Enforced free-tier LLM spend caps (USD / month) — see plan_tiers.py. */
-export const FREE_TIER_PERSONAL_CAP_USD = 1;
-export const FREE_TIER_ORG_CAP_USD = 3;
+/** Free-tier credit caps — 100 credits ≈ $1 Eden COGS (see plan_tiers.py). */
+export const CREDITS_PER_USD = 100;
+export const FREE_TIER_CREDITS_SOFT = 8_000; // ≈ $80
+export const FREE_TIER_CREDITS_HARD = 10_000; // ≈ $100
+export const FREE_TIER_CAP_USD = FREE_TIER_CREDITS_HARD / CREDITS_PER_USD;
+
+/** @deprecated Use FREE_TIER_CAP_USD — personal and org share the same ~$100 credit pool. */
+export const FREE_TIER_PERSONAL_CAP_USD = FREE_TIER_CAP_USD;
+/** @deprecated Use FREE_TIER_CAP_USD */
+export const FREE_TIER_ORG_CAP_USD = FREE_TIER_CAP_USD;
 
 /** Short free-tier line for hero KPIs and compact UI. */
-export const FREE_TIER_CAP_SHORT = `$${FREE_TIER_PERSONAL_CAP_USD} personal / $${FREE_TIER_ORG_CAP_USD} org`;
+export const FREE_TIER_CAP_SHORT = `${FREE_TIER_CREDITS_HARD.toLocaleString()} credits / mo (≈ $${FREE_TIER_CAP_USD})`;
 
 /** Full free-tier marketing sentence — landing, pricing, CTA. */
-export const FREE_TIER_TAGLINE = `Free during public beta · ${FREE_TIER_CAP_SHORT} monthly spend cap · No credit card.`;
+export const FREE_TIER_TAGLINE = `Free during public beta · ${FREE_TIER_CAP_SHORT} · No credit card.`;
 
 /** Sales contact — used by billing plan cards + Enterprise pricing CTA. */
 export const SALES_EMAIL = "kaiav@edenobservability.com";

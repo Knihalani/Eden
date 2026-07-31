@@ -7,15 +7,14 @@ endpoint path.  Blocks the request with HTTP 429 when a hard limit is hit
 and returns HTTP 429 with a soft-limit warning when only a soft limit is
 exceeded (still allows the request but warns).
 
-**Primary enforcement lever: ``cost_usd`` (total USD cost).** The free
-tier caps Eden's marginal COGS under $1/active-user/month. Every mutating
-request checks the org's monthly cost against its tier's
-``cost_hard_limit_usd``. Tokens / storage / sandbox remain in the headers
-for transparency but are NOT the primary blocker.
+**Primary enforcement lever: ``credits`` (100 credits ≈ $1 Eden COGS).**
+Free beta hard-caps at ~10_000 credits (≈ $100/mo). Every mutating
+request checks the org's monthly credits against its tier's
+``credits_hard_limit``. USD mirrors stay in headers for FinOps.
 
 Depends on:
   - org_resource_limits (soft / hard limits per org)
-  - usage_events (actual usage, aggregated in real time)
+  - usage_events + customer_cost_events (actual usage, aggregated)
   - plan_tiers (fallback defaults when DB limits are missing)
 
 Audit 2026-07-06 — converted from BaseHTTPMiddleware to pure ASGI.
@@ -63,7 +62,7 @@ PATH_RESOURCE_MAP: dict[str, list[str]] = {
 # Resources checked on EVERY mutating request regardless of path —
 # these are the headline free-tier levers.
 GLOBAL_MUTATING_RESOURCES: list[str] = [
-    "cost_usd",  # PRIMARY — total USD cost vs tier cap
+    "credits",  # PRIMARY — monthly credits vs tier cap (≈ $100 free beta)
 ]
 
 # HTTP methods considered "mutating"
@@ -372,8 +371,8 @@ class QuotaEnforcementMiddleware:
         # ── For mutating methods, enforce hard limits ──
         # GET/HEAD skip this branch entirely (B32).
         if method in MUTATING_METHODS:
-            # Path-specific resources + global (cost_usd) checked
-            # together. Cost cap fires regardless of path.
+            # Path-specific resources + global credits checked
+            # together. Credit cap fires regardless of path.
             resources = list(GLOBAL_MUTATING_RESOURCES) + self._resources_for_path(path)
             if resources:
                 # DL-14: ALWAYS check the cached snapshot first. If the
@@ -490,8 +489,15 @@ class QuotaEnforcementMiddleware:
             if status != "ok":
                 headers[f"X-Quota-{prefix}-Status"] = status
 
-        # PRIMARY cap — cost_usd. Floats so we don't lose precision on
-        # the cents/dollar boundary; the portal formats these as $.
+        # PRIMARY cap — credits. Also emit USD mirrors for FinOps UIs.
+        credits = budget.get("credits", {})
+        headers["X-Quota-Credits-Used"] = str(credits.get("used", 0))
+        headers["X-Quota-Credits-Soft"] = str(credits.get("soft_limit", 0))
+        headers["X-Quota-Credits-Hard"] = str(credits.get("hard_limit", 0))
+        headers["X-Quota-Credits-Pct"] = str(credits.get("percentage", 0))
+        if credits.get("status") not in (None, "ok"):
+            headers["X-Quota-Credits-Status"] = credits["status"]
+
         cost = budget.get("cost_usd", {})
         headers["X-Quota-Cost-Used"] = str(cost.get("used", 0))
         headers["X-Quota-Cost-Soft"] = str(cost.get("soft_limit", 0))
@@ -662,12 +668,23 @@ class QuotaEnforcementMiddleware:
             if status == "hard_exceeded" or over_cap:
                 used = res_data.get("used", 0)
                 hard = res_data.get("hard_limit", 0)
+                if resource == "credits":
+                    used_c = int(round(float(used)))
+                    hard_c = int(round(float(hard)))
+                    return (
+                        True,
+                        f"Free-tier credit cap reached this month "
+                        f"({used_c:,} / {hard_c:,} credits). "
+                        "Reach out to support to raise your cap. "
+                        "(Fail-closed: cached snapshot enforced)",
+                    )
                 if resource == "cost_usd":
                     return (
                         True,
                         f"Free-tier spending cap reached this month "
                         f"(${used:.2f} / ${hard:.2f}). "
-                        "Reach out to support to raise your cap. (Fail-closed: cached snapshot enforced)",
+                        "Reach out to support to raise your cap. "
+                        "(Fail-closed: cached snapshot enforced)",
                     )
                 if resource == "seats":
                     return (

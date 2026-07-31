@@ -6,14 +6,21 @@ Provides high-level APIs for:
 - Computing real-time spend and budget status against plan limits
 - Syncing quota counters from usage_events to org_resource_limits
 
-All monetary values are in USD (float dollars) for API convenience.
-Database stores cost_usd as NUMERIC(18,6) cents-compatible.
+Primary free-tier meter is **credits** (100 credits = $1 Eden COGS).
+USD mirrors remain for FinOps. Spend is the sum of ``usage_events``
+(customer telemetry) and ``customer_cost_events`` (platform LLM).
 """
+
+from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from eden.services.plan_tiers import get_plan_tier
+from eden.services.plan_tiers import (
+    get_plan_tier,
+    usd_to_credits,
+)
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
@@ -161,14 +168,19 @@ class UsageService:
         org_id: str,
         period: str = "month",  # "day" | "week" | "month" | "year"
     ) -> dict:
-        """Return total spend for the current billing period."""
+        """Return total spend for the current billing period.
+
+        Combines customer telemetry (``usage_events``) with Eden platform
+        LLM COGS (``customer_cost_events``) so free-tier credits track
+        both ingest-attributed cost and OpenRouter / gateway spend.
+        """
         now = datetime.now(UTC)
         start = self._period_start(now, period)
 
         client = await get_postgres_client()
+        total_cost_usd = await self._sum_org_cost_usd(client, org_id, start)
         query = """
             SELECT
-                COALESCE(SUM(cost_usd), 0) as total_cost_usd,
                 COALESCE(SUM(quantity) FILTER (WHERE event_type = 'llm_call'), 0) as total_tokens,
                 COALESCE(SUM(quantity) FILTER (WHERE event_type = 'job_start'), 0) as total_jobs,
                 COALESCE(SUM(quantity) FILTER (WHERE resource = 'storage_mb'), 0) as total_storage_mb,
@@ -178,16 +190,85 @@ class UsageService:
               AND created_at >= $2
         """
         row = await client.fetchrow(query, org_id, start)
+        credits_used = usd_to_credits(total_cost_usd)
         return {
             "period": period,
             "period_start": start.isoformat(),
             "period_end": now.isoformat(),
-            "total_cost_usd": float(row["total_cost_usd"]) if row else 0.0,
+            "total_cost_usd": total_cost_usd,
+            "credits_used": credits_used,
             "total_tokens": float(row["total_tokens"]) if row else 0.0,
             "total_jobs": float(row["total_jobs"]) if row else 0.0,
             "total_storage_mb": float(row["total_storage_mb"]) if row else 0.0,
             "total_events": row["total_events"] if row else 0,
         }
+
+    @staticmethod
+    async def _sum_org_cost_usd(client: Any, org_id: str, start: datetime) -> float:
+        """Sum monthly Eden COGS for credits enforcement.
+
+        Sources (best-effort; missing tables → 0):
+
+        - ``usage_events`` — customer telemetry / ingest-priced calls
+        - ``customer_cost_events`` — platform LLM via the cost ledger
+          (judges, Improve, chat, OpenRouter paths, …)
+        - ``budget_consumption`` (monthly window) — gateway + CostTracker
+          and any path that only mirrors into the budget service
+
+        OpenRouter / cost_ledger dual-writes ``customer_cost_events`` *and*
+        ``budget_consumption``, so we take ``max(events_sum, budget)``
+        instead of adding them — otherwise the same dollars would count
+        twice against the free-tier credit cap.
+        """
+        usage = 0.0
+        platform = 0.0
+        budget = 0.0
+        try:
+            row = await client.fetchrow(
+                """
+                SELECT COALESCE(SUM(cost_usd), 0) AS total
+                FROM usage_events
+                WHERE org_id = $1 AND created_at >= $2
+                """,
+                org_id,
+                start,
+            )
+            usage = float(row["total"]) if row else 0.0
+        except Exception as exc:
+            logger.debug("usage_events cost sum failed: %s", exc)
+        try:
+            row = await client.fetchrow(
+                """
+                SELECT COALESCE(SUM(cost_usd), 0) AS total
+                FROM customer_cost_events
+                WHERE org_id = $1 AND recorded_at >= $2
+                """,
+                org_id,
+                start,
+            )
+            platform = float(row["total"]) if row else 0.0
+        except Exception as exc:
+            logger.debug("customer_cost_events cost sum failed: %s", exc)
+        try:
+            # Monthly window_start aligns with plan-tier month boundaries
+            # (UTC first-of-month). Daily/weekly rows are ignored here —
+            # credits are a monthly free-tier cap.
+            row = await client.fetchrow(
+                """
+                SELECT COALESCE(SUM(cost_usd), 0) AS total
+                FROM budget_consumption
+                WHERE org_id = $1
+                  AND window = 'monthly'
+                  AND window_start >= $2
+                """,
+                org_id,
+                start,
+            )
+            budget = float(row["total"]) if row else 0.0
+        except Exception as exc:
+            logger.debug("budget_consumption cost sum failed: %s", exc)
+        events_sum = usage + platform
+        return round(max(events_sum, budget), 6)
 
     async def get_budget_status(self, org_id: str) -> dict:
         """Return current usage vs plan limits with soft/hard limit flags.
@@ -222,18 +303,18 @@ class UsageService:
             SELECT
                 COALESCE(SUM(quantity) FILTER (WHERE event_type = 'llm_call'), 0) as tokens_used,
                 COALESCE(SUM(quantity) FILTER (WHERE resource = 'storage_mb'), 0) as storage_mb_used,
-                COALESCE(SUM(quantity) FILTER (WHERE resource = 'sandbox_seconds'), 0) as sandbox_seconds_used,
-                COALESCE(SUM(cost_usd), 0) as total_cost_usd
+                COALESCE(SUM(quantity) FILTER (WHERE resource = 'sandbox_seconds'), 0) as sandbox_seconds_used
             FROM usage_events
             WHERE org_id = $1
               AND created_at >= $2
         """
         usage_row = await client.fetchrow(usage_query, org_id, month_start)
+        total_cost_usd = await self._sum_org_cost_usd(client, org_id, month_start)
 
         tokens_used = float(usage_row["tokens_used"]) if usage_row else 0.0
         storage_mb_used = float(usage_row["storage_mb_used"]) if usage_row else 0.0
         sandbox_seconds_used = float(usage_row["sandbox_seconds_used"]) if usage_row else 0.0
-        total_cost_usd = float(usage_row["total_cost_usd"]) if usage_row else 0.0
+        credits_used = usd_to_credits(total_cost_usd)
 
         def _limit(val, fallback):
             return int(val) if val and int(val) > 0 else fallback
@@ -304,9 +385,7 @@ class UsageService:
                 "status": _status(references_used, refs_soft, refs_hard),
             },
             "cost_usd": {
-                # PRIMARY free-tier enforcement lever. The portal UI
-                # leads with this card; the quota middleware 429s when
-                # ``status == "hard_exceeded"`` on any mutating request.
+                # USD mirror of credits — kept for FinOps / legacy headers.
                 "used": round(total_cost_usd, 4),
                 "soft_limit": round(float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd), 4),
                 "hard_limit": round(float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd), 4),
@@ -317,7 +396,23 @@ class UsageService:
                     float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd),
                 ),
             },
+            "credits": {
+                # PRIMARY free-tier enforcement lever (100 credits = $1).
+                "used": credits_used,
+                "soft_limit": int(getattr(tier, "credits_soft_limit", 0) or 0),
+                "hard_limit": int(getattr(tier, "credits_hard_limit", 0) or 0),
+                "percentage": _pct(
+                    credits_used,
+                    float(getattr(tier, "credits_hard_limit", 0) or 0),
+                ),
+                "status": _status(
+                    credits_used,
+                    float(getattr(tier, "credits_soft_limit", 0) or 0),
+                    float(getattr(tier, "credits_hard_limit", 0) or 0),
+                ),
+            },
             "total_cost_usd": round(total_cost_usd, 4),
+            "credits_used": credits_used,
         }
 
     async def get_daily_usage_series(

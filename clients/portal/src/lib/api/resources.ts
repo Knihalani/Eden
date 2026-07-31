@@ -504,12 +504,25 @@ export const api = {
   getPlans: (orgId: string) =>
     fetchApi<{
       plan_name: string;
+      display_name?: string;
+      /** Primary free-tier meter — 100 credits ≈ $1 Eden COGS. */
+      credits_used?: number;
+      credits_soft_limit?: number;
+      credits_hard_limit?: number;
+      credits_status?: string;
+      cost_used_usd?: number;
+      cost_soft_limit_usd?: number;
+      cost_hard_limit_usd?: number;
+      cost_status?: string;
       seats_limit: number;
       seats_used: number;
       references_limit: number;
       references_used: number;
-      jobs_limit: number;
-      jobs_used: number;
+      tokens_used?: number;
+      storage_mb_used?: number;
+      sandbox_seconds_used?: number;
+      jobs_limit?: number;
+      jobs_used?: number;
       active: boolean;
       stripe_subscription_id?: string;
       subscription_status?: string;
