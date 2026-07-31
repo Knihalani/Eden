@@ -401,8 +401,8 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     ):
         if src in usage:
             n = _as_token_count(usage[src])
-                if n is not None:
-                    metrics[dst] = n  # type: ignore[assignment]
+            if n is not None:
+                metrics[dst] = n  # type: ignore[assignment]
     if (
         "input_tokens" in metrics
         and "output_tokens" in metrics
@@ -667,8 +667,8 @@ def _bedrock_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     ):
         if src in usage:
             n = _as_token_count(usage[src])
-                if n is not None:
-                    metrics[dst] = n  # type: ignore[assignment]
+            if n is not None:
+                metrics[dst] = n  # type: ignore[assignment]
 
     # Pull request and response bodies verbatim. Bedrock's wire shape
     # varies; the most common keys are `input` (Converse), `body`
@@ -845,8 +845,8 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     ):
         if src in usage_metadata:
             n = _as_token_count(usage_metadata[src])
-                if n is not None:
-                    metrics[dst] = n  # type: ignore[assignment]
+            if n is not None:
+                metrics[dst] = n  # type: ignore[assignment]
 
     # Extract first text from candidates for backward-compat detectors
     candidates = item.get("candidates") or []
