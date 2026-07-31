@@ -590,17 +590,8 @@ function LabAgentInner() {
     patchQuery({ ai_prompt: null });
   }, [paramPrompt, seededPrompt, patchQuery]);
 
-  if (threadsQuery.isError) {
-    return (
-      <div className="ds-page">
-        <PageHeader title="Assistant" />
-        <QueryErrorPanel
-          error={threadsQuery.error}
-          onRetry={() => void threadsQuery.refetch()}
-        />
-      </div>
-    );
-  }
+  // Threads history failing must not block a fresh chat — the boot
+  // effect below seeds an empty thread when data is missing.
 
   if (!active) {
     return (

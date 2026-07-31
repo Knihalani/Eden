@@ -178,7 +178,11 @@ function LabDebuggerListInner() {
       <PageHeader
         title="Debugger"
         meta={
-          <span className="type-meta">{scopedCount} sessions</span>
+          <span className="type-meta">
+            Replay a single trace step-by-step · pick a run from Traces, or
+            start a session here
+            {scopedCount > 0 ? ` · ${scopedCount} sessions` : ""}
+          </span>
         }
       />
       <DebuggerListView

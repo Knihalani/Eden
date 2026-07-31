@@ -2171,7 +2171,7 @@ async def list_portal_keys(
             SELECT id, name, key_prefix, scopes, created_by,
                    last_used_at, created_at, revoked_at, active
             FROM org_api_keys
-            WHERE org_id = $1::uuid
+            WHERE org_id::text = $1
             ORDER BY created_at DESC
             LIMIT $2
             """,
@@ -2844,30 +2844,44 @@ async def list_portal_assistant_threads(
     limit: int = Query(50, ge=1, le=200),
     user: dict = Depends(get_current_user),
 ) -> list[AssistantThreadCard]:
-    """Assistant threads from ai-insights / conversations when available."""
+    """Assistant threads from ai-insights / conversations when available.
+
+    Soft-degrades to ``[]`` when Postgres is down, conversation tables
+    are missing, or the Clerk ``user_…`` id cannot map to Eden UUID —
+    never 503 the Assistant shell (that blocked New chat entirely).
+    """
     client = await _pg()
     if client is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Assistant threads temporarily unavailable; please retry",
-            headers={"Retry-After": "5"},
-        )
+        return []
 
-    user_id = user.get("user_id") if isinstance(user, dict) else None
+    from eden.api.deps import eden_user_id_from_auth
+
+    raw_user_id = user.get("user_id") if isinstance(user, dict) else None
+    eden_user_id: str | None = None
+    if raw_user_id:
+        try:
+            eden_user_id = await eden_user_id_from_auth(user)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "portal assistant threads: user resolve failed: %s",
+                redact_all(str(exc)),
+            )
+            eden_user_id = None
+
     rows: list[Any] = []
     try:
-        if user_id:
+        if eden_user_id:
             rows = await client.fetch(
                 """
                 SELECT id, title, updated_at, created_at
                 FROM ai_conversations
-                WHERE org_id = $1 AND user_id = $2
+                WHERE org_id::text = $1 AND user_id::text = $2
                   AND archived_at IS NULL
                 ORDER BY updated_at DESC
                 LIMIT $3
                 """,
                 org_id,
-                user_id,
+                eden_user_id,
                 limit,
             )
         else:
@@ -2875,7 +2889,7 @@ async def list_portal_assistant_threads(
                 """
                 SELECT id, title, updated_at, created_at
                 FROM ai_conversations
-                WHERE org_id = $1
+                WHERE org_id::text = $1
                   AND archived_at IS NULL
                 ORDER BY updated_at DESC
                 LIMIT $2
@@ -2884,12 +2898,11 @@ async def list_portal_assistant_threads(
                 limit,
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("portal assistant threads: query failed: %s", redact_all(str(exc)))
-        raise HTTPException(
-            status_code=503,
-            detail="Assistant threads temporarily unavailable; please retry",
-            headers={"Retry-After": "5"},
-        ) from exc
+        logger.warning(
+            "portal assistant threads: query failed: %s",
+            redact_all(str(exc)),
+        )
+        return []
 
     ids = [str(r["id"]) for r in rows]
     counts: dict[str, int] = {}
@@ -2898,8 +2911,8 @@ async def list_portal_assistant_threads(
             crows = await client.fetch(
                 """
                 SELECT conversation_id::text AS cid, COUNT(*)::int AS cnt
-                FROM ai_conversation_messages
-                WHERE conversation_id = ANY($1::text[])
+                FROM ai_messages
+                WHERE conversation_id::text = ANY($1::text[])
                 GROUP BY conversation_id
                 """,
                 ids,
@@ -2910,7 +2923,7 @@ async def list_portal_assistant_threads(
                 crows = await client.fetch(
                     """
                     SELECT conversation_id::text AS cid, COUNT(*)::int AS cnt
-                    FROM ai_messages
+                    FROM ai_conversation_messages
                     WHERE conversation_id::text = ANY($1::text[])
                     GROUP BY conversation_id
                     """,
@@ -2919,7 +2932,8 @@ async def list_portal_assistant_threads(
                 counts = {str(c["cid"]): int(c["cnt"] or 0) for c in crows}
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "portal assistant threads: message counts failed: %s", redact_all(str(exc))
+                    "portal assistant threads: message counts failed: %s",
+                    redact_all(str(exc)),
                 )
 
     out: list[AssistantThreadCard] = []
@@ -2928,10 +2942,10 @@ async def list_portal_assistant_threads(
         out.append(
             AssistantThreadCard(
                 id=sid,
-                title=str(r.get("title") or ""),
+                title=str(r.get("title") or "Chat"),
                 updatedAt=_iso(r.get("updated_at") or r.get("created_at")),
                 pins=[],
-                messageCount=counts.get(sid, 0),
+                messageCount=int(counts.get(sid, 0)),
             )
         )
     return out
