@@ -73,10 +73,37 @@ fi
 
 cd "$REPO_ROOT"
 
-echo "▶ Northflank deploy for project $PROJECT"
+SHA="$(git rev-parse HEAD)"
+echo "▶ Northflank deploy for project $PROJECT (sha=$SHA)"
 echo "  Git CI/CD is enabled on eden-api — pushes to main trigger builds automatically."
-echo "  To apply northflank.yml env/resource changes, update via the Northflank dashboard"
-echo "  or use: northflank patch service combined --project $PROJECT --service eden-api -f ..."
+
+# Keep EDEN_GIT_SHA honest on /live. Use the dedicated runtime-environment
+# and build-arguments routes — NEVER `patch service combined` with a
+# partial runtimeEnvironment (that SETS the whole map and wipes secrets
+# / plain vars that were omitted).
+if command -v northflank >/dev/null 2>&1; then
+  echo "▶ syncing EDEN_GIT_SHA via runtime-environment merge helper"
+  northflank get service --project "$PROJECT" --service eden-api -o json \
+    > /tmp/nf-live-for-env.json || true
+  if [[ -s /tmp/nf-live-for-env.json ]]; then
+    python3 "$REPO_ROOT/scripts/build_nf_env_payload.py" \
+      /tmp/nf-live-for-env.json /tmp/nf-env-payload.json || true
+    if [[ -s /tmp/nf-env-payload.json ]]; then
+      python3 - <<PY
+import json
+p = json.load(open("/tmp/nf-env-payload.json"))
+p.setdefault("runtimeEnvironment", {})["EDEN_GIT_SHA"] = "$SHA"
+json.dump(p, open("/tmp/nf-env-payload.json", "w"), indent=1, sort_keys=True)
+print("EDEN_GIT_SHA set in payload")
+PY
+      northflank update service runtime-environment \
+        --project "$PROJECT" --service eden-api -f /tmp/nf-env-payload.json || true
+    fi
+  fi
+  northflank update service build-arguments \
+    --project "$PROJECT" --service eden-api \
+    -i "{\"buildArguments\":{\"EDEN_GIT_SHA\":\"$SHA\"}}" || true
+fi
 
 if ! northflank combine --project "$PROJECT" --path "$MANIFEST" 2>/dev/null; then
   echo "▶ northflank combine unavailable in CLI $(northflank --version 2>/dev/null | tail -1)"

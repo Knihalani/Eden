@@ -30,17 +30,36 @@ async def test_check_postgres_ok():
 
 @pytest.mark.asyncio
 async def test_check_redis_missing_url():
-    with patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)):
-        assert await check_redis() == "error: REDIS_URL not configured"
+    with (
+        patch("eden.api.startup_checks.redis_quota_exhausted", create=True),
+        patch("eden.storage.redis.redis_quota_exhausted", return_value=False),
+        patch("eden.storage.redis.redis_url_configured", return_value=False),
+        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)),
+    ):
+        assert await check_redis() == "not_configured"
+
+
+@pytest.mark.asyncio
+async def test_check_redis_quota_exhausted():
+    with (
+        patch("eden.storage.redis.redis_quota_exhausted", return_value=True),
+        patch("eden.storage.redis.redis_url_configured", return_value=True),
+        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)),
+    ):
+        assert await check_redis() == "quota_exhausted"
 
 
 @pytest.mark.asyncio
 async def test_check_redis_ok():
     mock_client = AsyncMock()
     mock_client.ping.return_value = True
-    with patch(
-        "eden.storage.redis.get_redis_client",
-        AsyncMock(return_value=mock_client),
+    with (
+        patch("eden.storage.redis.redis_quota_exhausted", return_value=False),
+        patch("eden.storage.redis.redis_url_configured", return_value=True),
+        patch(
+            "eden.storage.redis.get_redis_client",
+            AsyncMock(return_value=mock_client),
+        ),
     ):
         assert await check_redis() == "ok"
 
@@ -71,7 +90,9 @@ async def test_check_openrouter_unauthorized():
     mock_client.__aexit__.return_value = None
     mock_client.get.return_value = mock_resp
     with patch("httpx.AsyncClient", return_value=mock_client):
-        assert await check_openrouter(settings) == "error: unauthorized (invalid OPENROUTER_API_KEY)"
+        assert (
+            await check_openrouter(settings) == "error: unauthorized (invalid OPENROUTER_API_KEY)"
+        )
 
 
 @pytest.mark.asyncio
