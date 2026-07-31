@@ -485,7 +485,7 @@ async def create_org(
             )
 
     # Free-only mode: every new org starts on ``org_free`` (3 seats,
-    # ~10_000 credits ≈ $100/mo hard cap). ``ON CONFLICT DO NOTHING``
+    # ~400 credits ≈ $4/mo hard cap). ``ON CONFLICT DO NOTHING``
     # (no target) makes the inserts idempotent against the composite
     # UNIQUE constraints on both tables — re-runs after Clerk backfill
     # just skip silently.

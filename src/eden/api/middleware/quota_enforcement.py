@@ -8,7 +8,7 @@ and returns HTTP 429 with a soft-limit warning when only a soft limit is
 exceeded (still allows the request but warns).
 
 **Primary enforcement lever: ``credits`` (100 credits ≈ $1 Eden COGS).**
-Free beta hard-caps at ~10_000 credits (≈ $100/mo). Every mutating
+Free beta hard-caps at ~400 credits (≈ $4/mo). Every mutating
 request checks the org's monthly credits against its tier's
 ``credits_hard_limit``. USD mirrors stay in headers for FinOps.
 
@@ -62,7 +62,7 @@ PATH_RESOURCE_MAP: dict[str, list[str]] = {
 # Resources checked on EVERY mutating request regardless of path —
 # these are the headline free-tier levers.
 GLOBAL_MUTATING_RESOURCES: list[str] = [
-    "credits",  # PRIMARY — monthly credits vs tier cap (≈ $100 free beta)
+    "credits",  # PRIMARY — monthly credits vs tier cap (≈ $4 free beta)
 ]
 
 # HTTP methods considered "mutating"

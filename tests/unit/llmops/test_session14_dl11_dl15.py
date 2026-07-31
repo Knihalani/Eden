@@ -577,8 +577,8 @@ class TestDl14QuotaFailClosed:
                 "org-x",
                 {
                     "credits": {
-                        "used": 10000.0,
-                        "hard_limit": 10000.0,
+                        "used": 400.0,
+                        "hard_limit": 400.0,
                         "status": "hard_exceeded",
                     },
                 },
