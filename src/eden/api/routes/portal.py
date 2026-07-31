@@ -2194,14 +2194,18 @@ async def list_portal_audit_packs(
     limit: int = Query(50, ge=1, le=200),
     _user: dict = Depends(get_current_user),
 ) -> list[AuditPackCard]:
-    """Compliance / ledger packs when available; else ``[]``."""
+    """Compliance / ledger packs when available."""
     try:
         from eden.governance.compliance_pack import AgentAuditLedgerWriter
 
         events = await AgentAuditLedgerWriter().query(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal audit packs: ledger unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Audit packs temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[AuditPackCard] = []
     for e in events or []:
@@ -2250,7 +2254,11 @@ async def list_portal_datasets(
         records = await DatasetHub().list_datasets(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal datasets: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Datasets temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[DatasetCard] = []
     for rec in records or []:
@@ -2283,7 +2291,11 @@ async def list_portal_playgrounds(
         records = await PlaygroundService().list(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal playgrounds: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Playgrounds temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[PlaygroundCard] = []
     for rec in records or []:
@@ -2319,7 +2331,11 @@ async def list_portal_experiments(
         rows = await OfflineExperimentRunner().list_experiments(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal experiments: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Experiments temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[ExperimentSummary] = []
     for r in rows or []:
@@ -2358,7 +2374,11 @@ async def list_portal_improve_plans(
         plans = await plans_repo.list_plans(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal improve plans: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Improve plans temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[ImprovePlanCard] = []
     for p in plans or []:
@@ -2547,7 +2567,11 @@ async def list_portal_guardrail_policies(
     # need ``org_id``, not the fetched policy rows), so run them concurrently.
     rows, match_counts = await asyncio.gather(_fetch_policy_rows(), _fetch_match_counts())
     if rows is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Guardrail policies temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     out: list[GuardrailPolicyCard] = []
     for r in rows:
@@ -2586,7 +2610,11 @@ async def list_portal_debugger_sessions(
         sessions = await DebugSessionService().list_sessions(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal debugger sessions: unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Debugger sessions temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[DebuggerSessionCard] = []
     for s in sessions or []:
@@ -2634,7 +2662,11 @@ async def list_portal_assistant_threads(
     """Assistant threads from ai-insights / conversations when available."""
     client = await _pg()
     if client is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Assistant threads temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     user_id = user.get("user_id") if isinstance(user, dict) else None
     rows: list[Any] = []
@@ -2668,7 +2700,11 @@ async def list_portal_assistant_threads(
             )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal assistant threads: query failed: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Assistant threads temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     ids = [str(r["id"]) for r in rows]
     counts: dict[str, int] = {}

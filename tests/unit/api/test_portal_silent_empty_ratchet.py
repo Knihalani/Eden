@@ -16,11 +16,14 @@ Converted to 503 (must not regress):
     list_portal_alert_rules / list_portal_alert_events
     list_portal_cost_drivers
     list_portal_members (client + members query)
-    list_portal_audit_events
+    list_portal_audit_events / list_portal_audit_packs
+    list_portal_datasets / playgrounds / experiments
+    list_portal_improve_plans
+    list_portal_debugger_sessions
+    list_portal_assistant_threads
 
-Remaining known soft-empties are either partial composers (invites)
-or secondary pages not yet on the error-panel contract. Shrinking
-this list is the only way the ratchet moves.
+Remaining known soft-empties are partial composers (invites).
+Shrinking this list is the only way the ratchet moves.
 """
 
 from __future__ import annotations
@@ -34,14 +37,6 @@ _PORTAL = _REPO / "src" / "eden" / "api" / "routes" / "portal.py"
 #: (handler, kind) pairs that currently return [] on a failure path.
 KNOWN_SILENT_EMPTY: set[tuple[str, str]] = {
     ("_fetch_invites", "except"),
-    ("list_portal_audit_packs", "except"),
-    ("list_portal_datasets", "except"),
-    ("list_portal_playgrounds", "except"),
-    ("list_portal_experiments", "except"),
-    ("list_portal_improve_plans", "except"),
-    ("list_portal_debugger_sessions", "except"),
-    ("list_portal_assistant_threads", "no-client"),
-    ("list_portal_assistant_threads", "except"),
 }
 
 _CONVERTED = (
@@ -58,6 +53,13 @@ _CONVERTED = (
     "list_portal_cost_drivers",
     "list_portal_members",
     "list_portal_audit_events",
+    "list_portal_audit_packs",
+    "list_portal_datasets",
+    "list_portal_playgrounds",
+    "list_portal_experiments",
+    "list_portal_improve_plans",
+    "list_portal_debugger_sessions",
+    "list_portal_assistant_threads",
 )
 
 
