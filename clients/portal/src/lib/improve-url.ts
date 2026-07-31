@@ -65,7 +65,7 @@ const ID_ALIASES = {
   artifactId: ["artifactId", "artifact_id"],
   promotionId: ["promotionId", "promotion_id"],
   entryId: ["entryId", "entry_id"],
-  agentId: ["agentId", "agent_id"],
+  agentId: ["agent", "agentId", "agent_id"],
   issueId: ["issueId", "issue_id"],
   alertId: ["alertId", "alert_id"],
   experimentId: ["experimentId", "experiment_id"],

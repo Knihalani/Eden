@@ -28,7 +28,7 @@ const DEFAULT_TAB: GuardrailsTab = "policies";
 const ID_ALIASES = {
   policyId: ["policyId", "policy_id"],
   violationId: ["violationId", "violation_id"],
-  agentId: ["agentId", "agent_id"],
+  agentId: ["agent", "agentId", "agent_id"],
   viewId: ["viewId", "savedView"],
 } as const;
 

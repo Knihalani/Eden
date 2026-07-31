@@ -254,8 +254,9 @@ export function parsePromoteTraceIds(
 }
 
 export function datasetHref(datasetId?: string): string {
-  if (datasetId) return `/datasets/${encodeURIComponent(datasetId)}`;
-  return "/evals?tab=datasets";
+  const q = new URLSearchParams({ tab: "datasets" });
+  if (datasetId) q.set("datasetId", datasetId);
+  return `/evals?${q.toString()}`;
 }
 
 export function experimentHref(experimentId?: string, issueId?: string): string {
@@ -266,13 +267,15 @@ export function experimentHref(experimentId?: string, issueId?: string): string 
 }
 
 export function ledgerHref(agentId?: string): string {
-  if (agentId) return `/agents/${encodeURIComponent(agentId)}/ledger`;
-  return "/improve?tab=ledger";
+  const q = new URLSearchParams({ tab: "ledger" });
+  if (agentId) q.set("agent", agentId);
+  return `/improve?${q.toString()}`;
 }
 
 export function driftHref(agentId: string, dimension?: string): string {
-  const q = dimension ? `?dimension=${encodeURIComponent(dimension)}` : "";
-  return `/agents/${encodeURIComponent(agentId)}/drift${q}`;
+  const q = new URLSearchParams({ id: agentId });
+  if (dimension) q.set("q", `dimension:${encodeURIComponent(dimension)}`);
+  return `/agents?${q.toString()}`;
 }
 
 export function tracesFilteredHref(filters: {
@@ -295,8 +298,9 @@ export function tracesFilteredHref(filters: {
 }
 
 export function labelingQueueHref(queueId?: string): string {
-  if (queueId) return `/labeling/queues/${encodeURIComponent(queueId)}`;
-  return "/evals?tab=labeling";
+  const q = new URLSearchParams({ tab: "labeling" });
+  if (queueId) q.set("queueId", queueId);
+  return `/evals?${q.toString()}`;
 }
 
 export function incidentHref(clusterId?: string): string {
@@ -304,9 +308,9 @@ export function incidentHref(clusterId?: string): string {
   return "/issues?tab=incidents";
 }
 
-/** Promotions nest under Ledger (Wave 3) — deep links preserve inbox UX. */
+/** Promotions live under Improve (Wave 3). */
 export function promotionsHref(): string {
-  return "/ledger?tab=promotions";
+  return "/improve?tab=promotions";
 }
 
 /** Required cross-link matrix entries (U19 §3) — used by CI tests. */

@@ -315,7 +315,10 @@ function DeltaStat({ label, value }: { label: string; value: string }) {
 
 function compareDelta(left: TraceFixture, right: TraceFixture) {
   const dMs = right.durationMs - left.durationMs;
-  const dCost = (right.costUsd ?? 0) - (left.costUsd ?? 0);
+  const bothCostsKnown = left.costUsd != null && right.costUsd != null;
+  const dCost = bothCostsKnown
+    ? (right.costUsd as number) - (left.costUsd as number)
+    : null;
   const dSpans = right.steps.length - left.steps.length;
   const max = Math.max(left.steps.length, right.steps.length);
   let firstDiff: string | null = null;
@@ -333,7 +336,10 @@ function compareDelta(left: TraceFixture, right: TraceFixture) {
   }
   return {
     duration: `${dMs >= 0 ? "+" : ""}${formatDuration(Math.abs(dMs))}${dMs >= 0 ? " slower" : " faster"}`,
-    cost: `${dCost >= 0 ? "+" : "−"}${formatUsd(Math.abs(dCost))}`,
+    cost:
+      dCost == null
+        ? "—"
+        : `${dCost >= 0 ? "+" : "−"}${formatUsd(Math.abs(dCost))}`,
     spans: `${dSpans >= 0 ? "+" : ""}${dSpans}`,
     status: `${left.status} → ${right.status}`,
     firstDiff,

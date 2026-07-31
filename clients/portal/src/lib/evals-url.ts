@@ -63,7 +63,7 @@ const ID_ALIASES = {
   experimentId: ["experimentId", "experiment_id"],
   baselineId: ["baselineId", "baseline_id"],
   compareId: ["compareId", "compare_id"],
-  agentId: ["agentId", "agent_id"],
+  agentId: ["agent", "agentId", "agent_id"],
   queueId: ["queueId", "queue_id"],
   viewId: ["viewId", "savedView"],
   traceId: ["traceId", "trace_id", "promote_trace"],

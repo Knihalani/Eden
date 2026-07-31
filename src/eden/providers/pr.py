@@ -405,6 +405,25 @@ class LocalPRProvider:
         await self._write_pr_record(info, commit, req.labels, req.reviewers)
         return info
 
+    async def _resolve_local_base(self, original: dict[str, Any]) -> str:
+        """Resolve revert base from the original PR or local git default."""
+        base = (original.get("base") or "").strip()
+        if base:
+            return base
+        try:
+            from .repo import LocalRepoProvider
+
+            branch = await LocalRepoProvider(repo_path=self.repo_path).get_default_branch()
+            branch = (branch or "").strip()
+            if branch:
+                return branch
+        except Exception as exc:
+            logger.debug("LocalPRProvider._resolve_local_base: %s", exc)
+        raise RuntimeError(
+            "LocalPRProvider.revert: could not resolve base branch "
+            "(original PR has no base and git default is unavailable)"
+        )
+
     async def revert(
         self,
         req: PRRevertRequest,
@@ -473,7 +492,7 @@ class LocalPRProvider:
             ),
             branch=new_branch,
             # Revert lands on the original PR's base — never the new head branch.
-            base=(original.get("base") or "").strip() or "main",
+            base=await self._resolve_local_base(original),
             url=(f"file://{self.repo_path}/.eden/prs/{number}.json"),
             state="open",
             created_at=datetime.now(UTC),
