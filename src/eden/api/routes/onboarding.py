@@ -19,6 +19,16 @@ The 4 endpoints (all under ``/v1/internal/onboarding/{org_id}``):
 The 7-step order is enforced in
 :class:`eden.services.onboarding.OnboardingStateMachine` —
 the route layer just maps JSON to method calls.
+
+**Gated off by ``onboarding_state_machine_v2_enabled`` (default
+``False``, 2026-07-31).** The state machine writes columns that do
+not exist on the live ``onboarding_state`` table, so every route used
+to answer ``{"status":"ok","live":true}`` while persisting nothing —
+see docs/ops/known-issues.md #9 and docs/ops/disabled-features.md.
+This is a separate, unaffected surface from the onboarding wizard the
+portal actually uses (``/orgs/{org_id}/onboarding/state`` in
+``api/routes/github.py``), which matches the live schema and persists
+for real. Do not change that route as part of fixing this one.
 """
 
 from __future__ import annotations
@@ -26,7 +36,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
@@ -42,10 +52,35 @@ from eden.services.onboarding import (
 
 logger = logging.getLogger(__name__)
 
+
+def _require_onboarding_v2_enabled() -> None:
+    """Gate the whole D.14 onboarding-v2 surface.
+
+    Raises 503 until :attr:`Settings.onboarding_state_machine_v2_enabled`
+    flips to True (i.e. until a real migration backs the columns this
+    state machine reads/writes). An honest 503 beats a route that
+    answers ``{"status":"ok"}`` and silently persists nothing.
+    """
+    from eden.config import get_settings
+
+    if not getattr(get_settings(), "onboarding_state_machine_v2_enabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Onboarding-v2 state tracking is temporarily disabled: the "
+                "state machine's columns are not yet migrated onto the live "
+                "onboarding_state table, so nothing here can persist. This "
+                "does not affect the onboarding wizard itself "
+                "(GET/POST /orgs/{org_id}/onboarding/state), which uses a "
+                "different, live-schema-backed table."
+            ),
+        )
+
+
 router = APIRouter(
     prefix="/v1/internal/onboarding/{org_id}",
     tags=["onboarding"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(_require_onboarding_v2_enabled)],
 )
 
 
@@ -112,7 +147,9 @@ async def get_state(
             "steps": [s.value for s in ONBOARDING_STEPS],
         }
     except Exception as exc:
-        logger.warning("onboarding: get_state fallback for org=%s: %s", org_id, redact_all(str(exc)))
+        logger.warning(
+            "onboarding: get_state fallback for org=%s: %s", org_id, redact_all(str(exc))
+        )
         return {
             "status": "ok",
             "feature": "onboarding",
@@ -143,9 +180,7 @@ async def advance(
     """Advance to a target step. Org-admin gated."""
     sm = get_state_machine()
     try:
-        state = await sm.advance(
-            org_id, body.target_step, force=body.force
-        )
+        state = await sm.advance(org_id, body.target_step, force=body.force)
     except ValueError as exc:
         return {
             "status": "error",
@@ -187,9 +222,7 @@ async def enable_cat(
 ) -> dict[str, Any]:
     """Toggle a cat enablement. Idempotent."""
     sm = get_state_machine()
-    state = await sm.enable_cat(
-        org_id, body.cat_id, config=body.config
-    )
+    state = await sm.enable_cat(org_id, body.cat_id, config=body.config)
     return {
         "status": "ok",
         "feature": "onboarding",

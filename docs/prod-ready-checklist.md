@@ -1,5 +1,19 @@
 # Eden — Prod-Ready Checklist
 
+> **STALE — superseded 2026-07-31.** This document predates the GA
+> Completion Program and no longer reflects current ship status. Most
+> items below (webhook rewrite, Cat 23 audit, compliance endpoints, portal
+> polish pages, a11y sweep) have since shipped or been re-scoped under the
+> GA program; this file was never updated to reflect that and should not
+> be used to judge current readiness.
+>
+> **For current status, use:**
+> - [`docs/specs/GA-COMPLETION-CHECKLIST.md`](specs/GA-COMPLETION-CHECKLIST.md) — per-feature status + final launch gate
+> - [`docs/ops/known-issues.md`](ops/known-issues.md) — live, verified, unfixed issues
+> - [`docs/ops/ship-status-2026-07-31.md`](ops/ship-status-2026-07-31.md) — single-page current ship status
+>
+> Content below is kept for historical reference only; do not delete.
+
 Two phases of work to get Eden to a launch-ready state. Each item is concrete enough to start on without further design.
 
 ## Phase 1 — Unblock Launch
