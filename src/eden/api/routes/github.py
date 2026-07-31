@@ -1050,7 +1050,7 @@ async def get_org_github_connection(
         provider=str(conn.get("provider") or "github"),
         installation_id=str(conn.get("installation_id") or ""),
         repo_full_name=repo,
-        default_branch=str(conn.get("default_branch") or "main"),
+        default_branch=str(conn.get("default_branch") or "").strip(),
         status=str(conn.get("status") or "active"),
         agent_id=(str(conn["agent_id"]) if conn.get("agent_id") else None),
     )

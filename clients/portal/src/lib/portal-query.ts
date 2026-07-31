@@ -12,6 +12,8 @@ import type { QueryClient } from "@tanstack/react-query";
 export const OBSERVE_STALE = 90_000;
 export const SETTINGS_STALE = 120_000;
 export const ASSIST_STALE = 30_000;
+/** Agents / Home fleet metrics — short TTL; status and spend move often. */
+export const LIVE_STALE = 20_000;
 
 /** Alert-bell events — long TTL; badge freshness is not critical-path. */
 export const ALERT_EVENTS_STALE = 180_000;
@@ -21,6 +23,13 @@ export const SHELL_QUERY = {
   refetchOnWindowFocus: false as const,
   // Within staleTime, soft-nav must not re-hit the proxy.
   refetchOnMount: false as const,
+};
+
+/** Fleet + connection state that must not lie after soft-nav. */
+export const LIVE_QUERY = {
+  staleTime: LIVE_STALE,
+  refetchOnWindowFocus: false as const,
+  refetchOnMount: "always" as const,
 };
 
 export const SETTINGS_QUERY = {

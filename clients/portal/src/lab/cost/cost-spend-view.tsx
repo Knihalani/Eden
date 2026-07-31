@@ -152,7 +152,9 @@ export function CostSpendView({
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {agents.map((a) => {
-              const perRun = a.runs24h ? a.costUsd24h / a.runs24h : 0;
+              const perRun = a.runs24h
+                ? (a.costUsd24h ?? 0) / a.runs24h
+                : 0;
               const active = agentId === a.id;
               return (
                 <li key={a.id}>

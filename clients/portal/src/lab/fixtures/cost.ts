@@ -69,7 +69,7 @@ function liveTraces(): TraceFixture[] {
 }
 
 export function fleetSpend24h(): number {
-  return liveAgents().reduce((s, a) => s + a.costUsd24h, 0);
+  return liveAgents().reduce((s, a) => s + (a.costUsd24h ?? 0), 0);
 }
 
 export function fleetRuns24h(): number {
@@ -103,7 +103,9 @@ function liveDrivers(): CostDriverFixture[] {
 }
 
 export function agentsBySpend(): AgentFixture[] {
-  return [...liveAgents()].sort((a, b) => b.costUsd24h - a.costUsd24h);
+  return [...liveAgents()].sort(
+    (a, b) => (b.costUsd24h ?? 0) - (a.costUsd24h ?? 0),
+  );
 }
 
 export function costlyTraces(
@@ -145,7 +147,8 @@ export function driverKindLabel(kind: CostDriverKind): string {
   return "evals";
 }
 
-export function formatSpend(n: number): string {
+export function formatSpend(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
   return formatUsd(n, n < 1 ? 3 : 2);
 }
 

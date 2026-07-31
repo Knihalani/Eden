@@ -9,8 +9,13 @@ import { queryKeys } from "@/lib/query-keys";
 import { githubApi, type GitHubRepo } from "@/lib/api/resources";
 import { ApiError } from "@/lib/api/core";
 import { useLabToast } from "@/lab/lab-toast";
-import { SHELL_QUERY } from "@/lib/portal-query";
+import { LIVE_QUERY, SHELL_QUERY } from "@/lib/portal-query";
 import { cn } from "@/lib/utils";
+
+function isValidRepoFullName(value: unknown): value is string {
+  const repo = String(value ?? "").trim();
+  return Boolean(repo && repo.includes("/") && !/undefined/i.test(repo));
+}
 
 /**
  * Connect the GitHub repo Eden opens Improve / fix PRs against for one agent.
@@ -54,7 +59,7 @@ export function ConnectRepoPanel({
         throw err;
       }
     },
-    { ...SHELL_QUERY, staleTime: 30_000 },
+    { ...LIVE_QUERY, staleTime: 10_000 },
   );
   const repos = useOrgQuery(
     queryKeys.github.repos(orgId),
@@ -69,17 +74,16 @@ export function ConnectRepoPanel({
 
   const active = useMemo(() => {
     const row = connection.data;
-    if (!row) return null;
-    const repo = String(row.repo_full_name ?? "").trim();
-    // Require owner/name — never treat empty/undefined as Connected.
-    if (!repo || !repo.includes("/") || /undefined/i.test(repo)) {
-      return null;
-    }
-    return { ...row, repo_full_name: repo };
+    if (!row || !isValidRepoFullName(row.repo_full_name)) return null;
+    return {
+      ...row,
+      repo_full_name: String(row.repo_full_name).trim(),
+    };
   }, [connection.data]);
   const githubHref = active
     ? `https://github.com/${active.repo_full_name}`
     : null;
+  const branchLabel = active?.default_branch?.trim() || null;
   const filteredRepos = useMemo(() => {
     const list = repos.data ?? [];
     const q = filter.trim().toLowerCase();
@@ -193,17 +197,33 @@ export function ConnectRepoPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <h3 className="type-ui">
-            {active
-              ? `Repository for ${agentId}`
-              : "Connect a repository"}
+            {connection.isPending
+              ? "Repository"
+              : active
+                ? `Repository for ${agentId}`
+                : "Connect a repository"}
           </h3>
           <p className="type-meta max-w-xl">
-            {active
-              ? agentHint
-              : "Link the GitHub repo that contains this agent's code. Eden uses it to open pull requests that fix issues and Improve plans."}
+            {connection.isPending
+              ? "Checking whether this agent already has a GitHub repo linked…"
+              : active
+                ? agentHint
+                : "Link the GitHub repo that contains this agent's code. Eden uses it to open pull requests that fix issues and Improve plans."}
           </p>
         </div>
-        {active ? (
+        {connection.isPending ? (
+          <span className="type-meta shrink-0 rounded border border-[var(--line)] px-2 py-1 text-[var(--text-secondary)]">
+            Checking…
+          </span>
+        ) : connection.isError ? (
+          <button
+            type="button"
+            className="type-meta shrink-0 rounded border border-[var(--error)] px-2 py-1 text-[var(--error)]"
+            onClick={() => void connection.refetch()}
+          >
+            Couldn’t load · retry
+          </button>
+        ) : active ? (
           <span className="type-meta shrink-0 rounded border border-[var(--line)] px-2 py-1">
             Connected
           </span>
@@ -214,12 +234,21 @@ export function ConnectRepoPanel({
         )}
       </div>
 
+      {connection.isError ? (
+        <p className="type-meta mt-4 text-[var(--error)]">
+          Couldn’t verify the GitHub link for this agent. Retry, or reconnect
+          below.
+        </p>
+      ) : null}
+
       {active ? (
         <div className="mt-4 space-y-3">
           <div>
             <p className="type-ui !text-[1rem]">{active.repo_full_name}</p>
             <p className="type-meta mt-1">
-              Default branch · {active.default_branch || "main"}
+              {branchLabel
+                ? `Default branch · ${branchLabel}`
+                : "Default branch unknown"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

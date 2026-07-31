@@ -37,9 +37,10 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { SHELL_QUERY } from "@/lib/portal-query";
+import { SHELL_QUERY, LIVE_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { useLabToast } from "@/lab/lab-toast";
+import { formatRelativeTime } from "@/lib/format";
 
 const ConnectRepoPanel = dynamic(
   () =>
@@ -96,7 +97,7 @@ function RunInspector({
               <h3 className="type-ui min-w-0 truncate text-[var(--text)]">{trace.name}</h3>
             </div>
             <p className="type-meta mt-1.5">
-              {trace.id} · {trace.startedAt} · {agent.name}
+              {trace.id} · {formatRelativeTime(trace.startedAt)} · {agent.name}
             </p>
             <div className="mt-2">
               <RunMeta trace={trace} />
@@ -509,7 +510,7 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
             <p className="type-meta">
               {agent.model ? <>{agent.model} · </> : null}
               {agent.lastSeen
-                ? <>last telemetry {agent.lastSeen}</>
+                ? <>last telemetry {formatRelativeTime(agent.lastSeen)}</>
                 : <>no recent activity in this window</>}
               {agent.topError ? (
                 <>
@@ -583,17 +584,21 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
         <MetricCell
           label="Success"
           value={
-            agent.runs24h > 0
+            agent.runs24h > 0 && agent.successRate != null
               ? `${(agent.successRate * 100).toFixed(0)}%`
               : "—"
           }
           hint={
-            agent.runs24h > 0
-              ? `${(agent.errorRate * 100).toFixed(0)}% errors`
-              : "no runs in window"
+            agent.runs24h <= 0
+              ? "no runs in window"
+              : agent.successRate == null
+                ? "outcomes not scored yet"
+                : agent.errorRate != null
+                  ? `${(agent.errorRate * 100).toFixed(0)}% errors`
+                  : undefined
           }
           tone={
-            agent.runs24h <= 0
+            agent.runs24h <= 0 || agent.successRate == null
               ? "default"
               : agent.successRate < 0.8
                 ? "error"
@@ -604,13 +609,27 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
         />
         <MetricCell
           label="Latency p50 / p95"
-          value={formatDuration(agent.p50Ms)}
-          hint={formatDuration(agent.p95Ms)}
+          value={
+            agent.runs24h > 0 && agent.p50Ms > 0
+              ? formatDuration(agent.p50Ms)
+              : "—"
+          }
+          hint={
+            agent.runs24h > 0 && agent.p95Ms > 0
+              ? formatDuration(agent.p95Ms)
+              : undefined
+          }
         />
         <MetricCell
           label="Spend"
           value={formatUsd(agent.costUsd24h)}
-          hint={`${formatTokens(agent.tokens24h)} · ${formatUsd(agent.costUsd24h / Math.max(agent.runs24h, 1), 3)}/run`}
+          hint={
+            agent.costUsd24h != null
+              ? `${formatTokens(agent.tokens24h)} · ${formatUsd((agent.costUsd24h ?? 0) / Math.max(agent.runs24h, 1), 3)}/run`
+              : agent.runs24h > 0
+                ? "cost not available"
+                : undefined
+          }
         />
         <MetricCell
           label="Issues"
@@ -656,7 +675,18 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
               <li>
-                <EmptyState title="No matching runs" />
+                <EmptyState
+                  title={
+                    runs.length === 0
+                      ? "No runs in this window"
+                      : "No matching runs"
+                  }
+                  body={
+                    runs.length === 0
+                      ? "Traces show up here after this agent sends telemetry."
+                      : undefined
+                  }
+                />
               </li>
             ) : (
               filtered.map((trace) => (
@@ -708,7 +738,7 @@ function LabAgentsInner() {
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    SHELL_QUERY,
+    LIVE_QUERY,
   );
   const agents = agentsQuery.data ?? [];
   const [fleetOpen, setFleetOpen, , fleetAnimate] = usePersistentBool(
@@ -770,7 +800,7 @@ function LabAgentsInner() {
   const fleetRuns = agents.reduce((s, a) => s + a.runs24h, 0);
   const live = agents.filter((a) => a.status === "live").length;
   const errored = agents.filter((a) => a.status === "error").length;
-  const fleetSpend = agents.reduce((s, a) => s + a.costUsd24h, 0);
+  const fleetSpend = agents.reduce((s, a) => s + (a.costUsd24h ?? 0), 0);
 
   if (agentsQuery.isLoading) {
     return (

@@ -12,6 +12,7 @@ import {
   patchPortalCatalog,
 } from "@/lib/portal-catalog";
 import {
+  LIVE_QUERY,
   OBSERVE_STALE,
   SHELL_QUERY,
 } from "@/lib/portal-query";
@@ -83,13 +84,13 @@ export function PortalCatalogSync() {
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    { ...SHELL_QUERY, enabled: needAgents },
+    { ...LIVE_QUERY, enabled: needAgents },
   );
   const traces = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
-    { ...SHELL_QUERY, enabled: needTraces },
+    { ...LIVE_QUERY, enabled: needTraces },
   );
   const sessions = useOrgQuery(
     queryKeys.portal.sessions(orgId),

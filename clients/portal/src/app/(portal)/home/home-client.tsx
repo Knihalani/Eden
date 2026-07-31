@@ -8,11 +8,6 @@ import {
   homeSnapshot,
   type AgentFixture,
 } from "@/lab/fixtures/agents";
-import {
-  budgetIsPressure,
-  budgetStatusFromSpend,
-  budgetStatusLabel,
-} from "@/lab/home-budget";
 import { issueForTrace, type IssueFixture } from "@/lab/fixtures/issues";
 import {
   formatDuration,
@@ -20,6 +15,7 @@ import {
   formatUsd,
   type TraceFixture,
 } from "@/lab/fixtures/traces";
+import { formatRelativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/ds/primitives";
 import { useDismissedSet } from "@/lab/hooks";
 import { useAlerts } from "@/lab/alerts-context";
@@ -33,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
-import { SHELL_QUERY } from "@/lib/portal-query";
+import { SHELL_QUERY, LIVE_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
@@ -116,7 +112,7 @@ function AttentionCard({
               {" · "}
               {trace.name}
               {" · "}
-              {trace.startedAt}
+              {formatRelativeTime(trace.startedAt)}
             </p>
           </div>
           <button
@@ -174,13 +170,13 @@ export default function HomeClient() {
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    SHELL_QUERY,
+    LIVE_QUERY,
   );
   const tracesQuery = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
-    SHELL_QUERY,
+    LIVE_QUERY,
   );
   /**
    * Subscribed here (not just read from the ``portal-catalog``
@@ -253,9 +249,6 @@ export default function HomeClient() {
   );
   const fleet = showAllFleet ? orderedFleet : orderedFleet.slice(0, 3);
   const recent = snap.recent.slice(0, 4);
-
-  const fleetCostUsd = snap.fleetCost;
-  const budgetStatus = budgetStatusFromSpend(fleetCostUsd, 0);
 
   const isLoading = agentsQuery.isLoading || tracesQuery.isLoading;
   const isError = agentsQuery.isError || tracesQuery.isError;
@@ -343,17 +336,9 @@ export default function HomeClient() {
         <Kpi
           label="Spend"
           value={formatUsd(snap.fleetCost)}
-          tone={budgetIsPressure(budgetStatus) ? "error" : "default"}
-          hint={
-            budgetIsPressure(budgetStatus)
-              ? `${budgetStatusLabel(budgetStatus)} · ${formatTokens(snap.fleetTokens)}`
-              : formatTokens(snap.fleetTokens)
-          }
-          href={
-            budgetIsPressure(budgetStatus)
-              ? "/cost?mode=drivers"
-              : "/cost"
-          }
+          tone="default"
+          hint={formatTokens(snap.fleetTokens)}
+          href="/cost"
         />
       </div>
 
@@ -481,7 +466,8 @@ export default function HomeClient() {
                             {trace.name}
                           </p>
                           <p className="type-meta mt-1 truncate">
-                            {agent?.name ?? "—"} · {trace.startedAt}
+                            {agent?.name ?? "—"} ·{" "}
+                            {formatRelativeTime(trace.startedAt)}
                           </p>
                         </div>
                         <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
@@ -525,9 +511,14 @@ export default function HomeClient() {
                       <p className="type-mono !text-[var(--text)]">{agent.name}</p>
                       <AgentStatusBadge status={agent.status} />
                     </div>
+                    {agent.id === agent.name ? (
+                      <p className="type-meta mt-0.5 text-[var(--text-tertiary)]">
+                        Rename on Agents for a clearer label
+                      </p>
+                    ) : null}
                     <p className="type-meta mt-1.5">
                       {agent.runs24h} runs
-                      {agent.runs24h > 0 ? (
+                      {agent.runs24h > 0 && agent.successRate != null ? (
                         <>
                           {" · "}
                           <span
@@ -542,6 +533,8 @@ export default function HomeClient() {
                             {(agent.successRate * 100).toFixed(0)}%
                           </span>
                         </>
+                      ) : agent.runs24h > 0 ? (
+                        <> · success unknown</>
                       ) : (
                         <> · no runs</>
                       )}
