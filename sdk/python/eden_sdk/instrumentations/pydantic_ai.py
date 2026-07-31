@@ -60,8 +60,17 @@ def _emit(
 
 
 def _agent_name(agent: Any) -> str:
-    # Prefer the enclosing eden.trace(...) name so dual-instrumented
-    # runs (eden.trace + pydantic_ai) share one user-facing agent_id.
+    # Prefer configured agent_id, then enclosing eden.trace(...) name,
+    # then the Agent.name — never a model class repr like
+    # ``pydantic-ai:OpenAIChatModel()``.
+    try:
+        from eden_sdk.config import get_config
+
+        configured = (get_config().agent_id or "").strip()
+        if configured:
+            return configured
+    except Exception:  # noqa: BLE001
+        pass
     try:
         from eden_sdk.trace import current_trace
 
@@ -76,9 +85,6 @@ def _agent_name(agent: Any) -> str:
         val = getattr(agent, attr, None)
         if val:
             return str(val)
-    model = getattr(agent, "model", None)
-    if model is not None:
-        return f"pydantic-ai:{model}"
     return "pydantic-ai-agent"
 
 

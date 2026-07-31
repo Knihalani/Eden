@@ -214,7 +214,7 @@ export interface TelemetryEvent {
   metrics?: Record<string, number>;
   tags?: string[];
   attributes?: Record<string, unknown>;
-  /** Set by the gateway, not the SDK. */
+  /** Stable agent identity — set via configure/emit or per-event. */
   agentId?: string;
   agentVersion?: string;
   environmentId?: string;

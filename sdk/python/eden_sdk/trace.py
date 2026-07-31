@@ -319,7 +319,7 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
         "trace_id": ctx.trace_id,
         "name": span.name,
         "event_type": "agent.run",
-        "agent_id": ctx.name,
+        "agent_id": (getattr(get_config(), "agent_id", None) or ctx.name),
         "agent_version": None,
         "duration_ms": duration_ms,
         "outcome": pending_outcome or span.outcome,

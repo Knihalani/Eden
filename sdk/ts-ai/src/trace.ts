@@ -299,6 +299,7 @@ function finishTrace(
       eventId: ctx.traceId,
       tenantId: config.orgId ?? "default",
       projectId: config.projectId,
+      agentId: config.agentId || ctx.name,
       traceId: ctx.traceId,
       realm: config.realm,
       eventType: "agent.run",
