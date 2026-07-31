@@ -27,6 +27,15 @@ def test_claim_installation_id_rejects_invalid(bad):
         ClaimInstallationRequest(installation_id=bad)
 
 
+def test_claim_route_accepts_body_or_query_installation_id():
+    """Empty body used to 422; query fallback must remain in the handler."""
+    src = inspect.getsource(github.claim_github_installation)
+    assert "ClaimInstallationRequest | None" in src
+    assert "Query(" in src
+    assert "installation_id is required" in src
+    assert "raw_id" in src or "resolved_id" in src
+
+
 def test_github_authorize_merges_oauth_state_on_conflict():
     """Existing orgs must get a fresh oauth_state without wiping user ids."""
     src = inspect.getsource(github.github_authorize)

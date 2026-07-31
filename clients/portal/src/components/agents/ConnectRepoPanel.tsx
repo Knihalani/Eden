@@ -104,9 +104,6 @@ export function ConnectRepoPanel({
     return list.filter((r) => r.full_name.toLowerCase().includes(q));
   }, [repos.data, filter]);
 
-  const appSlug = configured.data?.app_slug?.trim() || "eden-observability";
-  const appLandingHref = `https://github.com/apps/${encodeURIComponent(appSlug)}`;
-
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({
       queryKey: queryKeys.github.connection(orgId, agentId),
@@ -120,19 +117,27 @@ export function ConnectRepoPanel({
   }, [agentId, orgId, queryClient]);
 
   // Claim installation after GitHub redirects back with ?installation_id=.
+  // Do not mark claimedRef until success — setting it early + cancelling on
+  // Strict Mode / agent URL restore left claiming stuck on "Registering…".
+  const claimGenRef = useRef(0);
   useEffect(() => {
     if (!orgId) return;
     const fromQuery = parseInstallationId(searchParams.get("installation_id"));
     if (!fromQuery) return;
-    if (claimedRef.current === fromQuery) return;
-    claimedRef.current = fromQuery;
+    if (claimedRef.current === fromQuery) {
+      // Success landed while a prior effect was cancelled — still open picker.
+      setPickerOpen(true);
+      return;
+    }
     storeInstallationId(fromQuery);
+    const gen = ++claimGenRef.current;
     let cancelled = false;
     setClaiming(true);
     void (async () => {
       try {
         await githubApi.claimInstallation(orgId, fromQuery);
-        if (cancelled) return;
+        claimedRef.current = fromQuery;
+        if (cancelled || claimGenRef.current !== gen) return;
         clearStoredInstallationId();
         pushToast({
           title: "GitHub App installed",
@@ -142,14 +147,14 @@ export function ConnectRepoPanel({
         setPickerOpen(true);
         await invalidate();
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || claimGenRef.current !== gen) return;
         pushToast({
           title: "Couldn't register GitHub install",
           body: err instanceof Error ? err.message : "Try Install GitHub App again",
           tone: "fail",
         });
       } finally {
-        if (!cancelled) setClaiming(false);
+        if (claimGenRef.current === gen) setClaiming(false);
       }
     })();
     return () => {
@@ -426,24 +431,10 @@ export function ConnectRepoPanel({
               , then Accept the update on the installation — or Improve cannot
               open fix PRs.
             </p>
-          ) : (
-            <p className="type-meta max-w-xl text-[var(--text-secondary)]">
-              If GitHub says the app is private, the App owner must set{" "}
-              <span className="text-[var(--text)]">Where can this GitHub App be installed?</span>{" "}
-              to <span className="text-[var(--text)]">Any account</span> on{" "}
-              <a
-                href={appLandingHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                github.com/apps/{appSlug}
-              </a>
-              . That setting is on GitHub, not in Eden.
-            </p>
-          )}
+          ) : null}
         </div>
       )}
+
 
       {pickerOpen ? (
         <div className="mt-4 border-t border-[var(--line)] pt-4">
@@ -467,10 +458,6 @@ export function ConnectRepoPanel({
               <p className="type-meta text-[var(--error)]">
                 Couldn&apos;t list repos. Install the GitHub App first, or ask
                 an admin with integrations:write.
-              </p>
-              <p className="type-meta text-[var(--text-secondary)]">
-                Seeing “private GitHub App” on GitHub? The App must be public
-                (“Any account”) before other orgs can install it.
               </p>
               <button
                 type="button"

@@ -128,13 +128,23 @@ class InstallationRepo:
     pushed_at: str  # ISO-8601, may be empty
 
 
+def _normalize_private_key_pem(pem: str) -> str:
+    """Accept PEMs with real newlines or literal ``\\n`` from secret stores."""
+    text = (pem or "").strip()
+    if not text:
+        return ""
+    if "\\n" in text and "\n" not in text:
+        text = text.replace("\\n", "\n")
+    return text
+
+
 def _private_key_looks_loadable(pem: str) -> bool:
     """Reject empty / header-only PEMs that would break JWT minting.
 
     Northflank once stored only ``-----BEGIN RSA PRIVATE KEY-----``
     (31 chars). ``is_configured()`` must not treat that as ready.
     """
-    text = (pem or "").strip()
+    text = _normalize_private_key_pem(pem)
     if len(text) < 80:
         return False
     upper = text.upper()
@@ -207,7 +217,9 @@ class GitHubOAuthClient:
         self.app_id = app_id or getattr(s, "github_app_id", "")
         self.client_id = client_id or getattr(s, "github_app_client_id", "")
         self.client_secret = client_secret or getattr(s, "github_app_client_secret", "")
-        self.private_key = private_key or getattr(s, "github_app_private_key", "")
+        self.private_key = _normalize_private_key_pem(
+            private_key or getattr(s, "github_app_private_key", "")
+        )
         self.app_slug = (
             app_slug if app_slug is not None else getattr(s, "github_app_slug", "")
         ) or ""

@@ -268,6 +268,18 @@ class OnboardingStatePatch(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
+def _installed_at_iso(value: Any) -> str:
+    """Normalize PG timestamptz / already-string values for InstallationOut."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    iso = getattr(value, "isoformat", None)
+    if callable(iso):
+        return str(iso())
+    return str(value)
+
+
 async def _eden_org_or_404(org_id: str) -> str:
     """Map Clerk or Eden org id to canonical ``organizations.id``."""
     eden_org_id = await resolve_eden_org_id(org_id)
@@ -910,10 +922,15 @@ async def github_webhook(request: Request) -> dict[str, str]:
 
 @org_router.post("/github/installations/claim", response_model=InstallationOut)
 async def claim_github_installation(
-    req: ClaimInstallationRequest,
     org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_permission_dep("integrations:write")),
+    req: ClaimInstallationRequest | None = None,
+    installation_id: int | None = Query(
+        None,
+        description="Fallback when the JSON body is missing (proxy edge cases).",
+        gt=0,
+    ),
 ) -> InstallationOut:
     """Persist a GitHub App installation after the portal callback.
 
@@ -922,10 +939,22 @@ async def claim_github_installation(
     so GitHub redirects there with ``installation_id`` instead of hitting
     ``/integrations/github/callback``. This route lets the wizard register
     the installation in Eden's DB.
+
+    Accepts ``installation_id`` from the JSON body (preferred) or the query
+    string. A required body-only model 422'd when the portal proxy forwarded
+    an empty body, which left the connect UI stuck on "Registering…".
     """
+    raw_id = req.installation_id if req is not None else installation_id
+    if raw_id is None:
+        raise HTTPException(422, "installation_id is required")
+    try:
+        resolved_id = ClaimInstallationRequest(installation_id=raw_id).installation_id
+    except Exception as exc:
+        raise HTTPException(422, "installation_id must be a positive integer") from exc
+
     eden_org_id = await _eden_org_or_404(org_id)
     pg = await get_postgres_client()
-    installation_id = int(req.installation_id)
+    installation_id = resolved_id
 
     # Refuse claiming an installation already bound to a different Eden org.
     foreign = await pg.fetchrow(
@@ -980,7 +1009,7 @@ async def claim_github_installation(
         installation_id=int(row["installation_id"]),
         account_login=row["github_account_login"],
         account_type=row["github_account_type"],
-        installed_at=row["installed_at"].isoformat(),
+        installed_at=_installed_at_iso(row["installed_at"]),
         suspended=bool(row["suspended_at"]),
     )
 
@@ -1007,7 +1036,7 @@ async def list_org_installations(
             installation_id=int(r["installation_id"]),
             account_login=r["github_account_login"],
             account_type=r["github_account_type"],
-            installed_at=r["installed_at"].isoformat(),
+            installed_at=_installed_at_iso(r["installed_at"]),
             suspended=bool(r["suspended_at"]),
         )
         for r in rows
