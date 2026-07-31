@@ -1643,7 +1643,7 @@ async def _resolve_stumble_refs(
             """
             SELECT id::text AS id, trace_id, session_id
             FROM agent_stumbles
-            WHERE org_id = $1 AND id = ANY($2::uuid[])
+            WHERE org_id::text = $1 AND id::text = ANY($2::text[])
             """,
             org_id,
             ids,
@@ -1951,14 +1951,18 @@ async def get_portal_workspace(
     defaults = WorkspacePrefs()
     client = await _pg()
     if client is None:
-        return WorkspaceCard(id=org_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Workspace temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     try:
         row = await client.fetchrow(
             """
             SELECT id, name, slug, settings, is_personal, created_at
             FROM organizations
-            WHERE id = $1
+            WHERE id::text = $1
             """,
             org_id,
         )
@@ -1970,16 +1974,23 @@ async def get_portal_workspace(
                 """
                 SELECT id, name, slug, settings, created_at
                 FROM organizations
-                WHERE id = $1
+                WHERE id::text = $1
                 """,
                 org_id,
             )
         except Exception as exc2:  # noqa: BLE001
-            logger.debug("portal workspace: fallback failed: %s", exc2)
-            return WorkspaceCard(id=org_id)
+            logger.warning(
+                "portal workspace: fallback failed: %s",
+                redact_all(str(exc2)),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Workspace temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            ) from exc2
 
     if row is None:
-        return WorkspaceCard(id=org_id)
+        raise HTTPException(status_code=404, detail="Organization not found")
 
     settings = _as_dict(row.get("settings"))
     density_raw = settings.get("density")
@@ -2868,41 +2879,40 @@ async def list_portal_assistant_threads(
         try:
             eden_user_id = await eden_user_id_from_auth(user)
         except Exception as exc:  # noqa: BLE001
-            logger.debug(
+            logger.warning(
                 "portal assistant threads: user resolve failed: %s",
                 redact_all(str(exc)),
             )
             eden_user_id = None
 
+    # Never fall through to an org-wide SELECT — that leaks every
+    # member's chats when Clerk→Eden remap blips. Empty history for
+    # the caller is safer than a privacy bug; 503 if we had an auth
+    # subject but could not resolve it.
+    if not eden_user_id:
+        if raw_user_id:
+            raise HTTPException(
+                status_code=503,
+                detail="Assistant threads temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            )
+        return []
+
     rows: list[Any] = []
     try:
-        if eden_user_id:
-            rows = await client.fetch(
-                """
-                SELECT id, title, updated_at, created_at
-                FROM ai_conversations
-                WHERE org_id::text = $1 AND user_id::text = $2
-                  AND archived_at IS NULL
-                ORDER BY updated_at DESC
-                LIMIT $3
-                """,
-                org_id,
-                eden_user_id,
-                limit,
-            )
-        else:
-            rows = await client.fetch(
-                """
-                SELECT id, title, updated_at, created_at
-                FROM ai_conversations
-                WHERE org_id::text = $1
-                  AND archived_at IS NULL
-                ORDER BY updated_at DESC
-                LIMIT $2
-                """,
-                org_id,
-                limit,
-            )
+        rows = await client.fetch(
+            """
+            SELECT id, title, updated_at, created_at
+            FROM ai_conversations
+            WHERE org_id::text = $1 AND user_id::text = $2
+              AND archived_at IS NULL
+            ORDER BY updated_at DESC
+            LIMIT $3
+            """,
+            org_id,
+            eden_user_id,
+            limit,
+        )
     except Exception as exc:  # noqa: BLE001
         msg = str(exc).lower()
         # Tables may lag Alembic 126 on older deploys — empty history,

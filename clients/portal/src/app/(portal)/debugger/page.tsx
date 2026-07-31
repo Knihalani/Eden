@@ -66,6 +66,9 @@ function LabDebuggerListInner() {
   useEffect(() => {
     if (!paramTrace || seeded.current) return;
     if (sessionsQuery.isLoading) return;
+    // Don't mint a client-only session while the list is in error —
+    // that races QueryErrorPanel and looks like "API failed but opened".
+    if (sessionsQuery.isError) return;
     seeded.current = true;
     const existing = allSessions.find((s) => s.sourceTraceId === paramTrace);
     if (existing) {
@@ -96,6 +99,7 @@ function LabDebuggerListInner() {
     paramAgent,
     router,
     sessionsQuery.isLoading,
+    sessionsQuery.isError,
     allSessions,
   ]);
 

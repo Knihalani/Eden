@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, githubApi } from "@/lib/api";
 import { fetchApi } from "@/lib/api/core";
 import { isPaidPlansDisabledError } from "@/lib/feature-flag-error";
+import { toUserFacingError } from "@/lib/safe-error-message";
 
 export type IntegrationId =
   | "stripe"
@@ -60,7 +61,7 @@ export function interpretProbeFailure(
     if (error.status === 503) {
       return {
         available: false,
-        message: error.detail || DEFAULT_UNAVAILABLE[integration],
+        message: toUserFacingError(error, DEFAULT_UNAVAILABLE[integration]),
       };
     }
     // Exports list is admin-gated; 403 means the feature exists but is blocked.
@@ -81,9 +82,10 @@ export function interpretProbeFailure(
     if (error.status >= 500) {
       return {
         available: false,
-        message:
-          error.detail ||
+        message: toUserFacingError(
+          error,
           `Could not verify ${LABELS[integration]} status. Try again.`,
+        ),
       };
     }
   }
