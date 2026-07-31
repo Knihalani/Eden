@@ -37,6 +37,7 @@ _ENV_ORG_ID_CANDIDATES = ("EDEN_ORG_ID", "EDEN_DEFAULT_ORG")
 _ENV_API_KEY_CANDIDATES = ("EDEN_API_KEY", "EDEN_ORG_API_KEY")
 _ENV_BASE_URL = "EDEN_BASE_URL"
 _ENV_PROJECT = "EDEN_PROJECT_ID"
+_ENV_AGENT = "EDEN_AGENT_ID"
 _ENV_BATCH_SIZE = "EDEN_BATCH_SIZE"
 _ENV_FLUSH_INTERVAL_MS = "EDEN_FLUSH_INTERVAL_MS"
 _ENV_DISABLED = "EDEN_DISABLED"
@@ -79,6 +80,11 @@ class EdenConfig:
     project_id
         Multi-tenant project label. Defaults to ``"default"`` which is
         what the ingestion route uses when ``X-Project-Id`` is missing.
+    agent_id
+        Stable agent identity for the Agents fleet, Improve PRs, and
+        autonomy policies. Sent as ``X-Eden-Agent-Id`` and stamped on
+        every event payload when missing. Prefer a short slug
+        (``support-bot``) over auto-generated model class names.
     batch_size
         Maximum number of events to buffer before a flush.
     flush_interval_ms
@@ -117,6 +123,7 @@ class EdenConfig:
     # right thing without a second URL.
     gateway_url: str | None = None
     project_id: str = "default"
+    agent_id: str | None = None
     batch_size: int = 50
     flush_interval_ms: int = 250
     timeout_s: float = 5.0
@@ -187,6 +194,8 @@ class EdenConfig:
         }
         if self.api_key:
             headers["X-Org-Api-Key"] = self.api_key
+        if self.agent_id:
+            headers["X-Eden-Agent-Id"] = self.agent_id
         headers.update(self.extra_headers)
         return headers
 
@@ -324,6 +333,7 @@ def _from_env() -> EdenConfig:
         ),
         base_url=os.getenv(_ENV_BASE_URL, "https://api.edenobservability.com"),
         project_id=os.getenv(_ENV_PROJECT, "default"),
+        agent_id=(os.getenv(_ENV_AGENT) or None),
         batch_size=int(os.getenv(_ENV_BATCH_SIZE, "50")),
         flush_interval_ms=int(os.getenv(_ENV_FLUSH_INTERVAL_MS, "250")),
         disabled=os.getenv(_ENV_DISABLED, "").lower() in {"1", "true", "yes"},
@@ -353,6 +363,7 @@ def configure(
     base_url: str | None = None,
     gateway_url: str | None = None,
     project_id: str | None = None,
+    agent_id: str | None = None,
     batch_size: int | None = None,
     flush_interval_ms: int | None = None,
     timeout_s: float | None = None,
@@ -376,7 +387,7 @@ def configure(
 
     Recognised keyword args (in addition to ``EdenConfig`` field
     names via ``**overrides``):
-        org_id, api_key, base_url, gateway_url, project_id,
+        org_id, api_key, base_url, gateway_url, project_id, agent_id,
         batch_size, flush_interval_ms, timeout_s, disabled,
         dry_run, max_queue, extra_headers, filters
     """
@@ -395,6 +406,8 @@ def configure(
             _config.gateway_url = gateway_url
         if project_id is not None:
             _config.project_id = project_id
+        if agent_id is not None:
+            _config.agent_id = agent_id
         if batch_size is not None:
             _config.batch_size = batch_size
         if flush_interval_ms is not None:

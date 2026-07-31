@@ -167,10 +167,7 @@ async def normalize_to_telemetry_event(
                 to_mask.append((pii_field, value))
         if to_mask:
             masked_vals = await asyncio.gather(
-                *(
-                    mask_payload(value, tenant_id=attribution.tenant_id)
-                    for _, value in to_mask
-                )
+                *(mask_payload(value, tenant_id=attribution.tenant_id) for _, value in to_mask)
             )
             raw = {**raw, **{k: m for (k, _), m in zip(to_mask, masked_vals, strict=False)}}
 
@@ -182,7 +179,16 @@ async def normalize_to_telemetry_event(
         realm=realm,
         event_type=str(raw.get("event_type") or "ingest.event"),
         timestamp=timestamp,
-        agent_id=raw.get("agent_id"),
+        agent_id=(
+            raw.get("agent_id")
+            or (attributes.get("agent_id") if isinstance(attributes, dict) else None)
+            or (attributes.get("eden.agent_id") if isinstance(attributes, dict) else None)
+            or (
+                attribution.project_id
+                if attribution.project_id and attribution.project_id != "default"
+                else None
+            )
+        ),
         agent_version=raw.get("agent_version"),
         environment_id=raw.get("environment_id"),
         parent_span_id=raw.get("parent_span_id"),

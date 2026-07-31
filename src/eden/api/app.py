@@ -381,6 +381,11 @@ class HealthResponse(BaseModel):
     # of ``self_obs_probe_interval_seconds`` means the worker is gone even
     # though the API is fine.
     worker_heartbeat_age_seconds: float | None = None
+    # False when FormatRegistry failed to load (syntax/import error in a
+    # decoder). Ingest then 503s every SDK POST while /ready can still be
+    # green on Postgres alone — surface it here so monitors catch it.
+    ingest_decoders_ok: bool = True
+    ingest_decoders_missing: list[str] = Field(default_factory=list)
 
 
 # ============================================================================
@@ -608,6 +613,26 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(run_alembic_upgrade_head)
     except Exception as exc:
         logger.error("Alembic upgrade failed at startup: %s", exc)
+        if settings.eden_production or settings.strict_startup_checks:
+            raise
+
+    # Ingest decoders must load cleanly — a syntax error in providers.py
+    # previously left the registry empty and turned every SDK ingest into
+    # a generic 503 while /ready stayed green.
+    try:
+        from eden.observability.ingestion import assert_ingest_decoders_healthy
+
+        missing = assert_ingest_decoders_healthy()
+        app.state.ingest_decoders_ok = not missing
+        app.state.ingest_decoders_missing = missing
+        if missing:
+            logger.error("ingest decoders missing formats: %s", missing)
+            if settings.eden_production or settings.strict_startup_checks:
+                raise RuntimeError(f"ingest decoders missing: {missing}")
+    except Exception as exc:
+        app.state.ingest_decoders_ok = False
+        app.state.ingest_decoders_missing = [str(exc)]
+        logger.error("ingest decoder registry failed at startup: %s", exc)
         if settings.eden_production or settings.strict_startup_checks:
             raise
 
@@ -1562,6 +1587,24 @@ async def health_check():
     if overall == "healthy" and redis_status not in ("connected", "not_configured"):
         overall = "degraded"
 
+    ingest_ok = True
+    ingest_missing: list[str] = []
+    try:
+        ingest_ok = bool(getattr(app.state, "ingest_decoders_ok", True))
+        raw_missing = getattr(app.state, "ingest_decoders_missing", None) or []
+        ingest_missing = [str(x) for x in raw_missing]
+    except Exception:
+        try:
+            from eden.observability.ingestion import assert_ingest_decoders_healthy
+
+            ingest_missing = assert_ingest_decoders_healthy()
+            ingest_ok = not ingest_missing
+        except Exception as exc:
+            ingest_ok = False
+            ingest_missing = [f"{type(exc).__name__}: {exc}"]
+    if overall == "healthy" and not ingest_ok:
+        overall = "degraded"
+
     # Worker liveness, read from the self-obs heartbeat table. The API
     # process cannot see the worker process any other way.
     heartbeat_age: float | None = None
@@ -1599,6 +1642,8 @@ async def health_check():
         statgate_installed=statgate_installed,
         evolution_loop_running=evolution_loop_running,
         background_workers_expected=bool(getattr(settings, "run_background_workers", False)),
+        ingest_decoders_ok=ingest_ok,
+        ingest_decoders_missing=ingest_missing,
     )
 
     mode = getattr(settings, "health_probe_mode", "auto")

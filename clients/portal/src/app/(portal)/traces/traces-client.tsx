@@ -1742,6 +1742,11 @@ function LabTracesInner() {
               title={
                 hubView === "sessions" ? "No session selected" : "No run selected"
               }
+              body={
+                hubView === "sessions"
+                  ? "Pick a session from the list to inspect its runs and spans."
+                  : "Pick a run from the list to inspect its transcript, tree, and signals."
+              }
             />
           )}
         </div>

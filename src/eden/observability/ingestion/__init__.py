@@ -54,6 +54,7 @@ __all__ = [
     "get_format_registry",
     "reset_format_registry",
     "register_default_decoders",
+    "assert_ingest_decoders_healthy",
 ]
 
 
@@ -68,6 +69,10 @@ def register_default_decoders(registry: FormatRegistry) -> None:
     decoders actually registered here are imported, and only on
     explicit ``register_default_decoders()`` call (not at module
     import).
+
+    Import/syntax failures (e.g. IndentationError in providers.py)
+    propagate — callers must not swallow them into an empty registry,
+    or every ingest request becomes a cryptic 503.
     """
     from eden.observability.ingestion.framework import FrameworkDecoder
     from eden.observability.ingestion.helicone import HeliconeDecoder
@@ -90,6 +95,30 @@ def register_default_decoders(registry: FormatRegistry) -> None:
     registry.register(GeminiDecoder())
     registry.register(FrameworkDecoder())
     registry.register(WebhookDecoder())
+
+
+_REQUIRED_INGEST_FORMATS = (
+    "otel",
+    "helicone",
+    "langfuse",
+    "openai",
+    "anthropic",
+    "bedrock",
+    "gemini",
+    "framework",
+    "webhook",
+)
+
+
+def assert_ingest_decoders_healthy() -> list[str]:
+    """Load the format registry and return any missing required formats.
+
+    Raises on import/syntax errors so startup can refuse a broken build
+    instead of serving 503s on every SDK ingest.
+    """
+    registry = get_format_registry()
+    known = set(registry.known_formats())
+    return [fmt for fmt in _REQUIRED_INGEST_FORMATS if fmt not in known]
 
 
 # Backward-compatible alias used by ``registry.get_format_registry()``.

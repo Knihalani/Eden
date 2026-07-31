@@ -505,6 +505,12 @@ class EdenClient:
         if not self.config.enabled:
             return
         payload = event.payload if isinstance(event.payload, dict) else {}
+        # Stamp configured agent_id when the emitter omitted it so
+        # Agents / Improve / autonomy always have a stable key.
+        agent_id = getattr(self.config, "agent_id", None)
+        if agent_id and isinstance(payload, dict) and not payload.get("agent_id"):
+            payload["agent_id"] = agent_id
+            event.payload = payload
         has_error = bool(
             payload.get("error")
             or payload.get("outcome") == "error"
