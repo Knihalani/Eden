@@ -90,7 +90,9 @@ export function AgentStatusBadge({
 }) {
   const tone =
     status === "live" ? "live" : status === "error" ? "fail" : "neutral";
-  return <StatusChip tone={tone}>{status}</StatusChip>;
+  const label =
+    status === "live" ? "active" : status === "error" ? "error" : "idle";
+  return <StatusChip tone={tone}>{label}</StatusChip>;
 }
 
 export function EmptyState({

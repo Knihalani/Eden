@@ -84,10 +84,11 @@ export function homeSnapshot(
   const idle = agents.filter((a) => a.status === "idle").length;
   const errored = agents.filter((a) => a.status === "error").length;
   const successRate =
-    fleetRuns > 0
-      ? agents.reduce((sum, a) => sum + a.successRate * a.runs24h, 0) / fleetRuns
-      : 1;
-  const errorRate = 1 - successRate;
+    fleetRunsFromAgents > 0
+      ? agents.reduce((sum, a) => sum + a.successRate * a.runs24h, 0) /
+        fleetRunsFromAgents
+      : null;
+  const errorRate = successRate == null ? null : 1 - successRate;
   const avgCostPerRun = fleetCost / Math.max(fleetRuns, 1);
   const avgTokensPerRun = fleetTokens / Math.max(fleetRuns, 1);
   const p50Ms =
@@ -95,7 +96,8 @@ export function homeSnapshot(
       ? agents.reduce((sum, a) => sum + a.p50Ms * a.runs24h, 0) / fleetRuns
       : 0;
   const p95Ms = Math.max(...agents.map((a) => a.p95Ms), 0);
-  const failedRuns24h = Math.round(fleetRuns * errorRate);
+  const failedRuns24h =
+    errorRate == null ? 0 : Math.round(fleetRuns * errorRate);
   const feedErrorRate =
     traces.length > 0 ? failures.length / traces.length : 0;
 
@@ -103,7 +105,7 @@ export function homeSnapshot(
   const prior = {
     fleetRuns,
     fleetCost,
-    successRate,
+    successRate: successRate ?? 0,
     openIssues,
     failures: failures.length,
     p50Ms,
@@ -141,7 +143,7 @@ export function homeSnapshot(
     deltas: {
       runs: deltaPct(fleetRuns, prior.fleetRuns),
       spend: deltaPct(fleetCost, prior.fleetCost),
-      success: deltaPct(successRate, prior.successRate),
+      success: deltaPct(successRate ?? 0, prior.successRate),
       issues: deltaPct(openIssues, Math.max(prior.openIssues, 0.01)),
       failures: deltaPct(failures.length, Math.max(prior.failures, 0.01)),
       latency: deltaPct(p50Ms, prior.p50Ms),

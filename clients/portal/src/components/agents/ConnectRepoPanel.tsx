@@ -67,7 +67,19 @@ export function ConnectRepoPanel({
     },
   );
 
-  const active = connection.data;
+  const active = useMemo(() => {
+    const row = connection.data;
+    if (!row) return null;
+    const repo = String(row.repo_full_name ?? "").trim();
+    // Require owner/name — never treat empty/undefined as Connected.
+    if (!repo || !repo.includes("/") || /undefined/i.test(repo)) {
+      return null;
+    }
+    return { ...row, repo_full_name: repo };
+  }, [connection.data]);
+  const githubHref = active
+    ? `https://github.com/${active.repo_full_name}`
+    : null;
   const filteredRepos = useMemo(() => {
     const list = repos.data ?? [];
     const q = filter.trim().toLowerCase();
@@ -211,14 +223,16 @@ export function ConnectRepoPanel({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <a
-              href={`https://github.com/${active.repo_full_name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ds-btn ds-btn-outline ds-btn-sm"
-            >
-              Open on GitHub
-            </a>
+            {githubHref ? (
+              <a
+                href={githubHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ds-btn ds-btn-outline ds-btn-sm"
+              >
+                Open on GitHub
+              </a>
+            ) : null}
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
