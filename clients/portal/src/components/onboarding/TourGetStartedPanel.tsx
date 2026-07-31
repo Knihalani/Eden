@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import {
   QUICKSTART_LANGS,
@@ -11,6 +12,7 @@ import {
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
 import { buildAgentIntegrationPrompt } from "@/lib/agent-integration-prompt";
 import { useOrg } from "@/hooks/use-org";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 type FillState =
@@ -99,6 +101,7 @@ async function mintQuickstartKey(orgId: string): Promise<MintResult> {
  */
 export function TourGetStartedPanel() {
   const { currentOrg } = useOrg();
+  const queryClient = useQueryClient();
   const [lang, setLang] = useState<QuickstartLang>("python");
   const [fill, setFill] = useState<FillState>({ status: "loading" });
 
@@ -116,6 +119,9 @@ export function TourGetStartedPanel() {
     const cached = readCachedMint(orgId);
     if (cached) {
       setFill({ status: "ready", apiKey: cached.apiKey, orgId: cached.orgId });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.portal.keys(orgId),
+      });
       return;
     }
 
@@ -156,6 +162,12 @@ export function TourGetStartedPanel() {
           return;
         }
         const data = await mintQuickstartKey(orgId);
+        // Tour visits Settings before mint with an empty keys cache
+        // (staleTime 120s, no refetchOnMount) — invalidate so Overview
+        // / API keys show the Quickstart row immediately.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.keys(orgId),
+        });
         if (!cancelled) {
           setFill({
             status: "ready",
@@ -179,7 +191,7 @@ export function TourGetStartedPanel() {
     return () => {
       cancelled = true;
     };
-  }, [currentOrg?.id]);
+  }, [currentOrg?.id, queryClient]);
 
   // Shared by the hello-world snippet and the coding-agent prompt so the
   // two can never disagree about which key the user is being handed.
