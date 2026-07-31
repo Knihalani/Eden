@@ -922,10 +922,10 @@ async def github_webhook(request: Request) -> dict[str, str]:
 
 @org_router.post("/github/installations/claim", response_model=InstallationOut)
 async def claim_github_installation(
+    request: Request,
     org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     org: dict = Depends(require_org_permission_dep("integrations:write")),
-    req: ClaimInstallationRequest | None = None,
     installation_id: int | None = Query(
         None,
         description="Fallback when the JSON body is missing (proxy edge cases).",
@@ -940,11 +940,24 @@ async def claim_github_installation(
     ``/integrations/github/callback``. This route lets the wizard register
     the installation in Eden's DB.
 
-    Accepts ``installation_id`` from the JSON body (preferred) or the query
-    string. A required body-only model 422'd when the portal proxy forwarded
-    an empty body, which left the connect UI stuck on "Registering…".
+    Body is read raw (not via a required Pydantic body model) so a portal
+    proxy bug that sent ``Content-Type: application/json, application/json``
+    cannot 422 before we parse ``{"installation_id": …}``. Query string is
+    accepted as a second source.
     """
-    raw_id = req.installation_id if req is not None else installation_id
+    raw_id: object | None = installation_id
+    try:
+        body_bytes = await request.body()
+        if body_bytes:
+            parsed = json.loads(body_bytes.decode("utf-8"))
+            # Tolerate accidental double-encoding from proxies.
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+            if isinstance(parsed, dict) and parsed.get("installation_id") is not None:
+                raw_id = parsed.get("installation_id")
+    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+
     if raw_id is None:
         raise HTTPException(422, "installation_id is required")
     try:
