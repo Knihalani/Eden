@@ -88,6 +88,18 @@ def test_private_key_looks_loadable() -> None:
     assert github_oauth._private_key_looks_loadable(full) is True
 
 
+def test_normalize_private_key_pem_escaped_newlines() -> None:
+    escaped = (
+        "-----BEGIN RSA PRIVATE KEY-----\\n"
+        + ("x" * 64)
+        + "\\n-----END RSA PRIVATE KEY-----"
+    )
+    normalized = github_oauth._normalize_private_key_pem(escaped)
+    assert "\n" in normalized
+    assert "\\n" not in normalized
+    assert github_oauth._private_key_looks_loadable(escaped) is True
+
+
 def test_is_configured_pem_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mirror is_configured()'s predicate — header-only PEM must fail."""
 

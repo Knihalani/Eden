@@ -5229,11 +5229,17 @@ export const githubApi = {
       { method: "GET", headers: { "X-Org-Id": orgId } },
     ),
   claimInstallation: (orgId: string, installationId: number) =>
-    fetchApi<GitHubInstallation>(`/orgs/${orgId}/github/installations/claim`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId },
-      body: JSON.stringify({ installation_id: installationId }),
-    }),
+    fetchApi<GitHubInstallation>(
+      // Query fallback: empty/malformed JSON bodies used to 422 at FastAPI
+      // validation before the handler ran. Body remains the primary shape.
+      `/orgs/${orgId}/github/installations/claim?installation_id=${encodeURIComponent(String(installationId))}`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+        body: JSON.stringify({ installation_id: installationId }),
+        noDedup: true,
+      },
+    ),
   listInstallations: (orgId: string) =>
     fetchApi<GitHubInstallation[]>(
       `/orgs/${orgId}/github/installations`,

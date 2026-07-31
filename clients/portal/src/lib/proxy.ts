@@ -578,33 +578,36 @@ export async function forwardToBackend(
   // still win (override semantics preserved).
   const isStream = stream === true;
   const isForm = body instanceof FormData;
-  const headers: Record<string, string> = {
-    // Always stamp the hop so FastAPI's ``_request_id`` reuses the
-    // same id the portal surfaces — avoids body vs header mismatch
-    // when upstream mints its own UUID.
-    "X-Request-ID": requestId,
-  };
+  // Use Headers.set() (case-insensitive overwrite). A plain object with
+  // both ``Content-Type`` and ``content-type`` made Undici emit
+  // ``application/json, application/json``, and FastAPI then treated the
+  // JSON body as a string → 422 on routes like github claim.
+  const headers = new Headers();
+  headers.set("X-Request-ID", requestId);
   if (!isStream && !isForm) {
-    headers["Content-Type"] = "application/json";
+    headers.set("Content-Type", "application/json");
   }
-  if (cookieHeader) headers["Cookie"] = cookieHeader;
-  if (authorization) headers["Authorization"] = authorization;
+  if (cookieHeader) headers.set("Cookie", cookieHeader);
+  if (authorization) headers.set("Authorization", authorization);
   if (extraHeaders) {
     for (const [k, v] of Object.entries(extraHeaders)) {
-      // Allow caller to override Content-Type for non-JSON bodies.
+      const lower = k.toLowerCase();
       // Do not let a blank inbound id wipe the stamped request id.
       if (
-        (k.toLowerCase() === "x-request-id" ||
-          k.toLowerCase() === "x-correlation-id") &&
+        (lower === "x-request-id" || lower === "x-correlation-id") &&
         !v
       ) {
         continue;
       }
-      headers[k] = v;
+      headers.set(k, v);
     }
   }
-  if (!headers["X-Request-ID"] && !headers["x-request-id"]) {
-    headers["X-Request-ID"] = requestId;
+  if (!headers.get("X-Request-ID")) {
+    headers.set("X-Request-ID", requestId);
+  }
+  // Let fetch set multipart boundary — a pre-set Content-Type breaks uploads.
+  if (isForm) {
+    headers.delete("Content-Type");
   }
 
   // Serialize the body for fetch. Strings / FormData / Blob /
