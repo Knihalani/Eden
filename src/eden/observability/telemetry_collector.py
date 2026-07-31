@@ -803,9 +803,34 @@ class TelemetryCollector:
             await asyncio.gather(*pending, return_exceptions=True)
 
     def _spawn_bg(self, coro: Any) -> None:
-        """Fire-and-forget a coroutine; keep a strong ref until done."""
+        """Fire-and-forget a coroutine; keep a strong ref until done.
+
+        CRITICAL: strip the request-pinned Postgres connection from the
+        task's context. ``asyncio.create_task`` copies the caller's
+        ``contextvars.Context``, so a bare create_task here would let
+        billing / checkpoint / agent-registration work share the
+        RLS-pinned connection that ``RLSOrgContextMiddleware`` still
+        holds open for the ingest write. Concurrent use of that
+        connection raises ``InterfaceError: another operation is in
+        progress``, aborts the middleware transaction, and the later
+        COMMIT fails — while the handler has already returned
+        ``accepted: 1``. Traces vanish. Same pattern as
+        ``webhook_delivery`` / ``copy_context_without_request_pg_conn``.
+        """
         try:
-            task = asyncio.create_task(coro)
+            from eden.storage.postgres import copy_context_without_request_pg_conn
+
+            task = asyncio.create_task(
+                coro,
+                context=copy_context_without_request_pg_conn(),
+            )
+        except TypeError:
+            # Python < 3.11 has no create_task(context=...); fall back
+            # without the strip rather than dropping the work entirely.
+            try:
+                task = asyncio.create_task(coro)
+            except RuntimeError:
+                return
         except RuntimeError:
             return
         self._bg_tasks.add(task)
