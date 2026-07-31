@@ -357,7 +357,7 @@ function SignalsPanel({
                     <p className="type-ui truncate text-[var(--text)]">
                       {step.title}
                     </p>
-                    <p className="type-meta mt-0.5 truncate">
+                    <p className="type-meta mt-0.5 break-words whitespace-pre-wrap">
                       {step.errorMessage ?? step.outputPreview ?? step.id}
                     </p>
                   </div>

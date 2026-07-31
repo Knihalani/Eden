@@ -338,6 +338,15 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
     }
     if span.error:
         payload["attributes"]["eden.error"] = span.error
+        # Mirror to the generic key observability SQL and older
+        # portal paths already look for (`attributes->>'error'`).
+        payload["attributes"]["error"] = span.error
+        payload["error_message"] = span.error
+        payload["error_type"] = (
+            span.error.split("(", 1)[0].strip()
+            if "(" in span.error
+            else "error"
+        )
     get_default_client().enqueue(
         TraceEvent(payload=payload, source_format="framework")
     )

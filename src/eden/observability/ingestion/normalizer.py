@@ -145,6 +145,18 @@ async def normalize_to_telemetry_event(
     attributes = dict(raw.get("attributes") or {})
     tags = list(raw.get("tags") or [])
 
+    # SDK / framework emitters may stamp top-level error fields that are
+    # not mirrored into attributes yet — fold them in so portal SQL and
+    # transcript extractors always see a message on failure outcomes.
+    top_err = raw.get("error_message") or raw.get("error")
+    top_err_type = raw.get("error_type")
+    if top_err and not attributes.get("eden.error") and not attributes.get("error"):
+        attributes["error"] = str(top_err)
+        attributes["eden.error"] = str(top_err)
+    if top_err_type and not attributes.get("error_type") and not attributes.get("error.type"):
+        attributes["error_type"] = str(top_err_type)
+        attributes["error.type"] = str(top_err_type)
+
     if settings.ingestion_pii_pre_mask:
         # Mask payload + attributes concurrently (policy resolve is cached).
         payload, attributes = await asyncio.gather(
