@@ -107,17 +107,21 @@ export function toUserFacingError(
 
   // Prefer actionable temporary-unavailable copy from the API over the
   // generic "trouble reaching the server" banner (Assistant / keys /
-  // traces often return a clear Retry-After detail on 503).
-  if (
-    typeof status === "number" &&
-    status === 503 &&
-    /temporarily unavailable|please retry|Could not load|not yet available/i.test(
-      raw,
-    )
-  ) {
-    const cleaned = raw.replace(/^Error:\s*/i, "").trim();
-    if (cleaned.length > 0 && cleaned.length < 180) {
-      return cleaned;
+  // traces often return a clear Retry-After detail on 503). Also map
+  // proxy circuit-open / upstream-down strings the tour and chrome see.
+  if (typeof status === "number" && status === 503) {
+    if (/backend circuit open/i.test(raw)) {
+      return "Eden’s API is temporarily overloaded. Please try again in a moment.";
+    }
+    if (
+      /temporarily unavailable|please retry|Could not load|not yet available|Backend unavailable|upstream/i.test(
+        raw,
+      )
+    ) {
+      const cleaned = raw.replace(/^Error:\s*/i, "").trim();
+      if (cleaned.length > 0 && cleaned.length < 180) {
+        return cleaned;
+      }
     }
   }
 

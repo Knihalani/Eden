@@ -151,6 +151,9 @@ function LabSettingsInner() {
 
   // Wait for soft-switch remaps, but never spin forever when the user
   // has no org (queries stay disabled and would never resolve).
+  // Overview (workspace) health cards read keys + members — wait for
+  // those queries too or HealthCard paints "0 keys / ingest blocked"
+  // while the request is still in flight (or swallows keysQuery errors).
   const isLoading =
     orgSyncing ||
     (Boolean(orgId) &&
@@ -162,7 +165,9 @@ function LabSettingsInner() {
             ? workspaceQuery.isLoading ||
               auditEventsQuery.isLoading ||
               auditPacksQuery.isLoading
-            : workspaceQuery.isLoading));
+            : workspaceQuery.isLoading ||
+              keysQuery.isLoading ||
+              membersQuery.isLoading));
   const isError =
     loadMode === "keys"
       ? workspaceQuery.isError || keysQuery.isError
@@ -172,7 +177,9 @@ function LabSettingsInner() {
           ? workspaceQuery.isError ||
             auditEventsQuery.isError ||
             auditPacksQuery.isError
-          : workspaceQuery.isError;
+          : workspaceQuery.isError ||
+            keysQuery.isError ||
+            membersQuery.isError;
   const firstError =
     loadMode === "keys"
       ? (workspaceQuery.error ?? keysQuery.error)
@@ -182,7 +189,7 @@ function LabSettingsInner() {
           ? (workspaceQuery.error ??
             auditEventsQuery.error ??
             auditPacksQuery.error)
-          : workspaceQuery.error;
+          : (workspaceQuery.error ?? keysQuery.error ?? membersQuery.error);
 
   const invalidateWorkspace = useCallback((): Promise<void> => {
     if (!orgId) return Promise.resolve();

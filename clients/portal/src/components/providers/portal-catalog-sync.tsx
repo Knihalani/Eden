@@ -73,13 +73,14 @@ export function PortalCatalogSync() {
   const needAlertRules = onAlerts;
 
   useEffect(() => {
-    if (!orgId) {
-      clearPortalCatalog();
-      void import("@/lab/fixtures/debugger").then((m) => {
-        m.clearClientDebuggerSessions();
-      });
-      return;
-    }
+    // Always wipe shards on org change — patching only `{ orgId }` left
+    // the previous workspace's agents/traces in catalogTraces()/traceById
+    // until new queries resolved (debugger + handoffs could seed wrong org).
+    clearPortalCatalog();
+    void import("@/lab/fixtures/debugger").then((m) => {
+      m.clearClientDebuggerSessions();
+    });
+    if (!orgId) return;
     patchPortalCatalog({ orgId });
   }, [orgId]);
 
