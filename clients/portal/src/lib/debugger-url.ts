@@ -36,7 +36,7 @@ export function debuggerListHref(params: DebuggerListParams = {}): string {
   if (params.tab) p.set("tab", params.tab);
   if (params.traceId) p.set("traceId", params.traceId);
   if (params.spanId) p.set("spanId", params.spanId);
-  if (params.agentId) p.set("agentId", params.agentId);
+  if (params.agentId) p.set("agent", params.agentId);
   if (params.sessionId) p.set("sessionId", params.sessionId);
   if (params.q) p.set("q", params.q);
   if (params.pastHours != null) p.set("pastHours", String(params.pastHours));
@@ -74,7 +74,11 @@ export function parseDebuggerListParams(
       : undefined,
     traceId: params.get("traceId") ?? undefined,
     spanId: params.get("spanId") ?? undefined,
-    agentId: params.get("agentId") ?? undefined,
+    agentId:
+      params.get("agent") ??
+      params.get("agentId") ??
+      params.get("agent_id") ??
+      undefined,
     sessionId: params.get("sessionId") ?? undefined,
     q: params.get("q") ?? undefined,
     pastHours: params.get("pastHours") ? Number(params.get("pastHours")) : undefined,

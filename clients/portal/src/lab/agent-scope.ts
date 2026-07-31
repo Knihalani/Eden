@@ -69,7 +69,10 @@ export function useAgentScope() {
   // drive re-renders; grouping also synthesizes from live items.
   const agents = liveAgentList();
 
-  const raw = searchParams.get("agent");
+  const raw =
+    searchParams.get("agent") ||
+    searchParams.get("agentId") ||
+    searchParams.get("agent_id");
   const agentId: AgentScopeId =
     raw && raw.length > 0 ? raw : "all";
   const agent =
@@ -79,7 +82,13 @@ export function useAgentScope() {
 
   const setAgentId = useCallback(
     (id: AgentScopeId) => {
-      patchQuery({ agent: id === "all" ? null : id });
+      // Canonical query is `agent`; clear legacy aliases so they cannot
+      // disagree with the new scope on the next navigation.
+      patchQuery({
+        agent: id === "all" ? null : id,
+        agentId: null,
+        agent_id: null,
+      });
     },
     [patchQuery],
   );

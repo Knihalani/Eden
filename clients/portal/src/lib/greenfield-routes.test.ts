@@ -43,14 +43,12 @@ describe("product portal routes", () => {
     expect(buildHubRedirectUrl("/docs-fill", "?op=session")).toBeNull();
   });
 
-  it("soft-lands stubs and dashboard; onboarding starts tour", () => {
+  it("soft-lands stubs and dashboard; onboarding lands on home", () => {
     expect(STUB_LAND).toBe("/unavailable");
     expect(buildHubRedirectUrl("/dashboard", "")).toBe("/home");
     expect(buildHubRedirectUrl("/analytics", "")).toBe("/unavailable");
     expect(buildHubRedirectUrl("/marketplace", "")).toBe("/unavailable");
-    expect(buildHubRedirectUrl("/onboarding", "")).toBe(
-      "/home?onboarding=1",
-    );
+    expect(buildHubRedirectUrl("/onboarding", "")).toBe("/home");
   });
 
   // Which mechanism serves each mapping is a behavioural contract, not
@@ -80,10 +78,10 @@ describe("product portal routes", () => {
       mode: "redirect",
     });
 
-    // Changes visible state: OnboardingOverlay reads `?onboarding=1`
-    // from the browser URL, which a rewrite would never expose.
+    // Legacy /onboarding → /home. Do not force ?onboarding=1 — finished
+    // tours must not reopen; active users still see the banner.
     expect(resolveHubTarget("/onboarding", "")).toEqual({
-      destination: "/home?onboarding=1",
+      destination: "/home",
       mode: "redirect",
     });
 
@@ -106,26 +104,22 @@ describe("product portal routes", () => {
 
   it("preserves the query string on /onboarding, like every other branch", () => {
     expect(buildHubRedirectUrl("/onboarding", "?ref=welcome")).toBe(
-      "/home?onboarding=1&ref=welcome",
+      "/home?ref=welcome",
     );
     expect(buildHubRedirectUrl("/onboarding", "ref=welcome")).toBe(
-      "/home?onboarding=1&ref=welcome",
+      "/home?ref=welcome",
     );
     // No incoming query — behavior is unchanged.
-    expect(buildHubRedirectUrl("/onboarding", "")).toBe(
-      "/home?onboarding=1",
-    );
+    expect(buildHubRedirectUrl("/onboarding", "")).toBe("/home");
   });
 
-  it("produces a URL for /onboarding that a real URL parser can decode, with both params independently retrievable", () => {
+  it("produces a URL for /onboarding that a real URL parser can decode", () => {
     const result = buildHubRedirectUrl("/onboarding", "?ref=welcome");
     expect(result).not.toBeNull();
     const parsed = new URL(result as string, "https://example.test");
-    // A single, correctly-delimited query string — not `onboarding=1?ref=welcome`
-    // masquerading as one param, which is what naive string concatenation produced.
-    expect(parsed.searchParams.get("onboarding")).toBe("1");
+    expect(parsed.searchParams.get("onboarding")).toBeNull();
     expect(parsed.searchParams.get("ref")).toBe("welcome");
-    expect([...parsed.searchParams.keys()]).toEqual(["onboarding", "ref"]);
+    expect([...parsed.searchParams.keys()]).toEqual(["ref"]);
   });
 });
 

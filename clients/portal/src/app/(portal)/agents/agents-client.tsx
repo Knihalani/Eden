@@ -14,6 +14,7 @@ import {
   formatDuration,
   formatTokens,
   formatUsd,
+  preferKnownCostUsd,
   sortTracesNewestFirst,
   type TraceFixture,
 } from "@/lab/fixtures/traces";
@@ -38,6 +39,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY, LIVE_QUERY } from "@/lib/portal-query";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { useLabToast } from "@/lab/lab-toast";
 import { formatRelativeTime } from "@/lib/format";
@@ -97,7 +99,11 @@ function RunInspector({
               <h3 className="type-ui min-w-0 truncate text-[var(--text)]">{trace.name}</h3>
             </div>
             <p className="type-meta mt-1.5">
-              {trace.id} · {formatRelativeTime(trace.startedAt)} · {agent.name}
+              Run in agent <span className="text-[var(--text)]">{agent.name}</span>
+              {" · "}
+              {formatRelativeTime(trace.startedAt)}
+              {" · "}
+              <span className="font-mono text-[0.7rem]">{trace.id.slice(0, 12)}</span>
             </p>
             <div className="mt-2">
               <RunMeta trace={trace} />
@@ -234,7 +240,7 @@ function AgentDetail({ agent }: { agent: AgentFixture | null }) {
       <div className="space-y-4 p-5">
         <EmptyState
           title="No agents yet"
-          body="Send traffic with the SDK using an agent_id. Agents show up here from traces."
+          body={U20_EMPTY_COPY.agents}
         />
         <div className="flex flex-wrap gap-2">
           <Link href="/settings?mode=keys" className="ds-btn ds-btn-primary ds-btn-sm">
@@ -390,10 +396,14 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
     const detail = traceDetailQuery.data;
     if (detail && detail.id === selectedRunIdForDetail) {
       const base = selectedListItem ?? detail;
-      const stepCost = Array.isArray(detail.steps)
-        ? detail.steps.reduce((sum, s) => sum + (s.costUsd ?? 0), 0)
-        : 0;
-      const costUsd = Math.max(detail.costUsd ?? 0, base.costUsd ?? 0, stepCost);
+      const stepCosts = Array.isArray(detail.steps)
+        ? detail.steps
+            .map((s) => s.costUsd)
+            .filter((c): c is number => c != null && Number.isFinite(c))
+        : [];
+      const stepCost =
+        stepCosts.length > 0 ? stepCosts.reduce((sum, c) => sum + c, 0) : null;
+      const costUsd = preferKnownCostUsd(detail.costUsd, base.costUsd, stepCost);
       return {
         ...base,
         ...detail,
@@ -565,11 +575,13 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
           label="Spend"
           value={formatUsd(agent.costUsd24h)}
           hint={
-            agent.costUsd24h != null
-              ? `${formatTokens(agent.tokens24h)} · ${formatUsd((agent.costUsd24h ?? 0) / Math.max(agent.runs24h, 1), 3)}/run`
-              : agent.runs24h > 0
-                ? "cost not available"
-                : undefined
+            agent.costUsd24h != null && agent.runs24h > 0
+              ? `${formatTokens(agent.tokens24h)} · ${formatUsd(agent.costUsd24h / agent.runs24h, 3)}/run`
+              : agent.costUsd24h != null
+                ? formatTokens(agent.tokens24h)
+                : agent.runs24h > 0
+                  ? "cost not available"
+                  : undefined
           }
         />
         <MetricCell
@@ -741,7 +753,11 @@ function LabAgentsInner() {
   const fleetRuns = agents.reduce((s, a) => s + a.runs24h, 0);
   const live = agents.filter((a) => a.status === "live").length;
   const errored = agents.filter((a) => a.status === "error").length;
-  const fleetSpend = agents.reduce((s, a) => s + (a.costUsd24h ?? 0), 0);
+  const knownSpend = agents
+    .map((a) => a.costUsd24h)
+    .filter((c): c is number => c != null && Number.isFinite(c));
+  const fleetSpend =
+    knownSpend.length > 0 ? knownSpend.reduce((s, c) => s + c, 0) : null;
 
   if (agentsQuery.isLoading) {
     return (

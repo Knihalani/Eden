@@ -18,24 +18,18 @@ DEFAULT_MAX_GENERATES_PER_SWEEP = 3
 
 
 async def get_settings(org_id: str) -> dict[str, Any]:
-    """Read improvement settings from organizations.features."""
+    """Read this org's improvement settings, falling back to the defaults."""
     stored = await _read_features(org_id)
     try:
         from eden.config import get_settings as get_global
 
-        generates = int(
-            getattr(get_global(), "patch_max_generates_per_sweep", 3) or 3
-        )
+        generates = int(getattr(get_global(), "patch_max_generates_per_sweep", 3) or 3)
     except Exception:
         generates = DEFAULT_MAX_GENERATES_PER_SWEEP
     return {
-        "improvement_schedule_cron": stored.get(
-            "improvement_schedule_cron", DEFAULT_SCHEDULE_CRON
-        ),
+        "improvement_schedule_cron": stored.get("improvement_schedule_cron", DEFAULT_SCHEDULE_CRON),
         "improvement_max_plans_per_sweep": int(
-            stored.get(
-                "improvement_max_plans_per_sweep", DEFAULT_MAX_PLANS_PER_SWEEP
-            )
+            stored.get("improvement_max_plans_per_sweep", DEFAULT_MAX_PLANS_PER_SWEEP)
         ),
         "improvement_max_code_patch_per_sweep": int(
             stored.get(
@@ -73,41 +67,68 @@ async def update_settings(
     return await get_settings(org_id)
 
 
+#: The JSONB column on ``organizations`` that holds per-org settings.
+#:
+#: This module read and wrote ``features``. ``organizations`` has no such
+#: column — the JSONB blob is ``settings``. Both statements therefore raised
+#: ``UndefinedColumn`` on every call, and both were wrapped in
+#: ``except Exception: logger.debug(...)``: reads silently returned ``{}`` so
+#: every org got the module defaults, and writes silently returned ``False``.
+#: Per-org improvement scheduling has never taken effect.
+_SETTINGS_COLUMN = "settings"
+
+
 async def _read_features(org_id: str) -> dict[str, Any]:
-    try:
-        client = await get_postgres_client()
-        if client is None:
-            return {}
-        row = await client.fetchrow(
-            "SELECT features FROM organizations WHERE id = $1",
-            org_id,
-        )
-        if row is None:
-            return {}
-        raw = row.get("features")
-        if isinstance(raw, str):
-            return json.loads(raw)
-        if isinstance(raw, dict):
-            return raw
+    """Read the org's stored improvement settings.
+
+    Absence — no configured client, no such org — returns ``{}`` so callers
+    fall back to the module defaults. A *database* error is raised rather than
+    folded into that same empty dict: conflating "this org has no overrides"
+    with "the query is malformed" is precisely what hid the wrong column name
+    for as long as it did.
+    """
+    client = await get_postgres_client()
+    if client is None:
         return {}
-    except Exception as exc:
-        logger.debug("improvement.settings read failed: %s", exc)
+    row = await client.fetchrow(
+        f"SELECT {_SETTINGS_COLUMN} FROM organizations WHERE id = $1",
+        org_id,
+    )
+    if row is None:
         return {}
+    raw = row.get(_SETTINGS_COLUMN)
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning(
+                "improvement.settings: organizations.%s for org %s is not "
+                "valid JSON; falling back to defaults",
+                _SETTINGS_COLUMN,
+                org_id,
+            )
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    if isinstance(raw, dict):
+        return raw
+    return {}
 
 
 async def _merge_features(org_id: str, patch: dict[str, Any]) -> bool:
-    try:
-        client = await get_postgres_client()
-        if client is None:
-            return False
-        result = await client.execute(
-            "UPDATE organizations SET features = "
-            "COALESCE(features, '{}'::jsonb) || $1::jsonb "
-            "WHERE id = $2",
-            json.dumps(patch),
-            org_id,
-        )
-        return result.endswith(" 1")
-    except Exception as exc:
-        logger.debug("improvement.settings write failed: %s", exc)
+    """Merge ``patch`` into the org's settings blob.
+
+    Returns False when there is no client or the org does not exist. A
+    database error propagates — a settings write that fails silently reports
+    success to the caller, which is how a broken column name survives.
+    """
+    client = await get_postgres_client()
+    if client is None:
         return False
+    result = await client.execute(
+        f"UPDATE organizations SET {_SETTINGS_COLUMN} = "
+        f"COALESCE({_SETTINGS_COLUMN}, '{{}}'::jsonb) || $1::jsonb "
+        "WHERE id = $2",
+        json.dumps(patch),
+        org_id,
+    )
+    return result.endswith(" 1")

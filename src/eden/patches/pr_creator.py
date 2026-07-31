@@ -85,7 +85,7 @@ def _parse_unified_diff(diff: str) -> list[FileEntry]:
                         sha="",
                     )
                 )
-            current_path = line[len("+++ b/"):].strip()
+            current_path = line[len("+++ b/") :].strip()
             current_lines = []
         elif line.startswith("--- "):
             # Skip — the a/ path is the original, not what we commit.
@@ -119,6 +119,7 @@ async def _load_patch_for_pr(org_id: str, patch_id: str) -> dict[str, Any] | Non
         params=(patch_id,),
     )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -141,6 +142,7 @@ class PRCreator:
         if self._provider is not None:
             return self._provider
         from eden.providers.factory import get_pr_provider_for_org
+
         return await get_pr_provider_for_org(org_id)
 
     async def create(
@@ -176,7 +178,9 @@ class PRCreator:
         provider = await self._resolve_provider(org_id)
         if req is None:
             optin = _check_two_stage_optin(
-                self.name, policy, action_kind,
+                self.name,
+                policy,
+                action_kind,
             )
             if optin is not None:
                 return optin
@@ -216,28 +220,41 @@ class PRCreator:
                     error_code="empty_diff",
                     data={"patch_id": patch_id},
                 )
-            title_format = (
-                pr_patterns.get("title_format")
-                or f"[Eden Agent] Fix {patch_id[:8]}"
-            )
-            body = (
-                pr_patterns.get("body_template")
-                or (
-                    f"## Auto-generated patch\n\n"
-                    f"- **Patch ID:** `{patch_id}`\n"
-                    f"- **Trace:** `{patch.get('trace_id', 'n/a')}`\n"
-                    f"- **RCA:** `{patch.get('rca_id', 'n/a')}`\n"
-                    f"- **Quality score:** {patch.get('quality_score', 0):.2f}\n"
-                    f"\n### Explanation\n\n{patch.get('explanation') or '_No explanation provided._'}\n"
-                )
+            title_format = pr_patterns.get("title_format") or f"[Eden Agent] Fix {patch_id[:8]}"
+            body = pr_patterns.get("body_template") or (
+                f"## Auto-generated patch\n\n"
+                f"- **Patch ID:** `{patch_id}`\n"
+                f"- **Trace:** `{patch.get('trace_id', 'n/a')}`\n"
+                f"- **RCA:** `{patch.get('rca_id', 'n/a')}`\n"
+                f"- **Quality score:** {patch.get('quality_score', 0):.2f}\n"
+                f"\n### Explanation\n\n{patch.get('explanation') or '_No explanation provided._'}\n"
             )
             branch_prefix = pr_patterns.get("common_branch_prefix") or "eden/auto-fix"
             branch = f"{branch_prefix}-{patch_id[:12]}"
+            # Prefer persisted branch name. ``base_sha`` is a commit SHA — never
+            # use it as the GitHub ``base`` ref (and never invent ``main``).
+            base = (patch.get("base_branch") or "").strip()
+            if not base:
+                from eden.providers.factory import (
+                    get_repo_provider_for_org,
+                    resolve_pr_base_branch,
+                )
+
+                try:
+                    repo_provider = await get_repo_provider_for_org(org_id)
+                    base = await resolve_pr_base_branch(org_id, repo_provider)
+                except Exception as exc:
+                    return _error_envelope(
+                        self.name,
+                        message=f"Could not resolve PR base branch: {exc}",
+                        error_code="base_branch_unresolved",
+                        data={"patch_id": patch_id},
+                    )
             req = PRCreateRequest(
                 title=title_format,
                 body=body,
                 branch=branch,
-                base=patch.get("base_sha") or "main",
+                base=base,
                 draft=True,
                 repo_id=repo_id,
                 files=files,
@@ -247,9 +264,7 @@ class PRCreator:
             except NotImplementedError as exc:
                 return _error_envelope(
                     self.name,
-                    message=(
-                        f"PR provider not configured: {exc}"
-                    ),
+                    message=(f"PR provider not configured: {exc}"),
                     error_code="provider_not_implemented",
                     data={
                         "patch_id": patch_id,
@@ -289,7 +304,8 @@ class PRCreator:
         if req.files:
             file_paths = [f.path for f in req.files if f.path]
             codeowners = await self.resolve_codeowners_reviewers(
-                org_id, file_paths,
+                org_id,
+                file_paths,
             )
             if codeowners:
                 req = self.attach_codeowners_reviewers(req, codeowners)
@@ -298,9 +314,7 @@ class PRCreator:
         except NotImplementedError as exc:
             return _error_envelope(
                 self.name,
-                message=(
-                    f"PR provider not configured: {exc}"
-                ),
+                message=(f"PR provider not configured: {exc}"),
                 error_code="provider_not_implemented",
                 data={
                     "patch_id": patch_id,
@@ -359,7 +373,7 @@ class PRCreator:
                     patch_id,
                     getattr(info, "url", "") or "",
                     getattr(info, "number", None),
-                    getattr(info, "base", "main") or "main",
+                    getattr(info, "base", "") or req.base or "",
                     getattr(info, "branch", req.branch) or "",
                     getattr(info, "state", "open") or "open",
                     json.dumps(getattr(req, "labels", []) or []),
@@ -372,7 +386,9 @@ class PRCreator:
             # Audit trail must match operator-visible status.
             logger.warning(
                 "pr_creator: persistence failed for patch_id=%s pr_id=%s: %s",
-                patch_id, pr_id, exc,
+                patch_id,
+                pr_id,
+                exc,
             )
 
     @property
@@ -408,14 +424,17 @@ class PRCreator:
             return []
         try:
             from .repo_connector import RepoConnector
+
             connector = RepoConnector()
             owners_resp = await connector.owners_for_files(
-                org_id, file_paths,
+                org_id,
+                file_paths,
             )
             owners_map = (owners_resp.get("data") or {}).get("owners") or {}
         except Exception as exc:
             logger.debug(
-                "pr_creator: CODEOWNERS resolve failed: %s", exc,
+                "pr_creator: CODEOWNERS resolve failed: %s",
+                exc,
             )
             return []
         # Flatten + dedupe. ``owners_for_files`` returns
@@ -447,9 +466,7 @@ class PRCreator:
         """
         if not codeowners:
             return req
-        merged = list(req.reviewers) + [
-            o for o in codeowners if o not in req.reviewers
-        ]
+        merged = list(req.reviewers) + [o for o in codeowners if o not in req.reviewers]
         return PRCreateRequest(
             title=req.title,
             body=req.body,
@@ -499,7 +516,9 @@ class PRCreator:
         )
 
     async def get_pr(
-        self, org_id: str, pr_id: str,
+        self,
+        org_id: str,
+        pr_id: str,
     ) -> dict[str, Any]:
         """Get a single PR from the ``pull_requests`` table."""
         row = await _select_one(

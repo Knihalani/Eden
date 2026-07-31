@@ -92,33 +92,40 @@ async def _get_suggester(org_id: str) -> PRSuggester:
 
 class SuggestRequest(BaseModel):
     trigger: str = Field(
-        ..., description="rca_cluster | drift_alert | retrieval_gap | judge_regression",
+        ...,
+        description="rca_cluster | drift_alert | retrieval_gap | judge_regression",
     )
     trigger_id: str = Field(
-        ..., description="The source event id (cluster id, alert id, etc.)",
+        ...,
+        description="The source event id (cluster id, alert id, etc.)",
     )
     trigger_payload: dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "The per-trigger JSON. Should include "
-            "affected_files + description when available."
+            "The per-trigger JSON. Should include " "affected_files + description when available."
         ),
     )
 
 
 class OpenPRRequest(BaseModel):
     pr_title: str | None = Field(
-        default=None, description="Override the suggestion's title.",
+        default=None,
+        description="Override the suggestion's title.",
     )
     pr_body: str | None = Field(
-        default=None, description="Override the suggestion's body.",
+        default=None,
+        description="Override the suggestion's body.",
     )
     branch: str | None = Field(
         default=None,
         description="Override the branch name (default: eden/auto-<id>).",
     )
     base: str | None = Field(
-        default="main", description="The base branch to merge into.",
+        default=None,
+        description=(
+            "Base branch to merge into. When omitted, resolved from the "
+            "connected repo's default_branch (never invents main)."
+        ),
     )
     labels: list[str] = Field(default_factory=list)
     reviewers: list[str] = Field(default_factory=list)
@@ -143,7 +150,11 @@ async def list_suggestions(
     """List the org's PR suggestions, newest first."""
     suggester = await _get_suggester(org_id)
     rows = await suggester.list_suggestions(
-        org_id, status=status, trigger=trigger, since=since, limit=limit,
+        org_id,
+        status=status,
+        trigger=trigger,
+        since=since,
+        limit=limit,
     )
     return {
         "status": "ok",
@@ -270,11 +281,28 @@ async def open_pr(
         }
 
     pr_provider = await _get_pr_provider(org_id)
+    base = (body.base or "").strip() or None
+    if not base:
+        from eden.providers.factory import resolve_pr_base_branch
+
+        try:
+            base = await resolve_pr_base_branch(org_id, repo_provider)
+        except Exception as exc:
+            logger.warning("open_pr: could not resolve base branch: %s", redact_all(str(exc)))
+            return {
+                "status": "error",
+                "feature": "pr_suggester",
+                "live": True,
+                "data": {
+                    "suggestion_id": suggestion_id,
+                    "message": f"could_not_resolve_base_branch: {exc}",
+                },
+            }
     pr_req = PRCreateRequest(
         title=body.pr_title or suggestion.pr_title,
         body=body.pr_body or suggestion.pr_body,
         branch=body.branch or f"eden/auto-{suggestion_id}",
-        base=body.base,
+        base=base,
         labels=body.labels,
         reviewers=body.reviewers,
         draft=body.draft,
@@ -314,8 +342,7 @@ async def open_pr(
         }
     if _pr_create_failed(pr_info):
         logger.warning(
-            "open_pr: create_pr returned failure envelope "
-            "(state=%s number=%s url=%r)",
+            "open_pr: create_pr returned failure envelope " "(state=%s number=%s url=%r)",
             getattr(pr_info, "state", None),
             getattr(pr_info, "number", None),
             getattr(pr_info, "url", None),
@@ -401,10 +428,7 @@ def _suggestion_to_dict(s: Any) -> dict[str, Any]:
         "trigger": s.trigger,
         "trigger_id": s.trigger_id,
         "trigger_summary": s.trigger_summary,
-        "files": [
-            {"path": f.path, "size": f.size, "content": f.content}
-            for f in s.files
-        ],
+        "files": [{"path": f.path, "size": f.size, "content": f.content} for f in s.files],
         "patch_diff": s.patch_diff,
         "pr_title": s.pr_title,
         "pr_body": s.pr_body,
@@ -412,9 +436,7 @@ def _suggestion_to_dict(s: Any) -> dict[str, Any]:
         "confidence": s.confidence,
         "status": s.status,
         "created_at": (
-            s.created_at.isoformat()
-            if hasattr(s.created_at, "isoformat")
-            else str(s.created_at)
+            s.created_at.isoformat() if hasattr(s.created_at, "isoformat") else str(s.created_at)
         ),
         "opened_pr_number": s.opened_pr_number,
     }
@@ -425,7 +447,8 @@ def _suggestion_to_dict(s: Any) -> dict[str, Any]:
 
 class StatusUpdateRequest(BaseModel):
     status: str = Field(
-        ..., description="One of: merged, rejected, opened",
+        ...,
+        description="One of: merged, rejected, opened",
     )
 
 
@@ -455,7 +478,8 @@ async def bulk_regenerate_suggestions(
     """
     suggester = await _get_suggester(org_id)
     result = await suggester.bulk_regenerate(
-        org_id, body.suggestion_ids,
+        org_id,
+        body.suggestion_ids,
     )
     return {
         "status": "ok",
@@ -487,7 +511,9 @@ async def get_suggestion_file(
     """
     suggester = await _get_suggester(org_id)
     data = await suggester.get_file_content(
-        org_id, suggestion_id, file_path,
+        org_id,
+        suggestion_id,
+        file_path,
     )
     if data is None:
         return {
@@ -527,7 +553,9 @@ async def update_suggestion_status(
     """
     suggester = await _get_suggester(org_id)
     updated = await suggester.mark_status(
-        org_id, suggestion_id, body.status,
+        org_id,
+        suggestion_id,
+        body.status,
     )
     if updated is None:
         return {

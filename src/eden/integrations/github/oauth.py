@@ -391,6 +391,26 @@ class GitHubOAuthClient:
                 installation_id=installation_id,
             )
 
+    async def app_permissions(self) -> dict[str, str]:
+        """Return the App registration's repository permissions.
+
+        Used by ``/integrations/github/configured`` so the portal can
+        warn when Contents is still ``read`` (PR create needs ``write``).
+        """
+        async with _shared_httpx() as client:
+            r = await client.get(
+                f"{GITHUB_API_BASE}/app",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {self._app_jwt()}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            if r.status_code != 200:
+                raise GitHubAPIError(r.status_code, "app_permissions", r.text)
+            perms = r.json().get("permissions") or {}
+            return {str(k): str(v) for k, v in perms.items()}
+
     # ----------- list installations + repos --------------------------
 
     async def list_user_installations(self, user_token: str) -> list[dict[str, Any]]:
@@ -445,7 +465,7 @@ class GitHubOAuthClient:
                             full_name=item["full_name"],
                             name=item["name"],
                             owner=item["owner"]["login"],
-                            default_branch=item.get("default_branch", "main"),
+                            default_branch=str(item.get("default_branch") or "").strip(),
                             private=item.get("private", True),
                             description=item.get("description") or "",
                             html_url=item.get("html_url", ""),

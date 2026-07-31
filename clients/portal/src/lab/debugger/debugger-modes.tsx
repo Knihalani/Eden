@@ -21,6 +21,7 @@ import {
 import { DebuggerOutcomeChip } from "@/lab/debugger/debugger-chrome";
 import { EmptyState, RunTranscript, SeverityBadge } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 
 /* ------------------------------------------------------------------ */
 /* Replay — re-run FROM a step                                         */
@@ -61,7 +62,7 @@ export function DebuggerReplayView({
     return (
       <EmptyState
         title="No source trace"
-        body="Open a Trace and click Debugger to start."
+        body={U20_EMPTY_COPY.debugger}
         action={
           <Link href="/traces" className="ds-btn ds-btn-primary ds-btn-sm">
             Open traces
@@ -314,7 +315,7 @@ function DeltaStat({ label, value }: { label: string; value: string }) {
 
 function compareDelta(left: TraceFixture, right: TraceFixture) {
   const dMs = right.durationMs - left.durationMs;
-  const dCost = right.costUsd - left.costUsd;
+  const dCost = (right.costUsd ?? 0) - (left.costUsd ?? 0);
   const dSpans = right.steps.length - left.steps.length;
   const max = Math.max(left.steps.length, right.steps.length);
   let firstDiff: string | null = null;
@@ -451,7 +452,7 @@ export function DebuggerInspectView({
     return (
       <EmptyState
         title="No steps"
-        body="Open a Trace and click Debugger to inspect state."
+        body={U20_EMPTY_COPY.debugger}
         compact
       />
     );

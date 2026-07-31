@@ -41,6 +41,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 type SeverityFilter = "all" | "error" | "warn";
 type DetailTab = "overview" | "runs" | "fix";
@@ -585,7 +586,16 @@ function LabIssuesInner() {
             {filtered.length === 0 ? (
               <EmptyState
                 title={
-                  agent ? `No issues for ${agent.name}` : "No matching issues"
+                  agent
+                    ? `No issues for ${agent.name}`
+                    : scopedIssues.length === 0
+                      ? "No issues yet"
+                      : "No matching issues"
+                }
+                body={
+                  query.trim() || severityFilter !== "all" || agent
+                    ? U20_FILTER_EMPTY_COPY.issues
+                    : U20_EMPTY_COPY.issues
                 }
               />
             ) : (

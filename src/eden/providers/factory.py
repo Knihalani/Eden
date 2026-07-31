@@ -131,7 +131,9 @@ async def active_repo_connection(
     except Exception as exc:
         logger.debug(
             "factory: active repo_connections lookup for org=%s agent=%s failed: %s",
-            org_id, aid, exc,
+            org_id,
+            aid,
+            exc,
         )
         return None
 
@@ -184,7 +186,8 @@ async def _mint_installation_token(installation_id: str | int) -> str | None:
     except Exception as exc:
         logger.warning(
             "factory: installation_token(%s) failed: %s",
-            installation_id, exc,
+            installation_id,
+            exc,
         )
         return None
 
@@ -234,8 +237,7 @@ async def get_pr_provider_for_org(
                 org_id,
             )
             raise RepoConnectionError(
-                "Could not mint GitHub App installation token for the "
-                "active repo connection",
+                "Could not mint GitHub App installation token for the " "active repo connection",
                 org_id=org_id,
             )
 
@@ -278,18 +280,50 @@ async def get_repo_provider_for_org(
                 org_id,
             )
             raise RepoConnectionError(
-                "Could not mint GitHub App installation token for the "
-                "active repo connection",
+                "Could not mint GitHub App installation token for the " "active repo connection",
                 org_id=org_id,
             )
 
     return get_default_repo_provider()
 
 
+async def resolve_pr_base_branch(
+    org_id: str,
+    repo_provider: Any,
+    *,
+    agent_id: str | None = None,
+) -> str:
+    """Resolve the PR base branch — never invent ``main`` blindly.
+
+    Preference order:
+    1. ``repo_connections.default_branch`` when set
+    2. :meth:`RepoProvider.get_default_branch`
+    """
+    try:
+        conn = await active_repo_connection(org_id, agent_id=agent_id)
+    except Exception as exc:
+        logger.debug("resolve_pr_base_branch: active_repo_connection failed: %s", exc)
+        conn = None
+    if conn:
+        branch = (conn.get("default_branch") or "").strip()
+        if branch:
+            return branch
+    try:
+        branch = await repo_provider.get_default_branch()
+    except Exception as exc:
+        logger.warning("resolve_pr_base_branch: get_default_branch failed: %s", exc)
+        raise RuntimeError("could not resolve default branch for PR") from exc
+    branch = (branch or "").strip()
+    if not branch:
+        raise RuntimeError("could not resolve default branch for PR")
+    return branch
+
+
 __all__ = [
     "RepoConnectionError",
     "active_repo_connection",
     "resolve_active_repo_id",
+    "resolve_pr_base_branch",
     "get_pr_provider_for_org",
     "get_repo_provider_for_org",
 ]

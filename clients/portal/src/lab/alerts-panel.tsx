@@ -21,6 +21,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 type InboxFilter = "actionable" | "firing" | "muted" | "resolved" | "all";
 
@@ -436,7 +437,22 @@ export function AlertsModal() {
                 onRetry={() => void eventsQuery.refetch()}
               />
             ) : filtered.length === 0 ? (
-              <EmptyState title="Inbox clear" />
+              <EmptyState
+                title={
+                  events.length === 0
+                    ? "No alerts yet"
+                    : inboxFilter === "actionable"
+                      ? "Inbox clear"
+                      : "No matching alerts"
+                }
+                body={
+                  events.length === 0
+                    ? U20_EMPTY_COPY.alerts
+                    : inboxFilter === "actionable"
+                      ? U20_EMPTY_COPY.alertsClear
+                      : U20_FILTER_EMPTY_COPY.alerts
+                }
+              />
             ) : (
               filtered.map((event) => (
                 <EventRow

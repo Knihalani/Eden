@@ -183,9 +183,7 @@ class ImprovementAgent:
         try:
             from eden.config import get_settings as get_global
 
-            max_llm = int(
-                getattr(get_global(), "patch_max_llm_calls_per_sweep", 8) or 8
-            )
+            max_llm = int(getattr(get_global(), "patch_max_llm_calls_per_sweep", 8) or 8)
         except Exception:
             max_llm = 8
 
@@ -199,9 +197,7 @@ class ImprovementAgent:
             if issue_id:
                 from eden.improvement.issue_patch_trigger import propose_plan_for_issue
 
-                result = await propose_plan_for_issue(
-                    org_id, issue_id, run_id=run_id
-                )
+                result = await propose_plan_for_issue(org_id, issue_id, run_id=run_id)
                 cost = float((result.get("plan") or {}).get("llm_cost_usd") or 0)
                 created_n = 1 if result.get("status") == "proposed" else 0
                 skipped_n = 0 if created_n else 1
@@ -240,21 +236,16 @@ class ImprovementAgent:
             candidates.extend(await self._from_metrics(org_id, agent_id))
             candidates.extend(await self._from_repo_health(org_id, agent_id))
             candidates.extend(await self._from_cost_anomalies(org_id, agent_id))
-            candidates.extend(
-                await self._from_prompt_nudge_candidates(org_id, agent_id)
-            )
+            candidates.extend(await self._from_prompt_nudge_candidates(org_id, agent_id))
             # Advisory lane only — never fake empty code_patch.
             candidates = [
                 c
                 for c in candidates
-                if c.plan_kind != "code_patch"
-                or (c.diff_unified and str(c.diff_unified).strip())
+                if c.plan_kind != "code_patch" or (c.diff_unified and str(c.diff_unified).strip())
             ]
 
             llm_cost += sum(c.llm_cost_usd for c in candidates)
-            advisory_budget = min(
-                max_advisory, max(0, max_plans - issue_created_n)
-            )
+            advisory_budget = min(max_advisory, max(0, max_plans - issue_created_n))
             created, skipped = await persist_candidates(
                 org_id,
                 candidates,
@@ -298,9 +289,7 @@ class ImprovementAgent:
         finally:
             clear_sweep_llm_budget()
 
-    async def _from_issue(
-        self, org_id: str, issue_id: str, *, run_id: str
-    ) -> list[PlanCandidate]:
+    async def _from_issue(self, org_id: str, issue_id: str, *, run_id: str) -> list[PlanCandidate]:
         from eden.improvement.issue_patch_trigger import propose_plan_for_issue
 
         result = await propose_plan_for_issue(org_id, issue_id, run_id=run_id)
@@ -397,9 +386,7 @@ class ImprovementAgent:
                 created += 1
                 plan_ids.append(str(result["plan_id"]))
                 cost += float(
-                    (result.get("plan") or {}).get("llm_cost_usd")
-                    or result.get("cost_usd")
-                    or 0
+                    (result.get("plan") or {}).get("llm_cost_usd") or result.get("cost_usd") or 0
                 )
             else:
                 skipped += 1
@@ -479,16 +466,14 @@ class ImprovementAgent:
             logger.debug("sweep traces: %s", exc)
         return out
 
-    async def _from_metrics(
-        self, org_id: str, agent_id: str | None
-    ) -> list[PlanCandidate]:
+    async def _from_metrics(self, org_id: str, agent_id: str | None) -> list[PlanCandidate]:
         out: list[PlanCandidate] = []
         try:
             agent_clause = ""
             args: list[Any] = [org_id]
             if agent_id:
                 args.append(agent_id)
-                agent_clause = f" AND agent_id = ${len(args)}"
+                agent_clause = f" AND metadata->>'agent_id' = ${len(args)}"
 
             trace_24h = await _pg_fetch(
                 f"""
@@ -693,9 +678,7 @@ class ImprovementAgent:
             logger.debug("sweep metrics: %s", exc)
         return out
 
-    async def _from_repo_health(
-        self, org_id: str, agent_id: str | None
-    ) -> list[PlanCandidate]:
+    async def _from_repo_health(self, org_id: str, agent_id: str | None) -> list[PlanCandidate]:
         out: list[PlanCandidate] = []
         try:
             if not await _github_linked(org_id):
@@ -797,9 +780,7 @@ class ImprovementAgent:
             logger.debug("sweep repo_health: %s", exc)
         return out
 
-    async def _from_cost_anomalies(
-        self, org_id: str, agent_id: str | None
-    ) -> list[PlanCandidate]:
+    async def _from_cost_anomalies(self, org_id: str, agent_id: str | None) -> list[PlanCandidate]:
         out: list[PlanCandidate] = []
         try:
             from eden.services import budget_service
@@ -849,28 +830,34 @@ class ImprovementAgent:
 
             spend_24h = await _pg_fetch(
                 f"""
-                SELECT agent_id, COALESCE(SUM(cost_usd), 0) AS spend_24h
+                -- usage_events has no agent_id or timestamp column;
+                -- attribution is in metadata JSONB, the time column is created_at.
+                SELECT metadata->>'agent_id' AS agent_id,
+                       COALESCE(SUM(cost_usd), 0) AS spend_24h
                 FROM usage_events
                 WHERE org_id = $1
-                  AND timestamp >= NOW() - INTERVAL '24 hours'
-                  AND agent_id IS NOT NULL
+                  AND created_at >= NOW() - INTERVAL '24 hours'
+                  AND metadata->>'agent_id' IS NOT NULL
                   {agent_clause}
-                GROUP BY agent_id
+                GROUP BY metadata->>'agent_id'
                 """,
                 *args,
             )
             spend_baseline = await _pg_fetch(
                 f"""
+                -- Same usage_events naming as the 24h query above: no
+                -- agent_id column (metadata JSONB), no timestamp (created_at).
+                -- The guard skips CTEs, so this one had to be found by hand.
                 WITH daily AS (
-                    SELECT agent_id,
-                           date_trunc('day', timestamp) AS day,
+                    SELECT metadata->>'agent_id' AS agent_id,
+                           date_trunc('day', created_at) AS day,
                            COALESCE(SUM(cost_usd), 0) AS daily_spend
                     FROM usage_events
                     WHERE org_id = $1
-                      AND timestamp >= NOW() - INTERVAL '7 days'
-                      AND agent_id IS NOT NULL
+                      AND created_at >= NOW() - INTERVAL '7 days'
+                      AND metadata->>'agent_id' IS NOT NULL
                       {agent_clause}
-                    GROUP BY agent_id, date_trunc('day', timestamp)
+                    GROUP BY metadata->>'agent_id', date_trunc('day', created_at)
                 )
                 SELECT agent_id,
                        AVG(daily_spend) AS mean_spend,

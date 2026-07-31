@@ -5217,9 +5217,12 @@ export interface PendingInvite {
 
 export const githubApi = {
   configured: () =>
-    fetchApi<{ configured: boolean; app_slug: string | null }>(
-      `/integrations/github/configured`,
-    ),
+    fetchApi<{
+      configured: boolean;
+      app_slug: string | null;
+      contents_permission?: string | null;
+      can_open_prs?: boolean;
+    }>(`/integrations/github/configured`),
   authorize: (orgId: string) =>
     fetchApi<{ install_url: string; state: string }>(
       `/integrations/github/authorize`,

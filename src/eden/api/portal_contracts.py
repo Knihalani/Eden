@@ -114,7 +114,7 @@ class TraceListItem(BaseModel):
     startedAt: str = ""
     durationMs: int = 0
     tokens: int = 0
-    costUsd: float = 0.0
+    costUsd: float | None = None
     severity: TraceSeverity = "none"
     sessionId: str | None = None
     signals: TraceSignalSummary = Field(default_factory=TraceSignalSummary)
@@ -136,7 +136,7 @@ class SessionRollup(BaseModel):
     outcome: SessionOutcome = "mixed"
     durationMs: int = 0
     totalTokens: int = 0
-    costUsd: float = 0.0
+    costUsd: float | None = None
     lastErrorSummary: str | None = None
     diagnosis: str | None = None
     relatedIssueIds: list[str] = Field(default_factory=list)
@@ -398,9 +398,9 @@ class ExperimentSummary(BaseModel):
     status: ExperimentStatus = "completed"
     createdAt: str = ""
     avgScores: dict[str, float] = Field(default_factory=dict)
-    latencyMs: float = 0.0
-    costUsd: float = 0.0
-    errorRate: float = 0.0
+    latencyMs: float | None = None
+    costUsd: float | None = None
+    errorRate: float | None = None
     suggestedBaselineId: str | None = None
 
 

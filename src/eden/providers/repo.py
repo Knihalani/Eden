@@ -52,8 +52,10 @@ def _shared_httpx() -> "httpx.AsyncClient":  # noqa: UP037, F821
     global _HTTPX
     if _HTTPX is None:
         import httpx
+
         _HTTPX = httpx.AsyncClient(timeout=30.0)
     return _HTTPX
+
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +143,8 @@ class RepoProvider(Protocol):
     name: str
 
     async def list_files(
-        self, path_glob: str = "**/*",
+        self,
+        path_glob: str = "**/*",
     ) -> list[FileEntry]:
         """List files matching ``path_glob``.
 
@@ -162,19 +165,23 @@ class RepoProvider(Protocol):
         ...
 
     async def get_recent_commits(
-        self, limit: int = 10,
+        self,
+        limit: int = 10,
     ) -> list[CommitInfo]:
         """The most recent ``limit`` commits, newest first."""
         ...
 
     async def get_pull_request(
-        self, number: int,
+        self,
+        number: int,
     ) -> PullRequestInfo | None:
         """One PR by number, or ``None`` if it doesn't exist."""
         ...
 
     async def list_pull_requests(
-        self, state: str = "open", limit: int = 50,
+        self,
+        state: str = "open",
+        limit: int = 50,
     ) -> list[PullRequestInfo]:
         """PRs in the given state, newest first."""
         ...
@@ -210,7 +217,8 @@ class LocalRepoProvider:
             )
 
     async def list_files(
-        self, path_glob: str = "**/*",
+        self,
+        path_glob: str = "**/*",
     ) -> list[FileEntry]:
         """List files matching ``path_glob`` via ``git ls-files``.
 
@@ -248,7 +256,8 @@ class LocalRepoProvider:
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout_b, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=10.0,
+                proc.communicate(),
+                timeout=10.0,
             )
         except Exception as exc:
             logger.debug("LocalRepoProvider.list_files: %s", exc)
@@ -256,21 +265,11 @@ class LocalRepoProvider:
         if proc.returncode != 0:
             return []
         # NUL-separated; decode + filter empty entries.
-        paths = [
-            p.decode("utf-8", errors="replace")
-            for p in stdout_b.split(b"\x00")
-            if p
-        ]
+        paths = [p.decode("utf-8", errors="replace") for p in stdout_b.split(b"\x00") if p]
         # fnmatch filter — git's glob is forgiving but the
         # caller's glob is fnmatch-shaped, so re-filter.
-        filtered = [
-            p for p in paths
-            if _fnmatch_relpath(p, path_glob)
-        ]
-        return [
-            FileEntry(path=p, size=0, sha="")
-            for p in filtered
-        ]
+        filtered = [p for p in paths if _fnmatch_relpath(p, path_glob)]
+        return [FileEntry(path=p, size=0, sha="") for p in filtered]
 
     async def read_file(self, path: str) -> str:
         """Read ``path`` via ``git show HEAD:<path>``.
@@ -283,19 +282,23 @@ class LocalRepoProvider:
             return ""
         try:
             proc = await asyncio.create_subprocess_exec(
-                self._git, "show", f"HEAD:{path}",
+                self._git,
+                "show",
+                f"HEAD:{path}",
                 cwd=self.repo_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout_b, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=10.0,
+                proc.communicate(),
+                timeout=10.0,
             )
             if proc.returncode == 0:
                 return stdout_b.decode("utf-8", errors="replace")
         except Exception as exc:
             logger.debug(
-                "LocalRepoProvider.read_file git show failed: %s", exc,
+                "LocalRepoProvider.read_file git show failed: %s",
+                exc,
             )
         # Fallback: filesystem read for untracked files.
         try:
@@ -312,13 +315,15 @@ class LocalRepoProvider:
         try:
             proc = await asyncio.create_subprocess_exec(
                 self._git,
-                "symbolic-ref", "refs/remotes/origin/HEAD",
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
                 cwd=self.repo_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout_b, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=5.0,
+                proc.communicate(),
+                timeout=5.0,
             )
             if proc.returncode == 0 and stdout_b:
                 # Output is ``refs/remotes/origin/<branch>``.
@@ -329,13 +334,17 @@ class LocalRepoProvider:
         # the "HEAD branch:" line.
         try:
             proc = await asyncio.create_subprocess_exec(
-                self._git, "remote", "show", "origin",
+                self._git,
+                "remote",
+                "show",
+                "origin",
                 cwd=self.repo_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout_b, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=5.0,
+                proc.communicate(),
+                timeout=5.0,
             )
             if proc.returncode == 0:
                 for line in stdout_b.decode("utf-8", errors="replace").splitlines():
@@ -343,10 +352,14 @@ class LocalRepoProvider:
                         return line.rsplit(":", 1)[-1].strip()
         except Exception:
             pass
-        return "main"
+        # Prefer symbolic-ref / remote show; empty means unresolved when
+        # git is present but HEAD cannot be resolved. Callers that need a
+        # hard default (LocalPRProvider) supply their own.
+        return ""
 
     async def get_recent_commits(
-        self, limit: int = 10,
+        self,
+        limit: int = 10,
     ) -> list[CommitInfo]:
         """The most recent ``limit`` commits via ``git log``.
 
@@ -360,13 +373,17 @@ class LocalRepoProvider:
         fmt = f"%H%n%s%n%an <%ae>%n%aI%n{sep}"
         try:
             proc = await asyncio.create_subprocess_exec(
-                self._git, "log", f"-n{limit}", f"--format={fmt}",
+                self._git,
+                "log",
+                f"-n{limit}",
+                f"--format={fmt}",
                 cwd=self.repo_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout_b, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=10.0,
+                proc.communicate(),
+                timeout=10.0,
             )
         except Exception as exc:
             logger.debug("LocalRepoProvider.get_recent_commits: %s", exc)
@@ -399,7 +416,8 @@ class LocalRepoProvider:
         return out
 
     async def get_pull_request(
-        self, number: int,
+        self,
+        number: int,
     ) -> PullRequestInfo | None:
         """Read a PR from the local ``.eden/prs/<n>.json`` log.
 
@@ -409,12 +427,16 @@ class LocalRepoProvider:
         any external API.
         """
         path = os.path.join(
-            self.repo_path, ".eden", "prs", f"{int(number)}.json",
+            self.repo_path,
+            ".eden",
+            "prs",
+            f"{int(number)}.json",
         )
         if not os.path.isfile(path):
             return None
         try:
             import json as _json
+
             with open(path, encoding="utf-8") as fh:
                 data = _json.load(fh)
         except Exception:
@@ -425,7 +447,9 @@ class LocalRepoProvider:
             return None
 
     async def list_pull_requests(
-        self, state: str = "open", limit: int = 50,
+        self,
+        state: str = "open",
+        limit: int = 50,
     ) -> list[PullRequestInfo]:
         """List PRs in the local ``.eden/prs/*.json`` log.
 
@@ -435,6 +459,7 @@ class LocalRepoProvider:
         GitLab/Bitbucket providers will replace it.
         """
         import json as _json
+
         prs_dir = os.path.join(self.repo_path, ".eden", "prs")
         if not os.path.isdir(prs_dir):
             return []
@@ -504,7 +529,8 @@ class GitHubRepoProvider:
         }
 
     async def list_files(
-        self, path_glob: str = "**/*",
+        self,
+        path_glob: str = "**/*",
     ) -> list[FileEntry]:
         """List files via the git-trees API (recursive).
 
@@ -562,7 +588,12 @@ class GitHubRepoProvider:
             return ""
 
     async def get_default_branch(self) -> str:
-        """Read the default branch from the repo metadata."""
+        """Read the default branch from the repo metadata.
+
+        Returns an empty string when the API is unreachable so callers
+        (``resolve_pr_base_branch``) fail closed instead of inventing
+        ``main``.
+        """
         client = _shared_httpx()
         async with client:
             r = await client.get(
@@ -570,11 +601,12 @@ class GitHubRepoProvider:
                 headers=self._headers,
             )
             if r.status_code != 200:
-                return "main"
-            return r.json().get("default_branch") or "main"
+                return ""
+            return str(r.json().get("default_branch") or "").strip()
 
     async def get_recent_commits(
-        self, limit: int = 10,
+        self,
+        limit: int = 10,
     ) -> list[CommitInfo]:
         """List recent commits on the default branch."""
         client = _shared_httpx()
@@ -596,16 +628,21 @@ class GitHubRepoProvider:
                 ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
             except Exception:
                 ts = datetime.now(UTC)
-            out.append(CommitInfo(
-                sha=item.get("sha", ""),
-                message=(commit.get("message") or "").splitlines()[0] if commit.get("message") else "",
-                author=f"{author_data.get('name', '')} <{author_data.get('email', '')}>",
-                timestamp=ts,
-            ))
+            out.append(
+                CommitInfo(
+                    sha=item.get("sha", ""),
+                    message=(commit.get("message") or "").splitlines()[0]
+                    if commit.get("message")
+                    else "",
+                    author=f"{author_data.get('name', '')} <{author_data.get('email', '')}>",
+                    timestamp=ts,
+                )
+            )
         return out
 
     async def get_pull_request(
-        self, number: int,
+        self,
+        number: int,
     ) -> PullRequestInfo | None:
         """Fetch one PR by number."""
         client = _shared_httpx()
@@ -621,12 +658,14 @@ class GitHubRepoProvider:
             return _pr_info_from_github(r.json())
 
     async def list_pull_requests(
-        self, state: str = "open", limit: int = 50,
+        self,
+        state: str = "open",
+        limit: int = 50,
     ) -> list[PullRequestInfo]:
         """List PRs filtered by state ('open'|'closed'|'all')."""
         client = _shared_httpx()
-        gh_state = "all" if state == "all" else (
-            "closed" if state in ("merged", "closed") else "open"
+        gh_state = (
+            "all" if state == "all" else ("closed" if state in ("merged", "closed") else "open")
         )
         async with client:
             r = await client.get(
@@ -696,9 +735,12 @@ def _pr_info_from_dict(data: dict) -> PullRequestInfo:
     a future change to the wire format doesn't break the
     read path.
     """
-    created_at_raw = data.get("created_at") or datetime.now(
-        UTC,
-    ).isoformat()
+    created_at_raw = (
+        data.get("created_at")
+        or datetime.now(
+            UTC,
+        ).isoformat()
+    )
     try:
         created_at = datetime.fromisoformat(created_at_raw)
         if created_at.tzinfo is None:

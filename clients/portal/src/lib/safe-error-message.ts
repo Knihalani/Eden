@@ -97,6 +97,13 @@ export function toUserFacingError(
   ) {
     return REPO_NOT_CONNECTED_MESSAGE;
   }
+  if (
+    /github_permissions_missing/i.test(raw) ||
+    /Contents:\s*Read and write/i.test(raw) ||
+    /Resource not accessible by integration/i.test(raw)
+  ) {
+    return "GitHub App needs Contents: Read and write (and Pull requests: Read and write). Update the App permissions, Accept on the installation, then retry.";
+  }
 
   if (typeof status === "number" && status >= 500) {
     return "Eden is having trouble reaching the server. Please try again in a moment.";

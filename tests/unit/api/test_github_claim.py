@@ -48,13 +48,14 @@ def test_connect_repo_request_accepts_valid():
     assert req.default_branch == "develop"
 
 
-def test_connect_repo_request_defaults_branch():
+def test_connect_repo_request_blank_branch_stays_empty():
+    """Blank default_branch is resolved at connect time — not invented as main."""
     req = ConnectRepoRequest(
         installation_id=1,
         repo_full_name="acme/widgets",
         default_branch="  ",
     )
-    assert req.default_branch == "main"
+    assert req.default_branch == ""
 
 
 @pytest.mark.parametrize(

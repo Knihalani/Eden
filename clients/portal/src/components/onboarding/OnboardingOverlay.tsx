@@ -113,6 +113,14 @@ function OnboardingOverlayInner() {
       return;
     }
 
+    // Finished tours must not reopen via ?onboarding=1 (skipped may still resume).
+    if (progressStatus === "done" && forceOpen) {
+      sessionOpenRef.current = false;
+      setOpen(false);
+      clearTourQuery();
+      return;
+    }
+
     const forceRising = forceOpen && !prevForceOpenRef.current;
     prevForceOpenRef.current = forceOpen;
 
@@ -179,6 +187,7 @@ function OnboardingOverlayInner() {
     progressStep,
     setStatus,
     router,
+    clearTourQuery,
     deferTick,
   ]);
 
@@ -223,7 +232,7 @@ function OnboardingOverlayInner() {
     try {
       await persistTerminalStatus("skipped", stepIndex);
       pushToast({
-        title: "Tour paused — resume from the banner anytime",
+        title: "Tour closed",
         tone: "accent",
       });
     } catch {
@@ -299,7 +308,13 @@ function OnboardingOverlayInner() {
 
 export function OnboardingOverlay() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <span className="sr-only" role="status">
+          Loading onboarding…
+        </span>
+      }
+    >
       <OnboardingOverlayInner />
     </Suspense>
   );

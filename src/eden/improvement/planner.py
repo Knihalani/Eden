@@ -41,9 +41,7 @@ class PlanCandidate:
     @property
     def score(self) -> float:
         sev = _SEVERITY_SCORE.get(self.severity.lower(), 0.4)
-        blast = _BLAST_SCORE.get(
-            (self.estimated_blast_radius or "medium").lower(), 0.5
-        )
+        blast = _BLAST_SCORE.get((self.estimated_blast_radius or "medium").lower(), 0.5)
         stumble = int((self.evidence or {}).get("stumble_count") or 0)
         # Mild boost for recurring bugs without drowning severity×confidence.
         stumble_boost = 1.0 + min(stumble, 50) / 50.0
@@ -92,27 +90,19 @@ async def persist_candidates(
         if is_code and max_code_patch is not None and code_n >= max_code_patch:
             skipped += 1
             continue
-        if (
-            not is_code
-            and max_advisory is not None
-            and advisory_n >= max_advisory
-        ):
+        if not is_code and max_advisory is not None and advisory_n >= max_advisory:
             skipped += 1
             continue
         if not cand.source_fingerprint:
             skipped += 1
             continue
-        existing = await plans_repo.find_blocking_by_fingerprint(
-            org_id, cand.source_fingerprint
-        )
+        existing = await plans_repo.find_blocking_by_fingerprint(org_id, cand.source_fingerprint)
         if existing is not None:
             if existing.get("status") == "snoozed":
                 skipped += 1
                 continue
             if cand.score > _existing_score(existing):
-                await plans_repo.supersede_drafts(
-                    org_id, cand.source_fingerprint
-                )
+                await plans_repo.supersede_drafts(org_id, cand.source_fingerprint)
             else:
                 skipped += 1
                 continue
@@ -150,9 +140,7 @@ def _existing_score(plan: dict[str, Any]) -> float:
     evidence = plan.get("evidence") or {}
     sev = _SEVERITY_SCORE.get(str(evidence.get("severity", "medium")).lower(), 0.4)
     conf = float(evidence.get("confidence", 0.5))
-    blast = _BLAST_SCORE.get(
-        str(plan.get("estimated_blast_radius") or "medium").lower(), 0.5
-    )
+    blast = _BLAST_SCORE.get(str(plan.get("estimated_blast_radius") or "medium").lower(), 0.5)
     return sev * conf * blast
 
 

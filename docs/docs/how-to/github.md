@@ -7,34 +7,42 @@ sidebar_position: 5
 
 # How-to — Connect GitHub
 
-Connect the Eden GitHub App so the portal can see your repos for
-agent metadata and code references. Eden does **not** open
-auto-instrument PRs against your repositories — you wire the SDK
-yourself via the [Quickstart](/quickstart) or
-[Connect any agent](/how-to/connect-any-agent).
+Connect the Eden GitHub App so the portal can list your repos and
+**Improve can open fix PRs** against an agent's linked repository.
+
+## Required App permissions
+
+On [the Eden Observability App](https://github.com/settings/apps/eden-observability)
+→ **Permissions & events** → Repository permissions:
+
+| Permission | Level | Why |
+| --- | --- | --- |
+| **Contents** | **Read and write** | Create branches, blobs, and commits for fix PRs |
+| **Pull requests** | **Read and write** | Open / update / close PRs |
+| **Metadata** | Read-only | Always required |
+
+After saving, open
+`https://github.com/settings/installations` (or the org's
+Installed GitHub Apps page) and **Accept** the new permissions
+on each installation. Until you accept, tokens stay on the old
+scopes and PR create returns `403 Resource not accessible by
+integration`.
 
 ## Install the GitHub App
 
-1. Portal → **Settings** → **Integrations** → **GitHub** → **Install**.
-2. Pick the org or user that owns the repos.
-3. Pick the repos (all, or a selection).
+1. Portal → **Agents** → pick an agent → **Connect repository**
+   (or `/agents/connect?agent=<id>`).
+2. Click **Install GitHub App**, pick the org/user, grant repos.
+3. GitHub redirects to `/agents/connect` with `installation_id`;
+   Eden claims the installation, then you pick the repo for that agent.
 
-Typical permissions: read metadata and contents for framework /
-agent detection. Write access to PRs is **not** required for
-instrumentation (that flow was removed).
+Webhook URL (for PR status sync):
 
-## Register an agent from your repo
+`https://api.edenobservability.com/integrations/github/webhook`
 
-Optional — add `eden/agent.yaml` (or the path your team uses) so the
-portal can list agents:
+Callback / Setup URL:
 
-```yaml
-agents:
-  - name: checkout
-    framework: openai
-    version: 2.1.0
-    entrypoint: src/agents/checkout.py
-```
+`https://edenobservability.com/agents/connect`
 
 ## Next
 

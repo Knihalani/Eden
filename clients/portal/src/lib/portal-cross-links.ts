@@ -42,7 +42,7 @@ function applyPreserve(q: URLSearchParams, preserve?: TracePreserveParams): void
   if (preserve.pastHours) q.set("pastHours", preserve.pastHours);
   if (preserve.realm) q.set("realm", preserve.realm);
   if (preserve.outcome) q.set("outcome", preserve.outcome);
-  if (preserve.agent_id) q.set("agent_id", preserve.agent_id);
+  if (preserve.agent_id) q.set("agent", preserve.agent_id);
   if (preserve.view) q.set("view", preserve.view);
 }
 
@@ -55,7 +55,8 @@ export function preserveFromSearchParams(
   const pastHours = sp.get("pastHours");
   const realm = sp.get("realm");
   const outcome = sp.get("outcome");
-  const agent_id = sp.get("agent_id");
+  const agent_id =
+    sp.get("agent") || sp.get("agentId") || sp.get("agent_id");
   const view = sp.get("view");
   if (q) out.q = q;
   if (pastHours) out.pastHours = pastHours;
@@ -283,7 +284,7 @@ export function tracesFilteredHref(filters: {
   realm?: string;
 }): string {
   const q = new URLSearchParams();
-  if (filters.agent_id) q.set("agent_id", filters.agent_id);
+  if (filters.agent_id) q.set("agent", filters.agent_id);
   if (filters.outcome) q.set("outcome", filters.outcome);
   if (filters.dimension) q.set("q", `dimension:${filters.dimension}`);
   else if (filters.q) q.set("q", filters.q);

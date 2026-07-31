@@ -58,3 +58,13 @@ export function isRepoNotConnected(err: unknown): boolean {
     /No GitHub repo connected/i.test(blob)
   );
 }
+
+/** True when GitHub App Contents/PR write scopes are missing. */
+export function isGithubPermissionsMissing(err: unknown): boolean {
+  const blob = blobFromUnknown(err);
+  return (
+    /github_permissions_missing/i.test(blob) ||
+    /Contents:\s*Read and write/i.test(blob) ||
+    /Resource not accessible by integration/i.test(blob)
+  );
+}

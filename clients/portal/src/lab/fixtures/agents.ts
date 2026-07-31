@@ -72,13 +72,28 @@ export function homeSnapshot(
   const failures = traces.filter((t) => t.status === "error");
   const warnings = traces.filter((t) => t.severity === "warn");
   const ok = traces.filter((t) => t.status === "ok" && t.severity === "none");
-  const cost = traces.reduce((sum, t) => sum + t.costUsd, 0);
+  const cost = traces.reduce((sum, t) => sum + (t.costUsd ?? 0), 0);
   const tokens = traces.reduce((sum, t) => sum + t.tokens, 0);
-  const fleetCost = agents.reduce((sum, a) => sum + (a.costUsd24h ?? 0), 0);
+  const knownAgentCosts = agents
+    .map((a) => a.costUsd24h)
+    .filter((c): c is number => c != null && Number.isFinite(c));
+  const agentFleetCost =
+    knownAgentCosts.length > 0
+      ? knownAgentCosts.reduce((sum, c) => sum + c, 0)
+      : null;
+  // Prefer agent-card rollup when known; otherwise traces. Never invent
+  // $0 from null agent costs alone when the traces feed also has spend.
+  const fleetCost =
+    agentFleetCost != null
+      ? Math.max(agentFleetCost, cost)
+      : traces.length > 0
+        ? cost
+        : null;
   // One source of truth: agent card runs only. Do not inflate from the
   // traces feed — that made "N runs" disagree with "no runs yet" success.
   const fleetRuns = agents.reduce((sum, a) => sum + a.runs24h, 0);
-  const fleetTokens = agents.reduce((sum, a) => sum + a.tokens24h, 0);
+  const agentFleetTokens = agents.reduce((sum, a) => sum + a.tokens24h, 0);
+  const fleetTokens = Math.max(agentFleetTokens, tokens);
   const openIssues = agents.reduce((sum, a) => sum + a.openIssues, 0);
   const live = agents.filter((a) => a.status === "live").length;
   const idle = agents.filter((a) => a.status === "idle").length;
@@ -98,7 +113,8 @@ export function homeSnapshot(
         ) / scoredRuns
       : null;
   const errorRate = successRate == null ? null : 1 - successRate;
-  const avgCostPerRun = fleetCost / Math.max(fleetRuns, 1);
+  const avgCostPerRun =
+    fleetCost != null && fleetRuns > 0 ? fleetCost / fleetRuns : null;
   const avgTokensPerRun = fleetTokens / Math.max(fleetRuns, 1);
   const p50Ms =
     fleetRuns > 0
@@ -151,7 +167,7 @@ export function homeSnapshot(
     agents: agents.length,
     deltas: {
       runs: deltaPct(fleetRuns, prior.fleetRuns),
-      spend: deltaPct(fleetCost, prior.fleetCost),
+      spend: deltaPct(fleetCost ?? 0, prior.fleetCost ?? 0),
       success: deltaPct(successRate ?? 0, prior.successRate),
       issues: deltaPct(openIssues, Math.max(prior.openIssues, 0.01)),
       failures: deltaPct(failures.length, Math.max(prior.failures, 0.01)),

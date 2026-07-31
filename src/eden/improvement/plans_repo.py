@@ -149,9 +149,7 @@ async def list_plans(
     return [_row(r) for r in rows]
 
 
-async def find_open_by_fingerprint(
-    org_id: str, source_fingerprint: str
-) -> dict[str, Any] | None:
+async def find_open_by_fingerprint(org_id: str, source_fingerprint: str) -> dict[str, Any] | None:
     if not source_fingerprint:
         return None
     client = await get_postgres_client()
@@ -171,9 +169,7 @@ async def find_open_by_fingerprint(
     return _row(row) if row else None
 
 
-async def find_open_fingerprints(
-    org_id: str, fingerprints: list[str]
-) -> set[str]:
+async def find_open_fingerprints(org_id: str, fingerprints: list[str]) -> set[str]:
     """Return fingerprints that already have an open plan (batch dedup check)."""
     fps = [fp for fp in fingerprints if fp]
     if not fps:
@@ -259,8 +255,7 @@ async def update_plan(
     if client is None:
         return None
     await client.execute(
-        f"UPDATE improvement_plans SET {', '.join(sets)} "
-        f"WHERE org_id = $1 AND id = $2::uuid",
+        f"UPDATE improvement_plans SET {', '.join(sets)} " f"WHERE org_id = $1 AND id = $2::uuid",
         *args,
     )
     return await get_plan(org_id, plan_id)
@@ -331,9 +326,7 @@ async def mark_pr_opened(
     return await get_plan(org_id, plan_id)
 
 
-async def find_by_pr(
-    *, repo_full_name: str, pr_number: int
-) -> dict[str, Any] | None:
+async def find_by_pr(*, repo_full_name: str, pr_number: int) -> dict[str, Any] | None:
     """Locate the ``improvement_plans`` row a GitHub PR belongs to.
 
     Used by the GitHub webhook (Phase 2b) to sync plan status on merge/
@@ -493,9 +486,7 @@ def _rejection_ttl_days(rejection_type: str) -> int:
 
         settings = get_settings()
         if rejection_type == "user_fixed":
-            return int(
-                getattr(settings, "patch_rejection_memory_user_fixed_days", 90) or 90
-            )
+            return int(getattr(settings, "patch_rejection_memory_user_fixed_days", 90) or 90)
         return int(getattr(settings, "patch_rejection_memory_wontfix_days", 30) or 30)
     except Exception:
         return 90 if rejection_type == "user_fixed" else 30

@@ -12,6 +12,7 @@ import { traceById } from "@/lab/fixtures/traces";
 import { DebuggerOutcomeChip } from "@/lab/debugger/debugger-chrome";
 import { AgentScopeFilter, EmptyState } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 
 export function DebuggerListView({
   sessions,
@@ -77,7 +78,7 @@ export function DebuggerListView({
           body={
             q || agentId !== "all"
               ? "Clear filters to see all sessions."
-              : "From a Trace, click Debugger — or start a new session here."
+              : U20_EMPTY_COPY.debugger
           }
           action={
             q || agentId !== "all" ? (

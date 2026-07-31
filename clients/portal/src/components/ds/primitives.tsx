@@ -12,10 +12,20 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <header className={cn("ds-page-header", className)}>
+    <header
+      className={cn("ds-page-header", className)}
+      data-chrome-band="identity"
+    >
       <h1>{title}</h1>
       {meta}
-      {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div
+          className="ml-auto flex items-center gap-2"
+          data-chrome-band="toolbar"
+        >
+          {actions}
+        </div>
+      ) : null}
     </header>
   );
 }
