@@ -158,14 +158,22 @@ class MessageStore:
             logger.warning("MessageStore: no Postgres client, skipping upsert")
             return hashes
         try:
-            await client.executemany(
-                """
-                INSERT INTO trace_messages (trace_id, msg_hash, role, content)
-                VALUES ($1, $2, $3, $4::jsonb)
-                ON CONFLICT (trace_id, msg_hash) DO NOTHING
-                """,
-                rows,
-            )
+            # Nested transaction → SAVEPOINT when the request already
+            # holds an open RLS-pinned tx. A failure here must not abort
+            # that outer transaction: ``_prepare_postgres_row`` treats
+            # dedupe as best-effort, and an aborted outer tx makes the
+            # subsequent telemetry INSERT raise InFailedSQLTransaction
+            # (or worse, race a background task and lose the commit
+            # while ingest already returned accepted:1).
+            async with client.transaction() as conn:
+                await conn.executemany(
+                    """
+                    INSERT INTO trace_messages (trace_id, msg_hash, role, content)
+                    VALUES ($1, $2, $3, $4::jsonb)
+                    ON CONFLICT (trace_id, msg_hash) DO NOTHING
+                    """,
+                    rows,
+                )
         except Exception as exc:
             logger.warning(f"MessageStore._upsert failed: {exc}")
         return hashes
