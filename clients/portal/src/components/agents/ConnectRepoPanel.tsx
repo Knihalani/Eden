@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
@@ -10,6 +11,11 @@ import { githubApi, type GitHubRepo } from "@/lib/api/resources";
 import { ApiError } from "@/lib/api/core";
 import { useLabToast } from "@/lab/lab-toast";
 import { LIVE_QUERY, SHELL_QUERY } from "@/lib/portal-query";
+import {
+  clearStoredInstallationId,
+  parseInstallationId,
+  storeInstallationId,
+} from "@/lib/github-install";
 import { cn } from "@/lib/utils";
 
 function isValidRepoFullName(value: unknown): value is string {
@@ -35,9 +41,13 @@ export function ConnectRepoPanel({
   const orgId = currentOrg?.id ?? null;
   const { pushToast } = useLabToast();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [busy, setBusy] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  const claimedRef = useRef<number | null>(null);
+  const errorShownRef = useRef<string | null>(null);
 
   const configured = useOrgQuery(
     queryKeys.github.configured,
@@ -91,6 +101,9 @@ export function ConnectRepoPanel({
     return list.filter((r) => r.full_name.toLowerCase().includes(q));
   }, [repos.data, filter]);
 
+  const appSlug = configured.data?.app_slug?.trim() || "eden-observability";
+  const appLandingHref = `https://github.com/apps/${encodeURIComponent(appSlug)}`;
+
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({
       queryKey: queryKeys.github.connection(orgId, agentId),
@@ -98,7 +111,64 @@ export function ConnectRepoPanel({
     await queryClient.invalidateQueries({
       queryKey: queryKeys.github.repos(orgId),
     });
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.github.all,
+    });
   }, [agentId, orgId, queryClient]);
+
+  // Claim installation after GitHub redirects back with ?installation_id=.
+  useEffect(() => {
+    if (!orgId) return;
+    const fromQuery = parseInstallationId(searchParams.get("installation_id"));
+    if (!fromQuery) return;
+    if (claimedRef.current === fromQuery) return;
+    claimedRef.current = fromQuery;
+    storeInstallationId(fromQuery);
+    let cancelled = false;
+    setClaiming(true);
+    void (async () => {
+      try {
+        await githubApi.claimInstallation(orgId, fromQuery);
+        if (cancelled) return;
+        clearStoredInstallationId();
+        pushToast({
+          title: "GitHub App installed",
+          body: "Pick the repository that holds this agent’s code.",
+          tone: "ok",
+        });
+        setPickerOpen(true);
+        await invalidate();
+      } catch (err) {
+        if (cancelled) return;
+        pushToast({
+          title: "Couldn't register GitHub install",
+          body: err instanceof Error ? err.message : "Try Install GitHub App again",
+          tone: "fail",
+        });
+      } finally {
+        if (!cancelled) setClaiming(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invalidate, orgId, pushToast, searchParams]);
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (!err || errorShownRef.current === err) return;
+    errorShownRef.current = err;
+    pushToast({
+      title: "GitHub connect failed",
+      body:
+        err === "state_not_found"
+          ? "Install session expired — start Connect repo again."
+          : err === "installation_token_failed"
+            ? "GitHub accepted the install but Eden couldn’t verify it. Retry Install GitHub App."
+            : err,
+      tone: "fail",
+    });
+  }, [pushToast, searchParams]);
 
   const startInstall = useCallback(async () => {
     if (!orgId) return;
@@ -184,7 +254,7 @@ export function ConnectRepoPanel({
     );
   }
 
-  const agentHint = `Issues and Improve plans for ${agentId} open PRs on this repo. Other agents can link different repos.`;
+  const agentHint = "Improve opens fix PRs on this repo for this agent.";
 
   return (
     <div
@@ -200,15 +270,15 @@ export function ConnectRepoPanel({
             {connection.isPending
               ? "Repository"
               : active
-                ? `Repository for ${agentId}`
-                : "Connect a repository"}
+                ? "Repository"
+                : "Connect repository"}
           </h3>
           <p className="type-meta max-w-xl">
             {connection.isPending
-              ? "Checking whether this agent already has a GitHub repo linked…"
+              ? "Checking link…"
               : active
                 ? agentHint
-                : "Link the GitHub repo that contains this agent's code. Eden uses it to open pull requests that fix issues and Improve plans."}
+                : "Link the GitHub repo that holds this agent’s code."}
           </p>
         </div>
         {connection.isPending ? (
@@ -272,38 +342,34 @@ export function ConnectRepoPanel({
             </button>
             {agentId ? (
               <Link
-                href={`/improve?agent=${encodeURIComponent(agentId)}`}
+                href={`/agents?id=${encodeURIComponent(agentId)}`}
                 className="ds-btn ds-btn-ghost ds-btn-sm"
               >
-                Go to Improve
+                Back to agent
               </Link>
-            ) : (
-              <Link href="/improve" className="ds-btn ds-btn-ghost ds-btn-sm">
-                Go to Improve
-              </Link>
-            )}
+            ) : null}
           </div>
         </div>
       ) : (
         <div className="mt-4 space-y-3">
-          <ol className="list-decimal space-y-1.5 pl-4 type-meta">
-            <li>Install the Eden GitHub App on your org (admin).</li>
-            <li>Pick the repo that holds this agent&apos;s source.</li>
-            <li>Approve Improve plans — Eden opens PRs on that repo.</li>
-          </ol>
+          <p className="type-meta max-w-xl">
+            {claiming
+              ? "Registering the GitHub App installation…"
+              : "Install the Eden GitHub App, then choose a repo."}
+          </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
-              disabled={busy || configured.data?.configured === false}
+              disabled={busy || claiming || configured.data?.configured === false}
               onClick={() => void startInstall()}
             >
-              {busy ? "Redirecting…" : "Install GitHub App"}
+              {busy ? "Redirecting…" : claiming ? "Registering…" : "Install GitHub App"}
             </button>
             <button
               type="button"
               className="ds-btn ds-btn-outline ds-btn-sm"
-              disabled={busy}
+              disabled={busy || claiming}
               onClick={() => setPickerOpen(true)}
             >
               Choose repo
@@ -313,7 +379,22 @@ export function ConnectRepoPanel({
             <p className="type-meta text-[var(--error)]">
               GitHub App is not configured on this Eden instance.
             </p>
-          ) : null}
+          ) : (
+            <p className="type-meta max-w-xl text-[var(--text-secondary)]">
+              If GitHub says the app is private, the App owner must set{" "}
+              <span className="text-[var(--text)]">Where can this GitHub App be installed?</span>{" "}
+              to <span className="text-[var(--text)]">Any account</span> on{" "}
+              <a
+                href={appLandingHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                github.com/apps/{appSlug}
+              </a>
+              . That setting is on GitHub, not in Eden.
+            </p>
+          )}
         </div>
       )}
 
@@ -330,13 +411,19 @@ export function ConnectRepoPanel({
             placeholder="owner/name"
             autoComplete="off"
           />
-          {repos.isLoading ? (
-            <p className="type-meta">Loading repos…</p>
+          {repos.isLoading || claiming ? (
+            <p className="type-meta">
+              {claiming ? "Registering install…" : "Loading repos…"}
+            </p>
           ) : repos.isError ? (
             <div className="space-y-2">
               <p className="type-meta text-[var(--error)]">
                 Couldn&apos;t list repos. Install the GitHub App first, or ask
                 an admin with integrations:write.
+              </p>
+              <p className="type-meta text-[var(--text-secondary)]">
+                Seeing “private GitHub App” on GitHub? The App must be public
+                (“Any account”) before other orgs can install it.
               </p>
               <button
                 type="button"

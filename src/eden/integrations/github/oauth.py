@@ -128,6 +128,19 @@ class InstallationRepo:
     pushed_at: str  # ISO-8601, may be empty
 
 
+def _private_key_looks_loadable(pem: str) -> bool:
+    """Reject empty / header-only PEMs that would break JWT minting.
+
+    Northflank once stored only ``-----BEGIN RSA PRIVATE KEY-----``
+    (31 chars). ``is_configured()`` must not treat that as ready.
+    """
+    text = (pem or "").strip()
+    if len(text) < 80:
+        return False
+    upper = text.upper()
+    return "-----BEGIN" in upper and "PRIVATE KEY" in upper and "-----END" in upper
+
+
 def is_configured() -> bool:
     """True iff a real GitHub App is wired up on this Eden instance.
 
@@ -141,7 +154,7 @@ def is_configured() -> bool:
             getattr(s, "github_app_id", "").strip(),
             getattr(s, "github_app_client_id", "").strip(),
             getattr(s, "github_app_client_secret", "").strip(),
-            getattr(s, "github_app_private_key", "").strip(),
+            _private_key_looks_loadable(getattr(s, "github_app_private_key", "")),
         ]
     )
 
@@ -216,8 +229,8 @@ class GitHubOAuthClient:
 
         Prefer ``GITHUB_APP_CALLBACK_URL``. When empty (common misconfig
         that produced ``redirect_uri=``), fall back to
-        ``{APP_URL|PORTAL_BASE_URL}/onboarding/connect`` — the route
-        that claims the installation via
+        ``{APP_URL|PORTAL_BASE_URL}/agents/connect`` — the page that
+        claims the installation via
         ``POST /orgs/{id}/github/installations/claim``.
         """
         url = (configured or "").strip()
@@ -227,10 +240,10 @@ class GitHubOAuthClient:
             getattr(settings, "app_url", "") or getattr(settings, "portal_base_url", "") or ""
         ).rstrip("/")
         if base and "example.com" not in base:
-            return f"{base}/onboarding/connect"
+            return f"{base}/agents/connect"
         # Last-resort Eden cloud default so prod never ships an empty
         # redirect_uri even when APP_URL is still the placeholder.
-        return "https://edenobservability.com/onboarding/connect"
+        return "https://edenobservability.com/agents/connect"
 
     def resolve_app_slug(self) -> str:
         """Human-readable GitHub App slug for install URLs.

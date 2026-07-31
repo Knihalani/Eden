@@ -739,7 +739,7 @@ async def github_callback(
         # one org) is refused rather than silently resolved to the first.
         if not _SAFE_STATE_RE.fullmatch(state):
             return RedirectResponse(
-                url="/onboarding/connect?error=state_not_found",
+                url="/agents/connect?error=state_not_found",
                 status_code=302,
             )
         rows = await pg.fetch(
@@ -761,7 +761,7 @@ async def github_callback(
     if not org_id:
         # Couldn't identify org — bounce to the wizard with an error.
         return RedirectResponse(
-            url="/onboarding/connect?error=state_not_found",
+            url="/agents/connect?error=state_not_found",
             status_code=302,
         )
     eden_org_id = await _eden_org_or_404(org_id)
@@ -775,7 +775,7 @@ async def github_callback(
     except GitHubAPIError as exc:
         logger.warning("github_callback installation_token failed: %s", redact_all(str(exc)))
         return RedirectResponse(
-            url="/onboarding/connect?error=installation_token_failed",
+            url="/agents/connect?error=installation_token_failed",
             status_code=302,
         )
     await _persist_installation_row(
@@ -786,7 +786,7 @@ async def github_callback(
         installed_by_user_id=None,
     )
     return RedirectResponse(
-        url=f"/onboarding/connect?installation_id={installation_id}",
+        url=f"/agents/connect?installation_id={installation_id}",
         status_code=302,
     )
 
@@ -897,9 +897,10 @@ async def claim_github_installation(
     """Persist a GitHub App installation after the portal callback.
 
     ``GITHUB_APP_CALLBACK_URL`` points at the portal
-    (``/onboarding/connect``), so GitHub redirects there with
-    ``installation_id`` instead of hitting ``/integrations/github/callback``.
-    This route lets the wizard register the installation in Eden's DB.
+    (``/agents/connect``, with ``/onboarding/connect`` redirecting there),
+    so GitHub redirects there with ``installation_id`` instead of hitting
+    ``/integrations/github/callback``. This route lets the wizard register
+    the installation in Eden's DB.
     """
     eden_org_id = await _eden_org_or_404(org_id)
     pg = await get_postgres_client()

@@ -69,8 +69,8 @@ The manifest (`northflank.yml`) lists every non-secret env var. Below is the *ch
 | `GITHUB_APP_CLIENT_SECRET` | GitHub App settings | Generated secret |
 | `GITHUB_APP_PRIVATE_KEY` | GitHub App → Private key | Full PEM block, newlines preserved |
 | `GITHUB_APP_WEBHOOK_SECRET` | GitHub App → Webhook secret | 32+ hex |
-| `GITHUB_APP_SLUG` | GitHub App public page URL | Human slug, e.g. `eden-observability` (`github.com/apps/<slug>`) — never `Iv23…` |
-| `GITHUB_APP_CALLBACK_URL` | Portal callback after install | `https://edenobservability.com/onboarding/connect` |
+| `GITHUB_APP_SLUG` | GitHub App public page URL | Human slug, e.g. `eden-observability` (`github.com/apps/<slug>`) — never `Iv23…`. The App must be **public** (“Any account”); private Apps show “This is a private GitHub App” to other orgs. |
+| `GITHUB_APP_CALLBACK_URL` | Portal callback after install | `https://edenobservability.com/agents/connect` (legacy `/onboarding/connect` redirects here) |
 
 **Placeholders you MUST replace in `northflank.yml` before applying:**
 
