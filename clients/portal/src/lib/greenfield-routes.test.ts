@@ -87,6 +87,15 @@ describe("product portal routes", () => {
       mode: "redirect",
     });
 
+    expect(resolveHubTarget("/onboarding/connect", "?installation_id=42")).toEqual({
+      destination: "/agents/connect?installation_id=42",
+      mode: "redirect",
+    });
+    expect(resolveHubTarget("/onboarding/connect", "")).toEqual({
+      destination: "/agents/connect",
+      mode: "redirect",
+    });
+
     expect(resolveHubTarget("/traces", "")).toBeNull();
   });
 
