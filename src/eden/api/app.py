@@ -53,6 +53,14 @@ def _init_sentry() -> None:
     if lowered in {"none", "null", "undefined", "your_sentry_dsn_here"}:
         log.warning("SENTRY_DSN looks like a placeholder (%r) — skipping Sentry init", dsn)
         return
+    # Mis-pasted secret (e.g. ``SENTRY_ENVIRONMENT=production`` into the
+    # DSN slot) — treat as unset rather than BadDsn noise every boot.
+    if "=" in dsn and "://" not in dsn:
+        log.warning(
+            "SENTRY_DSN looks like a KEY=value paste (%r) — skipping Sentry init",
+            dsn[:64],
+        )
+        return
     if "://" not in dsn:
         log.warning(
             "SENTRY_DSN missing scheme (got %r) — skipping Sentry init. "

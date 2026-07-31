@@ -95,9 +95,11 @@ COPY --chown=eden:eden alembic.ini ./alembic.ini
 # One COPY per directory rather than one per file: the previous nine
 # single-file COPYs produced nine image layers for ~9 small modules.
 COPY --chown=eden:eden supplementaries/__init__.py ./supplementaries/__init__.py
+COPY --chown=eden:eden supplementaries/phase_4_guardrails/__init__.py supplementaries/phase_4_guardrails/policy_extension.py ./supplementaries/phase_4_guardrails/
 COPY --chown=eden:eden supplementaries/phase_6_stat_gate/__init__.py supplementaries/phase_6_stat_gate/gate.py ./supplementaries/phase_6_stat_gate/
 COPY --chown=eden:eden supplementaries/phase_7_detection/__init__.py supplementaries/phase_7_detection/stat_gated_executor.py supplementaries/phase_7_detection/detectors.py supplementaries/phase_7_detection/closed_loop.py ./supplementaries/phase_7_detection/
 COPY --chown=eden:eden supplementaries/phase_10_memory/__init__.py supplementaries/phase_10_memory/a2a.py ./supplementaries/phase_10_memory/
+COPY --chown=eden:eden supplementaries/cat_22_apm/__init__.py supplementaries/cat_22_apm/tail_sampling.py ./supplementaries/cat_22_apm/
 
 # Make the `eden` package importable when uvicorn runs from the
 # system Python (which is what `python -m uvicorn` uses). The package

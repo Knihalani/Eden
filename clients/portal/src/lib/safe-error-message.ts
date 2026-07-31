@@ -105,6 +105,22 @@ export function toUserFacingError(
     return "GitHub App needs Contents: Read and write (and Pull requests: Read and write). Update the App permissions, Accept on the installation, then retry.";
   }
 
+  // Prefer actionable temporary-unavailable copy from the API over the
+  // generic "trouble reaching the server" banner (Assistant / keys /
+  // traces often return a clear Retry-After detail on 503).
+  if (
+    typeof status === "number" &&
+    status === 503 &&
+    /temporarily unavailable|please retry|Could not load|not yet available/i.test(
+      raw,
+    )
+  ) {
+    const cleaned = raw.replace(/^Error:\s*/i, "").trim();
+    if (cleaned.length > 0 && cleaned.length < 180) {
+      return cleaned;
+    }
+  }
+
   if (typeof status === "number" && status >= 500) {
     return "Eden is having trouble reaching the server. Please try again in a moment.";
   }
