@@ -40,7 +40,7 @@ function tiers(signedIn: boolean) {
       name: "Free",
       price: "$0",
       period: "public beta",
-      blurb: `Instrument agents and inspect traces. ${FREE_TIER_CAP_SHORT} LLM spend cap.`,
+      blurb: `Instrument agents and inspect traces. ${FREE_TIER_CAP_SHORT}.`,
       features: [
         "Trace ingest & sessions",
         "Issues and detectors",

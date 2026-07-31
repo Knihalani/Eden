@@ -69,14 +69,20 @@ PAID_PLANS_ENABLED = False
 class PlanLimits(BaseModel):
     """Plan limit + current usage information returned to the portal.
 
-    The portal leads with ``cost_used_usd`` / ``cost_hard_limit_usd`` as
-    the primary free-tier meter. Token / storage / sandbox counts are
+    The portal leads with ``credits_used`` / ``credits_hard_limit`` as
+    the primary free-tier meter (100 credits ≈ $1). USD fields remain
+    as mirrors for FinOps. Token / storage / sandbox counts are
     informational. Seat / reference counts still gate invite / create
     flows via the org_plans rows.
     """
     plan_name: str
     display_name: str
-    # PRIMARY cap — USD cost this period
+    # PRIMARY cap — credits this period (100 credits = $1 Eden COGS)
+    credits_used: float = 0.0
+    credits_soft_limit: float = 0.0
+    credits_hard_limit: float = 0.0
+    credits_status: str = "ok"  # 'ok' | 'soft_exceeded' | 'hard_exceeded'
+    # USD mirrors
     cost_used_usd: float
     cost_soft_limit_usd: float
     cost_hard_limit_usd: float
@@ -278,9 +284,9 @@ async def get_plans(org_id: str = Depends(require_path_org_access), user: dict =
 ):
     """Get current plan and usage for the organization.
 
-    Surfaces the org's running USD cost + tier cap as the headline
-    (the primary free-tier lever), with token / storage / sandbox as
-    informational sub-section data.
+    Surfaces the org's running credit balance + tier cap as the headline
+    (the primary free-tier lever; 100 credits ≈ $1), with USD / token /
+    storage / sandbox as informational sub-section data.
     """
 
     # Sync usage to get accurate counts
@@ -288,11 +294,12 @@ async def get_plans(org_id: str = Depends(require_path_org_access), user: dict =
 
     plan = await get_org_plan(org_id)
 
-    # Resolve plan name + tier + budget (cost + resources) up front.
+    # Resolve plan name + tier + budget (credits + cost + resources) up front.
     plan_name = plan["plan_name"] if plan else "org_free"
     tier = get_plan_tier(plan_name)
     budget = await UsageService().get_budget_status(org_id)
     cost = budget.get("cost_usd", {})
+    credits = budget.get("credits", {})
 
     if not plan:
         # No row yet (backfill pending) — surface the org_free defaults
@@ -301,6 +308,10 @@ async def get_plans(org_id: str = Depends(require_path_org_access), user: dict =
         return PlanLimits(
             plan_name=tier.name,
             display_name=tier.display_name,
+            credits_used=float(credits.get("used", 0.0)),
+            credits_soft_limit=float(tier.credits_soft_limit),
+            credits_hard_limit=float(tier.credits_hard_limit),
+            credits_status=str(credits.get("status", "ok")),
             cost_used_usd=float(cost.get("used", 0.0)),
             cost_soft_limit_usd=float(tier.cost_soft_limit_usd),
             cost_hard_limit_usd=float(tier.cost_hard_limit_usd),
@@ -318,6 +329,10 @@ async def get_plans(org_id: str = Depends(require_path_org_access), user: dict =
     return PlanLimits(
         plan_name=plan["plan_name"],
         display_name=tier.display_name,
+        credits_used=float(credits.get("used", 0.0)),
+        credits_soft_limit=float(credits.get("soft_limit", tier.credits_soft_limit)),
+        credits_hard_limit=float(credits.get("hard_limit", tier.credits_hard_limit)),
+        credits_status=str(credits.get("status", "ok")),
         cost_used_usd=float(cost.get("used", 0.0)),
         cost_soft_limit_usd=float(cost.get("soft_limit", tier.cost_soft_limit_usd)),
         cost_hard_limit_usd=float(cost.get("hard_limit", tier.cost_hard_limit_usd)),
