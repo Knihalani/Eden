@@ -806,7 +806,8 @@ async def list_portal_agents(
             mrows = await client.fetch(
                 f"""
                 WITH recent AS (
-                    SELECT agent_id, trace_id, outcome, duration_ms, metrics
+                    SELECT agent_id, trace_id, outcome, duration_ms, metrics,
+                           timestamp
                     FROM telemetry_events
                     WHERE tenant_id = $1
                       AND agent_id IS NOT NULL
@@ -829,7 +830,8 @@ async def list_portal_agents(
                            END
                        )::float AS success_rate,
                        AVG(COALESCE(duration_ms, 0))::float AS p50,
-                       AVG(COALESCE(duration_ms, 0))::float AS p95
+                       AVG(COALESCE(duration_ms, 0))::float AS p95,
+                       MAX(timestamp) AS last_seen
                 FROM recent
                 GROUP BY agent_id
                 ORDER BY runs DESC
@@ -965,12 +967,13 @@ async def list_portal_agents(
         agent_id = str(row["agent_id"])
         seen.add(agent_id)
         purpose = str(row.get("framework") or row.get("repo_url") or "")
+        metrics = metrics_by_id.get(agent_id) or {}
         out.append(
             _build(
                 agent_id,
                 str(row.get("name") or agent_id),
                 purpose,
-                row.get("last_seen_at"),
+                row.get("last_seen_at") or metrics.get("last_seen"),
             )
         )
 

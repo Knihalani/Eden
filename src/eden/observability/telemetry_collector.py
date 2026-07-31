@@ -512,6 +512,9 @@ class TelemetryCollector:
             self._spawn_bg(maybe_persist_checkpoint(event))
         except Exception:  # noqa: BLE001 — never fail ingest for debugger
             pass
+        # Discover agents in the portal from SDK agent_id without a
+        # separate /agents/register call.
+        self._spawn_bg(self._touch_agent_registrations([event]))
         return self._single_result(accepted=1)
 
     async def ingest_batch(self, events: list[TelemetryEvent]) -> dict[str, Any]:
@@ -673,6 +676,7 @@ class TelemetryCollector:
                 self._spawn_bg(maybe_persist_checkpoint(ev))
         except Exception:  # noqa: BLE001
             pass
+        self._spawn_bg(self._touch_agent_registrations(list(to_route)))
 
         return {
             "accepted": accepted,
@@ -806,6 +810,62 @@ class TelemetryCollector:
             return
         self._bg_tasks.add(task)
         task.add_done_callback(self._bg_tasks.discard)
+
+    async def _touch_agent_registrations(self, events: list[TelemetryEvent]) -> None:
+        """Upsert ``agent_registrations`` from ingested ``agent_id`` values.
+
+        Portal Agents is registry-first; telemetry-only discovery is a
+        fallback. Touching the registry on ingest means SDK-chosen agent
+        IDs appear in the fleet list without a separate register call,
+        and repo / Improve / autonomous flows can key off the same id.
+        Best-effort — never fail ingest.
+        """
+        pairs: dict[tuple[str, str], str] = {}
+        for event in events:
+            agent_id = (event.agent_id or "").strip()
+            tenant_id = (event.tenant_id or "").strip()
+            if not agent_id or not tenant_id:
+                continue
+            # Prefer a human name from attributes when present.
+            name = agent_id
+            attrs = event.attributes or {}
+            for key in ("agent_name", "eden.agent_name", "name"):
+                raw = attrs.get(key)
+                if isinstance(raw, str) and raw.strip():
+                    name = raw.strip()
+                    break
+            pairs[(tenant_id, agent_id)] = name
+        if not pairs:
+            return
+        try:
+            pg = await self._get_postgres()
+            if pg is None:
+                return
+            rows = [
+                (org_id, agent_id, name)
+                for (org_id, agent_id), name in pairs.items()
+            ]
+            await pg.executemany(
+                """
+                INSERT INTO agent_registrations (org_id, agent_id, name, last_seen_at, updated_at)
+                VALUES ($1::uuid, $2, $3, NOW(), NOW())
+                ON CONFLICT (org_id, agent_id) DO UPDATE SET
+                    last_seen_at = NOW(),
+                    updated_at = NOW(),
+                    name = CASE
+                        WHEN agent_registrations.name = agent_registrations.agent_id
+                             AND EXCLUDED.name <> EXCLUDED.agent_id
+                        THEN EXCLUDED.name
+                        ELSE agent_registrations.name
+                    END
+                """,
+                rows,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "telemetry: agent_registrations touch skipped: %s",
+                exc,
+            )
 
     # ── Validation ────────────────────────────────────────────────────────
 
