@@ -935,31 +935,39 @@ async def list_portal_agents(
         issues = issues_by_id.get(agent_id) or {}
         runs = int(metrics.get("runs") or 0)
         raw_success = metrics.get("success_rate")
-        if "success_rate" in metrics and raw_success is None:
+        # No traffic → 0 rate (FE shows "—" / "no runs"). Never invent 100%.
+        if runs <= 0:
+            success = 0.0
+        elif "success_rate" in metrics and raw_success is None:
             # Metrics discovery degraded — do not invent 100% success.
             success = 0.0
         elif raw_success is not None:
             success = float(raw_success)
         else:
-            success = 1.0
+            success = 0.0
         success = max(0.0, min(1.0, success))
         open_issues = int(issues.get("open_issues") or 0)
         open_p0 = int(issues.get("open_p0") or 0)
         last = _iso(last_seen)
+        # "live" means active traffic in the lookback window — not "process
+        # currently running". Register/ingest heartbeats alone stay idle.
         status: str = "idle"
         if open_p0 > 0:
             status = "error"
-        elif last:
-            try:
-                ts = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=UTC)
-                if now - ts.astimezone(UTC) <= delta:
-                    status = "live"
-            except Exception:
-                status = "idle" if runs == 0 else "live"
         elif runs > 0:
-            status = "live"
+            seen_in_window = False
+            if last:
+                try:
+                    ts = datetime.fromisoformat(last.replace("Z", "+00:00"))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=UTC)
+                    seen_in_window = now - ts.astimezone(UTC) <= delta
+                except Exception:
+                    seen_in_window = True
+            else:
+                seen_in_window = True
+            if seen_in_window:
+                status = "live"
 
         raw_cost = metrics.get("cost_usd")
         cost_usd = round(float(raw_cost), 4) if raw_cost is not None else 0.0
@@ -973,7 +981,7 @@ async def list_portal_agents(
             model="",
             runs24h=runs,
             successRate=round(success, 4),
-            errorRate=round(1.0 - success, 4),
+            errorRate=round(1.0 - success, 4) if runs > 0 else 0.0,
             p50Ms=int(round(float(metrics.get("p50") or 0))),
             p95Ms=int(round(float(metrics.get("p95") or 0))),
             costUsd24h=cost_usd,

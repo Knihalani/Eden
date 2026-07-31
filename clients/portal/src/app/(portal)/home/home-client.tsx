@@ -244,7 +244,10 @@ export default function HomeClient() {
     () =>
       [...agents].sort((a: AgentFixture, b: AgentFixture) => {
         const rank = { error: 0, live: 1, idle: 2 } as const;
-        return rank[a.status] - rank[b.status];
+        const byStatus = rank[a.status] - rank[b.status];
+        if (byStatus !== 0) return byStatus;
+        if (b.runs24h !== a.runs24h) return b.runs24h - a.runs24h;
+        return a.name.localeCompare(b.name);
       }),
     [agents],
   );
@@ -306,24 +309,32 @@ export default function HomeClient() {
         <Kpi
           label="Runs"
           value={String(snap.fleetRuns)}
-          hint={`${(snap.successRate * 100).toFixed(0)}% success`}
+          hint={
+            snap.successRate == null
+              ? "no runs yet"
+              : `${(snap.successRate * 100).toFixed(0)}%`
+          }
           tone="default"
           hintTone={
-            snap.successRate >= 0.95
-              ? "ok"
-              : snap.successRate < 0.8
-                ? "error"
-                : "default"
+            snap.successRate == null
+              ? "default"
+              : snap.successRate >= 0.95
+                ? "ok"
+                : snap.successRate < 0.8
+                  ? "error"
+                  : "default"
           }
           href="/traces"
         />
         <Kpi
           label="Agents"
-          value={`${snap.live} live`}
+          value={String(snap.agents)}
           hint={
             snap.errored
               ? `${snap.errored} in error`
-              : `${snap.agents} registered`
+              : snap.live
+                ? `${snap.live} active in 24h`
+                : "none active in 24h"
           }
           tone="default"
           hintTone={snap.errored ? "error" : "default"}
@@ -515,18 +526,25 @@ export default function HomeClient() {
                       <AgentStatusBadge status={agent.status} />
                     </div>
                     <p className="type-meta mt-1.5">
-                      {agent.runs24h} runs ·{" "}
-                      <span
-                        className={
-                          agent.successRate >= 0.95
-                            ? "text-[var(--success)]"
-                            : agent.successRate < 0.8
-                              ? "text-[var(--error)]"
-                              : undefined
-                        }
-                      >
-                        {(agent.successRate * 100).toFixed(0)}% ok
-                      </span>
+                      {agent.runs24h} runs
+                      {agent.runs24h > 0 ? (
+                        <>
+                          {" · "}
+                          <span
+                            className={
+                              agent.successRate >= 0.95
+                                ? "text-[var(--success)]"
+                                : agent.successRate < 0.8
+                                  ? "text-[var(--error)]"
+                                  : undefined
+                            }
+                          >
+                            {(agent.successRate * 100).toFixed(0)}%
+                          </span>
+                        </>
+                      ) : (
+                        <> · no runs</>
+                      )}
                       {agent.openIssues > 0 ? (
                         <span className="text-[var(--error)]">
                           {" "}
@@ -571,7 +589,10 @@ export default function HomeClient() {
                   },
                   {
                     label: "Error rate",
-                    value: `${(snap.errorRate * 100).toFixed(1)}%`,
+                    value:
+                      snap.errorRate == null
+                        ? "—"
+                        : `${(snap.errorRate * 100).toFixed(0)}%`,
                   },
                   {
                     label: "Warnings",

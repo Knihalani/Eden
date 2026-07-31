@@ -4,7 +4,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { PanelLeftClose, ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { PanelLeftClose, ChevronLeft, ChevronRight, ExternalLink, Pencil, X } from "lucide-react";
 import {
   tracesForAgent,
   type AgentFixture,
@@ -38,6 +39,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { useLabToast } from "@/lab/lab-toast";
 
 const ConnectRepoPanel = dynamic(
   () =>
@@ -254,6 +256,48 @@ function AgentDetail({ agent }: { agent: AgentFixture | null }) {
 function AgentDetailBody({ agent }: { agent: AgentFixture }) {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
+  const { pushToast } = useLabToast();
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(agent.name);
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  useEffect(() => {
+    setDraftName(agent.name);
+    setRenaming(false);
+  }, [agent.id, agent.name]);
+
+  const saveName = useCallback(async () => {
+    if (!orgId) return;
+    const next = draftName.trim();
+    if (!next || next === agent.name) {
+      setRenaming(false);
+      setDraftName(agent.name);
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await portalApi.renameAgent(orgId, agent.id, next);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.portal.agents(orgId),
+      });
+      pushToast({
+        title: "Agent renamed",
+        body: `Now showing as “${next}”. The agent id stays ${agent.id}.`,
+        tone: "ok",
+      });
+      setRenaming(false);
+    } catch (err) {
+      pushToast({
+        title: "Couldn't rename agent",
+        body: err instanceof Error ? err.message : "Try again",
+        tone: "fail",
+      });
+    } finally {
+      setRenameBusy(false);
+    }
+  }, [agent.id, agent.name, draftName, orgId, pushToast, queryClient]);
+
   // Prefer React Query traces for this page — catalog alone was empty
   // when /agents did not prefetch traces (runs24h showed N, list showed 0).
   const tracesQuery = useOrgQuery(
@@ -406,11 +450,57 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="type-ui !text-[1.0625rem]">
-                {agent.name}
-              </h2>
+              {renaming ? (
+                <form
+                  className="flex min-w-0 flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveName();
+                  }}
+                >
+                  <input
+                    className="ds-input max-w-xs"
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    autoFocus
+                    maxLength={200}
+                    aria-label="Agent display name"
+                    disabled={renameBusy}
+                  />
+                  <button
+                    type="submit"
+                    className="ds-btn ds-btn-primary ds-btn-sm"
+                    disabled={renameBusy || !draftName.trim()}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn-ghost ds-btn-sm"
+                    disabled={renameBusy}
+                    onClick={() => {
+                      setRenaming(false);
+                      setDraftName(agent.name);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <h2 className="type-ui !text-[1.0625rem]">{agent.name}</h2>
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn-ghost ds-btn-icon"
+                    aria-label="Rename agent"
+                    title="Rename agent"
+                    onClick={() => setRenaming(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
               <AgentStatusBadge status={agent.status} />
-              <span className="type-meta">{agent.env}</span>
             </div>
             <p className="type-meta">
               Agent id · <span className="font-mono">{agent.id}</span>
@@ -419,7 +509,7 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
             <p className="type-meta">
               {agent.model ? <>{agent.model} · </> : null}
               {agent.lastSeen
-                ? <>last seen {agent.lastSeen}</>
+                ? <>last telemetry {agent.lastSeen}</>
                 : <>no recent activity in this window</>}
               {agent.topError ? (
                 <>
@@ -492,14 +582,24 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
         <MetricCell label="Runs (24h)" value={String(agent.runs24h)} />
         <MetricCell
           label="Success"
-          value={`${(agent.successRate * 100).toFixed(1)}%`}
-          hint={`${(agent.errorRate * 100).toFixed(1)}% errors`}
+          value={
+            agent.runs24h > 0
+              ? `${(agent.successRate * 100).toFixed(0)}%`
+              : "—"
+          }
+          hint={
+            agent.runs24h > 0
+              ? `${(agent.errorRate * 100).toFixed(0)}% errors`
+              : "no runs in window"
+          }
           tone={
-            agent.successRate < 0.8
-              ? "error"
-              : agent.successRate >= 0.95
-                ? "ok"
-                : "default"
+            agent.runs24h <= 0
+              ? "default"
+              : agent.successRate < 0.8
+                ? "error"
+                : agent.successRate >= 0.95
+                  ? "ok"
+                  : "default"
           }
         />
         <MetricCell
@@ -637,11 +737,34 @@ function LabAgentsInner() {
     agents.find((a) => a.id === selectedId) ?? agents[0] ?? null;
 
   const ordered = useMemo(() => {
+    const rank = { error: 0, live: 1, idle: 2 } as const;
     return [...agents].sort((a, b) => {
-      const rank = { error: 0, live: 1, idle: 2 } as const;
-      return rank[a.status] - rank[b.status];
+      const byStatus = rank[a.status] - rank[b.status];
+      if (byStatus !== 0) return byStatus;
+      if (b.runs24h !== a.runs24h) return b.runs24h - a.runs24h;
+      const aSeen = a.lastSeen || "";
+      const bSeen = b.lastSeen || "";
+      if (aSeen !== bSeen) return bSeen.localeCompare(aSeen);
+      return a.name.localeCompare(b.name);
     });
   }, [agents]);
+
+  const fleetGroups = useMemo(() => {
+    const groups: {
+      key: "error" | "live" | "idle";
+      label: string;
+      items: AgentFixture[];
+    }[] = [
+      { key: "error", label: "Needs attention", items: [] },
+      { key: "live", label: "Active in last 24h", items: [] },
+      { key: "idle", label: "Idle", items: [] },
+    ];
+    for (const agent of ordered) {
+      const g = groups.find((x) => x.key === agent.status);
+      g?.items.push(agent);
+    }
+    return groups.filter((g) => g.items.length > 0);
+  }, [ordered]);
 
   const fleetIssues = agents.reduce((s, a) => s + a.openIssues, 0);
   const fleetRuns = agents.reduce((s, a) => s + a.runs24h, 0);
@@ -676,7 +799,7 @@ function LabAgentsInner() {
         title="Agents"
         meta={
           <span className="type-meta hidden sm:inline">
-            {agents.length} agents · {live} live · {errored} error ·{" "}
+            {agents.length} agents · {live} active · {errored} error ·{" "}
             {fleetIssues} issues · {fleetRuns} runs · {formatUsd(fleetSpend)}
           </span>
         }
@@ -717,51 +840,64 @@ function LabAgentsInner() {
                 </p>
               </li>
             ) : (
-              ordered.map((agent) => {
-                const active = agent.id === selected?.id;
-                return (
-                  <li key={agent.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectAgent(agent.id)}
-                      className={cn(
-                        "w-full border-b border-[var(--line)] px-4 py-3.5 text-left transition-colors",
-                        active
-                          ? "bg-[var(--accent-muted)]"
-                          : "hover:bg-[var(--accent-muted)]",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="type-ui min-w-0 truncate">
-                          {agent.name}
-                        </p>
-                        <AgentStatusBadge status={agent.status} />
-                      </div>
-                      {agent.id !== agent.name ? (
-                        <p className="type-meta mt-0.5 truncate text-[var(--text-tertiary)]">
-                          id · {agent.id}
-                        </p>
-                      ) : null}
-                      <p className="type-meta mt-1.5">
-                        {agent.runs24h} runs
-                        {agent.openIssues > 0 ? (
-                          <span className="text-[var(--error)]">
-                            {" "}
-                            · {agent.openIssues} issues
-                          </span>
-                        ) : null}
-                        {" · "}
-                        {formatUsd(agent.costUsd24h)}
-                      </p>
-                      {agent.purpose ? (
-                        <p className="type-meta mt-1 truncate text-[var(--text-tertiary)]">
-                          {agent.purpose}
-                        </p>
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })
+              fleetGroups.map((group) => (
+                <li key={group.key}>
+                  <p className="type-label sticky top-0 z-[1] border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-2">
+                    {group.label}
+                  </p>
+                  <ul>
+                    {group.items.map((agent) => {
+                      const active = agent.id === selected?.id;
+                      return (
+                        <li key={agent.id}>
+                          <button
+                            type="button"
+                            onClick={() => selectAgent(agent.id)}
+                            className={cn(
+                              "w-full border-b border-[var(--line)] px-4 py-3.5 text-left transition-colors",
+                              active
+                                ? "bg-[var(--accent-muted)]"
+                                : "hover:bg-[var(--accent-muted)]",
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="type-ui min-w-0 truncate">
+                                {agent.name}
+                              </p>
+                              <AgentStatusBadge status={agent.status} />
+                            </div>
+                            {agent.id !== agent.name ? (
+                              <p className="type-meta mt-0.5 truncate text-[var(--text-tertiary)]">
+                                id · {agent.id}
+                              </p>
+                            ) : (
+                              <p className="type-meta mt-0.5 truncate text-[var(--text-tertiary)]">
+                                Rename to give this a clearer label
+                              </p>
+                            )}
+                            <p className="type-meta mt-1.5">
+                              {agent.runs24h} runs
+                              {agent.openIssues > 0 ? (
+                                <span className="text-[var(--error)]">
+                                  {" "}
+                                  · {agent.openIssues} issues
+                                </span>
+                              ) : null}
+                              {" · "}
+                              {formatUsd(agent.costUsd24h)}
+                            </p>
+                            {agent.purpose ? (
+                              <p className="type-meta mt-1 truncate text-[var(--text-tertiary)]">
+                                {agent.purpose}
+                              </p>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))
             )}
           </ul>
         </aside>

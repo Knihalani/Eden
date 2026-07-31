@@ -16,6 +16,10 @@ Endpoints:
   GET  /orgs/{org_id}/agents/{agent_id}
       Action: fetch one agent registration by id.
 
+  PATCH /orgs/{org_id}/agents/{agent_id}
+      Body: {name}
+      Action: rename (upsert registration for SDK-only agents).
+
 The SDK calls POST /agents/register at agent startup so the CLI's
 ``eden config discover-agents`` can list the user's agents. The
 ``agent_id`` is then threaded through observability queries
@@ -77,6 +81,12 @@ class AgentRegisterRequest(BaseModel):
 class AgentRegisterResponse(BaseModel):
     agent: AgentRegistration
     created: bool  # True if newly registered, False if updated in place
+
+
+class AgentUpdateRequest(BaseModel):
+    """Portal rename — display name only; ``agent_id`` stays stable."""
+
+    name: str = Field(..., min_length=1, max_length=200)
 
 
 # ── helpers ──────────────────────────────────────────────────────
@@ -141,11 +151,11 @@ async def list_agents(
         ORDER BY last_seen_at DESC
         LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
         """,
-        *params, limit, offset,
+        *params,
+        limit,
+        offset,
     )
-    total_coro = client.fetchval(
-        f"SELECT count(*) FROM agent_registrations WHERE {where}", *params
-    )
+    total_coro = client.fetchval(f"SELECT count(*) FROM agent_registrations WHERE {where}", *params)
     rows, total = await asyncio.gather(rows_coro, total_coro)
     return AgentListResponse(
         agents=[_row_to_response(r) for r in rows],
@@ -182,7 +192,8 @@ async def register_agent(
         FROM agent_registrations
         WHERE org_id = $1 AND agent_id = $2
         """,
-        org_id, agent_id,
+        org_id,
+        agent_id,
     )
 
     if existing is not None:
@@ -198,7 +209,11 @@ async def register_agent(
             RETURNING agent_id, name, framework, repo_url, last_seen_at,
                       created_at, updated_at
             """,
-            org_id, agent_id, body.name, body.framework, body.repo_url,
+            org_id,
+            agent_id,
+            body.name,
+            body.framework,
+            body.repo_url,
             body.register_token,
         )
         return AgentRegisterResponse(agent=_row_to_response(row), created=False)
@@ -211,10 +226,54 @@ async def register_agent(
         RETURNING agent_id, name, framework, repo_url, last_seen_at,
                   created_at, updated_at
         """,
-        org_id, agent_id, body.name, body.framework, body.repo_url,
+        org_id,
+        agent_id,
+        body.name,
+        body.framework,
+        body.repo_url,
         body.register_token,
     )
     return AgentRegisterResponse(agent=_row_to_response(row), created=True)
+
+
+# ── PATCH /orgs/{org_id}/agents/{agent_id} ───────────────────────
+
+
+@router.patch("/{agent_id}", response_model=AgentRegistration)
+async def update_agent(
+    body: AgentUpdateRequest,
+    org_id: str = Depends(require_path_org_access),
+    agent_id: str = Path(..., description="Agent ID"),
+    _user: dict = Depends(get_current_user),
+) -> AgentRegistration:
+    """Rename an agent. Upserts a registration row for SDK-only agents."""
+    from eden.storage.postgres import get_postgres_client
+
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    client = await get_postgres_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
+
+    row = await client.fetchrow(
+        """
+        INSERT INTO agent_registrations (org_id, agent_id, name)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (org_id, agent_id) DO UPDATE
+        SET name = EXCLUDED.name,
+            updated_at = NOW()
+        RETURNING agent_id, name, framework, repo_url, last_seen_at,
+                  created_at, updated_at
+        """,
+        org_id,
+        agent_id,
+        name,
+    )
+    if not row:
+        raise HTTPException(status_code=503, detail="Could not update agent")
+    return _row_to_response(row)
 
 
 # ── GET /orgs/{org_id}/agents/{agent_id} ─────────────────────────
@@ -240,7 +299,8 @@ async def get_agent(
         FROM agent_registrations
         WHERE org_id = $1 AND agent_id = $2
         """,
-        org_id, agent_id,
+        org_id,
+        agent_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Agent not found")

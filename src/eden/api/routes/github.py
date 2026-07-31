@@ -38,6 +38,7 @@ RBAC: the `integrations:write` permission gates the write-side routes
 member-level, but the wizard hides them client-side from
 member/viewer roles so they only see the "ask your admin" callout.
 """
+
 from __future__ import annotations
 
 import json
@@ -106,7 +107,7 @@ _MANIFEST_FILES = (
     "package.json",
     "setup.py",
     "tsconfig.json",
-    ".eden/config.yaml"
+    ".eden/config.yaml",
 )
 
 
@@ -329,17 +330,18 @@ async def _ensure_state_row(org_id: str) -> dict[str, Any]:
     """Insert-if-missing the per-org onboarding_state row, return it."""
     client = await get_postgres_client()
     row = await client.fetchrow(
-        "SELECT * FROM onboarding_state WHERE org_id = $1", org_id,
+        "SELECT * FROM onboarding_state WHERE org_id = $1",
+        org_id,
     )
     if row:
         return dict(row)
     await client.execute(
-        "INSERT INTO onboarding_state (org_id) VALUES ($1) "
-        "ON CONFLICT (org_id) DO NOTHING",
+        "INSERT INTO onboarding_state (org_id) VALUES ($1) " "ON CONFLICT (org_id) DO NOTHING",
         org_id,
     )
     row = await client.fetchrow(
-        "SELECT * FROM onboarding_state WHERE org_id = $1", org_id,
+        "SELECT * FROM onboarding_state WHERE org_id = $1",
+        org_id,
     )
     return dict(row) if row else {"org_id": org_id, "step": "welcome"}
 
@@ -433,11 +435,7 @@ async def _enqueue_change_impact_preview(
         repo_full,
     )
     org_id = str(row["org_id"]) if row and row.get("org_id") else "default"
-    installation_id = (
-        int(row["installation_id"])
-        if row and row.get("installation_id")
-        else None
-    )
+    installation_id = int(row["installation_id"]) if row and row.get("installation_id") else None
 
     # pull_request webhooks are not push-shaped — do not read payload["commits"].
     changed = await _pr_changed_filenames(
@@ -550,11 +548,7 @@ async def _pr_prompt_override(
         return None
     owner, repo = parts[0], parts[1]
     target = next(
-        (
-            p
-            for p in agent_files
-            if p.startswith("prompts/") or "prompt" in p.lower()
-        ),
+        (p for p in agent_files if p.startswith("prompts/") or "prompt" in p.lower()),
         agent_files[0],
     )
     try:
@@ -579,7 +573,10 @@ async def _pr_prompt_override(
 
 
 async def _sync_improvement_plan_on_pr_close(
-    *, repo_full: str, pr_number: int, merged: bool,
+    *,
+    repo_full: str,
+    pr_number: int,
+    merged: bool,
 ) -> None:
     """N23/N20 (Phase 2b): sync improvement_plans status on PR close.
 
@@ -600,7 +597,8 @@ async def _sync_improvement_plan_on_pr_close(
         from eden.improvement.approve import queue_verify_for_plan
 
         plan = await plans_repo.find_by_pr(
-            repo_full_name=repo_full, pr_number=pr_number,
+            repo_full_name=repo_full,
+            pr_number=pr_number,
         )
         if plan is None:
             return
@@ -615,12 +613,13 @@ async def _sync_improvement_plan_on_pr_close(
             )
         else:
             await plans_repo.mark_closed(
-                plan_org_id, plan_id, reason="pr_closed_without_merge",
+                plan_org_id,
+                plan_id,
+                reason="pr_closed_without_merge",
             )
     except Exception as exc:
         logger.warning(
-            "github webhook: improvement_plans PR-close sync failed "
-            "repo=%s pr=%s merged=%s: %s",
+            "github webhook: improvement_plans PR-close sync failed " "repo=%s pr=%s merged=%s: %s",
             repo_full,
             pr_number,
             merged,
@@ -681,9 +680,7 @@ async def github_authorize(
             raw = json.loads(raw)
         completed = list(raw)
     merged: list[Any] = [
-        entry
-        for entry in completed
-        if not (isinstance(entry, dict) and "oauth_state" in entry)
+        entry for entry in completed if not (isinstance(entry, dict) and "oauth_state" in entry)
     ]
     merged.append({"oauth_state": state})
     await pg.execute(
@@ -774,9 +771,7 @@ async def github_callback(
         oauth = GitHubOAuthClient()
         token = await oauth.installation_token(installation_id)
         async_client_resp = await oauth.list_installation_repos(token)
-        account_login = (
-            async_client_resp[0].owner if async_client_resp else "unknown"
-        )
+        account_login = async_client_resp[0].owner if async_client_resp else "unknown"
     except GitHubAPIError as exc:
         logger.warning("github_callback installation_token failed: %s", redact_all(str(exc)))
         return RedirectResponse(
@@ -833,10 +828,14 @@ async def github_webhook(request: Request) -> dict[str, str]:
                 SET status = $1, {ts_col} = NOW()
                 WHERE repo_full_name = $2 AND pr_number = $3
                 """,
-                new_status, repo_full, int(pr_number),
+                new_status,
+                repo_full,
+                int(pr_number),
             )
             await _sync_improvement_plan_on_pr_close(
-                repo_full=repo_full, pr_number=int(pr_number), merged=merged,
+                repo_full=repo_full,
+                pr_number=int(pr_number),
+                merged=merged,
             )
     elif event == "installation":
         action = payload.get("action", "")
@@ -846,9 +845,7 @@ async def github_webhook(request: Request) -> dict[str, str]:
             account = installation.get("account") or {}
             account_login = account.get("login") or "unknown"
             account_type = (
-                "Organization"
-                if (account.get("type") or "").lower() == "organization"
-                else "User"
+                "Organization" if (account.get("type") or "").lower() == "organization" else "User"
             )
             target_org = await _guess_org_for_github_install(pg)
             if target_org:
@@ -944,7 +941,8 @@ async def claim_github_installation(
             account_login = repos[0].owner if repos else "unknown"
         except (GitHubConfigError, GitHubAPIError) as exc:
             raise HTTPException(
-                400, f"Could not verify GitHub installation: {exc}",
+                400,
+                f"Could not verify GitHub installation: {exc}",
             ) from exc
 
         installer_id = await resolve_eden_user_id(user.get("user_id"))
@@ -1009,18 +1007,49 @@ async def get_org_github_connection(
     without requiring ``integrations:write``. Pass ``agent_id`` for
     per-agent linking (one repo per agent).
     """
-    from eden.providers.factory import active_repo_connection
+    from eden.storage.postgres import get_postgres_client
 
     aid = (agent_id or "").strip() or None
-    conn = await active_repo_connection(org_id, agent_id=aid)
-    if not conn:
+    # Agents UI passes agent_id: only an agent-scoped link counts as
+    # "Connected". Org-wide legacy rows still feed Improve PR fallbacks
+    # via active_repo_connection(), but must not falsely mark every agent.
+    pg = await get_postgres_client()
+    if pg is None:
+        return None
+    try:
+        if aid:
+            row = await pg.fetchrow(
+                """
+                SELECT id, org_id, provider, installation_id, repo_full_name,
+                       default_branch, status, agent_id
+                FROM repo_connections
+                WHERE org_id = $1
+                  AND status = 'active'
+                  AND agent_id = $2
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                org_id,
+                aid,
+            )
+        else:
+            from eden.providers.factory import active_repo_connection
+
+            row = await active_repo_connection(org_id, agent_id=None)
+    except Exception:
+        return None
+    if not row:
+        return None
+    conn = dict(row) if not isinstance(row, dict) else row
+    repo = str(conn.get("repo_full_name") or "").strip()
+    if not repo or "/" not in repo or "undefined" in repo.lower():
         return None
     return RepoConnectionOut(
         id=str(conn.get("id") or ""),
         org_id=str(conn.get("org_id") or org_id),
         provider=str(conn.get("provider") or "github"),
         installation_id=str(conn.get("installation_id") or ""),
-        repo_full_name=str(conn.get("repo_full_name") or ""),
+        repo_full_name=repo,
         default_branch=str(conn.get("default_branch") or "main"),
         status=str(conn.get("status") or "active"),
         agent_id=(str(conn["agent_id"]) if conn.get("agent_id") else None),
@@ -1092,9 +1121,7 @@ async def list_org_repos(
             for repo in repos
         ]
 
-    results = await asyncio.gather(
-        *[_repos_for(int(r["installation_id"])) for r in inst_rows]
-    )
+    results = await asyncio.gather(*[_repos_for(int(r["installation_id"])) for r in inst_rows])
     out: list[RepoOut] = []
     for batch in results:
         out.extend(batch)
@@ -1296,7 +1323,8 @@ async def list_onboarding_pr_runs(
         ORDER BY created_at DESC
         LIMIT $2
         """,
-        eden_org_id, limit,
+        eden_org_id,
+        limit,
     )
     return [_row_to_pr_run_out(dict(r)) for r in rows]
 
@@ -1373,7 +1401,8 @@ async def patch_onboarding_state(
                 exc_info=True,
             )
     row = await pg.fetchrow(
-        "SELECT * FROM onboarding_state WHERE org_id = $1", eden_org_id,
+        "SELECT * FROM onboarding_state WHERE org_id = $1",
+        eden_org_id,
     )
     return OnboardingStateOut(**_state_to_dict(dict(row) if row else {}))
 
@@ -1384,6 +1413,7 @@ async def patch_onboarding_state(
 def _row_to_pr_run_out(row: dict[str, Any]) -> PRRunOut:
     def _iso(v: Any) -> str | None:
         return v.isoformat() if isinstance(v, datetime) else (str(v) if v else None)
+
     detail = row.get("detail") or {}
     if isinstance(detail, str):
         detail = json.loads(detail)
@@ -1404,5 +1434,3 @@ def _row_to_pr_run_out(row: dict[str, Any]) -> PRRunOut:
         merged_at=_iso(row.get("merged_at")),
         closed_at=_iso(row.get("closed_at")),
     )
-
-

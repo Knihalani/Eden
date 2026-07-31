@@ -38,6 +38,24 @@ export const portalApi = {
   agents: (orgId: string) =>
     fetchApi<AgentFixture[]>(portalPath(orgId, "agents")),
 
+  renameAgent: (orgId: string, agentId: string, name: string) =>
+    fetchApi<{
+      agent_id: string;
+      name: string;
+      framework?: string | null;
+      repo_url?: string | null;
+      last_seen_at: string;
+      created_at: string;
+      updated_at: string;
+    }>(`/orgs/${orgId}/agents/${encodeURIComponent(agentId)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Org-Id": orgId,
+      },
+      body: JSON.stringify({ name }),
+    }),
+
   traces: (orgId: string) =>
     fetchApi<TraceFixture[]>(portalPath(orgId, "traces")),
 
