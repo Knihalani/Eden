@@ -125,6 +125,16 @@ export default function DocsFillBridgePage() {
           setStatus("Could not create key — return to docs.");
           return;
         }
+        // Notify any open portal tabs (Settings / tour) so keys RQ
+        // refreshes — docs-fill is outside PortalProviders and cannot
+        // invalidate directly.
+        try {
+          const bc = new BroadcastChannel("eden-portal");
+          bc.postMessage({ type: "keys-minted" });
+          bc.close();
+        } catch {
+          /* BroadcastChannel unavailable */
+        }
         postToOpener({ type: "eden-docs-fill", op: "fill", ...data });
         setStatus("Key created — returning to docs…");
         window.setTimeout(() => window.close(), 400);
