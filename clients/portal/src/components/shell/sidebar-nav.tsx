@@ -105,7 +105,7 @@ export function SidebarNav() {
     <aside
       data-collapsed={collapsed ? "true" : "false"}
       className={cn(
-        "group/sidebar flex h-dvh shrink-0 flex-col overflow-hidden border-r border-[var(--line)] bg-[var(--bg-sidebar)]",
+        "group/sidebar hidden h-dvh shrink-0 flex-col overflow-hidden border-r border-[var(--line)] bg-[var(--bg-sidebar)] md:flex",
         animate && "transition-[width] duration-200 ease-out",
         collapsed ? "w-[var(--sidebar-w-collapsed)]" : "w-[var(--sidebar-w)]",
       )}

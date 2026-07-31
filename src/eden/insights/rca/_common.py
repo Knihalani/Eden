@@ -202,6 +202,8 @@ async def _fetch_failed_traces_in_window(
             WHERE tenant_id = $1
               AND timestamp > NOW() - $2::interval
               AND (error IS NOT NULL OR outcome = 'error')
+            ORDER BY trace_id
+            LIMIT 500
             """,
             org_id,
             interval_sql,

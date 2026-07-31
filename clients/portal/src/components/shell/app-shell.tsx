@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
 import { SidebarNav } from "./sidebar-nav";
+import { MobileBottomNav } from "./mobile-nav";
 import { SidebarProvider } from "./sidebar-context";
 import { AlertsProvider } from "@/lab/alerts-context";
 import { LabToastProvider } from "@/lab/lab-toast";
@@ -54,10 +55,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
                   <PortalStatusBanners />
                   <OnboardingBanner />
-                  <main className="min-h-0 flex-1 overflow-auto outline-none">
+                  <main className="min-h-0 flex-1 overflow-auto outline-none pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
                     <PortalBootGate>{children}</PortalBootGate>
                   </main>
                 </div>
+                <MobileBottomNav />
               </div>
               <AlertsModal />
               <OnboardingOverlay />

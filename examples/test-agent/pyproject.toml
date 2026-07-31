@@ -1,0 +1,17 @@
+[project]
+name = "eden-test-agent"
+version = "1.0.0"
+description = "Basic OpenAI-compatible smoke agent instrumented with Eden observability"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "eden-sdk[openai]",
+  "openai>=1.30",
+  "python-dotenv>=1.0",
+]
+
+[tool.uv.sources]
+eden-sdk = { path = "../../sdk/python", editable = true }
+
+[tool.uv]
+package = false

@@ -16,7 +16,7 @@ pnpm add @eden-ai/sdk
 
 ## Configure
 
-The SDK reads the following env vars by default (all optional in dev — events are dropped silently when `orgId` is unset):
+The SDK reads the following env vars by default. In production set `orgId` (or `EDEN_ORG_ID`); without it the client stays disabled and emits are no-ops (counted on `droppedTotal`, not sent):
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -381,7 +381,7 @@ normalizeModelName("claude-3-5-sonnet-latest");   // => "claude-3-5-sonnet"
 
 ## Why is it fire-and-forget?
 
-Tracing must never block the user's call. Every emit path is wrapped in a try/catch, network failures are logged at debug level, and oversized batches are dropped silently. To opt into strict mode:
+Tracing must never block the user's call. Every emit path is wrapped in a try/catch; network failures spill to the durable offline queue (or count toward `droppedTotal` when the queue is full). Batches that hit HTTP 413 are bisected and retried; a single event that still cannot fit is counted as dropped rather than wiped silently. To opt into strict mode (throw on misconfiguration):
 
 ```ts
 configure({ strict: true, orgId: "..." });

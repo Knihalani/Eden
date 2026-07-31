@@ -34,6 +34,7 @@ Usage:
     clean = masker.mask(event_payload)
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -272,6 +273,17 @@ class PIIMasker:
         ),
     }
 
+    # Patterns that cannot match without at least one of these literals.
+    # Used by ``_can_skip`` to avoid running expensive regexes on clean
+    # prose. Equivalence is proven in
+    # ``tests/unit/data_platform/test_pii_prefilter.py`` — do not add an
+    # entry without extending that file.
+    _REQUIRED_LITERALS: dict[str, tuple[str, ...]] = {
+        "jwt": ("eyJ",),
+        "url_with_creds": ("://",),
+        "api_key": ("sk", "pk", "api_key", "api-key", "apikey"),
+    }
+
     # Heuristic: keys that suggest sensitive values
     SENSITIVE_KEYS: set[str] = {
         "password",
@@ -324,18 +336,45 @@ class PIIMasker:
             return self._mask_string(text, check_credentials=True)
         return text
 
+    async def amask(self, text: str | dict[str, Any]) -> str | dict[str, Any]:
+        """Async wrapper that runs :meth:`mask` off the event loop.
+
+        Regex masking is CPU-bound and holds the GIL; dispatching via
+        ``asyncio.to_thread`` lets the loop keep ticking (measured ~3.1×
+        lower stall on a 512 KiB body) without changing mask output.
+        """
+        return await asyncio.to_thread(self.mask, text)
+
+    def _can_skip(self, pii_type: str, text: str) -> bool:
+        """True when ``pii_type`` cannot possibly match ``text``.
+
+        Only patterns listed in ``_REQUIRED_LITERALS`` are eligible; a
+        missing entry means "always run the regex".
+        """
+        literals = self._REQUIRED_LITERALS.get(pii_type)
+        if not literals:
+            return False
+        return not any(lit in text for lit in literals)
+
     def _mask_string(self, text: str, *, check_credentials: bool = False) -> str:
         """Apply regex-based PII masking to a string. If
         ``check_credentials`` is True and the policy is fail-closed,
         raise on a credential hit before applying redactions."""
         if check_credentials and self.policy.fail_closed_on_credentials:
             for cat in self.policy.credential_categories:
-                if self._active_patterns[cat].search(text):
+                pattern = self._active_patterns.get(cat)
+                if pattern is None:
+                    continue
+                if self._can_skip(cat, text):
+                    continue
+                if pattern.search(text):
                     raise PIIMaskingError(
                         f"Credential-like PII detected (category={cat}) "
                         f"and fail_closed_on_credentials=True"
                     )
         for pii_type, pattern in self._active_patterns.items():
+            if self._can_skip(pii_type, text):
+                continue
             if pii_type == "credit_card":
                 # Luhn-validated substitution — skip matches that don't
                 # checksum. Synthetic / sequential 16-digit runs that

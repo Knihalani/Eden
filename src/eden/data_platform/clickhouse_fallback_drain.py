@@ -52,6 +52,7 @@ from __future__ import annotations
 import logging
 import os
 import socket
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,67 @@ _BACKOFF_CAP_MINUTES = 60
 #: longer because they are the only record of what was lost.
 _PURGE_RESOLVED_AFTER_DAYS = 7
 _PURGE_DEAD_AFTER_DAYS = 30
+
+#: Rows parked before this instant with a NULL ``error_message`` are
+#: undiagnosable leftovers from the pre-2026-07-30 fallback writer (see
+#: ``docs/ops/known-issues.md`` #1). The drain reads oldest-first, so
+#: they starve newer rows until marked dead.
+_ERROR_MESSAGE_FIX_CUTOFF = datetime(2026, 7, 30, tzinfo=UTC)
+
+
+async def mark_obsolete_pre_fix_rows_dead(
+    pg: Any,
+    *,
+    cutoff: datetime | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Mark undiagnosable pre-fix fallback rows as ``dead_at``.
+
+    Only touches ``clickhouse_fallback`` — never ``telemetry_events``.
+    """
+    when = cutoff if cutoff is not None else _ERROR_MESSAGE_FIX_CUTOFF
+
+    rows = await pg.fetch(
+        """
+        SELECT id, target_table, failed_at
+          FROM clickhouse_fallback
+         WHERE resolved_at IS NULL
+           AND dead_at IS NULL
+           AND error_message IS NULL
+           AND failed_at < $1
+         ORDER BY failed_at
+        """,
+        when,
+    )
+    ids = [r["id"] for r in rows]
+    if not ids:
+        return {"candidates": 0, "marked_dead": 0, "dry_run": dry_run}
+
+    if dry_run:
+        return {
+            "candidates": len(ids),
+            "marked_dead": 0,
+            "dry_run": True,
+            "ids": ids,
+        }
+
+    await pg.execute(
+        """
+        UPDATE clickhouse_fallback
+           SET dead_at = NOW()
+         WHERE id = ANY($1::uuid[])
+           AND resolved_at IS NULL
+           AND dead_at IS NULL
+        """,
+        ids,
+    )
+    return {
+        "candidates": len(ids),
+        "marked_dead": len(ids),
+        "dry_run": False,
+        "ids": ids,
+    }
+
 
 #: Distinct target tables replayed concurrently. Each is one HTTP round
 #: trip to ClickHouse and holds no Postgres connection.

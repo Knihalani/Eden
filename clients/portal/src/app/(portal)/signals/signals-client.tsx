@@ -32,6 +32,7 @@ import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 
 type KindFilter = "all" | SignalKind;
 type StateFilter = "all" | "on" | "off";
@@ -690,6 +691,13 @@ function LabSignalsInner() {
           </button>
         }
       />
+
+      {(localSignals.length > 0 || Object.keys(overrides).length > 0) ? (
+        <LocalDraftBanner>
+          Detector approvals and enable toggles on this page are local drafts
+          until a create/patch API is wired — they are not saved to the server.
+        </LocalDraftBanner>
+      ) : null}
 
       {pendingReview ? <ReviewDraftPanel onApprove={handleApprove} /> : null}
 

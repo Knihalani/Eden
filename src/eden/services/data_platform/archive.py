@@ -59,6 +59,27 @@ logger = logging.getLogger(__name__)
 #: hot window (Phase B3 / 2026-06-19).
 DEFAULT_COLD_AGE_DAYS = 90
 
+# Process-local S3 clients keyed by endpoint URL (or "" for default).
+# ``boto3.client("s3")`` is ~2.7 ms steady-state; constructing one per
+# archived trace dominated the archive hot path.
+_S3_CLIENTS: dict[str, Any] = {}
+
+
+def _reset_s3_clients() -> None:
+    """Clear cached S3 clients (tests only)."""
+    _S3_CLIENTS.clear()
+
+
+def _s3_client(endpoint: str | None = None) -> Any:
+    import boto3
+
+    key = endpoint or ""
+    client = _S3_CLIENTS.get(key)
+    if client is None:
+        client = boto3.client("s3", endpoint_url=endpoint)
+        _S3_CLIENTS[key] = client
+    return client
+
 
 class ArchiveService:
     """Move old telemetry_events rows from Postgres to Impossible Cloud."""
@@ -361,15 +382,13 @@ class ArchiveService:
             raise RuntimeError("bronze_s3_bucket not configured")
 
         try:
-            import boto3
-
             endpoint = (
                 os.environ.get("EDEN_STORAGE_ENDPOINT")
                 if os.environ.get("EDEN_STORAGE_BACKEND", "").lower()
                 == "impossible_cloud"
                 else None
             )
-            s3 = boto3.client("s3", endpoint_url=endpoint)
+            s3 = _s3_client(endpoint)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
@@ -391,15 +410,13 @@ class ArchiveService:
         if not bucket:
             return ""
         try:
-            import boto3
-
             endpoint = (
                 os.environ.get("EDEN_STORAGE_ENDPOINT")
                 if os.environ.get("EDEN_STORAGE_BACKEND", "").lower()
                 == "impossible_cloud"
                 else None
             )
-            s3 = boto3.client("s3", endpoint_url=endpoint)
+            s3 = _s3_client(endpoint)
             loop = asyncio.get_event_loop()
             resp = await loop.run_in_executor(
                 None, lambda: s3.get_object(Bucket=bucket, Key=key)

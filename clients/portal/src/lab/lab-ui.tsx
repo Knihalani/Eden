@@ -20,7 +20,7 @@ import {
   type TranscriptStep,
 } from "@/lab/fixtures/traces";
 import { AGENT_LIST, agentForTrace } from "@/lab/fixtures/agents";
-import { catalogAgents } from "@/lib/portal-catalog";
+import { useCatalogAgents } from "@/hooks/use-catalog-agents";
 import { StatusChip } from "@/components/ds/primitives";
 import { useSidebar } from "@/components/shell/sidebar-context";
 import { cn } from "@/lib/utils";
@@ -723,6 +723,8 @@ export function AgentScopeFilter({
   onChange: (id: string) => void;
   counts?: Record<string, number>;
 }) {
+  const agents = useCatalogAgents();
+  const options = agents.length > 0 ? agents : AGENT_LIST;
   return (
     <label className="block min-w-0">
       <span className="type-meta mb-1 block text-[var(--text-secondary)]">
@@ -737,14 +739,12 @@ export function AgentScopeFilter({
         <option value="all">
           All agents{counts?.all != null ? ` (${counts.all})` : ""}
         </option>
-        {(catalogAgents().length > 0 ? catalogAgents() : AGENT_LIST).map(
-          (agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name}
-              {counts?.[agent.id] != null ? ` (${counts[agent.id]})` : ""}
-            </option>
-          ),
-        )}
+        {options.map((agent) => (
+          <option key={agent.id} value={agent.id}>
+            {agent.name}
+            {counts?.[agent.id] != null ? ` (${counts[agent.id]})` : ""}
+          </option>
+        ))}
       </select>
     </label>
   );

@@ -399,12 +399,17 @@ class EdenClient:
         self._wake = threading.Event()
         self._chunk_wake = threading.Event()
         self._chunk_idle = threading.Event()
+        self._chunk_idle.set()
         self._loop_started = threading.Event()
         self._loop_failed = False
         self._loop_failed_event = threading.Event()
         self._generation_idle = threading.Event()
+        self._generation_idle.set()
         self._lifecycle_lock = threading.Lock()
         self._unresolved_lock = threading.Lock()
+        self._offline_replay_lock = threading.Lock()
+        self._offline_inflight = []
+        self._offline_next_drain_at = 0.0
         self._unresolved_offline_rows = set()
         self._generation = 0
         self._processed_generation = 0
