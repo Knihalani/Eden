@@ -253,6 +253,37 @@ def _build_settings_class():
         # latter, so SCIM could never be enabled either.
         # See docs/ops/disabled-features.md.
         sso_enabled: bool = False
+        # D.14 onboarding-v2 API surface (services/onboarding/ +
+        # api/routes/onboarding.py). OFF since 2026-07-31: the state
+        # machine writes to columns that do not exist on the live
+        # ``onboarding_state`` table (``current_step``,
+        # ``completed_steps``, ``cat_enablements``, ``first_trace_at``,
+        # ``milestones_reached`` vs. the live ``step``,
+        # ``org_setup_choice``, ``completed_by_users``,
+        # ``agents_onboarded``, ``updated_at``). ``_persist`` swallows
+        # the write failure at ``logger.debug`` and returns a synthetic
+        # row, so every route answered ``{"status":"ok","live":true}``
+        # while persisting nothing.
+        #
+        # Root cause: two parallel migration systems.
+        # ``migrations/029_onboarding_wizard.sql`` created the live
+        # table; alembic ``056_onboarding_state.py`` used
+        # ``CREATE TABLE IF NOT EXISTS`` and silently no-op'd, while
+        # alembic still records 056 as applied.
+        #
+        # Not a customer-facing regression: the portal does not call
+        # these endpoints (``onboardingV2Api`` has zero component
+        # consumers) — the wizard actually in use is
+        # ``/orgs/{org}/onboarding/state`` in ``api/routes/github.py``,
+        # which matches the live schema, persists for real, and is
+        # UNAFFECTED by this flag.
+        #
+        # Re-enable when a real migration adds the columns the state
+        # machine uses (or the state machine is rewritten against the
+        # live column names) and a test proves a round-trip persists.
+        # See docs/ops/disabled-features.md and
+        # docs/ops/known-issues.md #9.
+        onboarding_state_machine_v2_enabled: bool = False
         # Email verification on password signup. OFF since 2026-07-30
         # because none of it exists: email_verification_tokens is not a
         # table, send_verification_email is not a function, and there is

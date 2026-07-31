@@ -12,7 +12,10 @@
 # Exits non-zero on any failure (SLO breach, missing backup, etc).
 set -euo pipefail
 
-BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-eden-prod-backups}"
+# Single dash: an explicitly empty BACKUP_S3_BUCKET means "local only" rather
+# than silently falling back to the production bucket (which, with no
+# credentials, printed an AWS fatal error on every local run).
+BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET-eden-prod-backups}"
 BACKUP_LOCAL_DIR="${BACKUP_LOCAL_DIR:-./backups}"
 REPORT_DIR="${REPORT_DIR:-./reports}"
 PGHOST="${PGHOST:-localhost}"
@@ -45,7 +48,9 @@ EOF
     exit 2
 fi
 
-backup_age_hours=$(echo "scale=2; ($(date +%s) - $(stat -c %Y "$backup")) / 3600" | bc)
+# ``stat -c`` is GNU; macOS/BSD uses ``stat -f %m``. Try GNU, fall back to BSD.
+backup_mtime=$(stat -c %Y "$backup" 2>/dev/null || stat -f %m "$backup" 2>/dev/null || echo 0)
+backup_age_hours=$(echo "scale=2; ($(date +%s) - ${backup_mtime}) / 3600" | bc)
 echo "[dr-drill] using backup $backup (age ${backup_age_hours}h)"
 
 # 2. Restore into eden_restore_test
@@ -75,15 +80,21 @@ jobs_count=$(psql -h "$PGHOST" -U "$PGUSER" -d eden_restore_test -tAc "SELECT CO
 
 # 5. Try the golden-dataset eval
 eval_pass=false
-if PYTHONPATH=src python -c "
-import asyncio
-async def main():
-    from eden.evaluation.golden_dataset import load_canonical_datasets
-    ds = load_canonical_datasets()
-    assert len(ds.cases) == 50, f'expected 50 golden cases, got {len(ds.cases)}'
-    assert ds.validate(), 'golden dataset failed validation'
-asyncio.run(main())
-" 2>/dev/null; then
+PYTHON_BIN="${PYTHON:-}"
+if [ -z "$PYTHON_BIN" ] && [ -x "./.venv/bin/python" ]; then
+    PYTHON_BIN="./.venv/bin/python"
+fi
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+if PYTHONPATH=src "$PYTHON_BIN" -c "
+from eden.evaluation.golden_dataset import load_canonical_datasets
+reg = load_canonical_datasets()
+datasets = reg.list_datasets()
+assert datasets, 'expected at least one frozen golden dataset'
+ds = datasets[0]
+assert len(ds.cases) == 50, f'expected 50 golden cases, got {len(ds.cases)}'
+errors = ds.validate()
+assert not errors, f'golden dataset failed validation: {errors}'
+"; then
     eval_pass=true
 fi
 
