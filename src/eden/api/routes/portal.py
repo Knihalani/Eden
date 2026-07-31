@@ -810,7 +810,8 @@ async def list_portal_agents(
                 ) from exc2
 
     async def _load_metrics() -> dict[str, dict[str, Any]]:
-        """Bounded window scan — recent events only, no percentiles."""
+        """Bounded window scan — success from scored outcomes only;
+        real p50/p95 via percentile_cont (not duplicated AVG)."""
         metrics_by_id: dict[str, dict[str, Any]] = {}
         try:
             mrows = await client.fetch(
@@ -836,11 +837,20 @@ async def list_portal_agents(
                            CASE
                                WHEN lower(coalesce(outcome, '')) IN
                                     ('error','failed','failure','fail')
-                               THEN 0.0 ELSE 1.0
+                               THEN 0.0
+                               WHEN lower(coalesce(outcome, '')) IN
+                                    ('ok','success','succeeded','completed',
+                                     'pass','passed')
+                               THEN 1.0
+                               ELSE NULL
                            END
                        )::float AS success_rate,
-                       AVG(COALESCE(duration_ms, 0))::float AS p50,
-                       AVG(COALESCE(duration_ms, 0))::float AS p95,
+                       percentile_cont(0.5) WITHIN GROUP (
+                           ORDER BY duration_ms
+                       )::float AS p50,
+                       percentile_cont(0.95) WITHIN GROUP (
+                           ORDER BY duration_ms
+                       )::float AS p95,
                        MAX(timestamp) AS last_seen
                 FROM recent
                 GROUP BY agent_id
@@ -926,7 +936,6 @@ async def list_portal_agents(
         _load_open_issues(),
     )
 
-    now = datetime.now(UTC)
     out: list[AgentCard] = []
     seen: set[str] = set()
 
@@ -935,55 +944,47 @@ async def list_portal_agents(
         issues = issues_by_id.get(agent_id) or {}
         runs = int(metrics.get("runs") or 0)
         raw_success = metrics.get("success_rate")
-        # No traffic → 0 rate (FE shows "—" / "no runs"). Never invent 100%.
+        # None = unknown (no scored outcomes / degraded metrics). Never invent
+        # 0% or 100% — FE renders "—".
+        success: float | None
         if runs <= 0:
-            success = 0.0
-        elif "success_rate" in metrics and raw_success is None:
-            # Metrics discovery degraded — do not invent 100% success.
-            success = 0.0
-        elif raw_success is not None:
-            success = float(raw_success)
+            success = None
+        elif raw_success is None:
+            success = None
         else:
-            success = 0.0
-        success = max(0.0, min(1.0, success))
+            success = max(0.0, min(1.0, float(raw_success)))
         open_issues = int(issues.get("open_issues") or 0)
         open_p0 = int(issues.get("open_p0") or 0)
-        last = _iso(last_seen)
-        # "live" means active traffic in the lookback window — not "process
-        # currently running". Register/ingest heartbeats alone stay idle.
+        # Prefer telemetry last_seen when present — registry heartbeats alone
+        # should not drive "active" and can lag behind windowed runs.
+        last = _iso(metrics.get("last_seen") or last_seen)
+        # Windowed runs imply activity in the lookback; register-only stays idle.
         status: str = "idle"
         if open_p0 > 0:
             status = "error"
         elif runs > 0:
-            seen_in_window = False
-            if last:
-                try:
-                    ts = datetime.fromisoformat(last.replace("Z", "+00:00"))
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=UTC)
-                    seen_in_window = now - ts.astimezone(UTC) <= delta
-                except Exception:
-                    seen_in_window = True
-            else:
-                seen_in_window = True
-            if seen_in_window:
-                status = "live"
+            status = "live"
 
         raw_cost = metrics.get("cost_usd")
-        cost_usd = round(float(raw_cost), 4) if raw_cost is not None else 0.0
+        cost_usd = round(float(raw_cost), 4) if raw_cost is not None else None
+
+        raw_p50 = metrics.get("p50")
+        raw_p95 = metrics.get("p95")
+        p50 = int(round(float(raw_p50))) if raw_p50 is not None else 0
+        p95 = int(round(float(raw_p95))) if raw_p95 is not None else 0
 
         return AgentCard(
             id=agent_id,
             name=name or agent_id,
             purpose=purpose or "",
             status=status,  # type: ignore[arg-type]
-            env="prod",
+            env="",
             model="",
             runs24h=runs,
-            successRate=round(success, 4),
-            errorRate=round(1.0 - success, 4) if runs > 0 else 0.0,
-            p50Ms=int(round(float(metrics.get("p50") or 0))),
-            p95Ms=int(round(float(metrics.get("p95") or 0))),
+            successRate=round(success, 4) if success is not None else None,
+            errorRate=(round(1.0 - success, 4) if success is not None else None),
+            p50Ms=p50,
+            p95Ms=p95,
             costUsd24h=cost_usd,
             tokens24h=int(metrics.get("tokens") or 0),
             openIssues=open_issues,

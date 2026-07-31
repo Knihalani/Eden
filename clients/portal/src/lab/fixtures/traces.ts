@@ -61,7 +61,8 @@ export function formatTokens(n: number): string {
   return String(n);
 }
 
-export function formatUsd(n: number, digits = 2): string {
+export function formatUsd(n: number | null | undefined, digits = 2): string {
+  if (n == null) return "—";
   if (!Number.isFinite(n)) return "$0.00";
   // Sub-cent LLM costs (MiniMax etc.) used to render as "$0.000" /
   // "$0.00" and looked like billing was broken.

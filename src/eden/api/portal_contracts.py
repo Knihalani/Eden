@@ -57,14 +57,15 @@ class AgentCard(BaseModel):
     name: str
     purpose: str = ""
     status: AgentStatus = "idle"
-    env: str = "prod"
+    env: str = ""
     model: str = ""
     runs24h: int = 0
-    successRate: float = 0.0
-    errorRate: float = 0.0
+    # None = unknown (no scored outcomes / degraded metrics). Never invent.
+    successRate: float | None = None
+    errorRate: float | None = None
     p50Ms: int = 0
     p95Ms: int = 0
-    costUsd24h: float = 0.0
+    costUsd24h: float | None = None
     tokens24h: int = 0
     openIssues: int = 0
     lastSeen: str = ""

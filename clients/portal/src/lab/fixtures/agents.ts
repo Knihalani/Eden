@@ -18,11 +18,13 @@ export type AgentFixture = {
   env: string;
   model: string;
   runs24h: number;
-  successRate: number;
-  errorRate: number;
+  /** null = unknown / no scored outcomes — never invent 0% or 100%. */
+  successRate: number | null;
+  errorRate: number | null;
   p50Ms: number;
   p95Ms: number;
-  costUsd24h: number;
+  /** null = cost unknown (degraded metrics). */
+  costUsd24h: number | null;
   tokens24h: number;
   openIssues: number;
   lastSeen: string;
@@ -72,21 +74,28 @@ export function homeSnapshot(
   const ok = traces.filter((t) => t.status === "ok" && t.severity === "none");
   const cost = traces.reduce((sum, t) => sum + t.costUsd, 0);
   const tokens = traces.reduce((sum, t) => sum + t.tokens, 0);
-  const fleetCost = agents.reduce((sum, a) => sum + a.costUsd24h, 0);
-  // Prefer registry fleet counts; fall back to live traces so SDK-only
-  // orgs still show non-zero Runs before agents are registered.
-  const fleetRunsFromAgents = agents.reduce((sum, a) => sum + a.runs24h, 0);
-  const fleetRuns =
-    fleetRunsFromAgents > 0 ? fleetRunsFromAgents : traces.length;
+  const fleetCost = agents.reduce((sum, a) => sum + (a.costUsd24h ?? 0), 0);
+  // One source of truth: agent card runs only. Do not inflate from the
+  // traces feed — that made "N runs" disagree with "no runs yet" success.
+  const fleetRuns = agents.reduce((sum, a) => sum + a.runs24h, 0);
   const fleetTokens = agents.reduce((sum, a) => sum + a.tokens24h, 0);
   const openIssues = agents.reduce((sum, a) => sum + a.openIssues, 0);
   const live = agents.filter((a) => a.status === "live").length;
   const idle = agents.filter((a) => a.status === "idle").length;
   const errored = agents.filter((a) => a.status === "error").length;
+  const scoredRuns = agents.reduce(
+    (sum, a) => sum + (a.successRate != null && a.runs24h > 0 ? a.runs24h : 0),
+    0,
+  );
   const successRate =
-    fleetRunsFromAgents > 0
-      ? agents.reduce((sum, a) => sum + a.successRate * a.runs24h, 0) /
-        fleetRunsFromAgents
+    scoredRuns > 0
+      ? agents.reduce(
+          (sum, a) =>
+            a.successRate != null && a.runs24h > 0
+              ? sum + a.successRate * a.runs24h
+              : sum,
+          0,
+        ) / scoredRuns
       : null;
   const errorRate = successRate == null ? null : 1 - successRate;
   const avgCostPerRun = fleetCost / Math.max(fleetRuns, 1);

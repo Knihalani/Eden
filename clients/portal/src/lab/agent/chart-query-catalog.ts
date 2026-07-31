@@ -152,7 +152,7 @@ function runSeries(
   scope?: ChartQueryScope,
 ): AgentChartPoint[] {
   const agents = agentsInScope(scope).sort(
-    (a, b) => b.costUsd24h - a.costUsd24h,
+    (a, b) => (b.costUsd24h ?? 0) - (a.costUsd24h ?? 0),
   );
 
   switch (queryId) {
@@ -160,7 +160,7 @@ function runSeries(
     case "spend_share":
       return agents.map((a) => ({
         label: shortName(a.name),
-        value: Number(a.costUsd24h.toFixed(2)),
+        value: Number((a.costUsd24h ?? 0).toFixed(2)),
       }));
     case "spend_hourly":
       return HOURLY_SPEND.map((p) => ({ ...p }));
@@ -172,16 +172,20 @@ function runSeries(
           value: a.runs24h,
         }));
     case "spend_vs_success":
-      return agents.map((a) => ({
-        label: shortName(a.name),
-        value: Number(a.costUsd24h.toFixed(2)),
-        value2: Number((a.successRate * 100).toFixed(1)),
-      }));
+      return agents
+        .filter((a) => a.successRate != null)
+        .map((a) => ({
+          label: shortName(a.name),
+          value: Number((a.costUsd24h ?? 0).toFixed(2)),
+          value2: Number(((a.successRate ?? 0) * 100).toFixed(1)),
+        }));
     case "error_rate_by_agent":
-      return agents.map((a) => ({
-        label: shortName(a.name),
-        value: Number((a.errorRate * 100).toFixed(1)),
-      }));
+      return agents
+        .filter((a) => a.errorRate != null)
+        .map((a) => ({
+          label: shortName(a.name),
+          value: Number(((a.errorRate ?? 0) * 100).toFixed(1)),
+        }));
     case "driver_save_table":
       return [];
   }
