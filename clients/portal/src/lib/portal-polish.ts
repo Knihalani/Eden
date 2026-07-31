@@ -52,7 +52,7 @@ export const U20_EMPTY_COPY = {
   experiments:
     "No experiments yet. Promote a playground run, or create a dataset under Evals first.",
   debugger:
-    "No checkpoints listed. Paste a trace id to load steps, or open Traces to pick a recent run.",
+    "No debugger sessions yet. Open Traces, pick a run, and use Debugger to replay spans step-by-step — or start a new session here.",
   agents:
     "No agents registered. Create an API key, then register via the SDK or CLI.",
   improveQueue:

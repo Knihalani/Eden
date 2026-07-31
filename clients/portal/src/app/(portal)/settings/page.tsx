@@ -109,7 +109,10 @@ function LabSettingsInner() {
     () => portalApi.keys(orgId!),
     {
       ...SETTINGS_QUERY,
-      enabled: loadMode === "keys",
+      // Workspace health cards need key counts too — don't wait for
+      // the keys tab or Settings shows "0 keys" / "ingest blocked"
+      // while a Quickstart key already exists.
+      enabled: loadMode === "keys" || loadMode === "workspace",
     },
   );
   const membersQuery = useOrgQuery(
@@ -118,7 +121,7 @@ function LabSettingsInner() {
     () => portalApi.members(orgId!),
     {
       ...SETTINGS_QUERY,
-      enabled: loadMode === "members",
+      enabled: loadMode === "members" || loadMode === "workspace",
     },
   );
   const auditEventsQuery = useOrgQuery(
