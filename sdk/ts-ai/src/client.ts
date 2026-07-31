@@ -115,6 +115,8 @@ export interface ResolvedConfig {
   orgId: string | undefined;
   apiKey: string | undefined;
   projectId: string;
+  /** Stable agent identity; see `EdenSDKOptions.agentId`. */
+  agentId: string | undefined;
   baseUrl: string;
   /**
    * Explicit OpenAI-compatible gateway URL. When unset,
@@ -195,6 +197,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
   const apiKey =
     opts.apiKey ?? readEnv("EDEN_ORG_API_KEY") ?? readEnv("EDEN_API_KEY");
   const projectId = opts.projectId ?? readEnv("EDEN_PROJECT_ID") ?? DEFAULT_PROJECT_ID;
+  const agentId = opts.agentId ?? readEnv("EDEN_AGENT_ID") ?? undefined;
   const realm = opts.realm ?? readEnv("EDEN_REALM") ?? DEFAULT_REALM;
   const debug = opts.debug ?? readEnv("EDEN_DEBUG") === "1";
   const strict = opts.strict ?? false;
@@ -257,6 +260,7 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     orgId,
     apiKey,
     projectId,
+    agentId,
     baseUrl: baseUrl.replace(/\/+$/, ""),
     gatewayUrl,
     filters,
@@ -617,6 +621,10 @@ export class EdenSDK {
   emit(event: TelemetryEvent): void {
     if (this.disposed) return;
     if (this.config.disabled) return;
+    // Stamp configured agentId when the emitter omitted it.
+    if (this.config.agentId && !event.agentId) {
+      event = { ...event, agentId: this.config.agentId };
+    }
     const sampler = this.sampler;
     // Single payload read — avoid double cast / property walk on
     // the emit hot path (every instrumented LLM call).
@@ -1103,6 +1111,7 @@ export class EdenSDK {
     if (this.config.orgId) headers["X-Org-Id"] = this.config.orgId;
     if (this.config.apiKey) headers["X-Org-Api-Key"] = this.config.apiKey;
     if (this.config.projectId) headers["X-Project-Id"] = this.config.projectId;
+    if (this.config.agentId) headers["X-Eden-Agent-Id"] = this.config.agentId;
     return headers;
   }
 

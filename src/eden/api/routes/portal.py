@@ -758,7 +758,13 @@ async def list_portal_agents(
     window_secs = int(delta.total_seconds())
     client = await _pg()
     if client is None:
-        return []
+        # Same contract as traces: do not render infra outage as
+        # "you have no agents yet".
+        raise HTTPException(
+            status_code=503,
+            detail="Agent registry is temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     async def _load_registry() -> list[Any]:
         try:
@@ -986,7 +992,7 @@ async def list_portal_agents(
             _build(
                 agent_id,
                 agent_id,
-                "from telemetry",
+                "Seen in recent traces",
                 metrics.get("last_seen"),
             )
         )

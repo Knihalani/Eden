@@ -413,7 +413,14 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
               <span className="type-meta">{agent.env}</span>
             </div>
             <p className="type-meta">
-              {agent.model} · last seen {agent.lastSeen}
+              Agent id · <span className="font-mono">{agent.id}</span>
+              {agent.purpose ? <> · {agent.purpose}</> : null}
+            </p>
+            <p className="type-meta">
+              {agent.model ? <>{agent.model} · </> : null}
+              {agent.lastSeen
+                ? <>last seen {agent.lastSeen}</>
+                : <>no recent activity in this window</>}
               {agent.topError ? (
                 <>
                   {" · "}
@@ -730,6 +737,11 @@ function LabAgentsInner() {
                         </p>
                         <AgentStatusBadge status={agent.status} />
                       </div>
+                      {agent.id !== agent.name ? (
+                        <p className="type-meta mt-0.5 truncate text-[var(--text-tertiary)]">
+                          id · {agent.id}
+                        </p>
+                      ) : null}
                       <p className="type-meta mt-1.5">
                         {agent.runs24h} runs
                         {agent.openIssues > 0 ? (
@@ -741,6 +753,11 @@ function LabAgentsInner() {
                         {" · "}
                         {formatUsd(agent.costUsd24h)}
                       </p>
+                      {agent.purpose ? (
+                        <p className="type-meta mt-1 truncate text-[var(--text-tertiary)]">
+                          {agent.purpose}
+                        </p>
+                      ) : null}
                     </button>
                   </li>
                 );

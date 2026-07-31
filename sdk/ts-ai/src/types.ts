@@ -40,6 +40,15 @@ export interface EdenSDKOptions {
   projectId?: string;
 
   /**
+   * Stable agent identity for the Agents fleet, Improve PRs, and
+   * autonomy policies. Sent as `X-Eden-Agent-Id` and stamped on
+   * every event when `agentId` is missing on the payload. Prefer a
+   * short slug (`support-bot`) over auto-generated model class names.
+   * Falls back to `EDEN_AGENT_ID` when omitted.
+   */
+  agentId?: string;
+
+  /**
    * Gateway base URL. Defaults to `EDEN_BASE_URL` env var or
    * `https://api.edenobservability.com`. The SDK POSTs to
    * `${baseUrl}/orgs/${orgId}/ingest/...` for telemetry and

@@ -187,10 +187,7 @@ def _check_rate_limit(org_id: str) -> None:
         retry_after = max(1, int(bucket[0] + window - now))
         raise HTTPException(
             status_code=429,
-            detail=(
-                f"Ingestion rate limit exceeded for org {org_id} "
-                f"({cap} req/min)"
-            ),
+            detail=(f"Ingestion rate limit exceeded for org {org_id} " f"({cap} req/min)"),
             headers={"Retry-After": str(retry_after)},
         )
     bucket.append(now)
@@ -206,6 +203,10 @@ class IngestResponse(BaseModel):
     accepted: int = 0
     rejected: int = 0
     deduplicated: int = 0
+    #: Dropped by the tail-sampling gate: not stored, not billed, not an
+    #: error. Defaulted so existing clients are unaffected (and sampling
+    #: is off by default, so it is 0 for them regardless).
+    sampled_out: int = 0
     total: int = 0
     source_format: str
 
@@ -226,16 +227,10 @@ async def _ingest_handler(
     settings = get_settings()
 
     # Body size guard
-    if (
-        settings.ingestion_max_body_bytes
-        and len(body) > settings.ingestion_max_body_bytes
-    ):
+    if settings.ingestion_max_body_bytes and len(body) > settings.ingestion_max_body_bytes:
         raise HTTPException(
             status_code=413,
-            detail=(
-                f"Body too large: {len(body)} bytes > "
-                f"{settings.ingestion_max_body_bytes}"
-            ),
+            detail=(f"Body too large: {len(body)} bytes > " f"{settings.ingestion_max_body_bytes}"),
         )
 
     # Whitelist check
@@ -243,8 +238,7 @@ async def _ingest_handler(
         raise HTTPException(
             status_code=415,
             detail=(
-                f"Source format {path_format!r} is not in "
-                f"settings.ingestion_allowed_formats"
+                f"Source format {path_format!r} is not in " f"settings.ingestion_allowed_formats"
             ),
         )
 
@@ -275,10 +269,7 @@ async def _ingest_handler(
 
         content_encoding = (headers or {}).get("content-encoding")
         body = await maybe_gunzip_body_async(body, content_encoding)
-        if (
-            settings.ingestion_max_body_bytes
-            and len(body) > settings.ingestion_max_body_bytes
-        ):
+        if settings.ingestion_max_body_bytes and len(body) > settings.ingestion_max_body_bytes:
             raise HTTPException(
                 status_code=413,
                 detail=(
@@ -318,6 +309,23 @@ async def _ingest_handler(
             headers={"Retry-After": "5"},
         ) from exc
 
+    # Stamp agent_id from request headers when the payload omitted it.
+    # SDKs may set X-Eden-Agent-Id / X-Agent-Id (and X-Project-Id as a
+    # last-resort fallback when it is not the generic "default").
+    header_agent = ""
+    hdrs = headers or {}
+    for key in ("x-eden-agent-id", "x-agent-id"):
+        raw = hdrs.get(key)
+        if isinstance(raw, str) and raw.strip():
+            header_agent = raw.strip()
+            break
+    if not header_agent and project_id and project_id not in ("default", ""):
+        header_agent = project_id
+    if header_agent:
+        for event in events:
+            if not getattr(event, "agent_id", None):
+                event.agent_id = header_agent
+
     # Write
     from eden.observability.errors import IngestionUnavailable
 
@@ -349,6 +357,7 @@ async def _ingest_handler(
         accepted=result.get("accepted", len(events)),
         rejected=result.get("rejected", 0),
         deduplicated=result.get("deduplicated", 0),
+        sampled_out=result.get("sampled_out", 0),
         total=result.get("total", len(events)),
         source_format=path_format,
     )
@@ -461,10 +470,7 @@ async def ingest_chunks(
     org_id = _assert_ingest_org(auth_ctx, org_id)
     body = await request.body()
     settings = get_settings()
-    if (
-        settings.ingestion_max_body_bytes
-        and len(body) > settings.ingestion_max_body_bytes
-    ):
+    if settings.ingestion_max_body_bytes and len(body) > settings.ingestion_max_body_bytes:
         raise HTTPException(status_code=413, detail="Body too large")
     _check_rate_limit(org_id)
     from eden.observability.ingestion.shed import check_ingest_shed
@@ -473,13 +479,8 @@ async def ingest_chunks(
     try:
         from eden.observability.ingestion.providers import maybe_gunzip_body_async
 
-        body = await maybe_gunzip_body_async(
-            body, request.headers.get("content-encoding")
-        )
-        if (
-            settings.ingestion_max_body_bytes
-            and len(body) > settings.ingestion_max_body_bytes
-        ):
+        body = await maybe_gunzip_body_async(body, request.headers.get("content-encoding"))
+        if settings.ingestion_max_body_bytes and len(body) > settings.ingestion_max_body_bytes:
             raise HTTPException(status_code=413, detail="Body too large")
         payload = ChunksIngestRequest.model_validate_json(body)
     except HTTPException:
@@ -504,11 +505,10 @@ async def ingest_chunks(
 
     from eden.observability.errors import IngestionUnavailable
     from eden.observability.telemetry_collector import get_telemetry_collector
+
     collector = await get_telemetry_collector()
     try:
-        result = await collector.record_stream_chunks(
-            org_id, payload.chunks, settings=settings
-        )
+        result = await collector.record_stream_chunks(org_id, payload.chunks, settings=settings)
     except IngestionUnavailable as exc:
         # DL-3: surface Postgres-unavailable as 503 + Retry-After so
         # the SDK buffers and retries.
@@ -522,6 +522,7 @@ async def ingest_chunks(
         # traceback server-side and return a generic 503 with no
         # leak of the raw error text. The SDK retries either way.
         from eden.api.utils.safe_error import safe_detail
+
         raise HTTPException(
             status_code=503,
             detail=safe_detail(
@@ -531,4 +532,3 @@ async def ingest_chunks(
             headers={"Retry-After": "5"},
         ) from None
     return ChunksIngestResponse(**result)
-
