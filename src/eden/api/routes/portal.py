@@ -797,6 +797,26 @@ COALESCE(
 )
 """
 
+# Prefer the agent.run / framework root label over the first LLM model id
+# so the Traces list reads as a run name, not "MiniMax-M3" / "gpt-4o".
+_PREFERRED_TRACE_NAME_SQL = """
+COALESCE(
+  (ARRAY_AGG({alias}name ORDER BY {alias}timestamp ASC)
+    FILTER (
+      WHERE {alias}name IS NOT NULL
+        AND (
+          {alias}event_type IN ('agent.run', 'framework.run', 'trace')
+          OR {alias}source_format = 'framework'
+        )
+    ))[1],
+  (ARRAY_AGG({alias}name ORDER BY {alias}timestamp ASC)
+    FILTER (WHERE {alias}name IS NOT NULL))[1]
+)
+"""
+
+_PREFERRED_TRACE_NAME_SQL_ALIASED = _PREFERRED_TRACE_NAME_SQL.format(alias="e.")
+_PREFERRED_TRACE_NAME_SQL_UNALIASED = _PREFERRED_TRACE_NAME_SQL.format(alias="")
+
 # Template form kept for unit tests that assert ``::numeric`` + format(alias=).
 # Runtime SQL uses :func:`eden.storage.sql_safe.safe_token_sum_sql`.
 _SAFE_TOKEN_SUM_SQL = (
@@ -1175,8 +1195,7 @@ async def list_portal_traces(
             )
             SELECT e.trace_id,
                    {_PREFERRED_AGENT_ID_SQL} AS agent_id,
-                   (ARRAY_AGG(e.name ORDER BY e.timestamp ASC)
-                      FILTER (WHERE e.name IS NOT NULL))[1] AS name,
+                   {_PREFERRED_TRACE_NAME_SQL_ALIASED} AS name,
                    MIN(e.timestamp) AS started_at,
                    (ARRAY_AGG(e.outcome ORDER BY e.timestamp DESC)
                       FILTER (WHERE e.outcome IS NOT NULL))[1] AS outcome,
@@ -1286,8 +1305,7 @@ async def get_portal_trace(
             f"""
             SELECT trace_id,
                    {_PREFERRED_AGENT_ID_SQL} AS agent_id,
-                   (ARRAY_AGG(name ORDER BY timestamp ASC)
-                      FILTER (WHERE name IS NOT NULL))[1] AS name,
+                   {_PREFERRED_TRACE_NAME_SQL_UNALIASED} AS name,
                    MIN(timestamp) AS started_at,
                    (ARRAY_AGG(outcome ORDER BY timestamp DESC)
                       FILTER (WHERE outcome IS NOT NULL))[1] AS outcome,

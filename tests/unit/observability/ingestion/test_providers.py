@@ -83,6 +83,36 @@ async def test_openai_decode_list_input():
     assert len(events) == 2
 
 
+@pytest.mark.asyncio
+async def test_openai_decode_preserves_span_correlation_and_error():
+    body = json.dumps(
+        {
+            "id": "chatcmpl-err",
+            "model": "gpt-4o",
+            "trace_id": "trace_agent_1",
+            "span_id": "span_llm_1",
+            "parent_span_id": "span_agent_1",
+            "duration_ms": 42.5,
+            "error": {"message": "rate limited"},
+            "error_type": "RateLimitError",
+            "status": "error",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 0, "total_tokens": 1},
+        }
+    ).encode()
+    events = await OpenAIDecoder().decode(
+        body, Attribution(tenant_id="org_abc", source_format="openai")
+    )
+    assert len(events) == 1
+    e = events[0]
+    assert e.trace_id == "trace_agent_1"
+    assert e.span_id == "span_llm_1"
+    assert e.parent_span_id == "span_agent_1"
+    assert e.duration_ms == 42.5
+    assert e.outcome == "failure"
+    assert "rate limited" in (e.attributes.get("error") or "")
+    assert e.attributes.get("error_type") == "RateLimitError"
+
+
 # ── Anthropic ──────────────────────────────────────────────────────
 
 
@@ -149,12 +179,16 @@ async def test_anthropic_decode_max_tokens_outcome():
 @pytest.mark.asyncio
 async def test_anthropic_decode_caching_tokens():
     events = await AnthropicDecoder().decode(
-        json.dumps(_anthropic_response(usage={
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_creation_input_tokens": 200,
-            "cache_read_input_tokens": 300,
-        })).encode(),
+        json.dumps(
+            _anthropic_response(
+                usage={
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_creation_input_tokens": 200,
+                    "cache_read_input_tokens": 300,
+                }
+            )
+        ).encode(),
         Attribution(tenant_id="org_abc", source_format="anthropic"),
     )
     assert events[0].metrics["cache_creation_tokens"] == 200.0
@@ -225,12 +259,9 @@ def _gemini_response(**overrides) -> dict:
         "responseId": "resp_abc",
         "candidates": [
             {
-                "content": {
-                    "role": "model",
-                    "parts": [{"text": "Hello there"}]
-                },
+                "content": {"role": "model", "parts": [{"text": "Hello there"}]},
                 "finishReason": "STOP",
-                "index": 0
+                "index": 0,
             }
         ],
         "usageMetadata": {
@@ -249,10 +280,7 @@ def test_gemini_detect_positive():
 
 
 def test_gemini_detect_with_contents():
-    body = json.dumps({
-        "model": "gemini-pro",
-        "contents": [{"parts": [{"text": "Hi"}]}]
-    }).encode()
+    body = json.dumps({"model": "gemini-pro", "contents": [{"parts": [{"text": "Hi"}]}]}).encode()
     assert GeminiDecoder().detect(body, None) is True
 
 
@@ -282,9 +310,11 @@ async def test_gemini_decode_response():
 @pytest.mark.asyncio
 async def test_gemini_decode_safety_block_outcome():
     events = await GeminiDecoder().decode(
-        json.dumps(_gemini_response(candidates=[
-            {"content": {"parts": []}, "finishReason": "SAFETY", "index": 0}
-        ])).encode(),
+        json.dumps(
+            _gemini_response(
+                candidates=[{"content": {"parts": []}, "finishReason": "SAFETY", "index": 0}]
+            )
+        ).encode(),
         Attribution(tenant_id="org_abc", source_format="gemini"),
     )
     assert events[0].outcome == "failure"
@@ -293,9 +323,11 @@ async def test_gemini_decode_safety_block_outcome():
 @pytest.mark.asyncio
 async def test_gemini_decode_max_tokens_outcome():
     events = await GeminiDecoder().decode(
-        json.dumps(_gemini_response(candidates=[
-            {"content": {"parts": []}, "finishReason": "MAX_TOKENS", "index": 0}
-        ])).encode(),
+        json.dumps(
+            _gemini_response(
+                candidates=[{"content": {"parts": []}, "finishReason": "MAX_TOKENS", "index": 0}]
+            )
+        ).encode(),
         Attribution(tenant_id="org_abc", source_format="gemini"),
     )
     assert events[0].outcome == "partial"

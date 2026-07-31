@@ -264,6 +264,15 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     if (sf := item.get("system_fingerprint")):
         attributes["openai.system_fingerprint"] = str(sf)
 
+    # Fold SDK-stamped attributes (e.g. eden.error) without clobbering
+    # provider fields already set above.
+    sdk_attrs = item.get("attributes")
+    if isinstance(sdk_attrs, dict):
+        for k, v in sdk_attrs.items():
+            if v is None or k in attributes:
+                continue
+            attributes[str(k)] = str(v)
+
     tags = ["openai"]
     if model:
         tags.append(f"model:{model}")
@@ -304,9 +313,51 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         or (str(agent_id).strip() if agent_id else None)
         or (f"{model}" if model else None)
     )
+    # Outcome: prefer explicit error markers from the SDK over the
+    # historical "null content + stop" heuristic (which false-positive'd
+    # tool-only turns and missed real failures without choices).
+    has_error = bool(
+        item.get("error")
+        or item.get("error_message")
+        or str(item.get("status") or "").lower() in {"error", "failed", "failure"}
+    )
+    if has_error:
+        outcome: str | None = "failure"
+    elif choices:
+        first = choices[0] if choices else None
+        if (
+            first
+            and str(first.get("finish_reason") or "") == "stop"
+            and isinstance((msg := first.get("message")), dict)
+            and msg.get("content") is None
+            and not (msg.get("tool_calls") or msg.get("function_call"))
+        ):
+            outcome = "failure"
+        else:
+            outcome = "success"
+    else:
+        outcome = None
+
+    err_msg = item.get("error_message")
+    if err_msg is None and isinstance(item.get("error"), dict):
+        err_msg = item["error"].get("message") or item["error"].get("msg")
+    elif err_msg is None and isinstance(item.get("error"), str):
+        err_msg = item.get("error")
+    err_type = item.get("error_type")
+    if err_msg:
+        attributes["error"] = str(err_msg)
+        attributes["eden.error"] = str(err_msg)
+        attributes["error_message"] = str(err_msg)
+    if err_type:
+        attributes["error_type"] = str(err_type)
+        attributes["error.type"] = str(err_type)
+
     return {
         "event_id": event_id,
         "trace_id": str(sdk_trace_id or response_id or ""),
+        "span_id": item.get("span_id") or item.get("spanId"),
+        "parent_span_id": item.get("parent_span_id") or item.get("parentSpanId"),
+        "duration_ms": item.get("duration_ms") or item.get("durationMs"),
         "agent_id": agent_id,
         "name": run_name,
         "model": model or None,
@@ -325,15 +376,7 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         "metrics": metrics,
         "attributes": attributes,
         "tags": tags,
-        "outcome": (
-            "failure"
-            if (first := (choices[0] if choices else None))
-            and str(first.get("finish_reason") or "") == "stop"
-            and (msg := first.get("message"))
-            and isinstance(msg, dict)
-            and msg.get("content") is None
-            else "success"
-        ) if choices else None,
+        "outcome": outcome,
         # Phase 7.2 — full capture fields.
         "request_body": request_body,
         "response_body": response_body,
@@ -348,6 +391,8 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         "prompt_cache_savings_usd": prompt_cache_savings_usd,
         "model_version": item.get("service_tier") or None,  # OpenAI surfaces variant here
         "service_tier": item.get("service_tier"),
+        "error_message": str(err_msg) if err_msg else None,
+        "error_type": str(err_type) if err_type else None,
     }
 
 
@@ -547,19 +592,43 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     if stop_reason:
         attributes["anthropic.stop_reason"] = str(stop_reason)
 
+    sdk_attrs = item.get("attributes")
+    if isinstance(sdk_attrs, dict):
+        for k, v in sdk_attrs.items():
+            if v is None or k in attributes:
+                continue
+            attributes[str(k)] = str(v)
+
     tags = ["anthropic"]
     if model:
         tags.append(f"model:{model}")
 
+    # Explicit error markers win over stop_reason success heuristics.
     outcome = None
-    if stop_reason == "end_turn":
+    if item.get("error") or item.get("error_message") or str(item.get("status") or "").lower() in {
+        "error",
+        "failed",
+        "failure",
+    }:
+        outcome = "failure"
+    elif stop_reason == "end_turn":
         outcome = "success"
     elif stop_reason in ("max_tokens", "model_context_window_exceeded"):
         outcome = "partial"
     elif stop_reason in ("stop_sequence", "tool_use"):
         outcome = "success"
-    elif item.get("error"):
-        outcome = "failure"
+
+    err_msg = item.get("error_message")
+    if err_msg is None and isinstance(item.get("error"), dict):
+        err_msg = item["error"].get("message") or item["error"].get("msg")
+    elif err_msg is None and isinstance(item.get("error"), str):
+        err_msg = item.get("error")
+    if err_msg:
+        attributes["error"] = str(err_msg)
+        attributes["eden.error"] = str(err_msg)
+    if item.get("error_type"):
+        attributes["error_type"] = str(item["error_type"])
+        attributes["error.type"] = str(item["error_type"])
 
     # Build the full images list (multimodal: any image blocks become
     # entries in the images JSONB column; the media store URI is set
@@ -578,6 +647,9 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "event_id": response_id or f"anthropic_{model}",
         "trace_id": str(sdk_trace_id or response_id or ""),
+        "span_id": item.get("span_id") or item.get("spanId"),
+        "parent_span_id": item.get("parent_span_id") or item.get("parentSpanId"),
+        "duration_ms": item.get("duration_ms") or item.get("durationMs"),
         "agent_id": item.get("agent_id"),
         "name": model or None,
         "model": model or None,
