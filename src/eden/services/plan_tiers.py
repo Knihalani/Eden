@@ -12,9 +12,9 @@ plans are exposed:
 The primary free-tier cap is **credits** (not raw USD in the UI).
 
 - ``CREDITS_PER_USD = 100`` → 1 credit ≈ $0.01 Eden COGS
-- Free hard cap = **10_000 credits ≈ $100 / month** so users can
-  meaningfully test without spend spiraling before monetization
-- Soft cap = **8_000 credits ≈ $80** (warn; do not block)
+- Free hard cap = **400 credits ≈ $4 / month** — enough to try the
+  product, not enough for COGS to spiral before monetization
+- Soft cap = **320 credits ≈ $3.20** (warn; do not block)
 
 USD fields remain on the tier for FinOps / COGS accounting and stay
 in sync with credits (``cost_*_usd = credits_* / CREDITS_PER_USD``).
@@ -32,8 +32,8 @@ from dataclasses import dataclass, field
 CREDITS_PER_USD: int = 100
 
 # Free-beta monthly grant — enough to try the product, not enough to burn.
-FREE_TIER_CREDITS_SOFT: int = 8_000   # ≈ $80
-FREE_TIER_CREDITS_HARD: int = 10_000  # ≈ $100
+FREE_TIER_CREDITS_SOFT: int = 320   # ≈ $3.20
+FREE_TIER_CREDITS_HARD: int = 400   # ≈ $4 MAX
 
 
 def usd_to_credits(usd: float) -> float:
@@ -63,7 +63,7 @@ class PlanTier:
     cost_hard_limit_usd: float
     # Secondary limits — tracked for transparency; seats/refs still gate
     # invite/create flows. Tokens/storage/sandbox are informational under
-    # the credit cap (raised high enough not to trip before ~$100).
+    # the credit cap (raised high enough not to trip before ~$4).
     seats_limit: int
     references_limit: int
     jobs_soft_limit: int
@@ -103,7 +103,7 @@ PLAN_TIERS: dict[str, PlanTier] = {
         references_limit=25,
         jobs_soft_limit=100,
         jobs_hard_limit=250,
-        # Informational — sized so they don't trip before the $100 credit cap
+        # Informational — sized so they don't trip before the $4 credit cap
         # at typical ~$2–5 / MTok blended rates.
         tokens_soft_limit=20_000_000,
         tokens_hard_limit=50_000_000,

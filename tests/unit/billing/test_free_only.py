@@ -2,7 +2,7 @@
 
 Covers: every org defaults to ``org_free``; Stripe-backed endpoints
 return 503; ``/billing/plans`` surfaces org_free limits; free-tier
-primary meter is **credits** (10_000 ≈ $100).
+primary meter is **credits** (400 ≈ $4 MAX).
 """
 
 from __future__ import annotations
@@ -46,21 +46,22 @@ class TestFreeTiers:
 
 
 class TestCreditsModel:
-    """100 credits = $1; free beta hard-caps at ≈ $100."""
+    """100 credits = $1; free beta hard-caps at ≈ $4 MAX."""
 
     def test_credits_per_usd(self):
         assert plan_tiers.CREDITS_PER_USD == 100
 
     def test_usd_credits_round_trip(self):
         assert plan_tiers.usd_to_credits(1.0) == 100.0
-        assert plan_tiers.credits_to_usd(10_000) == 100.0
+        assert plan_tiers.credits_to_usd(400) == 4.0
 
-    def test_free_hard_cap_is_about_100_dollars(self):
-        assert plan_tiers.FREE_TIER_CREDITS_HARD == 10_000
+    def test_free_hard_cap_is_about_4_dollars(self):
+        assert plan_tiers.FREE_TIER_CREDITS_HARD == 400
+        assert plan_tiers.FREE_TIER_CREDITS_SOFT == 320
         for name in ("individual_free", "org_free"):
             tier = plan_tiers.get_plan_tier(name)
-            assert tier.credits_hard_limit == 10_000
-            assert tier.cost_hard_limit_usd == pytest.approx(100.0)
+            assert tier.credits_hard_limit == 400
+            assert tier.cost_hard_limit_usd == pytest.approx(4.0)
             assert 0 < tier.credits_soft_limit < tier.credits_hard_limit
             assert tier.cost_soft_limit_usd == pytest.approx(
                 plan_tiers.credits_to_usd(tier.credits_soft_limit)
@@ -83,7 +84,7 @@ class TestFreeTiersLimits:
 
     @pytest.mark.parametrize("plan_name", ["individual_free", "org_free"])
     def test_token_hard_limit_above_credit_cap(self, plan_name):
-        """Token caps must not trip before the ~$100 credit cap."""
+        """Token caps must not trip before the ~$4 credit cap."""
         assert plan_tiers.get_plan_tier(plan_name).tokens_hard_limit >= 20_000_000
 
     @pytest.mark.parametrize("plan_name", ["individual_free", "org_free"])
@@ -108,16 +109,16 @@ class TestQuotaEnforcementCreditsCap:
         mw = QuotaEnforcementMiddleware(app=None)
         budget = {
             "credits": {
-                "used": 10_500,
-                "soft_limit": 8_000,
-                "hard_limit": 10_000,
+                "used": 420,
+                "soft_limit": 320,
+                "hard_limit": 400,
                 "status": "hard_exceeded",
                 "percentage": 105.0,
             },
             "cost_usd": {
-                "used": 105.0,
-                "soft_limit": 80.0,
-                "hard_limit": 100.0,
+                "used": 4.2,
+                "soft_limit": 3.2,
+                "hard_limit": 4.0,
                 "status": "hard_exceeded",
                 "percentage": 105.0,
             },
@@ -133,7 +134,7 @@ class TestQuotaEnforcementCreditsCap:
         blocked, detail = asyncio.run(mw._check_hard_limits("org-1", ["credits"]))
         assert blocked is True
         assert "credit cap" in detail.lower()
-        assert "10500" in detail.replace(",", "") or "10,500" in detail or "10500" in detail
+        assert "420" in detail.replace(",", "")
 
     def test_credits_within_cap_does_not_block(self):
         import asyncio
@@ -143,18 +144,18 @@ class TestQuotaEnforcementCreditsCap:
         mw = QuotaEnforcementMiddleware(app=None)
         budget = {
             "credits": {
-                "used": 1_200,
-                "soft_limit": 8_000,
-                "hard_limit": 10_000,
+                "used": 50,
+                "soft_limit": 320,
+                "hard_limit": 400,
                 "status": "ok",
-                "percentage": 12.0,
+                "percentage": 12.5,
             },
             "cost_usd": {
-                "used": 12.0,
-                "soft_limit": 80.0,
-                "hard_limit": 100.0,
+                "used": 0.5,
+                "soft_limit": 3.2,
+                "hard_limit": 4.0,
                 "status": "ok",
-                "percentage": 12.0,
+                "percentage": 12.5,
             },
             "seats": {"used": 0, "soft_limit": 3, "hard_limit": 3, "status": "ok", "percentage": 0.0},
             "references": {"used": 0, "soft_limit": 50, "hard_limit": 50, "status": "ok", "percentage": 0.0},
@@ -182,18 +183,18 @@ class TestQuotaEnforcementCreditsCap:
             "seats": {"used": 1, "soft_limit": 3, "hard_limit": 3, "status": "ok", "percentage": 33.3},
             "references": {"used": 0, "soft_limit": 50, "hard_limit": 50, "status": "ok", "percentage": 0.0},
             "credits": {
-                "used": 450.0,
-                "soft_limit": 8_000,
-                "hard_limit": 10_000,
+                "used": 45.0,
+                "soft_limit": 320,
+                "hard_limit": 400,
                 "status": "ok",
-                "percentage": 4.5,
+                "percentage": 11.25,
             },
             "cost_usd": {
-                "used": 4.5,
-                "soft_limit": 80.0,
-                "hard_limit": 100.0,
+                "used": 0.45,
+                "soft_limit": 3.2,
+                "hard_limit": 4.0,
                 "status": "ok",
-                "percentage": 4.5,
+                "percentage": 11.25,
             },
             "plan_name": "org_free",
         }
@@ -204,10 +205,10 @@ class TestQuotaEnforcementCreditsCap:
 
         mw._usage_service = _FakeService()
         headers = asyncio.run(mw._build_quota_headers("org-1"))
-        assert headers["X-Quota-Credits-Used"] == "450.0"
-        assert headers["X-Quota-Credits-Hard"] == "10000"
-        assert headers["X-Quota-Cost-Used"] == "4.5"
-        assert headers["X-Quota-Cost-Hard"] == "100.0"
+        assert headers["X-Quota-Credits-Used"] == "45.0"
+        assert headers["X-Quota-Credits-Hard"] == "400"
+        assert headers["X-Quota-Cost-Used"] == "0.45"
+        assert headers["X-Quota-Cost-Hard"] == "4.0"
         assert headers["X-Quota-Plan"] == "org_free"
 
 

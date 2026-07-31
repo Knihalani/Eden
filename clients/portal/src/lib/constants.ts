@@ -20,11 +20,11 @@ export const GATEWAY_URL = "https://api.edenobservability.com/gateway/v1";
 
 /** Free-tier credit caps — 100 credits ≈ $1 Eden COGS (see plan_tiers.py). */
 export const CREDITS_PER_USD = 100;
-export const FREE_TIER_CREDITS_SOFT = 8_000; // ≈ $80
-export const FREE_TIER_CREDITS_HARD = 10_000; // ≈ $100
+export const FREE_TIER_CREDITS_SOFT = 320; // ≈ $3.20
+export const FREE_TIER_CREDITS_HARD = 400; // ≈ $4 MAX
 export const FREE_TIER_CAP_USD = FREE_TIER_CREDITS_HARD / CREDITS_PER_USD;
 
-/** @deprecated Use FREE_TIER_CAP_USD — personal and org share the same ~$100 credit pool. */
+/** @deprecated Use FREE_TIER_CAP_USD — personal and org share the same ~$4 credit pool. */
 export const FREE_TIER_PERSONAL_CAP_USD = FREE_TIER_CAP_USD;
 /** @deprecated Use FREE_TIER_CAP_USD */
 export const FREE_TIER_ORG_CAP_USD = FREE_TIER_CAP_USD;

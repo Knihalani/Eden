@@ -63,8 +63,8 @@ DEFAULT_ALERT_THRESHOLDS: list[int] = [50, 80, 100]
 
 FREE_TIER_DEFAULTS: dict[str, Any] = {
     "window": "monthly",
-    "cost_soft_limit_usd": 80.0,    # ≈ 8_000 credits
-    "cost_hard_limit_usd": 100.0,   # ≈ 10_000 credits (~$100 free beta)
+    "cost_soft_limit_usd": 3.2,    # ≈ 320 credits
+    "cost_hard_limit_usd": 4.0,    # ≈ 400 credits (~$4 free beta MAX)
     "enforcement_enabled": True,    # hard-stop aligns with quota middleware
     "action_on_exceed": "throttle",
     "threshold_alert_pct": 80,
