@@ -433,6 +433,19 @@ const nextConfig: NextConfig = {
       // Teardown Mode A: remaining former product trees → stub dashboard
       // Observe + Evaluate + Improve + Workspace live; Prompts lives above.
       // First-run: soft-landed routes stay unavailable; onboarding opens home tour.
+      // First-run tour entry. GitHub App install callback historically
+      // used /onboarding/connect?installation_id=… — that must land on
+      // Agents connect (query preserved), not the product tour.
+      {
+        source: "/onboarding/connect",
+        destination: "/agents/connect",
+        permanent: false,
+      },
+      {
+        source: "/onboarding/connect/:path*",
+        destination: "/agents/connect",
+        permanent: false,
+      },
       {
         source: "/onboarding",
         destination: "/home?onboarding=1",
