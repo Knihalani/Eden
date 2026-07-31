@@ -409,6 +409,23 @@ async def _pg() -> Any | None:
         return None
 
 
+def _pg_unavailable(feature: str) -> HTTPException:
+    """503 when list handlers must not soft-empty on a dead pool."""
+    return HTTPException(
+        status_code=503,
+        detail=f"{feature} temporarily unavailable; please retry",
+        headers={"Retry-After": "5"},
+    )
+
+
+async def _require_pg(feature: str) -> Any:
+    """Return a live Postgres client or raise 503 (traces/keys contract)."""
+    client = await _pg()
+    if client is None:
+        raise _pg_unavailable(feature)
+    return client
+
+
 # ── Phase 2a — trace transcript steps ──────────────────────────────
 # Populates ``TraceListItem.steps`` for a single selected trace by
 # reusing ``TelemetryCollector.get_trace_tree`` — the exact helper
@@ -1479,6 +1496,7 @@ async def list_portal_sessions(
     _user: dict = Depends(get_current_user),
 ) -> list[SessionRollup]:
     """Session rollups mapped to portal ``SessionRollup`` (empty OK)."""
+    await _require_pg("Sessions")
     try:
         from eden.services.agent_sessions import AgentSessionService
 
@@ -1565,6 +1583,7 @@ async def list_portal_issues(
     _user: dict = Depends(get_current_user),
 ) -> list[IssueCard]:
     """Issue cards with status mapped to open|acknowledged|resolved."""
+    await _require_pg("Issues")
     try:
         from eden.issues.repo import IssuesRepo
 
@@ -2444,6 +2463,7 @@ async def list_portal_datasets(
     _user: dict = Depends(get_current_user),
 ) -> list[DatasetCard]:
     """Eval dataset cards from DatasetHub when available."""
+    await _require_pg("Datasets")
     try:
         from eden.datasets.hub import DatasetHub
 
@@ -2481,6 +2501,7 @@ async def list_portal_playgrounds(
     _user: dict = Depends(get_current_user),
 ) -> list[PlaygroundCard]:
     """Eval playground cards when available."""
+    await _require_pg("Playgrounds")
     try:
         from eden.playground.service import PlaygroundService
 
@@ -2564,6 +2585,7 @@ async def list_portal_improve_plans(
     _user: dict = Depends(get_current_user),
 ) -> list[ImprovePlanCard]:
     """Improve plans with statuses mapped to portal ImproveStatus."""
+    await _require_pg("Improve plans")
     try:
         from eden.improvement import plans_repo
 
@@ -2612,11 +2634,14 @@ async def list_portal_ab_experiments(
 ) -> list[AbExperimentCard]:
     """A/B / intelligence experiments when available."""
     tests: list[Any] = []
+    registry_ok = False
+    tracker_ok = False
     try:
         from eden.api.routes import llmops as llmops_routes
 
         registry = getattr(llmops_routes, "_prompt_registry", None)
         if registry is not None:
+            registry_ok = True
             ab = getattr(registry, "_ab_tests", None) or {}
             tests = list(ab.values())
     except Exception as exc:  # noqa: BLE001
@@ -2628,11 +2653,19 @@ async def list_portal_ab_experiments(
 
             tracker = getattr(llmops_routes, "_experiment_tracker", None)
             if tracker is not None and hasattr(tracker, "list_experiments"):
+                tracker_ok = True
                 for exp in tracker.list_experiments() or []:
                     data = exp.to_dict() if hasattr(exp, "to_dict") else dict(exp)
                     tests.append(data)
         except Exception as exc:  # noqa: BLE001
             logger.warning("portal ab-tests: tracker unavailable: %s", redact_all(str(exc)))
+
+    # Both sources missing: if Postgres is also down, this is an outage
+    # (not "no experiments"). Healthy PG + unloaded backends → empty.
+    if not tests and not registry_ok and not tracker_ok:
+        if await _pg() is None:
+            raise _pg_unavailable("Compare experiments")
+        return []
 
     out: list[AbExperimentCard] = []
     for t in tests:
@@ -2693,7 +2726,7 @@ async def list_portal_guardrail_policies(
     _user: dict = Depends(get_current_user),
 ) -> list[GuardrailPolicyCard]:
     """Guardrail policy cards (all statuses when queryable)."""
-    client = await _pg()
+    client = await _require_pg("Guardrail policies")
 
     async def _fetch_policy_rows() -> list[dict[str, Any]] | None:
         """Returns policy rows, or ``None`` if no source was available."""
@@ -2800,6 +2833,7 @@ async def list_portal_debugger_sessions(
     _user: dict = Depends(get_current_user),
 ) -> list[DebuggerSessionCard]:
     """Debugger session cards when DebugSessionService is available."""
+    await _require_pg("Debugger sessions")
     try:
         from eden.debugger.session import DebugSessionService
 

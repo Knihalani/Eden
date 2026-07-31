@@ -75,6 +75,7 @@ _chat_rate_limiter = SlidingWindowRateLimiter(max_requests=30, window_seconds=60
 # Schemas
 # ============================================================================
 
+
 class PageContext(BaseModel):
     """Optional UI context so answers cite the view the user is on (W21 rich)."""
 
@@ -136,13 +137,11 @@ class PageContext(BaseModel):
 
 class ChatRequest(BaseModel):
     """Body for POST /chat."""
+
     message: str = Field(..., min_length=1, max_length=8000)
     session_id: str | None = Field(
         None,
-        description=(
-            "Existing session to append to. Omit (or null) to start a "
-            "fresh session."
-        ),
+        description=("Existing session to append to. Omit (or null) to start a " "fresh session."),
     )
     page_context: PageContext | None = Field(
         None,
@@ -163,6 +162,7 @@ class ChatRequest(BaseModel):
 # ============================================================================
 # Prompt + tool definitions
 # ============================================================================
+
 
 def _build_system_prompt(tools: list) -> str:
     """Compress the system prompt + tool catalogue into one string.
@@ -321,19 +321,13 @@ def _format_history_for_prompt(
         role = m.get("role", "user")
         content = m.get("content", "")
         if isinstance(content, list):
-            content = " ".join(
-                b.get("text", "") for b in content if b.get("type") == "text"
-            )
+            content = " ".join(b.get("text", "") for b in content if b.get("type") == "text")
         # Truncate each message to keep the prompt tight. 800
         # chars per turn is plenty for the model to know what
         # was said.
         if len(content) > 800:
             content = content[:797] + "..."
-        prefix = (
-            "USER" if role == "user"
-            else "ASSISTANT" if role == "assistant"
-            else "TOOL"
-        )
+        prefix = "USER" if role == "user" else "ASSISTANT" if role == "assistant" else "TOOL"
         lines.append(f"{prefix}: {content}")
     return "\n".join(lines)
 
@@ -341,6 +335,7 @@ def _format_history_for_prompt(
 # ============================================================================
 # Persistence helpers
 # ============================================================================
+
 
 async def _resolve_user_role(org_id: str, user_id: str) -> str:
     """Look up the caller's role inside ``org_id``.
@@ -358,7 +353,8 @@ async def _resolve_user_role(org_id: str, user_id: str) -> str:
             FROM org_members m
             WHERE m.org_id = $1 AND m.user_id = $2
             """,
-            org_id, user_id,
+            org_id,
+            user_id,
         )
         if row:
             return str(row["role"])
@@ -377,12 +373,17 @@ async def _load_session(org_id: str, user_id: str, session_id: str) -> dict[str,
             FROM ai_conversations
             WHERE id = $1 AND org_id = $2 AND user_id = $3
             """,
-            session_id, org_id, user_id,
+            session_id,
+            org_id,
+            user_id,
         )
     except Exception as exc:
         logger.warning(
             "ai_insights: _load_session failed for user=%s org=%s session=%s: %s",
-            user_id, org_id, session_id, redact_all(str(exc)),
+            user_id,
+            org_id,
+            session_id,
+            redact_all(str(exc)),
         )
         return None
 
@@ -405,7 +406,10 @@ async def _create_session(org_id: str, user_id: str, title: str) -> str:
         INSERT INTO ai_conversations (id, org_id, user_id, title, page_context)
         VALUES ($1::uuid, $2, $3, $4, '{}'::jsonb)
         """,
-        session_id, org_id, user_id, title,
+        session_id,
+        org_id,
+        user_id,
+        title,
     )
     return session_id
 
@@ -423,12 +427,16 @@ async def _append_message(session_id: str, role: str, content: list[dict[str, An
             INSERT INTO ai_messages (conversation_id, role, content)
             VALUES ($1::uuid, $2, $3)
             """,
-            session_id, role, text,
+            session_id,
+            role,
+            text,
         )
     except Exception as exc:
         logger.warning(
             "ai_insights: _append_message failed for session=%s role=%s: %s",
-            session_id, role, redact_all(str(exc)),
+            session_id,
+            role,
+            redact_all(str(exc)),
         )
 
 
@@ -443,7 +451,8 @@ async def _touch_session(session_id: str, title: str | None = None) -> None:
                 SET updated_at = NOW(), title = $2
                 WHERE id = $1
                 """,
-                session_id, title,
+                session_id,
+                title,
             )
         else:
             await client.execute(
@@ -453,7 +462,8 @@ async def _touch_session(session_id: str, title: str | None = None) -> None:
     except Exception as exc:
         logger.warning(
             "ai_insights: _touch_session failed for session=%s: %s",
-            session_id, redact_all(str(exc)),
+            session_id,
+            redact_all(str(exc)),
         )
 
 
@@ -475,6 +485,7 @@ def _derive_title(message: str) -> str:
 # ============================================================================
 # OpenRouter + tool loop (model_router-driven)
 # ============================================================================
+
 
 def _is_enabled() -> bool:
     settings = get_settings()
@@ -540,6 +551,7 @@ def _summarize_tool_result(name: str, result: dict[str, Any]) -> str:
 # ============================================================================
 # Endpoints
 # ============================================================================
+
 
 @router.post("/chat")
 async def chat(
@@ -710,32 +722,77 @@ async def list_sessions(
 ):
     """List the current user's chat sessions (newest first, archived last).
 
-    Defensive: a DB blip or missing table must not 500 the chat
-    sidebar — the user would lose their conversation list for
-    reasons the route can't control. Return an empty list so the
-    UI renders "no sessions yet" instead of a red error. July
-    2026 site-wide fix.
+    Missing ``ai_conversations`` soft-empties (Alembic lag). A dead
+    Postgres or unresolved Eden user 503s — same contract as portal
+    Assistant threads (never paint outage as "no chats").
     """
     limit = max(1, min(int(limit), 200))
-    user_id = user["user_id"]
+    from eden.api.deps import eden_user_id_from_auth
+
+    try:
+        user_id = await eden_user_id_from_auth(user)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "ai_insights: list_sessions user resolve failed: %s",
+            redact_all(str(exc)),
+        )
+        user_id = None
+    if not user_id:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat sessions temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
+
     try:
         client = await get_postgres_client()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "ai_insights: list_sessions postgres unavailable: %s",
+            redact_all(str(exc)),
+        )
+        client = None
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Chat sessions temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
+
+    try:
         rows = await client.fetch(
             """
             SELECT id AS session_id, title, created_at, updated_at, archived_at
             FROM ai_conversations
-            WHERE org_id = $1 AND user_id = $2
+            WHERE org_id::text = $1 AND user_id::text = $2
             ORDER BY (archived_at IS NULL) DESC, updated_at DESC
             LIMIT $3
             """,
-            org_id, user_id, limit,
+            org_id,
+            user_id,
+            limit,
         )
     except Exception as exc:
+        msg = str(exc).lower()
+        if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
+            logger.warning(
+                "ai_insights: list_sessions store missing for user=%s org=%s: %s",
+                user_id,
+                org_id,
+                redact_all(str(exc)),
+            )
+            return {"sessions": []}
         logger.warning(
             "ai_insights: list_sessions failed for user=%s org=%s: %s",
-            user_id, org_id, redact_all(str(exc)),
+            user_id,
+            org_id,
+            redact_all(str(exc)),
         )
-        return {"sessions": []}
+        raise HTTPException(
+            status_code=503,
+            detail="Chat sessions temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
     return {
         "sessions": [
             {
@@ -818,7 +875,10 @@ async def archive_session(
     except Exception as exc:
         logger.warning(
             "ai_insights: archive_session failed for user=%s org=%s session=%s: %s",
-            user_id, org_id, session_id, redact_all(str(exc)),
+            user_id,
+            org_id,
+            session_id,
+            redact_all(str(exc)),
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -838,8 +898,7 @@ async def health(
         "enabled": bool(settings.ai_insights_enabled),
         "model": settings.ai_insights_model,
         "anthropic_key_configured": bool(
-            os.environ.get("ANTHROPIC_API_KEY")
-            or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
         ),
         "tool_count": len(list_tools()),
     }

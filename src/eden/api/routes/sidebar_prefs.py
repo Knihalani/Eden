@@ -14,15 +14,17 @@ Two endpoints:
 Gated by ``require_path_org_access`` (any org member can persist their
 own UI prefs; no admin permission needed).
 """
+
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_path_org_access
+from eden.api.deps import eden_user_id_from_auth, get_current_user, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
 
@@ -44,6 +46,14 @@ class SidebarPrefs(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+async def _resolve_user_id(user: dict) -> str | None:
+    try:
+        return await eden_user_id_from_auth(user)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("sidebar_prefs: user resolve failed: %s", redact_all(str(exc)))
+        return None
+
+
 @router.get("")
 async def get_sidebar_prefs(
     org_id: str = Depends(require_path_org_access),
@@ -51,16 +61,14 @@ async def get_sidebar_prefs(
 ) -> SidebarPrefs | None:
     """Return the calling user's saved prefs, or ``null`` if unset.
 
-    Defensive: the migration creates the table with ``IF NOT
-    EXISTS`` but if the live DB is one migration behind, the
-    SELECT would 500 the whole route. Return ``None`` (which the
-    client treats as "no prefs yet, use defaults") on any DB
-    failure so the user still sees a working sidebar. June 2026
-    hardening.
+    Missing table soft-returns ``None`` (defaults). Resolve Clerk
+    ``user_…`` → Eden ``users.id`` and compare via ``::text`` so
+    UUID/TEXT column drift (063 vs 117) does not 500. Alembic 127
+    ALTERs the columns to match live ``users.id`` / ``organizations.id``.
 
     LP-03: never return a bare ``{}`` — unset is JSON ``null``.
     """
-    user_id = user.get("user_id")
+    user_id = await _resolve_user_id(user)
     if not user_id:
         return None
 
@@ -76,28 +84,32 @@ async def get_sidebar_prefs(
         row = await client.fetchrow(
             """
             SELECT prefs FROM sidebar_prefs
-            WHERE user_id = $1 AND org_id = $2
+            WHERE user_id::text = $1 AND org_id::text = $2
             """,
             user_id,
             org_id,
         )
     except Exception as exc:
-        # F70 — defensive redaction. ``user_id`` and ``org_id``
-        # are internal UUIDs (not PII), but the ``exc`` could
-        # theoretically include user data in a future refactor.
-        # ``redact_all`` is a no-op on typical Python exceptions
-        # (no email/credential patterns) but defends against
-        # the long tail.
+        msg = str(exc).lower()
+        if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
+            logger.warning(
+                "sidebar_prefs: table missing for user=%s org=%s: %s",
+                user_id,
+                org_id,
+                redact_all(str(exc)),
+            )
+            return None
         logger.warning(
             "sidebar_prefs: fetchrow failed for user=%s org=%s: %s",
-            user_id, org_id, redact_all(str(exc)),
+            user_id,
+            org_id,
+            redact_all(str(exc)),
         )
         return None
     if row is None:
         return None
     raw = row["prefs"]
     if isinstance(raw, dict):
-        # Empty JSON object → treat as unset (LP-03 soft contract).
         if not raw:
             return None
         try:
@@ -115,19 +127,13 @@ async def set_sidebar_prefs(
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Upsert the calling user's sidebar prefs row."""
-    user_id = user.get("user_id")
+    user_id = await _resolve_user_id(user)
     if not user_id:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=401, detail="Invalid token payload")
 
     client = await get_postgres_client()
     if client is None:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=503, detail="Postgres unavailable")
-
-    import json
 
     payload = prefs.model_dump()
     try:
@@ -143,17 +149,14 @@ async def set_sidebar_prefs(
             json.dumps(payload),
         )
     except Exception as exc:
-        # Migration may not be applied yet on the live DB — surface
-        # as 503 (the same code as "Postgres unavailable" above) so
-        # the client treats it as transient and retries on the
-        # next save tick. June 2026 hardening.
-        # F70 — defensive redaction (same pattern as the
-        # fetchrow branch above).
         logger.warning(
             "sidebar_prefs: upsert failed for user=%s org=%s: %s",
-            user_id, org_id, redact_all(str(exc)),
+            user_id,
+            org_id,
+            redact_all(str(exc)),
         )
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=503, detail="Sidebar prefs storage unavailable") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Sidebar prefs storage unavailable",
+        ) from exc
     return {"ok": True}

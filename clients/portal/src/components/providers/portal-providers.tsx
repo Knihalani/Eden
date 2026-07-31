@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   QueryClient,
   QueryClientProvider,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/use-auth";
 import { OrgProvider } from "@/hooks/use-org";
@@ -45,6 +46,30 @@ export function makeQueryClient() {
   });
 }
 
+/** Invalidate portal keys when docs-fill (or another tab) mints a key. */
+function KeysMintedListener() {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("eden-portal");
+    } catch {
+      return;
+    }
+    bc.onmessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string } | null;
+      if (data?.type !== "keys-minted") return;
+      void queryClient.invalidateQueries({
+        queryKey: ["portal", "keys"],
+      });
+    };
+    return () => {
+      bc?.close();
+    };
+  }, [queryClient]);
+  return null;
+}
+
 /**
  * Portal data layer: QueryClient → Auth → Org.
  * Mounted once under ``(portal)/layout`` so marketing/auth trees skip it.
@@ -53,6 +78,7 @@ export function PortalProviders({ children }: { children: ReactNode }) {
   const [client] = useState(makeQueryClient);
   return (
     <QueryClientProvider client={client}>
+      <KeysMintedListener />
       <AuthProvider>
         <OrgProvider>{children}</OrgProvider>
       </AuthProvider>
