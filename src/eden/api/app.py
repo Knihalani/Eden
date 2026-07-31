@@ -1398,31 +1398,6 @@ async def public_openapi_spec() -> dict:
 # ============================================================================
 
 
-def _resolve_serving_commit() -> str:
-    """Return the git SHA actually serving traffic, or ``unknown``.
-
-    Prefer the runtime/build env ``EDEN_GIT_SHA`` (set via Northflank
-    runtime environment + Dockerfile build-arg). Fall back to a few
-    common CI injects, then a bake-file written at image build time.
-    Never invent a SHA — ``unknown`` is safer than a wrong answer.
-    """
-    import os
-    from pathlib import Path
-
-    for key in ("EDEN_GIT_SHA", "NORTHFLANK_GIT_COMMIT", "GITHUB_SHA", "COMMIT_SHA"):
-        val = (os.environ.get(key) or "").strip()
-        if val and val.lower() not in {"unknown", "latest", "null", "none"}:
-            return val
-    for candidate in (Path("/app/.eden-git-sha"), Path("/app/var/eden-git-sha")):
-        try:
-            text = candidate.read_text(encoding="utf-8").strip()
-        except OSError:
-            continue
-        if text and text.lower() not in {"unknown", "latest"}:
-            return text
-    return "unknown"
-
-
 @app.get("/live")
 async def liveness_probe():
     """Kubernetes liveness probe — process is up.
@@ -1434,10 +1409,12 @@ async def liveness_probe():
     serving, and the only way to tell from outside was to probe for a
     route that one specific commit happened to remove.
     """
+    import os
+
     return {
         "status": "alive",
         "version": settings.app_version,
-        "commit": _resolve_serving_commit(),
+        "commit": os.environ.get("EDEN_GIT_SHA", "unknown"),
     }
 
 
@@ -1456,22 +1433,11 @@ async def readiness_probe(request: Request):
 
     from eden.api.startup_checks import is_ready, run_startup_checks
 
-    from eden.api.startup_checks import check_redis
-
     checks = getattr(request.app.state, "startup_checks", None)
     if checks is None:
         checks = await run_startup_checks(settings=settings, strict=False)
         request.app.state.startup_checks = checks
         request.app.state.ready = is_ready(checks)
-    else:
-        # Soft Redis status is cached at boot. Refresh it so /ready does
-        # not keep advertising ``ok`` after the Upstash quota circuit
-        # opens (or closes). Postgres readiness is unchanged.
-        try:
-            checks = {**checks, "redis": await check_redis()}
-            request.app.state.startup_checks = checks
-        except Exception:
-            pass
 
     ready = bool(getattr(request.app.state, "ready", False)) or is_ready(checks)
 
@@ -1586,56 +1552,34 @@ async def health_check():
 
     # Redis reachability. Cheap PING, hard-bounded so a hung Redis cannot
     # stall the health probe itself.
-    #
-    # Vocabulary (aligned with /ready startup checks):
-    #   connected | not_configured | quota_exhausted | read_only:… |
-    #   timeout | error:…
-    # ``not_configured`` and ``quota_exhausted`` are intentional operating
-    # modes (local/dev, or Postgres leader-election fallback while
-    # Upstash is at its plan cap) — report them honestly without
-    # forcing ``degraded``.
     redis_status = "unknown"
     try:
         import asyncio as _asyncio
 
-        from eden.storage.redis import (
-            get_redis_client,
-            redis_quota_exhausted,
-            redis_url_configured,
-        )
+        from eden.storage.redis import get_redis_client
 
-        if redis_quota_exhausted():
-            redis_status = "quota_exhausted"
+        _client = await get_redis_client()
+        if _client is None:
+            redis_status = "not_configured"
         else:
-            _client = await get_redis_client()
-            if _client is None:
-                if redis_quota_exhausted():
-                    redis_status = "quota_exhausted"
-                elif not redis_url_configured():
-                    redis_status = "not_configured"
-                else:
-                    redis_status = "unavailable"
-            else:
-                await _asyncio.wait_for(_client.ping(), timeout=2.0)
-                # PING only proves reads. A Redis over its plan limit serves
-                # reads and silently discards writes, which looks identical
-                # to healthy from here and takes down every leader-gated
-                # loop. Prove the write path with a short-lived key.
-                _probe = "eden:health:writeprobe"
-                _ok = await _asyncio.wait_for(
-                    _client.set(_probe, "1", nx=True, ex=5), timeout=2.0
+            await _asyncio.wait_for(_client.ping(), timeout=2.0)
+            # PING only proves reads. A Redis over its plan limit serves
+            # reads and silently discards writes, which looks identical
+            # to healthy from here and takes down every leader-gated
+            # loop. Prove the write path with a short-lived key.
+            _probe = "eden:health:writeprobe"
+            _ok = await _asyncio.wait_for(_client.set(_probe, "1", nx=True, ex=5), timeout=2.0)
+            if _ok is None:
+                # NX can legitimately lose a race with a concurrent probe;
+                # only call it broken when the key is also absent.
+                _existing = await _asyncio.wait_for(_client.get(_probe), timeout=2.0)
+                redis_status = (
+                    "connected"
+                    if _existing is not None
+                    else "read_only: writes silently dropped (plan limit?)"
                 )
-                if _ok is None:
-                    # NX can legitimately lose a race with a concurrent probe;
-                    # only call it broken when the key is also absent.
-                    _existing = await _asyncio.wait_for(_client.get(_probe), timeout=2.0)
-                    redis_status = (
-                        "connected"
-                        if _existing is not None
-                        else "read_only: writes silently dropped (plan limit?)"
-                    )
-                else:
-                    redis_status = "connected"
+            else:
+                redis_status = "connected"
     except TimeoutError:
         redis_status = "timeout"
     except Exception as exc:
@@ -1647,22 +1591,8 @@ async def health_check():
         from eden.api.utils.redact import redact_all as _redact
 
         detail = _redact(str(exc))[:160]
-        msg = str(exc).lower()
-        if "max requests" in msg or "max_requests" in msg:
-            try:
-                from eden.storage.redis import note_redis_quota_exhausted
-
-                note_redis_quota_exhausted(exc)
-            except Exception:
-                pass
-            redis_status = "quota_exhausted"
-        else:
-            redis_status = f"error: {type(exc).__name__}: {detail}".rstrip(": ")
-    if overall == "healthy" and redis_status not in (
-        "connected",
-        "not_configured",
-        "quota_exhausted",
-    ):
+        redis_status = f"error: {type(exc).__name__}: {detail}".rstrip(": ")
+    if overall == "healthy" and redis_status not in ("connected", "not_configured"):
         overall = "degraded"
 
     ingest_ok = True

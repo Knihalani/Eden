@@ -113,11 +113,6 @@ def _resolve_redis_url() -> str | None:
     return None
 
 
-def redis_url_configured() -> bool:
-    """True when a Redis URL (or Upstash REST pair) is configured."""
-    return _resolve_redis_url() is not None
-
-
 async def get_redis_client() -> Redis | None:
     """Get the singleton Redis client (short socket timeout — API path).
 

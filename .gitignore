@@ -5,10 +5,6 @@
 !.env.example
 !.env*.example
 
-# GitHub App private keys (never commit)
-*.pem
-*-private-key.pem
-
 # Python
 __pycache__/
 *.py[cod]
@@ -86,6 +82,3 @@ docs/.docusaurus/
 .forge/
 .loki/
 brief.txt
-backups/
-reports/dr-drill-*.json
-reports/backup-*.json

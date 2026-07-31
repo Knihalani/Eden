@@ -118,14 +118,11 @@ ENV PYTHONPATH=/app/src:/app
 # like. The only reliable check was probing for a route that a specific
 # commit removed, which only works by luck.
 #
-# Northflank passes the commit as a build argument AND as a runtime
-# env var (scripts/deploy-northflank.sh keeps them in sync). Unset
-# degrades to "unknown", never to a wrong answer. Do NOT use
-# `northflank patch service combined` with a partial runtimeEnvironment
-# — that route replaces the entire map and will wipe every other var.
+# Northflank passes the commit as a build argument; anything setting
+# EDEN_GIT_SHA works. Unset degrades to "unknown", never to a wrong
+# answer.
 ARG EDEN_GIT_SHA=unknown
 ENV EDEN_GIT_SHA=${EDEN_GIT_SHA}
-RUN printf '%s\n' "$EDEN_GIT_SHA" > /app/.eden-git-sha && chown eden:eden /app/.eden-git-sha || true
 
 # Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
 # Compression plan). ``eden.storage.compression`` looks for the file at
