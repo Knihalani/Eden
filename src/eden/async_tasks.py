@@ -4,6 +4,10 @@ Unbounded ``loop.create_task`` on ingest / cost / warm paths can exhaust
 the event loop under load. :func:`bounded_create_task` caps in-flight
 coroutines with a process-local semaphore and rejects excess waiters
 so memory does not grow without bound under an ingest flood.
+
+Tasks are tracked with a strong reference so they are not GC'd mid-await
+(CPython's event loop only holds tasks weakly). :func:`drain_background_tasks`
+waits for them at shutdown so a pod restart does not abandon in-flight writes.
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ _DEFAULT_LIMIT = 64
 _DEFAULT_QUEUE_MULTIPLIER = 4
 _semaphores: dict[int, tuple[asyncio.AbstractEventLoop, asyncio.Semaphore]] = {}
 _waiter_counts: dict[int, int] = {}
+# Strong refs so fire-and-forget tasks are not collected mid-await.
+_pending: set[asyncio.Task[Any]] = set()
 
 
 def _resolve_limit(limit: int | None) -> int:
@@ -49,9 +55,38 @@ def _semaphore_for(limit: int) -> asyncio.Semaphore:
 
 
 def reset_bounded_task_semaphores() -> None:
-    """Clear cached semaphores (tests only)."""
+    """Clear cached semaphores and pending tracking (tests only)."""
     _semaphores.clear()
     _waiter_counts.clear()
+    _pending.clear()
+
+
+def pending_background_tasks() -> int:
+    """Number of in-flight tasks still held by the strong-ref set."""
+    return len(_pending)
+
+
+def _track(
+    task: asyncio.Task[Any],
+    *,
+    owned_coro: Coroutine[Any, Any, Any] | None = None,
+) -> asyncio.Task[Any]:
+    _pending.add(task)
+
+    def _done(t: asyncio.Task[Any]) -> None:
+        _pending.discard(t)
+        if owned_coro is None or not t.cancelled():
+            return
+        try:
+            from inspect import CORO_CREATED, getcoroutinestate
+
+            if getcoroutinestate(owned_coro) == CORO_CREATED:
+                owned_coro.close()
+        except Exception:
+            pass
+
+    task.add_done_callback(_done)
+    return task
 
 
 def bounded_create_task(
@@ -60,6 +95,7 @@ def bounded_create_task(
     name: str | None = None,
     limit: int | None = None,
     max_waiting: int | None = None,
+    context: Any | None = None,
 ) -> asyncio.Task[T | None]:
     """Schedule ``coro`` under a concurrency semaphore.
 
@@ -67,6 +103,13 @@ def bounded_create_task(
     fire-and-forget sites. Excess coroutines wait on the semaphore
     up to ``max_waiting`` (default ``limit * 4``); further submissions
     are dropped so the waiter queue cannot grow without bound.
+
+    The returned task is also retained in ``_pending`` until it finishes
+    so discarding the caller's handle cannot GC the work mid-await.
+
+    ``context`` (optional) is forwarded to ``loop.create_task`` on
+    Python ≥ 3.11 so detached work can strip a request-pinned Postgres
+    connection via ``copy_context_without_request_pg_conn``.
     """
     cap = _resolve_limit(limit)
     queue_cap = (
@@ -77,6 +120,14 @@ def bounded_create_task(
     sem = _semaphore_for(cap)
     loop = asyncio.get_running_loop()
 
+    def _spawn(c: Coroutine[Any, Any, Any], *, task_name: str | None) -> asyncio.Task[Any]:
+        if context is not None:
+            try:
+                return loop.create_task(c, name=task_name, context=context)
+            except TypeError:
+                pass
+        return loop.create_task(c, name=task_name)
+
     waiting = _waiter_counts.get(cap, 0)
     if waiting >= queue_cap:
         coro.close()
@@ -86,26 +137,53 @@ def bounded_create_task(
             waiting,
             queue_cap,
         )
+        try:
+            from eden.observability.drop_metrics import record_drop
+
+            record_drop("queue", "queue_full")
+        except Exception:
+            pass
 
         async def _dropped() -> None:
             return None
 
-        return loop.create_task(_dropped(), name=name)
+        return _track(_spawn(_dropped(), task_name=name))
 
     _waiter_counts[cap] = waiting + 1
 
     async def _runner() -> T | None:
+        started = False
         try:
             async with sem:
                 try:
+                    started = True
                     return await coro
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
-                    logger.debug("bounded_create_task: %s", exc)
+                    try:
+                        from eden.observability.drop_metrics import record_drop
+
+                        record_drop("queue", "write_error")
+                    except Exception:
+                        pass
+                    logger.warning(
+                        "bounded_create_task: task %s failed: %s",
+                        name or "<unnamed>",
+                        exc,
+                    )
                     return None
+        except asyncio.CancelledError:
+            if not started:
+                try:
+                    coro.close()
+                except Exception:
+                    pass
+            raise
         finally:
             _waiter_counts[cap] = max(0, _waiter_counts.get(cap, 1) - 1)
 
-    return loop.create_task(_runner(), name=name)
+    return _track(_spawn(_runner(), task_name=name), owned_coro=coro)
 
 
 def fire_and_forget(
@@ -173,9 +251,40 @@ async def bounded_gather(
     )
 
 
+async def drain_background_tasks(*, timeout: float = 5.0) -> int:
+    """Wait for tracked fire-and-forget tasks, then cancel stragglers.
+
+    Returns the number of tasks that had to be cancelled after ``timeout``.
+    Cancelled tasks are counted as ``("queue", "shutdown")`` drops.
+    """
+    pending = [t for t in list(_pending) if not t.done()]
+    if not pending:
+        return 0
+
+    done, still = await asyncio.wait(pending, timeout=max(0.0, timeout))
+    cancelled = 0
+    if still:
+        for t in still:
+            t.cancel()
+        await asyncio.gather(*still, return_exceptions=True)
+        cancelled = len(still)
+        try:
+            from eden.observability.drop_metrics import record_drop
+
+            record_drop("queue", "shutdown", cancelled)
+        except Exception:
+            pass
+    # Done set is already finished; ensure refs are cleared.
+    for t in done:
+        _pending.discard(t)
+    return cancelled
+
+
 __all__ = [
     "bounded_create_task",
     "bounded_gather",
+    "drain_background_tasks",
     "fire_and_forget",
+    "pending_background_tasks",
     "reset_bounded_task_semaphores",
 ]

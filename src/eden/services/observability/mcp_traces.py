@@ -316,12 +316,25 @@ class McpTraceService:
 
         n_servers = 0
         n_tools = 0
+        params: list[tuple[Any, ...]] = []
         for row in servers:
             n_servers += 1
             tools = row.get("tool_names") or []
             n_tools += len(tools)
+            params.append(
+                (
+                    row["org_id"],
+                    row["server_name"],
+                    row["first_seen"],
+                    row["last_seen"],
+                    tools,
+                    row.get("transport"),
+                    int(row["call_count_7d"] or 0),
+                )
+            )
+        if params:
             try:
-                await client.execute(
+                await client.executemany(
                     """
                     INSERT INTO mcp_server_registry
                         (org_id, server_name, first_seen, last_seen, tool_names,
@@ -340,13 +353,7 @@ class McpTraceService:
                         ),
                         call_count_7d = EXCLUDED.call_count_7d
                     """,
-                    row["org_id"],
-                    row["server_name"],
-                    row["first_seen"],
-                    row["last_seen"],
-                    tools,
-                    row.get("transport"),
-                    int(row["call_count_7d"] or 0),
+                    params,
                 )
             except Exception as exc:
                 logger.debug("mcp.rollup_registry upsert server failed: %s", exc)

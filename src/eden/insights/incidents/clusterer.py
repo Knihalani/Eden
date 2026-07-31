@@ -22,7 +22,6 @@ See ``docs/observability-gap/02-root-cause-incidents.md``.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from collections import Counter, defaultdict
@@ -68,13 +67,20 @@ async def _gather_trace_events(
     O(N × per-trace RTT). With a 50ms RTT and 100 traces this dropped
     the cluster pass from ~5s to ~50ms.
 
+    Concurrency is capped via ``bounded_gather`` so a large candidate
+    set cannot exhaust the Postgres pool (the upstream fetch is also
+    LIMIT 500).
+
     Returned dict preserves the trace_id → events mapping the callers
     iterate over; missing/empty traces map to an empty list.
     """
     if not trace_ids:
         return {}
-    results = await asyncio.gather(
+    from eden.async_tasks import bounded_gather
+
+    results = await bounded_gather(
         *(_fetch_trace_events(org_id, tid) for tid in trace_ids),
+        limit=32,
         return_exceptions=True,
     )
     out: dict[str, list[dict[str, Any]]] = {}

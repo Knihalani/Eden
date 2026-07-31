@@ -1,8 +1,20 @@
 /**
  * Durable offline queue — JSONL file spill (Node). Browser IndexedDB omitted.
+ *
+ * Rewrites use temp-file + rename so a crash never truncates the live queue
+ * to an empty/partial file. Appends keep an in-memory row count so a fill
+ * stays O(1) per enqueue rather than re-reading the whole file each time.
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -26,6 +38,8 @@ export class OfflineQueue {
   path: string;
   maxRows: number;
   dropped = 0;
+  /** Cached non-empty line count; invalidated / healed by {@link size}. */
+  private _rowCount: number | null = null;
 
   constructor(path?: string, maxRows = 10_000) {
     this.path =
@@ -35,6 +49,7 @@ export class OfflineQueue {
     mkdirSync(dirname(this.path), { recursive: true });
     if (!existsSync(this.path)) {
       writeFileSync(this.path, "", "utf8");
+      this._rowCount = 0;
     }
   }
 
@@ -44,17 +59,16 @@ export class OfflineQueue {
       JSON.stringify({ sourceFormat, payload }) + "\n",
       "utf8",
     );
+    if (this._rowCount !== null) this._rowCount += 1;
     this._trim();
   }
 
   drain(limit = 100): OfflineEvent[] {
     if (!existsSync(this.path)) return [];
-    const lines = readFileSync(this.path, "utf8")
-      .split("\n")
-      .filter((l) => l.trim().length > 0);
+    const lines = this._readLines();
     const take = lines.slice(0, limit);
     const rest = lines.slice(limit);
-    writeFileSync(this.path, rest.length ? rest.join("\n") + "\n" : "", "utf8");
+    this._atomicRewrite(rest);
     const out: OfflineEvent[] = [];
     for (const line of take) {
       try {
@@ -80,9 +94,7 @@ export class OfflineQueue {
    */
   peek(limit = 100): OfflineRow[] {
     if (!existsSync(this.path)) return [];
-    const lines = readFileSync(this.path, "utf8")
-      .split("\n")
-      .filter((l) => l.trim().length > 0);
+    const lines = this._readLines();
     const take = lines.slice(0, limit);
     const out: OfflineRow[] = [];
     for (const line of take) {
@@ -113,9 +125,7 @@ export class OfflineQueue {
     for (const row of rows) {
       toRemove.set(row.raw, (toRemove.get(row.raw) ?? 0) + 1);
     }
-    const lines = readFileSync(this.path, "utf8")
-      .split("\n")
-      .filter((l) => l.trim().length > 0);
+    const lines = this._readLines();
     const remaining: string[] = [];
     for (const line of lines) {
       const pending = toRemove.get(line);
@@ -125,32 +135,55 @@ export class OfflineQueue {
       }
       remaining.push(line);
     }
-    writeFileSync(
-      this.path,
-      remaining.length ? remaining.join("\n") + "\n" : "",
-      "utf8",
-    );
+    this._atomicRewrite(remaining);
   }
 
   size(): number {
-    if (!existsSync(this.path)) return 0;
+    // Heal a stale cache (e.g. another OfflineQueue instance appended).
+    const n = this._readLines().length;
+    this._rowCount = n;
+    return n;
+  }
+
+  private _readLines(): string[] {
+    if (!existsSync(this.path)) return [];
     return readFileSync(this.path, "utf8")
       .split("\n")
-      .filter((l) => l.trim().length > 0).length;
+      .filter((l) => l.trim().length > 0);
+  }
+
+  /**
+   * Crash-safe replace: write a sibling temp, then rename over the live
+   * path. A reader always sees either the whole old queue or the whole
+   * new one — never a truncated mid-write file.
+   */
+  private _atomicRewrite(lines: string[]): void {
+    const body = lines.length ? lines.join("\n") + "\n" : "";
+    const tmp = `${this.path}.${process.pid}.${Date.now()}.tmp`;
+    writeFileSync(tmp, body, "utf8");
+    try {
+      renameSync(tmp, this.path);
+    } catch (err) {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* ignore cleanup failure */
+      }
+      throw err;
+    }
+    this._rowCount = lines.length;
   }
 
   private _trim(): void {
-    const n = this.size();
+    const n = this._rowCount ?? this.size();
     if (n <= this.maxRows) return;
-    const lines = readFileSync(this.path, "utf8")
-      .split("\n")
-      .filter((l) => l.trim().length > 0);
-    const overflow = n - this.maxRows;
+    const lines = this._readLines();
+    const overflow = lines.length - this.maxRows;
+    if (overflow <= 0) {
+      this._rowCount = lines.length;
+      return;
+    }
     this.dropped += overflow;
-    writeFileSync(
-      this.path,
-      lines.slice(overflow).join("\n") + (lines.length > overflow ? "\n" : ""),
-      "utf8",
-    );
+    this._atomicRewrite(lines.slice(overflow));
   }
 }
