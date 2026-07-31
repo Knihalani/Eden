@@ -28,7 +28,7 @@ why all 82 parked rows (Jul 6 → Jul 24) carry a NULL reason.
 queue. Pre-fix rows with NULL `error_message` are historical only.
 Never customer-facing — durable write is Postgres `telemetry_events`.
 
-### 2. ~~Silver ETL reports every event as passing when validation fails~~ — FIXED 2026-07-31
+### 2. ~~Silver ETL reports every event as passing when validation fails~~ — FIXED 2026-07-31; watermark/quarantine 2026-07-31
 
 `data_platform/silver_etl.py` previously round-tripped through a
 Postgres temp table into ``validate_silver_events`` *before* silver
@@ -37,10 +37,13 @@ always 0. A broad ``except`` then returned ``(events, 0)``, making
 ``quarantine_on_violation`` unreachable.
 
 **Fixed:** `_validate_quality` now evaluates each event in-process via
-``evaluate_row(..., SILVER_EVENT_EXPECTATIONS)``, returns only passing
-events, and counts real violations. Failures log the specific
-expectations. Safe today because `usage_events` is empty; required
-before metering.
+``evaluate_row(..., SILVER_EVENT_EXPECTATIONS)``, returns passing vs
+failing, and counts real violations. With ``quarantine_on_violation``,
+failing rows go to ``quarantine_events``. Bronze watermarks advance
+only for ``terminal_bronze_ids`` (silver-written or quarantined) —
+quality drops are no longer silent permanent loss. Dead
+``_create_temp_table`` helper removed. Safe today because
+`usage_events` is empty; required before metering.
 
 ### 3. ~~`_push_clickhouse` logs a success it did not perform~~ — FIXED 2026-07-30
 
@@ -127,33 +130,22 @@ without its required `org_id` and raises into a swallowed `except`).
 The dead auto-fire block at `promotion_hooks.py:668-688` is a candidate
 for deletion.
 
-### 9. D.14 onboarding state machine writes to columns that do not exist
+### 9. ~~D.14 onboarding state machine writes to columns that do not exist~~ — FIXED 2026-07-31
 
 `services/onboarding/state_machine.py` uses `current_step`,
 `completed_steps`, `cat_enablements`, `first_trace_at`,
-`milestones_reached`. The live table has `org_id`, `step`,
-`org_setup_choice`, `completed_by_users`, `agents_onboarded`,
-`updated_at`. `_persist` swallows the failure at `logger.debug` and
-returns a synthetic `StateRow`, and the routes return
-`{"status":"ok","live":true}`. Advance, milestone and enable_cat all
-report success and persist nothing.
+`milestones_reached`. The live table originally had only wizard
+columns (`step`, `org_setup_choice`, …). Alembic `056` used
+`CREATE TABLE IF NOT EXISTS` and no-op'd; `_persist` swallowed
+failures at `logger.debug` and routes answered ok/live while
+persisting nothing.
 
-Root cause is the two parallel migration systems:
-`migrations/029_onboarding_wizard.sql:62` created the live table, and
-alembic `056_onboarding_state.py:51` uses `CREATE TABLE IF NOT EXISTS`
-so it silently no-op'd — while alembic still records 056 as applied.
-
-**Blast radius is small:** the portal does not call these endpoints
-(`onboardingV2Api` has zero component consumers, and the server-side
-`OnboardingMilestoneHook` is never instantiated). The wizard the portal
-actually uses is `/orgs/{org}/onboarding/state` in `routes/github.py:1301`,
-which matches the live schema and does persist — 6 production rows prove
-it.
-
-This is a landmine in the public OpenAPI surface, not an active break.
-Either delete `services/onboarding/` + `routes/onboarding.py`, or write
-a real migration. Do not ship endpoints that only claim "ok".
-
+**Fixed:** migration `128_onboarding_state_v2_columns` adds the v2
+columns idempotently (coexists with the wizard schema) and the
+milestones GIN index. `_persist` raises on write failure; mutating
+routes return 503. Flag `onboarding_state_machine_v2_enabled`
+defaults to True (kill-switch via env still works). Portal wizard
+`/orgs/{org}/onboarding/state` unchanged.
 ---
 
 ## Infrastructure

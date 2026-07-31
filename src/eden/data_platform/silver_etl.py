@@ -32,7 +32,6 @@ from eden.data_platform.contracts import (
 from eden.data_platform.pii import PIIMasker
 from eden.data_platform.quality import (
     SILVER_EVENT_EXPECTATIONS,
-    DataQualityValidator,
     evaluate_row,
 )
 
@@ -87,6 +86,10 @@ class ETLReport:
     #: True when the Silver write raised. ``run_from_bronze`` uses this to
     #: decide whether the Bronze rows may be marked processed — see there.
     silver_write_failed: bool = False
+    #: Bronze ids that reached a terminal outcome (written to silver and/or
+    #: quarantined). ``run_from_bronze`` only watermarks these — never
+    #: quality-dropped ids that were discarded without quarantine.
+    terminal_bronze_ids: list[str] = field(default_factory=list)
 
 
 class SilverETLPipeline:
@@ -114,7 +117,6 @@ class SilverETLPipeline:
         self.quarantine_on_violation = quarantine_on_violation
         self._masker = PIIMasker()
         self._contract_validator = ContractValidator()
-        self._quality_validator = DataQualityValidator()
         self._postgres_client: Any | None = None
 
     async def _get_postgres(self) -> Any:
@@ -148,8 +150,12 @@ class SilverETLPipeline:
         # ── Step 2: Contract validation + quarantine ─────────────────────
         valid_events, quarantined = self._validate_contracts(deduped)
         report.quarantined = len(quarantined)
+        terminal: list[str] = []
         if quarantined:
             await self._write_quarantine(quarantined)
+            terminal.extend(
+                str(e["id"]) for e in quarantined if e.get("id") is not None
+            )
 
         # ── Step 3: PII scrubbing ────────────────────────────────────────
         scrubbed = self._scrub_pii(valid_events)
@@ -164,10 +170,26 @@ class SilverETLPipeline:
 
         # ── Step 6: Quality validation ────────────────────────────────────
         if self.enforce_quality:
-            passed, violations = await self._validate_quality(normalized)
+            passed, failed, violations = self._validate_quality(normalized)
             report.quality_violations = violations
-            if self.quarantine_on_violation and violations > 0:
-                # Only pass events that individually passed quality checks
+            if self.quarantine_on_violation and failed:
+                for event in failed:
+                    reasons = event.get("_quality_violations") or ["quality violation"]
+                    event["_quarantine_reason"] = [
+                        f"quality:{r}" if not str(r).startswith("quality:") else str(r)
+                        for r in reasons
+                    ]
+                    if not event.get("id"):
+                        event["id"] = event.get("bronze_event_id")
+                await self._write_quarantine(failed)
+                report.quarantined += len(failed)
+                terminal.extend(
+                    str(e["id"])
+                    for e in failed
+                    if e.get("id") is not None
+                )
+                normalized = passed
+            elif self.quarantine_on_violation:
                 normalized = passed
 
         # ── Step 7: Write to Silver (PostgreSQL) ───────────────────────
@@ -175,6 +197,11 @@ class SilverETLPipeline:
             try:
                 inserted = await self._write_silver(normalized)
                 report.silver_inserted = inserted
+                terminal.extend(
+                    str(e["bronze_event_id"])
+                    for e in normalized
+                    if e.get("bronze_event_id") is not None
+                )
             except Exception as exc:
                 report.silver_write_failed = True
                 logger.error(
@@ -184,6 +211,16 @@ class SilverETLPipeline:
                     exc,
                 )
                 report.errors.append(f"Silver write: {exc}")
+                # Do not treat silver ids as terminal — they must retry.
+                # Contract/quality quarantines above stay terminal.
+                written_ids = {
+                    str(e["bronze_event_id"])
+                    for e in normalized
+                    if e.get("bronze_event_id") is not None
+                }
+                terminal = [i for i in terminal if i not in written_ids]
+
+        report.terminal_bronze_ids = list(dict.fromkeys(terminal))
 
         # ── Step 8: Push to ClickHouse (analytics) ──────────────────────
         if push_to_clickhouse and normalized:
@@ -276,6 +313,13 @@ class SilverETLPipeline:
         # from the Bronze id, so re-running produces the same keys and the insert
         # is idempotent. Deduped and quarantined events are re-fetched too and
         # simply reach the same terminal outcome again.
+        # Mark only Bronze rows that reached a *terminal* outcome
+        # (written to silver and/or quarantined for contract/quality).
+        #
+        # This used to mark every fetched id whenever the Silver write did
+        # not raise — including quality-dropped events that were never
+        # written anywhere. Those rows became permanently unreachable:
+        # not in silver, not in quarantine, watermark already past them.
         if report.silver_write_failed:
             logger.error(
                 "Silver ETL: leaving %d Bronze event(s) unprocessed for retry "
@@ -284,9 +328,16 @@ class SilverETLPipeline:
             )
             return report
 
-        event_ids = [e["id"] for e in events]
+        event_ids = list(report.terminal_bronze_ids)
         if event_ids:
             await self._mark_bronze_processed(event_ids)
+        skipped = len(events) - len(event_ids)
+        if skipped > 0:
+            logger.warning(
+                "Silver ETL: left %d Bronze event(s) unprocessed "
+                "(non-terminal this run — e.g. quality gate off with drops)",
+                skipped,
+            )
 
         return report
 
@@ -463,7 +514,7 @@ class SilverETLPipeline:
             "pipeline_stage": event.get("pipeline_stage"),
             "agent_name": event.get("agent_name"),
             "job_id": event.get("job_id") or metadata.get("job_id"),
-            "trace_id": metadata.get("trace_id"),
+            "trace_id": event.get("trace_id") or metadata.get("trace_id"),
             "benchmark_id": metadata.get("benchmark_id"),
             "pii_detected": event.get("_pii_detected", False),
             "quarantined": False,
@@ -476,39 +527,23 @@ class SilverETLPipeline:
             or datetime.now(UTC).isoformat(),
         }
 
-    async def _validate_quality(
+    def _validate_quality(
         self, events: list[dict[str, Any]]
-    ) -> tuple[list[dict[str, Any]], int]:
-        """Run quality checks on each normalized event. Return (passing, violation_count).
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+        """Run quality checks on each normalized event.
 
-        Evaluated per-event in Python against ``SILVER_EVENT_EXPECTATIONS``
-        (error-severity expectations only — warnings are informational
-        and never gate).
+        Returns ``(passing, failing, violation_count)``. Evaluated per-event
+        in Python against ``SILVER_EVENT_EXPECTATIONS`` (error-severity only).
 
-        This used to round-trip through Postgres: insert the batch's
-        ``silver_event_id``s into a temp table, then ask
-        ``DataQualityValidator.validate_silver_events`` to scan
-        ``silver_events`` filtered to those ids. But this runs at step 6,
-        *before* ``_write_silver`` (step 7) — none of those ids exist in
-        ``silver_events`` yet, so the scan always matched zero rows and
-        ``report.error_count`` was always 0 regardless of what the batch
-        actually contained. A broad ``except Exception: return events, 0``
-        on top of that meant an outright query failure was indistinguishable
-        from a clean pass, and the caller (``run_batch``) treated the
-        returned ``events`` list as "all passed" either way, so
-        ``quarantine_on_violation`` had nothing to filter. Checking each
-        event directly, before it is written, actually gates.
-
-        Failing events are dropped from the returned ``passing`` list (the
-        caller only substitutes it in when ``quarantine_on_violation`` is
-        True) and logged at WARNING with the specific expectation(s) they
-        failed — they are not persisted to ``quarantine_events`` today,
-        unlike contract-validation failures in ``_validate_contracts``.
+        Failing events are returned separately so ``run_batch`` can persist
+        them to ``quarantine_events`` and watermark those Bronze ids as
+        terminal — not silently drop them while advancing the watermark.
         """
         if not events:
-            return [], 0
+            return [], [], 0
 
         passing: list[dict[str, Any]] = []
+        failing: list[dict[str, Any]] = []
         violation_count = 0
         for event in events:
             failed = evaluate_row(event, SILVER_EVENT_EXPECTATIONS)
@@ -520,32 +555,10 @@ class SilverETLPipeline:
                     event.get("silver_event_id"),
                     failed,
                 )
+                failing.append(event)
             else:
                 passing.append(event)
-        return passing, violation_count
-
-    async def _create_temp_table(
-        self, client: Any, table_name: str, events: list[dict[str, Any]]
-    ) -> None:
-        """Create a temporary table for batch quality validation."""
-        await client.execute(f"""
-            CREATE TEMP TABLE {table_name} (
-                silver_event_id UUID PRIMARY KEY
-            )
-        """)
-        # One executemany, not "insert the first row then executemany all of
-        # them". The previous version inserted ``rows[0]`` and then re-inserted
-        # it as part of the batch, violating the temp table's primary key. The
-        # resulting exception was caught by the broad handler in
-        # ``_validate_quality``, which logged "Quality validation failed" and
-        # returned zero violations — so quality validation never actually ran
-        # for any batch of more than one event.
-        rows = [(e["silver_event_id"],) for e in events]
-        if not rows:
-            return
-        query = f"INSERT INTO {table_name} (silver_event_id) VALUES ($1)"
-        async with client.acquire() as conn:
-            await conn.executemany(query, rows)
+        return passing, failing, violation_count
 
     async def _push_clickhouse(self, events: list[dict[str, Any]]) -> bool:
         """Push normalized Silver events to ClickHouse for OLAP analytics.

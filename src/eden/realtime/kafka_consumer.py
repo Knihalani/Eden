@@ -262,7 +262,13 @@ class KafkaEventConsumer:
                         )
 
                         self._metrics["messages_processed"] += 1
-                        await consumer.commit()
+                        if report.silver_write_failed:
+                            logger.error(
+                                "Silver ETL Kafka batch: Silver write failed — "
+                                "not committing offset so the batch is retried"
+                            )
+                        else:
+                            await consumer.commit()
 
                     except Exception as exc:
                         logger.error(f"Silver ETL failed for offset {msg.offset}: {exc}")

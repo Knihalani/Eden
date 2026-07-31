@@ -164,27 +164,10 @@ class TestMarkBronzeProcessed:
         assert sum(len(a) for _, a in client.execute_calls) == 2500
 
 
-class TestTempTableInsert:
-    @pytest.mark.asyncio
-    async def test_first_row_is_not_inserted_twice(self) -> None:
-        """The double-insert violated the temp table's primary key."""
-        pipeline = SilverETLPipeline()
-        client = _FakeClient()
-        events = [{"silver_event_id": f"id-{i}"} for i in range(3)]
-
-        await pipeline._create_temp_table(client, "_tmp", events)
-
-        # Exactly one batch, containing each id exactly once.
-        assert len(client.conn.executemany_calls) == 1
-        _query, rows = client.conn.executemany_calls[0]
-        assert rows == [("id-0",), ("id-1",), ("id-2",)]
-
-    @pytest.mark.asyncio
-    async def test_empty_event_list_inserts_nothing(self) -> None:
-        pipeline = SilverETLPipeline()
-        client = _FakeClient()
-        await pipeline._create_temp_table(client, "_tmp", [])
-        assert client.conn.executemany_calls == []
+class TestDeadTempTableHelperRemoved:
+    def test_create_temp_table_helper_is_gone(self) -> None:
+        """Dead path: ETL no longer builds an unused UNNEST temp table."""
+        assert not hasattr(SilverETLPipeline, "_create_temp_table")
 
 
 class TestClickHousePush:

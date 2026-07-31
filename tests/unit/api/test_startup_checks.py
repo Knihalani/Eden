@@ -50,6 +50,16 @@ async def test_check_redis_quota_exhausted():
 
 
 @pytest.mark.asyncio
+async def test_check_redis_configured_but_down_is_unavailable():
+    with (
+        patch("eden.storage.redis.redis_quota_exhausted", return_value=False),
+        patch("eden.storage.redis.redis_url_configured", return_value=True),
+        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)),
+    ):
+        assert await check_redis() == "unavailable"
+
+
+@pytest.mark.asyncio
 async def test_check_redis_ok():
     mock_client = AsyncMock()
     mock_client.ping.return_value = True
@@ -62,6 +72,7 @@ async def test_check_redis_ok():
         ),
     ):
         assert await check_redis() == "ok"
+
 
 
 @pytest.mark.asyncio

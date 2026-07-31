@@ -58,8 +58,8 @@ def test_session_notify_uses_ingest_path_and_org_api_key(
     time.sleep(0.08)
     s.identify("uid-9")
     time.sleep(0.08)
+    # ``complete`` uses wait=True on the end notify — no sleep needed.
     s.complete(success=True, flush=False)
-    time.sleep(0.08)
 
     assert any("/ingest/agent-sessions/start" in u for u, _, _ in posts)
     assert any("/ingest/agent-sessions/sess-fixed/identify" in u for u, _, _ in posts)
@@ -67,6 +67,23 @@ def test_session_notify_uses_ingest_path_and_org_api_key(
     for _, _, headers in posts:
         assert headers.get("X-Org-Api-Key") == "test-key"
         assert headers.get("X-Org-Id") == "test-org"
+
+
+def test_session_end_notify_waits_for_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: daemon end-notify used to die under SystemExit before POST."""
+    seen: list[str] = []
+
+    def _fake_post(url, json=None, headers=None, timeout=None):  # noqa: A002
+        seen.append(url)
+        return httpx.Response(200, json={"status": "ok"})
+
+    monkeypatch.setattr(httpx, "post", _fake_post)
+    s = session_mod.begin(agent_id="agent-y", session_id="sess-end-wait")
+    time.sleep(0.05)
+    s.complete(success=False, failure_reason="boom", flush=False)
+    assert any(u.endswith("/sess-end-wait/end") for u in seen)
 
 
 def test_shim_exports_session_api() -> None:

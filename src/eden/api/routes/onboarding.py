@@ -20,15 +20,13 @@ The 7-step order is enforced in
 :class:`eden.services.onboarding.OnboardingStateMachine` —
 the route layer just maps JSON to method calls.
 
-**Gated off by ``onboarding_state_machine_v2_enabled`` (default
-``False``, 2026-07-31).** The state machine writes columns that do
-not exist on the live ``onboarding_state`` table, so every route used
-to answer ``{"status":"ok","live":true}`` while persisting nothing —
-see docs/ops/known-issues.md #9 and docs/ops/disabled-features.md.
-This is a separate, unaffected surface from the onboarding wizard the
-portal actually uses (``/orgs/{org_id}/onboarding/state`` in
-``api/routes/github.py``), which matches the live schema and persists
-for real. Do not change that route as part of fixing this one.
+**Gated by ``onboarding_state_machine_v2_enabled`` (default
+``True`` after migration ``128_onboarding_state_v2_columns``).**
+Writes that fail to persist raise rather than answering
+``{"status":"ok","live":true}`` with a synthetic row — see
+docs/ops/known-issues.md #9. This is a separate surface from the
+onboarding wizard the portal uses
+(``/orgs/{org_id}/onboarding/state`` in ``api/routes/github.py``).
 """
 
 from __future__ import annotations
@@ -56,9 +54,8 @@ logger = logging.getLogger(__name__)
 def _require_onboarding_v2_enabled() -> None:
     """Gate the whole D.14 onboarding-v2 surface.
 
-    Raises 503 until :attr:`Settings.onboarding_state_machine_v2_enabled`
-    flips to True (i.e. until a real migration backs the columns this
-    state machine reads/writes). An honest 503 beats a route that
+    Raises 503 when :attr:`Settings.onboarding_state_machine_v2_enabled`
+    is False (kill-switch). An honest 503 beats a route that
     answers ``{"status":"ok"}`` and silently persists nothing.
     """
     from eden.config import get_settings
@@ -75,6 +72,16 @@ def _require_onboarding_v2_enabled() -> None:
                 "different, live-schema-backed table."
             ),
         )
+
+
+def _persist_failed(exc: BaseException) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Onboarding-v2 could not persist state "
+            f"({redact_all(str(exc))}). Retry later; nothing was claimed as saved."
+        ),
+    )
 
 
 router = APIRouter(
@@ -189,6 +196,8 @@ async def advance(
             "message": str(exc),
             "data": None,
         }
+    except RuntimeError as exc:
+        raise _persist_failed(exc) from exc
     return {
         "status": "ok",
         "feature": "onboarding",
@@ -205,7 +214,10 @@ async def record_milestone(
 ) -> dict[str, Any]:
     """Record a milestone. Idempotent; auto-advances if mapped."""
     sm = get_state_machine()
-    state = await sm.record_milestone(org_id, body.milestone)
+    try:
+        state = await sm.record_milestone(org_id, body.milestone)
+    except RuntimeError as exc:
+        raise _persist_failed(exc) from exc
     return {
         "status": "ok",
         "feature": "onboarding",
@@ -222,7 +234,10 @@ async def enable_cat(
 ) -> dict[str, Any]:
     """Toggle a cat enablement. Idempotent."""
     sm = get_state_machine()
-    state = await sm.enable_cat(org_id, body.cat_id, config=body.config)
+    try:
+        state = await sm.enable_cat(org_id, body.cat_id, config=body.config)
+    except RuntimeError as exc:
+        raise _persist_failed(exc) from exc
     return {
         "status": "ok",
         "feature": "onboarding",
