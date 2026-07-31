@@ -803,7 +803,11 @@ async def list_portal_agents(
                 )
             except Exception as exc2:  # noqa: BLE001
                 logger.debug("portal agents: registry fallback failed: %s", exc2)
-                return []
+                raise HTTPException(
+                    status_code=503,
+                    detail="Agent registry is temporarily unavailable; please retry",
+                    headers={"Retry-After": "5"},
+                ) from exc2
 
     async def _load_metrics() -> dict[str, dict[str, Any]]:
         """Bounded window scan — recent events only, no percentiles."""
@@ -872,8 +876,10 @@ async def list_portal_agents(
                 for r in id_rows:
                     metrics_by_id[str(r["agent_id"])] = {
                         "runs": int(r["runs"] or 0),
-                        "success_rate": 1.0,
-                        "cost_usd": 0.0,
+                        # Do not invent 100% success / $0 — FE should
+                        # treat missing cost/success as unknown.
+                        "success_rate": None,
+                        "cost_usd": None,
                         "tokens": 0,
                         "p50": 0.0,
                         "p95": 0.0,
@@ -928,9 +934,14 @@ async def list_portal_agents(
         metrics = metrics_by_id.get(agent_id) or {}
         issues = issues_by_id.get(agent_id) or {}
         runs = int(metrics.get("runs") or 0)
-        success = float(
-            metrics.get("success_rate") if metrics.get("success_rate") is not None else 1.0
-        )
+        raw_success = metrics.get("success_rate")
+        if "success_rate" in metrics and raw_success is None:
+            # Metrics discovery degraded — do not invent 100% success.
+            success = 0.0
+        elif raw_success is not None:
+            success = float(raw_success)
+        else:
+            success = 1.0
         success = max(0.0, min(1.0, success))
         open_issues = int(issues.get("open_issues") or 0)
         open_p0 = int(issues.get("open_p0") or 0)
@@ -950,6 +961,9 @@ async def list_portal_agents(
         elif runs > 0:
             status = "live"
 
+        raw_cost = metrics.get("cost_usd")
+        cost_usd = round(float(raw_cost), 4) if raw_cost is not None else 0.0
+
         return AgentCard(
             id=agent_id,
             name=name or agent_id,
@@ -962,7 +976,7 @@ async def list_portal_agents(
             errorRate=round(1.0 - success, 4),
             p50Ms=int(round(float(metrics.get("p50") or 0))),
             p95Ms=int(round(float(metrics.get("p95") or 0))),
-            costUsd24h=round(float(metrics.get("cost_usd") or 0), 4),
+            costUsd24h=cost_usd,
             tokens24h=int(metrics.get("tokens") or 0),
             openIssues=open_issues,
             lastSeen=last,
@@ -1282,7 +1296,11 @@ async def list_portal_sessions(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal sessions: service unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Sessions temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[SessionRollup] = []
     for s in sessions:
@@ -1358,7 +1376,11 @@ async def list_portal_issues(
         issues = await IssuesRepo().list_issues(org_id, limit=limit, offset=0)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal issues: repo unavailable: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Issues temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     # ``example_stumble_ids`` are stumble UUIDs — portal FE matches
     # ``occurrenceTraceIds`` against run ids. Resolve to real trace_ids.
@@ -1503,7 +1525,11 @@ async def list_portal_signals(
     """Signal cards (notify defaults when fields absent)."""
     client = await _pg()
     if client is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Signals temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     try:
         rows = await client.fetch(
@@ -1519,7 +1545,11 @@ async def list_portal_signals(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal signals: query failed: %s", redact_all(str(exc)))
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Signals temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
     out: list[SignalCard] = []
     for r in rows:
