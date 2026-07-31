@@ -232,7 +232,20 @@ class AgentSessionService:
     ) -> AgentSession | None:
         session = await self.get(org_id, session_id)
         if session is None:
-            return None
+            # SDK end can race a still-in-flight start notify. Upsert an
+            # ended row so we never ack success while leaving the session
+            # open forever.
+            session = AgentSession(
+                id=session_id,
+                org_id=org_id,
+                success=success,
+                failure_reason=failure_reason,
+                ended_at=datetime.now(UTC).isoformat(),
+            )
+            await self._persist(session)
+            if not success:
+                await self._emit_task_failure(org_id, session)
+            return session
         session.success = success
         session.failure_reason = failure_reason
         session.ended_at = datetime.now(UTC).isoformat()

@@ -162,6 +162,8 @@
 | 125_clickhouse_fallback_drain | clickhouse_fallback | yes | forever | none | low | Add dead_at (a terminal state distinct from resolved_at) and a partial index on failed_at for the oldest-first drain query, so the rows migration 008 has been accumulating ever since can finally be replayed into ClickHouse instead of stored forever and read by nothing | Reliability |
 | 126_ai_conversations | ai_conversations, ai_messages | yes | forever | soft | medium | Assistant threads + messages (org-scoped); UUID/TEXT alignment for user_id FKs must match users.id | Assistant |
 | 127_sidebar_prefs_user_id_type | sidebar_prefs | yes | forever | soft | low | Align sidebar_prefs.user_id type with users.id (TEXT) to stop UUID cast crash-loops on prefs write | Portal UX |
+| 128_onboarding_state_v2_columns | onboarding_state | yes | forever | soft | low | Add D.14 v2 columns + milestones GIN index onto wizard onboarding_state (056 CREATE IF NOT EXISTS no-op) | Onboarding v2 |
+
 
 ### Migration chain repair (2026-07-17, GA hardening)
 

@@ -49,6 +49,7 @@ class AgentSession(AbstractContextManager["AgentSession"]):
                 "org_id": self.org_id,
                 "user_id": user_id,
             },
+            wait=True,
         )
 
     def add_cost(self, amount_usd: float) -> None:
@@ -164,6 +165,7 @@ def begin(
                 "user_id": user_id,
                 "metadata": session.metadata,
             },
+            wait=True,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("session.start notify failed: %s", exc)
@@ -187,11 +189,11 @@ def _notify_session(
 ) -> None:
     """Best-effort HTTP notify for agent session lifecycle (ingest path).
 
-    ``wait=True`` joins the worker thread (used for ``end``). Daemon
-    fire-and-forget is fine for start/identify, but process exit after
-    ``complete_session(success=False)`` + ``SystemExit`` used to kill the
-    end notify before it landed — leaving ``agent_sessions.success`` NULL
-    and ``ended_at`` unset while Issues still saw a partial failure signal.
+    ``wait=True`` joins the worker thread (used for ``start``,
+    ``identify``, and ``end``). Daemon fire-and-forget left a race where
+    ``end`` could finish before ``start`` persisted the row — the API
+    answered 200 ``not_found`` and the later start left ``success`` NULL
+    forever. Attach-trace notifies stay async.
     """
     import threading
 
