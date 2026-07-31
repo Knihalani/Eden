@@ -42,17 +42,17 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { useLabToast } from "@/lab/lab-toast";
 import { formatRelativeTime } from "@/lib/format";
 
-const ConnectRepoPanel = dynamic(
+const ConnectRepoButton = dynamic(
   () =>
-    import("@/components/agents/ConnectRepoPanel").then((m) => ({
-      default: m.ConnectRepoPanel,
+    import("@/components/agents/ConnectRepoButton").then((m) => ({
+      default: m.ConnectRepoButton,
     })),
   {
     ssr: false,
     loading: () => (
-      <p className="type-meta px-1 py-4 text-[var(--text-faint)]">
-        Loading connect panel…
-      </p>
+      <span className="ds-btn ds-btn-outline ds-btn-sm pointer-events-none opacity-60">
+        Repo…
+      </span>
     ),
   },
 );
@@ -128,9 +128,9 @@ function RunInspector({
             </button>
             <Link
               href={`/traces?id=${trace.id}&agent=${agent.id}${hasSignals ? "&tab=signals" : ""}`}
-              className="ds-btn ds-btn-primary ds-btn-sm"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
             >
-              Traces
+              Open
               <ExternalLink className="h-3 w-3" aria-hidden />
             </Link>
           </div>
@@ -234,17 +234,11 @@ function AgentDetail({ agent }: { agent: AgentFixture | null }) {
       <div className="space-y-4 p-5">
         <EmptyState
           title="No agents yet"
-          body="Send traffic with the SDK using an agent_id (or project id). Agents appear here automatically from traces — connect a GitHub repo later from an agent’s detail view when you want Improve to open fix PRs."
+          body="Send traffic with the SDK using an agent_id. Agents show up here from traces."
         />
         <div className="flex flex-wrap gap-2">
           <Link href="/settings?mode=keys" className="ds-btn ds-btn-primary ds-btn-sm">
             API keys
-          </Link>
-          <Link href="/gateway" className="ds-btn ds-btn-outline ds-btn-sm">
-            Gateway usage
-          </Link>
-          <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">
-            Traces
           </Link>
         </div>
       </div>
@@ -447,9 +441,9 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="shrink-0 border-b border-[var(--line)] px-5 py-5 sm:px-6">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-0 flex-1 space-y-2">
+      <header className="shrink-0 border-b border-[var(--line)] px-5 py-4 sm:px-6">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               {renaming ? (
                 <form
@@ -504,14 +498,12 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
               <AgentStatusBadge status={agent.status} />
             </div>
             <p className="type-meta">
-              Agent id · <span className="font-mono">{agent.id}</span>
-              {agent.purpose ? <> · {agent.purpose}</> : null}
-            </p>
-            <p className="type-meta">
-              {agent.model ? <>{agent.model} · </> : null}
+              <span className="font-mono">{agent.id}</span>
+              {agent.model ? <> · {agent.model}</> : null}
+              {" · "}
               {agent.lastSeen
                 ? <>last telemetry {formatRelativeTime(agent.lastSeen)}</>
-                : <>no recent activity in this window</>}
+                : <>no recent activity</>}
               {agent.topError ? (
                 <>
                   {" · "}
@@ -521,65 +513,14 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
             </p>
           </div>
 
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Link
-              href={`/agent?thread=thr_empty&agent=${agent.id}`}
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-            >
-              Ask AI
-            </Link>
-            <Link
-              href={`/debugger?agent=${agent.id}`}
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-            >
-              Debugger
-            </Link>
-            <Link
-              href={`/cost?agent=${agent.id}`}
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-            >
-              Cost
-            </Link>
-            <Link
-              href={`/improve?agent=${agent.id}`}
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-            >
-              Improve
-            </Link>
-            <Link
-              href={`/signals?agent=${agent.id}`}
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-            >
-              Signals
-            </Link>
-            <Link
-              href={`/issues?agent=${agent.id}`}
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-            >
-              Issues
-              {agent.openIssues > 0 ? ` · ${agent.openIssues}` : ""}
-            </Link>
-            <Link
-              href={`/agents/connect?agent=${encodeURIComponent(agent.id)}`}
-              className="ds-btn ds-btn-outline ds-btn-sm"
-            >
-              Connect repo
-            </Link>
-            <Link
-              href={`/traces?agent=${agent.id}`}
-              className="ds-btn ds-btn-primary ds-btn-sm"
-            >
-              Traces
-            </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Sidebar already covers Traces / Improve / Issues / etc. */}
+            <ConnectRepoButton agentId={agent.id} />
           </div>
         </div>
       </header>
 
-      <div className="border-b border-[var(--line)] px-4 py-4 sm:px-5">
-        <ConnectRepoPanel agentId={agent.id} compact />
-      </div>
-
-      <div className="lab-metric-strip shrink-0">
+      <div className="lab-metric-strip shrink-0 [&_>_*]:!px-4 [&_>_*]:!py-3">
         <MetricCell label="Runs (24h)" value={String(agent.runs24h)} />
         <MetricCell
           label="Success"
@@ -639,7 +580,7 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
         />
       </div>
 
-      <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[minmax(15rem,22rem)_minmax(0,1fr)]">
+      <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[minmax(16rem,24rem)_minmax(0,1fr)]">
         <section className="flex min-h-0 min-w-0 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
           <div className="lab-list-chrome">
             <div className="flex items-center justify-between gap-2">
@@ -846,12 +787,12 @@ function LabAgentsInner() {
             "flex min-h-0 shrink-0 flex-col overflow-hidden border-[var(--line)]",
             fleetAnimate && "transition-[width,opacity] duration-200 ease-out",
             fleetOpen
-              ? "w-[16.5rem] border-r opacity-100 lg:w-[19rem]"
+              ? "w-[14.5rem] border-r opacity-100 lg:w-[16.5rem]"
               : "pointer-events-none w-0 border-r-0 opacity-0",
           )}
           aria-hidden={!fleetOpen}
         >
-          <div className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
             <p className="type-label">Fleet</p>
             <button
               type="button"
@@ -864,7 +805,7 @@ function LabAgentsInner() {
           </div>
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {ordered.length === 0 ? (
-              <li className="px-4 py-6">
+              <li className="px-3 py-5">
                 <p className="type-meta text-[var(--text-secondary)]">
                   No agents yet
                 </p>
@@ -872,7 +813,7 @@ function LabAgentsInner() {
             ) : (
               fleetGroups.map((group) => (
                 <li key={group.key}>
-                  <p className="type-label sticky top-0 z-[1] border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-2">
+                  <p className="type-label sticky top-0 z-[1] border-b border-[var(--line)] bg-[var(--bg-inset)] px-3 py-1.5">
                     {group.label}
                   </p>
                   <ul>
@@ -884,7 +825,7 @@ function LabAgentsInner() {
                             type="button"
                             onClick={() => selectAgent(agent.id)}
                             className={cn(
-                              "w-full border-b border-[var(--line)] px-4 py-3.5 text-left transition-colors",
+                              "w-full border-b border-[var(--line)] px-3 py-2.5 text-left transition-colors",
                               active
                                 ? "bg-[var(--accent-muted)]"
                                 : "hover:bg-[var(--accent-muted)]",
@@ -896,16 +837,7 @@ function LabAgentsInner() {
                               </p>
                               <AgentStatusBadge status={agent.status} />
                             </div>
-                            {agent.id !== agent.name ? (
-                              <p className="type-meta mt-0.5 truncate text-[var(--text-tertiary)]">
-                                id · {agent.id}
-                              </p>
-                            ) : (
-                              <p className="type-meta mt-0.5 truncate text-[var(--text-tertiary)]">
-                                Rename to give this a clearer label
-                              </p>
-                            )}
-                            <p className="type-meta mt-1.5">
+                            <p className="type-meta mt-1 truncate">
                               {agent.runs24h} runs
                               {agent.openIssues > 0 ? (
                                 <span className="text-[var(--error)]">
@@ -916,11 +848,6 @@ function LabAgentsInner() {
                               {" · "}
                               {formatUsd(agent.costUsd24h)}
                             </p>
-                            {agent.purpose ? (
-                              <p className="type-meta mt-1 truncate text-[var(--text-tertiary)]">
-                                {agent.purpose}
-                              </p>
-                            ) : null}
                           </button>
                         </li>
                       );

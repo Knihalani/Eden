@@ -852,7 +852,7 @@ def _build_settings_class():
         github_app_private_key: str = ""  # PEM-encoded; multi-line OK in .env
         github_app_webhook_secret: str = ""
         github_app_slug: str = ""  # e.g. eden-observability
-        github_app_callback_url: str = ""  # e.g. https://edenobservability.com/onboarding/connect
+        github_app_callback_url: str = ""  # e.g. https://edenobservability.com/agents/connect
 
         # ── Trace-quality / quality-pipeline activation (N14) ───────────
         # These gate the trace-quality wiring (``install_all()``) and the
