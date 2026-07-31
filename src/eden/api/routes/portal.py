@@ -2846,13 +2846,18 @@ async def list_portal_assistant_threads(
 ) -> list[AssistantThreadCard]:
     """Assistant threads from ai-insights / conversations when available.
 
-    Soft-degrades to ``[]`` when Postgres is down, conversation tables
-    are missing, or the Clerk ``user_…`` id cannot map to Eden UUID —
-    never 503 the Assistant shell (that blocked New chat entirely).
+    Resolves Clerk ``user_…`` → Eden ``users.id`` before querying
+    (UUID columns). Missing conversation tables soft-empty; a dead
+    Postgres still 503s so onboarding is not confused with "no chats".
+    The Assistant UI seeds a blank thread when this errors.
     """
     client = await _pg()
     if client is None:
-        return []
+        raise HTTPException(
+            status_code=503,
+            detail="Assistant threads temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        )
 
     from eden.api.deps import eden_user_id_from_auth
 
@@ -2898,11 +2903,25 @@ async def list_portal_assistant_threads(
                 limit,
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "portal assistant threads: query failed: %s",
-            redact_all(str(exc)),
-        )
-        return []
+        msg = str(exc).lower()
+        # Tables may lag Alembic 126 on older deploys — empty history,
+        # not a hard outage (Assistant still opens a blank chat).
+        if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
+            logger.warning(
+                "portal assistant threads: conversation store missing: %s",
+                redact_all(str(exc)),
+            )
+            rows = []
+        else:
+            logger.warning(
+                "portal assistant threads: query failed: %s",
+                redact_all(str(exc)),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Assistant threads temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            ) from exc
 
     ids = [str(r["id"]) for r in rows]
     counts: dict[str, int] = {}
