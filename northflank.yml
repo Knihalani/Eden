@@ -288,26 +288,21 @@ spec:
     # group. POSTGRES_SSLMODE must be "require" (or stricter) — Neon
     # rejects plain-text connections. See docs/deploy/neon-cutover.md.
     - name: POSTGRES_HOST
-      valueFrom: { secretKeyRef: { group: postgres-host, key: POSTGRES-HOST } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
     - name: POSTGRES_PORT
-      valueFrom: { secretKeyRef: { group: postgres-port, key: POSTGRES-PORT } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
     - name: POSTGRES_DB
-      valueFrom: { secretKeyRef: { group: postgres-db, key: POSTGRES-DB } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
     - name: POSTGRES_USER
-      valueFrom: { secretKeyRef: { group: postgres-user, key: POSTGRES-USER } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
     - name: POSTGRES_PASSWORD
-      valueFrom: { secretKeyRef: { group: postgres-password, key: POSTGRES_PASSWORD } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
     - name: POSTGRES_SSLMODE
-      valueFrom: { secretKeyRef: { group: postgres-sslmode, key: POSTGRES-SSLMODE } }
-    # NOT in the confirmed live-group mapping (2026-07-31 reconciliation) —
-    # left pointing at the fictional "eden-required" group on purpose so
-    # the drift checker keeps flagging it instead of silently resolving to
-    # a guessed group. Confirm the real group id before touching this.
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
     - name: POSTGRES_CHANNEL_BINDING
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING, optional: true } }
-    # See POSTGRES_CHANNEL_BINDING note above — same unmapped status.
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
     - name: POSTGRES_ENDPOINT_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID, optional: true } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
     - name: POSTGRES_POOL_SIZE
       value: "10"            # 512 MB container — cap pool aggressively
     - name: POSTGRES_MIN_POOL_SIZE
@@ -333,13 +328,13 @@ spec:
     - name: QDRANT_COLLECTION_PREFIX
       value: eden_
     - name: QDRANT_API_KEY
-      valueFrom: { secretKeyRef: { group: qdrant-api-key, key: QDRANT_API_KEY } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: QDRANT_API_KEY } }
     # ── Redis (external — Upstash free tier) ────────────────────
     # Conserve commands: rate limits stay in-process (single replica),
     # redis-py health PINGs disabled. Set RATE_LIMIT_DISTRIBUTED=true
     # only after upgrading Upstash past Free (10k cmds/day).
     - name: REDIS_URL
-      valueFrom: { secretKeyRef: { group: redis-url, key: REDIS_URL } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
     - name: RATE_LIMIT_DISTRIBUTED
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
@@ -399,9 +394,6 @@ spec:
     # provisions the secret, not before.
     - name: TYPESENSE_ENABLED
       value: "false"
-    # NOT in the confirmed live-group mapping (2026-07-31 reconciliation) —
-    # W9 hasn't provisioned these yet, so there is no live group to point
-    # at. `optional: true` keeps the deploy from failing either way.
     - name: TYPESENSE_HOST
       valueFrom: { secretKeyRef: { group: eden-required, key: TYPESENSE_HOST, optional: true } }
     - name: TYPESENSE_API_KEY
@@ -444,17 +436,17 @@ spec:
     - name: JWT_SECRET
       valueFrom:
         secretKeyRef:
-          group: jwt-secret
+          group: eden-required
           key: JWT_SECRET
     - name: ENCRYPTION_KEY
       valueFrom:
         secretKeyRef:
-          group: encryption-key
+          group: eden-required
           key: ENCRYPTION_KEY
     - name: SESSION_SECRET
       valueFrom:
         secretKeyRef:
-          group: session-secret
+          group: eden-required
           key: SESSION_SECRET
     # ── Clerk (portal auth provider, June 2026 cutover) ────────
     # CLERK_SECRET_KEY is the live secret key for the Clerk instance
@@ -470,80 +462,79 @@ spec:
     - name: CLERK_SECRET_KEY
       valueFrom:
         secretKeyRef:
-          group: clerk-secret-key
+          group: eden-required
           key: CLERK_SECRET_KEY
     - name: CLERK_PUBLISHABLE_KEY
       valueFrom:
         secretKeyRef:
-          group: clerk-publishable-key
+          group: eden-required
           key: CLERK_PUBLISHABLE_KEY
     - name: CLERK_JWKS_URL
       value: https://clerk.edenobservability.com/.well-known/jwks.json
     - name: CLERK_WEBHOOK_SIGNING_SECRET
       valueFrom:
         secretKeyRef:
-          group: clerk-webhook-signing-secret
+          group: eden-required
           key: CLERK_WEBHOOK_SIGNING_SECRET
     - name: METRICS_BEARER_TOKEN
       valueFrom:
         secretKeyRef:
           group: eden-required
           key: METRICS_BEARER_TOKEN
-          optional: true
     - name: OPENROUTER_API_KEY
       valueFrom:
         secretKeyRef:
-          group: openrouter-api-key
+          group: eden-required
           key: OPENROUTER_API_KEY
     - name: TINYBIRD_ADMIN_TOKEN
       valueFrom:
         secretKeyRef:
-          group: tinybird-admin-token
+          group: eden-required
           key: TINYBIRD_ADMIN_TOKEN
     - name: TINYBIRD_BRANCH_TOKEN
       valueFrom:
         secretKeyRef:
-          group: tinybird-branch-token
+          group: eden-required
           key: TINYBIRD_BRANCH_TOKEN
     - name: SENTRY_DSN
       valueFrom:
         secretKeyRef:
-          group: sentry-dsn
+          group: eden-required
           key: SENTRY_DSN
     - name: GITHUB_APP_ID
       valueFrom:
         secretKeyRef:
-          group: github-app-id
+          group: eden-required
           key: GITHUB_APP_ID
     - name: GITHUB_APP_CLIENT_ID
       valueFrom:
         secretKeyRef:
-          group: github-app-client-id
+          group: eden-required
           key: GITHUB_APP_CLIENT_ID
     - name: GITHUB_APP_CLIENT_SECRET
       valueFrom:
         secretKeyRef:
-          group: github-app-client-secret
+          group: eden-required
           key: GITHUB_APP_CLIENT_SECRET
     - name: GITHUB_APP_PRIVATE_KEY
       valueFrom:
         secretKeyRef:
-          group: github-app-private-key
+          group: eden-required
           key: GITHUB_APP_PRIVATE_KEY
     - name: GITHUB_APP_WEBHOOK_SECRET
       valueFrom:
         secretKeyRef:
-          group: github-app-webhook-secret
+          group: eden-required
           key: GITHUB_APP_WEBHOOK_SECRET
     - name: GITHUB_APP_CALLBACK_URL
       valueFrom:
         secretKeyRef:
-          group: github-app-callback-url
+          group: eden-required
           key: GITHUB_APP_CALLBACK_URL
     - name: SENDKIT_API_KEY
       valueFrom:
         secretKeyRef:
-          group: sendkit-api-key
+          group: eden-required
           key: SENDKIT_API_KEY
     # Public URL slug (github.com/apps/<slug>) — NOT the OAuth client id.
     # Plain value so missing secret groups don't break the deploy; code
@@ -661,26 +652,21 @@ spec:
     - name: SENTRY_ENVIRONMENT
       value: northflank-staging-worker
     - name: POSTGRES_HOST
-      valueFrom: { secretKeyRef: { group: postgres-host, key: POSTGRES-HOST } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_HOST } }
     - name: POSTGRES_PORT
-      valueFrom: { secretKeyRef: { group: postgres-port, key: POSTGRES-PORT } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PORT } }
     - name: POSTGRES_DB
-      valueFrom: { secretKeyRef: { group: postgres-db, key: POSTGRES-DB } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_DB } }
     - name: POSTGRES_USER
-      valueFrom: { secretKeyRef: { group: postgres-user, key: POSTGRES-USER } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_USER } }
     - name: POSTGRES_PASSWORD
-      valueFrom: { secretKeyRef: { group: postgres-password, key: POSTGRES_PASSWORD } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_PASSWORD } }
     - name: POSTGRES_SSLMODE
-      valueFrom: { secretKeyRef: { group: postgres-sslmode, key: POSTGRES-SSLMODE } }
-    # NOT in the confirmed live-group mapping (2026-07-31 reconciliation) —
-    # left pointing at the fictional "eden-required" group on purpose so
-    # the drift checker keeps flagging it instead of silently resolving to
-    # a guessed group. Confirm the real group id before touching this.
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_SSLMODE } }
     - name: POSTGRES_CHANNEL_BINDING
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING, optional: true } }
-    # See POSTGRES_CHANNEL_BINDING note above — same unmapped status.
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING } }
     - name: POSTGRES_ENDPOINT_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID, optional: true } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID } }
     # Pool must cover the largest sidecar's own concurrency plus
     # headroom for the 5 leader-gated loops this process hosts, not
     # just "a worker" — quality_pipeline runs up to 8 concurrent
@@ -703,7 +689,7 @@ spec:
     - name: QDRANT_PORT
       value: "6333"
     - name: QDRANT_API_KEY
-      valueFrom: { secretKeyRef: { group: qdrant-api-key, key: QDRANT_API_KEY } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: QDRANT_API_KEY } }
 
 
 
@@ -711,7 +697,7 @@ spec:
 
 
     - name: REDIS_URL
-      valueFrom: { secretKeyRef: { group: redis-url, key: REDIS_URL } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: REDIS_URL } }
     - name: RATE_LIMIT_DISTRIBUTED
       value: "false"
     - name: REDIS_HEALTH_CHECK_INTERVAL
@@ -738,30 +724,30 @@ spec:
     - name: OPENROUTER_BASE_URL
       value: https://openrouter.ai/api/v1
     - name: JWT_SECRET
-      valueFrom: { secretKeyRef: { group: jwt-secret, key: JWT_SECRET } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: JWT_SECRET } }
     - name: ENCRYPTION_KEY
-      valueFrom: { secretKeyRef: { group: encryption-key, key: ENCRYPTION_KEY } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: ENCRYPTION_KEY } }
     - name: SESSION_SECRET
-      valueFrom: { secretKeyRef: { group: session-secret, key: SESSION_SECRET } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: SESSION_SECRET } }
     - name: OPENROUTER_API_KEY
-      valueFrom: { secretKeyRef: { group: openrouter-api-key, key: OPENROUTER_API_KEY } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: OPENROUTER_API_KEY } }
     - name: TINYBIRD_ADMIN_TOKEN
-      valueFrom: { secretKeyRef: { group: tinybird-admin-token, key: TINYBIRD_ADMIN_TOKEN } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: TINYBIRD_ADMIN_TOKEN } }
     - name: TINYBIRD_BRANCH_TOKEN
-      valueFrom: { secretKeyRef: { group: tinybird-branch-token, key: TINYBIRD_BRANCH_TOKEN } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: TINYBIRD_BRANCH_TOKEN } }
     - name: SENTRY_DSN
-      valueFrom: { secretKeyRef: { group: sentry-dsn, key: SENTRY_DSN } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: SENTRY_DSN } }
     # ── Clerk (Phase 2 audit — workers need it for Cat 14 autonomous
     # actions + future webhook verification in jobs). Without these
     # the worker would have no way to call Clerk on behalf of the
     # user when e.g. posting a Slack notification via Clerk's user
     # lookup, or when re-verifying a webhook signature mid-job.
     - name: CLERK_SECRET_KEY
-      valueFrom: { secretKeyRef: { group: clerk-secret-key, key: CLERK_SECRET_KEY } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_SECRET_KEY } }
     - name: CLERK_PUBLISHABLE_KEY
-      valueFrom: { secretKeyRef: { group: clerk-publishable-key, key: CLERK_PUBLISHABLE_KEY } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_PUBLISHABLE_KEY } }
     - name: CLERK_WEBHOOK_SIGNING_SECRET
-      valueFrom: { secretKeyRef: { group: clerk-webhook-signing-secret, key: CLERK_WEBHOOK_SIGNING_SECRET } }
+      valueFrom: { secretKeyRef: { group: eden-required, key: CLERK_WEBHOOK_SIGNING_SECRET } }
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 2/2: eden-cron (DISABLED — maintenance lives on eden-worker)

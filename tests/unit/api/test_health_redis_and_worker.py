@@ -27,7 +27,9 @@ def _health_payload(client):
 def test_health_exposes_redis_and_worker_heartbeat_fields(api_client) -> None:
     body = _health_payload(api_client)
     assert "redis" in body, "health payload lost the redis field"
-    assert "worker_heartbeat_age_seconds" in body, "health payload lost the worker heartbeat field"
+    assert "worker_heartbeat_age_seconds" in body, (
+        "health payload lost the worker heartbeat field"
+    )
 
 
 def test_health_response_model_declares_the_fields() -> None:
@@ -50,7 +52,9 @@ def test_health_response_model_declares_the_fields() -> None:
     ],
     ids=["unreachable", "hung"],
 )
-def test_unreachable_redis_degrades_health(api_client, side_effect, expected_prefix) -> None:
+def test_unreachable_redis_degrades_health(
+    api_client, side_effect, expected_prefix
+) -> None:
     """A Redis that is down or hanging must not read as healthy."""
     fake = MagicMock()
     fake.ping = AsyncMock(side_effect=side_effect)
@@ -90,8 +94,8 @@ def test_redis_serving_reads_but_dropping_writes_is_reported(api_client) -> None
     start — and a PING-only health check calls that healthy."""
     fake = MagicMock()
     fake.ping = AsyncMock(return_value=True)
-    fake.set = AsyncMock(return_value=None)  # write discarded
-    fake.get = AsyncMock(return_value=None)  # and nothing is there
+    fake.set = AsyncMock(return_value=None)   # write discarded
+    fake.get = AsyncMock(return_value=None)   # and nothing is there
 
     with patch(
         "eden.storage.redis.get_redis_client",
@@ -123,37 +127,13 @@ def test_lost_nx_race_is_not_called_read_only(api_client) -> None:
 def test_unconfigured_redis_does_not_degrade(api_client) -> None:
     """Local / test deployments legitimately run without Redis. That is a
     configuration choice, not an outage — it must be reported, not alarmed."""
-    with (
-        patch("eden.storage.redis.redis_quota_exhausted", return_value=False),
-        patch("eden.storage.redis.redis_url_configured", return_value=False),
-        patch(
-            "eden.storage.redis.get_redis_client",
-            AsyncMock(return_value=None),
-        ),
+    with patch(
+        "eden.storage.redis.get_redis_client",
+        AsyncMock(return_value=None),
     ):
         body = _health_payload(api_client)
 
     assert body["redis"] == "not_configured"
-    # Redis must not be the reason for degradation (qdrant/other soft
-    # deps may still degrade in the shared api_client fixture).
-    assert body["redis"] in ("not_configured",)
-
-
-def test_quota_exhausted_redis_does_not_degrade(api_client) -> None:
-    """Upstash at its plan cap is an intentional Postgres-fallback mode.
-    Report ``quota_exhausted`` honestly without treating Redis as an
-    unexpected outage — leader election already rides Postgres leases."""
-    with (
-        patch("eden.storage.redis.redis_quota_exhausted", return_value=True),
-        patch("eden.storage.redis.redis_url_configured", return_value=True),
-        patch(
-            "eden.storage.redis.get_redis_client",
-            AsyncMock(return_value=None),
-        ),
-    ):
-        body = _health_payload(api_client)
-
-    assert body["redis"] == "quota_exhausted"
 
 
 def test_worker_heartbeat_age_is_surfaced(api_client, mock_postgres_client) -> None:
@@ -190,9 +170,9 @@ def test_health_reports_what_the_background_bundle_actually_started(api_client) 
     ``background_loops.started`` is the fact that actually matters.
     """
     body = _health_payload(api_client)
-    assert (
-        "background_loops" in body
-    ), "health lost the only field that says whether the fleet started"
+    assert "background_loops" in body, (
+        "health lost the only field that says whether the fleet started"
+    )
     snap = body["background_loops"]
     if snap is None:  # import guard tripped — acceptable, but not silent
         return

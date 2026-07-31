@@ -49,30 +49,12 @@ async def check_postgres() -> str:
 
 
 async def check_redis() -> str:
-    """Verify Redis responds to PING.
+    """Verify Redis responds to PING."""
+    from eden.storage.redis import get_redis_client
 
-    Vocabulary (aligned with ``/health``):
-      * ``ok`` — PING succeeded
-      * ``not_configured`` — no Redis URL
-      * ``quota_exhausted`` — Upstash max-requests circuit open
-      * ``error: …`` — probe failed
-    """
-    from eden.storage.redis import (
-        get_redis_client,
-        redis_quota_exhausted,
-        redis_url_configured,
-    )
-
-    if redis_quota_exhausted():
-        return "quota_exhausted"
-    if not redis_url_configured():
-        return "not_configured"
     client = await get_redis_client()
     if client is None:
-        # Race: circuit may have opened between the checks above.
-        if redis_quota_exhausted():
-            return "quota_exhausted"
-        return "not_configured"
+        return "error: REDIS_URL not configured"
     pong = await client.ping()
     if pong not in (True, "PONG", b"PONG"):
         return f"error: unexpected PING response {pong!r}"

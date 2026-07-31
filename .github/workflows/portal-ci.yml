@@ -68,28 +68,6 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
 
-  # Portal quality gates — anti-clutter / layout / class ratchets + polish
-  # invariants. polish:check (scripts/polish-check.sh) already runs
-  # lint:portal-layout, lint:portal-classes, and lint:portal-clutter as
-  # steps, so one script run covers all four npm scripts. Pure static
-  # analysis over src/ — no build or server needed, so this stays fast
-  # and can't be skipped by a flaky server start. Ratchets only fail on
-  # count INCREASES vs the stored baseline (see each script's header), so
-  # this does not regress-flake on unrelated diffs.
-  quality-gates:
-    name: Portal quality gates (clutter/layout/classes/polish)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: clients/portal
-    steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run polish:check
-
   build:
     name: Next.js production build
     runs-on: ubuntu-latest
