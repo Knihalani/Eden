@@ -32,7 +32,7 @@ import { portalApi } from "@/lib/api/portal";
 import { fetchApi } from "@/lib/api/core";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { useLabToast } from "@/lab/lab-toast";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { QueryLoadingPanel } from "@/components/shell/query-error-panel";
 
 function titleFromPrompt(prompt: string): string {
   const t = prompt.trim();
@@ -159,6 +159,19 @@ function LabAgentInner() {
   const [thinking, setThinking] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [seededPrompt, setSeededPrompt] = useState<string | null>(null);
+
+  // Org switch must re-boot — otherwise prior-org threads / conversation
+  // IDs stay in local state and can POST into the new workspace.
+  useEffect(() => {
+    bootedRef.current = false;
+    conversationIdsRef.current = {};
+    syncedThreadUrl.current = false;
+    setThreads([]);
+    setActiveId("");
+    setDraft("");
+    setThinking(false);
+    setSeededPrompt(null);
+  }, [orgId]);
 
   // Boot once live threads have resolved (or failed) — mirrors the
   // previous synchronous fixture-driven boot, just deferred one tick.
@@ -521,8 +534,10 @@ function LabAgentInner() {
           );
         }
       } finally {
-        if (abortRef.current === controller) abortRef.current = null;
-        setThinking(false);
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          setThinking(false);
+        }
       }
     },
     [orgId, pushToast],

@@ -121,6 +121,49 @@ function LabDebuggerDetailInner() {
     traces.find((t) => t.id !== leftTraceId)?.id ??
     leftTraceId;
 
+  const sourceTraceQuery = useOrgQuery(
+    queryKeys.portal.traceDetail(orgId, session?.sourceTraceId ?? null),
+    orgId,
+    () => portalApi.traceDetail(orgId!, session!.sourceTraceId),
+    {
+      ...SHELL_QUERY,
+      staleTime: ASSIST_STALE,
+      enabled: Boolean(orgId && session?.sourceTraceId),
+    },
+  );
+  const leftDetailQuery = useOrgQuery(
+    queryKeys.portal.traceDetail(orgId, leftTraceId || null),
+    orgId,
+    () => portalApi.traceDetail(orgId!, leftTraceId),
+    {
+      ...SHELL_QUERY,
+      staleTime: ASSIST_STALE,
+      enabled: Boolean(orgId && leftTraceId && mode === "compare"),
+    },
+  );
+  const rightDetailQuery = useOrgQuery(
+    queryKeys.portal.traceDetail(orgId, rightTraceId || null),
+    orgId,
+    () => portalApi.traceDetail(orgId!, rightTraceId),
+    {
+      ...SHELL_QUERY,
+      staleTime: ASSIST_STALE,
+      enabled: Boolean(
+        orgId && rightTraceId && mode === "compare" && rightTraceId !== leftTraceId,
+      ),
+    },
+  );
+
+  const sourceTrace = sourceTraceQuery.data ?? null;
+  const leftTrace =
+    leftDetailQuery.data ??
+    (leftTraceId === session?.sourceTraceId ? sourceTrace : null);
+  const rightTrace =
+    rightTraceId === leftTraceId
+      ? leftTrace
+      : (rightDetailQuery.data ??
+        (rightTraceId === session?.sourceTraceId ? sourceTrace : null));
+
   useEffect(() => {
     if (paramAgent && paramAgent !== agentId) setAgentId(paramAgent);
   }, [paramAgent, agentId, setAgentId]);
@@ -272,6 +315,7 @@ function LabDebuggerDetailInner() {
               focusSpanId={paramSpan}
               onFocusSpan={(spanId) => patchQuery({ spanId })}
               onReplay={onReplay}
+              sourceTrace={sourceTrace}
             />
           ) : null}
           {mode === "compare" ? (
@@ -281,6 +325,8 @@ function LabDebuggerDetailInner() {
               rightTraceId={rightTraceId}
               onLeftChange={(id) => patchQuery({ leftTraceId: id })}
               onRightChange={(id) => patchQuery({ rightTraceId: id })}
+              leftTrace={leftTrace}
+              rightTrace={rightTrace}
             />
           ) : null}
           {mode === "inspect" ? (
@@ -288,6 +334,7 @@ function LabDebuggerDetailInner() {
               session={session}
               focusSpanId={paramSpan}
               onFocusSpan={(spanId) => patchQuery({ spanId })}
+              sourceTrace={sourceTrace}
             />
           ) : null}
 
