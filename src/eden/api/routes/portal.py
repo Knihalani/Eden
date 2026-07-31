@@ -2847,9 +2847,10 @@ async def list_portal_assistant_threads(
     """Assistant threads from ai-insights / conversations when available.
 
     Resolves Clerk ``user_…`` → Eden ``users.id`` before querying
-    (UUID columns). Missing conversation tables soft-empty; a dead
-    Postgres still 503s so onboarding is not confused with "no chats".
-    The Assistant UI seeds a blank thread when this errors.
+    (``users.id`` is TEXT in Clerk-era prod, UUID on fresh Alembic).
+    Missing conversation tables soft-empty; a dead Postgres still 503s
+    so onboarding is not confused with "no chats". The Assistant UI
+    seeds a blank thread when this errors.
     """
     client = await _pg()
     if client is None:
