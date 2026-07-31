@@ -156,11 +156,11 @@ export function buildDiagnosis(input: {
   if (input.agentCount === 0 || input.traceCountEver === 0) {
     primaryHref = "/agents/connect";
   } else if (input.openIssueCount > 0 && worstAgentId) {
-    primaryHref = `/issues?agentId=${encodeURIComponent(worstAgentId)}`;
+    primaryHref = `/issues?agent=${encodeURIComponent(worstAgentId)}`;
   } else if (input.openIssueCount > 0) {
     primaryHref = "/issues";
   } else if (input.errorTraceCount > 0 && worstAgentId) {
-    primaryHref = `/traces?outcome=error&agentId=${encodeURIComponent(worstAgentId)}`;
+    primaryHref = `/traces?outcome=error&agent=${encodeURIComponent(worstAgentId)}`;
   } else if (input.errorTraceCount > 0) {
     primaryHref = "/traces?outcome=error";
   } else if (worstAgentId) {
@@ -195,7 +195,7 @@ export function buildNextAction(input: {
 
   if (input.openIssueCount > 0) {
     const href = input.worstAgentId
-      ? `/issues?agentId=${encodeURIComponent(input.worstAgentId)}`
+      ? `/issues?agent=${encodeURIComponent(input.worstAgentId)}`
       : "/issues";
     return {
       kind: "open_issue",
@@ -206,7 +206,7 @@ export function buildNextAction(input: {
 
   if (input.errorTraceCount > 0) {
     const href = input.worstAgentId
-      ? `/traces?outcome=error&agentId=${encodeURIComponent(input.worstAgentId)}`
+      ? `/traces?outcome=error&agent=${encodeURIComponent(input.worstAgentId)}`
       : "/traces?outcome=error";
     return {
       kind: "review_failures",
@@ -220,7 +220,7 @@ export function buildNextAction(input: {
     input.worstStatus === "degraded"
   ) {
     const href = input.worstAgentId
-      ? `/improve?tab=plans&agentId=${encodeURIComponent(input.worstAgentId)}`
+      ? `/improve?tab=plans&agent=${encodeURIComponent(input.worstAgentId)}`
       : "/improve?tab=plans";
     return {
       kind: "create_plan",

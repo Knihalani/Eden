@@ -1,14 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ds/primitives";
 import { ConnectRepoPanel } from "@/components/agents/ConnectRepoPanel";
+import {
+  clearStoredInstallAgentId,
+  readStoredInstallAgentId,
+} from "@/lib/github-install";
 
 function ConnectInner() {
   const searchParams = useSearchParams();
-  const agentId = searchParams.get("agent");
+  const router = useRouter();
+  const agentFromQuery = searchParams.get("agent");
+  const [agentId, setAgentId] = useState<string | null>(agentFromQuery);
+
+  // GitHub callback drops ?agent= — restore from sessionStorage after install.
+  useEffect(() => {
+    if (agentFromQuery) {
+      setAgentId(agentFromQuery);
+      return;
+    }
+    const stored = readStoredInstallAgentId();
+    if (!stored) return;
+    setAgentId(stored);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("agent", stored);
+    clearStoredInstallAgentId();
+    router.replace(`/agents/connect?${params.toString()}`);
+  }, [agentFromQuery, router, searchParams]);
 
   return (
     <div className="ds-page">

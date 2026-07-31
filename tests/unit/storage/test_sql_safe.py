@@ -31,7 +31,17 @@ def test_safe_cost_sum_nullif_empty():
     frag = safe_cost_sum_sql()
     assert "NULLIF" in frag
     assert "cost_usd" in frag
+    assert "COALESCE" in frag
 
+
+def test_safe_cost_sum_nullable_omits_zero_coalesce():
+    from eden.storage.sql_safe import safe_cost_sum_nullable_sql
+
+    frag = safe_cost_sum_nullable_sql(alias="r.")
+    assert "NULLIF" in frag
+    assert "r.metrics->>'cost_usd'" in frag
+    assert "COALESCE(SUM" not in frag
+    assert frag.startswith("SUM(")
 
 def test_safe_token_coalesce_ladder():
     frag = safe_token_coalesce_sql(

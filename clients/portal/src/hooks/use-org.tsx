@@ -10,7 +10,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { useOrganization, useUser } from "@clerk/nextjs";
+import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/core";
 import type { Organization } from "@/lib/types";
@@ -141,6 +141,13 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const { organization: clerkOrg, membership, isLoaded: clerkOrgLoaded } =
     useOrganization();
   const { user, isLoaded: userLoaded } = useUser();
+  const {
+    isLoaded: orgListLoaded,
+    setActive,
+    userMemberships,
+  } = useOrganizationList({
+    userMemberships: { infinite: false },
+  });
   const queryClient = useQueryClient();
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -154,6 +161,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // Tracks which me+clerk snapshot we've applied so hydrate can sync
   // during render (avoids empty-workspace flash before useEffect).
   const appliedMeKeyRef = useRef<string | null>(null);
+  // Prevents re-entrant setActive when Clerk has memberships but no
+  // active org (known-issue #6 — create-org task remint loop).
+  const activatingOrgRef = useRef(false);
 
   const authErrorRef = useRef<string | null>(null);
   const authErrorKindRef = useRef<AuthErrorKind | null>(null);
@@ -294,6 +304,43 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       );
     }
   }
+
+  // After sign-in: if Clerk has memberships but no active org, activate one.
+  // Stops the hosted create-organization session task from reminting orgs
+  // (docs/ops/known-issues.md §6). Prefer Eden's preferred clerk_org_id.
+  useEffect(() => {
+    if (!userLoaded || !clerkOrgLoaded || !orgListLoaded) return;
+    if (!user || clerkOrg || !setActive || activatingOrgRef.current) return;
+
+    const memberships = userMemberships?.data ?? [];
+    const edenOrgs = meQuery.data?.organizations ?? [];
+    const preferredClerkId =
+      edenOrgs.find((o) => o.id === meQuery.data?.current_org_id)
+        ?.clerk_org_id ??
+      edenOrgs.find((o) => Boolean(o.clerk_org_id))?.clerk_org_id ??
+      null;
+    const fromMembership = memberships[0]?.organization?.id ?? null;
+    const target = preferredClerkId || fromMembership;
+    if (!target) return;
+
+    activatingOrgRef.current = true;
+    void setActive({ organization: target })
+      .catch(() => {
+        /* leave inactive — empty banner / create-workspace still available */
+      })
+      .finally(() => {
+        activatingOrgRef.current = false;
+      });
+  }, [
+    userLoaded,
+    clerkOrgLoaded,
+    orgListLoaded,
+    user,
+    clerkOrg,
+    setActive,
+    userMemberships?.data,
+    meQuery.data,
+  ]);
 
   // Drop org-scoped RQ cache when Clerk's active org changes, then
   // force a fresh ``/auth/me`` so enrichment matches the new org.

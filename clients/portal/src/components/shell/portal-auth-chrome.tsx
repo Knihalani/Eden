@@ -117,7 +117,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           aria-label={ariaLabel}
           aria-expanded={open}
           aria-haspopup="listbox"
-          aria-controls={listId}
+          aria-controls={open ? listId : undefined}
           disabled={!isLoaded || busy}
           onClick={() => setOpen((v) => !v)}
           title={label}
@@ -148,7 +148,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-controls={listId}
+        aria-controls={open ? listId : undefined}
         disabled={!isLoaded || busy || organizations.length === 0}
         onClick={() => setOpen((v) => !v)}
       >
@@ -253,7 +253,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-controls={menuId}
+        aria-controls={open ? menuId : undefined}
         onClick={() => setOpen((v) => !v)}
       >
         {imageUrl ? (

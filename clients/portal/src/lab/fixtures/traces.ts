@@ -31,7 +31,8 @@ export type TraceFixture = {
   startedAt: string;
   durationMs: number;
   tokens: number;
-  costUsd: number;
+  /** null = cost unknown (unstamped / degraded). */
+  costUsd: number | null;
   /** Hard failure or soft warning */
   severity: "error" | "warn" | "none";
   /** Multi-turn thread this run belongs to (G6 Sessions). */
@@ -62,8 +63,7 @@ export function formatTokens(n: number): string {
 }
 
 export function formatUsd(n: number | null | undefined, digits = 2): string {
-  if (n == null) return "—";
-  if (!Number.isFinite(n)) return "$0.00";
+  if (n == null || !Number.isFinite(n)) return "—";
   // Sub-cent LLM costs (MiniMax etc.) used to render as "$0.000" /
   // "$0.00" and looked like billing was broken.
   if (n > 0 && n < 10 ** -digits) {
@@ -71,6 +71,17 @@ export function formatUsd(n: number | null | undefined, digits = 2): string {
     return `$${n.toFixed(needed)}`;
   }
   return `$${n.toFixed(digits)}`;
+}
+
+/** Prefer the largest known cost; null when every candidate is unknown. */
+export function preferKnownCostUsd(
+  ...candidates: Array<number | null | undefined>
+): number | null {
+  const known = candidates.filter(
+    (c): c is number => c != null && Number.isFinite(c),
+  );
+  if (known.length === 0) return null;
+  return Math.max(...known);
 }
 
 export const TRACE_COUNTS = {

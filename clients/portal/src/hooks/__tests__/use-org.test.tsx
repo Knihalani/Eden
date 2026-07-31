@@ -52,6 +52,11 @@ vi.mock("@/lib/api/auth-client", () => ({
 vi.mock("@clerk/nextjs", () => ({
   useOrganization: () => ({ organization: null, membership: null, isLoaded: true }),
   useUser: () => ({ user: { id: "user_1" }, isLoaded: true }),
+  useOrganizationList: () => ({
+    isLoaded: true,
+    setActive: vi.fn(async () => undefined),
+    userMemberships: { data: [] },
+  }),
 }));
 
 // Isolate the test from usePolling's own mount-time + interval fetch —

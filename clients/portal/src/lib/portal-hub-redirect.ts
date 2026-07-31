@@ -136,9 +136,7 @@ export function resolveHubTarget(
   if (p === "/onboarding" || p.startsWith("/onboarding/")) {
     const extra = search.replace(/^\?/, "");
     return {
-      destination: extra
-        ? `/home?onboarding=1&${extra}`
-        : "/home?onboarding=1",
+      destination: extra ? `/home?${extra}` : "/home",
       mode: "redirect",
     };
   }

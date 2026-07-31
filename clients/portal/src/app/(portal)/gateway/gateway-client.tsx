@@ -55,7 +55,8 @@ const CHART_COLORS = [
 ];
 
 function formatUsd(n: number | null | undefined): string {
-  const v = Number(n) || 0;
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  const v = Number(n);
   if (Math.abs(v) < 0.01 && v !== 0) return `$${v.toFixed(4)}`;
   return `$${v.toFixed(2)}`;
 }

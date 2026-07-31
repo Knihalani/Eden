@@ -60,9 +60,9 @@ export type ExperimentFixture = {
   status: ExperimentStatus;
   createdAt: string;
   avgScores: Record<string, number>;
-  latencyMs: number;
-  costUsd: number;
-  errorRate: number;
+  latencyMs: number | null;
+  costUsd: number | null;
+  errorRate: number | null;
   suggestedBaselineId?: string;
 };
 

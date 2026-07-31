@@ -40,7 +40,7 @@ export function CostSpendView({
   const spend =
     agentId === "all"
       ? fleetSpend24h()
-      : (agentById(agentId)?.costUsd24h ?? 0);
+      : (agentById(agentId)?.costUsd24h ?? null);
   const runs =
     agentId === "all"
       ? fleetRuns24h()
@@ -48,9 +48,9 @@ export function CostSpendView({
   const avg =
     agentId === "all"
       ? avgCostPerRun()
-      : runs
+      : runs && spend != null
         ? spend / runs
-        : 0;
+        : null;
 
   const showOrgBudget = agentId === "all";
   const pct = Math.min(
@@ -79,19 +79,27 @@ export function CostSpendView({
         />
         {showOrgBudget ? (
           <Kpi
-            label="Budget"
+            label="Org budget"
             value={
-              <>
-                <span className={pressure ? "text-[var(--error)]" : undefined}>
-                  {formatUsd(budget.spentUsd)}
-                </span>
-                <span className="text-[var(--text-muted)]">
-                  {" "}
-                  / {formatUsd(budget.limitUsd)}
-                </span>
-              </>
+              budget.limitUsd > 0 ? (
+                <>
+                  <span className={pressure ? "text-[var(--error)]" : undefined}>
+                    {formatUsd(budget.spentUsd)}
+                  </span>
+                  <span className="text-[var(--text-muted)]">
+                    {" "}
+                    / {formatUsd(budget.limitUsd)}
+                  </span>
+                </>
+              ) : (
+                "—"
+              )
             }
-            hint={`${pct}% · open drivers`}
+            hint={
+              budget.limitUsd > 0
+                ? `${pct}% · gateway budget (not telemetry spend)`
+                : "No hard limit set"
+            }
             onClick={onGoDrivers}
           />
         ) : (
@@ -104,7 +112,7 @@ export function CostSpendView({
         )}
       </div>
 
-      {showOrgBudget ? (
+      {showOrgBudget && budget.limitUsd > 0 ? (
         <div className="shrink-0 border-b border-[var(--line)] px-4 py-3 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p>
@@ -119,6 +127,8 @@ export function CostSpendView({
                   of {formatUsd(budget.limitUsd)}
                 </span>
               </span>
+              <span className="type-sep mx-1.5">·</span>
+              <span className="type-meta">gateway budget</span>
             </p>
             <BudgetChip status={budget.status} />
           </div>
@@ -152,9 +162,10 @@ export function CostSpendView({
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {agents.map((a) => {
-              const perRun = a.runs24h
-                ? (a.costUsd24h ?? 0) / a.runs24h
-                : 0;
+              const perRun =
+                a.runs24h && a.costUsd24h != null
+                  ? a.costUsd24h / a.runs24h
+                  : null;
               const active = agentId === a.id;
               return (
                 <li key={a.id}>

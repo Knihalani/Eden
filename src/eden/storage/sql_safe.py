@@ -41,12 +41,25 @@ def safe_output_token_sum_sql(*, alias: str = "", col: str = "metrics") -> str:
 
 
 def safe_cost_sum_sql(*, alias: str = "", col: str = "metrics") -> str:
-    """SUM(cost_usd) as float from one jsonb column."""
+    """SUM(cost_usd) as float from one jsonb column.
+
+    Coalesces to ``0`` when every row lacked a stamped cost — callers that
+    estimate from tokens (trace list) should use this form.
+    """
     return (
         "COALESCE(SUM("
         f"COALESCE((NULLIF({alias}{col}->>'cost_usd', ''))::float, 0)"
         "), 0)::float"
     )
+
+
+def safe_cost_sum_nullable_sql(*, alias: str = "", col: str = "metrics") -> str:
+    """SUM(cost_usd); SQL NULL when no event stamped cost_usd.
+
+    Use for agent-card rollups so the portal can show ``—`` instead of
+    inventing ``$0.00`` when cost was never recorded.
+    """
+    return f"SUM((NULLIF({alias}{col}->>'cost_usd', ''))::float)"
 
 
 def safe_token_coalesce_sql(

@@ -45,7 +45,7 @@ from eden.api.portal_contracts import (
 )
 from eden.api.utils.redact import redact_all
 from eden.storage.sql_safe import (
-    safe_cost_sum_sql,
+    safe_cost_sum_nullable_sql,
     safe_input_token_sum_sql,
     safe_output_token_sum_sql,
     safe_token_sum_sql,
@@ -209,28 +209,34 @@ def _trace_signal_summary(
 
 def _resolved_trace_cost_usd(
     *,
-    cost_usd: float,
+    cost_usd: float | None,
     input_tokens: int,
     output_tokens: int,
     model: str | None,
-) -> float:
-    """Prefer stamped cost; else estimate from tokens + seed pricing."""
-    if cost_usd > 0:
+) -> float | None:
+    """Prefer stamped cost; else estimate from tokens + seed pricing.
+
+    Returns ``None`` when cost was never stamped and there are no tokens
+    to estimate from — callers should render ``—``, not ``$0.00``.
+    """
+    if cost_usd is not None and cost_usd > 0:
         return round(cost_usd, 6)
+    if input_tokens <= 0 and output_tokens <= 0:
+        return None if cost_usd is None else round(float(cost_usd), 6)
     try:
         from eden.llmops.pricing import estimate_cost_usd
 
-        return round(
-            estimate_cost_usd(
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                existing=cost_usd,
-            ),
-            6,
+        estimated = estimate_cost_usd(
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            existing=float(cost_usd or 0),
         )
+        if estimated > 0:
+            return round(estimated, 6)
+        return None if cost_usd is None else round(float(cost_usd), 6)
     except Exception:  # noqa: BLE001
-        return round(cost_usd, 6)
+        return None if cost_usd is None else round(float(cost_usd), 6)
 
 
 def _normalize_notify_channel(raw: object | None) -> str:
@@ -828,17 +834,27 @@ async def list_portal_agents(
                     -- approximate; full-window GROUP BY is too expensive
                     -- for hot tenants on every agents page load.
                     LIMIT 4000
+                ),
+                -- Collapse framework instrument ids (pydantic-ai:…) onto the
+                -- preferred SDK agent_id per trace — same rule as the traces
+                -- list — so registered agents do not show 0 runs while their
+                -- preferred-id traces appear in the feed.
+                trace_agent AS (
+                    SELECT trace_id,
+                           {_PREFERRED_AGENT_ID_SQL} AS agent_id
+                    FROM recent
+                    GROUP BY trace_id
                 )
-                SELECT agent_id,
-                       COUNT(DISTINCT trace_id)::int AS runs,
-                       {safe_cost_sum_sql()} AS cost_usd,
-                       {safe_token_sum_sql()} AS tokens,
+                SELECT ta.agent_id,
+                       COUNT(DISTINCT r.trace_id)::int AS runs,
+                       {safe_cost_sum_nullable_sql(alias="r.")} AS cost_usd,
+                       {safe_token_sum_sql(alias="r.")} AS tokens,
                        AVG(
                            CASE
-                               WHEN lower(coalesce(outcome, '')) IN
+                               WHEN lower(coalesce(r.outcome, '')) IN
                                     ('error','failed','failure','fail')
                                THEN 0.0
-                               WHEN lower(coalesce(outcome, '')) IN
+                               WHEN lower(coalesce(r.outcome, '')) IN
                                     ('ok','success','succeeded','completed',
                                      'pass','passed')
                                THEN 1.0
@@ -846,14 +862,16 @@ async def list_portal_agents(
                            END
                        )::float AS success_rate,
                        percentile_cont(0.5) WITHIN GROUP (
-                           ORDER BY duration_ms
+                           ORDER BY r.duration_ms
                        )::float AS p50,
                        percentile_cont(0.95) WITHIN GROUP (
-                           ORDER BY duration_ms
+                           ORDER BY r.duration_ms
                        )::float AS p95,
-                       MAX(timestamp) AS last_seen
-                FROM recent
-                GROUP BY agent_id
+                       MAX(r.timestamp) AS last_seen
+                FROM recent r
+                INNER JOIN trace_agent ta ON ta.trace_id = r.trace_id
+                WHERE ta.agent_id IS NOT NULL
+                GROUP BY ta.agent_id
                 ORDER BY runs DESC
                 LIMIT 200
                 """,
@@ -869,14 +887,29 @@ async def list_portal_agents(
             # query so cards still appear (runs/tokens stay zero).
             try:
                 id_rows = await client.fetch(
-                    """
-                    SELECT agent_id, COUNT(DISTINCT trace_id)::int AS runs,
-                           MAX(timestamp) AS last_seen
-                    FROM telemetry_events
-                    WHERE tenant_id = $1
-                      AND agent_id IS NOT NULL
-                      AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
-                    GROUP BY agent_id
+                    f"""
+                    WITH recent AS (
+                        SELECT agent_id, trace_id, timestamp
+                        FROM telemetry_events
+                        WHERE tenant_id = $1
+                          AND agent_id IS NOT NULL
+                          AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
+                        ORDER BY timestamp DESC
+                        LIMIT 4000
+                    ),
+                    trace_agent AS (
+                        SELECT trace_id,
+                               {_PREFERRED_AGENT_ID_SQL} AS agent_id
+                        FROM recent
+                        GROUP BY trace_id
+                    )
+                    SELECT ta.agent_id,
+                           COUNT(DISTINCT r.trace_id)::int AS runs,
+                           MAX(r.timestamp) AS last_seen
+                    FROM recent r
+                    INNER JOIN trace_agent ta ON ta.trace_id = r.trace_id
+                    WHERE ta.agent_id IS NOT NULL
+                    GROUP BY ta.agent_id
                     ORDER BY runs DESC
                     LIMIT 200
                     """,
@@ -1082,7 +1115,7 @@ async def list_portal_traces(
                    {safe_token_sum_sql(alias="e.")} AS tokens,
                    {safe_input_token_sum_sql(alias="e.")} AS input_tokens,
                    {safe_output_token_sum_sql(alias="e.")} AS output_tokens,
-                   {safe_cost_sum_sql(alias="e.")} AS cost_usd,
+                   {safe_cost_sum_nullable_sql(alias="e.")} AS cost_usd,
                    {_PREFERRED_MODEL_SQL} AS model,
                    MAX(e.attributes->>'session_id') AS session_id
             FROM telemetry_events e
@@ -1112,7 +1145,9 @@ async def list_portal_traces(
         status, severity = _map_trace_outcome(r.get("outcome"))
         name = str(r["name"] or r["trace_id"])
         cost_usd = _resolved_trace_cost_usd(
-            cost_usd=float(r["cost_usd"] or 0),
+            cost_usd=(
+                float(r["cost_usd"]) if r.get("cost_usd") is not None else None
+            ),
             input_tokens=int(r["input_tokens"] or 0),
             output_tokens=int(r["output_tokens"] or 0),
             model=str(r["model"]) if r.get("model") else None,
@@ -1171,7 +1206,7 @@ async def get_portal_trace(
                    {safe_token_sum_sql()} AS tokens,
                    {safe_input_token_sum_sql()} AS input_tokens,
                    {safe_output_token_sum_sql()} AS output_tokens,
-                   {safe_cost_sum_sql()} AS cost_usd,
+                   {safe_cost_sum_nullable_sql()} AS cost_usd,
                    {_PREFERRED_MODEL_SQL_UNALIASED} AS model,
                    MAX(attributes->>'session_id') AS session_id
             FROM telemetry_events
@@ -1271,15 +1306,19 @@ async def get_portal_trace(
     status, severity = _map_trace_outcome(row.get("outcome"))
     name = str(row["name"] or row["trace_id"])
     cost_usd = _resolved_trace_cost_usd(
-        cost_usd=float(row["cost_usd"] or 0),
+        cost_usd=(
+            float(row["cost_usd"]) if row.get("cost_usd") is not None else None
+        ),
         input_tokens=int(row["input_tokens"] or 0),
         output_tokens=int(row["output_tokens"] or 0),
         model=str(row["model"]) if row.get("model") else None,
     )
-    # Prefer per-step cost rollup when the tree hydrated and stamped
-    # costs on spans (ingest or estimate_cost_usd on read).
-    step_cost = sum(float(s.costUsd or 0) for s in steps)
-    if step_cost > cost_usd:
+    # Prefer per-step cost rollup when the tree hydrated stamped costs.
+    known_step_costs = [
+        float(s.costUsd) for s in steps if s.costUsd is not None
+    ]
+    step_cost = sum(known_step_costs) if known_step_costs else None
+    if step_cost is not None and (cost_usd is None or step_cost > cost_usd):
         cost_usd = round(step_cost, 6)
     return TraceListItem(
         id=str(row["trace_id"]),
@@ -1363,7 +1402,11 @@ async def list_portal_sessions(
                 outcome=outcome,  # type: ignore[arg-type]
                 durationMs=duration_ms,
                 totalTokens=int(data.get("total_tokens") or 0),
-                costUsd=float(data.get("cost_usd") or 0),
+                costUsd=(
+                    float(data["cost_usd"])
+                    if data.get("cost_usd") is not None
+                    else None
+                ),
                 lastErrorSummary=str(failure_reason) if failure_reason else None,
                 diagnosis=diagnosis,
                 relatedIssueIds=[],  # filled below
@@ -2358,9 +2401,9 @@ async def list_portal_experiments(
                 status=_map_experiment_status(data.get("status")),  # type: ignore[arg-type]
                 createdAt=_iso(data.get("created_at")),
                 avgScores={},
-                latencyMs=0.0,
-                costUsd=0.0,
-                errorRate=0.0,
+                latencyMs=None,
+                costUsd=None,
+                errorRate=None,
                 suggestedBaselineId=None,
             )
         )

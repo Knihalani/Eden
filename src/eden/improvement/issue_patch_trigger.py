@@ -242,9 +242,7 @@ async def _budget_ok(org_id: str) -> tuple[bool, str]:
         settings = get_settings()
         cap = float(getattr(settings, "daily_maintenance_budget_usd", 25.0) or 0)
         if cap > 0:
-            spent = await sum_feature_spend_today(
-                org_id, features=("patches", "autonomy")
-            )
+            spent = await sum_feature_spend_today(org_id, features=("patches", "autonomy"))
             if spent >= cap:
                 return False, f"budget_exhausted:{spent:.2f}>={cap:.2f}"
 
@@ -527,9 +525,7 @@ def _stack_trace_from_detail(detail: dict[str, Any] | None) -> str | None:
     return None
 
 
-async def _extract_linker_inputs(
-    org_id: str, ctx: dict[str, Any]
-) -> dict[str, Any]:
+async def _extract_linker_inputs(org_id: str, ctx: dict[str, Any]) -> dict[str, Any]:
     triage = ctx.get("triage") or {}
     stack_trace = _stack_trace_from_detail(triage)
     if not stack_trace:
@@ -617,9 +613,7 @@ async def propose_patch_for_issue(org_id: str, issue_id: str) -> dict[str, Any]:
     return result
 
 
-async def propose_patch_for_action(
-    org_id: str, action: dict[str, Any]
-) -> dict[str, Any]:
+async def propose_patch_for_action(org_id: str, action: dict[str, Any]) -> dict[str, Any]:
     """Adapter for closed_loop_executor._dispatch_side_effect."""
     from eden.improvement.sweep_budget import llm_budget_scope
 

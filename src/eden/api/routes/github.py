@@ -117,6 +117,11 @@ _MANIFEST_FILES = (
 class ConfiguredResponse(BaseModel):
     configured: bool
     app_slug: str | None = None
+    #: Repository Contents permission on the App registration
+    #: (``read`` / ``write`` / ``none``). PR creation needs ``write``.
+    contents_permission: str | None = None
+    #: True when the App can create branches/blobs/commits for fix PRs.
+    can_open_prs: bool = False
 
 
 class AuthorizeResponse(BaseModel):
@@ -166,7 +171,8 @@ class ClaimInstallationRequest(BaseModel):
 class ConnectRepoRequest(BaseModel):
     installation_id: int
     repo_full_name: str
-    default_branch: str = "main"
+    # Empty means "resolve from GitHub at connect time" — do not invent main.
+    default_branch: str = ""
     # Per-agent link: one active repo per agent. Required for new connects
     # from the Agents UI; omit only for legacy org-wide links.
     agent_id: str | None = None
@@ -200,8 +206,8 @@ class ConnectRepoRequest(BaseModel):
 
     @field_validator("default_branch")
     @classmethod
-    def _nonempty_default_branch(cls, v: str) -> str:
-        branch = (v or "").strip() or "main"
+    def _normalize_default_branch(cls, v: str) -> str:
+        branch = (v or "").strip()
         if len(branch) > 128:
             raise ValueError("default_branch is too long")
         return branch
@@ -634,14 +640,29 @@ async def _sync_improvement_plan_on_pr_close(
 async def github_configured() -> ConfiguredResponse:
     """Public — does this Eden instance have a GitHub App wired up?"""
     slug: str | None = None
+    contents_permission: str | None = None
+    can_open_prs = False
     if is_configured():
         try:
-            slug = GitHubOAuthClient().resolve_app_slug()
+            client = GitHubOAuthClient()
+            slug = client.resolve_app_slug()
+            try:
+                perms = await client.app_permissions()
+                contents_permission = str(perms.get("contents") or "none")
+                # pull_requests:write opens the PR; contents:write pushes commits.
+                can_open_prs = (
+                    contents_permission == "write"
+                    and str(perms.get("pull_requests") or "") == "write"
+                )
+            except Exception as exc:  # noqa: BLE001 — best-effort metadata
+                logger.debug("github_configured: app_permissions failed: %s", exc)
         except GitHubConfigError:
             slug = None
     return ConfiguredResponse(
         configured=is_configured(),
         app_slug=slug,
+        contents_permission=contents_permission,
+        can_open_prs=can_open_prs,
     )
 
 
@@ -1146,7 +1167,7 @@ async def connect_org_repo(
     pg = await get_postgres_client()
     installation_id = int(req.installation_id)
     repo_full_name = req.repo_full_name
-    default_branch = req.default_branch
+    default_branch = (req.default_branch or "").strip()
     agent_id = (req.agent_id or "").strip() or None
 
     owned = await pg.fetchrow(
@@ -1164,6 +1185,45 @@ async def connect_org_repo(
             400,
             "GitHub installation is not registered for this organization "
             "(or is suspended). Claim the installation first.",
+        )
+
+    if not default_branch:
+        try:
+            _, installation_token = await _client_for(installation_id)
+            repos = await GitHubOAuthClient().list_installation_repos(
+                installation_token
+            )
+            match = next(
+                (r for r in repos if r.full_name == repo_full_name),
+                None,
+            )
+            if match is not None:
+                default_branch = (match.default_branch or "").strip()
+            if not default_branch:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=15.0) as http:
+                    r = await http.get(
+                        f"https://api.github.com/repos/{repo_full_name}",
+                        headers={
+                            "Authorization": f"Bearer {installation_token.token}",
+                            "Accept": "application/vnd.github+json",
+                            "X-GitHub-Api-Version": "2022-11-28",
+                        },
+                    )
+                if r.status_code == 200:
+                    default_branch = str(r.json().get("default_branch") or "").strip()
+        except Exception as exc:
+            logger.warning(
+                "connect_org_repo: resolve default_branch failed: %s",
+                redact_all(str(exc)),
+            )
+            default_branch = ""
+    if not default_branch:
+        raise HTTPException(
+            400,
+            "Could not resolve the repo default branch. Pass default_branch "
+            "explicitly or ensure the installation can read the repository.",
         )
 
     connected_by = await resolve_eden_user_id(user.get("user_id"))

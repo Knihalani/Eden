@@ -721,7 +721,9 @@ export function AgentScopeFilter({
 }) {
   return (
     <label className="block min-w-0">
-      <span className="sr-only">Agent</span>
+      <span className="type-meta mb-1 block text-[var(--text-secondary)]">
+        Viewing agent
+      </span>
       <select
         className="ds-input w-full"
         value={value}

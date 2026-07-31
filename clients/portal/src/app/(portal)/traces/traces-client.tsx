@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import {
   formatDuration,
+  preferKnownCostUsd,
   sortTracesNewestFirst,
   type TraceFixture,
   type TranscriptStep,
@@ -75,6 +76,7 @@ import {
   type HubView,
 } from "@/lab/traces-session-lens";
 import { cn } from "@/lib/utils";
+import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 type DetailTab = "trace" | "tree" | "signals" | "chat";
 type SeverityFilter = "all" | "error" | "warn" | "ok";
@@ -430,7 +432,7 @@ function ChatPanel({
         <p className="type-body text-[var(--text-secondary)]">
           {trace.signals.title
             ? `${trace.signals.title} — ${trace.signals.body || "Open the assistant to investigate."}`
-            : `${trace.name} · ${trace.tokens.toLocaleString()} tokens · $${trace.costUsd.toFixed(4)}. Open the assistant for a real answer.`}
+            : `${trace.name} · ${trace.tokens.toLocaleString()} tokens · ${trace.costUsd != null ? `$${trace.costUsd.toFixed(4)}` : "—"}. Open the assistant for a real answer.`}
         </p>
       </div>
       <div className="flex shrink-0 gap-2 border-t border-[var(--line)] px-4 py-3 sm:px-5">
@@ -907,10 +909,14 @@ function LabTracesInner() {
     const detail = traceDetailQuery.data;
     if (detail && detail.id === selectedId) {
       const base = selectedListItem ?? detail;
-      const stepCost = Array.isArray(detail.steps)
-        ? detail.steps.reduce((sum, s) => sum + (s.costUsd ?? 0), 0)
-        : 0;
-      const costUsd = Math.max(detail.costUsd ?? 0, base.costUsd ?? 0, stepCost);
+      const stepCosts = Array.isArray(detail.steps)
+        ? detail.steps
+            .map((s) => s.costUsd)
+            .filter((c): c is number => c != null && Number.isFinite(c))
+        : [];
+      const stepCost =
+        stepCosts.length > 0 ? stepCosts.reduce((sum, c) => sum + c, 0) : null;
+      const costUsd = preferKnownCostUsd(detail.costUsd, base.costUsd, stepCost);
       return {
         ...base,
         ...detail,
@@ -1308,12 +1314,17 @@ function LabTracesInner() {
                       ? `No matches for “${query}”`
                       : scopeAgent
                         ? `No sessions for ${scopeAgent.name}`
-                        : "No matching sessions"
+                        : "No sessions yet"
                     : query
                       ? `No matches for “${query}”`
                       : scopeAgent
                         ? `No runs for ${scopeAgent.name}`
-                        : "No matching runs"
+                        : "No runs yet"
+                }
+                body={
+                  query || scopeAgent
+                    ? U20_FILTER_EMPTY_COPY.traces
+                    : U20_EMPTY_COPY.traces
                 }
               />
             ) : (

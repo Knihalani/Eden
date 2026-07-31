@@ -11,9 +11,8 @@ import userEvent from "@testing-library/user-event";
  * tour again:
  *
  *   - Finishing (Done on the finish step) must persist `status: "done"`.
- *   - Skipping (Esc / X / Skip) must persist `status: "skipped"` AND preserve
- *     the step the user was on, so Resume returns them there.
- *   - "done" must retire the resume banner; "skipped" must keep it.
+ *   - Skipping (Esc / X / Skip) must persist `status: "skipped"`.
+ *   - Both "done" and "skipped" must retire the resume banner entirely.
  *   - Neither exit may let the effect loop re-open the tour afterwards.
  *
  * The seam is deliberately at the ProductTour boundary: ProductTour is stubbed
@@ -301,7 +300,7 @@ describe("banner reflects the persisted terminal status", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("keeps the resume banner after a skip", () => {
+  it("retires the resume banner after a skip", () => {
     clerk.metadata = {
       [EDEN_TOUR_META_KEY]: {
         status: "skipped",
@@ -309,10 +308,7 @@ describe("banner reflects the persisted terminal status", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
-    render(<OnboardingBanner />);
-    expect(
-      screen.getByRole("region", { name: "Onboarding progress" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Tour paused/)).toBeInTheDocument();
+    const { container } = render(<OnboardingBanner />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

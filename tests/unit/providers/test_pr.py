@@ -24,17 +24,20 @@ def temp_git_repo():
         subprocess.run(["git", "init", "-q"], cwd=tmpdir, check=True)
         subprocess.run(
             ["git", "config", "user.email", "test@eden.local"],
-            cwd=tmpdir, check=True,
+            cwd=tmpdir,
+            check=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "Eden Test"],
-            cwd=tmpdir, check=True,
+            cwd=tmpdir,
+            check=True,
         )
         (Path(tmpdir) / "foo.py").write_text("x = 1\n")
         subprocess.run(["git", "add", "foo.py"], cwd=tmpdir, check=True)
         subprocess.run(
             ["git", "commit", "-q", "-m", "add foo"],
-            cwd=tmpdir, check=True,
+            cwd=tmpdir,
+            check=True,
         )
         yield tmpdir
 
@@ -42,6 +45,7 @@ def temp_git_repo():
 @pytest.fixture
 def provider(temp_git_repo):
     from eden.providers.pr import LocalPRProvider
+
     return LocalPRProvider(repo_path=temp_git_repo)
 
 
@@ -53,15 +57,22 @@ class TestLocalPRProvider:
     async def test_create_pr_records_to_disk(self, provider, temp_git_repo):
         from eden.providers.pr import PRCreateRequest
         from eden.providers.repo import FileEntry
-        pr = await provider.create_pr(PRCreateRequest(
-            title="[Eden Agent] Test PR",
-            body="Test body",
-            branch="eden/test-pr",
-            base="main",
-            files=[FileEntry(
-                path="bar.py", size=11, content="y = 2\n",
-            )],
-        ))
+
+        pr = await provider.create_pr(
+            PRCreateRequest(
+                title="[Eden Agent] Test PR",
+                body="Test body",
+                branch="eden/test-pr",
+                base="main",
+                files=[
+                    FileEntry(
+                        path="bar.py",
+                        size=11,
+                        content="y = 2\n",
+                    )
+                ],
+            )
+        )
         # PR metadata
         assert pr.number == 1
         assert pr.title == "[Eden Agent] Test PR"
@@ -69,7 +80,10 @@ class TestLocalPRProvider:
         assert pr.state == "open"
         # PR record was written to .eden/prs/1.json
         record_path = os.path.join(
-            temp_git_repo, ".eden", "prs", "1.json",
+            temp_git_repo,
+            ".eden",
+            "prs",
+            "1.json",
         )
         assert os.path.isfile(record_path)
         with open(record_path, encoding="utf-8") as fh:
@@ -81,20 +95,32 @@ class TestLocalPRProvider:
     async def test_pr_counter_increments(self, provider):
         from eden.providers.pr import PRCreateRequest
         from eden.providers.repo import FileEntry
-        a = await provider.create_pr(PRCreateRequest(
-            title="A", body="", branch="eden/a", base="main",
-            files=[FileEntry(path="a.py", size=1, content="a")],
-        ))
-        b = await provider.create_pr(PRCreateRequest(
-            title="B", body="", branch="eden/b", base="main",
-            files=[FileEntry(path="b.py", size=1, content="b")],
-        ))
+
+        a = await provider.create_pr(
+            PRCreateRequest(
+                title="A",
+                body="",
+                branch="eden/a",
+                base="main",
+                files=[FileEntry(path="a.py", size=1, content="a")],
+            )
+        )
+        b = await provider.create_pr(
+            PRCreateRequest(
+                title="B",
+                body="",
+                branch="eden/b",
+                base="main",
+                files=[FileEntry(path="b.py", size=1, content="b")],
+            )
+        )
         assert a.number == 1
         assert b.number == 2
 
     @pytest.mark.asyncio
     async def test_commit_files_creates_branch(self, provider):
         from eden.providers.repo import FileEntry
+
         commit = await provider.commit_files(
             branch="eden/test-branch",
             files=[FileEntry(path="c.py", size=1, content="c")],
@@ -117,16 +143,23 @@ class TestLocalPRProvider:
         # First create a PR.
         from eden.providers.pr import PRCreateRequest, PRRevertRequest
         from eden.providers.repo import FileEntry
-        original = await provider.create_pr(PRCreateRequest(
-            title="Original", body="body",
-            branch="eden/orig", base="main",
-            files=[FileEntry(path="o.py", size=1, content="o")],
-        ))
+
+        original = await provider.create_pr(
+            PRCreateRequest(
+                title="Original",
+                body="body",
+                branch="eden/orig",
+                base="main",
+                files=[FileEntry(path="o.py", size=1, content="o")],
+            )
+        )
         # Revert with close_pr strategy.
-        result = await provider.revert(PRRevertRequest(
-            pr_number=original.number,
-            strategy="close_pr",
-        ))
+        result = await provider.revert(
+            PRRevertRequest(
+                pr_number=original.number,
+                strategy="close_pr",
+            )
+        )
         assert result.state == "closed"
 
     @pytest.mark.asyncio
@@ -136,16 +169,23 @@ class TestLocalPRProvider:
             PRRevertRequest,
         )
         from eden.providers.repo import FileEntry
-        original = await provider.create_pr(PRCreateRequest(
-            title="To revert", body="body",
-            branch="eden/rev", base="main",
-            files=[FileEntry(path="r.py", size=1, content="r")],
-        ))
-        result = await provider.revert(PRRevertRequest(
-            pr_number=original.number,
-            strategy="revert_pr",
-            merge_sha="deadbeef",
-        ))
+
+        original = await provider.create_pr(
+            PRCreateRequest(
+                title="To revert",
+                body="body",
+                branch="eden/rev",
+                base="main",
+                files=[FileEntry(path="r.py", size=1, content="r")],
+            )
+        )
+        result = await provider.revert(
+            PRRevertRequest(
+                pr_number=original.number,
+                strategy="revert_pr",
+                merge_sha="deadbeef",
+            )
+        )
         # The revert PR is a new PR.
         assert result.number == original.number + 1
         assert "Revert" in result.title
@@ -153,23 +193,35 @@ class TestLocalPRProvider:
     @pytest.mark.asyncio
     async def test_revert_missing_pr(self, provider):
         from eden.providers.pr import PRRevertRequest
-        result = await provider.revert(PRRevertRequest(
-            pr_number=999, strategy="close_pr",
-        ))
+
+        result = await provider.revert(
+            PRRevertRequest(
+                pr_number=999,
+                strategy="close_pr",
+            )
+        )
         assert result.state == "missing"
 
     @pytest.mark.asyncio
     async def test_comment_appends_to_record(self, provider):
         from eden.providers.pr import PRCreateRequest
         from eden.providers.repo import FileEntry
-        pr = await provider.create_pr(PRCreateRequest(
-            title="C", body="", branch="eden/c", base="main",
-            files=[FileEntry(path="c.py", size=1, content="c")],
-        ))
+
+        pr = await provider.create_pr(
+            PRCreateRequest(
+                title="C",
+                body="",
+                branch="eden/c",
+                base="main",
+                files=[FileEntry(path="c.py", size=1, content="c")],
+            )
+        )
         await provider.comment(pr.number, "first comment")
         # Read the record and assert the comment is there.
         record_path = os.path.join(
-            provider.repo_path, ".eden", "prs",
+            provider.repo_path,
+            ".eden",
+            "prs",
             f"{pr.number}.json",
         )
         with open(record_path, encoding="utf-8") as fh:
@@ -188,16 +240,19 @@ class TestGitHubPRProvider:
 
     def test_provider_name(self):
         from eden.providers.pr import GitHubPRProvider
+
         provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
         assert provider.name == "github"
 
     def test_requires_token(self):
         from eden.providers.pr import GitHubPRProvider
+
         with pytest.raises(ValueError, match="token"):
             GitHubPRProvider(token="", repo="acme/foo")
 
     def test_requires_repo(self):
         from eden.providers.pr import GitHubPRProvider
+
         with pytest.raises(ValueError, match="repo"):
             GitHubPRProvider(token="ghs_test", repo="invalid")
 
@@ -205,13 +260,13 @@ class TestGitHubPRProvider:
         """Verifies the contract methods exist; wire-format coverage
         lives in the integration suite."""
         from eden.providers.pr import GitHubPRProvider
+
         provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
         assert hasattr(provider, "create_branch")
         assert hasattr(provider, "commit_files")
         assert hasattr(provider, "create_pr")
         assert hasattr(provider, "revert")
         assert hasattr(provider, "comment")
-
 
 class TestGetDefaultPRProvider:
     def test_default_is_local(self, monkeypatch):
@@ -220,6 +275,7 @@ class TestGetDefaultPRProvider:
             LocalPRProvider,
             get_default_pr_provider,
         )
+
         assert isinstance(get_default_pr_provider(), LocalPRProvider)
 
     def test_github_when_env_set(self, monkeypatch):
@@ -231,6 +287,7 @@ class TestGetDefaultPRProvider:
             GitHubPRProvider,
             get_default_pr_provider,
         )
+
         assert isinstance(get_default_pr_provider(), GitHubPRProvider)
 
     def test_github_falls_back_to_local_without_creds(self, monkeypatch):
@@ -242,8 +299,8 @@ class TestGetDefaultPRProvider:
             LocalPRProvider,
             get_default_pr_provider,
         )
-        assert isinstance(get_default_pr_provider(), LocalPRProvider)
 
+        assert isinstance(get_default_pr_provider(), LocalPRProvider)
 
 
 class TestGitHubCommitFilesPerformance:
@@ -260,11 +317,27 @@ class TestGitHubCommitFilesPerformance:
       defined but never used).
     """
 
+    @pytest.mark.asyncio
+    async def test_create_branch_raises_on_contents_read_only(self, fake_httpx):
+        """403 Resource not accessible → GitHubPRPermissionError (Contents write missing)."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from eden.providers.pr import GitHubPRPermissionError, GitHubPRProvider
+
+        r = MagicMock()
+        r.status_code = 403
+        r.text = '{"message":"Resource not accessible by integration","status":"403"}'
+        fake_httpx.post = AsyncMock(return_value=r)
+        provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
+        with pytest.raises(GitHubPRPermissionError, match="Contents: Read and write"):
+            await provider.create_branch("eden/test", from_sha="abc123")
+
     @pytest.fixture
     def fake_httpx(self):
         """Replace ``_shared_httpx`` with a mock client that records
         the sequence of calls."""
         from unittest.mock import AsyncMock, MagicMock
+
         from eden.providers import pr as pr_mod
 
         class _Response:
@@ -280,26 +353,31 @@ class TestGitHubCommitFilesPerformance:
         pr_mod._HTTPX = None
         client = MagicMock()
         # Default 201 + sha payload for any POST/GET/PATCH.
-        client.post = AsyncMock(return_value=_Response(
-            201, payload={"sha": "abc123"},
-        ))
-        client.get = AsyncMock(return_value=_Response(
-            200, payload={
-                "object": {"sha": "parent_sha"},
-                "tree": {"sha": "base_tree_sha"},
-                "default_branch": "main",
-            },
-        ))
+        client.post = AsyncMock(
+            return_value=_Response(
+                201,
+                payload={"sha": "abc123"},
+            )
+        )
+        client.get = AsyncMock(
+            return_value=_Response(
+                200,
+                payload={
+                    "object": {"sha": "parent_sha"},
+                    "tree": {"sha": "base_tree_sha"},
+                    "default_branch": "main",
+                },
+            )
+        )
         client.patch = AsyncMock(return_value=_Response(200, payload={}))
         pr_mod._shared_httpx = lambda: client
         yield client
         pr_mod._HTTPX = None
         # Restore the real helper.
         import httpx
+
         pr_mod._shared_httpx = (
-            lambda: pr_mod._HTTPX
-            if pr_mod._HTTPX is not None
-            else pr_mod._HTTPX  # noqa: E501
+            lambda: pr_mod._HTTPX if pr_mod._HTTPX is not None else pr_mod._HTTPX  # noqa: E501
         )
         # Simplest: just restore by reimport
         pr_mod._shared_httpx = lambda: _real_shared(pr_mod)
@@ -315,6 +393,7 @@ class TestGitHubCommitFilesPerformance:
         scheduled together.
         """
         from unittest.mock import AsyncMock
+
         from eden.providers.pr import GitHubPRProvider
         from eden.providers.repo import FileEntry
 
@@ -330,9 +409,11 @@ class TestGitHubCommitFilesPerformance:
             peak_in_flight = max(peak_in_flight, in_flight)
             # Yield to the event loop to allow other tasks to start.
             import asyncio
+
             await asyncio.sleep(0)
             in_flight -= 1
             from unittest.mock import MagicMock
+
             r = MagicMock()
             r.status_code = 201
             r.json.return_value = {"sha": f"blob-{peak_in_flight}"}
@@ -360,17 +441,20 @@ class TestGitHubCommitFilesPerformance:
 
         fake_httpx.post = AsyncMock(side_effect=_tracking_post)
         fake_httpx.get = AsyncMock(side_effect=_get_side_effect)
-        fake_httpx.patch = AsyncMock(return_value=MagicMock(
-            status_code=200, json=lambda: {}, text="",
-        ))
+        fake_httpx.patch = AsyncMock(
+            return_value=MagicMock(
+                status_code=200,
+                json=lambda: {},
+                text="",
+            )
+        )
 
         provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
-        files = [
-            FileEntry(path=f"file_{i}.py", size=10, content="x = 1\n")
-            for i in range(5)
-        ]
+        files = [FileEntry(path=f"file_{i}.py", size=10, content="x = 1\n") for i in range(5)]
         commit = await provider.commit_files(
-            branch="main", files=files, message="test",
+            branch="main",
+            files=files,
+            message="test",
         )
 
         # The peak in-flight count for the blob POSTs should be > 1
@@ -384,9 +468,7 @@ class TestGitHubCommitFilesPerformance:
         # All 5 blobs were created.
         # The other POSTs are: 1 trees + 1 commits = 2 non-blob POSTs.
         # Total POSTs = 5 blobs + 1 tree + 1 commit = 7.
-        post_urls = [
-            c.args[0] for c in fake_httpx.post.await_args_list
-        ]
+        post_urls = [c.args[0] for c in fake_httpx.post.await_args_list]
         blob_posts = [u for u in post_urls if "git/blobs" in u]
         assert len(blob_posts) == 5
         assert commit.sha == "blob-5"  # last blob's sha returned
@@ -402,10 +484,11 @@ class TestGitHubCommitFilesPerformance:
         singleton (the comment at the helper definition makes
         the intent clear).
         """
+        from unittest.mock import AsyncMock, MagicMock
+
         from eden.providers import pr as pr_mod
         from eden.providers.pr import GitHubPRProvider
         from eden.providers.repo import FileEntry
-        from unittest.mock import AsyncMock, MagicMock
 
         # Record that the shared helper was the only client source.
         # If the code opened a fresh httpx.AsyncClient, that would
@@ -419,7 +502,9 @@ class TestGitHubCommitFilesPerformance:
             return orig_init(self, *a, **kw)
 
         monkeypatch.setattr(
-            pr_mod.httpx.AsyncClient, "__init__", _tracking_init,
+            pr_mod.httpx.AsyncClient,
+            "__init__",
+            _tracking_init,
         )
 
         # Stub the GETs to return real-ish payloads.
@@ -436,12 +521,20 @@ class TestGitHubCommitFilesPerformance:
             return r
 
         fake_httpx.get = AsyncMock(side_effect=_get_side_effect)
-        fake_httpx.post = AsyncMock(return_value=MagicMock(
-            status_code=201, json=lambda: {"sha": "x"}, text="",
-        ))
-        fake_httpx.patch = AsyncMock(return_value=MagicMock(
-            status_code=200, json=lambda: {}, text="",
-        ))
+        fake_httpx.post = AsyncMock(
+            return_value=MagicMock(
+                status_code=201,
+                json=lambda: {"sha": "x"},
+                text="",
+            )
+        )
+        fake_httpx.patch = AsyncMock(
+            return_value=MagicMock(
+                status_code=200,
+                json=lambda: {},
+                text="",
+            )
+        )
 
         provider = GitHubPRProvider(token="ghs_test", repo="acme/foo")
         await provider.commit_files(
@@ -464,4 +557,3 @@ def _real_shared(pr_mod):
     if pr_mod._HTTPX is None:
         pr_mod._HTTPX = pr_mod.httpx.AsyncClient(timeout=30.0)
     return pr_mod._HTTPX
-

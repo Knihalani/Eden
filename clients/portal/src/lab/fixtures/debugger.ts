@@ -59,7 +59,7 @@ export type TimelineSnapshot = {
   checkpoint: DebuggerCheckpoint;
   elapsedMs: number;
   tokens: number;
-  costUsd: number;
+  costUsd: number | null;
   model?: string;
   provider?: string;
   errorCount: number;
@@ -112,7 +112,8 @@ export function snapshotAtIndex(
 
   const prefix = trace.steps.slice(0, i + 1);
   let tokens = 0;
-  let costUsd = 0;
+  let knownCost = 0;
+  let hasCost = false;
   let model: string | undefined;
   let provider: string | undefined;
   let errorCount = 0;
@@ -120,7 +121,10 @@ export function snapshotAtIndex(
 
   for (const s of prefix) {
     tokens += (s.tokensIn ?? 0) + (s.tokensOut ?? 0);
-    costUsd += s.costUsd ?? 0;
+    if (s.costUsd != null && Number.isFinite(s.costUsd)) {
+      knownCost += s.costUsd;
+      hasCost = true;
+    }
     if (s.model) model = s.model;
     if (s.provider) provider = s.provider;
     if (s.status === "error") errorCount += 1;
@@ -139,7 +143,7 @@ export function snapshotAtIndex(
     checkpoint,
     elapsedMs: checkpoint.atMs + step.durationMs,
     tokens,
-    costUsd,
+    costUsd: hasCost ? knownCost : null,
     model,
     provider,
     errorCount,

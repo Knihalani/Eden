@@ -21,14 +21,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
-_FOO_PATCH = (
-    "--- a/foo.py\n"
-    "+++ b/foo.py\n"
-    "@@ -1 +1 @@\n"
-    "-x = 1\n"
-    "+x = 2\n"
-)
+_FOO_PATCH = "--- a/foo.py\n" "+++ b/foo.py\n" "@@ -1 +1 @@\n" "-x = 1\n" "+x = 2\n"
 
 
 def _inject_patch_diff(repo: str, suggestion_id: str, diff: str) -> None:
@@ -72,7 +65,8 @@ def client() -> TestClient:
     app = FastAPI(title="eden-agent-pr-suggestions-test")
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_org_member] = lambda: {
-        "sub": "test-user", "org_id": "org_test",
+        "sub": "test-user",
+        "org_id": "org_test",
     }
     app.dependency_overrides[require_path_org_access] = _fake_path_org
     app.include_router(router)
@@ -88,17 +82,20 @@ def temp_git_repo(monkeypatch):
         subprocess.run(["git", "init", "-q"], cwd=tmpdir, check=True)
         subprocess.run(
             ["git", "config", "user.email", "test@eden.local"],
-            cwd=tmpdir, check=True,
+            cwd=tmpdir,
+            check=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "Eden Test"],
-            cwd=tmpdir, check=True,
+            cwd=tmpdir,
+            check=True,
         )
         (Path(tmpdir) / "foo.py").write_text("x = 1\n")
         subprocess.run(["git", "add", "foo.py"], cwd=tmpdir, check=True)
         subprocess.run(
             ["git", "commit", "-q", "-m", "init"],
-            cwd=tmpdir, check=True,
+            cwd=tmpdir,
+            check=True,
         )
         monkeypatch.setenv("EDEN_LOCAL_REPO_PATH", tmpdir)
         monkeypatch.setenv("EDEN_REPO_PROVIDER", "local")
@@ -108,11 +105,11 @@ def temp_git_repo(monkeypatch):
 
 class TestAgentPRSugRoutes:
     def test_list_empty(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
-        resp = client.get(
-            "/orgs/org_x/agent/pr-suggestions"
-        )
+        resp = client.get("/orgs/org_x/agent/pr-suggestions")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
@@ -120,7 +117,9 @@ class TestAgentPRSugRoutes:
         assert body["data"]["count"] == 0
 
     def test_create_suggestion(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -138,12 +137,12 @@ class TestAgentPRSugRoutes:
         assert body["status"] == "ok"
         assert body["data"]["suggestion_id"].startswith("prsug_")
         assert body["data"]["suggestion"]["trigger"] == "rca_cluster"
-        assert (
-            body["data"]["suggestion"]["trigger_id"] == "clu_abc"
-        )
+        assert body["data"]["suggestion"]["trigger_id"] == "clu_abc"
 
     def test_list_after_create(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         # Create one.
         create_resp = client.post(
@@ -159,15 +158,15 @@ class TestAgentPRSugRoutes:
         assert create_resp.status_code == 200
         sid = create_resp.json()["data"]["suggestion_id"]
         # List returns it.
-        list_resp = client.get(
-            "/orgs/org_x/agent/pr-suggestions"
-        )
+        list_resp = client.get("/orgs/org_x/agent/pr-suggestions")
         assert list_resp.status_code == 200
         suggestions = list_resp.json()["data"]["suggestions"]
         assert any(s["id"] == sid for s in suggestions)
 
     def test_get_suggestion(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         create_resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -180,25 +179,25 @@ class TestAgentPRSugRoutes:
             },
         )
         sid = create_resp.json()["data"]["suggestion_id"]
-        resp = client.get(
-            f"/orgs/org_x/agent/pr-suggestions/{sid}"
-        )
+        resp = client.get(f"/orgs/org_x/agent/pr-suggestions/{sid}")
         assert resp.status_code == 200
         body = resp.json()
         assert body["data"]["suggestion"]["id"] == sid
 
     def test_get_missing_returns_not_found(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
-        resp = client.get(
-            "/orgs/org_x/agent/pr-suggestions/prsug_does_not_exist"
-        )
+        resp = client.get("/orgs/org_x/agent/pr-suggestions/prsug_does_not_exist")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "not_found"
 
     def test_open_pr_creates_pr_record(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         # 1. Create a suggestion.
         create_resp = client.post(
@@ -232,7 +231,10 @@ class TestAgentPRSugRoutes:
         assert body["data"]["pr"]["number"] == 1
         # 3. The PR record exists on disk.
         record_path = os.path.join(
-            temp_git_repo, ".eden", "prs", "1.json",
+            temp_git_repo,
+            ".eden",
+            "prs",
+            "1.json",
         )
         assert os.path.isfile(record_path)
         with open(record_path, encoding="utf-8") as fh:
@@ -250,7 +252,9 @@ class TestAgentPRSugRoutes:
         assert "@@" not in show.stdout
 
     def test_open_pr_empty_diff_fail_closed(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         create_resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -272,7 +276,9 @@ class TestAgentPRSugRoutes:
         assert "empty_or_unparseable_diff" in body["data"]["message"]
 
     def test_open_pr_fail_closed_on_create_pr_failure(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         from datetime import UTC, datetime
         from unittest.mock import AsyncMock
@@ -316,9 +322,7 @@ class TestAgentPRSugRoutes:
         assert body["status"] == "error"
         assert "failed create_pr" in body["data"]["message"]
         # Suggestion must not be marked opened.
-        get_resp = client.get(
-            f"/orgs/org_x/agent/pr-suggestions/{sid}"
-        )
+        get_resp = client.get(f"/orgs/org_x/agent/pr-suggestions/{sid}")
         assert get_resp.json()["data"]["suggestion"]["status"] == "pending"
 
 
@@ -327,7 +331,9 @@ class TestAgentPRSugRoutes:
 
 class TestAgentPRFileRoute:
     def test_get_file_content(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         # Create a suggestion whose affected_files
         # include foo.py (which the temp repo has).
@@ -341,9 +347,7 @@ class TestAgentPRFileRoute:
         )
         sid = create_resp.json()["data"]["suggestion_id"]
         # Read the file.
-        resp = client.get(
-            f"/orgs/org_x/agent/pr-suggestions/{sid}/files/foo.py"
-        )
+        resp = client.get(f"/orgs/org_x/agent/pr-suggestions/{sid}/files/foo.py")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
@@ -351,7 +355,9 @@ class TestAgentPRFileRoute:
         assert "x = 1" in body["data"]["content"]
 
     def test_get_file_not_in_affected(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         # Create a suggestion WITHOUT foo.py in its
         # affected files.
@@ -366,26 +372,26 @@ class TestAgentPRFileRoute:
         sid = create_resp.json()["data"]["suggestion_id"]
         # The provider cannot read foo.py because the
         # suggestion doesn't include it.
-        resp = client.get(
-            f"/orgs/org_x/agent/pr-suggestions/{sid}/files/foo.py"
-        )
+        resp = client.get(f"/orgs/org_x/agent/pr-suggestions/{sid}/files/foo.py")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "not_found"
 
     def test_get_file_missing_suggestion(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
-        resp = client.get(
-            "/orgs/org_x/agent/pr-suggestions/prsug_does_not_exist/files/foo.py"
-        )
+        resp = client.get("/orgs/org_x/agent/pr-suggestions/prsug_does_not_exist/files/foo.py")
         assert resp.status_code == 200
         assert resp.json()["status"] == "not_found"
 
 
 class TestAgentPRStatusRoute:
     def test_mark_merged(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         create_resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -411,7 +417,9 @@ class TestAgentPRStatusRoute:
         assert resp.json()["data"]["suggestion"]["status"] == "merged"
 
     def test_mark_rejected(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         create_resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -430,7 +438,9 @@ class TestAgentPRStatusRoute:
         assert resp.json()["data"]["suggestion"]["status"] == "rejected"
 
     def test_status_invalid(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         create_resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -448,7 +458,9 @@ class TestAgentPRStatusRoute:
         assert resp.json()["status"] == "bad_request"
 
     def test_status_missing_suggestion(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         resp = client.post(
             "/orgs/org_x/agent/pr-suggestions/prsug_nope/status",
@@ -459,7 +471,9 @@ class TestAgentPRStatusRoute:
 
 class TestAgentPRRegenerateRoute:
     def test_regenerate_resets_status(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         create_resp = client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -476,9 +490,7 @@ class TestAgentPRRegenerateRoute:
             json={"status": "rejected"},
         )
         # Regenerate.
-        resp = client.post(
-            f"/orgs/org_x/agent/pr-suggestions/{sid}/regenerate"
-        )
+        resp = client.post(f"/orgs/org_x/agent/pr-suggestions/{sid}/regenerate")
         assert resp.status_code == 200
         body = resp.json()
         # Status resets to pending.
@@ -487,17 +499,19 @@ class TestAgentPRRegenerateRoute:
         assert body["data"]["suggestion"]["id"] == sid
 
     def test_regenerate_missing(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
-        resp = client.post(
-            "/orgs/org_x/agent/pr-suggestions/prsug_nope/regenerate"
-        )
+        resp = client.post("/orgs/org_x/agent/pr-suggestions/prsug_nope/regenerate")
         assert resp.json()["status"] == "not_found"
 
 
 class TestAgentPRBulkRegenerateRoute:
     def test_bulk_regenerate_mixed(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         ids: list[str] = []
         for i in range(3):
@@ -515,7 +529,9 @@ class TestAgentPRBulkRegenerateRoute:
             "/orgs/org_x/agent/pr-suggestions/bulk/regenerate",
             json={
                 "suggestion_ids": [
-                    ids[0], ids[1], "prsug_does_not_exist",
+                    ids[0],
+                    ids[1],
+                    "prsug_does_not_exist",
                 ],
             },
         )
@@ -530,7 +546,9 @@ class TestAgentPRBulkRegenerateRoute:
         assert body["data"]["requested"] == 3
 
     def test_bulk_regenerate_empty(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         resp = client.post(
             "/orgs/org_x/agent/pr-suggestions/bulk/regenerate",
@@ -543,7 +561,9 @@ class TestAgentPRBulkRegenerateRoute:
 
 class TestAgentPRListFilter:
     def test_filter_by_trigger(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         for trig in ("rca_cluster", "drift_alert", "rca_cluster"):
             client.post(
@@ -554,15 +574,15 @@ class TestAgentPRListFilter:
                     "trigger_payload": {"affected_files": ["foo.py"]},
                 },
             )
-        resp = client.get(
-            "/orgs/org_x/agent/pr-suggestions?trigger=drift_alert"
-        )
+        resp = client.get("/orgs/org_x/agent/pr-suggestions?trigger=drift_alert")
         rows = resp.json()["data"]["suggestions"]
         assert len(rows) == 1
         assert rows[0]["trigger"] == "drift_alert"
 
     def test_filter_by_status(
-        self, client: TestClient, temp_git_repo: str,
+        self,
+        client: TestClient,
+        temp_git_repo: str,
     ) -> None:
         client.post(
             "/orgs/org_x/agent/pr-suggestions",
@@ -586,8 +606,6 @@ class TestAgentPRListFilter:
             json={"status": "rejected"},
         )
         # Filter for rejected.
-        resp = client.get(
-            "/orgs/org_x/agent/pr-suggestions?status=rejected"
-        )
+        resp = client.get("/orgs/org_x/agent/pr-suggestions?status=rejected")
         rows = resp.json()["data"]["suggestions"]
         assert all(r["id"] == s2 for r in rows)

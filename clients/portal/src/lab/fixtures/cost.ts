@@ -68,22 +68,32 @@ function liveTraces(): TraceFixture[] {
   return live.length > 0 ? live : TRACE_LIST;
 }
 
-export function fleetSpend24h(): number {
-  return liveAgents().reduce((s, a) => s + (a.costUsd24h ?? 0), 0);
+/** Sum of known agent costs; null when every agent cost is unknown. */
+export function fleetSpend24h(): number | null {
+  const known = liveAgents()
+    .map((a) => a.costUsd24h)
+    .filter((c): c is number => c != null && Number.isFinite(c));
+  const fromAgents =
+    known.length > 0 ? known.reduce((s, c) => s + c, 0) : null;
+  const fromTraces = liveTraces().reduce((s, t) => s + (t.costUsd ?? 0), 0);
+  if (fromAgents != null) return Math.max(fromAgents, fromTraces);
+  return liveTraces().length > 0 ? fromTraces : null;
 }
 
 export function fleetRuns24h(): number {
   return liveAgents().reduce((s, a) => s + a.runs24h, 0);
 }
 
-export function avgCostPerRun(): number {
+export function avgCostPerRun(): number | null {
   const runs = fleetRuns24h();
-  if (!runs) return 0;
-  return fleetSpend24h() / runs;
+  const spend = fleetSpend24h();
+  if (!runs || spend == null) return null;
+  return spend / runs;
 }
 
 const ORG_BUDGET_LIMIT = 0;
-const ORG_BUDGET_SPENT = Number(fleetSpend24h().toFixed(2));
+// Fixture fallback only — live Cost page uses gateway budget rollup.
+const ORG_BUDGET_SPENT = 0;
 
 export const COST_BUDGET: CostBudgetFixture = {
   id: "bud_org_24h",
@@ -103,9 +113,15 @@ function liveDrivers(): CostDriverFixture[] {
 }
 
 export function agentsBySpend(): AgentFixture[] {
-  return [...liveAgents()].sort(
-    (a, b) => (b.costUsd24h ?? 0) - (a.costUsd24h ?? 0),
-  );
+  return [...liveAgents()].sort((a, b) => {
+    // Unknown costs sort last (not as $0).
+    const ac = a.costUsd24h;
+    const bc = b.costUsd24h;
+    if (ac == null && bc == null) return 0;
+    if (ac == null) return 1;
+    if (bc == null) return -1;
+    return bc - ac;
+  });
 }
 
 export function costlyTraces(
@@ -116,7 +132,9 @@ export function costlyTraces(
     agentId === "all"
       ? liveTraces()
       : liveTraces().filter((t) => t.agentId === agentId);
-  return [...list].sort((a, b) => b.costUsd - a.costUsd).slice(0, limit);
+  return [...list]
+    .sort((a, b) => (b.costUsd ?? -1) - (a.costUsd ?? -1))
+    .slice(0, limit);
 }
 
 export function driverById(id: string): CostDriverFixture | undefined {
@@ -134,6 +152,7 @@ export function driversForAgent(
 }
 
 export function budgetStatusLabel(status: BudgetStatus): string {
+  if (status === "unset") return "no limit";
   if (status === "breach") return "over";
   if (status === "warn") return "near limit";
   return "on track";

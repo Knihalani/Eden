@@ -242,14 +242,23 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         "name": "search_spans",
         "summary": "Full-text search across every span (Laminar parity).",
         "args": {
-            "query": {"type": "string", "required": True,
-                       "description": "Text to search for across input/output/tool names."},
+            "query": {
+                "type": "string",
+                "required": True,
+                "description": "Text to search for across input/output/tool names.",
+            },
             "agent_id": {"type": "string", "required": False},
             "tool": {"type": "string", "required": False},
-            "outcome": {"type": "string", "required": False,
-                         "enum": ["success", "failure", "partial", "timeout", "crash"]},
-            "from_ts": {"type": "integer", "required": False,
-                         "description": "Lower bound, epoch seconds."},
+            "outcome": {
+                "type": "string",
+                "required": False,
+                "enum": ["success", "failure", "partial", "timeout", "crash"],
+            },
+            "from_ts": {
+                "type": "integer",
+                "required": False,
+                "description": "Lower bound, epoch seconds.",
+            },
             "to_ts": {"type": "integer", "required": False},
             "per_page": {"type": "integer", "required": False, "default": 20},
         },
@@ -273,8 +282,11 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         "name": "query_sql",
         "summary": "Run a SQL query against the columnar engine (Cat 18) with Postgres fallback.",
         "args": {
-            "sql": {"type": "string", "required": True,
-                     "description": "Read-only SELECT. DROP/DELETE/INSERT/UPDATE rejected."},
+            "sql": {
+                "type": "string",
+                "required": True,
+                "description": "Read-only SELECT. DROP/DELETE/INSERT/UPDATE rejected.",
+            },
         },
     },
     {
@@ -289,8 +301,12 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         "name": "list_incidents",
         "summary": "Open / resolved incident clusters (Cat 2).",
         "args": {
-            "status": {"type": "string", "required": False,
-                        "enum": ["open", "resolved", "all"], "default": "open"},
+            "status": {
+                "type": "string",
+                "required": False,
+                "enum": ["open", "resolved", "all"],
+                "default": "open",
+            },
             "limit": {"type": "integer", "required": False, "default": 20},
         },
     },
@@ -299,8 +315,12 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         "summary": "Judge-score PSI drift + embedding-histogram drift (Cat 13).",
         "args": {
             "days": {"type": "integer", "required": False, "default": 7},
-            "severity": {"type": "string", "required": False,
-                          "enum": ["low", "medium", "high"], "default": "all"},
+            "severity": {
+                "type": "string",
+                "required": False,
+                "enum": ["low", "medium", "high"],
+                "default": "all",
+            },
         },
     },
     {
@@ -315,8 +335,12 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         "summary": "PII / secret / toxic violations from runtime guardrails (Cat 10).",
         "args": {
             "days": {"type": "integer", "required": False, "default": 7},
-            "severity": {"type": "string", "required": False,
-                          "enum": ["low", "medium", "high", "critical"], "default": "all"},
+            "severity": {
+                "type": "string",
+                "required": False,
+                "enum": ["low", "medium", "high", "critical"],
+                "default": "all",
+            },
         },
     },
     {
@@ -341,8 +365,11 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         "summary": "Mark an incident cluster as resolved (admin only, Cat 2 action).",
         "args": {
             "cluster_id": {"type": "string", "required": True},
-            "note": {"type": "string", "required": False,
-                      "description": "Resolution note for the audit log."},
+            "note": {
+                "type": "string",
+                "required": False,
+                "description": "Resolution note for the audit log.",
+            },
         },
     },
     {
@@ -354,20 +381,24 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         ),
         "args": {
             "trigger": {
-                "type": "string", "required": True,
+                "type": "string",
+                "required": True,
                 "enum": ["rca_cluster", "drift_alert", "retrieval_gap", "judge_regression"],
                 "description": "The observability event kind driving the suggestion.",
             },
             "trigger_id": {
-                "type": "string", "required": True,
+                "type": "string",
+                "required": True,
                 "description": "The source event id (cluster id, alert id, etc.).",
             },
             "description": {
-                "type": "string", "required": False,
+                "type": "string",
+                "required": False,
                 "description": "Plain-English context for the agent — affected files, recent regressions, etc.",
             },
             "affected_files": {
-                "type": "array", "required": False,
+                "type": "array",
+                "required": False,
                 "description": "List of file paths the suggestion should touch.",
             },
         },
@@ -380,14 +411,25 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         ),
         "args": {
             "suggestion_id": {
-                "type": "string", "required": True,
+                "type": "string",
+                "required": True,
                 "description": "The suggestion_id returned by create_pr_suggestion.",
             },
             "pr_title": {"type": "string", "required": False},
             "pr_body": {"type": "string", "required": False},
-            "branch": {"type": "string", "required": False,
-                        "description": "Override branch name (default: eden/auto-<id>)."},
-            "base": {"type": "string", "required": False, "default": "main"},
+            "branch": {
+                "type": "string",
+                "required": False,
+                "description": "Override branch name (default: eden/auto-<id>).",
+            },
+            "base": {
+                "type": "string",
+                "required": False,
+                "description": (
+                    "Base branch; when omitted, resolved from the "
+                    "connected repo default_branch."
+                ),
+            },
             "labels": {"type": "array", "required": False},
             "draft": {"type": "boolean", "required": False, "default": False},
         },
@@ -485,14 +527,17 @@ async def _tool_get_trace_messages(tenant_id: str, args: dict[str, Any]) -> dict
             content = msg.get("content", "")
             if isinstance(content, list):
                 content = " ".join(
-                    b.get("text", "") for b in content
+                    b.get("text", "")
+                    for b in content
                     if isinstance(b, dict) and isinstance(b.get("text"), str)
                 )
-            out.append({
-                "span_id": span_id,
-                "role": msg.get("role"),
-                "content": content if isinstance(content, str) else str(content),
-            })
+            out.append(
+                {
+                    "span_id": span_id,
+                    "role": msg.get("role"),
+                    "content": content if isinstance(content, str) else str(content),
+                }
+            )
             if len(out) >= limit:
                 return {"messages": out, "count": len(out)}
     return {"messages": out, "count": len(out)}
@@ -516,9 +561,18 @@ async def _tool_query_sql(tenant_id: str, args: dict[str, Any]) -> dict[str, Any
     if head not in ("SELECT", "WITH"):
         return {"error": f"only SELECT/WITH queries are allowed, got {head!r}"}
     banned = (
-        " INSERT ", " UPDATE ", " DELETE ", " DROP ", " ALTER ",
-        " CREATE ", " GRANT ", " REVOKE ", " TRUNCATE ", " COPY ",
-        " EXECUTE ", " CALL ",
+        " INSERT ",
+        " UPDATE ",
+        " DELETE ",
+        " DROP ",
+        " ALTER ",
+        " CREATE ",
+        " GRANT ",
+        " REVOKE ",
+        " TRUNCATE ",
+        " COPY ",
+        " EXECUTE ",
+        " CALL ",
     )
     padded = f" {sql.upper()} "
     for token in banned:
@@ -526,9 +580,7 @@ async def _tool_query_sql(tenant_id: str, args: dict[str, Any]) -> dict[str, Any
             return {"error": f"forbidden SQL keyword:{token.strip()}"}
 
     upper = sql.upper()
-    complexity = 1 + sum(
-        1 for frag in (" JOIN ", " GROUP BY ", " ORDER BY ") if frag in upper
-    )
+    complexity = 1 + sum(1 for frag in (" JOIN ", " GROUP BY ", " ORDER BY ") if frag in upper)
     estimated_usd = round(0.002 * complexity, 4)
     spend_preview = {
         "estimated_usd": estimated_usd,
@@ -544,9 +596,7 @@ async def _tool_query_sql(tenant_id: str, args: dict[str, Any]) -> dict[str, Any
             "spend_preview": spend_preview,
             "tool": "query_sql",
             "args": {"sql": sql, "confirm_spend": True},
-            "message": (
-                f"Query spend preview ~${estimated_usd:.4f}. Confirm to run."
-            ),
+            "message": (f"Query spend preview ~${estimated_usd:.4f}. Confirm to run."),
         }
 
     engine = ColumnarQueryEngine()
@@ -581,41 +631,62 @@ async def _tool_get_cost_summary(tenant_id: str, args: dict[str, Any]) -> dict[s
         if agent_id:
             rows = await client.fetch(
                 """
+                -- usage_events records one metered row per resource:
+                -- (resource, quantity, unit, cost_usd, created_at, metadata).
+                -- ``ts``, ``prompt_tokens`` and ``completion_tokens`` were never
+                -- columns, so both branches of this tool raised UndefinedColumn
+                -- and returned {"error": ...} on every call.
                 SELECT
-                    COALESCE(agent_id, 'unknown') AS agent_id,
-                    DATE_TRUNC('day', ts) AS day,
+                    COALESCE(metadata->>'agent_id', 'unknown') AS agent_id,
+                    DATE_TRUNC('day', created_at) AS day,
                     SUM(cost_usd) AS cost_usd,
                     COUNT(*) AS call_count,
-                    SUM(prompt_tokens) AS prompt_tokens,
-                    SUM(completion_tokens) AS completion_tokens
+                    SUM(quantity) FILTER (
+                        WHERE resource = 'prompt_tokens'
+                    ) AS prompt_tokens,
+                    SUM(quantity) FILTER (
+                        WHERE resource = 'completion_tokens'
+                    ) AS completion_tokens
                 FROM usage_events
                 WHERE org_id = $1
-                  AND ts > NOW() - ($2 || ' days')::interval
-                  AND agent_id = $3
+                  AND created_at > NOW() - ($2 || ' days')::interval
+                  AND metadata->>'agent_id' = $3
                 GROUP BY 1, 2
                 ORDER BY 2 DESC, 1
                 LIMIT 1000
                 """,
-                tenant_id, days, agent_id,
+                tenant_id,
+                days,
+                agent_id,
             )
         else:
             rows = await client.fetch(
                 """
+                -- usage_events records one metered row per resource:
+                -- (resource, quantity, unit, cost_usd, created_at, metadata).
+                -- ``ts``, ``prompt_tokens`` and ``completion_tokens`` were never
+                -- columns, so both branches of this tool raised UndefinedColumn
+                -- and returned {"error": ...} on every call.
                 SELECT
-                    COALESCE(agent_id, 'unknown') AS agent_id,
-                    DATE_TRUNC('day', ts) AS day,
+                    COALESCE(metadata->>'agent_id', 'unknown') AS agent_id,
+                    DATE_TRUNC('day', created_at) AS day,
                     SUM(cost_usd) AS cost_usd,
                     COUNT(*) AS call_count,
-                    SUM(prompt_tokens) AS prompt_tokens,
-                    SUM(completion_tokens) AS completion_tokens
+                    SUM(quantity) FILTER (
+                        WHERE resource = 'prompt_tokens'
+                    ) AS prompt_tokens,
+                    SUM(quantity) FILTER (
+                        WHERE resource = 'completion_tokens'
+                    ) AS completion_tokens
                 FROM usage_events
                 WHERE org_id = $1
-                  AND ts > NOW() - ($2 || ' days')::interval
+                  AND created_at > NOW() - ($2 || ' days')::interval
                 GROUP BY 1, 2
                 ORDER BY 2 DESC, 1
                 LIMIT 1000
                 """,
-                tenant_id, days,
+                tenant_id,
+                days,
             )
         return {
             "rows": [dict(r) for r in rows],
@@ -644,7 +715,8 @@ async def _tool_list_incidents(tenant_id: str, args: dict[str, Any]) -> dict[str
                 ORDER BY last_seen DESC NULLS LAST
                 LIMIT $2
                 """,
-                tenant_id, limit,
+                tenant_id,
+                limit,
             )
         else:
             rows = await client.fetch(
@@ -656,7 +728,9 @@ async def _tool_list_incidents(tenant_id: str, args: dict[str, Any]) -> dict[str
                 ORDER BY last_seen DESC NULLS LAST
                 LIMIT $3
                 """,
-                tenant_id, status, limit,
+                tenant_id,
+                status,
+                limit,
             )
         return {"rows": [dict(r) for r in rows], "count": len(rows)}
     except Exception as exc:
@@ -683,7 +757,8 @@ async def _tool_get_drift_alerts(tenant_id: str, args: dict[str, Any]) -> dict[s
                 ORDER BY created_at DESC
                 LIMIT 100
                 """,
-                tenant_id, days,
+                tenant_id,
+                days,
             )
         else:
             rows = await client.fetch(
@@ -697,7 +772,9 @@ async def _tool_get_drift_alerts(tenant_id: str, args: dict[str, Any]) -> dict[s
                 ORDER BY created_at DESC
                 LIMIT 100
                 """,
-                tenant_id, days, severity,
+                tenant_id,
+                days,
+                severity,
             )
         return {"rows": [dict(r) for r in rows], "count": len(rows)}
     except Exception as exc:
@@ -725,7 +802,8 @@ async def _tool_get_user_satisfaction(tenant_id: str, args: dict[str, Any]) -> d
             GROUP BY 1
             ORDER BY 1
             """,
-            tenant_id, days,
+            tenant_id,
+            days,
         )
         return {"rows": [dict(r) for r in rows], "days": days}
     except Exception as exc:
@@ -752,7 +830,8 @@ async def _tool_list_guardrail_violations(tenant_id: str, args: dict[str, Any]) 
                 ORDER BY created_at DESC
                 LIMIT 100
                 """,
-                tenant_id, days,
+                tenant_id,
+                days,
             )
         else:
             rows = await client.fetch(
@@ -766,7 +845,9 @@ async def _tool_list_guardrail_violations(tenant_id: str, args: dict[str, Any]) 
                 ORDER BY created_at DESC
                 LIMIT 100
                 """,
-                tenant_id, days, severity,
+                tenant_id,
+                days,
+                severity,
             )
         return {"rows": [dict(r) for r in rows], "count": len(rows)}
     except Exception as exc:
@@ -787,46 +868,58 @@ async def _tool_get_eval_results(tenant_id: str, args: dict[str, Any]) -> dict[s
         if trace_id and judge_id:
             rows = await client.fetch(
                 """
-                SELECT id, trace_id, judge_id, score, label, created_at, notes
+                SELECT judge_run_id AS id, trace_id, judge_name AS judge_id, score,
+                       rationale AS notes, scored_at AS created_at
                 FROM judge_scores
-                WHERE org_id = $1 AND trace_id = $2 AND judge_id = $3
-                ORDER BY created_at DESC
+                WHERE tenant_id = $1 AND trace_id = $2 AND judge_name = $3
+                ORDER BY scored_at DESC
                 LIMIT $4
                 """,
-                tenant_id, trace_id, judge_id, limit,
+                tenant_id,
+                trace_id,
+                judge_id,
+                limit,
             )
         elif trace_id:
             rows = await client.fetch(
                 """
-                SELECT id, trace_id, judge_id, score, label, created_at, notes
+                SELECT judge_run_id AS id, trace_id, judge_name AS judge_id, score,
+                       rationale AS notes, scored_at AS created_at
                 FROM judge_scores
-                WHERE org_id = $1 AND trace_id = $2
-                ORDER BY created_at DESC
+                WHERE tenant_id = $1 AND trace_id = $2
+                ORDER BY scored_at DESC
                 LIMIT $3
                 """,
-                tenant_id, trace_id, limit,
+                tenant_id,
+                trace_id,
+                limit,
             )
         elif judge_id:
             rows = await client.fetch(
                 """
-                SELECT id, trace_id, judge_id, score, label, created_at, notes
+                SELECT judge_run_id AS id, trace_id, judge_name AS judge_id, score,
+                       rationale AS notes, scored_at AS created_at
                 FROM judge_scores
-                WHERE org_id = $1 AND judge_id = $2
-                ORDER BY created_at DESC
+                WHERE tenant_id = $1 AND judge_name = $2
+                ORDER BY scored_at DESC
                 LIMIT $3
                 """,
-                tenant_id, judge_id, limit,
+                tenant_id,
+                judge_id,
+                limit,
             )
         else:
             rows = await client.fetch(
                 """
-                SELECT id, trace_id, judge_id, score, label, created_at, notes
+                SELECT judge_run_id AS id, trace_id, judge_name AS judge_id, score,
+                       rationale AS notes, scored_at AS created_at
                 FROM judge_scores
-                WHERE org_id = $1
-                ORDER BY created_at DESC
+                WHERE tenant_id = $1
+                ORDER BY scored_at DESC
                 LIMIT $2
                 """,
-                tenant_id, limit,
+                tenant_id,
+                limit,
             )
         return {"rows": [dict(r) for r in rows], "count": len(rows)}
     except Exception as exc:
@@ -856,7 +949,9 @@ async def _tool_get_outcomes(tenant_id: str, args: dict[str, Any]) -> dict[str, 
                 GROUP BY 1
                 ORDER BY 2 DESC
                 """,
-                tenant_id, days, department,
+                tenant_id,
+                days,
+                department,
             )
         else:
             rows = await client.fetch(
@@ -871,15 +966,17 @@ async def _tool_get_outcomes(tenant_id: str, args: dict[str, Any]) -> dict[str, 
                 GROUP BY 1
                 ORDER BY 2 DESC
                 """,
-                tenant_id, days,
+                tenant_id,
+                days,
             )
         return {"rows": [dict(r) for r in rows], "days": days}
     except Exception as exc:
         return {"error": str(exc)}
 
 
-async def _tool_mark_incident_resolved(tenant_id: str, args: dict[str, Any],
-                                         *, user_role: str) -> dict[str, Any]:
+async def _tool_mark_incident_resolved(
+    tenant_id: str, args: dict[str, Any], *, user_role: str
+) -> dict[str, Any]:
     if user_role not in ("owner", "admin", "org_admin"):
         return {"error": "permission_denied: requires admin role"}
     from eden.storage.postgres import get_postgres_client
@@ -898,7 +995,9 @@ async def _tool_mark_incident_resolved(tenant_id: str, args: dict[str, Any],
                 resolution_note = $3
             WHERE org_id = $1 AND cluster_id = $2
             """,
-            tenant_id, cluster_id, note,
+            tenant_id,
+            cluster_id,
+            note,
         )
         return {"cluster_id": cluster_id, "status": "resolved", "raw": str(result)}
     except Exception as exc:
@@ -972,8 +1071,9 @@ async def _tool_create_pr_suggestion(tenant_id: str, args: dict[str, Any]) -> di
     }
 
 
-async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
-                                     *, user_role: str) -> dict[str, Any]:
+async def _tool_open_pr_suggestion(
+    tenant_id: str, args: dict[str, Any], *, user_role: str
+) -> dict[str, Any]:
     """Destructive: materialise a suggestion as a real PR. Admin only."""
     if user_role not in ("owner", "admin", "org_admin"):
         return {"error": "permission_denied: open_pr_suggestion requires admin role"}
@@ -1018,11 +1118,7 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
     if not diff:
         return {"error": "empty_or_unparseable_diff"}
 
-    originals = {
-        f.path: f.content
-        for f in (suggestion.files or [])
-        if getattr(f, "path", None)
-    }
+    originals = {f.path: f.content for f in (suggestion.files or []) if getattr(f, "path", None)}
 
     async def read_file(path: str) -> str:
         if path in originals:
@@ -1038,11 +1134,16 @@ async def _tool_open_pr_suggestion(tenant_id: str, args: dict[str, Any],
 
     try:
         pr_provider = await get_pr_provider_for_org(tenant_id)
+        base = (args.get("base") or "").strip() or None
+        if not base:
+            from eden.providers.factory import resolve_pr_base_branch
+
+            base = await resolve_pr_base_branch(tenant_id, repo_provider)
         pr_req = PRCreateRequest(
             title=args.get("pr_title") or suggestion.pr_title,
             body=args.get("pr_body") or suggestion.pr_body,
             branch=args.get("branch") or f"eden/auto-{suggestion_id}",
-            base=args.get("base") or "main",
+            base=base,
             labels=list(args.get("labels") or []),
             reviewers=[],
             draft=bool(args.get("draft") or False),
@@ -1108,55 +1209,58 @@ _TOOL_REGISTRY: dict[str, dict[str, Any]] = {
     "list_guardrail_violations": {"fn": _tool_list_guardrail_violations, "requires_role": None},
     "get_eval_results": {"fn": _tool_get_eval_results, "requires_role": None},
     "get_outcomes": {"fn": _tool_get_outcomes, "requires_role": None},
-    "mark_incident_resolved": {"fn": _tool_mark_incident_resolved,
-                                "requires_role": "admin"},
+    "mark_incident_resolved": {"fn": _tool_mark_incident_resolved, "requires_role": "admin"},
     # Phase 3a (2026-06-23) — Cat 23 PR-suggestion tools. The agent
     # can now create + open PR suggestions without leaving the Cmd-J
     # panel. open_pr_suggestion is admin-gated because it mutates
     # the remote repo via the configured PRProvider.
-    "create_pr_suggestion": {"fn": _tool_create_pr_suggestion,
-                               "requires_role": None},
-    "open_pr_suggestion": {"fn": _tool_open_pr_suggestion,
-                            "requires_role": "admin"},
+    "create_pr_suggestion": {"fn": _tool_create_pr_suggestion, "requires_role": None},
+    "open_pr_suggestion": {"fn": _tool_open_pr_suggestion, "requires_role": "admin"},
 }
 
 #: Write tools never auto-execute from the LLM loop. They return
 #: ``approval_required`` so the portal ApprovalCard is the only
 #: mutation path (W20). Call ``dispatch_tool(..., execute_approved=True)``
 #: from the approve endpoint after RBAC + N06 audit.
-_APPROVAL_GATED_TOOLS = frozenset({
-    "mark_incident_resolved",
-    "open_pr_suggestion",
-    "create_alert_rule",
-    "create_signal",
-    "promote_artifact",
-    # W23 evaluate mutations
-    "create_dataset",
-    "promote_trace_to_dataset",
-    "create_experiment",
-    "create_playground",
-    "playground_from_span",
-})
+_APPROVAL_GATED_TOOLS = frozenset(
+    {
+        "mark_incident_resolved",
+        "open_pr_suggestion",
+        "create_alert_rule",
+        "create_signal",
+        "promote_artifact",
+        # W23 evaluate mutations
+        "create_dataset",
+        "promote_trace_to_dataset",
+        "create_experiment",
+        "create_playground",
+        "playground_from_span",
+    }
+)
 
 #: Spend-preview confirmations (not silent writes). Approve re-runs
 #: with ``confirm_spend`` after the operator acknowledges cost.
-_SPEND_CONFIRM_TOOLS = frozenset({
-    "export_table",
-    "query_sql",
-    "run_analysis_template",
-})
+_SPEND_CONFIRM_TOOLS = frozenset(
+    {
+        "export_table",
+        "query_sql",
+        "run_analysis_template",
+    }
+)
 
 #: Insights write tools that inherit admin RBAC on merge.
-_WRITE_INSIGHTS_TOOLS = frozenset({
-    "create_alert_rule",
-    "create_signal",
-    "promote_artifact",
-    "create_dataset",
-    "promote_trace_to_dataset",
-    "create_experiment",
-    "create_playground",
-    "playground_from_span",
-})
+_WRITE_INSIGHTS_TOOLS = frozenset(
+    {
+        "create_alert_rule",
+        "create_signal",
+        "promote_artifact",
+        "create_dataset",
+        "promote_trace_to_dataset",
+        "create_experiment",
+        "create_playground",
+        "playground_from_span",
+    }
+)
 
 
 async def dispatch_tool(
@@ -1179,7 +1283,8 @@ async def dispatch_tool(
         return ToolCall(name=name, args=args, error=f"unknown tool: {name}")
     if spec["requires_role"] and user_role not in ("owner", "admin", "org_admin"):
         return ToolCall(
-            name=name, args=args,
+            name=name,
+            args=args,
             error=f"permission_denied: {spec['requires_role']} role required",
         )
     if name in _APPROVAL_GATED_TOOLS and not execute_approved:
@@ -1205,14 +1310,15 @@ async def dispatch_tool(
         # Truncate huge results so a runaway query doesn't blow up the row.
         result_str = json.dumps(result, default=str)
         if len(result_str) > 50_000:
-            result = {"_truncated": True, "_size_bytes": len(result_str),
-                      "preview": result_str[:50_000]}
-        return ToolCall(name=name, args=args, result=result,
-                        latency_ms=elapsed_ms)
+            result = {
+                "_truncated": True,
+                "_size_bytes": len(result_str),
+                "preview": result_str[:50_000],
+            }
+        return ToolCall(name=name, args=args, result=result, latency_ms=elapsed_ms)
     except Exception as exc:
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        return ToolCall(name=name, args=args, error=str(exc),
-                        latency_ms=elapsed_ms)
+        return ToolCall(name=name, args=args, error=str(exc), latency_ms=elapsed_ms)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -1469,22 +1575,25 @@ class ChatService:
         # Resolve conversation (create if missing).
         client = await get_postgres_client()
         conv_id = await self._ensure_conversation(
-            client, conversation_id, tenant_id, user_id, user_message,
+            client,
+            conversation_id,
+            tenant_id,
+            user_id,
+            user_message,
         )
         # Persist the user message.
         await self._append_message(
-            client, conv_id, role="user", content=user_message,
+            client,
+            conv_id,
+            role="user",
+            content=user_message,
         )
 
         # Build the message history (last 20 turns to bound context).
         history = await self._load_history(client, conv_id, limit=20)
-        preferred_model = page_context.get("preferred_model") or page_context.get(
-            "model"
-        )
+        preferred_model = page_context.get("preferred_model") or page_context.get("model")
         preferred_tier = str(
-            page_context.get("preferred_tier")
-            or page_context.get("tier")
-            or "auto"
+            page_context.get("preferred_tier") or page_context.get("tier") or "auto"
         )
         model, tier_key = await self._pick_model(
             user_message=user_message,
@@ -1535,27 +1644,29 @@ class ChatService:
             from eden.services.budget_service import get_consumption
 
             if not await is_feature_enabled(tenant_id, "chat_sidebar"):
-                await emit(AgentChunk(
-                    type="error",
-                    error="ChatSidebar is disabled for this organization.",
-                ))
+                await emit(
+                    AgentChunk(
+                        type="error",
+                        error="ChatSidebar is disabled for this organization.",
+                    )
+                )
                 return {"conversation_id": str(conv_id), "turns": 0}
-            _cons = await get_consumption(
-                tenant_id, window=_budget.get("window", "monthly")
-            )
+            _cons = await get_consumption(tenant_id, window=_budget.get("window", "monthly"))
             if (
                 _hard_limit > 0
                 and float(_cons.get("cost_usd") or 0) >= _hard_limit
                 and bool(_budget.get("enforcement_enabled"))
             ):
-                await emit(AgentChunk(
-                    type="error",
-                    error=(
-                        f"Budget hard cap already reached "
-                        f"(${float(_cons.get('cost_usd') or 0):.4f} / "
-                        f"${_hard_limit:.4f})."
-                    ),
-                ))
+                await emit(
+                    AgentChunk(
+                        type="error",
+                        error=(
+                            f"Budget hard cap already reached "
+                            f"(${float(_cons.get('cost_usd') or 0):.4f} / "
+                            f"${_hard_limit:.4f})."
+                        ),
+                    )
+                )
                 return {"conversation_id": str(conv_id), "turns": 0}
         except Exception as exc:
             logger.debug("ChatService: preflight budget check failed: %s", exc)
@@ -1565,6 +1676,7 @@ class ChatService:
             turn += 1
             # ── LLM call (streams text deltas) ──
             llm_result: dict[str, Any] = {}
+
             async def _stream_text(piece: str) -> None:
                 await emit(AgentChunk(type="text_delta", text=piece))
 
@@ -1577,8 +1689,7 @@ class ChatService:
                 )
             except Exception as exc:
                 logger.exception("ChatService LLM call failed")
-                await emit(AgentChunk(type="error",
-                                       error=f"LLM call failed: {exc}"))
+                await emit(AgentChunk(type="error", error=f"LLM call failed: {exc}"))
                 break
 
             total_prompt_tokens += llm_result.get("prompt_tokens", 0)
@@ -1600,30 +1711,31 @@ class ChatService:
                             model=model,
                             cost_usd=cost_usd,
                             input_tokens=int(llm_result.get("prompt_tokens") or 0),
-                            output_tokens=int(
-                                llm_result.get("completion_tokens") or 0
-                            ),
+                            output_tokens=int(llm_result.get("completion_tokens") or 0),
                             user_id=user_id,
                             session_id=str(conv_id),
                         )
                     )
                 except Exception as exc:
                     logger.debug(
-                        "ChatService: record_cost_event failed: %s", exc,
+                        "ChatService: record_cost_event failed: %s",
+                        exc,
                     )
 
-            await emit(AgentChunk(
-                type="cost",
-                cost_usd=total_cost_usd,
-                turn_cost_usd=cost_usd,
-                meta={
-                    "model": model,
-                    "tier": tier_key,
-                    "ttft_ms": llm_result.get("ttft_ms"),
-                    "ttft_budget_ms": ttft_budget_ms(tier_key),
-                    "cost_estimate": cost_est,
-                },
-            ))
+            await emit(
+                AgentChunk(
+                    type="cost",
+                    cost_usd=total_cost_usd,
+                    turn_cost_usd=cost_usd,
+                    meta={
+                        "model": model,
+                        "tier": tier_key,
+                        "ttft_ms": llm_result.get("ttft_ms"),
+                        "ttft_budget_ms": ttft_budget_ms(tier_key),
+                        "cost_estimate": cost_est,
+                    },
+                )
+            )
 
             warn = ttft_warning(llm_result.get("ttft_ms"), tier_key)
             if warn:
@@ -1649,19 +1761,23 @@ class ChatService:
             # hard cap, break the loop and emit an error chunk so
             # the user knows why the agent stopped.
             if _hard_limit > 0 and total_cost_usd > _hard_limit:
-                await emit(AgentChunk(
-                    type="error",
-                    error=(
-                        f"Budget hard cap exceeded: "
-                        f"${total_cost_usd:.4f} > ${_hard_limit:.4f}"
-                    ),
-                ))
+                await emit(
+                    AgentChunk(
+                        type="error",
+                        error=(
+                            f"Budget hard cap exceeded: "
+                            f"${total_cost_usd:.4f} > ${_hard_limit:.4f}"
+                        ),
+                    )
+                )
                 break
 
             # Persist the assistant message (full raw text — we
             # reconstruct the display view on read).
             await self._append_message(
-                client, conv_id, role="assistant",
+                client,
+                conv_id,
+                role="assistant",
                 content=llm_result["text"],
                 tool_calls=llm_result["tool_calls"],
                 chart_specs=llm_result["charts"],
@@ -1674,21 +1790,31 @@ class ChatService:
             # Emit chart + citation chunks now (they don't depend on
             # tool execution).
             for chart_dict in llm_result["charts"]:
-                await emit(AgentChunk(
-                    type="chart",
-                    chart=ChartSpec(**{
-                        k: v for k, v in chart_dict.items()
-                        if k in ChartSpec.__dataclass_fields__
-                    }),
-                ))
+                await emit(
+                    AgentChunk(
+                        type="chart",
+                        chart=ChartSpec(
+                            **{
+                                k: v
+                                for k, v in chart_dict.items()
+                                if k in ChartSpec.__dataclass_fields__
+                            }
+                        ),
+                    )
+                )
             for cite_dict in llm_result["citations"]:
-                await emit(AgentChunk(
-                    type="citation",
-                    citation=Citation(**{
-                        k: v for k, v in cite_dict.items()
-                        if k in Citation.__dataclass_fields__
-                    }),
-                ))
+                await emit(
+                    AgentChunk(
+                        type="citation",
+                        citation=Citation(
+                            **{
+                                k: v
+                                for k, v in cite_dict.items()
+                                if k in Citation.__dataclass_fields__
+                            }
+                        ),
+                    )
+                )
 
             # ── Tool execution round ──
             tool_blocks = llm_result["tool_calls"]
@@ -1700,33 +1826,38 @@ class ChatService:
             for tb in tool_blocks:
                 name = tb.get("name")
                 args = tb.get("args") or {}
-                tc = await dispatch_tool(name, args,
-                                          tenant_id=tenant_id,
-                                          user_role=user_role)
+                tc = await dispatch_tool(name, args, tenant_id=tenant_id, user_role=user_role)
                 await emit(AgentChunk(type="tool_call", tool_call=tc))
-                tool_results.append({
-                    "name": name,
-                    "result": tc.result,
-                    "error": tc.error,
-                })
+                tool_results.append(
+                    {
+                        "name": name,
+                        "result": tc.result,
+                        "error": tc.error,
+                    }
+                )
                 # Persist the tool message so a later chat reload
                 # shows the full tool trace.
                 await self._append_message(
-                    client, conv_id, role="tool",
+                    client,
+                    conv_id,
+                    role="tool",
                     tool_calls=[tc.to_dict()],
-                    tool_results=[{"name": name, "result": tc.result,
-                                    "error": tc.error}],
+                    tool_results=[{"name": name, "result": tc.result, "error": tc.error}],
                 )
 
             # Add tool results to the history and loop.
-            history.append({
-                "role": "assistant",
-                "content": llm_result["raw_text"],
-            })
-            history.append({
-                "role": "tool",
-                "content": json.dumps(tool_results, default=str)[:50_000],
-            })
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": llm_result["raw_text"],
+                }
+            )
+            history.append(
+                {
+                    "role": "tool",
+                    "content": json.dumps(tool_results, default=str)[:50_000],
+                }
+            )
 
         # Update conversation-level counters.
         await client.execute(
@@ -1737,17 +1868,20 @@ class ChatService:
                 total_cost_usd = total_cost_usd + $4
             WHERE id = $1
             """,
-            conv_id, turn,
+            conv_id,
+            turn,
             total_prompt_tokens + total_completion_tokens,
             total_cost_usd,
         )
 
-        await emit(AgentChunk(
-            type="done",
-            text="",
-            cost_usd=total_cost_usd,
-            turn_cost_usd=total_cost_usd,
-        ))
+        await emit(
+            AgentChunk(
+                type="done",
+                text="",
+                cost_usd=total_cost_usd,
+                turn_cost_usd=total_cost_usd,
+            )
+        )
         return {
             "conversation_id": str(conv_id),
             "turns": turn,
@@ -1759,13 +1893,18 @@ class ChatService:
     # ── Persistence helpers ────────────────────────────────────────
 
     async def _ensure_conversation(
-        self, client: Any, conversation_id: str | None,
-        tenant_id: str, user_id: str, first_message: str,
+        self,
+        client: Any,
+        conversation_id: str | None,
+        tenant_id: str,
+        user_id: str,
+        first_message: str,
     ) -> Any:
         if conversation_id:
             row = await client.fetchrow(
                 "SELECT id FROM ai_conversations WHERE id = $1 AND org_id = $2",
-                conversation_id, tenant_id,
+                conversation_id,
+                tenant_id,
             )
             if row:
                 return row["id"]
@@ -1783,7 +1922,10 @@ class ChatService:
                 ON CONFLICT (id) DO NOTHING
                 RETURNING id
                 """,
-                conversation_id, tenant_id, user_id, title,
+                conversation_id,
+                tenant_id,
+                user_id,
+                title,
             )
             if row:
                 return row["id"]
@@ -1791,7 +1933,8 @@ class ChatService:
             # Re-check ours; otherwise mint a fresh conversation.
             row = await client.fetchrow(
                 "SELECT id FROM ai_conversations WHERE id = $1 AND org_id = $2",
-                conversation_id, tenant_id,
+                conversation_id,
+                tenant_id,
             )
             if row:
                 return row["id"]
@@ -1801,13 +1944,19 @@ class ChatService:
             VALUES ($1, $2, $3, '{}'::jsonb)
             RETURNING id
             """,
-            tenant_id, user_id, title,
+            tenant_id,
+            user_id,
+            title,
         )
         return row["id"]
 
     async def _append_message(
-        self, client: Any, conversation_id: Any, *,
-        role: str, content: str = "",
+        self,
+        client: Any,
+        conversation_id: Any,
+        *,
+        role: str,
+        content: str = "",
         tool_calls: list[dict[str, Any]] | None = None,
         tool_results: list[dict[str, Any]] | None = None,
         chart_specs: list[dict[str, Any]] | None = None,
@@ -1827,16 +1976,23 @@ class ChatService:
                     $8, $9, $10)
             RETURNING id
             """,
-            conversation_id, role, content,
+            conversation_id,
+            role,
+            content,
             json.dumps(tool_calls or []),
             json.dumps(tool_results or []),
             json.dumps(chart_specs or []),
             json.dumps(citations or []),
-            prompt_tokens, completion_tokens, model_used,
+            prompt_tokens,
+            completion_tokens,
+            model_used,
         )
 
     async def _load_history(
-        self, client: Any, conversation_id: Any, *,
+        self,
+        client: Any,
+        conversation_id: Any,
+        *,
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         rows = await client.fetch(
@@ -1847,7 +2003,8 @@ class ChatService:
             ORDER BY created_at DESC
             LIMIT $2
             """,
-            conversation_id, limit,
+            conversation_id,
+            limit,
         )
         # Reverse to chronological; map to OpenAI chat-completions shape.
         history: list[dict[str, Any]] = []
@@ -1859,10 +2016,12 @@ class ChatService:
                 # — we collapse tool messages back into a single user
                 # message summarising the result so the model still sees
                 # them.
-                history.append({
-                    "role": "user",
-                    "content": f"[tool result] {content}",
-                })
+                history.append(
+                    {
+                        "role": "user",
+                        "content": f"[tool result] {content}",
+                    }
+                )
             elif role == "assistant":
                 history.append({"role": "assistant", "content": content})
             elif role == "user":
@@ -1883,8 +2042,7 @@ _BLOCK_RE = re.compile(
 )
 
 
-def _extract_blocks(text: str, kind: str,
-                     parser: Callable[[str], Any]) -> list[Any]:
+def _extract_blocks(text: str, kind: str, parser: Callable[[str], Any]) -> list[Any]:
     """Pull every ```<kind> fenced JSON block out of ``text``."""
     out: list[Any] = []
     for m in _BLOCK_RE.finditer(text):
@@ -1949,17 +2107,19 @@ def _register_insights_tools() -> None:
             "requires_role": "admin" if name in _WRITE_INSIGHTS_TOOLS else None,
         }
         schema = tool.input_schema.get("properties", {})
-        _TOOL_SPECS.append({
-            "name": name,
-            "summary": (tool.description or "").split("\n", 1)[0].strip(),
-            "args": {
-                k: {
-                    "type": v.get("type", "string"),
-                    "required": k in (tool.input_schema.get("required") or []),
-                }
-                for k, v in schema.items()
-            },
-        })
+        _TOOL_SPECS.append(
+            {
+                "name": name,
+                "summary": (tool.description or "").split("\n", 1)[0].strip(),
+                "args": {
+                    k: {
+                        "type": v.get("type", "string"),
+                        "required": k in (tool.input_schema.get("required") or []),
+                    }
+                    for k, v in schema.items()
+                },
+            }
+        )
 
 
 _register_insights_tools()

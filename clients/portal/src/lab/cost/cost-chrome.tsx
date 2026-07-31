@@ -46,6 +46,9 @@ export function CostModeNav({
 }
 
 export function BudgetChip({ status }: { status: BudgetStatus }) {
+  if (status === "unset") {
+    return <StatusChip tone="neutral">{budgetStatusLabel(status)}</StatusChip>;
+  }
   const tone = status === "ok" ? "ok" : "fail";
   return <StatusChip tone={tone}>{budgetStatusLabel(status)}</StatusChip>;
 }

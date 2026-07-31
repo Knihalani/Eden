@@ -13,6 +13,7 @@ import {
 } from "@/components/shell/portal-auth-chrome";
 import { PortalCatalogSync } from "@/components/providers/portal-catalog-sync";
 import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner";
+import { ConfirmProvider } from "@/hooks/use-confirm";
 
 /** Alerts modal pulls heavy graphs — load after first paint. */
 const AlertsModal = dynamic(
@@ -30,30 +31,40 @@ const OnboardingOverlay = dynamic(
   { ssr: false },
 );
 
+function CatalogSyncFallback() {
+  return (
+    <span className="sr-only" role="status">
+      Syncing catalog…
+    </span>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <LabToastProvider>
-        <AlertsProvider>
-          <SignalJobsProvider>
-            <Suspense fallback={null}>
-              <PortalCatalogSync />
-            </Suspense>
-            <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
-              <SidebarNav />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
-                <PortalStatusBanners />
-                <OnboardingBanner />
-                <main className="min-h-0 flex-1 overflow-auto outline-none">
-                  <PortalBootGate>{children}</PortalBootGate>
-                </main>
+      <ConfirmProvider>
+        <LabToastProvider>
+          <AlertsProvider>
+            <SignalJobsProvider>
+              <Suspense fallback={<CatalogSyncFallback />}>
+                <PortalCatalogSync />
+              </Suspense>
+              <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
+                <SidebarNav />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
+                  <PortalStatusBanners />
+                  <OnboardingBanner />
+                  <main className="min-h-0 flex-1 overflow-auto outline-none">
+                    <PortalBootGate>{children}</PortalBootGate>
+                  </main>
+                </div>
               </div>
-            </div>
-            <AlertsModal />
-            <OnboardingOverlay />
-          </SignalJobsProvider>
-        </AlertsProvider>
-      </LabToastProvider>
+              <AlertsModal />
+              <OnboardingOverlay />
+            </SignalJobsProvider>
+          </AlertsProvider>
+        </LabToastProvider>
+      </ConfirmProvider>
     </SidebarProvider>
   );
 }

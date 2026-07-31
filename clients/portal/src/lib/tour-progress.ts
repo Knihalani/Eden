@@ -58,10 +58,12 @@ export function isTourComplete(progress: EdenTourProgress | null): boolean {
   return progress?.status === "done" || progress?.status === "skipped";
 }
 
-/** Banner stays visible after Skip so Resume / API-key CTAs remain reachable. */
+/** Banner only while the tour is still in progress (active / never started). */
 export function shouldShowTourBanner(
   progress: EdenTourProgress | null,
 ): boolean {
+  // No metadata yet → treat as not started (show once). After Finish or
+  // Skip the chrome must disappear entirely — not a dismissible Resume chip.
   if (!progress) return true;
-  return progress.status !== "done";
+  return progress.status === "active";
 }

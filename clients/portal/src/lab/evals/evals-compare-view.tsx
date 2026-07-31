@@ -500,13 +500,14 @@ function ExpPlain({
 }) {
   if (!exp) return null;
   const primary = Object.values(exp.avgScores)[0] ?? 0;
+  const latencyLabel =
+    exp.latencyMs != null ? formatDuration(exp.latencyMs) : "—";
   return (
     <div>
       <p className="type-label">{title}</p>
       <p className="type-ui mt-1 text-[var(--text)]">{exp.name}</p>
       <p className="type-value mt-1.5 !text-[0.6875rem]">
-        {formatScore(primary)} · {formatDuration(exp.latencyMs)} ·{" "}
-        {formatUsd(exp.costUsd, 3)}
+        {formatScore(primary)} · {latencyLabel} · {formatUsd(exp.costUsd, 3)}
       </p>
     </div>
   );

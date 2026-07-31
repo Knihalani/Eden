@@ -7,7 +7,7 @@
  * later by a real warehouse), never as PNGs in the chat stream.
  */
 
-import { AGENT_LIST } from "@/lab/fixtures/agents";
+import { catalogAgents } from "@/lib/portal-catalog";
 import { COST_DRIVERS } from "@/lab/fixtures/cost";
 import type {
   AgentArtifact,
@@ -58,9 +58,10 @@ function shortName(name: string): string {
 }
 
 function agentsInScope(scope?: ChartQueryScope) {
+  const agents = catalogAgents();
   const id = scope?.agentId;
-  if (!id || id === "all") return [...AGENT_LIST];
-  return AGENT_LIST.filter((a) => a.id === id);
+  if (!id || id === "all") return [...agents];
+  return agents.filter((a) => a.id === id);
 }
 
 export const CHART_QUERY_CATALOG: Record<ChartQueryId, ChartQueryDef> = {
@@ -151,17 +152,24 @@ function runSeries(
   queryId: ChartQueryId,
   scope?: ChartQueryScope,
 ): AgentChartPoint[] {
-  const agents = agentsInScope(scope).sort(
-    (a, b) => (b.costUsd24h ?? 0) - (a.costUsd24h ?? 0),
-  );
+  const agents = agentsInScope(scope).sort((a, b) => {
+    const ac = a.costUsd24h;
+    const bc = b.costUsd24h;
+    if (ac == null && bc == null) return 0;
+    if (ac == null) return 1;
+    if (bc == null) return -1;
+    return bc - ac;
+  });
 
   switch (queryId) {
     case "spend_by_agent":
     case "spend_share":
-      return agents.map((a) => ({
-        label: shortName(a.name),
-        value: Number((a.costUsd24h ?? 0).toFixed(2)),
-      }));
+      return agents
+        .filter((a) => a.costUsd24h != null)
+        .map((a) => ({
+          label: shortName(a.name),
+          value: Number((a.costUsd24h as number).toFixed(2)),
+        }));
     case "spend_hourly":
       return HOURLY_SPEND.map((p) => ({ ...p }));
     case "runs_by_agent":
@@ -173,10 +181,10 @@ function runSeries(
         }));
     case "spend_vs_success":
       return agents
-        .filter((a) => a.successRate != null)
+        .filter((a) => a.successRate != null && a.costUsd24h != null)
         .map((a) => ({
           label: shortName(a.name),
-          value: Number((a.costUsd24h ?? 0).toFixed(2)),
+          value: Number((a.costUsd24h as number).toFixed(2)),
           value2: Number(((a.successRate ?? 0) * 100).toFixed(1)),
         }));
     case "error_rate_by_agent":
@@ -212,7 +220,7 @@ export function executeChartQuery(intent: ChartQueryIntent): AgentArtifact {
       return d.agentId === aid;
     }).map((d) => ({
       driver: d.title,
-      agent: AGENT_LIST.find((a) => a.id === d.agentId)?.name ?? d.agentId,
+      agent: catalogAgents().find((a) => a.id === d.agentId)?.name ?? d.agentId,
       estSaveUsd: d.estSaveUsd,
       confidence: d.confidence,
     }));

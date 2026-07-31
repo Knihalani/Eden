@@ -90,6 +90,7 @@ def __getattr__(name: str) -> Any:
     if name in _LAZY_IMPORTS:
         module_name, attr_name = _LAZY_IMPORTS[name]
         from importlib import import_module
+
         module = import_module(module_name, __name__)
         value = getattr(module, attr_name)
         globals()[name] = value

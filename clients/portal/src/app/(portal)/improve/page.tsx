@@ -23,6 +23,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { improvePlansApi } from "@/lib/api/resources";
+import { isGithubPermissionsMissing } from "@/lib/improve-feature";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { useLabToast } from "@/lab/lab-toast";
@@ -255,9 +256,16 @@ function LabImproveInner() {
           });
           pushToast({ title: "Plan approved", tone: "ok" });
         } catch (err) {
+          const permissionsMissing = isGithubPermissionsMissing(err);
           pushToast({
-            title: "Approve failed",
-            body: err instanceof Error ? err.message : String(err),
+            title: permissionsMissing
+              ? "GitHub App needs Contents: Read and write"
+              : "Approve failed",
+            body: permissionsMissing
+              ? "Update Contents to Read and write on the Eden Observability App, Accept on the installation, then retry."
+              : err instanceof Error
+                ? err.message
+                : String(err),
             tone: "fail",
           });
         }

@@ -95,20 +95,29 @@ class ImprovementCockpitAggregator:
         *,
         limit: int = 100,
     ) -> ImprovementQueue:
-        issues_t, actions_t, patches_t, nudges_t, promotions_t, artifacts_t, ledger_t, evolution_t, heals_t, denials_t = (
-            await asyncio.gather(
-                self._from_issues(org_id, agent_id),
-                self._from_closed_loop(org_id),
-                self._from_improvement_plans(org_id, agent_id),
-                self._from_nudges(org_id, agent_id),
-                self._from_promotions(org_id),
-                self._from_artifacts_pending(org_id, agent_id),
-                self._from_ledger_stale(org_id, agent_id),
-                self._from_evolution_canaries(org_id, agent_id),
-                self._from_self_heals(org_id),
-                self._from_autonomy_denials(org_id, agent_id),
-                return_exceptions=True,
-            )
+        (
+            issues_t,
+            actions_t,
+            patches_t,
+            nudges_t,
+            promotions_t,
+            artifacts_t,
+            ledger_t,
+            evolution_t,
+            heals_t,
+            denials_t,
+        ) = await asyncio.gather(
+            self._from_issues(org_id, agent_id),
+            self._from_closed_loop(org_id),
+            self._from_improvement_plans(org_id, agent_id),
+            self._from_nudges(org_id, agent_id),
+            self._from_promotions(org_id),
+            self._from_artifacts_pending(org_id, agent_id),
+            self._from_ledger_stale(org_id, agent_id),
+            self._from_evolution_canaries(org_id, agent_id),
+            self._from_self_heals(org_id),
+            self._from_autonomy_denials(org_id, agent_id),
+            return_exceptions=True,
         )
         items: list[ImprovementItem] = []
         for result in (
@@ -169,15 +178,11 @@ class ImprovementCockpitAggregator:
             logger.debug("cockpit fleet severity: %s", exc)
             return {}
 
-    async def _from_issues(
-        self, org_id: str, agent_id: str | None
-    ) -> list[ImprovementItem]:
+    async def _from_issues(self, org_id: str, agent_id: str | None) -> list[ImprovementItem]:
         try:
             from eden.issues.repo import IssuesRepo
 
-            rows = await IssuesRepo().list_issues(
-                org_id, status="open", limit=50
-            )
+            rows = await IssuesRepo().list_issues(org_id, status="open", limit=50)
         except Exception as exc:
             logger.debug("cockpit issues: %s", exc)
             return []
@@ -374,8 +379,7 @@ class ImprovementCockpitAggregator:
                         "decision": decision,
                         "tier": r.get("tier_applied"),
                     },
-                    autonomy_tier_required=str(r.get("tier_applied") or "")
-                    or None,
+                    autonomy_tier_required=str(r.get("tier_applied") or "") or None,
                     blocked_reason=reason[:240],
                     source="autonomy_audit",
                 )
@@ -466,9 +470,7 @@ class ImprovementCockpitAggregator:
                     ref=f"proposed_patch:{pid}",
                     item_type="proposed_patch",
                     title=desc,
-                    column=COLUMN_NEEDS_YOU
-                    if status == "proposed"
-                    else COLUMN_VERIFY,
+                    column=COLUMN_NEEDS_YOU if status == "proposed" else COLUMN_VERIFY,
                     severity="medium",
                     agent_id=repo,
                     status=status,
@@ -484,9 +486,7 @@ class ImprovementCockpitAggregator:
             )
         return out
 
-    async def _from_nudges(
-        self, org_id: str, agent_id: str | None
-    ) -> list[ImprovementItem]:
+    async def _from_nudges(self, org_id: str, agent_id: str | None) -> list[ImprovementItem]:
         try:
             from eden.storage.postgres import get_postgres_client
 
@@ -524,15 +524,9 @@ class ImprovementCockpitAggregator:
             nid = str(r["id"])
             name = str(r.get("name") or "Shadow nudge")
             aid = r.get("agent_id")
-            blocked_reason, tier = await _autonomy_block_reason(
-                org_id, "nudge_shadow", aid
-            )
+            blocked_reason, tier = await _autonomy_block_reason(org_id, "nudge_shadow", aid)
             column = COLUMN_AUTONOMOUS if not blocked_reason else COLUMN_NEEDS_YOU
-            href = (
-                f"/issues/{r['source_issue_id']}"
-                if r.get("source_issue_id")
-                else "/settings"
-            )
+            href = f"/issues/{r['source_issue_id']}" if r.get("source_issue_id") else "/settings"
             out.append(
                 ImprovementItem(
                     ref=f"nudge:{nid}",
@@ -587,9 +581,7 @@ class ImprovementCockpitAggregator:
             )
         return out
 
-    async def _from_ledger_stale(
-        self, org_id: str, agent_id: str | None
-    ) -> list[ImprovementItem]:
+    async def _from_ledger_stale(self, org_id: str, agent_id: str | None) -> list[ImprovementItem]:
         try:
             from eden.preview.gates import ledger_enabled
 
@@ -700,9 +692,7 @@ class ImprovementCockpitAggregator:
             cid = str(r.get("id") or "")
             aid = str(r.get("agent_id") or "default")
             name = str(r.get("name") or "Prompt canary")
-            blocked_reason, tier = await _autonomy_block_reason(
-                org_id, "prompt_canary", aid
-            )
+            blocked_reason, tier = await _autonomy_block_reason(org_id, "prompt_canary", aid)
             column = COLUMN_AUTONOMOUS if not blocked_reason else COLUMN_NEEDS_YOU
             out.append(
                 ImprovementItem(
@@ -729,9 +719,7 @@ class ImprovementCockpitAggregator:
         try:
             from eden.promotion.evidence_gate import EvidenceGate
 
-            candidates = await EvidenceGate().list_queue(
-                org_id, status="pending", limit=50
-            )
+            candidates = await EvidenceGate().list_queue(org_id, status="pending", limit=50)
         except Exception as exc:
             logger.debug("cockpit promotions: %s", exc)
             return []
@@ -742,13 +730,9 @@ class ImprovementCockpitAggregator:
             cid = str(row.get("id") or "")
             kind = str(row.get("kind") or "promotion")
             ref_id = str(row.get("ref_id") or "")
-            item_type = (
-                "guardrail_promote" if "guardrail" in kind else "promotion_candidate"
-            )
+            item_type = "guardrail_promote" if "guardrail" in kind else "promotion_candidate"
             action_type = "guardrail_promote" if "guardrail" in kind else "nudge_promote"
-            blocked_reason, tier = await _autonomy_block_reason(
-                org_id, action_type, None
-            )
+            blocked_reason, tier = await _autonomy_block_reason(org_id, action_type, None)
             column = COLUMN_PROPOSED if not blocked_reason else COLUMN_NEEDS_YOU
             title = f"Promotion pending: {kind}"
             if ref_id:
@@ -811,9 +795,7 @@ async def _autonomy_block_reason(
     try:
         from eden.closed_loop.autonomy_policy import why_blocked
 
-        return await why_blocked(
-            org_id, action_type, agent_id=str(agent_id) if agent_id else None
-        )
+        return await why_blocked(org_id, action_type, agent_id=str(agent_id) if agent_id else None)
     except Exception as exc:
         logger.debug("cockpit autonomy block reason: %s", exc)
         return None, None

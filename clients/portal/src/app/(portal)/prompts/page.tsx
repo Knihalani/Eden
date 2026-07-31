@@ -268,7 +268,11 @@ function PromptsInner() {
         ? apiVersions.find((v) => v.version === selectedNum)
         : undefined) ??
       [...apiVersions].sort((a, b) => b.version - a.version)[0];
-    const model = selectedApi?.model || "gpt-4o-mini";
+    const model = (selectedApi?.model || "").trim();
+    if (!model) {
+      setNotice("Pick a model on the version before saving");
+      return;
+    }
 
     try {
       await promptsV2Api.createVersion(orgId, prompt.name, {

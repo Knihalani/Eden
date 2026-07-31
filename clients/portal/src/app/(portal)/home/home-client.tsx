@@ -34,6 +34,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { getPageDescription } from "@/lib/page-descriptions";
 
 function Kpi({
   label,
@@ -288,7 +290,14 @@ export default function HomeClient() {
 
   return (
     <div className="ds-page overflow-y-auto">
-      <PageHeader title="Home" />
+      <PageHeader
+        title="Home"
+        meta={
+          <span className="type-meta max-w-xl truncate">
+            {getPageDescription("/home")}
+          </span>
+        }
+      />
 
       <div className="flex flex-wrap border-b border-[var(--line)]">
         <Kpi
@@ -304,7 +313,9 @@ export default function HomeClient() {
           value={String(snap.fleetRuns)}
           hint={
             snap.successRate == null
-              ? "no runs yet"
+              ? snap.fleetRuns > 0
+                ? "success unknown"
+                : "no runs yet"
               : `${(snap.successRate * 100).toFixed(0)}%`
           }
           tone="default"
@@ -391,10 +402,10 @@ export default function HomeClient() {
                 }
                 body={
                   traces.length === 0 && agents.length === 0
-                    ? "Install the SDK or mint an API key to see attention items here."
+                    ? U20_EMPTY_COPY.dashboardTraces
                     : dismissedCount > 0
-                      ? `${dismissedCount} dismissed`
-                      : undefined
+                      ? `${dismissedCount} dismissed. ${U20_EMPTY_COPY.alertsClear}`
+                      : U20_EMPTY_COPY.alertsClear
                 }
                 action={
                   traces.length === 0 && agents.length === 0 ? (
@@ -442,7 +453,7 @@ export default function HomeClient() {
             {recent.length === 0 ? (
               <EmptyState
                 title="No recent runs"
-                body="Events show up here after your first ingest."
+                body={U20_EMPTY_COPY.dashboardTraces}
                 action={
                   <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">
                     Open traces
@@ -492,7 +503,7 @@ export default function HomeClient() {
           {fleet.length === 0 ? (
             <EmptyState
               title="No agents yet"
-              body="Agents appear after your first traced runs."
+              body={U20_EMPTY_COPY.agents}
               action={
                 <Link href="/agents" className="ds-btn ds-btn-ghost ds-btn-sm">
                   Open agents

@@ -14,6 +14,7 @@ import contextlib
 import gzip
 import io
 import logging
+import uuid
 from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
@@ -285,12 +286,29 @@ def _openai_to_raw(item: dict[str, Any]) -> dict[str, Any]:
     # Prefer SDK-supplied correlation ids (eden.trace / instrumentations).
     # Falling back to OpenAI ``user`` or response ``id`` used to orphan LLM
     # spans onto separate traces from the enclosing agent.run.
-    sdk_trace_id = item.get("trace_id") or item.get("user") or ""
+    sdk_trace_id = item.get("trace_id") or item.get("trace") or item.get("user") or ""
+    # event_id MUST be unique per ingest. The old
+    # ``openai_{model}_{total_tokens}`` fallback collided constantly
+    # (same model + same token count → ON CONFLICT DO NOTHING while the
+    # API still reported accepted=1), so traces never appeared in the portal.
+    event_id = (
+        str(response_id).strip()
+        if response_id
+        else f"openai_{uuid.uuid4().hex}"
+    )
+    agent_id = item.get("agent_id")
+    # Prefer a human run label over the raw model id so the Traces list
+    # does not look like a swarm of "MiniMax-M3" / "gpt-4o" pseudo-agents.
+    run_name = (
+        item.get("name")
+        or (str(agent_id).strip() if agent_id else None)
+        or (f"{model}" if model else None)
+    )
     return {
-        "event_id": response_id or f"openai_{model}_{usage.get('total_tokens', '')}",
+        "event_id": event_id,
         "trace_id": str(sdk_trace_id or response_id or ""),
-        "agent_id": item.get("agent_id"),
-        "name": model or None,
+        "agent_id": agent_id,
+        "name": run_name,
         "model": model or None,
         "model_name": model or None,
         "event_type": "openai.chat_completion",

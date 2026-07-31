@@ -1,6 +1,7 @@
 /** GitHub App install callback helpers for the onboarding wizard. */
 
 export const GITHUB_INSTALL_STORAGE_KEY = "eden:onboarding:github_installation_id";
+export const GITHUB_INSTALL_AGENT_KEY = "eden:onboarding:github_agent_id";
 
 /** Parse GitHub's installation_id query param (digits only). */
 export function parseInstallationId(
@@ -26,4 +27,24 @@ export function storeInstallationId(id: number): void {
 export function clearStoredInstallationId(): void {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(GITHUB_INSTALL_STORAGE_KEY);
+}
+
+/** Persist agent id across the GitHub App install redirect (callback drops ?agent=). */
+export function storeInstallAgentId(agentId: string): void {
+  if (typeof window === "undefined") return;
+  const trimmed = agentId.trim();
+  if (!trimmed) return;
+  sessionStorage.setItem(GITHUB_INSTALL_AGENT_KEY, trimmed);
+}
+
+export function readStoredInstallAgentId(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = sessionStorage.getItem(GITHUB_INSTALL_AGENT_KEY);
+  const trimmed = (raw || "").trim();
+  return trimmed || null;
+}
+
+export function clearStoredInstallAgentId(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(GITHUB_INSTALL_AGENT_KEY);
 }

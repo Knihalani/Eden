@@ -26,7 +26,8 @@ export type SessionFixture = {
   /** Wall-clock across the thread (sum of turn durations in lab fixtures). */
   durationMs: number;
   totalTokens: number;
-  costUsd: number;
+  /** null = session spend unknown — never invent $0. */
+  costUsd: number | null;
   lastErrorSummary?: string;
   diagnosis?: string;
   relatedIssueIds: string[];

@@ -5,6 +5,8 @@
 export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/dashboard":
     "One-glance view of agents, traces, costs, and alerts for the active org. Start here.",
+  "/home":
+    "One-glance view of agents, traces, costs, and alerts for the active org. Start here.",
   "/agents":
     "Every AI agent seen in this org. Agents appear from SDK agent_id on ingest. Connect a repo from an agent’s detail view when you want Improve to open fix PRs.",
   "/agents/connect":

@@ -42,34 +42,10 @@ async def _resolve_base_branch(
     *,
     agent_id: str | None = None,
 ) -> str:
-    """Resolve the PR base branch — never hardcode ``main``.
+    """Resolve the PR base branch — never hardcode ``main``."""
+    from eden.providers.factory import resolve_pr_base_branch
 
-    Preference order:
-    1. ``repo_connections.default_branch`` when set
-    2. :meth:`RepoProvider.get_default_branch`
-    """
-    try:
-        from eden.providers.factory import active_repo_connection
-
-        conn = await active_repo_connection(org_id, agent_id=agent_id)
-    except Exception as exc:
-        logger.debug("approve: active_repo_connection failed: %s", exc)
-        conn = None
-    if conn:
-        branch = (conn.get("default_branch") or "").strip()
-        if branch:
-            return branch
-    try:
-        branch = await repo_provider.get_default_branch()
-    except Exception as exc:
-        logger.warning("approve: get_default_branch failed: %s", exc)
-        raise RuntimeError(
-            "could not resolve default branch for approve"
-        ) from exc
-    branch = (branch or "").strip()
-    if not branch:
-        raise RuntimeError("could not resolve default branch for approve")
-    return branch
+    return await resolve_pr_base_branch(org_id, repo_provider, agent_id=agent_id)
 
 
 def _pr_create_failed(info: Any) -> bool:
@@ -144,9 +120,7 @@ async def approve_plan(
         return {"status": "error", "plan_id": plan_id, "error": "unparseable_diff"}
 
     try:
-        base = await _resolve_base_branch(
-            org_id, repo_provider, agent_id=plan_agent_id
-        )
+        base = await _resolve_base_branch(org_id, repo_provider, agent_id=plan_agent_id)
     except RuntimeError as exc:
         return {
             "status": "error",
@@ -158,9 +132,20 @@ async def approve_plan(
     if provider is not None:
         pr_provider = provider
     else:
-        pr_provider = await get_pr_provider_for_org(
-            org_id, agent_id=plan_agent_id
-        )
+        try:
+            pr_provider = await get_pr_provider_for_org(org_id, agent_id=plan_agent_id)
+        except Exception as exc:
+            from eden.providers.factory import RepoConnectionError
+
+            if isinstance(exc, RepoConnectionError):
+                logger.warning("approve_plan: repo connection error: %s", exc)
+                return {
+                    "status": "error",
+                    "plan_id": plan_id,
+                    "error": "repo_connection_error",
+                    "message": str(exc),
+                }
+            raise
 
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"
@@ -185,18 +170,24 @@ async def approve_plan(
             "message": str(exc),
         }
     except Exception as exc:
+        from eden.providers.pr import GitHubPRPermissionError
+
         logger.warning("approve_plan: PR create failed: %s", exc)
+        error = (
+            "github_permissions_missing"
+            if isinstance(exc, GitHubPRPermissionError)
+            else "pr_create_failed"
+        )
         return {
             "status": "error",
             "plan_id": plan_id,
-            "error": "pr_create_failed",
+            "error": error,
             "message": str(exc),
         }
 
     if _pr_create_failed(info):
         logger.warning(
-            "approve_plan: create_pr returned failure envelope "
-            "(state=%s number=%s url=%r)",
+            "approve_plan: create_pr returned failure envelope " "(state=%s number=%s url=%r)",
             getattr(info, "state", None),
             getattr(info, "number", None),
             getattr(info, "url", None),
@@ -205,7 +196,10 @@ async def approve_plan(
             "status": "error",
             "plan_id": plan_id,
             "error": "pr_create_failed",
-            "message": "PR provider returned a failed create_pr result",
+            "message": (
+                f"PR create failed (state={getattr(info, 'state', None)!s}, "
+                f"number={getattr(info, 'number', None)!s})"
+            ),
         }
 
     opened_branch = info.branch or branch
@@ -218,9 +212,7 @@ async def approve_plan(
         approved_by=approved_by,
     )
 
-    verify_job_id = await _queue_verify(
-        org_id, updated or plan, branch=opened_branch
-    )
+    verify_job_id = await _queue_verify(org_id, updated or plan, branch=opened_branch)
     await _audit_approve(org_id, plan_id, approved_by)
     await _n06_ledger(
         org_id,
@@ -478,9 +470,7 @@ async def reject_plan_audited(
     return updated
 
 
-async def _audit_approve(
-    org_id: str, plan_id: str, approved_by: str | None
-) -> None:
+async def _audit_approve(org_id: str, plan_id: str, approved_by: str | None) -> None:
     try:
         from eden.closed_loop.autonomy_policy import audit
 

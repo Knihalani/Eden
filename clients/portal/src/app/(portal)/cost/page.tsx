@@ -93,8 +93,12 @@ function LabCostInner() {
 
   const budget: CostBudgetFixture = useMemo(() => {
     const rollup = budgetQuery.data?.data?.rollup;
-    const spentUsd = rollup?.cost_used_usd ?? 0;
-    const limitUsd = rollup?.cost_hard_limit_usd ?? 0;
+    const spentUsd =
+      rollup?.cost_used_usd != null ? Number(rollup.cost_used_usd) : 0;
+    const limitUsd =
+      rollup?.cost_hard_limit_usd != null
+        ? Number(rollup.cost_hard_limit_usd)
+        : 0;
     return {
       id: "bud_org_24h",
       name: "Org · 24h",
@@ -203,7 +207,7 @@ function LabCostInner() {
   const spend =
     agentId === "all"
       ? fleetSpend24h()
-      : (scopeAgent?.costUsd24h ?? 0);
+      : (scopeAgent?.costUsd24h ?? null);
   const saveHint = totalDriverSaveUsd(agentId);
   const meta = (
     <span className="type-meta inline-flex flex-wrap items-center gap-2">

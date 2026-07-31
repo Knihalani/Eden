@@ -13,8 +13,11 @@ import { useLabToast } from "@/lab/lab-toast";
 import { LIVE_QUERY, SHELL_QUERY } from "@/lib/portal-query";
 import {
   clearStoredInstallationId,
+  clearStoredInstallAgentId,
   parseInstallationId,
+  readStoredInstallAgentId,
   storeInstallationId,
+  storeInstallAgentId,
 } from "@/lib/github-install";
 import { cn } from "@/lib/utils";
 
@@ -174,6 +177,7 @@ export function ConnectRepoPanel({
     if (!orgId) return;
     setBusy(true);
     try {
+      if (agentId) storeInstallAgentId(agentId);
       const { install_url } = await githubApi.authorize(orgId);
       window.location.assign(install_url);
     } catch (err) {
@@ -184,7 +188,7 @@ export function ConnectRepoPanel({
       });
       setBusy(false);
     }
-  }, [orgId, pushToast]);
+  }, [agentId, orgId, pushToast]);
 
   const connect = useCallback(
     async (repo: GitHubRepo) => {
@@ -202,7 +206,7 @@ export function ConnectRepoPanel({
         await githubApi.connectRepo(orgId, {
           installation_id: repo.installation_id,
           repo_full_name: repo.full_name,
-          default_branch: repo.default_branch || "main",
+          default_branch: repo.default_branch || "",
           agent_id: agentId,
         });
         pushToast({
@@ -321,6 +325,28 @@ export function ConnectRepoPanel({
                 : "Default branch unknown"}
             </p>
           </div>
+          {configured.data?.configured &&
+          configured.data?.can_open_prs === false ? (
+            <p className="type-meta max-w-xl text-[var(--error)]">
+              GitHub App Contents permission is still{" "}
+              <span className="text-[var(--text)]">
+                {configured.data.contents_permission || "read"}
+              </span>
+              . Set{" "}
+              <span className="text-[var(--text)]">Contents → Read and write</span>{" "}
+              on{" "}
+              <a
+                href="https://github.com/settings/apps/eden-observability/permissions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                the App permissions page
+              </a>
+              , then Accept the update on the installation — or Improve cannot
+              open fix PRs.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             {githubHref ? (
               <a
@@ -378,6 +404,27 @@ export function ConnectRepoPanel({
           {configured.data?.configured === false ? (
             <p className="type-meta text-[var(--error)]">
               GitHub App is not configured on this Eden instance.
+            </p>
+          ) : configured.data?.configured &&
+            configured.data?.can_open_prs === false ? (
+            <p className="type-meta max-w-xl text-[var(--error)]">
+              GitHub App Contents permission is still{" "}
+              <span className="text-[var(--text)]">
+                {configured.data.contents_permission || "read"}
+              </span>
+              . Set{" "}
+              <span className="text-[var(--text)]">Contents → Read and write</span>{" "}
+              on{" "}
+              <a
+                href="https://github.com/settings/apps/eden-observability/permissions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                the App permissions page
+              </a>
+              , then Accept the update on the installation — or Improve cannot
+              open fix PRs.
             </p>
           ) : (
             <p className="type-meta max-w-xl text-[var(--text-secondary)]">
@@ -450,7 +497,7 @@ export function ConnectRepoPanel({
                     <p className="type-ui truncate">{repo.full_name}</p>
                     <p className="type-meta">
                       {repo.private ? "Private" : "Public"} ·{" "}
-                      {repo.default_branch || "main"}
+                      {repo.default_branch || "default branch unknown"}
                     </p>
                   </div>
                   <button
