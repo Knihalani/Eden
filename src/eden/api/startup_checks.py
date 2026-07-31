@@ -184,6 +184,13 @@ async def run_startup_checks(
             results[name] = f"error: {exc}"
         if results[name] != "ok":
             entry = f"{name}={results[name]}"
+            if name == "redis":
+                try:
+                    from eden.storage.redis import note_redis_quota_exhausted
+
+                    note_redis_quota_exhausted(results[name])
+                except Exception:  # noqa: BLE001
+                    pass
             if name in REQUIRED_FOR_READY:
                 required_failures.append(entry)
                 logger.error("startup check failed (required): %s -> %s", name, results[name])

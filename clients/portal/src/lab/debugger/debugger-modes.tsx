@@ -18,10 +18,16 @@ import {
   traceById,
   type TraceFixture,
 } from "@/lab/fixtures/traces";
+import { catalogTraces } from "@/lib/portal-catalog";
 import { DebuggerOutcomeChip } from "@/lab/debugger/debugger-chrome";
 import { EmptyState, RunTranscript, SeverityBadge } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+
+function liveCompareTraces(): TraceFixture[] {
+  const live = catalogTraces();
+  return live.length > 0 ? live : TRACE_LIST;
+}
 
 /* ------------------------------------------------------------------ */
 /* Replay — re-run FROM a step                                         */
@@ -32,14 +38,17 @@ export function DebuggerReplayView({
   focusSpanId,
   onFocusSpan,
   onReplay,
+  sourceTrace,
 }: {
   session: DebuggerSessionFixture;
   focusSpanId?: string | null;
   onFocusSpan: (spanId: string | null) => void;
   onReplay: (checkpoint: DebuggerCheckpoint) => void;
+  /** Hydrated detail from ``portalApi.traceDetail`` (list rows have empty steps). */
+  sourceTrace?: TraceFixture | null;
 }) {
-  const checkpoints = sessionCheckpoints(session);
-  const trace = traceById(session.sourceTraceId);
+  const checkpoints = sessionCheckpoints(session, sourceTrace);
+  const trace = sourceTrace ?? traceById(session.sourceTraceId);
   const [selectedId, setSelectedId] = useState(
     () =>
       checkpoints.find((c) => c.spanId === focusSpanId)?.id ??
@@ -201,20 +210,25 @@ export function DebuggerCompareView({
   rightTraceId,
   onLeftChange,
   onRightChange,
+  leftTrace,
+  rightTrace,
 }: {
   session: DebuggerSessionFixture;
   leftTraceId: string;
   rightTraceId: string;
   onLeftChange: (id: string) => void;
   onRightChange: (id: string) => void;
+  leftTrace?: TraceFixture | null;
+  rightTrace?: TraceFixture | null;
 }) {
-  const left = traceById(leftTraceId);
-  const right = traceById(rightTraceId);
+  const left = leftTrace ?? traceById(leftTraceId);
+  const right = rightTrace ?? traceById(rightTraceId);
   const options = useMemo(() => {
-    const scoped = TRACE_LIST.filter((t) => t.agentId === session.agentId);
-    const base = scoped.length >= 2 ? scoped : TRACE_LIST;
+    const pool = liveCompareTraces();
+    const scoped = pool.filter((t) => t.agentId === session.agentId);
+    const base = scoped.length >= 2 ? scoped : pool;
     const ids = new Set(base.map((t) => t.id));
-    const extras = TRACE_LIST.filter(
+    const extras = pool.filter(
       (t) =>
         (t.id === leftTraceId || t.id === rightTraceId) && !ids.has(t.id),
     );
@@ -399,13 +413,15 @@ export function DebuggerInspectView({
   session,
   focusSpanId,
   onFocusSpan,
+  sourceTrace,
 }: {
   session: DebuggerSessionFixture;
   focusSpanId?: string | null;
   onFocusSpan: (spanId: string | null) => void;
+  sourceTrace?: TraceFixture | null;
 }) {
-  const checkpoints = sessionCheckpoints(session);
-  const trace = traceById(session.sourceTraceId);
+  const checkpoints = sessionCheckpoints(session, sourceTrace);
+  const trace = sourceTrace ?? traceById(session.sourceTraceId);
 
   const initialIndex = useMemo(() => {
     if (!checkpoints.length) return 0;

@@ -75,6 +75,9 @@ export function PortalCatalogSync() {
   useEffect(() => {
     if (!orgId) {
       clearPortalCatalog();
+      void import("@/lab/fixtures/debugger").then((m) => {
+        m.clearClientDebuggerSessions();
+      });
       return;
     }
     patchPortalCatalog({ orgId });

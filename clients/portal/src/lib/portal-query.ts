@@ -54,4 +54,8 @@ export function dropOrgScopedQueries(queryClient: QueryClient): void {
       );
     },
   });
+  // Module-global debugger handoff sessions are not RQ-backed.
+  void import("@/lab/fixtures/debugger").then((m) => {
+    m.clearClientDebuggerSessions();
+  });
 }

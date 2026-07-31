@@ -93,8 +93,9 @@ function checkpointsForTrace(trace: TraceFixture): DebuggerCheckpoint[] {
 
 export function sessionCheckpoints(
   session: DebuggerSessionFixture,
+  traceOverride?: TraceFixture | null,
 ): DebuggerCheckpoint[] {
-  const trace = traceById(session.sourceTraceId);
+  const trace = traceOverride ?? traceById(session.sourceTraceId);
   if (!trace) return [];
   return checkpointsForTrace(trace);
 }
@@ -200,6 +201,11 @@ export function rememberClientSession(session: DebuggerSessionFixture): void {
   const idx = CLIENT_SESSIONS.findIndex((s) => s.id === session.id);
   if (idx >= 0) CLIENT_SESSIONS[idx] = session;
   else CLIENT_SESSIONS.unshift(session);
+}
+
+/** Drop in-memory sessions on org switch so prior-org dbg_* ids cannot leak. */
+export function clearClientDebuggerSessions(): void {
+  CLIENT_SESSIONS.length = 0;
 }
 
 export function defaultSessionId(): string {
