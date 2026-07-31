@@ -172,11 +172,23 @@ SILVER_EVENT_EXPECTATIONS: list[Expectation] = [
         kwargs={
             "column": "event_type",
             "value_set": [
-                "llm_call", "job_start", "job_complete", "job_cancel",
-                "storage", "sandbox", "api_request", "benchmark_run",
-                "agent.start", "agent.think", "agent.act", "agent.tool_call",
-                "agent.complete", "agent.error",
-                "pipeline.stage_start", "pipeline.stage_complete", "pipeline.stage_error",
+                "llm_call",
+                "job_start",
+                "job_complete",
+                "job_cancel",
+                "storage",
+                "sandbox",
+                "api_request",
+                "benchmark_run",
+                "agent.start",
+                "agent.think",
+                "agent.act",
+                "agent.tool_call",
+                "agent.complete",
+                "agent.error",
+                "pipeline.stage_start",
+                "pipeline.stage_complete",
+                "pipeline.stage_error",
             ],
         },
     ),
@@ -227,6 +239,7 @@ class DataQualityValidator:
     async def _get_client(self) -> Any:
         if self._client is None:
             from eden.storage.postgres import get_postgres_client
+
             self._client = await get_postgres_client()
         return self._client
 
@@ -289,13 +302,9 @@ class DataQualityValidator:
 
         if etype == Expectation.EXPECT_NOT_NULL:
             col = kwargs["column"]
-            query = f"""
-                SELECT COUNT(*) FROM {table_name}
-                {where}
-                {"AND" if where else "WHERE"} {col} IS NULL
-            """
-            unexpected = await client.fetchval(query) or 0
-            total = await client.fetchval(f"SELECT COUNT(*) FROM {table_name} {where}") or 1
+            total, unexpected = await _count_total_and_unexpected(
+                client, table_name, where, f"{col} IS NULL"
+            )
             success = unexpected == 0
             return ExpectationResult(
                 expectation=expectation,
@@ -308,11 +317,16 @@ class DataQualityValidator:
 
         if etype == Expectation.EXPECT_UNIQUE:
             col = kwargs["column"]
-            query = f"""
-                SELECT COUNT(*) - COUNT(DISTINCT {col}) FROM {table_name} {where}
-            """
-            unexpected = await client.fetchval(query) or 0
-            total = await client.fetchval(f"SELECT COUNT(*) FROM {table_name} {where}") or 1
+            # COUNT(*) - COUNT(DISTINCT col) already needs the total, so this
+            # one is a single scan either way; taking both from one row keeps it
+            # consistent with the others.
+            row = await client.fetchrow(
+                f"SELECT COUNT(*) AS total, "
+                f"COUNT(*) - COUNT(DISTINCT {col}) AS unexpected "
+                f"FROM {table_name} {where}"
+            )
+            total = (int(row["total"] or 0) if row else 0) or 1
+            unexpected = int(row["unexpected"] or 0) if row else 0
             success = unexpected == 0
             return ExpectationResult(
                 expectation=expectation,
@@ -333,13 +347,9 @@ class DataQualityValidator:
             if max_val is not None:
                 conditions.append(f"{col} > {max_val}")
             cond = " OR ".join(conditions)
-            query = f"""
-                SELECT COUNT(*) FROM {table_name}
-                {where}
-                {"AND" if where else "WHERE"} ({cond})
-            """
-            unexpected = await client.fetchval(query) or 0
-            total = await client.fetchval(f"SELECT COUNT(*) FROM {table_name} {where}") or 1
+            total, unexpected = await _count_total_and_unexpected(
+                client, table_name, where, f"({cond})"
+            )
             success = unexpected == 0
             return ExpectationResult(
                 expectation=expectation,
@@ -353,14 +363,13 @@ class DataQualityValidator:
         if etype == Expectation.EXPECT_REGEX:
             col = kwargs["column"]
             pattern = kwargs["regex"]
-            query = f"""
-                SELECT COUNT(*) FROM {table_name}
-                {where}
-                {"AND" if where else "WHERE"} {col} IS NOT NULL
-                AND {col} !~ ${len([1])}
-            """
-            unexpected = await client.fetchval(query, pattern) or 0
-            total = await client.fetchval(f"SELECT COUNT(*) FROM {table_name} {where}") or 1
+            total, unexpected = await _count_total_and_unexpected(
+                client,
+                table_name,
+                where,
+                f"{col} IS NOT NULL AND {col} !~ $1",
+                pattern,
+            )
             success = unexpected == 0
             return ExpectationResult(
                 expectation=expectation,
@@ -381,14 +390,13 @@ class DataQualityValidator:
                     message="Empty value set — skipped",
                 )
             placeholders = ", ".join(f"${i + 1}" for i in range(len(value_set)))
-            query = f"""
-                SELECT COUNT(*) FROM {table_name}
-                {where}
-                {"AND" if where else "WHERE"} {col} IS NOT NULL
-                AND {col} NOT IN ({placeholders})
-            """
-            unexpected = await client.fetchval(query, *value_set) or 0
-            total = await client.fetchval(f"SELECT COUNT(*) FROM {table_name} {where}") or 1
+            total, unexpected = await _count_total_and_unexpected(
+                client,
+                table_name,
+                where,
+                f"{col} IS NOT NULL AND {col} NOT IN ({placeholders})",
+                *value_set,
+            )
             success = unexpected == 0
             return ExpectationResult(
                 expectation=expectation,
@@ -409,7 +417,9 @@ class DataQualityValidator:
                 expectation=expectation,
                 success=success,
                 observed_value=row_count,
-                message=f"Row count {row_count} not in range [{min_rows}, {max_rows}]" if not success else "",
+                message=f"Row count {row_count} not in range [{min_rows}, {max_rows}]"
+                if not success
+                else "",
             )
 
         # Fallback for unhandled expectation types
@@ -486,6 +496,80 @@ class DataQualityValidator:
         return expectations
 
 
+def _expectation_holds_for_row(row: dict[str, Any], exp: Expectation) -> bool:
+    """Evaluate one expectation against a single in-memory row.
+
+    Mirrors the SQL-based checks in ``_evaluate_expectation`` but
+    operates on a Python value instead of a table scan — used for
+    gating a row *before* it has been written anywhere. Expectation
+    types that are only meaningful in aggregate over a whole table
+    (row count, uniqueness, column-set shape) are not evaluable
+    per-row and are treated as passing so they cannot spuriously gate
+    a single event.
+    """
+    etype = exp.expectation_type
+    kwargs = exp.kwargs
+    col = kwargs.get("column")
+    value = row.get(col) if col else None
+
+    if etype == Expectation.EXPECT_NOT_NULL:
+        return value is not None
+
+    if etype == Expectation.EXPECT_BETWEEN:
+        if value is None:
+            return True  # absence is EXPECT_NOT_NULL's job, not this one's
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return False
+        min_val = kwargs.get("min_value")
+        max_val = kwargs.get("max_value")
+        if min_val is not None and numeric < min_val:
+            return False
+        return not (max_val is not None and numeric > max_val)
+
+    if etype == Expectation.EXPECT_REGEX:
+        if value is None:
+            return True
+        return re.match(kwargs["regex"], str(value)) is not None
+
+    if etype == Expectation.EXPECT_IN_SET:
+        if value is None:
+            return True
+        value_set = kwargs.get("value_set") or []
+        if not value_set:
+            return True
+        return value in value_set
+
+    # EXPECT_UNIQUE / EXPECT_ROW_COUNT / EXPECT_COLUMNS / EXPECT_NO_DUPLICATES
+    # need the full table (or at least the full batch) to evaluate and
+    # cannot be assessed one row at a time.
+    return True
+
+
+def evaluate_row(
+    row: dict[str, Any],
+    expectations: list[Expectation],
+    *,
+    severities: tuple[str, ...] = ("error",),
+) -> list[str]:
+    """Return the names of expectations ``row`` fails, restricted to
+    ``severities`` (error-severity only, by default, matching how
+    :class:`ValidationReport` decides overall ``success``).
+
+    Used by the Silver ETL to gate events before they are written: a
+    row that does not exist in the target table yet cannot be found
+    by :meth:`DataQualityValidator.validate_table`'s SQL scan, so a
+    caller that wants a real pre-write gate needs a Python-side check
+    against the same expectation suite instead.
+    """
+    return [
+        exp.name
+        for exp in expectations
+        if exp.severity in severities and not _expectation_holds_for_row(row, exp)
+    ]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 5.5.4: Great Expectations interop
 # ─────────────────────────────────────────────────────────────────────────────
@@ -494,6 +578,7 @@ class DataQualityValidator:
 # the in-house ``Expectation`` representation into a GE suite and
 # back, so users can author suites in either format and run them
 # against the same engine.
+
 
 def _to_ge_expectation(exp: Expectation) -> Any | None:
     """Convert an in-house :class:`Expectation` to a GE expectation
@@ -537,11 +622,11 @@ class geExpectationFactory:
     def _gx(self):
         try:
             import great_expectations.expectations as gx_expectations  # type: ignore
+
             return gx_expectations
         except ImportError:
             raise RuntimeError(
-                "great_expectations is not installed. "
-                "Run `pip install great_expectations`."
+                "great_expectations is not installed. " "Run `pip install great_expectations`."
             ) from None
 
     def not_null(self, **kw):  # type: ignore[no-untyped-def]
@@ -596,6 +681,7 @@ async def run_with_great_expectations(
     # hand the rows to GE for the actual evaluation. This keeps the
     # two engines in lock-step for the data they see.
     from eden.storage.postgres import get_postgres_client
+
     client = await get_postgres_client()
     sql = f"SELECT * FROM {table_name}"
     if where_clause:
@@ -626,11 +712,13 @@ async def run_with_great_expectations(
         except Exception as exc:  # noqa: BLE001
             ok = False
             res = {"exception": str(exc)}
-        results.append({
-            "name": exp.name,
-            "success": ok,
-            "result": str(res)[:500] if res is not None else None,
-        })
+        results.append(
+            {
+                "name": exp.name,
+                "success": ok,
+                "result": str(res)[:500] if res is not None else None,
+            }
+        )
         if ok:
             passed += 1
     return {
@@ -641,3 +729,31 @@ async def run_with_great_expectations(
         "results": results,
         "available": True,
     }
+
+
+async def _count_total_and_unexpected(
+    client: Any,
+    table_name: str,
+    where: str,
+    predicate: str,
+    *args: Any,
+) -> tuple[int, int]:
+    """Return ``(total, unexpected)`` from one scan.
+
+    ``total`` counts every row matching ``where``; ``unexpected`` counts the
+    subset also matching ``predicate``. Each expectation used to ask for these
+    separately — two full-table counts where one does — and the ``total`` query
+    was identical for every expectation in a suite.
+
+    ``total`` is floored at 1 so the percentage below cannot divide by zero,
+    matching the ``or 1`` the previous call sites used.
+    """
+    row = await client.fetchrow(
+        f"SELECT COUNT(*) AS total, "
+        f"COUNT(*) FILTER (WHERE {predicate}) AS unexpected "
+        f"FROM {table_name} {where}",
+        *args,
+    )
+    if row is None:
+        return 1, 0
+    return int(row["total"] or 0) or 1, int(row["unexpected"] or 0)

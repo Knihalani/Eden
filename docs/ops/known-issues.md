@@ -11,7 +11,7 @@ Ordered by live impact.
 
 ## Live, unfixed
 
-### 1. ~~ClickHouse mirror discards write failures~~ — PARTLY FIXED 2026-07-30
+### 1. ~~ClickHouse mirror discards write failures~~ — PARTLY FIXED 2026-07-30; drain settled 2026-07-31
 
 `sink.insert` does not raise on a failed write; it returns an
 `IngestionReport` with `rows_failed` set and parks the rows in
@@ -23,29 +23,24 @@ logs at ERROR with the sink's own error text. `_fallback_to_postgres`
 now records `error_message` — the column existed all along, which is
 why all 82 parked rows (Jul 6 → Jul 24) carry a NULL reason.
 
-**Still open:** the `clickhouse_fallback` drain is not advancing
-(`n_tup_upd` and `n_tup_del` both 0 since Jul 6). The 82 existing rows
-remain unreplayed and, being pre-fix, have no `error_message` to
-diagnose from.
+**2026-07-31 status:** all 82 rows now have `resolved_at` set
+(`open=0`, `dead=0`, `resolved=82`). Nothing remains in the drain
+queue. Pre-fix rows with NULL `error_message` are historical only.
+Never customer-facing — durable write is Postgres `telemetry_events`.
 
-**Never customer-facing.** The durable write is Postgres
-`telemetry_events`, and the portal trace list reads that same table.
+### 2. ~~Silver ETL reports every event as passing when validation fails~~ — FIXED 2026-07-31
 
-### 2. Silver ETL reports every event as passing when validation fails
+`data_platform/silver_etl.py` previously round-tripped through a
+Postgres temp table into ``validate_silver_events`` *before* silver
+write, so the scan always matched zero rows and ``error_count`` was
+always 0. A broad ``except`` then returned ``(events, 0)``, making
+``quarantine_on_violation`` unreachable.
 
-`data_platform/silver_etl.py:482` — the broad `except` returns
-`(events, 0)`, so a failed quality validation is reported as "all events
-passed, zero violations", surfaced only as a `logger.warning`.
-
-Even on the success path (`:481`) it returns all `events` as passing, so
-`run_batch`'s `normalized = passed` is a no-op and
-`quarantine_on_violation` can never quarantine anything despite
-`report.quality_violations` being non-zero. The inline comment concedes
-this: *"we trust all events if the batch-level report passes."*
-
-**Deliberately not fixed today.** `usage_events` is empty, so this
-processes nothing, and a behaviour change to ETL error handling on
-launch day is worse than the bug. Fix before metering goes live.
+**Fixed:** `_validate_quality` now evaluates each event in-process via
+``evaluate_row(..., SILVER_EVENT_EXPECTATIONS)``, returns only passing
+events, and counts real violations. Failures log the specific
+expectations. Safe today because `usage_events` is empty; required
+before metering.
 
 ### 3. ~~`_push_clickhouse` logs a success it did not perform~~ — FIXED 2026-07-30
 
@@ -95,24 +90,28 @@ returns zero source hits.
 
 These were created by **Clerk's hosted create-organization session
 task**, which re-shows whenever the session has no active org. The
-portal never calls `setActive` after sign-in.
+portal historically never called `setActive` after sign-in.
 
-**Fix is in the Clerk dashboard, not the codebase:** disable the forced
-create-organization task, and call `setActive` on sign-in when the user
-already has an org. (Eden's own `POST /orgs` now has an idempotency
-guard, which was a genuine gap, but it was not the cause of these.)
+**Code fix (2026-07-31):** `OrgProvider` now calls `setActive` when the
+user has Clerk memberships (or an Eden `clerk_org_id`) but no active
+org.
 
-### 7. Stale identity rows in production `users`
+**Ops fix (2026-07-31):** Clerk
+`organization_settings.force_organization_selection` set to **false**
+on both production (`ins_3FJJw1RScIsFcbJi7YLG6R2tmso`) and development
+(`ins_3FG3Go0jmcbsGJ3xPOzNTsFfkSn`) via `clerk config patch`. Verified
+with a follow-up `clerk config pull`.
 
-- One row has `clerk_id` set to another user's Eden primary key, so
-  `id = X OR clerk_id = X` matches two rows. **Already fixed at the
+### 7. ~~Stale identity rows in production `users`~~ — FIXED 2026-07-31
+
+- One row had `clerk_id` set to another user's Eden primary key, so
+  `id = X OR clerk_id = X` matched two rows. **Already fixed at the
   source** (`auth.py:954`, commit `80b25934`, one day after that row was
-  created); no new ghosts since. The row itself should still be deleted.
-- One row has `email = ''` while `users_email_key` is UNIQUE. If Clerk
-  ever delivers a user with no email, `_upsert_user` inserts `email=''`,
-  conflicts, and the recovery UPDATE re-claims that soft-deleted row for
-  the new user. Unproven that Clerk can produce this; it is a one-row
-  cleanup to eliminate the possibility.
+  created); no new ghosts since. The row itself was deleted 2026-07-31
+  (`e0c21ab9-…`, zero FK refs).
+- One row had `email = ''` while `users_email_key` is UNIQUE. Deleted
+  2026-07-31 (`0446839d-…`, zero FK refs). Empty-email remaining: 0;
+  clerk_id-ghost remaining: 0.
 
 ---
 
@@ -177,25 +176,15 @@ should not recur.
 
 ---
 
-### 11. `northflank.yml` secret groups do not match reality
+### 11. ~~`northflank.yml` secret groups do not match reality~~ — FIXED 2026-07-31
 
-`scripts/northflank_drift_check.py` reports exactly one remaining
-drift, and it is informational:
-
-```
-manifest: eden-required (one group, 30 keys)
-live    : 31 single-key groups under other names (JWT-SECRET, not JWT_SECRET)
-```
-
-Credentials **are** delivered and working — this is purely that the
-manifest's `secretKeyRef` group name does not exist, so the file could
-never be applied as written. Every other declaration (compute plan,
-health checks, 61 environment variables) now matches the live project.
-
-Not fixed today: rewriting 31 secret references in the deployment
-manifest is not a change worth making on launch day for zero runtime
-effect. Fix by updating the manifest to name the real groups — not by
-restructuring the live secrets, which are working.
+Manifest `secretKeyRef` groups now name the live single-key groups
+(`jwt-secret`, `postgres-host`, …) with the live key names
+(`JWT_SECRET`, `POSTGRES-HOST`, …). Optional keys that do not exist
+live (`POSTGRES_CHANNEL_BINDING`, `TYPESENSE_*`, `METRICS_BEARER_TOKEN`)
+remain pointed at the fictional `eden-required` group with
+`optional: true` so apply does not fail. Do **not** reshape live
+secrets.
 
 ---
 

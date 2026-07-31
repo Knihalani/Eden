@@ -38,7 +38,7 @@
 | ID | Status | Wave | Spec | Notes |
 |---|---|---|---|---|
 | F03 | **DONE** | Phase 1 | [f03-checkpoint-ingestion-from-spans.md](features/f03-checkpoint-ingestion-from-spans.md) | Microbench + 1k-trace/hr backfill budget in `cache.py`; tests green |
-| F12 | **PARTIAL** | Phase 1 | [f12-typesense-span-search.md](features/f12-typesense-span-search.md) | PII + fallback tests pass; staging 10M p95 **BLOCKED** — Typesense unreachable locally Jul 17; see `docs/ops/F12-STAGING-10M-SPAN-SEARCH.md` |
+| F12 | **PARTIAL** | Phase 1 | [f12-typesense-span-search.md](features/f12-typesense-span-search.md) | PII + fallback tests pass; staging 10M p95 **BLOCKED** — Typesense unreachable locally Jul 17; see `docs/ops/F12-STAGING-10M-SPAN-SEARCH.md` — **2026-07-31: `TYPESENSE_ENABLED=false` in prod verified (`northflank.yml:395`), no secret provisioned; still BLOCKED, no number invented** |
 | F20 | **DONE** | Phase 1 | [f20-zero-config-auto-issue-detection.md](features/f20-zero-config-auto-issue-detection.md) | 8 detectors on standard profile; `auto_issue_detection_v1` default true; e2e <60s |
 | F28 | **DONE** | Phase 1 | [f28-agent-stumbles.md](features/f28-agent-stumbles.md) | Stumble loop + detector profiles hardened |
 | F29 | **DONE** | Phase 1 | [f29-agent-issues-sentry.md](features/f29-agent-issues-sentry.md) | Grouping + promotion + Slack `user_count` |
@@ -75,7 +75,7 @@
 | F81 | **DONE** | Phase 3 | [f81-nl-alerts-real-benign-triage.md](features/f81-nl-alerts-real-benign-triage.md) | real/benign/duplicate triage + paging confidence gate |
 | U02 | **DONE** | Phase 3 | [u02-artifacts.md](ui/u02-artifacts.md) | Detail, export, NL author, promote warning modal, promotions link |
 | U05 | **DONE** | Phase 3 | [u05-book-and-drift.md](ui/u05-book-and-drift.md) | Version diff, citation chips, inject preview + toggle |
-| F85 | **PARTIAL** | Phase 3 | [f85-critical-path-e2e-debug-hardening.md](features/f85-critical-path-e2e-debug-hardening.md) | **8/8 PASS local** Jul 17; Clerk redirect loop fixed; CI `localhost:3000`; first green CI pending |
+| F85 | **PARTIAL** | Phase 3 | [f85-critical-path-e2e-debug-hardening.md](features/f85-critical-path-e2e-debug-hardening.md) | **8/8 PASS local** Jul 17; Clerk redirect loop fixed; CI `localhost:3000`; first green CI pending — **2026-07-31: still blocked, now on GitHub Actions billing (run `30657530124`), not code** |
 
 ---
 
@@ -184,7 +184,7 @@
 | F82 | **DONE** | Phase 13 | [f82-portal-performance-budgets.md](features/f82-portal-performance-budgets.md) | InfiniteDataTable/VirtualizedList on core tables; progressive trace panel; perf marks; `web-vitals.yml` CI |
 | F83 | **DONE** | Phase 13 | [f83-platform-wide-optimization.md](features/f83-platform-wide-optimization.md) | [optimization-pass.md](optimization-pass.md); PG indexes mig 106; CH MVs; `CostTracker`→`budget_service` mirror |
 | F84 | **PARTIAL** | Phase 13 | [f84-dogfood-debugging-self-observability.md](features/f84-dogfood-debugging-self-observability.md) | W9: heartbeats + `/admin/flags` + MCP `eden_health` + ingest lag UI; staging continuous probes still open |
-| F85 | **PARTIAL** | Phase 13 | [f85-critical-path-e2e-debug-hardening.md](features/f85-critical-path-e2e-debug-hardening.md) | **8/8 PASS local** Jul 17; seed-auth loud fail + `clerkSetup` in runner; CI strict (no continue-on-error) |
+| F85 | **PARTIAL** | Phase 13 | [f85-critical-path-e2e-debug-hardening.md](features/f85-critical-path-e2e-debug-hardening.md) | **8/8 PASS local** Jul 17; seed-auth loud fail + `clerkSetup` in runner; CI strict (no continue-on-error) — **2026-07-31: blocked on GitHub Actions billing (run `30657530124`), local/portal quality gates wired and green** |
 
 ---
 
@@ -225,18 +225,21 @@
 
 - [x] N14 health all green (`statgate_installed`, `quality_worker_running`, `evolution_loop_running` on leader)
 - [x] New org: auto detection + shadow Artifacts + Ledger draft within 7d of first trace (or alert)
-- [ ] F85 8/8 green on main — **8/8 PASS local** Jul 17 (`localhost:3040`); Clerk fixes: `/sign-in` URLs, `allowedRedirectOrigins`, `clerkSetup` in golden runner; CI uses `localhost:3000`; **first green CI run pending**
+- [ ] F85 8/8 green on main — **8/8 PASS local** Jul 17 (`localhost:3040`); Clerk fixes: `/sign-in` URLs, `allowedRedirectOrigins`, `clerkSetup` in golden runner; CI uses `localhost:3000`. **STILL BLOCKED 2026-07-31**: GitHub Actions cannot run at all — org billing failed / spending limit needs increase, annotation on run `30657530124` (`gh run view 30657530124`). This is a payments/account block, not a code or test failure. Local quality gates remain green and portal CI (`portal-ci.yml`, `web-vitals.yml`, `f12-span-search-contract.yml`, `eden-eval.yml`) are wired and would run once billing is restored — first green CI run still pending on that.
 - [x] `bench/evolution` full suite cost + lift gates — nightly `evolution-nightly.yml` + smoke on evolution PRs
-- [x] F82 Web Vitals CI green — `.github/workflows/web-vitals.yml` (LCP/INP on Home + Traces)
+- [x] F82 Web Vitals CI green — `.github/workflows/web-vitals.yml` (LCP/INP on Home + Traces) — wired; blocked from executing by the same GitHub Actions billing issue above
 - [x] F83 optimization report published — `docs/specs/optimization-pass.md` (CH MVs + budget mirror done; Redis→PG cap merge deferred)
 - [x] No `preview_disabled` on core routes for GA-tier orgs (new-org features seed)
 - [x] Feature flags + rollback runbook — `docs/runbooks/feature-flags-rollback.md`
 - [x] GT audit clean — zero CRITICAL wiring gaps — `CODEBASE-GROUND-TRUTH.md` refreshed Jul 17; N11 **DONE (W27)**; F21 labels **DONE (W27)**; N20 dogfood DONE (W26); F70 DONE (W23)
 - [x] No U19 before U18 exit; no GA mark before F85 green — U18/U19/U20 DONE; F85 partial blocks full GA sign-off
-- [ ] F12 10M staging span search p95 proof — **BLOCKED** on staging Typesense; local Typesense at `localhost:8108` unreachable Jul 17; SQLite proxy N=50k p95 253 ms documented (not 10M Typesense gate)
+- [ ] F12 10M staging span search p95 proof — **BLOCKED 2026-07-31**, still no invented number. `TYPESENSE_ENABLED=false` in the production Northflank env, verified directly against `northflank.yml` (line 395) and matching the live env — disabled since 2026-07-29 because no `TYPESENSE_HOST` secret is provisioned in the `eden-required` group, so "enabled" would mean every search attempted a connection to nothing (see comment at `northflank.yml:383-394`). No staging Typesense cluster exists to seed 10M docs against, so the p95 proof cannot be run — this is an infra-provisioning gap, not a code gap. SQLite-proxy floor (N=50k, p95 88 ms / N=5k, p95 56.41 ms) remains documented in `docs/ops/F12-STAGING-10M-SPAN-SEARCH.md` as a worst-case floor only, explicitly **not** a substitute for the 10M Typesense gate. Do not close this until a real Typesense cluster is provisioned and the bench script in that doc is run against it.
 - [x] Live axe with Clerk auth on all core routes — **PASS** Jul 17 (`seed-auth.mjs` + `audit-a11y.cjs`); 8/8 U20 routes, 0 critical / 0 serious authenticated
+- [x] Clerk `organization_settings.force_organization_selection` set to **false** on both production (`ins_3FJJw1RScIsFcbJi7YLG6R2tmso`) and development (`ins_3FG3Go0jmcbsGJ3xPOzNTsFfkSn`) 2026-07-31, verified with `clerk config pull` — stops Clerk's hosted create-organization prompt from re-firing on every sign-in; see `docs/ops/known-issues.md` #6.
+- [x] `/live` reports the real deployed commit — `EDEN_GIT_SHA` build arg now surfaces as `commit` in the `/live` response (see `docs/ops/ship-baseline-2026-07-31.md`, currently `2eae670652cef3dbd42fa67ac7852f974aee7c3c`), replacing the hand-maintained `app_version: 0.1.0` as the only reliable "what's actually deployed" signal.
 
 **Achievement report:** [GA-ACHIEVEMENT-REPORT.md](GA-ACHIEVEMENT-REPORT.md)
+**Current ship status (single page):** [ship-status-2026-07-31.md](../ops/ship-status-2026-07-31.md)
 
 ---
 

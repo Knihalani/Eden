@@ -156,6 +156,12 @@
 | 119_repo_connections_agent_id | repo_connections.agent_id | yes | forever | none | low | One linked GitHub repo per agent | Improve |
 | 120_guardrail_policies_direction | guardrail_policies.direction | yes | forever | none | low | Cat 15 guardrail direction-scoped enforcement | Cat 15 |
 | 121_leader_leases | eden_leader_leases | yes | forever | none | low | Postgres leader-election fallback (Redis quota outage 2026-07-29) | Reliability |
+| 122_judge_watermark_composite | judge_scores_processed | yes | forever | none | low | Composite (scored_at, judge_run_id) cursor — the UUID-only watermark silently skipped judge scores | Correctness |
+| 123_usage_events_rls_restore | usage_events | yes | forever | none | low | Restore tenant RLS dropped by 042 for the Timescale conversion (billing table had no row-level boundary) | Security |
+| 124_missing_columns_both_sides_assume | eden_component_heartbeats, users, jobs, lineage_runs, retrieval_logs, org_pii_patterns | yes | forever | none | low | Add four columns the writers and readers both already name: heartbeats.checked_at (writes always failed), users.email_verified (signup 503s), jobs.current_stage + archivist_summary (job progress and inserts both failed), org_id on lineage_runs + retrieval_logs (untenanted tables), and org_pii_patterns so per-tenant PII regex overrides have storage at last | Correctness |
+| 125_clickhouse_fallback_drain | clickhouse_fallback | yes | forever | none | low | Add dead_at (a terminal state distinct from resolved_at) and a partial index on failed_at for the oldest-first drain query, so the rows migration 008 has been accumulating ever since can finally be replayed into ClickHouse instead of stored forever and read by nothing | Reliability |
+| 126_ai_conversations | ai_conversations, ai_messages | yes | forever | soft | medium | Assistant threads + messages (org-scoped); UUID/TEXT alignment for user_id FKs must match users.id | Assistant |
+| 127_sidebar_prefs_user_id_type | sidebar_prefs | yes | forever | soft | low | Align sidebar_prefs.user_id type with users.id (TEXT) to stop UUID cast crash-loops on prefs write | Portal UX |
 
 ### Migration chain repair (2026-07-17, GA hardening)
 
