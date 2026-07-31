@@ -220,6 +220,7 @@ function LabAgentInner() {
     setThreads([t]);
     setActiveId(t.id);
   }, [
+    orgId,
     threadsQuery.isLoading,
     threadsQuery.data,
     paramThread,
