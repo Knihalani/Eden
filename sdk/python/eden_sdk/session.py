@@ -99,6 +99,7 @@ class AgentSession(AbstractContextManager["AgentSession"]):
                 "metadata": dict(self.metadata),
                 "cost_usd": self.cost_usd,
             },
+            wait=True,
         )
         if flush:
             try:
@@ -178,8 +179,20 @@ def identify(user_id: str, *, session: AgentSession | None = None) -> None:
     target.identify(user_id)
 
 
-def _notify_session(phase: str, payload: dict[str, Any]) -> None:
-    """Best-effort HTTP notify for agent session lifecycle (ingest path)."""
+def _notify_session(
+    phase: str,
+    payload: dict[str, Any],
+    *,
+    wait: bool = False,
+) -> None:
+    """Best-effort HTTP notify for agent session lifecycle (ingest path).
+
+    ``wait=True`` joins the worker thread (used for ``end``). Daemon
+    fire-and-forget is fine for start/identify, but process exit after
+    ``complete_session(success=False)`` + ``SystemExit`` used to kill the
+    end notify before it landed — leaving ``agent_sessions.success`` NULL
+    and ``ended_at`` unset while Issues still saw a partial failure signal.
+    """
     import threading
 
     def _post() -> None:
@@ -227,7 +240,10 @@ def _notify_session(phase: str, payload: dict[str, Any]) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("session %s notify failed: %s", phase, exc)
 
-    threading.Thread(target=_post, daemon=True, name="eden-sdk-session").start()
+    thread = threading.Thread(target=_post, daemon=True, name="eden-sdk-session")
+    thread.start()
+    if wait:
+        thread.join(timeout=6.0)
 
 
 def complete_session(

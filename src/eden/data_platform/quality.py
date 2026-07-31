@@ -311,7 +311,7 @@ class DataQualityValidator:
                 success=success,
                 observed_value=f"{unexpected} nulls",
                 unexpected_count=unexpected,
-                unexpected_percent=(unexpected / total) * 100,
+                unexpected_percent=_unexpected_percent(unexpected, total),
                 message=f"{unexpected} null values found in '{col}'" if not success else "",
             )
 
@@ -325,7 +325,7 @@ class DataQualityValidator:
                 f"COUNT(*) - COUNT(DISTINCT {col}) AS unexpected "
                 f"FROM {table_name} {where}"
             )
-            total = (int(row["total"] or 0) if row else 0) or 1
+            total = int(row["total"] or 0) if row else 0
             unexpected = int(row["unexpected"] or 0) if row else 0
             success = unexpected == 0
             return ExpectationResult(
@@ -333,7 +333,7 @@ class DataQualityValidator:
                 success=success,
                 observed_value=f"{unexpected} duplicates",
                 unexpected_count=unexpected,
-                unexpected_percent=(unexpected / total) * 100,
+                unexpected_percent=_unexpected_percent(unexpected, total),
                 message=f"{unexpected} duplicate values in '{col}'" if not success else "",
             )
 
@@ -356,7 +356,7 @@ class DataQualityValidator:
                 success=success,
                 observed_value=f"{unexpected} out-of-range",
                 unexpected_count=unexpected,
-                unexpected_percent=(unexpected / total) * 100,
+                unexpected_percent=_unexpected_percent(unexpected, total),
                 message=f"{unexpected} values out of range in '{col}'" if not success else "",
             )
 
@@ -376,7 +376,7 @@ class DataQualityValidator:
                 success=success,
                 observed_value=f"{unexpected} regex failures",
                 unexpected_count=unexpected,
-                unexpected_percent=(unexpected / total) * 100,
+                unexpected_percent=_unexpected_percent(unexpected, total),
                 message=f"{unexpected} values don't match regex in '{col}'" if not success else "",
             )
 
@@ -403,7 +403,7 @@ class DataQualityValidator:
                 success=success,
                 observed_value=f"{unexpected} invalid values",
                 unexpected_count=unexpected,
-                unexpected_percent=(unexpected / total) * 100,
+                unexpected_percent=_unexpected_percent(unexpected, total),
                 message=f"{unexpected} unexpected values in '{col}'" if not success else "",
             )
 
@@ -531,12 +531,20 @@ def _expectation_holds_for_row(row: dict[str, Any], exp: Expectation) -> bool:
     if etype == Expectation.EXPECT_REGEX:
         if value is None:
             return True
-        return re.match(kwargs["regex"], str(value)) is not None
+        pattern = kwargs.get("_compiled_regex")
+        if pattern is None:
+            pattern = re.compile(kwargs["regex"])
+            kwargs["_compiled_regex"] = pattern
+        return pattern.match(str(value)) is not None
 
     if etype == Expectation.EXPECT_IN_SET:
         if value is None:
             return True
-        value_set = kwargs.get("value_set") or []
+        value_set = kwargs.get("_value_set_frozen")
+        if value_set is None:
+            raw = kwargs.get("value_set") or []
+            value_set = frozenset(raw)
+            kwargs["_value_set_frozen"] = value_set
         if not value_set:
             return True
         return value in value_set
@@ -745,8 +753,10 @@ async def _count_total_and_unexpected(
     separately — two full-table counts where one does — and the ``total`` query
     was identical for every expectation in a suite.
 
-    ``total`` is floored at 1 so the percentage below cannot divide by zero,
-    matching the ``or 1`` the previous call sites used.
+    Empty tables return ``(0, 0)``. Callers must use
+    :func:`_unexpected_percent` so percent math never divides by zero — the
+    previous ``or 1`` floor made an empty table look like a clean pass with
+    ``unexpected_percent=0`` while inventing a phantom row.
     """
     row = await client.fetchrow(
         f"SELECT COUNT(*) AS total, "
@@ -755,5 +765,12 @@ async def _count_total_and_unexpected(
         *args,
     )
     if row is None:
-        return 1, 0
-    return int(row["total"] or 0) or 1, int(row["unexpected"] or 0)
+        return 0, 0
+    return int(row["total"] or 0), int(row["unexpected"] or 0)
+
+
+def _unexpected_percent(unexpected: int, total: int) -> float:
+    """Percent of unexpected rows; ``0.0`` when the table is empty."""
+    if total <= 0:
+        return 0.0
+    return (unexpected / total) * 100

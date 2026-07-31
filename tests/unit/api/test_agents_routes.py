@@ -375,10 +375,14 @@ def app():
     async def _override_path_org():
         return "org-test"
 
+    async def _override_register_org():
+        return "org-test"
+
     test_app.dependency_overrides[get_current_user] = _override_user
     test_app.dependency_overrides[require_org_member] = _override_org_member
     test_app.dependency_overrides[require_path_org_access] = _override_path_org
     test_app.dependency_overrides[agents.require_path_org_access] = _override_path_org
+    test_app.dependency_overrides[agents.require_agent_register_org] = _override_register_org
     test_app.dependency_overrides[observability.require_path_org_access] = _override_path_org
 
     stub = _StubPostgresClient()

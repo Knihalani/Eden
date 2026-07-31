@@ -55,6 +55,7 @@ async def check_redis() -> str:
       * ``ok`` — PING succeeded
       * ``not_configured`` — no Redis URL
       * ``quota_exhausted`` — Upstash max-requests circuit open
+      * ``unavailable`` — URL configured but client could not be obtained
       * ``error: …`` — probe failed
     """
     from eden.storage.redis import (
@@ -72,7 +73,10 @@ async def check_redis() -> str:
         # Race: circuit may have opened between the checks above.
         if redis_quota_exhausted():
             return "quota_exhausted"
-        return "not_configured"
+        # URL is set (checked above) but we have no client — connect
+        # failed. Do not call this ``not_configured``; that vocabulary is
+        # reserved for a missing URL and would mislead /ready operators.
+        return "unavailable"
     pong = await client.ping()
     if pong not in (True, "PONG", b"PONG"):
         return f"error: unexpected PING response {pong!r}"

@@ -34,18 +34,55 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 
-from eden.api.deps import get_current_user, require_path_org_access
+from eden.api.deps import (
+    get_current_org_api_key,
+    get_current_user,
+    get_optional_user,
+    require_path_org_access,
+    resolve_path_org_access,
+)
 
 logger = logging.getLogger(__name__)
 
+# No router-level ``require_path_org_access``: that dep always requires a
+# Clerk/JWT user, which 401s the SDK's ``X-Org-Api-Key`` register call
+# (documented as the startup path). List/get/patch stay JWT-gated;
+# register accepts API key *or* session user.
 router = APIRouter(
     prefix="/orgs/{org_id}/agents",
     tags=["agents"],
-    dependencies=[Depends(require_path_org_access)],
 )
+
+
+async def require_agent_register_org(
+    request: Request,
+    org_id: str = Path(..., description="Organization ID"),
+    x_org_id: str | None = Header(None, alias="X-Org-Id"),
+    x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
+    user: dict | None = Depends(get_optional_user),
+) -> str:
+    """Eden org UUID for ``POST /agents/register`` (API key or JWT)."""
+    if x_org_api_key:
+        ctx = await get_current_org_api_key(x_org_id or org_id, x_org_api_key)
+        auth_org = str(ctx["org_id"])
+        if org_id != auth_org:
+            raise HTTPException(
+                status_code=403,
+                detail="Path org_id does not match API key organization",
+            )
+        return auth_org
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = getattr(request.state, "eden_jwt_payload", None)
+    _, eden_org = await resolve_path_org_access(
+        org_id,
+        user,
+        payload if isinstance(payload, dict) else None,
+    )
+    return eden_org
 
 
 # ── Pydantic schemas ─────────────────────────────────────────────
@@ -171,10 +208,12 @@ async def list_agents(
 @router.post("/register", response_model=AgentRegisterResponse)
 async def register_agent(
     body: AgentRegisterRequest,
-    org_id: str = Depends(require_path_org_access),
-    user: dict = Depends(get_current_user),
+    org_id: str = Depends(require_agent_register_org),
 ) -> AgentRegisterResponse:
-    """Register an agent. Idempotent on (org_id, agent_id)."""
+    """Register an agent. Idempotent on (org_id, agent_id).
+
+    Auth: ``X-Org-Api-Key`` (SDK) or Clerk/session JWT (portal).
+    """
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
@@ -201,8 +240,8 @@ async def register_agent(
             """
             UPDATE agent_registrations
             SET name = $3,
-                framework = $4,
-                repo_url = $5,
+                framework = COALESCE($4, framework),
+                repo_url = COALESCE($5, repo_url),
                 register_token = COALESCE($6, register_token),
                 last_seen_at = NOW()
             WHERE org_id = $1 AND agent_id = $2

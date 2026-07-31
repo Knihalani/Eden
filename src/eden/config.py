@@ -254,36 +254,16 @@ def _build_settings_class():
         # See docs/ops/disabled-features.md.
         sso_enabled: bool = False
         # D.14 onboarding-v2 API surface (services/onboarding/ +
-        # api/routes/onboarding.py). OFF since 2026-07-31: the state
-        # machine writes to columns that do not exist on the live
-        # ``onboarding_state`` table (``current_step``,
-        # ``completed_steps``, ``cat_enablements``, ``first_trace_at``,
-        # ``milestones_reached`` vs. the live ``step``,
-        # ``org_setup_choice``, ``completed_by_users``,
-        # ``agents_onboarded``, ``updated_at``). ``_persist`` swallows
-        # the write failure at ``logger.debug`` and returns a synthetic
-        # row, so every route answered ``{"status":"ok","live":true}``
-        # while persisting nothing.
-        #
-        # Root cause: two parallel migration systems.
-        # ``migrations/029_onboarding_wizard.sql`` created the live
-        # table; alembic ``056_onboarding_state.py`` used
-        # ``CREATE TABLE IF NOT EXISTS`` and silently no-op'd, while
-        # alembic still records 056 as applied.
-        #
-        # Not a customer-facing regression: the portal does not call
-        # these endpoints (``onboardingV2Api`` has zero component
-        # consumers) — the wizard actually in use is
-        # ``/orgs/{org}/onboarding/state`` in ``api/routes/github.py``,
-        # which matches the live schema, persists for real, and is
-        # UNAFFECTED by this flag.
-        #
-        # Re-enable when a real migration adds the columns the state
-        # machine uses (or the state machine is rewritten against the
-        # live column names) and a test proves a round-trip persists.
-        # See docs/ops/disabled-features.md and
-        # docs/ops/known-issues.md #9.
-        onboarding_state_machine_v2_enabled: bool = False
+        # api/routes/onboarding.py). ON after migration
+        # ``128_onboarding_state_v2_columns`` adds the state-machine
+        # columns alongside the wizard columns from
+        # ``029_onboarding_wizard``. Alembic 056's ``CREATE TABLE IF
+        # NOT EXISTS`` had no-op'd against the wizard table; ``_persist``
+        # no longer swallows write failures. Flip off with
+        # ``ONBOARDING_STATE_MACHINE_V2_ENABLED=0`` if needed.
+        # Portal wizard ``/orgs/{org}/onboarding/state`` is separate.
+        # See docs/ops/known-issues.md #9.
+        onboarding_state_machine_v2_enabled: bool = True
         # Email verification on password signup. OFF since 2026-07-30
         # because none of it exists: email_verification_tokens is not a
         # table, send_verification_email is not a function, and there is

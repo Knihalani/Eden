@@ -125,28 +125,67 @@ async def _get_client():
         return None
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Coerce JSONB / JSON-text / mapping into a plain dict."""
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        import json as _json
+
+        try:
+            parsed = _json.loads(value)
+        except Exception:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _as_str_list(value: Any) -> list[str]:
+    """Coerce TEXT[] / JSON-array-text into a list of strings."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, list | tuple):
+        return [str(v) for v in value]
+    if isinstance(value, str):
+        import json as _json
+
+        try:
+            parsed = _json.loads(value)
+        except Exception:
+            return []
+        if isinstance(parsed, list):
+            return [str(v) for v in parsed]
+        return []
+    return []
+
+
 def _row_to_state(row: dict[str, Any]) -> StateRow:
     """Convert a raw DB row to a :class:`StateRow`."""
+    created = row.get("created_at")
+    updated = row.get("updated_at")
+    first_trace = row.get("first_trace_at")
     return StateRow(
         org_id=str(row["org_id"]),
         current_step=str(row["current_step"]),
-        completed_steps=list(row.get("completed_steps") or []),
-        cat_enablements=dict(row.get("cat_enablements") or {}),
+        completed_steps=_as_str_list(row.get("completed_steps")),
+        cat_enablements=_as_dict(row.get("cat_enablements")),
         first_trace_at=(
-            row["first_trace_at"].isoformat()
-            if row.get("first_trace_at") is not None
-            else None
+            first_trace.isoformat()
+            if first_trace is not None and hasattr(first_trace, "isoformat")
+            else (str(first_trace) if first_trace is not None else None)
         ),
-        milestones_reached=list(row.get("milestones_reached") or []),
+        milestones_reached=_as_str_list(row.get("milestones_reached")),
         created_at=(
-            row["created_at"].isoformat()
-            if row.get("created_at") is not None
-            else ""
+            created.isoformat()
+            if created is not None and hasattr(created, "isoformat")
+            else (str(created) if created is not None else "")
         ),
         updated_at=(
-            row["updated_at"].isoformat()
-            if row.get("updated_at") is not None
-            else ""
+            updated.isoformat()
+            if updated is not None and hasattr(updated, "isoformat")
+            else (str(updated) if updated is not None else "")
         ),
         source="db",
     )
@@ -358,17 +397,8 @@ class OnboardingStateMachine:
             logger.info("onboarding: org=%s %s", org_id, audit)
         client = await _get_client()
         if client is None:
-            # Build a synthetic StateRow from the values the caller
-            # intended to persist so the caller still gets a useful
-            # response (best-effort).
-            return StateRow(
-                org_id=org_id,
-                current_step=current_step or OnboardingStep.INSTALL.value,
-                completed_steps=list(completed_steps or []),
-                cat_enablements=dict(cat_enablements or {}),
-                milestones_reached=list(milestones_reached or []),
-                source="defaults",
-                last_audit=audit,
+            raise RuntimeError(
+                "postgres unavailable: cannot persist onboarding_state"
             )
         try:
             # Import inside the function to avoid the JSONB
@@ -401,16 +431,10 @@ class OnboardingStateMachine:
                 list(milestones_reached) if milestones_reached is not None else None,
             )
         except Exception as exc:
-            logger.debug("onboarding: _persist failed: %s", exc)
-            return StateRow(
-                org_id=org_id,
-                current_step=current_step or OnboardingStep.INSTALL.value,
-                completed_steps=list(completed_steps or []),
-                cat_enablements=dict(cat_enablements or {}),
-                milestones_reached=list(milestones_reached or []),
-                source="defaults",
-                last_audit=audit,
-            )
+            logger.error("onboarding: _persist failed: %s", exc)
+            raise RuntimeError(
+                f"onboarding_state persist failed: {exc}"
+            ) from exc
         # Re-read so the caller gets the canonical row + the
         # audit info.
         result = await self.get_state(org_id)

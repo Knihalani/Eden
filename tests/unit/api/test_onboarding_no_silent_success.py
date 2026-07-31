@@ -30,7 +30,47 @@ import inspect
 import pytest
 
 
-class TestListOrgsDistinguishesProvisioningFromEmpty:
+class TestOnboardingV2HonestyGate:
+    def test_router_depends_on_v2_gate(self):
+        from eden.api.routes import onboarding
+
+        deps = list(onboarding.router.dependencies or [])
+        assert deps, "v2 router must declare dependencies"
+        # Gate lives on the router so every path 503s when the flag is off.
+        assert onboarding._require_onboarding_v2_enabled in {
+            getattr(d, "dependency", None) for d in deps
+        }
+
+    def test_default_settings_enable_v2_after_migration(self):
+        from eden.config import Settings
+
+        # Construct without loading .env so the ship-default is what we assert.
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            jwt_secret="x" * 32,
+            encryption_key="0123456789abcdef0123456789abcdef",
+            session_secret="y" * 32,
+        )
+        assert s.onboarding_state_machine_v2_enabled is True
+
+    def test_gate_raises_503_when_disabled(self, monkeypatch):
+        from fastapi import HTTPException
+
+        from eden.api.routes import onboarding
+
+        class _S:
+            onboarding_state_machine_v2_enabled = False
+
+        monkeypatch.setattr(
+            "eden.config.get_settings", lambda: _S()
+        )
+        with pytest.raises(HTTPException) as ei:
+            onboarding._require_onboarding_v2_enabled()
+        assert ei.value.status_code == 503
+        assert "not yet migrated" in str(ei.value.detail).lower() or "disabled" in str(
+            ei.value.detail
+        ).lower()
+
     def test_missing_user_row_raises_401_rather_than_returning_empty(self):
         from eden.api.routes import orgs
 
