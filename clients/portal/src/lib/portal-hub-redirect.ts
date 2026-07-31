@@ -20,11 +20,9 @@
  * - `/dashboard*` → `/home`: **redirect**, same reason, plus a rewrite
  *   would leave two live URLs serving the same page indefinitely.
  *
- * - `/onboarding*` → `/home?onboarding=1`: **redirect**. It changes
- *   visible state. `OnboardingOverlay` opens the tour off
- *   `useSearchParams().get("onboarding")`, which reads the *browser*
- *   URL — under a rewrite the client would never see the param and the
- *   tour would silently never open.
+ * - `/onboarding*` → `/home`: **redirect**. Legacy wizard URLs land on
+ *   home without forcing `?onboarding=1` (finished tours must not reopen;
+ *   active users still see the tour banner).
  *
  * - stub / removed prefixes → `/unavailable`: **rewrite**. This is the
  *   one genuinely correct rewrite. The resource is gone, so the
@@ -118,11 +116,8 @@ export function resolveHubTarget(
     return { destination: withSearch("/home", search), mode: "redirect" };
   }
 
-  // First-run entry — product home with soft-open tour. Merge the
-  // incoming query with the hardcoded onboarding=1 param rather than
-  // naively concatenating (the base path already has a `?`, so a plain
-  // withSearch() call here would produce a second `?` and corrupt the
-  // URL — see portal-hub-redirect.test history for the bug this fixes).
+  // Legacy /onboarding → /home. Preserve incoming query; do not force
+  // ?onboarding=1 (finished tours must not reopen).
   //
   // Exception: GitHub App install callback historically used
   // ``/onboarding/connect?installation_id=…``. That must NOT open the

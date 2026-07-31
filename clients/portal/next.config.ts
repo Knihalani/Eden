@@ -448,12 +448,12 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/onboarding",
-        destination: "/home?onboarding=1",
+        destination: "/home",
         permanent: false,
       },
       {
         source: "/onboarding/:path*",
-        destination: "/home?onboarding=1",
+        destination: "/home",
         permanent: false,
       },
       ...softLand([

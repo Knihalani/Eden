@@ -84,7 +84,7 @@ function shortDay(iso: string | undefined): string {
 
 type BreakdownRow = {
   key: string;
-  cost_usd: number;
+  cost_usd: number | null;
   events: number;
   tokens: number;
 };
@@ -93,14 +93,17 @@ function normalizeBreakdown(
   rows: Array<{ key?: string; cost_usd: number; events: number; tokens: number }> | undefined,
 ): BreakdownRow[] {
   return (rows ?? [])
-    .map((r) => ({
-      key: String(r.key || "unknown"),
-      cost_usd: Number(r.cost_usd) || 0,
-      events: Number(r.events) || 0,
-      tokens: Number(r.tokens) || 0,
-    }))
+    .map((r) => {
+      const raw = r.cost_usd == null ? NaN : Number(r.cost_usd);
+      return {
+        key: String(r.key || "unknown"),
+        cost_usd: Number.isFinite(raw) ? raw : null,
+        events: Number(r.events) || 0,
+        tokens: Number(r.tokens) || 0,
+      };
+    })
     .filter((r) => r.key)
-    .sort((a, b) => b.cost_usd - a.cost_usd)
+    .sort((a, b) => (b.cost_usd ?? -1) - (a.cost_usd ?? -1))
     .slice(0, 12);
 }
 
@@ -168,7 +171,10 @@ function BreakdownTable({
   empty: string;
   onExport?: () => void;
 }) {
-  const maxCost = Math.max(1, ...rows.map((r) => r.cost_usd));
+  const maxCost = Math.max(
+    1,
+    ...rows.map((r) => (r.cost_usd != null && Number.isFinite(r.cost_usd) ? r.cost_usd : 0)),
+  );
   return (
     <section className="min-w-0">
       <div className="mb-3 flex items-center justify-between gap-2 px-1">
@@ -220,7 +226,10 @@ function BreakdownTable({
                       <div
                         className="h-1.5 bg-[var(--text)]"
                         style={{
-                          width: `${Math.max(2, (row.cost_usd / maxCost) * 100)}%`,
+                          width:
+                            row.cost_usd == null
+                              ? "0%"
+                              : `${Math.max(2, (row.cost_usd / maxCost) * 100)}%`,
                         }}
                       />
                     </div>
@@ -269,10 +278,11 @@ export default function GatewayClient() {
   const series = useMemo(() => {
     return (data?.by_day ?? []).map((d) => {
       const day = String(d.day ?? "");
+      const rawCost = d.cost_usd == null ? NaN : Number(d.cost_usd);
       return {
         day,
         label: shortDay(day),
-        cost_usd: Number(d.cost_usd) || 0,
+        cost_usd: Number.isFinite(rawCost) ? rawCost : null,
         tokens: Number(d.tokens) || 0,
         input_tokens: Number(d.input_tokens) || 0,
         output_tokens: Number(d.output_tokens) || 0,
@@ -283,10 +293,13 @@ export default function GatewayClient() {
 
   const pieData = useMemo(
     () =>
-      byModel.slice(0, 8).map((r) => ({
-        name: r.key,
-        value: r.cost_usd,
-      })),
+      byModel
+        .filter((r) => r.cost_usd != null && r.cost_usd > 0)
+        .slice(0, 8)
+        .map((r) => ({
+          name: r.key,
+          value: r.cost_usd as number,
+        })),
     [byModel],
   );
 

@@ -32,7 +32,7 @@ export type CostUrlState = {
 const DEFAULT_TAB: CostTab = "overview";
 
 const ID_ALIASES = {
-  agentId: ["agentId", "agent_id"],
+  agentId: ["agent", "agentId", "agent_id"],
   budgetId: ["budgetId", "budget_id"],
   viewId: ["viewId", "savedView"],
 } as const;

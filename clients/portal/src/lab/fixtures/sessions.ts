@@ -82,7 +82,7 @@ export function tracesForSession(session: SessionFixture): TraceFixture[] {
         startedAt: "",
         durationMs: 0,
         tokens: 0,
-        costUsd: 0,
+        costUsd: null,
         severity: "none" as const,
         sessionId: session.id,
         signals: { title: "", body: "" },

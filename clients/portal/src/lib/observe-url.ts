@@ -47,7 +47,7 @@ export const OBSERVE_ID_ALIASES = {
   traceId: ["traceId", "trace_id", "trace"],
   spanId: ["spanId", "span_id", "span"],
   sessionId: ["sessionId", "session_id"],
-  agentId: ["agentId", "agent_id"],
+  agentId: ["agent", "agentId", "agent_id"],
   issueId: ["issueId", "issue_id"],
   alertId: ["alertId", "alert_id"],
   viewId: ["viewId", "savedView"],
@@ -285,7 +285,7 @@ export function preserveObserveFilters(
   const viewId = readObserveIdParam(from, "viewId");
   for (const key of OBSERVE_FILTER_PRESERVE_KEYS) {
     if (key === "agentId") {
-      if (agentId) out.set("agentId", agentId);
+  if (agentId) out.set("agent", agentId);
       continue;
     }
     if (key === "viewId") {
