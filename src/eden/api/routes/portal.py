@@ -180,24 +180,92 @@ def _map_trace_outcome(outcome: str | None) -> tuple[str, str]:
     return "ok", "none"
 
 
+_ERROR_OUTCOMES = frozenset(
+    {"error", "failed", "failure", "fail", "errored", "crash", "timeout"}
+)
+
+_BARE_OUTCOME_MESSAGES = frozenset(
+    {"error", "failed", "failure", "fail", "errored", "crash", "timeout", "success", "ok"}
+)
+
+
+def _first_nonempty_str(*candidates: Any) -> str | None:
+    for value in candidates:
+        if value is None:
+            continue
+        if isinstance(value, dict):
+            nested = _first_nonempty_str(
+                value.get("message"),
+                value.get("msg"),
+                value.get("error"),
+                value.get("type"),
+                value.get("name"),
+            )
+            if nested:
+                return nested
+            continue
+        text = str(value).strip()
+        if text and text.lower() not in _BARE_OUTCOME_MESSAGES:
+            return text
+    return None
+
+
+def _extract_span_error_message(
+    *,
+    attrs: dict[str, Any],
+    payload: dict[str, Any],
+    node: dict[str, Any],
+) -> str | None:
+    """Pull a human error string from span fields.
+
+    The Python SDK stamps ``attributes["eden.error"]`` (repr of the
+    exception). Provider instrumentations use ``error_type`` /
+    ``error_message``. Older paths used ``attributes["error"]``. Never
+    surface the bare outcome word (``error`` / ``failure``) as the
+    message — that is what made the portal look like it hid the cause.
+    """
+    return _first_nonempty_str(
+        attrs.get("eden.error"),
+        attrs.get("error"),
+        attrs.get("error_message"),
+        attrs.get("error.message"),
+        attrs.get("exception.message"),
+        attrs.get("exception"),
+        payload.get("error_message"),
+        payload.get("error"),
+        payload.get("error_type"),
+        payload.get("exception"),
+        node.get("error_message"),
+        node.get("error_type"),
+        node.get("finish_reason")
+        if str(node.get("finish_reason") or "").lower()
+        not in {"stop", "end_turn", "tool_calls", "length", ""}
+        else None,
+        # Last resort: type-only is still better than blank.
+        attrs.get("error_type") or payload.get("error_type") or node.get("error_type"),
+    )
+
+
 def _trace_signal_summary(
     *,
     name: str,
     severity: str,
     status: str,
+    error_detail: str | None = None,
 ) -> TraceSignalSummary:
     """Human summary for the Signals pane (never leave title blank)."""
     label = name or "Run"
+    detail = (error_detail or "").strip()
     if severity == "error" or status == "error":
         return TraceSignalSummary(
             title="Run failed",
-            body=f"{label} ended with an error outcome.",
+            body=detail or f"{label} ended with an error outcome.",
             count=1,
         )
     if severity == "warn":
         return TraceSignalSummary(
             title="Degraded run",
-            body=f"{label} completed with warnings.",
+            body=detail or f"{label} completed with warnings.",
             count=1,
         )
     return TraceSignalSummary(
@@ -349,7 +417,6 @@ async def _pg() -> Any | None:
 # single-trace detail route below; ``list_portal_traces`` deliberately
 # keeps ``steps=[]`` to avoid an N+1 of per-trace decompression work.
 
-_ERROR_OUTCOMES = {"error", "failed", "failure", "fail", "errored", "crash", "timeout"}
 _OK_OUTCOMES = {"success", "ok", "completed", "complete"}
 
 
@@ -558,9 +625,11 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
 
     error_message: str | None = None
     if outcome and str(outcome).lower() in _ERROR_OUTCOMES:
-        error_message = str(
-            attrs.get("error") or payload.get("error") or node.get("finish_reason") or outcome
-        )
+        error_message = _extract_span_error_message(
+            attrs=attrs,
+            payload=payload,
+            node=node,
+        ) or "Error outcome recorded (no message captured)"
 
     # Bodies may also arrive as JSON strings — parse when possible so
     # nested message/content previews still resolve.
@@ -1117,7 +1186,22 @@ async def list_portal_traces(
                    {safe_output_token_sum_sql(alias="e.")} AS output_tokens,
                    {safe_cost_sum_nullable_sql(alias="e.")} AS cost_usd,
                    {_PREFERRED_MODEL_SQL} AS model,
-                   MAX(e.attributes->>'session_id') AS session_id
+                   MAX(e.attributes->>'session_id') AS session_id,
+                   (ARRAY_AGG(
+                      COALESCE(
+                        NULLIF(e.attributes->>'eden.error', ''),
+                        NULLIF(e.attributes->>'error', ''),
+                        NULLIF(e.attributes->>'error_message', ''),
+                        NULLIF(e.error_type, ''),
+                        NULLIF(e.payload->>'error_message', ''),
+                        NULLIF(e.payload->>'error_type', ''),
+                        NULLIF(e.payload->>'error', '')
+                      )
+                      ORDER BY e.timestamp DESC
+                    ) FILTER (
+                      WHERE lower(coalesce(e.outcome, '')) IN
+                        ('error','failed','failure','fail','errored','crash','timeout')
+                    ))[1] AS error_detail
             FROM telemetry_events e
             INNER JOIN ids ON ids.trace_id = e.trace_id
             WHERE e.tenant_id = $1
@@ -1164,7 +1248,12 @@ async def list_portal_traces(
                 costUsd=cost_usd,
                 severity=severity,  # type: ignore[arg-type]
                 sessionId=str(r["session_id"]) if r.get("session_id") else None,
-                signals=_trace_signal_summary(name=name, severity=severity, status=status),
+                signals=_trace_signal_summary(
+                    name=name,
+                    severity=severity,
+                    status=status,
+                    error_detail=str(r["error_detail"]) if r.get("error_detail") else None,
+                ),
                 steps=[],
             )
         )
@@ -1208,7 +1297,22 @@ async def get_portal_trace(
                    {safe_output_token_sum_sql()} AS output_tokens,
                    {safe_cost_sum_nullable_sql()} AS cost_usd,
                    {_PREFERRED_MODEL_SQL_UNALIASED} AS model,
-                   MAX(attributes->>'session_id') AS session_id
+                   MAX(attributes->>'session_id') AS session_id,
+                   (ARRAY_AGG(
+                      COALESCE(
+                        NULLIF(attributes->>'eden.error', ''),
+                        NULLIF(attributes->>'error', ''),
+                        NULLIF(attributes->>'error_message', ''),
+                        NULLIF(error_type, ''),
+                        NULLIF(payload->>'error_message', ''),
+                        NULLIF(payload->>'error_type', ''),
+                        NULLIF(payload->>'error', '')
+                      )
+                      ORDER BY timestamp DESC
+                    ) FILTER (
+                      WHERE lower(coalesce(outcome, '')) IN
+                        ('error','failed','failure','fail','errored','crash','timeout')
+                    ))[1] AS error_detail
             FROM telemetry_events
             WHERE tenant_id = $1 AND trace_id = $2
             GROUP BY trace_id
@@ -1320,6 +1424,12 @@ async def get_portal_trace(
     step_cost = sum(known_step_costs) if known_step_costs else None
     if step_cost is not None and (cost_usd is None or step_cost > cost_usd):
         cost_usd = round(step_cost, 6)
+    error_detail = str(row["error_detail"]) if row.get("error_detail") else None
+    if not error_detail:
+        for step in steps:
+            if step.errorMessage:
+                error_detail = step.errorMessage
+                break
     return TraceListItem(
         id=str(row["trace_id"]),
         agentId=str(row["agent_id"] or ""),
@@ -1331,7 +1441,12 @@ async def get_portal_trace(
         costUsd=cost_usd,
         severity=severity,  # type: ignore[arg-type]
         sessionId=str(row["session_id"]) if row.get("session_id") else None,
-        signals=_trace_signal_summary(name=name, severity=severity, status=status),
+        signals=_trace_signal_summary(
+            name=name,
+            severity=severity,
+            status=status,
+            error_detail=error_detail,
+        ),
         steps=steps,
     )
 

@@ -153,6 +153,52 @@ async def test_otel_decode_error_status_becomes_failure():
 
 
 @pytest.mark.asyncio
+async def test_otel_decode_error_status_message_stamped():
+    span = _otlp_span(
+        status={"code": "STATUS_CODE_ERROR", "message": "division by zero"},
+    )
+    events = await OtelDecoder().decode(
+        _otlp_body(spans=[span]),
+        Attribution(tenant_id="org_abc", source_format="otel"),
+    )
+    e = events[0]
+    assert e.outcome == "failure"
+    assert e.attributes.get("error") == "division by zero"
+    assert e.attributes.get("error.message") == "division by zero"
+
+
+@pytest.mark.asyncio
+async def test_otel_decode_exception_event_stamps_error():
+    span = _otlp_span(
+        status={"code": "STATUS_CODE_ERROR"},
+        events=[
+            {
+                "timeUnixNano": "1700000001000000000",
+                "name": "exception",
+                "attributes": [
+                    {
+                        "key": "exception.type",
+                        "value": {"stringValue": "ZeroDivisionError"},
+                    },
+                    {
+                        "key": "exception.message",
+                        "value": {"stringValue": "division by zero"},
+                    },
+                ],
+            }
+        ],
+    )
+    events = await OtelDecoder().decode(
+        _otlp_body(spans=[span]),
+        Attribution(tenant_id="org_abc", source_format="otel"),
+    )
+    e = events[0]
+    assert e.outcome == "failure"
+    assert "division by zero" in (e.attributes.get("error") or "")
+    assert e.attributes.get("error.type") == "ZeroDivisionError"
+
+
+@pytest.mark.asyncio
 async def test_otel_decode_error_type_attr_becomes_failure():
     span = _otlp_span(attributes=[
         {"key": "error.type", "value": {"stringValue": "rate_limit"}}
@@ -162,6 +208,7 @@ async def test_otel_decode_error_type_attr_becomes_failure():
         Attribution(tenant_id="org_abc", source_format="otel"),
     )
     assert events[0].outcome == "failure"
+    assert events[0].attributes.get("error.type") == "rate_limit"
 
 
 @pytest.mark.asyncio

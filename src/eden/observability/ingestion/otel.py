@@ -277,7 +277,13 @@ def _span_to_raw_dict(
     # ── outcome from status.code + error.type ──────────────────────
     status = span.get("status") or {}
     status_code = str(status.get("code", "")).upper()
+    # OTel may use numeric status codes (1=OK, 2=ERROR) or string enums.
+    if status_code in {"2", "STATUS_CODE_ERROR", "ERROR"}:
+        status_code = "STATUS_CODE_ERROR"
+    elif status_code in {"1", "STATUS_CODE_OK", "OK"}:
+        status_code = "STATUS_CODE_OK"
     error_type = attrs.get("error.type")
+    status_message = status.get("message") or status.get("description")
     if status_code == "STATUS_CODE_ERROR" or error_type:
         outcome = "failure"
     elif status_code == "STATUS_CODE_OK":
@@ -424,6 +430,34 @@ def _span_to_raw_dict(
         attributes["gen_ai.conversation.id"] = str(conv_id)
     if provider := attrs.get("gen_ai.provider.name"):
         attributes["gen_ai.provider.name"] = str(provider)
+    # Surface the failure reason for portal SQL + transcript (never leave
+    # outcome=failure with a blank error message).
+    if error_type:
+        attributes["error.type"] = str(error_type)
+        attributes["error_type"] = str(error_type)
+    if status_message:
+        attributes["error"] = str(status_message)
+        attributes["error.message"] = str(status_message)
+        attributes["otel.status.message"] = str(status_message)
+    # Exception span events (OTel exception semantic convention).
+    for ev in events:
+        if str(ev.get("name") or "").lower() != "exception":
+            continue
+        ev_attrs = ev.get("attributes") or {}
+        if not isinstance(ev_attrs, dict):
+            continue
+        exc_msg = (
+            ev_attrs.get("exception.message")
+            or ev_attrs.get("exception.type")
+            or ev_attrs.get("message")
+        )
+        if exc_msg and "error" not in attributes:
+            attributes["error"] = str(exc_msg)
+            attributes["error.message"] = str(exc_msg)
+        if ev_attrs.get("exception.type") and "error.type" not in attributes:
+            attributes["error.type"] = str(ev_attrs["exception.type"])
+            attributes["error_type"] = str(ev_attrs["exception.type"])
+        break
 
     # ── tags: deployment / environment hints, error.type ──────────
     tags: list[str] = ["otel"]
@@ -433,6 +467,8 @@ def _span_to_raw_dict(
         tags.append(f"env:{env_name}")
     if error_type:
         tags.append(f"error:{error_type}")
+    elif attributes.get("error.type"):
+        tags.append(f"error:{attributes['error.type']}")
 
     # ── timestamp from startTimeUnixNano ───────────────────────────
     timestamp = _ns_to_iso(span.get("startTimeUnixNano", 0))

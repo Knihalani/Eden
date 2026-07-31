@@ -282,6 +282,41 @@ def test_tree_node_to_step_maps_tool_error() -> None:
     assert step.errorMessage == "timeout after 30s"
 
 
+def test_tree_node_to_step_reads_sdk_eden_error() -> None:
+    """Python SDK stamps exceptions on attributes['eden.error']."""
+    from eden.api.routes.portal import _tree_node_to_step
+
+    node = {
+        "span_id": "span_err",
+        "name": "agent.run",
+        "event_type": "agent.run",
+        "duration_ms": 12,
+        "metrics": {},
+        "attributes": {"eden.error": "ZeroDivisionError('division by zero')"},
+        "payload": {},
+        "outcome": "error",
+        "request_body": None,
+        "response_body": None,
+    }
+    step = _tree_node_to_step(node)
+    assert step.status == "error"
+    assert "ZeroDivisionError" in (step.errorMessage or "")
+    assert step.errorMessage != "error"
+
+
+def test_trace_signal_summary_includes_error_detail() -> None:
+    from eden.api.routes.portal import _trace_signal_summary
+
+    summary = _trace_signal_summary(
+        name="testagent",
+        severity="error",
+        status="error",
+        error_detail="ZeroDivisionError('division by zero')",
+    )
+    assert summary.title == "Run failed"
+    assert "ZeroDivisionError" in summary.body
+
+
 def test_flatten_tree_preserves_depth_first_order() -> None:
     from eden.api.routes.portal import _flatten_tree
 

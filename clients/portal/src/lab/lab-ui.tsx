@@ -198,7 +198,11 @@ export const RunListButton = memo(function RunListButton({
         <p className="type-meta mt-1 truncate">
           {showAgent && agent ? `${agent.name} · ` : ""}
           {trace.startedAt}
-          {trace.severity !== "none" ? ` · ${trace.signals.title}` : ""}
+          {trace.severity === "error" && trace.signals.body
+            ? ` · ${trace.signals.body}`
+            : trace.severity !== "none"
+              ? ` · ${trace.signals.title}`
+              : ""}
         </p>
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-0.5 sm:flex">

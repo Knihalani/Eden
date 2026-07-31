@@ -1661,8 +1661,10 @@ class TelemetryCollector:
         than the configured cold-archive age (default 90 days).
 
         ``hydrate_bodies=False`` skips message_store reconstruct and
-        zstd body decode — used by portal list-detail for span
-        structure without N message round-trips.
+        large request/response body zstd — used by portal list-detail
+        for span structure without N message round-trips. Attributes,
+        payload, and metrics zstd are still decoded so error text,
+        tokens, and cost remain available on the cheap path.
         """
         client = await self._get_postgres()
         if not client:
@@ -1726,10 +1728,9 @@ class TelemetryCollector:
         # which fans out across the storage layer's worker pool.
         # Measured: ~3-5x faster on traces with 50+ spans.
         #
-        # Portal structure path (hydrate_bodies=False) skips zstd
-        # entirely — inline JSONB already has previews, and a single
-        # dict-mismatched *_zstd column used to abort the whole tree
-        # (portal then served steps=[]).
+        # Structure path still needs attributes/payload/metrics (errors,
+        # tokens, cost). Only skip the large body / message_store path.
+        # A dict-mismatched column soft-fails per-row via decompress_many.
         from eden.storage.compression import decompress_many
 
         per_row: list[dict[str, Any]] = []
@@ -1744,18 +1745,22 @@ class TelemetryCollector:
                 "metrics_zstd",
                 "attributes_zstd",
             )
-            # Collect every (row, col) value to feed the batch API.
-            flat: list[bytes | None] = []
-            for row in rows:
-                for col in _zstd_cols:
-                    flat.append(row.get(col))
-            decoded = await asyncio.to_thread(decompress_many, flat) if flat else []
-            # Re-shape into a {row_index: {col: value}} lookup.
-            cols_n = len(_zstd_cols)
-            for i in range(0, len(decoded), cols_n):
-                per_row.append({col: decoded[i + j] for j, col in enumerate(_zstd_cols)})
         else:
-            _zstd_cols = ()
+            _zstd_cols = (
+                "payload_zstd",
+                "metrics_zstd",
+                "attributes_zstd",
+            )
+        # Collect every (row, col) value to feed the batch API.
+        flat: list[bytes | None] = []
+        for row in rows:
+            for col in _zstd_cols:
+                flat.append(row.get(col))
+        decoded = await asyncio.to_thread(decompress_many, flat) if flat else []
+        # Re-shape into a {row_index: {col: value}} lookup.
+        cols_n = len(_zstd_cols)
+        for i in range(0, len(decoded), cols_n):
+            per_row.append({col: decoded[i + j] for j, col in enumerate(_zstd_cols)})
 
         async def _resolve_request_for(row: dict, decoded_cols: dict) -> Any:
             if message_store is not None:
@@ -1869,6 +1874,8 @@ class TelemetryCollector:
                 "prompt_cache_savings_usd": row.get("prompt_cache_savings_usd"),
                 "model_version": row.get("model_version"),
                 "service_tier": row.get("service_tier"),
+                "error_type": row.get("error_type"),
+                "error_message": row.get("error_message"),
                 "children": [],
             }
             span_map[span_id] = node
