@@ -123,6 +123,16 @@ export function resolveHubTarget(
   // naively concatenating (the base path already has a `?`, so a plain
   // withSearch() call here would produce a second `?` and corrupt the
   // URL — see portal-hub-redirect.test history for the bug this fixes).
+  //
+  // Exception: GitHub App install callback historically used
+  // ``/onboarding/connect?installation_id=…``. That must NOT open the
+  // product tour — send it to the real connect page with query intact.
+  if (p === "/onboarding/connect" || p.startsWith("/onboarding/connect/")) {
+    return {
+      destination: withSearch("/agents/connect", search),
+      mode: "redirect",
+    };
+  }
   if (p === "/onboarding" || p.startsWith("/onboarding/")) {
     const extra = search.replace(/^\?/, "");
     return {
