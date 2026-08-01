@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  normalizeAbExperiments,
   seedFromDebuggerSession,
   seedFromEvalsPair,
   type AbExperimentFixture,
@@ -82,7 +83,10 @@ function LabCompareInner() {
     () => portalApi.compareExperiments(orgId!),
     SHELL_QUERY,
   );
-  const experiments = experimentsQuery.data ?? [];
+  const experiments = useMemo(
+    () => normalizeAbExperiments(experimentsQuery.data),
+    [experimentsQuery.data],
+  );
 
   const { agentId, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();

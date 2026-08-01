@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   DOCS_URL,
@@ -10,8 +12,8 @@ import { MarketingRail } from "@/components/marketing/marketing-primitives";
 import {
   MARKETING_APP_HREF,
   MARKETING_APP_LABEL,
-  isMarketingSignedIn,
-} from "@/lib/marketing-session";
+} from "@/lib/marketing-cta";
+import { useMarketingSignedIn } from "@/lib/marketing-signed-in-client";
 
 type FooterLink = {
   href: string;
@@ -57,8 +59,8 @@ const LEGAL_LINKS: FooterLink[] = [
   { href: "/do-not-sell", label: "Do Not Sell My Info" },
 ];
 
-export async function MarketingFooter() {
-  const signedIn = await isMarketingSignedIn();
+export function MarketingFooter() {
+  const signedIn = useMarketingSignedIn();
   const columns = [
     { title: "Product", links: productLinks(signedIn) },
     { title: "Resources", links: RESOURCE_LINKS },

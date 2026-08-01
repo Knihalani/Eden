@@ -7,6 +7,7 @@ import {
   MARKETING_APP_HREF,
   MARKETING_APP_LABEL,
 } from "@/lib/marketing-cta";
+import { useMarketingSignedIn } from "@/lib/marketing-signed-in-client";
 
 type NavLink =
   | { href: string; label: string; external?: boolean; primary?: boolean };
@@ -32,7 +33,8 @@ function navLinks(signedIn: boolean): NavLink[] {
 }
 
 /** Mobile menu — md+ uses the desktop nav; this is md:hidden only. */
-export function MarketingMobileNav({ signedIn = false }: { signedIn?: boolean }) {
+export function MarketingMobileNav() {
+  const signedIn = useMarketingSignedIn();
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const links = navLinks(signedIn);

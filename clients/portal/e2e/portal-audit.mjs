@@ -50,75 +50,53 @@ if (isLocal) {
     "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
 }
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/sign-in", "/sign-up", "/privacy", "/security", "/terms"];
+const PUBLIC_ROUTES = [
+  "/",
+  "/pricing",
+  "/about",
+  "/contact",
+  "/changelog",
+  "/privacy",
+  "/security",
+  "/terms",
+  "/status",
+  "/login",
+  "/signup",
+  "/sign-in",
+  "/sign-up",
+];
 
-/** Canonical 12-item IA + deep-link survivors used by the portal. */
+/** Canonical live IA + soft-land / redirect smoke. */
 const PORTAL_ROUTES = [
-  // Core 12
+  "/home",
   "/dashboard",
-  "/dashboard?onboarding=1",
   "/agents",
-  "/agents?tab=fleet",
   "/agents/connect",
   "/traces",
-  "/traces?view=inspect",
-  "/traces?view=replay",
-  "/traces?view=debug",
-  "/traces?view=query",
+  "/sessions",
   "/issues",
-  "/issues?tab=incidents",
   "/alerts",
-  "/alerts?tab=signals",
-  "/analytics",
-  "/analytics?tab=insights",
-  "/analytics?tab=topics",
-  "/analytics?tab=tools",
-  "/analytics?tab=users",
+  "/signals",
   "/evals",
-  "/evals?tab=datasets",
-  "/evals?tab=labeling",
-  "/evals?tab=studio",
-  "/evals?tab=synthetic",
-  "/improve",
-  "/improve?tab=plans",
-  "/improve?tab=history",
-  "/optimization",
-  "/optimization?tab=budget",
-  "/optimization?tab=outcomes",
-  "/optimization?tab=predict",
-  "/optimization?tab=advisor",
-  "/guardrails",
-  "/guardrails?tab=redteam",
   "/prompts",
+  "/compare",
+  "/improve",
+  "/guardrails",
+  "/cost",
+  "/gateway",
+  "/agent",
+  "/debugger",
   "/settings",
   "/settings?tab=account",
-  "/settings?tab=billing",
-  "/runs/test-run-id/lineage",
-  // Redirect smoke (cut / consolidated routes)
   "/onboarding",
   "/onboarding/connect",
-  "/inspector",
-  "/replay",
-  "/debugger",
-  "/fleet",
-  "/incidents",
-  "/insights",
-  "/tools",
-  "/users",
-  "/signals",
-  "/datasets",
-  "/labeling",
-  "/studio",
-  "/synthetic",
-  "/closed-loop",
-  "/autonomous",
-  "/pr-suggestions",
+  "/unavailable",
+  // stub → soft-land
+  "/analytics",
   "/billing",
-  "/profile",
-  "/llmops",
-  "/redteam",
+  "/artifacts",
+  "/debugger-sessions",
   "/observability",
-  "/observability/eval",
 ];
 
 const BAD_VISIBLE = [
@@ -235,7 +213,7 @@ async function ensureAuth(browser) {
   if (existsSync(STORAGE)) {
     const ctx = await browser.newContext({ storageState: STORAGE, viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/home`, { waitUntil: "domcontentloaded" });
     await sleep(2000);
     const me = await page.request.get(`${BASE}/api/proxy/auth/me`).catch(() => null);
     const url = page.url();

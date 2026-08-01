@@ -77,7 +77,8 @@ export const AB_EXPERIMENTS: AbExperimentFixture[] = [];
 
 function liveExperiments(): AbExperimentFixture[] {
   const live = catalogCompareExperiments();
-  return live.length > 0 ? live : AB_EXPERIMENTS;
+  if (live.length > 0) return normalizeAbExperiments(live);
+  return AB_EXPERIMENTS;
 }
 
 export function experimentById(
@@ -133,29 +134,35 @@ export function verdictLabel(rec: AbRecommendation): string {
 
 /** One-line ship answer including the candidate version name. */
 export function verdictSentence(exp: AbExperimentFixture): string {
-  const [, treatment] = exp.arms;
-  const [control] = exp.arms;
+  const control = exp.arms?.[0];
+  const treatment = exp.arms?.[1];
+  const treatmentLabel = treatment?.label || "Candidate";
+  const controlLabel = control?.label || "Current";
   if (exp.recommendation === "ship") {
-    return `Promote ${treatment.label} to 100%`;
+    return `Promote ${treatmentLabel} to 100%`;
   }
   if (exp.recommendation === "ship_with_monitoring") {
-    return `Promote ${treatment.label} · watch cost`;
+    return `Promote ${treatmentLabel} · watch cost`;
   }
   if (exp.recommendation === "dont_ship") {
-    return `Keep ${control.label}`;
+    return `Keep ${controlLabel}`;
   }
-  return `Need more ${treatment.label} traffic`;
+  return `Need more ${treatmentLabel} traffic`;
 }
 
 export function confidenceLine(exp: AbExperimentFixture): string {
-  const pct = Math.round(exp.winnerConfidence * 100);
-  const [control, treatment] = exp.arms;
-  const split = `${(control.weight * 100).toFixed(0)}/${(treatment.weight * 100).toFixed(0)}`;
+  const pct = Math.round(num(exp.winnerConfidence) * 100);
+  const control = exp.arms?.[0];
+  const treatment = exp.arms?.[1];
+  const split =
+    control && treatment
+      ? `${(num(control.weight) * 100).toFixed(0)}/${(num(treatment.weight) * 100).toFixed(0)}`
+      : "—/—";
   const age =
     exp.status === "active"
-      ? `Live ${exp.createdAt.replace(" ago", "")}`
-      : exp.createdAt;
-  return `${age} · ${exp.durationHours}h · ${split} · ${pct}% conf`;
+      ? `Live ${String(exp.createdAt || "").replace(" ago", "") || "now"}`
+      : String(exp.createdAt || "");
+  return `${age} · ${num(exp.durationHours)}h · ${split} · ${pct}% conf`;
 }
 
 export function metricLabel(metric: AbPrimaryMetric): string {
@@ -186,13 +193,115 @@ export function layoutSubtitle(layout: AbLayout): string {
 
 export function formatMetricValue(
   metric: AbPrimaryMetric,
-  value: number,
+  value: number | null | undefined,
 ): string {
-  if (metric === "stumble") return `${(value * 100).toFixed(1)}%`;
-  if (metric === "score") return value.toFixed(2);
-  if (metric === "cost") return `$${value.toFixed(3)}`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
-  return `${Math.round(value)}ms`;
+  if (value == null || Number.isNaN(Number(value))) return "—";
+  const n = Number(value);
+  if (metric === "stumble") return `${(n * 100).toFixed(1)}%`;
+  if (metric === "score") return n.toFixed(2);
+  if (metric === "cost") return `$${n.toFixed(3)}`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}s`;
+  return `${Math.round(n)}ms`;
+}
+
+function num(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeArm(
+  raw: Partial<AbArm> | null | undefined,
+  key: AbArmKey,
+): AbArm {
+  return {
+    key: raw?.key === "treatment" || raw?.key === "control" ? raw.key : key,
+    label: String(raw?.label || (key === "control" ? "Control" : "Treatment")),
+    versionKey: String(raw?.versionKey || ""),
+    weight: num(raw?.weight, key === "control" ? 0.5 : 0.5),
+    nTraces: num(raw?.nTraces),
+    stumbleRate: num(raw?.stumbleRate),
+    avgScore: num(raw?.avgScore),
+    costUsdPerTrace: num(raw?.costUsdPerTrace),
+    latencyP95Ms: num(raw?.latencyP95Ms),
+  };
+}
+
+/**
+ * Coerce partial portal/API experiment cards into a full fixture.
+ * Production arms often omit metrics — never crash on missing fields.
+ */
+export function normalizeAbExperiment(
+  raw: Partial<AbExperimentFixture> & { id?: string },
+): AbExperimentFixture | null {
+  const id = String(raw?.id || "").trim();
+  if (!id) return null;
+  const rawArms = Array.isArray(raw.arms) ? raw.arms : [];
+  const controlRaw =
+    rawArms.find((a) => a?.key === "control") ?? rawArms[0] ?? null;
+  const treatmentRaw =
+    rawArms.find((a) => a?.key === "treatment") ??
+    rawArms.find((a) => a !== controlRaw) ??
+    rawArms[1] ??
+    null;
+  const control = normalizeArm(controlRaw, "control");
+  const treatment = normalizeArm(treatmentRaw, "treatment");
+  const status: AbStatus =
+    raw.status === "stopped" || raw.status === "winner_detected"
+      ? raw.status
+      : "active";
+  const recommendation: AbRecommendation =
+    raw.recommendation === "ship" ||
+    raw.recommendation === "dont_ship" ||
+    raw.recommendation === "ship_with_monitoring" ||
+    raw.recommendation === "need_more_data"
+      ? raw.recommendation
+      : "need_more_data";
+  const primaryMetric: AbPrimaryMetric =
+    raw.primaryMetric === "score" ||
+    raw.primaryMetric === "cost" ||
+    raw.primaryMetric === "latency" ||
+    raw.primaryMetric === "stumble"
+      ? raw.primaryMetric
+      : "stumble";
+  return {
+    id,
+    name: String(raw.name || id),
+    agentId: String(raw.agentId || ""),
+    status,
+    createdAt: String(raw.createdAt || ""),
+    durationHours: num(raw.durationHours),
+    arms: [control, treatment],
+    winner: raw.winner === "control" || raw.winner === "treatment" ? raw.winner : undefined,
+    winnerConfidence: num(raw.winnerConfidence),
+    recommendation,
+    rationale: String(raw.rationale || ""),
+    primaryMetric,
+    series: raw.series ?? {
+      stumble: [],
+      score: [],
+      cost: [],
+      latency: [],
+    },
+    sampleIds: Array.isArray(raw.sampleIds)
+      ? raw.sampleIds.map(String)
+      : [],
+    issueId: raw.issueId,
+    sourceEvalBaselineId: raw.sourceEvalBaselineId,
+    sourceEvalCompareId: raw.sourceEvalCompareId,
+    sourceDebuggerSessionId: raw.sourceDebuggerSessionId,
+  };
+}
+
+export function normalizeAbExperiments(
+  rows: Array<Partial<AbExperimentFixture> & { id?: string }> | null | undefined,
+): AbExperimentFixture[] {
+  if (!rows?.length) return [];
+  const out: AbExperimentFixture[] = [];
+  for (const row of rows) {
+    const normalized = normalizeAbExperiment(row);
+    if (normalized) out.push(normalized);
+  }
+  return out;
 }
 
 /** Format a treatment−control delta for the verdict strip. */
@@ -222,19 +331,23 @@ export function armDelta(
   exp: AbExperimentFixture,
   metric: AbPrimaryMetric,
 ): { delta: number; invertGood: boolean; better: "control" | "treatment" | "tie" } {
-  const [control, treatment] = exp.arms;
+  const control = exp.arms?.[0];
+  const treatment = exp.arms?.[1];
   let delta = 0;
   let invertGood = false;
+  if (!control || !treatment) {
+    return { delta: 0, invertGood: metric !== "score", better: "tie" };
+  }
   if (metric === "stumble") {
-    delta = treatment.stumbleRate - control.stumbleRate;
+    delta = num(treatment.stumbleRate) - num(control.stumbleRate);
     invertGood = true;
   } else if (metric === "score") {
-    delta = treatment.avgScore - control.avgScore;
+    delta = num(treatment.avgScore) - num(control.avgScore);
   } else if (metric === "cost") {
-    delta = treatment.costUsdPerTrace - control.costUsdPerTrace;
+    delta = num(treatment.costUsdPerTrace) - num(control.costUsdPerTrace);
     invertGood = true;
   } else {
-    delta = treatment.latencyP95Ms - control.latencyP95Ms;
+    delta = num(treatment.latencyP95Ms) - num(control.latencyP95Ms);
     invertGood = true;
   }
   const eps = metric === "latency" ? 50 : 0.0005;

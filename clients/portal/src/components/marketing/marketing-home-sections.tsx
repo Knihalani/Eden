@@ -3,13 +3,11 @@ import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas"
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
 import { INSTALL_SNIPPET } from "@/components/marketing/install-snippet";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
-import { isMarketingSignedIn } from "@/lib/marketing-session";
 
 /**
  * Below-fold — denser instrument metaphors, asymmetric layouts.
  */
-export async function MarketingHomeSections() {
-  const signedIn = await isMarketingSignedIn();
+export function MarketingHomeSections() {
   return (
     <>
       <section className="relative overflow-hidden border-b border-[var(--line)] py-16 sm:py-24">
@@ -232,7 +230,6 @@ export async function MarketingHomeSections() {
               </p>
             </div>
             <MarketingPrimaryCta
-              signedIn={signedIn}
               className="px-6"
             />
           </div>

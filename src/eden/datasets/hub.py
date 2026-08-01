@@ -91,7 +91,7 @@ class DatasetHub:
             SELECT d.id, d.org_id, d.name, d.description, d.source_type,
                    d.source_ref, d.version, d.created_at, d.updated_at,
                    (SELECT COUNT(*)::int FROM dataset_items di WHERE di.dataset_id = d.id) AS row_count,
-                   (SELECT COUNT(*)::int FROM dataset_columns dc WHERE dc.dataset_id = d.id) AS column_count
+                   0 AS column_count
             FROM datasets d
             WHERE d.org_id = $1
             ORDER BY d.updated_at DESC
@@ -112,7 +112,7 @@ class DatasetHub:
             SELECT d.id, d.org_id, d.name, d.description, d.source_type,
                    d.source_ref, d.version, d.created_at, d.updated_at,
                    (SELECT COUNT(*)::int FROM dataset_items di WHERE di.dataset_id = d.id) AS row_count,
-                   (SELECT COUNT(*)::int FROM dataset_columns dc WHERE dc.dataset_id = d.id) AS column_count
+                   0 AS column_count
             FROM datasets d
             WHERE d.org_id = $1 AND d.id = $2::uuid
             """,

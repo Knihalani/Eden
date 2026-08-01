@@ -222,14 +222,12 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
 
 export const config = {
   matcher: [
-    // P25: run Clerk on portal + marketing page routes; skip static
-    // assets (incl. avif/wasm/map/txt/xml) so they never pay auth or
-    // intl. Intl itself is gated in the middleware body via
-    // ``shouldRunIntl`` — matcher alone cannot drop intl without
-    // also dropping Clerk protect() on portal prefixes.
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|avif|mp4|webm|wasm|map|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|txt|xml)).*)",
-    // Always run on API + TRPC routes (Clerk session forwarding; no intl).
-    "/(api|trpc)(.*)",
+    // Skip static assets AND the lean /api/health edge probe so uptime
+    // monitors never pay Clerk middleware cold-start cost.
+    "/((?!_next|api/health(?:$|\\?)|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|avif|mp4|webm|wasm|map|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest|txt|xml)).*)",
+    // Always run on API + TRPC routes except /api/health (covered above).
+    "/api/((?!health$).*)",
+    "/trpc/(.*)",
     // Always run on Clerk's own auto-proxy path (after the API matcher).
     "/__clerk/:path*",
   ],

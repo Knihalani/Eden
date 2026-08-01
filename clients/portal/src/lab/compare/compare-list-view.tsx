@@ -129,14 +129,20 @@ export function CompareListView({
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {filtered.map((e) => {
             const active = e.id === activeId;
-            const [control, treatment] = e.arms;
-            const primary = armDelta(e, e.primaryMetric);
+            const control = e.arms?.[0];
+            const treatment = e.arms?.[1];
+            const metric = e.primaryMetric || "stumble";
+            const primary = armDelta(e, metric);
             const good = primary.invertGood
               ? primary.delta < -0.0005
               : primary.delta > 0.0005;
             const bad = primary.invertGood
               ? primary.delta > 0.0005
               : primary.delta < -0.0005;
+            const split =
+              control && treatment
+                ? `${((control.weight ?? 0) * 100).toFixed(0)}/${((treatment.weight ?? 0) * 100).toFixed(0)}`
+                : "—/—";
             return (
               <li key={e.id}>
                 <button
@@ -159,20 +165,18 @@ export function CompareListView({
                         !good && !bad && "!text-[var(--text-muted)]",
                       )}
                     >
-                      {metricShortLabel(e.primaryMetric)}{" "}
-                      {formatDeltaDisplay(e.primaryMetric, primary.delta)}
+                      {metricShortLabel(metric)}{" "}
+                      {formatDeltaDisplay(metric, primary.delta)}
                     </span>
                     <span className="type-meta text-[var(--text-faint)]">
-                      {Math.round(e.winnerConfidence * 100)}%
+                      {Math.round((e.winnerConfidence ?? 0) * 100)}%
                     </span>
                   </div>
                   <span className="type-ui truncate text-[var(--text)]">
                     {e.name}
                   </span>
                   <span className="type-meta">
-                    {agentLabel(e.agentId)} ·{" "}
-                    {(control.weight * 100).toFixed(0)}/
-                    {(treatment.weight * 100).toFixed(0)} · {e.createdAt}
+                    {agentLabel(e.agentId)} · {split} · {e.createdAt || "—"}
                   </span>
                 </button>
               </li>
