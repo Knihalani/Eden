@@ -13,7 +13,9 @@ claims in `docs/prod-ready-checklist.md` (Jul 3). Detail lives in
 | Portal `edenobservability.com` | Vercel prod READY (`dpl_92SLEG9KpKeotWtAqEB4979Pq7zc`) |
 | Docs `docs.edenobservability.com` | 200 |
 | Redis | Upstash 500k cap → `quota_exhausted`; Postgres leader leases |
-| Typesense product path | still `TYPESENSE_ENABLED=false`; F12 remains BLOCKED |
+| Typesense product path | still `TYPESENSE_ENABLED=false`; F12 remains BLOCKED (needs provisioned cluster + secrets — not a code flip) |
+| Eden MCP server (F04) | soft-retired for free beta — docs/nav/keys hidden; `mcp_http_transport_v1=False`; code kept for internal/dev |
+| RTBF (`rtbf_fanout_v1`) | stays False — wrong content-table columns; would certify unerased data |
 
 ## Shipped in commit `c591185d`
 
@@ -56,4 +58,6 @@ Use `scripts/build_nf_env_payload.py` + `update service runtime-environment` and
 1. **npm login / new token** → publish `@eden-ai/sdk@0.4.0`
 2. Restore GitHub Actions billing (F85 CI-green)
 3. ~~Tinybird datasource type fixes~~ — **Deployment #3 live** 2026-08-01 (DateTime64(3), UUID, Float64, LowCardinality + FORWARD_QUERY)
-4. Provision Typesense before closing F12
+4. Provision Typesense (+ `TYPESENSE_HOST`/`API_KEY`) before closing F12 — PG ILIKE fallback is fine for free beta
+5. RTBF: remap `gdpr.py` content-table columns before any enable
+6. Eden MCP: remains soft-retired until F04 is explicitly productized again

@@ -8,42 +8,29 @@ while doing nothing is worse than a feature that is absent.** An absent
 feature costs a customer nothing. A lying one costs them their trust and
 sends them debugging their own code.
 
-Last reviewed: 2026-07-30.
+Last reviewed: 2026-07-31.
 
 ---
 
-## 1. Time-travel replay — `time_travel_replay_enabled = False`
+## 1. Time-travel replay — `time_travel_replay_enabled = True` (fixed 2026-07-31)
 
 **Endpoint:** `POST /orgs/{org_id}/intelligence/time-travel/replay`
-**Now returns:** 503 with an explanation. Forks, recording and the
-timeline views are unaffected.
 
-**Why.** It never re-executed anything, and said it did.
+**Was:** 503 / lying `re_executed=True` with identical hashes (metadata-only
+recording; edits applied to step root; empty prompt returned recorded hash).
 
-The recorder stores no prompt content. Both call sites
-(`llmops/ai_gateway.py:757`, `api/routes/gateway.py:485`) pass a request
-dict holding only model / prompt_hash / temperature, which
-`recorder.py:162` nests under `payload["request"]`. The replayer looks
-for `payload["messages"]` (`replayer.py:321`) and falls back to
-`payload["prompt"]` (`:336`) — both top-level, both absent. With an
-empty prompt it returns early at `:338`, handing back the **recorded**
-`response_hash`, and `:188` then records `re_executed=True`.
+**Fixed:**
+1. AI gateway + HTTP gateway persist capped `prompt` / `messages` in the
+   recorded request payload.
+2. `_apply_edits_to_step` writes prompt-shaped keys into `payload` and
+   `payload.request`.
+3. `_re_execute_step` unwraps `payload.request` and returns
+   `cannot_replay` / `re_executed=False` when content is missing or the
+   gateway fails — callers no longer claim live execution.
+4. Default flag is **True**; set `TIME_TRAVEL_REPLAY_ENABLED=0` to disable.
+   Historical rows without content still return honest `cannot_replay`.
 
-A second, independent bug produces the same outcome even with the
-payload fixed: `_apply_edits_to_step` (`_common.py:207`) writes edits
-onto the *step* dict, while `_re_execute_step` reads from
-`step["payload"]`. User edits never reach the prompt.
-
-So a customer edits a prompt, gets back a byte-identical response hash,
-and concludes the edit made no difference to the model. `tokens_saved`
-and `cost_saved_usd` are fabricated.
-
-**Re-enable when:** the recorder persists real message content, AND
-edits are applied into `payload`, AND a test asserts that a changed
-prompt produces a changed `response_hash`.
-
-**Recording stays ON** — it is harmless, and its data is what a proper
-fix needs.
+**Recording** was already ON.
 
 ---
 
@@ -109,7 +96,13 @@ login.
 
 ---
 
-## 2. Right-to-be-forgotten fanout — `rtbf_fanout_v1 = False` (unchanged)
+## 2. Right-to-be-forgotten fanout — `rtbf_fanout_v1 = False` (deferred for free beta)
+
+**What it is:** GDPR Art. 17 erase (`POST …/rtbf`). Not a free-beta feature.
+
+**When to enable:** only after Postgres erase maps to live columns on
+content tables, fail-closed on SQL errors, and secondary-store deletes
+are real. Until then, enabling certifies erasure we cannot perform.
 
 Already off; left off, but the reason on record was misleading and has
 been corrected.
@@ -146,7 +139,25 @@ Note: the two callers that bypass the route are both dead —
 
 ---
 
-## 3. `eden-worker` Northflank job — `EDEN_RUN_BACKGROUND_WORKERS=0`, now actually enforced
+## 4. Eden MCP server — soft-retired for free beta (F04)
+
+**What it is:** Coding-agent MCP tools (`eden-mcp`, `/v1/mcp`, org MCP keys)
+so Cursor/Claude can query traces and trigger autofix from the IDE.
+
+**Why hidden:** Not first-class for free beta. HTTP transport stays
+`mcp_http_transport_v1=False`. Org MCP key routes are unmounted.
+Portal ⌘K / docs sidebar entry points removed. Code under
+`src/eden/mcp_server/` remains for internal/dev.
+
+**Do not confuse with** observe MCP telemetry (customer agents' MCP
+tool spans) — that ingest path stays on.
+
+**Re-productize when:** F04 is explicitly back in scope with auth,
+portal config UI, and hermetic/autofix tools wired end-to-end.
+
+---
+
+## 5. `eden-worker` Northflank job — `EDEN_RUN_BACKGROUND_WORKERS=0`, now actually enforced
 
 The variable was already set to `0`, but **nothing read it** —
 `workers/main.py` mentioned it only in a docstring. The job started the

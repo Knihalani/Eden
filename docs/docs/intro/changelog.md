@@ -20,7 +20,6 @@ sidebar_position: 99
 ### Docs
 
 - [Connect any agent](/how-to/connect-any-agent) — three-tier instrumentation guide
-- [MCP in Cursor](/how-to/mcp-cursor) — IDE setup for Eden MCP tools
 - [Agent sessions](/how-to/agent-sessions) — F23 session-first SDK reference
 - [Failure fixtures](/how-to/failure-fixtures) — D6 export + local replay
 - [Security model](/explanation/security-model) — tenancy, encryption, audit
@@ -30,7 +29,7 @@ sidebar_position: 99
 - [API endpoint](/how-to/deploy) — connect your app; DNS for `api.edenobservability.com`
 ### Portal
 
-- **Settings → MCP** — copy-paste `.cursor/mcp.json` and Claude Code config
+- Settings hub for API keys, autonomy, and workspace (Eden MCP server soft-retired for free beta)
 
 ## v1.7 — June 2026
 

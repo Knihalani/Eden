@@ -26,6 +26,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { debuggerApi } from "@/lib/api/resources";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { EmptyState } from "@/lab/lab-ui";
@@ -62,6 +63,13 @@ const DebuggerReplayView = dynamic(
   () =>
     import("@/lab/debugger/debugger-modes").then((m) => ({
       default: m.DebuggerReplayView,
+    })),
+  { loading: () => debuggerFallback },
+);
+const DebuggerTimeTravelView = dynamic(
+  () =>
+    import("@/lab/debugger/debugger-modes").then((m) => ({
+      default: m.DebuggerTimeTravelView,
     })),
   { loading: () => debuggerFallback },
 );
@@ -195,22 +203,59 @@ function LabDebuggerDetailInner() {
   );
 
   const onReplay = useCallback(
-    (checkpoint: DebuggerCheckpoint) => {
-      const outcome = checkpoint.status;
-      updateSession({
-        updatedAt: "just now",
-        lastReplay: {
-          at: "just now",
-          fromCheckpointId: checkpoint.id,
-          outcome,
-          summary:
-            outcome === "error"
-              ? `Replayed from “${checkpoint.label}” — failure reproduced.`
-              : `Replayed from “${checkpoint.label}” — completed without error.`,
-        },
-      });
+    async (checkpoint: DebuggerCheckpoint, fromStep: number) => {
+      const traceId = session?.sourceTraceId;
+      if (!orgId || !traceId) {
+        updateSession({
+          updatedAt: "just now",
+          lastReplay: {
+            at: "just now",
+            fromCheckpointId: checkpoint.id,
+            outcome: "error",
+            summary:
+              "Hermetic re-run unavailable — missing org or source trace id.",
+          },
+        });
+        return;
+      }
+      try {
+        const result = await debuggerApi.rerun(orgId, {
+          trace_id: traceId,
+          from_step: Math.max(0, fromStep),
+          live_prefix: false,
+          session_id: session?.id?.startsWith("dbg_") ? session.id : undefined,
+        });
+        const diffLen = Array.isArray(result.diff) ? result.diff.length : 0;
+        const cpCount = Array.isArray(result.checkpoints)
+          ? result.checkpoints.length
+          : 0;
+        updateSession({
+          updatedAt: "just now",
+          lastReplay: {
+            at: "just now",
+            fromCheckpointId: checkpoint.id,
+            outcome: cpCount > 0 ? "ok" : "error",
+            summary:
+              cpCount > 0
+                ? `Hermetic re-run from step ${result.from_step} → ${result.to_step} (${cpCount} checkpoints, ${diffLen} diffs). Recorded responses only — no live LLM.`
+                : `Hermetic re-run returned no checkpoints for ${traceId}. Ingest debugger checkpoints or open the trace inspect view.`,
+          },
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Hermetic re-run failed";
+        updateSession({
+          updatedAt: "just now",
+          lastReplay: {
+            at: "just now",
+            fromCheckpointId: checkpoint.id,
+            outcome: "error",
+            summary: message,
+          },
+        });
+      }
     },
-    [updateSession],
+    [orgId, session?.id, session?.sourceTraceId, updateSession],
   );
 
   const related = useMemo(() => {
@@ -316,6 +361,7 @@ function LabDebuggerDetailInner() {
               onFocusSpan={(spanId) => patchQuery({ spanId })}
               onReplay={onReplay}
               sourceTrace={sourceTrace}
+              liveTravelNote="Hermetic re-run uses recorded debugger checkpoints only (no live LLM). Use the Time travel tab for Cat 20 fork + live replay."
             />
           ) : null}
           {mode === "compare" ? (
@@ -334,6 +380,13 @@ function LabDebuggerDetailInner() {
               session={session}
               focusSpanId={paramSpan}
               onFocusSpan={(spanId) => patchQuery({ spanId })}
+              sourceTrace={sourceTrace}
+            />
+          ) : null}
+          {mode === "time-travel" ? (
+            <DebuggerTimeTravelView
+              session={session}
+              orgId={orgId}
               sourceTrace={sourceTrace}
             />
           ) : null}

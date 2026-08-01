@@ -18,10 +18,10 @@ import {
   catalogTraces,
 } from "@/lib/portal-catalog";
 
-export type DebuggerMode = "replay" | "compare" | "inspect";
+export type DebuggerMode = "replay" | "compare" | "inspect" | "time-travel";
 
-/** @deprecated URL alias — prefer inspect */
-export type DebuggerModeUrl = DebuggerMode | "time-travel" | "notes";
+/** @deprecated URL alias — prefer inspect / time-travel */
+export type DebuggerModeUrl = DebuggerMode | "notes";
 
 export type DebuggerCheckpoint = {
   id: string;
@@ -43,7 +43,7 @@ export type DebuggerSessionFixture = {
   updatedAt: string;
   modeHint: DebuggerMode;
   notes: string;
-  /** Last fixture replay outcome (client-simulated). */
+  /** Last hermetic re-run outcome from the debugger API (not client-simulated). */
   lastReplay?: {
     at: string;
     fromCheckpointId: string;
@@ -167,17 +167,21 @@ export function modeHintLabel(mode: DebuggerMode): string {
       return "Compare";
     case "inspect":
       return "Inspect";
+    case "time-travel":
+      return "Time travel";
   }
 }
 
 export function modeSubtitle(mode: DebuggerMode): string {
   switch (mode) {
     case "replay":
-      return "Re-run from a step";
+      return "Hermetic re-run from a step (recorded responses)";
     case "compare":
       return "Diff two traces";
     case "inspect":
       return "State at this step";
+    case "time-travel":
+      return "Fork, edit, and live-replay a step (Cat 20)";
   }
 }
 

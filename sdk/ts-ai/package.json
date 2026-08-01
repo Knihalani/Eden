@@ -39,9 +39,10 @@
     }
   },
   "bin": {
-    "eden-doctor": "./dist/doctor.js"
+    "eden-doctor": "./bin/eden-doctor.mjs"
   },
   "files": [
+    "bin",
     "dist",
     "README.md",
     "CHANGELOG.md",

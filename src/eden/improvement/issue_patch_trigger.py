@@ -183,11 +183,15 @@ def _plan_payload_from_patch(
     patch_data: dict[str, Any],
     *,
     run_id: str | None = None,
+    failure_pack: dict[str, Any] | None = None,
+    hermetic_preverify: dict[str, Any] | None = None,
+    example_trace_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     issue = ctx["issue"]
     triage = ctx.get("triage") or {}
     files = patch_data.get("files") or []
     sev = normalize_severity(issue.severity)
+    pack = failure_pack or {}
     return {
         "org_id": org_id,
         "run_id": run_id,
@@ -205,6 +209,10 @@ def _plan_payload_from_patch(
             "severity": sev,
             "confidence": float(triage.get("confidence", 0.0) or 0.0),
             "stumble_count": int(getattr(issue, "stumble_count", 0) or 0),
+            "example_trace_ids": list(example_trace_ids or pack.get("example_trace_ids") or []),
+            "failure_pack_format": pack.get("format"),
+            "failure_pack_status": pack.get("status"),
+            "hermetic_preverify": hermetic_preverify,
         },
         "triage_snapshot": triage,
         "llm_cost_usd": float(patch_data.get("cost_usd") or 0),
@@ -351,7 +359,9 @@ async def propose_plan_for_issue(
             "message": "Connect a GitHub repo for this agent so Eden can open fix PRs",
         }
 
-    linked_files = await _linked_files(org_id, rca_id, ctx, repo_id=repo_id)
+    linked_files = await _linked_files(
+        org_id, rca_id, ctx, repo_id=repo_id, agent_id=issue_agent_id
+    )
     if not linked_files:
         return {
             "status": "suppressed",
@@ -373,15 +383,48 @@ async def propose_plan_for_issue(
             "issue_id": issue_id,
         }
 
+    # Phase 1 — bind redacted failure pack + real example traces.
+    from eden.improvement.evidence_plane import (
+        build_failure_pack,
+        run_hermetic_preverify,
+    )
+
+    failure_pack: dict[str, Any] = {}
+    try:
+        failure_pack = await build_failure_pack(org_id, issue_id)
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: failure_pack failed: %s", exc)
+        failure_pack = {"status": "error", "example_trace_ids": [], "excerpt": ""}
+
+    example_trace_ids = list(failure_pack.get("example_trace_ids") or [])
+    linker_trace = None
+    try:
+        linker_inputs = await _extract_linker_inputs(org_id, ctx)
+        linker_trace = linker_inputs.get("trace_id")
+    except Exception:
+        linker_trace = None
+    if linker_trace and linker_trace not in example_trace_ids:
+        example_trace_ids = [str(linker_trace), *example_trace_ids][:5]
+
+    rca_summary = ctx["rca_summary"]
+    excerpt = (failure_pack.get("excerpt") or "").strip()
+    if excerpt:
+        rca_summary = f"{rca_summary}\n\n## Failure pack\n{excerpt}"
+
+    # Prefer a real production trace id for the generator; never invent iss_*.
+    generator_trace_id = (
+        example_trace_ids[0] if example_trace_ids else f"unknown_trace:{issue_id}"
+    )
+
     try:
         from eden.patches.patch_generator import PatchGenerator
 
         result = await PatchGenerator().generate(
             org_id=org_id,
             rca_id=rca_id,
-            trace_id=rca_id,
+            trace_id=generator_trace_id,
             repo_id=repo_id,
-            rca_summary=ctx["rca_summary"],
+            rca_summary=rca_summary,
             test_plan=[],
             linked_files=linked_files,
             persist=False,
@@ -415,7 +458,34 @@ async def propose_plan_for_issue(
     if not data.get("diff"):
         return {"status": "error", "reason": "empty_diff", "issue_id": issue_id}
 
-    payload = _plan_payload_from_patch(org_id, issue_id, ctx, data, run_id=run_id)
+    # Phase 2 — hermetic/fixture smoke on bound traces (quiet-window stays on approve).
+    hermetic_preverify: dict[str, Any] = {}
+    try:
+        hermetic_preverify = await run_hermetic_preverify(
+            org_id,
+            issue_id,
+            example_trace_ids=example_trace_ids,
+            fingerprint=str(getattr(issue, "fingerprint", "") or ""),
+            diff_unified=str(data.get("diff") or ""),
+            linked_files=linked_files,
+        )
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: hermetic preverify failed: %s", exc)
+        hermetic_preverify = {
+            "status": "skipped",
+            "detail": {"reason": str(exc)[:240]},
+        }
+
+    payload = _plan_payload_from_patch(
+        org_id,
+        issue_id,
+        ctx,
+        data,
+        run_id=run_id,
+        failure_pack=failure_pack,
+        hermetic_preverify=hermetic_preverify,
+        example_trace_ids=example_trace_ids,
+    )
     plan = await plans_repo.create_plan(org_id, **payload)
     if plan is None:
         return {"status": "error", "reason": "persist_failed", "issue_id": issue_id}
@@ -442,6 +512,11 @@ async def propose_plan_for_issue(
         "plan": plan,
         "issue_id": issue_id,
         "linked_files_count": len(linked_files),
+        "linked_files_with_content": sum(
+            1 for f in linked_files if (f.get("content") or "").strip()
+        ),
+        "example_trace_ids": example_trace_ids,
+        "hermetic_preverify": hermetic_preverify.get("status"),
         "stumble_count": stumble_count,
     }
 
@@ -466,8 +541,10 @@ async def _linked_files(
     ctx: dict[str, Any],
     *,
     repo_id: str,
+    agent_id: str | None = None,
 ) -> list[dict[str, str]]:
-    """Resolve linked files via RCA linker (salvaged Cat 23)."""
+    """Resolve linked files via RCA linker, then hydrate source via RepoProvider."""
+    from eden.improvement.evidence_plane import hydrate_linked_files
     from eden.patches.rca_linker import CodeRootCauseLinker, _stack_trace_files
 
     inputs = await _extract_linker_inputs(org_id, ctx)
@@ -506,13 +583,22 @@ async def _linked_files(
         linked.append({"path": path, "content": ""})
 
     seen: set[str] = set()
-    out: list[dict[str, str]] = []
+    path_shells: list[dict[str, str]] = []
     for item in linked:
         path = item.get("path") or ""
         if path and path not in seen:
             seen.add(path)
-            out.append({"path": path, "content": item.get("content") or ""})
-    return out
+            path_shells.append({"path": path, "content": item.get("content") or ""})
+
+    hydrated = await hydrate_linked_files(
+        org_id, path_shells, agent_id=agent_id or (ctx.get("agent_id") or None)
+    )
+    # Prefer hydrated (non-empty) content; fall back to path shells so
+    # callers that only need paths still see candidates when the repo
+    # is unreachable — PatchGenerator will omit empty content sections.
+    if hydrated:
+        return hydrated
+    return path_shells
 
 
 def _stack_trace_from_detail(detail: dict[str, Any] | None) -> str | None:

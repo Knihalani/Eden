@@ -160,7 +160,6 @@ from eden.api.routes import (
     labeling,
     learn,
     llmops,
-    mcp_keys,
     media,
     model_compare,
     notifications,
@@ -1153,7 +1152,9 @@ app.include_router(
 )  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
 from eden.mcp_server.http_transport import router as mcp_http_router
 
-app.include_router(mcp_http_router)  # W28 Streamable HTTP MCP at /v1/mcp
+# Soft-retired for free beta (F04 out of scope): Streamable HTTP MCP stays
+# behind mcp_http_transport_v1=False inside the router. Do not advertise.
+app.include_router(mcp_http_router)  # /v1/mcp — gated off by default
 app.include_router(
     observability_a2a.router
 )  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
@@ -1275,7 +1276,8 @@ app.include_router(signal_classifiers.router)  # F34 classifiers
 app.include_router(topics.router)  # F65 topics
 app.include_router(tool_call_labels.router)  # /orgs/{org_id}/tool-calls/{span_id}/label (F21)
 app.include_router(observability_live.router)  # /orgs/{org_id}/stream/traces/* (N11 live)
-app.include_router(mcp_keys.router)  # /orgs/{org_id}/mcp/keys (W28)
+# Soft-retired for free beta: do not mount /orgs/{org_id}/mcp/keys (F04).
+# Re-mount eden.api.routes.mcp_keys.router when Eden MCP is productized again.
 app.include_router(agentic_metrics.router)  # F64 agentic metrics pack
 app.include_router(
     autonomy.router

@@ -50,12 +50,6 @@ If you want to **learn** something, see
   </div>
 
   <div class="eden-card eden-card--small">
-    <h4>MCP in Cursor</h4>
-    <p>Wire Eden MCP for trace search, triage, and autofix from your IDE.</p>
-    <a href="/how-to/mcp-cursor">Read →</a>
-  </div>
-
-  <div class="eden-card eden-card--small">
     <h4>Agent sessions</h4>
     <p>Session-first SDK: begin, trace turns, complete_session.</p>
     <a href="/how-to/agent-sessions">Read →</a>

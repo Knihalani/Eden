@@ -612,12 +612,26 @@ class AIGateway:
         if self.exact_cache:
             cached = await self._check_exact_cache(request)
             if cached:
+                await self._record_cache_lookup_hit(
+                    request,
+                    cache_key=f"exact:{request.prompt_hash}",
+                    tokens_used=int(
+                        (cached.input_tokens or 0) + (cached.output_tokens or 0)
+                    ),
+                )
                 return cached
 
         # 2. Check semantic cache
         if self.semantic_cache:
             cached = await self._check_semantic_cache(request)
             if cached:
+                await self._record_cache_lookup_hit(
+                    request,
+                    cache_key=f"semantic:{request.prompt_hash}",
+                    tokens_used=int(
+                        (cached.input_tokens or 0) + (cached.output_tokens or 0)
+                    ),
+                )
                 return cached
 
         # 3. Enforce token budget
@@ -718,6 +732,15 @@ class AIGateway:
                     "model": request.model_version,
                     "prompt_hash": request.prompt_hash,
                     "temperature": request.temperature,
+                    # Persist usable prompt content for Cat 20 replay
+                    # (capped). Replayer reads prompt/messages from
+                    # payload.request or top-level payload.
+                    "prompt": (request.prompt or "")[:8000],
+                    "messages": (
+                        [{"role": "user", "content": (request.prompt or "")[:8000]}]
+                        if (request.prompt or "").strip()
+                        else []
+                    ),
                 },
                 response={
                     "response_hash": response_hash,
@@ -735,6 +758,28 @@ class AIGateway:
             )
         except Exception as exc:  # noqa: BLE001 — never break hot path
             logger.debug("ai_gateway: time-travel record_step failed: %s", exc)
+
+    async def _record_cache_lookup_hit(
+        self,
+        request: ModelRequest,
+        *,
+        cache_key: str,
+        tokens_used: int,
+    ) -> None:
+        """Best-effort write to ``cache_lookups`` (never breaks hot path)."""
+        try:
+            if not request.tenant_id:
+                return
+            from eden.time_travel._common import record_cache_lookup
+
+            await record_cache_lookup(
+                org_id=request.tenant_id,
+                cache_key=cache_key,
+                tokens_used=tokens_used,
+                cost_usd=0.0,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ai_gateway: cache_lookups write failed: %s", exc)
 
     async def _check_exact_cache(self, request: ModelRequest) -> ModelResponse | None:
         if not self.exact_cache:

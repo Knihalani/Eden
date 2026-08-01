@@ -490,14 +490,47 @@ async def _maybe_record_time_travel_from_gateway(
         response_hash = hashlib.sha256(
             text.encode("utf-8", errors="replace")
         ).hexdigest()[:32] if text else ""
+        raw_messages = request_body.get("messages")
+        messages: list[dict[str, Any]] = []
+        if isinstance(raw_messages, list):
+            for m in raw_messages[:40]:
+                if not isinstance(m, dict):
+                    continue
+                role = str(m.get("role") or "user")
+                content = m.get("content")
+                if isinstance(content, str):
+                    messages.append({"role": role, "content": content[:4000]})
+                elif isinstance(content, list):
+                    # Keep text parts only; drop image blobs.
+                    parts = []
+                    for block in content[:20]:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            parts.append(
+                                {
+                                    "type": "text",
+                                    "text": str(block.get("text") or "")[:4000],
+                                }
+                            )
+                    if parts:
+                        messages.append({"role": role, "content": parts})
+        prompt = request_body.get("prompt")
+        prompt_s = str(prompt)[:8000] if prompt is not None else ""
+        step_index = 0
+        try:
+            if request_body.get("step_index") is not None:
+                step_index = int(request_body.get("step_index") or 0)
+        except (TypeError, ValueError):
+            step_index = 0
         await TraceRecorder().record_step(
             org_id,
             trace_id=trace_id,
-            step_index=0,
+            step_index=step_index,
             request={
                 "model": model,
                 "endpoint": "gateway",
                 "temperature": temperature_f,
+                "messages": messages,
+                "prompt": prompt_s,
             },
             response={
                 "response_hash": response_hash,

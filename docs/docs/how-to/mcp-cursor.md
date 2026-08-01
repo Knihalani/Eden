@@ -1,11 +1,19 @@
 ---
 id: mcp-cursor
 title: MCP in Cursor and Claude Code
-sidebar_label: MCP in Cursor
+sidebar_label: MCP in Cursor (retired)
 sidebar_position: 9
+draft: true
+unlisted: true
 ---
 
 # How-to — MCP in Cursor and Claude Code
+
+> **Soft-retired for free beta (2026-07-31).** Eden MCP is not a
+> first-class product surface. HTTP transport and org MCP key routes
+> are off/unmounted. This page is kept for internal/dev reference only
+> and is hidden from the docs sidebar. Prefer the portal debugger,
+> improve cockpit, and REST APIs.
 
 Eden's MCP server lets coding agents search production traces, triage
 issues, rerun the debugger, and open fix PRs — without leaving your IDE.

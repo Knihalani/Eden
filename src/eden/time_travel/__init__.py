@@ -1,25 +1,21 @@
 """Cat 20 — Time-Travel Debugging (v1.3).
 
-Extends the existing Cat 1 :class:`CheckpointService` with
-fork-and-replay semantics. Closes the agentoptics/rewind,
-Laminar, agent-vcr gap. **10× debug cycle time reduction.**
+Extends Cat 1 checkpointing with fork / record / diff, and
+an optional live re-execute path gated by
+``time_travel_replay_enabled``.
 
 Four services:
 
-* :class:`TraceRecorder` — the instrument the
-  :class:`eden.llmops.ai_gateway.AIGateway` calls on every
-  LLM step. Decides cacheable vs not + computes the cache
-  key the :class:`TraceReplayer` reads on a later fork.
-* :class:`TraceForker` — branches a trace at step N,
-  producing a new ``fork_id`` that inherits the cached
-  payload of steps 1..N-1.
-* :class:`TraceReplayer` — the "killer query". Serves
-  steps 1..N-1 from cache (0 tokens, 0 ms) and re-executes
-  step N live through the AIGateway (PII filter still
-  applies). Emits the side-by-side diff and the
-  tokens_saved / cost_saved_usd metrics.
-* :class:`ReplayDiff` — side-by-side comparison of the
-  original and replayed timelines (per-step + per-key).
+* :class:`TraceRecorder` — gateway hook that persists
+  ``agent.step`` events (recording stays on by default).
+* :class:`TraceForker` — branches a trace at step N into
+  ``trace_fork_branches``.
+* :class:`TraceReplayer` — live re-exec from a fork through
+  the AIGateway. Disabled until prompt content is recorded,
+  edits land in ``payload``, and tests prove a changed
+  ``response_hash``. See ``docs/ops/disabled-features.md``.
+* :class:`ReplayDiff` — side-by-side original vs replayed
+  timeline comparison.
 
 The package uses **lazy re-exports** so that
 ``from eden.time_travel import TraceForker`` does not
@@ -30,9 +26,8 @@ or import the service module directly:
 
     from eden.time_travel.forker import TraceForker
 
-See ``docs/observability-gap/20-time-travel-debugging.md``.
+See ``docs/docs/observability/20-time-travel-debugging.md``.
 """
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
