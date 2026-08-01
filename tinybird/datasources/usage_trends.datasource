@@ -14,9 +14,12 @@ SCHEMA >
     model LowCardinality(String) `json:$.model`,
     cost_usd Float64 `json:$.cost_usd`,
     hour DateTime `json:$.hour`,
-    date Date DEFAULT toDate(hour)
+    date Date `json:$.date` DEFAULT toDate(hour)
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(hour)"
 ENGINE_SORTING_KEY "tenant_id, event_type, hour"
 ENGINE_TTL "hour + toIntervalYear(7)"
+
+FORWARD_QUERY >
+    SELECT CAST(tenant_id, 'UUID') AS tenant_id, CAST(user_id, 'UUID') AS user_id, CAST(event_type, 'LowCardinality(String)') AS event_type, CAST(resource, 'LowCardinality(String)') AS resource, CAST(quantity, 'Float64') AS quantity, CAST(unit, 'LowCardinality(String)') AS unit, CAST(model, 'LowCardinality(String)') AS model, CAST(cost_usd, 'Float64') AS cost_usd, hour, defaultValueOfTypeName('Date') AS date

@@ -17,9 +17,12 @@ SCHEMA >
     model LowCardinality(String) `json:$.model`,
     pipeline_stage LowCardinality(String) `json:$.pipeline_stage`,
     timestamp DateTime64(3) `json:$.timestamp`,
-    date Date DEFAULT toDate(timestamp)
+    date Date `json:$.date` DEFAULT toDate(timestamp)
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
 ENGINE_SORTING_KEY "tenant_id, agent_name, timestamp"
 ENGINE_TTL "toDateTime(timestamp) + toIntervalYear(7)"
+
+FORWARD_QUERY >
+    SELECT CAST(tenant_id, 'UUID') AS tenant_id, CAST(job_id, 'UUID') AS job_id, CAST(agent_name, 'LowCardinality(String)') AS agent_name, CAST(event_type, 'LowCardinality(String)') AS event_type, CAST(duration_ms, 'UInt32') AS duration_ms, CAST(input_tokens, 'UInt32') AS input_tokens, CAST(output_tokens, 'UInt32') AS output_tokens, CAST(total_tokens, 'UInt32') AS total_tokens, CAST(cost_usd, 'Float64') AS cost_usd, CAST(model, 'LowCardinality(String)') AS model, CAST(pipeline_stage, 'LowCardinality(String)') AS pipeline_stage, CAST(timestamp, 'DateTime64(3)') AS timestamp, defaultValueOfTypeName('Date') AS date

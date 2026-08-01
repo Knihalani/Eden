@@ -13,9 +13,12 @@ SCHEMA >
     passed UInt8 `json:$.passed`,
     duration_ms UInt32 `json:$.duration_ms`,
     timestamp DateTime64(3) `json:$.timestamp`,
-    date Date DEFAULT toDate(timestamp)
+    date Date `json:$.date` DEFAULT toDate(timestamp)
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
 ENGINE_SORTING_KEY "tenant_id, benchmark_id, timestamp"
 ENGINE_TTL "toDateTime(timestamp) + toIntervalYear(7)"
+
+FORWARD_QUERY >
+    SELECT CAST(tenant_id, 'UUID') AS tenant_id, CAST(benchmark_id, 'UUID') AS benchmark_id, CAST(job_id, 'UUID') AS job_id, CAST(event_type, 'LowCardinality(String)') AS event_type, CAST(score, 'Float64') AS score, CAST(passed, 'UInt8') AS passed, CAST(duration_ms, 'UInt32') AS duration_ms, CAST(timestamp, 'DateTime64(3)') AS timestamp, defaultValueOfTypeName('Date') AS date
