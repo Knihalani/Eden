@@ -64,9 +64,9 @@ export const U20_EMPTY_COPY = {
   onlineScoring:
     "No scoring rules. Create one to sample production traces (code → SLM → LLM).",
   alerts:
-    "No notification rules configured. Empty does not mean healthy — create a rule to watch cost, quality, or pipeline thresholds.",
+    "No fired detector events yet. Detectors appear under Signals; Inbox shows firings when thresholds trip.",
   alertsClear:
-    "No active alerts for your rules. New rows appear here when thresholds fire.",
+    "Inbox clear — no firing detector events for your rules.",
   signals:
     "No detectors yet. Create one to watch errors, latency, cost, or policy across runs.",
 } as const;
@@ -76,7 +76,7 @@ export const U20_FILTER_EMPTY_COPY = {
   traces: "No rows match the current filters. Clear filters or widen the query.",
   issues: "No issues match this status filter. Clear the filter to see the full queue.",
   agents: "No agents match the current filters. Clear search or framework filter.",
-  alerts: "No alerts match the current filters. Clear filters to see the full feed.",
+  alerts: "No events match the current filters. Clear filters to see the full Inbox.",
   signals:
     "No detectors match the current filters. Clear search or kind/state filters.",
 } as const;

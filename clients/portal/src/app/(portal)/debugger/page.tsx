@@ -10,6 +10,7 @@ import {
   type DebuggerSessionFixture,
 } from "@/lab/fixtures/debugger";
 import { DebuggerListView } from "@/lab/debugger/debugger-list-view";
+import { parseDebuggerMode } from "@/lab/debugger/debugger-chrome";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -23,10 +24,12 @@ import { useLabToast } from "@/lab/lab-toast";
 function LabDebuggerListInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const paramTrace = searchParams.get("traceId");
-  const paramSpan = searchParams.get("spanId");
+  const paramTrace = searchParams.get("traceId") ?? searchParams.get("id");
+  const paramSpan = searchParams.get("spanId") ?? searchParams.get("span");
   const paramAgent = searchParams.get("agent");
   const paramQ = searchParams.get("q");
+  const paramMode =
+    searchParams.get("mode") ?? searchParams.get("tab");
 
   const { agentId, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
@@ -72,10 +75,11 @@ function LabDebuggerListInner() {
     if (sessionsQuery.isError) return;
     seeded.current = true;
     const existing = allSessions.find((s) => s.sourceTraceId === paramTrace);
+  const seededMode = parseDebuggerMode(paramMode);
     if (existing) {
       router.replace(
         labDebuggerDetailHref(existing.id, {
-          mode: "replay",
+          mode: seededMode,
           spanId: paramSpan,
           agent: existing.agentId,
         }),
@@ -89,7 +93,7 @@ function LabDebuggerListInner() {
     setLocalSessions((prev) => [created, ...prev]);
     router.replace(
       labDebuggerDetailHref(created.id, {
-        mode: "replay",
+        mode: seededMode,
         spanId: paramSpan,
         agent: created.agentId,
       }),
@@ -98,6 +102,7 @@ function LabDebuggerListInner() {
     paramTrace,
     paramSpan,
     paramAgent,
+    paramMode,
     router,
     sessionsQuery.isLoading,
     sessionsQuery.isError,

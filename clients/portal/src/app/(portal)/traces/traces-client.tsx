@@ -150,11 +150,12 @@ const FEED_GROUP_ESTIMATE = 55;
 
 function LabTracesInner() {
   const searchParams = useSearchParams();
-  const paramId = searchParams.get("id");
+  const paramId = searchParams.get("id") ?? searchParams.get("traceId");
   const paramTab = searchParams.get("tab");
-  const paramSpan = searchParams.get("span");
+  const paramSpan = searchParams.get("span") ?? searchParams.get("spanId");
   const paramView = searchParams.get("view");
-  const paramSession = searchParams.get("session");
+  const paramSession =
+    searchParams.get("session") ?? searchParams.get("sessionId");
   const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();

@@ -53,6 +53,7 @@ const ImprovePlanView = dynamic(
 function LabImproveInner() {
   const searchParams = useSearchParams();
   const paramMode = searchParams.get("mode");
+  const paramTab = searchParams.get("tab");
   const paramId = searchParams.get("id");
   const paramBaseline = searchParams.get("baselineId");
   const paramCompare = searchParams.get("compareId");
@@ -90,7 +91,11 @@ function LabImproveInner() {
     Record<string, ImprovePlanFixture["status"]>
   >({});
   const [mode, setMode] = useState<ImproveMode>(() =>
-    parseImproveMode(paramMode, Boolean(paramId || paramBaseline || paramCompare || paramIssue)),
+    parseImproveMode(
+      paramMode,
+      Boolean(paramId || paramBaseline || paramCompare || paramIssue),
+      paramTab,
+    ),
   );
   const [planId, setPlanId] = useState("");
   const handledHandoff = useRef<string | null>(null);
@@ -124,9 +129,10 @@ function LabImproveInner() {
     const nextMode = parseImproveMode(
       paramMode,
       Boolean(paramId || paramBaseline || paramCompare || paramIssue),
+      paramTab,
     );
     setMode(nextMode);
-  }, [paramMode, paramId, paramBaseline, paramCompare, paramIssue]);
+  }, [paramMode, paramTab, paramId, paramBaseline, paramCompare, paramIssue]);
 
   useEffect(() => {
     const next =
@@ -396,6 +402,7 @@ function LabImproveInner() {
       ) : (
         <ImprovePlanView
           plan={selectedPlan}
+          hasPlans={allPlans.length > 0}
           onStatus={setStatus}
           onBack={() => changeMode("queue")}
         />

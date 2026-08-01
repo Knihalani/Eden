@@ -416,7 +416,9 @@ spec:
     - name: BRONZE_FLUSH_INTERVAL_SECONDS
       value: "5.0"
     - name: RATE_LIMIT_DEFAULT_PER_WINDOW
-      value: "60"
+      value: "300"
+    - name: RATE_LIMIT_PORTAL_PER_WINDOW
+      value: "300"
     - name: RATE_LIMIT_WINDOW_SECONDS
       value: "60"
     - name: EVOLVER_AUTO_CANARY_PCT

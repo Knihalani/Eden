@@ -147,7 +147,19 @@ export function CostSpendView({
           ) : null}
         </div>
         {agents.length === 0 ? (
-          <EmptyState compact title="No agents" />
+          <EmptyState
+            compact
+            title="No agents"
+            body="Connect an agent to see spend by fleet."
+            action={
+              <Link
+                href="/settings?mode=keys"
+                className="ds-btn ds-btn-primary ds-btn-sm"
+              >
+                API keys
+              </Link>
+            }
+          />
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {agents.map((a) => {
@@ -196,7 +208,30 @@ export function CostSpendView({
       <section className="px-4 py-4 sm:px-6">
         <p className="type-label mb-3">Costliest runs</p>
         {traces.length === 0 ? (
-          <EmptyState compact title="No runs" />
+          <EmptyState
+            compact
+            title="No runs"
+            body={
+              agentId !== "all"
+                ? "No costly runs for this agent filter."
+                : "No costly runs in the last 24h."
+            }
+            action={
+              agentId !== "all" ? (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={() => onFilterAgent("all")}
+                >
+                  Clear filter
+                </button>
+              ) : (
+                <Link href={runsHref} className="ds-btn ds-btn-ghost ds-btn-sm">
+                  Traces
+                </Link>
+              )
+            }
+          />
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {traces.map((t) => {

@@ -60,7 +60,7 @@ const PromptsDetailView = dynamic(
 
 function PromptsInner() {
   const searchParams = useSearchParams();
-  const paramId = searchParams.get("id");
+  const paramId = searchParams.get("id") ?? searchParams.get("prompt");
   const paramAgent = searchParams.get("agent");
   const paramStatus = searchParams.get("status");
   const paramTab = searchParams.get("tab");

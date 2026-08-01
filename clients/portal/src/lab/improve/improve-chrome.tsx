@@ -13,8 +13,21 @@ export type ImproveMode = "queue" | "plan";
 export function parseImproveMode(
   mode: string | null,
   hasPlanId: boolean,
+  /** Legacy `?tab=` deep-links from next.config / citations. */
+  tab: string | null = null,
 ): ImproveMode {
   if (mode === "plan" || mode === "queue") return mode;
+  // Legacy tabs that never shipped as modes → sensible Improve leaf.
+  if (
+    tab === "plans" ||
+    tab === "plan" ||
+    tab === "history" ||
+    tab === "ledger" ||
+    tab === "promotions"
+  ) {
+    return tab === "plans" || tab === "plan" ? "plan" : "queue";
+  }
+  if (tab === "artifacts" || tab === "queue") return "queue";
   if (hasPlanId) return "plan";
   return "queue";
 }

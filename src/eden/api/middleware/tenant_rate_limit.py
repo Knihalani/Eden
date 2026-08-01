@@ -583,6 +583,17 @@ class TenantRateLimitMiddleware:
         # ── Resolve limits ──
         if org_id:
             limit, window, tier = await self._get_tier_limits(org_id)
+            # Portal UI (Clerk/JWT, no API key) needs a higher floor than
+            # free-tier 60 rpm — one hub mount fans out many GETs against
+            # the shared org bucket. API-key traffic keeps the tighter
+            # tier limit so SDK/automation cannot burn 300 rpm by default.
+            if api_key_id is None:
+                portal_rpm = int(
+                    getattr(get_settings(), "rate_limit_portal_per_window", 300)
+                    or 300
+                )
+                if portal_rpm > limit:
+                    limit = portal_rpm
         else:
             limit, window, tier = self.default_limit, self.default_window, "anonymous"
 

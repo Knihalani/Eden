@@ -5,29 +5,16 @@
 
 import {
   Bell,
-  Bot,
-  CreditCard,
-  Database,
-  EyeOff,
-  FileArchive,
-  FileText,
   FlaskConical,
+  FileText,
   Key,
-  KeyRound,
   Settings2,
-  Shield,
   ShieldAlert,
   Sparkles,
   Plus,
   MessageSquare,
-  Server,
-  Activity,
-  BarChart2,
   Building2,
   Users,
-  User,
-  Code,
-  Wallet,
   Home,
   GitBranch,
   AlertTriangle,
@@ -35,6 +22,9 @@ import {
   Network,
   Bug,
   GitCompare,
+  Bot,
+  Activity,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -95,7 +85,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/signals",
+    href: "/signals?create=1",
     label: "Create detector",
     description: "Open Detectors to define a new threshold or signal rule.",
     group: "Actions",
@@ -111,7 +101,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/evals?tab=playgrounds",
+    href: "/evals?mode=playground",
     label: "Open playground",
     description: "Author and test prompts against production traces.",
     group: "Actions",
@@ -127,17 +117,17 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/improve?tab=artifacts",
-    label: "Review artifacts",
+    href: "/improve?mode=queue",
+    label: "Review queue",
     description: "Shadow runtime fixes awaiting evidence-gated promotion.",
     group: "Actions",
     icon: Sparkles,
     kind: "action",
   },
   {
-    href: "/improve?tab=ledger",
-    label: "Open ledger",
-    description: "Compounding institutional memory across agents.",
+    href: "/improve?mode=plan",
+    label: "Open plan",
+    description: "Plan detail and compounding institutional memory across agents.",
     group: "Actions",
     icon: FileText,
     kind: "action",
@@ -147,7 +137,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     label: "Open prompts",
     description: "Version and manage prompt templates.",
     group: "Actions",
-    icon: Code,
+    icon: FileText,
     kind: "action",
   },
   {
@@ -156,30 +146,6 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     description: "Threshold notifications and custom signal rules.",
     group: "Actions",
     icon: Bell,
-    kind: "action",
-  },
-  {
-    href: "/improve/online-scoring",
-    label: "Online scoring",
-    description: "Production scorers (code → SLM → LLM) — Advanced Improve.",
-    group: "Actions",
-    icon: Sparkles,
-    kind: "action",
-  },
-  {
-    href: "/improve/scorecard",
-    label: "Process scorecard",
-    description: "Synthetic engineering gates — Advanced Improve only.",
-    group: "Actions",
-    icon: Sparkles,
-    kind: "action",
-  },
-  {
-    href: "/improve/change-impact",
-    label: "Change impact preview",
-    description: "Replay stratified traffic before shipping changes — Advanced Improve.",
-    group: "Actions",
-    icon: Sparkles,
     kind: "action",
   },
 ];
@@ -194,31 +160,16 @@ export const WS1_NAV_AUDIT_REDIRECT_COMPLETED = true as const;
 export const WAVE_E1_NAV_HYGIENE_COMPLETED = true as const;
 
 /**
- * Settings tab deep-links for ⌘K (peer S-06). Labels match the settings rail.
- * Hidden soft-launch tabs (roles, sso) omitted from the palette.
- * Audit trail aliases to `/settings?mode=audit` (settings audit packs/events).
+ * Settings mode deep-links for ⌘K.
+ * Only live modes: Overview (workspace), Keys, Members, Audit.
  */
 export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
   {
-    href: "/settings",
-    label: "Settings · Overview",
-    description: "Workspace settings overview — members, billing, security, and more.",
-    group: "Settings",
-    icon: Settings2,
-  },
-  {
     href: "/settings?mode=workspace",
-    label: "Settings · Workspace",
-    description: "Workspace name, slug, archive, and ownership transfer.",
+    label: "Settings · Overview",
+    description: "Workspace settings overview — prefs, health, and shortcuts.",
     group: "Settings",
     icon: Building2,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Account",
-    description: "Your profile and account preferences.",
-    group: "Settings",
-    icon: User,
   },
   {
     href: "/settings?mode=keys",
@@ -235,102 +186,11 @@ export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
     icon: Users,
   },
   {
-    href: "/settings?mode=workspace",
-    label: "Settings · Code References",
-    description: "Link GitHub repos for code references.",
-    group: "Settings",
-    icon: Code,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Security",
-    description: "2FA enforcement and password policy.",
-    group: "Settings",
-    icon: Shield,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · SCIM",
-    description: "Directory provisioning (Okta, Entra).",
-    group: "Settings",
-    icon: KeyRound,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · AI Gateway",
-    description: "LLM proxy routing and model defaults.",
-    group: "Settings",
-    icon: Server,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · PII Policy",
-    description: "Redaction and privacy scrub rules.",
-    group: "Settings",
-    icon: EyeOff,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Retention",
-    description: "Trace retention TTL and lifecycle.",
-    group: "Settings",
-    icon: Database,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Exports",
-    description: "Scheduled and one-shot data exports.",
-    group: "Settings",
-    icon: FileArchive,
-  },
-  {
     href: "/settings?mode=audit",
     label: "Audit trail",
     description: "Unified compliance — privileged events and AuditPacks.",
     group: "Settings",
     icon: FileText,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Platform status",
-    description: "Dependency health and platform status.",
-    group: "Settings",
-    icon: Activity,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Analytics",
-    description: "Org usage analytics preferences.",
-    group: "Settings",
-    icon: BarChart2,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Billing",
-    description: "Plan, invoices, and payment method.",
-    group: "Settings",
-    icon: CreditCard,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · FinOps kills",
-    description: "Cost kill switches and FinOps controls.",
-    group: "Settings",
-    icon: Wallet,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Autonomous",
-    description: "Heal / intelligence agent autonomy tiers.",
-    group: "Settings",
-    icon: Bot,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · Sidebar",
-    description: "Nav density and pinned sidebar items.",
-    group: "Settings",
-    icon: Settings2,
   },
 ];
 

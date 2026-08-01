@@ -54,6 +54,7 @@ const BUDGET_QUERY_KEY = (orgId: string | null) =>
 function LabCostInner() {
   const searchParams = useSearchParams();
   const paramMode = searchParams.get("mode");
+  const paramTab = searchParams.get("tab");
   const paramId = searchParams.get("id");
   const paramAgent = searchParams.get("agent");
 
@@ -85,7 +86,9 @@ function LabCostInner() {
   const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
 
-  const [mode, setMode] = useState<CostMode>(() => parseCostMode(paramMode));
+  const [mode, setMode] = useState<CostMode>(() =>
+    parseCostMode(paramMode, paramTab),
+  );
   const [driverId, setDriverId] = useState("");
 
   const drivers = driversQuery.data ?? [];
@@ -116,8 +119,8 @@ function LabCostInner() {
   }, [paramAgent, agentId, setAgentId]);
 
   useEffect(() => {
-    setMode(parseCostMode(paramMode));
-  }, [paramMode]);
+    setMode(parseCostMode(paramMode, paramTab));
+  }, [paramMode, paramTab]);
 
   // Keep Drivers selection inside the current agent scope.
   useEffect(() => {

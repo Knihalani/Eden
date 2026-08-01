@@ -57,6 +57,7 @@ function Kpi({
   return (
     <Link
       href={href}
+      aria-label={`${label}: ${value}. ${hint}`}
       className={cn(
         "min-w-0 flex-1 basis-[8rem] border-b border-[var(--line)] px-5 py-5 transition-colors hover:bg-[var(--accent-muted)] sm:border-b-0 sm:border-r sm:last:border-r-0",
         className,
@@ -477,8 +478,8 @@ export default function HomeClient() {
         <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
           Traces
         </Link>
-        <Link href="/agents/connect" className="ds-btn ds-btn-outline ds-btn-sm">
-          Connect
+        <Link href="/settings?mode=keys" className="ds-btn ds-btn-outline ds-btn-sm">
+          API keys
         </Link>
         <span className="flex-1" />
         <button
@@ -589,13 +590,16 @@ export default function HomeClient() {
                   <li key={agent.id} className="border-b border-[var(--line)]">
                     <Link
                       href={`/agents?id=${agent.id}`}
+                      aria-label={`${agent.name}, ${agent.status}`}
                       className="block px-5 py-4 transition-colors hover:bg-[var(--accent-muted)] sm:px-6"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="type-mono !text-[var(--text)]">
+                        <p className="type-mono min-w-0 truncate !text-[var(--text)]">
                           {agent.name}
                         </p>
-                        <AgentStatusBadge status={agent.status} />
+                        <span className="shrink-0">
+                          <AgentStatusBadge status={agent.status} />
+                        </span>
                       </div>
                       {agent.id === agent.name ? (
                         <p className="type-meta mt-0.5 text-[var(--text-tertiary)]">

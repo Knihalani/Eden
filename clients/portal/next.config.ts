@@ -119,43 +119,44 @@ const nextConfig: NextConfig = {
       { source: "/health", destination: "/status", permanent: false },
 
       // Phase 2: live Agents routes — not soft-landed
-      { source: "/fleet", destination: "/agents?tab=fleet", permanent: false },
-      { source: "/fleet/:path*", destination: "/agents?tab=fleet", permanent: false },
+      { source: "/fleet", destination: "/agents", permanent: false },
+      { source: "/fleet/:path*", destination: "/agents", permanent: false },
       {
+        // Book / drift leaves never shipped as agent modes — land on agent detail.
         source: "/agents/:id/book",
-        destination: "/agents/:id?tab=book",
+        destination: "/agents?id=:id",
         permanent: false,
       },
       {
         // portal-cross-links.ts generates /ledger and /drift for an agent;
         // only /drift had a rule, so the ledger cross-link 404'd.
         source: "/agents/:id/ledger",
-        destination: "/agents/:id",
+        destination: "/agents?id=:id",
         permanent: false,
       },
       {
         source: "/agents/:id/drift",
-        destination: "/agents/:id?tab=drift",
+        destination: "/agents?id=:id",
         permanent: false,
       },
       {
         source: "/agents/:id/sim-runs",
-        destination: "/agents/:id",
+        destination: "/agents?id=:id",
         permanent: false,
       },
       {
         source: "/agents/:id/sim-runs/:path*",
-        destination: "/agents/:id",
+        destination: "/agents?id=:id",
         permanent: false,
       },
       {
         source: "/agents/:id/test-runs",
-        destination: "/agents/:id",
+        destination: "/agents?id=:id",
         permanent: false,
       },
       {
         source: "/agents/:id/test-runs/:path*",
-        destination: "/agents/:id",
+        destination: "/agents?id=:id",
         permanent: false,
       },
 
@@ -163,10 +164,10 @@ const nextConfig: NextConfig = {
       { source: "/sessions", destination: "/traces?view=sessions", permanent: false },
       {
         source: "/sessions/:sessionId",
-        destination: "/traces?view=sessions&sessionId=:sessionId",
+        destination: "/traces?view=sessions&session=:sessionId",
         permanent: false,
       },
-      { source: "/incidents", destination: "/issues?tab=incidents", permanent: false },
+      { source: "/incidents", destination: "/issues", permanent: false },
       {
         // issues-client selects off ``?id=``; ``issueId`` was never read,
         // so this rule used to drop the cluster id on the floor.
@@ -186,31 +187,35 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
       // Signals is the product leaf; /alerts soft-lands → /signals (hub redirect)
-      { source: "/inspector", destination: "/traces?mode=meta", permanent: false },
-      { source: "/observability/mcp", destination: "/traces?facet=mcp", permanent: false },
+      { source: "/inspector", destination: "/traces", permanent: false },
+      {
+        source: "/observability/mcp",
+        destination: "/traces?q=mcp",
+        permanent: false,
+      },
       {
         source: "/observability/decisions",
-        destination: "/traces?facet=decisions",
+        destination: "/traces?q=decision",
         permanent: false,
       },
       {
         source: "/observability/memory",
-        destination: "/traces?facet=memory",
+        destination: "/traces?q=memory",
         permanent: false,
       },
       {
         source: "/observability/retrieval",
-        destination: "/traces?facet=retrieval",
+        destination: "/traces?q=retrieval",
         permanent: false,
       },
       {
         source: "/observability/time-travel",
-        destination: "/debugger?tab=time-travel",
+        destination: "/debugger?mode=time-travel",
         permanent: false,
       },
       {
         source: "/observability/eval",
-        destination: "/evals?tab=eval",
+        destination: "/evals?mode=compare",
         permanent: false,
       },
       { source: "/observability/query", destination: "/traces", permanent: false },
@@ -223,76 +228,78 @@ const nextConfig: NextConfig = {
       { source: "/apm/:path*", destination: "/traces", permanent: false },
 
       // Phase 4 Evaluate — IA redirects (before soft-land catch-alls)
-      { source: "/datasets", destination: "/evals?tab=datasets", permanent: false },
+      { source: "/datasets", destination: "/evals?mode=datasets", permanent: false },
       {
         // Was /evals/datasets/:id, which has no page and 404'd. Dataset
-        // detail is a selection inside the evals page (it reads ?tab= and
-        // ?id=), so carry the id through instead of dropping it.
+        // detail is a selection inside the evals page (it reads ?mode=/
+        // ?tab= and ?id=), so carry the id through instead of dropping it.
         source: "/datasets/:id",
-        destination: "/evals?tab=datasets&id=:id",
+        destination: "/evals?mode=datasets&id=:id",
         permanent: false,
       },
       {
         source: "/playgrounds",
-        destination: "/evals?tab=playgrounds",
+        destination: "/evals?mode=playground",
         permanent: false,
       },
       {
         source: "/experiments",
-        destination: "/evals?tab=experiments",
+        destination: "/evals?mode=compare",
         permanent: false,
       },
-      { source: "/labeling", destination: "/evals?tab=labeling", permanent: false },
+      // Labeling / Studio / Synthetic are not live Evaluate modes — don't
+      // silently dump users onto Results (default when tab is unknown).
+      { source: "/labeling", destination: "/unavailable", permanent: false },
       {
         source: "/labeling/queues/:id",
-        destination: "/evals?tab=labeling&queueId=:id",
+        destination: "/unavailable",
         permanent: false,
       },
-      { source: "/studio", destination: "/evals?tab=studio", permanent: false },
+      { source: "/studio", destination: "/unavailable", permanent: false },
       {
         source: "/synthetic",
-        destination: "/evals?tab=synthetic",
+        destination: "/unavailable",
         permanent: false,
       },
 
-      // Phase 5 Improve / Cost / Guardrails — IA §7.3 + §7.5 (before soft-land)
-      { source: "/artifacts", destination: "/improve?tab=artifacts", permanent: false },
+      // Phase 5 Improve — legacy paths → live mode= queue/plan (page ignores old tab=)
+      { source: "/artifacts", destination: "/improve?mode=queue", permanent: false },
       {
         source: "/artifacts/:path*",
-        destination: "/improve?tab=artifacts",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
-      { source: "/ledger", destination: "/improve?tab=ledger", permanent: false },
+      { source: "/ledger", destination: "/improve?mode=queue", permanent: false },
       {
         source: "/ledger/:path*",
-        destination: "/improve?tab=ledger",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
       {
         source: "/promotions",
-        destination: "/improve?tab=promotions",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
       {
         source: "/promotions/:path*",
-        destination: "/improve?tab=promotions",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
-      { source: "/improve/plans", destination: "/improve?tab=plans", permanent: false },
-      { source: "/improve/runs", destination: "/improve?tab=history", permanent: false },
+      { source: "/improve/plans", destination: "/improve?mode=plan", permanent: false },
+      { source: "/improve/runs", destination: "/improve?mode=queue", permanent: false },
       {
         source: "/improve/runs/:path*",
-        destination: "/improve?tab=history",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
       {
         source: "/improve/scorecard",
-        destination: "/improve?tab=history",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
       {
         source: "/improve/scorecard/:path*",
-        destination: "/improve?tab=history",
+        destination: "/improve?mode=queue",
         permanent: false,
       },
       {
@@ -317,17 +324,17 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/pr-suggestions",
-        destination: "/improve?tab=plans",
+        destination: "/improve?mode=plan",
         permanent: false,
       },
       {
         source: "/pr-suggestions/:path*",
-        destination: "/improve?tab=plans",
+        destination: "/improve?mode=plan",
         permanent: false,
       },
       {
         source: "/agents/eden/inbox",
-        destination: "/improve?tab=plans",
+        destination: "/improve?mode=plan",
         permanent: false,
       },
       { source: "/closed-loop", destination: "/improve", permanent: false },
@@ -344,22 +351,22 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/optimization/budget",
-        destination: "/cost?tab=budget",
+        destination: "/cost?mode=spend",
         permanent: false,
       },
       {
         source: "/optimization/outcomes",
-        destination: "/cost?tab=outcomes",
+        destination: "/cost?mode=drivers",
         permanent: false,
       },
       {
         source: "/optimization/predict",
-        destination: "/cost?tab=forecast",
+        destination: "/cost?mode=spend",
         permanent: false,
       },
       {
         source: "/optimization/model-advisor",
-        destination: "/cost?tab=advisor",
+        destination: "/cost?mode=drivers",
         permanent: false,
       },
       { source: "/optimization", destination: "/cost", permanent: false },
@@ -372,12 +379,12 @@ const nextConfig: NextConfig = {
       { source: "/llmops/:path*", destination: "/cost", permanent: false },
       {
         source: "/redteam",
-        destination: "/guardrails?tab=policies",
+        destination: "/guardrails",
         permanent: false,
       },
       {
         source: "/redteam/:path*",
-        destination: "/guardrails?tab=policies",
+        destination: "/guardrails",
         permanent: false,
       },
 
@@ -394,12 +401,12 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/replay",
-        destination: "/debugger?tab=replay",
+        destination: "/debugger?mode=replay",
         permanent: false,
       },
       {
         source: "/replay/:path*",
-        destination: "/debugger?tab=replay",
+        destination: "/debugger?mode=replay",
         permanent: false,
       },
 

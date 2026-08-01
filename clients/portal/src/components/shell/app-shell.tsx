@@ -56,20 +56,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <LabToastProvider>
           <AlertsProvider>
             <SignalJobsProvider>
-              <Suspense fallback={<CatalogSyncFallback />}>
-                <PortalCatalogSync />
-              </Suspense>
               <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
                 <SidebarNav />
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
                   <PortalStatusBanners />
                   <OnboardingBanner />
                   <main className="min-h-0 flex-1 overflow-auto outline-none pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+                    {/*
+                      HydrationBoundary on hub pages must seed the query
+                      cache before PortalCatalogSync subscribes — otherwise
+                      CatalogSync starts duplicate client GETs and SSR
+                      dehydrate work is wasted (home docMs ~3s).
+                    */}
                     <PortalBootGate>{children}</PortalBootGate>
                   </main>
                 </div>
                 <MobileBottomNav />
               </div>
+              <Suspense fallback={<CatalogSyncFallback />}>
+                <PortalCatalogSync />
+              </Suspense>
               <AlertsModal />
               <OnboardingOverlay />
               <CommandPalette />

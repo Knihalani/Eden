@@ -10,7 +10,6 @@ import {
   memberCounts,
   packsForAgent,
   type ApiKeyFixture,
-  type AuditPackFixture,
   type KeyScope,
   type MemberFixture,
   type MemberRole,
@@ -34,7 +33,6 @@ import { api } from "@/lib/api/resources";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
-import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
 
 const settingsFallback = (
@@ -92,6 +90,15 @@ function LabSettingsInner() {
   const paramAgent = searchParams.get("agent");
 
   const patchQuery = useQueryPatch();
+
+  // Canonicalize legacy `?tab=` → `?mode=` so the URL matches live IA.
+  useEffect(() => {
+    if (!paramTab || searchParams.get("mode")) return;
+    const mapped = resolveSettingsModeParam(null, paramTab);
+    if (!mapped) return;
+    patchQuery({ mode: mapped, tab: null });
+  }, [paramTab, searchParams, patchQuery]);
+
   const { currentOrg, orgSyncing } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
@@ -214,17 +221,8 @@ function LabSettingsInner() {
     ]).then(() => undefined);
   }, [orgId, queryClient]);
 
-  // Local overlays for actions the backend doesn't yet persist, or that
-  // need to render before the next refetch lands (e.g. a freshly minted
-  // API key secret, which the server never returns again).
+  // Local overlay for freshly minted API key secrets (server never returns again).
   const [pendingSecrets, setPendingSecrets] = useState<Record<string, string>>({});
-  const [memberStatusOverride, setMemberStatusOverride] = useState<
-    Record<string, MemberFixture["status"]>
-  >({});
-  const [packVerifiedOverride, setPackVerifiedOverride] = useState<
-    Record<string, boolean>
-  >({});
-  const [localPacks, setLocalPacks] = useState<AuditPackFixture[]>([]);
 
   const workspace = workspaceData;
   const keys = useMemo(
@@ -234,23 +232,8 @@ function LabSettingsInner() {
       ),
     [keysData, pendingSecrets],
   );
-  const members = useMemo(
-    () =>
-      membersData.map((m) =>
-        memberStatusOverride[m.id]
-          ? { ...m, status: memberStatusOverride[m.id] }
-          : m,
-      ),
-    [membersData, memberStatusOverride],
-  );
-  const packs = useMemo(() => {
-    const merged = [...localPacks, ...packsData];
-    return merged.map((p) =>
-      packVerifiedOverride[p.id] !== undefined
-        ? { ...p, verified: packVerifiedOverride[p.id] }
-        : p,
-    );
-  }, [localPacks, packsData, packVerifiedOverride]);
+  const members = membersData;
+  const packs = packsData;
 
   const [mode, setMode] = useState<SettingsMode>(() =>
     parseSettingsMode(paramMode),
@@ -437,39 +420,41 @@ function LabSettingsInner() {
   );
 
   const renameWorkspace = useCallback(
-    (name: string) => {
-      if (!orgId) return;
-      api
-        .updateOrgSettings(orgId, { name })
-        .then(() => invalidateWorkspace())
-        .catch((err) => {
-          pushToast({
-            title: "Rename failed",
-            body: err instanceof Error ? err.message : "Try again.",
-            tone: "fail",
-          });
+    async (name: string) => {
+      if (!orgId) throw new Error("No organization selected");
+      try {
+        await api.updateOrgSettings(orgId, { name });
+        await invalidateWorkspace();
+      } catch (err) {
+        pushToast({
+          title: "Rename failed",
+          body: err instanceof Error ? err.message : "Try again.",
+          tone: "fail",
         });
+        throw err;
+      }
     },
     [orgId, invalidateWorkspace, pushToast],
   );
 
   const patchWorkspace = useCallback(
-    (patch: Partial<WorkspaceFixture>, label: string) => {
-      if (!orgId) return;
+    async (patch: Partial<WorkspaceFixture>, label: string) => {
+      if (!orgId) throw new Error("No organization selected");
       const mapped: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(patch)) {
         mapped[WORKSPACE_PATCH_KEY_MAP[key] ?? key] = value;
       }
-      api
-        .updateOrgSettings(orgId, mapped)
-        .then(() => invalidateWorkspace())
-        .catch((err) => {
-          pushToast({
-            title: "Update failed",
-            body: err instanceof Error ? err.message : label,
-            tone: "fail",
-          });
+      try {
+        await api.updateOrgSettings(orgId, mapped);
+        await invalidateWorkspace();
+      } catch (err) {
+        pushToast({
+          title: "Update failed",
+          body: err instanceof Error ? err.message : label,
+          tone: "fail",
         });
+        throw err;
+      }
     },
     [orgId, invalidateWorkspace, pushToast],
   );
@@ -548,18 +533,19 @@ function LabSettingsInner() {
   );
 
   const changeRole = useCallback(
-    (id: string, role: MemberRole) => {
-      if (!orgId) return;
-      api
-        .updateOrgMemberRole(orgId, id, role)
-        .then(() => invalidateMembers())
-        .catch((err) => {
-          pushToast({
-            title: "Role change failed",
-            body: err instanceof Error ? err.message : "Try again.",
-            tone: "fail",
-          });
+    async (id: string, role: MemberRole) => {
+      if (!orgId) throw new Error("No organization selected");
+      try {
+        await api.updateOrgMemberRole(orgId, id, role);
+        await invalidateMembers();
+      } catch (err) {
+        pushToast({
+          title: "Role change failed",
+          body: err instanceof Error ? err.message : "Try again.",
+          tone: "fail",
         });
+        throw err;
+      }
     },
     [orgId, invalidateMembers, pushToast],
   );
@@ -584,46 +570,6 @@ function LabSettingsInner() {
         });
     },
     [orgId, members, invalidateMembers, pushToast],
-  );
-
-  // No backend endpoint for member enable/disable yet — local overlay only.
-  const disableMember = useCallback((id: string) => {
-    setMemberStatusOverride((prev) => ({ ...prev, [id]: "disabled" }));
-  }, []);
-
-  const enableMember = useCallback((id: string) => {
-    setMemberStatusOverride((prev) => ({ ...prev, [id]: "active" }));
-  }, []);
-
-  // No backend endpoint for audit pack reverify/export yet — local overlay only.
-  const reverifyPack = useCallback((id: string) => {
-    setPackVerifiedOverride((prev) => ({ ...prev, [id]: true }));
-  }, []);
-
-  const exportPack = useCallback(
-    (agent: string) => {
-      const created: AuditPackFixture = {
-        id: `ap_${Date.now().toString(36)}`,
-        at: "just now",
-        agentId: agent,
-        kind: "export",
-        actor: "You",
-        entryHash: `${Math.random().toString(16).slice(2, 8)}…${Math.random().toString(16).slice(2, 6)}`,
-        verified: true,
-        rows: 0,
-      };
-      setLocalPacks((prev) => [created, ...prev]);
-      setPackId(created.id);
-      setAuditTab("packs");
-      setMode("audit");
-      patchQuery({
-        mode: "audit",
-        tab: "packs",
-        id: created.id,
-        agent: agentId !== "all" ? agentId : null,
-      });
-    },
-    [patchQuery, agentId],
   );
 
   const counts = memberCounts(members);
@@ -707,15 +653,6 @@ function LabSettingsInner() {
         }
       />
 
-      {(Object.keys(memberStatusOverride).length > 0 ||
-        Object.keys(packVerifiedOverride).length > 0 ||
-        localPacks.length > 0) ? (
-        <LocalDraftBanner>
-          Member disable/enable and audit pack reverify/export on this page are
-          local drafts — they are not saved to the server yet.
-        </LocalDraftBanner>
-      ) : null}
-
       {mode === "workspace" ? (
         <SettingsWorkspaceView
           workspace={workspace}
@@ -747,8 +684,6 @@ function LabSettingsInner() {
           onInvite={inviteMember}
           onRole={changeRole}
           onResend={resendInvite}
-          onDisable={disableMember}
-          onEnable={enableMember}
         />
       ) : null}
       {mode === "audit" ? (
@@ -761,8 +696,6 @@ function LabSettingsInner() {
           packs={packs}
           selectedPackId={packId}
           onSelectPack={selectPack}
-          onReverify={reverifyPack}
-          onExportPack={exportPack}
         />
       ) : null}
     </div>

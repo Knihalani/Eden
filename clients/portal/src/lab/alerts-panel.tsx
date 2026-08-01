@@ -130,14 +130,16 @@ function EventDetail({
               <button
                 type="button"
                 className="ds-btn ds-btn-primary ds-btn-sm"
+                title="Local draft only — not saved to the server"
                 onClick={() => onStatus("resolved")}
               >
-                Resolve
+                Resolve (draft)
               </button>
               <button
                 type="button"
                 className="ds-btn ds-btn-ghost ds-btn-sm"
-                onClick={() => onStatus("muted")}
+                disabled
+                title="Not available yet"
               >
                 Mute
               </button>
@@ -147,7 +149,8 @@ function EventDetail({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
-              onClick={() => onStatus("firing")}
+              disabled
+              title="Not available yet"
             >
               Unmute
             </button>
@@ -156,9 +159,10 @@ function EventDetail({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
+              title="Local draft only — not saved to the server"
               onClick={() => onStatus("firing")}
             >
-              Reopen
+              Reopen (draft)
             </button>
           ) : null}
         </div>
@@ -209,9 +213,9 @@ function EventDetail({
                 onClick={onCloseModal}
                 className="block rounded-[var(--radius)] px-4 py-3 shadow-[0_0_0_1px_var(--line)] transition-colors hover:bg-[var(--accent-muted)]"
               >
-                <p className="type-label">Signal</p>
+                <p className="type-label">Detector</p>
                 <p className="type-ui mt-1 text-[var(--text)]">
-                  {rule?.name ?? "Signals"}
+                  {rule?.name ?? "Detectors"}
                 </p>
               </Link>
             </li>
@@ -384,6 +388,8 @@ export function AlertsModal() {
               {unreadCount > 0
                 ? `${unreadCount} unread · ${counts.firing} firing`
                 : `${counts.firing} firing`}
+              {" · "}
+              Resolve here stays local until inbox sync is available
             </p>
           </div>
         </div>
@@ -467,18 +473,23 @@ export function AlertsModal() {
           </div>
         </aside>
 
-        <div className="min-h-0 min-w-0 flex-1 bg-[var(--bg)]">
-          {selected ? (
-            <EventDetail
-              event={selected}
-              rule={selectedRule}
-              onCloseModal={closeAlerts}
-              onStatus={(status) => setEventStatus(selected.id, status)}
-            />
-          ) : (
-            <EmptyState title="Select an event" />
-          )}
-        </div>
+        {filtered.length === 0 ? null : (
+          <div className="min-h-0 min-w-0 flex-1 bg-[var(--bg)]">
+            {selected ? (
+              <EventDetail
+                event={selected}
+                rule={selectedRule}
+                onCloseModal={closeAlerts}
+                onStatus={(status) => setEventStatus(selected.id, status)}
+              />
+            ) : (
+              <EmptyState
+                title="Select an event"
+                body="Pick a row to see detector context and take action."
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

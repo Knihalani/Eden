@@ -1235,42 +1235,58 @@ async def get_me(
             # current_org_id do not call org routes with a stale
             # preferred UUID while the JWT ``o.id`` points elsewhere.
             if healed_org_id and str(db_user.get("preferred_org_id") or "") != healed_org_id:
-                await client.execute(
-                    """
-                    UPDATE users SET preferred_org_id = $1
-                    WHERE id = $2
-                    """,
-                    healed_org_id,
-                    str(db_user["id"]),
-                )
-                db_user = dict(db_user)
-                db_user["preferred_org_id"] = healed_org_id
+                try:
+                    await client.execute(
+                        """
+                        UPDATE users SET preferred_org_id = $1
+                        WHERE id = $2
+                        """,
+                        healed_org_id,
+                        str(db_user["id"]),
+                    )
+                    db_user = dict(db_user)
+                    db_user["preferred_org_id"] = healed_org_id
+                except Exception:
+                    logger.exception(
+                        "auth.me preferred_org update failed user_id=%s org_id=%s",
+                        db_user.get("id"),
+                        healed_org_id,
+                    )
 
-    # Fetch user's organizations (include is_personal when migration 046 applied)
-    personal_col = await organizations_have_is_personal(client)
-    personal_select = ", o.is_personal" if personal_col else ""
-    orgs_query = f"""
-        SELECT o.id, o.name, o.slug, om.role, o.clerk_org_id
-               {personal_select}
-        FROM organizations o
-        JOIN org_members om ON om.org_id = o.id
-        WHERE om.user_id = $1
-        ORDER BY o.created_at DESC
-    """
-    orgs_rows = await client.fetch(orgs_query, str(db_user["id"]))
+    # Fetch user's organizations (include is_personal when migration 046 applied).
+    # Guard: schema drift or DB blips must not 500 the whole /auth/me — portal
+    # boot depends on this endpoint. Degrade to empty orgs instead.
+    organizations: list[dict] = []
+    try:
+        personal_col = await organizations_have_is_personal(client)
+        personal_select = ", o.is_personal" if personal_col else ""
+        orgs_query = f"""
+            SELECT o.id, o.name, o.slug, om.role, o.clerk_org_id
+                   {personal_select}
+            FROM organizations o
+            JOIN org_members om ON om.org_id = o.id
+            WHERE om.user_id = $1
+            ORDER BY o.created_at DESC
+        """
+        orgs_rows = await client.fetch(orgs_query, str(db_user["id"]))
 
-    organizations = []
-    for r in orgs_rows:
-        org = {
-            "id": str(r["id"]),
-            "name": r["name"],
-            "slug": r["slug"],
-            "role": r["role"],
-            "clerk_org_id": str(r["clerk_org_id"]) if r.get("clerk_org_id") else None,
-        }
-        if personal_col:
-            org["is_personal"] = bool(r["is_personal"])
-        organizations.append(org)
+        for r in orgs_rows:
+            org = {
+                "id": str(r["id"]),
+                "name": r["name"],
+                "slug": r["slug"],
+                "role": r["role"],
+                "clerk_org_id": str(r["clerk_org_id"]) if r.get("clerk_org_id") else None,
+            }
+            if personal_col:
+                org["is_personal"] = bool(r["is_personal"])
+            organizations.append(org)
+    except Exception:
+        logger.exception(
+            "auth.me org listing failed for user_id=%s; returning empty orgs",
+            db_user.get("id"),
+        )
+        organizations = []
 
     # Prefer Clerk session org, then preferred_org if still a member,
     # then first membership — never advertise a preferred id the user

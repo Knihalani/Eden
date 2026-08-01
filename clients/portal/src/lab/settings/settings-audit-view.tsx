@@ -30,8 +30,6 @@ export function SettingsAuditView({
   packs,
   selectedPackId,
   onSelectPack,
-  onReverify,
-  onExportPack,
 }: {
   tab: AuditTab;
   onTab: (tab: AuditTab) => void;
@@ -41,8 +39,6 @@ export function SettingsAuditView({
   packs: AuditPackFixture[];
   selectedPackId: string | null;
   onSelectPack: (id: string) => void;
-  onReverify: (id: string) => void;
-  onExportPack: (agentId: string) => void;
 }) {
   const [eventFilter, setEventFilter] = useState<EventFilter>("all");
 
@@ -128,7 +124,14 @@ export function SettingsAuditView({
                 >
                   Clear filter
                 </button>
-              ) : undefined
+              ) : (
+                <Link
+                  href="/settings?mode=workspace"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                >
+                  Settings overview
+                </Link>
+              )
             }
           />
         </div>
@@ -149,7 +152,14 @@ export function SettingsAuditView({
                     >
                       Show all agents
                     </button>
-                  ) : undefined
+                  ) : (
+                    <Link
+                      href="/settings?mode=workspace"
+                      className="ds-btn ds-btn-ghost ds-btn-sm"
+                    >
+                      Settings overview
+                    </Link>
+                  )
                 }
               />
             ) : (
@@ -192,15 +202,7 @@ export function SettingsAuditView({
           </div>
           <div className="flex min-h-[14rem] w-full shrink-0 flex-col lg:w-[26rem] lg:min-h-0">
             {selected ? (
-              <PackDetail
-                pack={selected}
-                onReverify={() => {
-                  onReverify(selected.id);
-                }}
-                onExport={() => {
-                  onExportPack(selected.agentId);
-                }}
-              />
+              <PackDetail pack={selected} />
             ) : (
               <EmptyState compact title="Select a pack" />
             )}
@@ -268,15 +270,7 @@ function EventsList({
   );
 }
 
-function PackDetail({
-  pack,
-  onReverify,
-  onExport,
-}: {
-  pack: AuditPackFixture;
-  onReverify: () => void;
-  onExport: () => void;
-}) {
+function PackDetail({ pack }: { pack: AuditPackFixture }) {
   return (
     <div className="flex h-full flex-col border-t border-[var(--line)] bg-[var(--bg-inset)] px-4 py-4 sm:px-6 lg:border-t-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -313,26 +307,12 @@ function PackDetail({
         </p>
       ) : null}
       <div className="mt-auto flex flex-wrap gap-2 pt-4">
-        {pack.kind === "verify" && !pack.verified ? (
-          <button
-            type="button"
-            className="ds-btn ds-btn-primary ds-btn-sm"
-            onClick={onReverify}
-          >
-            Re-verify
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="ds-btn ds-btn-primary ds-btn-sm"
-            onClick={onExport}
-          >
-            Export pack
-          </button>
-        )}
+        <p className="type-meta w-full text-[var(--text-faint)]">
+          Pack export and re-verify aren’t available yet.
+        </p>
         <Link
           href={`/agents?id=${pack.agentId}`}
-          className="ds-btn ds-btn-ghost ds-btn-sm"
+          className="ds-btn ds-btn-primary ds-btn-sm"
         >
           Open agent
         </Link>

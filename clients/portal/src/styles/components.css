@@ -292,6 +292,8 @@ select.ds-input {
 
 .ds-tab {
   border-radius: var(--radius);
+  /* ≥44px touch height on coarse pointers; keep compact on desktop */
+  min-height: 2rem;
   padding: var(--space-2) var(--space-3);
   font-family: var(--font-sans);
   font-size: var(--fs-meta);
@@ -303,6 +305,14 @@ select.ds-input {
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
+}
+
+@media (pointer: coarse) {
+  .ds-tab {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    padding: 0.625rem 0.875rem;
+  }
 }
 
 .ds-tab:hover {

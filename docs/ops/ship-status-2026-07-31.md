@@ -2,6 +2,25 @@
 
 Single current status for free-beta production quality. Supersedes stale
 
+## Live audit + rate-limit / clarity pass — 2026-08-01
+
+Authenticated prod audit (`edenobservability.com`) after headed Chrome sign-in:
+
+| Probe | Result |
+|---|---|
+| Sequential journey clarity (`journey-clarity-1785560582386.json`) | **29/29 OK** — soft-lands honest (`/alerts`→Detectors, `/artifacts`→Improve queue, `/labeling`→unavailable, `/billing`→settings) |
+| Mobile rapid-nav (`mobile-rapid-*.json`) | **14/14** — 0×429 after cooldown, no overflow, no pageErrors |
+| Parallel portal-audit + deep-audit | Inflated fails from **429** when two runners hammered the shared org bucket |
+
+Root cause: free-tier **60 rpm** + portal hub fan-out (8–15 GETs/page) → `ApiError: Too many requests` pageErrors during normal multi-page use.
+
+Fixes this pass:
+- **Live API:** `org_resource_limits` free/org_free → **300 rpm**; Northflank env `RATE_LIMIT_DEFAULT_PER_WINDOW=300` + `RATE_LIMIT_PORTAL_PER_WINDOW=300`; API restarted
+- **Code (needs commit + NF image):** portal JWT floor via `rate_limit_portal_per_window`; plan_tiers 300; alembic `130_portal_rpm_floor`
+- **Portal:** CatalogSync after HydrationBoundary; Home dehydrate budget 800ms; 429 soft UX; teaching empties (Cost drivers, Improve plan, Evals); coarse-pointer `.ds-tab` ≥44px
+- **Portal Vercel prod:** `dpl_5UhZg6vprFSJgktEKFkT29GoZjeR` aliased to edenobservability.com (working-tree deploy)
+- **Follow-up polish:** Inbox `softAuth` (no false session-expired); Settings honesty (no dead Disable/Export CTAs); Home fleet a11y; Improve/Inbox dual-empty gated; redeploy `dpl_3JSAT4U16t4VztHv548qcoDLEP4x`
+
 ## Prod audit pass — 2026-08-01
 
 Portal Vercel prod redeployed (`dpl_DgkT13nQTuhCa4GDsz2BfAvd8Quv`) with:
@@ -22,6 +41,27 @@ Portal Vercel prod (`dpl_8scS3dYGY378DRP3gVPFPFcng7Vi`, commit `e5a590df`):
 - Looked/felt: Home Status→Action; ⌘K palette; mobile list→full-bleed; Gateway/Cost diet
 - Fast: Home query priority; Traces/Gateway lazy heavy panels
 - Live UX smoke: 9/9 (Home CTAs, Inbox, ⌘K, Improve, Detectors, mobile traces)
+
+## Portal clarity / usability / functionality — 2026-08-01 (later)
+
+Portal Vercel prod (`dpl_F7cgsHeEW8dz652ekuopRF9t629h`, working tree — commit pending):
+- Soft-lands use live `mode=` (Improve queue/plan, Cost spend/drivers, Evals datasets/playground/compare)
+- Unshipped Evaluate leaves (`/labeling`, `/studio`, `/synthetic`) → `/unavailable` (not silent Results dump)
+- Cross-links / citations / Home next-action / ⌘K playground use canonical query grammar
+- Improve Start/Mark verify labeled local draft; Approve/Reject stay real API
+- Settings Disable/Re-verify/Export disabled (“Not available yet”); workspace toasts await API
+- Guardrails empty → Review traces; Cost no-agents → API keys
+- Prod redirect spot-check: `/artifacts`→`/improve?mode=queue`, `/labeling`→`/unavailable`, `/datasets`→`/evals?mode=datasets`
+
+## Portal deep-link honesty — 2026-08-01 (follow-up)
+
+Follow-up after audit of remaining Observe/Evals/Inbox URL mismatches (redeploy after this section):
+- Sessions soft-land + helpers use `session=` (Traces reader); aliases accept `sessionId`/`traceId`/`spanId`/`issueId`
+- `traceHref`/`issueHref`/`citationHref` emit live `id`/`span`/`session` grammar
+- Promote helpers use `from=`; playground does not steal Datasets handoff
+- Inbox Resolve/Reopen labeled draft; Mute disabled; Audit empty Export disabled
+- Facet/inspector/debugger/incidents soft-lands no longer emit ignored query keys
+- Home / next-action zero-data → API keys (not Connect repo)
 
 claims in `docs/prod-ready-checklist.md` (Jul 3). Detail lives in
 `docs/ops/known-issues.md` and `docs/ops/remediation-measured-corrections.md`.

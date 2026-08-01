@@ -15,16 +15,16 @@
       "workspace": "Workspace"
     },
     "leaves": {
-      "dashboard": "Dashboard",
+      "dashboard": "Home",
       "agents": "Agents",
       "traces": "Traces",
       "issues": "Issues",
-      "alerts": "Alerts",
+      "alerts": "Detectors",
       "evals": "Evals",
       "improve": "Improve",
       "guardrails": "Guardrails",
       "cost": "Cost",
-      "agent": "AI Agent",
+      "agent": "Assistant",
       "debugger": "Debugger",
       "prompts": "Prompts",
       "sessions": "Sessions",
@@ -37,7 +37,7 @@
     "ariaLabel": "Mobile navigation",
     "more": "More",
     "moreTitle": "More",
-    "moreDescription": "Agents, Alerts, Cost, Guardrails, AI Agent, Prompts, Sessions, and Settings."
+    "moreDescription": "Agents, Detectors, Cost, Guardrails, Assistant, Prompts, and Settings."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -58,7 +58,7 @@
     "empty": {
       "title": "Connect an agent",
       "body": "Point the Gateway or SDK at Eden to see your first Trace tonight.",
-      "connect": "Connect agent",
+      "connect": "Create API key",
       "docs": "View docs"
     },
     "filterEmpty": {
@@ -87,14 +87,14 @@
       "failuresTitle": "Recent failures",
       "failuresEmpty": "No recent failures in this window.",
       "kinds": {
-        "connect": "Connect an agent to see your first Trace.",
+        "connect": "Create an API key to send your first Trace.",
         "review_failures": "Review recent error traces.",
         "open_issue": "Open the top issue for triage.",
         "create_plan": "Create an improvement plan for the worst agent.",
         "healthy": "Traffic looks normal — open Traces if you want to browse."
       },
       "cta": {
-        "connect": "Connect agent",
+        "connect": "Create API key",
         "review_failures": "Review failures",
         "open_issue": "Open issue",
         "create_plan": "Create plan",
@@ -628,13 +628,13 @@
     }
   },
   "alerts": {
-    "title": "Alerts",
-    "subtitle": "Fired notifications, detector signals, and rules.",
-    "tabsAria": "Alerts sections",
+    "title": "Detectors",
+    "subtitle": "Threshold notifications, fired events, and rules.",
+    "tabsAria": "Detector sections",
     "tabs": {
       "inbox": "Inbox",
       "rules": "Rules",
-      "signals": "Signals"
+      "signals": "Detectors"
     },
     "searchPlaceholder": "Search alerts",
     "ackBatch": "Ack open",
@@ -882,7 +882,7 @@
       "accountGroup": "Account",
       "agents": "Agents",
       "artifacts": "Artifacts",
-      "alerts": "Alerts",
+      "alerts": "Detectors",
       "evals": "Evals",
       "ledger": "Ledger",
       "promotions": "Promotions",
@@ -897,10 +897,10 @@
       "workspace": "Workspace",
       "traces": "Traces",
       "agentIssues": "Agent Issues",
-      "alerts": "Alerts",
+      "alerts": "Detectors",
       "agents": "Agents",
       "analytics": "Analytics",
-      "signals": "Signals",
+      "signals": "Detectors",
       "debugSessions": "Debug sessions",
       "evals": "Evals",
       "artifacts": "Artifacts",
@@ -1124,7 +1124,7 @@
     "empty": {
       "title": "Waiting for traffic",
       "body": "Connect an agent via Gateway or SDK — traces appear here once events ingest.",
-      "connect": "Connect agent",
+      "connect": "Create API key",
       "docs": "Docs quickstart"
     },
     "filterEmpty": {
@@ -1208,7 +1208,7 @@
     "empty": {
       "title": "Waiting for gateway traffic",
       "body": "Connect an agent or configure the gateway — spend appears once usage ingests.",
-      "connect": "Connect agent",
+      "connect": "Create API key",
       "gateway": "Gateway settings"
     },
     "filterEmpty": {
@@ -1283,7 +1283,7 @@
       "threshold": "Alert at {pct}% of hard limit",
       "exceededBanner": "Hard budget cap exceeded — acknowledge in Alerts or open Issues.",
       "alertBanner": "Budget alert threshold breached.",
-      "openAlerts": "Open Alerts",
+      "openAlerts": "Open Inbox",
       "openIssues": "Open Issues",
       "actionsTitle": "Budget actions",
       "noActions": "No enforcement actions yet.",

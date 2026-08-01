@@ -154,7 +154,7 @@ export function buildDiagnosis(input: {
 
   let primaryHref = "/traces";
   if (input.agentCount === 0 || input.traceCountEver === 0) {
-    primaryHref = "/agents/connect";
+    primaryHref = "/settings?mode=keys";
   } else if (input.openIssueCount > 0 && worstAgentId) {
     primaryHref = `/issues?agent=${encodeURIComponent(worstAgentId)}`;
   } else if (input.openIssueCount > 0) {
@@ -188,7 +188,7 @@ export function buildNextAction(input: {
   if (input.agentCount === 0 || input.traceCountEver === 0) {
     return {
       kind: "connect",
-      href: "/agents/connect",
+      href: "/settings?mode=keys",
       labelKey: "dashboard.nextAction.kinds.connect",
     };
   }
@@ -220,8 +220,8 @@ export function buildNextAction(input: {
     input.worstStatus === "degraded"
   ) {
     const href = input.worstAgentId
-      ? `/improve?tab=plans&agent=${encodeURIComponent(input.worstAgentId)}`
-      : "/improve?tab=plans";
+      ? `/improve?mode=plan&agent=${encodeURIComponent(input.worstAgentId)}`
+      : "/improve?mode=plan";
     return {
       kind: "create_plan",
       href,

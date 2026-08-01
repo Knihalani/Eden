@@ -152,16 +152,22 @@ export function ImproveQueueView({
         )}
       </div>
 
-      <div className="flex min-h-[14rem] w-full shrink-0 flex-col lg:w-[22rem] lg:min-h-0">
-        {selected ? (
-          <QueuePeek
-            plan={selected}
-            onOpen={() => onOpenPlan(selected.id)}
-          />
-        ) : (
-          <EmptyState compact title="Select a plan" />
-        )}
-      </div>
+      {rows.length === 0 ? null : (
+        <div className="flex min-h-[14rem] w-full shrink-0 flex-col lg:w-[22rem] lg:min-h-0">
+          {selected ? (
+            <QueuePeek
+              plan={selected}
+              onOpen={() => onOpenPlan(selected.id)}
+            />
+          ) : (
+            <EmptyState
+              compact
+              title="Select a plan"
+              body="Pick a plan from the queue to preview RCA and open the full plan."
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

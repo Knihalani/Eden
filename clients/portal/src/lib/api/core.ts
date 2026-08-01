@@ -53,12 +53,23 @@ export class ApiError extends Error {
   readonly detail: string;
   /** Optional machine code from structured upstream bodies. */
   readonly code?: string;
-  constructor(status: number, message: string, detail?: string, code?: string) {
+  /** Cooldown hint from ``Retry-After`` / body ``retry_after`` (ms). */
+  readonly retryAfterMs?: number;
+  constructor(
+    status: number,
+    message: string,
+    detail?: string,
+    code?: string,
+    retryAfterMs?: number,
+  ) {
     super(message || `HTTP ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail ?? message;
     if (code) this.code = code;
+    if (retryAfterMs != null && Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+      this.retryAfterMs = retryAfterMs;
+    }
   }
 }
 
@@ -156,6 +167,12 @@ interface FetchOptions extends RequestInit {
    * entirely via a raw ``fetch()`` call.
    */
   raw?: boolean;
+  /**
+   * Soft background polls (Inbox badge, etc.): still throw ApiError on
+   * 401 after refresh retry, but do **not** broadcast session-expired
+   * chrome — a JWT race on a non-critical GET must not kick the user.
+   */
+  softAuth?: boolean;
 }
 
 export async function fetchApi<T>(
@@ -169,6 +186,7 @@ export async function fetchApi<T>(
     stream,
     noDedup,
     raw,
+    softAuth,
     signal: callerSignal,
     ...rest
   } = options;
@@ -428,7 +446,13 @@ export async function fetchApi<T>(
       // Keep raw detail/code for machine matching; message is sanitized.
       // After the one-shot Clerk refresh retry above, a lingering 401
       // means the session is gone — notify chrome (banners / re-auth).
-      if (response.status === 401 && typeof window !== "undefined") {
+      // Soft polls skip this so a background Inbox GET can't flash
+      // "Session expired" during a JWT race.
+      if (
+        response.status === 401 &&
+        !softAuth &&
+        typeof window !== "undefined"
+      ) {
         try {
           window.sessionStorage.setItem("eden:auth:error", "session");
           window.dispatchEvent(
@@ -440,7 +464,22 @@ export async function fetchApi<T>(
           /* ignore storage / event failures */
         }
       }
-      throw new ApiError(response.status, message, detailStr, code);
+      let retryMs: number | undefined;
+      if (response.status === 429) {
+        const fromHeader = retryAfterMs(response);
+        const fromBody =
+          typeof error === "object" &&
+          error !== null &&
+          "retry_after" in error &&
+          typeof (error as { retry_after?: unknown }).retry_after === "number"
+            ? Math.max(
+                0,
+                Math.floor((error as { retry_after: number }).retry_after * 1000),
+              )
+            : null;
+        retryMs = fromHeader ?? fromBody ?? RETRY_AFTER_DEFAULT_MS;
+      }
+      throw new ApiError(response.status, message, detailStr, code, retryMs);
     }
 
     // SSE streams stay text; binary ``stream: true`` (e.g. ZIP export)

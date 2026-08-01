@@ -13,10 +13,13 @@ import {
 
 export function ImprovePlanView({
   plan,
+  hasPlans = true,
   onStatus,
   onBack,
 }: {
   plan: ImprovePlanFixture | null;
+  /** False when the queue is empty — avoid “No plan selected” for zero work. */
+  hasPlans?: boolean;
   onStatus: (
     id: string,
     status: ImprovePlanFixture["status"],
@@ -24,17 +27,41 @@ export function ImprovePlanView({
   onBack: () => void;
 }) {
   if (!plan) {
+    if (!hasPlans) {
+      return (
+        <EmptyState
+          compact
+          title="No plans yet"
+          body="Improve plans appear after Agent Issues cluster production failures. Review Issues, then come back to Plan."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link href="/issues" className="ds-btn ds-btn-primary ds-btn-sm">
+                Open Issues
+              </Link>
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-sm"
+                onClick={onBack}
+              >
+                Queue
+              </button>
+            </div>
+          }
+        />
+      );
+    }
     return (
       <EmptyState
         compact
         title="No plan selected"
+        body="Open Queue to pick an improve item, or wait for Agent Issues to produce a plan from production failures."
         action={
           <button
             type="button"
-            className="ds-btn ds-btn-ghost ds-btn-sm"
+            className="ds-btn ds-btn-primary ds-btn-sm"
             onClick={onBack}
           >
-            Queue
+            Back to Queue
           </button>
         }
       />
@@ -74,18 +101,20 @@ export function ImprovePlanView({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
+              title="Local draft only — not saved to the server"
               onClick={() => void onStatus(plan.id, "in_progress")}
             >
-              Start
+              Start (draft)
             </button>
           ) : null}
           {plan.status === "in_progress" || plan.status === "needs_you" ? (
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
+              title="Local draft only — not saved to the server"
               onClick={() => void onStatus(plan.id, "verify")}
             >
-              Mark verify
+              Mark verify (draft)
             </button>
           ) : null}
           {plan.status === "needs_you" ||
@@ -94,6 +123,7 @@ export function ImprovePlanView({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
+              title="Reject permanently via API"
               onClick={() => void onStatus(plan.id, "blocked")}
             >
               Reject
@@ -102,7 +132,8 @@ export function ImprovePlanView({
           {plan.status === "verify" ? (
             <button
               type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              title="Approve via API — opens the fix path when GitHub is connected"
               onClick={() => void onStatus(plan.id, "done")}
             >
               Approve

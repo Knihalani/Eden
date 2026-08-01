@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import {
   roleLabel,
@@ -25,23 +25,20 @@ export function SettingsMembersView({
   onInvite,
   onRole,
   onResend,
-  onDisable,
-  onEnable,
 }: {
   members: MemberFixture[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onClose: () => void;
   onInvite: (email: string, role: MemberRole) => Promise<MemberFixture>;
-  onRole: (id: string, role: MemberRole) => void;
+  onRole: (id: string, role: MemberRole) => void | Promise<void>;
   onResend: (id: string) => void;
-  onDisable: (id: string) => void;
-  onEnable: (id: string) => void;
 }) {
   const { pushToast } = useLabToast();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<MemberRole>("member");
   const [filter, setFilter] = useState<MemberFilter>("all");
+  const inviteInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     if (filter === "all") return members;
@@ -76,6 +73,7 @@ export function SettingsMembersView({
           <label className="min-w-[12rem] flex-1">
             <span className="type-label">Invite</span>
             <input
+              ref={inviteInputRef}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -136,7 +134,15 @@ export function SettingsMembersView({
               : "Try another filter."
           }
           action={
-            filter !== "all" ? (
+            members.length === 0 ? (
+              <button
+                type="button"
+                className="ds-btn ds-btn-primary ds-btn-sm"
+                onClick={() => inviteInputRef.current?.focus()}
+              >
+                Invite
+              </button>
+            ) : filter !== "all" ? (
               <button
                 type="button"
                 className="ds-btn ds-btn-ghost ds-btn-sm"
@@ -188,8 +194,6 @@ export function SettingsMembersView({
           onClose={onClose}
           onRole={onRole}
           onResend={onResend}
-          onDisable={onDisable}
-          onEnable={onEnable}
         />
       ) : null}
     </div>
@@ -201,15 +205,11 @@ function MemberDialog({
   onClose,
   onRole,
   onResend,
-  onDisable,
-  onEnable,
 }: {
   member: MemberFixture;
   onClose: () => void;
-  onRole: (id: string, role: MemberRole) => void;
+  onRole: (id: string, role: MemberRole) => void | Promise<void>;
   onResend: (id: string) => void;
-  onDisable: (id: string) => void;
-  onEnable: (id: string) => void;
 }) {
   const { pushToast } = useLabToast();
   const canChangeRole =
@@ -284,12 +284,18 @@ function MemberDialog({
                 onChange={(e) => {
                   const next = e.target.value as MemberRole;
                   if (next === member.role) return;
-                  onRole(member.id, next);
-                  pushToast({
-                    title: "Role updated",
-                    body: `${member.email} → ${roleLabel(next)}`,
-                    tone: "ok",
-                  });
+                  void (async () => {
+                    try {
+                      await onRole(member.id, next);
+                      pushToast({
+                        title: "Role updated",
+                        body: `${member.email} → ${roleLabel(next)}`,
+                        tone: "ok",
+                      });
+                    } catch {
+                      /* parent toasts failure */
+                    }
+                  })();
                 }}
               >
                 <option value="admin">Admin</option>
@@ -311,38 +317,20 @@ function MemberDialog({
               className="ds-btn ds-btn-primary ds-btn-sm"
               onClick={() => {
                 onResend(member.id);
-                pushToast({
-                  title: "Invite resent",
-                  body: member.email,
-                  tone: "ok",
-                });
               }}
             >
               Resend invite
             </button>
           ) : null}
           {member.role !== "owner" && member.status === "active" ? (
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
-              onClick={() => {
-                onDisable(member.id);
-                onClose();
-              }}
-            >
-              Disable
-            </button>
+            <p className="type-meta mr-auto text-[var(--text-faint)]">
+              Disable isn’t available yet.
+            </p>
           ) : null}
           {member.status === "disabled" ? (
-            <button
-              type="button"
-              className="ds-btn ds-btn-primary ds-btn-sm"
-              onClick={() => {
-                onEnable(member.id);
-              }}
-            >
-              Re-enable
-            </button>
+            <p className="type-meta mr-auto text-[var(--text-faint)]">
+              Re-enable isn’t available yet.
+            </p>
           ) : null}
           <button
             type="button"

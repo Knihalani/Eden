@@ -150,8 +150,11 @@ export function GuardrailsListView({
                 Clear
               </button>
             ) : (
-              <Link href="/guardrails?tab=test" className="ds-btn ds-btn-primary ds-btn-sm">
-                Open Test
+              <Link
+                href="/traces"
+                className="ds-btn ds-btn-primary ds-btn-sm"
+              >
+                Review traces
               </Link>
             )
           }

@@ -111,8 +111,9 @@ PLAN_TIERS: dict[str, PlanTier] = {
         storage_mb_hard_limit=51_200,      # 50 GB
         sandbox_seconds_soft_limit=360_000,   # 100h
         sandbox_seconds_hard_limit=720_000,   # 200h
-        requests_per_minute=60,
-        requests_per_hour=2_000,
+        # Portal hubs fan out many GETs; 60 rpm rate-limited normal UI.
+        requests_per_minute=300,
+        requests_per_hour=8_000,
         concurrent_jobs=2,
         features=set(_FREE_FEATURES),
     ),
@@ -134,8 +135,8 @@ PLAN_TIERS: dict[str, PlanTier] = {
         storage_mb_hard_limit=51_200,
         sandbox_seconds_soft_limit=360_000,
         sandbox_seconds_hard_limit=720_000,
-        requests_per_minute=60,
-        requests_per_hour=2_000,
+        requests_per_minute=300,
+        requests_per_hour=8_000,
         concurrent_jobs=2,
         features=set(_FREE_FEATURES),
     ),
