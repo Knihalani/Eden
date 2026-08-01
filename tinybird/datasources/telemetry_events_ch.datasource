@@ -35,3 +35,6 @@ ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
 ENGINE_SORTING_KEY "tenant_id, timestamp"
 ENGINE_TTL "toDateTime(timestamp) + toIntervalDay(90)"
+
+FORWARD_QUERY >
+    SELECT event_id, tenant_id, project_id, trace_id, CAST(realm, 'LowCardinality(String)') AS realm, CAST(event_type, 'LowCardinality(String)') AS event_type, CAST(timestamp, 'DateTime64(3)') AS timestamp, agent_id, agent_version, environment_id, span_id, name, CAST(duration_ms, 'Float64') AS duration_ms, metrics, tags, CAST(outcome, 'LowCardinality(String)') AS outcome, CAST(finish_reason, 'LowCardinality(String)') AS finish_reason, CAST(model, 'LowCardinality(String)') AS model, model_version, CAST(cache_hit, 'UInt8') AS cache_hit, CAST(prompt_cache_savings_usd, 'Float64') AS prompt_cache_savings_usd, CAST(ingested_at, 'DateTime64(3)') AS ingested_at

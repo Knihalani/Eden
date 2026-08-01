@@ -169,13 +169,15 @@ def parse_ddl(source: str) -> dict[str, Table]:
     return tables
 
 
-def render(t: Table) -> str:
+def render(t: Table, *, forward_query: str | None = None) -> str:
     lines = [_HEADER, "\nSCHEMA >\n"]
     body: list[str] = []
     for col, ctype, default in t.columns:
+        # Tinybird Forward requires a jsonpath on every SCHEMA column
+        # (``Column X has no jsonpath`` otherwise). Keep DEFAULT so a
+        # missing JSON field still materializes the derived value.
         if default is not None:
-            # A derived column has no place in the ingest JSON path.
-            body.append(f"    {col} {ctype} DEFAULT {default}")
+            body.append(f"    {col} {ctype} `json:$.{col}` DEFAULT {default}")
         else:
             body.append(f"    {col} {ctype} `json:$.{col}`")
     lines.append(",\n".join(body) + "\n")
@@ -189,7 +191,26 @@ def render(t: Table) -> str:
         lines.append(f'ENGINE_SORTING_KEY "{t.sorting_key}"\n')
     if t.ttl:
         lines.append(f'ENGINE_TTL "{_translate_ttl(t.ttl)}"\n')
+    if forward_query:
+        # Preserve an existing FORWARD_QUERY across regenerations so a
+        # mid-migration deploy does not lose the cast plan Tinybird needs.
+        lines.append(f"\nFORWARD_QUERY >\n    {forward_query.strip()}\n")
     return "".join(lines)
+
+
+_FORWARD_RE = re.compile(
+    r"FORWARD_QUERY\s*>\s*\n(?P<body>.*?)(?=\n[A-Z_]+\s|>\s*$|\Z)",
+    re.S,
+)
+
+
+def _existing_forward_query(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    m = _FORWARD_RE.search(path.read_text())
+    if not m:
+        return None
+    return " ".join(m.group("body").split())
 
 
 def main() -> int:
@@ -209,8 +230,8 @@ def main() -> int:
 
     stale: list[str] = []
     for name in TINYBIRD_TABLES:
-        want = render(tables[name])
         path = OUT_DIR / f"{name}.datasource"
+        want = render(tables[name], forward_query=_existing_forward_query(path))
         have = path.read_text() if path.exists() else ""
         if have == want:
             continue

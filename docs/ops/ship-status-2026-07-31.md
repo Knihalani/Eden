@@ -55,5 +55,5 @@ Use `scripts/build_nf_env_payload.py` + `update service runtime-environment` and
 
 1. **npm login / new token** → publish `@eden-ai/sdk@0.4.0`
 2. Restore GitHub Actions billing (F85 CI-green)
-3. `tb deploy` Tinybird datasource type fixes when ready
+3. ~~Tinybird datasource type fixes~~ — **Deployment #3 live** 2026-08-01 (DateTime64(3), UUID, Float64, LowCardinality + FORWARD_QUERY)
 4. Provision Typesense before closing F12
