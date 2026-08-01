@@ -223,7 +223,13 @@ export function usePolling(
           // the very next tick. The hook's calling code can surface
           // a banner via the error it catches in `fetch`; this loop
           // just keeps the request cadence polite.
-          const fallbackMs = 30_000;
+          const fallbackMs =
+            (typeof err === "object" &&
+            err !== null &&
+            "retryAfterMs" in err &&
+            typeof (err as { retryAfterMs?: unknown }).retryAfterMs === "number"
+              ? (err as { retryAfterMs: number }).retryAfterMs
+              : null) || 30_000;
           rateLimitedUntilMs = Math.max(rateLimitedUntilMs, now + fallbackMs);
           currentDelay = Math.min(currentDelay * 2, maxBackoffMs);
           schedule(Math.max(currentDelay, fallbackMs));

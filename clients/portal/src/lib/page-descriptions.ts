@@ -3,10 +3,10 @@
  */
 
 export const PAGE_DESCRIPTIONS: Record<string, string> = {
-  "/dashboard":
-    "One-glance view of agents, traces, costs, and alerts for the active org. Start here.",
   "/home":
-    "One-glance view of agents, traces, costs, and alerts for the active org. Start here.",
+    "One-glance view of agents, traces, costs, and detectors for the active org. Start here.",
+  "/dashboard":
+    "One-glance view of agents, traces, costs, and detectors for the active org. Start here.",
   "/agents":
     "Every AI agent seen in this org. Agents appear from SDK agent_id on ingest. Connect a repo from an agent’s detail view when you want Improve to open fix PRs.",
   "/agents/connect":
@@ -24,19 +24,19 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/analytics":
     "Usage, tools, users, and trend insights.",
   "/evals":
-    "Datasets, labeling, studio metrics, synthetic data, and eval scores.",
+    "Datasets, playground, and offline experiment results — Observe → Evaluate loop.",
   "/compare":
     "Live A/B — run prompt or model variants against production traffic and read the verdict.",
   "/improve":
-    "Action queue, improvement plans, and sweep history — core Improve act path.",
+    "Review queue and improvement plans — approve, reject, and open evidence-linked fixes.",
   "/artifacts":
-    "Versioned runtime fixes with evidence-gated promotion — core Improve.",
+    "Soft-lands on Improve queue — versioned runtime fixes with evidence-gated promotion.",
   "/ledger":
-    "Institutional memory; promotions nest as a Ledger mode — core Improve.",
+    "Soft-lands on Improve queue — institutional memory and promotion history.",
   "/prompts":
-    "Version and manage prompt templates — core Improve (iterate via Evaluate playground).",
+    "Version and manage prompt templates — iterate via Evaluate playground.",
   "/optimization":
-    "Spend, budgets, outcomes, forecasts, and model advice — Advanced Improve.",
+    "Soft-lands on Cost — spend and drivers for this workspace.",
   "/guardrails":
     "Safety policies and red-team tests — Advanced Improve.",
   "/improve/scorecard":

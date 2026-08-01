@@ -51,8 +51,14 @@ export function parseEvalsMode(tab: string | null, mode: string | null): EvalsMo
     return mode;
   }
   if (tab === "datasets") return "datasets";
-  if (tab === "playgrounds" || tab === "playground") return "playground";
-  if (tab === "experiments") return "compare";
+  if (tab === "playgrounds" || tab === "playground" || tab === "studio") {
+    return "playground";
+  }
+  if (tab === "experiments" || tab === "eval" || tab === "synthetic") {
+    return "compare";
+  }
+  // Labeling is not a live mode — land on Datasets (closest Evaluate surface).
+  if (tab === "labeling") return "datasets";
   return "compare";
 }
 

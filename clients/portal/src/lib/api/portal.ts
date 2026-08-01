@@ -2,7 +2,7 @@
  * Thin typed client for ``GET /orgs/{orgId}/portal/*`` read models.
  * Mutations stay on domain routes via ``api`` / ``promptsApi`` helpers.
  */
-import { fetchApi } from "@/lib/api/core";
+import { ApiError, fetchApi } from "@/lib/api/core";
 import type {
   AgentFixture,
 } from "@/lab/fixtures/agents";
@@ -82,8 +82,23 @@ export const portalApi = {
   alertRules: (orgId: string) =>
     fetchApi<AlertRule[]>(portalPath(orgId, "alerts/rules")),
 
-  alertEvents: (orgId: string) =>
-    fetchApi<AlertEvent[]>(portalPath(orgId, "alerts/events")),
+  alertEvents: async (orgId: string) => {
+    try {
+      return await fetchApi<AlertEvent[]>(portalPath(orgId, "alerts/events"), {
+        softAuth: true,
+      });
+    } catch (e) {
+      // Background Inbox poll — JWT race / membership blip must not
+      // empty the shell or trip session chrome; treat as no events.
+      if (
+        e instanceof ApiError &&
+        (e.status === 401 || e.status === 403 || e.status === 404)
+      ) {
+        return [];
+      }
+      throw e;
+    }
+  },
 
   costDrivers: (orgId: string) =>
     fetchApi<CostDriverFixture[]>(portalPath(orgId, "cost/drivers")),

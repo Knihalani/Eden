@@ -26,13 +26,25 @@ export function QueryErrorPanel({
   error: Error | null | undefined;
   onRetry?: () => void;
 }) {
-  const gated = error ? featureGatedErrorCopy(error, title) : null;
-  const displayTitle = gated?.title ?? title;
-  const message =
-    gated?.message?.trim() ||
-    error?.message?.trim() ||
-    "Something went wrong talking to the API. Try again.";
-  const showRetry = Boolean(onRetry) && error != null && isRetryableIntelligenceError(error);
+  const rateLimited =
+    error != null &&
+    ((typeof error === "object" &&
+      "status" in error &&
+      (error as { status?: unknown }).status === 429) ||
+      /too many requests|rate\s*limit/i.test(error.message || ""));
+  const gated = error && !rateLimited ? featureGatedErrorCopy(error, title) : null;
+  const displayTitle = rateLimited
+    ? "Slow down — rate limited"
+    : (gated?.title ?? title);
+  const message = rateLimited
+    ? "Eden briefly paused requests for this workspace. Wait a few seconds, then retry."
+    : gated?.message?.trim() ||
+      error?.message?.trim() ||
+      "Something went wrong talking to the API. Try again.";
+  const showRetry =
+    Boolean(onRetry) &&
+    error != null &&
+    (rateLimited || isRetryableIntelligenceError(error));
 
   useEffect(() => {
     if (typeof document === "undefined") return;

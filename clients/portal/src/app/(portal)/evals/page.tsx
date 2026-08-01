@@ -515,6 +515,8 @@ function LabEvalsInner() {
   }, [paramAgent, agentId, setAgentId]);
 
   useEffect(() => {
+    // `from=` is the Datasets promote handoff — never steal Playground deep-links.
+    if (paramMode === "playground") return;
     if (!paramFrom || handledFrom.current === paramFrom) return;
     handledFrom.current = paramFrom;
 
@@ -629,7 +631,7 @@ function LabEvalsInner() {
       compareId: null,
       case: null,
     });
-  }, [paramFrom, patchQuery, setAgentId, liveDatasets]);
+  }, [paramFrom, paramMode, patchQuery, setAgentId, liveDatasets]);
 
   const changeMode = useCallback(
     (next: EvalsMode) => {

@@ -867,6 +867,7 @@ function LabAgentsInner() {
                           <button
                             type="button"
                             onClick={() => selectAgent(agent.id)}
+                            aria-label={`${agent.name}, ${agent.status}`}
                             className={cn(
                               "w-full border-b border-[var(--line)] px-3 py-2.5 text-left transition-colors",
                               active
@@ -878,7 +879,9 @@ function LabAgentsInner() {
                               <p className="type-ui min-w-0 truncate">
                                 {agent.name}
                               </p>
-                              <AgentStatusBadge status={agent.status} />
+                              <span className="shrink-0">
+                                <AgentStatusBadge status={agent.status} />
+                              </span>
                             </div>
                             <p className="type-meta mt-1 truncate">
                               {agent.runs24h} runs

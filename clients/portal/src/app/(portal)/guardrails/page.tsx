@@ -5,15 +5,12 @@ import { useSearchParams } from "next/navigation";
 import {
   type GuardrailKind,
   type GuardrailStatus,
-  type GuardrailTab,
 } from "@/lab/fixtures/guardrails";
 import { PageHeader } from "@/components/ds/primitives";
 import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
 import {
-  GuardrailsTabNav,
   parseGuardrailKindFilter,
   parseGuardrailStatusFilter,
-  parseGuardrailTab,
 } from "@/lab/guardrails/guardrails-chrome";
 import dynamic from "next/dynamic";
 import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
@@ -44,19 +41,11 @@ const GuardrailsDetailView = dynamic(
     })),
   { loading: () => guardrailsFallback },
 );
-const GuardrailsTestView = dynamic(
-  () =>
-    import("@/lab/guardrails/guardrails-detail-view").then((m) => ({
-      default: m.GuardrailsTestView,
-    })),
-  { loading: () => guardrailsFallback },
-);
 
 function LabGuardrailsInner() {
   const searchParams = useSearchParams();
   const paramId = searchParams.get("id");
   const paramAgent = searchParams.get("agent");
-  const paramTab = searchParams.get("tab");
   const paramKind = searchParams.get("kind");
   const paramStatus = searchParams.get("status");
 
@@ -83,9 +72,6 @@ function LabGuardrailsInner() {
   const { agentId, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
 
-  const [tab, setTab] = useState<GuardrailTab>(() =>
-    parseGuardrailTab(paramTab),
-  );
   const [policyId, setPolicyId] = useState("");
   const [kindFilter, setKindFilter] = useState<GuardrailKind | "all">(() =>
     parseGuardrailKindFilter(paramKind),
@@ -104,10 +90,9 @@ function LabGuardrailsInner() {
   }, [paramAgent, agentId, setAgentId]);
 
   useEffect(() => {
-    setTab(parseGuardrailTab(paramTab));
     setKindFilter(parseGuardrailKindFilter(paramKind));
     setStatusFilter(parseGuardrailStatusFilter(paramStatus));
-  }, [paramTab, paramKind, paramStatus]);
+  }, [paramKind, paramStatus]);
 
   const scoped = useMemo(() => {
     if (agentId === "all") return policies;
@@ -116,7 +101,6 @@ function LabGuardrailsInner() {
 
   // Keep selection inside agent scope.
   useEffect(() => {
-    if (tab !== "policies") return;
     const next =
       scoped.find((p) => p.id === paramId)?.id ??
       scoped.find((p) => p.status === "active")?.id ??
@@ -125,7 +109,7 @@ function LabGuardrailsInner() {
     if (next && next !== policyId) setPolicyId(next);
     else if (!next && policyId) setPolicyId("");
      
-  }, [agentId, scoped, tab, paramId]);
+  }, [agentId, scoped, paramId]);
 
   const policy = scoped.find((p) => p.id === policyId) ?? scoped[0] ?? null;
 
@@ -141,25 +125,9 @@ function LabGuardrailsInner() {
     return map;
   }, [policies]);
 
-  const changeTab = useCallback(
-    (next: GuardrailTab) => {
-      setTab(next);
-      if (next === "policies") {
-        patchQuery({
-          tab: null,
-          id: policyId || null,
-        });
-      } else {
-        patchQuery({ tab: "test", id: null });
-      }
-    },
-    [patchQuery, policyId],
-  );
-
   const selectPolicy = useCallback(
     (id: string) => {
       setPolicyId(id);
-      setTab("policies");
       patchQuery({ tab: null, id });
     },
     [patchQuery],
@@ -214,14 +182,9 @@ function LabGuardrailsInner() {
 
   return (
     <div className="ds-page flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title="Guardrails"
-        meta={meta}
-        actions={<GuardrailsTabNav value={tab} onChange={changeTab} />}
-      />
+      <PageHeader title="Guardrails" meta={meta} />
 
-      {tab === "policies" ? (
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[22rem] lg:shrink-0 lg:border-b-0 lg:border-r">
             <GuardrailsListView
               policies={scoped}
@@ -242,13 +205,6 @@ function LabGuardrailsInner() {
             <GuardrailsDetailView policy={policy} />
           </div>
         </div>
-      ) : (
-        <GuardrailsTestView
-          agentId={agentId}
-          onAgentChange={setAgentId}
-          counts={scopeCounts}
-        />
-      )}
     </div>
   );
 }

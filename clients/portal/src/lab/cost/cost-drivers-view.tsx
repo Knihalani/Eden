@@ -28,7 +28,21 @@ export function CostDriversView({
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
         {rows.length === 0 ? (
-          <EmptyState compact title="No drivers" />
+          <EmptyState
+            compact
+            title="No cost drivers yet"
+            body="Drivers appear after agents spend on LLM calls. Open Spend for totals, or send traffic with an API key."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link href="/cost?mode=spend" className="ds-btn ds-btn-ghost ds-btn-sm">
+                  Spend
+                </Link>
+                <Link href="/settings?mode=keys" className="ds-btn ds-btn-primary ds-btn-sm">
+                  API keys
+                </Link>
+              </div>
+            }
+          />
         ) : (
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {rows.map((d) => {
@@ -71,13 +85,19 @@ export function CostDriversView({
         )}
       </div>
 
+      {rows.length === 0 ? null : (
       <div className="flex min-h-[14rem] w-full shrink-0 flex-col lg:w-[24rem] lg:min-h-0">
         {selected ? (
           <DriverDetail driver={selected} />
         ) : (
-          <EmptyState compact title="Select a driver" />
+          <EmptyState
+            compact
+            title="Select a driver"
+            body="Pick a row to see savings, evidence traces, and next actions."
+          />
         )}
       </div>
+      )}
     </div>
   );
 }

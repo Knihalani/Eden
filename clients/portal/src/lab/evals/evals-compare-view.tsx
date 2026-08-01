@@ -163,6 +163,7 @@ export function EvalsCompareView({
         <EmptyState
           compact
           title="No completed runs"
+          body="Compare needs finished eval runs. Create a dataset from a failing trace, or try a prompt draft first."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <button

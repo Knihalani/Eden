@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/use-auth";
 import { OrgProvider } from "@/hooks/use-org";
+import { ApiError } from "@/lib/api/core";
 
 /** Exported (not just module-private) so the F41-3 retry-layering fix
  *  — the global default must not duplicate fetchApi's own transport
@@ -38,12 +39,30 @@ export function makeQueryClient() {
         // business-level retry (e.g. the "user not found" race) via
         // a per-query ``retry`` option, which overrides this default.
         retry: false,
+        // Rate-limit / soft transport errors should surface as
+        // ``query.isError``, not uncaught pageErrors that crash audits.
+        throwOnError: false,
       },
       mutations: {
         retry: 0,
       },
     },
   });
+}
+
+/** Ignore orphaned 429 ApiErrors so rapid nav doesn't spam pageerror. */
+function RateLimitRejectionGuard() {
+  useEffect(() => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      if (reason instanceof ApiError && reason.status === 429) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, []);
+  return null;
 }
 
 /** Invalidate portal keys when docs-fill (or another tab) mints a key. */
@@ -78,6 +97,7 @@ export function PortalProviders({ children }: { children: ReactNode }) {
   const [client] = useState(makeQueryClient);
   return (
     <QueryClientProvider client={client}>
+      <RateLimitRejectionGuard />
       <KeysMintedListener />
       <AuthProvider>
         <OrgProvider>{children}</OrgProvider>

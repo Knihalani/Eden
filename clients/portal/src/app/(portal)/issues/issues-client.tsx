@@ -426,7 +426,7 @@ function IssueDetail({
 
 function LabIssuesInner() {
   const searchParams = useSearchParams();
-  const paramId = searchParams.get("id");
+  const paramId = searchParams.get("id") ?? searchParams.get("issueId");
   const { agentId, agent, setAgentId, hrefFor } = useAgentScope();
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();

@@ -12,6 +12,7 @@ export function parseDebuggerMode(mode: string | null): DebuggerMode {
   if (mode === "compare") return "compare";
   if (mode === "inspect") return "inspect";
   if (mode === "time-travel") return "time-travel";
+  if (mode === "replay") return "replay";
   return "replay";
 }
 

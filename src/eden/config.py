@@ -765,8 +765,15 @@ def _build_settings_class():
         # Tests set this to False (paired with quota_enabled); production
         # keeps it True.
         rate_limit_enabled: bool = True
+        # Anonymous / IP + fallback when no org tier row exists.
         rate_limit_default_per_window: int = 60
         rate_limit_window_seconds: int = 60
+        # Authenticated portal (Clerk/JWT, no API key) fan-out: a single
+        # hub mount can fire 8–15 React Query GETs. Free-tier 60 rpm made
+        # normal navigation throw "Too many requests" pageErrors. Portal
+        # traffic uses max(tier_rpm, this value); API-key traffic stays
+        # on the tighter tier/default bucket.
+        rate_limit_portal_per_window: int = 300
         # When False (default), rate limits use in-process token buckets /
         # sliding windows and do NOT touch Redis. Upstash Free tier is
         # 500k commands/month; per-request Redis Lua (3–5 cmds each) was

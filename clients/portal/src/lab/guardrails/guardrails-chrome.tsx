@@ -13,7 +13,8 @@ import {
 } from "@/lab/fixtures/guardrails";
 
 export function parseGuardrailTab(v: string | null): GuardrailTab {
-  if (v === "test") return "test";
+  // Test dry-run is not wired — ignore legacy `?tab=test`.
+  void v;
   return "policies";
 }
 
@@ -39,6 +40,7 @@ export function parseGuardrailStatusFilter(
   return "all";
 }
 
+/** Policies-only nav — Test dry-run is not a live surface. */
 export function GuardrailsTabNav({
   value,
   onChange,
@@ -48,23 +50,15 @@ export function GuardrailsTabNav({
 }) {
   return (
     <div role="tablist" aria-label="Guardrails sections" className="flex gap-1">
-      {(
-        [
-          ["policies", "Policies"],
-          ["test", "Test"],
-        ] as const
-      ).map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          aria-selected={value === id}
-          className="ds-tab"
-          onClick={() => onChange(id)}
-        >
-          {label}
-        </button>
-      ))}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={value === "policies"}
+        className="ds-tab"
+        onClick={() => onChange("policies")}
+      >
+        Policies
+      </button>
     </div>
   );
 }

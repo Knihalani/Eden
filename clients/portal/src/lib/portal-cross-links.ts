@@ -103,8 +103,8 @@ export function traceHref(
   opts?: { spanId?: string },
 ): string {
   const q = new URLSearchParams();
-  q.set("traceId", traceId);
-  if (opts?.spanId) q.set("spanId", opts.spanId);
+  q.set("id", traceId);
+  if (opts?.spanId) q.set("span", opts.spanId);
   applyPreserve(q, preserve);
   return `/traces?${q.toString()}`;
 }
@@ -140,14 +140,13 @@ export function sessionHref(
   sessionId: string,
   preserve?: TracePreserveParams,
 ): string {
-  const q = new URLSearchParams();
+  const q = new URLSearchParams({ view: "sessions", session: sessionId });
   applyPreserve(q, preserve);
-  const qs = q.toString();
-  return `/sessions/${encodeURIComponent(sessionId)}${qs ? `?${qs}` : ""}`;
+  return `/traces?${q.toString()}`;
 }
 
 export function issueHref(issueId: string): string {
-  return `/issues?issueId=${encodeURIComponent(issueId)}`;
+  return `/issues?id=${encodeURIComponent(issueId)}`;
 }
 
 export function issueFullHref(issueId: string): string {
@@ -161,10 +160,9 @@ export function improveHref(issueId?: string): string {
 }
 
 export function artifactHref(artifactId?: string): string {
-  if (artifactId) {
-    return `/improve?tab=artifacts&artifactId=${encodeURIComponent(artifactId)}`;
-  }
-  return "/improve?tab=artifacts";
+  // Improve queue has no artifact selector yet — don't pretend `id` is an artifact.
+  void artifactId;
+  return "/improve?mode=queue";
 }
 
 export function playgroundHref(
@@ -172,9 +170,10 @@ export function playgroundHref(
   spanId?: string,
   preserve?: TracePreserveParams,
 ): string {
-  const q = new URLSearchParams({ tab: "playgrounds" });
-  if (traceId) q.set("trace_id", traceId);
-  if (spanId) q.set("span_id", spanId);
+  const q = new URLSearchParams({ mode: "playground" });
+  // Do not set `from=` — that triggers the Datasets promote handoff on /evals.
+  if (traceId) q.set("seed", traceId);
+  if (spanId) q.set("span", spanId);
   applyPreserve(q, preserve);
   return `/evals?${q.toString()}`;
 }
@@ -182,29 +181,28 @@ export function playgroundHref(
 /** Prompts registry deep link (Improve core). */
 export function promptHref(name?: string): string {
   if (!name) return "/prompts";
-  return `/prompts?prompt=${encodeURIComponent(name)}`;
+  return `/prompts?id=${encodeURIComponent(name)}`;
 }
 
 /**
  * Iterate a prompt in Evaluate playground (Wave 5 / Wave 9).
- * Passes `prompt` as registry **name** (same as `promptHref`); playground
- * consumes `?prompt=` to prefill the active task system template.
+ * Prefill is local-draft today — open Try mode without a fake promote handoff.
  */
 export function promptPlaygroundHref(promptName?: string): string {
-  const q = new URLSearchParams({ tab: "playgrounds" });
-  if (promptName) q.set("prompt", promptName);
+  const q = new URLSearchParams({ mode: "playground" });
+  if (promptName) q.set("id", promptName);
   return `/evals?${q.toString()}`;
 }
 
 /** Plans list / detail deep links (Improve hub + standalone). */
 export function improvePlansHref(planId?: string): string {
-  if (planId) return `/improve/plans/${encodeURIComponent(planId)}`;
-  return "/improve?tab=plans";
+  if (planId) return `/improve?mode=plan&id=${encodeURIComponent(planId)}`;
+  return "/improve?mode=plan";
 }
 
-/** Sweep history (Improve hub History tab). */
+/** Sweep history (Improve queue — ledger/history soft-land). */
 export function improveHistoryHref(): string {
-  return "/improve?tab=history";
+  return "/improve?mode=queue";
 }
 
 /** Promote a production trace into a dataset while keeping Observe context. */
@@ -212,7 +210,7 @@ export function promoteTraceToDatasetHref(
   traceId: string,
   preserve?: TracePreserveParams,
 ): string {
-  const q = new URLSearchParams({ tab: "datasets", promote_trace: traceId });
+  const q = new URLSearchParams({ mode: "datasets", from: traceId });
   applyPreserve(q, preserve);
   return `/evals?${q.toString()}`;
 }
@@ -226,23 +224,20 @@ export function promoteTracesToDatasetHref(
   preserve?: TracePreserveParams,
 ): string {
   const ids = [...new Set(traceIds.map((id) => id.trim()).filter(Boolean))];
-  if (ids.length === 0) return "/evals?tab=datasets";
-  if (ids.length === 1) return promoteTraceToDatasetHref(ids[0]!, preserve);
-  const q = new URLSearchParams({
-    tab: "datasets",
-    promote_traces: ids.join(","),
-  });
-  applyPreserve(q, preserve);
-  return `/evals?${q.toString()}`;
+  if (ids.length === 0) return "/evals?mode=datasets";
+  // Page consumes a single `from=` today — land on the first id.
+  return promoteTraceToDatasetHref(ids[0]!, preserve);
 }
 
-/** Parse promote_trace / promote_traces query into unique trace ids. */
+/** Parse promote_trace / promote_traces / from query into unique trace ids. */
 export function parsePromoteTraceIds(
   sp: URLSearchParams | { get: (key: string) => string | null },
 ): string[] {
+  const from = sp.get("from")?.trim();
   const single = sp.get("promote_trace")?.trim();
   const batch = sp.get("promote_traces")?.trim();
   const ids: string[] = [];
+  if (from) ids.push(from);
   if (single) ids.push(single);
   if (batch) {
     for (const part of batch.split(",")) {
@@ -254,20 +249,20 @@ export function parsePromoteTraceIds(
 }
 
 export function datasetHref(datasetId?: string): string {
-  const q = new URLSearchParams({ tab: "datasets" });
-  if (datasetId) q.set("datasetId", datasetId);
+  const q = new URLSearchParams({ mode: "datasets" });
+  if (datasetId) q.set("id", datasetId);
   return `/evals?${q.toString()}`;
 }
 
 export function experimentHref(experimentId?: string, issueId?: string): string {
-  const q = new URLSearchParams({ tab: "experiments" });
-  if (experimentId) q.set("experimentId", experimentId);
-  if (issueId) q.set("issueId", issueId);
+  const q = new URLSearchParams({ mode: "compare" });
+  if (experimentId) q.set("baselineId", experimentId);
+  if (issueId) q.set("issue", issueId);
   return `/evals?${q.toString()}`;
 }
 
 export function ledgerHref(agentId?: string): string {
-  const q = new URLSearchParams({ tab: "ledger" });
+  const q = new URLSearchParams({ mode: "queue" });
   if (agentId) q.set("agent", agentId);
   return `/improve?${q.toString()}`;
 }
@@ -297,10 +292,11 @@ export function tracesFilteredHref(filters: {
   return qs ? `/traces?${qs}` : "/traces";
 }
 
+/** Labeling queues are not a live Evaluate mode yet — soft-land honestly. */
 export function labelingQueueHref(queueId?: string): string {
-  const q = new URLSearchParams({ tab: "labeling" });
+  const q = new URLSearchParams({ from: "/labeling" });
   if (queueId) q.set("queueId", queueId);
-  return `/evals?${q.toString()}`;
+  return `/unavailable?${q.toString()}`;
 }
 
 export function incidentHref(clusterId?: string): string {
@@ -310,7 +306,7 @@ export function incidentHref(clusterId?: string): string {
 
 /** Promotions live under Improve (Wave 3). */
 export function promotionsHref(): string {
-  return "/improve?tab=promotions";
+  return "/improve?mode=queue";
 }
 
 /** Required cross-link matrix entries (U19 §3) — used by CI tests. */

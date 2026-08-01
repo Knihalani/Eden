@@ -10,8 +10,21 @@ import {
 
 export type CostMode = "spend" | "drivers";
 
-export function parseCostMode(mode: string | null): CostMode {
-  if (mode === "drivers") return "drivers";
+export function parseCostMode(
+  mode: string | null,
+  /** Legacy `?tab=` from soft-lands / bookmarks. */
+  tab: string | null = null,
+): CostMode {
+  if (mode === "drivers" || mode === "spend") return mode;
+  if (
+    tab === "drivers" ||
+    tab === "outcomes" ||
+    tab === "advisor" ||
+    tab === "forecast"
+  ) {
+    return tab === "forecast" ? "spend" : "drivers";
+  }
+  if (tab === "budget" || tab === "spend") return "spend";
   return "spend";
 }
 

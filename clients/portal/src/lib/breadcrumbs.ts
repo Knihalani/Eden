@@ -36,7 +36,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   incidents: { label: "Incidents", category: "observe" },
   insights: { label: "Insights", category: "observe" },
   inspector: { label: "Inspector", category: "observe" },
-  alerts: { label: "Alerts", category: "observe" },
+  alerts: { label: "Detectors", category: "observe" },
   llmops: { label: "LLMOps", category: "observe" },
   agents: { label: "Agents", category: "observe" },
   // sandbox / builder / marketplace / multi-agent removed — env-gen strip

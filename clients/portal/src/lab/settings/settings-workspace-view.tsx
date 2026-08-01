@@ -36,8 +36,11 @@ export function SettingsWorkspaceView({
   packs: AuditPackFixture[];
   events: AuditEventFixture[];
   onGo: (mode: SettingsMode, opts?: { tab?: "events" | "packs" }) => void;
-  onRename: (name: string) => void;
-  onPatch: (patch: Partial<WorkspaceFixture>, label: string) => void;
+  onRename: (name: string) => void | Promise<void>;
+  onPatch: (
+    patch: Partial<WorkspaceFixture>,
+    label: string,
+  ) => void | Promise<void>;
 }) {
   const { pushToast } = useLabToast();
   const [editing, setEditing] = useState(false);
@@ -65,13 +68,19 @@ export function SettingsWorkspaceView({
                     setDraft(workspace.name);
                     return;
                   }
-                  onRename(next);
-                  setEditing(false);
-                  pushToast({
-                    title: "Workspace renamed",
-                    body: next,
-                    tone: "ok",
-                  });
+                  void (async () => {
+                    try {
+                      await onRename(next);
+                      setEditing(false);
+                      pushToast({
+                        title: "Workspace renamed",
+                        body: next,
+                        tone: "ok",
+                      });
+                    } catch {
+                      /* parent toasts failure */
+                    }
+                  })();
                 }}
               >
                 <input
@@ -178,12 +187,18 @@ export function SettingsWorkspaceView({
             value={workspace.timezone}
             options={TIMEZONE_OPTIONS.map((t) => ({ value: t, label: t }))}
             onChange={(timezone) => {
-              onPatch({ timezone }, `timezone → ${timezone}`);
-              pushToast({
-                title: "Timezone updated",
-                body: timezone,
-                tone: "ok",
-              });
+              void (async () => {
+                try {
+                  await onPatch({ timezone }, `timezone → ${timezone}`);
+                  pushToast({
+                    title: "Timezone updated",
+                    body: timezone,
+                    tone: "ok",
+                  });
+                } catch {
+                  /* parent toasts failure */
+                }
+              })();
             }}
           />
           <PrefSelect
@@ -195,15 +210,21 @@ export function SettingsWorkspaceView({
             }))}
             onChange={(v) => {
               const retentionDays = Number(v) as RetentionDays;
-              onPatch(
-                { retentionDays },
-                `retention → ${retentionDays}d`,
-              );
-              pushToast({
-                title: "Retention updated",
-                body: `${retentionDays} days`,
-                tone: "ok",
-              });
+              void (async () => {
+                try {
+                  await onPatch(
+                    { retentionDays },
+                    `retention → ${retentionDays}d`,
+                  );
+                  pushToast({
+                    title: "Retention updated",
+                    body: `${retentionDays} days`,
+                    tone: "ok",
+                  });
+                } catch {
+                  /* parent toasts failure */
+                }
+              })();
             }}
           />
           <div>
@@ -217,12 +238,18 @@ export function SettingsWorkspaceView({
                   aria-pressed={workspace.density === d}
                   onClick={() => {
                     if (d === workspace.density) return;
-                    onPatch({ density: d }, `density → ${d}`);
-                    pushToast({
-                      title: "Density updated",
-                      body: densityLabel(d),
-                      tone: "ok",
-                    });
+                    void (async () => {
+                      try {
+                        await onPatch({ density: d }, `density → ${d}`);
+                        pushToast({
+                          title: "Density updated",
+                          body: densityLabel(d),
+                          tone: "ok",
+                        });
+                      } catch {
+                        /* parent toasts failure */
+                      }
+                    })();
                   }}
                 >
                   {densityLabel(d)}
@@ -238,16 +265,22 @@ export function SettingsWorkspaceView({
               aria-pressed={workspace.piiRedaction}
               onClick={() => {
                 const piiRedaction = !workspace.piiRedaction;
-                onPatch(
-                  { piiRedaction },
-                  `pii → ${piiRedaction ? "on" : "off"}`,
-                );
-                pushToast({
-                  title: piiRedaction
-                    ? "PII redaction on"
-                    : "PII redaction off",
-                  tone: piiRedaction ? "ok" : "fail",
-                });
+                void (async () => {
+                  try {
+                    await onPatch(
+                      { piiRedaction },
+                      `pii → ${piiRedaction ? "on" : "off"}`,
+                    );
+                    pushToast({
+                      title: piiRedaction
+                        ? "PII redaction on"
+                        : "PII redaction off",
+                      tone: piiRedaction ? "ok" : "fail",
+                    });
+                  } catch {
+                    /* parent toasts failure */
+                  }
+                })();
               }}
             >
               {workspace.piiRedaction ? "On" : "Off"}
@@ -318,6 +351,7 @@ function HealthCard({
     <button
       type="button"
       onClick={onClick}
+      aria-label={`${label}: ${value}, ${ok ? okLabel : failLabel}. ${hint}`}
       className="block rounded-[var(--radius)] px-3.5 py-3 text-left shadow-[0_0_0_1px_var(--line)] transition-colors duration-150 ease-out hover:bg-[var(--bg-hover)] sm:px-4"
     >
       <div className="flex items-center justify-between gap-2">
