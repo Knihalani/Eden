@@ -17,11 +17,11 @@ API follow-up (this commit): DatasetHub no longer queries missing `dataset_colum
 claims in `docs/prod-ready-checklist.md` (Jul 3). Detail lives in
 `docs/ops/known-issues.md` and `docs/ops/remediation-measured-corrections.md`.
 
-## Live surfaces (verified 2026-08-01 ~02:05 UTC)
+## Live surfaces (verified 2026-08-01 ~03:18 UTC)
 
 | Surface | Status |
 |---|---|
-| API `api.edenobservability.com` | `/live` commit = **`6f3740c9`** (evidence plane + MCP soft-retire); `/ready` ready |
+| API `api.edenobservability.com` | `/live` commit = **`f934dc09`** (prod audit fixes); `/ready` ready |
 | Portal `edenobservability.com` | Vercel prod READY (`dpl_DgkT13nQTuhCa4GDsz2BfAvd8Quv`) aliased |
 | Background fleet | Leader `acquired(via=postgres)`; quality worker + webhook/eql/maintenance/self-obs loops alive |
 | Docs `docs.edenobservability.com` | 200 |
