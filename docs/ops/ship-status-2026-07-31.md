@@ -8,7 +8,8 @@ claims in `docs/prod-ready-checklist.md` (Jul 3). Detail lives in
 
 | Surface | Status |
 |---|---|
-| API `api.edenobservability.com` | `/live.commit` = **`c591185d6865cc72aa914248c8ad2ba9d2c718ae`**; `/ready` ready; `/health` **healthy** |
+| API `api.edenobservability.com` | `/live` commit = **`6f3740c9`** (evidence plane + MCP soft-retire); `/ready` ready |
+| Portal `edenobservability.com` | Vercel prod READY (`dpl_3ecGVPV3gkEWjDoPaW6VwT5Wz2Zd`) aliased |
 | Background fleet | Leader `acquired(via=postgres)`; quality worker + webhook/eql/maintenance/self-obs loops alive |
 | Portal `edenobservability.com` | Vercel prod READY (`dpl_92SLEG9KpKeotWtAqEB4979Pq7zc`) |
 | Docs `docs.edenobservability.com` | 200 |
