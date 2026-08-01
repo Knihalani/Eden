@@ -1,23 +1,25 @@
+"use client";
+
 import Link from "next/link";
 import {
   MARKETING_APP_HREF,
   MARKETING_APP_LABEL,
 } from "@/lib/marketing-cta";
+import { useMarketingSignedIn } from "@/lib/marketing-signed-in-client";
 import { cn } from "@/lib/utils";
 
 /**
  * Header / hero CTAs — Sign in + Get started, or a single Go to Eden
- * when the session is already authorized.
+ * when the session is already authorized (client cookie detect).
  */
 export function MarketingAuthCtas({
-  signedIn,
   size = "md",
   className,
 }: {
-  signedIn: boolean;
   size?: "sm" | "md";
   className?: string;
 }) {
+  const signedIn = useMarketingSignedIn();
   const btn = size === "sm" ? "ds-btn-sm" : "";
   if (signedIn) {
     return (
@@ -56,16 +58,15 @@ export function MarketingAuthCtas({
 
 /** Single primary CTA used in mid-page / pricing / footer product column. */
 export function MarketingPrimaryCta({
-  signedIn,
   signedOutHref = "/sign-up",
   signedOutLabel = "Get started",
   className,
 }: {
-  signedIn: boolean;
   signedOutHref?: string;
   signedOutLabel?: string;
   className?: string;
 }) {
+  const signedIn = useMarketingSignedIn();
   return (
     <Link
       href={signedIn ? MARKETING_APP_HREF : signedOutHref}

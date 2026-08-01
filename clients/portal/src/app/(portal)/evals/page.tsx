@@ -901,10 +901,10 @@ function LabEvalsInner() {
     datasetsQuery.isLoading ||
     playgroundsQuery.isLoading ||
     experimentsQuery.isLoading;
-  const isError =
-    datasetsQuery.isError ||
-    playgroundsQuery.isError ||
-    experimentsQuery.isError;
+  // Datasets-only outages must not blank the whole Evals hub — show an
+  // empty datasets pane with a retry note instead of a full-page ApiError.
+  const datasetsUnavailable = datasetsQuery.isError;
+  const isError = playgroundsQuery.isError || experimentsQuery.isError;
 
   if (!orgId) {
     return (
@@ -929,11 +929,7 @@ function LabEvalsInner() {
       <div className="ds-page">
         <PageHeader title="Evals" />
         <QueryErrorPanel
-          error={
-            datasetsQuery.error ??
-            playgroundsQuery.error ??
-            experimentsQuery.error
-          }
+          error={playgroundsQuery.error ?? experimentsQuery.error}
           onRetry={() => {
             void datasetsQuery.refetch();
             void playgroundsQuery.refetch();
@@ -1014,6 +1010,25 @@ function LabEvalsInner() {
             made in this session aren&apos;t saved to the backend yet. They
             will be lost on refresh or navigation.
           </p>
+        </div>
+      ) : null}
+
+      {datasetsUnavailable && mode === "datasets" ? (
+        <div
+          role="status"
+          className="shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg-inset)] px-5 py-2.5 sm:px-7"
+        >
+          <p className="type-meta text-[var(--text)]">
+            Datasets are temporarily unavailable. Other eval surfaces still
+            work.
+          </p>
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-sm"
+            onClick={() => void datasetsQuery.refetch()}
+          >
+            Retry
+          </button>
         </div>
       ) : null}
 

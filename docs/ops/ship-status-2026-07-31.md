@@ -1,17 +1,29 @@
 # Eden ship status — 2026-07-31 (pre-ship pass shipped)
 
 Single current status for free-beta production quality. Supersedes stale
+
+## Prod audit pass — 2026-08-01
+
+Portal Vercel prod redeployed (`dpl_DgkT13nQTuhCa4GDsz2BfAvd8Quv`) with:
+- `/compare` null-safe A/B metrics (no crash on partial arms)
+- `/alerts` soft-land → `/signals` (Detectors)
+- Marketing CTAs client-session detect (no server `auth()` on public pages)
+- Lean edge `/api/health` (skip Clerk matcher + fat proxy)
+- Daily warm cron for `/api/health` (Hobby plan)
+
+API follow-up (this commit): DatasetHub no longer queries missing `dataset_columns`
+(fixes `/portal/evals/datasets` 503). Migration `129_dataset_columns` added for later spreadsheet features.
+
 claims in `docs/prod-ready-checklist.md` (Jul 3). Detail lives in
 `docs/ops/known-issues.md` and `docs/ops/remediation-measured-corrections.md`.
 
-## Live surfaces (verified 2026-07-31 ~23:52 UTC)
+## Live surfaces (verified 2026-08-01 ~02:05 UTC)
 
 | Surface | Status |
 |---|---|
 | API `api.edenobservability.com` | `/live` commit = **`6f3740c9`** (evidence plane + MCP soft-retire); `/ready` ready |
-| Portal `edenobservability.com` | Vercel prod READY (`dpl_3ecGVPV3gkEWjDoPaW6VwT5Wz2Zd`) aliased |
+| Portal `edenobservability.com` | Vercel prod READY (`dpl_DgkT13nQTuhCa4GDsz2BfAvd8Quv`) aliased |
 | Background fleet | Leader `acquired(via=postgres)`; quality worker + webhook/eql/maintenance/self-obs loops alive |
-| Portal `edenobservability.com` | Vercel prod READY (`dpl_92SLEG9KpKeotWtAqEB4979Pq7zc`) |
 | Docs `docs.edenobservability.com` | 200 |
 | Redis | Upstash 500k cap → `quota_exhausted`; Postgres leader leases |
 | Typesense product path | still `TYPESENSE_ENABLED=false`; F12 remains BLOCKED (needs provisioned cluster + secrets — not a code flip) |

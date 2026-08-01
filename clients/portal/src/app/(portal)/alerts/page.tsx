@@ -1,18 +1,12 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAlerts } from "@/lab/alerts-context";
-
-/** Legacy route — opens the shell alerts modal, then returns to Home. */
-export default function LabAlertsRedirect() {
-  const router = useRouter();
-  const { openAlerts } = useAlerts();
-
-  useEffect(() => {
-    openAlerts();
-    router.replace("/home");
-  }, [openAlerts, router]);
-
-  return null;
+/**
+ * Legacy /alerts URL → Detectors (/signals).
+ *
+ * Product leaf for threshold / signal rules is /signals (nav: Detectors).
+ * The firing inbox remains the shell alerts modal (bell). Soft-landing
+ * here instead of /home so bookmarks and stale nav links stay useful.
+ */
+export default function AlertsSoftLandPage() {
+  redirect("/signals");
 }

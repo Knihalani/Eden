@@ -138,6 +138,14 @@ export function resolveHubTarget(
 
   if (p === "/rebuild" || p.startsWith("/rebuild/")) return null;
   if (p === "/unavailable" || p.startsWith("/unavailable/")) return null;
+
+  // Legacy /alerts → Detectors. Inbox lives in the shell bell modal;
+  // the product leaf for rules is /signals. Do this before the live
+  // prefix pass-through so /alerts is not treated as a live leaf.
+  if (p === "/alerts" || p.startsWith("/alerts/")) {
+    return { destination: withSearch("/signals", search), mode: "redirect" };
+  }
+
   if (isLiveProductPath(p)) return null;
 
   for (const prefix of STUB_PREFIXES) {

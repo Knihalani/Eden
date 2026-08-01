@@ -101,7 +101,7 @@ export const MOBILE_BOTTOM_NAV = [
 /** More sheet — core leaves not on bottom nav + secondary (debugger, prompts, analytics). */
 export const MOBILE_MORE_NAV = [
   { id: "agents" as const, href: "/agents", labelKey: "nav.leaves.agents" },
-  { id: "alerts" as const, href: "/alerts", labelKey: "nav.leaves.alerts" },
+  { id: "alerts" as const, href: "/signals", labelKey: "nav.leaves.alerts" },
   { id: "cost" as const, href: "/cost", labelKey: "nav.leaves.cost" },
   {
     id: "guardrails" as const,
@@ -174,7 +174,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       },
       {
         id: "alerts",
-        href: "/alerts",
+        href: "/signals",
         labelKey: "nav.leaves.alerts",
         icon: Bell,
         category: "core",

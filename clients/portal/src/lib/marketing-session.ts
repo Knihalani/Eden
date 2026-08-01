@@ -1,24 +1,11 @@
 /**
- * Marketing auth detection without mounting ClerkProvider on public pages.
- * Uses the request session via Clerk middleware + ``auth()``.
- *
- * Wrapped in ``React.cache`` so header/hero/sections/footer share one
- * ``auth()`` lookup per request instead of three–four serial Clerk hits.
+ * Marketing CTA constants (re-exported for callers that historically
+ * imported from this module). Session detection for marketing CTAs is
+ * client-side — see ``marketing-signed-in-client.ts`` — so public pages
+ * do not call Clerk ``auth()`` and stay out of the dynamic SSR path.
  */
-
-import { cache } from "react";
-import { auth } from "@clerk/nextjs/server";
 
 export {
   MARKETING_APP_HREF,
   MARKETING_APP_LABEL,
 } from "@/lib/marketing-cta";
-
-export const isMarketingSignedIn = cache(async (): Promise<boolean> => {
-  try {
-    const { userId } = await auth();
-    return Boolean(userId);
-  } catch {
-    return false;
-  }
-});

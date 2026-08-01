@@ -3,15 +3,13 @@ import { DOCS_URL } from "@/lib/constants";
 import { MarketingAuthCtas } from "@/components/marketing/marketing-auth-ctas";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
 import { ProductSurfaceMock } from "@/components/marketing/product-surface-mock";
-import { isMarketingSignedIn } from "@/lib/marketing-session";
 
 /**
  * First viewport as one composition: brand copy + dense product chrome.
  * Desktop: split. Mobile: stacked. No empty black slab.
+ * CTAs detect session client-side — no server ``auth()`` (keeps marketing fast).
  */
-export async function MarketingHomeHero() {
-  const signedIn = await isMarketingSignedIn();
-
+export function MarketingHomeHero() {
   return (
     <section className="relative isolate overflow-hidden border-b border-[var(--line)]">
       <div
@@ -57,7 +55,7 @@ export async function MarketingHomeHero() {
             improvements in one loop.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <MarketingAuthCtas signedIn={signedIn} size="md" />
+            <MarketingAuthCtas size="md" />
             <a
               href={DOCS_URL}
               className="type-ui px-1 text-[var(--text-muted)] transition-colors duration-150 hover:text-[var(--accent)]"

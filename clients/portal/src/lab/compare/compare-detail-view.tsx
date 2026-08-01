@@ -73,7 +73,7 @@ export function CompareDetailView({
   const focus = sampleId
     ? (samples.find((s) => s.id === sampleId) ?? null)
     : null;
-  const [control, treatment] = experiment.arms;
+  const [control, treatment] = experiment.arms ?? [];
   const primary = armDelta(experiment, metric);
   const stumble = armDelta(experiment, "stumble");
   const score = armDelta(experiment, "score");
@@ -206,8 +206,8 @@ export function CompareDetailView({
             diff={diff}
             sampleId={sampleId}
             onSample={onSample}
-            controlLabel={control.label}
-            treatmentLabel={treatment.label}
+            controlLabel={control?.label || "Current"}
+            treatmentLabel={treatment?.label || "Candidate"}
           />
         ) : null}
         {layout === "timeline" ? (
@@ -312,7 +312,7 @@ function OverviewBody({
   primary: ReturnType<typeof armDelta>;
   rationale: string;
 }) {
-  const [control, treatment] = experiment.arms;
+  const [control, treatment] = experiment.arms ?? [];
   const lead =
     primary.better === "tie"
       ? "Tied"
@@ -350,11 +350,19 @@ function ArmPane({
   edge,
   highlight,
 }: {
-  arm: AbExperimentFixture["arms"][number];
+  arm: AbExperimentFixture["arms"][number] | null | undefined;
   metric: AbPrimaryMetric;
   edge?: boolean;
   highlight?: boolean;
 }) {
+  if (!arm) {
+    return (
+      <div className="space-y-2 px-1 py-1">
+        <p className="type-label">{edge ? "Candidate" : "Current"}</p>
+        <p className="type-meta">No arm metrics yet</p>
+      </div>
+    );
+  }
   const value =
     metric === "stumble"
       ? formatMetricValue("stumble", arm.stumbleRate)
@@ -376,14 +384,17 @@ function ArmPane({
       <div className="flex items-baseline justify-between gap-2">
         <p className="type-label">{armRoleLabel(arm.key)}</p>
         <p className="type-mono !text-[0.75rem] text-[var(--text)]">
-          {(arm.weight * 100).toFixed(0)}%
+          {((arm.weight ?? 0) * 100).toFixed(0)}%
         </p>
       </div>
       <p className="type-title">{arm.label}</p>
       <p className="type-display mt-1 tabular-nums">{value}</p>
       <p className="type-meta">{metricLabel(metric)}</p>
       <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
-        <Stat label="Runs" value={arm.nTraces.toLocaleString()} />
+        <Stat
+          label="Runs"
+          value={(arm.nTraces ?? 0).toLocaleString()}
+        />
         <Stat
           label="Fail rate"
           value={formatMetricValue("stumble", arm.stumbleRate)}

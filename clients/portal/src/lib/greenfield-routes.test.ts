@@ -95,6 +95,16 @@ describe("product portal routes", () => {
     });
 
     expect(resolveHubTarget("/traces", "")).toBeNull();
+
+    // Legacy /alerts → Detectors (not /home).
+    expect(resolveHubTarget("/alerts", "")).toEqual({
+      destination: "/signals",
+      mode: "redirect",
+    });
+    expect(resolveHubTarget("/alerts", "?id=sig_1")).toEqual({
+      destination: "/signals?id=sig_1",
+      mode: "redirect",
+    });
   });
 
   it("sends auth fallback to home; sign-up opens tour", () => {

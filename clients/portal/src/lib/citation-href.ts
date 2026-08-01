@@ -71,7 +71,7 @@ export function citationHref(target: CitationTarget): string {
       return `/debugger/${encodeURIComponent(id)}`;
     }
     case "alert": {
-      return `/alerts?alertId=${encodeURIComponent(id)}`;
+      return `/signals?id=${encodeURIComponent(id)}`;
     }
     case "experiment": {
       return `/evals?tab=experiments&experimentId=${encodeURIComponent(id)}`;

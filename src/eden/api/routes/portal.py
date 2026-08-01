@@ -2463,11 +2463,11 @@ async def list_portal_datasets(
     _user: dict = Depends(get_current_user),
 ) -> list[DatasetCard]:
     """Eval dataset cards from DatasetHub when available."""
-    await _require_pg("Datasets")
+    client = await _require_pg("Datasets")
     try:
         from eden.datasets.hub import DatasetHub
 
-        records = await DatasetHub().list_datasets(org_id, limit=limit)
+        records = await DatasetHub(pg=client).list_datasets(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal datasets: unavailable: %s", redact_all(str(exc)))
         raise HTTPException(
@@ -2686,16 +2686,47 @@ async def list_portal_ab_experiments(
                     "label": "Control",
                     "versionKey": str(data.get("variant_a_id") or ""),
                     "weight": round(1.0 - split, 4),
+                    "nTraces": 0,
+                    "stumbleRate": 0.0,
+                    "avgScore": 0.0,
+                    "costUsdPerTrace": 0.0,
+                    "latencyP95Ms": 0.0,
                 },
                 {
                     "key": "treatment",
                     "label": "Treatment",
                     "versionKey": str(data.get("variant_b_id") or ""),
                     "weight": round(split, 4),
+                    "nTraces": 0,
+                    "stumbleRate": 0.0,
+                    "avgScore": 0.0,
+                    "costUsdPerTrace": 0.0,
+                    "latencyP95Ms": 0.0,
                 },
             ]
         elif isinstance(data.get("arms"), list):
-            arms = [a for a in data["arms"] if isinstance(a, dict)]
+            for a in data["arms"]:
+                if not isinstance(a, dict):
+                    continue
+                arms.append(
+                    {
+                        "key": a.get("key") or ("control" if not arms else "treatment"),
+                        "label": str(a.get("label") or "Arm"),
+                        "versionKey": str(a.get("versionKey") or a.get("version_key") or ""),
+                        "weight": float(a.get("weight") or 0.5),
+                        "nTraces": int(a.get("nTraces") or a.get("n_traces") or 0),
+                        "stumbleRate": float(
+                            a.get("stumbleRate") or a.get("stumble_rate") or 0.0
+                        ),
+                        "avgScore": float(a.get("avgScore") or a.get("avg_score") or 0.0),
+                        "costUsdPerTrace": float(
+                            a.get("costUsdPerTrace") or a.get("cost_usd_per_trace") or 0.0
+                        ),
+                        "latencyP95Ms": float(
+                            a.get("latencyP95Ms") or a.get("latency_p95_ms") or 0.0
+                        ),
+                    }
+                )
         rec = "need_more_data"
         if data.get("winner_id") or status == "winner_detected":
             rec = "ship"

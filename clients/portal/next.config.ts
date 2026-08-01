@@ -88,7 +88,8 @@ const nextConfig: NextConfig = {
       { source: "/lab/sessions", destination: "/traces?view=sessions", permanent: false },
       { source: "/lab/issues", destination: "/issues", permanent: false },
       { source: "/lab/signals", destination: "/signals", permanent: false },
-      { source: "/lab/alerts", destination: "/alerts", permanent: false },
+      // Legacy /alerts soft-lands on Detectors (/signals)
+      { source: "/lab/alerts", destination: "/signals", permanent: false },
       { source: "/lab/evals", destination: "/evals", permanent: false },
       { source: "/lab/improve", destination: "/improve", permanent: false },
       { source: "/lab/cost", destination: "/cost", permanent: false },
@@ -184,7 +185,7 @@ const nextConfig: NextConfig = {
         destination: "/issues?id=:id&tab=fix",
         permanent: false,
       },
-      // Signals is the product leaf; /alerts opens the shell modal then home
+      // Signals is the product leaf; /alerts soft-lands → /signals (hub redirect)
       { source: "/inspector", destination: "/traces?mode=meta", permanent: false },
       { source: "/observability/mcp", destination: "/traces?facet=mcp", permanent: false },
       {

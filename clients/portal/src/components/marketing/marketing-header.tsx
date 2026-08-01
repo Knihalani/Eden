@@ -4,7 +4,6 @@ import { DOCS_URL } from "@/lib/constants";
 import { MarketingAuthCtas } from "@/components/marketing/marketing-auth-ctas";
 import { MarketingMobileNav } from "@/components/marketing/marketing-mobile-nav";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
-import { isMarketingSignedIn } from "@/lib/marketing-session";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -14,13 +13,11 @@ const NAV = [
   { href: "/contact", label: "Contact" },
 ] as const;
 
-export async function MarketingHeader({
+export function MarketingHeader({
   transparent = false,
 }: {
   transparent?: boolean;
 }) {
-  const signedIn = await isMarketingSignedIn();
-
   return (
     <header
       className={cn(
@@ -67,12 +64,8 @@ export async function MarketingHeader({
           })}
         </nav>
         <div className="flex items-center gap-2">
-          <MarketingAuthCtas
-            signedIn={signedIn}
-            size="sm"
-            className="hidden sm:flex"
-          />
-          <MarketingMobileNav signedIn={signedIn} />
+          <MarketingAuthCtas size="sm" className="hidden sm:flex" />
+          <MarketingMobileNav />
         </div>
       </MarketingRail>
     </header>
