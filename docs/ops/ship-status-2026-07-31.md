@@ -14,6 +14,15 @@ Portal Vercel prod redeployed (`dpl_DgkT13nQTuhCa4GDsz2BfAvd8Quv`) with:
 API follow-up (this commit): DatasetHub no longer queries missing `dataset_columns`
 (fixes `/portal/evals/datasets` 503). Migration `129_dataset_columns` added for later spreadsheet features.
 
+## Portal clarity / craft / feel — 2026-08-01
+
+Portal Vercel prod (`dpl_8scS3dYGY378DRP3gVPFPFcng7Vi`, commit `e5a590df`):
+- Clear: Detectors/Inbox vocabulary; teaching empties; feature-gate errors
+- Worked: LocalDraftBanner on draft mutations; Improve Approve/Reject; `/audit`→settings
+- Looked/felt: Home Status→Action; ⌘K palette; mobile list→full-bleed; Gateway/Cost diet
+- Fast: Home query priority; Traces/Gateway lazy heavy panels
+- Live UX smoke: 9/9 (Home CTAs, Inbox, ⌘K, Improve, Detectors, mobile traces)
+
 claims in `docs/prod-ready-checklist.md` (Jul 3). Detail lives in
 `docs/ops/known-issues.md` and `docs/ops/remediation-measured-corrections.md`.
 
