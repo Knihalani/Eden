@@ -194,6 +194,17 @@ def _build_patch_prompt(
         parts.append("\n## Linked source files\n")
         for f in files_with_content:
             parts.append(f"--- {f['path']} ---\n{f['content'][:2000]}\n\n")
+    elif linked_files:
+        # Be explicit when paths exist but content was not hydrated —
+        # otherwise the model invents edits against imaginary files.
+        parts.append(
+            "\n## Linked source files\n"
+            "(paths known but content unavailable — do not invent file bodies; "
+            "propose a minimal diff only if the RCA names exact edits)\n"
+        )
+        for f in linked_files[:5]:
+            if f.get("path"):
+                parts.append(f"- {f['path']}\n")
     return _PATCH_GEN_SYSTEM_PROMPT, "".join(parts)
 
 

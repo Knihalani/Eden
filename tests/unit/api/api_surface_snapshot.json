@@ -810,10 +810,6 @@
       "200:application/json",
       "422:application/json"
     ],
-    "GET /orgs/{org_id}/mcp/keys": [
-      "200:application/json",
-      "422:application/json"
-    ],
     "GET /orgs/{org_id}/media/{blob_id}": [
       "200:application/json",
       "422:application/json"
@@ -1432,6 +1428,10 @@
       "422:application/json"
     ],
     "PATCH /notifications/{notification_id}/read": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/agents/{agent_id}": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2198,10 +2198,6 @@
       "200:application/json",
       "422:application/json"
     ],
-    "POST /orgs/{org_id}/mcp/keys": [
-      "200:application/json",
-      "422:application/json"
-    ],
     "POST /orgs/{org_id}/models/compare": [
       "200:application/json",
       "422:application/json"
@@ -2650,7 +2646,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 678,
+  "route_count": 677,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -2864,7 +2860,6 @@
     "GET /orgs/{org_id}/llmops/monitoring/models/{model_family}",
     "GET /orgs/{org_id}/llmops/prompts",
     "GET /orgs/{org_id}/llmops/prompts/{prompt_id}",
-    "GET /orgs/{org_id}/mcp/keys",
     "GET /orgs/{org_id}/media/{blob_id}",
     "GET /orgs/{org_id}/media/{blob_id}/info",
     "GET /orgs/{org_id}/members",
@@ -3022,6 +3017,7 @@
     "PATCH /auth/users/me",
     "PATCH /notifications/read-all",
     "PATCH /notifications/{notification_id}/read",
+    "PATCH /orgs/{org_id}/agents/{agent_id}",
     "PATCH /orgs/{org_id}/agents/{agent_id}/book/config",
     "PATCH /orgs/{org_id}/agents/{agent_id}/ledger/config",
     "PATCH /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
@@ -3217,7 +3213,6 @@
     "POST /orgs/{org_id}/llmops/prompts",
     "POST /orgs/{org_id}/llmops/prompts/{prompt_id}/render",
     "POST /orgs/{org_id}/llmops/prompts/{prompt_name}/default",
-    "POST /orgs/{org_id}/mcp/keys",
     "POST /orgs/{org_id}/models/compare",
     "POST /orgs/{org_id}/models/project",
     "POST /orgs/{org_id}/models/recommend",
@@ -3331,7 +3326,7 @@
     "PUT /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
     "PUT /orgs/{org_id}/sidebar-prefs"
   ],
-  "schema_count": 416,
+  "schema_count": 415,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -3346,6 +3341,7 @@
     "AgentRegisterRequest",
     "AgentRegisterResponse",
     "AgentRegistration",
+    "AgentUpdateRequest",
     "AlertAcknowledgeRequest",
     "AlertEventCard",
     "AlertRuleCard",
@@ -3393,7 +3389,6 @@
     "CheckpointListResponse",
     "CheckpointResponse",
     "ChunksIngestResponse",
-    "ClaimInstallationRequest",
     "ClassifierCreate",
     "ClusterRequest",
     "ClusterResponse",
@@ -3424,7 +3419,6 @@
     "CreateBrowserSessionRequest",
     "CreateDatasetRequest",
     "CreateDebugSessionRequest",
-    "CreateMcpKeyBody",
     "CreateNotificationRequest",
     "CreateOrgBody",
     "CreatePlaygroundRequest",

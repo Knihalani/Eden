@@ -78,6 +78,15 @@ async def approve_plan(
     if blocked:
         raise ApproveBlocked(blocked)
 
+    # Phase 2 — surface hermetic preverify on the plan; human approve still
+    # proceeds (free beta). Auto-merge paths must not skip this signal.
+    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    hermetic = evidence.get("hermetic_preverify") if isinstance(evidence, dict) else None
+    hermetic_status = None
+    if isinstance(hermetic, dict):
+        hermetic_status = hermetic.get("status")
+
+
     plan_kind = plan.get("plan_kind") or "code_patch"
     if plan_kind != "code_patch":
         return await _approve_non_code(org_id, plan_id, plan, approved_by=approved_by)
@@ -244,6 +253,7 @@ async def approve_plan(
         "branch": opened_branch,
         "verify_job_id": verify_job_id,
         "merge_advice": merge_advice,
+        "hermetic_preverify_status": hermetic_status,
         "plan": updated,
     }
 

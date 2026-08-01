@@ -19,7 +19,7 @@ sidebar_label: Security launch checklist
 | 1 | `JWT_SECRET` is not a placeholder in production | Deploy env audit; `tests/unit/config/test_jwt_secret_assertion.py` passes in CI | CI log / Northflank secret name |
 | 2 | `ENCRYPTION_KEY` is unique per environment | Fernet key generated per env; not copied from `.env.example` | Secret manager screenshot (redacted) |
 | 3 | API keys rotatable from portal | Settings → API Keys: create, use, revoke | Screen recording or E2E |
-| 4 | MCP keys documented | Settings → MCP tab shows config; dedicated `POST /v1/mcp/keys` when `eden_mcp_server_v1` enabled | Portal + docs link |
+| 4 | Eden MCP server soft-retired for free beta | `mcp_http_transport_v1=False`; `/orgs/.../mcp/keys` not mounted; portal/docs entry points removed. Do not require Settings → MCP for launch. | Config + `app.py` mount comments |
 
 ## Authorization & audit
 

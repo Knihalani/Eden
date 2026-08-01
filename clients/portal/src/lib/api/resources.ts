@@ -4845,6 +4845,19 @@ export const timeTravelApi = {
       `/orgs/${orgId}/intelligence/time-travel/replay`,
       { method: "POST", body: JSON.stringify(data) },
     ),
+  listForks: (orgId: string, parentTraceId: string) =>
+    fetchApi<
+      TimeTravelEnvelope<{
+        forks: Array<Record<string, unknown>>;
+        n_forks: number;
+      }>
+    >(
+      `/orgs/${orgId}/intelligence/time-travel/forks?parent_trace_id=${encodeURIComponent(parentTraceId)}`,
+    ),
+  diff: (orgId: string, forkId: string, replayId: string) =>
+    fetchApi<TimeTravelEnvelope<Record<string, unknown>>>(
+      `/orgs/${orgId}/intelligence/time-travel/diff/${encodeURIComponent(forkId)}/${encodeURIComponent(replayId)}`,
+    ),
 };
 
 // ── Intelligence: APM Depth (Cat 22) ────────────────────────────────

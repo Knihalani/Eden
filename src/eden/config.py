@@ -235,11 +235,12 @@ def _build_settings_class():
         # hash back, and concludes their edit had no effect on the model.
         # The tokens_saved / cost_saved_usd figures are fiction.
         #
-        # Recording stays ON (it is harmless and its data is needed to
-        # fix this properly). Re-enable once the recorder persists real
-        # message content AND edits are applied to payload.
+        # Recording stays ON. Replay is ON after the 2026-07-31 evidence-
+        # plane fix: call sites persist prompt/messages, edits land in
+        # payload, and empty prompts report cannot_replay (not fake
+        # re_executed). Flip off with TIME_TRAVEL_REPLAY_ENABLED=0 if needed.
         # See docs/ops/disabled-features.md.
-        time_travel_replay_enabled: bool = False
+        time_travel_replay_enabled: bool = True
         # SSO routes. OFF since 2026-07-30: all 11 handlers in
         # api/routes/sso.py query ``org_sso_providers``, which does not
         # exist — the live schema has ``org_sso_settings`` and

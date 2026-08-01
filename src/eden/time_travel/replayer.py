@@ -191,7 +191,9 @@ class TraceReplayer:
             re_exec_result = await self._re_execute_step(
                 org_id=org_id, step=step_with_edits
             )
-            re_executed.append(step_index)
+            did_re_exec = bool(re_exec_result.get("re_executed"))
+            if did_re_exec:
+                re_executed.append(step_index)
             await _insert_replay_step(
                 org_id=org_id,
                 replay_id=replay_id,
@@ -199,21 +201,21 @@ class TraceReplayer:
                 step_index=step_index,
                 served_from_cache=False,
                 cache_key=None,
-                re_executed=True,
+                re_executed=did_re_exec,
                 response_hash=re_exec_result.get("response_hash"),
                 tokens_used=int(re_exec_result.get("tokens_used", 0) or 0),
                 cost_usd=float(re_exec_result.get("cost_usd", 0.0) or 0.0),
             )
+            if re_exec_result.get("cannot_replay"):
+                if step_index not in cache_miss_warnings:
+                    cache_miss_warnings.append(step_index)
 
         duration_ms = int((time.monotonic() - t0) * 1000)
-        # Determine the outcome label. A replay is "success"
-        # when no cache-miss warnings fired and the live
-        # re-execution didn't raise; "partial" when at least
-        # one cache-miss warning fired; "fail" when the live
-        # re-execution raised (caller can check
-        # ``re_executed`` length vs ``n_steps``).
-        if not re_executed:
-            outcome = "success"  # everything served from cache
+        # Determine the outcome label.
+        if cache_miss_warnings and not re_executed and not served_from_cache:
+            outcome = "fail"
+        elif not re_executed and not cache_miss_warnings:
+            outcome = "success"  # everything served from cache (or empty)
         elif cache_miss_warnings:
             outcome = "partial"
         else:
@@ -279,10 +281,12 @@ class TraceReplayer:
         """Look up a cached step by cache_key.
 
         The v1.3 ship reads from the existing
-        ``cache_lookups`` table (the AIGateway writes to it
-        on every cache hit). The fallback when the table
-        has no matching row is ``None`` — the caller
-        surfaces a ``cache_miss_warnings`` entry.
+        ``cache_lookups`` table. Rows are written by
+        :func:`eden.time_travel._common.record_cache_lookup`
+        from :class:`TraceRecorder` when a step is cacheable.
+        The fallback when the table has no matching row is
+        ``None`` — the caller surfaces a ``cache_miss_warnings``
+        entry.
         """
         try:
             from eden.storage.postgres import get_postgres_client
@@ -313,13 +317,14 @@ class TraceReplayer:
         """Re-execute a step live via the configured AIGateway / OpenRouter.
 
         Extracts the model + messages from the stored ``agent.step``
-        payload, builds a :class:`ModelRequest`, and calls the
+        payload (top-level or nested under ``payload["request"]``),
+        builds a :class:`ModelRequest`, and calls the
         shared :func:`get_ai_gateway` singleton so the PII filter,
         audit, tenant rate-limit, and cost tracking all apply.
 
-        Falls back to the stored token/cost values when the payload
-        has no usable content or the gateway call fails, so a
-        provider outage never breaks the replay surface.
+        When the payload has no usable prompt content, returns the
+        recorded hash with ``re_executed=False`` / ``cannot_replay=True``
+        so callers never claim a live execution that did not happen.
         """
         import hashlib as _hashlib
         import json as _json
@@ -331,38 +336,96 @@ class TraceReplayer:
             except Exception:
                 payload = {}
 
-        # Build the prompt from the stored messages (OpenAI-wire format).
-        messages = payload.get("messages") or []
-        if messages:
+        request = (
+            payload.get("request")
+            if isinstance(payload.get("request"), dict)
+            else {}
+        )
+        response_meta = (
+            payload.get("response")
+            if isinstance(payload.get("response"), dict)
+            else {}
+        )
+
+        def _first(*vals: Any) -> Any:
+            for v in vals:
+                if v is not None and v != "" and v != []:
+                    return v
+            return None
+
+        # Prefer explicit prompt / system_prompt (including edits) over
+        # reconstructing from messages — otherwise a prompt edit is ignored
+        # when the recorder also stored the original messages array.
+        explicit_prompt = _first(payload.get("prompt"), request.get("prompt"))
+        explicit_system = _first(
+            payload.get("system_prompt"), request.get("system_prompt")
+        )
+        if explicit_prompt or explicit_system:
             parts: list[str] = []
-            for m in messages:
-                if isinstance(m, dict):
-                    content = m.get("content") or ""
-                    if isinstance(content, str) and content:
-                        parts.append(content)
-                    elif isinstance(content, list):
-                        # multi-part content (vision blocks, etc.)
-                        for block in content:
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                parts.append(block.get("text") or "")
+            if explicit_system:
+                parts.append(str(explicit_system))
+            if explicit_prompt:
+                parts.append(str(explicit_prompt))
             prompt = "\n".join(parts)
         else:
-            prompt = (
-                payload.get("prompt")
-                or payload.get("system_prompt")
-                or ""
+            messages = (
+                _first(payload.get("messages"), request.get("messages")) or []
             )
+            if messages:
+                parts = []
+                for m in messages:
+                    if isinstance(m, dict):
+                        content = m.get("content") or ""
+                        if isinstance(content, str) and content:
+                            parts.append(content)
+                        elif isinstance(content, list):
+                            for block in content:
+                                if (
+                                    isinstance(block, dict)
+                                    and block.get("type") == "text"
+                                ):
+                                    parts.append(block.get("text") or "")
+                prompt = "\n".join(parts)
+            else:
+                prompt = ""
+
+        recorded_hash = str(
+            step.get("response_hash")
+            or response_meta.get("response_hash")
+            or ""
+        )
+        recorded_tokens = int(
+            step.get("tokens_used")
+            or response_meta.get("tokens_used")
+            or 0
+            or 0
+        )
+        recorded_cost = float(
+            step.get("cost_usd")
+            or response_meta.get("cost_usd")
+            or 0.0
+            or 0.0
+        )
 
         if not prompt:
-            # No usable content in the stored payload — return the
-            # recorded values so the diff surface still works.
             return {
-                "response_hash": step.get("response_hash") or "",
-                "tokens_used": int(step.get("tokens_used", 0) or 0),
-                "cost_usd": float(step.get("cost_usd", 0.0) or 0.0),
+                "response_hash": recorded_hash,
+                "tokens_used": recorded_tokens,
+                "cost_usd": recorded_cost,
+                "re_executed": False,
+                "cannot_replay": True,
+                "reason": "no_usable_prompt_content",
             }
 
-        model = str(payload.get("model") or payload.get("model_version") or "")
+        model = str(
+            _first(
+                payload.get("model"),
+                payload.get("model_version"),
+                request.get("model"),
+                request.get("model_version"),
+            )
+            or ""
+        )
         try:
             from eden.api.routes.gateway import get_ai_gateway
             from eden.llmops.ai_gateway import ModelRequest
@@ -383,17 +446,22 @@ class TraceReplayer:
                 "response_hash": response_hash,
                 "tokens_used": resp.input_tokens + resp.output_tokens,
                 "cost_usd": float(resp.cost_usd or 0.0),
+                "re_executed": True,
+                "cannot_replay": False,
             }
         except Exception as exc:
             logger.warning(
                 "_re_execute_step: gateway call failed (%s); "
-                "falling back to recorded values",
+                "falling back to recorded values (not claiming re_executed)",
                 exc,
             )
             return {
-                "response_hash": step.get("response_hash") or "",
-                "tokens_used": int(step.get("tokens_used", 0) or 0),
-                "cost_usd": float(step.get("cost_usd", 0.0) or 0.0),
+                "response_hash": recorded_hash,
+                "tokens_used": recorded_tokens,
+                "cost_usd": recorded_cost,
+                "re_executed": False,
+                "cannot_replay": True,
+                "reason": f"gateway_failed:{exc}",
             }
 
 

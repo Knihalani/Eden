@@ -195,6 +195,18 @@ class TraceRecorder:
                 json.dumps(payload, default=str),
                 json.dumps(attributes, default=str),
             )
+            # Persist cache_lookups so TraceReplayer can serve pre-fork
+            # steps without inventing savings.
+            cache_key = meta.get("cache_key")
+            if meta.get("cacheable") and cache_key:
+                from eden.time_travel._common import record_cache_lookup
+
+                await record_cache_lookup(
+                    org_id=org_id,
+                    cache_key=str(cache_key),
+                    tokens_used=int(response.get("tokens_used") or 0),
+                    cost_usd=float(response.get("cost_usd") or 0.0),
+                )
         except Exception as exc:  # noqa: BLE001
             logger.debug(
                 "TraceRecorder.persist_agent_step failed: %s", exc

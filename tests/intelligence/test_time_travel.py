@@ -288,15 +288,22 @@ class TestTraceReplayer:
                 cache_hit,
             ]
         )
-        # _get_parent_steps: 3 agent.step events.
+        # _get_parent_steps: 3 agent.step events with prompt content.
         parent_rows = [
             {
                 "event_id": f"ev_{i}",
                 "trace_id": "trc_abc",
                 "span_id": f"s{i}",
                 "name": "agent.step",
-                "payload": {"step_index": i},
-                "attributes": {"cacheable": True},
+                "payload": {
+                    "step_index": i,
+                    "request": {
+                        "model": "openai/gpt-test",
+                        "prompt": f"prompt step {i}",
+                    },
+                    "response": {"response_hash": f"hash_{i}", "tokens_used": 10},
+                },
+                "attributes": {"cacheable": True, "response_hash": f"hash_{i}"},
                 "response_hash": f"hash_{i}",
                 "duration_ms": 100.0,
                 "timestamp": datetime(2026, 6, 11, 10, 0, i, tzinfo=UTC),
@@ -306,18 +313,31 @@ class TestTraceReplayer:
         mock_postgres_client.fetch = AsyncMock(return_value=parent_rows)
         mock_postgres_client.execute = AsyncMock(return_value=None)
 
-        result = await TraceReplayer().replay_from("org_test", fork_id="frk_abc", edits={})
+        class _Resp:
+            text = "live replay output"
+            input_tokens = 2
+            output_tokens = 3
+            cost_usd = 0.002
+
+        gw = MagicMock()
+        gw.complete = AsyncMock(return_value=_Resp())
+
+        with patch("eden.api.routes.gateway.get_ai_gateway", return_value=gw):
+            result = await TraceReplayer().replay_from(
+                "org_test", fork_id="frk_abc", edits={}
+            )
         assert result["status"] == "ok"
         assert result["data"]["replay_id"].startswith("rpl_")
         # Steps 0 and 1 should be served from cache
         # (fork_at_step=2).
         assert 0 in result["data"]["served_from_cache"]
         assert 1 in result["data"]["served_from_cache"]
-        # Step 2 is the fork step — re-executed.
+        # Step 2 is the fork step — re-executed live.
         assert 2 in result["data"]["re_executed"]
         # No cache-miss warnings (the cache_lookups
         # side-effect returned a row every time).
         assert result["data"]["cache_miss_warnings"] == []
+        gw.complete.assert_awaited()
 
     async def test_replay_with_cache_miss_warning(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
@@ -607,23 +627,32 @@ class TestTimeTravelRoutes:
                 "edits": {},
             },
         )
-        # Replay is disabled (config.time_travel_replay_enabled=False,
-        # 2026-07-30). It never re-executed anything: the recorder
-        # stores no prompt content, so the replayer short-circuits and
-        # returns the ORIGINAL response hash while reporting
-        # re_executed=True. 503 beats a confidently wrong 200.
-        # See docs/ops/disabled-features.md.
+        # Replay enabled by default after 2026-07-31 honesty fix.
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["feature"] == "TraceReplayer"
+        assert body["data"]["replay_id"].startswith("rpl_")
+
+    def test_replay_route_when_disabled(
+        self, tt_client: TestClient, mock_postgres_client: MagicMock, monkeypatch
+    ) -> None:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(
+            settings, "time_travel_replay_enabled", False, raising=False
+        )
+        resp = tt_client.post(
+            "/orgs/org_test/intelligence/time-travel/replay",
+            json={"fork_id": "frk_abc", "edits": {}},
+        )
         assert resp.status_code == 503
         assert "disabled" in resp.json()["detail"].lower()
 
     def test_replay_route_when_enabled(
         self, tt_client: TestClient, mock_postgres_client: MagicMock, monkeypatch
     ) -> None:
-        """The route still works when the flag is turned back on.
-
-        Guards the kill switch itself: if re-enabling did not restore
-        the endpoint, the flag would be a one-way door.
-        """
+        """Explicit True still works (kill-switch smoke)."""
         from eden.config import get_settings
 
         settings = get_settings()

@@ -27,7 +27,6 @@ import {
   Users,
   User,
   Code,
-  Terminal,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -227,13 +226,6 @@ export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
     description: "Link GitHub repos for code references.",
     group: "Settings",
     icon: Code,
-  },
-  {
-    href: "/settings?mode=workspace",
-    label: "Settings · MCP",
-    description: "Model Context Protocol server configuration.",
-    group: "Settings",
-    icon: Terminal,
   },
   {
     href: "/settings?mode=workspace",

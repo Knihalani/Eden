@@ -216,21 +216,96 @@ def _apply_edits_to_step(
     step: dict[str, Any],
     step_edits: dict[str, Any],
 ) -> dict[str, Any]:
-    """Apply the per-step edits to a single step dict.
+    """Apply the per-step edits into ``step["payload"]`` (and request).
 
-    Returns a new dict (the input is not mutated). The
-    merge is shallow — a sub-key like
-    ``step_30.tool_args`` is replaced wholesale, not
-    deep-merged. The v1.3 ship keeps the merge semantics
-    simple; a v2 implementation can add deep-merge.
+    Returns a new dict (the input is not mutated). Prompt-shaped
+    keys (``messages``, ``prompt``, ``system_prompt``, ``model``,
+    ``temperature``, …) are written where :meth:`TraceReplayer._re_execute_step`
+    reads them — nested under ``payload`` / ``payload.request``, not
+    only on the step root.
     """
     out = dict(step)
+    payload_raw = out.get("payload")
+    if isinstance(payload_raw, dict):
+        payload: dict[str, Any] = dict(payload_raw)
+    else:
+        payload = {}
+    request_raw = payload.get("request")
+    request: dict[str, Any] = (
+        dict(request_raw) if isinstance(request_raw, dict) else {}
+    )
+    prompt_keys = {
+        "messages",
+        "prompt",
+        "system_prompt",
+        "model",
+        "model_version",
+        "temperature",
+    }
     for k, v in step_edits.items():
         out[k] = v
+        payload[k] = v
+        if k in prompt_keys:
+            request[k] = v
+    if request:
+        payload["request"] = request
+    out["payload"] = payload
     return out
 
 
-# ─── Persistence helpers ─────────────────────────────────────
+# ─── Cache lookup persistence (Cat 20) ───────────────────────
+
+
+async def record_cache_lookup(
+    *,
+    org_id: str,
+    cache_key: str,
+    tokens_used: int = 0,
+    cost_usd: float = 0.0,
+) -> None:
+    """Best-effort INSERT into ``cache_lookups`` for TraceReplayer reads.
+
+    Ensures the table exists (CREATE IF NOT EXISTS) so environments
+    without a dedicated migration still work. Never raises.
+    """
+    if not org_id or not cache_key:
+        return
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return
+        await client.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cache_lookups (
+                id            BIGSERIAL PRIMARY KEY,
+                org_id        VARCHAR(128) NOT NULL,
+                cache_key     TEXT NOT NULL,
+                tokens_used   INTEGER NOT NULL DEFAULT 0,
+                cost_usd      DOUBLE PRECISION NOT NULL DEFAULT 0,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await client.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_cache_lookups_org_key
+            ON cache_lookups (org_id, cache_key, created_at DESC)
+            """
+        )
+        await client.execute(
+            """
+            INSERT INTO cache_lookups (org_id, cache_key, tokens_used, cost_usd)
+            VALUES ($1, $2, $3, $4)
+            """,
+            org_id,
+            cache_key[:512],
+            int(tokens_used or 0),
+            float(cost_usd or 0.0),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("record_cache_lookup failed: %s", exc)
 
 
 async def _upsert_fork_branch(
@@ -559,4 +634,5 @@ __all__ = [
     "_step_index_of",
     "_upsert_fork_branch",
     "_validate_edits",
+    "record_cache_lookup",
 ]

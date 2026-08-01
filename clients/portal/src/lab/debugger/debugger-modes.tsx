@@ -39,13 +39,19 @@ export function DebuggerReplayView({
   onFocusSpan,
   onReplay,
   sourceTrace,
+  liveTravelNote,
 }: {
   session: DebuggerSessionFixture;
   focusSpanId?: string | null;
   onFocusSpan: (spanId: string | null) => void;
-  onReplay: (checkpoint: DebuggerCheckpoint) => void;
+  onReplay: (
+    checkpoint: DebuggerCheckpoint,
+    fromStep: number,
+  ) => void | Promise<void>;
   /** Hydrated detail from ``portalApi.traceDetail`` (list rows have empty steps). */
   sourceTrace?: TraceFixture | null;
+  /** Honest copy when live Cat 20 re-exec is off. */
+  liveTravelNote?: string | null;
 }) {
   const checkpoints = sessionCheckpoints(session, sourceTrace);
   const trace = sourceTrace ?? traceById(session.sourceTraceId);
@@ -147,16 +153,21 @@ export function DebuggerReplayView({
             onClick={() => {
               if (!selected) return;
               setRunning(true);
-              window.setTimeout(() => {
-                onReplay(selected);
-                setRunning(false);
-              }, 520);
+              void Promise.resolve(
+                onReplay(selected, Math.max(0, selectedIndex)),
+              ).finally(() => setRunning(false));
             }}
           >
             <Play className="h-3.5 w-3.5 fill-current" aria-hidden />
-            {running ? "Replaying…" : "Run replay"}
+            {running ? "Re-running…" : "Hermetic re-run"}
           </button>
         </div>
+
+        {liveTravelNote ? (
+          <div className="shrink-0 border-b border-[var(--line)] px-4 py-2 sm:px-5">
+            <p className="type-meta text-[var(--text-faint)]">{liveTravelNote}</p>
+          </div>
+        ) : null}
 
         {session.lastReplay ? (
           <div className="shrink-0 border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
@@ -611,8 +622,233 @@ export function DebuggerInspectView({
   );
 }
 
-/** @deprecated alias */
-export const DebuggerTimeTravelView = DebuggerInspectView;
+/* ------------------------------------------------------------------ */
+/* Time travel — Cat 20 fork / live replay / diff                      */
+/* ------------------------------------------------------------------ */
+
+export function DebuggerTimeTravelView({
+  session,
+  orgId,
+  sourceTrace,
+}: {
+  session: DebuggerSessionFixture;
+  orgId: string | null;
+  sourceTrace?: TraceFixture | null;
+}) {
+  const checkpoints = sessionCheckpoints(session, sourceTrace);
+  const [forkAt, setForkAt] = useState(0);
+  const [promptEdit, setPromptEdit] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [forkId, setForkId] = useState<string | null>(null);
+  const [replayId, setReplayId] = useState<string | null>(null);
+  const [forks, setForks] = useState<Array<Record<string, unknown>>>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [diffSummary, setDiffSummary] = useState<string | null>(null);
+
+  const refreshForks = async () => {
+    if (!orgId || !session.sourceTraceId) return;
+    try {
+      const { timeTravelApi } = await import("@/lib/api/resources");
+      const res = await timeTravelApi.listForks(orgId, session.sourceTraceId);
+      const data = (res as { data?: { forks?: Array<Record<string, unknown>> } })
+        ?.data;
+      setForks(Array.isArray(data?.forks) ? data!.forks! : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to list forks");
+    }
+  };
+
+  useEffect(() => {
+    void refreshForks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per session/org
+  }, [orgId, session.sourceTraceId]);
+
+  const onForkAndReplay = async () => {
+    if (!orgId || !session.sourceTraceId) {
+      setError("Missing org or source trace.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    setDiffSummary(null);
+    try {
+      const { timeTravelApi } = await import("@/lib/api/resources");
+      const edits: Record<string, unknown> = {};
+      if (promptEdit.trim()) {
+        edits[`step_${forkAt}.prompt`] = promptEdit.trim();
+      }
+      const forkRes = await timeTravelApi.fork(orgId, {
+        parent_trace_id: session.sourceTraceId,
+        fork_at_step: forkAt,
+        name: `Debugger fork @ ${forkAt}`,
+        edits,
+      });
+      const newForkId = String(
+        (forkRes as { data?: { fork_id?: string } })?.data?.fork_id || "",
+      );
+      if (!newForkId) {
+        throw new Error("Fork response missing fork_id");
+      }
+      setForkId(newForkId);
+      setStatus(`Forked ${newForkId}`);
+
+      const replayRes = await timeTravelApi.replay(orgId, {
+        fork_id: newForkId,
+        edits,
+      });
+      const replayData = (replayRes as { data?: TimeTravelReplayShape })?.data;
+      const newReplayId = String(replayData?.replay_id || "");
+      setReplayId(newReplayId || null);
+      const nRe = Number(replayData?.n_re_executed ?? 0);
+      const nCache = Number(replayData?.n_served_from_cache ?? 0);
+      const outcome = String(replayData?.new_outcome || "unknown");
+      setStatus(
+        `Replay ${newReplayId || "—"} · outcome=${outcome} · re_executed=${nRe} · from_cache=${nCache}`,
+      );
+
+      if (newForkId && newReplayId) {
+        try {
+          const diffRes = await timeTravelApi.diff(orgId, newForkId, newReplayId);
+          const d = (diffRes as { data?: { diff?: unknown } })?.data;
+          const diffArr = Array.isArray(d?.diff) ? d!.diff! : [];
+          setDiffSummary(
+            diffArr.length
+              ? `${diffArr.length} field change(s) vs original`
+              : "No field-level diffs (identical hashes or cannot_replay on historical steps).",
+          );
+        } catch (diffErr) {
+          setDiffSummary(
+            diffErr instanceof Error
+              ? `Diff unavailable: ${diffErr.message}`
+              : "Diff unavailable",
+          );
+        }
+      }
+      await refreshForks();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Time travel failed";
+      setError(
+        /503|disabled/i.test(msg)
+          ? `${msg} — live replay may be disabled (TIME_TRAVEL_REPLAY_ENABLED).`
+          : /no_usable_prompt|cannot_replay/i.test(msg)
+            ? `${msg} — historical steps without recorded prompt cannot re-exec.`
+            : msg,
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3 sm:px-5">
+      <div>
+        <p className="type-label">Cat 20 time travel</p>
+        <p className="type-meta mt-1 text-[var(--text-secondary)]">
+          Fork this trace at a step, optionally edit the prompt, and live-replay
+          through the AI gateway. Steps before the fork may serve from{" "}
+          <code className="type-meta">cache_lookups</code>. Historical rows
+          without recorded prompt content return honest{" "}
+          <code className="type-meta">cannot_replay</code>.
+        </p>
+      </div>
+
+      <label className="flex flex-col gap-1">
+        <span className="type-label">Fork at step</span>
+        <select
+          className="ds-input"
+          value={forkAt}
+          onChange={(e) => setForkAt(Number(e.target.value) || 0)}
+        >
+          {(checkpoints.length ? checkpoints : [{ id: "0", label: "Step 0" }]).map(
+            (cp, i) => (
+              <option key={cp.id} value={i}>
+                {i}: {cp.label}
+              </option>
+            ),
+          )}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="type-label">Prompt edit (optional)</span>
+        <textarea
+          className="ds-input min-h-[5rem]"
+          placeholder="step_N.prompt override"
+          value={promptEdit}
+          onChange={(e) => setPromptEdit(e.target.value)}
+        />
+      </label>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="ds-btn ds-btn-primary ds-btn-sm"
+          disabled={busy || !orgId}
+          onClick={() => void onForkAndReplay()}
+        >
+          {busy ? "Running…" : "Fork + live replay"}
+        </button>
+        <button
+          type="button"
+          className="ds-btn ds-btn-ghost ds-btn-sm"
+          disabled={busy || !orgId}
+          onClick={() => void refreshForks()}
+        >
+          Refresh forks
+        </button>
+      </div>
+
+      {status ? (
+        <p className="type-meta text-[var(--text-secondary)]">{status}</p>
+      ) : null}
+      {diffSummary ? (
+        <p className="type-meta text-[var(--text-secondary)]">{diffSummary}</p>
+      ) : null}
+      {error ? <p className="type-meta text-[var(--error)]">{error}</p> : null}
+      {forkId ? (
+        <p className="type-meta text-[var(--text-faint)]">
+          fork={forkId}
+          {replayId ? ` · replay=${replayId}` : ""}
+        </p>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--line)] pt-3">
+        <p className="type-label">Forks for this trace</p>
+        {forks.length === 0 ? (
+          <p className="type-meta mt-2 text-[var(--text-faint)]">No forks yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {forks.map((f) => (
+              <li
+                key={String(f.fork_id || f.id)}
+                className="type-meta rounded-[var(--radius)] border border-[var(--line)] px-3 py-2"
+              >
+                <span className="text-[var(--text)]">
+                  {String(f.fork_id || f.id)}
+                </span>
+                {" · step "}
+                {String(f.fork_at_step ?? "?")}
+                {f.name ? ` · ${String(f.name)}` : ""}
+                {f.last_replay_outcome
+                  ? ` · last=${String(f.last_replay_outcome)}`
+                  : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type TimeTravelReplayShape = {
+  replay_id?: string;
+  n_re_executed?: number;
+  n_served_from_cache?: number;
+  new_outcome?: string;
+};
 
 function Stat({
   term,

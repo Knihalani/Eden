@@ -1,18 +1,20 @@
 ---
 title: "20 — Time-Travel Debugging (v1.3)"
-status: ✅ IMPLEMENTED v1
-last_updated: 2026-06-11
-version: 0.3
+status: RECORDING_ON / REPLAY_GATED
+last_updated: 2026-07-31
+version: 0.4
 ---
 
 # 20 — Time-Travel Debugging (v1.3)
 
-> **Status:** ✅ **IMPLEMENTED v1** (shipped 2026-06-11).
-> **Extends the existing Cat 1 `CheckpointService`
-> (forward rewind) with fork-and-replay semantics**
-> (steps 1..N served from cache, step N re-runs live).
-> Closes the agentoptics/rewind, Laminar, agent-vcr gap.
-> **10× debug cycle time reduction.**
+> **Status:** **RECORDING ON / LIVE REPLAY GATED** (updated 2026-07-31).
+> Fork, record, list-forks, and diff APIs ship. Live
+> `POST …/time-travel/replay` is gated by
+> `time_travel_replay_enabled` and must persist real prompt
+> content, apply edits into `payload`, and prove a changed
+> `response_hash` before it is treated as production-ready.
+> See `docs/ops/disabled-features.md`. Do not claim 10×
+> cycle-time reduction until that bar is green.
 
 ## Table of Contents
 

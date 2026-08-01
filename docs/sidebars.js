@@ -46,7 +46,8 @@ const howtoSidebar = {
         'how-to/auto-instrument',
         'how-to/connect-llm-provider',
         'how-to/connect-any-agent',
-        'how-to/mcp-cursor',
+        // Eden MCP server soft-retired for free beta (F04 out of scope).
+        // Keep how-to/mcp-cursor.md in tree for internal/dev; do not list it.
         'how-to/agent-sessions',
         'how-to/github',
         'how-to/deploy',

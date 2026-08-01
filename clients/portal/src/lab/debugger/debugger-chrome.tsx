@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 
 export function parseDebuggerMode(mode: string | null): DebuggerMode {
   if (mode === "compare") return "compare";
-  if (mode === "inspect" || mode === "time-travel") return "inspect";
+  if (mode === "inspect") return "inspect";
+  if (mode === "time-travel") return "time-travel";
   return "replay";
 }
 
@@ -37,6 +38,7 @@ export function DebuggerModeNav({
           ["replay", "Replay"],
           ["compare", "Compare"],
           ["inspect", "Inspect"],
+          ["time-travel", "Time travel"],
         ] as const
       ).map(([id, label]) => {
         const selected = value === id;
