@@ -20,6 +20,7 @@ Fixes this pass:
 - **Portal:** CatalogSync after HydrationBoundary; Home dehydrate budget 800ms; 429 soft UX; teaching empties (Cost drivers, Improve plan, Evals); coarse-pointer `.ds-tab` ≥44px
 - **Portal Vercel prod:** `dpl_5UhZg6vprFSJgktEKFkT29GoZjeR` aliased to edenobservability.com (working-tree deploy)
 - **Follow-up polish:** Inbox `softAuth` (no false session-expired); Settings honesty (no dead Disable/Export CTAs); Home fleet a11y; Improve/Inbox dual-empty gated; redeploy `dpl_3JSAT4U16t4VztHv548qcoDLEP4x`
+- **Pushed `3c6e1a09`:** portal `dpl_7Tr8xk7aXbwE4w1svvtr1hNs3qj6`; Northflank API deploying same SHA (portal RPM middleware + auth/me harden)
 
 ## Prod audit pass — 2026-08-01
 
