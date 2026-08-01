@@ -1,16 +1,12 @@
 /**
- * Home SSR prefetch + dehydrate helpers.
- *
- * 2026-07-23 rewrite — the previous version prefetched
- * ``/orgs/{id}/observability/traces`` and ``/orgs/{id}/observability/summary``,
- * neither of which Home actually reads. Home's real data comes from
+ * Prefetch Home's attention shards — traces + issues — plus ``/auth/me``.
+ * Agents stay off the cold path (client loads them after "Show fleet").
  * ``PortalCatalogSync`` / the page's own ``useOrgQuery`` calls against
- * ``GET /orgs/{id}/portal/agents`` and ``GET /orgs/{id}/portal/traces``
+ * ``GET /orgs/{id}/portal/traces`` and ``GET /orgs/{id}/portal/issues``
  * (see ``lib/api/portal.ts`` + ``queryKeys.portal.*``). This module now
- * seeds exactly those two shards plus ``/auth/me``, keyed identically
- * to the client queries, so ``HydrationBoundary`` on ``/home`` actually
- * warms the cache the client reads from instead of silently prefetching
- * data nothing subscribes to.
+ * seeds those shards plus ``/auth/me``, keyed identically to the client
+ * queries, so ``HydrationBoundary`` on ``/home`` actually warms the
+ * cache the client reads from.
  *
  * Consumed by ``app/(portal)/home/page.tsx`` (server component) via
  * ``dehydrateHome`` — see that file for the Clerk org-resolution +
@@ -92,8 +88,8 @@ function seedMeQuery(qc: QueryClient, me: MePrefetchPayload): Promise<void> {
 }
 
 /**
- * Prefetch Home's real shards — agents + traces + issues — plus
- * ``/auth/me``, for hydration.
+ * Prefetch Home's attention shards — traces + issues — plus ``/auth/me``.
+ * Agents stay off the cold path (client loads them after "Show fleet").
  *
  * Query keys match ``queryKeys.portal.*`` exactly so
  * ``PortalCatalogSync`` and Home's ``useOrgQuery`` calls hydrate from
@@ -103,17 +99,11 @@ export async function dehydrateHome(
   auth: PortalPrefetchAuth,
 ): Promise<DehydratedState> {
   const qc = new QueryClient();
-  const agentsKey = queryKeys.portal.agents(auth.orgId);
   const tracesKey = queryKeys.portal.traces(auth.orgId);
   const issuesKey = queryKeys.portal.issues(auth.orgId);
   // Per-shard settle: one failing endpoint must not wipe warm shards.
   await Promise.allSettled([
     seedMeQuery(qc, auth.me),
-    qc.prefetchQuery({
-      queryKey: [...agentsKey],
-      queryFn: () =>
-        serverGet<AgentFixture[]>(auth, `/orgs/${auth.orgId}/portal/agents`),
-    }),
     qc.prefetchQuery({
       queryKey: [...tracesKey],
       queryFn: () =>

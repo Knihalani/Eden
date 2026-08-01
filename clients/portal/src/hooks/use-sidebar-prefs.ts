@@ -1,7 +1,12 @@
 "use client";
 
 /**
- * useSidebarPrefs — per-user sidebar customisations.
+ * useSidebarPrefs — per-user sidebar customisations (settings editor).
+ *
+ * Live shell navigation uses `@/lab/nav` (NAV_SECTIONS / PRIMARY_NAV).
+ * This hook still applies prefs against `DEFAULT_SIDEBAR` for the
+ * settings sidebar editor + legacy pin/hide API — group ids overlap
+ * Observe/Evaluate/Improve/Workspace with lab/nav section ids.
  *
  * The customisations live in three buckets:
  *   1. **pinned**     — item ids that should appear in a "📌 Pinned" section

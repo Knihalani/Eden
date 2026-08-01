@@ -20,7 +20,7 @@ import {
 } from "@/lab/fixtures/traces";
 import { PageHeader } from "@/components/ds/primitives";
 import { useQueryPatch } from "@/lab/agent-scope";
-import { useListKeyboard, usePersistentBool } from "@/lab/hooks";
+import { useListKeyboard, useMinWidth, usePersistentBool } from "@/lab/hooks";
 import {
   AgentStatusBadge,
   EmptyState,
@@ -200,11 +200,7 @@ function RunInspector({
             />
           </div>
         ) : stepsLoading && trace.steps.length === 0 ? (
-          <EmptyState
-            title="Loading transcript"
-            body="Fetching spans for this run…"
-            compact
-          />
+          <QueryLoadingPanel label="Loading transcript…" />
         ) : !stepsLoading && trace.steps.length === 0 ? (
           <EmptyState
             title="No spans"
@@ -234,7 +230,13 @@ function RunInspector({
   );
 }
 
-function AgentDetail({ agent }: { agent: AgentFixture | null }) {
+function AgentDetail({
+  agent,
+  onBackToList,
+}: {
+  agent: AgentFixture | null;
+  onBackToList?: () => void;
+}) {
   if (!agent) {
     return (
       <div className="space-y-4 p-5">
@@ -251,10 +253,16 @@ function AgentDetail({ agent }: { agent: AgentFixture | null }) {
     );
   }
 
-  return <AgentDetailBody agent={agent} />;
+  return <AgentDetailBody agent={agent} onBackToList={onBackToList} />;
 }
 
-function AgentDetailBody({ agent }: { agent: AgentFixture }) {
+function AgentDetailBody({
+  agent,
+  onBackToList,
+}: {
+  agent: AgentFixture;
+  onBackToList?: () => void;
+}) {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
@@ -455,6 +463,16 @@ function AgentDetailBody({ agent }: { agent: AgentFixture }) {
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
+              {onBackToList ? (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-icon lg:hidden"
+                  onClick={onBackToList}
+                  aria-label="Back to fleet"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              ) : null}
               {renaming ? (
                 <form
                   className="flex min-w-0 flex-wrap items-center gap-2"
@@ -698,9 +716,17 @@ function LabAgentsInner() {
     "eden.agents.fleetOpen",
     true,
   );
+  /** Tailwind `lg` — below this, fleet list and detail are exclusive full-bleed panes. */
+  const isLgUp = useMinWidth(1024);
   const [selectedId, setSelectedId] = useState(
     () => agents.find((a) => a.id === paramId)?.id ?? agents[0]?.id ?? "",
   );
+
+  // Deep-link on phone → full-bleed detail (mq must be known false).
+  useEffect(() => {
+    if (isLgUp !== false) return;
+    if (paramId) setFleetOpen(false);
+  }, [isLgUp, paramId, setFleetOpen]);
 
   useEffect(() => {
     const next = agents.find((a) => a.id === paramId)?.id ?? agents[0]?.id;
@@ -712,8 +738,9 @@ function LabAgentsInner() {
     (id: string) => {
       setSelectedId(id);
       patchQuery({ id });
+      if (isLgUp === false) setFleetOpen(false);
     },
-    [patchQuery],
+    [patchQuery, isLgUp, setFleetOpen],
   );
 
   const selected =
@@ -803,7 +830,7 @@ function LabAgentsInner() {
             "flex min-h-0 shrink-0 flex-col overflow-hidden border-[var(--line)]",
             fleetAnimate && "transition-[width,opacity] duration-200 ease-out",
             fleetOpen
-              ? "w-[14.5rem] border-r opacity-100 lg:w-[16.5rem]"
+              ? "w-full border-r opacity-100 lg:w-[16.5rem]"
               : "pointer-events-none w-0 border-r-0 opacity-0",
           )}
           aria-hidden={!fleetOpen}
@@ -813,7 +840,7 @@ function LabAgentsInner() {
             <button
               type="button"
               onClick={() => setFleetOpen(false)}
-              className="ds-btn ds-btn-ghost ds-btn-icon"
+              className="ds-btn ds-btn-ghost ds-btn-icon hidden lg:inline-flex"
               aria-label="Collapse fleet list"
             >
               <PanelLeftClose className="h-4 w-4" />
@@ -875,7 +902,17 @@ function LabAgentsInner() {
           </ul>
         </aside>
 
-        <AgentDetail agent={selected} />
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1",
+            fleetOpen ? "hidden lg:block" : "block",
+          )}
+        >
+          <AgentDetail
+            agent={selected}
+            onBackToList={() => setFleetOpen(true)}
+          />
+        </div>
       </div>
     </div>
   );

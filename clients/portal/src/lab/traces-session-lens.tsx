@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { memo, useCallback } from "react";
+import { ChevronLeft } from "lucide-react";
 import {
   agentForSession,
   formatDuration,
@@ -117,9 +118,11 @@ export const SessionListButton = memo(function SessionListButton({
 export function SessionReader({
   session,
   onOpenTurn,
+  onBackToList,
 }: {
   session: SessionFixture;
   onOpenTurn: (traceId: string) => void;
+  onBackToList?: () => void;
 }) {
   const agent = agentForSession(session);
   const turns = turnsForSession(session);
@@ -131,6 +134,16 @@ export function SessionReader({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              {onBackToList ? (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-icon lg:hidden"
+                  onClick={onBackToList}
+                  aria-label="Back to feed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              ) : null}
               <SessionOutcomeBadge outcome={session.outcome} />
               <h2 className="type-ui min-w-0 truncate text-[var(--text)]">
                 {session.diagnosis ?? session.id}

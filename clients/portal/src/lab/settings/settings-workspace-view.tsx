@@ -126,7 +126,7 @@ export function SettingsWorkspaceView({
         </div>
       </section>
 
-      <div className="grid shrink-0 gap-px border-b border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
+      <div className="grid shrink-0 gap-3 border-b border-[var(--line)] px-4 py-4 sm:grid-cols-3 sm:gap-4 sm:px-6">
         <HealthCard
           label="API keys"
           value={String(liveKeys.length)}
@@ -318,7 +318,7 @@ function HealthCard({
     <button
       type="button"
       onClick={onClick}
-      className="block bg-[var(--bg)] px-4 py-3 text-left transition-colors hover:bg-[var(--bg-hover)] sm:px-6"
+      className="block rounded-[var(--radius)] px-3.5 py-3 text-left shadow-[0_0_0_1px_var(--line)] transition-colors duration-150 ease-out hover:bg-[var(--bg-hover)] sm:px-4"
     >
       <div className="flex items-center justify-between gap-2">
         <p className="type-label">{label}</p>

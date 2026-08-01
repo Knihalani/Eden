@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Fragment,
-  memo,
   Suspense,
   useCallback,
   useEffect,
@@ -18,19 +18,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  MoreHorizontal,
   PanelLeftClose,
-  X,
 } from "lucide-react";
 import {
-  formatDuration,
   preferKnownCostUsd,
   sortTracesNewestFirst,
   type TraceFixture,
-  type TranscriptStep,
 } from "@/lab/fixtures/traces";
 import { agentForTrace } from "@/lab/fixtures/agents";
 import { issueForTrace, type IssueFixture } from "@/lab/fixtures/issues";
-import { signalsForTrace } from "@/lab/fixtures/signals";
 import {
   agentForSession,
   resolveSessionForTrace,
@@ -52,7 +49,7 @@ import {
   useAgentScope,
   useQueryPatch,
 } from "@/lab/agent-scope";
-import { useListKeyboard, usePersistentBool } from "@/lab/hooks";
+import { useListKeyboard, useMinWidth, usePersistentBool } from "@/lab/hooks";
 import {
   AgentGroupHeader,
   AgentLink,
@@ -60,23 +57,60 @@ import {
   EmptyState,
   errorStepIds,
   FilterChips,
-  isBadStep,
   ListRevealButton,
   RunListButton,
   RunMeta,
-  RunTranscript,
   SeverityBadge,
-  stepKindLabel,
 } from "@/lab/lab-ui";
 import {
   HubViewToggle,
   parseHubView,
   SessionListButton,
-  SessionReader,
   type HubView,
 } from "@/lab/traces-session-lens";
 import { cn } from "@/lib/utils";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
+
+const panelFallback = (
+  <div className="flex min-h-[8rem] items-center justify-center px-5">
+    <p className="type-meta">Loading…</p>
+  </div>
+);
+
+/** Transcript is heavy (nested span chrome) — mount only for active tab. */
+const RunTranscript = dynamic(
+  () =>
+    import("@/lab/lab-ui").then((m) => ({ default: m.RunTranscript })),
+  { loading: () => panelFallback },
+);
+
+const SessionReader = dynamic(
+  () =>
+    import("@/lab/traces-session-lens").then((m) => ({
+      default: m.SessionReader,
+    })),
+  { loading: () => panelFallback },
+);
+
+const TreePanel = dynamic(
+  () =>
+    import("./traces-detail-panels").then((m) => ({ default: m.TreePanel })),
+  { loading: () => panelFallback },
+);
+
+const SignalsPanel = dynamic(
+  () =>
+    import("./traces-detail-panels").then((m) => ({
+      default: m.SignalsPanel,
+    })),
+  { loading: () => panelFallback },
+);
+
+const ChatPanel = dynamic(
+  () =>
+    import("./traces-detail-panels").then((m) => ({ default: m.ChatPanel })),
+  { loading: () => panelFallback },
+);
 
 type DetailTab = "trace" | "tree" | "signals" | "chat";
 type SeverityFilter = "all" | "error" | "warn" | "ok";
@@ -91,371 +125,6 @@ function parseTab(value: string | null): DetailTab {
     return value;
   }
   return "trace";
-}
-
-type TreeRow = {
-  step: TranscriptStep;
-  depth: number;
-  hasChildren: boolean;
-};
-
-/**
- * Depth-first flatten of the span tree. Virtualising needs a flat,
- * index-addressable list — a recursive JSX walk can only render the
- * whole tree at once. `seen` guards against a malformed payload whose
- * parent pointers form a cycle (the old recursion would hang).
- */
-export function flattenSpanTree(steps: TranscriptStep[]): TreeRow[] {
-  const byParent = new Map<string | undefined, TranscriptStep[]>();
-  for (const step of steps) {
-    const key = step.parentId;
-    const list = byParent.get(key) ?? [];
-    list.push(step);
-    byParent.set(key, list);
-  }
-  const roots = byParent.get(undefined) ?? steps.filter((s) => !s.parentId);
-
-  const out: TreeRow[] = [];
-  const seen = new Set<string>();
-  const walk = (nodes: TranscriptStep[], depth: number) => {
-    for (const step of nodes) {
-      if (seen.has(step.id)) continue;
-      seen.add(step.id);
-      const kids = byParent.get(step.spanId ?? step.id) ?? [];
-      out.push({ step, depth, hasChildren: kids.length > 0 });
-      if (kids.length > 0) walk(kids, depth + 1);
-    }
-  };
-  walk(roots, 0);
-  // Parents truncated by max_spans (or missing) used to drop orphans
-  // entirely — Tree undercounted vs Transcript with no warning.
-  const orphans = steps.filter((s) => !seen.has(s.id));
-  if (orphans.length > 0) walk(orphans, 0);
-  return out;
-}
-
-/** ~40px at the current density; real heights come from measureElement. */
-const TREE_ROW_ESTIMATE = 40;
-
-const TreeRowButton = memo(function TreeRowButton({
-  step,
-  depth,
-  active,
-  hasChildren,
-  posInSet,
-  setSize,
-  onFocus,
-}: {
-  step: TranscriptStep;
-  depth: number;
-  active: boolean;
-  hasChildren: boolean;
-  posInSet: number;
-  setSize: number;
-  onFocus: (id: string) => void;
-}) {
-  const bad = isBadStep(step);
-  const handleClick = useCallback(() => onFocus(step.id), [onFocus, step.id]);
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      role="treeitem"
-      aria-level={depth + 1}
-      aria-posinset={posInSet}
-      aria-setsize={setSize}
-      aria-selected={active}
-      aria-expanded={hasChildren ? true : undefined}
-      className={cn(
-        "flex w-full items-center gap-2 py-2.5 pr-4 text-left transition-colors hover:bg-[var(--bg-hover)]",
-        active && "bg-[var(--accent-muted)] shadow-[inset_2px_0_0_var(--accent)]",
-        bad && !active && "bg-[var(--error-muted)]",
-        bad && active && "shadow-[inset_2px_0_0_var(--error)]",
-      )}
-      style={{ paddingLeft: `${0.75 + depth * 1.1}rem` }}
-    >
-      <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
-        {stepKindLabel(step.kind)}
-      </span>
-      <span
-        className={cn(
-          "type-ui min-w-0 flex-1 truncate !font-normal",
-          bad ? "text-[var(--error)]" : "text-[var(--text)]",
-        )}
-      >
-        {step.title}
-      </span>
-      <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
-        {formatDuration(step.durationMs)}
-      </span>
-    </button>
-  );
-});
-
-function TreePanel({
-  steps,
-  focusStepId,
-  onFocus,
-}: {
-  steps: TranscriptStep[];
-  focusStepId: string | null;
-  onFocus: (id: string) => void;
-}) {
-  const rows = useMemo(() => flattenSpanTree(steps), [steps]);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => TREE_ROW_ESTIMATE,
-    overscan: 8,
-    getItemKey: (index) => rows[index]?.step.id ?? index,
-    measureElement: measureVirtualRow,
-  });
-
-  // Bring the focused span into view even when its row is not mounted.
-  useEffect(() => {
-    if (!focusStepId) return;
-    const index = rows.findIndex((r) => r.step.id === focusStepId);
-    if (index >= 0) virtualizer.scrollToIndex(index, { align: "center" });
-  }, [focusStepId, rows, virtualizer]);
-
-  if (rows.length === 0) {
-    return <EmptyState title="No spans" />;
-  }
-
-  return (
-    <div
-      ref={scrollRef}
-      className="min-h-0 h-full overflow-y-auto py-1"
-      {...{ [VIRTUAL_SCROLL_ATTR]: "tree" }}
-    >
-      <ul
-        role="tree"
-        aria-label="Span tree"
-        className="relative"
-        style={{ height: `${virtualizer.getTotalSize()}px` }}
-      >
-        {virtualizer.getVirtualItems().map((item) => {
-          const row = rows[item.index];
-          if (!row) return null;
-          return (
-            <li
-              key={item.key}
-              ref={virtualizer.measureElement}
-              data-index={item.index}
-              role="none"
-              className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${item.start}px)` }}
-            >
-              <TreeRowButton
-                step={row.step}
-                depth={row.depth}
-                active={focusStepId === row.step.id}
-                hasChildren={row.hasChildren}
-                posInSet={item.index + 1}
-                setSize={rows.length}
-                onFocus={onFocus}
-              />
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function SignalsPanel({
-  trace,
-  onJumpStep,
-  dismissed,
-  onDismiss,
-  onRestore,
-}: {
-  trace: TraceFixture;
-  onJumpStep: (stepId: string) => void;
-  dismissed: boolean;
-  onDismiss: () => void;
-  onRestore: () => void;
-}) {
-  const detectors = signalsForTrace(trace.id);
-  const badSteps = trace.steps.filter(isBadStep);
-  // severity==="none" used to short-circuit to EmptyState even when
-  // the API shipped a "Clean run" summary — so every successful trace
-  // looked broken ("No signals").
-  const empty =
-    !trace.signals.title &&
-    detectors.length === 0 &&
-    badSteps.length === 0;
-
-  if (empty) {
-    return (
-      <EmptyState
-        title="No signals"
-        body="No detectors matched and no failing spans on this run."
-      />
-    );
-  }
-
-  if (dismissed) {
-    return (
-      <EmptyState
-        title="Signals dismissed"
-        action={
-          <button
-            type="button"
-            className="ds-btn ds-btn-ghost ds-btn-sm"
-            onClick={onRestore}
-          >
-            Show
-          </button>
-        }
-      />
-    );
-  }
-
-  return (
-    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-5">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <SeverityBadge severity={trace.severity} />
-            <p className="type-ui text-[var(--text)]">
-              {trace.signals.title ||
-                (trace.severity === "none" ? "Clean run" : "Signals")}
-            </p>
-          </div>
-          <p className="type-body mt-2 text-[var(--text-secondary)]">
-            {trace.signals.body ||
-              (badSteps.length > 0
-                ? `${badSteps.length} failing span${badSteps.length === 1 ? "" : "s"}.`
-                : "No detectors matched this run.")}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="ds-btn ds-btn-ghost ds-btn-icon shrink-0"
-          aria-label="Dismiss"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {badSteps.length > 0 ? (
-        <section className="space-y-2">
-          <h3 className="type-label">Failing spans</h3>
-          <ul className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
-            {badSteps.map((step) => (
-              <li key={step.id}>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 py-3 text-left hover:bg-[var(--accent-muted)]"
-                  onClick={() => onJumpStep(step.id)}
-                >
-                  <SeverityBadge severity="error" />
-                  <div className="min-w-0 flex-1">
-                    <p className="type-ui truncate text-[var(--text)]">
-                      {step.title}
-                    </p>
-                    <p className="type-meta mt-0.5 break-words whitespace-pre-wrap">
-                      {step.errorMessage ?? step.outputPreview ?? step.id}
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {detectors.length > 0 ? (
-        <section className="space-y-2">
-          <h3 className="type-label">Matched detectors</h3>
-          <ul className="space-y-1">
-            {detectors.map((sig) => (
-              <li key={sig.id}>
-                <Link
-                  href={`/signals?id=${sig.id}`}
-                  className="block px-1 py-2.5 transition-colors hover:bg-[var(--accent-muted)]"
-                >
-                  <p className="type-ui text-[var(--text)]">{sig.name}</p>
-                  <p className="type-mono mt-1 !text-[0.6875rem] !text-[var(--text-secondary)]">
-                    {sig.condition}
-                  </p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-function ChatPanel({
-  trace,
-  issue,
-}: {
-  trace: TraceFixture;
-  issue?: IssueFixture;
-}) {
-  const agentHref = (() => {
-    const q = new URLSearchParams();
-    q.set("thread", "thr_empty");
-    q.set("traceId", trace.id);
-    q.set("agent", trace.agentId);
-    if (issue) q.set("issueId", issue.id);
-    return `/agent?${q.toString()}`;
-  })();
-  const [draft, setDraft] = useState("");
-
-  function openInAgent() {
-    const text = draft.trim();
-    const q = new URLSearchParams();
-    q.set("thread", "thr_empty");
-    q.set("traceId", trace.id);
-    q.set("agent", trace.agentId);
-    if (issue) q.set("issueId", issue.id);
-    if (text) q.set("ai_prompt", text);
-    window.location.href = `/agent?${q.toString()}`;
-  }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2 sm:px-5">
-        <p className="type-meta">Ask the assistant about this run</p>
-        <Link href={agentHref} className="ds-btn ds-btn-ghost ds-btn-sm">
-          Open Assistant
-        </Link>
-      </div>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5">
-        <p className="type-body text-[var(--text-secondary)]">
-          {trace.signals.title
-            ? `${trace.signals.title} — ${trace.signals.body || "Open the assistant to investigate."}`
-            : `${trace.name} · ${trace.tokens.toLocaleString()} tokens · ${trace.costUsd != null ? `$${trace.costUsd.toFixed(4)}` : "—"}. Open the assistant for a real answer.`}
-        </p>
-      </div>
-      <div className="flex shrink-0 gap-2 border-t border-[var(--line)] px-4 py-3 sm:px-5">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") openInAgent();
-          }}
-          placeholder="Ask about this run…"
-          className="ds-input min-w-0 flex-1"
-          aria-label="Ask about this run"
-        />
-        <button
-          type="button"
-          className="ds-btn ds-btn-primary ds-btn-sm shrink-0"
-          onClick={openInAgent}
-        >
-          Ask
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /** Flat row model for the virtualised feed (sessions / grouped / flat runs). */
@@ -547,6 +216,16 @@ function LabTracesInner() {
     "eden.traces.listOpen",
     true,
   );
+  /** Tailwind `lg` — below this, list and detail are mutually exclusive full-bleed panes. */
+  const isLgUp = useMinWidth(1024);
+
+  // Deep-link on phone: land on full-bleed detail, not crushed split.
+  // Only when mq is known false — never while null (would stomp desktop).
+  useEffect(() => {
+    if (isLgUp !== false) return;
+    if (paramId || paramSession) setListOpen(false);
+  }, [isLgUp, paramId, paramSession, setListOpen]);
+
   const [hubView, setHubViewState] = useState<HubView>(() =>
     parseHubView(paramView),
   );
@@ -754,6 +433,7 @@ function LabTracesInner() {
       setSelectedId(id);
       const resolvedTab = nextTab ?? tab;
       setTab(resolvedTab);
+      if (isLgUp === false) setListOpen(false);
       const sess = resolveSessionForTrace(
         traces.find((t) => t.id === id) ?? { id },
         sessions,
@@ -775,13 +455,14 @@ function LabTracesInner() {
         });
       }
     },
-    [patchQuery, tab, hubView, sessions, traces],
+    [patchQuery, tab, hubView, sessions, traces, isLgUp, setListOpen],
   );
 
   const selectSession = useCallback(
     (id: string) => {
       justSelectedSessionIdRef.current = id;
       setSelectedSessionId(id);
+      if (isLgUp === false) setListOpen(false);
       patchQuery({
         view: "sessions",
         session: id,
@@ -790,7 +471,7 @@ function LabTracesInner() {
         span: null,
       });
     },
-    [patchQuery],
+    [patchQuery, isLgUp, setListOpen],
   );
 
   const openTurn = useCallback(
@@ -798,6 +479,7 @@ function LabTracesInner() {
       justSelectedTraceIdRef.current = traceId;
       setSelectedId(traceId);
       setTab("trace");
+      if (isLgUp === false) setListOpen(false);
       patchQuery({
         view: "sessions",
         session: selectedSessionId,
@@ -806,7 +488,7 @@ function LabTracesInner() {
         span: null,
       });
     },
-    [patchQuery, selectedSessionId],
+    [patchQuery, selectedSessionId, isLgUp, setListOpen],
   );
 
   const backToSession = useCallback(() => {
@@ -1252,7 +934,7 @@ function LabTracesInner() {
             "flex min-h-0 shrink-0 flex-col overflow-hidden border-[var(--line)] bg-[var(--bg-inset)]",
             listAnimate && "transition-[width,opacity] duration-200 ease-out",
             listOpen
-              ? "w-[min(17.5rem,36vw)] border-r opacity-100"
+              ? "w-full border-r opacity-100 lg:w-[17.5rem]"
               : "pointer-events-none w-0 border-r-0 opacity-0",
           )}
           aria-hidden={!listOpen}
@@ -1268,7 +950,7 @@ function LabTracesInner() {
               <button
                 type="button"
                 onClick={() => setListOpen(false)}
-                className="ds-btn ds-btn-ghost ds-btn-icon"
+                className="ds-btn ds-btn-ghost ds-btn-icon hidden lg:inline-flex"
                 aria-label="Collapse list"
               >
                 <PanelLeftClose className="h-4 w-4" />
@@ -1390,11 +1072,17 @@ function LabTracesInner() {
           </div>
         </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]",
+            listOpen ? "hidden lg:flex" : "flex",
+          )}
+        >
           {hubView === "sessions" && selectedSession && !inspectingTurn ? (
             <SessionReader
               session={selectedSession}
               onOpenTurn={openTurn}
+              onBackToList={() => setListOpen(true)}
             />
           ) : showRunInspector && selected ? (
             <>
@@ -1402,6 +1090,14 @@ function LabTracesInner() {
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className="ds-btn ds-btn-ghost ds-btn-icon lg:hidden"
+                        onClick={() => setListOpen(true)}
+                        aria-label="Back to feed"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
                       <SeverityBadge severity={selected.severity} />
                       <h2 className="type-ui min-w-0 truncate text-[var(--text)]">
                         {selected.name}
@@ -1555,20 +1251,36 @@ function LabTracesInner() {
                     >
                       Debugger
                     </Link>
-                    <Link
-                      href={`/evals?mode=datasets&from=${selected.id}&agent=${selected.agentId}`}
-                      className="ds-btn ds-btn-ghost ds-btn-sm"
-                    >
-                      Dataset
-                    </Link>
-                    <Link
-                      href={`/agent?thread=thr_empty&traceId=${selected.id}&agent=${selected.agentId}${
-                        issue ? `&issueId=${issue.id}` : ""
-                      }`}
-                      className="ds-btn ds-btn-ghost ds-btn-sm"
-                    >
-                      Ask AI
-                    </Link>
+                    <details className="relative">
+                      <summary
+                        className="ds-btn ds-btn-ghost ds-btn-sm cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+                        aria-label="More actions"
+                      >
+                        More
+                        <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                      </summary>
+                      <div
+                        role="menu"
+                        className="absolute right-0 z-20 mt-1 min-w-[10rem] overflow-hidden rounded-[var(--radius)] bg-[var(--bg)] py-1 shadow-[0_0_0_1px_var(--line)]"
+                      >
+                        <Link
+                          role="menuitem"
+                          href={`/evals?mode=datasets&from=${selected.id}&agent=${selected.agentId}`}
+                          className="type-ui block px-3 py-2 text-[var(--text)] hover:bg-[var(--accent-muted)]"
+                        >
+                          Dataset
+                        </Link>
+                        <Link
+                          role="menuitem"
+                          href={`/agent?thread=thr_empty&traceId=${selected.id}&agent=${selected.agentId}${
+                            issue ? `&issueId=${issue.id}` : ""
+                          }`}
+                          className="type-ui block px-3 py-2 text-[var(--text)] hover:bg-[var(--accent-muted)]"
+                        >
+                          Ask AI
+                        </Link>
+                      </div>
+                    </details>
                   </div>
                 </div>
               </header>
@@ -1659,11 +1371,7 @@ function LabTracesInner() {
                       </div>
                     ) : traceDetailQuery.isLoading &&
                       selected.steps.length === 0 ? (
-                      <EmptyState
-                        title="Loading transcript"
-                        body="Fetching spans for this run…"
-                        compact
-                      />
+                      <QueryLoadingPanel label="Loading transcript…" />
                     ) : !traceDetailQuery.isLoading &&
                       !traceDetailQuery.isFetching &&
                       selected.steps.length === 0 ? (
@@ -1705,11 +1413,7 @@ function LabTracesInner() {
                       </div>
                     ) : traceDetailQuery.isLoading &&
                       selected.steps.length === 0 ? (
-                      <EmptyState
-                        title="Loading tree"
-                        body="Fetching spans for this run…"
-                        compact
-                      />
+                      <QueryLoadingPanel label="Loading tree…" />
                     ) : !traceDetailQuery.isLoading &&
                       !traceDetailQuery.isFetching &&
                       selected.steps.length === 0 ? (

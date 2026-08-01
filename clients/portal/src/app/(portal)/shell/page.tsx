@@ -21,7 +21,7 @@ const SURFACES = [
 
 const SHORTCUTS = [
   { keys: "[", action: "Toggle nav" },
-  { keys: "Bell (click)", action: "Open alerts" },
+  { keys: "Bell (click)", action: "Open Inbox" },
   { keys: "esc", action: "Close alerts" },
   { keys: "j / k", action: "Next / previous" },
   { keys: "t / s / c", action: "Transcript / Signals / Ask" },

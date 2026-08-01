@@ -234,7 +234,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
       },
       {
         id: "audit",
-        href: "/audit",
+        href: "/settings?mode=audit",
         labelKey: "nav.leaves.audit",
         icon: ScrollText,
         category: "core",
@@ -264,18 +264,22 @@ export const ALL_ITEM_IDS: readonly string[] = DEFAULT_SIDEBAR.flatMap((g) =>
   ]),
 );
 
-/** English fallback labels for settings sidebar editor (i18n on chrome elsewhere). */
+/**
+ * English fallback labels for settings sidebar editor (i18n on chrome elsewhere).
+ * Align vocabulary with lab/nav where leaves overlap (Home, Detectors, Assistant).
+ * Live shell SoT remains `@/lab/nav` — this config is prefs/editor only.
+ */
 export const SIDEBAR_ITEM_LABELS: Record<string, string> = {
-  dashboard: "Dashboard",
+  dashboard: "Home",
   agents: "Agents",
   traces: "Traces",
   issues: "Issues",
-  alerts: "Alerts",
+  alerts: "Detectors",
   evals: "Evals",
   improve: "Improve",
   guardrails: "Guardrails",
   cost: "Cost",
-  agent: "AI Agent",
+  agent: "Assistant",
   audit: "Audit",
   settings: "Settings",
 };

@@ -1,6 +1,6 @@
 /**
- * Derive command-palette entries from the sidebar config so Cmd+K
- * and the left nav never drift apart.
+ * Derive command-palette entries from lab/nav (PRIMARY_NAV / NAV_SECTIONS)
+ * so Cmd+K and the live sidebar never drift apart.
  */
 
 import {
@@ -28,13 +28,29 @@ import {
   User,
   Code,
   Wallet,
+  Home,
+  GitBranch,
+  AlertTriangle,
+  DollarSign,
+  Network,
+  Bug,
+  GitCompare,
   type LucideIcon,
 } from "lucide-react";
-import { DEFAULT_SIDEBAR, SIDEBAR_GROUP_LABELS, SIDEBAR_ITEM_LABELS, type SidebarGroup, type SidebarIcon, type SidebarItem } from "@/lib/sidebar-config";
+import {
+  NAV_SECTIONS,
+  PRIMARY_NAV,
+  type NavIcon,
+  type NavSection,
+} from "@/lab/nav";
 
-/** Maps sidebar group IDs → product IA labels (ids match labels after Wave 3). */
-export const GROUP_LABEL: Record<SidebarGroup["id"], string> = {
-  ...SIDEBAR_GROUP_LABELS,
+/** Section id → palette group label (observe has no rail label). */
+export const GROUP_LABEL: Record<NavSection["id"], string> = {
+  observe: "Observe",
+  evaluate: "Evaluate",
+  improve: "Improve",
+  assist: "Assist",
+  workspace: "Workspace",
 };
 
 export type NavCommand = {
@@ -42,29 +58,30 @@ export type NavCommand = {
   label: string;
   description?: string;
   group: string;
-  icon: SidebarIcon | LucideIcon;
+  icon: LucideIcon;
   kind?: "route" | "action";
 };
 
-/** Special palette href — opens ChatSidebar via custom event (not a route). */
+/** Special palette href — opens Assistant (not a soft-land route). */
 export const OPEN_AI_CHAT_HREF = "eden:open-ai-chat";
 
-function walkItems(
-  items: SidebarItem[],
-  group: SidebarGroup["id"],
-  out: NavCommand[],
-) {
-  for (const item of items) {
-    out.push({
-      href: item.href,
-      label: SIDEBAR_ITEM_LABELS[item.id] ?? item.id,
-      description: item.descriptionKey,
-      group: GROUP_LABEL[group],
-      icon: item.icon,
-    });
-    if (item.children) walkItems(item.children, group, out);
-  }
-}
+const NAV_ICONS: Record<NavIcon, LucideIcon> = {
+  home: Home,
+  agents: Bot,
+  traces: GitBranch,
+  issues: AlertTriangle,
+  signals: Activity,
+  evals: FlaskConical,
+  improve: Sparkles,
+  cost: DollarSign,
+  gateway: Network,
+  agent: MessageSquare,
+  debugger: Bug,
+  compare: GitCompare,
+  prompts: FileText,
+  guardrails: Shield,
+  settings: Settings2,
+};
 
 /** U18 quick actions — surfaced in ⌘K alongside routes. */
 export const PALETTE_ACTIONS: NavCommand[] = [
@@ -117,9 +134,6 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     icon: Sparkles,
     kind: "action",
   },
-  // "Topic clusters" (/analytics?tab=topics) removed: the Analytics hub was
-  // never built, so this palette entry navigated straight into a 404.
-  // Re-add it alongside the page rather than ahead of it.
   {
     href: "/improve?tab=ledger",
     label: "Open ledger",
@@ -171,8 +185,8 @@ export const PALETTE_ACTIONS: NavCommand[] = [
 ];
 
 /**
- * Wave 1.7 — ⌘K audit entry targets canonical `/audit-trail` (M3/M9).
- * Settings `?tab=audit-log` bookmarks redirect separately; nav no longer deep-links that tab.
+ * Wave 1.7 — ⌘K audit entry targets Settings audit mode (`?mode=audit`).
+ * Legacy `/audit` soft-lands elsewhere; nav deep-links the live settings surface.
  */
 export const WS1_NAV_AUDIT_REDIRECT_COMPLETED = true as const;
 
@@ -182,7 +196,7 @@ export const WAVE_E1_NAV_HYGIENE_COMPLETED = true as const;
 /**
  * Settings tab deep-links for ⌘K (peer S-06). Labels match the settings rail.
  * Hidden soft-launch tabs (roles, sso) omitted from the palette.
- * Audit trail aliases to `/audit-trail` (unified compliance), not `?tab=audit-log`.
+ * Audit trail aliases to `/settings?mode=audit` (settings audit packs/events).
  */
 export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
   {
@@ -270,7 +284,7 @@ export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
     icon: FileArchive,
   },
   {
-    href: "/audit",
+    href: "/settings?mode=audit",
     label: "Audit trail",
     description: "Unified compliance — privileged events and AuditPacks.",
     group: "Settings",
@@ -320,26 +334,25 @@ export const SETTINGS_TAB_COMMANDS: NavCommand[] = [
   },
 ];
 
-/** Flat command list mirroring DEFAULT_SIDEBAR (including nested children). */
+/** Flat command list mirroring lab/nav NAV_SECTIONS + actions + settings tabs. */
 export function buildNavCommands(): NavCommand[] {
   const out: NavCommand[] = [];
-  for (const group of DEFAULT_SIDEBAR) {
-    walkItems(group.items, group.id, out);
+  for (const section of NAV_SECTIONS) {
+    const group = GROUP_LABEL[section.id];
+    for (const item of section.items) {
+      out.push({
+        href: item.href,
+        label: item.label,
+        group,
+        icon: NAV_ICONS[item.icon],
+        kind: "route",
+      });
+    }
   }
   return [...out, ...PALETTE_ACTIONS, ...SETTINGS_TAB_COMMANDS];
 }
 
-/** Sidebar href paths (no query) for CI route-agreement checks. */
+/** Live nav href paths (no query) for CI route-agreement checks. */
 export function collectSidebarHrefs(): string[] {
-  const hrefs: string[] = [];
-  function walk(items: SidebarItem[]) {
-    for (const item of items) {
-      hrefs.push(item.href.split("?")[0]);
-      if (item.children) walk(item.children);
-    }
-  }
-  for (const group of DEFAULT_SIDEBAR) {
-    walk(group.items);
-  }
-  return hrefs;
+  return PRIMARY_NAV.map((item) => item.href.split("?")[0]);
 }

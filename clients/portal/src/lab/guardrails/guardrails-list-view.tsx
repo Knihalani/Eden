@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import Link from "next/link";
 import {
   agentLabel,
   matchesLine,
@@ -14,6 +15,7 @@ import {
   GuardrailStatusChip,
 } from "@/lab/guardrails/guardrails-chrome";
 import { AgentScopeFilter, EmptyState, FilterChips } from "@/lab/lab-ui";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { cn } from "@/lib/utils";
 
 export function GuardrailsListView({
@@ -122,6 +124,14 @@ export function GuardrailsListView({
               ? "No matches"
               : "No policies"
           }
+          body={
+            q ||
+            agentId !== "all" ||
+            kindFilter !== "all" ||
+            statusFilter !== "all"
+              ? undefined
+              : U20_EMPTY_COPY.guardrailsPolicies
+          }
           action={
             q ||
             agentId !== "all" ||
@@ -139,7 +149,11 @@ export function GuardrailsListView({
               >
                 Clear
               </button>
-            ) : undefined
+            ) : (
+              <Link href="/guardrails?tab=test" className="ds-btn ds-btn-primary ds-btn-sm">
+                Open Test
+              </Link>
+            )
           }
         />
       ) : (

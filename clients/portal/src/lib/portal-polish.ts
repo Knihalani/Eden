@@ -57,12 +57,18 @@ export const U20_EMPTY_COPY = {
     "No agents registered. Create an API key, then register via the SDK or CLI.",
   improveQueue:
     "Queue is empty. Needs production traces and Agent Issues before triage items appear.",
+  datasets:
+    "No datasets yet. Create one from a failing trace, or add cases under Evals to score prompts.",
+  guardrailsPolicies:
+    "No policies yet. Add a policy to block or flag unsafe tool and model calls.",
   onlineScoring:
     "No scoring rules. Create one to sample production traces (code → SLM → LLM).",
   alerts:
     "No notification rules configured. Empty does not mean healthy — create a rule to watch cost, quality, or pipeline thresholds.",
   alertsClear:
     "No active alerts for your rules. New rows appear here when thresholds fire.",
+  signals:
+    "No detectors yet. Create one to watch errors, latency, cost, or policy across runs.",
 } as const;
 
 /** Filter-empty voice — distinct from never-ingested / zero-data. */
@@ -71,6 +77,8 @@ export const U20_FILTER_EMPTY_COPY = {
   issues: "No issues match this status filter. Clear the filter to see the full queue.",
   agents: "No agents match the current filters. Clear search or framework filter.",
   alerts: "No alerts match the current filters. Clear filters to see the full feed.",
+  signals:
+    "No detectors match the current filters. Clear search or kind/state filters.",
 } as const;
 
 /**

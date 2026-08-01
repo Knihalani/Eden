@@ -11,7 +11,6 @@ import {
   type AuditPackFixture,
 } from "@/lab/fixtures/settings";
 import { EmptyState, FilterChips } from "@/lab/lab-ui";
-import { useLabToast } from "@/lab/lab-toast";
 import {
   AuditTabNav,
   PackKindChip,
@@ -45,7 +44,6 @@ export function SettingsAuditView({
   onReverify: (id: string) => void;
   onExportPack: (agentId: string) => void;
 }) {
-  const { pushToast } = useLabToast();
   const [eventFilter, setEventFilter] = useState<EventFilter>("all");
 
   const filteredEvents = useMemo(() => {
@@ -198,21 +196,9 @@ export function SettingsAuditView({
                 pack={selected}
                 onReverify={() => {
                   onReverify(selected.id);
-                  pushToast({
-                    title: selected.verified
-                      ? "Already verified"
-                      : "Pack re-verified",
-                    body: agentName(selected.agentId),
-                    tone: "ok",
-                  });
                 }}
                 onExport={() => {
                   onExportPack(selected.agentId);
-                  pushToast({
-                    title: "Pack exported",
-                    body: agentName(selected.agentId),
-                    tone: "ok",
-                  });
                 }}
               />
             ) : (

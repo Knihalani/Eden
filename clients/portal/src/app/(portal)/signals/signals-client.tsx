@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { Plus, ChevronLeft, X } from "lucide-react";
 import {
   agentForSignal,
   issuesForSignal,
@@ -22,7 +22,6 @@ import {
   FilterChips,
 } from "@/lab/lab-ui";
 import { useSignalJobs } from "@/lab/signal-jobs-context";
-import { useLabToast } from "@/lab/lab-toast";
 import { compileNaturalLanguageFallback } from "@/lab/signal-compile";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
@@ -33,6 +32,7 @@ import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
+import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 type KindFilter = "all" | SignalKind;
 type StateFilter = "all" | "on" | "off";
@@ -48,7 +48,7 @@ function severityTone(severity: SignalSeverity): "fail" | "neutral" {
   return "neutral";
 }
 
-function SignalCard({
+function SignalRow({
   signal,
   active,
   onSelect,
@@ -64,27 +64,28 @@ function SignalCard({
       onClick={onSelect}
       data-active={active ? "true" : "false"}
       className={cn(
-        "flex min-h-[10rem] flex-col items-start rounded-[var(--radius-lg)] p-5 text-left transition-colors",
-        "shadow-[0_0_0_1px_var(--line)]",
+        "flex w-full items-start gap-3 border-b border-[var(--line)] px-4 py-3 text-left transition-colors sm:px-5",
         active
-          ? "bg-[var(--accent-muted)] shadow-[0_0_0_1px_var(--accent)]"
-          : "bg-[var(--bg)] hover:bg-[var(--accent-muted)]",
+          ? "bg-[var(--accent-muted)] shadow-[inset_2px_0_0_var(--accent)]"
+          : "hover:bg-[var(--accent-muted)]",
         !signal.enabled && "opacity-55",
       )}
     >
-      <div className="flex w-full items-start justify-between gap-2">
-        <StatusChip tone={severityTone(signal.severity)}>{signal.severity}</StatusChip>
-        <StatusChip tone={signal.enabled ? "live" : "neutral"}>
-          {signal.enabled ? "on" : "off"}
-        </StatusChip>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusChip tone={severityTone(signal.severity)}>{signal.severity}</StatusChip>
+          <StatusChip tone={signal.enabled ? "live" : "neutral"}>
+            {signal.enabled ? "on" : "off"}
+          </StatusChip>
+          <span className="type-meta capitalize">{signal.kind}</span>
+        </div>
+        <p className="type-ui truncate text-[var(--text)]">{signal.name}</p>
+        <p className="type-meta truncate">
+          {agent?.name ?? "All agents"}
+          {" · "}
+          {signal.hits24h} hits / 24h
+        </p>
       </div>
-      <p className="type-ui mt-3 text-[var(--text)]">{signal.name}</p>
-      <p className="type-meta mt-1.5 line-clamp-3">{signal.description}</p>
-      <p className="type-meta mt-auto pt-4">
-        {agent?.name ?? "All agents"}
-        {" · "}
-        {signal.hits24h} hits / 24h
-      </p>
     </button>
   );
 }
@@ -107,13 +108,21 @@ function SignalDetail({
 
   return (
     <aside
-      className="flex h-full min-h-0 w-full flex-col border-l border-[var(--line)] bg-[var(--bg)] lg:w-[min(28rem,42vw)]"
-      aria-label="Signal detail"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col border-[var(--line)] bg-[var(--bg)] lg:w-[min(28rem,42vw)] lg:border-l"
+      aria-label="Detector detail"
     >
       <header className="shrink-0 border-b border-[var(--line)] px-6 py-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-icon lg:hidden"
+                onClick={onClose}
+                aria-label="Back to detectors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
               <StatusChip tone={severityTone(signal.severity)}>{signal.severity}</StatusChip>
               <StatusChip tone={signal.enabled ? "live" : "neutral"}>
                 {signal.enabled ? "on" : "off"}
@@ -134,9 +143,9 @@ function SignalDetail({
           </div>
           <button
             type="button"
-            className="ds-btn ds-btn-ghost ds-btn-icon shrink-0"
+            className="ds-btn ds-btn-ghost ds-btn-icon hidden shrink-0 lg:inline-flex"
             onClick={onClose}
-            aria-label="Close signal detail"
+            aria-label="Close detector detail"
           >
             <X className="h-4 w-4" />
           </button>
@@ -315,7 +324,7 @@ export function CreateSignalDialog({
               id="create-signal-title"
               className="type-title text-[var(--text)] !text-[1.35rem]"
             >
-              New signal
+              New detector
             </h2>
           </div>
           <button
@@ -408,7 +417,6 @@ function ReviewDraftPanel({
     clearPendingReview,
     clearSignalsNavAttention,
   } = useSignalJobs();
-  const { pushToast } = useLabToast();
 
   if (!pendingReview?.draft) return null;
   const job = pendingReview;
@@ -431,23 +439,18 @@ function ReviewDraftPanel({
     });
     clearPendingReview(job.id);
     clearSignalsNavAttention();
-    pushToast({
-      title: "Signal saved",
-      body: draft.name,
-      tone: "ok",
-    });
   }
 
   return (
     <section
       className="shrink-0 border-b border-[var(--accent)] bg-[var(--accent-muted)] px-5 py-5 sm:px-7"
-      aria-label="Review AI signal"
+      aria-label="Review AI detector"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="type-title text-[var(--text)] !text-[1.2rem]">
-              Review signal
+              Review detector
             </h2>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -650,7 +653,7 @@ function LabSignalsInner() {
     return (
       <div className="ds-page">
         <PageHeader title="Detectors" />
-        <QueryLoadingPanel label="Loading signals…" />
+        <QueryLoadingPanel label="Loading detectors…" />
       </div>
     );
   }
@@ -687,7 +690,7 @@ function LabSignalsInner() {
             }}
           >
             <Plus className="h-3.5 w-3.5" />
-            Create signal
+            Create detector
           </button>
         }
       />
@@ -702,7 +705,12 @@ function LabSignalsInner() {
       {pendingReview ? <ReviewDraftPanel onApprove={handleApprove} /> : null}
 
       <div className="flex min-h-0 min-w-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+            selected ? "hidden lg:flex" : "flex",
+          )}
+        >
           <div className="lab-list-chrome shrink-0 border-b border-[var(--line)] sm:!flex-row sm:flex-wrap sm:items-end">
             <div className="min-w-[11rem] flex-1 space-y-2 sm:max-w-[14rem]">
               <p className="type-label">Agent</p>
@@ -720,7 +728,7 @@ function LabSignalsInner() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
                 className="ds-input w-full"
-                aria-label="Search signals"
+                aria-label="Search detectors"
               />
             </div>
             <div className="space-y-2">
@@ -753,14 +761,40 @@ function LabSignalsInner() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-7">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <EmptyState title="No matching signals" />
+              <EmptyState
+                title={
+                  catalog.length === 0
+                    ? "No detectors yet"
+                    : "No matching detectors"
+                }
+                body={
+                  catalog.length === 0
+                    ? U20_EMPTY_COPY.signals
+                    : U20_FILTER_EMPTY_COPY.signals
+                }
+                action={
+                  catalog.length === 0 ? (
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-primary ds-btn-sm"
+                      onClick={() => {
+                        setCreatePrompt("");
+                        setCreating(true);
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create detector
+                    </button>
+                  ) : undefined
+                }
+              />
             ) : (
-              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <ul role="list" aria-label="Detectors">
                 {filtered.map((signal) => (
                   <li key={signal.id}>
-                    <SignalCard
+                    <SignalRow
                       signal={signal}
                       active={signal.id === selected?.id}
                       onSelect={() => selectSignal(signal.id)}

@@ -116,12 +116,13 @@ describe("GatewayClient window variable", () => {
     expect(screen.queryByText("Spend (24h)")).not.toBeInTheDocument();
   });
 
-  it("export helpers receive the active window's label, proving `activeWindow` (not a shadowed `window`) drives filenames", () => {
+  it("export helpers receive the active window's label, proving `activeWindow` (not a shadowed `window`) drives filenames", async () => {
     render(<GatewayClient />);
 
     fireEvent.click(screen.getByRole("tab", { name: "30d" }));
 
-    const csvButtons = screen.getAllByRole("button", { name: "CSV" });
+    // Spend ChartCard mounts after chartsReady (post-paint dynamic island).
+    const csvButtons = await screen.findAllByRole("button", { name: "CSV" });
     fireEvent.click(csvButtons[0]);
 
     expect(downloadCsv).toHaveBeenCalledWith(

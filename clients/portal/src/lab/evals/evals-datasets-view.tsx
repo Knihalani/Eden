@@ -14,6 +14,7 @@ import {
 } from "@/lab/fixtures/evals";
 import { AgentLink, EmptyState, FilterChips } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 
 type SourceFilter = "all" | DatasetSource;
 type DetailTab = "cases" | "runs";
@@ -149,6 +150,9 @@ export function EvalsDatasetsView({
         <EmptyState
           compact
           title={scoped.length === 0 ? "No datasets" : "No matches"}
+          body={
+            scoped.length === 0 ? U20_EMPTY_COPY.datasets : undefined
+          }
           action={
             scoped.length === 0 ? (
               <button

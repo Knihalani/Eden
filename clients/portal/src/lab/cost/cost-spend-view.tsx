@@ -8,7 +8,6 @@ import {
   budgetIsPressure,
   costlyTraces,
   fleetRuns24h,
-  fleetSpend24h,
   formatSpend,
   type CostBudgetFixture,
 } from "@/lab/fixtures/cost";
@@ -21,11 +20,18 @@ import { cn } from "@/lib/utils";
 export function CostSpendView({
   agentId,
   budget,
+  spendUsd,
+  spendEstimated = false,
+  spendSourceLabel = "Telemetry · 24h",
   onFilterAgent,
   onGoDrivers,
 }: {
   agentId: string;
   budget: CostBudgetFixture;
+  /** Single primary spend figure from the page (catalog/telemetry). */
+  spendUsd: number | null;
+  spendEstimated?: boolean;
+  spendSourceLabel?: string;
   onFilterAgent: (id: string) => void;
   onGoDrivers: () => void;
 }) {
@@ -37,10 +43,7 @@ export function CostSpendView({
 
   const traces = useMemo(() => costlyTraces(agentId, 8), [agentId]);
 
-  const spend =
-    agentId === "all"
-      ? fleetSpend24h()
-      : (agentById(agentId)?.costUsd24h ?? null);
+  const spend = spendUsd;
   const runs =
     agentId === "all"
       ? fleetRuns24h()
@@ -65,11 +68,17 @@ export function CostSpendView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="grid shrink-0 gap-px border-b border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
+      {/* First viewport: one job — Spend. Runs is secondary context only. */}
+      <div className="grid shrink-0 gap-px border-b border-[var(--line)] bg-[var(--line)] sm:grid-cols-2">
         <Kpi
-          label="Spend · 24h"
+          label={spendEstimated ? "Est. spend · 24h" : "Spend · 24h"}
           value={formatSpend(spend)}
-          hint={agentId === "all" ? "Fleet" : agentById(agentId)?.name}
+          hint={
+            agentId === "all"
+              ? spendSourceLabel
+              : agentById(agentId)?.name
+          }
+          primary
         />
         <Kpi
           label="Runs · 24h"
@@ -77,39 +86,17 @@ export function CostSpendView({
           href={runsHref}
           hint={`${formatSpend(avg)} / run`}
         />
-        {showOrgBudget ? (
-          <Kpi
-            label="Org budget"
-            value={
-              budget.limitUsd > 0 ? (
-                <>
-                  <span className={pressure ? "text-[var(--error)]" : undefined}>
-                    {formatUsd(budget.spentUsd)}
-                  </span>
-                  <span className="text-[var(--text-muted)]">
-                    {" "}
-                    / {formatUsd(budget.limitUsd)}
-                  </span>
-                </>
-              ) : (
-                "—"
-              )
-            }
-            hint={
-              budget.limitUsd > 0
-                ? `${pct}% · gateway budget (not telemetry spend)`
-                : "No hard limit set"
-            }
-            onClick={onGoDrivers}
-          />
-        ) : (
-          <Kpi
-            label="Drivers"
-            value="Open"
-            hint="Find savings for this agent"
-            onClick={onGoDrivers}
-          />
-        )}
+      </div>
+
+      {/* Drivers tease — below the primary spend job, not an equal KPI. */}
+      <div className="shrink-0 border-b border-[var(--line)] px-4 py-2.5 sm:px-6">
+        <button
+          type="button"
+          onClick={onGoDrivers}
+          className="type-meta text-[var(--accent)] hover:underline"
+        >
+          Find savings drivers →
+        </button>
       </div>
 
       {showOrgBudget && budget.limitUsd > 0 ? (
@@ -128,7 +115,9 @@ export function CostSpendView({
                 </span>
               </span>
               <span className="type-sep mx-1.5">·</span>
-              <span className="type-meta">gateway budget</span>
+              <span className="type-meta">
+                gateway budget (separate from telemetry spend above)
+              </span>
             </p>
             <BudgetChip status={budget.status} />
           </div>
@@ -247,6 +236,7 @@ function Kpi({
   href,
   trailing,
   onClick,
+  primary,
 }: {
   label: string;
   value: ReactNode;
@@ -254,6 +244,7 @@ function Kpi({
   href?: string;
   trailing?: ReactNode;
   onClick?: () => void;
+  primary?: boolean;
 }) {
   const inner = (
     <>
@@ -261,7 +252,14 @@ function Kpi({
         <p className="type-label">{label}</p>
         {trailing}
       </div>
-      <p className="type-ui mt-1.5 text-[var(--text)]">{value}</p>
+      <p
+        className={cn(
+          "mt-1.5 text-[var(--text)]",
+          primary ? "type-display !text-[1.25rem]" : "type-ui",
+        )}
+      >
+        {value}
+      </p>
       {hint ? <p className="type-meta mt-1">{hint}</p> : null}
     </>
   );

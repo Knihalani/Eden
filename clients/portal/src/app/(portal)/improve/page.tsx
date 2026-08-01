@@ -26,6 +26,7 @@ import { improvePlansApi } from "@/lib/api/resources";
 import { isGithubPermissionsMissing } from "@/lib/improve-feature";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
 
 const improveFallback = (
@@ -376,6 +377,13 @@ function LabImproveInner() {
           </div>
         }
       />
+
+      {(extraPlans.length > 0 || Object.keys(statusOverrides).length > 0) ? (
+        <LocalDraftBanner>
+          Start and Mark verify update local draft status only — Approve and
+          Reject hit the API when available.
+        </LocalDraftBanner>
+      ) : null}
 
       {mode === "queue" ? (
         <ImproveQueueView

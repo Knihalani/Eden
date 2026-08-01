@@ -1,22 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import Link from "next/link";
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { PageHeader } from "@/components/ds/primitives";
 import { MetricCell } from "@/lab/lab-metric-cell";
 import { useOrg } from "@/hooks/use-org";
@@ -30,8 +21,26 @@ import {
 } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { SHELL_QUERY } from "@/lib/portal-query";
+import { downloadCsv } from "@/lib/export";
 import { cn } from "@/lib/utils";
-import { downloadCsv, downloadPng } from "@/lib/export";
+
+const chartFallback = (
+  <p className="type-meta px-2 py-8 text-center">Loading charts…</p>
+);
+
+const GatewaySpendChart = dynamic(
+  () =>
+    import("./gateway-charts").then((m) => ({ default: m.GatewaySpendChart })),
+  { ssr: false, loading: () => chartFallback },
+);
+
+const GatewayBreakdownCharts = dynamic(
+  () =>
+    import("./gateway-charts").then((m) => ({
+      default: m.GatewayBreakdownCharts,
+    })),
+  { ssr: false, loading: () => chartFallback },
+);
 
 const WINDOW_OPTIONS = [
   { label: "24h", hours: 24 },
@@ -39,20 +48,6 @@ const WINDOW_OPTIONS = [
   { label: "30d", hours: 720 },
 ] as const;
 
-// Categorical series palette. Uses the shared `--chart-pie-*` tokens
-// (styles/tokens.css) so the gateway cost breakdown reads as the same
-// product as every other chart. The previous literal sage/olive ramp
-// (#6b8f71 … #3a5a40) was off-brand on two counts: none of those values
-// exist in the token ladder, and .impeccable.md reserves green for
-// active/running/success — never decoration.
-const CHART_COLORS = [
-  "var(--chart-pie-1)",
-  "var(--chart-pie-2)",
-  "var(--chart-pie-3)",
-  "var(--chart-pie-4)",
-  "var(--chart-pie-5)",
-  "var(--text-secondary)",
-];
 
 function formatUsd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(Number(n))) return "—";
@@ -105,59 +100,6 @@ function normalizeBreakdown(
     .filter((r) => r.key)
     .sort((a, b) => (b.cost_usd ?? -1) - (a.cost_usd ?? -1))
     .slice(0, 12);
-}
-
-function ChartCard({
-  title,
-  hint,
-  children,
-  onExportCsv,
-  onExportPng,
-  chartRef,
-}: {
-  title: string;
-  hint?: string;
-  children: ReactNode;
-  onExportCsv?: () => void;
-  onExportPng?: () => void;
-  chartRef?: RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <section className="min-w-0">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 px-1">
-        <div>
-          <h2 className="type-ui">{title}</h2>
-          {hint ? <p className="type-meta mt-0.5">{hint}</p> : null}
-        </div>
-        <div className="flex gap-1">
-          {onExportCsv ? (
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm !rounded-none"
-              onClick={onExportCsv}
-            >
-              CSV
-            </button>
-          ) : null}
-          {onExportPng ? (
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm !rounded-none"
-              onClick={onExportPng}
-            >
-              PNG
-            </button>
-          ) : null}
-        </div>
-      </div>
-      <div
-        ref={chartRef}
-        className="border border-[var(--line)] bg-[var(--bg)] px-2 py-3 sm:px-3"
-      >
-        {children}
-      </div>
-    </section>
-  );
 }
 
 function BreakdownTable({
@@ -250,9 +192,13 @@ export default function GatewayClient() {
   const [windowIdx, setWindowIdx] = useState(0);
   const activeWindow = WINDOW_OPTIONS[windowIdx] ?? WINDOW_OPTIONS[0];
 
-  const spendChartRef = useRef<HTMLDivElement>(null);
-  const tokenChartRef = useRef<HTMLDivElement>(null);
-  const modelChartRef = useRef<HTMLDivElement>(null);
+  const [chartsReady, setChartsReady] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setChartsReady(true), 0);
+    return () => window.clearTimeout(id);
+  }, []);
 
   const overview = useOrgQuery(
     queryKeys.gateway.overview(orgId, activeWindow.hours),
@@ -291,17 +237,6 @@ export default function GatewayClient() {
     });
   }, [data?.by_day]);
 
-  const pieData = useMemo(
-    () =>
-      byModel
-        .filter((r) => r.cost_usd != null && r.cost_usd > 0)
-        .slice(0, 8)
-        .map((r) => ({
-          name: r.key,
-          value: r.cost_usd as number,
-        })),
-    [byModel],
-  );
 
   const registry = data?.models ?? [];
   const providersHealth = data?.providers ?? [];
@@ -367,23 +302,6 @@ export default function GatewayClient() {
     ]);
   };
 
-  const exportPng = async (
-    ref: RefObject<HTMLDivElement | null>,
-    name: string,
-  ) => {
-    if (!ref.current) return;
-    // Fallback must match the product surface (Signal Black). It was
-    // "#f7f5f0" — an off-white left over from a light theme — so any
-    // failure to resolve --bg exported a PNG with white chart text on a
-    // near-white background.
-    const bg =
-      getComputedStyle(document.documentElement)
-        .getPropertyValue("--bg")
-        .trim() || "#000000";
-    await downloadPng(`eden-gateway-${name}-${activeWindow.label}.png`, ref.current, {
-      backgroundColor: bg,
-    });
-  };
 
   if (!orgId) {
     return (
@@ -420,13 +338,6 @@ export default function GatewayClient() {
     deltaPct == null
       ? "vs prior window"
       : `${deltaPct > 0 ? "+" : ""}${deltaPct.toFixed(1)}% vs prior`;
-
-  const tipStyle = {
-    background: "var(--bg)",
-    border: "1px solid var(--line)",
-    borderRadius: 0,
-    fontSize: 12,
-  };
 
   return (
     <div className="ds-page">
@@ -478,6 +389,7 @@ export default function GatewayClient() {
         }
       />
 
+      {/* First viewport: 2–3 KPIs + one primary chart. */}
       <div className="lab-metric-strip shrink-0">
         <MetricCell
           label={`Spend (${activeWindow.label})`}
@@ -494,341 +406,195 @@ export default function GatewayClient() {
           value={formatTokens(data?.total_tokens)}
           hint={`${formatTokens(data?.input_tokens)} in · ${formatTokens(data?.output_tokens)} out`}
         />
-        <MetricCell
-          label="Cache savings"
-          value={formatUsd(data?.cache_savings_usd)}
-          hint="Prompt-cache $ saved"
-        />
-        <MetricCell
-          label="Models"
-          value={String(registry.length)}
-          hint={
-            registry.filter((m) => m.enabled).length
-              ? `${registry.filter((m) => m.enabled).length} enabled`
-              : "Add via gateway models API"
-          }
-        />
-        {cacheView ? (
-          <MetricCell
-            label="Cache hit rate"
-            value={formatRate(cacheView.hitRate)}
-            hint={
-              cacheView.detail ??
-              `${cacheView.hits} hits · ${cacheView.misses} miss`
-            }
-          />
-        ) : null}
       </div>
 
       <div className="flex flex-col gap-8 px-5 py-6 sm:px-6">
-        <section>
-          <h2 className="type-ui mb-2">How to send traffic</h2>
-          <p className="type-body max-w-2xl text-[var(--text-secondary)]">
-            Point your OpenAI-compatible client at{" "}
-            <code className="type-meta">{GATEWAY_URL}</code> with an Eden API
-            key. Charts below come from one durable ledger query (cost +
-            tokens), not six parallel API calls.
-          </p>
-        </section>
-
-        <div className="grid gap-8 lg:grid-cols-2">
-          <ChartCard
-            title="Spend over time"
-            hint="Daily cost from the customer ledger"
-            chartRef={spendChartRef}
-            onExportCsv={() =>
-              downloadCsv(`eden-gateway-spend-${activeWindow.label}.csv`, series)
-            }
-            onExportPng={() => void exportPng(spendChartRef, "spend")}
-          >
-            {series.length === 0 ? (
-              <p className="type-meta px-2 py-8 text-center">
-                No spend in this window yet.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="var(--line)" strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                    axisLine={{ stroke: "var(--line)" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `$${Number(v).toFixed(0)}`}
-                    width={44}
-                  />
-                  <Tooltip
-                    contentStyle={tipStyle}
-                    formatter={(v) => formatUsd(Number(v))}
-                    labelFormatter={(_, payload) =>
-                      String(payload?.[0]?.payload?.day ?? "")
-                    }
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="cost_usd"
-                    name="Spend"
-                    stroke="var(--text)"
-                    fill="var(--text)"
-                    fillOpacity={0.12}
-                    strokeWidth={1.5}
-                    isAnimationActive
-                    animationDuration={450}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </ChartCard>
-
-          <ChartCard
-            title="Tokens over time"
-            hint="Input vs output from the same ledger"
-            chartRef={tokenChartRef}
-            onExportCsv={() =>
-              downloadCsv(`eden-gateway-tokens-${activeWindow.label}.csv`, series)
-            }
-            onExportPng={() => void exportPng(tokenChartRef, "tokens")}
-          >
-            {series.length === 0 ? (
-              <p className="type-meta px-2 py-8 text-center">
-                No token series in this window.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="var(--line)" strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                    axisLine={{ stroke: "var(--line)" }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => formatTokens(Number(v))}
-                    width={44}
-                  />
-                  <Tooltip
-                    contentStyle={tipStyle}
-                    formatter={(v) => formatTokens(Number(v))}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar
-                    dataKey="input_tokens"
-                    name="Input"
-                    stackId="t"
-                    fill="var(--text)"
-                    isAnimationActive
-                    animationDuration={450}
-                  />
-                  <Bar
-                    dataKey="output_tokens"
-                    name="Output"
-                    stackId="t"
-                    fill="var(--text-secondary)"
-                    isAnimationActive
-                    animationDuration={450}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </ChartCard>
-        </div>
-
-        <ChartCard
-          title="Spend by model"
-          hint="Top models in this window"
-          chartRef={modelChartRef}
-          onExportCsv={() =>
-            downloadCsv(`eden-gateway-models-${activeWindow.label}.csv`, byModel)
-          }
-          onExportPng={() => void exportPng(modelChartRef, "models")}
-        >
-          {pieData.length === 0 ? (
-            <p className="type-meta px-2 py-8 text-center">
-              No model spend yet.
-            </p>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="48%"
-                    outerRadius="72%"
-                    paddingAngle={2}
-                    stroke="var(--bg)"
-                    strokeWidth={2}
-                    isAnimationActive
-                    animationDuration={450}
-                  >
-                    {pieData.map((_, i) => (
-                      <Cell
-                        key={pieData[i]?.name ?? i}
-                        fill={CHART_COLORS[i % CHART_COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={tipStyle}
-                    formatter={(v) => formatUsd(Number(v))}
-                  />
-                  <Legend
-                    verticalAlign="bottom"
-                    wrapperStyle={{ fontSize: 11, color: "var(--text-secondary)" }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart
-                  data={byModel.slice(0, 8)}
-                  layout="vertical"
-                  margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
+        {chartsReady ? (
+          <GatewaySpendChart
+            series={series}
+            windowLabel={activeWindow.label}
+            emptySlot={
+              <div className="px-2 py-8 text-center">
+                <p className="type-meta">No spend in this window yet.</p>
+                <p className="type-body mt-2 text-[var(--text-secondary)]">
+                  Point your client at{" "}
+                  <code className="type-meta">{GATEWAY_URL}</code> with an Eden
+                  API key, then send traffic.
+                </p>
+                <Link
+                  href="/settings?mode=keys"
+                  className="ds-btn ds-btn-outline ds-btn-sm mt-3"
                 >
-                  <CartesianGrid stroke="var(--line)" strokeDasharray="3 3" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `$${Number(v).toFixed(0)}`}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="key"
-                    width={96}
-                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={tipStyle}
-                    formatter={(v) => formatUsd(Number(v))}
-                  />
-                  <Bar
-                    dataKey="cost_usd"
-                    name="Cost"
-                    fill="var(--text)"
-                    isAnimationActive
-                    animationDuration={450}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </ChartCard>
-
-        <div className="grid gap-8 lg:grid-cols-2">
-          <BreakdownTable
-            title="By feature"
-            rows={byFeature}
-            empty="No feature-tagged spend yet."
-            onExport={() =>
-              downloadCsv(`eden-gateway-features-${activeWindow.label}.csv`, byFeature)
+                  API keys
+                </Link>
+              </div>
             }
           />
-          <BreakdownTable
-            title="By agent"
-            rows={byAgent}
-            empty="No agent-tagged spend yet."
-            onExport={() =>
-              downloadCsv(`eden-gateway-agents-${activeWindow.label}.csv`, byAgent)
-            }
-          />
-        </div>
+        ) : (
+          chartFallback
+        )}
 
-        <section>
-          <h2 className="type-ui mb-3">Configured gateway models</h2>
-          {registry.length === 0 ? (
-            <p className="type-meta">
-              No models registered. Add upstream models via the gateway models
-              API, then route clients through Eden.
-            </p>
-          ) : (
-            <div className="overflow-x-auto border border-[var(--line)]">
-              <table className="w-full min-w-[32rem] text-left">
-                <thead>
-                  <tr className="border-b border-[var(--line)] type-meta">
-                    <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Provider</th>
-                    <th className="px-3 py-2 font-medium">Upstream</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Priority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {registry.map((m) => (
-                    <tr
-                      key={m.model_id}
-                      className="border-b border-[var(--line)] last:border-0"
-                    >
-                      <td className="type-ui px-3 py-2">{m.name}</td>
-                      <td className="type-meta px-3 py-2">{m.provider}</td>
-                      <td className="type-meta px-3 py-2">{m.upstream_model}</td>
-                      <td className="type-meta px-3 py-2">
-                        {m.enabled ? "Enabled" : "Disabled"}
-                      </td>
-                      <td className="type-meta px-3 py-2 tabular-nums">
-                        {m.routing_priority}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Secondary: breakdowns + extra charts below the fold. */}
+        <details
+          className="group border border-[var(--line)] open:pb-0"
+          onToggle={(e) =>
+            setBreakdownOpen((e.currentTarget as HTMLDetailsElement).open)
+          }
+        >
+          <summary className="cursor-pointer list-none px-4 py-3 type-ui marker:content-none [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center justify-between gap-2">
+              Breakdown &amp; models
+              <span className="type-meta group-open:hidden">Show</span>
+              <span className="type-meta hidden group-open:inline">Hide</span>
+            </span>
+          </summary>
+          <div className="flex flex-col gap-8 border-t border-[var(--line)] px-4 py-6 sm:px-5">
+            <div className="lab-metric-strip -mx-4 border-y border-[var(--line)] sm:-mx-5">
+              <MetricCell
+                label="Cache savings"
+                value={formatUsd(data?.cache_savings_usd)}
+                hint="Prompt-cache $ saved"
+              />
+              <MetricCell
+                label="Models"
+                value={String(registry.length)}
+                hint={
+                  registry.filter((m) => m.enabled).length
+                    ? `${registry.filter((m) => m.enabled).length} enabled`
+                    : "Add via gateway models API"
+                }
+              />
+              {cacheView ? (
+                <MetricCell
+                  label="Cache hit rate"
+                  value={formatRate(cacheView.hitRate)}
+                  hint={
+                    cacheView.detail ??
+                    `${cacheView.hits} hits · ${cacheView.misses} miss`
+                  }
+                />
+              ) : null}
             </div>
-          )}
-        </section>
 
-        {providersHealth.length > 0 ? (
-          <section>
-            <h2 className="type-ui mb-3">Provider health (live process)</h2>
-            <div className="overflow-x-auto border border-[var(--line)]">
-              <table className="w-full min-w-[24rem] text-left">
-                <thead>
-                  <tr className="border-b border-[var(--line)] type-meta">
-                    <th className="px-3 py-2 font-medium">Provider</th>
-                    <th className="px-3 py-2 font-medium">Healthy</th>
-                    <th className="px-3 py-2 font-medium">Avg latency</th>
-                    <th className="px-3 py-2 font-medium">Error rate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {providersHealth.map((p) => (
-                    <tr
-                      key={p.provider}
-                      className="border-b border-[var(--line)] last:border-0"
-                    >
-                      <td className="type-ui px-3 py-2">{p.provider}</td>
-                      <td className="type-meta px-3 py-2">
-                        {p.healthy ? "Yes" : "No"}
-                      </td>
-                      <td className="type-meta px-3 py-2 tabular-nums">
-                        {Math.round(p.avg_latency_ms ?? 0)} ms
-                      </td>
-                      <td className="type-meta px-3 py-2 tabular-nums">
-                        {formatRate(p.error_rate)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {breakdownOpen ? (
+              <GatewayBreakdownCharts
+                series={series}
+                byModel={byModel}
+                windowLabel={activeWindow.label}
+              />
+            ) : null}
+
+            <div className="grid gap-8 lg:grid-cols-2">
+              <BreakdownTable
+                title="By feature"
+                rows={byFeature}
+                empty="No feature-tagged spend yet."
+                onExport={() =>
+                  downloadCsv(
+                    `eden-gateway-features-${activeWindow.label}.csv`,
+                    byFeature,
+                  )
+                }
+              />
+              <BreakdownTable
+                title="By agent"
+                rows={byAgent}
+                empty="No agent-tagged spend yet."
+                onExport={() =>
+                  downloadCsv(
+                    `eden-gateway-agents-${activeWindow.label}.csv`,
+                    byAgent,
+                  )
+                }
+              />
             </div>
-            <p className="type-meta mt-2">
-              Live process view — may reset on deploy. Durable spend is above.
-            </p>
-          </section>
-        ) : null}
+
+            <section>
+              <h2 className="type-ui mb-3">Configured gateway models</h2>
+              {registry.length === 0 ? (
+                <p className="type-meta">
+                  No models registered. Add upstream models via the gateway
+                  models API, then route clients through Eden.
+                </p>
+              ) : (
+                <div className="overflow-x-auto border border-[var(--line)]">
+                  <table className="w-full min-w-[32rem] text-left">
+                    <thead>
+                      <tr className="border-b border-[var(--line)] type-meta">
+                        <th className="px-3 py-2 font-medium">Name</th>
+                        <th className="px-3 py-2 font-medium">Provider</th>
+                        <th className="px-3 py-2 font-medium">Upstream</th>
+                        <th className="px-3 py-2 font-medium">Status</th>
+                        <th className="px-3 py-2 font-medium">Priority</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {registry.map((m) => (
+                        <tr
+                          key={m.model_id}
+                          className="border-b border-[var(--line)] last:border-0"
+                        >
+                          <td className="type-ui px-3 py-2">{m.name}</td>
+                          <td className="type-meta px-3 py-2">{m.provider}</td>
+                          <td className="type-meta px-3 py-2">
+                            {m.upstream_model}
+                          </td>
+                          <td className="type-meta px-3 py-2">
+                            {m.enabled ? "Enabled" : "Disabled"}
+                          </td>
+                          <td className="type-meta px-3 py-2 tabular-nums">
+                            {m.routing_priority}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {providersHealth.length > 0 ? (
+              <section>
+                <h2 className="type-ui mb-3">Provider health (live process)</h2>
+                <div className="overflow-x-auto border border-[var(--line)]">
+                  <table className="w-full min-w-[24rem] text-left">
+                    <thead>
+                      <tr className="border-b border-[var(--line)] type-meta">
+                        <th className="px-3 py-2 font-medium">Provider</th>
+                        <th className="px-3 py-2 font-medium">Healthy</th>
+                        <th className="px-3 py-2 font-medium">Avg latency</th>
+                        <th className="px-3 py-2 font-medium">Error rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {providersHealth.map((p) => (
+                        <tr
+                          key={p.provider}
+                          className="border-b border-[var(--line)] last:border-0"
+                        >
+                          <td className="type-ui px-3 py-2">{p.provider}</td>
+                          <td className="type-meta px-3 py-2">
+                            {p.healthy ? "Yes" : "No"}
+                          </td>
+                          <td className="type-meta px-3 py-2 tabular-nums">
+                            {Math.round(p.avg_latency_ms ?? 0)} ms
+                          </td>
+                          <td className="type-meta px-3 py-2 tabular-nums">
+                            {formatRate(p.error_rate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="type-meta mt-2">
+                  Live process view — may reset on deploy. Durable spend is
+                  above.
+                </p>
+              </section>
+            ) : null}
+          </div>
+        </details>
       </div>
     </div>
   );

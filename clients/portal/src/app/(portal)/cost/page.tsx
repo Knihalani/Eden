@@ -5,9 +5,8 @@ import { useSearchParams } from "next/navigation";
 import {
   budgetStatusFromSpend,
   defaultDriverId,
-  fleetSpend24h,
   formatSpend,
-  totalDriverSaveUsd,
+  primaryFleetSpend24h,
   type CostBudgetFixture,
 } from "@/lab/fixtures/cost";
 import { PageHeader } from "@/components/ds/primitives";
@@ -39,14 +38,14 @@ const CostSpendView = dynamic(
     import("@/lab/cost/cost-spend-view").then((m) => ({
       default: m.CostSpendView,
     })),
-  { loading: () => costFallback },
+  { ssr: false, loading: () => costFallback },
 );
 const CostDriversView = dynamic(
   () =>
     import("@/lab/cost/cost-drivers-view").then((m) => ({
       default: m.CostDriversView,
     })),
-  { loading: () => costFallback },
+  { ssr: false, loading: () => costFallback },
 );
 
 const BUDGET_QUERY_KEY = (orgId: string | null) =>
@@ -204,27 +203,30 @@ function LabCostInner() {
     );
   }
 
-  const spend =
+  // One primary spend figure — catalog/telemetry only. Gateway budget is a
+  // separate rollup shown inside Spend mode; never compete in the header.
+  const primary =
     agentId === "all"
-      ? fleetSpend24h()
-      : (scopeAgent?.costUsd24h ?? null);
-  const saveHint = totalDriverSaveUsd(agentId);
+      ? primaryFleetSpend24h()
+      : {
+          usd: scopeAgent?.costUsd24h ?? null,
+          estimated: false,
+          sourceLabel: "Telemetry · 24h",
+        };
   const meta = (
     <span className="type-meta inline-flex flex-wrap items-center gap-2">
       <span>
-        {scopeAgent ? scopeAgent.name : "All agents"} · {formatSpend(spend)} /
-        24h
-        {saveHint > 0 ? (
-          <>
-            {" "}
-            ·{" "}
-            <span className="text-[var(--success)]">
-              −{formatSpend(saveHint)} drivers
-            </span>
-          </>
-        ) : null}
+        {scopeAgent ? scopeAgent.name : "All agents"} ·{" "}
+        {primary.estimated ? "est. " : ""}
+        {formatSpend(primary.usd)} / 24h
+        <span className="text-[var(--text-muted)]">
+          {" "}
+          · {primary.sourceLabel}
+        </span>
       </span>
-      {agentId === "all" ? <BudgetChip status={budget.status} /> : null}
+      {agentId === "all" && budget.limitUsd > 0 ? (
+        <BudgetChip status={budget.status} />
+      ) : null}
     </span>
   );
 
@@ -266,6 +268,9 @@ function LabCostInner() {
         <CostSpendView
           agentId={agentId}
           budget={budget}
+          spendUsd={primary.usd}
+          spendEstimated={primary.estimated}
+          spendSourceLabel={primary.sourceLabel}
           onFilterAgent={filterAgent}
           onGoDrivers={() => changeMode("drivers")}
         />

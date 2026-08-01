@@ -13,6 +13,26 @@ function readLocalBool(key: string, fallback: boolean) {
   return fallback;
 }
 
+/**
+ * Match a min-width media query.
+ * Returns `null` until mounted (unknown), then `true`/`false`.
+ * Callers must not treat `null` as mobile — that would collapse desktop
+ * master–detail panes on the first paint.
+ */
+export function useMinWidth(px: number): boolean | null {
+  const [matches, setMatches] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${px}px)`);
+    const update = () => setMatches(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [px]);
+
+  return matches;
+}
+
 /** Persist boolean in localStorage — only writes on user-driven changes. */
 export function usePersistentBool(key: string, initial: boolean) {
   // Match SSR + first client paint; restore stored value before paint.
