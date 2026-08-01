@@ -47,14 +47,14 @@ function isTextInput(target: EventTarget | null): boolean {
 
 /**
  * Document-level shortcuts. Modifier chords (⌘K / Ctrl+K, etc.) are ignored
- * so portal chrome owns the command palette — never steal filter focus via ⌘K.
+ * so AppShell `CommandPalette` owns the palette — never steal filter focus via ⌘K.
  */
 export function useKeyboardShortcuts(map: ShortcutMap, enabled: boolean = true): void {
   React.useEffect(() => {
     if (!enabled) return;
     const handler = (e: KeyboardEvent) => {
       if (isTextInput(e.target)) return;
-      // Don't trigger with modifier keys — ⌘K / Ctrl+K stay on chrome palette.
+      // Don't trigger with modifier keys — ⌘K / Ctrl+K stay on CommandPalette.
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key;
       const fn =

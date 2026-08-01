@@ -32,6 +32,15 @@ const OnboardingOverlay = dynamic(
   { ssr: false },
 );
 
+/** ⌘K palette — bind after hydration; dialog mounts when opened. */
+const CommandPalette = dynamic(
+  () =>
+    import("@/components/shell/command-palette").then((m) => ({
+      default: m.CommandPalette,
+    })),
+  { ssr: false },
+);
+
 function CatalogSyncFallback() {
   return (
     <span className="sr-only" role="status">
@@ -63,6 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
               <AlertsModal />
               <OnboardingOverlay />
+              <CommandPalette />
             </SignalJobsProvider>
           </AlertsProvider>
         </LabToastProvider>

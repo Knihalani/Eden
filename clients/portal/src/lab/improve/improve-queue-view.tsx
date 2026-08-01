@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   agentForPlan,
@@ -12,6 +13,7 @@ import {
   ImproveKindChip,
   ImproveStatusChip,
 } from "@/lab/improve/improve-chrome";
+import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | ImproveStatus;
@@ -92,6 +94,11 @@ export function ImproveQueueView({
           <EmptyState
             compact
             title={scoped.length === 0 ? "No improve work" : "No matches"}
+            body={
+              scoped.length === 0
+                ? U20_EMPTY_COPY.improveQueue
+                : undefined
+            }
             action={
               status !== "all" ? (
                 <button
@@ -101,6 +108,10 @@ export function ImproveQueueView({
                 >
                   Show all
                 </button>
+              ) : scoped.length === 0 ? (
+                <Link href="/issues" className="ds-btn ds-btn-primary ds-btn-sm">
+                  Open Issues
+                </Link>
               ) : undefined
             }
           />

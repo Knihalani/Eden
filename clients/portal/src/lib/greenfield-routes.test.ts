@@ -172,4 +172,25 @@ describe("nav IA", () => {
     expect(PRIMARY_NAV.find((i) => i.id === "agent")?.href).toBe("/agent");
     expect(PRIMARY_NAV.find((i) => i.id === "signals")?.href).toBe("/signals");
   });
+
+  it("command palette derives routes from lab/nav SoT", async () => {
+    const { buildNavCommands, collectSidebarHrefs } = await import(
+      "@/lib/nav-commands"
+    );
+    const cmds = buildNavCommands();
+    const detectors = cmds.find(
+      (c) => c.href === "/signals" && c.label === "Detectors",
+    );
+    expect(detectors).toBeTruthy();
+    expect(cmds.find((c) => c.label === "Assistant")?.href).toBe("/agent");
+    expect(
+      cmds.find((c) => c.href === "/settings?mode=audit")?.label,
+    ).toBe("Audit trail");
+    const hrefs = collectSidebarHrefs();
+    expect(hrefs).toContain("/signals");
+    expect(hrefs).toContain("/home");
+    expect(hrefs).toEqual(
+      expect.arrayContaining(PRIMARY_NAV.map((i) => i.href.split("?")[0])),
+    );
+  });
 });

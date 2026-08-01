@@ -378,7 +378,7 @@ export function AlertsModal() {
           </span>
           <div className="min-w-0">
             <h1 id="alerts-modal-title" className="type-title text-[var(--text)]">
-              Alerts
+              Inbox
             </h1>
             <p className="type-meta mt-0.5">
               {unreadCount > 0
@@ -402,7 +402,7 @@ export function AlertsModal() {
           type="button"
           className="ds-btn ds-btn-ghost ds-btn-sm"
           onClick={closeAlerts}
-          aria-label="Close alerts"
+          aria-label="Close Inbox"
         >
           <X className="h-4 w-4" />
           <span className="hidden sm:inline">Close</span>
@@ -430,7 +430,7 @@ export function AlertsModal() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {eventsQuery.isLoading ? (
-              <QueryLoadingPanel label="Loading alerts…" />
+              <QueryLoadingPanel label="Loading Inbox…" />
             ) : eventsQuery.isError ? (
               <QueryErrorPanel
                 error={eventsQuery.error}
@@ -440,10 +440,10 @@ export function AlertsModal() {
               <EmptyState
                 title={
                   events.length === 0
-                    ? "No alerts yet"
+                    ? "Inbox empty"
                     : inboxFilter === "actionable"
                       ? "Inbox clear"
-                      : "No matching alerts"
+                      : "No matching events"
                 }
                 body={
                   events.length === 0
@@ -476,7 +476,7 @@ export function AlertsModal() {
               onStatus={(status) => setEventStatus(selected.id, status)}
             />
           ) : (
-            <EmptyState title="Select an alert" />
+            <EmptyState title="Select an event" />
           )}
         </div>
       </div>

@@ -52,11 +52,11 @@ export function PortalCatalogSync() {
   const onGuardrails = pathIn(pathname, ["/guardrails"]);
   const onCost = pathIn(pathname, ["/cost"]);
 
-  // Agents: only observe hubs that render agent lists / scope chips
-  // from the catalog. Cost/evals/improve fetch agents in-page when needed.
+  // Agents: observe hubs that render agent lists / scope chips from the
+  // catalog. Home defers agents until "Show fleet" (page-local query).
+  // Cost/evals/improve fetch agents in-page when needed.
   // Settings / agent-chat / debugger fetch their own shards — do not warm here.
   const needAgents =
-    onHome ||
     onTraces ||
     onSessions ||
     onIssues ||
@@ -64,6 +64,7 @@ export function PortalCatalogSync() {
     onAlerts ||
     onAgents ||
     onDebugger;
+  // Home attention path: traces + issues only (not agents).
   const needTraces = onHome || onTraces || onAgents || onDebugger || onSessions;
   // Sessions are traces-hub only (agents inspector uses traces, not sessions).
   const needSessions = onTraces || onSessions;
@@ -94,7 +95,10 @@ export function PortalCatalogSync() {
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
-    { ...LIVE_QUERY, enabled: needTraces },
+    {
+      ...(onHome ? SHELL_QUERY : LIVE_QUERY),
+      enabled: needTraces,
+    },
   );
   const sessions = useOrgQuery(
     queryKeys.portal.sessions(orgId),
@@ -108,7 +112,8 @@ export function PortalCatalogSync() {
     () => portalApi.issues(orgId!),
     {
       ...SHELL_QUERY,
-      enabled: needIssues && (!onHome || !agents.isPending),
+      // Home: fire issues in parallel with traces (no agents gate).
+      enabled: needIssues,
     },
   );
   const signals = useOrgQuery(

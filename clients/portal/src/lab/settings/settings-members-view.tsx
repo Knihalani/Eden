@@ -327,11 +327,6 @@ function MemberDialog({
               className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
               onClick={() => {
                 onDisable(member.id);
-                pushToast({
-                  title: "Member disabled",
-                  body: member.email,
-                  tone: "fail",
-                });
                 onClose();
               }}
             >
@@ -344,11 +339,6 @@ function MemberDialog({
               className="ds-btn ds-btn-primary ds-btn-sm"
               onClick={() => {
                 onEnable(member.id);
-                pushToast({
-                  title: "Member re-enabled",
-                  body: member.email,
-                  tone: "ok",
-                });
               }}
             >
               Re-enable

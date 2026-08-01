@@ -43,17 +43,23 @@ const IntersectionObserverStub = class {
 
 if (typeof window !== "undefined" && typeof window.matchMedia === "undefined") {
   // Radix UI and a handful of other libs probe `window.matchMedia`
-  // during render. Provide a stub that always reports "no match".
-  window.matchMedia = (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  });
+  // during render. Default to a desktop (≥1024) viewport so master–detail
+  // hubs keep the list mounted in unit tests; mobile exclusivity is CSS +
+  // useMinWidth-driven and covered by manual/e2e checks.
+  window.matchMedia = (query: string) => {
+    const minWidth = /min-width:\s*(\d+)px/.exec(query);
+    const matches = minWidth ? Number(minWidth[1]) <= 1024 : false;
+    return {
+      matches,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    };
+  };
 }
 
 // @tanstack/react-virtual sizes its window from the scroll element's

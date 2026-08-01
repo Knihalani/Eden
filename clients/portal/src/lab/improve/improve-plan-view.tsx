@@ -88,13 +88,24 @@ export function ImprovePlanView({
               Mark verify
             </button>
           ) : null}
+          {plan.status === "needs_you" ||
+          plan.status === "in_progress" ||
+          plan.status === "verify" ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
+              onClick={() => void onStatus(plan.id, "blocked")}
+            >
+              Reject
+            </button>
+          ) : null}
           {plan.status === "verify" ? (
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
               onClick={() => void onStatus(plan.id, "done")}
             >
-              Mark done
+              Approve
             </button>
           ) : null}
           {primary ? (

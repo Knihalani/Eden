@@ -34,6 +34,7 @@ import { api } from "@/lib/api/resources";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
 
 const settingsFallback = (
@@ -705,6 +706,15 @@ function LabSettingsInner() {
           <SettingsModeNav value={mode} onChange={(m) => changeMode(m)} />
         }
       />
+
+      {(Object.keys(memberStatusOverride).length > 0 ||
+        Object.keys(packVerifiedOverride).length > 0 ||
+        localPacks.length > 0) ? (
+        <LocalDraftBanner>
+          Member disable/enable and audit pack reverify/export on this page are
+          local drafts — they are not saved to the server yet.
+        </LocalDraftBanner>
+      ) : null}
 
       {mode === "workspace" ? (
         <SettingsWorkspaceView

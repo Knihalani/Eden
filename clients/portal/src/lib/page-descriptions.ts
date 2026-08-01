@@ -25,6 +25,8 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
     "Usage, tools, users, and trend insights.",
   "/evals":
     "Datasets, labeling, studio metrics, synthetic data, and eval scores.",
+  "/compare":
+    "Live A/B — run prompt or model variants against production traffic and read the verdict.",
   "/improve":
     "Action queue, improvement plans, and sweep history — core Improve act path.",
   "/artifacts":

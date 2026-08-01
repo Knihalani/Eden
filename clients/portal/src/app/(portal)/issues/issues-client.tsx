@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import {
   agentForIssue,
   occurrencesForIssue,
@@ -41,6 +41,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 type SeverityFilter = "all" | "error" | "warn";
@@ -71,7 +72,7 @@ function IssueStatusChip({ status }: { status: IssueStatus }) {
   return <StatusChip tone={statusTone(status)}>{label}</StatusChip>;
 }
 
-function IssueCard({
+function IssueRow({
   issue,
   active,
   onSelect,
@@ -88,24 +89,25 @@ function IssueCard({
       data-issue-id={issue.id}
       data-active={active ? "true" : "false"}
       className={cn(
-        "w-full rounded-[var(--radius-lg)] p-4 text-left transition-colors",
-        "shadow-[0_0_0_1px_var(--line)]",
+        "flex w-full items-start gap-3 border-b border-[var(--line)] px-4 py-3 text-left transition-colors sm:px-5",
         active
-          ? "bg-[var(--accent-muted)] shadow-[0_0_0_1px_var(--accent)]"
-          : "bg-[var(--bg)] hover:bg-[var(--accent-muted)]",
+          ? "bg-[var(--accent-muted)] shadow-[inset_2px_0_0_var(--accent)]"
+          : "hover:bg-[var(--accent-muted)]",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <SeverityBadge severity={issue.severity} />
-        <span className="type-value tabular-nums !text-[0.625rem]">
-          {issue.occurrenceTraceIds.length}×
-        </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <SeverityBadge severity={issue.severity} />
+          <IssueStatusChip status={issue.status} />
+          <span className="type-value tabular-nums !text-[0.625rem] text-[var(--text-muted)]">
+            {issue.occurrenceTraceIds.length}×
+          </span>
+        </div>
+        <p className="type-ui truncate text-[var(--text)]">{issue.title}</p>
+        <p className="type-meta truncate">
+          {agent?.name ?? "unknown"} · {issue.lastSeen}
+        </p>
       </div>
-      <p className="type-ui mt-3 text-[var(--text)]">{issue.title}</p>
-      <p className="type-body mt-1.5 line-clamp-2">{issue.summary}</p>
-      <p className="type-meta mt-3">
-        {agent?.name ?? "unknown"} · {issue.lastSeen}
-      </p>
     </button>
   );
 }
@@ -139,13 +141,21 @@ function IssueDetail({
 
   return (
     <aside
-      className="flex w-full max-w-xl shrink-0 flex-col overflow-hidden border-l border-[var(--line)] bg-[var(--bg)]"
+      className="flex w-full min-w-0 shrink-0 flex-col overflow-hidden border-[var(--line)] bg-[var(--bg)] lg:max-w-xl lg:border-l"
       aria-label="Issue detail"
     >
       <header className="shrink-0 border-b border-[var(--line)] px-5 py-5 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-icon lg:hidden"
+                onClick={onClose}
+                aria-label="Back to issues"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
               <SeverityBadge severity={issue.severity} />
               <IssueStatusChip status={issue.status} />
             </div>
@@ -161,7 +171,7 @@ function IssueDetail({
           </div>
           <button
             type="button"
-            className="ds-btn ds-btn-ghost ds-btn-icon"
+            className="ds-btn ds-btn-ghost ds-btn-icon hidden lg:inline-flex"
             onClick={onClose}
             aria-label="Close detail"
           >
@@ -546,8 +556,20 @@ function LabIssuesInner() {
         }
       />
 
+      {Object.keys(statusOverride).length > 0 ? (
+        <LocalDraftBanner>
+          Triage status changes on this page are local drafts and are not saved
+          to the server yet.
+        </LocalDraftBanner>
+      ) : null}
+
       <div className="flex min-h-0 min-w-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+            selected ? "hidden lg:flex" : "flex",
+          )}
+        >
           <div className="lab-list-chrome border-b border-[var(--line)] sm:!flex-row sm:flex-wrap sm:items-end">
             <div className="min-w-[12rem] flex-1 space-y-2 sm:max-w-xs">
               <p className="type-label">Agent</p>
@@ -582,7 +604,7 @@ function LabIssuesInner() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
               <EmptyState
                 title={
@@ -599,37 +621,26 @@ function LabIssuesInner() {
                 }
               />
             ) : (
-              <div className="flex h-full min-w-[48rem] gap-4 px-5 py-5 sm:px-7">
+              <div className="pb-2">
                 {COLUMNS.map((col) => {
                   const items = byColumn[col.id];
+                  if (items.length === 0) return null;
                   return (
-                    <section
-                      key={col.id}
-                      className="flex min-h-0 w-[min(20rem,32vw)] shrink-0 flex-col"
-                      aria-label={`${col.label} issues`}
-                    >
-                      <header className="mb-3 flex shrink-0 items-baseline justify-between gap-2">
-                        <h3 className="type-ui text-[var(--text)]">{col.label}</h3>
-                        <span className="type-value tabular-nums">
-                          {items.length}
-                        </span>
+                    <section key={col.id} aria-label={`${col.label} issues`}>
+                      <header className="sticky top-0 z-[1] flex items-baseline justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-2 sm:px-5">
+                        <h3 className="type-label text-[var(--text)]">{col.label}</h3>
+                        <span className="type-value tabular-nums">{items.length}</span>
                       </header>
-                      <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-2">
-                        {items.length === 0 ? (
-                          <li className="rounded-[var(--radius-lg)] px-3 py-8 text-center shadow-[0_0_0_1px_var(--line)]">
-                            <p className="type-meta">—</p>
+                      <ul>
+                        {items.map((issue) => (
+                          <li key={issue.id}>
+                            <IssueRow
+                              issue={issue}
+                              active={issue.id === selected?.id}
+                              onSelect={() => selectIssue(issue.id)}
+                            />
                           </li>
-                        ) : (
-                          items.map((issue) => (
-                            <li key={issue.id}>
-                              <IssueCard
-                                issue={issue}
-                                active={issue.id === selected?.id}
-                                onSelect={() => selectIssue(issue.id)}
-                              />
-                            </li>
-                          ))
-                        )}
+                        ))}
                       </ul>
                     </section>
                   );

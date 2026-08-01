@@ -68,16 +68,49 @@ function liveTraces(): TraceFixture[] {
   return live.length > 0 ? live : TRACE_LIST;
 }
 
-/** Sum of known agent costs; null when every agent cost is unknown. */
-export function fleetSpend24h(): number | null {
+export type PrimarySpendFigure = {
+  usd: number | null;
+  /** True when agent catalog and trace rollups disagree and we blend them. */
+  estimated: boolean;
+  /** Short source label for the header / KPI hint. */
+  sourceLabel: string;
+};
+
+/**
+ * One primary fleet spend figure for Cost.
+ * Prefers agent catalog costs; falls back to trace rollup. When both disagree,
+ * takes the max and marks `estimated` so the UI does not present two truths.
+ */
+export function primaryFleetSpend24h(): PrimarySpendFigure {
   const known = liveAgents()
     .map((a) => a.costUsd24h)
     .filter((c): c is number => c != null && Number.isFinite(c));
   const fromAgents =
     known.length > 0 ? known.reduce((s, c) => s + c, 0) : null;
   const fromTraces = liveTraces().reduce((s, t) => s + (t.costUsd ?? 0), 0);
-  if (fromAgents != null) return Math.max(fromAgents, fromTraces);
-  return liveTraces().length > 0 ? fromTraces : null;
+  const hasTraceSpend = liveTraces().length > 0 && fromTraces > 0;
+
+  if (fromAgents != null && hasTraceSpend) {
+    const blended = Math.max(fromAgents, fromTraces);
+    const disagree = Math.abs(fromAgents - fromTraces) > 0.01;
+    return {
+      usd: blended,
+      estimated: disagree,
+      sourceLabel: disagree ? "Estimated · catalog + traces" : "Telemetry · 24h",
+    };
+  }
+  if (fromAgents != null) {
+    return { usd: fromAgents, estimated: false, sourceLabel: "Telemetry · 24h" };
+  }
+  if (hasTraceSpend) {
+    return { usd: fromTraces, estimated: false, sourceLabel: "From traces · 24h" };
+  }
+  return { usd: null, estimated: false, sourceLabel: "24h" };
+}
+
+/** Sum of known agent costs; null when every agent cost is unknown. */
+export function fleetSpend24h(): number | null {
+  return primaryFleetSpend24h().usd;
 }
 
 export function fleetRuns24h(): number {

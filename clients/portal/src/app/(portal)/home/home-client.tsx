@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
-import { SHELL_QUERY, LIVE_QUERY } from "@/lib/portal-query";
+import { SHELL_QUERY, OBSERVE_STALE } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
@@ -44,6 +44,7 @@ function Kpi({
   tone = "default",
   hintTone = "default",
   href,
+  className,
 }: {
   label: string;
   value: string;
@@ -51,11 +52,15 @@ function Kpi({
   tone?: "default" | "error" | "ok" | "live";
   hintTone?: "default" | "error" | "ok";
   href: string;
+  className?: string;
 }) {
   return (
     <Link
       href={href}
-      className="min-w-0 flex-1 basis-[8rem] border-b border-[var(--line)] px-5 py-5 transition-colors hover:bg-[var(--accent-muted)] sm:border-b-0 sm:border-r sm:last:border-r-0"
+      className={cn(
+        "min-w-0 flex-1 basis-[8rem] border-b border-[var(--line)] px-5 py-5 transition-colors hover:bg-[var(--accent-muted)] sm:border-b-0 sm:border-r sm:last:border-r-0",
+        className,
+      )}
     >
       <p className="type-label">{label}</p>
       <p
@@ -93,6 +98,8 @@ function AttentionCard({
 }) {
   const agent = agentForTrace(trace);
   const isError = trace.severity === "error";
+  const agentName = agent?.name ?? trace.agentId;
+  const agentId = agent?.id ?? trace.agentId;
 
   return (
     <li
@@ -110,7 +117,7 @@ function AttentionCard({
               <p className="type-ui text-[var(--text)]">{trace.signals.title}</p>
             </div>
             <p className="type-meta mt-2">
-              <AgentLink agentId={agent?.id} name={agent?.name ?? "unknown"} />
+              <AgentLink agentId={agentId} name={agentName} />
               {" · "}
               {trace.name}
               {" · "}
@@ -144,7 +151,7 @@ function AttentionCard({
             </Link>
           ) : (
             <Link
-              href={`/traces?id=${trace.id}&tab=signals${agent ? `&agent=${agent.id}` : ""}`}
+              href={`/traces?id=${trace.id}&tab=signals&agent=${agentId}`}
               className="ds-btn ds-btn-primary ds-btn-sm"
             >
               Run
@@ -152,7 +159,7 @@ function AttentionCard({
           )}
           {issue ? (
             <Link
-              href={`/traces?id=${trace.id}&tab=signals${agent ? `&agent=${agent.id}` : ""}`}
+              href={`/traces?id=${trace.id}&tab=signals&agent=${agentId}`}
               className="ds-btn ds-btn-ghost ds-btn-sm"
             >
               Run
@@ -167,18 +174,19 @@ function AttentionCard({
 export default function HomeClient() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const [showAllFleet, setShowAllFleet] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
+  const [showFleet, setShowFleet] = useState(false);
 
-  const agentsQuery = useOrgQuery(
-    queryKeys.portal.agents(orgId),
-    orgId,
-    () => portalApi.agents(orgId!),
-    LIVE_QUERY,
-  );
+  /**
+   * Attention path first: traces + issues. Fleet/agents wait until
+   * "Show fleet" so cold Home does not race three LIVE GETs.
+   */
   const tracesQuery = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
-    LIVE_QUERY,
+    SHELL_QUERY,
   );
   /**
    * Subscribed here (not just read from the ``portal-catalog``
@@ -193,11 +201,21 @@ export default function HomeClient() {
     () => portalApi.issues(orgId!),
     {
       ...SHELL_QUERY,
-      // Match catalog deferral — don't race agents/traces on cold Home.
-      enabled: Boolean(orgId) && !agentsQuery.isPending,
+      enabled: Boolean(orgId),
+    },
+  );
+  const agentsQuery = useOrgQuery(
+    queryKeys.portal.agents(orgId),
+    orgId,
+    () => portalApi.agents(orgId!),
+    {
+      ...SHELL_QUERY,
+      staleTime: OBSERVE_STALE,
+      enabled: Boolean(orgId) && showFleet,
     },
   );
 
+  const agentsLoaded = agentsQuery.data !== undefined;
   const agents = agentsQuery.data ?? [];
   const traces = tracesQuery.data ?? [];
 
@@ -217,6 +235,12 @@ export default function HomeClient() {
     return map;
   }, [issuesQuery.data]);
 
+  const openIssuesCount = useMemo(
+    () =>
+      (issuesQuery.data ?? []).filter((i) => i.status !== "resolved").length,
+    [issuesQuery.data],
+  );
+
   const resolveIssueForTrace = (traceId: string): IssueFixture | undefined =>
     issueByTraceId.get(traceId) ?? issueForTrace(traceId);
 
@@ -226,8 +250,6 @@ export default function HomeClient() {
   );
   const alerts = useDismissedSet("eden.home.dismissedAlerts");
   const { openAlerts } = useAlerts();
-  const [showAllFleet, setShowAllFleet] = useState(false);
-  const [showMetrics, setShowMetrics] = useState(false);
 
   const visibleAlerts = useMemo(
     () => snap.attention.filter((t) => !alerts.dismissed.has(t.id)),
@@ -252,8 +274,9 @@ export default function HomeClient() {
   const fleet = showAllFleet ? orderedFleet : orderedFleet.slice(0, 3);
   const recent = snap.recent.slice(0, 4);
 
-  const isLoading = agentsQuery.isLoading || tracesQuery.isLoading;
-  const isError = agentsQuery.isError || tracesQuery.isError;
+  // First paint gates on attention shards only — fleet can stream in later.
+  const isLoading = tracesQuery.isLoading;
+  const isError = tracesQuery.isError;
 
   if (!orgId) {
     return (
@@ -278,10 +301,10 @@ export default function HomeClient() {
       <div className="ds-page overflow-y-auto">
         <PageHeader title="Home" />
         <QueryErrorPanel
-          error={agentsQuery.error ?? tracesQuery.error}
+          error={tracesQuery.error}
           onRetry={() => {
-            void agentsQuery.refetch();
             void tracesQuery.refetch();
+            void issuesQuery.refetch();
           }}
         />
       </div>
@@ -299,320 +322,376 @@ export default function HomeClient() {
         }
       />
 
+      {/* First viewport: KPIs (≤3 mobile) → diagnosis → one primary action group */}
       <div className="flex flex-wrap border-b border-[var(--line)]">
         <Kpi
           label="Failures"
           value={String(snap.failures.length)}
-          hint={`${snap.openIssues} open issues`}
+          hint={`${openIssuesCount} open issues`}
           tone={snap.failures.length ? "error" : "default"}
-          hintTone={snap.openIssues > 0 ? "error" : "default"}
+          hintTone={openIssuesCount > 0 ? "error" : "default"}
           href="/issues"
         />
         <Kpi
           label="Runs"
-          value={String(snap.fleetRuns)}
+          value={
+            agentsLoaded ? String(snap.fleetRuns) : String(traces.length)
+          }
           hint={
-            snap.successRate == null
-              ? snap.fleetRuns > 0
-                ? "success unknown"
+            agentsLoaded
+              ? snap.successRate == null
+                ? snap.fleetRuns > 0
+                  ? "success unknown"
+                  : "no runs yet"
+                : `${(snap.successRate * 100).toFixed(0)}%`
+              : traces.length
+                ? "from feed · open fleet for rollup"
                 : "no runs yet"
-              : `${(snap.successRate * 100).toFixed(0)}%`
           }
           tone="default"
           hintTone={
-            snap.successRate == null
+            !agentsLoaded
               ? "default"
-              : snap.successRate >= 0.95
-                ? "ok"
-                : snap.successRate < 0.8
-                  ? "error"
-                  : "default"
+              : snap.successRate == null
+                ? "default"
+                : snap.successRate >= 0.95
+                  ? "ok"
+                  : snap.successRate < 0.8
+                    ? "error"
+                    : "default"
           }
           href="/traces"
         />
         <Kpi
           label="Agents"
-          value={String(snap.agents)}
+          value={agentsLoaded ? String(snap.agents) : "—"}
           hint={
-            snap.errored
-              ? `${snap.errored} in error`
-              : snap.live
-                ? `${snap.live} active in 24h`
-                : "none active in 24h"
+            agentsLoaded
+              ? snap.errored
+                ? `${snap.errored} in error`
+                : snap.live
+                  ? `${snap.live} active in 24h`
+                  : "none active in 24h"
+              : "Open fleet"
           }
           tone="default"
-          hintTone={snap.errored ? "error" : "default"}
+          hintTone={agentsLoaded && snap.errored ? "error" : "default"}
           href="/agents"
         />
         <Kpi
           label="Spend"
-          value={formatUsd(snap.fleetCost)}
+          value={
+            agentsLoaded ? formatUsd(snap.fleetCost) : formatUsd(snap.cost)
+          }
           tone="default"
-          hint={formatTokens(snap.fleetTokens)}
+          hint={
+            agentsLoaded
+              ? formatTokens(snap.fleetTokens)
+              : formatTokens(snap.tokens)
+          }
           href="/cost"
+          className="hidden sm:block"
         />
       </div>
 
-      <div className="grid min-h-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.75fr)]">
-        <div className="min-w-0 border-b border-[var(--line)] lg:border-b-0 lg:border-r">
-          <section>
-            <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3.5 sm:px-6">
-              <div>
-                <h2 className="type-ui text-[var(--text)]">Failing runs</h2>
-                {visibleAlerts.length > 0 ? (
-                  <p className="type-meta mt-1">
-                    {attentionFails} fail · {attentionWarns} warn
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2">
+      <section className="border-b border-[var(--line)]">
+        <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3.5 sm:px-6">
+          <div>
+            <h2 className="type-ui text-[var(--text)]">Needs attention</h2>
+            {visibleAlerts.length > 0 ? (
+              <p className="type-meta mt-1">
+                {attentionFails} fail · {attentionWarns} warn
+              </p>
+            ) : (
+              <p className="type-meta mt-1">
+                {traces.length === 0
+                  ? "Connect an agent to start seeing runs"
+                  : "No failing runs in view"}
+              </p>
+            )}
+          </div>
+          {visibleAlerts.length > 1 ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
+              onClick={() =>
+                alerts.dismissMany(visibleAlerts.map((t) => t.id))
+              }
+            >
+              Dismiss all
+            </button>
+          ) : null}
+        </header>
+
+        {visibleAlerts.length === 0 ? (
+          <EmptyState
+            title={traces.length === 0 ? "No runs yet" : "All clear"}
+            body={
+              traces.length === 0
+                ? U20_EMPTY_COPY.dashboardTraces
+                : dismissedCount > 0
+                  ? `${dismissedCount} dismissed. ${U20_EMPTY_COPY.alertsClear}`
+                  : U20_EMPTY_COPY.alertsClear
+            }
+            action={
+              traces.length === 0 ? (
+                <Link
+                  href="/settings?mode=keys"
+                  className="ds-btn ds-btn-primary ds-btn-sm"
+                >
+                  Create API key
+                </Link>
+              ) : dismissedCount > 0 ? (
                 <button
                   type="button"
-                  className="type-meta text-[var(--accent)]"
-                  onClick={openAlerts}
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={() => alerts.restore()}
                 >
-                  Alerts
+                  Restore
                 </button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul>
+            {visibleAlerts.slice(0, 3).map((trace) => (
+              <AttentionCard
+                key={trace.id}
+                trace={trace}
+                issue={resolveIssueForTrace(trace.id)}
+                onDismiss={() => alerts.dismiss(trace.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <div
+        className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-5 py-4 sm:px-6"
+        role="group"
+        aria-label="Primary actions"
+      >
+        <Link href="/issues" className="ds-btn ds-btn-primary ds-btn-sm">
+          Issues
+        </Link>
+        <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
+          Traces
+        </Link>
+        <Link href="/agents/connect" className="ds-btn ds-btn-outline ds-btn-sm">
+          Connect
+        </Link>
+        <span className="flex-1" />
+        <button
+          type="button"
+          className="ds-btn ds-btn-ghost ds-btn-sm"
+          onClick={openAlerts}
+          aria-label="Open Inbox"
+          title="Inbox"
+        >
+          Inbox
+        </button>
+      </div>
+
+      {/* Below fold / disclosure — fleet + recent */}
+      <div className="border-b border-[var(--line)] px-5 py-3 sm:px-6">
+        <button
+          type="button"
+          className="ds-btn ds-btn-ghost ds-btn-sm"
+          onClick={() => setShowFleet((v) => !v)}
+          aria-expanded={showFleet}
+        >
+          {showFleet ? "Hide fleet" : "Show fleet"}
+        </button>
+      </div>
+
+      {showFleet ? (
+        agentsQuery.isLoading && !agentsLoaded ? (
+          <QueryLoadingPanel label="Loading fleet…" />
+        ) : (
+        <div className="grid min-h-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(16rem,0.75fr)]">
+          <div className="min-w-0 border-b border-[var(--line)] lg:border-b-0 lg:border-r">
+            <section>
+              <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3.5 sm:px-6">
+                <h2 className="type-ui text-[var(--text)]">Recent runs</h2>
                 <Link
-                  href="/issues"
+                  href="/traces"
                   className="type-meta text-[var(--accent)]"
                 >
-                  Issues
+                  Traces
                 </Link>
-                {visibleAlerts.length > 1 ? (
-                  <button
-                    type="button"
-                    className="ds-btn ds-btn-ghost ds-btn-sm"
-                    onClick={() =>
-                      alerts.dismissMany(visibleAlerts.map((t) => t.id))
-                    }
-                  >
-                    Dismiss all
-                  </button>
-                ) : null}
-              </div>
-            </header>
-
-            {visibleAlerts.length === 0 ? (
-              <EmptyState
-                title={
-                  traces.length === 0 && agents.length === 0
-                    ? "No runs yet"
-                    : "All clear"
-                }
-                body={
-                  traces.length === 0 && agents.length === 0
-                    ? U20_EMPTY_COPY.dashboardTraces
-                    : dismissedCount > 0
-                      ? `${dismissedCount} dismissed. ${U20_EMPTY_COPY.alertsClear}`
-                      : U20_EMPTY_COPY.alertsClear
-                }
-                action={
-                  traces.length === 0 && agents.length === 0 ? (
+              </header>
+              {recent.length === 0 ? (
+                <EmptyState
+                  title="No recent runs"
+                  body={U20_EMPTY_COPY.dashboardTraces}
+                  action={
                     <Link
-                      href="/settings?mode=keys"
-                      className="ds-btn ds-btn-primary ds-btn-sm"
-                    >
-                      Create API key
-                    </Link>
-                  ) : dismissedCount > 0 ? (
-                    <button
-                      type="button"
+                      href="/traces"
                       className="ds-btn ds-btn-ghost ds-btn-sm"
-                      onClick={() => alerts.restore()}
                     >
-                      Restore
-                    </button>
-                  ) : undefined
+                      Open traces
+                    </Link>
+                  }
+                />
+              ) : (
+                <ul>
+                  {recent.map((trace) => {
+                    const agent = agentForTrace(trace);
+                    return (
+                      <li key={trace.id}>
+                        <Link
+                          href={`/traces?id=${trace.id}${agent ? `&agent=${agent.id}` : ""}${trace.severity !== "none" ? "&tab=signals" : ""}`}
+                          className="lab-run-row"
+                          data-severity={trace.severity}
+                        >
+                          <SeverityBadge severity={trace.severity} />
+                          <div className="min-w-0 flex-1">
+                            <p className="type-ui truncate text-[var(--text)]">
+                              {trace.name}
+                            </p>
+                            <p className="type-meta mt-1 truncate">
+                              {agent?.name ?? "—"} ·{" "}
+                              {formatRelativeTime(trace.startedAt)}
+                            </p>
+                          </div>
+                          <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
+                            {formatDuration(trace.durationMs)}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+
+          <aside className="min-w-0">
+            <header className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3.5 sm:px-6">
+              <h2 className="type-ui text-[var(--text)]">Fleet</h2>
+              <Link href="/agents" className="type-meta text-[var(--accent)]">
+                Agents
+              </Link>
+            </header>
+            {fleet.length === 0 ? (
+              <EmptyState
+                title="No agents yet"
+                body={U20_EMPTY_COPY.agents}
+                action={
+                  <Link href="/agents" className="ds-btn ds-btn-ghost ds-btn-sm">
+                    Open agents
+                  </Link>
                 }
               />
             ) : (
               <ul>
-                {visibleAlerts.map((trace) => (
-                  <AttentionCard
-                    key={trace.id}
-                    trace={trace}
-                    issue={resolveIssueForTrace(trace.id)}
-                    onDismiss={() => alerts.dismiss(trace.id)}
-                  />
+                {fleet.map((agent) => (
+                  <li key={agent.id} className="border-b border-[var(--line)]">
+                    <Link
+                      href={`/agents?id=${agent.id}`}
+                      className="block px-5 py-4 transition-colors hover:bg-[var(--accent-muted)] sm:px-6"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="type-mono !text-[var(--text)]">
+                          {agent.name}
+                        </p>
+                        <AgentStatusBadge status={agent.status} />
+                      </div>
+                      {agent.id === agent.name ? (
+                        <p className="type-meta mt-0.5 text-[var(--text-tertiary)]">
+                          Rename on Agents for a clearer label
+                        </p>
+                      ) : null}
+                      <p className="type-meta mt-1.5">
+                        {agent.runs24h} runs
+                        {agent.runs24h > 0 && agent.successRate != null ? (
+                          <>
+                            {" · "}
+                            <span
+                              className={
+                                agent.successRate >= 0.95
+                                  ? "text-[var(--success)]"
+                                  : agent.successRate < 0.8
+                                    ? "text-[var(--error)]"
+                                    : undefined
+                              }
+                            >
+                              {(agent.successRate * 100).toFixed(0)}%
+                            </span>
+                          </>
+                        ) : agent.runs24h > 0 ? (
+                          <> · success unknown</>
+                        ) : (
+                          <> · no runs</>
+                        )}
+                        {agent.openIssues > 0 ? (
+                          <span className="text-[var(--error)]">
+                            {" "}
+                            · {agent.openIssues} issues
+                          </span>
+                        ) : null}
+                        {" · "}
+                        {formatUsd(agent.costUsd24h)}
+                      </p>
+                    </Link>
+                  </li>
                 ))}
               </ul>
             )}
-          </section>
 
-          <section>
-            <header className="flex items-center justify-between gap-3 border-b border-t border-[var(--line)] px-5 py-3.5 sm:px-6">
-              <h2 className="type-ui text-[var(--text)]">Recent runs</h2>
-              <Link
-                href="/traces"
-                className="type-meta text-[var(--accent)]"
-              >
-                Traces
-              </Link>
-            </header>
-            {recent.length === 0 ? (
-              <EmptyState
-                title="No recent runs"
-                body={U20_EMPTY_COPY.dashboardTraces}
-                action={
-                  <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">
-                    Open traces
-                  </Link>
-                }
-              />
-            ) : (
-              <ul>
-                {recent.map((trace) => {
-                  const agent = agentForTrace(trace);
-                  return (
-                    <li key={trace.id}>
-                      <Link
-                        href={`/traces?id=${trace.id}${agent ? `&agent=${agent.id}` : ""}${trace.severity !== "none" ? "&tab=signals" : ""}`}
-                        className="lab-run-row"
-                        data-severity={trace.severity}
-                      >
-                        <SeverityBadge severity={trace.severity} />
-                        <div className="min-w-0 flex-1">
-                          <p className="type-ui truncate text-[var(--text)]">
-                            {trace.name}
-                          </p>
-                          <p className="type-meta mt-1 truncate">
-                            {agent?.name ?? "—"} ·{" "}
-                            {formatRelativeTime(trace.startedAt)}
-                          </p>
-                        </div>
-                        <span className="type-value shrink-0 tabular-nums !text-[0.6875rem]">
-                          {formatDuration(trace.durationMs)}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        </div>
-
-        <aside className="min-w-0">
-          <header className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3.5 sm:px-6">
-            <h2 className="type-ui text-[var(--text)]">Fleet</h2>
-            <Link href="/agents" className="type-meta text-[var(--accent)]">
-              Agents
-            </Link>
-          </header>
-          {fleet.length === 0 ? (
-            <EmptyState
-              title="No agents yet"
-              body={U20_EMPTY_COPY.agents}
-              action={
-                <Link href="/agents" className="ds-btn ds-btn-ghost ds-btn-sm">
-                  Open agents
-                </Link>
-              }
-            />
-          ) : (
-            <ul>
-              {fleet.map((agent) => (
-                <li key={agent.id} className="border-b border-[var(--line)]">
-                  <Link
-                    href={`/agents?id=${agent.id}`}
-                    className="block px-5 py-4 transition-colors hover:bg-[var(--accent-muted)] sm:px-6"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="type-mono !text-[var(--text)]">{agent.name}</p>
-                      <AgentStatusBadge status={agent.status} />
-                    </div>
-                    {agent.id === agent.name ? (
-                      <p className="type-meta mt-0.5 text-[var(--text-tertiary)]">
-                        Rename on Agents for a clearer label
-                      </p>
-                    ) : null}
-                    <p className="type-meta mt-1.5">
-                      {agent.runs24h} runs
-                      {agent.runs24h > 0 && agent.successRate != null ? (
-                        <>
-                          {" · "}
-                          <span
-                            className={
-                              agent.successRate >= 0.95
-                                ? "text-[var(--success)]"
-                                : agent.successRate < 0.8
-                                  ? "text-[var(--error)]"
-                                  : undefined
-                            }
-                          >
-                            {(agent.successRate * 100).toFixed(0)}%
-                          </span>
-                        </>
-                      ) : agent.runs24h > 0 ? (
-                        <> · success unknown</>
-                      ) : (
-                        <> · no runs</>
-                      )}
-                      {agent.openIssues > 0 ? (
-                        <span className="text-[var(--error)]">
-                          {" "}
-                          · {agent.openIssues} issues
-                        </span>
-                      ) : null}
-                      {" · "}
-                      {formatUsd(agent.costUsd24h)}
-                    </p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="space-y-2 px-5 py-4 sm:px-6">
-            {orderedFleet.length > 3 ? (
+            <div className="space-y-2 px-5 py-4 sm:px-6">
+              {orderedFleet.length > 3 ? (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm w-full"
+                  onClick={() => setShowAllFleet((v) => !v)}
+                >
+                  {showAllFleet ? "Show fewer" : "Show all"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="ds-btn ds-btn-ghost ds-btn-sm w-full"
-                onClick={() => setShowAllFleet((v) => !v)}
+                onClick={() => setShowMetrics((v) => !v)}
+                aria-expanded={showMetrics}
               >
-                {showAllFleet ? "Show fewer" : "Show all"}
+                {showMetrics ? "Hide metrics" : "Metrics"}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm w-full"
-              onClick={() => setShowMetrics((v) => !v)}
-              aria-expanded={showMetrics}
-            >
-              {showMetrics ? "Hide metrics" : "Metrics"}
-            </button>
-            {showMetrics ? (
-              <dl className="space-y-2.5 border-t border-[var(--line)] pt-4">
-                {[
-                  { label: "p50 latency", value: formatDuration(snap.p50Ms) },
-                  { label: "p95 latency", value: formatDuration(snap.p95Ms) },
-                  {
-                    label: "Avg cost / run",
-                    value: formatUsd(snap.avgCostPerRun, 3),
-                  },
-                  {
-                    label: "Error rate",
-                    value:
-                      snap.errorRate == null
-                        ? "—"
-                        : `${(snap.errorRate * 100).toFixed(0)}%`,
-                  },
-                  {
-                    label: "Warnings",
-                    value: String(snap.warnings.length),
-                  },
-                ].map((row) => (
-                  <div key={row.label} className="flex justify-between gap-3">
-                    <dt className="type-meta">{row.label}</dt>
-                    <dd className="type-mono !text-[var(--text)]">{row.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
-          </div>
-        </aside>
-      </div>
+              {showMetrics ? (
+                <dl className="space-y-2.5 border-t border-[var(--line)] pt-4">
+                  {[
+                    { label: "p50 latency", value: formatDuration(snap.p50Ms) },
+                    { label: "p95 latency", value: formatDuration(snap.p95Ms) },
+                    {
+                      label: "Avg cost / run",
+                      value: formatUsd(snap.avgCostPerRun, 3),
+                    },
+                    {
+                      label: "Error rate",
+                      value:
+                        snap.errorRate == null
+                          ? "—"
+                          : `${(snap.errorRate * 100).toFixed(0)}%`,
+                    },
+                    {
+                      label: "Warnings",
+                      value: String(snap.warnings.length),
+                    },
+                  ].map((row) => (
+                    <div key={row.label} className="flex justify-between gap-3">
+                      <dt className="type-meta">{row.label}</dt>
+                      <dd className="type-mono !text-[var(--text)]">
+                        {row.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </div>
+          </aside>
+        </div>
+        )
+      ) : null}
     </div>
   );
 }

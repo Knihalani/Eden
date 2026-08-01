@@ -19,12 +19,7 @@ export function PageHeader({
       <h1>{title}</h1>
       {meta}
       {actions ? (
-        <div
-          className="ml-auto flex items-center gap-2"
-          data-chrome-band="toolbar"
-        >
-          {actions}
-        </div>
+        <div className="ml-auto flex items-center gap-2">{actions}</div>
       ) : null}
     </header>
   );

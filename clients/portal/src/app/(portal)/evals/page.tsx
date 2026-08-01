@@ -52,6 +52,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 const viewFallback = (
@@ -194,9 +195,8 @@ function LabEvalsInner() {
   // deleteCase, createPlayground, renamePlayground, linkPlaygroundDataset,
   // runExperiment, promotePlayground) only ever touches this local React
   // state. None of it is sent to the API, so it is silently lost on
-  // refresh/navigation. `hasUnsavedEvalsWork` below drives a visible
-  // banner warning the user about this; do not remove that banner
-  // without wiring real persistence for these actions first.
+  // refresh/navigation. A standing LocalDraftBanner warns the user about
+  // this; do not remove that banner without wiring real persistence first.
   const [extraDatasets, setExtraDatasets] = useState<DatasetFixture[]>([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState<string[]>([]);
   const [extraCases, setExtraCases] = useState<DatasetCaseFixture[]>([]);
@@ -954,15 +954,7 @@ function LabEvalsInner() {
   );
 
   // See the local-state comment above `extraDatasets` — none of these
-  // surfaces persist to the backend, so surface a standing warning
-  // whenever the session holds any local-only draft work.
-  const hasUnsavedEvalsWork =
-    extraDatasets.length > 0 ||
-    hiddenDatasetIds.length > 0 ||
-    extraCases.length > 0 ||
-    extraExperiments.length > 0 ||
-    extraPlaygrounds.length > 0;
-
+  // surfaces persist to the backend, so surface a standing honesty banner.
   return (
     <div className="ds-page">
       <PageHeader
@@ -999,19 +991,10 @@ function LabEvalsInner() {
         }
       />
 
-      {hasUnsavedEvalsWork ? (
-        <div
-          role="status"
-          className="shrink-0 border-b border-[var(--warning)] bg-[var(--warning-muted)] px-5 py-2.5 sm:px-7"
-        >
-          <p className="type-meta text-[var(--text)]">
-            <strong className="font-medium">Local draft only —</strong>{" "}
-            dataset/case edits, experiment runs, and playground promotions
-            made in this session aren&apos;t saved to the backend yet. They
-            will be lost on refresh or navigation.
-          </p>
-        </div>
-      ) : null}
+      <LocalDraftBanner>
+        Dataset/case edits, experiment runs, and playground promotions on this
+        page are local drafts and are not saved to the server yet.
+      </LocalDraftBanner>
 
       {datasetsUnavailable && mode === "datasets" ? (
         <div

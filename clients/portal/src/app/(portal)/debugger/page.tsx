@@ -16,6 +16,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { catalogTraces } from "@/lib/portal-catalog";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -189,6 +190,12 @@ function LabDebuggerListInner() {
           </span>
         }
       />
+      {localSessions.length > 0 ? (
+        <LocalDraftBanner>
+          Sessions started here are client-minted only and are not saved to the
+          server yet.
+        </LocalDraftBanner>
+      ) : null}
       <DebuggerListView
         sessions={allSessions}
         query={query}

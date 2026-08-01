@@ -9,8 +9,8 @@ export function AlertsBell({ collapsed = false }: { collapsed?: boolean }) {
   const { openAlerts, unreadCount, firingCount, open } = useAlerts();
   const label =
     unreadCount > 0
-      ? `Open alerts, ${unreadCount} unread`
-      : "Open alerts";
+      ? `Open Inbox, ${unreadCount} unread`
+      : "Open Inbox";
   const badgeCount = firingCount > 0 ? firingCount : unreadCount;
   const badgeBad = firingCount > 0;
 

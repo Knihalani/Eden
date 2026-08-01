@@ -1,14 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import {
   agentLabel,
   matchesLine,
-  policyById,
-  testSamplesForAgent,
   type GuardrailPolicyFixture,
-  type GuardrailTestSample,
 } from "@/lab/fixtures/guardrails";
 import {
   GuardrailActionChip,
@@ -17,7 +13,6 @@ import {
   GuardrailStatusChip,
 } from "@/lab/guardrails/guardrails-chrome";
 import { AgentLink, AgentScopeFilter, EmptyState } from "@/lab/lab-ui";
-import { cn } from "@/lib/utils";
 
 export function GuardrailsDetailView({
   policy,
@@ -130,7 +125,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Dry-run panel — fixture sample in → policy hits out. No API. */
+/** Dry-run tab — no durable samples API yet; honesty empty instead of fixture theater. */
 export function GuardrailsTestView({
   agentId,
   onAgentChange,
@@ -140,142 +135,20 @@ export function GuardrailsTestView({
   onAgentChange: (id: string) => void;
   counts?: Record<string, number>;
 }) {
-  const samples = useMemo(
-    () => testSamplesForAgent(agentId),
-    [agentId],
-  );
-  const [sampleId, setSampleId] = useState(
-    () => samples[0]?.id ?? "",
-  );
-
-  useEffect(() => {
-    if (samples.some((s) => s.id === sampleId)) return;
-    setSampleId(samples[0]?.id ?? "");
-  }, [samples, sampleId]);
-
-  const sample: GuardrailTestSample | null =
-    samples.find((s) => s.id === sampleId) ?? samples[0] ?? null;
-
-  if (!sample) {
-    return <EmptyState title="No test samples" compact />;
-  }
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-      <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[18rem] lg:shrink-0 lg:border-b-0 lg:border-r">
-        <div className="border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-          <AgentScopeFilter
-            value={agentId}
-            onChange={onAgentChange}
-            counts={counts}
-          />
-        </div>
-        <p className="type-label border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-          Samples
-        </p>
-        <ul className="min-h-0 flex-1 overflow-y-auto">
-          {samples.map((s) => {
-            const active = s.id === sample.id;
-            return (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => setSampleId(s.id)}
-                  className={cn(
-                    "flex w-full flex-col gap-0.5 border-b border-[var(--line)] px-4 py-2.5 text-left transition-colors sm:px-5",
-                    active
-                      ? "bg-[var(--accent-muted)]"
-                      : "hover:bg-[var(--bg-inset)]",
-                  )}
-                >
-                  <span className="type-ui text-[var(--text)]">{s.label}</span>
-                  <span className="type-meta">
-                    {agentLabel(s.agentId)} · {s.hits.length} hit
-                    {s.hits.length === 1 ? "" : "s"}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
+        <AgentScopeFilter
+          value={agentId}
+          onChange={onAgentChange}
+          counts={counts}
+        />
       </div>
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5">
-        <section className="space-y-2">
-          <h2 className="type-label">Input</h2>
-          <p className="type-mono rounded-[var(--radius)] bg-[var(--bg-inset)] px-3 py-3 !text-[0.75rem] text-[var(--text)]">
-            {sample.input}
-          </p>
-        </section>
-
-        <section className="mt-5 space-y-3">
-          <h2 className="type-label">
-            Hits
-            <span className="ml-2 type-meta font-normal normal-case tracking-normal">
-              {sample.hits.length === 0
-                ? "none"
-                : `${sample.hits.length} policy match${
-                    sample.hits.length === 1 ? "" : "es"
-                  }`}
-            </span>
-          </h2>
-
-          {sample.hits.length === 0 ? (
-            <p className="type-body text-[var(--text-secondary)]">
-              No policies fired on this sample.
-            </p>
-          ) : (
-            <ul className="divide-y divide-[var(--line)] rounded-[var(--radius)] shadow-[0_0_0_1px_var(--line)]">
-              {sample.hits.map((hit, i) => {
-                const pol = policyById(hit.policyId);
-                return (
-                  <li key={`${hit.policyId}-${i}`} className="space-y-2 px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {pol ? <GuardrailKindChip kind={pol.kind} /> : null}
-                      <GuardrailActionChip action={hit.action} />
-                      <span className="type-ui text-[var(--text)]">
-                        {pol?.name ?? hit.policyId}
-                      </span>
-                    </div>
-                    <p className="type-mono !text-[0.6875rem] text-[var(--text-secondary)]">
-                      “{hit.excerpt}”
-                    </p>
-                    <p className="type-meta">{hit.note}</p>
-                    {pol ? (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <Link
-                          href={`/guardrails?id=${pol.id}${
-                            pol.agentId ? `&agent=${pol.agentId}` : ""
-                          }`}
-                          className="ds-btn ds-btn-ghost ds-btn-sm"
-                        >
-                          Policy
-                        </Link>
-                        {pol.issueId ? (
-                          <Link
-                            href={`/issues?id=${pol.issueId}`}
-                            className="ds-btn ds-btn-ghost ds-btn-sm"
-                          >
-                            Issue
-                          </Link>
-                        ) : null}
-                        {pol.traceIds?.[0] ? (
-                          <Link
-                            href={`/traces?id=${pol.traceIds[0]}`}
-                            className="ds-btn ds-btn-ghost ds-btn-sm"
-                          >
-                            Trace
-                          </Link>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
+      <EmptyState
+        title="Dry-run not connected"
+        body="Guardrail test samples are not wired to an API yet. Policy list and detail still work."
+        compact
+      />
     </div>
   );
 }
