@@ -1183,27 +1183,15 @@ app.include_router(
 )  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
 app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
-# SSO is OFF by default (2026-07-30). All 11 handlers in sso.py query
-# ``org_sso_providers``, which does not exist in the database — the live
-# schema has ``org_sso_settings`` and ``sso_configurations``. PostgresClient
-# .fetch does not swallow, so GET /sso/providers was an unhandled 500 and
-# POST was a 503. Mounting endpoints that can only fail is worse than not
-# mounting them: they appear in the OpenAPI surface and in the portal as
-# though they work.
-#
-# Knock-on, and the reason this is not a quick repoint: the SCIM token is
-# WRITTEN to org_sso_providers.scim_token_hash but READ from
-# org_scim_config.scim_token_hash, and nothing ever writes the latter — so
-# SCIM could never be enabled either, even with the table in place.
-#
-# Turned off rather than deleted. See docs/ops/disabled-features.md for
-# what re-enabling requires.
+# SSO routes mount when sso_enabled (default True since 2026-08-02).
+# Handlers use live tables org_sso_settings + sso_configurations; SCIM
+# token hash is written to org_scim_config (same table scim.py reads).
+# Kill-switch: SSO_ENABLED=0. See docs/ops/disabled-features.md.
 if getattr(settings, "sso_enabled", False):
     app.include_router(sso.router)  # /sso
 else:
     logger.info(
-        "SSO routes not mounted (sso_enabled=False): sso.py targets the "
-        "non-existent org_sso_providers table. See "
+        "SSO routes not mounted (sso_enabled=False). See "
         "docs/ops/disabled-features.md"
     )
 app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights

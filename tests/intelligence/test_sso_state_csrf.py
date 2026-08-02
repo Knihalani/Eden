@@ -56,19 +56,24 @@ class _FakeRedis:
 
 # ─── Provider fixture ──────────────────────────────────────────────────
 def _provider_row(provider_type: str = "okta") -> dict[str, Any]:
-    config = {"client_id": "client-1"}
+    """Row shape from the live JOIN (org_sso_settings × sso_configurations)."""
+    auth = None
     if provider_type == "okta":
-        config["sso_url"] = "https://example.okta.com"
+        auth = "https://example.okta.com"
     elif provider_type == "google":
-        config["sso_url"] = "https://accounts.google.com/o/oauth2/v2/auth"
+        auth = "https://accounts.google.com/o/oauth2/v2/auth"
     elif provider_type == "oidc":
-        config["authorization_endpoint"] = "https://example.com/oauth2/authorize"
+        auth = "https://example.com/oauth2/authorize"
     return {
         "id": "prov-1",
         "org_id": "org-1",
         "provider_type": provider_type,
-        "name": f"Test {provider_type}",
-        "config": config,
+        "name": provider_type,
+        "client_id": "client-1",
+        "client_secret": "secret-1",
+        "authorization_endpoint": auth,
+        "token_endpoint": None,
+        "userinfo_endpoint": None,
     }
 
 

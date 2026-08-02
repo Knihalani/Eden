@@ -241,19 +241,11 @@ def _build_settings_class():
         # re_executed). Flip off with TIME_TRAVEL_REPLAY_ENABLED=0 if needed.
         # See docs/ops/disabled-features.md.
         time_travel_replay_enabled: bool = True
-        # SSO routes. OFF since 2026-07-30: all 11 handlers in
-        # api/routes/sso.py query ``org_sso_providers``, which does not
-        # exist — the live schema has ``org_sso_settings`` and
-        # ``sso_configurations``. GET /sso/providers was an unhandled
-        # 500; POST returned 503. Endpoints that can only fail should
-        # not be in the OpenAPI surface.
-        #
-        # Re-enabling needs more than creating the table: the SCIM token
-        # is written to org_sso_providers.scim_token_hash but read from
-        # org_scim_config.scim_token_hash, and nothing writes the
-        # latter, so SCIM could never be enabled either.
-        # See docs/ops/disabled-features.md.
-        sso_enabled: bool = False
+        # SSO routes. ON after 2026-08-02: handlers query live tables
+        # ``org_sso_settings`` + ``sso_configurations``; SCIM token
+        # write/read both use ``org_scim_config``. Kill-switch via
+        # ``SSO_ENABLED=0``. See docs/ops/disabled-features.md.
+        sso_enabled: bool = True
         # D.14 onboarding-v2 API surface (services/onboarding/ +
         # api/routes/onboarding.py). ON after migration
         # ``128_onboarding_state_v2_columns`` adds the state-machine
