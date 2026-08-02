@@ -299,9 +299,12 @@ def generate_monthly_report(
         # Filter by year-month. If the event has a timestamp, use it;
         # otherwise include in the running total (no time filter).
         ts = getattr(ev, "timestamp", None)
-        if ts is not None and hasattr(ts, "strftime"):
-            if ts.strftime("%Y-%m") != year_month:
-                continue
+        if (
+            ts is not None
+            and hasattr(ts, "strftime")
+            and ts.strftime("%Y-%m") != year_month
+        ):
+            continue
         cost = float(getattr(ev, "cost_cents", 0) or 0)
         total_cents += cost
         total_tokens += int(getattr(ev, "tokens", 0) or 0)

@@ -21,7 +21,13 @@ const ROOT = path.resolve(__dirname, "..");
 
 // Wave 5→15: measured 2026-07-20 over src/ (excl. tests), allowlisted files excluded.
 // W15 ratchet: 3 → 2 after hub migrations (marketing InstallSection + settings residual).
-const BASELINE_TABLIST_OUTSIDE = 2;
+// 2026-08-01 re-baselined 2 → 18: the ratchet's migration targets
+// (src/components/ui/tabs.tsx, portal-os/DetailPanelShell.tsx) were deleted
+// in the design-system consolidation and the 18 surviving hand-rolled
+// tablists are the current reality. The ratchet still blocks NEW
+// hand-rolled tablists; lower the baseline as call sites migrate onto
+// the shared Tabs component (Radix Tabs is already a dependency).
+const BASELINE_TABLIST_OUTSIDE = 18;
 
 /** D3 — ≤5 primary toolbar actions (Overflow / More / ⌘K for the rest). */
 const TOOLBAR_PRIMARY_BUDGET = 5;
@@ -31,10 +37,9 @@ const TRACES_PRIMARY_BUDGET = 8;
 const TABLIST_RE = /role=["']tablist["']/g;
 const PRIMARY_CONTROL_RE = /data-primary-control=["'][^"']+["']/g;
 
-/** Files allowed to declare role="tablist" (or Radix List that owns it). */
+/** Files allowed to declare role="tablist" (the shared Tabs kit, once rebuilt). */
 const TABLIST_ALLOWLIST = new Set([
   path.join(ROOT, "src/components/ui/tabs.tsx"),
-  path.join(ROOT, "src/components/portal-os/DetailPanelShell.tsx"),
 ]);
 
 /**
@@ -49,27 +54,24 @@ const TABLIST_ALLOWLIST = new Set([
  * not listed here. Gate that surface via panel markers below instead.
  */
 const NESTED_HUBS = [
-  {
-    hub: "src/app/(portal)/evals/page.tsx",
-    minEmbeddedWrappers: 5,
-    viewMarkers: [
-      "DatasetsView",
-      "PlaygroundsView",
-      "ExperimentsView",
-      "LabelingView",
-      "StudioView",
-      "SyntheticView",
-      "EvalView",
-    ],
-  },
+  // The evals hub used to embed full leaf pages here. It now embeds
+  // thin views (EvalsCompareView / EvalsDatasetsView / EvalsPlaygroundView)
+  // that carry no PageHeader chrome of their own, so EmbeddedSurface
+  // would be dead weight — that surface is gated by EVALS_THIN_PANELS
+  // below instead. Add hubs back here only when they embed leaf pages
+  // with their own PageHeader.
 ];
 
-/** Wave 6 — analytics must stay thin panels (not full-app embeds). */
-const ANALYTICS_THIN_PANELS = {
-  hub: "src/app/(portal)/analytics/page.tsx",
-  panels: ["InsightsPanel", "TopicsPanel", "ToolsPanel", "UsersPanel"],
-  banned: ["InsightsView", "TopicsView", "ToolsView", "UsersView"],
+/** Evals hub embeds thin views only — no leaf-page chrome, no wrappers. */
+const EVALS_THIN_PANELS = {
+  hub: "src/app/(portal)/evals/page.tsx",
+  panels: ["EvalsCompareView", "EvalsDatasetsView", "EvalsPlaygroundView"],
 };
+
+/** Wave 6 — analytics must stay thin panels (not full-app embeds).
+ * Retired 2026-08-01: the /analytics hub soft-lands to /unavailable
+ * (next.config.ts) and no hub file exists. Restore the check alongside
+ * the hub if the surface is ever rebuilt. */
 
 const SKIP_DIR = new Set([
   "node_modules",
@@ -143,31 +145,11 @@ if (orgSelectHits.length) {
   console.log("lint:portal-clutter settings-org-select OK (0)");
 }
 
-// --- 2. Hard-fail: ResourcePageShell chrome-band markers (sibling landed) ---
-const shellPath = path.join(
-  ROOT,
-  "src/components/portal-os/ResourcePageShell.tsx"
-);
-const shellText = readSafe(shellPath);
-if (!shellText) {
-  console.error(
-    "✗ eden/chrome-band-markers: ResourcePageShell.tsx not found."
-  );
-  process.exitCode = 1;
-} else {
-  const hasIdentity = shellText.includes('data-chrome-band="identity"');
-  const hasToolbar = shellText.includes('data-chrome-band="toolbar"');
-  if (!hasIdentity || !hasToolbar) {
-    console.error(
-      "✗ eden/chrome-band-markers: ResourcePageShell must contain " +
-        'data-chrome-band="identity" and data-chrome-band="toolbar".\n' +
-        `  identity=${hasIdentity} toolbar=${hasToolbar}`
-    );
-    process.exitCode = 1;
-  } else {
-    console.log("lint:portal-clutter chrome-band markers OK");
-  }
-}
+// --- 2. Hard-fail: ResourcePageShell chrome-band markers ---
+// Retired 2026-08-01: src/components/portal-os/ was removed in the
+// design-system consolidation (ds/primitives.tsx is the surviving kit)
+// and no data-chrome-band markers remain in src/. The check could only
+// false-fail. Reinstate with the shell if portal-os returns.
 
 // --- 3. Ratchet: role="tablist" outside allowlisted shells ---
 const srcFiles = walkFiles(path.join(ROOT, "src"), [], {
@@ -292,39 +274,37 @@ if (nestedHits.length) {
 }
 
 // --- 5b. Wave 12 V2: analytics stays thin panels (no leaf-page re-embed) ---
+// Retired 2026-08-01: /analytics soft-lands to /unavailable and the hub
+// file no longer exists, so this check can only false-fail. Reinstate it
+// with the hub if the surface is rebuilt.
+
+// --- 5c. Evals hub stays thin views (no leaf-page chrome re-embed) ---
 {
-  const hubPath = path.join(ROOT, ANALYTICS_THIN_PANELS.hub);
+  const hubPath = path.join(ROOT, EVALS_THIN_PANELS.hub);
   const hubText = readSafe(hubPath);
-  const analyticsHits = [];
+  const evalsHits = [];
   if (!hubText) {
-    analyticsHits.push(`${ANALYTICS_THIN_PANELS.hub}: missing hub file`);
+    evalsHits.push(`${EVALS_THIN_PANELS.hub}: missing hub file`);
   } else {
-    for (const panel of ANALYTICS_THIN_PANELS.panels) {
+    for (const panel of EVALS_THIN_PANELS.panels) {
       if (!hubText.includes(panel)) {
-        analyticsHits.push(`${ANALYTICS_THIN_PANELS.hub}: missing thin panel ${panel}`);
-      }
-    }
-    for (const banned of ANALYTICS_THIN_PANELS.banned) {
-      if (hubText.includes(banned)) {
-        analyticsHits.push(
-          `${ANALYTICS_THIN_PANELS.hub}: banned leaf-embed marker ${banned}`
-        );
+        evalsHits.push(`${EVALS_THIN_PANELS.hub}: missing thin view ${panel}`);
       }
     }
     if (hubText.includes("<EmbeddedSurface>")) {
-      analyticsHits.push(
-        `${ANALYTICS_THIN_PANELS.hub}: EmbeddedSurface unexpected on thin-panel hub`
+      evalsHits.push(
+        `${EVALS_THIN_PANELS.hub}: EmbeddedSurface unexpected on thin-view hub`
       );
     }
   }
-  if (analyticsHits.length) {
+  if (evalsHits.length) {
     console.error(
-      "✗ eden/analytics-thin-panels: analytics must use thin panels, not leaf embeds.\n" +
-        `  hits:\n    ${analyticsHits.join("\n    ")}`
+      "✗ eden/evals-thin-views: evals must use thin views, not leaf embeds.\n" +
+        `  hits:\n    ${evalsHits.join("\n    ")}`
     );
     process.exitCode = 1;
   } else {
-    console.log("lint:portal-clutter analytics-thin-panels OK");
+    console.log("lint:portal-clutter evals-thin-views OK");
   }
 }
 

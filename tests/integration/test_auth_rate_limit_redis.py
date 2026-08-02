@@ -2,7 +2,7 @@
 
 Verifies that :func:`eden.api.utils.rate_limit._redis_sliding_window_check`
 enforces a shared sliding window across callers when Redis is available,
-and that :class:`SlidingWindowRateLimiter` surfaces ``RateLimitExceeded``
+and that :class:`SlidingWindowRateLimiter` surfaces ``RateLimitExceededError``
 through the Redis path.
 """
 
@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from eden.api.utils.rate_limit import (
-    RateLimitExceeded,
+    RateLimitExceededError,
     SlidingWindowRateLimiter,
     _redis_sliding_window_check,
 )
@@ -92,7 +92,7 @@ async def test_limiter_raises_via_redis_path() -> None:
     ):
         for _ in range(3):
             await limiter.check("redis-login-ip")
-        with pytest.raises(RateLimitExceeded) as excinfo:
+        with pytest.raises(RateLimitExceededError) as excinfo:
             await limiter.check("redis-login-ip")
         assert excinfo.value.retry_after >= 1.0
 
@@ -112,7 +112,7 @@ async def test_redis_unavailable_falls_back_to_in_memory() -> None:
     ):
         await limiter.check("fallback-ip")
         await limiter.check("fallback-ip")
-        with pytest.raises(RateLimitExceeded):
+        with pytest.raises(RateLimitExceededError):
             await limiter.check("fallback-ip")
 
 
@@ -137,5 +137,5 @@ async def test_redis_allow_skips_in_memory_double_count() -> None:
         # Cap is 2; a third would fail on Redis. In-memory alone would
         # also fail at 3 — but if we double-counted, we'd fail earlier.
         assert len(limiter._buckets.get("no-double", [])) == 0
-        with pytest.raises(RateLimitExceeded):
+        with pytest.raises(RateLimitExceededError):
             await limiter.check("no-double")

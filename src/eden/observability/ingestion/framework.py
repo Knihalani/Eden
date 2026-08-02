@@ -27,17 +27,15 @@ from __future__ import annotations
 
 import logging
 
+from eden.integrations.framework_registry import (
+    build_otel_header_map,
+    build_otel_prefix_map,
+)
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.json_body import loads_body
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
-
-
-from eden.integrations.framework_registry import (
-    build_otel_header_map,
-    build_otel_prefix_map,
-)
 
 # Attribute prefixes that identify a specific framework. OTel-mapped
 # framework-specific attributes live under these namespaces.

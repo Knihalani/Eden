@@ -629,7 +629,7 @@ class geExpectationFactory:
 
     def _gx(self):
         try:
-            import great_expectations.expectations as gx_expectations  # type: ignore
+            import great_expectations.expectations as gx_expectations
 
             return gx_expectations
         except ImportError:
@@ -700,7 +700,7 @@ async def run_with_great_expectations(
         return {"engine": "ge", "ran": 0, "skipped": len(expectations), "detail": "no rows"}
 
     try:
-        import pandas as pd  # type: ignore
+        import pandas as pd
     except ImportError:
         return {
             "engine": "ge",

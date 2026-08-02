@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import {
   COMPILE_SYSTEM_PROMPT,
   T3_PRIMARY_MODEL,
@@ -125,10 +126,15 @@ async function compileSignalOnce(prompt: string): Promise<NextResponse> {
 }
 
 /**
- * Compile a natural-language signal via Eden model router T3
- * (OpenRouter primary: x-ai/grok-4.5). Falls back locally if unset/unreachable.
+ * Compile a natural-language signal via Eden internal chat model
+ * (OpenRouter: deepseek/deepseek-v4-flash-0731). Falls back locally if unset/unreachable.
  */
 export async function POST(request: Request) {
+  const session = await auth();
+  if (!session.userId) {
+    return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;

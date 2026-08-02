@@ -103,6 +103,12 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/api/v1/me/do-not-sell",
     # Portal pre-login feature flags (experiments_v1, etc.)
     "/feature-flags",
+    # Token-gated public share links (handler verifies share token)
+    "/public",
+    # Presigned feedback tokens (handler verifies token_id)
+    "/api/v1/feedback/tokens",
+    # OpenAI fine-tune webhooks (HMAC-verified at the handler)
+    "/v1/webhooks",
 )
 
 

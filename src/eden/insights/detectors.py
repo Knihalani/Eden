@@ -21,6 +21,7 @@ from typing import Any
 
 from eden.insights.unified_trace_model import Outcome, SpanType, UnifiedTrace
 from eden.insights.utils import BoundedSet
+from eden.util.stable_hash import stable_hash
 
 logger = logging.getLogger(__name__)
 
@@ -121,10 +122,12 @@ class FailurePatternDetector(BaseDetector):
         tool_failures: dict[str, list[str]] = defaultdict(list)
         for trace in failure_traces:
             for span in trace.spans:
-                if span.span_type == SpanType.TOOL_INVOCATION:
-                    if not span.payload.get("success", True):
-                        tool_name = span.payload.get("tool_name", "unknown")
-                        tool_failures[tool_name].append(trace.trace_id)
+                if (
+                    span.span_type == SpanType.TOOL_INVOCATION
+                    and not span.payload.get("success", True)
+                ):
+                    tool_name = span.payload.get("tool_name", "unknown")
+                    tool_failures[tool_name].append(trace.trace_id)
 
         for tool_name, trace_ids in tool_failures.items():
             if len(trace_ids) >= self.min_occurrences:
@@ -571,7 +574,10 @@ class NovelBehaviorDetector(BaseDetector):
                 if span.span_type == SpanType.ENV_STEP:
                     state = span.payload.get("state_snapshot", "")
                     if prev_state is not None and state != prev_state:
-                        transition = f"{hash(prev_state) % 10000}->{hash(state) % 10000}"
+                        transition = (
+                            f"{stable_hash(prev_state) % 10000}"
+                            f"->{stable_hash(state) % 10000}"
+                        )
                         state_transitions.append(transition)
                     prev_state = state
 

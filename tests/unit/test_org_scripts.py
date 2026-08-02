@@ -38,9 +38,17 @@ class TestBackfillLegacyOrgsCLI:
     def test_requires_clerk_secret_when_not_dry_run(self):
         from eden.scripts.backfill_legacy_orgs import main
 
-        # No CLERK_SECRET_KEY in test settings → exits 2 with stderr error.
-        # The Settings fixture in conftest clears the secret.
-        with patch("sys.argv", ["backfill_legacy_orgs"]):
+        # No CLERK_SECRET_KEY in settings → exits 2 with stderr error.
+        # Patch the settings object directly: a dev `.env` may legitimately
+        # carry a real secret, and nothing in conftest strips it.
+        mock_settings = MagicMock(clerk_secret_key="")
+        with (
+            patch("sys.argv", ["backfill_legacy_orgs"]),
+            patch(
+                "eden.scripts.backfill_legacy_orgs.get_settings",
+                return_value=mock_settings,
+            ),
+        ):
             captured = io.StringIO()
             with redirect_stdout(captured):
                 # main returns the exit code; we assert below

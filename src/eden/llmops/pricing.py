@@ -712,10 +712,9 @@ def resolve_seed_row(model_id: str | None) -> PricingRow | None:
     best_len = -1
     for key, row in default_seed_rows().items():
         k = key.lower()
-        if lowered == k or lowered in k or k in lowered:
-            if len(k) > best_len:
-                best = row
-                best_len = len(k)
+        if (lowered == k or lowered in k or k in lowered) and len(k) > best_len:
+            best = row
+            best_len = len(k)
     return best
 
 
@@ -1060,6 +1059,11 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
     # short-lived process, is every call.
     routed_models = [
         # (model_id,               in/1k,     out/1k,    quality, p95ms)
+        # Internal chat SSOT (eden.llm.models.INTERNAL_CHAT_MODEL) —
+        # all Eden tiers route here. DeepInfra via OpenRouter.
+        ("deepseek/deepseek-v4-flash-0731", 0.00009, 0.00018, 0.90, 800),
+        # Legacy tier models — kept priced so historical cost rows and
+        # any rollback window still resolve instead of falling to $0.
         ("tencent/hy3", 0.000132, 0.000528, 0.86, 700),
         ("xiaomi/mimo-v2.5", 0.00014, 0.00028, 0.85, 650),
         ("minimax/minimax-m3", 0.0003, 0.0012, 0.89, 900),

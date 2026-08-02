@@ -350,9 +350,7 @@ class TriageAgent:
             return True
         if await self._has_open_patch(org_id, issue):
             return True
-        if await self._has_pending_verify(org_id, issue):
-            return True
-        return False
+        return bool(await self._has_pending_verify(org_id, issue))
 
     async def _has_open_patch(self, org_id: str, issue: Any) -> bool:
         try:
@@ -525,9 +523,7 @@ def _should_invalidate_cache(issue: Any, score: Any) -> bool:
     prior = issue.triage_result or {}
     if score.auto_escalate and not bool(prior.get("auto_escalate")):
         return True
-    if _severity_escalated(issue.severity, prior):
-        return True
-    return False
+    return bool(_severity_escalated(issue.severity, prior))
 
 
 def _severity_escalated(current: str, prior_triage: dict[str, Any]) -> bool:

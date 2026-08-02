@@ -22,9 +22,8 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import raise_mapped_db_error
@@ -37,31 +36,18 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-
 def _annotation_value_error_status(exc: ValueError) -> int:
     msg = str(exc).lower()
     if "not found" in msg:
         return 404
     return 400
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/labeling",
     tags=["labeling"],
 )
 
-
 # ── Schemas ───────────────────────────────────────────────────────
-
 
 class SeedItemRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -75,10 +61,8 @@ class SeedItemRequest(BaseModel):
     source_dataset_id: str | None = None
     source_synthetic_qa_id: str | None = None
 
-
 class SeedItemResponse(BaseModel):
     item_id: str
-
 
 class ItemResponse(BaseModel):
     id: str
@@ -96,7 +80,6 @@ class ItemResponse(BaseModel):
     source_synthetic_qa_id: str | None = None
     assigned_to: str | None = None
 
-
 class LabelingItemListEntry(BaseModel):
     id: str
     prompt: str
@@ -106,21 +89,17 @@ class LabelingItemListEntry(BaseModel):
     created_at: str
     annotations_count: int = 0
 
-
 class LabelingItemsListResponse(BaseModel):
     items: list[LabelingItemListEntry]
     total: int
-
 
 class TraceAnnotateRequest(BaseModel):
     score: int = Field(..., ge=0, le=10)
     category: str = Field(..., min_length=1, max_length=100)
     comment: str | None = None
 
-
 class QueueResponse(BaseModel):
     items: list[ItemResponse]
-
 
 class AnnotateRequest(BaseModel):
     item_id: str
@@ -129,7 +108,6 @@ class AnnotateRequest(BaseModel):
     notes: str | None = None
     time_spent_ms: int | None = None
     skills_exercised: list[str] = Field(default_factory=list)
-
 
 class AnnotationResponse(BaseModel):
     id: str
@@ -144,7 +122,6 @@ class AnnotationResponse(BaseModel):
     created_at: str
     updated_at: str
 
-
 class IIAResponse(BaseModel):
     kappa: float
     alpha: float
@@ -154,14 +131,11 @@ class IIAResponse(BaseModel):
     per_item: dict[str, dict[str, float]] = Field(default_factory=dict)
     per_pair: dict[str, dict[str, float]] = Field(default_factory=dict)
 
-
 class SkipRequest(BaseModel):
     item_id: str
     reason: str | None = None
 
-
 # ── Helpers ───────────────────────────────────────────────────────
-
 
 def _item_to_response(item: LabelingItem) -> ItemResponse:
     return ItemResponse(
@@ -178,7 +152,6 @@ def _item_to_response(item: LabelingItem) -> ItemResponse:
         assigned_to=item.assigned_to,
     )
 
-
 def _annotation_to_response(ann: Annotation) -> AnnotationResponse:
     return AnnotationResponse(
         id=ann.id, org_id=ann.org_id,
@@ -190,16 +163,13 @@ def _annotation_to_response(ann: Annotation) -> AnnotationResponse:
         updated_at=ann.updated_at,
     )
 
-
 def _user_skills(uid: str) -> list[str]:
     """Default skills lookup. Returns an empty list until a
     dedicated ``user_skills`` table lands; ``LabelingService``
     treats empty as "generalist" so the queue keeps moving."""
     return []
 
-
 # ── Routes ────────────────────────────────────────────────────────
-
 
 @router.get(
     "/items",
@@ -207,7 +177,7 @@ def _user_skills(uid: str) -> list[str]:
     summary="List labeling queue items with annotation counts",
 )
 async def list_items(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> LabelingItemsListResponse:
@@ -219,7 +189,6 @@ async def list_items(
         total=total,
     )
 
-
 @router.post(
     "/items",
     response_model=SeedItemResponse,
@@ -227,7 +196,7 @@ async def list_items(
 )
 async def seed_item(
     body: SeedItemRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
 ) -> SeedItemResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
@@ -255,7 +224,6 @@ async def seed_item(
         )
     return SeedItemResponse(item_id=item_id)
 
-
 @router.post(
     "/traces/{trace_id}/annotate",
     response_model=AnnotationResponse,
@@ -263,7 +231,7 @@ async def seed_item(
 )
 async def annotate_trace(
     body: TraceAnnotateRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> AnnotationResponse:
@@ -298,14 +266,13 @@ async def annotate_trace(
         )
     return _annotation_to_response(ann)
 
-
 @router.get(
     "/queue/{user_id}",
     response_model=QueueResponse,
     summary="Pop the next N items for an annotator",
 )
 async def pop_queue(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user_id: str = Path(...),
     limit: int = Query(default=5, ge=1, le=50),
 ) -> QueueResponse:
@@ -316,7 +283,6 @@ async def pop_queue(
     )
     return QueueResponse(items=[_item_to_response(i) for i in items])
 
-
 @router.post(
     "/annotate",
     response_model=AnnotationResponse,
@@ -324,7 +290,7 @@ async def pop_queue(
 )
 async def annotate(
     body: AnnotateRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> AnnotationResponse:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
@@ -359,14 +325,13 @@ async def annotate(
         )
     return _annotation_to_response(ann)
 
-
 @router.post(
     "/skip",
     summary="Mark an item as skipped (un-labelable)",
 )
 async def skip(
     body: SkipRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
     user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
@@ -380,14 +345,13 @@ async def skip(
     )
     return {"skipped": True}
 
-
 @router.get(
     "/iia",
     response_model=IIAResponse,
     summary="Compute inter-annotator agreement (Cohen's kappa + Krippendorff's alpha)",
 )
 async def compute_iia(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     item_ids: list[str] | None = Query(default=None),
 ) -> IIAResponse:
     pg = await get_postgres_client()
@@ -396,14 +360,13 @@ async def compute_iia(
     d = report.to_dict()
     return IIAResponse(**d)
 
-
 @router.get(
     "/export",
     response_class=PlainTextResponse,
     summary="Export approved annotations as JSONL",
 )
 async def export(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     status: str = Query(default="completed", pattern="^(pending|in_progress|completed|skipped)$"),
     limit: int = Query(default=10_000, ge=1, le=100_000),
 ) -> str:
@@ -411,39 +374,33 @@ async def export(
     svc = LabelingService(pg, user_skills=_user_skills)
     return await svc.export(org_id=org_id, status_filter=status, limit=limit)
 
-
 # ── F50 annotation queues (kanban) ─────────────────────────────────
-
 
 class CreateQueueRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="", max_length=2_000)
     label_schema: dict[str, Any] = Field(default_factory=dict)
 
-
 class MoveItemRequest(BaseModel):
     item_id: str
     status: str = Field(..., pattern="^(todo|in_progress|done|skipped)$")
 
-
 class PushDatasetRequest(BaseModel):
     dataset_id: str
 
-
 @router.get("/queues")
 async def list_queues(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
     queues = await LabelingQueueService().list_queues(org_id)
     return {"queues": [q.to_dict() for q in queues], "total": len(queues)}
 
-
 @router.post("/queues")
 async def create_queue(
     body: CreateQueueRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
 
@@ -462,10 +419,9 @@ async def create_queue(
         )
     return {"queue": q.to_dict()}
 
-
 @router.get("/queues/{queue_id}")
 async def get_queue(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     queue_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
@@ -476,10 +432,9 @@ async def get_queue(
             return {"queue": q.to_dict()}
     raise HTTPException(status_code=404, detail="queue not found")
 
-
 @router.get("/queues/{queue_id}/board")
 async def queue_board(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     queue_id: str = Path(...),
     limit: int = Query(100, ge=1, le=100),
 ) -> dict[str, Any]:
@@ -488,10 +443,9 @@ async def queue_board(
     board = await LabelingQueueService().kanban_board(org_id, queue_id, limit=limit)
     return {"queue_id": queue_id, "board": board}
 
-
 @router.get("/queues/{queue_id}/iaa")
 async def queue_iaa(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     queue_id: str = Path(...),
 ) -> dict[str, Any]:
     """Cohen's κ from dual labels in item payload when present."""
@@ -516,11 +470,10 @@ async def queue_iaa(
                 pairs.append((str(a), str(b)))
     return {"queue_id": queue_id, "iaa": iaa_from_annotation_pairs(pairs)}
 
-
 @router.post("/queues/{queue_id}/move")
 async def move_queue_item(
     body: MoveItemRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     queue_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService
@@ -532,11 +485,10 @@ async def move_queue_item(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"moved": ok, "item_id": body.item_id, "status": body.status}
 
-
 @router.post("/queues/{queue_id}/push-to-dataset")
 async def push_queue_to_dataset(
     body: PushDatasetRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     queue_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.evaluation.labeling_queues import LabelingQueueService

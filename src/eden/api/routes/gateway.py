@@ -80,6 +80,8 @@ if TYPE_CHECKING:
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from eden.util.ssrf import assert_public_https_url
+
 # Audit 2026-07-06 - lazy-import the openai SDK. ``APIError`` is
 # only used in except clauses inside route handlers, and
 # ``AsyncOpenAI`` is only used in helper functions that build the
@@ -122,7 +124,7 @@ def _get_openai_api_error():
 from pydantic import BaseModel, Field  # noqa: E402
 
 from eden.api.deps import get_gateway_auth  # noqa: E402
-from eden.api.utils.redact import redact_all
+from eden.api.utils.redact import redact_all  # noqa: E402
 from eden.api.utils.safe_error import redact_upstream_error, safe_detail  # noqa: E402
 from eden.config import get_settings  # noqa: E402
 from eden.data_platform.pii import PIIPolicy  # noqa: E402
@@ -637,6 +639,18 @@ def _resolve_upstream(
         if in_base and not in_provider:
             # Caller passed a custom URL — infer the provider from it.
             provider = _infer_provider_from_base_url(in_base)
+        # Caller-supplied upstream URL is an SSRF vector (metadata /
+        # private VPC). Server-configured bases are trusted admin config.
+        if in_base:
+            try:
+                assert_public_https_url(
+                    in_base, what="X-Upstream-Base-Url"
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=str(exc),
+                ) from exc
     else:
         if settings.use_minimax:
             base_url = settings.minimax_base_url or "https://api.openai.com/v1"
@@ -819,7 +833,7 @@ def _apply_learn_filters_to_messages(
     if not messages:
         return messages, []
 
-    from eden.llmops.filters.guardrail import GuardrailBlocked
+    from eden.llmops.filters.guardrail import GuardrailBlockedError
 
     gw = get_ai_gateway()
     original_prompt = messages_to_prompt(messages)
@@ -851,7 +865,7 @@ def _apply_learn_filters_to_messages(
         try:
             mr, f_findings = filt.apply(mr)
             findings.extend(f_findings)
-        except GuardrailBlocked as exc:
+        except GuardrailBlockedError as exc:
             raise _GuardrailBlockedError(
                 getattr(exc, "verdict", None),
                 str(exc),
@@ -2201,6 +2215,16 @@ async def list_models(
         api_key = in_key or (
             s.minimax_api_key if s.use_minimax else s.openrouter_api_key
         ) or ""
+        if in_base:
+            try:
+                assert_public_https_url(
+                    in_base, what="X-Upstream-Base-Url"
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=str(exc),
+                ) from exc
     else:
         base_url = (
             s.minimax_base_url

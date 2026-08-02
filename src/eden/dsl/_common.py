@@ -322,9 +322,7 @@ def _looks_like_readonly_sql(query: str) -> bool:
             return False
     cte_names = _collect_cte_names(no_strings, first)
     tables = {m.group(1).lower() for m in _TABLE_REF_RE.finditer(no_strings)}
-    if tables - _ALLOWED_TABLES - cte_names:
-        return False
-    return True
+    return not tables - _ALLOWED_TABLES - cte_names
 
 
 # ─── Relational field expansion ──────────────────────────────
@@ -789,7 +787,7 @@ def _has_org_scope_predicate(query: str, org_id: str) -> bool:
         if literal is None:
             continue
         inner = literal[1:-1]
-        if inner == org_id or inner == safe_org:
+        if inner in (org_id, safe_org):
             return True
     return False
 
@@ -951,12 +949,13 @@ def _inject_org_id(query: str, org_id: str) -> str:
     body = query[body_start:body_end].strip()
     tail = query[body_end:].strip()
 
-    if not body:
-        # Malformed "WHERE" with an empty body — don't emit
-        # "WHERE () AND ...", just install the real predicate alone.
-        new_clause = f"WHERE {org_predicate}"
-    else:
-        new_clause = f"WHERE ({body}) AND {org_predicate}"
+    # Malformed "WHERE" with an empty body — don't emit
+    # "WHERE () AND ...", just install the real predicate alone.
+    new_clause = (
+        f"WHERE {org_predicate}"
+        if not body
+        else f"WHERE ({body}) AND {org_predicate}"
+    )
 
     head = query[: where_match.start()].rstrip()
     result = f"{head} {new_clause}"

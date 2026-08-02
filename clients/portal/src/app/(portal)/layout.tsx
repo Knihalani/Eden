@@ -9,13 +9,29 @@ import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
  * Portal chrome. SSR-seeds ``["auth","me"]`` above AppShell / BootGate
  * so Clerk + React Query hydrate from warm cache instead of blocking
  * the first paint on a cold client ``/auth/me``.
+ *
+ * The seed is bounded: Clerk JWT minting + the server-to-server
+ * ``/auth/me`` round-trip sit on the TTFB critical path, and a slow
+ * backend must not stall the first byte indefinitely. Past the budget
+ * we render without the seed and BootGate fetches ``/auth/me``
+ * client-side (the in-flight promise is React.cache'd, so a page-level
+ * dehydrate in the same request can still await it to completion).
  */
+const PREFETCH_BUDGET_MS = 700;
+
 export default async function PortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const auth = await resolvePortalPrefetchAuth();
+  let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+  const auth = await Promise.race([
+    resolvePortalPrefetchAuth(),
+    new Promise<null>((resolve) => {
+      budgetTimer = setTimeout(() => resolve(null), PREFETCH_BUDGET_MS);
+    }),
+  ]);
+  clearTimeout(budgetTimer);
   const meState = auth ? await dehydrateMe(auth) : null;
 
   return (

@@ -142,6 +142,10 @@ class BackgroundWorkers:
     _task: asyncio.Task[Any] | None = None
     _stop: asyncio.Event = field(default_factory=asyncio.Event)
     _state: _BackgroundState = field(default_factory=_BackgroundState)
+    #: Currently held bundle leadership, if any.
+    #: ``("redis", Lock)`` or ``("postgres", identity:str)``. Cleared when
+    #: released (from ``_supervise`` or ``stop``) so release is idempotent.
+    _held: tuple[str, Any] | None = None
 
     @property
     def running(self) -> bool:
@@ -170,10 +174,40 @@ class BackgroundWorkers:
         )
         logger.info("background: leader supervisor started")
 
+    async def _release_leadership(self) -> None:
+        """Release the bundle Redis lock or Postgres lease, if held.
+
+        Idempotent and never raises: ``stop()`` calls this after the drain so
+        a cancelled supervisor's ``finally`` cannot leave the lock held until
+        TTL expiry. ``_supervise`` clears ``_held`` when it releases itself.
+        """
+        held = self._held
+        if held is None:
+            return
+        # Clear first so a concurrent / second call is a no-op even if the
+        # await below suspends or fails.
+        self._held = None
+        kind, handle = held
+        try:
+            if kind == "redis":
+                await handle.release()
+            elif kind == "postgres":
+                from eden.storage import pg_lease
+
+                await pg_lease.release(_BUNDLE_LOCK_NAME, handle)
+            else:  # pragma: no cover - defensive
+                logger.warning("background: unknown leadership kind %r", kind)
+        except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+            logger.warning("background: leadership release failed: %s", exc)
+
     async def stop(self, timeout: float = 35.0) -> None:
         """Stop the supervisor and drain hosted loops.
 
         Timeout must be ≥ the quality sidecar's 30s drain budget.
+
+        Order: cancel supervisor → drain loops → release leadership.
+        Releasing before the drain lets a peer acquire the lock and start
+        the same loops while this replica is still flushing.
         """
         self._stop.set()
         if self._task is None:
@@ -183,6 +217,7 @@ class BackgroundWorkers:
             await asyncio.wait_for(self._task, timeout=timeout)
         self._task = None
         await self._stop_all(self._state)
+        await self._release_leadership()
 
     async def _supervise(self, settings: Settings) -> None:
         """Acquire the global leader lock and host background loops.
@@ -242,6 +277,7 @@ class BackgroundWorkers:
                 # rather than through the Redis extender.
                 from eden.storage import pg_lease
 
+                self._held = ("postgres", identity)
                 try:
                     await self._start_all(settings, self._state)
                     while not self._stop.is_set():
@@ -262,10 +298,22 @@ class BackgroundWorkers:
                             continue
                 finally:
                     await self._stop_all(self._state, include_adopted=False)
-                    await pg_lease.release(_BUNDLE_LOCK_NAME, identity)
+                    released = False
+                    try:
+                        await pg_lease.release(_BUNDLE_LOCK_NAME, identity)
+                        released = True
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "background: postgres lease release failed: %s", exc
+                        )
+                    # Only clear on success so stop() can finish a skipped
+                    # or failed release (CancelledError in this finally).
+                    if released and self._held == ("postgres", identity):
+                        self._held = None
                 continue
 
             if acquired:
+                self._held = ("redis", lock)
                 extender_stop = asyncio.Event()
                 # ``lost`` lets the extender report leadership loss directly.
                 # The supervise loop used to call ``lock.extend`` itself once
@@ -322,7 +370,18 @@ class BackgroundWorkers:
                     # Lock loss ends the non-gated loops, not the
                     # individually-gated adopted ones.
                     await self._stop_all(self._state, include_adopted=False)
-                    await lock.release()
+                    released = False
+                    try:
+                        await lock.release()
+                        released = True
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "background: redis lock release failed: %s", exc
+                        )
+                    # Only clear on success so stop() can finish a release
+                    # that CancelledError skipped in this finally.
+                    if released and self._held is not None and self._held[0] == "redis":
+                        self._held = None
             else:
                 # The five loops adopted from workers.main are each
                 # individually leader-gated by run_if_leader, so the outer

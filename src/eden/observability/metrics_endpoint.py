@@ -453,6 +453,30 @@ async def metrics() -> Response:
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read drop counters: %s", exc)
 
+    # ClickHouse→Postgres fallbacks. A 100% fallback rate means the
+    # columnar store is decorative; seed at zero so "no fallbacks" is an
+    # assertion rather than an absent series.
+    try:
+        from eden.columnar.fallback_metrics import get_fallback_metrics
+
+        lines.append(
+            _render_family(
+                "eden_columnar_fallback_total",
+                help_text=(
+                    "ClickHouse to Postgres fallbacks by surface and reason."
+                ),
+                metric_type="counter",
+                samples=[
+                    ("", {"surface": surface, "reason": reason}, value)
+                    for (surface, reason), value in sorted(
+                        get_fallback_metrics().items()
+                    )
+                ],
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read columnar fallback counters: %s", exc)
+
     # Families registered through ``simple_metrics`` (checkpoint ingest hook,
     # quality-pipeline worker). These were previously written into
     # prometheus_client's default registry, which this endpoint never read.

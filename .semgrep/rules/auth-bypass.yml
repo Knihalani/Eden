@@ -6,7 +6,7 @@ rules:
       This bypasses FastAPI dependency injection and leaves the endpoint unprotected.
       Fix: `user: dict = Depends(get_current_user)`
     severity: ERROR
-    pattern: user: dict = get_current_user
+    pattern: "user: dict = get_current_user"
     paths:
       include:
         - src/eden/api/routes/*.py
@@ -18,7 +18,7 @@ rules:
       This bypasses FastAPI dependency injection.
       Fix: `user: dict = Depends(require_org_admin)`
     severity: ERROR
-    pattern: user: dict = require_org_admin
+    pattern: "user: dict = require_org_admin"
     paths:
       include:
         - src/eden/api/routes/*.py

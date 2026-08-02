@@ -305,8 +305,11 @@ class ContractValidator:
                     violations.append(
                         f"Field '{fc.name}' exceeds max length {fc.max_length}"
                     )
-                if fc.max_size_bytes and isinstance(value, str):
-                    if len(value.encode("utf-8")) > fc.max_size_bytes:
+                if (
+                    fc.max_size_bytes
+                    and isinstance(value, str)
+                    and len(value.encode("utf-8")) > fc.max_size_bytes
+                ):
                         violations.append(
                             f"Field '{fc.name}' exceeds max size {fc.max_size_bytes} bytes"
                         )

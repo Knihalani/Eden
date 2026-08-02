@@ -131,6 +131,9 @@ dependencies = [
 dev = [
     "pre-commit>=4.6.0,<5.0.0",
     "ruff>=0.6.0,<1.0.0",
+    # Pinned via uv.lock so CI's `uv run mypy src/` type-checks against
+    # a reproducible version instead of whatever is latest that day.
+    "mypy>=1.14,<2.2",
     # Test framework + plugins. Moved out of [project].dependencies
     # because nothing in src/eden/ imports them — they're strictly
     # test-only.
@@ -182,11 +185,7 @@ testpaths = ["tests", "supplementaries"]
 # ``src`` first so pytest resolves ``eden`` to the app package, not
 # the SDK stub under ``sdk/python`` (editable install shadow).
 pythonpath = ["src", "."]
-# multi_agent package removed in Autopilot close-out; guardrail
-# supplementaries still import eden.multi_agent.planning.
-addopts = [
-    "--ignore=supplementaries/phase_4_guardrails",
-]
+addopts = []
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

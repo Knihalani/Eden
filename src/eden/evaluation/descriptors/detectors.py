@@ -6,11 +6,13 @@ exact structural checks with calibrated lexical/trajectory heuristics.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Callable
 from typing import Any
 
+from eden.evaluation.descriptors.long_agent import LONG_AGENT_DETECTORS
 from eden.evaluation.descriptors.parse import TrajectoryView, is_failure_outcome
 from eden.evaluation.descriptors.signals import (
     CHITCHAT_RE,
@@ -293,19 +295,21 @@ def detect_timeout(view: TrajectoryView) -> list[dict[str, Any]]:
     max_ms = 0.0
     timed_out = False
     for e in view.events:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             max_ms = max(max_ms, float(e.get("duration_ms") or 0.0))
-        except (TypeError, ValueError):
-            pass
         outcome = str(e.get("outcome") or "").lower()
         finish = str(e.get("finish_reason") or "").lower()
         et = str(e.get("event_type") or "").lower()
         name = str(e.get("name") or "").lower()
-        if outcome == "timeout" or "timeout" in finish:
+        if outcome == "timeout" or "timeout" in finish or (
+            "timeout" in str(e.get("error") or "").lower()
+            and "tool" not in et
+            and (
+                e.get("parent_span_id") is None
+                or name in {"trace", "span.end", "session"}
+            )
+        ):
             timed_out = True
-        elif "timeout" in str(e.get("error") or "").lower() and "tool" not in et:
-            if e.get("parent_span_id") is None or name in {"trace", "span.end", "session"}:
-                timed_out = True
     if timed_out or max_ms > threshold:
         return [
             _result(
@@ -422,20 +426,19 @@ def detect_loops(
 
     # Alternating 2-step tool cycle: A,B,A,B,A,B
     names = [tc.name for tc in view.tool_calls]
-    if len(names) >= 6:
-        if (
-            names[0::2] == [names[0]] * (len(names[0::2]))
-            and names[1::2] == [names[1]] * (len(names[1::2]))
-            and names[0] != names[1]
-        ):
-            out.append(
-                _result(
-                    DescriptorId.LOOPING.value,
-                    rationale=f"Agent loop: alternating tools '{names[0]}'↔'{names[1]}'",
-                    evidence={"kind": "alternating_cycle", "tools": [names[0], names[1]]},
-                    confidence=0.88,
-                )
+    if len(names) >= 6 and (
+        names[0::2] == [names[0]] * (len(names[0::2]))
+        and names[1::2] == [names[1]] * (len(names[1::2]))
+        and names[0] != names[1]
+    ):
+        out.append(
+            _result(
+                DescriptorId.LOOPING.value,
+                rationale=f"Agent loop: alternating tools '{names[0]}'↔'{names[1]}'",
+                evidence={"kind": "alternating_cycle", "tools": [names[0], names[1]]},
+                confidence=0.88,
             )
+        )
     return out
 
 
@@ -492,16 +495,12 @@ def detect_cost_spike(view: TrajectoryView) -> list[dict[str, Any]]:
     for e in view.events:
         metrics = e.get("metrics") or {}
         if isinstance(metrics, dict):
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 total += float(metrics.get("cost_usd") or 0.0)
-            except (TypeError, ValueError):
-                pass
         attrs = e.get("attributes") or {}
         if isinstance(attrs, dict) and attrs.get("cost_usd") is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 total += float(attrs["cost_usd"])
-            except (TypeError, ValueError):
-                pass
     threshold = _DEFAULT_COST_SPIKE_USD
     pol = None
     for e in view.events:
@@ -509,10 +508,8 @@ def detect_cost_spike(view: TrajectoryView) -> list[dict[str, Any]]:
         if isinstance(attrs, dict):
             pol = attrs.get("layer_a_policy") or pol
     if isinstance(pol, dict) and pol.get("cost_spike_usd") is not None:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             threshold = float(pol["cost_spike_usd"])
-        except (TypeError, ValueError):
-            pass
     if total > threshold:
         return [
             _result(
@@ -551,9 +548,12 @@ def detect_result_ignore(view: TrajectoryView) -> list[dict[str, Any]]:
         hits = [t for t in strong if fuzzy_token_in_text(t, answer)]
         if not hits:
             ignored.append({"tool_name": name, "unused_tokens": sorted(strong)[:8]})
-        elif len(hits) < len(strong) and len(strong) >= 2:
+        elif (
+            len(hits) < len(strong)
+            and len(strong) >= 2
+            and len(hits) / len(strong) < 0.5
+        ):
             # Partial only when a minority of anchors were used
-            if len(hits) / len(strong) < 0.5:
                 missed = sorted(strong - set(hits))[:8]
                 partial.append(
                     {"tool_name": name, "unused_tokens": missed, "used": hits[:8]}
@@ -570,10 +570,7 @@ def detect_result_ignore(view: TrajectoryView) -> list[dict[str, Any]]:
             ]
             if toks:
                 nontrivial.append({**item, "unused_tokens": toks})
-        if not nontrivial:
-            ignored = []
-        else:
-            ignored = nontrivial
+        ignored = nontrivial if nontrivial else []
     if ignored and not (len(ignored) == 1 and len(useful) > 2):
         return [
             _result(
@@ -675,10 +672,15 @@ def detect_inaccuracy(view: TrajectoryView) -> list[dict[str, Any]]:
     # but answer has different money numbers.
     money_ans = {n for n in ans_nums if "." in n or float(n) >= 10}
     money_tool = {n for n in tool_nums if "." in n or (n.isdigit() and int(n) >= 10)}
-    if money_ans and money_tool and money_ans.isdisjoint(money_tool):
-        if SUCCESS_CLAIM_RE.search(view.final_assistant_text) or re.search(
-            r"\$\d", view.final_assistant_text
-        ):
+    if (
+        money_ans
+        and money_tool
+        and money_ans.isdisjoint(money_tool)
+        and (
+            SUCCESS_CLAIM_RE.search(view.final_assistant_text)
+            or re.search(r"\$\d", view.final_assistant_text)
+        )
+    ):
             return [
                 _result(
                     DescriptorId.INACCURACY.value,
@@ -790,8 +792,13 @@ def detect_tool_skip(view: TrajectoryView) -> list[dict[str, Any]]:
                 re.I,
             )
         )
-        if actiony and intents and not view.tool_calls and view.assistant_messages:
-            if SUCCESS_CLAIM_RE.search(view.final_assistant_text):
+        if (
+            actiony
+            and intents
+            and not view.tool_calls
+            and view.assistant_messages
+            and SUCCESS_CLAIM_RE.search(view.final_assistant_text)
+        ):
                 return [
                     _result(
                         DescriptorId.TOOL_SKIP.value,
@@ -1044,18 +1051,17 @@ def detect_refusal_inappropriate(view: TrajectoryView) -> list[dict[str, Any]]:
     if not REFUSAL_RE.search(final):
         return []
     # Benign actionable request
-    if intent_keywords(user) or re.search(
+    if (intent_keywords(user) or re.search(
         r"\b(weather|order|transfer|email|schedule|search)\b", user, re.I
-    ):
-        if not JAILBREAK_RE.search(user):
-            return [
-                _result(
-                    DescriptorId.REFUSAL_INAPPROPRIATE.value,
-                    rationale="Assistant refused a benign in-domain request",
-                    evidence={"user_excerpt": user[:200]},
-                    confidence=0.7,
-                )
-            ]
+    )) and not JAILBREAK_RE.search(user):
+        return [
+            _result(
+                DescriptorId.REFUSAL_INAPPROPRIATE.value,
+                rationale="Assistant refused a benign in-domain request",
+                evidence={"user_excerpt": user[:200]},
+                confidence=0.7,
+            )
+        ]
     return []
 
 
@@ -1088,8 +1094,6 @@ def detect_pii_leak(view: TrajectoryView) -> list[dict[str, Any]]:
 
 
 # ── Registry ──────────────────────────────────────────────────────
-
-from eden.evaluation.descriptors.long_agent import LONG_AGENT_DETECTORS
 
 Detector = Callable[..., list[dict[str, Any]]]
 

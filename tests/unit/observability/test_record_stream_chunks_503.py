@@ -14,7 +14,7 @@ The fix distinguishes:
 
 * **DB-unavailable errors** (asyncpg connection / interface
   errors, ``ConnectionError``, ``OSError``) — re-raise as
-  :class:`eden.observability.errors.IngestionUnavailable` so the
+  :class:`eden.observability.errors.IngestionUnavailableError` so the
   route returns 503 + ``Retry-After`` and the SDK retries.
 
 * **Constraint / type errors** (rare, e.g. schema drift) — keep
@@ -22,7 +22,7 @@ The fix distinguishes:
   permanently bad data.
 
 The route's catch-all was tightened to use ``safe_detail`` for any
-non-``IngestionUnavailable`` exception so internal-error text
+non-``IngestionUnavailableError`` exception so internal-error text
 (``asyncpg.UniqueViolationError: duplicate key value violates
 unique constraint "telemetry_stream_chunks_pkey"`` etc.) never
 reaches the client.
@@ -36,7 +36,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from eden.observability.errors import IngestionUnavailable
+from eden.observability.errors import IngestionUnavailableError
 from eden.observability.telemetry_collector import TelemetryCollector
 
 
@@ -55,7 +55,7 @@ def _chunks(n: int = 1) -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_db_connection_error_raises_ingestion_unavailable() -> None:
-    """A Postgres connection error propagates as ``IngestionUnavailable``."""
+    """A Postgres connection error propagates as ``IngestionUnavailableError``."""
     import asyncpg
 
     tc = TelemetryCollector()
@@ -68,7 +68,7 @@ async def test_db_connection_error_raises_ingestion_unavailable() -> None:
     fake_client.acquire = MagicMock()
 
     with patch.object(tc, "_get_postgres", return_value=fake_client):
-        with pytest.raises(IngestionUnavailable):
+        with pytest.raises(IngestionUnavailableError):
             await tc.record_stream_chunks(
                 "00000000-0000-0000-0000-000000000001",
                 _chunks(3),
@@ -89,7 +89,7 @@ async def test_interface_error_raises_ingestion_unavailable() -> None:
     fake_client.executemany = _raise
 
     with patch.object(tc, "_get_postgres", return_value=fake_client):
-        with pytest.raises(IngestionUnavailable):
+        with pytest.raises(IngestionUnavailableError):
             await tc.record_stream_chunks(
                 "00000000-0000-0000-0000-000000000001",
                 _chunks(1),
@@ -110,7 +110,7 @@ async def test_cannot_connect_now_raises_ingestion_unavailable() -> None:
     fake_client.executemany = _raise
 
     with patch.object(tc, "_get_postgres", return_value=fake_client):
-        with pytest.raises(IngestionUnavailable):
+        with pytest.raises(IngestionUnavailableError):
             await tc.record_stream_chunks(
                 "00000000-0000-0000-0000-000000000001",
                 _chunks(1),
@@ -129,7 +129,7 @@ async def test_oserror_raises_ingestion_unavailable() -> None:
     fake_client.executemany = _raise
 
     with patch.object(tc, "_get_postgres", return_value=fake_client):
-        with pytest.raises(IngestionUnavailable):
+        with pytest.raises(IngestionUnavailableError):
             await tc.record_stream_chunks(
                 "00000000-0000-0000-0000-000000000001",
                 _chunks(1),

@@ -565,6 +565,16 @@ async def _postgres_count_rows(
     return int(row["n"]) if row else 0
 
 
+def _record_columnar_fallback(surface: str, reason: str) -> None:
+    """Count a ClickHouse→Postgres fallback. Never raises."""
+    try:
+        from eden.columnar.fallback_metrics import record_fallback
+
+        record_fallback(surface, reason)
+    except Exception:  # noqa: BLE001 — a metric must never break a fallback
+        pass
+
+
 __all__ = [
     "_VALID_GRANULARITIES",
     "_VALID_SOURCE_TABLES",
@@ -577,6 +587,7 @@ __all__ = [
     "_json_dumps",
     "_not_implemented_envelope",
     "_ok_envelope",
+    "_record_columnar_fallback",
     "_ok_fallback_envelope",
     "_partition_id_for",
     "_clickhouse_partition_name",

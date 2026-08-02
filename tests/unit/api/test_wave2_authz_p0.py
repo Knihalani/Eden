@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from eden.api.deps import get_current_user
+
 
 def test_list_sso_providers_requires_org_admin() -> None:
     from eden.api.routes import sso as sso_routes
@@ -56,7 +58,7 @@ def test_run_judges_viewer_forbidden() -> None:
         "user_id": "u-1",
         "email": "x@y.z",
     }
-    app.dependency_overrides[judges_routes._require_path_org] = lambda: "org-A"
+    app.dependency_overrides[judges_routes.require_path_org_access] = lambda: "org-A"
     app.dependency_overrides[judges_routes._try_resolve_token_payload] = lambda: {
         "sub": "u-1",
     }
@@ -85,8 +87,8 @@ def test_item_approve_improvement_plan_requires_agent_v1() -> None:
     async def _path_org(org_id: str = "org_1") -> str:
         return org_id
 
-    app.dependency_overrides[improve_routes.get_current_user] = _fake_user
-    app.dependency_overrides[improve_routes._require_path_org] = _path_org
+    app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[improve_routes.require_path_org_access] = _path_org
     app.include_router(improve_routes.router)
     client = TestClient(app)
 
@@ -136,8 +138,8 @@ def test_item_approve_closed_loop_requires_org_admin() -> None:
     async def _payload() -> dict:
         return {"sub": "user_1"}
 
-    app.dependency_overrides[improve_routes.get_current_user] = _fake_user
-    app.dependency_overrides[improve_routes._require_path_org] = _path_org
+    app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[improve_routes.require_path_org_access] = _path_org
     app.dependency_overrides[improve_routes._try_resolve_token_payload] = _payload
     app.include_router(improve_routes.router)
     client = TestClient(app)
@@ -178,8 +180,8 @@ def test_item_approve_closed_loop_requires_agent_v1() -> None:
     async def _payload() -> dict:
         return {"sub": "user_1"}
 
-    app.dependency_overrides[improve_routes.get_current_user] = _fake_user
-    app.dependency_overrides[improve_routes._require_path_org] = _path_org
+    app.dependency_overrides[get_current_user] = _fake_user
+    app.dependency_overrides[improve_routes.require_path_org_access] = _path_org
     app.dependency_overrides[improve_routes._try_resolve_token_payload] = _payload
     app.include_router(improve_routes.router)
     client = TestClient(app)

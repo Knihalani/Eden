@@ -98,7 +98,7 @@ def _build_servicer():
         regardless of transport.
         """
 
-        async def StreamEvents(self, request, context):  # type: ignore[no-untyped-def]
+        async def StreamEvents(self, request, context):
             store = await get_trace_event_store()
             topic = request.topic or "eden-trace"
             last_event_id = request.last_event_id or ""
@@ -138,7 +138,7 @@ def _build_servicer():
             finally:
                 task.cancel()
 
-        async def PublishEvent(self, request, context):  # type: ignore[no-untyped-def]
+        async def PublishEvent(self, request, context):
             try:
                 store = await get_trace_event_store()
                 # Decode JSON payload
@@ -164,7 +164,7 @@ def _build_servicer():
             except Exception as exc:
                 return _to_proto_ack(ok=False, event_id=request.event_id, error=str(exc))
 
-        async def BidiStream(self, request_iterator, context):  # type: ignore[no-untyped-def]
+        async def BidiStream(self, request_iterator, context):
             store = await get_trace_event_store()
             upstream: asyncio.Queue = asyncio.Queue(maxsize=200)
 
@@ -256,7 +256,7 @@ def _to_proto_ack(*, ok: bool, event_id: str, error: str = "") -> Any:
 async def serve() -> None:
     """Start the gRPC server. Reads GRPC_HOST/GRPC_PORT/GRPC_TLS_* from env."""
     try:
-        import grpc  # type: ignore
+        import grpc
     except ImportError:
         logger.error(
             "grpcio not installed. Run `pip install grpcio grpcio-tools` "

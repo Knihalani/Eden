@@ -39,19 +39,14 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Resolve Clerk keys
-        # Prefer repo secrets; fall back to committed Clerk test-mode keys
-        # (same as portal-ci). seed-auth fails non-zero if keys are unusable.
+        # Require repo secrets — never fall back to committed keys.
         run: |
-          SK="${CLERK_SECRET_KEY:-}"
-          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}"
-          if [ -z "$SK" ] || [ -z "$PK" ]; then
-            echo "::warning::CLERK_SECRET_KEY / NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY secrets unset — using committed test-mode keys (CLERK_TEST_KEY_FALLBACK=1)"
-            SK="${SK:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
-            PK="${PK:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
-            echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+          if [ -z "$CLERK_SECRET_KEY" ] || [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be set as GitHub Actions secrets (no committed fallbacks)."
+            exit 1
           fi
-          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
+          echo "CLERK_SECRET_KEY=$CLERK_SECRET_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -79,7 +74,6 @@ jobs:
           NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
           PORT: "3000"
           BASE_URL: "http://127.0.0.1:3000"
-          CLERK_TEST_KEY_FALLBACK: ${{ env.CLERK_TEST_KEY_FALLBACK }}
         run: |
           set -euo pipefail
           bun run start -- -p 3000 -H 127.0.0.1 &

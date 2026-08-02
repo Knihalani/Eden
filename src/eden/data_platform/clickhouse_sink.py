@@ -1361,9 +1361,10 @@ class ClickHouseSink:
     async def health_check(self) -> str:
         """Check ClickHouse / Tinybird connectivity."""
         try:
-            if self.config.is_tinybird:
-                if not (self.config.tinybird_token or self.config.password):
-                    return "error: tinybird token missing"
+            if self.config.is_tinybird and not (
+                self.config.tinybird_token or self.config.password
+            ):
+                return "error: tinybird token missing"
             await self._execute("SELECT 1")
             return "connected"
         except Exception as exc:

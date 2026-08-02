@@ -7,10 +7,8 @@ import logging
 import secrets
 from datetime import UTC
 
-import pyotp
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, EmailStr, Field
-from qrcode import QRCode
 
 from eden.api.deps import (
     _resolve_token_payload,
@@ -42,7 +40,7 @@ from eden.api.utils.clerk_client import (
 )
 from eden.api.utils.org_schema import organizations_have_is_personal
 from eden.api.utils.rate_limit import (
-    RateLimitExceeded,
+    RateLimitExceededError,
     login_email_limiter,
     login_limiter,
     password_reset_limiter,
@@ -124,7 +122,7 @@ async def _check_rate_limit(limiter, key: str) -> None:
     """Run the limiter and raise a 429 with Retry-After when exceeded."""
     try:
         await limiter.check(key)
-    except RateLimitExceeded as exc:
+    except RateLimitExceededError as exc:
         # Use 429 Too Many Requests; surface Retry-After per RFC 7231 §7.1.3.
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -1381,6 +1379,9 @@ async def setup_2fa(user: dict = Depends(get_current_user), req: Request = None)
     await _check_rate_limit(totp_setup_limiter, _client_ip(req))
     client = await get_postgres_client()
 
+    import pyotp
+    from qrcode import QRCode
+
     # Check if user already has 2FA enabled
     db_user = await get_user_by_id(user["user_id"])
     if db_user.get("two_factor_enabled"):
@@ -1468,6 +1469,8 @@ async def verify_2fa(
     secret = decrypt_value(secret)
 
     # Verify the TOTP code
+    import pyotp
+
     totp = pyotp.TOTP(secret)
     if not totp.verify(request.code):
         raise HTTPException(
@@ -1557,6 +1560,8 @@ async def disable_2fa(
     # Verify the TOTP code using the stored secret
     # Note: In a production system, secrets should be encrypted at rest
     # For now, we use the secret directly for verification
+    import pyotp
+
     totp = pyotp.TOTP(row["two_factor_secret"] or "")
     if not totp.verify(request.code):
         raise HTTPException(

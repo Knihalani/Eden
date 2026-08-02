@@ -11,16 +11,18 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
+    require_path_org_access,
     resolve_eden_org_id,
-    resolve_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.automations.engine import AutomationsEngine
 from eden.evaluation.categorical_classifier import CategoricalClassifierService
 from eden.evaluation.ci_webhook import CIWebhookHandler
-from eden.evaluation.code_evaluator import CodeEvaluatorRunner
+from eden.evaluation.code_evaluator import (
+    CodeEvaluatorDisabledError,
+    CodeEvaluatorRunner,
+)
 from eden.evaluation.online.rules_engine import (
     DEFAULT_NEW_RULE_SAMPLE_RATE,
     OnlineScoringRulesEngine,
@@ -34,22 +36,11 @@ from eden.prompts.workspace import PromptWorkspaceService
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["wave6-online-quality"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
-
 
 def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -61,9 +52,7 @@ def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
         "data": data,
     }
 
-
 # ── F52 online scoring rules ────────────────────────────────────────
-
 
 class RuleCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
@@ -80,7 +69,6 @@ class RuleCreate(BaseModel):
     sample_rate: float = Field(DEFAULT_NEW_RULE_SAMPLE_RATE, ge=0.0, le=1.0)
     config: dict[str, Any] = Field(default_factory=dict)
 
-
 class RulePatch(BaseModel):
     name: str | None = None
     description: str | None = None
@@ -91,26 +79,23 @@ class RulePatch(BaseModel):
     sample_rate: float | None = Field(None, ge=0.0, le=1.0)
     config: dict[str, Any] | None = None
 
-
 @router.get("/online-scoring/rules")
-async def list_scoring_rules(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def list_scoring_rules(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     rules = await OnlineScoringRulesEngine().list_rules(org_id)
     return _ok("f52", {"rules": [r.to_dict() for r in rules]})
 
-
 @router.post("/online-scoring/rules")
 async def create_scoring_rule(
-    org_id: str = Depends(_require_path_org), body: RuleCreate = Body(...)
+    org_id: str = Depends(require_path_org_access), body: RuleCreate = Body(...)
 ) -> dict[str, Any]:
     rule = await OnlineScoringRulesEngine().create_rule(org_id, **body.model_dump())
     if rule is None:
         raise HTTPException(status_code=503, detail="rules engine unavailable")
     return _ok("f52", {"rule": rule.to_dict()})
 
-
 @router.patch("/online-scoring/rules/{rule_id}")
 async def patch_scoring_rule(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     rule_id: str = Path(...),
     body: RulePatch = Body(...),
 ) -> dict[str, Any]:
@@ -120,18 +105,16 @@ async def patch_scoring_rule(
         raise HTTPException(status_code=404, detail="rule not found")
     return _ok("f52", {"rule": rule.to_dict()})
 
-
 @router.post("/online-scoring/rules/{rule_id}/rewind")
 async def rewind_scoring_rule(
-    org_id: str = Depends(_require_path_org), rule_id: str = Path(...)
+    org_id: str = Depends(require_path_org_access), rule_id: str = Path(...)
 ) -> dict[str, Any]:
     job_id = await OnlineScoringRulesEngine().rewind(org_id, rule_id)
     return _ok("f52", {"job_id": job_id})
 
-
 @router.post("/online-scoring/apply/{trace_id}")
 async def apply_scoring(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     agent_id: str | None = Query(None),
     span_id: str | None = Query(None),
@@ -141,28 +124,23 @@ async def apply_scoring(
     )
     return _ok("f52", {"results": results})
 
-
 # ── F79 span scores ─────────────────────────────────────────────────
 
-
 @router.get("/spans/{span_id}/scores")
-async def span_scores(org_id: str = Depends(_require_path_org), span_id: str = Path(...)) -> dict[str, Any]:
+async def span_scores(org_id: str = Depends(require_path_org_access), span_id: str = Path(...)) -> dict[str, Any]:
     scores = await SpanScoreStore().list_for_span(org_id, span_id)
     return _ok("f79", {"span_id": span_id, "scores": scores})
 
-
 @router.get("/traces/{trace_id}/span-scores")
 async def trace_span_scores(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     span_id: str | None = Query(None),
 ) -> dict[str, Any]:
     scores = await SpanScoreStore().list_for_trace(org_id, trace_id, span_id=span_id)
     return _ok("f79", {"trace_id": trace_id, "scores": scores})
 
-
 # ── F54 code evaluators ─────────────────────────────────────────────
-
 
 class CodeEvaluatorCreate(BaseModel):
     name: str
@@ -170,26 +148,24 @@ class CodeEvaluatorCreate(BaseModel):
     entrypoint: str = "evaluate"
     timeout_ms: int = Field(500, ge=50, le=5000)
 
-
 @router.get("/code-evaluators")
-async def list_code_evaluators(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def list_code_evaluators(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     rows = await CodeEvaluatorRunner().list_evaluators(org_id)
     return _ok("f54", {"evaluators": rows})
 
-
 @router.post("/code-evaluators")
 async def create_code_evaluator(
-    org_id: str = Depends(_require_path_org), body: CodeEvaluatorCreate = Body(...)
+    org_id: str = Depends(require_path_org_access), body: CodeEvaluatorCreate = Body(...)
 ) -> dict[str, Any]:
     try:
         rec = await CodeEvaluatorRunner().register(org_id, **body.model_dump())
+    except CodeEvaluatorDisabledError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _ok("f54", {"evaluator": rec})
 
-
 # ── F55 categorical classifiers ───────────────────────────────────
-
 
 class ClassifierCreate(BaseModel):
     name: str
@@ -198,24 +174,21 @@ class ClassifierCreate(BaseModel):
     scorer_type: str = "slm"
     scorer_ref: str | None = None
 
-
 @router.get("/categorical-classifiers")
-async def list_classifiers(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def list_classifiers(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     rows = await CategoricalClassifierService().list_classifiers(org_id)
     return _ok("f55", {"classifiers": rows})
 
-
 @router.post("/categorical-classifiers")
 async def create_classifier(
-    org_id: str = Depends(_require_path_org), body: ClassifierCreate = Body(...)
+    org_id: str = Depends(require_path_org_access), body: ClassifierCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await CategoricalClassifierService().register(org_id, **body.model_dump())
     return _ok("f55", {"classifier": rec})
 
-
 @router.post("/categorical-classifiers/{classifier_id}/classify/{trace_id}")
 async def classify_trace(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     classifier_id: str = Path(...),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
@@ -224,9 +197,7 @@ async def classify_trace(
     )
     return _ok("f55", {"result": result})
 
-
 # ── F61 automations ─────────────────────────────────────────────────
-
 
 class AutomationCreate(BaseModel):
     name: str
@@ -235,31 +206,26 @@ class AutomationCreate(BaseModel):
     action_type: str = "dataset"
     action_config: dict[str, Any] = Field(default_factory=dict)
 
-
 @router.get("/automations")
 async def list_automations(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(100, ge=1, le=100),
 ) -> dict[str, Any]:
     rows = await AutomationsEngine().list_automations(org_id, limit=limit)
     return _ok("f61", {"automations": rows})
 
-
 @router.post("/automations")
 async def create_automation(
-    org_id: str = Depends(_require_path_org), body: AutomationCreate = Body(...)
+    org_id: str = Depends(require_path_org_access), body: AutomationCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await AutomationsEngine().create(org_id, **body.model_dump())
     return _ok("f61", {"automation": rec})
 
-
 # ── F57 dashboards ──────────────────────────────────────────────────
-
 
 class DashboardCreate(BaseModel):
     name: str
     is_home: bool = False
-
 
 class WidgetUpsert(BaseModel):
     widget_type: str = "metric"
@@ -269,40 +235,35 @@ class WidgetUpsert(BaseModel):
     position: int = 0
     widget_id: str | None = None
 
-
 async def _resolved_org(org_id: str) -> str:
     """Prefer Eden UUID; fall back to path id so legacy tenants still work."""
     resolved = await resolve_eden_org_id(org_id)
     return resolved or org_id
 
-
 @router.get("/dashboards/home")
-async def get_home_dashboard(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def get_home_dashboard(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     dash = await MonitoringDashboardService().get_home(await _resolved_org(org_id))
     return _ok("f57", {"dashboard": dash})
 
-
 @router.get("/dashboards")
-async def list_dashboards(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def list_dashboards(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     rows = await MonitoringDashboardService().list_dashboards(
         await _resolved_org(org_id)
     )
     return _ok("f57", {"dashboards": rows})
 
-
 @router.post("/dashboards")
 async def create_dashboard(
-    org_id: str = Depends(_require_path_org), body: DashboardCreate = Body(...)
+    org_id: str = Depends(require_path_org_access), body: DashboardCreate = Body(...)
 ) -> dict[str, Any]:
     rec = await MonitoringDashboardService().create_dashboard(
         await _resolved_org(org_id), name=body.name, is_home=body.is_home
     )
     return _ok("f57", {"dashboard": rec})
 
-
 @router.post("/dashboards/{dashboard_id}/widgets")
 async def upsert_widget(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dashboard_id: str = Path(...),
     body: WidgetUpsert = Body(...),
 ) -> dict[str, Any]:
@@ -311,10 +272,9 @@ async def upsert_widget(
     )
     return _ok("f57", {"widget": rec})
 
-
 @router.post("/dashboards/widgets/execute")
 async def execute_widget_query(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     query: str = Body(..., embed=True),
     agent_id: str | None = Body(None, embed=True),
 ) -> dict[str, Any]:
@@ -323,13 +283,11 @@ async def execute_widget_query(
     )
     return _ok("f57", {"result": result})
 
-
 # ── F60 cost analytics KPI ──────────────────────────────────────────
-
 
 @router.get("/cost-analytics/kpi")
 async def cost_kpi(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     window_hours: int = Query(24, ge=1, le=720),
     agent_id: str | None = Query(None),
     property_key: str | None = Query(None),
@@ -349,8 +307,11 @@ async def cost_kpi(
     data_source = "postgres"
 
     # Prefer ClickHouse / Tinybird rollups when clickhouse_url is set.
+    # Reachability is not populatedness: an empty ClickHouse answer must
+    # fall through to Postgres so Home does not report zero traces on a
+    # first deploy / ingest stall / post-TTL window.
     ch_tiles = await _home_kpi_from_clickhouse(org_id, window_hours=window_hours)
-    if ch_tiles is not None:
+    if ch_tiles is not None and int(ch_tiles.get("event_count") or 0) > 0:
         traces = int(ch_tiles.get("event_count") or 0)
         prev_traces = int(ch_tiles.get("prev_event_count") or 0)
         data_source = "clickhouse"
@@ -450,7 +411,6 @@ async def cost_kpi(
         },
     )
 
-
 async def _home_kpi_from_clickhouse(
     org_id: str, *, window_hours: int
 ) -> dict[str, Any] | None:
@@ -468,48 +428,40 @@ async def _home_kpi_from_clickhouse(
         logger.debug("home KPI CH read failed; using PG: %s", redact_all(str(exc)))
         return None
 
-
 # ── F66 prompt workspace ────────────────────────────────────────────
 
-
 @router.get("/prompts/{name}/workspace")
-async def prompt_workspace(org_id: str = Depends(_require_path_org), name: str = Path(...)) -> dict[str, Any]:
+async def prompt_workspace(org_id: str = Depends(require_path_org_access), name: str = Path(...)) -> dict[str, Any]:
     ws = await PromptWorkspaceService().get_workspace(org_id, name)
     return _ok("f66", {"workspace": ws})
-
 
 class CollaboratorAdd(BaseModel):
     user_id: str
     role: str = "editor"
 
-
 @router.post("/prompts/{name}/collaborators")
 async def add_collaborator(
-    org_id: str = Depends(_require_path_org), name: str = Path(...), body: CollaboratorAdd = Body(...)
+    org_id: str = Depends(require_path_org_access), name: str = Path(...), body: CollaboratorAdd = Body(...)
 ) -> dict[str, Any]:
     rec = await PromptWorkspaceService().add_collaborator(
         org_id, prompt_name=name, user_id=body.user_id, role=body.role
     )
     return _ok("f66", {"collaborator": rec})
 
-
 # ── F68 prompt deploy ───────────────────────────────────────────────
-
 
 class PromptDeployBody(BaseModel):
     env: str = "production"
     version: int = Field(..., ge=1)
 
-
 @router.get("/prompts/{name}/environments")
-async def list_prompt_envs(org_id: str = Depends(_require_path_org), name: str = Path(...)) -> dict[str, Any]:
+async def list_prompt_envs(org_id: str = Depends(require_path_org_access), name: str = Path(...)) -> dict[str, Any]:
     envs = await PromptDeployService().list_environments(org_id, name)
     return _ok("f68", {"environments": envs})
 
-
 @router.post("/prompts/{name}/deploy")
 async def deploy_prompt(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     body: PromptDeployBody = Body(...),
     user: dict = Depends(get_current_user),
@@ -523,19 +475,16 @@ async def deploy_prompt(
     )
     return _ok("f68", {"deployment": rec})
 
-
 @router.get("/prompts/{name}/resolve")
 async def resolve_prompt(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     name: str = Path(...),
     env: str = Query("production"),
 ) -> dict[str, Any]:
     resolved = await PromptDeployService().resolve(org_id, prompt_name=name, env=env)
     return _ok("f68", {"resolved": resolved})
 
-
 # ── F56 CI eval ─────────────────────────────────────────────────────
-
 
 class CIEvalRequest(BaseModel):
     change_id: str
@@ -543,9 +492,8 @@ class CIEvalRequest(BaseModel):
     agent_id: str | None = None
     baseline_experiment_id: str | None = None
 
-
 @router.post("/ci-eval/run")
-async def ci_eval_run(org_id: str = Depends(_require_path_org), body: CIEvalRequest = Body(...)) -> dict[str, Any]:
+async def ci_eval_run(org_id: str = Depends(require_path_org_access), body: CIEvalRequest = Body(...)) -> dict[str, Any]:
     result = await CIWebhookHandler().on_prompt_change(
         org_id,
         changed_files=body.changed_files,
@@ -554,48 +502,40 @@ async def ci_eval_run(org_id: str = Depends(_require_path_org), body: CIEvalRequ
     )
     return _ok("f56", result)
 
-
 # ── F76 SQL export ──────────────────────────────────────────────────
-
 
 class SqlExportDataset(BaseModel):
     sql: str
     dataset_name: str
     trace_id_column: str = "trace_id"
 
-
 class SqlExportQueue(BaseModel):
     sql: str
     queue_id: str
     trace_id_column: str = "trace_id"
 
-
 @router.post("/sql/export/dataset")
 async def sql_export_dataset(
-    org_id: str = Depends(_require_path_org), body: SqlExportDataset = Body(...)
+    org_id: str = Depends(require_path_org_access), body: SqlExportDataset = Body(...)
 ) -> dict[str, Any]:
     result = await SqlExportService().export_to_dataset(org_id, **body.model_dump())
     return _ok("f76", result)
 
-
 @router.post("/sql/export/queue")
 async def sql_export_queue(
-    org_id: str = Depends(_require_path_org), body: SqlExportQueue = Body(...)
+    org_id: str = Depends(require_path_org_access), body: SqlExportQueue = Body(...)
 ) -> dict[str, Any]:
     result = await SqlExportService().export_to_queue(org_id, **body.model_dump())
     return _ok("f76", result)
 
-
 # ── F75 late metadata ───────────────────────────────────────────────
-
 
 class LateMetadataBody(BaseModel):
     properties: dict[str, str]
 
-
 @router.post("/traces/{trace_id}/metadata")
 async def late_trace_metadata(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     body: LateMetadataBody = Body(...),
 ) -> dict[str, Any]:
@@ -603,18 +543,15 @@ async def late_trace_metadata(
         org_id, trace_id=trace_id, properties=body.properties
     )
 
-
 # ── N15 shadow promote ──────────────────────────────────────────────
-
 
 class ShadowPromoteBody(BaseModel):
     judge_name: str
     threshold: float = Field(..., ge=0.0, le=1.0)
 
-
 @router.post("/eval/promote-to-shadow-guardrail")
 async def promote_shadow_guardrail(
-    org_id: str = Depends(_require_path_org), body: ShadowPromoteBody = Body(...)
+    org_id: str = Depends(require_path_org_access), body: ShadowPromoteBody = Body(...)
 ) -> dict[str, Any]:
     from eden.evaluation.eval_intel.integration import EvalToGuardrailLink
 

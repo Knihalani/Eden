@@ -26,7 +26,7 @@ from eden.sdk.streaming import (
 _OPTIONAL_FEATURES: list[tuple[bool, list[str]]] = []
 
 try:  # pragma: no cover - graceful when A2A not yet shipped
-    from eden.sdk.a2a import (  # type: ignore
+    from eden.sdk.a2a import (
         build_a2a_attributes,
         wrap_a2a_invocation,
     )
@@ -41,7 +41,7 @@ except ImportError:
     ]))
 
 try:  # pragma: no cover - graceful when Computer Use not yet shipped
-    from eden.sdk.computer_use import (  # type: ignore
+    from eden.sdk.computer_use import (
         ComputerUseAction,
         click,
         drag,
@@ -74,7 +74,7 @@ except ImportError:
     ]))
 
 try:  # pragma: no cover - graceful when Fine-Tune not yet shipped
-    from eden.sdk.fine_tune import (  # type: ignore
+    from eden.sdk.fine_tune import (
         build_fine_tune_attributes,
         parse_openai_webhook_payload,
         register_run as register_fine_tune_run,
@@ -92,7 +92,7 @@ except ImportError:
     ]))
 
 try:  # pragma: no cover - graceful when Provider Routing not yet shipped
-    from eden.sdk.provider_routing import (  # type: ignore
+    from eden.sdk.provider_routing import (
         build_provider_routing_attributes,
         record_attempt as record_provider_routing_attempt,
         retry_with_fallback,
@@ -110,7 +110,7 @@ except ImportError:
     ]))
 
 try:  # pragma: no cover - graceful when Voice not yet shipped
-    from eden.sdk.voice import (  # type: ignore
+    from eden.sdk.voice import (
         build_voice_attributes,
         detect_spike,
         mark_barge_in,

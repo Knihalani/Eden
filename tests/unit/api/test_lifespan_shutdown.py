@@ -18,18 +18,34 @@ Each leak cost the first request after a restart a fresh
 TCP/TLS handshake — measurable against Redis / OTLP / etc.
 These tests pin the wiring so a future refactor doesn't
 quietly drop one of the four.
+
+The closes live in ``_shutdown_steps`` / ``_shutdown_step``
+(the ordered, bounded registry that lifespan iterates). Source
+scans cover that registry, not only the thin lifespan loop.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import inspect
 
 
 def _lifespan_source() -> str:
+    """Source of the lifespan + the shutdown registry it drives.
+
+    Lifespan itself is a one-line loop over ``_shutdown_steps``; the
+    actual ``close_*`` / ``shutdown_*`` calls live in the nested
+    factories registered there, each guarded by ``_shutdown_step``.
+    """
     from eden.api import app as app_module
-    return inspect.getsource(app_module.lifespan)
+
+    return "\n".join(
+        (
+            inspect.getsource(app_module.lifespan),
+            inspect.getsource(app_module._shutdown_steps),
+            inspect.getsource(app_module._shutdown_step),
+        )
+    )
 
 
 class TestF59LifespanClosesAllSingletons:
@@ -118,27 +134,24 @@ class TestF59SinkClosesAreAsyncAndCoroutineSafe:
 class TestF59CleanupResilientToIndividualFailure:
     """The pre-F59 cleanup used ``try/except`` only around the
     Postgres close. The post-F59 cleanup wraps every close
-    call in its own ``try/except`` so one broken sink
-    doesn't strand the rest of the pod (especially
-    Postgres, which is shared by everything that follows).
+    call via ``_shutdown_step`` so one broken sink doesn't
+    strand the rest of the pod (especially Postgres, which is
+    shared by everything that follows).
 
-    Source-level: every close call inside the cleanup
-    section has a corresponding ``except`` block that
-    logs at WARNING. Pin this so a future refactor that
-    drops the exception guard doesn't silently break
-    shutdown.
+    Source-level: ``_shutdown_step`` logs at WARNING on both
+    timeout and exception, and every registered closer appears
+    in ``_shutdown_steps``. Pin this so a future refactor that
+    drops the exception guard doesn't silently break shutdown.
     """
 
     def test_individual_try_blocks_per_close(self) -> None:
         src = _lifespan_source()
-        # Each of these should appear inside a try block —
-        # we just assert the count of the literal string
-        # ``logger.warning`` reaches the expected minimum
-        # so we know every close path is guarded.
-        # Pre-F59 only had 2 ``logger.warning`` calls (Postgres
-        # + Insights); post-F59 has at least 5 (Postgres,
-        # Insights, trace_quality, otel, redis, telemetry,
-        # clerk_auth, webhook) — i.e. >= 7.
+        # ``_shutdown_step`` centralises the try/except + logger.warning
+        # for every registered closer. Pre-F59 only had 2
+        # ``logger.warning`` calls (Postgres + Insights); post-F59 /
+        # registry has at least the step-level guards plus the
+        # remaining lifespan warnings — i.e. >= 7 across the combined
+        # source.
         logger_warn_lines = [
             line for line in src.splitlines()
             if "logger.warning" in line
@@ -150,16 +163,10 @@ class TestF59CleanupResilientToIndividualFailure:
         )
 
     def test_cleanup_section_is_guarded(self) -> None:
-        """A regression that removes a single ``except`` block
-        (and lets one close raise) would be silent here. The
-        previous test catches the bulk-drop; this one is the
-        per-call minimum."""
+        """A regression that removes a single closer from the
+        registry would be silent here. The previous test catches
+        the bulk-drop; this one is the per-call minimum."""
         src = _lifespan_source()
-        # Every imported close_* function reference in the
-        # cleanup section must be inside a try block. We do
-        # this by counting the close_* invocations vs the
-        # close_* imports in cleanup — they must be equal
-        # (every import has an invocation wrapped in try).
         cleanup_close_calls = sum(
             1
             for name in (

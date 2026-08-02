@@ -23,34 +23,21 @@ from typing import Any
 from fastapi import APIRouter, Depends, Path, Query
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
-    get_current_user,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.sdk.streaming import StreamingTokenCapture
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/traces",
     tags=["streaming-tokens"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
-
 
 @router.get("/{trace_id}/tokens")
 async def list_trace_tokens(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     limit: int = Query(5000, ge=1, le=50000),
 ) -> dict[str, Any]:

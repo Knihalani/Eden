@@ -332,7 +332,7 @@ class SentenceTransformerEmbedder:
     def _load(self) -> Any:
         if self._model is None:
             try:
-                from sentence_transformers import SentenceTransformer  # type: ignore
+                from sentence_transformers import SentenceTransformer
             except ImportError as exc:
                 raise RuntimeError(
                     "sentence-transformers not installed. "

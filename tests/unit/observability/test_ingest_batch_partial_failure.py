@@ -11,7 +11,7 @@ Retrying is safe — the Postgres write is
 reported per-event in the response, because the SDK acks on any 2xx and would
 discard events it still needs to resend.
 
-One exception keeps propagating: ``IngestionUnavailable`` means the durable
+One exception keeps propagating: ``IngestionUnavailableError`` means the durable
 store is down, so *nothing* in the batch landed. It has to reach the caller as a
 503 so the SDK backs off and retries, rather than being logged as a handful of
 dropped events while the client is told everything is fine.
@@ -31,7 +31,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from eden.observability.drop_metrics import get_drop_metrics, reset_for_tests
-from eden.observability.errors import IngestionUnavailable
+from eden.observability.errors import IngestionUnavailableError
 from eden.observability.telemetry_collector import TelemetryCollector, TelemetryEvent
 
 
@@ -169,7 +169,7 @@ class TestPartialRoutingFailure:
 
 
 class TestBackpressureStillPropagates:
-    """``IngestionUnavailable`` means the store is down — the client must know."""
+    """``IngestionUnavailableError`` means the store is down — the client must know."""
 
     @pytest.mark.asyncio
     async def test_unavailable_is_reraised_not_swallowed(self) -> None:
@@ -178,11 +178,11 @@ class TestBackpressureStillPropagates:
             patch.object(
                 collector,
                 "_route",
-                new=AsyncMock(side_effect=IngestionUnavailable("pg down")),
+                new=AsyncMock(side_effect=IngestionUnavailableError("pg down")),
             ),
             patch.object(collector, "_emit_billing_events", new=AsyncMock()),
         ):
-            with pytest.raises(IngestionUnavailable):
+            with pytest.raises(IngestionUnavailableError):
                 await collector.ingest_batch([_event(0), _event(1)])
 
     @pytest.mark.asyncio
@@ -195,13 +195,13 @@ class TestBackpressureStillPropagates:
         ) -> None:
             if event.event_id == "evt-0":
                 raise RuntimeError("sink exploded")
-            raise IngestionUnavailable("pg down")
+            raise IngestionUnavailableError("pg down")
 
         with (
             patch.object(collector, "_route", new=AsyncMock(side_effect=_route)),
             patch.object(collector, "_emit_billing_events", new=AsyncMock()),
         ):
-            with pytest.raises(IngestionUnavailable):
+            with pytest.raises(IngestionUnavailableError):
                 await collector.ingest_batch([_event(0), _event(1)])
 
 

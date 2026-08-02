@@ -11,9 +11,8 @@ from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import raise_mapped_db_error
@@ -26,44 +25,29 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-
 def _value_error_status(exc: ValueError) -> int:
     msg = str(exc).lower()
     if "not found" in msg:
         return 404
     return 400
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/playgrounds",
     tags=["playgrounds"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
-
 
 class CreatePlaygroundRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     config: dict[str, Any] = Field(default_factory=dict)
 
-
 class PatchPlaygroundRequest(BaseModel):
     name: str | None = None
     config: dict[str, Any] | None = None
 
-
 class RunPlaygroundRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     dataset_rows: list[dict[str, Any]] | None = None
-
 
 class FromSpanRequest(BaseModel):
     trace_id: str = Field(..., min_length=1)
@@ -72,15 +56,13 @@ class FromSpanRequest(BaseModel):
     model: str | None = None
     tools: list[dict[str, Any]] = Field(default_factory=list)
 
-
 class PromoteExperimentRequest(BaseModel):
     name: str | None = None
     dataset_id: str | None = None
 
-
 @router.get("")
 async def list_playgrounds(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     limit: int = Query(50, ge=1, le=100),
 ) -> dict[str, Any]:
@@ -96,11 +78,10 @@ async def list_playgrounds(
         )
     return {"playgrounds": [p.to_dict() for p in items], "total": len(items)}
 
-
 @router.post("")
 async def create_playground(
     body: CreatePlaygroundRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
@@ -120,11 +101,10 @@ async def create_playground(
         )
     return {"playground": rec.to_dict()}
 
-
 @router.post("/from-span")
 async def playground_from_span(
     body: FromSpanRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     svc = PlaygroundService()
@@ -149,10 +129,9 @@ async def playground_from_span(
         )
     return {"playground": rec.to_dict()}
 
-
 @router.get("/{playground_id}")
 async def get_playground(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -170,11 +149,10 @@ async def get_playground(
         raise HTTPException(status_code=404, detail="playground not found")
     return {"playground": rec.to_dict()}
 
-
 @router.patch("/{playground_id}")
 async def patch_playground(
     body: PatchPlaygroundRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -195,11 +173,10 @@ async def patch_playground(
         raise HTTPException(status_code=404, detail="playground not found")
     return {"playground": rec.to_dict()}
 
-
 @router.post("/{playground_id}/run")
 async def run_playground(
     body: RunPlaygroundRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -224,18 +201,17 @@ async def run_playground(
         )
     return {"status": "ok", "run": result}
 
-
 @router.post("/{playground_id}/run/stream")
 async def run_playground_stream(
     body: RunPlaygroundRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> Any:
     """SSE wrapper — emits start → result → done (practical stream surface)."""
     svc = PlaygroundService()
 
-    async def _sse_events():  # type: ignore[no-untyped-def]
+    async def _sse_events():
         yield {"event": "start", "data": '{"status":"running"}'}
         try:
             result = await svc.run(
@@ -249,7 +225,7 @@ async def run_playground_stream(
         except ValueError as exc:
             yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
 
-    async def _plain():  # type: ignore[no-untyped-def]
+    async def _plain():
         yield "event: start\ndata: {\"status\":\"running\"}\n\n"
         try:
             result = await svc.run(
@@ -267,11 +243,10 @@ async def run_playground_stream(
         return _SSEResponse(_sse_events())
     return StreamingResponse(_plain(), media_type="text/event-stream")
 
-
 @router.post("/{playground_id}/promote-experiment")
 async def promote_playground_experiment(
     body: PromoteExperimentRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:

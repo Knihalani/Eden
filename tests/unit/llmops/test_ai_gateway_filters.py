@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from eden.llmops.ai_gateway import AIGateway, ModelRequest, Provider, ProviderUnavailable
+from eden.llmops.ai_gateway import AIGateway, ModelRequest, Provider, ProviderUnavailableError
 from eden.llmops.filters import PIIFilter, PIIFilterConfig
 
 

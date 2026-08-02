@@ -1,4 +1,4 @@
-"""Wave 2 — learn filters mutate live /gateway/v1 messages; GuardrailBlocked → 4xx."""
+"""Wave 2 — learn filters mutate live /gateway/v1 messages; GuardrailBlockedError → 4xx."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from eden.llmops.ai_gateway import ModelRequest
-from eden.llmops.filters.guardrail import GuardrailBlocked, GuardrailGatewayFilter
+from eden.llmops.filters.guardrail import GuardrailBlockedError, GuardrailGatewayFilter
 from eden.llmops.openai_adapter import messages_to_prompt
 
 
@@ -86,7 +86,7 @@ def test_apply_learn_filters_guardrail_raises() -> None:
             return True
 
         def apply(self, request):
-            raise GuardrailBlocked({"summary": "blocked by policy", "judge_id": "j1"})
+            raise GuardrailBlockedError({"summary": "blocked by policy", "judge_id": "j1"})
 
     fake_gw = MagicMock()
     fake_gw._filters.filters = [_Block()]
@@ -111,7 +111,7 @@ def test_filter_registry_does_not_swallow_guardrail_blocked() -> None:
             return True
 
         def apply(self, request):
-            raise GuardrailBlocked({"summary": "no"})
+            raise GuardrailBlockedError({"summary": "no"})
 
     reg = FilterRegistry(fail_open=True)
     reg.register(_Block())
@@ -121,7 +121,7 @@ def test_filter_registry_does_not_swallow_guardrail_blocked() -> None:
         prompt="hi",
         tenant_id="o1",
     )
-    with pytest.raises(GuardrailBlocked):
+    with pytest.raises(GuardrailBlockedError):
         reg.run(mr)
 
 
@@ -138,5 +138,5 @@ def test_guardrail_filter_block_raises() -> None:
         tenant_id="org-1",
     )
     mr.org_id = "org-1"  # type: ignore[attr-defined]
-    with pytest.raises(GuardrailBlocked):
+    with pytest.raises(GuardrailBlockedError):
         filt.apply(mr)

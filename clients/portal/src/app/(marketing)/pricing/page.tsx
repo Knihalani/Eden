@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
 import {
@@ -8,6 +9,8 @@ import {
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+
+export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "Pricing · Eden",
   description:

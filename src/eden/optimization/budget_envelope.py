@@ -77,10 +77,7 @@ class BudgetEnvelope:
         cost = float(consumption.get("cost_usd", 0.0))
         window = str(cfg.get("window", consumption.get("window", "monthly")))
 
-        if hard > 0 and hard != float("inf"):
-            util = min(100.0, cost / hard * 100)
-        else:
-            util = 0.0
+        util = min(100.0, cost / hard * 100) if hard > 0 and hard != float("inf") else 0.0
 
         if cost >= hard:
             status = cls.STATUS_HARD

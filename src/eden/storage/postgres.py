@@ -215,7 +215,7 @@ class RequestConnLease:
 
         So a 10-event batch issued 10 concurrent INSERTs against one
         connection. Nine collided. ``_route_postgres`` wraps any exception in
-        ``IngestionUnavailable``, which ``ingest_batch`` re-raises, so the
+        ``IngestionUnavailableError``, which ``ingest_batch`` re-raises, so the
         *whole* batch 503'd — and the SDK's retry hit exactly the same wall.
         Reachable through the documented setup: ``X-Org-Api-Key`` +
         ``X-Org-Id`` is a verified identity, so ``_resolve_org_id`` returns the
@@ -691,6 +691,30 @@ class PostgresClient:
 
         if not self._pool:
             await self.initialize()
+        else:
+            # An asyncpg pool is bound to the event loop that created
+            # it. Callers that rotate loops (pytest function-scoped
+            # loops, ``asyncio.new_event_loop()`` per case) otherwise
+            # hang forever inside ``pool.acquire()`` waiting on
+            # primitives owned by a stopped loop. Detect the mismatch
+            # and rebuild on the current loop. Production runs one
+            # long-lived loop, so this path is test/dev-only.
+            pool_loop = getattr(self._pool, "_loop", None)
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if (
+                pool_loop is not None
+                and running is not None
+                and pool_loop is not running
+            ):
+                stale, self._pool = self._pool, None
+                # The stale pool's primitives belong to the other
+                # loop; abandon it rather than block re-init.
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(stale.close(), timeout=1.0)
+                await self.initialize()
 
         async with self._pool.acquire() as connection:
             yield connection

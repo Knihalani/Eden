@@ -319,10 +319,11 @@ def test_enqueue_marks_evicted_offline_replay_row_unresolved() -> None:
     # the evicted live-traffic events carried no offline_row_id and
     # must leave no trace, matching prior behavior.
     assert client._unresolved_offline_rows == {1, 2}
-    # These were evictions (room was made and the put succeeded), not
-    # the harder "still full after evicting" drop path -- dropped_total
-    # must not move.
-    assert client.dropped == 0
+    # Every back-pressure eviction counts toward ``dropped`` (4 here:
+    # live-1, live-2, replay-1, replay-2). Counting only the rarer
+    # "still full after evicting" path made ``dropped_total()`` silently
+    # omit ordinary evictions — fixed in c51429f9.
+    assert client.dropped == 4
 
 
 def test_flush_offline_partial_eviction_does_not_ack_dropped_rows(

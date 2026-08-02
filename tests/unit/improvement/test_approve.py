@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from eden.improvement.approve import ApproveBlocked, approve_plan
+from eden.improvement.approve import ApproveBlockedError, approve_plan
 from eden.providers import PullRequestInfo
 
 
@@ -80,7 +80,7 @@ async def test_approve_plan_opens_pr_and_updates_status() -> None:
         patch(
             "eden.improvement.approve._queue_verify",
             AsyncMock(return_value="verify-1"),
-        ),
+        ) as queue_verify,
         patch("eden.improvement.approve._audit_approve", AsyncMock()),
     ):
         result = await approve_plan(
@@ -90,6 +90,9 @@ async def test_approve_plan_opens_pr_and_updates_status() -> None:
     assert result["status"] == "pr_opened"
     assert result["pr_number"] == 42
     assert result["pr_url"] == "https://github.com/org/repo/pull/42"
+    # Phase 8: no verify at PR-open — the merge webhook schedules it.
+    queue_verify.assert_not_awaited()
+    assert result["merge_advice"]["verify_timing"] == "post_merge"
     mock_provider.create_pr.assert_awaited_once()
     req = mock_provider.create_pr.await_args.args[0]
     assert req.repo_id == "repo-conn-1"
@@ -216,19 +219,68 @@ async def test_approve_plan_n22_deny_raises() -> None:
             AsyncMock(return_value="budget exhausted"),
         ),
     ):
-        with pytest.raises(ApproveBlocked) as exc:
+        with pytest.raises(ApproveBlockedError) as exc:
             await approve_plan("org-1", "plan-1")
     assert "budget" in exc.value.reason
 
 
 @pytest.mark.asyncio
-async def test_approve_prompt_update_fail_closed_f68() -> None:
+async def test_approve_prompt_update_deploys_via_f68() -> None:
+    """Soft Autonomy Phase 4: prompt_update approve wires the real F68
+    PromptDeployService — no more fail-closed no-op."""
     plan = {
         "id": "plan-1",
         "status": "draft",
         "plan_kind": "prompt_update",
-        "evidence": {"prompt_version_id": "pv-1"},
+        "evidence": {"prompt_version_id": "pv-1", "env": "staging"},
     }
+    deploy = AsyncMock(return_value={"prompt_name": "checkout", "env": "staging", "version": 3})
+    client = MagicMock()
+    client.fetchrow = AsyncMock(return_value={"prompt_name": "checkout", "version": 3})
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_approved",
+            AsyncMock(return_value={**plan, "status": "approved"}),
+        ) as mark,
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=client),
+        ),
+        patch("eden.prompts.deploy.PromptDeployService.deploy", deploy),
+        patch(
+            "eden.improvement.approve._audit_approve",
+            AsyncMock(),
+        ),
+    ):
+        result = await approve_plan("org-1", "plan-1", approved_by="user-1")
+
+    assert result["status"] == "deployed"
+    assert result["prompt_name"] == "checkout"
+    assert result["version"] == 3
+    assert result["env"] == "staging"
+    deploy.assert_awaited_once()
+    mark.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_approve_prompt_update_missing_version_fails_closed() -> None:
+    """Unknown prompt_version_id must still fail closed — never fake-deploy."""
+    plan = {
+        "id": "plan-1b",
+        "status": "draft",
+        "plan_kind": "prompt_update",
+        "evidence": {"prompt_version_id": "pv-missing"},
+    }
+    client = MagicMock()
+    client.fetchrow = AsyncMock(return_value=None)
     with (
         patch(
             "eden.improvement.approve.plans_repo.get_plan",
@@ -242,23 +294,32 @@ async def test_approve_prompt_update_fail_closed_f68() -> None:
             "eden.improvement.approve.plans_repo.mark_approved",
             AsyncMock(),
         ) as mark,
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=client),
+        ),
     ):
-        result = await approve_plan("org-1", "plan-1", approved_by="user-1")
+        result = await approve_plan("org-1", "plan-1b", approved_by="user-1")
 
-    assert result["status"] == "not_implemented"
-    assert result["supported"] is False
-    assert result["error"] == "f68_gateway_deploy_not_implemented"
+    assert result["status"] == "error"
+    assert result["error"] == "prompt_version_not_found"
     mark.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_approve_guardrail_tune_fail_closed_f68() -> None:
+async def test_approve_guardrail_tune_routes_to_f41() -> None:
+    """guardrail_tune now routes through the F41 promotion queue."""
     plan = {
         "id": "plan-2",
         "status": "pending_review",
         "plan_kind": "guardrail_tune",
         "evidence": {"guardrail_id": "g-1"},
     }
+
+    class _Gate:
+        async def enqueue(self, *a, **k):
+            return "cand-1"
+
     with (
         patch(
             "eden.improvement.approve.plans_repo.get_plan",
@@ -268,11 +329,23 @@ async def test_approve_guardrail_tune_fail_closed_f68() -> None:
             "eden.improvement.approve._n22_blocked",
             AsyncMock(return_value=None),
         ),
+        patch(
+            "eden.promotion.evidence_gate.EvidenceGate",
+            return_value=_Gate(),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_approved",
+            AsyncMock(return_value={**plan, "status": "approved"}),
+        ),
+        patch(
+            "eden.improvement.approve._audit_approve",
+            AsyncMock(),
+        ),
     ):
         result = await approve_plan("org-1", "plan-2")
 
-    assert result["status"] == "not_implemented"
-    assert result.get("supported") is False
+    assert result["status"] == "promotion_queued"
+    assert result["promotion_candidate_id"] == "cand-1"
 
 
 @pytest.mark.asyncio

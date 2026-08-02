@@ -12,6 +12,7 @@ from datetime import UTC
 
 from eden.llm.client import LLMResponse
 from eden.storage.redis import get_redis_client
+from eden.util.stable_hash import stable_seed
 
 
 def _get_qdrant_client():
@@ -354,7 +355,7 @@ class SemanticCache:
             # Return a pseudo-random vector as fallback (won't match anything)
             import random
 
-            random.seed(hash(text))
+            random.seed(stable_seed(text))
             return [random.uniform(-0.01, 0.01) for _ in range(self.VECTOR_SIZE)]
 
     def _normalize(self, prompt: str) -> str:

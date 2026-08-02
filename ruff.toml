@@ -24,6 +24,10 @@ extend-immutable-calls = [
     "Depends", "Query", "Path", "Body", "Header", "Cookie", "File",
     "Form", "Security",
     "pydantic.Field", "Field",
+    # FastAPI dependency factory — `Depends(require_org_permission_dep(...))`
+    # is resolved per-request, same as Depends itself.
+    "require_org_permission_dep",
+    "eden.api.deps.require_org_permission_dep",
 ]
 
 [lint.per-file-ignores]
@@ -33,6 +37,10 @@ extend-immutable-calls = [
 # (`startIndex`). These are non-negotiable external contracts.
 "src/eden/realtime/**" = ["N802", "N806"]
 "src/eden/api/routes/scim.py" = ["N803", "N815"]
+# Pydantic response contracts deliberately mirror the portal's
+# camelCase TypeScript fixtures (clients/portal/src/lab/fixtures/).
+# Renaming to snake_case would break the wire format.
+"src/eden/api/portal_contracts.py" = ["N815"]
 "src/eden/data_platform/quality.py" = ["N801"]
 "src/eden/services/usage_service.py" = ["N806"]
 "src/eden/observability/ingestion/otel_grpc.py" = ["N802"]

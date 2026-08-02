@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from eden.improvement.approve import ApproveBlocked, approve_plan
+from eden.improvement.approve import ApproveBlockedError, approve_plan
 from eden.improvement.issue_patch_trigger import (
     _min_fingerprint_count,
     propose_plan_for_issue,
@@ -308,7 +308,7 @@ async def test_approve_opens_pr_with_n01_merge_advice() -> None:
         patch(
             "eden.improvement.approve._queue_verify",
             AsyncMock(return_value="verify-1"),
-        ),
+        ) as queue_verify,
         patch("eden.improvement.approve._audit_approve", AsyncMock()),
         patch("eden.improvement.approve._n06_ledger", AsyncMock()) as n06,
     ):
@@ -317,8 +317,11 @@ async def test_approve_opens_pr_with_n01_merge_advice() -> None:
         )
 
     assert result["status"] == "pr_opened"
-    assert result["merge_advice"]["do_not_merge_until"] == "n01_verify_pass"
-    assert result["verify_job_id"] == "verify-1"
+    # Phase 8: verify moved to post-merge (GitHub webhook); PR-open no
+    # longer schedules it, so the old do-not-merge gate is gone.
+    assert result["merge_advice"]["verify_timing"] == "post_merge"
+    assert "verify_job_id" not in result
+    queue_verify.assert_not_awaited()
     n06.assert_awaited()
     mock_provider.create_pr.assert_awaited_once()
     req = mock_provider.create_pr.await_args.args[0]
@@ -346,7 +349,7 @@ async def test_approve_n22_still_blocks() -> None:
             AsyncMock(return_value="budget exhausted"),
         ),
     ):
-        with pytest.raises(ApproveBlocked):
+        with pytest.raises(ApproveBlockedError):
             await approve_plan("org-1", "plan-1")
 
 

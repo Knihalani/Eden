@@ -914,7 +914,7 @@ def verify_setup(
         cfg = root / ".eden" / "config.yaml"
         if cfg.exists():
             try:
-                import yaml  # type: ignore
+                import yaml
                 framework = str(yaml.safe_load(cfg.read_text()).get("integrate", {}).get("framework", ""))
             except Exception:
                 pass

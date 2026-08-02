@@ -38,6 +38,13 @@ export type ImprovePlanFixture = {
   /** Before / after artifact (prompt or policy text) */
   before: string;
   after: string;
+  /** Unified diff for code_patch plans (from the API). */
+  diff?: string;
+  /** GitHub PR URL once opened. */
+  prUrl?: string;
+  /** Soft Autonomy Phase 9: set when the post-PR guardian drafted this
+   * plan as a revert/follow-up of an earlier merged plan. */
+  parentPlanId?: string | null;
   /** Primary next action */
   primaryAction: "try_evals" | "recompare" | "open_trace" | "open_issue";
 };

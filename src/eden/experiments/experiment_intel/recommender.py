@@ -69,6 +69,7 @@ from eden.experiments._common import (
     empty_envelope,
     ok_envelope,
 )
+from eden.util.stable_hash import stable_hash
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class ExperimentRecommender:
         # caller's payload is never mutated. Sharing the
         # inner ``control``/``treatment`` sub-dicts is
         # fine — those are read-only here.
-        rng = random.Random(0xC0FFEE ^ hash(experiment_id) & 0xFFFFFFFF)
+        rng = random.Random(0xC0FFEE ^ stable_hash(experiment_id) & 0xFFFFFFFF)
         augmented: dict[str, dict[str, Any]] = {}
         for judge, per_variant in comparison.items():
             control = per_variant.get("control") or {}

@@ -311,18 +311,18 @@ class TestP19FallbackChain:
         self,
     ) -> None:
         """When the primary provider's circuit breaker
-        raises ProviderUnavailable, the gateway retries
+        raises ProviderUnavailableError, the gateway retries
         with a fallback provider."""
         from eden.llmops.ai_gateway import (
             AIGateway,
             ModelRequest,
             ModelResponse,
             Provider,
-            ProviderUnavailable,
+            ProviderUnavailableError,
         )
 
         # Two providers registered. We make the PRIMARY
-        # always raise ProviderUnavailable (via CB); the
+        # always raise ProviderUnavailableError (via CB); the
         # FALLBACK returns a real response.
         gw = AIGateway()
         good_response = ModelResponse(
@@ -340,7 +340,7 @@ class TestP19FallbackChain:
             state = "closed"
 
             async def call(self, fn, *a, **kw):
-                raise ProviderUnavailable("primary broken")
+                raise ProviderUnavailableError("primary broken")
 
         class _AlwaysWorks:
             state = "closed"

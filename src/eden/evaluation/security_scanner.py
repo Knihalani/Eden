@@ -308,11 +308,11 @@ typosquatting detection (names that look similar to popular packages).
         if pkg_name in known_packages:
             return True
         # Check for common patterns of real packages
-        if re.match(r"^[a-z][a-z0-9_-]+$", pkg_name) and len(pkg_name) >= 3:
-            # Simulate probabilistic check (in production: actual PyPI API call)
-            # For common-looking names, assume they exist to reduce false positives
-            return True
-        return False
+        # Simulate probabilistic check (in production: actual PyPI API call)
+        # For common-looking names, assume they exist to reduce false positives
+        return bool(
+            re.match(r"^[a-z][a-z0-9_-]+$", pkg_name) and len(pkg_name) >= 3
+        )
 
     def _find_similar(self, pkg_name: str) -> list[str]:
         """Find popular packages with similar names (Levenshtein distance <= 2)."""

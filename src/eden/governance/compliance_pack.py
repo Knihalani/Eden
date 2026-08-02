@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -163,10 +164,8 @@ class AgentAuditLedgerWriter:
                 d["id"] = str(d["id"])
                 d["prev_hash"] = d.get("prev_hash")
                 if isinstance(d.get("payload"), str):
-                    try:
+                    with contextlib.suppress(Exception):
                         d["payload"] = json.loads(d["payload"])
-                    except Exception:
-                        pass
                 out.append(d)
             return out
         except Exception as exc:

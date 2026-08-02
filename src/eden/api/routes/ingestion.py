@@ -327,12 +327,12 @@ async def _ingest_handler(
                 event.agent_id = header_agent
 
     # Write
-    from eden.observability.errors import IngestionUnavailable
+    from eden.observability.errors import IngestionUnavailableError
 
     collector: TelemetryCollector = await get_telemetry_collector()
     try:
         result = await collector.ingest_batch(events)
-    except IngestionUnavailable as exc:
+    except IngestionUnavailableError as exc:
         # Mirror /chunks: Postgres-unavailable → 503 + Retry-After so
         # SDKs buffer and retry instead of treating a 500 as fatal.
         raise HTTPException(
@@ -503,13 +503,13 @@ async def ingest_chunks(
             ),
         )
 
-    from eden.observability.errors import IngestionUnavailable
+    from eden.observability.errors import IngestionUnavailableError
     from eden.observability.telemetry_collector import get_telemetry_collector
 
     collector = await get_telemetry_collector()
     try:
         result = await collector.record_stream_chunks(org_id, payload.chunks, settings=settings)
-    except IngestionUnavailable as exc:
+    except IngestionUnavailableError as exc:
         # DL-3: surface Postgres-unavailable as 503 + Retry-After so
         # the SDK buffers and retries.
         raise HTTPException(

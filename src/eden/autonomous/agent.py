@@ -3,10 +3,9 @@
 The headline surface of the new portal: one agent, accessible from
 any page via Cmd-J, capable of answering questions about traces,
 incidents, costs, judges, drift, satisfaction, and guardrails via
-14 registered tools. Uses the ModelRouter T3 tier
-(``x-ai/grok-4.5`` primary, with ``minimax/minimax-m3``
-and ``xiaomi/mimo-v2.5-pro`` fallback — per
-``src/eden/optimization/model_router.py``).
+14 registered tools. Uses the internal chat SSOT
+(``eden.llm.models.INTERNAL_CHAT_MODEL`` — deepseek-v4-flash across
+all tiers — per ``src/eden/optimization/model_router.py``).
 
 Architecture
 ─────────────
@@ -18,7 +17,7 @@ Architecture
   │     ▼                                                           │
   │  ChatService                                                     │
   │     ├─ System prompt + page context + tool list                 │
-  │     ├─ OpenRouterClient (T3 tier: x-ai/grok-4.5)                │
+  │     ├─ OpenRouterClient (internal chat SSOT: deepseek-v4-flash) │
   │     ├─ ReAct loop (max 10 turns)                                │
   │     ├─ Tool registry → 14 tools                                 │
   │     ├─ Chart spec emitter (line/bar/pie/scatter/                │
@@ -65,8 +64,10 @@ naturally.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -2034,8 +2035,6 @@ class ChatService:
 # ────────────────────────────────────────────────────────────────────
 
 
-import re
-
 _BLOCK_RE = re.compile(
     r"```(" + "|".join(["chart", "cite", "tool"]) + r")\s*\n(.*?)```",
     re.DOTALL,
@@ -2047,12 +2046,10 @@ def _extract_blocks(text: str, kind: str, parser: Callable[[str], Any]) -> list[
     out: list[Any] = []
     for m in _BLOCK_RE.finditer(text):
         if m.group(1) == kind:
-            try:
+            # Skip malformed blocks silently — the model is
+            # allowed to emit rough JSON.
+            with contextlib.suppress(Exception):
                 out.append(parser(m.group(2).strip()))
-            except Exception:
-                # Skip malformed blocks silently — the model is
-                # allowed to emit rough JSON.
-                pass
     return out
 
 

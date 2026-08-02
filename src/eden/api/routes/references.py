@@ -19,6 +19,7 @@ from eden.api.deps import (
 from eden.api.routes.billing import check_limit
 from eden.api.utils.redact import redact_all
 from eden.storage.postgres import get_postgres_client
+from eden.util.stable_hash import stable_hash
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ async def generate_embedding(text: str) -> list[float]:
     words = text.lower().split()
     vector = [0.0] * 1536
     for i, word in enumerate(words[:1536]):
-        # Simple hash-based weighting
-        vector[i % 1536] += hash(word) % 100 / 100.0
+        # Simple hash-based weighting (stable across process restarts)
+        vector[i % 1536] += stable_hash(word) % 100 / 100.0
 
     # Normalize
     magnitude = sum(v * v for v in vector) ** 0.5

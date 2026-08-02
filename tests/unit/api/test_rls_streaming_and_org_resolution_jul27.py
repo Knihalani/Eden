@@ -29,7 +29,6 @@ from starlette.requests import Request
 
 from eden.api.utils.auth import create_access_token
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Shared fakes — a minimal asyncpg-shaped pool/connection/transaction so we
 # can drive RLSOrgContextMiddleware's acquisition/cleanup logic precisely,
@@ -147,6 +146,13 @@ async def test_connection_released_before_streaming_body_chunks():
     observed_at_first_chunk: dict[str, bool] = {}
 
     async def inner(scope, receive, send):
+        # Lazy lease: redeem on first "query" so finalize has something
+        # to release — mirrors a real handler that touches Postgres.
+        from eden.storage.postgres import get_bound_request_pg_lease
+
+        lease = get_bound_request_pg_lease()
+        assert lease is not None
+        await lease.ensure()
         await send({"type": "http.response.start", "status": 200, "headers": []})
         # By the time control returns here, RLSOrgContextMiddleware's
         # send-wrapper must already have finalized (committed + released)
@@ -211,6 +217,11 @@ async def test_finalize_pg_context_is_idempotent_across_wrapper_and_finally():
     tx.__aexit__ = counting_aexit
 
     async def inner(scope, receive, send):
+        from eden.storage.postgres import get_bound_request_pg_lease
+
+        lease = get_bound_request_pg_lease()
+        assert lease is not None
+        await lease.ensure()
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"", "more_body": False})
 
@@ -324,8 +335,8 @@ async def test_bound_request_pg_conn_contextvar_cleared_after_finalize():
     ``request.state.pg_conn`` (a plain attribute, unaffected by this
     bug class) was cleared.
     """
-    from eden.storage.postgres import get_bound_request_pg_conn
     from eden.api.middleware.rls_org_context import RLSOrgContextMiddleware
+    from eden.storage.postgres import get_bound_request_pg_conn
 
     tx = _FakeTx()
     conn = _FakeConn(tx)
@@ -337,7 +348,12 @@ async def test_bound_request_pg_conn_contextvar_cleared_after_finalize():
 
     async def inner(scope, receive, send):
         # Sanity: the contextvar IS bound to our fake connection while
-        # the request is in flight, in this same task.
+        # the request is in flight, in this same task (after redeem).
+        from eden.storage.postgres import get_bound_request_pg_lease
+
+        lease = get_bound_request_pg_lease()
+        assert lease is not None
+        await lease.ensure()
         observed["bound_during_request"] = get_bound_request_pg_conn()
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"", "more_body": False})
@@ -392,8 +408,8 @@ async def test_bound_request_pg_conn_cleared_even_when_finalize_runs_via_finally
     """Same assertion as above, but via the ``finally`` fallback path
     in ``__call__`` (downstream app raises before sending any ASGI
     message) rather than the send-wrapper early-release path."""
-    from eden.storage.postgres import get_bound_request_pg_conn
     from eden.api.middleware.rls_org_context import RLSOrgContextMiddleware
+    from eden.storage.postgres import get_bound_request_pg_conn
 
     tx = _FakeTx()
     conn = _FakeConn(tx)
@@ -457,6 +473,12 @@ async def test_begin_failure_closes_connection_without_touching_tx_aexit():
     fake_client = _FakeClient(pool)
 
     async def inner(scope, receive, send):
+        from eden.storage.postgres import get_bound_request_pg_lease
+
+        lease = get_bound_request_pg_lease()
+        assert lease is not None
+        # BEGIN fails inside ensure — fail-soft (returns None).
+        assert await lease.ensure() is None
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"", "more_body": False})
 
@@ -515,6 +537,11 @@ async def test_begin_success_then_commit_failure_still_closes_connection():
     fake_client = _FakeClient(pool)
 
     async def inner(scope, receive, send):
+        from eden.storage.postgres import get_bound_request_pg_lease
+
+        lease = get_bound_request_pg_lease()
+        assert lease is not None
+        assert await lease.ensure() is conn
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"", "more_body": False})
 

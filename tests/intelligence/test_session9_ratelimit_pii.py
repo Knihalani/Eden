@@ -288,7 +288,7 @@ class TestS17GatewayRequestBodyScrub:
         with patch(
             "eden.data_platform.pii.PIIMasker"
         ) as mock_masker_cls:
-            mock_masker_cls.return_value.mask.return_value = scrubbed_body
+            mock_masker_cls.return_value.amask = AsyncMock(return_value=scrubbed_body)
             with patch.object(
                 gw, "get_telemetry_collector",
                 AsyncMock(return_value=captured_collector),
@@ -305,8 +305,8 @@ class TestS17GatewayRequestBodyScrub:
                         request_body=body_with_pii,
                     )
 
-        # PIIMasker was instantiated and mask was called.
-        mock_masker_cls.return_value.mask.assert_called_once_with(body_with_pii)
+        # PIIMasker was instantiated and amask was called.
+        mock_masker_cls.return_value.amask.assert_called_once_with(body_with_pii)
         # The TelemetryEvent got the SCRUBBED body, not the raw one.
         assert captured["request_body"]["messages"][0]["content"] == "[REDACTED]"
         # And the raw PII is NOT in the persisted body.
@@ -331,8 +331,8 @@ class TestS17GatewayRequestBodyScrub:
         with patch(
             "eden.data_platform.pii.PIIMasker"
         ) as mock_masker_cls:
-            mock_masker_cls.return_value.mask.side_effect = RuntimeError(
-                "scrubber exploded"
+            mock_masker_cls.return_value.amask = AsyncMock(
+                side_effect=RuntimeError("scrubber exploded")
             )
             with patch(
                 "eden.observability.telemetry_collector.TelemetryEvent",

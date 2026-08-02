@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-
 _ORG = "00000000-0000-0000-0000-000000000099"
 _OTHER_ORG = "00000000-0000-0000-0000-000000000088"
 
@@ -34,6 +33,9 @@ _EVENT = {
 @pytest.fixture
 def mock_collector() -> AsyncMock:
     collector = AsyncMock()
+    collector.ingest_one = AsyncMock(
+        return_value={"accepted": 1, "rejected": 0, "deduplicated": 0, "sampled_out": 0, "total": 1}
+    )
     collector.ingest = AsyncMock(return_value=True)
     collector.ingest_batch = AsyncMock(
         return_value={"accepted": 1, "rejected": 0, "deduplicated": 0, "total": 1}
@@ -159,7 +161,7 @@ class TestTelemetryIngestWrongOrgIs403:
                 },
             )
             assert response.status_code == 200, response.text
-            assert mock_collector.ingest.await_count == 1
+            assert mock_collector.ingest_one.await_count == 1
         finally:
             app.dependency_overrides.pop(get_ingest_auth, None)
 
@@ -174,7 +176,7 @@ class TestTelemetryIngestClientErrorIs4xx:
         from eden.api.deps import get_ingest_auth
 
         _patch_collector(monkeypatch, mock_collector)
-        mock_collector.ingest = AsyncMock(side_effect=ValueError("bad event shape"))
+        mock_collector.ingest_one = AsyncMock(side_effect=ValueError("bad event shape"))
         fake_auth = {
             "org_id": _ORG,
             "scopes": ["ingest:write"],

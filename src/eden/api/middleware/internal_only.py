@@ -83,52 +83,68 @@ class InternalOnlyMiddleware:
             return
 
         # IP resolution — direct scope fields, no Request construction.
+        # Trusted-proxy model:
+        #   1. TCP peer must be allow-listed (loopback or platform LB).
+        #   2. If X-Forwarded-For is present, unwrap the leftmost hop and
+        #      require THAT client IP to also be allow-listed.
+        # Never honour XFF from an untrusted TCP peer (spoof).
+        # Never allow "TCP peer is LB" alone to grant access to every
+        # downstream client without checking the real client IP.
         client = scope.get("client") or ("", 0)
-        client_ip = client[0] if client else ""
+        tcp_peer = client[0] if client else ""
 
-        if client_ip not in self.allowed_ips:
-            # Caller isn't directly in the allow-list. They could
-            # still be a legitimate reverse proxy forwarding on
-            # behalf of a loopback peer — accept XFF only when the
-            # TCP source is itself allow-listed.
-            trusted_proxy = client_ip in self.allowed_ips
-            if trusted_proxy:
-                # Walk scope headers for XFF (lowercase ASCII).
-                for name, value in scope.get("headers") or ():
-                    if name.lower() == b"x-forwarded-for":
-                        xff_raw = value.decode("latin1", errors="ignore")
-                        xff = xff_raw.split(",")[0].strip() if xff_raw else ""
-                        if xff:
-                            client_ip = xff
-                        break
+        if tcp_peer not in self.allowed_ips:
+            logger.warning(
+                "internal_only: blocked %s from untrusted peer %s",
+                path,
+                tcp_peer or "(unknown)",
+            )
+            await self._forbid(path, tcp_peer or None, send)
+            return
+
+        client_ip = tcp_peer
+        for name, value in scope.get("headers") or ():
+            if name.lower() == b"x-forwarded-for":
+                xff_raw = value.decode("latin1", errors="ignore")
+                xff = xff_raw.split(",")[0].strip() if xff_raw else ""
+                if xff:
+                    client_ip = xff
+                break
 
         if client_ip not in self.allowed_ips:
             logger.warning(
-                "internal_only: blocked %s from %s",
+                "internal_only: blocked %s from %s (via trusted peer %s)",
                 path,
                 client_ip or "(unknown)",
+                tcp_peer,
             )
-            body = json.dumps({
-                "status": "forbidden",
-                "message": (
-                    "The /v1/internal/health/* surface is allow-listed. "
-                    "Set INTERNAL_ALLOWED_IPS to grant access."
-                ),
-                "client_ip": client_ip or None,
-            }).encode("latin1")
-            await send({
-                "type": "http.response.start",
-                "status": 403,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(body)).encode("latin1")),
-                ],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": body,
-                "more_body": False,
-            })
+            await self._forbid(path, client_ip or None, send)
             return
 
         await self.app(scope, receive, send)
+
+    async def _forbid(
+        self, path: str, client_ip: str | None, send: Send
+    ) -> None:
+        body = json.dumps({
+            "status": "forbidden",
+            "message": (
+                "The /v1/internal/health/* surface is allow-listed. "
+                "Set INTERNAL_ALLOWED_IPS to grant access."
+            ),
+            "client_ip": client_ip,
+        }).encode("latin1")
+        await send({
+            "type": "http.response.start",
+            "status": 403,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode("latin1")),
+            ],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": body,
+            "more_body": False,
+        })
+

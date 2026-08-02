@@ -12,15 +12,14 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import (
     _try_resolve_token_payload,
-    get_current_user,
     require_org_admin,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.improvement import plans_repo, runs_repo
 from eden.improvement import settings as imp_settings
 from eden.improvement.agent import ImprovementAgent
-from eden.improvement.approve import ApproveBlocked, approve_plan, reject_plan_audited
+from eden.improvement.approve import ApproveBlockedError, approve_plan, reject_plan_audited
 from eden.improvement.cockpit_aggregator import (
     ImprovementCockpitAggregator,
     snooze_item,
@@ -29,24 +28,13 @@ from eden.improvement.schedule import resolved_schedule
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/improve",
     tags=["improve"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
 
 _aggregator = ImprovementCockpitAggregator()
-
 
 def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -57,7 +45,6 @@ def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat(),
         "data": data,
     }
-
 
 def _require_agent_v1(org_id: str) -> None:
     """Sync fallback — global flag only (prefer _require_agent_v1_async)."""
@@ -70,7 +57,6 @@ def _require_agent_v1(org_id: str) -> None:
         detail="improvement_agent_v1 is disabled for this org",
     )
 
-
 async def _require_agent_v1_async(org_id: str) -> None:
     from eden.preview.gates import improvement_agent_enabled
 
@@ -81,53 +67,44 @@ async def _require_agent_v1_async(org_id: str) -> None:
         detail="improvement_agent_v1 is disabled for this org",
     )
 
-
 class SnoozeRequest(BaseModel):
     hours: int = Field(default=24, ge=1, le=168)
 
-
 class AutofixRequest(BaseModel):
     dry_run: bool = True
-
 
 class PlanPatchRequest(BaseModel):
     title: str | None = None
     summary: str | None = None
     diff_unified: str | None = None
 
-
 class RejectRequest(BaseModel):
     reason: str = Field(default="", max_length=2000)
-
 
 class SnoozePlanRequest(BaseModel):
     snoozed_until: str | None = None
     hours: int = Field(default=168, ge=1, le=720)
 
-
 class ScheduleUpdateRequest(BaseModel):
     improvement_schedule_cron: str | None = None
     improvement_max_plans_per_sweep: int | None = Field(default=None, ge=1, le=25)
-
 
 class ManualRunRequest(BaseModel):
     agent_id: str | None = None
     issue_id: str | None = None
 
-
 @router.get("/queue")
 async def get_queue(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str | None = Query(None),
     limit: int = Query(100, ge=1, le=200),
 ) -> dict[str, Any]:
     queue = await _aggregator.list_queue(org_id, agent_id=agent_id, limit=limit)
     return _ok("improvement_cockpit", queue.to_dict())
 
-
 @router.get("/plans")
 async def list_plans(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     status: str | None = Query(None),
     plan_kind: str | None = Query(None),
     agent_id: str | None = Query(None),
@@ -143,10 +120,9 @@ async def list_plans(
     )
     return _ok("improvement_plans", {"plans": plans, "count": len(plans)})
 
-
 @router.get("/plans/{plan_id}")
 async def get_plan(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -155,10 +131,9 @@ async def get_plan(
         raise HTTPException(status_code=404, detail="plan not found")
     return _ok("improvement_plans", {"plan": plan})
 
-
 @router.patch("/plans/{plan_id}")
 async def patch_plan(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
     body: PlanPatchRequest = Body(...),
 ) -> dict[str, Any]:
@@ -176,17 +151,16 @@ async def patch_plan(
     )
     return _ok("improvement_plans", {"plan": updated})
 
-
 @router.post("/plans/{plan_id}/approve")
 async def approve_plan_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
     applied_by: str | None = Query(None),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
     try:
         result = await approve_plan(org_id, plan_id, approved_by=applied_by)
-    except ApproveBlocked as exc:
+    except ApproveBlockedError as exc:
         raise HTTPException(
             status_code=403,
             detail={"blocked_reason": exc.reason},
@@ -203,10 +177,9 @@ async def approve_plan_route(
         raise HTTPException(status_code=503, detail=result)
     return _ok("improvement_plans", result)
 
-
 @router.post("/plans/{plan_id}/reject")
 async def reject_plan_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
     body: RejectRequest = Body(default=RejectRequest()),
     rejected_by: str | None = Query(None),
@@ -226,10 +199,9 @@ async def reject_plan_route(
     )
     return _ok("improvement_plans", {"plan": updated})
 
-
 @router.post("/plans/{plan_id}/snooze")
 async def snooze_plan_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
     body: SnoozePlanRequest = Body(default=SnoozePlanRequest()),
 ) -> dict[str, Any]:
@@ -250,10 +222,9 @@ async def snooze_plan_route(
     updated = await plans_repo.snooze_plan(org_id, plan_id, snoozed_until=until)
     return _ok("improvement_plans", {"plan": updated, "snoozed_until": until.isoformat()})
 
-
 @router.get("/runs")
 async def list_runs(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -268,10 +239,9 @@ async def list_runs(
         },
     )
 
-
 @router.get("/runs/{run_id}")
 async def get_run(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     run_id: str = Path(...),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -280,10 +250,9 @@ async def get_run(
         raise HTTPException(status_code=404, detail="run not found")
     return _ok("improvement_runs", {"run": run})
 
-
 @router.post("/runs")
 async def trigger_run(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: ManualRunRequest = Body(default=ManualRunRequest()),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -295,17 +264,15 @@ async def trigger_run(
     )
     return _ok("improvement_runs", result)
 
-
 @router.get("/schedule")
-async def get_schedule(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def get_schedule(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
     sched = await resolved_schedule(org_id)
     return _ok("improvement_schedule", sched)
 
-
 @router.put("/schedule")
 async def put_schedule(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: ScheduleUpdateRequest = Body(...),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
@@ -317,10 +284,9 @@ async def put_schedule(
     sched = await resolved_schedule(org_id)
     return _ok("improvement_schedule", {**sched, **updated})
 
-
 @router.post("/items/{item_ref:path}/snooze")
 async def snooze(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     item_ref: str = Path(...),
     body: SnoozeRequest = Body(default=SnoozeRequest()),
 ) -> dict[str, Any]:
@@ -331,10 +297,9 @@ async def snooze(
         {"item_ref": item_ref, "snoozed_until": until.isoformat()},
     )
 
-
 @router.post("/items/{item_ref:path}/approve")
 async def approve(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     item_ref: str = Path(...),
     applied_by: str | None = Query(None),
     payload: dict | None = Depends(_try_resolve_token_payload),
@@ -356,7 +321,7 @@ async def approve(
         plan_id = item_ref.split(":", 1)[1]
         try:
             result = await approve_plan(org_id, plan_id, approved_by=applied_by)
-        except ApproveBlocked as exc:
+        except ApproveBlockedError as exc:
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -387,10 +352,9 @@ async def approve(
         },
     )
 
-
 @router.post("/autofix/{issue_id}")
 async def autofix(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
     body: AutofixRequest = Body(default=AutofixRequest()),
 ) -> dict[str, Any]:
@@ -400,7 +364,6 @@ async def autofix(
     issue = await IssuesRepo().get_issue(org_id, issue_id)
     if issue is None:
         raise HTTPException(status_code=404, detail="issue not found")
-
 
     triage = issue.triage_result
     if not triage:

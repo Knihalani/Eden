@@ -232,15 +232,18 @@ def decide(policy: AutonomousMaintenancePolicy, action: str) -> tuple[Decision, 
     if mode == "observe":
         return "deny", f"maintenance_mode=observe (profile={policy.compliance_profile})", tier_name
 
-    # The fine-grained bound must be enabled.
-    if not getattr(policy, tier_name, False):
-        return "deny", f"{tier_name} disabled", tier_name
-
     # soc2_strict never auto-merges.
     if action in ("code_patch_merge", "auto_merge") and policy.compliance_profile == "soc2_strict":
         return "deny", "soc2_strict forbids auto-merge", tier_name
 
     # assisted: runtime heals auto-execute; code patches/merges need a human.
+    #
+    # Soft Autonomy Phase 3 (PR-first): this check runs BEFORE the
+    # fine-grained flag check for ``auto_code_patch_pr``. Drafting a fix
+    # plan has no repo side-effect — the human Approve is the gate — so
+    # the legacy ``code_change_enabled=False`` master switch must not
+    # silently deny every code PR in assisted mode. The flag still gates
+    # fully-autonomous execution below.
     if mode == "assisted" and tier_name in (
         "auto_code_patch_pr",
         "auto_code_patch_merge",
@@ -248,6 +251,10 @@ def decide(policy: AutonomousMaintenancePolicy, action: str) -> tuple[Decision, 
         "auto_guardrail_promote",
     ):
         return "require_approval", "assisted mode requires human approval", tier_name
+
+    # The fine-grained bound must be enabled.
+    if not getattr(policy, tier_name, False):
+        return "deny", f"{tier_name} disabled", tier_name
 
     return "allow", f"{mode} mode permits {tier_name}", tier_name
 

@@ -93,9 +93,7 @@ def is_llm_event(event_type: str | None) -> bool:
     et = event_type.lower()
     if et in _LLM_EVENT_TYPES:
         return True
-    if "llm" in et and ("completion" in et or "chat" in et or "message" in et):
-        return True
-    return False
+    return bool("llm" in et and ("completion" in et or "chat" in et or "message" in et))
 
 
 def extract_llm_payload(payload: dict[str, Any] | None) -> dict[str, Any]:

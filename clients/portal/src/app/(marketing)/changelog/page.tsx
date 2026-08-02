@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+
 import { ThinMarketingDoc } from "@/components/marketing/thin-marketing-doc";
 
+
+export const revalidate = 3600;
 export const metadata: Metadata = { title: "Changelog · Eden" };
 
 export default function Page() {

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, get_ingest_auth, require_path_org_access
 from eden.api.utils.redact import redact_all
-from eden.observability.errors import IngestionUnavailable
+from eden.observability.errors import IngestionUnavailableError
 from eden.observability.telemetry_collector import (  # noqa: F401
     TelemetryCollector,
     TelemetryEvent,
@@ -257,7 +257,7 @@ async def ingest_telemetry_event(
         return TelemetryIngestResponse(**result)
     except HTTPException:
         raise
-    except IngestionUnavailable as exc:
+    except IngestionUnavailableError as exc:
         raise HTTPException(
             status_code=503,
             detail=str(exc.message) if hasattr(exc, "message") else str(exc),
@@ -295,7 +295,7 @@ async def ingest_telemetry_batch(
         return TelemetryIngestResponse(**result)
     except HTTPException:
         raise
-    except IngestionUnavailable as exc:
+    except IngestionUnavailableError as exc:
         raise HTTPException(
             status_code=503,
             detail=str(exc.message) if hasattr(exc, "message") else str(exc),

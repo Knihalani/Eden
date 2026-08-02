@@ -245,9 +245,12 @@ def build_span_doc(event: Any) -> dict[str, Any]:
     # rather than embedding it in ``request_body``. De-dup against
     # the payload-derived list to avoid duplicate entries.
     for tc in event.tool_calls_full or []:
-        if isinstance(tc, dict) and isinstance(tc.get("name"), str):
-            if tc["name"] not in tool_names:
-                tool_names.append(tc["name"])
+        if (
+            isinstance(tc, dict)
+            and isinstance(tc.get("name"), str)
+            and tc["name"] not in tool_names
+        ):
+            tool_names.append(tc["name"])
 
     return {
         "id": f"{event.tenant_id}:{event.event_id}",
@@ -376,6 +379,12 @@ class TypesenseClient:
         is down. Returns ``(0, None)`` on network failure.
         """
         if not self._is_reachable():
+            try:
+                from eden.observability.drop_metrics import record_drop
+
+                record_drop("sink_search", "write_error")
+            except Exception:
+                pass
             return 0, None
         session = await self._get_session()
         if session is None:
@@ -442,15 +451,28 @@ class TypesenseClient:
         per line. ``return_score=false`` skips the per-doc score
         payload (cheaper).
         """
+        doc_list = list(docs)
         if not self._schema_ready:
             await self.ensure_collection()
-        body = "\n".join(json.dumps(d, default=str) for d in docs)
-        if not body:
-            return 0
-        session = await self._get_session()
-        if session is None:
+        if not doc_list:
             return 0
         if not self._is_reachable():
+            try:
+                from eden.observability.drop_metrics import record_drop
+
+                record_drop("sink_search", "write_error", len(doc_list))
+            except Exception:
+                pass
+            return 0
+        body = "\n".join(json.dumps(d, default=str) for d in doc_list)
+        session = await self._get_session()
+        if session is None:
+            try:
+                from eden.observability.drop_metrics import record_drop
+
+                record_drop("sink_search", "write_error", len(doc_list))
+            except Exception:
+                pass
             return 0
         url = (
             f"{self.base_url}/collections/{self._collection}"
@@ -465,10 +487,30 @@ class TypesenseClient:
                 for line in text.splitlines():
                     if line.strip() == "OK":
                         ok += 1
+                rejected = len(doc_list) - ok
+                if rejected > 0:
+                    try:
+                        from eden.observability.drop_metrics import record_drop
+
+                        record_drop("sink_search", "write_error", rejected)
+                    except Exception:
+                        pass
+                    logger.warning(
+                        "Typesense bulk import rejected %d/%d doc(s)",
+                        rejected,
+                        len(doc_list),
+                    )
+                self._record_success()
                 return ok
         except Exception as exc:
             logger.debug(f"Typesense bulk import failed: {exc}")
-            self._last_failure = time.time()
+            self._record_failure()
+            try:
+                from eden.observability.drop_metrics import record_drop
+
+                record_drop("sink_search", "write_error", len(doc_list))
+            except Exception:
+                pass
             return 0
 
     async def delete_span(self, doc_id: str) -> bool:

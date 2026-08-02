@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.routes import labeling as labeling_routes
 
 
@@ -18,8 +19,8 @@ def _app_with_cross_org_denial() -> TestClient:
     async def _deny_path_org() -> str:
         raise HTTPException(status_code=403, detail="Not a member of this organization")
 
-    app.dependency_overrides[labeling_routes._require_path_org] = _deny_path_org
-    app.dependency_overrides[labeling_routes.get_current_user] = lambda: {
+    app.dependency_overrides[require_path_org_access] = _deny_path_org
+    app.dependency_overrides[get_current_user] = lambda: {
         "user_id": "u-1",
         "email": "x@y.z",
     }
@@ -38,13 +39,13 @@ class TestLabelingPathOrgAccess:
             while stack:
                 d = stack.pop()
                 stack.extend(d.dependencies)
-                if d.call is labeling_routes._require_path_org:
+                if d.call is require_path_org_access:
                     any_check = True
                     break
             if any_check:
                 break
         assert any_check, (
-            "labeling routes must Depends(_require_path_org) for path org membership"
+            "labeling routes must Depends(require_path_org_access) for path org membership"
         )
 
     def test_list_items_cross_org_403(self) -> None:
@@ -108,7 +109,7 @@ class TestLabelingPathOrgAccess:
 
 @pytest.mark.asyncio
 async def test_list_items_member_uses_resolved_eden_org(monkeypatch) -> None:
-    """Member path: _require_path_org return value is the org passed to the service."""
+    """Member path: require_path_org_access return value is the org passed to the service."""
     from httpx import ASGITransport, AsyncClient
 
     captured: dict[str, str] = {}
@@ -123,10 +124,10 @@ async def test_list_items_member_uses_resolved_eden_org(monkeypatch) -> None:
 
     application = FastAPI()
     application.include_router(labeling_routes.router)
-    application.dependency_overrides[labeling_routes._require_path_org] = (
+    application.dependency_overrides[require_path_org_access] = (
         lambda: "eden-org-resolved"
     )
-    application.dependency_overrides[labeling_routes.get_current_user] = lambda: {
+    application.dependency_overrides[get_current_user] = lambda: {
         "user_id": "u-1",
     }
 

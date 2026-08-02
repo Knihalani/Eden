@@ -14,6 +14,7 @@ dedup absorb duplicate finalize signals for the same trace.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from typing import Any
@@ -123,10 +124,8 @@ async def emit_trace_finalized(
             # Drop the claim so a later emit can retry; otherwise the
             # 1h dedupe key permanently suppresses finalize for this
             # org/trace after a failed XADD.
-            try:
+            with contextlib.suppress(Exception):  # pragma: no cover
                 await redis.delete(f"trace.finalized:emitted:{dedup_key}")
-            except Exception:  # pragma: no cover
-                pass
             raise
         _emitted_local[dedup_key] = now_mono + float(_EMIT_DEDUP_TTL_S)
         if len(_emitted_local) > 8192:

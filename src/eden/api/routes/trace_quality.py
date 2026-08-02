@@ -191,7 +191,7 @@ async def _write_audit(
     environments without Postgres, the wrapper is a no-op.
     """
     try:
-        from eden.audit.writer import write_audit_event  # type: ignore
+        from eden.audit.writer import write_audit_event
     except Exception:
         return
     try:

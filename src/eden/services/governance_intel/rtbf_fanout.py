@@ -122,7 +122,7 @@ async def _fanout_qdrant(
     try:
         client = get_qdrant_client()
         if hasattr(client, "__await__"):
-            client = await client  # type: ignore[misc]
+            client = await client
     except Exception as exc:
         return {"store": store, "status": "unavailable", "error": str(exc)}
     if client is None:
@@ -192,7 +192,7 @@ async def _fanout_clickhouse(
     try:
         sink = get_clickhouse_sink()
         if hasattr(sink, "__await__"):
-            sink = await sink  # type: ignore[misc]
+            sink = await sink
     except Exception as exc:
         return {"store": store, "status": "unavailable", "error": str(exc)}
     if sink is None:

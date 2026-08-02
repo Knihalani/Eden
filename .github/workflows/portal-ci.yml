@@ -104,13 +104,14 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Ensure Clerk test keys when secrets absent
+      - name: Require Clerk keys from secrets
         run: |
-          SK="${CLERK_SECRET_KEY:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
-          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
-          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
-          echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+          if [ -z "$CLERK_SECRET_KEY" ] || [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be set as GitHub Actions secrets (no committed fallbacks)."
+            exit 1
+          fi
+          echo "CLERK_SECRET_KEY=$CLERK_SECRET_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -176,13 +177,14 @@ jobs:
         with:
           name: portal-next-build-${{ github.run_id }}
           path: clients/portal/.next
-      - name: Ensure Clerk test keys when secrets absent
+      - name: Require Clerk keys from secrets
         run: |
-          SK="${CLERK_SECRET_KEY:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
-          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
-          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
-          echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+          if [ -z "$CLERK_SECRET_KEY" ] || [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be set as GitHub Actions secrets (no committed fallbacks)."
+            exit 1
+          fi
+          echo "CLERK_SECRET_KEY=$CLERK_SECRET_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -243,7 +245,7 @@ jobs:
   # Auth seed failure exits non-zero (job fails). Path failures also exit 1
   # (GOLDEN_ALLOW_FAIL must never be set here — that soft-fails EXIT 0).
   # Required env: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-  # (repo secrets preferred; committed pk_test fallback via CLERK_TEST_KEY_FALLBACK).
+  # (GitHub Actions secrets only — no committed key fallbacks).
   golden-paths:
     name: Golden paths (F85)
     runs-on: ubuntu-latest
@@ -263,13 +265,14 @@ jobs:
         with:
           name: portal-next-build-${{ github.run_id }}
           path: clients/portal/.next
-      - name: Ensure Clerk test keys when secrets absent
+      - name: Require Clerk keys from secrets
         run: |
-          SK="${CLERK_SECRET_KEY:-sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm}"
-          PK="${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ}"
-          echo "CLERK_SECRET_KEY=$SK" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$PK" >> "$GITHUB_ENV"
-          echo "CLERK_TEST_KEY_FALLBACK=1" >> "$GITHUB_ENV"
+          if [ -z "$CLERK_SECRET_KEY" ] || [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be set as GitHub Actions secrets (no committed fallbacks)."
+            exit 1
+          fi
+          echo "CLERK_SECRET_KEY=$CLERK_SECRET_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}

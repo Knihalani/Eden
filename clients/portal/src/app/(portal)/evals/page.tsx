@@ -393,7 +393,7 @@ function LabEvalsInner() {
           ds?.agentId ?? (agentId === "all" ? undefined : agentId) ?? undefined,
         datasetId: ds?.id,
         prompt: "You are a careful agent. Follow the task exactly.",
-        model: "eden-router / grok-4.5",
+        model: "eden-router / deepseek-v4-flash",
         dirty: true,
         variants: [
           { id: "var_base", label: "Baseline", provider: "baseline" },

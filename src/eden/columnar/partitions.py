@@ -46,6 +46,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ._common import (
+    _VALID_GRANULARITIES,
     _check_ch_available,
     _clickhouse_partition_name,
     _not_implemented_envelope,
@@ -53,6 +54,7 @@ from ._common import (
     _ok_fallback_envelope,
     _partition_id_for,
     _postgres_count_rows,
+    _record_columnar_fallback,
     _upsert_partition,
     _validate_granularity,
     _validate_source_table,
@@ -108,7 +110,7 @@ class ColumnarPartitionManager:
             return _not_implemented_envelope(
                 "ColumnarPartitionManager",
                 f"invalid granularity: {granularity!r} "
-                "(expected one of: hour, day, week)",
+                f"(expected one of: {', '.join(sorted(_VALID_GRANULARITIES))})",
             )
 
         partition_id = _partition_id_for(org_id=org_id)
@@ -127,6 +129,7 @@ class ColumnarPartitionManager:
                 rows_estimate = rows_total
                 bytes_estimate = bytes_total
             except Exception as exc:  # noqa: BLE001 - probe is best-effort
+                _record_columnar_fallback("partitions", "query_error")
                 logger.warning(
                     "ClickHouse count failed for org=%s table=%s: %s; "
                     "falling back to Postgres",

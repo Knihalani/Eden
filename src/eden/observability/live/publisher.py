@@ -102,12 +102,16 @@ class LiveTracePublisher:
                     "skipped": "no_subscribers",
                 }
 
-            cap = await self._enforce_session_cap(redis, org_id, session_id)
-            if cap is not None:
-                return cap
-            rate = await self._enforce_rate(redis, org_id, session_id)
-            if rate is not None:
-                return rate
+            # ``force=True`` is the close path (``trace_finalized``): the
+            # UI depends on that event to leave "in progress". Cap/rate
+            # gates still apply to ordinary span updates.
+            if not force:
+                cap = await self._enforce_session_cap(redis, org_id, session_id)
+                if cap is not None:
+                    return cap
+                rate = await self._enforce_rate(redis, org_id, session_id)
+                if rate is not None:
+                    return rate
 
             event_id = int(await redis.incr(seq_key(org_id, session_id)))
             payload["event_id"] = event_id

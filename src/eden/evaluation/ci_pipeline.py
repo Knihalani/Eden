@@ -28,9 +28,9 @@ from eden.evaluation.golden_dataset import DatasetRegistry, load_canonical_datas
 # import is made lazy so this module imports cleanly even when the
 # engine is absent.
 try:
-    from eden.benchmark_engine import BenchmarkEngine  # type: ignore
+    from eden.benchmark_engine import BenchmarkEngine
 except ImportError:  # noqa: BLE001
-    BenchmarkEngine = None  # type: ignore[assignment,misc]
+    BenchmarkEngine = None
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ class CIPipeline:
         # BenchmarkEngine was part of the retired env-gen stack; tolerate
         # absence by defaulting to None and letting the benchmark stage
         # short-circuit at run-time.
-        self._benchmark_engine = benchmark_engine or BenchmarkEngine  # type: ignore[assignment]
+        self._benchmark_engine = benchmark_engine or BenchmarkEngine
         self._dataset_registry = dataset_registry or load_canonical_datasets()
         self._work_dir = work_dir or Path("./.eden/ci")
         self._work_dir.mkdir(parents=True, exist_ok=True)

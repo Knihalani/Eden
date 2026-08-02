@@ -226,19 +226,19 @@ def krippendorffs_alpha(
                     disagree += 1
     if pairs == 0:
         return None
-    D_o = disagree / pairs
+    d_o = disagree / pairs
     # Expected disagreement (marginal distribution).
     # Sum over all pairs of (count_l / N) * ((N - count_l) / N)
     # = (N - sum(count_l^2 / N)) / (N - 1)
     sum_sq = sum(c * c for c in counts.values())
-    D_e = (n_labels - sum_sq / n_labels) / (n_labels - 1) if n_labels > 1 else 0.0
-    if D_e == 0:
+    d_e = (n_labels - sum_sq / n_labels) / (n_labels - 1) if n_labels > 1 else 0.0
+    if d_e == 0:
         # No expected disagreement means every label is
         # the same — perfect agreement → alpha = 1.0.
-        if D_o == 0:
+        if d_o == 0:
             return 1.0
         return None
-    return 1.0 - (D_o / D_e)
+    return 1.0 - (d_o / d_e)
 
 
 def agreement_rate(labels_a: list[Any], labels_b: list[Any]) -> float:

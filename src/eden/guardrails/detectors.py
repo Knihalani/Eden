@@ -433,10 +433,7 @@ class HallucinationBlocker:
         if overlap < 0.2:
             verdict = action
         elif overlap < 0.4:
-            if ACTION_RANK.get(action, 0) <= ACTION_RANK.get("warn", 1):
-                verdict = action
-            else:
-                verdict = "warn"
+            verdict = action if ACTION_RANK.get(action, 0) <= ACTION_RANK.get("warn", 1) else "warn"
         else:
             verdict = "allow"
 

@@ -53,6 +53,7 @@ state between runs.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -338,6 +339,10 @@ def _reduce_recommended(checks: list[str | None]) -> str:
 
 _KILL_CACHE_TTL = 60.0
 _KILL_CACHE_MAX_ENTRIES = 10_240  # ~1000 tenants × 10 action classes
+# Hard cap on the kill-switch DB read. Generous relative to the 5 ms
+# hot-path budget — it exists to catch a wedged substrate, not to
+# police ordinary latency.
+_KILL_SWITCH_FETCH_TIMEOUT_S = 2.0
 
 
 class _LRUKillCache:
@@ -449,10 +454,17 @@ async def _get_kill_switch(org_id: str, action_class: str) -> bool | None:
 
     # Cache miss — fetch from the DB. ``fetch_tenant_action_config``
     # is module-scoped; the import was hoisted at module load.
+    # The wait_for cap is load-bearing: this is the hot path (p99 < 5 ms
+    # contract), and a wedged substrate — e.g. a connection pool bound
+    # to a stopped event loop — must degrade to the per-action default,
+    # never block the caller.
     state: bool | None = None
     if fetch_tenant_action_config is not None:
         try:
-            state = await fetch_tenant_action_config(org_id, action_class)
+            state = await asyncio.wait_for(
+                fetch_tenant_action_config(org_id, action_class),
+                timeout=_KILL_SWITCH_FETCH_TIMEOUT_S,
+            )
         except Exception as exc:
             logger.debug("trace_quality.hooks: kill-switch fetch failed: %s", exc)
             state = None
@@ -520,16 +532,12 @@ class _ActionQueue:
             # Drop oldest to make room — preserves the most recent
             # audit signal (operators investigating "what just
             # happened" care more about recency than completeness).
-            try:
+            with contextlib.suppress(IndexError):
                 self._buf.popleft()
-            except IndexError:
-                pass
         self._buf.append(row)
-        try:
-            _ACTION_WAKEUP.set()
-        except NameError:
-            # Module still importing; wakeup is wired below.
-            pass
+        # Module still importing; wakeup is wired below.
+        with contextlib.suppress(NameError):
+            _wakeup_event().set()
         return True
 
     def drain(self, max_rows: int) -> list[tuple[Any, ...]]:
@@ -559,7 +567,30 @@ _ACTION_FIELD_PAYLOAD = 9
 
 
 _ACTION_QUEUE = _ActionQueue()
-_ACTION_WAKEUP = asyncio.Event()
+# The wakeup Event binds to the first loop that awaits it, so a
+# module-level instance wedges any caller that rotates event loops
+# (pytest function-scoped loops, ``asyncio.new_event_loop()`` per
+# case): the drain task on loop B waits on an Event bound to dead
+# loop A and never wakes. Keep one Event per running loop instead.
+_ACTION_WAKEUP: asyncio.Event | None = None
+_ACTION_WAKEUP_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _wakeup_event() -> asyncio.Event:
+    """Return the wakeup Event for the current running loop."""
+    global _ACTION_WAKEUP, _ACTION_WAKEUP_LOOP
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if (
+        _ACTION_WAKEUP is None
+        or _ACTION_WAKEUP_LOOP is not loop
+        or (loop is not None and loop.is_closed())
+    ):
+        _ACTION_WAKEUP = asyncio.Event()
+        _ACTION_WAKEUP_LOOP = loop
+    return _ACTION_WAKEUP
 
 
 def _maybe_warm_drain() -> None:
@@ -636,10 +667,8 @@ def _schedule_drain_start() -> None:
     # Optimistically reserve the slot with a sentinel so the
     # next call doesn't re-schedule. The actual task replaces
     # this when ``_start_drain`` runs.
-    try:
+    with contextlib.suppress(Exception):
         loop.call_soon(_ensure_drain_task)
-    except Exception:
-        pass
 
 
 def _ensure_drain_task() -> None:
@@ -708,18 +737,16 @@ async def _drain_loop() -> None:
     """
     while True:
         try:
-            await _ACTION_WAKEUP.wait()
-            _ACTION_WAKEUP.clear()
+            await _wakeup_event().wait()
+            _wakeup_event().clear()
             while len(_ACTION_QUEUE) > 0:
                 await _flush_once()
                 # Tiny yield so a wedged flush cannot starve the loop.
                 await asyncio.sleep(0)
         except asyncio.CancelledError:
             # Graceful shutdown — one last flush, then exit.
-            try:
+            with contextlib.suppress(Exception):
                 await _flush_once()
-            except Exception:
-                pass
             raise
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug("trace_quality.hooks: drain error: %s", exc)
@@ -737,7 +764,12 @@ async def _flush_once() -> int:
     if not rows:
         return 0
     if _get_pg is None:
-        # Storage layer missing — drop the rows to bound memory.
+        # Storage layer missing — put the rows back. The queue is already
+        # bounded (``_ACTION_QUEUE_MAX``); silently discarding here made
+        # whether a Postgres outage lost up to ``_ACTION_QUEUE_BATCH`` rows
+        # depend on *how* Postgres was unavailable.
+        for r in reversed(rows):
+            _ACTION_QUEUE.push(r)
         return 0
     try:
         client = await _get_pg()
@@ -750,6 +782,8 @@ async def _flush_once() -> int:
         logger.debug("trace_quality.hooks: flush skipped: %s", exc)
         return 0
     if client is None:
+        for r in reversed(rows):
+            _ACTION_QUEUE.push(r)
         return 0
     try:
         # Build the parameterised executemany. ``json.dumps`` is
@@ -805,11 +839,17 @@ async def shutdown_trace_quality() -> None:
     _drain_task = None
     if task is None or task.done():
         return
-    task.cancel()
     try:
+        loop = task.get_loop()
+    except Exception:
+        loop = None
+    if loop is None or not loop.is_running() or loop.is_closed():
+        # The owning loop can never observe the cancellation — abandon
+        # the task rather than awaiting it forever.
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
         await task
-    except (asyncio.CancelledError, Exception):
-        pass
 
 
 def reset_for_tests() -> None:
@@ -818,11 +858,22 @@ def reset_for_tests() -> None:
     Test-only helper. Production code uses ``shutdown_trace_quality``
     instead (which awaits the final flush).
     """
-    global _drain_task
+    global _drain_task, _ACTION_WAKEUP, _ACTION_WAKEUP_LOOP
     task = _drain_task
     _drain_task = None
     if task is not None and not task.done():
-        task.cancel()
+        # Cancelling a task bound to a stopped loop queues a callback
+        # that never runs (the task leaks and keeps its pool connection);
+        # on a closed loop ``cancel()`` raises RuntimeError outright.
+        # Only cancel when the owning loop can actually observe it.
+        try:
+            loop = task.get_loop()
+        except Exception:
+            loop = None
+        if loop is not None and loop.is_running() and not loop.is_closed():
+            task.cancel()
+    _ACTION_WAKEUP = None
+    _ACTION_WAKEUP_LOOP = None
     _KILL_CACHE.clear()
     while len(_ACTION_QUEUE) > 0:
         _ACTION_QUEUE.drain(_ACTION_QUEUE_MAX)
@@ -909,7 +960,7 @@ async def evaluate_trajectory_step(
         reason[:512],
         [c or "" for c in checks],
     ))
-    _ACTION_WAKEUP.set()
+    _wakeup_event().set()
     _maybe_warm_drain()
 
     elapsed_s = time.perf_counter() - t0

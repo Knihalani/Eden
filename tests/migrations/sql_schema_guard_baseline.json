@@ -75,13 +75,13 @@
     },
     {
       "file": "src/eden/dsl/_common.py",
-      "line": 414,
+      "line": 412,
       "table": "telemetry_events",
       "column": "org_id"
     },
     {
       "file": "src/eden/dsl/_common.py",
-      "line": 430,
+      "line": 428,
       "table": "telemetry_events",
       "column": "org_id"
     },

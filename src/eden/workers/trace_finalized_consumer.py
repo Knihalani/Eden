@@ -381,7 +381,7 @@ class TraceFinalizedConsumer:
                     sorted(report.descriptor_ids),
                     report.latency_ms,
                 )
-                _LAYER_A_STUMBLE_KINDS = {
+                _layer_a_stumble_kinds = {
                     "tool_error": "tool_error",
                     "looping": "loop",
                     "confusion_loop": "loop",
@@ -393,7 +393,7 @@ class TraceFinalizedConsumer:
                 }
                 writer = StumbleWriter()
                 for desc in report.descriptors:
-                    kind = _LAYER_A_STUMBLE_KINDS.get(desc.descriptor_id)
+                    kind = _layer_a_stumble_kinds.get(desc.descriptor_id)
                     if not kind:
                         continue
                     try:

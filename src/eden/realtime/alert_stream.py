@@ -84,9 +84,12 @@ class AlertRule:
             value = context.get(self.metric_name)
             if value is None:
                 value = event.get("payload", {}).get(self.metric_name)
-            if value is not None and isinstance(value, (int, float)):
-                if value < self.metric_threshold:
-                    return False
+            if (
+                value is not None
+                and isinstance(value, (int, float))
+                and value < self.metric_threshold
+            ):
+                return False
 
         return True
 

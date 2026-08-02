@@ -30,6 +30,7 @@ import asyncio
 import os
 import sys
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -141,9 +142,9 @@ def _make_score_row(
         "score": float(score),
         "rationale": rationale,
         "model": "anthropic/claude-sonnet-4.6",
-        "scored_at": MagicMock(
-            isoformat=lambda: "2026-06-08T10:00:00+00:00"
-        ),
+        # Real datetime — asyncpg returns ``datetime`` for timestamptz,
+        # and the loop's keyset cursor parses/compares it directly.
+        "scored_at": datetime(2026, 6, 8, 10, 0, 0, tzinfo=timezone.utc),
         "latency_ms": 120.0,
         "tenant_id": tenant_id,
     }

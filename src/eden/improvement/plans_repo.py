@@ -43,6 +43,8 @@ def _row(row: Any) -> dict[str, Any]:
     d["id"] = str(d["id"])
     if d.get("run_id"):
         d["run_id"] = str(d["run_id"])
+    if d.get("parent_plan_id"):
+        d["parent_plan_id"] = str(d["parent_plan_id"])
     return d
 
 
@@ -63,6 +65,7 @@ async def create_plan(
     estimated_blast_radius: str | None = None,
     llm_cost_usd: float = 0.0,
     status: str = "draft",
+    parent_plan_id: str | None = None,
 ) -> dict[str, Any] | None:
     plan_id = str(uuid.uuid4())
     client = await get_postgres_client()
@@ -75,12 +78,12 @@ async def create_plan(
                 id, org_id, run_id, agent_id, plan_kind, status, title,
                 summary, source_ref, source_fingerprint, diff_unified,
                 files_changed, evidence, triage_snapshot,
-                estimated_blast_radius, llm_cost_usd
+                estimated_blast_radius, llm_cost_usd, parent_plan_id
             ) VALUES (
                 $1::uuid, $2, $3::uuid, $4, $5, $6, $7,
                 $8, $9, $10, $11,
                 $12::jsonb, $13::jsonb, $14::jsonb,
-                $15, $16
+                $15, $16, $17::uuid
             )
             """,
             plan_id,
@@ -99,6 +102,7 @@ async def create_plan(
             json.dumps(triage_snapshot) if triage_snapshot else None,
             estimated_blast_radius,
             llm_cost_usd,
+            parent_plan_id,
         )
     except Exception:
         return None

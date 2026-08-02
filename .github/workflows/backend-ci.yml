@@ -119,9 +119,13 @@ jobs:
       - name: ruff (style — informational)
         run: uv run ruff check src/ || true
 
-      - run: uv run mypy src/ || true
-        # mypy is informational only — flip to non-zero exit once the
-        # cleanup pass tracked in eden-audit-phase8 lands.
+      # Ratchet: mypy runs against a per-file baseline
+      # (tests/baselines/mypy.json). Any file that gains errors — or any
+      # previously-clean file that starts erroring — fails the build.
+      # Counts may only go down; regenerate deliberately with
+      # `uv run mypy src/eden | python scripts/mypy_ratchet.py --update`.
+      - name: mypy (ratchet — blocking)
+        run: uv run mypy src/eden | uv run python scripts/mypy_ratchet.py
 
       # Settings read by the code but never defined on Settings.
       # model_config sets extra="ignore", so `getattr(settings, "flag",
@@ -181,13 +185,16 @@ jobs:
         with:
           version: "latest"
       - run: uv sync --frozen --all-extras
+      # Backend tests import the Python SDK (e.g.
+      # tests/unit/observability/test_ingest_decoder_health.py); uv sync
+      # prunes anything not in uv.lock, so install it editable per job.
+      - run: uv pip install -e sdk/python
       - name: Apply migrations
         run: uv run alembic upgrade head
       - name: Run tests
         run: >-
           uv run pytest -q --tb=short --maxfail=15
           --ignore=tests/e2e
-          --ignore=supplementaries/phase_4_guardrails
           --cov=eden
           --cov-report=term-missing:skip-covered
           --cov-fail-under=55

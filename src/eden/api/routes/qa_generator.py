@@ -24,10 +24,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
     require_org_member,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.data_platform.qa_generator import (
     ALL_QA_TYPES,
@@ -38,28 +37,16 @@ from eden.data_platform.qa_generator import (
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/synthetic",
     tags=["synthetic"],
     dependencies=[
         Depends(require_org_member),
-        Depends(_require_path_org),
+        Depends(require_path_org_access),
     ],
 )
 
-
 # ── Schemas ───────────────────────────────────────────────────────
-
 
 class GenerateRequest(BaseModel):
     text: str = Field(
@@ -94,7 +81,6 @@ class GenerateRequest(BaseModel):
     )
     tags: list[str] = Field(default_factory=list)
 
-
 class QAResponse(BaseModel):
     """One synthetic Q/A triple."""
     id: str
@@ -110,7 +96,6 @@ class QAResponse(BaseModel):
     metadata: dict[str, Any]
     created_at: str
 
-
 class GenerateResponse(BaseModel):
     run_id: str
     qa_type: str
@@ -118,18 +103,12 @@ class GenerateResponse(BaseModel):
     triple_count: int
     triples: list[QAResponse]
 
-
 # ── Helpers ───────────────────────────────────────────────────────
-
-
-
 
 def _qa_to_response(qa: SyntheticQA) -> QAResponse:
     return QAResponse(**qa.to_dict())
 
-
 # ── Routes ────────────────────────────────────────────────────────
-
 
 @router.post(
     "/generate",
@@ -138,7 +117,7 @@ def _qa_to_response(qa: SyntheticQA) -> QAResponse:
 )
 async def generate_qa(
     body: GenerateRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> GenerateResponse:
     """Run the generator and return the batch of triples.
@@ -186,30 +165,27 @@ async def generate_qa(
         triples=[_qa_to_response(t) for t in triples],
     )
 
-
 # ── Run history (Phase J.5 follow-up) ──────────────────────────────────────
 # Persistence of past generation runs is deferred. For now the
 # endpoints return an empty list / 404 so the portal renders
 # the page cleanly instead of bouncing a 501 on every load.
-
 
 @router.get(
     "/runs",
     summary="List past Q/A generation runs (Phase J.5 follow-up)",
 )
 async def list_runs(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     return {"runs": [], "total": 0, "detail": "run history ships in Phase J.5"}
-
 
 @router.get(
     "/runs/{run_id}",
     summary="Fetch a Q/A generation run (Phase J.5 follow-up)",
 )
 async def get_run(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     run_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:

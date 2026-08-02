@@ -44,6 +44,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from eden.util.atomic_io import atomic_write_lines
+
 from ..providers.repo import FileEntry, RepoProvider
 
 logger = logging.getLogger(__name__)
@@ -760,11 +762,9 @@ class PRSuggester:
                 json.dumps(_suggestion_to_dict(suggestion))
                 + "\n"
             )
-        try:
-            with open(self._store_path, "w", encoding="utf-8") as fh:
-                fh.writelines(out)
-        except Exception as exc:
-            logger.debug("PRSuggester._replace_suggestion write: %s", exc)
+        # Atomic replace — never truncate-in-place. Failures propagate
+        # so callers do not treat a lost write as success.
+        atomic_write_lines(self._store_path, out)
 
     # ── Internal helpers ───────────────────────────────────
 
@@ -1118,11 +1118,9 @@ class PRSuggester:
                 out_lines.append(line)
         if found is None:
             return None
-        try:
-            with open(self._store_path, "w", encoding="utf-8") as fh:
-                fh.writelines(out_lines)
-        except Exception as exc:
-            logger.debug("PRSuggester._update_suggestion write: %s", exc)
+        # Atomic replace — never truncate-in-place. Failures propagate
+        # so mark_opened / mark_status do not desync Postgres.
+        atomic_write_lines(self._store_path, out_lines)
         return found
 
 

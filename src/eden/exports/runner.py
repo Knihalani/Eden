@@ -94,8 +94,8 @@ def _serialise(rows: list[dict], format: str) -> bytes:
 
     if format == "parquet":
         try:
-            import pyarrow as pa  # type: ignore
-            import pyarrow.parquet as pq  # type: ignore
+            import pyarrow as pa
+            import pyarrow.parquet as pq
 
             table = pa.Table.from_pylist(rows) if rows else pa.table({})
             sink = io.BytesIO()
@@ -128,7 +128,7 @@ def _push_to_destination(
 
     if destination_type == "s3":
         try:
-            import boto3  # type: ignore
+            import boto3
 
             creds = (config or {}).get("credentials", {})
             s3 = boto3.client(
@@ -150,7 +150,7 @@ def _push_to_destination(
 
     if destination_type == "gcs":
         try:
-            from google.cloud import storage  # type: ignore
+            from google.cloud import storage
 
             creds = (config or {}).get("credentials", {})
             client = storage.Client.from_service_account_info(creds)

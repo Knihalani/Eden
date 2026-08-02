@@ -2,38 +2,38 @@
  * U20 portal polish — shared constants for a11y CI, microcopy, and toast audit.
  */
 
-/** Core routes that must pass axe with zero critical violations (U20 §4 + W12 + W6). */
+/** Live portal routes that must pass axe with zero critical violations.
+ * 2026-08-01: pruned to routes that actually exist — retired surfaces
+ * (/dashboard, /artifacts, /playgrounds, /ledger, /optimization) soft-land
+ * and auditing them measured the redirect target. Keep in sync with
+ * scripts/audit-a11y.cjs ROUTES. */
 export const U20_CORE_AXE_ROUTES = [
-  "/dashboard",
+  "/home",
   "/traces",
   "/issues",
-  "/artifacts",
-  "/playgrounds",
+  "/sessions",
   "/evals",
   "/improve",
   "/alerts",
   "/agents",
+  "/compare",
+  "/cost",
+  "/gateway",
+  "/signals",
+  "/prompts",
+  "/guardrails",
   "/settings",
 ] as const;
 
-/** Routes where Wave 5 / 6 / 8 also fails the gate on axe `serious`. */
-export const U20_SERIOUS_AXE_ROUTES = ["/traces", "/improve", "/evals", "/issues"] as const;
-
-/**
- * Improve V3 Wave 10 — Improve-group routes that must pass axe serious=0
- * when authenticated audit runs. Keep in sync with scripts/audit-a11y.cjs.
- */
-export const IMPROVE_V3_AXE_ROUTES = [
+/** Routes where the gate also fails on axe `serious`. */
+export const U20_SERIOUS_AXE_ROUTES = [
+  "/traces",
   "/improve",
-  "/artifacts",
-  "/ledger",
+  "/evals",
+  "/issues",
   "/prompts",
   "/guardrails",
-  "/optimization",
 ] as const;
-
-/** Serious-impact gate for Improve V3 Wave 10 (superset of /improve + satellites). */
-export const IMPROVE_V3_SERIOUS_AXE_ROUTES = IMPROVE_V3_AXE_ROUTES;
 
 /** Gap 4.8 empty-state voice — precise, technical, calm (no exclamation marks). */
 export const U20_EMPTY_COPY = {

@@ -69,6 +69,14 @@ def evaluate_late_span(event: Any) -> str:
         return "ok"
 
     _late_stats["rejected_late"] += 1.0
+    try:
+        from eden.observability.drop_metrics import record_drop
+
+        # Late-span hard rejects are an ingest admission decision; the
+        # closest closed-vocabulary reason is quota_exceeded (age budget).
+        record_drop("ingest", "quota_exceeded")
+    except Exception:
+        pass
     logger.debug(
         "late_span reject event_id=%s age_s=%.1f max=%.1f",
         getattr(event, "event_id", "?"),

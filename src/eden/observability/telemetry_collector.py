@@ -28,7 +28,7 @@ from eden.observability.bounded_expiry_cache import (
     resolve_max_entries,
 )
 from eden.observability.drop_metrics import record_drop
-from eden.observability.errors import IngestionUnavailable
+from eden.observability.errors import IngestionUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -603,7 +603,7 @@ class TelemetryCollector:
             # pins one pooled connection per request and asyncpg permits one
             # operation in flight per connection, so N concurrent INSERTs on
             # the pinned connection collided — 9 of 10 raising
-            # ``InterfaceError``, each wrapped as ``IngestionUnavailable``,
+            # ``InterfaceError``, each wrapped as ``IngestionUnavailableError``,
             # which 503'd the whole batch. (``RequestConnLease.use`` now
             # serialises that, so the collision is fixed either way; batching
             # means there is nothing left to serialise.) Performance:
@@ -613,7 +613,7 @@ class TelemetryCollector:
             #
             # Raised, not gathered: a single statement in a single transaction
             # either lands or does not, and "it did not" means nothing in this
-            # batch is stored. That is precisely ``IngestionUnavailable``, and
+            # batch is stored. That is precisely ``IngestionUnavailableError``, and
             # the handler below already releases every dedup reservation for
             # it so the SDK's retry is not rejected as duplicate.
             try:
@@ -633,12 +633,12 @@ class TelemetryCollector:
             )
             failures = [r for r in results if isinstance(r, BaseException)]
 
-            # ``IngestionUnavailable`` is not a per-event failure — it means the
+            # ``IngestionUnavailableError`` is not a per-event failure — it means the
             # store is down, so nothing in this batch landed. It must still
             # propagate: the caller turns it into a 503 and the SDK retries.
             # Swallowing it would silently discard the batch while telling the
             # client it succeeded.
-            unavailable = next((f for f in failures if isinstance(f, IngestionUnavailable)), None)
+            unavailable = next((f for f in failures if isinstance(f, IngestionUnavailableError)), None)
             if unavailable is not None:
                 # Nothing in this batch landed, so every reservation must go —
                 # otherwise the SDK's retry is rejected wholesale and the entire
@@ -716,7 +716,7 @@ class TelemetryCollector:
         # the SDK's auto-instrumentation emits AND any of the
         # server-side decoder normalizations (openai.chat_completion,
         # anthropic.message, bedrock.invoke_model, …).
-        BILLABLE_EVENT_TYPES = frozenset(
+        billable_event_types = frozenset(
             {
                 "llm.completion",
                 "llm_completion",
@@ -733,7 +733,7 @@ class TelemetryCollector:
 
         pending: list[Any] = []
         for event in events:
-            if event.event_type not in BILLABLE_EVENT_TYPES:
+            if event.event_type not in billable_event_types:
                 continue
             metrics = event.metrics or {}
             input_tokens = float(metrics.get("input_tokens") or 0)
@@ -936,6 +936,10 @@ class TelemetryCollector:
         self._stamp_cost_usd(event)
 
         # Ingestion latency
+        self._compute_ingest_latency(event)
+
+    def _compute_ingest_latency(self, event: TelemetryEvent) -> None:
+        """Stamp ``_ingest_latency_ms``; log (don't fail) on bad timestamps."""
         try:
             event_ts = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
             ingest_latency_ms = (datetime.now(UTC) - event_ts).total_seconds() * 1000
@@ -1084,7 +1088,7 @@ class TelemetryCollector:
         of every sink's hot path (PG insert alone can be 10-50ms).
         Using ``asyncio.gather`` with ``return_exceptions=True`` keeps
         fail-soft semantics for secondary sinks, but Postgres is the
-        durable store: ``IngestionUnavailable`` must surface so the
+        durable store: ``IngestionUnavailableError`` must surface so the
         route can return 503 and the SDK can retry.
         """
         sinks = [
@@ -1097,10 +1101,10 @@ class TelemetryCollector:
         if not skip_postgres:
             sinks.append(self._route_postgres(event))
         results = await asyncio.gather(*sinks, return_exceptions=True)
-        from eden.observability.errors import IngestionUnavailable
+        from eden.observability.errors import IngestionUnavailableError
 
         for result in results:
-            if isinstance(result, IngestionUnavailable):
+            if isinstance(result, IngestionUnavailableError):
                 raise result
 
     async def _route_redis(self, event: TelemetryEvent) -> None:
@@ -1193,7 +1197,7 @@ class TelemetryCollector:
             logger.debug(f"telemetry: trace.finalized emit failed: {exc}")
 
     async def _require_postgres(self) -> Any:
-        """The Postgres client, or ``IngestionUnavailable`` if there is none.
+        """The Postgres client, or ``IngestionUnavailableError`` if there is none.
 
         Postgres is the durable store, so its absence is not a per-event
         failure — the caller turns this into a 503 so the SDK retries rather
@@ -1201,12 +1205,12 @@ class TelemetryCollector:
         """
         client = await self._get_postgres()
         if not client:
-            from eden.observability.errors import IngestionUnavailable
+            from eden.observability.errors import IngestionUnavailableError
 
             logger.warning(
-                "Postgres unavailable for telemetry; raising IngestionUnavailable",
+                "Postgres unavailable for telemetry; raising IngestionUnavailableError",
             )
-            raise IngestionUnavailable(
+            raise IngestionUnavailableError(
                 "Ingestion temporarily unavailable; Postgres unavailable, retry after backoff",
             )
         return client
@@ -1360,12 +1364,12 @@ class TelemetryCollector:
             row = await self._prepare_postgres_row(event)
             await client.execute(TELEMETRY_INSERT_SQL, *row)
         except Exception as exc:
-            from eden.observability.errors import IngestionUnavailable
+            from eden.observability.errors import IngestionUnavailableError
 
-            if isinstance(exc, IngestionUnavailable):
+            if isinstance(exc, IngestionUnavailableError):
                 raise
             logger.warning(f"Postgres telemetry insert failed: {exc}")
-            raise IngestionUnavailable(
+            raise IngestionUnavailableError(
                 "Ingestion temporarily unavailable; Postgres write failed, retry after backoff",
             ) from exc
 
@@ -1392,7 +1396,7 @@ class TelemetryCollector:
         Failure is all-or-nothing, which is a deliberate change from the
         per-event fate the fan-out had: one statement in one transaction either
         lands or does not. ``ingest_batch`` already handles exactly this case —
-        its ``IngestionUnavailable`` branch releases every dedup reservation in
+        its ``IngestionUnavailableError`` branch releases every dedup reservation in
         the batch — and ``ON CONFLICT ... DO NOTHING`` keeps the retry safe.
         """
         if not events:
@@ -1402,16 +1406,16 @@ class TelemetryCollector:
             rows = await asyncio.gather(*(self._prepare_postgres_row(e) for e in events))
             await client.executemany(TELEMETRY_INSERT_SQL, rows)
         except Exception as exc:
-            from eden.observability.errors import IngestionUnavailable
+            from eden.observability.errors import IngestionUnavailableError
 
-            if isinstance(exc, IngestionUnavailable):
+            if isinstance(exc, IngestionUnavailableError):
                 raise
             logger.warning(
                 "Postgres telemetry batch insert failed (%d events): %s",
                 len(events),
                 exc,
             )
-            raise IngestionUnavailable(
+            raise IngestionUnavailableError(
                 "Ingestion temporarily unavailable; Postgres write failed, retry after backoff",
             ) from exc
 
@@ -2258,14 +2262,14 @@ class TelemetryCollector:
             # returns 503 + Retry-After. The SDK will retry the
             # buffered chunks. Silently dropping leaves the SDK
             # thinking the data was persisted.
-            from eden.observability.errors import IngestionUnavailable
+            from eden.observability.errors import IngestionUnavailableError
 
             logger.warning(
                 "record_stream_chunks: no Postgres client; "
-                "raising IngestionUnavailable for the route to map "
+                "raising IngestionUnavailableError for the route to map "
                 "to 503",
             )
-            raise IngestionUnavailable(
+            raise IngestionUnavailableError(
                 "Ingestion temporarily unavailable; Postgres unavailable, retry after backoff",
             )
 
@@ -2378,7 +2382,7 @@ class TelemetryCollector:
         except Exception as exc:
             # Check whether the underlying error is a Postgres
             # connection / availability problem. If yes, re-raise as
-            # ``IngestionUnavailable`` so the route returns 503 +
+            # ``IngestionUnavailableError`` so the route returns 503 +
             # ``Retry-After``. Otherwise (e.g. constraint violation,
             # type error) keep the existing behaviour of counting the
             # rows as rejected — the SDK already validated chunk
@@ -2386,7 +2390,7 @@ class TelemetryCollector:
             # drift, manual DB edits).
             import asyncpg
 
-            from eden.observability.errors import IngestionUnavailable
+            from eden.observability.errors import IngestionUnavailableError
 
             if isinstance(
                 exc,
@@ -2400,11 +2404,11 @@ class TelemetryCollector:
             ):
                 logger.warning(
                     "record_stream_chunks: DB unavailable; "
-                    "raising IngestionUnavailable for the route to "
+                    "raising IngestionUnavailableError for the route to "
                     "map to 503: %s",
                     exc,
                 )
-                raise IngestionUnavailable(
+                raise IngestionUnavailableError(
                     "Ingestion temporarily unavailable; Postgres unavailable, retry after backoff"
                 ) from exc
             # Non-connection error (constraint, type error). Treat

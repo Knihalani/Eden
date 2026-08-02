@@ -35,6 +35,12 @@ class SamplingSummaryStore:
     def record(self, summary: TraceSamplingSummary) -> None:
         if len(self._rows) >= self.max_buffered:
             self._rows.pop(0)
+            try:
+                from eden.observability.drop_metrics import record_drop
+
+                record_drop("sample", "queue_full")
+            except Exception:
+                pass
         self._rows.append(summary)
 
     def buffered(self) -> list[TraceSamplingSummary]:

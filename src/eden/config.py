@@ -380,7 +380,8 @@ def _build_settings_class():
         scheduler_tick_seconds: int = 900
 
         # Phase C — unified AI agent (Cat 14 real + global panel).
-        # The agent uses the ModelRouter T3 tier (x-ai/grok-4.5 primary).
+        # The agent uses the internal chat SSOT (all ModelRouter tiers
+        # resolve to eden.llm.models.INTERNAL_CHAT_MODEL — DeepSeek).
         # Override via AI_AGENT_T3_MODEL when set. ``max_turns`` caps the
         # ReAct loop so a runaway query can't burn an unlimited number of
         # LLM calls. The retention window controls how long persisted
@@ -747,7 +748,10 @@ def _build_settings_class():
         # actually invoke the model — ``ai_insights_enabled`` only gates
         # the route's master switch.
         ai_insights_enabled: bool = True
-        ai_insights_model: str = "claude-sonnet-4-6"
+        # Internal chat SSOT (eden.llm.models.INTERNAL_CHAT_MODEL).
+        # Was "claude-sonnet-4-6" — misleading: insights actually route
+        # through OpenRouter tiers, all of which are DeepSeek now.
+        ai_insights_model: str = "deepseek/deepseek-v4-flash-0731"
 
         # ── Rate limiting ─────────────────────────────────────────────────
         # Per-tenant sliding-window rate limiter. Defaults to 60 requests
@@ -872,6 +876,37 @@ def _build_settings_class():
         github_app_webhook_secret: str = ""
         github_app_slug: str = ""  # e.g. eden-observability
         github_app_callback_url: str = ""  # e.g. https://edenobservability.com/agents/connect
+
+        # ── Slack App (Soft Autonomy alerts) ─────────────────────────────
+        # Full Slack Bot (OAuth + chat.postMessage + Block Kit) for
+        # issue / PR / needs-approval alerts with per-agent channel
+        # routing. Mirrors the GitHub App pattern: org-level install
+        # (``org_slack_installs``) + per-agent channel binding
+        # (``agent_slack_channels``). All fields optional — when unset,
+        # the portal "Connect Slack" button degrades to hidden and the
+        # dispatcher no-ops.
+        #
+        # ``slack_bot_token`` (xoxb-) is the single-workspace fallback for
+        # early development / self-hosted single-tenant deploys; the
+        # multi-tenant path stores per-org bot tokens (encrypted) from
+        # the OAuth exchange and never reads this var.
+        slack_client_id: str = ""
+        slack_client_secret: str = ""
+        slack_signing_secret: str = ""
+        slack_callback_url: str = ""  # e.g. https://api.eden…/integrations/slack/callback
+        slack_bot_token: str = ""  # xoxb- dev/single-tenant fallback only
+        # Alert storm control, mirrors issue_alert_* for email.
+        slack_alerts_enabled: bool = True
+        slack_alert_dedup_minutes: int = 15
+        slack_alert_max_per_hour: int = 30
+
+        # ── Soft Autonomy Phase 7: nightly soft-issue novelty review ──
+        # L1 rank (hot orgs by fresh issues) → L3 DeepSeek novelty scout
+        # over a compact digest of ≤ ``soft_issue_review_traces_per_org``
+        # traces → L4 compile_signal shadow detectors. Hard caps live in
+        # eden.services.soft_issue_review; these are the operator knobs.
+        soft_issue_review_enabled: bool = True
+        soft_issue_review_traces_per_org: int = 50
 
         # ── Trace-quality / quality-pipeline activation (N14) ───────────
         # These gate the trace-quality wiring (``install_all()``) and the
@@ -1167,6 +1202,16 @@ def _build_settings_class():
         fleet_health_v1: bool = True
         compliance_pack_export_v1: bool = True
         issue_experiments_v1: bool = True
+        # In-process code evaluators use exec() without a real sandbox —
+        # keep OFF until subprocess/container isolation ships.
+        code_evaluators_exec_enabled: bool = Field(
+            default=False,
+            validation_alias=AliasChoices(
+                "code_evaluators_exec_enabled",
+                "CODE_EVALUATORS_EXEC_ENABLED",
+                "EDEN_CODE_EVALUATORS_EXEC_ENABLED",
+            ),
+        )
 
         # ── Issue alerting (F47 Wave 7) ─────────────────────────────────
         # SendKit email alert storm control (Slack removed 2026-07-23).

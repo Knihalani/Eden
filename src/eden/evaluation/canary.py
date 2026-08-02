@@ -19,6 +19,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from eden.util.stable_hash import stable_bucket
+
 logger = logging.getLogger(__name__)
 
 
@@ -426,7 +428,7 @@ class CanaryDeployment:
         """
         # Deterministic simulation based on environment_id and version
         import random
-        seed = hash(f"{environment_id}-{version}") % 10000
+        seed = stable_bucket(f"{environment_id}-{version}", 10000)
         rng = random.Random(seed)
 
         return {
@@ -501,7 +503,7 @@ class CanaryDeployment:
         In production, this would query the health endpoint.
         """
         import random
-        seed = hash(f"health-{environment_id}-{version}") % 10000
+        seed = stable_bucket(f"health-{environment_id}-{version}", 10000)
         rng = random.Random(seed)
         return rng.random() > 0.1  # 90% healthy
 
@@ -677,10 +679,9 @@ class RollbackController:
                     "threshold": threshold,
                     "window_minutes": trigger_config["window_minutes"],
                 })
-            elif threshold_pct is not None:
+            elif threshold_pct is not None and metric_value > threshold_pct / 100:
                 # Percentage-based trigger needs baseline comparison
                 # Simplified: assume baseline is implicit
-                if metric_value > threshold_pct / 100:
                     triggered.append({
                         "trigger": trigger_name,
                         "metric": trigger_config["metric"],

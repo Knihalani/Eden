@@ -476,8 +476,9 @@ def apm_depth_app() -> FastAPI:
     app.dependency_overrides[get_current_user] = _fake_user
     app.dependency_overrides[require_path_org_access] = lambda: "org_test"
     app.dependency_overrides[require_org_member] = lambda: {"sub": "test-user", "org_id": "org_test"}
-    # Router uses module-local ``_require_path_org`` (not require_path_org_access).
-    app.dependency_overrides[mod._require_path_org] = lambda: "org_test"
+    # Router gates on the shared ``require_path_org_access`` (overridden
+    # above) — the module-local ``_require_path_org`` wrapper was removed
+    # in the shared-gate consolidation.
     async def _flag_on() -> None:
         return None
     for r in mod.router.routes:

@@ -80,9 +80,8 @@ def next_run_at(expr: str, *, after: datetime | None = None) -> datetime | None:
         after = after.replace(tzinfo=UTC)
     probe = after.replace(second=0, microsecond=0)
     for _ in range(366 * 24 * 12):
-        if cron_matches(expr, probe, minute_window=60):
-            if probe > after:
-                return probe
+        if cron_matches(expr, probe, minute_window=60) and probe > after:
+            return probe
         probe += timedelta(minutes=5)
     return None
 
@@ -100,9 +99,7 @@ async def is_due(
         return False
     watermark = await runs_repo.get_watermark(org_id)
     # Suppress duplicate fire in same hour
-    if watermark and (now - watermark).total_seconds() < 3600:
-        return False
-    return True
+    return not (watermark and (now - watermark).total_seconds() < 3600)
 
 
 async def resolved_schedule(org_id: str) -> dict[str, Any]:

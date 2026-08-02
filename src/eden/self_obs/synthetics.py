@@ -53,14 +53,16 @@ async def probe_sign_in_home(org_id: str) -> dict[str, Any]:
 
         url = urljoin(base + "/", "sign-in")
         timeout = aiohttp.ClientTimeout(total=5)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, allow_redirects=True) as resp:
-                ok = resp.status < 500
-                return {
-                    "status": "ok" if ok else "fail",
-                    "http_status": resp.status,
-                    "url": url,
-                }
+        async with (
+            aiohttp.ClientSession(timeout=timeout) as session,
+            session.get(url, allow_redirects=True) as resp,
+        ):
+            ok = resp.status < 500
+            return {
+                "status": "ok" if ok else "fail",
+                "http_status": resp.status,
+                "url": url,
+            }
     except Exception as exc:
         return {"status": "degraded", "error": str(exc)}
 
@@ -128,14 +130,16 @@ async def probe_gateway_health(org_id: str) -> dict[str, Any]:
 
             url = f"{base}/ready"
             timeout = aiohttp.ClientTimeout(total=5)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as resp:
-                    return {
-                        "status": "ok" if resp.status < 500 else "fail",
-                        "http_status": resp.status,
-                        "gateway_enabled": enabled,
-                        "url": url,
-                    }
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.get(url) as resp,
+            ):
+                return {
+                    "status": "ok" if resp.status < 500 else "fail",
+                    "http_status": resp.status,
+                    "gateway_enabled": enabled,
+                    "url": url,
+                }
         return {"status": "ok", "gateway_enabled": enabled}
     except Exception as exc:
         return {"status": "fail", "error": str(exc)}

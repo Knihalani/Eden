@@ -59,7 +59,7 @@ class DecisionScorer:
 
     #: Per-judge weight in the weighted overall score. Weights
     #: sum to 1.0. Tune by overriding the class attribute in a
-    #: subclass or via env (TODO if needed).
+    #: subclass.
     WEIGHTS: dict[str, float] = {
         "action_completion": 0.4,
         "tool_selection_quality": 0.3,

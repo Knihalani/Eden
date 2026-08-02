@@ -133,8 +133,7 @@ async function exportPng(
 ) {
   if (!ref.current) return;
   const bg =
-    getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() ||
-    "#000000";
+    getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#000000";
   await downloadPng(`eden-gateway-${name}-${windowLabel}.png`, ref.current, {
     backgroundColor: bg,
   });

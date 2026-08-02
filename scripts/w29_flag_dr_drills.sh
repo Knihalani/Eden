@@ -2,7 +2,7 @@
 # Wave 29 — flag + DR drills (documented + run where possible).
 #
 # Flag drill: contract-check /admin/flags route + Settings status surface.
-# DR drill: invoke scripts/dr_drill.sh (advisory when no backup).
+# DR drill: invoke scripts/dr_drill.sh; wrapper exit follows the DR verdict.
 #
 # Usage:
 #   scripts/w29_flag_dr_drills.sh
@@ -40,7 +40,6 @@ else
 fi
 
 echo "==> DR drill"
-export DR_DRILL_ALLOW_MISSING_BACKUP="${DR_DRILL_ALLOW_MISSING_BACKUP:-1}"
 export REPORT_DIR
 set +e
 bash scripts/dr_drill.sh
@@ -53,7 +52,7 @@ if [[ -n "$DR_REPORT" ]]; then
   echo "OK: DR report at $DR_REPORT (verdict=$DR_VERDICT, exit=$DR_CODE)"
 else
   DR_VERDICT=MISSING
-  echo "WARN: no DR report produced (exit=$DR_CODE) — advisory until BACKUP_S3_BUCKET configured"
+  echo "WARN: no DR report produced (exit=$DR_CODE)"
 fi
 
 # Workflow present
@@ -72,13 +71,16 @@ out = {
   "flag_drill": {"verdict": "$FLAG_VERDICT"},
   "dr_drill": {"verdict": "$DR_VERDICT", "exit_code": $DR_CODE, "report": "$DR_REPORT"},
   "workflow_present": json.loads("$WF_JSON"),
-  "honesty": "DR is advisory in CI without BACKUP_S3_BUCKET; flag drill is contract-level unless staging URL set.",
 }
 open("$OUT", "w").write(json.dumps(out, indent=2) + "\n")
 print("Wrote", "$OUT")
 PY
 
 if [[ "$FLAG_VERDICT" != "PASS" ]]; then
+  exit 1
+fi
+if [[ "$DR_VERDICT" != "PASS" ]]; then
+  echo "FAIL: DR drill verdict=$DR_VERDICT (exit=$DR_CODE)"
   exit 1
 fi
 echo "W29 flag+DR drills: documented (flag=$FLAG_VERDICT, dr=$DR_VERDICT)"

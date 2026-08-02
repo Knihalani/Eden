@@ -206,9 +206,11 @@ class TraceReplayer:
                 tokens_used=int(re_exec_result.get("tokens_used", 0) or 0),
                 cost_usd=float(re_exec_result.get("cost_usd", 0.0) or 0.0),
             )
-            if re_exec_result.get("cannot_replay"):
-                if step_index not in cache_miss_warnings:
-                    cache_miss_warnings.append(step_index)
+            if (
+                re_exec_result.get("cannot_replay")
+                and step_index not in cache_miss_warnings
+            ):
+                cache_miss_warnings.append(step_index)
 
         duration_ms = int((time.monotonic() - t0) * 1000)
         # Determine the outcome label.

@@ -5,7 +5,7 @@ Lightweight, fire-and-forget observability for LLM applications.
 - `@trace_agent` decorator and `with eden.trace(...)` context manager
 - One-call auto-instrumentation for **OpenAI, Anthropic, Groq, Cohere, Mistral, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra** (no-op for TS-only frameworks)
 - Async, batched HTTP sender with a **5 ms p99 overhead budget** on the producer hot path
-- Zero required dependencies beyond `httpx` (zero required deps beyond)
+- Zero required dependencies beyond `httpx`
 
 ## Install
 

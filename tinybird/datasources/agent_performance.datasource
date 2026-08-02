@@ -17,7 +17,7 @@ SCHEMA >
     model LowCardinality(String) `json:$.model`,
     pipeline_stage LowCardinality(String) `json:$.pipeline_stage`,
     timestamp DateTime64(3) `json:$.timestamp`,
-    date Date `json:$.date` DEFAULT toDate(timestamp)
+    date Date DEFAULT toDate(timestamp) `json:$.date`
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"

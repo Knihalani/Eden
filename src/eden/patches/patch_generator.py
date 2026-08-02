@@ -410,7 +410,7 @@ async def _critic_review(
 
     if not try_consume_llm_call():
         return {
-            "passed": False if fail_closed else True,
+            "passed": not fail_closed,
             "reason": "llm_budget_exhausted" if fail_closed else "critic_skipped",
             "raw": "",
         }
@@ -669,7 +669,9 @@ class PatchGenerator:
         # ── Generate → critic loop (max 2 attempts) ────────────────
         diff = ""
         cost_usd = 0.0
-        model_used = "anthropic/claude-sonnet-4"
+        # Placeholder until the first routed response reports its real
+        # model id (internal chat SSOT — see eden.llm.models).
+        model_used = "deepseek/deepseek-v4-flash-0731"
         critic_verdict: dict[str, Any] | None = None
         critic_attempts = 0
         last_response_content = ""

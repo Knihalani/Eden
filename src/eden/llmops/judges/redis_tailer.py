@@ -242,7 +242,7 @@ class RedisTailer:
             for f in _LightEvent.__slots__:
                 setattr(event, f, event_dict.get(f))
 
-            judges = registry.for_event(event)  # type: ignore[arg-type]
+            judges = registry.for_event(event)
             if not judges:
                 continue
 

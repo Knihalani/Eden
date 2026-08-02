@@ -50,6 +50,7 @@ replayed output with the existing judge set).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -569,10 +570,8 @@ async def _get_parent_steps(
         for jk in ("payload", "attributes"):
             val = d.get(jk)
             if isinstance(val, str):
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     d[jk] = json.loads(val)
-                except (ValueError, TypeError):
-                    pass
         attrs = d.get("attributes") if isinstance(d.get("attributes"), dict) else {}
         payload = d.get("payload") if isinstance(d.get("payload"), dict) else {}
         response = payload.get("response") if isinstance(payload.get("response"), dict) else {}
