@@ -17,13 +17,32 @@ ORG = "00000000-0000-0000-0000-000000000001"
 USER = "00000000-0000-0000-0000-000000000002"
 
 
+def _sso_pg_with_tx_error(exc: Exception) -> MagicMock:
+    """Mock PostgresClient whose transaction() raises on enter.
+
+    create_sso_provider now writes via ``async with client.transaction()``
+    into ``sso_configurations`` + ``org_sso_settings`` (not the dead
+    ``org_sso_providers`` table).
+    """
+
+    class _FailingTx:
+        async def __aenter__(self) -> None:
+            raise exc
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    client = MagicMock()
+    client.transaction = lambda: _FailingTx()
+    return client
+
+
 @pytest.mark.asyncio
 async def test_create_sso_provider_unique_is_409():
     from eden.api.routes import sso as mod
 
-    client = MagicMock()
-    client.fetchrow = AsyncMock(
-        side_effect=Exception("duplicate key value violates unique constraint")
+    client = _sso_pg_with_tx_error(
+        Exception("duplicate key value violates unique constraint")
     )
 
     with (
@@ -45,10 +64,9 @@ async def test_create_sso_provider_unique_is_409():
 async def test_create_sso_provider_fk_is_404():
     from eden.api.routes import sso as mod
 
-    client = MagicMock()
-    client.fetchrow = AsyncMock(
-        side_effect=Exception(
-            'insert or update on table "org_sso_providers" violates foreign key constraint'
+    client = _sso_pg_with_tx_error(
+        Exception(
+            'insert or update on table "org_sso_settings" violates foreign key constraint'
         )
     )
 
@@ -71,9 +89,8 @@ async def test_create_sso_provider_fk_is_404():
 async def test_create_sso_provider_bad_uuid_is_400():
     from eden.api.routes import sso as mod
 
-    client = MagicMock()
-    client.fetchrow = AsyncMock(
-        side_effect=Exception('invalid input syntax for type uuid: "org_bad"')
+    client = _sso_pg_with_tx_error(
+        Exception('invalid input syntax for type uuid: "org_bad"')
     )
 
     with (
