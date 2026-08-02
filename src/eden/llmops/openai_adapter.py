@@ -114,12 +114,13 @@ class ChatCompletionRequest(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_max_tokens_cap(self) -> ChatCompletionRequest:
-        """C-11: reject requests that exceed the gateway token cap.
+        """C-11: default omitted max_tokens to the gateway cap, then reject over-cap.
 
-        The cap is enforced at the request boundary (here) so a
-        misconfigured caller gets a 422 instead of a successful
-        response with truncated output. ``cap == 0`` disables the
-        check (enterprise plans raise it via env).
+        When ``max_tokens`` / ``max_completion_tokens`` are omitted, set
+        ``max_tokens`` to ``gateway_max_tokens_cap`` before forwarding so
+        unbounded upstream completions cannot burn cost. Explicit values
+        above the cap still raise (422). ``cap == 0`` disables both the
+        default and the check (enterprise plans raise it via env).
         """
         # Lazy import via module so a test patch on
         # ``eden.config.get_settings`` resolves at call time.
@@ -128,6 +129,8 @@ class ChatCompletionRequest(BaseModel):
         cap = get_settings().gateway_max_tokens_cap
         if cap <= 0:
             return self
+        if self.max_tokens is None and self.max_completion_tokens is None:
+            self.max_tokens = cap
         for field_name in ("max_tokens", "max_completion_tokens"):
             value = getattr(self, field_name)
             if value is not None and value > cap:

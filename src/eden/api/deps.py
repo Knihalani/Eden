@@ -2122,12 +2122,21 @@ def require_feature_flag(flag_name: str):
 
 async def _ingestion_auth_impl(
     *,
+    request: Request | None = None,
     x_org_id: str | None,
     x_org_api_key: str | None,
     authorization: str | None,
+    bearer: HTTPAuthorizationCredentials | None = None,
     required_scopes: frozenset[str] | None,
 ) -> dict:
-    """Shared ingest/gateway auth body (not a FastAPI dependency)."""
+    """Shared ingest/gateway auth body (not a FastAPI dependency).
+
+    Accepts (in order):
+      1. ``X-Org-Api-Key`` (+ ``X-Org-Id``) — SDK / programmatic
+      2. ``Authorization: Bearer`` — Clerk session JWT (Wave 4) or
+         Eden-issued JWT
+      3. Legacy ``authorization`` cookie — Eden session JWT
+    """
     if x_org_api_key:
         if not x_org_id:
             raise HTTPException(
@@ -2144,18 +2153,29 @@ async def _ingestion_auth_impl(
             )
         return org
 
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-Org-Api-Key header or session cookie required",
-        )
+    payload: dict | None = None
 
-    payload = decode_access_token(authorization)
+    # Wave 4: accept Clerk Bearer the same way portal routes do.
+    if bearer and bearer.scheme.lower() == "bearer":
+        if request is not None:
+            clerk_payload = await verify_clerk_token_for_request(
+                request, bearer.credentials
+            )
+            if clerk_payload:
+                payload = clerk_payload
+        if payload is None:
+            # Eden-issued JWT presented as Bearer (CLI / SDK).
+            payload = decode_access_token(bearer.credentials)
+
+    if payload is None and authorization:
+        payload = decode_access_token(authorization)
+
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session cookie",
+            detail="X-Org-Api-Key, Authorization Bearer, or session cookie required",
         )
+
     org = await get_current_org(x_org_id, payload=payload)
     if not org:
         raise HTTPException(
@@ -2166,9 +2186,11 @@ async def _ingestion_auth_impl(
 
 
 async def get_ingestion_auth(
+    request: Request,
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
     authorization: str | None = Cookie(None),
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict:
     """Authenticate an ingestion / gateway request (no scope gate).
 
@@ -2176,9 +2198,11 @@ async def get_ingestion_auth(
     routes so API-key scopes are enforced.
     """
     return await _ingestion_auth_impl(
+        request=request,
         x_org_id=x_org_id,
         x_org_api_key=x_org_api_key,
         authorization=authorization,
+        bearer=bearer,
         required_scopes=None,
     )
 
@@ -2188,14 +2212,18 @@ def require_ingestion_scopes(*scopes: str):
     allowed = frozenset(scopes)
 
     async def _dep(
+        request: Request,
         x_org_id: str | None = Header(None, alias="X-Org-Id"),
         x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
         authorization: str | None = Cookie(None),
+        bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
     ) -> dict:
         return await _ingestion_auth_impl(
+            request=request,
             x_org_id=x_org_id,
             x_org_api_key=x_org_api_key,
             authorization=authorization,
+            bearer=bearer,
             required_scopes=allowed,
         )
 
@@ -2203,28 +2231,36 @@ def require_ingestion_scopes(*scopes: str):
 
 
 async def get_ingest_auth(
+    request: Request,
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
     authorization: str | None = Cookie(None),
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict:
     """Ingest-path auth requiring ``ingest:*`` family scopes on API keys."""
     return await _ingestion_auth_impl(
+        request=request,
         x_org_id=x_org_id,
         x_org_api_key=x_org_api_key,
         authorization=authorization,
+        bearer=bearer,
         required_scopes=INGEST_SCOPES,
     )
 
 
 async def get_gateway_auth(
+    request: Request,
     x_org_id: str | None = Header(None, alias="X-Org-Id"),
     x_org_api_key: str | None = Header(None, alias="X-Org-Api-Key"),
     authorization: str | None = Cookie(None),
+    bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(security)] = None,
 ) -> dict:
     """Gateway-path auth requiring ``gateway:*`` family scopes on API keys."""
     return await _ingestion_auth_impl(
+        request=request,
         x_org_id=x_org_id,
         x_org_api_key=x_org_api_key,
         authorization=authorization,
+        bearer=bearer,
         required_scopes=GATEWAY_SCOPES,
     )

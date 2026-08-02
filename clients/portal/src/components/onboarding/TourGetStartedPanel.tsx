@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 type FillState =
   | { status: "loading" }
   | { status: "ready"; apiKey: string; orgId: string }
+  | { status: "member"; orgId: string; message: string }
   | { status: "error"; message: string; orgId?: string };
 
 type MintResult = { apiKey: string; orgId: string };
@@ -153,10 +154,10 @@ export function TourGetStartedPanel() {
         if (!info.canCreateKeys) {
           if (!cancelled) {
             setFill({
-              status: "error",
-              message:
-                "You need owner or admin on this org to mint a key. Create one under Settings → API keys.",
+              status: "member",
               orgId,
+              message:
+                "Ask an admin to create an API key for this workspace, then come back here or open Traces after doctor.",
             });
           }
           return;
@@ -198,7 +199,7 @@ export function TourGetStartedPanel() {
   const creds = {
     apiKey: fill.status === "ready" ? fill.apiKey : null,
     orgId:
-      fill.status === "ready"
+      fill.status === "ready" || fill.status === "member"
         ? fill.orgId
         : fill.status === "error"
           ? fill.orgId
@@ -228,6 +229,20 @@ export function TourGetStartedPanel() {
         <p className="font-mono text-[0.6875rem] text-[var(--text-faint)]">
           Creating Quickstart key…
         </p>
+      ) : null}
+
+      {fill.status === "member" ? (
+        <div className="border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2.5 text-left">
+          <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
+            {fill.message}
+          </p>
+          <Link
+            href="/settings?mode=keys"
+            className="mt-2 inline-block font-mono text-[0.6875rem] text-[var(--accent)] hover:text-[var(--accent-hover)]"
+          >
+            Settings → API keys →
+          </Link>
+        </div>
       ) : null}
 
       {fill.status === "error" ? (
@@ -303,7 +318,9 @@ export function TourGetStartedPanel() {
           <p className="font-mono text-[0.625rem] text-[var(--text-faint)]">
             {fill.status === "ready"
               ? "Includes your key and org id — treat it as a secret."
-              : "Sign in and mint a key to have it filled in automatically."}
+              : fill.status === "member"
+                ? "Once an admin creates a key, paste it into the snippet or re-open this tour."
+                : "Sign in and mint a key to have it filled in automatically."}
           </p>
         </div>
       </div>

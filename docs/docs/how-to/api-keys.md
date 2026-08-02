@@ -40,8 +40,14 @@ Current portal scopes (used for org API surfaces that check scopes):
 
 | Scope | Purpose |
 |-------|---------|
+| `ingest:write` | Trace / event ingestion (**SDK default**) |
+| `gateway:write` | OpenAI-compatible `/gateway/v1` (**SDK default**) |
 | `references:read` / `references:write` | Code references |
 | `jobs:read` / `jobs:write` | Jobs / eval harnesses |
+
+Portal **Create API key** (and SDK quickstart mint) include `ingest:write`
+and `gateway:write` by default so doctor and the SDKs work without a second
+key edit.
 
 **Ingestion and the gateway** authenticate with a valid org API key
 (`X-Org-Api-Key` + `X-Org-Id`). Prefer selecting all scopes when creating
@@ -58,7 +64,7 @@ curl -X POST "https://api.edenobservability.com/orgs/$EDEN_ORG_ID/api-keys" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "SDK",
-    "scopes": ["references:read","references:write","jobs:read","jobs:write"]
+    "scopes": ["ingest:write","gateway:write","references:read","references:write","jobs:read","jobs:write"]
   }'
 ```
 

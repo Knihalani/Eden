@@ -32,6 +32,12 @@ class CreateDatasetRequest(BaseModel):
     source_type: str = Field(default="manual")
     source_ref: str | None = None
 
+
+class PatchDatasetRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2_000)
+
+
 class PromoteTraceRequest(BaseModel):
     trace_id: str = Field(..., min_length=1)
     dataset_id: str | None = None
@@ -99,6 +105,60 @@ async def create_dataset(
             fk_detail="Organization not found",
         )
     return _to_response(rec)
+
+
+@router.patch("/{dataset_id}", response_model=DatasetResponse)
+async def patch_dataset(
+    body: PatchDatasetRequest,
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> DatasetResponse:
+    if body.name is None and body.description is None:
+        raise HTTPException(status_code=400, detail="name or description required")
+    hub = DatasetHub()
+    try:
+        rec = await hub.update_dataset(
+            org_id,
+            dataset_id,
+            name=body.name,
+            description=body.description,
+        )
+    except Exception as exc:
+        logger.warning("patch_dataset failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="dataset update failed",
+            unique_detail="dataset name already exists",
+            uuid_detail="Invalid dataset id",
+            fk_detail="Dataset not found",
+        )
+    if rec is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    return _to_response(rec)
+
+
+@router.delete("/{dataset_id}")
+async def delete_dataset(
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, bool]:
+    hub = DatasetHub()
+    try:
+        deleted = await hub.delete_dataset(org_id, dataset_id)
+    except Exception as exc:
+        logger.warning("delete_dataset failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="dataset delete failed",
+            uuid_detail="Invalid dataset id",
+            fk_detail="Dataset not found",
+        )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    return {"deleted": True}
+
 
 @router.post("/promote-from-trace")
 async def promote_from_trace(

@@ -18,11 +18,11 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/issues":
     "Grouped agent failures and systemic incident clusters.",
   "/alerts":
-    "Soft-lands on Detectors — threshold notifications and custom signal rules.",
+    "Firing alerts live in the bell Inbox. Soft-land page — use Home or Detectors for rules.",
   "/signals":
     "Detectors: threshold notifications and custom signal rules.",
   "/analytics":
-    "Usage, tools, users, and trend insights.",
+    "Retired Analytics hub — soft-lands on Page moved. Use Gateway for spend and Home for KPIs.",
   "/evals":
     "Datasets, playground, and offline experiment results — Observe → Evaluate loop.",
   "/compare":

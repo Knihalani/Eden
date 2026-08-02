@@ -38,9 +38,12 @@ class StumbleKind(StrEnum):
 STUMBLE_KINDS: frozenset[str] = frozenset(k.value for k in StumbleKind)
 
 # F29 open/resolved/ignored/regressed + F46 orchestration states.
+# ``acknowledged`` is the portal "In progress" triage value (also mapped
+# from triaged/fix_pending/verifying/learning/regressed on read).
 ISSUE_STATUSES: frozenset[str] = frozenset(
     {
         "open",
+        "acknowledged",
         "triaged",
         "fix_pending",
         "verifying",

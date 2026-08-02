@@ -67,7 +67,7 @@ The platform ships:
   <div class="eden-card">
     <p class="eden-card__eyebrow">Evaluate</p>
     <h3>Score what shipped</h3>
-    <p>Deterministic + LLM judges, regression alerts, golden datasets, and batch replay.</p>
+    <p>Deterministic + LLM judges, regression alerts, and offline eval runs in the portal Evaluate hub.</p>
     <a href="/tutorials/judge-model-output">Judge tutorial →</a>
   </div>
 

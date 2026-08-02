@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, ChevronLeft, X } from "lucide-react";
 import {
   agentForSignal,
@@ -23,16 +24,18 @@ import {
 } from "@/lab/lab-ui";
 import { useSignalJobs } from "@/lab/signal-jobs-context";
 import { compileNaturalLanguageFallback } from "@/lab/signal-compile";
+import type { CompiledSignalDraft } from "@/lab/signal-compile";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { signalsApi } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
-import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
+import { useLabToast } from "@/lab/lab-toast";
 
 type KindFilter = "all" | SignalKind;
 type StateFilter = "all" | "on" | "off";
@@ -94,10 +97,12 @@ function SignalDetail({
   signal,
   onClose,
   onToggleEnabled,
+  toggleBusy,
 }: {
   signal: SignalFixture;
   onClose: () => void;
   onToggleEnabled: (enabled: boolean) => void;
+  toggleBusy?: boolean;
 }) {
   const agent = agentForSignal(signal);
   const issues = issuesForSignal(signal);
@@ -157,6 +162,7 @@ function SignalDetail({
               "ds-btn ds-btn-sm",
               signal.enabled ? "ds-btn-ghost" : "ds-btn-primary",
             )}
+            disabled={toggleBusy}
             onClick={() => onToggleEnabled(!signal.enabled)}
           >
             {signal.enabled ? "Off" : "On"}
@@ -405,11 +411,11 @@ export function CreateSignalDialog({
   );
 }
 
-/** Verify / edit draft before saving into the catalog. */
+/** Verify / edit draft before saving into the catalog via API. */
 function ReviewDraftPanel({
   onApprove,
 }: {
-  onApprove: (signal: SignalFixture) => void;
+  onApprove: (draft: CompiledSignalDraft, prompt: string) => Promise<void>;
 }) {
   const {
     pendingReview,
@@ -417,28 +423,28 @@ function ReviewDraftPanel({
     clearPendingReview,
     clearSignalsNavAttention,
   } = useSignalJobs();
+  const [busy, setBusy] = useState(false);
+  const { pushToast } = useLabToast();
 
   if (!pendingReview?.draft) return null;
   const job = pendingReview;
   const draft = job.draft!;
 
-  function approve() {
-    const id = `sig_${Date.now().toString(36)}`;
-    onApprove({
-      id,
-      name: draft.name,
-      description: draft.description,
-      kind: draft.kind,
-      severity: draft.severity,
-      condition: draft.condition,
-      agentId: job.agentId,
-      enabled: true,
-      hits24h: 0,
-      relatedIssueIds: [],
-      exampleTraceIds: [],
-    });
-    clearPendingReview(job.id);
-    clearSignalsNavAttention();
+  async function approve() {
+    setBusy(true);
+    try {
+      await onApprove(draft, job.prompt);
+      clearPendingReview(job.id);
+      clearSignalsNavAttention();
+    } catch (err) {
+      pushToast({
+        title: "Couldn't save detector",
+        body: err instanceof Error ? err.message : "Try again",
+        tone: "fail",
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -457,6 +463,7 @@ function ReviewDraftPanel({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
+              disabled={busy}
               onClick={() => clearPendingReview(job.id)}
             >
               Discard
@@ -464,9 +471,10 @@ function ReviewDraftPanel({
             <button
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
-              onClick={approve}
+              disabled={busy}
+              onClick={() => void approve()}
             >
-              Approve
+              {busy ? "Saving…" : "Approve"}
             </button>
           </div>
         </div>
@@ -477,6 +485,7 @@ function ReviewDraftPanel({
             <input
               className="ds-input w-full"
               value={draft.name}
+              disabled={busy}
               onChange={(e) => updatePendingDraft({ name: e.target.value })}
             />
           </label>
@@ -485,6 +494,7 @@ function ReviewDraftPanel({
             <textarea
               className="ds-input min-h-[4.5rem] w-full resize-y !h-auto py-2.5"
               value={draft.watching}
+              disabled={busy}
               onChange={(e) => updatePendingDraft({ watching: e.target.value })}
             />
           </label>
@@ -493,6 +503,7 @@ function ReviewDraftPanel({
             <select
               className="ds-input w-full"
               value={draft.kind}
+              disabled={busy}
               onChange={(e) =>
                 updatePendingDraft({ kind: e.target.value as SignalKind })
               }
@@ -509,6 +520,7 @@ function ReviewDraftPanel({
             <select
               className="ds-input w-full"
               value={draft.severity}
+              disabled={busy}
               onChange={(e) =>
                 updatePendingDraft({
                   severity: e.target.value as SignalSeverity,
@@ -533,13 +545,15 @@ function LabSignalsInner() {
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
+  const { pushToast } = useLabToast();
   const signalsQuery = useOrgQuery(
     queryKeys.portal.signals(orgId),
     orgId,
     () => portalApi.signals(orgId!),
     SHELL_QUERY,
   );
-  const liveSignals = signalsQuery.data ?? [];
+  const catalog = signalsQuery.data ?? [];
   const {
     pendingReview,
     clearSignalsNavAttention,
@@ -547,22 +561,22 @@ function LabSignalsInner() {
     jobs,
   } = useSignalJobs();
 
-  // Approved-in-session drafts (no create/patch endpoint matching this
-  // fixture shape yet) plus local overrides for the enable toggle.
-  const [localSignals, setLocalSignals] = useState<SignalFixture[]>([]);
-  const [overrides, setOverrides] = useState<Record<string, Partial<SignalFixture>>>({});
-  const catalog = useMemo(() => {
-    const merged = [...localSignals, ...liveSignals];
-    return merged.map((s) => (overrides[s.id] ? { ...s, ...overrides[s.id] } : s));
-  }, [localSignals, liveSignals, overrides]);
   const [kind, setKind] = useState<KindFilter>("all");
   const [state, setState] = useState<StateFilter>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
   const [creating, setCreating] = useState(false);
   const [createPrompt, setCreatePrompt] = useState("");
+  const [toggleBusyId, setToggleBusyId] = useState<string | null>(null);
   const createParam = searchParams.get("create");
   const promptParam = searchParams.get("prompt");
+
+  const invalidateSignals = useCallback(async () => {
+    if (!orgId) return;
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.portal.signals(orgId),
+    });
+  }, [orgId, queryClient]);
 
   useEffect(() => {
     setSelectedId(paramId);
@@ -631,14 +645,51 @@ function LabSignalsInner() {
     patchQuery({ id: null });
   }
 
-  function patchSignal(id: string, patch: Partial<SignalFixture>) {
-    setOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
-  }
+  const handleApprove = useCallback(
+    async (draft: CompiledSignalDraft, prompt: string) => {
+      if (!orgId) throw new Error("Select a workspace first.");
+      const description =
+        draft.description.trim() ||
+        draft.watching.trim() ||
+        prompt.trim();
+      if (description.length < 3) {
+        throw new Error("Description is too short.");
+      }
+      const created = await signalsApi.create(orgId, {
+        description,
+        enabled: true,
+      });
+      await invalidateSignals();
+      pushToast({ title: "Detector saved", body: draft.name, tone: "ok" });
+      setSelectedId(created.id);
+      patchQuery({ id: created.id });
+    },
+    [orgId, invalidateSignals, pushToast, patchQuery],
+  );
 
-  function handleApprove(signal: SignalFixture) {
-    setLocalSignals((prev) => [signal, ...prev]);
-    selectSignal(signal.id);
-  }
+  const handleToggleEnabled = useCallback(
+    async (signal: SignalFixture, enabled: boolean) => {
+      if (!orgId) return;
+      setToggleBusyId(signal.id);
+      try {
+        if (signal.templateId) {
+          await signalsApi.toggleLibrary(orgId, signal.templateId, enabled);
+        } else {
+          await signalsApi.toggle(orgId, signal.id, enabled);
+        }
+        await invalidateSignals();
+      } catch (err) {
+        pushToast({
+          title: enabled ? "Couldn't enable detector" : "Couldn't disable detector",
+          body: err instanceof Error ? err.message : "Try again",
+          tone: "fail",
+        });
+      } finally {
+        setToggleBusyId(null);
+      }
+    },
+    [orgId, invalidateSignals, pushToast],
+  );
 
   if (!orgId) {
     return (
@@ -694,13 +745,6 @@ function LabSignalsInner() {
           </button>
         }
       />
-
-      {(localSignals.length > 0 || Object.keys(overrides).length > 0) ? (
-        <LocalDraftBanner>
-          Detector approvals and enable toggles on this page are local drafts
-          until a create/patch API is wired — they are not saved to the server.
-        </LocalDraftBanner>
-      ) : null}
 
       {pendingReview ? <ReviewDraftPanel onApprove={handleApprove} /> : null}
 
@@ -810,7 +854,10 @@ function LabSignalsInner() {
           <SignalDetail
             signal={selected}
             onClose={clearSelection}
-            onToggleEnabled={(enabled) => patchSignal(selected.id, { enabled })}
+            toggleBusy={toggleBusyId === selected.id}
+            onToggleEnabled={(enabled) => {
+              void handleToggleEnabled(selected, enabled);
+            }}
           />
         ) : null}
       </div>
@@ -823,7 +870,8 @@ function LabSignalsInner() {
         }}
         defaultAgentId={agentId === "all" ? null : agentId}
         initialPrompt={createPrompt}
-      />    </div>
+      />
+    </div>
   );
 }
 

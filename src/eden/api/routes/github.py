@@ -830,8 +830,9 @@ async def github_webhook(request: Request) -> dict[str, str]:
     """Receive GitHub webhook events; update PR-run statuses.
 
     Verifies the X-Hub-Signature-256 header against the configured
-    GITHUB_APP_WEBHOOK_SECRET. Currently handles ``pull_request`` events
-    (closed / merged) and ``installation`` (suspended / unsuspended).
+    GITHUB_APP_WEBHOOK_SECRET. Handles ``pull_request`` events
+    (closed / merged), ``installation`` (created / deleted / suspended /
+    unsuspended). Dedupes on ``X-GitHub-Delivery`` via Redis SET NX.
     """
     secret = getattr(settings, "github_app_webhook_secret", "")
     if not secret:
@@ -840,89 +841,154 @@ async def github_webhook(request: Request) -> dict[str, str]:
     sig = request.headers.get("X-Hub-Signature-256", "")
     if not verify_webhook_signature(body=body, signature_header=sig, secret=secret):
         raise HTTPException(401, "Invalid webhook signature.")
+
+    delivery_id = request.headers.get("X-GitHub-Delivery") or ""
+    if delivery_id and not await _claim_github_delivery(delivery_id):
+        return {"status": "ok", "duplicate": "true"}
+
     event = request.headers.get("X-GitHub-Event", "")
     payload = json.loads(body) if body else {}
     pg = await get_postgres_client()
-    if event == "pull_request":
-        pr = payload.get("pull_request", {})
-        action = payload.get("action", "")
-        pr_number = pr.get("number")
-        repo_full = (payload.get("repository") or {}).get("full_name", "")
-        if not pr_number or not repo_full:
-            return {"status": "ignored"}
-        if action in ("opened", "synchronize", "reopened"):
-            await _enqueue_change_impact_preview(pg, payload, repo_full, pr)
-        if action == "closed":
-            merged = pr.get("merged", False)
-            new_status = "merged" if merged else "closed"
-            ts_col = "merged_at" if merged else "closed_at"
-            await pg.execute(
-                f"""
-                UPDATE onboarding_pr_runs
-                SET status = $1, {ts_col} = NOW()
-                WHERE repo_full_name = $2 AND pr_number = $3
-                """,
-                new_status,
-                repo_full,
-                int(pr_number),
-            )
-            await _sync_improvement_plan_on_pr_close(
-                repo_full=repo_full,
-                pr_number=int(pr_number),
-                merged=merged,
-            )
-    elif event == "installation":
-        action = payload.get("action", "")
-        installation = payload.get("installation") or {}
-        installation_id = installation.get("id")
-        if action == "created" and installation_id:
-            account = installation.get("account") or {}
-            account_login = account.get("login") or "unknown"
-            account_type = (
-                "Organization" if (account.get("type") or "").lower() == "organization" else "User"
-            )
-            target_org = await _guess_org_for_github_install(pg)
-            if target_org:
-                try:
-                    await _persist_installation_row(
-                        pg,
-                        org_id=target_org,
-                        installation_id=int(installation_id),
-                        account_login=account_login,
-                        account_type=account_type,
-                        installed_by_user_id=None,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "installation.created webhook persist failed: %s",
-                        redact_all(str(exc)),
-                    )
-            else:
-                logger.info(
-                    "installation.created id=%s account=%s — awaiting "
-                    "authenticated portal claim (no cross-tenant auto-bind)",
-                    installation_id,
-                    account_login,
+    try:
+        if event == "pull_request":
+            pr = payload.get("pull_request", {})
+            action = payload.get("action", "")
+            pr_number = pr.get("number")
+            repo_full = (payload.get("repository") or {}).get("full_name", "")
+            if not pr_number or not repo_full:
+                return {"status": "ignored"}
+            if action in ("opened", "synchronize", "reopened"):
+                await _enqueue_change_impact_preview(pg, payload, repo_full, pr)
+            if action == "closed":
+                merged = pr.get("merged", False)
+                new_status = "merged" if merged else "closed"
+                ts_col = "merged_at" if merged else "closed_at"
+                await pg.execute(
+                    f"""
+                    UPDATE onboarding_pr_runs
+                    SET status = $1, {ts_col} = NOW()
+                    WHERE repo_full_name = $2 AND pr_number = $3
+                    """,
+                    new_status,
+                    repo_full,
+                    int(pr_number),
                 )
-        elif action == "suspend" and installation_id:
-            await pg.execute(
-                """
-                UPDATE org_github_installations
-                SET suspended_at = NOW()
-                WHERE installation_id = $1
-                """,
-                int(installation_id),
+                await _sync_improvement_plan_on_pr_close(
+                    repo_full=repo_full,
+                    pr_number=int(pr_number),
+                    merged=merged,
+                )
+        elif event == "installation":
+            action = payload.get("action", "")
+            installation = payload.get("installation") or {}
+            installation_id = installation.get("id")
+            if action == "created" and installation_id:
+                account = installation.get("account") or {}
+                account_login = account.get("login") or "unknown"
+                account_type = (
+                    "Organization" if (account.get("type") or "").lower() == "organization" else "User"
+                )
+                target_org = await _guess_org_for_github_install(pg)
+                if target_org:
+                    try:
+                        await _persist_installation_row(
+                            pg,
+                            org_id=target_org,
+                            installation_id=int(installation_id),
+                            account_login=account_login,
+                            account_type=account_type,
+                            installed_by_user_id=None,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "installation.created webhook persist failed: %s",
+                            redact_all(str(exc)),
+                        )
+                else:
+                    logger.info(
+                        "installation.created id=%s account=%s — awaiting "
+                        "authenticated portal claim (no cross-tenant auto-bind)",
+                        installation_id,
+                        account_login,
+                    )
+            elif action == "deleted" and installation_id:
+                # Schema has no deleted_at — suspended_at is the inactive
+                # marker (queries filter WHERE suspended_at IS NULL).
+                await pg.execute(
+                    """
+                    UPDATE org_github_installations
+                    SET suspended_at = NOW()
+                    WHERE installation_id = $1
+                    """,
+                    int(installation_id),
+                )
+            elif action == "suspend" and installation_id:
+                await pg.execute(
+                    """
+                    UPDATE org_github_installations
+                    SET suspended_at = NOW()
+                    WHERE installation_id = $1
+                    """,
+                    int(installation_id),
+                )
+            elif action == "unsuspend" and installation_id:
+                await pg.execute(
+                    """
+                    UPDATE org_github_installations
+                    SET suspended_at = NULL
+                    WHERE installation_id = $1
+                    """,
+                    int(installation_id),
+                )
+        elif event == "installation_repositories":
+            # Repo add/remove under an existing install — no Eden table
+            # tracks the full GitHub repo list; suspend/delete of the
+            # install itself is handled on ``installation`` events.
+            action = payload.get("action", "")
+            logger.info(
+                "installation_repositories action=%s ignored (no local repo roster)",
+                action,
             )
-        elif action == "unsuspend" and installation_id:
-            await pg.execute(
-                """
-                UPDATE org_github_installations
-                SET suspended_at = NULL
-                WHERE installation_id = $1
-                """,
-                int(installation_id),
-            )
+    except Exception:
+        if delivery_id:
+            await _release_github_delivery(delivery_id)
+        raise
     return {"status": "ok"}
+
+
+_GITHUB_DELIVERY_TTL_S = 86400
+
+
+async def _claim_github_delivery(delivery_id: str) -> bool:
+    """Claim X-GitHub-Delivery. Return False if already processed."""
+    try:
+        from eden.storage.redis import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is None:
+            return True
+        was_set = await redis.set(
+            f"github:delivery:{delivery_id}",
+            "1",
+            nx=True,
+            ex=_GITHUB_DELIVERY_TTL_S,
+        )
+        return bool(was_set)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("github delivery idempotency claim failed: %s", exc)
+        return True
+
+
+async def _release_github_delivery(delivery_id: str) -> None:
+    try:
+        from eden.storage.redis import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is None:
+            return
+        await redis.delete(f"github:delivery:{delivery_id}")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("github delivery idempotency release failed: %s", exc)
 
 
 # ── Org-scoped routes ───────────────────────────────────────────────

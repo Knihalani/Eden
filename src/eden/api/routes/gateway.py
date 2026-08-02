@@ -38,13 +38,12 @@ outputs, etc.). ``X-Upstream-Api-Key`` and ``X-Org-Api-Key`` are
 explicitly stripped from the outbound request to avoid leaking
 credentials to a third-party LLM provider.
 
-Auth: ``get_ingestion_auth`` (matches SDK / ingest routes) — accepts
-either ``X-Org-Api-Key`` or a session cookie. Programmatic callers
-use the API key; portal users use the cookie. The path is
-``/gateway/v1/...`` (no ``org_id`` in the URL — the org is implied
-by the auth context, matching OpenAI's pattern). For portal traffic
-the org is taken from the cookie; for API-key traffic it's the key's
-own org.
+Auth: ``get_gateway_auth`` (matches SDK / ingest routes) — accepts
+either ``X-Org-Api-Key``, a Clerk ``Authorization: Bearer`` session
+JWT, or a legacy Eden session cookie. Programmatic callers use the
+API key; portal users use Clerk Bearer (Wave 4) or the cookie. The
+path is ``/gateway/v1/...`` (no ``org_id`` in the URL — the org is
+implied by the auth context, matching OpenAI's pattern).
 
 Risks / known limitations:
   * Embeddings support is best-effort: the upstream's
@@ -759,8 +758,23 @@ def _get_or_build_upstream_client(base_url: str, api_key: str):
         # one-off keys.
         _upstream_client_cache.move_to_end(cache_key)
         return _upstream_client_cache[cache_key]
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    # Match OpenRouterClient / EDEN_LLM_REQUEST_TIMEOUT_S (default 60s)
+    # so a hung upstream cannot pin an ASGI worker for the SDK's
+    # 600s default.
+    from eden.llm.client import _LLM_REQUEST_TIMEOUT_S
+
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=_LLM_REQUEST_TIMEOUT_S,
+        max_retries=0,
+    )
     _upstream_client_cache[cache_key] = client
+    # Wave 4 note: budget ``record_usage`` on the success path is
+    # intentionally deferred — cost already flows through the usage /
+    # quota snapshot pipeline; wiring a second write here is invasive.
+    # Free-tier ``enforcement_enabled=True`` (defaults + migration 134)
+    # is the cost-control gate for new orgs.
     # F62: enforce the cap. Evict FIFO until we're back
     # under the limit. Fresh inserts always succeed.
     while len(_upstream_client_cache) > _MAX_UPSTREAM_CLIENT_CACHE:
@@ -1713,7 +1727,18 @@ async def _chat_completions_stream(
     ``data: [DONE]`` is emitted. Telemetry is written once on
     close (best-effort) — we accumulate token counts from the
     chunks as they pass through.
+
+    Cache note (Wave 5): streaming deliberately skips the unary
+    exact-response cache used by :func:`_chat_completions_unary`.
+    A stream cannot return a cached JSON body without either buffering
+    the full completion (defeating streaming) or synthesising SSE
+    chunks from a cached unary hit. Callers that want cache hits
+    should use ``stream=false``. Future work could hash the request
+    and, on an exact-cache hit, emit the cached completion as a
+    synthetic single-chunk SSE stream.
     """
+    # Wave 5: stream path does not check exact_cache / coalesce —
+    # see docstring. Unary path owns cache lookup + write.
     if client is None:
         client = get_async_openai_client()
 

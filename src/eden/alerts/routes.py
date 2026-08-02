@@ -61,6 +61,13 @@ class OverrideRequest(BaseModel):
     verdict: str = Field(..., pattern="^(real_incident|benign|duplicate)$")
 
 
+class AcknowledgeRequest(BaseModel):
+    acknowledged: bool = Field(
+        default=True,
+        description="True = mute (acknowledged); False = unmute.",
+    )
+
+
 async def _require_org_member(
     org_id: str,
     user: dict[str, Any],
@@ -258,3 +265,59 @@ async def override_alert_verdict(
     if not feedback:
         raise HTTPException(status_code=404, detail="Alert not found")
     return {"status": "ok", **feedback}
+
+
+@router.post("/orgs/{org_id}/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert_event(
+    body: AcknowledgeRequest,
+    org_id: str = Path(...),
+    alert_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    """Mute/unmute an NL alert event via ``alert_events.acknowledged``.
+
+    Portal maps ``acknowledged=true`` → status ``muted`` (see
+    ``_alert_event_status``). When the id is not an ``alert_events``
+    row, fall through to the notifications-feed acknowledge so the
+    legacy inbox path keeps working (same URL, different id space).
+    """
+    eden_org_id = await _require_org_member(org_id, user, payload)
+    user_id = await eden_user_id_from_auth(user)
+    event = await repo.set_alert_acknowledged(
+        alert_event_id=alert_id,
+        org_id=eden_org_id,
+        acknowledged=body.acknowledged,
+    )
+    if event:
+        return {
+            "status": "ok",
+            "alert_id": alert_id,
+            "acknowledged": bool(event.get("acknowledged")),
+        }
+
+    # Legacy notifications-feed acknowledge (read_at). Only supports mute
+    # (acknowledged=true); unmute is a no-op / 404 for that store.
+    if not body.acknowledged:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    result = await client.execute(
+        """
+        UPDATE notifications
+        SET read_at = NOW()
+        WHERE id = $1
+          AND user_id = $2
+          AND org_id = $3
+          AND (data->>'is_alert')::boolean = true
+          AND read_at IS NULL
+        """,
+        alert_id,
+        user_id,
+        eden_org_id,
+    )
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"status": "ok", "alert_id": alert_id, "acknowledged": True}

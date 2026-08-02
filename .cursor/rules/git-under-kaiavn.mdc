@@ -1,0 +1,29 @@
+---
+description: Always perform git/GitHub operations for this repo under KaiavN
+alwaysApply: true
+---
+
+# Git under KaiavN
+
+For this Eden repository, **all git and GitHub work must go through `KaiavN`**.
+
+## Required
+
+- Remote must be `https://github.com/KaiavN/Eden.git` (or SSH equivalent under `KaiavN/Eden`)
+- PRs, issues, releases, and `gh` commands target the **`KaiavN/Eden`** repo
+- New branches, pushes, and remotes stay under the **KaiavN** org/account — never a personal fork or alternate owner unless the user explicitly overrides
+
+## Examples
+
+```bash
+# ✅ GOOD
+git remote -v   # origin → github.com/KaiavN/Eden.git
+gh pr create    # against KaiavN/Eden
+git push -u origin HEAD
+
+# ❌ BAD
+git remote set-url origin https://github.com/<other-user>/Eden.git
+gh pr create --repo <other-user>/Eden
+```
+
+If the remote is not under `KaiavN`, stop and fix it (or ask) before pushing or opening a PR.

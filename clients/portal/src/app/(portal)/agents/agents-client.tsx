@@ -41,6 +41,7 @@ import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY, LIVE_QUERY } from "@/lib/portal-query";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { formatRelativeTime } from "@/lib/format";
 
@@ -784,6 +785,15 @@ function LabAgentsInner() {
     .filter((c): c is number => c != null && Number.isFinite(c));
   const fleetSpend =
     knownSpend.length > 0 ? knownSpend.reduce((s, c) => s + c, 0) : null;
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Agents"
+        message="Select a workspace to view agents."
+      />
+    );
+  }
 
   if (agentsQuery.isLoading) {
     return (

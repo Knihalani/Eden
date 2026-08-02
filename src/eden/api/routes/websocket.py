@@ -37,13 +37,125 @@ _JOB_EVENT_CHANNEL_PREFIX = "eden:job:"
 # code_fragment payloads are truncated to 32 KiB on the wire (K30).
 _CODE_FRAGMENT_MAX_BYTES: int = 32 * 1024
 
-# Track active WebSocket connections per job
+# Track active WebSocket connections per job (process-local).
+# Cross-pod fanout goes through Redis ``eden:ws:fanout`` — see
+# ``broadcast_to_job_websockets`` / ``ensure_ws_fanout_listener``.
 _job_connections: dict[str, set[WebSocket]] = {}
+
+_WS_FANOUT_CHANNEL = "eden:ws:fanout"
+_ws_fanout_listener_started = False
+# Skip Redis fanout echoes that this pod already delivered locally.
+_POD_ORIGIN = f"ws-{id(_job_connections):x}"
 
 
 def job_event_channel(job_id: str) -> str:
     """Redis pub/sub channel for a job's live updates."""
     return f"{_JOB_EVENT_CHANNEL_PREFIX}{job_id}"
+
+
+async def _send_local_job_websockets(job_id: str, message: dict[str, Any]) -> None:
+    """Deliver ``message`` to WebSockets on this pod only."""
+    conns = _job_connections.get(job_id)
+    if not conns:
+        return
+    for ws in list(conns):
+        try:
+            await ws.send_json(message)
+        except Exception:
+            conns.discard(ws)
+            if not conns and job_id in _job_connections:
+                del _job_connections[job_id]
+                break
+
+
+async def broadcast_to_job_websockets(
+    job_id: str,
+    message: dict[str, Any],
+) -> None:
+    """Fan out a WS payload to every pod that has subscribers for ``job_id``.
+
+    Local sockets get the message immediately; other pods receive it via
+    Redis ``eden:ws:fanout``. Prefer this over touching ``_job_connections``
+    directly from collectors / alert paths.
+    """
+    await _send_local_job_websockets(job_id, message)
+    try:
+        redis = await get_redis_client()
+    except Exception:
+        return
+    if redis is None:
+        return
+    body = json.dumps(
+        {"job_id": job_id, "message": message, "origin": _POD_ORIGIN},
+        default=str,
+    )
+    try:
+        await redis.publish(_WS_FANOUT_CHANNEL, body)
+    except Exception as exc:
+        logger.debug(
+            "broadcast_to_job_websockets redis failed for %s: %s",
+            job_id,
+            redact_all(str(exc)),
+        )
+
+
+async def ensure_ws_fanout_listener() -> None:
+    """Start the process-wide Redis fanout subscriber (idempotent)."""
+    global _ws_fanout_listener_started
+    if _ws_fanout_listener_started:
+        return
+    _ws_fanout_listener_started = True
+
+    async def _loop() -> None:
+        while True:
+            redis = None
+            with contextlib.suppress(Exception):
+                redis = await get_redis_client()
+            if redis is None:
+                await asyncio.sleep(5.0)
+                continue
+            pubsub = redis.pubsub()
+            try:
+                await pubsub.subscribe(_WS_FANOUT_CHANNEL)
+                async for raw in pubsub.listen():
+                    if raw is None or raw.get("type") != "message":
+                        continue
+                    data = raw.get("data")
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8", errors="ignore")
+                    if not isinstance(data, str):
+                        continue
+                    try:
+                        envelope = json.loads(data)
+                    except Exception:
+                        continue
+                    if envelope.get("origin") == _POD_ORIGIN:
+                        continue
+                    job_id = str(envelope.get("job_id") or "")
+                    message = envelope.get("message")
+                    if not job_id or not isinstance(message, dict):
+                        continue
+                    if job_id not in _job_connections:
+                        continue
+                    await _send_local_job_websockets(job_id, message)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug(
+                    "ws fanout listener error: %s", redact_all(str(exc))
+                )
+                await asyncio.sleep(2.0)
+            finally:
+                with contextlib.suppress(Exception):
+                    await pubsub.unsubscribe(_WS_FANOUT_CHANNEL)
+                    await pubsub.close()
+
+    try:
+        from eden.async_tasks import bounded_create_task
+
+        bounded_create_task(_loop(), name="ws-fanout-listener")
+    except Exception:
+        asyncio.create_task(_loop())
 
 
 async def publish_job_event(

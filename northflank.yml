@@ -253,6 +253,10 @@ spec:
     # if a worker is ever brought back.
     - name: EDEN_RUN_BACKGROUND_WORKERS
       value: "1"
+    # Wave 5 cost: balanced sampling (~15% non-signal keep; errors /
+    # loops / stumbles always kept). Soft-launch used ``full`` (100%).
+    - name: EDEN_SAMPLING_PROFILE
+      value: balanced
     - name: SENTRY_ENVIRONMENT
       value: production
     - name: SENTRY_TRACES_SAMPLE_RATE
@@ -555,11 +559,22 @@ spec:
     # ── N23 recurring improvement agent (July 2026 bloat-cut ship) ──
     - name: IMPROVEMENT_AGENT_V1
       value: "true"
+    # cron_tick intentionally skips improvement sweeps (issue-driven
+    # closed loop only — see cron_tick.py ``improvement_sweeps``).
+    # Leaving this true advertised a schedule that never ran. Keep
+    # false until a worker Service hosts ``run_due_sweeps`` for real.
     - name: IMPROVEMENT_SCHEDULE_ENABLED
-      value: "true"
+      value: "false"
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)
+#
+# Fleet-on-API is intentional until this Job can be a Service: Eden's
+# Developer Sandbox only allows one always-on service, so background
+# loops live in eden-api (EDEN_RUN_BACKGROUND_WORKERS=1). Do NOT flip
+# EDEN_PRODUCTION=1 on either host without confirming ENCRYPTION_KEY
+# reaches the container — see the EDEN_PRODUCTION note on eden-api
+# (crash-looped on 2026-07-29 when set to 1 with a missing/misnamed key).
 # ─────────────────────────────────────────────────────────────────────
 ---
 apiVersion: workloads/v1

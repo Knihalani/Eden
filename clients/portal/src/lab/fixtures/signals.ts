@@ -31,6 +31,8 @@ export type SignalFixture = {
   lastHit?: string;
   relatedIssueIds: string[];
   exampleTraceIds: string[];
+  /** Library template id — when set, enable toggles use ``toggleLibrary``. */
+  templateId?: string | null;
 };
 
 export const SIGNAL_LIST: SignalFixture[] = [];

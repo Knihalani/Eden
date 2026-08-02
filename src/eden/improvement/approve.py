@@ -1,7 +1,8 @@
-"""Approve flow: N22 gate → materialize diff → draft PR → plan status (N23)."""
+"""Approve flow: N22 gate → materialize diff → static preverify → draft PR (N23)."""
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -56,6 +57,166 @@ def _pr_create_failed(info: Any) -> bool:
     return state == "failed" or number == 0 or not url
 
 
+def _files_to_static_payload(files: list[Any]) -> list[dict[str, Any]]:
+    """Normalize materialized FileEntry / dicts for static_check_files."""
+    out: list[dict[str, Any]] = []
+    for f in files:
+        if isinstance(f, dict):
+            path = str(f.get("path") or "")
+            content = str(f.get("content") or "")
+        else:
+            path = str(getattr(f, "path", "") or "")
+            content = str(getattr(f, "content", "") or "")
+        if path:
+            out.append({"path": path, "content": content})
+    return out
+
+
+async def _merge_plan_evidence(
+    org_id: str,
+    plan_id: str,
+    patch: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Merge keys into ``improvement_plans.evidence`` (jsonb ||)."""
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    if client is None:
+        return await plans_repo.get_plan(org_id, plan_id)
+    try:
+        await client.execute(
+            """
+            UPDATE improvement_plans SET
+                evidence = evidence || $3::jsonb,
+                updated_at = NOW()
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            org_id,
+            plan_id,
+            json.dumps(patch, default=str),
+        )
+    except Exception as exc:
+        logger.debug("approve: merge evidence failed: %s", exc)
+    return await plans_repo.get_plan(org_id, plan_id)
+
+
+async def regenerate_plan_diff_from_static_errors(
+    org_id: str,
+    plan: dict[str, Any],
+    *,
+    repo_provider: Any,
+    static_errors: list[dict[str, Any]],
+    linked_paths: list[str],
+) -> dict[str, Any]:
+    """Re-run PatchGenerator once with static feedback; update the plan diff.
+
+    Returns ``{status, plan, static_preverify, ...}``.
+    """
+    from eden.improvement.evidence_plane import format_static_errors_for_prompt
+    from eden.patches.patch_generator import PatchGenerator
+
+    plan_id = str(plan.get("id") or "")
+    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    feedback = format_static_errors_for_prompt(static_errors)
+    if not feedback:
+        feedback = "Static preverify failed — regenerate a syntactically valid patch."
+
+    linked_files: list[dict[str, str]] = []
+    for path in linked_paths[:8]:
+        try:
+            content = await repo_provider.read_file(path) or ""
+        except Exception:
+            content = ""
+        if content.strip():
+            linked_files.append({"path": path, "content": content})
+
+    if not linked_files:
+        return {
+            "status": "error",
+            "error": "static_regenerate_no_linked_files",
+            "message": "Cannot regenerate: no base file content available",
+        }
+
+    issue_id = str(evidence.get("issue_id") or "").strip()
+    rca_id = issue_id or f"plan:{plan_id}"
+    example_ids = list(evidence.get("example_trace_ids") or [])
+    trace_id = (
+        str(example_ids[0])
+        if example_ids
+        else f"unknown_trace:{issue_id or plan_id}"
+    )
+    repo_id = await _resolve_repo_id(
+        org_id, agent_id=(plan.get("agent_id") or "").strip() or None
+    )
+    rca_summary = (
+        str(plan.get("summary") or "")
+        or str(plan.get("title") or "")
+        or "Approve-time static preverify failed; regenerate the patch."
+    )
+
+    try:
+        result = await PatchGenerator().generate(
+            org_id=org_id,
+            rca_id=rca_id,
+            trace_id=trace_id,
+            repo_id=str(repo_id or ""),
+            rca_summary=rca_summary,
+            linked_files=linked_files,
+            test_plan=[],
+            persist=False,
+            static_feedback=feedback,
+        )
+    except Exception as exc:
+        logger.warning("approve: regenerate failed: %s", exc)
+        return {
+            "status": "error",
+            "error": "static_regenerate_failed",
+            "message": str(exc)[:400],
+        }
+
+    data = result.get("data", {}) if isinstance(result, dict) else {}
+    new_diff = str(data.get("diff") or "").strip()
+    static_preverify = data.get("static_preverify") or {}
+    if not new_diff or data.get("status") in (
+        "low_quality",
+        "deduplicated",
+        "investigation",
+    ):
+        return {
+            "status": "error",
+            "error": "static_preverify_failed",
+            "message": str(
+                data.get("reason") or "regenerate did not produce a clean diff"
+            ),
+            "static_preverify": static_preverify,
+        }
+
+    updated = await plans_repo.update_plan(
+        org_id,
+        plan_id,
+        diff_unified=new_diff,
+        diff_edited=True,
+        summary=str(data.get("explanation") or plan.get("summary") or "") or None,
+        title=str(data.get("description") or plan.get("title") or "") or None,
+    )
+    updated = await _merge_plan_evidence(
+        org_id,
+        plan_id,
+        {
+            "static_preverify": static_preverify or {"status": "passed"},
+            "approve_regenerated": True,
+            "static_preverify_errors": static_errors,
+        },
+    )
+    return {
+        "status": "ok",
+        "plan": updated or plan,
+        "diff": new_diff,
+        "static_preverify": static_preverify,
+        "files": data.get("files") or [],
+    }
+
+
 async def approve_plan(
     org_id: str,
     plan_id: str,
@@ -78,14 +239,11 @@ async def approve_plan(
     if blocked:
         raise ApproveBlockedError(blocked)
 
-    # Phase 2 — surface hermetic preverify on the plan; human approve still
-    # proceeds (free beta). Auto-merge paths must not skip this signal.
     evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
     hermetic = evidence.get("hermetic_preverify") if isinstance(evidence, dict) else None
     hermetic_status = None
     if isinstance(hermetic, dict):
         hermetic_status = hermetic.get("status")
-
 
     plan_kind = plan.get("plan_kind") or "code_patch"
     if plan_kind != "code_patch":
@@ -106,6 +264,7 @@ async def approve_plan(
             "message": "Connect a GitHub repo for this agent so Eden can open fix PRs",
         }
 
+    from eden.improvement.evidence_plane import static_check_files
     from eden.providers.factory import (
         get_pr_provider_for_org,
         get_repo_provider_for_org,
@@ -127,6 +286,67 @@ async def approve_plan(
         }
     if not files:
         return {"status": "error", "plan_id": plan_id, "error": "unparseable_diff"}
+
+    # Free static recheck on live materialized contents (repo may have drifted).
+    static_result = static_check_files(_files_to_static_payload(files))
+    static_status = str(static_result.get("status") or "passed")
+    regenerated = False
+    if static_status == "failed":
+        linked_paths = [str(getattr(f, "path", "") or "") for f in files]
+        linked_paths = [p for p in linked_paths if p]
+        regen = await regenerate_plan_diff_from_static_errors(
+            org_id,
+            plan,
+            repo_provider=repo_provider,
+            static_errors=list(static_result.get("errors") or []),
+            linked_paths=linked_paths,
+        )
+        if regen.get("status") != "ok":
+            return {
+                "status": "error",
+                "plan_id": plan_id,
+                "error": regen.get("error") or "static_preverify_failed",
+                "message": regen.get("message")
+                or "Static preverify failed and regenerate did not fix it",
+                "static_preverify_status": "failed",
+                "static_preverify": regen.get("static_preverify") or static_result,
+                "hermetic_preverify_status": hermetic_status,
+            }
+        regenerated = True
+        plan = regen.get("plan") or plan
+        diff = str(regen.get("diff") or "")
+        try:
+            files = await materialize_unified_diff(
+                diff,
+                read_file=repo_provider.read_file,
+            )
+        except DiffMaterializeError as exc:
+            return {
+                "status": "error",
+                "plan_id": plan_id,
+                "error": "diff_materialize_failed",
+                "message": str(exc),
+                "static_preverify_status": "failed",
+            }
+        if not files:
+            return {
+                "status": "error",
+                "plan_id": plan_id,
+                "error": "unparseable_diff",
+                "static_preverify_status": "failed",
+            }
+        static_result = static_check_files(_files_to_static_payload(files))
+        static_status = str(static_result.get("status") or "passed")
+        if static_status == "failed":
+            return {
+                "status": "error",
+                "plan_id": plan_id,
+                "error": "static_preverify_failed",
+                "message": "Regenerated patch still fails free static preverify",
+                "static_preverify_status": "failed",
+                "static_preverify": static_result,
+                "hermetic_preverify_status": hermetic_status,
+            }
 
     try:
         base = await _resolve_base_branch(org_id, repo_provider, agent_id=plan_agent_id)
@@ -221,11 +441,9 @@ async def approve_plan(
         approved_by=approved_by,
     )
 
-    # Soft Autonomy Phase 8: NO verify at PR-open. Verifying a draft
-    # branch against production telemetry produced false VERIFY_FAILED
-    # alerts (the fix isn't live yet). The real regression verify is
-    # scheduled by the GitHub merge webhook via ``queue_verify_for_plan``
-    # — see ``_sync_improvement_plan_on_pr_close``.
+    # Soft Autonomy Phase 8: NO production-telemetry verify at PR-open.
+    # Free static preverify already ran above. N01 quiet-window verify
+    # is scheduled by the GitHub merge webhook via ``queue_verify_for_plan``.
     await _audit_approve(org_id, plan_id, approved_by)
 
     # Soft Autonomy Phase 6: Slack alert for the opened PR. Approve is a
@@ -254,18 +472,18 @@ async def approve_plan(
             "pr_url": info.url,
             "pr_number": info.number,
             "branch": opened_branch,
+            "static_preverify_status": static_status,
+            "regenerated": regenerated,
         },
     )
 
-    # Phase 8: verify runs post-merge (webhook), not at PR-open. The
-    # merge advice reflects that — merging is safe; Eden watches the
-    # regression window after the PR lands.
     merge_advice = {
         "verify_timing": "post_merge",
         "message": (
             "Safe to merge when ready — Eden schedules the N01 "
             "regression verify automatically when the PR lands."
         ),
+        "static_preverify_status": static_status,
     }
 
     return {
@@ -276,6 +494,8 @@ async def approve_plan(
         "branch": opened_branch,
         "merge_advice": merge_advice,
         "hermetic_preverify_status": hermetic_status,
+        "static_preverify_status": static_status,
+        "regenerated": regenerated,
         "plan": updated,
     }
 

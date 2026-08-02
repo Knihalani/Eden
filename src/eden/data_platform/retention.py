@@ -344,9 +344,9 @@ class DataRetentionManager:
         endpoint instead of f-string interpolation.
 
         Tinybird workspaces reject ALTER DELETE via ``/v0/sql``.
-        When the configured host is Tinybird we soft-skip (log +
-        return 0) rather than POST raw ALTER bodies that silently
-        fail or 5xx the GDPR route.
+        When the configured host is Tinybird we raise so the caller
+        records an error on ``RetentionReport`` — returning 0 used to
+        look like a successful empty purge.
         """
         # ClickHouse integration is optional — if not configured, skip
         clickhouse_url = getattr(settings, "clickhouse_url", "")
@@ -355,11 +355,14 @@ class DataRetentionManager:
 
         if "tinybird.co" in clickhouse_url.lower():
             logger.warning(
-                "GDPR ClickHouse purge skipped: Tinybird host cannot "
+                "GDPR ClickHouse purge incomplete: Tinybird host cannot "
                 "ALTER DELETE via /v0/sql (tenant=%s)",
                 tenant_id,
             )
-            return 0
+            raise RuntimeError(
+                "ClickHouse purge incomplete: Tinybird cannot ALTER DELETE "
+                "via /v0/sql — erasure must not be reported complete"
+            )
 
         # SQL-standard string-literal escape: double the quote.
         safe_tenant_id = tenant_id.replace("'", "''")

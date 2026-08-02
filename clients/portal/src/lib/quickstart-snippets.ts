@@ -47,7 +47,10 @@ async function greet(question: string) {
 
 greet("Say hello in five languages")
   .then(console.log)
-  .finally(() => getDefaultClient().flush());`;
+  .finally(() => getDefaultClient().flush());
+
+// Verify ingest
+// npx eden-doctor`;
   }
 
   return `import os

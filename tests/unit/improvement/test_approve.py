@@ -416,3 +416,153 @@ async def test_queue_verify_returns_none_when_schedule_fails() -> None:
         AsyncMock(return_value=None),
     ):
         assert await _queue_verify("org-1", plan) is None
+
+
+_BROKEN_DIFF = """--- a/foo.py
++++ b/foo.py
+@@ -1 +1 @@
+-x = 1
++def broken(
+"""
+
+_FIXED_DIFF = """--- a/foo.py
++++ b/foo.py
+@@ -1 +1 @@
+-x = 1
++x = 2
+"""
+
+
+@pytest.mark.asyncio
+async def test_approve_regenerates_on_static_fail_then_opens_pr() -> None:
+    plan = {
+        "id": "plan-1",
+        "status": "draft",
+        "plan_kind": "code_patch",
+        "agent_id": "agent-a",
+        "title": "Fix foo",
+        "summary": "summary",
+        "diff_unified": _BROKEN_DIFF,
+        "evidence": {"issue_id": "iss-1", "example_trace_ids": ["trc-1"]},
+    }
+    fixed_plan = {**plan, "diff_unified": _FIXED_DIFF}
+    pr_info = PullRequestInfo(
+        number=7,
+        title="[Eden] Fix foo",
+        body="summary",
+        branch="eden/improve-plan-1",
+        base="develop",
+        url="https://github.com/org/repo/pull/7",
+        state="open",
+        created_at=datetime.now(UTC),
+    )
+    mock_provider = MagicMock()
+    mock_provider.create_pr = AsyncMock(return_value=pr_info)
+    mock_repo = _mock_repo_provider(default_branch="develop")
+    mock_repo.read_file = AsyncMock(return_value="x = 1\n")
+
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
+        ),
+        patch(
+            "eden.providers.factory.get_repo_provider_for_org",
+            AsyncMock(return_value=mock_repo),
+        ),
+        patch(
+            "eden.providers.factory.active_repo_connection",
+            AsyncMock(return_value={"default_branch": "develop"}),
+        ),
+        patch(
+            "eden.improvement.approve.regenerate_plan_diff_from_static_errors",
+            AsyncMock(
+                return_value={
+                    "status": "ok",
+                    "plan": fixed_plan,
+                    "diff": _FIXED_DIFF,
+                    "static_preverify": {"status": "passed"},
+                }
+            ),
+        ) as regen,
+        patch(
+            "eden.improvement.approve.plans_repo.mark_pr_opened",
+            AsyncMock(return_value={**fixed_plan, "status": "pr_opened"}),
+        ),
+        patch("eden.improvement.approve._audit_approve", AsyncMock()),
+        patch("eden.improvement.approve._n06_ledger", AsyncMock()),
+    ):
+        result = await approve_plan(
+            "org-1", "plan-1", approved_by="user-1", provider=mock_provider
+        )
+
+    assert result["status"] == "pr_opened"
+    assert result["regenerated"] is True
+    assert result["static_preverify_status"] == "passed"
+    regen.assert_awaited_once()
+    mock_provider.create_pr.assert_awaited_once()
+    assert mock_provider.create_pr.await_args.args[0].files[0].content == "x = 2\n"
+
+
+@pytest.mark.asyncio
+async def test_approve_blocks_pr_when_static_still_fails() -> None:
+    plan = {
+        "id": "plan-1",
+        "status": "draft",
+        "plan_kind": "code_patch",
+        "title": "Fix foo",
+        "diff_unified": _BROKEN_DIFF,
+        "evidence": {"issue_id": "iss-1"},
+    }
+    mock_provider = MagicMock()
+    mock_provider.create_pr = AsyncMock()
+    mock_repo = _mock_repo_provider()
+    mock_repo.read_file = AsyncMock(return_value="x = 1\n")
+
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
+        ),
+        patch(
+            "eden.providers.factory.get_repo_provider_for_org",
+            AsyncMock(return_value=mock_repo),
+        ),
+        patch(
+            "eden.improvement.approve.regenerate_plan_diff_from_static_errors",
+            AsyncMock(
+                return_value={
+                    "status": "error",
+                    "error": "static_preverify_failed",
+                    "message": "still broken",
+                    "static_preverify": {"status": "failed"},
+                }
+            ),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_pr_opened",
+            AsyncMock(),
+        ) as mark,
+    ):
+        result = await approve_plan("org-1", "plan-1", provider=mock_provider)
+
+    assert result["status"] == "error"
+    assert result["error"] == "static_preverify_failed"
+    mock_provider.create_pr.assert_not_awaited()
+    mark.assert_not_awaited()

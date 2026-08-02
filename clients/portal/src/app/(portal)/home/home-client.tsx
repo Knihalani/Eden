@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import {
   agentForTrace,
@@ -34,7 +34,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
-import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { FirstEventWaitAction } from "@/components/shell/first-event-wait";
+import { FIRST_EVENT_WAIT, U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { getPageDescription } from "@/lib/page-descriptions";
 
 function Kpi({
@@ -219,6 +220,18 @@ export default function HomeClient() {
   const agentsLoaded = agentsQuery.data !== undefined;
   const agents = agentsQuery.data ?? [];
   const traces = tracesQuery.data ?? [];
+  const zeroData = traces.length === 0;
+
+  // Soft-poll while waiting for first ingest so Home updates without a full reload.
+  useEffect(() => {
+    if (!orgId || !zeroData) return;
+    const id = window.setInterval(() => {
+      void tracesQuery.refetch();
+    }, FIRST_EVENT_WAIT.pollMs);
+    return () => window.clearInterval(id);
+    // tracesQuery identity is unstable; refetch via orgId + zeroData only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [orgId, zeroData]);
 
   /** Map traceId -> open (or most-recent) issue, built from the live
    * issues query so Run/Issue badges react to ``issues.data`` instead
@@ -331,7 +344,7 @@ export default function HomeClient() {
           hint={`${openIssuesCount} open issues`}
           tone={snap.failures.length ? "error" : "default"}
           hintTone={openIssuesCount > 0 ? "error" : "default"}
-          href="/issues"
+          href={zeroData ? "/traces" : "/issues"}
         />
         <Kpi
           label="Runs"
@@ -405,8 +418,8 @@ export default function HomeClient() {
               </p>
             ) : (
               <p className="type-meta mt-1">
-                {traces.length === 0
-                  ? "Connect an agent to start seeing runs"
+                {zeroData
+                  ? "Create a key, run doctor, then open Traces"
                   : "No failing runs in view"}
               </p>
             )}
@@ -426,22 +439,22 @@ export default function HomeClient() {
 
         {visibleAlerts.length === 0 ? (
           <EmptyState
-            title={traces.length === 0 ? "No runs yet" : "All clear"}
+            title={zeroData ? FIRST_EVENT_WAIT.title : "All clear"}
             body={
-              traces.length === 0
-                ? U20_EMPTY_COPY.dashboardTraces
+              zeroData
+                ? FIRST_EVENT_WAIT.description
                 : dismissedCount > 0
                   ? `${dismissedCount} dismissed. ${U20_EMPTY_COPY.alertsClear}`
                   : U20_EMPTY_COPY.alertsClear
             }
             action={
-              traces.length === 0 ? (
-                <Link
-                  href="/settings?mode=keys"
-                  className="ds-btn ds-btn-primary ds-btn-sm"
-                >
-                  Create API key
-                </Link>
+              zeroData ? (
+                <FirstEventWaitAction
+                  onCheck={() => {
+                    void tracesQuery.refetch();
+                  }}
+                  checking={tracesQuery.isFetching}
+                />
               ) : dismissedCount > 0 ? (
                 <button
                   type="button"
@@ -472,15 +485,37 @@ export default function HomeClient() {
         role="group"
         aria-label="Primary actions"
       >
-        <Link href="/issues" className="ds-btn ds-btn-primary ds-btn-sm">
-          Issues
-        </Link>
-        <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
-          Traces
-        </Link>
-        <Link href="/settings?mode=keys" className="ds-btn ds-btn-outline ds-btn-sm">
-          API keys
-        </Link>
+        {zeroData ? (
+          <>
+            <Link
+              href="/settings?mode=keys"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+            >
+              Create API key
+            </Link>
+            <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
+              Traces
+            </Link>
+            <Link href="/issues" className="ds-btn ds-btn-ghost ds-btn-sm">
+              Issues
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link href="/issues" className="ds-btn ds-btn-primary ds-btn-sm">
+              Issues
+            </Link>
+            <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
+              Traces
+            </Link>
+            <Link
+              href="/settings?mode=keys"
+              className="ds-btn ds-btn-outline ds-btn-sm"
+            >
+              API keys
+            </Link>
+          </>
+        )}
         <span className="flex-1" />
         <button
           type="button"

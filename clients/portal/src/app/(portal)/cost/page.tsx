@@ -26,6 +26,7 @@ import { portalApi } from "@/lib/api/portal";
 import { budgetApi } from "@/lib/api/budget";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 const costFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -181,6 +182,15 @@ function LabCostInner() {
 
   const isLoading = driversQuery.isLoading || budgetQuery.isLoading;
   const isError = driversQuery.isError || budgetQuery.isError;
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Cost"
+        message="Select a workspace to view cost."
+      />
+    );
+  }
 
   if (isLoading) {
     return (

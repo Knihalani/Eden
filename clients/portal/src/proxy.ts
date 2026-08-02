@@ -7,18 +7,15 @@ import { KNOWN_PORTAL_PREFIXES, isKnownPortalPath } from "@/lib/portal-routes";
 import { resolveHubTarget } from "@/lib/portal-hub-redirect";
 
 // Protected-first: block everything, allow the routes that must stay
-// reachable without a session (marketing pages, auth flows, the
-// catch-all proxy to FastAPI, and Clerk's own internal callbacks).
+// reachable without a session (marketing pages, auth flows, and
+// Clerk's own internal callbacks).
 //
 // /api/health is a public, unauthenticated health probe so uptime
 // monitors and the auth-card status badge can call it without
-// needing a Clerk session. The catch-all proxy at
-// ``/api/proxy/(.*)`` is the canonical auth-aware surface — it
-// forwards ``Authorization: Bearer`` + cookies to FastAPI and is
-// the only auth-related route the client calls. Every dedicated
-// ``/api/auth/*`` route was removed in F37 (July 2026) because
-// the catch-all proxy covers them all with stricter Bearer +
-// cookie handling.
+// needing a Clerk session. Wave 4: ``/api/proxy/(.*)`` is NOT public —
+// unauthenticated callers are redirected to sign-in. The route
+// handler still forwards Clerk Bearer + session cookies once the
+// middleware has confirmed a session.
 const isPublicRoute = createRouteMatcher([
   "/",
   "/login(.*)",
@@ -58,8 +55,6 @@ const isPublicRoute = createRouteMatcher([
   "/og-pricing.png",
   "/icon(.*)",
   "/apple-icon(.*)",
-  "/api/proxy/(.*)",  // explicit / after proxy so the matcher sees
-                        // segments, not just a trailing string
   "/api/health",
   // Docs Fill-in (CORS from docs.edenobservability.com). Auth is
   // checked inside the handler via Clerk ``auth().getToken()``.
@@ -176,9 +171,16 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   // would render sign-in under the protected URL and lose the return
   // trip entirely.
   const enforcePortalAuth = async () => {
-    const isKnownProtected = KNOWN_PORTAL_PREFIXES.some(
-      (p) => path === p || path.startsWith(p + "/"),
-    );
+    // Wave 4: /api/proxy requires a Clerk session (removed from
+    // isPublicRoute). Session cookies + auth().getToken() still
+    // work inside the route handler once this gate passes.
+    const isProxyPath =
+      path === "/api/proxy" || path.startsWith("/api/proxy/");
+    const isKnownProtected =
+      isProxyPath ||
+      KNOWN_PORTAL_PREFIXES.some(
+        (p) => path === p || path.startsWith(p + "/"),
+      );
     if (!isKnownProtected || isPublicRoute(request)) return null;
     const { userId } = await auth();
     if (userId) return null;

@@ -38,6 +38,21 @@ TIER_MODELS: dict[ModelTier, list[str]] = {
 }
 
 
+def _chat_tiers_share_model() -> bool:
+    """True when T1/T2/T3 primary models are identical.
+
+    Soft Autonomy keeps all three on ``INTERNAL_CHAT_MODEL``. When that
+    is the case, LLM task classification, quality-judge escalation, and
+    tier fallbacks burn extra tokens without changing the model — skip
+    them. If any tier primary diverges, full routing behaviour resumes.
+    """
+    primaries = [
+        (TIER_MODELS.get(t) or [None])[0]
+        for t in (ModelTier.T1, ModelTier.T2, ModelTier.T3)
+    ]
+    return primaries[0] is not None and primaries[0] == primaries[1] == primaries[2]
+
+
 @dataclass
 class PipelineTask:
     """Description of a pipeline task for classification."""
@@ -107,6 +122,21 @@ class TaskClassifier:
 
     async def classify(self, task: PipelineTask) -> ClassificationResult:
         """Classify a task and return the optimal model tier."""
+        # When T1=T2=T3 share one model, LLM classify has no routing
+        # value — use heuristic (or T2 default) only.
+        if _chat_tiers_share_model():
+            heuristic_tier = self._heuristic_classify(task) or ModelTier.T2
+            self._heuristic_hits += 1
+            return ClassificationResult(
+                tier=heuristic_tier,
+                complexity=0.3 if heuristic_tier == ModelTier.T1 else 0.6,
+                novelty=0.2,
+                reasoning_depth=0.3 if heuristic_tier == ModelTier.T1 else 0.7,
+                domain_expertise=0.2,
+                confidence=0.9,
+                heuristic_used=True,
+            )
+
         # ── Fast heuristic path (no LLM call) ─────────────────────────────
         heuristic_tier = self._heuristic_classify(task)
         if heuristic_tier is not None:
@@ -320,8 +350,14 @@ class QualityValidator:
                     tier_used=tier,
                 )
 
-        # Check 4: Semantic quality (lightweight LLM judge) — skip for very short outputs
-        if task.requires_quality_check and len(content) > 100:
+        # Check 4: Semantic quality (lightweight LLM judge) — skip for
+        # very short outputs, and skip when T1=T2=T3 share a model
+        # (escalation cannot improve quality by changing model).
+        if (
+            task.requires_quality_check
+            and len(content) > 100
+            and not _chat_tiers_share_model()
+        ):
             quality_score = await self._judge_quality(content, task)
             if quality_score is not None and quality_score < 0.7:
                 return ValidationResult(
@@ -435,7 +471,11 @@ class ModelRouter:
         # Default for sync path when classification is None
         start_tier = ModelTier.T2 if classification is None else classification
 
-        tiers_to_try = self._get_fallback_chain(start_tier)
+        # Identical T1/T2/T3 models: no escalation value — try one tier.
+        if _chat_tiers_share_model():
+            tiers_to_try = [start_tier]
+        else:
+            tiers_to_try = self._get_fallback_chain(start_tier)
         last_error: str | None = None
 
         for tier in tiers_to_try:
@@ -504,7 +544,10 @@ class ModelRouter:
 
         classification = await self.classifier.classify(task)
         start_tier = classification.tier
-        tiers_to_try = self._get_fallback_chain(start_tier)
+        if _chat_tiers_share_model():
+            tiers_to_try = [start_tier]
+        else:
+            tiers_to_try = self._get_fallback_chain(start_tier)
         last_error: str | None = None
 
         for tier in tiers_to_try:

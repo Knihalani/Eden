@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, X } from "lucide-react";
 import {
   agentForIssue,
@@ -39,9 +40,11 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { agentIssuesApi } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
-import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { useLabToast } from "@/lab/lab-toast";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 
 type SeverityFilter = "all" | "error" | "warn";
@@ -450,6 +453,8 @@ function LabIssuesInner() {
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
+  const { pushToast } = useLabToast();
   const issuesQuery = useOrgQuery(
     queryKeys.portal.issues(orgId),
     orgId,
@@ -460,6 +465,7 @@ function LabIssuesInner() {
 
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [query, setQuery] = useState("");
+  /** Optimistic triage overlay — cleared after invalidate or on failure. */
   const [statusOverride, setStatusOverride] = useState<Record<string, IssueStatus>>(
     {},
   );
@@ -475,6 +481,36 @@ function LabIssuesInner() {
       status: statusOverride[issue.id] ?? issue.status,
     }));
   }, [issuesData, statusOverride]);
+
+  const setIssueStatus = useCallback(
+    async (issueId: string, status: IssueStatus) => {
+      if (!orgId) return;
+      setStatusOverride((prev) => ({ ...prev, [issueId]: status }));
+      try {
+        await agentIssuesApi.setStatus(orgId, issueId, status);
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.issues(orgId),
+        });
+        setStatusOverride((prev) => {
+          const next = { ...prev };
+          delete next[issueId];
+          return next;
+        });
+      } catch (err) {
+        setStatusOverride((prev) => {
+          const next = { ...prev };
+          delete next[issueId];
+          return next;
+        });
+        pushToast({
+          title: "Could not update issue",
+          body: err instanceof Error ? err.message : String(err),
+          tone: "fail",
+        });
+      }
+    },
+    [orgId, queryClient, pushToast],
+  );
 
   const scopedIssues = useMemo(() => {
     if (agentId === "all") return issues;
@@ -543,6 +579,15 @@ function LabIssuesInner() {
     [scopedIssues],
   );
 
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Issues"
+        message="Select a workspace to view issues."
+      />
+    );
+  }
+
   if (issuesQuery.isLoading) {
     return (
       <div className="ds-page">
@@ -574,13 +619,6 @@ function LabIssuesInner() {
           </span>
         }
       />
-
-      {Object.keys(statusOverride).length > 0 ? (
-        <LocalDraftBanner>
-          Triage status changes on this page are local drafts and are not saved
-          to the server yet.
-        </LocalDraftBanner>
-      ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1">
         <div
@@ -674,9 +712,9 @@ function LabIssuesInner() {
             issue={selected}
             hrefFor={hrefFor}
             onClose={clearSelection}
-            onStatus={(status) =>
-              setStatusOverride((prev) => ({ ...prev, [selected.id]: status }))
-            }
+            onStatus={(status) => {
+              void setIssueStatus(selected.id, status);
+            }}
           />
         ) : null}
       </div>

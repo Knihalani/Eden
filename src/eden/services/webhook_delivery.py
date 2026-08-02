@@ -564,6 +564,19 @@ class WebhookDeliveryService:
         bounded_limit = max(1, min(int(limit), 500))
         try:
             pg = await get_postgres_client()
+            # Reclaim deliveries stuck in ``in_flight`` after a worker crash
+            # or hard timeout. ``last_attempt_at`` is stamped when the row is
+            # claimed (see ``_attempt_delivery``); if it is older than 5
+            # minutes the attempt is dead and the row must re-enter the
+            # ``retrying`` pool so the outbox drain can pick it up again.
+            await pg.execute(
+                "UPDATE webhook_deliveries "
+                "SET status = 'retrying', "
+                "    next_attempt_at = COALESCE(next_attempt_at, NOW()) "
+                "WHERE status = 'in_flight' "
+                "  AND last_attempt_at IS NOT NULL "
+                "  AND last_attempt_at < NOW() - INTERVAL '5 minutes'",
+            )
             rows = await pg.fetch(
                 "SELECT d.id AS delivery_id, "
                 "       d.webhook_id, "

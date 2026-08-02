@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orgs/{org_id}/billing", tags=["billing"], dependencies=[Depends(require_path_org_access)])
 
+# Public Stripe webhook — signature verification only (no JWT / org path auth).
+# Mounted at ``POST /webhooks/stripe`` so Stripe can reach it; the org-scoped
+# ``/orgs/{org_id}/billing/webhook`` path is deprecated.
+webhook_router = APIRouter(prefix="/webhooks", tags=["billing-webhooks"])
+
 _T = TypeVar("_T")
 
 
@@ -605,17 +610,50 @@ async def cancel_subscription(org_id: str = Depends(require_path_org_access), us
 # Stripe Webhook Handler
 # ============================================================================
 
-@router.post("/webhook")
-async def stripe_webhook(
-    request: Request,
-    org_id: str = Depends(require_path_org_access),
-):
-    """Handle Stripe webhook events.
+async def _process_stripe_webhook_event(event: dict) -> dict[str, Any]:
+    """Idempotent Stripe event ingest + optional subscription sync.
 
-    Signature verification always runs first and rejects invalid
-    payloads with 400 — even when paid plans are disabled (those
-    endpoints return 503 separately via ``_require_paid_plans_enabled``).
-    Never falls back to unverified ``json.loads(payload)``.
+    Always stores the event (verify+log). Plan mutations only run when
+    ``PAID_PLANS_ENABLED`` is True. Duplicate ``stripe_event_id`` rows
+    are skipped via ``ON CONFLICT DO NOTHING … RETURNING``.
+    """
+    event_type = event.get("type", "")
+    event_id = event.get("id", "")
+
+    client = await get_postgres_client()
+    inserted = await client.fetchrow(
+        """
+        INSERT INTO stripe_events (stripe_event_id, event_type, payload)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (stripe_event_id) DO NOTHING
+        RETURNING stripe_event_id
+        """,
+        event_id,
+        event_type,
+        json.dumps(event),
+    )
+    if inserted is None:
+        return {"received": True, "duplicate": True}
+
+    if not PAID_PLANS_ENABLED:
+        logger.info(
+            "Stripe webhook logged event_type=%s (paid plans disabled; no plan sync)",
+            event_type,
+        )
+        return {"received": True, "processed": False}
+
+    if event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
+        await handle_subscription_event(event)
+
+    return {"received": True, "processed": True}
+
+
+@webhook_router.post("/stripe")
+async def stripe_webhook_public(request: Request):
+    """Public Stripe webhook — signature verification only, no org auth.
+
+    Stripe cannot call ``/orgs/{org_id}/billing/webhook`` (JWT + path org
+    gate). Configure the Stripe endpoint to ``POST /webhooks/stripe``.
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -661,42 +699,15 @@ async def stripe_webhook(
             detail="Invalid Stripe signature",
         ) from None
 
-    # Paid actions (subscribe / cancel) stay 503 until enabled; the
-    # webhook itself only processes events when paid plans + Stripe
-    # keys are live.
-    _require_paid_plans_enabled()
-    stripe_api_key = getattr(get_settings(), "stripe_secret_key", None) or ""
-    if not stripe_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Stripe is not configured.",
-        )
-
     try:
-        stripe.api_key = stripe_api_key
-
-        event_type = event.get("type", "")
-        event_id = event.get("id", "")
-
-        # Store event for debugging
-        client = await get_postgres_client()
-        await client.execute(
-            """
-            INSERT INTO stripe_events (stripe_event_id, event_type, payload)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (stripe_event_id) DO NOTHING
-            """,
-            event_id,
-            event_type,
-            json.dumps(event),
-        )
-
-        # Handle subscription events
-        if event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
-            await handle_subscription_event(event)
-
-        return {"received": True}
-
+        # construct_event returns a StripeObject; normalize to a plain dict.
+        if hasattr(event, "to_dict"):
+            event_dict = event.to_dict()
+        elif isinstance(event, dict):
+            event_dict = event
+        else:
+            event_dict = dict(event)
+        return await _process_stripe_webhook_event(event_dict)
     except HTTPException:
         raise
     except Exception as e:
@@ -705,6 +716,23 @@ async def stripe_webhook(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=safe_detail(e, fallback="Webhook processing failed"),
         ) from e
+
+
+@router.post("/webhook", deprecated=True)
+async def stripe_webhook_deprecated(
+    request: Request,
+    org_id: str = Depends(require_path_org_access),
+):
+    """Deprecated — use ``POST /webhooks/stripe`` (public, signature-only).
+
+    Kept so existing docs/clients get a clear 410 instead of silent auth
+    failures when Stripe cannot present an Eden JWT.
+    """
+    del request, org_id
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Stripe webhook moved to POST /webhooks/stripe (no org path auth).",
+    )
 
 
 async def handle_subscription_event(event: dict) -> None:
@@ -721,20 +749,23 @@ async def handle_subscription_event(event: dict) -> None:
     if not stripe_sub_id:
         return
 
-    # Find org by Stripe customer
-    org = await client.fetchrow(
-        """
-        SELECT o.id FROM organizations o
-        WHERE o.settings->>'stripe_customer_id' = $1
-        """,
-        stripe_customer_id,
-    )
-
-    if not org:
-        logger.warning(f"No org found for Stripe customer: {stripe_customer_id}")
-        return
-
-    org_id = str(org["id"])
+    # Prefer org_id from subscription / customer metadata (set at checkout).
+    metadata = data.get("metadata") or {}
+    org_id = metadata.get("org_id") if isinstance(metadata, dict) else None
+    if not org_id:
+        org = await client.fetchrow(
+            """
+            SELECT o.id FROM organizations o
+            WHERE o.settings->>'stripe_customer_id' = $1
+            """,
+            stripe_customer_id,
+        )
+        if not org:
+            logger.warning(f"No org found for Stripe customer: {stripe_customer_id}")
+            return
+        org_id = str(org["id"])
+    else:
+        org_id = str(org_id)
 
     if event.get("type") == "customer.subscription.deleted":
         # Subscription cancelled - revert to free plan

@@ -30,8 +30,10 @@ create a key, and set `EDEN_API_KEY` + `EDEN_ORG_ID` in your environment.
 # Python
 pip install eden-sdk
 
-# TypeScript / Node / Bun
-npm install @eden-ai/sdk openai
+# TypeScript / Node / Bun — requires @eden-ai/sdk@0.4.0 (doctor + current APIs).
+# If your registry still resolves an older 0.3.x, pin explicitly:
+npm install @eden-ai/sdk@0.4.0 openai
+# or from a checkout of this monorepo: npm install ./sdk/ts-ai
 ```
 
 Set credentials (or use **Fill in** above), then validate connectivity:

@@ -1491,20 +1491,20 @@ class TelemetryCollector:
         """Insert one detached ClickHouse batch, accounting for any loss.
 
         ``batch`` has already been swapped out of ``_ch_telemetry_buffer`` by the
-        caller, so it exists nowhere else. Both failure paths below therefore
-        lose the whole batch — at ``CH_TELEMETRY_BATCH_SIZE`` that is 100+ rows
-        per occurrence — and neither used to be counted. The absent-sink branch
-        was a bare ``return`` whose only trace was a ``logger.debug`` inside
-        ``_get_clickhouse``, a different function, so a misconfigured or
-        unreachable ClickHouse silently shredded every flush indefinitely.
+        caller, so it exists nowhere else. Failure paths below park rows in
+        ``clickhouse_fallback`` (same as ``ClickHouseSink._fallback_to_postgres``)
+        so the drain can replay them — they must not be permanently dropped.
         """
         sink = await self._get_clickhouse()
         if not sink:
             record_drop("sink_ch", "write_error", len(batch))
             logger.warning(
-                "ClickHouse sink unavailable; dropped %d buffered telemetry "
-                "row(s) — this batch is not retried and exists nowhere else",
+                "ClickHouse sink unavailable; parking %d buffered telemetry "
+                "row(s) in clickhouse_fallback for the drain",
                 len(batch),
+            )
+            await self._park_ch_batch_fallback(
+                batch, error="ClickHouse sink unavailable",
             )
             return
         try:
@@ -1536,9 +1536,44 @@ class TelemetryCollector:
         except Exception as exc:
             record_drop("sink_ch", "write_error", len(batch))
             logger.warning(
-                "ClickHouse telemetry batch insert failed, dropping %d row(s): %s",
+                "ClickHouse telemetry batch insert failed, parking %d "
+                "row(s) in clickhouse_fallback: %s",
                 len(batch),
                 exc,
+            )
+            fallback = getattr(sink, "_fallback_to_postgres", None)
+            if fallback is not None:
+                try:
+                    await fallback("telemetry_events_ch", batch, exc)
+                except Exception as park_exc:  # noqa: BLE001
+                    logger.error(
+                        "clickhouse_fallback park also failed: %s", park_exc,
+                    )
+            else:
+                await self._park_ch_batch_fallback(batch, error=exc)
+
+    async def _park_ch_batch_fallback(
+        self,
+        batch: list[dict[str, Any]],
+        *,
+        error: Exception | str | None = None,
+    ) -> None:
+        """Park CH buffer rows when the sink object itself is unavailable."""
+        try:
+            from eden.data_platform.clickhouse_sink import ClickHouseSink
+
+            # Instance method does not use ``self`` state — call unbound.
+            await ClickHouseSink._fallback_to_postgres(
+                None,  # type: ignore[arg-type]
+                "telemetry_events_ch",
+                batch,
+                error,
+            )
+        except Exception as park_exc:  # noqa: BLE001
+            logger.error(
+                "clickhouse_fallback park also failed for %d row(s): %s",
+                len(batch),
+                park_exc,
             )
 
     async def _flush_clickhouse_buffer(self) -> None:
@@ -1553,22 +1588,14 @@ class TelemetryCollector:
     async def _route_websocket(self, event: TelemetryEvent) -> None:
         """Fan out telemetry event to real-time WebSocket subscribers."""
         try:
-            from eden.api.routes.websocket import _job_connections
+            from eden.api.routes.websocket import broadcast_to_job_websockets
 
-            # Use trace_id as the entity key for fanout
-            if event.trace_id in _job_connections:
-                message = {
-                    "type": "telemetry_event",
-                    "event": event.to_dict(),
-                }
-                for ws in list(_job_connections[event.trace_id]):
-                    try:
-                        await ws.send_json(message)
-                    except Exception:
-                        _job_connections[event.trace_id].discard(ws)
-                        if not _job_connections[event.trace_id]:
-                            del _job_connections[event.trace_id]
-                            break
+            if not event.trace_id:
+                return
+            await broadcast_to_job_websockets(
+                event.trace_id,
+                {"type": "telemetry_event", "event": event.to_dict()},
+            )
         except Exception as exc:
             logger.debug(f"WebSocket telemetry fanout failed: {exc}")
 
@@ -1791,16 +1818,37 @@ class TelemetryCollector:
         for i in range(0, len(decoded), cols_n):
             per_row.append({col: decoded[i + j] for j, col in enumerate(_zstd_cols)})
 
-        async def _resolve_request_for(row: dict, decoded_cols: dict) -> Any:
-            if message_store is not None:
-                hashes = row.get("request_message_hashes")
-                if hashes:
-                    reconstructed = await message_store.reconstruct_request_body(
-                        trace_id,
-                        list(hashes),
-                    )
-                    if reconstructed is not None:
-                        return reconstructed
+        # Wave 5: batch message_store hydration — one get_many for all
+        # hashes across the trace, then reconstruct per span in-memory.
+        # Previously each span awaited reconstruct_request/response
+        # (N+1 round-trips).
+        msg_by_hash: dict[str, dict[str, Any]] = {}
+        if hydrate_bodies and message_store is not None:
+            ordered_hashes: list[str] = []
+            seen_hashes: set[str] = set()
+            for row in rows:
+                for key in ("request_message_hashes", "response_message_hashes"):
+                    hashes = row.get(key)
+                    if not hashes:
+                        continue
+                    for h in hashes:
+                        if h and h not in seen_hashes:
+                            seen_hashes.add(h)
+                            ordered_hashes.append(h)
+            if ordered_hashes:
+                fetched = await message_store.get_many(trace_id, ordered_hashes)
+                msg_by_hash = {
+                    h: m
+                    for h, m in zip(ordered_hashes, fetched, strict=True)
+                    if m is not None
+                }
+
+        def _resolve_request_for(row: dict, decoded_cols: dict) -> Any:
+            hashes = row.get("request_message_hashes")
+            if hashes and msg_by_hash:
+                out = [msg_by_hash[h] for h in hashes if h in msg_by_hash]
+                if out:
+                    return {"messages": out}
             # decompress_many already returned parsed JSON (or None on
             # soft-fail) — do not feed it back into decompress_jsonb.
             zstd_val = decoded_cols.get("request_body_zstd")
@@ -1808,16 +1856,12 @@ class TelemetryCollector:
                 return zstd_val
             return row.get("request_body")
 
-        async def _resolve_response_for(row: dict, decoded_cols: dict) -> Any:
-            if message_store is not None:
-                hashes = row.get("response_message_hashes")
-                if hashes:
-                    reconstructed = await message_store.reconstruct_response_body(
-                        trace_id,
-                        list(hashes),
-                    )
-                    if reconstructed is not None:
-                        return reconstructed
+        def _resolve_response_for(row: dict, decoded_cols: dict) -> Any:
+            hashes = row.get("response_message_hashes")
+            if hashes and msg_by_hash:
+                out = [msg_by_hash[h] for h in hashes if h in msg_by_hash]
+                if out:
+                    return {"choices": [{"message": m} for m in out]}
             zstd_val = decoded_cols.get("response_body_zstd")
             if zstd_val is not None:
                 return zstd_val
@@ -1834,10 +1878,8 @@ class TelemetryCollector:
 
             decoded_cols = per_row[idx] if idx < len(per_row) else {}
             if hydrate_bodies:
-                request_body, response_body = await asyncio.gather(
-                    _resolve_request_for(row, decoded_cols),
-                    _resolve_response_for(row, decoded_cols),
-                )
+                request_body = _resolve_request_for(row, decoded_cols)
+                response_body = _resolve_response_for(row, decoded_cols)
             else:
                 # Cheap path for portal structure: keep inline JSONB
                 # previews, skip message_store reconstruct + body zstd.
@@ -2011,21 +2053,36 @@ class TelemetryCollector:
             max_value=max_val if max_val != float("-inf") else 0.0,
         )
 
-    async def get_timeline(self, tenant_id: str, trace_id: str) -> TimelineData | None:
-        """Build a step timeline for a single trace."""
+    async def get_timeline(
+        self,
+        tenant_id: str,
+        trace_id: str,
+        *,
+        max_spans: int = 500,
+    ) -> TimelineData | None:
+        """Build a step timeline for a single trace.
+
+        Projects only timeline columns and caps rows at ``max_spans``
+        (aligned with :meth:`get_trace_tree` default) to avoid unbounded
+        ``SELECT *`` on large traces.
+        """
         client = await self._get_postgres()
         if not client:
             return None
 
+        limit = max(1, min(int(max_spans), 2000))
         try:
             rows = await client.fetch(
                 """
-                SELECT * FROM telemetry_events
+                SELECT timestamp, duration_ms, name, event_type, outcome
+                FROM telemetry_events
                 WHERE tenant_id = $1 AND trace_id = $2
                 ORDER BY timestamp ASC
+                LIMIT $3
                 """,
                 tenant_id,
                 trace_id,
+                limit,
             )
         except Exception as exc:
             logger.warning(f"Failed to fetch timeline data: {exc}")
@@ -2035,6 +2092,8 @@ class TelemetryCollector:
             rows = await self._load_from_archive(tenant_id, trace_id)
             if not rows:
                 return None
+            if len(rows) > limit:
+                rows = rows[:limit]
 
         steps: list[dict[str, Any]] = []
         markers: list[dict[str, Any]] = []

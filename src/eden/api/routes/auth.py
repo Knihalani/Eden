@@ -58,6 +58,30 @@ from eden.services.invitation_service import (
 )
 from eden.storage.postgres import get_postgres_client
 
+
+def _legacy_password_auth_disabled() -> bool:
+    """Wave 4: block password login/signup when Clerk is primary or prod.
+
+    Clerk is considered enabled when ``clerk_secret_key`` is configured.
+    Production always disables legacy password routes even if Clerk is
+    temporarily misconfigured — callers must use Clerk sign-in.
+
+    Resolve settings via the config module attribute so test patches on
+    ``eden.config.get_settings`` apply (local ``from … import`` bindings
+    would miss the autouse fixture).
+    """
+    from eden import config as _eden_config
+
+    settings = _eden_config.get_settings()
+    return bool(settings.clerk_secret_key) or bool(settings.eden_production)
+
+
+def _gone_use_clerk() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Password login/signup is disabled; use Clerk sign-in",
+    )
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -216,6 +240,8 @@ class EnforceTwoFAResponse(BaseModel):
 @router.post("/signup", response_model=UserResponse)
 async def signup(request: SignupRequest, response: Response, req: Request):
     """Create a new user account."""
+    if _legacy_password_auth_disabled():
+        raise _gone_use_clerk()
     # Throttle signups per IP to prevent mass account creation.
     await _check_rate_limit(signup_limiter, _client_ip(req))
 
@@ -409,6 +435,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
 @router.post("/login", response_model=UserResponse)
 async def login(request: LoginRequest, response: Response, req: Request):
     """Authenticate user and return JWT cookie."""
+    if _legacy_password_auth_disabled():
+        raise _gone_use_clerk()
     # Two-axis throttling: per-IP (broad brute force) and per-email
     # (credential stuffing against one account). Per-email is checked
     # only once we know the email — the per-IP check fires first so a

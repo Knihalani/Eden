@@ -201,6 +201,16 @@ async def _fanout_clickhouse(
             "status": "unavailable",
             "error": "ClickHouse sink not configured",
         }
+    # Tinybird cannot ALTER DELETE via /v0/sql — must not report ok.
+    cfg = getattr(sink, "config", None)
+    if cfg is not None and getattr(cfg, "is_tinybird", False):
+        return {
+            "store": store,
+            "status": "unavailable",
+            "error": "Tinybird cannot ALTER DELETE via /v0/sql — erasure incomplete",
+            "user_id": user_id,
+            "org_id": org_id,
+        }
     if dry_run:
         return {"store": store, "status": "dry_run", "detail": "would ALTER DELETE by user_id"}
     try:

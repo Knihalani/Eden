@@ -1,8 +1,8 @@
-"""LP-10 — quota middleware fail-open / warm-snapshot.
+"""Wave 4 — quota middleware fail-closed on missing/stale snapshot.
 
-Mutations must not 429 with "No recent quota snapshot" when the
-cache is empty or stale. A successful header build (e.g. /auth/me)
-must warm the cache for subsequent POSTs/PUTs.
+Mutations must 429 when the live quota fetch fails and there is no
+fresh cache. A successful header build (e.g. /auth/me) still warms
+the cache for subsequent POSTs/PUTs so the happy path stays open.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class TestLp10FailOpen:
             mw._check_hard_limits.assert_awaited()
 
     @pytest.mark.asyncio
-    async def test_live_fetch_failure_without_cache_fails_open(self) -> None:
+    async def test_live_fetch_failure_without_cache_fails_closed(self) -> None:
         from eden.api.middleware.quota_enforcement import (
             QuotaEnforcementMiddleware,
         )
@@ -129,8 +129,9 @@ class TestLp10FailOpen:
 
         mw._usage_service = _Boom()
         blocked, detail = await mw._check_hard_limits("org-x", ["cost_usd"])
-        assert blocked is False
-        assert detail == ""
+        assert blocked is True
+        assert "No recent quota snapshot" in detail
+        assert "Fail-closed" in detail
 
     @pytest.mark.asyncio
     async def test_live_fetch_failure_with_fresh_over_cap_still_blocks(
@@ -175,7 +176,7 @@ class TestLp10FailOpen:
         age = mw._budget_staleness("org-age")
         assert age is not None
         assert age < 1.0
-        # Backdate past staleness limit — cached check must fail-open.
+        # Backdate past staleness limit — cached check defers to live path.
         ts, view = mw._last_known_hard_limits["org-age"]
         mw._last_known_hard_limits["org-age"] = (time.monotonic() - 90.0, view)
         blocked, _ = mw._cached_block_check("org-age", ["cost_usd"])

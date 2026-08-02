@@ -166,6 +166,69 @@ class DatasetHub:
         rec.column_count = 0
         return rec
 
+    async def update_dataset(
+        self,
+        org_id: str,
+        dataset_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> DatasetRecord | None:
+        existing = await self.get_dataset(org_id, dataset_id)
+        if existing is None:
+            return None
+        new_name = name if name is not None else existing.name
+        new_description = (
+            description if description is not None else existing.description
+        )
+        now = datetime.now(UTC).isoformat()
+        client = await self._client()
+        if client is None:
+            existing.name = new_name
+            existing.description = new_description
+            existing.updated_at = now
+            existing.version = int(existing.version or 1) + 1
+            self._memory[dataset_id] = existing
+            return existing
+        row = await client.fetchrow(
+            """
+            UPDATE datasets
+            SET name = $3,
+                description = $4,
+                updated_at = NOW(),
+                version = version + 1
+            WHERE org_id = $1 AND id = $2::uuid
+            RETURNING id, org_id, name, description, source_type, source_ref, version,
+                      created_at, updated_at
+            """,
+            org_id,
+            dataset_id,
+            new_name,
+            new_description,
+        )
+        if row is None:
+            return None
+        rec = _row_to_dataset(dict(row))
+        rec.row_count = existing.row_count
+        rec.column_count = existing.column_count
+        return rec
+
+    async def delete_dataset(self, org_id: str, dataset_id: str) -> bool:
+        existing = await self.get_dataset(org_id, dataset_id)
+        if existing is None:
+            return False
+        client = await self._client()
+        if client is None:
+            del self._memory[dataset_id]
+            return True
+        result = await client.execute(
+            "DELETE FROM datasets WHERE org_id = $1 AND id = $2::uuid",
+            org_id,
+            dataset_id,
+        )
+        parts = str(result).split()
+        return bool(parts) and parts[-1] != "0"
+
     async def promote_trace(
         self,
         org_id: str,

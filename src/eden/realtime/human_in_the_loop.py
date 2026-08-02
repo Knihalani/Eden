@@ -379,21 +379,16 @@ class HILTController:
     async def _broadcast_state_change(self, job_id: str, state: HILTStateRecord) -> None:
         """Broadcast HILT state change to connected WebSocket clients."""
         try:
-            from eden.api.routes.websocket import _job_connections
-            if job_id in _job_connections:
-                message = {
+            from eden.api.routes.websocket import broadcast_to_job_websockets
+
+            await broadcast_to_job_websockets(
+                job_id,
+                {
                     "type": "hilt_state_change",
                     "job_id": job_id,
                     "state": state.to_dict(),
-                }
-                for ws in list(_job_connections[job_id]):
-                    try:
-                        await ws.send_json(message)
-                    except Exception:
-                        _job_connections[job_id].discard(ws)
-                        if not _job_connections[job_id]:
-                            del _job_connections[job_id]
-                            break
+                },
+            )
         except Exception as exc:
             logger.debug(f"HILT broadcast failed for {job_id}: {exc}")
 

@@ -32,7 +32,6 @@ from eden.datasets.spreadsheet import (
     SpreadsheetColumn,
     SpreadsheetRow,
     SpreadsheetService,
-    generate_column,
 )
 from eden.storage.postgres import get_postgres_client
 
@@ -231,43 +230,11 @@ async def generate_column_route(
     col_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> RowListResponse:
-    """Run the AI handler over every row to fill the column.
-
-    The handler is the stub (returns a placeholder) in v1;
-    production wires a real LLM via the route layer.
-    """
-    await _assert_dataset_org(org_id, dataset_id)
-    svc = await _spreadsheet_svc()
-    try:
-        cols = await svc.list_columns(dataset_id)
-        col = next((c for c in cols if c.id == col_id), None)
-        if col is None:
-            raise HTTPException(status_code=404, detail="column not found")
-        rows = await svc.list_rows(dataset_id, limit=10_000)
-        # Generate values.
-        generated = await generate_column(col, rows)
-        # Persist the values back into each row.
-        for row in rows:
-            if row.id in generated:
-                new_values = dict(row.values)
-                new_values[col_id] = generated[row.id]
-                await svc.update_row(
-                    row_id=row.id, dataset_id=dataset_id, values=new_values
-                )
-        # Re-fetch the rows.
-        updated_rows = await svc.list_rows(dataset_id, limit=10_000)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning("generate_column failed: %s", redact_all(str(exc)))
-        raise_mapped_db_error(
-            exc,
-            fallback="column generate failed",
-            uuid_detail="Invalid column or dataset id",
-        )
-    return RowListResponse(
-        rows=[_row_to_response(r) for r in updated_rows],
-        total_count=len(updated_rows),
+    """AI column fill is not enabled yet — refuse stub/fake values."""
+    del body, org_id, dataset_id, col_id, user
+    raise HTTPException(
+        status_code=501,
+        detail="AI column generate not enabled",
     )
 
 @router.get(

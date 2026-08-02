@@ -105,7 +105,13 @@ def _issue_dict(i: Issue) -> dict[str, Any]:
 
 
 class ResolveRequest(BaseModel):
-    status: str = "resolved"  # resolved | ignored
+    # Portal triage uses open|acknowledged|resolved; ignored remains for
+    # soft-dismiss. ``set_status`` accepts any string — this allowlist
+    # keeps the resolve endpoint from writing arbitrary values.
+    status: str = "resolved"  # open | acknowledged | resolved | ignored
+
+
+_RESOLVE_STATUSES = frozenset({"open", "acknowledged", "resolved", "ignored"})
 
 
 class TriageRequest(BaseModel):
@@ -164,7 +170,7 @@ async def resolve_issue(
     body: ResolveRequest = Body(default=ResolveRequest()),
 ) -> dict[str, Any]:
     await _require_postgres()
-    target = body.status if body.status in ("resolved", "ignored") else "resolved"
+    target = body.status if body.status in _RESOLVE_STATUSES else "resolved"
     ok = await _repo.set_status(
         org_id, issue_id, target, set_resolved_at=(target == "resolved")
     )

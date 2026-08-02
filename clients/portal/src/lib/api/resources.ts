@@ -2073,7 +2073,11 @@ export const api = {
   acknowledgeAlert: (orgId: string, alertId: string) =>
     fetchApi<{ alert_id: string; acknowledged: boolean }>(
       `/orgs/${orgId}/alerts/${alertId}/acknowledge`,
-      { method: "POST" },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acknowledged: true }),
+      },
     ),
 
   acknowledgeAlertsBatch: (orgId: string, alertIds: string[]) =>
@@ -2723,6 +2727,40 @@ export const agentsApi = {
     ),
 };
 
+// ── Agent Issues (F29) ─────────────────────────────────────────────
+// Backend: POST /orgs/{org_id}/agent-issues/{issue_id}/resolve
+// Accepts open | acknowledged | resolved | ignored (portal triage uses
+// the first three; ignored soft-dismisses and maps to resolved in the
+// portal list).
+export type AgentIssueResolveStatus =
+  | "open"
+  | "acknowledged"
+  | "resolved"
+  | "ignored";
+
+export const agentIssuesApi = {
+  resolve: (
+    orgId: string,
+    issueId: string,
+    status: AgentIssueResolveStatus = "resolved",
+  ) =>
+    fetchApi<{
+      status: string;
+      data: { issue_id: string; status: string; updated: boolean };
+    }>(`/orgs/${orgId}/agent-issues/${issueId}/resolve`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+      noDedup: true,
+    }),
+  /** Alias for ``resolve`` — portal triage setStatus wiring. */
+  setStatus: (
+    orgId: string,
+    issueId: string,
+    status: AgentIssueResolveStatus,
+  ) => agentIssuesApi.resolve(orgId, issueId, status),
+};
+
 /** N22 autonomy policy envelope (Settings → Autonomous). */
 export type AutonomyPolicy = {
   org_id: string;
@@ -3248,6 +3286,23 @@ const signalsApi = {
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  toggle: (orgId: string, signalId: string, enabled: boolean) =>
+    fetchApi<Signal>(`/orgs/${orgId}/signals/${encodeURIComponent(signalId)}`, {
+      method: "PATCH",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }),
+  toggleLibrary: (orgId: string, templateId: string, enabled: boolean) =>
+    fetchApi<{
+      template_id: string;
+      enabled: boolean;
+      updated: number;
+      backfill_estimate: number;
+    }>(`/orgs/${orgId}/signals/library/${encodeURIComponent(templateId)}`, {
+      method: "PATCH",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }),
   seedDefaults: (orgId: string, profile: "minimal" | "standard" | "advanced" = "standard") =>
     fetchApi<{ count: number; skipped: number; profile: string; signal_ids: string[] }>(
       `/orgs/${orgId}/signals/seed-defaults`,
@@ -3264,6 +3319,32 @@ const signalsApi = {
         method: "POST",
         headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
         body: JSON.stringify({ value }),
+      },
+    ),
+};
+
+/** Inbox mutations for NL ``alert_events`` (resolve / reopen / mute). */
+const alertsApi = {
+  override: (
+    orgId: string,
+    alertId: string,
+    verdict: "real_incident" | "benign" | "duplicate",
+  ) =>
+    fetchApi<{ status: string; human_verdict?: string }>(
+      `/orgs/${orgId}/alerts/${encodeURIComponent(alertId)}/override`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ verdict }),
+      },
+    ),
+  acknowledge: (orgId: string, alertId: string, acknowledged: boolean) =>
+    fetchApi<{ status: string; alert_id: string; acknowledged: boolean }>(
+      `/orgs/${orgId}/alerts/${encodeURIComponent(alertId)}/acknowledge`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ acknowledged }),
       },
     ),
 };
@@ -3607,6 +3688,32 @@ const datasetsApi = {
       method: "PATCH",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  deleteRow: (orgId: string, datasetId: string, rowId: string) =>
+    fetchApi<{ deleted: boolean }>(
+      `/orgs/${orgId}/datasets/${datasetId}/rows/${rowId}`,
+      {
+        method: "DELETE",
+        headers: { "X-Org-Id": orgId },
+        noDedup: true,
+      },
+    ),
+  patch: (
+    orgId: string,
+    datasetId: string,
+    body: { name?: string; description?: string },
+  ) =>
+    fetchApi<Dataset>(`/orgs/${orgId}/datasets/${datasetId}`, {
+      method: "PATCH",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  delete: (orgId: string, datasetId: string) =>
+    fetchApi<{ deleted: boolean }>(`/orgs/${orgId}/datasets/${datasetId}`, {
+      method: "DELETE",
+      headers: { "X-Org-Id": orgId },
       noDedup: true,
     }),
   createSnapshot: (orgId: string, datasetId: string) =>
@@ -4011,6 +4118,7 @@ const wave6Api = {
 
 (api as unknown as Record<string, unknown>).labelingApi = labelingApi;
 (api as unknown as Record<string, unknown>).signalsApi = signalsApi;
+(api as unknown as Record<string, unknown>).alertsApi = alertsApi;
 (api as unknown as Record<string, unknown>).debuggerApi = debuggerApi;
 (api as unknown as Record<string, unknown>).debugSessionsApi = debugSessionsApi;
 (api as unknown as Record<string, unknown>).browserSessionsApi = browserSessionsApi;
@@ -4021,6 +4129,7 @@ const wave6Api = {
 export {
   labelingApi,
   signalsApi,
+  alertsApi,
   debuggerApi,
   debugSessionsApi,
   browserSessionsApi,

@@ -239,18 +239,21 @@ class TestP3ArchiveResolveParallel:
     """``_load_from_archive`` resolves request/response pairs in
     parallel via a single outer ``gather``."""
 
-    def test_resolve_pairs_gathered(self) -> None:
-        """Static check: ``get_trace_tree`` uses ``asyncio.gather``
-        on the request/response resolve pairs (was sequential per
-        row)."""
+    def test_resolve_pairs_batched(self) -> None:
+        """Static check: ``get_trace_tree`` batch-hydrates message
+        bodies via one ``get_many`` (was N× asyncio.gather pairs)."""
         import inspect
 
         from eden.observability import telemetry_collector as tc
 
         source = inspect.getsource(tc.TelemetryCollector.get_trace_tree)
-        assert "asyncio.gather" in source, (
-            "P-3 regression: get_trace_tree doesn't use asyncio.gather "
-            "for resolve_request/resolve_response"
+        assert "get_many" in source, (
+            "Wave 5 regression: get_trace_tree doesn't batch-hydrate "
+            "via message_store.get_many"
+        )
+        assert "reconstruct_request_body" not in source, (
+            "Wave 5 regression: get_trace_tree still per-span "
+            "reconstruct_request_body (N+1)"
         )
 
 

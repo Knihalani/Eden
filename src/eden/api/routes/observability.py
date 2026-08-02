@@ -602,11 +602,21 @@ async def list_traces(
 async def get_trace_tree_route(
     org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., description="Trace ID"),
+    hydrate_bodies: bool = Query(
+        False,
+        description=(
+            "When true, reconstruct full request/response bodies via "
+            "message_store (expensive). Default false returns span "
+            "structure with inline JSONB previews only."
+        ),
+    ),
     user: dict = Depends(get_current_user),
 ) -> TraceTreeResponse:
     """Retrieve a hierarchical trace tree for visualization."""
     collector = await _get_collector()
-    tree = await collector.get_trace_tree(org_id, trace_id)
+    tree = await collector.get_trace_tree(
+        org_id, trace_id, hydrate_bodies=hydrate_bodies,
+    )
     if tree is None:
         raise HTTPException(status_code=404, detail="Trace not found")
     return TraceTreeResponse(

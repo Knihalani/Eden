@@ -75,7 +75,7 @@ If you want to **learn** something, see
 
   <div class="eden-card eden-card--small">
     <h4>Build a judge pipeline</h4>
-    <p>Deterministic + LLM judges, regression alerts, golden datasets.</p>
+    <p>Deterministic + LLM judges, regression alerts, and offline eval runs.</p>
     <a href="/how-to/judges">Read →</a>
   </div>
 

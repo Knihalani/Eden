@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bell, X } from "lucide-react";
 import {
   agentForAlert,
@@ -20,8 +21,10 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { alertsApi } from "@/lib/api/resources";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
+import { useLabToast } from "@/lab/lab-toast";
 
 type InboxFilter = "actionable" | "firing" | "muted" | "resolved" | "all";
 
@@ -85,12 +88,20 @@ function EventRow({
 function EventDetail({
   event,
   rule,
-  onStatus,
+  busy,
+  onResolve,
+  onReopen,
+  onMute,
+  onUnmute,
   onCloseModal,
 }: {
   event: AlertEvent;
   rule?: AlertRule;
-  onStatus: (status: AlertEventStatus) => void;
+  busy?: boolean;
+  onResolve: () => void;
+  onReopen: () => void;
+  onMute: () => void;
+  onUnmute: () => void;
   onCloseModal: () => void;
 }) {
   const agent = agentForAlert(event);
@@ -130,16 +141,16 @@ function EventDetail({
               <button
                 type="button"
                 className="ds-btn ds-btn-primary ds-btn-sm"
-                title="Local draft only — not saved to the server"
-                onClick={() => onStatus("resolved")}
+                disabled={busy}
+                onClick={onResolve}
               >
-                Resolve (draft)
+                Resolve
               </button>
               <button
                 type="button"
                 className="ds-btn ds-btn-ghost ds-btn-sm"
-                disabled
-                title="Not available yet"
+                disabled={busy}
+                onClick={onMute}
               >
                 Mute
               </button>
@@ -149,8 +160,8 @@ function EventDetail({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
-              disabled
-              title="Not available yet"
+              disabled={busy}
+              onClick={onUnmute}
             >
               Unmute
             </button>
@@ -159,10 +170,10 @@ function EventDetail({
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
-              title="Local draft only — not saved to the server"
-              onClick={() => onStatus("firing")}
+              disabled={busy}
+              onClick={onReopen}
             >
-              Reopen (draft)
+              Reopen
             </button>
           ) : null}
         </div>
@@ -262,6 +273,8 @@ export function AlertsModal() {
 
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
+  const { pushToast } = useLabToast();
 
   const rulesQuery = useOrgQuery(
     queryKeys.portal.alertRules(orgId),
@@ -276,15 +289,20 @@ export function AlertsModal() {
     { enabled: open },
   );
   const liveRules = rulesQuery.data ?? [];
-  const liveEvents = eventsQuery.data ?? [];
+  const events = eventsQuery.data ?? [];
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("actionable");
-  const [statusOverride, setStatusOverride] = useState<
-    Record<string, AlertEventStatus>
-  >({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+
+  const invalidateEvents = useCallback(async () => {
+    if (!orgId) return;
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.portal.alertEvents(orgId),
+    });
+  }, [orgId, queryClient]);
 
   useEffect(() => {
     if (open) {
@@ -307,15 +325,6 @@ export function AlertsModal() {
       document.body.style.overflow = prev;
     };
   }, [mounted]);
-
-  const events = useMemo(
-    () =>
-      liveEvents.map((e) => ({
-        ...e,
-        status: statusOverride[e.id] ?? e.status,
-      })),
-    [liveEvents, statusOverride],
-  );
 
   const rules = liveRules;
 
@@ -359,12 +368,77 @@ export function AlertsModal() {
     markRead(id);
   }
 
-  function setEventStatus(id: string, status: AlertEventStatus) {
-    setStatusOverride((prev) => ({ ...prev, [id]: status }));
-    markRead(id);
-  }
+  const runAction = useCallback(
+    async (
+      eventId: string,
+      label: string,
+      action: () => Promise<unknown>,
+    ) => {
+      if (!orgId) return;
+      setActionBusyId(eventId);
+      markRead(eventId);
+      try {
+        await action();
+        await invalidateEvents();
+      } catch (err) {
+        pushToast({
+          title: `Couldn't ${label}`,
+          body: err instanceof Error ? err.message : "Try again",
+          tone: "fail",
+        });
+      } finally {
+        setActionBusyId(null);
+      }
+    },
+    [orgId, invalidateEvents, markRead, pushToast],
+  );
 
   if (!mounted) return null;
+
+  if (!orgId) {
+    return (
+      <div
+        className="lab-alerts-modal fixed inset-0 z-[70] flex flex-col bg-[var(--bg)] text-[var(--text)]"
+        data-state={visible ? "open" : "closed"}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="alerts-modal-title"
+        aria-hidden={!visible}
+      >
+        <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-7">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-[var(--radius)] bg-[var(--accent-muted)] text-[var(--accent)]">
+              <Bell className="h-4 w-4" strokeWidth={1.7} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h1
+                id="alerts-modal-title"
+                className="type-title text-[var(--text)]"
+              >
+                Inbox
+              </h1>
+              <p className="type-meta mt-0.5">
+                Select a workspace to view alerts
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-sm"
+            onClick={closeAlerts}
+            aria-label="Close Inbox"
+          >
+            <X className="h-4 w-4" />
+            <span className="hidden sm:inline">Close</span>
+          </button>
+        </header>
+        <EmptyState
+          title="No workspace selected"
+          body="Select a workspace to view this inbox."
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -388,8 +462,6 @@ export function AlertsModal() {
               {unreadCount > 0
                 ? `${unreadCount} unread · ${counts.firing} firing`
                 : `${counts.firing} firing`}
-              {" · "}
-              Resolve here stays local until inbox sync is available
             </p>
           </div>
         </div>
@@ -501,12 +573,32 @@ export function AlertsModal() {
 
         {filtered.length === 0 ? null : (
           <div className="min-h-0 min-w-0 flex-1 bg-[var(--bg)]">
-            {selected ? (
+            {selected && orgId ? (
               <EventDetail
                 event={selected}
                 rule={selectedRule}
+                busy={actionBusyId === selected.id}
                 onCloseModal={closeAlerts}
-                onStatus={(status) => setEventStatus(selected.id, status)}
+                onResolve={() => {
+                  void runAction(selected.id, "resolve", () =>
+                    alertsApi.override(orgId, selected.id, "benign"),
+                  );
+                }}
+                onReopen={() => {
+                  void runAction(selected.id, "reopen", () =>
+                    alertsApi.override(orgId, selected.id, "real_incident"),
+                  );
+                }}
+                onMute={() => {
+                  void runAction(selected.id, "mute", () =>
+                    alertsApi.acknowledge(orgId, selected.id, true),
+                  );
+                }}
+                onUnmute={() => {
+                  void runAction(selected.id, "unmute", () =>
+                    alertsApi.acknowledge(orgId, selected.id, false),
+                  );
+                }}
               />
             ) : (
               <EmptyState
