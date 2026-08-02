@@ -14,7 +14,6 @@ export const U20_CORE_AXE_ROUTES = [
   "/sessions",
   "/evals",
   "/improve",
-  "/alerts",
   "/agents",
   "/compare",
   "/cost",
@@ -41,10 +40,6 @@ export const U20_EMPTY_COPY = {
     "No traces ingested yet. Create an API key, then send traffic via the SDK or gateway.",
   issues:
     "No failure fingerprints yet. They appear after finalized traces fail — usually within 60 seconds. Install the SDK, then send traffic.",
-  artifacts:
-    "No shadow candidates yet. They appear after recurring issues resolve. Send traces via the SDK or gateway first.",
-  ledger:
-    "No ledger drafts yet. Resolve an issue or promote an Artifact to seed the first draft.",
   traces:
     "No events ingested yet. Run doctor to verify ingest, then send traffic from the gateway or SDK.",
   playground:

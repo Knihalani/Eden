@@ -64,7 +64,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('clients/portal/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('clients/portal/bun.lock') }}
 
       - name: Run e2e suite
         run: |

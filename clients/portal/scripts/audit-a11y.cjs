@@ -34,7 +34,6 @@ const ROUTES = [
   "/sessions",
   "/evals",
   "/improve",
-  "/alerts",
   "/agents",
   "/compare",
   "/cost",

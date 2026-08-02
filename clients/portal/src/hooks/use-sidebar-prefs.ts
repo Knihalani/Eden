@@ -6,13 +6,13 @@
  * Live shell navigation uses `@/lab/nav` (NAV_SECTIONS / PRIMARY_NAV).
  * This hook still applies prefs against `DEFAULT_SIDEBAR` for the
  * settings sidebar editor + legacy pin/hide API — group ids overlap
- * Observe/Evaluate/Improve/Workspace with lab/nav section ids.
+ * Observe/Evaluate/Improve/Assist/Workspace with lab/nav section ids.
  *
  * The customisations live in three buckets:
  *   1. **pinned**     — item ids that should appear in a "📌 Pinned" section
  *                       above the groups
  *   2. **hidden**     — item ids that should be removed entirely
- *   3. **groupOrder** — the order of the 5 top-level groups
+ *   3. **groupOrder** — the order of the top-level groups
  *
  * The data is loaded from the FastAPI backend (per-user, per-org) and
  * cached in `sessionStorage` for instant render on hard reload. Writes
@@ -37,36 +37,70 @@ export interface SidebarPrefs {
   density: Density;
 }
 
-/** Wave 3 group-id rename — migrate persisted prefs / session cache. */
+/** Prior group-id renames — migrate persisted prefs / session cache. */
 const LEGACY_GROUP_IDS: Record<string, SidebarGroup["id"]> = {
-  build: "home",
+  build: "observe",
   automate: "evaluate",
   optimize: "improve",
+  home: "observe",
+  agents: "observe",
 };
 
 const KNOWN_GROUP_IDS = new Set<SidebarGroup["id"]>([
-  "home",
-  "agents",
   "observe",
   "evaluate",
   "improve",
+  "assist",
   "workspace",
 ]);
 
+const DEFAULT_GROUP_ORDER: SidebarGroup["id"][] = [
+  "observe",
+  "evaluate",
+  "improve",
+  "assist",
+  "workspace",
+];
+
+/** Map legacy leaf ids stored in pinned/hidden prefs onto live leaf ids. */
+const LEGACY_ITEM_IDS: Record<string, string> = {
+  dashboard: "home",
+  alerts: "signals",
+  audit: "settings",
+};
+
+function migrateItemIds(ids: string[] | undefined): string[] {
+  if (!Array.isArray(ids)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    const next = LEGACY_ITEM_IDS[id] ?? id;
+    if (seen.has(next)) continue;
+    seen.add(next);
+    out.push(next);
+  }
+  return out;
+}
+
 export function migrateGroupOrder(order: string[] | undefined): SidebarGroup["id"][] {
-  if (!Array.isArray(order) || (order.length !== 5 && order.length !== 6)) {
+  if (!Array.isArray(order) || order.length < 4 || order.length > 6) {
     return DEFAULT_PREFS.groupOrder;
   }
   const mapped = order.map(
     (id) => LEGACY_GROUP_IDS[id] ?? (id as SidebarGroup["id"]),
   );
-  // Phase 2+ added `agents` group — inject if migrating from 5-group prefs.
-  const withAgents =
-    mapped.includes("agents")
-      ? mapped
-      : ([mapped[0], "agents", ...mapped.slice(1)] as SidebarGroup["id"][]);
-  if (withAgents.every((id) => KNOWN_GROUP_IDS.has(id)) && withAgents.length === 6) {
-    return withAgents;
+  // Dedupe while preserving first-seen order (home/agents both → observe).
+  const deduped: SidebarGroup["id"][] = [];
+  for (const id of mapped) {
+    if (!KNOWN_GROUP_IDS.has(id)) continue;
+    if (deduped.includes(id)) continue;
+    deduped.push(id);
+  }
+  for (const id of DEFAULT_GROUP_ORDER) {
+    if (!deduped.includes(id)) deduped.push(id);
+  }
+  if (deduped.length === 5 && deduped.every((id) => KNOWN_GROUP_IDS.has(id))) {
+    return deduped;
   }
   return DEFAULT_PREFS.groupOrder;
 }
@@ -74,8 +108,8 @@ export function migrateGroupOrder(order: string[] | undefined): SidebarGroup["id
 export const DEFAULT_PREFS: SidebarPrefs = {
   pinned: [],
   hidden: [],
-  // Home → Agents → Observe → Evaluate → Improve → Workspace (product path).
-  groupOrder: ["home", "agents", "observe", "evaluate", "improve", "workspace"],
+  // Observe → Evaluate → Improve → Assist → Workspace (product path).
+  groupOrder: DEFAULT_GROUP_ORDER,
   density: "comfortable",
 };
 
@@ -141,8 +175,8 @@ function fromApiPrefs(p: ApiSidebarPrefs | null | Record<string, unknown>): Side
   }
   const prefs = p as ApiSidebarPrefs;
   return {
-    pinned: Array.isArray(prefs.pinned) ? prefs.pinned : [],
-    hidden: Array.isArray(prefs.hidden) ? prefs.hidden : [],
+    pinned: migrateItemIds(prefs.pinned),
+    hidden: migrateItemIds(prefs.hidden),
     groupOrder: migrateGroupOrder(prefs.group_order),
     density: prefs.density === "compact" ? "compact" : "comfortable",
   };
@@ -155,8 +189,8 @@ function readCached(orgId: string | null | undefined): SidebarPrefs | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SidebarPrefs>;
     return {
-      pinned: Array.isArray(parsed.pinned) ? parsed.pinned : DEFAULT_PREFS.pinned,
-      hidden: Array.isArray(parsed.hidden) ? parsed.hidden : DEFAULT_PREFS.hidden,
+      pinned: migrateItemIds(parsed.pinned),
+      hidden: migrateItemIds(parsed.hidden),
       groupOrder: migrateGroupOrder(parsed.groupOrder),
       density: parsed.density === "compact" ? "compact" : "comfortable",
     };

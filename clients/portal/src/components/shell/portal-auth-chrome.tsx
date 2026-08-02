@@ -156,7 +156,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           />
         ) : null}
         {selectError ? (
-          <p className="mt-1 type-meta text-[var(--danger)]" role="alert">
+          <p className="mt-1 type-meta text-[var(--error)]" role="alert">
             {selectError}
           </p>
         ) : null}
@@ -195,7 +195,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
         />
       ) : null}
       {selectError ? (
-        <p className="mt-1 type-meta text-[var(--danger)]" role="alert">
+        <p className="mt-1 type-meta text-[var(--error)]" role="alert">
           {selectError}
         </p>
       ) : null}
@@ -547,7 +547,7 @@ export function PortalStatusBanners() {
               : "Create a workspace to start ingesting traces and managing agents."}
           </p>
           {createError ? (
-            <p className="type-meta mt-1 text-[var(--danger)]">{createError}</p>
+            <p className="type-meta mt-1 text-[var(--error)]">{createError}</p>
           ) : null}
         </div>
         <button

@@ -105,6 +105,8 @@
   --error-muted: color-mix(in srgb, var(--eden-rose-400) 12%, transparent);
   --error-bg: var(--error-muted);
   --error-dim: var(--error-muted);
+  /* Alias for legacy call sites that said "danger" instead of "error". */
+  --danger: var(--error);
   /* Warn is not a third status color — bad is red. Kept as aliases for legacy classnames. */
   --warning: var(--error);
   --warning-muted: var(--error-muted);

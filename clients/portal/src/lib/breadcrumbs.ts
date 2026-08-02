@@ -6,10 +6,10 @@
 // re-implementing the sidebar-group lookup in two places.
 
 export type SidebarGroupId =
-  | "home"
   | "observe"
   | "improve"
   | "evaluate"
+  | "assist"
   | "workspace";
 
 export interface BreadcrumbLabel {
@@ -31,7 +31,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   billing: { label: "Billing", category: "workspace" },
   docs: { label: "Quickstart", category: "workspace" },
   profile: { label: "Profile", category: "workspace" },
-  new: { label: "New", category: "home" },
+  new: { label: "New", category: "observe" },
   observability: { label: "Observability", category: "observe" },
   incidents: { label: "Incidents", category: "observe" },
   insights: { label: "Insights", category: "observe" },
@@ -42,7 +42,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   // sandbox / builder / marketplace / multi-agent removed — env-gen strip
   users: { label: "User Intelligence", category: "observe" },
   prompts: { label: "Prompts", category: "improve" },
-  debugger: { label: "Debugger", category: "observe" },
+  debugger: { label: "Debugger", category: "assist" },
   synthetic: { label: "Synthetic Q/A", category: "observe" },
   signals: { label: "Signals", category: "observe" },
   members: { label: "Members", category: "workspace" },
@@ -70,11 +70,11 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   eval: { label: "Eval", category: "observe" },
   traces: { label: "Traces", category: "observe" },
   onboarding: { label: "Onboarding", category: "workspace" },
-  connect: { label: "Connect Agent", category: "home" },
+  connect: { label: "Connect Agent", category: "observe" },
   fleet: { label: "Fleet", category: "observe" },
   replay: { label: "Replay", category: "observe" },
-  datasets: { label: "Datasets", category: "home" },
-  labeling: { label: "Labeling", category: "home" },
+  datasets: { label: "Datasets", category: "evaluate" },
+  labeling: { label: "Labeling", category: "evaluate" },
   mcp: { label: "MCP SRE", category: "observe" },
   "model-advisor": { label: "Model Advisor", category: "improve" },
   "closed-loop": { label: "Closed-Loop", category: "evaluate" },
@@ -87,12 +87,16 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   ledger: { label: "Ledger", category: "improve" },
   book: { label: "Agent Book", category: "evaluate" },
   drift: { label: "Drift", category: "evaluate" },
-  "debugger-sessions": { label: "Debug sessions", category: "observe" },
+  "debugger-sessions": { label: "Debug sessions", category: "assist" },
   scorecard: { label: "Scorecard", category: "improve" },
   "online-scoring": { label: "Online scoring", category: "improve" },
   "change-impact": { label: "Change impact", category: "improve" },
   audit: { label: "Audit trail", category: "workspace" },
   "audit-trail": { label: "Audit trail", category: "workspace" },
+  agent: { label: "Assistant", category: "assist" },
+  compare: { label: "Live A/B", category: "evaluate" },
+  gateway: { label: "Gateway", category: "improve" },
+  cost: { label: "Cost", category: "improve" },
 };
 
 export interface Breadcrumb {

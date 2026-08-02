@@ -54,12 +54,13 @@ even on this two-weeks-stale tree:
 2. **`vercel.json`** install command now wraps the install with a fallback:
 
    ```
-   bun install --frozen-lockfile || (echo ...warning && bun install)
+   bun install --frozen-lockfile || bun install
    ```
 
    `--frozen-lockfile` exits 1 when `bun.lock` has drifted even slightly
-   from the manifest. The fallback logs the drift so it's visible in build
-   output, then re-installs without the flag.
+   from the manifest. The fallback re-installs without the flag so the
+   build can proceed. Do **not** fall back to `npm ci` — the portal is
+   Bun-only (`packageManager: bun@…`) and `package-lock.json` was removed.
 
 See `.vercel/output/diagnostics/cli_traces.json` for the last failed build
 trace (Jul 2, 2026 21:25 UTC — `vc.builder.install` exited 1).

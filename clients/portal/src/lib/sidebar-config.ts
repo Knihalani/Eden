@@ -1,22 +1,25 @@
 /**
- * Rebuild IA sidebar — 12 core leaves.
- * Phase 7: all must-ship leaves live (agent, audit, settings); Later surfaces stay redirected.
- * Labels resolve via next-intl (labelKey).
+ * Prefs/editor sidebar config — keep leaf ids/hrefs aligned with `@/lab/nav`.
+ * Live shell SoT remains `@/lab/nav`; this file drives pin-hide prefs only.
+ * Labels resolve via next-intl (labelKey) with English fallbacks below.
  */
 
 import type { ComponentType } from "react";
 import {
-  LayoutDashboard,
+  Home,
   Bot,
   GitBranch,
-  ShieldAlert,
-  Bell,
+  AlertTriangle,
+  Activity,
   FlaskConical,
   Sparkles,
-  ShieldCheck,
+  Shield,
   CircleDollarSign,
+  Network,
   MessageSquare,
-  ScrollText,
+  Bug,
+  GitCompare,
+  FileText,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -35,25 +38,28 @@ export interface SidebarItem {
 }
 
 export interface SidebarGroup {
-  id: "home" | "agents" | "observe" | "evaluate" | "improve" | "workspace";
+  id: "observe" | "evaluate" | "improve" | "assist" | "workspace";
   /** next-intl key under `nav.groups.*` */
   labelKey: string;
   items: SidebarItem[];
 }
 
-/** Exactly the 12 core leaf ids (IA §1.1). */
+/** Live product leaf ids — mirrors PRIMARY_NAV in `@/lab/nav`. */
 export const CORE_NAV_LEAF_IDS = [
-  "dashboard",
+  "home",
   "agents",
   "traces",
   "issues",
-  "alerts",
+  "signals",
   "evals",
+  "prompts",
+  "compare",
   "improve",
   "guardrails",
   "cost",
+  "gateway",
   "agent",
-  "audit",
+  "debugger",
   "settings",
 ] as const;
 
@@ -69,12 +75,12 @@ export const CORE_NAV_ITEM_COUNT = CORE_NAV_LEAF_IDS.length;
 /** No core leaves remain stubbed after Phase 7. Later surfaces use redirects, not /_stub. */
 export const STUB_SURFACE_IDS = [] as readonly CoreNavLeafId[];
 
-/** Mobile bottom nav — exactly 5 hubs (PHASES §1.5). */
+/** Mobile bottom nav — exactly 5 hubs (mirrors mobile-nav BOTTOM_IDS). */
 export const MOBILE_BOTTOM_NAV = [
   {
-    id: "dashboard" as const,
+    id: "home" as const,
     href: "/home",
-    labelKey: "nav.leaves.dashboard",
+    labelKey: "nav.leaves.home",
   },
   {
     id: "traces" as const,
@@ -98,27 +104,24 @@ export const MOBILE_BOTTOM_NAV = [
   },
 ] as const;
 
-/** More sheet — core leaves not on bottom nav + secondary (debugger, prompts, analytics). */
+/** More sheet — core leaves not on bottom nav. */
 export const MOBILE_MORE_NAV = [
   { id: "agents" as const, href: "/agents", labelKey: "nav.leaves.agents" },
-  { id: "alerts" as const, href: "/alerts", labelKey: "nav.leaves.alerts" },
-  { id: "cost" as const, href: "/cost", labelKey: "nav.leaves.cost" },
+  { id: "signals" as const, href: "/signals", labelKey: "nav.leaves.signals" },
+  { id: "prompts" as const, href: "/prompts", labelKey: "nav.leaves.prompts" },
+  { id: "compare" as const, href: "/compare", labelKey: "nav.leaves.compare" },
   {
     id: "guardrails" as const,
     href: "/guardrails",
     labelKey: "nav.leaves.guardrails",
   },
+  { id: "cost" as const, href: "/cost", labelKey: "nav.leaves.cost" },
+  { id: "gateway" as const, href: "/gateway", labelKey: "nav.leaves.gateway" },
   { id: "agent" as const, href: "/agent", labelKey: "nav.leaves.agent" },
   {
     id: "debugger" as const,
     href: "/debugger",
     labelKey: "nav.leaves.debugger",
-  },
-  { id: "prompts" as const, href: "/prompts", labelKey: "nav.leaves.prompts" },
-  {
-    id: "sessions" as const,
-    href: "/sessions",
-    labelKey: "nav.leaves.sessions",
   },
   {
     id: "settings" as const,
@@ -129,22 +132,16 @@ export const MOBILE_MORE_NAV = [
 
 export const DEFAULT_SIDEBAR: SidebarGroup[] = [
   {
-    id: "home",
-    labelKey: "nav.groups.home",
+    id: "observe",
+    labelKey: "nav.groups.observe",
     items: [
       {
-        id: "dashboard",
+        id: "home",
         href: "/home",
-        labelKey: "nav.leaves.dashboard",
-        icon: LayoutDashboard,
+        labelKey: "nav.leaves.home",
+        icon: Home,
         category: "core",
       },
-    ],
-  },
-  {
-    id: "agents",
-    labelKey: "nav.groups.agents",
-    items: [
       {
         id: "agents",
         href: "/agents",
@@ -152,12 +149,6 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         icon: Bot,
         category: "core",
       },
-    ],
-  },
-  {
-    id: "observe",
-    labelKey: "nav.groups.observe",
-    items: [
       {
         id: "traces",
         href: "/traces",
@@ -169,14 +160,14 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         id: "issues",
         href: "/issues",
         labelKey: "nav.leaves.issues",
-        icon: ShieldAlert,
+        icon: AlertTriangle,
         category: "core",
       },
       {
-        id: "alerts",
-        href: "/alerts",
-        labelKey: "nav.leaves.alerts",
-        icon: Bell,
+        id: "signals",
+        href: "/signals",
+        labelKey: "nav.leaves.signals",
+        icon: Activity,
         category: "core",
       },
     ],
@@ -190,6 +181,20 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/evals",
         labelKey: "nav.leaves.evals",
         icon: FlaskConical,
+        category: "core",
+      },
+      {
+        id: "prompts",
+        href: "/prompts",
+        labelKey: "nav.leaves.prompts",
+        icon: FileText,
+        category: "core",
+      },
+      {
+        id: "compare",
+        href: "/compare",
+        labelKey: "nav.leaves.compare",
+        icon: GitCompare,
         category: "core",
       },
     ],
@@ -209,7 +214,7 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         id: "guardrails",
         href: "/guardrails",
         labelKey: "nav.leaves.guardrails",
-        icon: ShieldCheck,
+        icon: Shield,
         category: "core",
       },
       {
@@ -219,11 +224,18 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         icon: CircleDollarSign,
         category: "core",
       },
+      {
+        id: "gateway",
+        href: "/gateway",
+        labelKey: "nav.leaves.gateway",
+        icon: Network,
+        category: "core",
+      },
     ],
   },
   {
-    id: "workspace",
-    labelKey: "nav.groups.workspace",
+    id: "assist",
+    labelKey: "nav.groups.assist",
     items: [
       {
         id: "agent",
@@ -233,12 +245,18 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         category: "core",
       },
       {
-        id: "audit",
-        href: "/settings?mode=audit",
-        labelKey: "nav.leaves.audit",
-        icon: ScrollText,
+        id: "debugger",
+        href: "/debugger",
+        labelKey: "nav.leaves.debugger",
+        icon: Bug,
         category: "core",
       },
+    ],
+  },
+  {
+    id: "workspace",
+    labelKey: "nav.groups.workspace",
+    items: [
       {
         id: "settings",
         href: "/settings",
@@ -270,25 +288,27 @@ export const ALL_ITEM_IDS: readonly string[] = DEFAULT_SIDEBAR.flatMap((g) =>
  * Live shell SoT remains `@/lab/nav` — this config is prefs/editor only.
  */
 export const SIDEBAR_ITEM_LABELS: Record<string, string> = {
-  dashboard: "Home",
+  home: "Home",
   agents: "Agents",
   traces: "Traces",
   issues: "Issues",
-  alerts: "Detectors",
+  signals: "Detectors",
   evals: "Evals",
+  prompts: "Prompts",
+  compare: "Live A/B",
   improve: "Improve",
   guardrails: "Guardrails",
   cost: "Cost",
+  gateway: "Gateway",
   agent: "Assistant",
-  audit: "Audit",
+  debugger: "Debugger",
   settings: "Settings",
 };
 
 export const SIDEBAR_GROUP_LABELS: Record<SidebarGroup["id"], string> = {
-  home: "Home",
-  agents: "Agents",
   observe: "Observe",
   evaluate: "Evaluate",
   improve: "Improve",
+  assist: "Assist",
   workspace: "Workspace",
 };
