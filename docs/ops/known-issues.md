@@ -78,7 +78,7 @@ Zero duplicate slugs in production, which is exactly why it never fired
 picked the same organization name. Now dedupes the same way `create_org`
 does.
 
-### 6. Duplicate organizations are minted by Clerk, not by Eden
+### 6. ~~Duplicate organizations are minted by Clerk, not by Eden~~ — VERIFIED CLOSED 2026-08-02
 
 One production user owns 7 orgs, all named "Kaiav's Organization", one
 per sign-in between Jul 12-24.
@@ -105,6 +105,12 @@ on both production (`ins_3FJJw1RScIsFcbJi7YLG6R2tmso`) and development
 (`ins_3FG3Go0jmcbsGJ3xPOzNTsFfkSn`) via `clerk config patch`. Verified
 with a follow-up `clerk config pull`.
 
+**Verified closed (2026-08-02):** the `setActive` fix is in
+`use-org.tsx` (`OrgProvider`, lines ~308-343, with a re-entrancy guard
+referencing this entry). Live DB check: **zero** organizations created
+since 2026-07-31, and the only `owner+name` group with more than one
+org is the original pre-fix seven (Jul 12-24). The remint loop is dead.
+
 ### 7. ~~Stale identity rows in production `users`~~ — FIXED 2026-07-31
 
 - One row had `clerk_id` set to another user's Eden primary key, so
@@ -120,15 +126,19 @@ with a follow-up `clerk config pull`.
 
 ## Latent (unreachable today)
 
-### 8. RTBF misses the tables holding user content
+### 8. ~~RTBF misses the tables holding user content~~ — CODE-FIXED 2026-08-02
 
-See `docs/ops/disabled-features.md` §2. Behind `rtbf_fanout_v1=False`;
-its two bypass callers are both dead code (`rtbf_tracker.py` has no
-production callers; `promotion_hooks.py:678` calls `process_request`
-without its required `org_id` and raises into a swallowed `except`).
+See `docs/ops/disabled-features.md` §2. The Postgres path in
+`gdpr.py` now issues per-table SQL verified against the live
+`information_schema` and fails closed (named failing tables in an error
+envelope instead of a silent `rows_matched: 0` success). The dead
+auto-fire block in `promotion_hooks.py` is deleted, with a regression
+test pinning the removal. `rtbf_tracker.py` still has no production
+callers.
 
-The dead auto-fire block at `promotion_hooks.py:668-688` is a candidate
-for deletion.
+`rtbf_fanout_v1` stays **False**: the remaining blocker is proving
+secondary-store erasure (Typesense / Redis / Qdrant / ClickHouse / S3)
+before the flag certifies it.
 
 ### 9. ~~D.14 onboarding state machine writes to columns that do not exist~~ — FIXED 2026-07-31
 
@@ -150,21 +160,20 @@ defaults to True (kill-switch via env still works). Portal wizard
 
 ## Infrastructure
 
-### 10. Upstash Redis is at its hard limit
+### 10. ~~Upstash Redis is at its hard limit~~ — RESOLVED 2026-08-02 (month-end confirmation pending)
 
-`/health` reports `max requests limit exceeded. Limit: 500000, Usage:
-500000`. The fleet is riding the Postgres leader-election fallback.
+`/health` reported `max requests limit exceeded. Limit: 500000, Usage:
+500000` in July. The fleet rode the Postgres leader-election fallback.
 
-**Not currently customer-visible:** `/ready` is 200, the liveness and
-readiness probes target `/ready` and `/live` (not `/health`), rate
-limiting still works, and requests succeed.
-
-The quota resets at the start of the month. The burn that consumed it
-was the *pre*-2026-07-29 configuration (20s renewals on two permanently
-held locks plus 120s leader ticks ≈ 17k/day ≈ 510k/month — which lands
-almost exactly on the 500k observed). The current configuration measures
-at ~3,488/day ≈ 106k/month, i.e. 21% of the free allowance, so this
-should not recur.
+**2026-08-02 status:** the quota reset at the start of August as
+expected, and `/health` now reports Redis connected with the limit
+error gone. The burn that consumed July's quota was the
+*pre*-2026-07-29 configuration (20s renewals on two permanently held
+locks plus 120s leader ticks ≈ 17k/day ≈ 510k/month). The current
+configuration measures at ~3,488/day ≈ 106k/month — 21% of the free
+allowance — so the new cadence is holding two days into the reset
+period. Full-month confirmation due end of August; recurrence would
+mean the cadence model is wrong, not a new leak class.
 
 ---
 
@@ -238,6 +247,40 @@ Recorded so the same ground is not re-covered:
 - **`/health` could not see a read-only database.** Witnessed live: the Neon
   endpoint went read-only for ~2 minutes, all writes failed, and `/health`
   reported `postgres: connected` throughout.
+
+---
+
+## Fixed on 2026-08-02 (recorded so they are not re-investigated)
+
+- **Budget tracking was silently broken in production by an unquoted
+  reserved word.** `budget_consumption.window` is a PostgreSQL reserved
+  keyword, and `budget_service.py` / `usage_service.py` used it bare in
+  five SQL statements. Every budget check raised `PostgresSyntaxError`,
+  was caught and logged, and left the request-scoped transaction aborted
+  — surfacing as an unrelated-looking `InFailedSQLTransactionError`
+  (HTTP 503) on the *next* statement in the request. All five statements
+  now quote `"window"`; verified end-to-end with a live SDK ingest that
+  previously failed at exactly this point.
+- **Dead retention-policy router mounted.** `retention_policy.py` defined
+  GET/PUT `/orgs/{org_id}/retention-policy` but was never included in
+  `app.py` (the comment named it; the actual include was
+  `cost_overrides.router`). Mounted, with a wiring test
+  (`tests/unit/api/test_retention_policy_mount.py`) so it cannot silently
+  unmount again.
+- **`prompts_v2` shadowing `prompts` confirmed deliberate and pinned.**
+  The v1 list/create/get are intentionally superseded by v2
+  (first-match-wins); the v1-only surface (playground, rollback, …)
+  stays reachable. `tests/unit/api/test_prompts_router_precedence.py`
+  pins both halves so a future reorder breaks loudly.
+- **SDK `set_input`/`set_output` payloads were dropped on ingest.** The
+  normalizer never mapped the top-level `input`/`output` fields the SDKs
+  send onto `request_body`/`response_body`, so traces arrived with empty
+  payloads. Fixed in `ingestion/normalizer.py`, with PII masking applied
+  after the mapping so the mapped fields are also masked.
+- **TypeScript SDK minted malformed trace IDs.** `randomUUID().slice(0,
+  24)` produced dash-truncated IDs (`a6fe688f-0623-42a1-83c4-`). Now a
+  24-char base-36 generator (`sdk/ts-ai/src/trace.ts`), matching the
+  Python SDK's format; TS SDK tests updated and green.
 
 ---
 
