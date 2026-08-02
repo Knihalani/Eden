@@ -223,3 +223,54 @@ async def send_password_reset_email(*, to_email: str, token: str) -> EmailResult
         text_content=text,
         purpose="transactional",
     )
+
+
+async def send_verification_email(*, to_email: str, token: str) -> EmailResult:
+    """Send the email-address verification link (password signup).
+
+    This function did not exist while the signup path imported it
+    inside a ``try/except Exception`` — every signup told the user to
+    check an inbox that would never receive anything. Shipped
+    2026-08-02 alongside the ``email_verification_tokens`` table and
+    the ``/auth/verify-email`` route.
+
+    Same ``portal_base_url`` guard as the password-reset link: sending
+    a verification link to a domain that does not resolve is worse
+    than sending nothing — refuse so the caller's ERROR names a
+    fixable cause.
+    """
+    settings = get_settings()
+    base = (getattr(settings, "portal_base_url", "") or "").rstrip("/")
+
+    if not base or "example.com" in base:
+        raise RuntimeError(
+            "portal_base_url is unset or still the placeholder "
+            f"({base or 'empty'!r}); a verification link built on it would "
+            "not resolve. Set PORTAL_BASE_URL to the portal origin."
+        )
+
+    link = f"{base}/verify-email?token={token}"
+
+    subject = "Verify your Eden email address"
+    text = (
+        "Welcome to Eden.\n\n"
+        f"Open this link to verify your email address:\n{link}\n\n"
+        "The link expires in 24 hours and can be used once.\n"
+        "If you did not create an account, you can ignore this email.\n"
+    )
+    html = (
+        "<p>Welcome to Eden.</p>"
+        f'<p><a href="{link}">Verify your email address</a></p>'
+        "<p>The link expires in 24 hours and can be used once.</p>"
+        "<p>If you did not create an account, you can ignore this email.</p>"
+        f'<p style="color:#666;font-size:12px">If the button does not '
+        f"work, paste this into your browser:<br>{link}</p>"
+    )
+
+    return await get_email_service().send_email(
+        to_email=to_email,
+        subject=subject,
+        html_content=html,
+        text_content=text,
+        purpose="transactional",
+    )

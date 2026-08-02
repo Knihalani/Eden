@@ -8,8 +8,8 @@ the remaining PII-in-logs call sites in auth.py:
   The IP is needed for the honeypot diagnostic (so the
   operator can block the bot), but the email is straight
   PII and must be redacted.
-* ``verification email dispatch failed: {exc}`` /
-  ``password reset email dispatch failed: {exc}`` /
+* ``verification email dispatch FAILED …: {exc}`` /
+  ``password reset email dispatch FAILED: {exc}`` /
   ``forgot-password dispatch failed: {exc}`` — the
   upstream ``exc`` in the email service can include the
   request email in the error message. F66 wraps the
@@ -61,7 +61,12 @@ class TestF66AuthDispatchExcRedaction:
     @pytest.mark.parametrize(
         "log_text",
         [
-            "verification email dispatch failed",
+            # Reworded when this was raised WARNING -> ERROR on
+            # 2026-08-02 (verification flow shipped): a failed dispatch
+            # means the user can never verify and there is no resend
+            # path — that must be visible. The redaction requirement
+            # this test guards is unchanged.
+            "verification email dispatch FAILED",
             # Reworded when this was raised WARNING -> ERROR: the
             # plaintext reset token exists only in that email, so a
             # failed dispatch locks the user out with no recourse. The

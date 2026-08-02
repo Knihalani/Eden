@@ -244,8 +244,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             content={
                 "message": (
                     "If that email is not already registered, an account "
-                    "has been created. Check your email to verify before "
-                    "signing in."
+                    "has been created. Check your email to verify your "
+                    "address."
                 ),
             },
             # F69 — apply OWASP security headers (defense-in-depth).
@@ -286,8 +286,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             content={
                 "message": (
                     "If that email is not already registered, an account "
-                    "has been created. Check your email to verify before "
-                    "signing in."
+                    "has been created. Check your email to verify your "
+                    "address."
                 ),
             },
             # F69 — apply OWASP security headers (defense-in-depth).
@@ -316,8 +316,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
                 content={
                     "message": (
                         "If that email is not already registered, an account "
-                        "has been created. Check your email to verify before "
-                        "signing in."
+                        "has been created. Check your email to verify your "
+                        "address."
                     ),
                 },
                 headers=apply_security_headers(),
@@ -336,20 +336,15 @@ async def signup(request: SignupRequest, response: Response, req: Request):
     user_id = str(row["id"])
 
     # Audit 2026-06-22 B1.23 — mint a verification token and dispatch email.
-    # The session cookie is only issued AFTER /auth/verify-email succeeds.
-    # Email verification is OFF (2026-07-30) because it does not exist,
-    # in three independent ways:
-    #   * ``email_verification_tokens`` is not in the database, so the
-    #     INSERT below raises UndefinedTable on every signup;
-    #   * ``send_verification_email`` is not defined in email_service;
-    #   * there is no ``/auth/verify-email`` route anywhere — only a
-    #     string in default_deny.py's allowlist.
-    # All three were swallowed by the except, so every signup issued a
-    # doomed write and then told the user to check their email.
-    #
-    # ``login`` does not check ``email_verified``, so accounts are
-    # usable — the only damage was the instruction being a lie, and a
-    # failing DB write per signup. See docs/ops/disabled-features.md.
+    # Shipped 2026-08-02 (previously OFF because none of the flow existed):
+    #   * ``email_verification_tokens`` — migration
+    #     ``133_email_verification_tokens`` (SHA-256 ``token_hash``, the
+    #     plaintext only lives in the email link);
+    #   * ``email_service.send_verification_email``;
+    #   * the ``/auth/verify-email`` route below.
+    # ``login`` does not gate on ``email_verified`` (accounts stay usable
+    # while the verify email is in flight); verification records trust,
+    # it does not yet block sign-in. See docs/ops/disabled-features.md.
     verification_sent = False
     if getattr(get_settings(), "email_verification_enabled", False):
         try:
@@ -357,14 +352,15 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             from datetime import datetime, timedelta
 
             verify_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(verify_token.encode("utf-8")).hexdigest()
             expires = datetime.now(UTC) + timedelta(hours=24)
             await client.execute(
                 """
-                INSERT INTO email_verification_tokens (user_id, token, expires_at, used_at, created_at)
-                VALUES ($1, $2, $3, NULL, $3)
+                INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+                VALUES ($1, $2, $3)
                 """,
                 user_id,
-                verify_token,
+                token_hash,
                 expires,
             )
             from eden.services.email_service import send_verification_email
@@ -372,10 +368,15 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             await send_verification_email(to_email=request.email, token=verify_token)
             verification_sent = True
         except Exception as exc:
-            # F66 — defensive PII redaction. The upstream
-            # email service error can include the request
-            # email in the message; scrub it defensively.
-            logger.warning(f"verification email dispatch failed: {redact_email(str(exc))}")
+            # ERROR, not WARNING: the plaintext token exists ONLY in the
+            # email. If it does not go out the user can never verify and
+            # there is no resend path — that must be visible.
+            # F66 — defensive PII redaction.
+            logger.error(
+                "verification email dispatch FAILED — the user cannot "
+                "verify their address: %s",
+                redact_email(str(exc)),
+            )
 
     # Audit 2026-06-22 B1.23 — return 202; no session cookie until verified.
     # Security audit (enumeration): use the same generic message as the
@@ -393,8 +394,8 @@ async def signup(request: SignupRequest, response: Response, req: Request):
             # how you strand them on their first minute with the product.
             "message": (
                 "If that email is not already registered, an account "
-                "has been created. Check your email to verify before "
-                "signing in."
+                "has been created. Check your email to verify your "
+                "address."
                 if verification_sent
                 else "If that email is not already registered, an "
                 "account has been created. You can now sign in."
@@ -2060,6 +2061,10 @@ class _ResetPasswordRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class _VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
 @router.post("/forgot-password", response_model=dict)
 async def forgot_password(
     request: _ForgotPasswordRequest,
@@ -2225,3 +2230,76 @@ async def reset_password(
         )
 
     return {"message": "Password has been reset"}
+
+
+@router.post("/verify-email", response_model=dict)
+async def verify_email(request: _VerifyEmailRequest):
+    """Verify a signup email address with a one-time token.
+
+    Mirrors ``/auth/reset-password``: the submitted token is SHA-256
+    hashed and looked up in ``email_verification_tokens`` (plaintext
+    tokens are never stored); missing, expired or already-used tokens
+    all get the same 400 so the endpoint does not leak token state.
+    On success the token is burned and ``users.email_verified`` is set
+    in the same transaction.
+
+    Hidden (404) while ``email_verification_enabled`` is False — the
+    same convention as the feature-flagged routes.
+    """
+    if not getattr(get_settings(), "email_verification_enabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
+
+    if not request.token or len(request.token) < 16:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    client = await get_postgres_client()
+    token_hash = hashlib.sha256(request.token.encode("utf-8")).hexdigest()
+    row = await client.fetchrow(
+        """
+        SELECT id, user_id, expires_at, used_at
+          FROM email_verification_tokens
+         WHERE token_hash = $1
+        """,
+        token_hash,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    from datetime import datetime
+
+    now = datetime.now(UTC)
+    if row["used_at"] is not None or row["expires_at"] <= now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    async with client.transaction():
+        await client.execute(
+            """
+            UPDATE email_verification_tokens
+               SET used_at = $1
+             WHERE id = $2
+            """,
+            now,
+            row["id"],
+        )
+        await client.execute(
+            """
+            UPDATE users
+               SET email_verified = TRUE
+             WHERE id = $1
+            """,
+            row["user_id"],
+        )
+
+    return {"message": "Email address verified"}
