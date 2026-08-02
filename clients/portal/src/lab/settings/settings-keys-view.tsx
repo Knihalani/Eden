@@ -99,6 +99,13 @@ export function SettingsKeysView({
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
               disabled={isCreating || !draftName.trim() || scopes.length === 0}
+              title={
+                !draftName.trim()
+                  ? "Name the key first"
+                  : scopes.length === 0
+                    ? "Select at least one scope"
+                    : undefined
+              }
               onClick={async () => {
                 if (isCreating) return;
                 setIsCreating(true);

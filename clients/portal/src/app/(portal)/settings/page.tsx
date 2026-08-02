@@ -138,7 +138,9 @@ function LabSettingsInner() {
     () => portalApi.auditEvents(orgId!),
     {
       ...SETTINGS_QUERY,
-      enabled: loadMode === "audit",
+      // Workspace overview renders an Audit health card — without these
+      // enabled it painted "Clean / Verified" off empty defaults.
+      enabled: loadMode === "audit" || loadMode === "workspace",
     },
   );
   const auditPacksQuery = useOrgQuery(
@@ -147,7 +149,7 @@ function LabSettingsInner() {
     () => portalApi.auditPacks(orgId!),
     {
       ...SETTINGS_QUERY,
-      enabled: loadMode === "audit",
+      enabled: loadMode === "audit" || loadMode === "workspace",
     },
   );
 
@@ -175,7 +177,9 @@ function LabSettingsInner() {
               auditPacksQuery.isLoading
             : workspaceQuery.isLoading ||
               keysQuery.isLoading ||
-              membersQuery.isLoading));
+              membersQuery.isLoading ||
+              auditEventsQuery.isLoading ||
+              auditPacksQuery.isLoading));
   const isError =
     loadMode === "keys"
       ? workspaceQuery.isError || keysQuery.isError
@@ -716,7 +720,11 @@ function SettingsSuspenseFallback() {
         title="Settings"
         meta={<span className="type-meta">Loading…</span>}
         actions={
-          <SettingsModeNav value={mode} onChange={() => undefined} />
+          // Non-interactive while the real page suspends — tabs that
+          // look clickable but swallow clicks read as broken.
+          <div aria-hidden="true" className="pointer-events-none opacity-60">
+            <SettingsModeNav value={mode} onChange={() => undefined} />
+          </div>
         }
       />
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   agentForPlan,
   statusCounts,
@@ -40,6 +40,14 @@ export function ImproveQueueView({
   }, [plans, agentId]);
 
   const counts = useMemo(() => statusCounts(scoped), [scoped]);
+
+  // Landing on "No matches" with zero explanation when nothing needs
+  // review reads as broken — fall back to the full list.
+  useEffect(() => {
+    if (status === "needs_you" && counts.needs_you === 0 && scoped.length > 0) {
+      setStatus("all");
+    }
+  }, [status, counts.needs_you, scoped.length]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();

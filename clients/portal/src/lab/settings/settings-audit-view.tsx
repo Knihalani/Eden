@@ -303,7 +303,7 @@ function PackDetail({ pack }: { pack: AuditPackFixture }) {
       </dl>
       {!pack.verified ? (
         <p className="type-body mt-4 text-[var(--error)]">
-          Verify failed — re-verify or inspect the agent ledger.
+          Verify failed — re-verify, or inspect the agent&rsquo;s traces.
         </p>
       ) : null}
       <div className="mt-auto flex flex-wrap gap-2 pt-4">

@@ -27,7 +27,6 @@ export default function robots(): MetadataRoute.Robots {
           "/subprocessors",
           "/do-not-sell",
           "/status",
-          "/health",
           "/og.png",
           "/og-pricing.png",
         ],
