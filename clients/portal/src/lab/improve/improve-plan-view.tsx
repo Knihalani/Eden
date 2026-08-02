@@ -132,7 +132,16 @@ export function ImprovePlanView({
             </span>
           ) : null}
           {primary ? (
-            <Link href={primary.href} className="ds-btn ds-btn-primary ds-btn-sm">
+            // Ghost when Approve is also offered — two competing primary
+            // CTAs read as a bug; the decision button keeps the accent.
+            <Link
+              href={primary.href}
+              className={
+                canDecide
+                  ? "ds-btn ds-btn-ghost ds-btn-sm"
+                  : "ds-btn ds-btn-primary ds-btn-sm"
+              }
+            >
               {primary.label}
             </Link>
           ) : null}

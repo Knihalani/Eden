@@ -64,7 +64,7 @@ export const U20_EMPTY_COPY = {
   onlineScoring:
     "No scoring rules. Create one to sample production traces (code → SLM → LLM).",
   alerts:
-    "No fired detector events yet. Detectors appear under Signals; Inbox shows firings when thresholds trip.",
+    "No fired detector events yet. Create detectors on the Detectors page; Inbox shows firings when thresholds trip.",
   alertsClear:
     "Inbox clear — no firing detector events for your rules.",
   signals:

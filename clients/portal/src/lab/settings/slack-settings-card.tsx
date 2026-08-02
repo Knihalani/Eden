@@ -284,6 +284,7 @@ function ChannelRow({
         className="ds-input min-w-48"
         value={value}
         disabled={disabled}
+        aria-label={label}
         onChange={(e) => {
           if (e.target.value) onChange(e.target.value);
         }}

@@ -79,15 +79,20 @@ const resp = await openai.chat.completions.create({
 
 ```bash
 # Install the platform
-git clone https://github.com/eden/eden.git
-cd eden
+git clone https://github.com/KaiavN/Eden.git
+cd Eden
 cp .env.example .env
 
 # Start infrastructure
 docker compose -f docker/docker-compose.yml up -d
 
+# Install deps + apply migrations (see CONTRIBUTING.md for the full
+# setup, including the editable SDK install and PYTHONPATH note)
+uv sync --all-extras
+uv run alembic upgrade head
+
 # Run the API + gateway
-python -m eden.api.app
+PYTHONPATH=src uv run python -m eden.api.app
 ```
 
 ## Architecture
@@ -138,27 +143,22 @@ eden/
 │   │   ├── span.py
 │   │   ├── eval.py
 │   │   └── context.py
-│   ├── portal_api/              # API surface for the web platform (Pillar 2)
-│   │   ├── orgs/
-│   │   ├── projects/
-│   │   ├── traces/
-│   │   ├── evals/
-│   │   ├── export/
-│   │   └── assistant/           # Persistent AI assistant
+│   ├── api/                     # FastAPI surface for the web platform (Pillar 2)
+│   │   ├── routes/              # orgs, traces, evals, improve, gateway, …
+│   │   └── middleware/          # default-deny, internal-only, quota
 │   ├── kb/                      # Knowledge Base (shared across pillars)
 │   │   ├── episodic/            # PostgreSQL trace/eval/attempt records
 │   │   ├── semantic/            # Temporal knowledge graph
 │   │   ├── procedural/          # Skill Library
 │   │   └── regression/          # Regression / exploit probes
 │   ├── storage/                 # PostgreSQL + Qdrant clients
-│   └── llm/                     # OpenRouter client
-├── web/portal/                  # Next.js web platform (Pillar 2) → clients/portal/
-├── migrations/                  # Raw-SQL migrations (legacy parallel set)
-├── src/eden/db_migrations/      # Alembic migrations (current; head = 051)
+│   └── llm/                     # Model SSOT + routing
+├── clients/portal/              # Next.js web platform (Pillar 2)
+├── src/eden/db_migrations/      # Alembic migrations (current)
 ├── docs/
 │   ├── deploy/                  # NF + Vercel deploy runbooks (cutover-checklist.md)
 │   └── spec/                    # upgradespec-v2.md + archived original
-└── tests/                       # 815+ tests across unit + integration + intelligence
+└── tests/                       # 7000+ tests across unit + integration + intelligence
 ```
 
 ## Deploy
@@ -175,12 +175,15 @@ Copy `.env.example` to `.env` and configure:
 cp .env.example .env
 ```
 
-Key settings:
-- `EDEN_ORG_ID` — your org id (`org_…`); required for gateway + SDK attribution
-- `EDEN_API_KEY` — your Eden API key (`sk_eden_…`)
-- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `BEDROCK_*` — upstream model credentials (configure whichever upstreams you want to use through the gateway)
+Key server settings (see `.env.example` for the full list):
 - `POSTGRES_*` — PostgreSQL connection settings
 - `QDRANT_*` — Qdrant connection settings
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `BEDROCK_*` — upstream model credentials (configure whichever upstreams you want to use through the gateway)
+- `CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY` — portal session verification (full-stack local dev)
+
+SDK / gateway client env (set in your app's environment, not the server `.env`):
+- `EDEN_ORG_ID` — your org id (`org_…`); required for gateway + SDK attribution
+- `EDEN_API_KEY` — your Eden API key (`sk_eden_…`)
 - `GATEWAY_BASE_URL` — public URL of your Eden gateway
 
 ## API
@@ -219,5 +222,4 @@ cd clients/portal && bun install && bun run dev
 
 ## Documentation
 
-See [PRD.md](./PRD.md) for the full product requirements document and roadmap.
 See the published docs quickstart at [docs/docs/quickstart.mdx](./docs/docs/quickstart.mdx).

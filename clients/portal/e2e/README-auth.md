@@ -54,7 +54,7 @@ npx playwright codegen \
   https://edenobservability.com/sign-in
 ```
 
-Navigate to `/dashboard`, confirm you're signed in, close the window.
+Navigate to `/home`, confirm you're signed in, close the window.
 
 ## C. Local / CI — automated Clerk testing token
 

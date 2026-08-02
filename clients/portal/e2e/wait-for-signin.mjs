@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const BASE = (process.env.BASE || "http://127.0.0.1:3000").replace(/\/$/, "");
+const BASE = (process.env.BASE || process.env.BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 const STORAGE = join(__dirname, ".auth-state.json");
 const MAX_WAIT_MS = Number(process.env.E2E_SIGNIN_WAIT_MS || "300000");
 

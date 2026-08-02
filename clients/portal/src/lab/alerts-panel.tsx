@@ -435,6 +435,21 @@ export function AlertsModal() {
             />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
+            {rulesQuery.isError ? (
+              <div className="mx-4 mt-3 flex items-center justify-between gap-3 border border-[var(--line)] px-3 py-2">
+                <p className="type-meta text-[var(--error)]">
+                  Detector rules failed to load — event details may be
+                  incomplete.
+                </p>
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={() => void rulesQuery.refetch()}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
             {eventsQuery.isLoading ? (
               <QueryLoadingPanel label="Loading Inbox…" />
             ) : eventsQuery.isError ? (
@@ -457,6 +472,17 @@ export function AlertsModal() {
                     : inboxFilter === "actionable"
                       ? U20_EMPTY_COPY.alertsClear
                       : U20_FILTER_EMPTY_COPY.alerts
+                }
+                action={
+                  events.length > 0 && inboxFilter !== "all" ? (
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-ghost ds-btn-sm mt-4"
+                      onClick={() => setInboxFilter("all")}
+                    >
+                      Show all
+                    </button>
+                  ) : undefined
                 }
               />
             ) : (

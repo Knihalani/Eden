@@ -2,7 +2,7 @@
   "name": "Eden — Observability + improvement",
   "short_name": "Eden",
   "description": "Observability + improvement for AI agents and LLM apps.",
-  "start_url": "/dashboard",
+  "start_url": "/home",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#0A0A0A",
@@ -16,9 +16,9 @@
       "purpose": "any"
     },
     {
-      "src": "/favicon.ico",
-      "sizes": "16x16 32x32 48x48 64x64 128x128",
-      "type": "image/x-icon",
+      "src": "/favicon.png",
+      "sizes": "32x32",
+      "type": "image/png",
       "purpose": "any"
     },
     {
@@ -45,10 +45,10 @@
   "dir": "ltr",
   "shortcuts": [
     {
-      "name": "Observability",
-      "short_name": "Obs",
-      "description": "View live agent observability (traces, judges, failure modes)",
-      "url": "/observability",
+      "name": "Traces",
+      "short_name": "Traces",
+      "description": "View live agent traces, judges, and failure modes",
+      "url": "/traces",
       "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
     },
     {

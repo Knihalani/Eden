@@ -99,6 +99,9 @@ export function SettingsMembersView({
             type="button"
             className="ds-btn ds-btn-primary ds-btn-sm"
             disabled={!email.trim().includes("@")}
+            title={
+              email.trim().includes("@") ? undefined : "Enter a valid email"
+            }
             onClick={async () => {
               try {
                 const invited = await onInvite(email.trim(), role);

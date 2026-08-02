@@ -221,21 +221,21 @@ async function main() {
   }
   console.log("[seed-auth] session active (__client_uat != 0):", sessionActive);
 
-  // Navigate to dashboard to confirm auth sticks and Clerk redirects there.
-  console.log("[seed-auth] → goto /dashboard");
+  // Navigate to /home to confirm auth sticks (Clerk post-auth landing).
+  console.log("[seed-auth] → goto /home");
   try {
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await page.goto(`${BASE}/home`, { waitUntil: "domcontentloaded", timeout: 45_000 });
   } catch (e) {
-    console.log("[seed-auth] goto /dashboard threw:", String(e).slice(0, 120));
+    console.log("[seed-auth] goto /home threw:", String(e).slice(0, 120));
   }
   await sleep(1500);
 
   // Detect Clerk key-mismatch redirect loop (session refresh bounces to /sign-in).
   let finalUrl = page.url();
   if (/sign-in|login/.test(finalUrl)) {
-    console.log("[seed-auth] still on auth after signIn — retrying with testing token on /dashboard");
+    console.log("[seed-auth] still on auth after signIn — retrying with testing token on /home");
     await setupClerkTestingToken({ page });
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => {});
+    await page.goto(`${BASE}/home`, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => {});
     await sleep(1500);
     finalUrl = page.url();
   }
@@ -250,7 +250,7 @@ async function main() {
     const body = ((await me?.text().catch(() => "")) ?? "").slice(0, 300);
     console.log("[seed-auth] auth/me body:", body || "(no response body)");
     // auth/me 401/404 might mean the backend API isn't running. The Clerk
-    // session itself may still be valid — check if we're on /dashboard vs /sign-in.
+    // session itself may still be valid — check if we're on /home vs /sign-in.
     const onSignIn = /sign-in/.test(finalUrl);
     if (onSignIn) {
       await browser.close();

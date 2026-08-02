@@ -46,7 +46,7 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/improve/change-impact":
     "Replay traffic before shipping prompt or model changes — Advanced Improve.",
   "/settings":
-    "Members, billing, account, gateway, retention, PII, and exports.",
+    "Workspace overview, API keys, members, and audit packs.",
   "/runs":
     "Live and recent runs of agents, jobs, and evaluations.",
 };
