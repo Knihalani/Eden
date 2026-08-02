@@ -2,10 +2,11 @@
 
 Three audit items:
 
-* **S-18** — ``llmops/promotion_hooks.py:on_compliance_gap_gdpr`` was
-  advisory-only; the operator had to invoke ``RightToBeForgottenService``
-  manually. Fix: when ``details`` carries a ``target_user_id`` (or
-  ``subject_id``), auto-fire the redaction in best-effort mode.
+* **S-18** — ``llmops/promotion_hooks.py:on_compliance_gap_gdpr`` had
+  an auto-fire RTBF block that called ``process_request`` without the
+  required ``org_id`` and raised into a swallowed ``except`` on every
+  invocation. Removed 2026-08-02: RTBF is an operator-confirmed action
+  via the governance route, never an alert-hook side effect.
 
 * **S-19** — ``api/utils/auth.py`` previously used
   ``password.encode("utf-8")[:72]`` for bcrypt input, which could split
@@ -29,15 +30,25 @@ import pytest
 
 
 # ─── S-18: GDPR auto-RTBF on compliance gap ─────────────────────
-class TestS18GdprAutoRtbf:
-    """The audit bug: the GDPR gap hook only recorded the
-    recommendation; the operator had to invoke the RTBF service
-    manually. The S-18 fix auto-fires ``process_request`` when
-    ``details`` carries a target user id.
+class TestS18GdprAutoRtbfRemoved:
+    """S-18 auto-fire was removed on 2026-08-02.
+
+    The original S-18 "fix" auto-fired
+    ``RightToBeForgottenService.process_request`` from the GDPR
+    compliance-gap hook. It never once succeeded in production:
+    the call omitted the required positional ``org_id``, so every
+    invocation raised ``TypeError`` into a swallowed ``except``
+    (documented in ``docs/ops/known-issues.md`` §8). Irreversible
+    cross-table erasure as an unconfirmed side effect of an
+    alert hook is also the wrong shape — RTBF is a deliberate,
+    operator-confirmed action via the governance route.
+
+    These tests pin the removal: the hook records the
+    recommendation and MUST NOT reach for the RTBF service.
     """
 
     @pytest.mark.asyncio
-    async def test_target_user_id_triggers_rtbf_process_request(self) -> None:
+    async def test_hook_records_recommendation_without_rtbf(self) -> None:
         from eden.llmops.promotion_hooks import get_promotion_hook
 
         hook = get_promotion_hook()
@@ -45,17 +56,9 @@ class TestS18GdprAutoRtbf:
         with patch(
             "eden.services.governance_intel.gdpr.RightToBeForgottenService"
         ) as mock_rtbf_cls:
-            mock_service = mock_rtbf_cls.return_value
-            mock_service.process_request = AsyncMock(
-                return_value={
-                    "ok": True,
-                    "data": {"request_id": "rtbf-abc123"},
-                }
-            )
-
             action_id = await hook.on_compliance_gap_gdpr(
                 "org-1",
-                finding_id="finding-gdpr-s10-1",  # unique vs E.1 suite (1h bus suppression)
+                finding_id="finding-gdpr-s10-1",
                 framework_control="Art.17",
                 details={
                     "target_user_id": "user-42",
@@ -63,102 +66,35 @@ class TestS18GdprAutoRtbf:
                 },
             )
 
-        # Hook still returns a non-empty action id (the
-        # recommendation was recorded).
+        # The recommendation is still recorded…
         assert action_id is not None
-        # The RTBF service was instantiated and process_request
-        # was called with the target user.
-        mock_rtbf_cls.assert_called_once_with()
-        mock_service.process_request.assert_awaited_once()
-        call_kwargs = mock_service.process_request.await_args.kwargs
-        assert call_kwargs["user_id"] == "user-42"
-        assert call_kwargs["requested_by"] == "auto:on_compliance_gap_gdpr"
-        assert call_kwargs["dry_run"] is False
+        # …but the erasure service is never touched.
+        mock_rtbf_cls.assert_not_called()
 
-    @pytest.mark.asyncio
-    async def test_subject_id_alias_triggers_rtbf(self) -> None:
-        """Some callers use ``subject_id`` instead of
-        ``target_user_id`` (matches the Cat 9 user-intel
-        naming). The S-18 fix honours both keys.
+    def test_no_rtbf_reference_in_promotion_hooks(self) -> None:
+        """Static lock: the hook module must not import or name
+        the RTBF service, so the auto-fire cannot creep back in
+        under a new flag or alias.
         """
-        from eden.llmops.promotion_hooks import get_promotion_hook
+        import ast
+        from pathlib import Path
 
-        hook = get_promotion_hook()
-
-        with patch(
-            "eden.services.governance_intel.gdpr.RightToBeForgottenService"
-        ) as mock_rtbf_cls:
-            mock_service = mock_rtbf_cls.return_value
-            mock_service.process_request = AsyncMock(
-                return_value={"ok": True, "data": {"request_id": "r"}}
-            )
-
-            await hook.on_compliance_gap_gdpr(
-                "org-1",
-                finding_id="f-2",
-                framework_control="Art.17",
-                details={"subject_id": "user-99"},
-            )
-
-        assert mock_service.process_request.await_count == 1
-        assert mock_service.process_request.await_args.kwargs["user_id"] == "user-99"
-
-    @pytest.mark.asyncio
-    async def test_no_target_user_id_skips_rtbf(self) -> None:
-        """When the finding doesn't identify a subject (e.g., a
-        gap in policy controls rather than a specific user),
-        the hook still records the recommendation but does
-        NOT auto-fire the redaction (no user to forget).
-        """
-        from eden.llmops.promotion_hooks import get_promotion_hook
-
-        hook = get_promotion_hook()
-
-        with patch(
-            "eden.services.governance_intel.gdpr.RightToBeForgottenService"
-        ) as mock_rtbf_cls:
-            mock_service = mock_rtbf_cls.return_value
-            mock_service.process_request = AsyncMock()
-
-            action_id = await hook.on_compliance_gap_gdpr(
-                "org-1",
-                finding_id="f-3",
-                framework_control="Art.30",
-                details={"data_categories": ["logs"]},  # no subject
-            )
-
-        assert action_id is not None
-        mock_service.process_request.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_rtbf_failure_does_not_break_hook(self) -> None:
-        """If ``process_request`` raises (DB down, schema
-        missing, etc.) the hook MUST still return the
-        recommendation. Fail-soft, not fail-closed — the
-        hook is the action-RECORDING layer, not the
-        side-effect gatekeeper.
-        """
-        from eden.llmops.promotion_hooks import get_promotion_hook
-
-        hook = get_promotion_hook()
-
-        with patch(
-            "eden.services.governance_intel.gdpr.RightToBeForgottenService"
-        ) as mock_rtbf_cls:
-            mock_service = mock_rtbf_cls.return_value
-            mock_service.process_request = AsyncMock(
-                side_effect=RuntimeError("postgres unreachable")
-            )
-
-            # MUST NOT raise.
-            action_id = await hook.on_compliance_gap_gdpr(
-                "org-1",
-                finding_id="f-4",
-                framework_control="Art.17",
-                details={"target_user_id": "user-x"},
-            )
-
-        assert action_id is not None
+        src = Path("src/eden/llmops/promotion_hooks.py").read_text()
+        tree = ast.parse(src)
+        identifiers: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                identifiers.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                identifiers.add(node.attr)
+            elif isinstance(node, ast.alias):
+                identifiers.add(node.name.rsplit(".", 1)[-1])
+        leaked = {"RightToBeForgottenService", "process_request"} & identifiers
+        assert not leaked, (
+            f"promotion_hooks.py references {sorted(leaked)} — RTBF "
+            "auto-fire was removed; erasure is operator-confirmed via "
+            "the governance route only."
+        )
 
 
 # ─── S-19: auth hashing — SHA-256 pre-hash + pad to 72 bytes ────

@@ -374,37 +374,28 @@ async def process_rtbf(
     """Right-to-be-forgotten request.
 
     Gated OFF by default (``rtbf_fanout_v1``). Serving this endpoint would
-    return a compliance guarantee the system cannot keep.
+    return a compliance guarantee the system cannot yet keep — for ONE
+    remaining reason:
 
-    There are TWO reasons, and the smaller one used to be the only one
-    documented — which would send an implementer to the wrong file.
+    The cross-store fanout (``rtbf_fanout.py``) cannot erase per-user
+    data from every secondary store. Redis (SCAN+DEL) works; Typesense,
+    Qdrant and ClickHouse depend on delete-by-user support in their
+    clients, and S3 has no per-user object index at all (reports
+    ``unsupported``, which counts as incomplete by design).
 
-    1. PRIMARY PATH, and the serious one. ``governance_intel/gdpr.py``
-       (lines 60-67) lists six Postgres tables; three name columns that do
-       not exist, verified against live ``information_schema``:
+    The PRIMARY Postgres path was FIXED 2026-08-02:
+    ``governance_intel/gdpr.py`` now names live-schema columns on all
+    six tables (``tenant_id`` + ``attributes->>`` user keys for
+    ``telemetry_events``; ``trace_id = ANY`` scoping for
+    ``judge_scores``; ``conversation_id = ANY`` scoping for
+    ``conversation_messages`` — every statement EXPLAIN-validated
+    against the live database) and fails closed: a SQL error on any
+    table returns an ``error`` envelope naming the failed table
+    instead of a silent ``rows_matched: 0`` inside a success envelope.
 
-         telemetry_events       no org_id; no payload_json/metadata_json
-         judge_scores           no org_id; no raw_input/raw_output
-         conversation_messages  no user_id (keyed org_id + conversation_id)
-
-       The split falls exactly along the content line: those three are the
-       tables holding actual user content — prompts, completions, tool
-       calls, reasoning, judge rationales, chat message bodies. The three
-       that DO work hold a feedback comment, session counters and a
-       conversation title.
-
-       It fails silently: ``gdpr.py:222`` catches the UndefinedColumnError
-       and returns 0, so the response reports ``rows_matched: 0`` and an
-       overall success envelope.
-
-    2. Secondary. The cross-store fanout (``rtbf_fanout.py``) cannot erase
-       per-user data from Typesense, Redis, Qdrant, ClickHouse or S3 — each
-       either filters on a field its schema lacks or has no delete-by-user
-       path at all.
-
-    Re-enable only when BOTH are fixed. Fixing the fanout alone would ship
-    an erasure certificate for prompts and messages still sitting in
-    Postgres. See docs/ops/disabled-features.md.
+    Re-enable only when the fanout is fixed too. Enabling before then
+    ships an erasure whose ``complete`` flag can never be true.
+    See docs/ops/disabled-features.md.
     """
     return await _rtbf.process_request(
         org_id,

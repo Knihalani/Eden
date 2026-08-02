@@ -623,12 +623,14 @@ class PromotionHook:
         invoke the existing Cat 10 Postgres-only
         ``RightToBeForgottenService`` manually.
 
-        Audit 2026-07-02 S-18 — when ``details`` carries a
-        ``target_user_id`` (or the Cat 9 alias ``subject_id``),
-        auto-fire ``RightToBeForgottenService.process_request``
-        in best-effort mode. Failures (DB down, schema
-        missing) MUST NOT break the hook — the hook is the
-        action-RECORDING layer, not the side-effect gatekeeper.
+        The S-18 auto-fire block (which invoked
+        ``RightToBeForgottenService.process_request`` from this
+        hook) was removed 2026-08-02: it never once succeeded —
+        it called ``process_request`` without the required
+        positional ``org_id``, raising TypeError into a swallowed
+        ``except`` on every invocation. RTBF is a deliberate,
+        operator-confirmed action via the governance route, not
+        a side effect of an alert hook.
         """
         action_id = await _record_action(
             org_id,
@@ -643,27 +645,6 @@ class PromotionHook:
             },
             severity="critical",
         )
-        # Audit 2026-07-02 S-18 — auto-fire RTBF if a target user
-        # is identified. Best-effort; never raises.
-        target_user_id = (details or {}).get("target_user_id") or (
-            details or {}
-        ).get("subject_id")
-        if target_user_id:
-            try:
-                from eden.services.governance_intel.gdpr import (
-                    RightToBeForgottenService,
-                )
-                rtbf = RightToBeForgottenService()
-                await rtbf.process_request(
-                    user_id=str(target_user_id),
-                    requested_by="auto:on_compliance_gap_gdpr",
-                    dry_run=False,
-                )
-            except Exception as exc:  # noqa: BLE001 — best-effort
-                logger.debug(
-                    "promotion_hook.on_compliance_gap_gdpr rtbf auto-fire "
-                    "failed (non-fatal): %s", exc,
-                )
         logger.debug(
             "promotion_hook.on_compliance_gap_gdpr org=%s finding=%s "
             "control=%s action_id=%s",
