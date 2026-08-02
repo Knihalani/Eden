@@ -2161,6 +2161,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/invites/{invitation_id}/resend": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/labeling/annotate": [
       "200:application/json",
       "422:application/json"
@@ -2737,7 +2741,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 700,
+  "route_count": 701,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3295,6 +3299,7 @@
     "POST /orgs/{org_id}/invites",
     "POST /orgs/{org_id}/invites/{invitation_id}/accept",
     "POST /orgs/{org_id}/invites/{invitation_id}/decline",
+    "POST /orgs/{org_id}/invites/{invitation_id}/resend",
     "POST /orgs/{org_id}/labeling/annotate",
     "POST /orgs/{org_id}/labeling/items",
     "POST /orgs/{org_id}/labeling/queues",

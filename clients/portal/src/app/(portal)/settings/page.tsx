@@ -11,7 +11,6 @@ import {
   packsForAgent,
   type ApiKeyFixture,
   type KeyScope,
-  type MemberFixture,
   type MemberRole,
   type WorkspaceFixture,
 } from "@/lab/fixtures/settings";
@@ -25,6 +24,8 @@ import {
 } from "@/lab/settings/settings-chrome";
 import dynamic from "next/dynamic";
 import { useOrg } from "@/hooks/use-org";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useInvalidateMe } from "@/hooks/use-me-query";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -70,6 +71,8 @@ const SettingsAuditView = dynamic(
   { loading: () => settingsFallback },
 );
 
+import type { InviteOutcome } from "@/lab/settings/settings-members-view";
+
 const WORKSPACE_PATCH_KEY_MAP: Record<string, string> = {
   timezone: "timezone",
   density: "density",
@@ -99,10 +102,15 @@ function LabSettingsInner() {
     patchQuery({ mode: mapped, tab: null });
   }, [paramTab, searchParams, patchQuery]);
 
-  const { currentOrg, orgSyncing } = useOrg();
+  const { currentOrg, organizations, orgSyncing } = useOrg();
+  const { hasPermission } = usePermissions();
+  const invalidateMe = useInvalidateMe();
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const canInvite = hasPermission("members:invite");
+  const canEditSettings = hasPermission("settings:edit");
+  const isPersonalWorkspace = Boolean(currentOrg?.is_personal);
 
   const workspaceQuery = useOrgQuery(
     queryKeys.portal.workspace(orgId),
@@ -191,7 +199,12 @@ function LabSettingsInner() {
             auditPacksQuery.isError
           : workspaceQuery.isError ||
             keysQuery.isError ||
-            membersQuery.isError;
+            membersQuery.isError ||
+            // Workspace overview renders the Audit health card off
+            // these queries — swallowing their errors painted
+            // "Clean / Verified" on empty defaults.
+            auditEventsQuery.isError ||
+            auditPacksQuery.isError;
   const firstError =
     loadMode === "keys"
       ? (workspaceQuery.error ?? keysQuery.error)
@@ -201,7 +214,11 @@ function LabSettingsInner() {
           ? (workspaceQuery.error ??
             auditEventsQuery.error ??
             auditPacksQuery.error)
-          : (workspaceQuery.error ?? keysQuery.error ?? membersQuery.error);
+          : (workspaceQuery.error ??
+            keysQuery.error ??
+            membersQuery.error ??
+            auditEventsQuery.error ??
+            auditPacksQuery.error);
 
   const invalidateWorkspace = useCallback((): Promise<void> => {
     if (!orgId) return Promise.resolve();
@@ -429,6 +446,9 @@ function LabSettingsInner() {
       try {
         await api.updateOrgSettings(orgId, { name });
         await invalidateWorkspace();
+        // The sidebar switcher reads the org name from /auth/me —
+        // without this it kept the old name until the next poll.
+        await invalidateMe();
       } catch (err) {
         pushToast({
           title: "Rename failed",
@@ -520,17 +540,24 @@ function LabSettingsInner() {
   }, []);
 
   const inviteMember = useCallback(
-    async (email: string, role: MemberRole): Promise<MemberFixture> => {
+    async (email: string, role: MemberRole): Promise<InviteOutcome> => {
       if (!orgId) throw new Error("No organization selected");
       const res = await api.inviteOrgMember(orgId, email, role);
       await invalidateMembers();
       return {
-        id: res.invitation_id,
-        name: email.split("@")[0] || "invitee",
-        email,
-        role,
-        status: "invited",
-        lastActive: "—",
+        member: {
+          id: res.invitation_id,
+          name: email.split("@")[0] || "invitee",
+          email,
+          role,
+          status: "invited",
+          lastActive: "—",
+        },
+        // Surfaced so the UI can say "email didn't go out — share this
+        // link" instead of lying "Invite sent" (backend always returns
+        // invite_url for exactly this case).
+        emailStatus: res.email_status ?? null,
+        inviteUrl: res.invite_url ?? null,
       };
     },
     [orgId, invalidateMembers],
@@ -559,11 +586,27 @@ function LabSettingsInner() {
       if (!orgId) return;
       const member = members.find((m) => m.id === id);
       if (!member) return;
+      // Dedicated resend endpoint — re-POSTing /invites 400'd with
+      // "already pending" for exactly the invites this button targets.
       api
-        .inviteOrgMember(orgId, member.email, member.role)
-        .then(() => {
+        .resendOrgInvite(orgId, member.id)
+        .then((res) => {
           invalidateMembers();
-          pushToast({ title: "Invite resent", body: member.email, tone: "ok" });
+          if (res.email_status && res.email_status !== "sent") {
+            pushToast({
+              title: "Invite renewed — email not sent",
+              body: res.invite_url
+                ? `Share this link: ${res.invite_url}`
+                : member.email,
+              tone: "accent",
+            });
+          } else {
+            pushToast({
+              title: "Invite resent",
+              body: member.email,
+              tone: "ok",
+            });
+          }
         })
         .catch((err) => {
           pushToast({
@@ -574,6 +617,25 @@ function LabSettingsInner() {
         });
     },
     [orgId, members, invalidateMembers, pushToast],
+  );
+
+  const removeMember = useCallback(
+    async (id: string) => {
+      if (!orgId) throw new Error("No organization selected");
+      try {
+        await api.removeOrgMember(orgId, id);
+        await invalidateMembers();
+        if (memberId === id) setMemberId(null);
+      } catch (err) {
+        pushToast({
+          title: "Remove failed",
+          body: err instanceof Error ? err.message : "Try again.",
+          tone: "fail",
+        });
+        throw err;
+      }
+    },
+    [orgId, invalidateMembers, pushToast, memberId],
   );
 
   const counts = memberCounts(members);
@@ -602,7 +664,11 @@ function LabSettingsInner() {
     return (
       <NoWorkspaceGuard
         title="Settings"
-        message="Select a workspace to view settings."
+        message={
+          organizations.length === 0
+            ? "No workspace yet — create one from the banner above to get started."
+            : "Select a workspace to view settings."
+        }
         actions={
           <SettingsModeNav value={mode} onChange={(m) => changeMode(m)} />
         }
@@ -664,6 +730,7 @@ function LabSettingsInner() {
           members={members}
           packs={packs}
           events={events}
+          canEdit={canEditSettings}
           onGo={changeMode}
           onRename={renameWorkspace}
           onPatch={patchWorkspace}
@@ -683,11 +750,14 @@ function LabSettingsInner() {
         <SettingsMembersView
           members={members}
           selectedId={memberId}
+          canInvite={canInvite && !isPersonalWorkspace}
+          canRemove={hasPermission("members:remove")}
           onSelect={selectMember}
           onClose={closeMember}
           onInvite={inviteMember}
           onRole={changeRole}
           onResend={resendInvite}
+          onRemove={removeMember}
         />
       ) : null}
       {mode === "audit" ? (

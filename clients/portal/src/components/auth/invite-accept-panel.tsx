@@ -21,6 +21,7 @@ type Phase =
   | "ready"
   | "accepting"
   | "accepted"
+  | "accepted-unactivated"
   | "error";
 
 function formatExpiry(iso: string): string {
@@ -89,21 +90,27 @@ export function InviteAcceptPanel({ token }: { token: string }) {
     setError(null);
     try {
       const result = await api.acceptInviteByToken(token);
+      let activated = Boolean(!result.clerk_org_id || !setActive);
       if (result.clerk_org_id && setActive) {
         // Retry briefly if org list was still hydrating at click time.
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 8 && !activated; i++) {
           try {
             await setActive({ organization: result.clerk_org_id });
-            break;
+            activated = true;
           } catch {
             await new Promise((r) => window.setTimeout(r, 150));
           }
         }
       }
-      setPhase("accepted");
+      // Activation failed after the server-side join succeeded — the
+      // org context auto-activates the new membership on /home, so
+      // still proceed, but don't claim an instant switch. (Re-accept
+      // is not possible: the invite is consumed, so a fake "Retry"
+      // here would just error.)
+      setPhase(activated ? "accepted" : "accepted-unactivated");
       window.setTimeout(() => {
         router.replace("/home");
-      }, 600);
+      }, activated ? 600 : 1200);
     } catch (err) {
       setPhase("ready");
       if (err instanceof ApiError && err.status === 401) {
@@ -154,7 +161,7 @@ export function InviteAcceptPanel({ token }: { token: string }) {
     );
   }
 
-  if (phase === "accepted") {
+  if (phase === "accepted" || phase === "accepted-unactivated") {
     return (
       <div className="text-center">
         <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--success)]">
@@ -164,7 +171,9 @@ export function InviteAcceptPanel({ token }: { token: string }) {
           Welcome to {details?.org_name ?? "the workspace"}
         </h1>
         <p className="mt-3 text-[0.8125rem] text-[var(--text-muted)]">
-          Redirecting to home…
+          {phase === "accepted"
+            ? "Redirecting to home…"
+            : "Redirecting to home — switching to the new workspace may take a moment."}
         </p>
       </div>
     );

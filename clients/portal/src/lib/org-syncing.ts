@@ -23,18 +23,35 @@ export function isOrgSyncing(args: {
   authErrorKind: "session" | "server" | null;
   loading: boolean;
   meInFlight: boolean;
+  /**
+   * True once the user has held an org selection this session. After a
+   * Clerk-initiated switch, ``currentOrg`` is nulled on purpose while
+   * /auth/me remaps — that gap SHOULD read as syncing (not "Select
+   * workspace") even while the refetch is in flight. First load keeps
+   * the old ``meInFlight`` suppression so the banner doesn't flash on
+   * a cold start.
+   */
+  hadSelection?: boolean;
 }): boolean {
-  const { clerkOrgId, currentOrg, authErrorKind, loading, meInFlight } = args;
+  const {
+    clerkOrgId,
+    currentOrg,
+    authErrorKind,
+    loading,
+    meInFlight,
+    hadSelection,
+  } = args;
   const edenOnlySelection = Boolean(
     currentOrg &&
       (currentOrg.clerk_org_id == null || currentOrg.clerk_org_id === ""),
   );
+  const inflightSuppressed = meInFlight && !(hadSelection && !currentOrg);
   return Boolean(
     clerkOrgId &&
       !edenOnlySelection &&
       authErrorKind !== "session" &&
       !loading &&
-      !meInFlight &&
+      !inflightSuppressed &&
       (!currentOrg ||
         (currentOrg.clerk_org_id !== clerkOrgId &&
           currentOrg.id !== clerkOrgId)),

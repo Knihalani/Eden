@@ -26,6 +26,7 @@ import {
   type AuthErrorKind,
 } from "@/lib/org-load-error";
 import { isOrgSyncing } from "@/lib/org-syncing";
+import { dedupeOrganizations } from "@/lib/dedupe-orgs";
 
 export type { AuthErrorKind };
 export { classifyOrgLoadError };
@@ -63,10 +64,34 @@ function applyMeToOrgState(
   clerkOrg: { id: string } | null | undefined,
   setOrganizations: (orgs: Organization[]) => void,
   setCurrentOrgState: (org: Organization | null) => void,
+  clerkMembershipIds?: ReadonlySet<string> | null,
+  edenOnlyOrgId?: string | null,
 ) {
-  const enrichedOrgs: Organization[] = (me.organizations ??
-    []) as Organization[];
+  // Display-level dedupe: pre-guard Clerk session-task remints left
+  // some accounts with several identically-named orgs where only one
+  // has a live Clerk link — the rest rendered in the switcher but did
+  // nothing when clicked. Collapse same-named groups to the most
+  // usable survivor; DB rows are intentionally left alone.
+  const enrichedOrgs = dedupeOrganizations(
+    (me.organizations ?? []) as Organization[],
+    {
+      currentOrgId: me.current_org_id,
+      clerkMembershipIds,
+    },
+  );
   setOrganizations(enrichedOrgs);
+
+  // An explicit Eden-only selection (degraded create / dead Clerk
+  // link) wins over Clerk's active org — otherwise picking it in the
+  // switcher snapped back to the previous Clerk org on the next
+  // /auth/me apply, and the click looked broken again.
+  if (edenOnlyOrgId) {
+    const chosen = enrichedOrgs.find((o) => o.id === edenOnlyOrgId);
+    if (chosen) {
+      setCurrentOrgState(chosen);
+      return;
+    }
+  }
 
   const fromClerk = clerkOrg
     ? enrichedOrgs.find(
@@ -149,6 +174,20 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     userMemberships: { infinite: false },
   });
   const queryClient = useQueryClient();
+  // Clerk org ids this user actually belongs to — dedupe prefers the
+  // same-named org whose Clerk link is live (see dedupe-orgs.ts).
+  const clerkMembershipIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of userMemberships?.data ?? []) {
+      const id = m?.organization?.id;
+      if (id) ids.add(id);
+    }
+    return ids;
+  }, [userMemberships?.data]);
+  const clerkMembershipKey = useMemo(
+    () => Array.from(clerkMembershipIds).sort().join(","),
+    [clerkMembershipIds],
+  );
   const [currentOrg, setCurrentOrgState] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(false);
@@ -164,6 +203,17 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // Prevents re-entrant setActive when Clerk has memberships but no
   // active org (known-issue #6 — create-org task remint loop).
   const activatingOrgRef = useRef(false);
+
+  // Explicit Eden-only selection (setCurrentOrg with no clerk_org_id).
+  // applyMeToOrgState prefers Clerk's active org otherwise, which
+  // snapped the UI back after the user picked an Eden-only workspace.
+  const edenOnlyOrgIdRef = useRef<string | null>(null);
+
+  // True once the user has had a selected org — distinguishes the
+  // first-load gap (no "syncing" banner while /auth/me is in flight)
+  // from a mid-session org switch (currentOrg nulled on purpose; the
+  // gap SHOULD show syncing instead of flashing "Select workspace").
+  const hadSelectionRef = useRef(false);
 
   const authErrorRef = useRef<string | null>(null);
   const authErrorKindRef = useRef<AuthErrorKind | null>(null);
@@ -240,7 +290,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
           await new Promise((r) => setTimeout(r, 1200));
           try {
             const me = await fetchMeQuery(queryClient);
-            applyMeToOrgState(me, clerkOrg, setOrganizations, setCurrentOrgState);
+            applyMeToOrgState(
+              me,
+              clerkOrg,
+              setOrganizations,
+              setCurrentOrgState,
+              clerkMembershipIds,
+              edenOnlyOrgIdRef.current,
+            );
             setAuthError(null);
             setAuthErrorKind(null);
             if (typeof window !== "undefined") {
@@ -261,7 +318,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       }
       await authRecoveryRef.current;
     },
-    [queryClient, clerkOrg],
+    [queryClient, clerkOrg, clerkMembershipIds],
   );
 
   // Global 401s from fetchApi (after Clerk refresh retry) surface here.
@@ -293,7 +350,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // Apply dehydrated / fetched ``/auth/me`` during render so BootGate and
   // banners see orgs on the same frame HydrationBoundary seeds the cache.
   if (meQuery.data) {
-    const meKey = `${meQuery.dataUpdatedAt}:${clerkOrg?.id ?? ""}:${meQuery.data.current_org_id ?? ""}:${meQuery.data.organizations?.length ?? 0}`;
+    const meKey = `${meQuery.dataUpdatedAt}:${clerkOrg?.id ?? ""}:${meQuery.data.current_org_id ?? ""}:${meQuery.data.organizations?.length ?? 0}:${clerkMembershipKey}`;
     if (appliedMeKeyRef.current !== meKey) {
       appliedMeKeyRef.current = meKey;
       applyMeToOrgState(
@@ -301,6 +358,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         clerkOrg,
         setOrganizations,
         setCurrentOrgState,
+        clerkMembershipIds,
+        edenOnlyOrgIdRef.current,
       );
     }
   }
@@ -356,6 +415,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     prevClerkOrgIdRef.current = nextId;
     // Clear Eden selection immediately so chrome never shows the
     // previous org while /auth/me remaps (orgSyncing covers the gap).
+    // Clerk initiated the switch, so any Eden-only override is dead.
+    edenOnlyOrgIdRef.current = null;
     setCurrentOrgState(null);
     dropOrgScopedQueries(queryClient);
     void fetchMeQuery(queryClient).catch(() => {
@@ -375,6 +436,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       clerkOrg,
       setOrganizations,
       setCurrentOrgState,
+      clerkMembershipIds,
+      edenOnlyOrgIdRef.current,
     );
     setAuthError(null);
     setAuthErrorKind(null);
@@ -382,7 +445,9 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       window.sessionStorage.removeItem("eden:auth:error");
     }
     // clerkOrg object identity is unstable — key off its id only.
-  }, [meQuery.data, clerkOrg?.id]);
+    // clerkMembershipIds re-runs the apply when Clerk memberships load
+    // so the dedupe winner can switch to the live-Clerk-link org.
+  }, [meQuery.data, clerkOrg?.id, clerkMembershipIds]);
 
   useEffect(() => {
     if (!meQuery.error) return;
@@ -419,7 +484,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       // extra retry before surfacing the session banner — see that
       // function's doc comment.
       const me = await fetchMeQuery(queryClient);
-      applyMeToOrgState(me, clerkOrg, setOrganizations, setCurrentOrgState);
+      applyMeToOrgState(
+        me,
+        clerkOrg,
+        setOrganizations,
+        setCurrentOrgState,
+        clerkMembershipIds,
+        edenOnlyOrgIdRef.current,
+      );
       setAuthError(null);
       setAuthErrorKind(null);
       if (typeof window !== "undefined") {
@@ -430,19 +502,26 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, clerkOrg, queryClient, recoverFromAuthPropagationRace]);
+  }, [user, clerkOrg, queryClient, recoverFromAuthPropagationRace, clerkMembershipIds]);
 
-  // Do not flash "syncing" while /auth/me is still in flight — empty
-  // local orgs during the first fetch are not a sync gap yet. After a
-  // Clerk org switch we null currentOrg; treat that (or a mismatched
-  // Eden row) as syncing until me remaps.
+  // Do not flash "syncing" while /auth/me is still in flight on FIRST
+  // load — empty local orgs during the first fetch are not a sync gap
+  // yet. After a Clerk org switch we null currentOrg; treat that (or
+  // a mismatched Eden row) as syncing until me remaps, even while the
+  // refetch is in flight — otherwise the chrome flashes "Select
+  // workspace" + page empty states mid-switch.
+  const hadSelection = hadSelectionRef.current || Boolean(currentOrg);
   const orgSyncing = isOrgSyncing({
     clerkOrgId: clerkOrg?.id,
     currentOrg,
     authErrorKind,
     loading,
     meInFlight: Boolean(meEnabled && (meQuery.isLoading || meQuery.isFetching)),
+    hadSelection,
   });
+  useEffect(() => {
+    if (currentOrg) hadSelectionRef.current = true;
+  }, [currentOrg]);
 
   useEffect(() => {
     if (!orgSyncing) {
@@ -459,8 +538,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [orgSyncing]);
 
-  // Polling when signed in with no Eden orgs (webhook race). Shares
-  // the same ``["auth","me"]`` key via ``fetchMeQuery``.
+  // Polling when signed in with no Eden orgs (webhook race), and while
+  // a Clerk→Eden org sync gap persists — otherwise a Clerk org that
+  // never syncs left the "Syncing organization…" banner up forever
+  // with no recovery when the user already had other orgs. Shares the
+  // same ``["auth","me"]`` key via ``fetchMeQuery``.
   usePolling({
     fetch: () => refreshOrgs(),
     intervalMs: 20_000,
@@ -469,13 +551,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       clerkOrgLoaded,
       organizations.length,
       authErrorKind === "session",
+      orgSyncing,
     ],
     enabled:
       userLoaded &&
       clerkOrgLoaded &&
       !loading &&
       authErrorKind !== "session" &&
-      organizations.length === 0,
+      (organizations.length === 0 || orgSyncing),
   });
 
   const currentOrgIdRef = useRef<string | null>(null);
@@ -486,6 +569,11 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const setCurrentOrg = useCallback(
     (org: Organization | null) => {
       const nextId = org?.id ?? null;
+      // Remember explicit Eden-only selections so the next /auth/me
+      // apply doesn't snap back to Clerk's active org; a Clerk-linked
+      // selection (or clearing) drops the override.
+      edenOnlyOrgIdRef.current =
+        org && !org.clerk_org_id ? org.id : null;
       if (currentOrgIdRef.current !== nextId) {
         dropOrgScopedQueries(queryClient);
         void fetchMeQuery(queryClient).catch(() => {

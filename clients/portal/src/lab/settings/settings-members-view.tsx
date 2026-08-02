@@ -9,6 +9,7 @@ import {
 } from "@/lab/fixtures/settings";
 import { EmptyState, FilterChips } from "@/lab/lab-ui";
 import { useLabToast } from "@/lab/lab-toast";
+import { useConfirm } from "@/hooks/use-confirm";
 import {
   MemberRoleChip,
   MemberStatusChip,
@@ -17,27 +18,41 @@ import { cn } from "@/lib/utils";
 
 type MemberFilter = "all" | "active" | "invited" | "disabled";
 
+export type InviteOutcome = {
+  member: MemberFixture;
+  emailStatus: string | null;
+  inviteUrl: string | null;
+};
+
 export function SettingsMembersView({
   members,
   selectedId,
+  canInvite = true,
+  canRemove = true,
   onSelect,
   onClose,
   onInvite,
   onRole,
   onResend,
+  onRemove,
 }: {
   members: MemberFixture[];
   selectedId: string | null;
+  /** False for personal workspaces and non-admin roles. */
+  canInvite?: boolean;
+  canRemove?: boolean;
   onSelect: (id: string) => void;
   onClose: () => void;
-  onInvite: (email: string, role: MemberRole) => Promise<MemberFixture>;
+  onInvite: (email: string, role: MemberRole) => Promise<InviteOutcome>;
   onRole: (id: string, role: MemberRole) => void | Promise<void>;
   onResend: (id: string) => void;
+  onRemove: (id: string) => void | Promise<void>;
 }) {
   const { pushToast } = useLabToast();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<MemberRole>("member");
   const [filter, setFilter] = useState<MemberFilter>("all");
+  const [inviting, setInviting] = useState(false);
   const inviteInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -69,62 +84,86 @@ export function SettingsMembersView({
             { id: "disabled", label: "Disabled", count: counts.disabled },
           ]}
         />
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="min-w-[12rem] flex-1">
-            <span className="type-label">Invite</span>
-            <input
-              ref={inviteInputRef}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.com"
-              className="ds-input mt-1.5 w-full"
-              aria-label="Invite email"
-            />
-          </label>
-          <label>
-            <span className="type-label">Role</span>
-            <select
-              className="ds-input mt-1.5 !h-9 !w-auto !py-0"
-              value={role}
-              onChange={(e) => setRole(e.target.value as MemberRole)}
-              aria-label="Invite role"
-            >
-              <option value="admin">Admin</option>
-              <option value="member">Member</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            className="ds-btn ds-btn-primary ds-btn-sm"
-            disabled={!email.trim().includes("@")}
-            title={
-              email.trim().includes("@") ? undefined : "Enter a valid email"
-            }
-            onClick={async () => {
-              try {
-                const invited = await onInvite(email.trim(), role);
-                setEmail("");
-                setFilter("all");
-                onSelect(invited.id);
-                pushToast({
-                  title: "Invite sent",
-                  body: `${invited.email} · ${roleLabel(invited.role)}`,
-                  tone: "ok",
-                });
-              } catch (err) {
-                pushToast({
-                  title: "Invite failed",
-                  body: err instanceof Error ? err.message : "Try again.",
-                  tone: "fail",
-                });
+        {canInvite ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="min-w-[12rem] flex-1">
+              <span className="type-label">Invite</span>
+              <input
+                ref={inviteInputRef}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.com"
+                className="ds-input mt-1.5 w-full"
+                aria-label="Invite email"
+              />
+            </label>
+            <label>
+              <span className="type-label">Role</span>
+              <select
+                className="ds-input mt-1.5 !h-9 !w-auto !py-0"
+                value={role}
+                onChange={(e) => setRole(e.target.value as MemberRole)}
+                aria-label="Invite role"
+              >
+                <option value="admin">Admin</option>
+                <option value="member">Member</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              disabled={inviting || !email.trim().includes("@")}
+              title={
+                email.trim().includes("@") ? undefined : "Enter a valid email"
               }
-            }}
-          >
-            Invite
-          </button>
-        </div>
+              onClick={async () => {
+                setInviting(true);
+                try {
+                  const outcome = await onInvite(email.trim(), role);
+                  setEmail("");
+                  setFilter("all");
+                  onSelect(outcome.member.id);
+                  if (
+                    outcome.emailStatus &&
+                    outcome.emailStatus !== "sent"
+                  ) {
+                    // Backend always returns invite_url so an admin can
+                    // share the link manually when email is down.
+                    pushToast({
+                      title: "Invite created — email not sent",
+                      body: outcome.inviteUrl
+                        ? `Share this link: ${outcome.inviteUrl}`
+                        : `${outcome.member.email} · email delivery unavailable`,
+                      tone: "accent",
+                    });
+                  } else {
+                    pushToast({
+                      title: "Invite sent",
+                      body: `${outcome.member.email} · ${roleLabel(outcome.member.role)}`,
+                      tone: "ok",
+                    });
+                  }
+                } catch (err) {
+                  pushToast({
+                    title: "Invite failed",
+                    body: err instanceof Error ? err.message : "Try again.",
+                    tone: "fail",
+                  });
+                } finally {
+                  setInviting(false);
+                }
+              }}
+            >
+              {inviting ? "Inviting…" : "Invite"}
+            </button>
+          </div>
+        ) : (
+          <p className="type-meta text-[var(--text-faint)]">
+            Invites are off for this workspace.
+          </p>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -133,11 +172,13 @@ export function SettingsMembersView({
           title={members.length === 0 ? "No members" : "No matches"}
           body={
             members.length === 0
-              ? "Invite someone to share this workspace."
+              ? canInvite
+                ? "Invite someone to share this workspace."
+                : "Just you here — this workspace has invites turned off."
               : "Try another filter."
           }
           action={
-            members.length === 0 ? (
+            members.length === 0 && canInvite ? (
               <button
                 type="button"
                 className="ds-btn ds-btn-primary ds-btn-sm"
@@ -194,9 +235,12 @@ export function SettingsMembersView({
       {selected ? (
         <MemberDialog
           member={selected}
+          canInvite={canInvite}
+          canRemove={canRemove}
           onClose={onClose}
           onRole={onRole}
           onResend={onResend}
+          onRemove={onRemove}
         />
       ) : null}
     </div>
@@ -205,16 +249,26 @@ export function SettingsMembersView({
 
 function MemberDialog({
   member,
+  canInvite,
+  canRemove,
   onClose,
   onRole,
   onResend,
+  onRemove,
 }: {
   member: MemberFixture;
+  canInvite: boolean;
+  canRemove: boolean;
   onClose: () => void;
   onRole: (id: string, role: MemberRole) => void | Promise<void>;
   onResend: (id: string) => void;
+  onRemove: (id: string) => void | Promise<void>;
 }) {
   const { pushToast } = useLabToast();
+  const confirm = useConfirm();
+  const [roleBusy, setRoleBusy] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const canChangeRole =
     member.role !== "owner" && member.status === "active";
 
@@ -284,9 +338,11 @@ function MemberDialog({
               <select
                 className="ds-input mt-1.5 w-full"
                 value={member.role}
+                disabled={roleBusy}
                 onChange={(e) => {
                   const next = e.target.value as MemberRole;
                   if (next === member.role) return;
+                  setRoleBusy(true);
                   void (async () => {
                     try {
                       await onRole(member.id, next);
@@ -297,6 +353,8 @@ function MemberDialog({
                       });
                     } catch {
                       /* parent toasts failure */
+                    } finally {
+                      setRoleBusy(false);
                     }
                   })();
                 }}
@@ -314,26 +372,56 @@ function MemberDialog({
         </div>
 
         <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--line)] px-5 py-3">
-          {member.status === "invited" ? (
+          {member.status === "invited" && canInvite ? (
             <button
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
+              disabled={resending}
               onClick={() => {
-                onResend(member.id);
+                setResending(true);
+                try {
+                  onResend(member.id);
+                } finally {
+                  // Parent fires the request fire-and-forget; release
+                  // the button shortly after so a rapid double-click
+                  // can't stack duplicate resends.
+                  window.setTimeout(() => setResending(false), 800);
+                }
               }}
             >
-              Resend invite
+              {resending ? "Resending…" : "Resend invite"}
             </button>
           ) : null}
-          {member.role !== "owner" && member.status === "active" ? (
-            <p className="type-meta mr-auto text-[var(--text-faint)]">
-              Disable isn’t available yet.
-            </p>
-          ) : null}
-          {member.status === "disabled" ? (
-            <p className="type-meta mr-auto text-[var(--text-faint)]">
-              Re-enable isn’t available yet.
-            </p>
+          {member.role !== "owner" && member.status === "active" && canRemove ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm mr-auto text-[var(--danger)]"
+              disabled={removing}
+              onClick={() => {
+                void (async () => {
+                  const ok = await confirm(
+                    `Remove ${member.email} from this workspace? They lose access immediately.`,
+                  );
+                  if (!ok) return;
+                  setRemoving(true);
+                  try {
+                    await onRemove(member.id);
+                    pushToast({
+                      title: "Member removed",
+                      body: member.email,
+                      tone: "ok",
+                    });
+                    onClose();
+                  } catch {
+                    /* parent toasts failure */
+                  } finally {
+                    setRemoving(false);
+                  }
+                })();
+              }}
+            >
+              {removing ? "Removing…" : "Remove from workspace"}
+            </button>
           ) : null}
           <button
             type="button"

@@ -30,7 +30,12 @@ export type CreateOrgResponse = {
 };
 
 export const authApi = {
-  getMe: () => fetchApi<MeResponse>("/auth/me"),
+  // softAuth: OrgProvider owns 401 handling for /auth/me (one bounded
+  // wait + retry for the post-signup JWT race, then its own session
+  // banner). Without this, fetchApi broadcast "session expired" the
+  // instant the first 401 landed — flashing the banner during the
+  // exact race the retry then silently recovered from.
+  getMe: () => fetchApi<MeResponse>("/auth/me", { softAuth: true }),
 
   createOrg: (name: string, makeDefault?: boolean) =>
     fetchApi<CreateOrgResponse>("/orgs", {

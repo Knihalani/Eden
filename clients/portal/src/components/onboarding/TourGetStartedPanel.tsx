@@ -273,7 +273,10 @@ export function TourGetStartedPanel() {
               </button>
             ))}
           </div>
-          <InstallSnippetCopy snippet={snippet} />
+          <InstallSnippetCopy
+            snippet={snippet}
+            disabled={fill.status !== "ready"}
+          />
         </div>
         <pre className="max-h-48 overflow-auto p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text-secondary)]">
           <code>{snippet}</code>
@@ -285,7 +288,10 @@ export function TourGetStartedPanel() {
           <span className="font-mono text-[0.625rem] uppercase tracking-[0.12em] text-[var(--text-faint)]">
             Or: integrate an existing codebase
           </span>
-          <InstallSnippetCopy snippet={agentPrompt} />
+          <InstallSnippetCopy
+            snippet={agentPrompt}
+            disabled={fill.status !== "ready"}
+          />
         </div>
         <div className="space-y-2 px-3 py-2.5">
           <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
