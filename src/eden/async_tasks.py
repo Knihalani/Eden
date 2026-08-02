@@ -8,11 +8,18 @@ so memory does not grow without bound under an ingest flood.
 Tasks are tracked with a strong reference so they are not GC'd mid-await
 (CPython's event loop only holds tasks weakly). :func:`drain_background_tasks`
 waits for them at shutdown so a pod restart does not abandon in-flight writes.
+
+Fire-and-forget tasks are spawned under a context that strips the
+request-pinned Postgres connection (see :func:`_detached_context`) so a
+task that outlives its request cannot reuse a connection the pool has
+already handed to another tenant.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import contextvars
 import logging
 from collections.abc import Awaitable, Coroutine
 from typing import Any, TypeVar
@@ -24,7 +31,9 @@ T = TypeVar("T")
 _DEFAULT_LIMIT = 64
 # Max tasks waiting on the semaphore (in addition to those holding it).
 _DEFAULT_QUEUE_MULTIPLIER = 4
-_semaphores: dict[int, tuple[asyncio.AbstractEventLoop, asyncio.Semaphore]] = {}
+# Keyed by (limit, kind) so ``bounded_create_task`` and ``bounded_gather``
+# never share a semaphore — a wide gather must not starve fire-and-forget.
+_semaphores: dict[tuple[int, str], tuple[asyncio.AbstractEventLoop, asyncio.Semaphore]] = {}
 _waiter_counts: dict[int, int] = {}
 # Strong refs so fire-and-forget tasks are not collected mid-await.
 _pending: set[asyncio.Task[Any]] = set()
@@ -44,14 +53,35 @@ def _resolve_limit(limit: int | None) -> int:
         return _DEFAULT_LIMIT
 
 
-def _semaphore_for(limit: int) -> asyncio.Semaphore:
+def _semaphore_for(limit: int, kind: str) -> asyncio.Semaphore:
+    """Return a process-local semaphore for ``(limit, kind)``.
+
+    ``kind`` separates fire-and-forget (``"task"``) from gather
+    (``"gather"``) so a wide ``bounded_gather`` cannot hold every permit
+    and push ``bounded_create_task`` into the drop path.
+    """
     loop = asyncio.get_running_loop()
-    cached = _semaphores.get(limit)
+    key = (limit, kind)
+    cached = _semaphores.get(key)
     if cached is not None and cached[0] is loop:
         return cached[1]
     sem = asyncio.Semaphore(limit)
-    _semaphores[limit] = (loop, sem)
+    _semaphores[key] = (loop, sem)
     return sem
+
+
+def _detached_context() -> contextvars.Context:
+    """Context for fire-and-forget tasks: strip the request-pinned PG conn.
+
+    ``asyncio.Task`` copies the caller's context at creation. Without this,
+    a task spawned from a route handler inherits the connection
+    ``RLSOrgContextMiddleware`` pinned via ``bind_request_pg_conn`` and can
+    query it after the middleware released it back to the pool — possibly
+    while another tenant's request holds that same connection.
+    """
+    from eden.storage.postgres import copy_context_without_request_pg_conn
+
+    return copy_context_without_request_pg_conn()
 
 
 def reset_bounded_task_semaphores() -> None:
@@ -89,7 +119,7 @@ def _track(
     return task
 
 
-def bounded_create_task(
+def bounded_create_task[T](
     coro: Coroutine[Any, Any, T],
     *,
     name: str | None = None,
@@ -107,9 +137,9 @@ def bounded_create_task(
     The returned task is also retained in ``_pending`` until it finishes
     so discarding the caller's handle cannot GC the work mid-await.
 
-    ``context`` (optional) is forwarded to ``loop.create_task`` on
-    Python ≥ 3.11 so detached work can strip a request-pinned Postgres
-    connection via ``copy_context_without_request_pg_conn``.
+    By default the task runs under :func:`_detached_context` so it does
+    not inherit a request-pinned Postgres connection. Pass ``context=``
+    only when you have already built an appropriate context yourself.
     """
     cap = _resolve_limit(limit)
     queue_cap = (
@@ -117,16 +147,12 @@ def bounded_create_task(
         if max_waiting is not None and max_waiting >= 0
         else cap * _DEFAULT_QUEUE_MULTIPLIER
     )
-    sem = _semaphore_for(cap)
+    sem = _semaphore_for(cap, "task")
     loop = asyncio.get_running_loop()
-
-    def _spawn(c: Coroutine[Any, Any, Any], *, task_name: str | None) -> asyncio.Task[Any]:
-        if context is not None:
-            try:
-                return loop.create_task(c, name=task_name, context=context)
-            except TypeError:
-                pass
-        return loop.create_task(c, name=task_name)
+    # Always detach unless the caller supplied an explicit context.
+    # Both create_task sites below must pass context= so neither path
+    # inherits the request-pinned connection.
+    task_ctx = context if context is not None else _detached_context()
 
     waiting = _waiter_counts.get(cap, 0)
     if waiting >= queue_cap:
@@ -147,7 +173,9 @@ def bounded_create_task(
         async def _dropped() -> None:
             return None
 
-        return _track(_spawn(_dropped(), task_name=name))
+        return _track(
+            loop.create_task(_dropped(), name=name, context=task_ctx)
+        )
 
     _waiter_counts[cap] = waiting + 1
 
@@ -175,15 +203,16 @@ def bounded_create_task(
                     return None
         except asyncio.CancelledError:
             if not started:
-                try:
+                with contextlib.suppress(Exception):
                     coro.close()
-                except Exception:
-                    pass
             raise
         finally:
             _waiter_counts[cap] = max(0, _waiter_counts.get(cap, 1) - 1)
 
-    return _track(_spawn(_runner(), task_name=name), owned_coro=coro)
+    return _track(
+        loop.create_task(_runner(), name=name, context=task_ctx),
+        owned_coro=coro,
+    )
 
 
 def fire_and_forget(
@@ -219,25 +248,24 @@ def fire_and_forget(
         return True
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("fire_and_forget: scheduling %s failed: %s", name, exc)
-        try:
+        with contextlib.suppress(Exception):
             result.close()
-        except Exception:
-            pass
         return False
 
 
-async def bounded_gather(
+async def bounded_gather[T](
     *aws: Awaitable[T],
     limit: int | None = None,
     return_exceptions: bool = False,
 ) -> list[T | BaseException]:
     """Like ``asyncio.gather`` but caps concurrent awaitables.
 
-    Each awaitable runs under the shared process-local semaphore for
-    ``limit`` (default from settings / 64).
+    Each awaitable runs under a gather-scoped process-local semaphore for
+    ``limit`` (default from settings / 64). Separate from the fire-and-forget
+    semaphore so a wide gather cannot starve ``bounded_create_task``.
     """
     cap = _resolve_limit(limit)
-    sem = _semaphore_for(cap)
+    sem = _semaphore_for(cap, "gather")
 
     async def _run(aw: Awaitable[T]) -> T:
         async with sem:

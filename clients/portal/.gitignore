@@ -46,3 +46,8 @@ next-env.d.ts
 
 # debug probes — created during audits, never meant to ship
 /.tmp-*.mjs
+
+# audit/e2e run artifacts — regenerate locally, never commit
+/e2e/reports/
+/report-a11y-*.json
+/e2e/.auth-state.json

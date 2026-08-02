@@ -48,6 +48,7 @@ from ._common import (
     _not_implemented_envelope,
     _ok_envelope,
     _ok_fallback_envelope,
+    _record_columnar_fallback,
 )
 
 logger = logging.getLogger(__name__)
@@ -261,6 +262,7 @@ class ColumnarQueryEngine:
                     },
                 )
             except Exception as exc:  # noqa: BLE001 - fallback path
+                _record_columnar_fallback("query", "query_error")
                 logger.warning(
                     "ClickHouse query failed for org=%s: %s; falling back",
                     org_id,

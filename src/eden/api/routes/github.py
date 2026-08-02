@@ -321,17 +321,18 @@ async def _persist_installation_row(
 
 
 async def _guess_org_for_github_install(pg: Any) -> str | None:
-    """Best-effort org match when GitHub webhook fires before portal claim."""
-    row = await pg.fetchrow(
-        """
-        SELECT org_id FROM onboarding_state
-        WHERE step = 'connect_github'
-          AND updated_at > NOW() - INTERVAL '2 hours'
-        ORDER BY updated_at DESC
-        LIMIT 1
-        """
-    )
-    return str(row["org_id"]) if row else None
+    """Deprecated: never auto-bind installations across tenants.
+
+    ``installation.created`` must not pick ``ORDER BY updated_at`` from
+    *any* org's onboarding_state — that races and can attach a GitHub
+    App install to the wrong tenant. Portal ``claim_github_installation``
+    is the only safe bind path (authenticated org member + installation_id).
+    """
+    del pg  # unused — kept for call-site compatibility during rollout
+    return None
+
+
+# Kept name for tests that patch the symbol; always returns None.
 
 
 async def _client_for(installation_id: int) -> tuple[GitHubOAuthClient, Any]:
@@ -667,7 +668,7 @@ async def github_configured() -> ConfiguredResponse:
                     and str(perms.get("pull_requests") or "") == "write"
                 )
             except Exception as exc:  # noqa: BLE001 — best-effort metadata
-                logger.debug("github_configured: app_permissions failed: %s", exc)
+                logger.debug("github_configured: app_permissions failed: %s", redact_all(str(exc)))
         except GitHubConfigError:
             slug = None
     return ConfiguredResponse(
@@ -896,6 +897,13 @@ async def github_webhook(request: Request) -> dict[str, str]:
                         "installation.created webhook persist failed: %s",
                         redact_all(str(exc)),
                     )
+            else:
+                logger.info(
+                    "installation.created id=%s account=%s — awaiting "
+                    "authenticated portal claim (no cross-tenant auto-bind)",
+                    installation_id,
+                    account_login,
+                )
         elif action == "suspend" and installation_id:
             await pg.execute(
                 """

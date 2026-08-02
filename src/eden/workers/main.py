@@ -65,10 +65,10 @@ CLI
 from __future__ import annotations
 
 import argparse
-import os
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import sys
 from collections.abc import Awaitable, Callable

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -90,7 +91,7 @@ async def patch_agent(
     if client is not None:
         await _fleet.discover_agent(org_id, agent_id, display_name=body.display_name)
         if body.tier:
-            try:
+            with contextlib.suppress(Exception):
                 await client.execute(
                     "UPDATE agent_registry SET tier = $3 "
                     "WHERE org_id = $1 AND agent_id = $2",
@@ -98,6 +99,4 @@ async def patch_agent(
                     agent_id,
                     body.tier,
                 )
-            except Exception:
-                pass
     return await get_agent(org_id, agent_id)

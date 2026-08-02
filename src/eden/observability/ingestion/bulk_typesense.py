@@ -58,10 +58,20 @@ async def flush_bulk_index() -> int:
 
         client = get_typesense_client()
         if client is None:
+            # Put the detached batch back — an absent client is transient
+            # (Typesense not configured yet / mid-restart), not a reason
+            # to discard up to ``_BULK_FLUSH_SIZE`` docs.
+            _bulk_buffer = batch + _bulk_buffer
             return 0
         return int(await client.index_many(batch))
     except Exception as exc:
         logger.debug("bulk typesense flush failed: %s", exc)
+        try:
+            from eden.observability.drop_metrics import record_drop
+
+            record_drop("sink_search", "write_error", len(batch))
+        except Exception:
+            pass
         return 0
 
 

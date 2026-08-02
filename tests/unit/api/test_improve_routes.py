@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.routes import improve as improve_routes
 from eden.improvement.cockpit_aggregator import ImprovementItem, ImprovementQueue
 
@@ -21,9 +22,9 @@ def _app() -> FastAPI:
     async def _path_org(org_id: str = "org_1") -> str:
         return org_id
 
-    app.dependency_overrides[improve_routes.get_current_user] = _fake_user
+    app.dependency_overrides[get_current_user] = _fake_user
     # Router-level membership gate (Phase 3 path-org); bypass for smoke tests.
-    app.dependency_overrides[improve_routes._require_path_org] = _path_org
+    app.dependency_overrides[require_path_org_access] = _path_org
     app.include_router(improve_routes.router)
     return app
 

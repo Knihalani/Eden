@@ -34,7 +34,10 @@ class ProductionEvalSampler:
             return None
         if not is_stumble and not self._should_sample(trace_id, policy):
             return None
-        if not is_stumble and not await self._budget_allows(org_id, policy):
+        # Stumbles skip the sample RATE (a failing trace is always worth
+        # scoring) but never the spend CAP — a looping agent emits stumbles
+        # in bursts, so the budget gate must apply to them most of all.
+        if not await self._budget_allows(org_id, policy):
             return None
         score, passed, billed_cost = await self._score_trace(
             org_id, trace_id, agent_id

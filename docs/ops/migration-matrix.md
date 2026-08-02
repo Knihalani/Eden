@@ -163,6 +163,10 @@
 | 126_ai_conversations | ai_conversations, ai_messages | yes | forever | soft | medium | Assistant threads + messages (org-scoped); UUID/TEXT alignment for user_id FKs must match users.id | Assistant |
 | 127_sidebar_prefs_user_id_type | sidebar_prefs | yes | forever | soft | low | Align sidebar_prefs.user_id type with users.id (TEXT) to stop UUID cast crash-loops on prefs write | Portal UX |
 | 128_onboarding_state_v2_columns | onboarding_state | yes | forever | soft | low | Add D.14 v2 columns + milestones GIN index onto wizard onboarding_state (056 CREATE IF NOT EXISTS no-op) | Onboarding v2 |
+| 129_dataset_columns | dataset_columns | yes | forever | none | low | Idempotent CREATE for spreadsheet metadata table previously only in migrations/037 outside Alembic | Portal UX |
+| 130_portal_rpm_floor | rate_limit_snapshots | yes | forever | soft | low | Raise free-tier portal RPM floor 60 → 300 so hub React Query fan-out does not 429 | Reliability |
+| 131_slack_integration | org_slack_installs, agent_slack_channels | yes | forever | soft | medium | Soft Autonomy Slack bot installs + per-agent channel routing | Integrations |
+| 132_plan_parent | improvement_plans | yes | forever | soft | low | Soft Autonomy parent_plan_id for post-merge regression follow-ups | Improve |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)

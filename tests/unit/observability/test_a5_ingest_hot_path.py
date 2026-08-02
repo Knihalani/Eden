@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,7 +21,7 @@ def _event(eid: str = "evt-1") -> TelemetryEvent:
         trace_id="trace-1",
         realm="environment",
         event_type="llm.completion",
-        timestamp="2026-07-18T00:00:00Z",
+        timestamp=datetime.now(UTC).isoformat(),
         agent_id="agent-1",
         payload={"model": "gpt-4o"},
         metrics={"input_tokens": 1.0, "output_tokens": 1.0},
@@ -298,6 +299,8 @@ class TestEnrichAndSingleToDict:
         collector = TelemetryCollector()
         a = _event("same")
         b = _event("same")
+        # ``_event`` stamps ``datetime.now`` per call so equalise before hashing.
+        b.timestamp = a.timestamp
         b.payload = {"huge": "x" * 10_000}
         collector._enrich(a)
         collector._enrich(b)

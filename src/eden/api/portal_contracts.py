@@ -167,6 +167,10 @@ class IssueCard(BaseModel):
     errorSample: str = ""
     impact: str = ""
     suggestedFix: str = ""
+    # Soft Autonomy Phase 3: why Eden could not draft a fix PR
+    # (e.g. ``repo_not_connected``). Empty when unblocked.
+    patchBlockedReason: str = ""
+    patchBlockedMessage: str = ""
     tags: list[str] = Field(default_factory=list)
 
 
@@ -415,7 +419,7 @@ AssistantPartType = Literal["text", "citations", "actions", "artifacts"]
 
 
 class ImprovePlanCard(BaseModel):
-    """Improve plan card — matches lab ``ImprovePlanFixture`` (minimal)."""
+    """Improve plan card — matches lab ``ImprovePlanFixture``."""
 
     id: str
     title: str = ""
@@ -426,6 +430,16 @@ class ImprovePlanCard(BaseModel):
     caseIds: list[str] = Field(default_factory=list)
     baselineId: str | None = None
     compareId: str | None = None
+    # Soft Autonomy Phase 2: the plan view renders these unconditionally —
+    # without them real plans showed a blank Why section and empty diff panes.
+    rca: str = ""
+    summary: str = ""
+    diff: str = ""
+    prUrl: str | None = None
+    updatedAt: str = ""
+    # Soft Autonomy Phase 9: set when the post-PR guardian drafted
+    # this plan as a revert/follow-up of an earlier merged plan.
+    parentPlanId: str | None = None
 
 
 class AbExperimentCard(BaseModel):

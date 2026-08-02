@@ -661,7 +661,6 @@ export function DebuggerTimeTravelView({
 
   useEffect(() => {
     void refreshForks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per session/org
   }, [orgId, session.sourceTraceId]);
 
   const onForkAndReplay = async () => {

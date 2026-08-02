@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { DOCS_URL, SUPPORT_EMAIL } from "@/lib/constants";
 
+
+export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "About · Eden",
   description:

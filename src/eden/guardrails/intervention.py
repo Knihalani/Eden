@@ -518,7 +518,7 @@ class InterventionEngine:
 
         # judge_link policies are declared but not evaluated here —
         # do not advertise live enforcement solely because they exist.
-        _ENFORCED_TYPES = frozenset(
+        _enforced_types = frozenset(
             {
                 "prompt_injection",
                 "pii_redaction",
@@ -527,7 +527,7 @@ class InterventionEngine:
             }
         )
         enforced_policies = [
-            p for p in policies if p.get("type") in _ENFORCED_TYPES
+            p for p in policies if p.get("type") in _enforced_types
         ]
         if not enforced_policies:
             has_judge = any(p.get("type") == "judge_link" for p in policies)

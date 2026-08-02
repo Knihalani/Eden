@@ -6,16 +6,25 @@ authentication** via headless `@clerk/testing/playwright`.
 
 ## Paths
 
+Routes are the **live** portal IA (see `src/lib/portal-polish.ts`
+`U20_CORE_AXE_ROUTES`). Retired aliases (`/dashboard`, `/artifacts`,
+`/debugger-sessions`) are covered by a separate legacy-redirect
+regression check in the same spec, not as golden paths.
+
 | # | Journey | Route | Deep assertion |
 |---|---------|-------|----------------|
-| 1 | Sign-in → Home | `/dashboard` | Authenticated shell visible, `h1` "Telemetry Overview" (or NoOrgState) rendered |
+| 1 | Sign-in → Home | `/home` | Authenticated shell visible, recognisable home content (or NoOrgState) rendered |
 | 2 | Traces → transcript → span → dataset | `/traces?traceId=tr-redacted-001` | Fixture trace ID navigates without crash; body contains trace-related text |
-| 3 | Issue → shadow Artifact | `/issues` → `/artifacts` | Issues list renders; if data present, clicks first issue and checks for `/artifacts` cross-link |
-| 4 | Artifact → promote / gate fail | `/artifacts` → `/promotions` | Artifacts page renders; if data present, checks EvidenceGate / Promote button |
-| 5 | Playground from-span → run → save | `/playgrounds` | Page renders; checks for New/Run affordance (degrades loudly if empty) |
+| 3 | Issues list | `/issues` | Issues list renders; if data present, clicks first issue and checks the detail panel |
+| 4 | Improve queue | `/improve` | Improve hub renders queue/plan chrome (successor to the retired `/artifacts` surface) |
+| 5 | Playground from-span → run → save | `/evals?tab=playgrounds` | Page renders; checks for New/Run affordance (degrades loudly if empty) |
 | 6 | Alert NL compile → save → ack | `/alerts` | Alerts page renders; checks for NL compile affordance |
-| 7 | Experiment compare | `/experiments` | Experiments page renders; checks for compare panel or content |
-| 8 | Debugger session / prefix rerun | `/debugger-sessions` | Debugger sessions page renders; checks for session/replay affordance |
+| 7 | Experiment compare | `/evals?tab=experiments` | Experiments tab renders; checks for compare panel or content |
+| 8 | Debugger session / prefix rerun | `/debugger` | Debugger page renders; checks for session/replay affordance |
+
+Legacy-redirect regression: `/dashboard` → `/home`,
+`/artifacts` → `/improve`, `/debugger-sessions` → `/debugger`. A
+retired alias that 404s or strands on `/unavailable` fails the run.
 
 ## Required env vars
 
@@ -57,10 +66,13 @@ Expected output:
 
 ```
 [golden] storageState loaded — running with Clerk session
-✓ Sign-in → Home (/dashboard) — "Telemetry Overview"
+✓ legacy /dashboard → /home
+✓ legacy /artifacts → /improve
+✓ legacy /debugger-sessions → /debugger
+✓ Sign-in → Home
 ✓ Traces hub
 ✓ Issues list
-✓ Artifacts
+✓ Improve queue
 ✓ Playground
 ✓ Alerts
 ✓ Experiments compare
@@ -99,16 +111,19 @@ unless the page itself crashes.
 
 ## Accessibility audit (U20)
 
-`bun run audit:a11y` runs Playwright + axe-core against the 5 core routes:
-`/dashboard`, `/traces`, `/issues`, `/artifacts`, `/playgrounds`.
+`bun run audit:a11y` runs Playwright + axe-core against the live portal
+routes (`/home`, `/traces`, `/issues`, `/sessions`, `/evals`, `/improve`,
+`/alerts`, `/agents`, `/compare`, `/cost`, `/gateway`, `/signals`,
+`/prompts`, `/guardrails`, `/settings`, `/debugger`).
 
-When `e2e/.auth-state.json` exists (i.e. `seed-auth.mjs` has run), the
-audit navigates with the Clerk session so the **real authenticated shell**
-is audited — not the `/sign-in` redirect stub.
+The audit **requires** `e2e/.auth-state.json` (run `seed-auth.mjs` first)
+and exits 2 without it — an unauthenticated run only audits the
+`/sign-in` redirect stub, which is a false pass. Routes that redirect to
+`/sign-in` or `/unavailable` mid-audit are recorded as errors, not passes.
 
 - Critical violations block CI (`process.exit(1)`)
-- Serious violations are reported but non-blocking
-- axe reports saved to `report-a11y-auth-*.json`
+- Serious violations gate on the core routes (`U20_SERIOUS_AXE_ROUTES`)
+- axe reports saved to `e2e/reports/` (gitignored)
 
 **Known resolved violations**: `color-contrast` on `NoOrgState` subtitle
 (`text-faint` → `text-muted` fix in `src/components/ui/no-org-state.tsx`).

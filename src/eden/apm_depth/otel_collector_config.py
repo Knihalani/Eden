@@ -106,7 +106,7 @@ _CONFIG_CANDIDATES: tuple[Path, ...] = (
 
 def _load_yaml(path: Path) -> dict[str, Any] | None:
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
 
         with path.open("r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh)

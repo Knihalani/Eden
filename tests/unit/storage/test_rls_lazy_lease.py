@@ -361,7 +361,7 @@ async def test_concurrent_queries_do_not_collide_on_the_shared_connection() -> N
     six sinks, so a batch issues many concurrent statements from one task --
     all landing on the one connection the RLS middleware pinned. asyncpg
     permits one operation at a time, so nine of ten collided, and
-    ``_route_postgres`` turns any exception into ``IngestionUnavailable``,
+    ``_route_postgres`` turns any exception into ``IngestionUnavailableError``,
     which 503s the whole batch.
     """
     conn = _OneOpAtATimeConn()

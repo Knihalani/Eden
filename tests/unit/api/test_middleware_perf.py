@@ -965,3 +965,62 @@ def test_internal_only_allows_loopback_in_default_allow_list():
     assert starts and starts[0]["status"] != 403, (
         f"Loopback caller must NOT be 403'd; starts={starts}"
     )
+
+
+def test_internal_only_xff_requires_client_also_allowlisted(monkeypatch):
+    """Trusted TCP peer + XFF to a non-allow-listed client → 403.
+
+    Prevents 'allowlist the load balancer' from opening health to every
+    downstream caller.
+    """
+    import asyncio
+
+    from eden.api.middleware import internal_only as mod
+    from eden.api.middleware.internal_only import InternalOnlyMiddleware
+
+    monkeypatch.setattr(
+        mod,
+        "_get_allowed_ips",
+        lambda: ("10.0.0.1", "127.0.0.1"),
+    )
+
+    inner_called = {"n": 0}
+
+    async def inner(scope, receive, send):
+        inner_called["n"] += 1
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    mw = InternalOnlyMiddleware(inner)
+    # Re-bind allow list after construction (``__init__`` cached env).
+    mw.allowed_ips = ("10.0.0.1", "127.0.0.1")
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/v1/internal/health/x",
+        "raw_path": b"/v1/internal/health/x",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"test"),
+            (b"x-forwarded-for", b"203.0.113.50"),
+        ],
+        "client": ("10.0.0.1", 50000),  # trusted LB
+        "server": ("testserver", 80),
+        "root_path": "",
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    sent: list = []
+
+    async def send(msg):
+        sent.append(msg)
+
+    asyncio.run(mw(scope, receive, send))
+    assert inner_called["n"] == 0
+    starts = [m for m in sent if m["type"] == "http.response.start"]
+    assert starts and starts[0]["status"] == 403

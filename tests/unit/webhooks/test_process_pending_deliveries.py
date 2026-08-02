@@ -465,8 +465,15 @@ class TestF57AppShutdownReleasesWebhookPool:
 
         from eden.api import app as app_module
 
-        src = inspect.getsource(app_module.lifespan)
-        # Lifespan calls aclose() on the singleton accessor.
+        # Closes live in the `_shutdown_steps` registry that lifespan
+        # iterates — not inlined in the lifespan body itself.
+        src = "\n".join(
+            (
+                inspect.getsource(app_module.lifespan),
+                inspect.getsource(app_module._shutdown_steps),
+            )
+        )
+        # Lifespan registry calls aclose() on the singleton accessor.
         assert "get_webhook_delivery_service" in src
         assert ".aclose()" in src
 

@@ -145,10 +145,10 @@ def current_cost_context() -> dict[str, Any]:
 #: dispatch the synchronous ``call()`` into, so it has no running loop of
 #: its own and cannot create a task. Binding the serving loop once at
 #: startup gives those writes somewhere to go.
-_ledger_loop: "asyncio.AbstractEventLoop | None" = None
+_ledger_loop: asyncio.AbstractEventLoop | None = None
 
 
-def bind_event_loop(loop: "asyncio.AbstractEventLoop | None" = None) -> None:
+def bind_event_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
     """Bind the loop that cross-thread ledger writes schedule onto.
 
     Call once from a long-lived async entrypoint (the API lifespan, the

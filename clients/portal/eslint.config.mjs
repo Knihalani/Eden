@@ -53,11 +53,11 @@ const eslintConfig = defineConfig([
       //   The rule is "advisory" for us — every page handler that
       //   wants the strict check can re-enable per-file.
       "react-hooks/exhaustive-deps": "off",
-      // Promote `no-explicit-any` to error: the portal interfaces with
-      // dynamic FastAPI response shapes but every new code path should
-      // opt-in via per-line eslint-disable with a reason. Tightening
-      // this is the next step toward a fully-typed portal.
-      "@typescript-eslint/no-explicit-any": "warn",
+      // `no-explicit-any` is an error: the portal interfaces with
+      // dynamic FastAPI response shapes but every new code path must
+      // opt in via per-line eslint-disable with a reason. (Promoted
+      // from "warn" 2026-08-01 — the tree was already clean.)
+      "@typescript-eslint/no-explicit-any": "error",
       // unused-vars: relax the catch-param + destructured-prop patterns.
       "@typescript-eslint/no-unused-vars": [
         "warn",

@@ -1,63 +1,57 @@
 #!/usr/bin/env node
 /**
- * U20 axe gate — run @axe-core/cli (unauthenticated) OR Playwright + axe-core
- * (authenticated, when e2e/.auth-state.json is present) against the running
- * portal server. Audits core routes (WCAG 2.2 AA).
+ * Axe gate — Playwright + axe-core with the saved Clerk storageState
+ * (e2e/.auth-state.json) against the running portal server, auditing the
+ * live authenticated portal routes (WCAG 2.2 AA).
  *
- * Authenticated mode (default when storageState exists):
- *   Uses Playwright with the saved Clerk storageState so pages render the real
- *   authenticated shell rather than the /sign-in redirect stub.
- *
- * Unauthenticated fallback:
- *   Falls back to @axe-core/cli when storageState is not present (e.g. first
- *   install before seed-auth has been run).
+ * There is deliberately no unauthenticated fallback: without storageState
+ * every portal route renders the /sign-in stub and the audit would report
+ * a false pass (this gate shipped "0 violations" for months that way).
+ * Missing/expired storageState exits 2 with instructions; a route that
+ * redirects to sign-in or soft-lands on /unavailable fails the run.
  *
  * Usage:
+ *   node e2e/golden/seed-auth.mjs   # refresh storageState first
  *   PORT=3000 bun run audit:a11y
  *
- * CI: run seed-auth.mjs first (saves storageState), start production server,
- * then run this script. Fails on any critical violation. Also fails on
- * serious violations for /traces and /improve (W6 UX-P0-15).
+ * Fails on any critical violation, on serious violations for gated routes
+ * (SERIOUS_GATE_ROUTES), and on any route that could not be audited
+ * truthfully.
  */
-const { execSync, execFileSync } = require("node:child_process");
 const http = require("node:http");
 const path = require("node:path");
 const fs = require("node:fs");
 
 const PORT = process.env.PORT || "3000";
-// Keep in sync with src/lib/portal-polish.ts U20_CORE_AXE_ROUTES + IMPROVE_V3_AXE_ROUTES
+// Live portal leaves only (2026-08-01). Retired routes (/dashboard,
+// /artifacts, /playgrounds, /ledger, /optimization) soft-land to
+// /unavailable or /home — auditing them measured the redirect target,
+// not a real surface, and produced false-pass reports.
 const ROUTES = [
-  "/dashboard",
+  "/home",
   "/traces",
   "/issues",
-  "/artifacts",
-  "/playgrounds",
+  "/sessions",
   "/evals",
   "/improve",
   "/alerts",
   "/agents",
-  "/settings",
-  // Improve V3 Wave 10 — Improve-group satellites
-  "/ledger",
+  "/compare",
+  "/cost",
+  "/gateway",
+  "/signals",
   "/prompts",
   "/guardrails",
-  "/optimization",
+  "/settings",
 ];
-/**
- * Keep in sync with U20_SERIOUS_AXE_ROUTES + IMPROVE_V3_SERIOUS_AXE_ROUTES —
- * fail gate on serious here.
- */
+/** Fail the gate on serious violations for the highest-traffic surfaces. */
 const SERIOUS_GATE_ROUTES = new Set([
   "/traces",
   "/improve",
   "/evals",
   "/issues",
-  // Improve V3 Wave 10
-  "/artifacts",
-  "/ledger",
   "/prompts",
   "/guardrails",
-  "/optimization",
 ]);
 const BLOCKING_IMPACTS = new Set(["critical"]);
 const STATE_PATH = path.join(__dirname, "../e2e/.auth-state.json");
@@ -87,24 +81,6 @@ function pingServer(port, timeoutMs = 60000) {
 }
 
 /**
- * Unauthenticated audit via @axe-core/cli.
- * Used as fallback when no storageState exists.
- */
-function runAxeCli(url) {
-  const axeBin = path.join(process.cwd(), "node_modules", ".bin", "axe");
-  const reportFile = `report-${encodeURIComponent(url)}.json`;
-  try {
-    execSync(
-      `"${axeBin}" "${url}" --exit --tags wcag2a,wcag2aa,wcag21a,wcag21aa,wcag22aa --save "${reportFile}"`,
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    );
-    return { ok: true, reportFile };
-  } catch {
-    return { ok: false, reportFile };
-  }
-}
-
-/**
  * Authenticated audit via Playwright + axe-core injected into the page.
  * Runs with the saved Clerk storageState so the real authenticated shell
  * renders instead of the /sign-in redirect.
@@ -130,6 +106,25 @@ async function runAxeWithAuth(routes, storageState) {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
       // Wait for React to hydrate
       await page.waitForTimeout(2000);
+
+      // Truthfulness guard: if the route bounced to /sign-in (expired or
+      // invalid storageState) or soft-landed on /unavailable, axe would be
+      // auditing the wrong page and reporting a false pass. Record it as a
+      // failure instead of a clean bill.
+      const landed = page.url();
+      if (landed.includes("/sign-in") || landed.includes("/sign-up")) {
+        console.error(
+          `[audit:a11y] ${route}: redirected to sign-in — storageState is missing/expired. ` +
+            `Run e2e/golden/seed-auth.mjs to refresh it.`,
+        );
+        results.push({ route, ok: false, critical: 0, serious: 0, error: "auth-redirect" });
+        continue;
+      }
+      if (landed.includes("/unavailable")) {
+        console.error(`[audit:a11y] ${route}: soft-landed on /unavailable — stale route in ROUTES list.`);
+        results.push({ route, ok: false, critical: 0, serious: 0, error: "soft-landed" });
+        continue;
+      }
 
       // Inject axe-core into the page
       await page.addScriptTag({ content: axeSource });
@@ -174,8 +169,10 @@ async function runAxeWithAuth(routes, storageState) {
       );
       results.push({ route, ok, critical, serious, seriousGate, violations: violations.length });
 
-      // Save JSON report for CI artifact
-      const reportPath = path.join(process.cwd(), `report-a11y-auth-${encodeURIComponent(route)}.json`);
+      // Save JSON report for CI artifact (gitignored run-artifacts dir)
+      const reportsDir = path.join(__dirname, "../e2e/reports");
+      fs.mkdirSync(reportsDir, { recursive: true });
+      const reportPath = path.join(reportsDir, `report-a11y-auth-${encodeURIComponent(route)}.json`);
       fs.writeFileSync(reportPath, JSON.stringify(axeResults, null, 2));
     } catch (e) {
       console.error(`[audit:a11y] ${route}: error during axe run:`, e.message);
@@ -203,73 +200,42 @@ async function main() {
   }
 
   if (!storageState) {
-    console.warn(
-      "[audit:a11y] No storageState available — running unauthenticated audit.\n" +
-      "  NOTE: authenticated pages (Dashboard, Traces, etc.) will be audited as\n" +
-      "  the /sign-in redirect stub, not the real authenticated shell.\n" +
-      "  Run seed-auth.mjs before audit:a11y for a full U20 audit.",
+    // Every route in ROUTES requires auth. Auditing them unauthenticated
+    // measures the /sign-in stub and reports a false pass — that is how
+    // this gate shipped "0 violations" for months while the real shell
+    // was never scanned. Refuse to run instead.
+    console.error(
+      "[audit:a11y] No storageState at e2e/.auth-state.json — refusing to audit\n" +
+      "  the /sign-in redirect stub and call it a pass.\n" +
+      "  Run `node e2e/golden/seed-auth.mjs` first, then re-run audit:a11y.",
     );
+    process.exit(2);
   }
 
-  console.log("[audit:a11y] auditing U20 core routes:", ROUTES.join(", "));
+  console.log("[audit:a11y] auditing live portal routes:", ROUTES.join(", "));
 
   let totalCritical = 0;
   let totalSerious = 0;
   let totalSeriousGateFails = 0;
-  let results;
+  let totalErrors = 0;
 
-  if (storageState) {
-    results = await runAxeWithAuth(ROUTES, storageState);
-    for (const r of results) {
-      totalCritical += r.critical || 0;
-      totalSerious += r.serious || 0;
-      if (r.seriousGate && (r.serious || 0) > 0) totalSeriousGateFails += r.serious;
-    }
-  } else {
-    // Unauthenticated fallback via @axe-core/cli
-    results = [];
-    for (const route of ROUTES) {
-      const url = `http://localhost:${PORT}${route}`;
-      const r = runAxeCli(url);
-      const reportPath = path.join(process.cwd(), r.reportFile);
-      let critical = 0;
-      let serious = 0;
-      const seriousGate = SERIOUS_GATE_ROUTES.has(route);
-
-      try {
-        const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
-        const violations = report.violations || [];
-        critical = violations.filter((v) => v.impact === "critical").length;
-        serious = violations.filter((v) => v.impact === "serious").length;
-        totalCritical += critical;
-        totalSerious += serious;
-        if (seriousGate && serious > 0) totalSeriousGateFails += serious;
-        console.log(
-          `[audit:a11y] ${route}: ${critical} critical, ${serious} serious` +
-            (seriousGate ? " (serious gated)" : ""),
-        );
-      } catch (e) {
-        console.error(`[audit:a11y] ${route}: failed to read report`, e.message);
-      }
-
-      results.push({
-        route,
-        ok: r.ok && critical === 0 && (!seriousGate || serious === 0),
-        critical,
-        serious,
-        seriousGate,
-      });
-    }
+  const results = await runAxeWithAuth(ROUTES, storageState);
+  for (const r of results) {
+    totalCritical += r.critical || 0;
+    totalSerious += r.serious || 0;
+    if (r.seriousGate && (r.serious || 0) > 0) totalSeriousGateFails += r.serious;
+    if (r.error) totalErrors += 1;
   }
 
   console.log("\n[audit:a11y] === summary ===");
   console.log(
     JSON.stringify(
       {
-        mode: storageState ? "authenticated" : "unauthenticated",
+        mode: "authenticated",
         totalCritical,
         totalSerious,
         totalSeriousGateFails,
+        totalErrors,
         seriousGateRoutes: [...SERIOUS_GATE_ROUTES],
         routes: results,
       },
@@ -278,6 +244,13 @@ async function main() {
     ),
   );
 
+  if (totalErrors > 0) {
+    console.error(
+      `[audit:a11y] FAIL: ${totalErrors} route(s) could not be audited truthfully ` +
+        "(auth redirect / soft-land / run error) — a skipped route is not a passing route",
+    );
+    process.exit(1);
+  }
   if (totalCritical > 0) {
     console.error(`[audit:a11y] FAIL: ${totalCritical} critical violations`);
     process.exit(1);

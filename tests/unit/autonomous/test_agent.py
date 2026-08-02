@@ -342,7 +342,9 @@ class TestModelSelection:
             preferred_tier="t3",
         )
         assert tier == "t2"
-        assert model == "minimax/minimax-m3"
+        from eden.llm.models import INTERNAL_CHAT_MODEL
+
+        assert model == INTERNAL_CHAT_MODEL
 
     @pytest.mark.asyncio
     async def test_always_t2_ignores_t3_override(self, monkeypatch):
@@ -356,7 +358,9 @@ class TestModelSelection:
             preferred_tier="t3",
         )
         assert tier == "t2"
-        assert model == "minimax/minimax-m3"
+        from eden.llm.models import INTERNAL_CHAT_MODEL
+
+        assert model == INTERNAL_CHAT_MODEL
 
     @pytest.mark.asyncio
     async def test_always_t2_for_short_question(self, monkeypatch):
@@ -367,7 +371,9 @@ class TestModelSelection:
         service = ChatService()
         model, tier = await service._pick_model(user_message="what is p95?")
         assert tier == "t2"
-        assert model == "minimax/minimax-m3"
+        from eden.llm.models import INTERNAL_CHAT_MODEL
+
+        assert model == INTERNAL_CHAT_MODEL
 
 
 
@@ -753,6 +759,10 @@ class TestOpenPrSuggestionTool:
                 AsyncMock(return_value=mock_pr),
             ) as get_pr,
             patch(
+                "eden.providers.factory.resolve_pr_base_branch",
+                AsyncMock(return_value="main"),
+            ),
+            patch(
                 "eden.agent.PRSuggester",
                 return_value=mock_suggester,
             ),
@@ -864,6 +874,10 @@ class TestOpenPrSuggestionTool:
             patch(
                 "eden.providers.factory.get_pr_provider_for_org",
                 AsyncMock(return_value=mock_pr),
+            ),
+            patch(
+                "eden.providers.factory.resolve_pr_base_branch",
+                AsyncMock(return_value="main"),
             ),
             patch(
                 "eden.agent.PRSuggester",

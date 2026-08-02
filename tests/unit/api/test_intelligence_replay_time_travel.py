@@ -119,9 +119,9 @@ def app(stub_pg, monkeypatch):
     app = FastAPI()
     app.include_router(intelligence_replay.router)
     app.include_router(intelligence_time_travel.router)
-    # Override auth on the ORIGINAL function the routes captured.
-    app.dependency_overrides[intelligence_replay.get_current_user] = _get_user
-    app.dependency_overrides[intelligence_time_travel.get_current_user] = _get_user
+    # Override auth / path-org on the shared deps the routes captured.
+    app.dependency_overrides[eden_deps.get_current_user] = _get_user
+    app.dependency_overrides[eden_deps.require_path_org_access] = lambda: "org-test"
     return app
 
 

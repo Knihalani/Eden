@@ -14,7 +14,6 @@ from eden.api.deps import (
     api_key_has_scope,
 )
 
-
 # ── Scope helper ────────────────────────────────────────────────────
 
 
@@ -148,12 +147,15 @@ def test_admin_status_has_no_pg_stat_activity() -> None:
 def test_rls_middleware_casts_org_id_text() -> None:
     from pathlib import Path
 
+    # GUC set_config lives on ``RequestConnLease._materialize`` (lazy
+    # acquisition); middleware only constructs/binds the lease.
     src = (
         Path(__file__).resolve().parents[3]
-        / "src/eden/api/middleware/rls_org_context.py"
+        / "src/eden/storage/postgres.py"
     )
     text = src.read_text(encoding="utf-8")
     assert "set_config('app.current_org_id', $1::text, true)" in text
+    assert "class RequestConnLease" in text
 
 
 # ── PII fail-closed Typesense ───────────────────────────────────────

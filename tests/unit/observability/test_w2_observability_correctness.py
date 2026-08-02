@@ -13,7 +13,7 @@ from eden.api.deps import get_ingest_auth
 from eden.api.routes import ingest_agent_sessions as ias_routes
 from eden.api.routes import observability_live as live_routes
 from eden.api.routes import observability_stream as stream
-from eden.observability.errors import IngestionUnavailable
+from eden.observability.errors import IngestionUnavailableError
 from eden.observability.telemetry_collector import TelemetryCollector, TelemetryEvent
 from eden.services.agent_sessions import AgentSessionService
 
@@ -123,7 +123,7 @@ async def test_route_postgres_missing_client_raises_unavailable() -> None:
     collector = TelemetryCollector()
     collector._postgres = None
     with patch.object(collector, "_get_postgres", new=AsyncMock(return_value=None)):
-        with pytest.raises(IngestionUnavailable):
+        with pytest.raises(IngestionUnavailableError):
             await collector._route_postgres(_event())
 
 
@@ -166,7 +166,7 @@ async def test_ingest_batch_surfaces_pg_unavailable() -> None:
         patch.object(collector, "_route_otel_dual_emit", new=AsyncMock()),
         patch.object(collector, "_route_typesense", new=AsyncMock()),
     ):
-        with pytest.raises(IngestionUnavailable):
+        with pytest.raises(IngestionUnavailableError):
             await collector.ingest_batch([_event()])
 
 

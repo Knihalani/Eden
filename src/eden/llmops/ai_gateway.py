@@ -321,9 +321,12 @@ class CircuitBreaker:
 
     @property
     def state(self) -> str:
-        if self._state == "open":
-            if self._last_failure_time and (time.time() - self._last_failure_time) > self.recovery_timeout_sec:
-                self._state = "half_open"
+        if (
+            self._state == "open"
+            and self._last_failure_time
+            and (time.time() - self._last_failure_time) > self.recovery_timeout_sec
+        ):
+            self._state = "half_open"
         return self._state
 
     def record_success(self) -> None:
@@ -339,7 +342,7 @@ class CircuitBreaker:
     async def call(self, fn: Callable, *args: Any, **kwargs: Any) -> Any:
         st = self.state
         if st == "open":
-            raise ProviderUnavailable("Circuit breaker OPEN for provider")
+            raise ProviderUnavailableError("Circuit breaker OPEN for provider")
         try:
             result = await fn(*args, **kwargs)
             self.record_success()
@@ -349,7 +352,7 @@ class CircuitBreaker:
             raise
 
 
-class ProviderUnavailable(Exception):
+class ProviderUnavailableError(Exception):
     pass
 
 
@@ -645,7 +648,7 @@ class AIGateway:
         # 4. Select best provider
         provider = self._select_provider(request)
         if not provider:
-            raise ProviderUnavailable("No healthy provider available for request")
+            raise ProviderUnavailableError("No healthy provider available for request")
 
         # 5. Walk the primary + up to ``_MAX_FALLBACK_DEPTH`` fallbacks,
         # each attempt routed through its own CircuitBreaker. Any
@@ -659,16 +662,16 @@ class AIGateway:
                 response = await cb.call(self._execute_provider, provider, request)
                 last_exc = None
                 break
-            except ProviderUnavailable as exc:
+            except ProviderUnavailableError as exc:
                 last_exc = exc
                 provider = self._select_fallback(provider, request)
                 attempts += 1
         else:  # exhausted attempts
             if last_exc is not None:
-                raise ProviderUnavailable(
+                raise ProviderUnavailableError(
                     f"All {self._MAX_FALLBACK_DEPTH + 1} providers unavailable"
                 ) from last_exc
-            raise ProviderUnavailable("All providers unavailable")
+            raise ProviderUnavailableError("All providers unavailable")
 
         latency_ms = int(time.time() * 1000) - start_ms
 
@@ -1116,7 +1119,7 @@ class AIGateway:
     async def _execute_provider(self, provider: Provider, request: ModelRequest) -> ModelResponse:
         client = self._providers.get(provider)
         if not client:
-            raise ProviderUnavailable(f"Provider {provider.value} not registered")
+            raise ProviderUnavailableError(f"Provider {provider.value} not registered")
 
         # DL-10: enforce gateway_max_tokens_cap. 0 = disabled.
         settings = _get_settings()

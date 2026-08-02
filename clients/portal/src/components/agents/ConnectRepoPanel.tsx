@@ -13,9 +13,7 @@ import { useLabToast } from "@/lab/lab-toast";
 import { LIVE_QUERY, SHELL_QUERY } from "@/lib/portal-query";
 import {
   clearStoredInstallationId,
-  clearStoredInstallAgentId,
   parseInstallationId,
-  readStoredInstallAgentId,
   storeInstallationId,
   storeInstallAgentId,
 } from "@/lib/github-install";

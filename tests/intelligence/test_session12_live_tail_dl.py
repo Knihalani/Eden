@@ -15,7 +15,7 @@ Five audit items:
 
 * **DL-3** — ``record_stream_chunks`` returned 200/accepted when
   Postgres was unavailable. SDKs treated that as success and chunks
-  vanished on every DB blip. Fix: raise ``IngestionUnavailable``;
+  vanished on every DB blip. Fix: raise ``IngestionUnavailableError``;
   route catches → 503 + ``Retry-After: 5``.
 
 * **DL-9** — ``memory_intel._common:_fetch_trace_response_text``
@@ -328,16 +328,16 @@ class TestDl2TenantCounterReset:
         assert result["rejected"] == 0
 
 
-# ─── DL-3: PG blip → IngestionUnavailable → HTTP 503 ───────────────
+# ─── DL-3: PG blip → IngestionUnavailableError → HTTP 503 ───────────────
 class TestDl3PgBlipReturns503:
     """Pre-fix: record_stream_chunks returned 200/accepted when
     Postgres was unavailable. SDKs treated that as success and
-    chunks vanished. Post-fix: it raises IngestionUnavailable and
+    chunks vanished. Post-fix: it raises IngestionUnavailableError and
     the route returns 503 + Retry-After."""
 
     @pytest.mark.asyncio
     async def test_record_stream_chunks_raises_when_no_pg(self) -> None:
-        from eden.observability.errors import IngestionUnavailable
+        from eden.observability.errors import IngestionUnavailableError
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
         )
@@ -348,7 +348,7 @@ class TestDl3PgBlipReturns503:
         with patch.object(
             collector, "_get_postgres", new=AsyncMock(return_value=None)
         ):
-            with pytest.raises(IngestionUnavailable):
+            with pytest.raises(IngestionUnavailableError):
                 await collector.record_stream_chunks(
                     "org-1",
                     [
@@ -381,7 +381,7 @@ class TestDl3PgBlipReturns503:
         self,
     ) -> None:
         """End-to-end: route returns 503 + Retry-After: 5 when
-        the collector raises IngestionUnavailable."""
+        the collector raises IngestionUnavailableError."""
         from fastapi import HTTPException
 
         from eden.observability.telemetry_collector import (

@@ -57,6 +57,7 @@ from eden.experiments._common import (
     empty_envelope,
     ok_envelope,
 )
+from eden.util.stable_hash import stable_hash
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class ExperimentWinnerDetector:
         # ── 2. Per-judge posterior + winner label ──────
         # We build a NEW judge_winners dict so the caller's
         # payload is never mutated.
-        rng = random.Random(0xBADA55 ^ hash(experiment_id) & 0xFFFFFFFF)
+        rng = random.Random(0xBADA55 ^ stable_hash(experiment_id) & 0xFFFFFFFF)
         judge_winners: dict[str, dict[str, Any]] = {}
         for judge, per_variant in comparison.items():
             control = per_variant.get("control") or {}

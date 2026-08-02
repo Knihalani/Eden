@@ -9,7 +9,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-class GuardrailBlocked(Exception):
+class GuardrailBlockedError(Exception):
     """Raised when a live guardrail blocks a gateway request."""
 
     def __init__(self, verdict: dict[str, Any]) -> None:
@@ -57,7 +57,7 @@ class GuardrailGatewayFilter:
 
             summary = f"guardrail_breach:{judge_id}"
             if enforcement == "block":
-                raise GuardrailBlocked(
+                raise GuardrailBlockedError(
                     {"judge_id": judge_id, "summary": summary, "enforcement": "block"}
                 )
             if enforcement == "warn":

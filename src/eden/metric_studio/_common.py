@@ -244,13 +244,13 @@ async def _delete_then_insert(
     from request input.
     """
     import re as _re
-    _IDENT = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-    if not isinstance(table, str) or not _IDENT.match(table):
+    _ident = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    if not isinstance(table, str) or not _ident.match(table):
         raise ValueError(
             f"_delete_then_insert: invalid SQL identifier table={table!r}"
         )
     for i, c in enumerate(columns):
-        if not isinstance(c, str) or not _IDENT.match(c):
+        if not isinstance(c, str) or not _ident.match(c):
             raise ValueError(
                 f"_delete_then_insert: invalid SQL identifier column[{i}]={c!r}"
             )

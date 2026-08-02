@@ -7,6 +7,8 @@ import random
 from typing import Any
 from uuid import uuid4
 
+from eden.util.stable_hash import stable_bucket
+
 logger = logging.getLogger(__name__)
 
 _MAX_AGENTS = 20
@@ -140,7 +142,7 @@ class AutoCurator:
         k = min(_MAX_CLUSTERS, max(1, int(len(traces) ** 0.5)))
         buckets: dict[int, list[dict[str, Any]]] = {i: [] for i in range(k)}
         for t in traces:
-            bucket = hash(t.get("trace_id") or t.get("title") or "") % k
+            bucket = stable_bucket(t.get("trace_id") or t.get("title") or "", k)
             buckets[bucket].append(t)
         return [b for b in buckets.values() if b]
 

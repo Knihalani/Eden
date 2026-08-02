@@ -12,8 +12,8 @@ Three audit items:
   ``/{judge_run_id}`` with only ``Depends(get_current_user)``. Any
   authenticated user could read or run judges on any tenant's
   trace_id by guessing ``org_id`` in the path.
-  Fix: router ``dependencies=[Depends(_require_path_org)]`` so the
-  path's org_id is verified via ``resolve_path_org_access``.
+  Fix: router ``dependencies=[Depends(require_path_org_access)]`` so the
+  path's org_id is verified via the shared gate in ``eden.api.deps``.
 
 * **C-3** — Six intelligence routers mounted ``get_current_user``
   only at the router level (no org-membership check). A user
@@ -185,7 +185,7 @@ def _deny_path_org() -> str:
 class TestC2JudgesApiRequiresOrgMember:
     """Pre-fix: any authenticated user could read or run judges on
     any org's traces. Post-fix: the path's org_id is checked via
-    ``_require_path_org``."""
+    the shared ``require_path_org_access`` gate."""
 
     def test_run_requires_org_membership(self) -> None:
         """A user authenticated to org-A calling /orgs/org-B/...
@@ -198,7 +198,7 @@ class TestC2JudgesApiRequiresOrgMember:
         app.dependency_overrides[judges_routes.get_current_user] = lambda: {
             "user_id": "u-1", "email": "x@y.z",
         }
-        app.dependency_overrides[judges_routes._require_path_org] = (
+        app.dependency_overrides[judges_routes.require_path_org_access] = (
             _deny_path_org
         )
         with patch.object(
@@ -224,7 +224,7 @@ class TestC2JudgesApiRequiresOrgMember:
         app.dependency_overrides[judges_routes.get_current_user] = lambda: {
             "user_id": "u-1", "email": "x@y.z",
         }
-        app.dependency_overrides[judges_routes._require_path_org] = (
+        app.dependency_overrides[judges_routes.require_path_org_access] = (
             _deny_path_org
         )
         client = TestClient(app)
@@ -242,7 +242,7 @@ class TestC2JudgesApiRequiresOrgMember:
         app.dependency_overrides[judges_routes.get_current_user] = lambda: {
             "user_id": "u-1", "email": "x@y.z",
         }
-        app.dependency_overrides[judges_routes._require_path_org] = (
+        app.dependency_overrides[judges_routes.require_path_org_access] = (
             _deny_path_org
         )
         client = TestClient(app)
@@ -254,7 +254,7 @@ class TestC2JudgesApiRequiresOrgMember:
 
     def test_route_depends_on_require_org_member(self) -> None:
         """Static check: the route declarations include
-        ``Depends(_require_path_org)``."""
+        ``Depends(require_path_org_access)``."""
         from eden.api.routes import judges as judges_routes
 
         app = FastAPI()
@@ -267,13 +267,13 @@ class TestC2JudgesApiRequiresOrgMember:
             while stack:
                 d = stack.pop()
                 stack.extend(d.dependencies)
-                if d.call is judges_routes._require_path_org:
+                if d.call is judges_routes.require_path_org_access:
                     any_check = True
                     break
             if any_check:
                 break
         assert any_check, (
-            "C-2 regression: no judges route uses _require_path_org"
+            "C-2 regression: no judges route uses require_path_org_access"
         )
 
 

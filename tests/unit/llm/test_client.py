@@ -338,13 +338,15 @@ class TestUsageTracking:
 
 class TestSlotTierRouting:
     def test_get_model_for_slot(self):
-        """Slots resolve to ModelRouter tier primary models."""
+        """Slots resolve to the internal chat SSOT (all tiers = DeepSeek)."""
+        from eden.llm.models import INTERNAL_CHAT_MODEL
+
         with patch("eden.llm.client.OpenAI"):
             client = OpenRouterClient(api_key="test")
-            assert client.get_model_for_slot("reasoning") == "minimax/minimax-m3"
-            assert client.get_model_for_slot("fast") == "tencent/hy3"
-            assert client.get_model_for_slot("code") == "minimax/minimax-m3"
-            assert client.get_model_for_slot("extraction") == "tencent/hy3"
+            assert client.get_model_for_slot("reasoning") == INTERNAL_CHAT_MODEL
+            assert client.get_model_for_slot("fast") == INTERNAL_CHAT_MODEL
+            assert client.get_model_for_slot("code") == INTERNAL_CHAT_MODEL
+            assert client.get_model_for_slot("extraction") == INTERNAL_CHAT_MODEL
 
     def test_slot_has_max_tokens(self):
         """Each slot configures max_tokens from settings."""

@@ -1,8 +1,9 @@
 /**
- * Lab signal compile — mirrors Eden model router T3 primary.
- * @see src/eden/optimization/model_router.py TIER_MODELS[T3]
+ * Lab signal compile — mirrors Eden internal chat SSOT.
+ * @see src/eden/llm/models.py INTERNAL_CHAT_MODEL
+ * @see src/eden/optimization/model_router.py TIER_MODELS (all tiers = internal model)
  */
-export const T3_PRIMARY_MODEL = "x-ai/grok-4.5";
+export const T3_PRIMARY_MODEL = "deepseek/deepseek-v4-flash-0731";
 
 export type CompiledSignalDraft = {
   name: string;

@@ -229,10 +229,22 @@ async def _dispatch_side_effect(
                 reason=reason or "closed_loop_executor",
             )
             if verdict != "allow":
-                return {
-                    "side_effect": "denied",
-                    "detail": {"reason": reason, "tier": tier, "action_kind": kind},
-                }
+                # Soft Autonomy Phase 3/4 (PR-first): for patch drafting,
+                # ``require_approval`` must NOT block the draft — the
+                # drafted plan landing in Needs-you IS the approval
+                # request. Only a hard ``deny`` (observe mode, disabled
+                # bound, budget) stops the draft.
+                if verdict == "require_approval" and policy_action in (
+                    "propose_patch",
+                    "code_change",
+                    "patch",
+                ):
+                    pass  # fall through — draft the plan for human approval
+                else:
+                    return {
+                        "side_effect": "denied",
+                        "detail": {"reason": reason, "tier": tier, "action_kind": kind},
+                    }
         except Exception as exc:
             logger.debug("closed_loop_executor: N22 gate failed: %s", exc)
             return {

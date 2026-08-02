@@ -211,6 +211,9 @@ from eden.api.routes import (
 from eden.api.routes import (
     github as github_routes,
 )
+from eden.api.routes import (
+    slack as slack_routes,
+)
 from eden.config import get_settings
 from eden.kb import health_check as kb_health_check
 from eden.kb import initialize_kb
@@ -1334,6 +1337,14 @@ app.include_router(integrations_status.router)  # /orgs/{org_id}/integrations/st
 app.include_router(github_routes.public_router)
 app.include_router(github_routes.org_router)
 
+# Soft Autonomy Phase 5 — Slack App OAuth + per-agent alert routing.
+#   public: /integrations/slack/{configured,authorize,callback}
+#   org:    /orgs/{org_id}/slack/{install,channels,routes,test}
+# Degrades gracefully when SLACK_* env vars are unset (portal hides
+# the Connect Slack button; the dispatcher no-ops).
+app.include_router(slack_routes.public_router)
+app.include_router(slack_routes.org_router)
+
 # Outbound webhooks (customer-facing CRUD + delivery + replay). Prefix
 # /orgs/{org_id}/webhooks — no collision with the inbound clerk_webhooks
 # router mounted above at /webhooks/clerk.
@@ -1456,9 +1467,7 @@ async def readiness_probe(request: Request):
     """
     from fastapi.responses import JSONResponse
 
-    from eden.api.startup_checks import is_ready, run_startup_checks
-
-    from eden.api.startup_checks import check_redis
+    from eden.api.startup_checks import check_redis, is_ready, run_startup_checks
 
     checks = getattr(request.app.state, "startup_checks", None)
     if checks is None:

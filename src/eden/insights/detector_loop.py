@@ -59,12 +59,16 @@ import asyncio
 import contextlib
 import logging
 import time
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from eden.config import Settings, get_settings
 from eden.storage.empty_cooldown import make_empty_cooldown
 from eden.storage.postgres import get_postgres_client
+
+#: Composite keyset cursor: ``(scored_at, judge_run_id)``.
+WatermarkCursor = tuple[datetime, str]
 
 logger = logging.getLogger(__name__)
 
@@ -205,10 +209,11 @@ class InsightsDetectorLoop:
     async def _list_tenants_with_new_scores(self) -> list[str]:
         """Return the tenant_ids that have new judge_scores rows to process.
 
-        The heuristic: union of the tenants in the watermark table
-        (where we left off mid-stream) and the distinct
-        ``tenant_id`` values in ``judge_scores`` that are ahead of
-        the watermark (or for which no watermark row exists).
+        Uses the same composite keyset as ``_process_tenant``:
+        ``(scored_at, judge_run_id)``. A bare UUID comparison here would
+        skip tenants whose newest run id sorts below the stored watermark.
+        Either missing watermark half is treated as no cursor (matches
+        ``_read_watermark``).
         """
         client = await self._get_pg()
         if client is None:
@@ -223,8 +228,10 @@ class InsightsDetectorLoop:
                 FROM judge_scores j
                 WHERE j.tenant_id = w.tenant_id
                   AND (
-                    w.last_processed_judge_score_id IS NULL
-                    OR j.judge_run_id > w.last_processed_judge_score_id
+                    w.last_processed_scored_at IS NULL
+                    OR w.last_processed_judge_score_id IS NULL
+                    OR (j.scored_at, j.judge_run_id)
+                         > (w.last_processed_scored_at, w.last_processed_judge_score_id)
                   )
                 LIMIT 1
             )
@@ -252,18 +259,20 @@ class InsightsDetectorLoop:
 
         watermark = await self._read_watermark(client, tenant_id)
         if watermark is not None:
+            scored_at, run_id = watermark
             new_rows = await client.fetch(
                 """
                 SELECT judge_run_id, judge_name, judge_version, trace_id, span_id,
                        score, rationale, model, scored_at, latency_ms, tenant_id
                 FROM judge_scores
                 WHERE tenant_id = $1
-                  AND judge_run_id > $2
-                ORDER BY scored_at ASC
-                LIMIT $3
+                  AND (scored_at, judge_run_id) > ($2, $3::uuid)
+                ORDER BY scored_at ASC, judge_run_id ASC
+                LIMIT $4
                 """,
                 tenant_id,
-                watermark,
+                scored_at,
+                run_id,
                 self.batch_size,
             )
         else:
@@ -273,7 +282,7 @@ class InsightsDetectorLoop:
                        score, rationale, model, scored_at, latency_ms, tenant_id
                 FROM judge_scores
                 WHERE tenant_id = $1
-                ORDER BY scored_at ASC
+                ORDER BY scored_at ASC, judge_run_id ASC
                 LIMIT $2
                 """,
                 tenant_id,
@@ -295,10 +304,11 @@ class InsightsDetectorLoop:
         # already runs on demand).
         insights = self._rows_to_insights([dict(r) for r in new_rows])
         if not insights:
-            # Advance the watermark to the highest id we saw so
-            # we don't re-read the same rows next tick.
-            top = max(str(r["judge_run_id"]) for r in new_rows)
-            await self._upsert_watermark(client, tenant_id, top)
+            # Advance the watermark to the last row in keyset order
+            # so we don't re-read the same rows next tick.
+            await self._upsert_watermark(
+                client, tenant_id, self._batch_cursor([dict(r) for r in new_rows])
+            )
             return 0
 
         # Persist Insights via the InsightsService — same code
@@ -373,10 +383,28 @@ class InsightsDetectorLoop:
             )
             return persisted
 
-        # Advance watermark to the highest judge_run_id we saw.
-        top = max(str(r["judge_run_id"]) for r in new_rows)
-        await self._upsert_watermark(client, tenant_id, top)
+        # Advance watermark to the last row of the batch in keyset order.
+        await self._upsert_watermark(
+            client, tenant_id, self._batch_cursor([dict(r) for r in new_rows])
+        )
         return persisted
+
+    @staticmethod
+    def _batch_cursor(rows: list[dict[str, Any]]) -> WatermarkCursor | None:
+        """Return the composite cursor for the last row in keyset order.
+
+        The batch is already ordered by ``(scored_at, judge_run_id)``, so the
+        tail is the correct advance — *not* ``max(judge_run_id)``, which is
+        the bug this cursor replaces.
+        """
+        if not rows:
+            return None
+        last = rows[-1]
+        scored_at = last["scored_at"]
+        run_id = last["judge_run_id"]
+        if not isinstance(scored_at, datetime):
+            scored_at = datetime.fromisoformat(str(scored_at))
+        return (scored_at, str(run_id))
 
     @staticmethod
     def _rows_to_insights(rows: list[dict[str, Any]]) -> list[Any]:
@@ -398,10 +426,10 @@ class InsightsDetectorLoop:
     @staticmethod
     async def _read_watermark(
         client: Any, tenant_id: str
-    ) -> str | None:
+    ) -> WatermarkCursor | None:
         row = await client.fetchrow(
             """
-            SELECT last_processed_judge_score_id
+            SELECT last_processed_judge_score_id, last_processed_scored_at
             FROM judge_scores_processed
             WHERE tenant_id = $1
             """,
@@ -409,49 +437,57 @@ class InsightsDetectorLoop:
         )
         if row is None:
             return None
-        val = row["last_processed_judge_score_id"]
-        return str(val) if val is not None else None
+        run_id = row["last_processed_judge_score_id"]
+        scored_at = row["last_processed_scored_at"]
+        # A UUID without its timestamp (or vice versa) cannot seed a
+        # composite keyset — treat a half-populated row as no cursor.
+        if run_id is None or scored_at is None:
+            return None
+        return (scored_at, str(run_id))
 
     @staticmethod
     async def _upsert_watermark(
         client: Any,
         tenant_id: str,
-        last_processed_judge_score_id: str | None,
+        cursor: WatermarkCursor | None,
     ) -> None:
-        """Set the watermark for ``tenant_id``.
+        """Persist the composite watermark for ``tenant_id``.
 
-        ``last_processed_judge_score_id`` may be ``None`` (no
-        rows seen yet) or a UUID string.  We use
-        ``COALESCE`` so a ``None`` pass through (e.g. the
-        watermark exists but we want to keep its value) is a
-        no-op.  The caller always passes the value we want
-        persisted, so a straight ``EXCLUDED`` write is fine.
+        ``cursor`` is ``(scored_at, judge_run_id)`` or ``None`` (both
+        halves written as NULL).
         """
+        scored_at: datetime | None
+        run_uuid: UUID | None
+        if cursor is None:
+            scored_at = None
+            run_uuid = None
+        else:
+            scored_at, run_id = cursor
+            try:
+                run_uuid = UUID(run_id) if not isinstance(run_id, UUID) else run_id
+            except (ValueError, TypeError) as exc:
+                logger.warning(
+                    "insights loop: bad watermark id %r: %s",
+                    run_id,
+                    exc,
+                )
+                return
         try:
             await client.execute(
                 """
                 INSERT INTO judge_scores_processed (
-                    tenant_id, last_processed_judge_score_id, updated_at
+                    tenant_id, last_processed_judge_score_id,
+                    last_processed_scored_at, updated_at
                 )
-                VALUES ($1, $2, NOW())
+                VALUES ($1, $2, $3, NOW())
                 ON CONFLICT (tenant_id) DO UPDATE
                 SET last_processed_judge_score_id = EXCLUDED.last_processed_judge_score_id,
+                    last_processed_scored_at = EXCLUDED.last_processed_scored_at,
                     updated_at = NOW()
                 """,
                 tenant_id,
-                # Postgres needs a UUID or NULL — the column is UUID.
-                # The loop's contract: we always pass either the
-                # last-known UUID (no new rows) or the top of the
-                # just-processed batch.  Both are valid UUIDs.
-                UUID(last_processed_judge_score_id)
-                if last_processed_judge_score_id
-                else None,
-            )
-        except (ValueError, TypeError) as exc:
-            logger.warning(
-                "insights loop: bad watermark id %r: %s",
-                last_processed_judge_score_id,
-                exc,
+                run_uuid,
+                scored_at,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(

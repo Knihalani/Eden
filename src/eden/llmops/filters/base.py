@@ -89,12 +89,16 @@ class FilterRegistry:
                 self.findings += len(findings)
             except Exception as exc:  # noqa: BLE001 — filter isolation
                 self.errors += 1
-                # Wave 2: GuardrailBlocked is fail-closed — never swallow.
+                # Wave 2: GuardrailBlockedError is fail-closed — never swallow.
                 try:
-                    from eden.llmops.filters.guardrail import GuardrailBlocked
+                    from eden.llmops.filters.guardrail import GuardrailBlockedError
+
+                    _blocked_types: tuple[type[BaseException], ...] = (
+                        GuardrailBlockedError,
+                    )
                 except Exception:  # pragma: no cover
-                    GuardrailBlocked = ()  # type: ignore[misc, assignment]
-                if isinstance(exc, GuardrailBlocked):
+                    _blocked_types = ()
+                if isinstance(exc, _blocked_types):
                     raise
                 if not self.fail_open:
                     raise

@@ -48,6 +48,24 @@ def test_assisted_allows_heal_but_patch_needs_approval() -> None:
     assert decide(p, "propose_patch")[0] == "require_approval"
 
 
+def test_assisted_pr_first_flag_off_still_requires_approval_not_deny() -> None:
+    """Soft Autonomy Phase 3: the legacy ``code_change_enabled=False``
+    master switch (auto_code_patch_pr=False) must NOT silently deny code
+    PRs in assisted mode — drafting a plan is side-effect-free and the
+    human Approve is the gate."""
+    p = _policy(maintenance_mode="assisted", auto_code_patch_pr=False)
+    verdict, reason, _tier = decide(p, "propose_patch")
+    assert verdict == "require_approval"
+    assert "approval" in reason
+
+
+def test_autonomous_flag_off_still_denies() -> None:
+    """In fully-autonomous mode the fine-grained flag still gates —
+    no silent auto-execution without the explicit opt-in."""
+    p = _policy(maintenance_mode="autonomous", auto_code_patch_pr=False)
+    assert decide(p, "propose_patch")[0] == "deny"
+
+
 def test_autonomous_allows_patch_pr() -> None:
     p = _policy(maintenance_mode="autonomous", auto_code_patch_pr=True)
     assert decide(p, "propose_patch")[0] == "allow"

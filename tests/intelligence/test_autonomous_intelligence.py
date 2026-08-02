@@ -626,48 +626,6 @@ class TestRoutes:
         # 200 OR 403.
         assert r.status_code in (200, 403)
 
-    @pytest.mark.skip(reason="nl/query and nl/dashboard routes removed from autonomous router")
-    def test_nl_query_route(self, client: TestClient) -> None:
-        pg = _pg_with_signals(
-            judge_trends=[
-                {"judge_name": "hallucination", "avg_score": 0.9, "n": 10},
-            ]
-        )
-        with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-            with patch(
-                "eden.llm.client.get_llm_client",
-                return_value=_make_llm_client(content="not json"),
-            ):
-                r = client.post(
-                    "/orgs/org_test/intelligence/autonomous/nl/query",
-                    json={"question": "how is judge quality?"},
-                )
-        body = r.json()
-        assert r.status_code == 200
-        assert body["status"] == "ok"
-        assert body["live"] is True
-        assert "assumptions" in body["data"]
-        assert body["data"]["data_source"] == "postgres"
-
-    @pytest.mark.skip(reason="nl/query and nl/dashboard routes removed from autonomous router")
-    def test_nl_dashboard_route(self, client: TestClient) -> None:
-        pg = _pg_with_signals()
-        with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
-            with patch(
-                "eden.llm.client.get_llm_client",
-                return_value=_make_llm_client(content="not json"),
-            ):
-                r = client.post(
-                    "/orgs/org_test/intelligence/autonomous/nl/dashboard",
-                    json={"description": "judge quality last 7 days"},
-                )
-        body = r.json()
-        assert r.status_code == 200
-        assert body["status"] == "ok"
-        assert body["live"] is True
-        assert "panels" in body["data"]["spec"]
-        assert len(body["data"]["spec"]["panels"]) >= 1
-
     def test_nl_report_route(self, client: TestClient) -> None:
         r = client.post(
             "/orgs/org_test/intelligence/autonomous/nl/report",

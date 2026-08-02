@@ -352,10 +352,30 @@ class LocalRepoProvider:
                         return line.rsplit(":", 1)[-1].strip()
         except Exception:
             pass
-        # Prefer symbolic-ref / remote show; empty means unresolved when
-        # git is present but HEAD cannot be resolved. Callers that need a
-        # hard default (LocalPRProvider) supply their own.
-        return ""
+        # No origin — fall back to the local HEAD branch name so a bare
+        # ``git init`` temp repo still resolves (main/master). Empty only
+        # when even that cannot be read.
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self._git,
+                "symbolic-ref",
+                "--short",
+                "HEAD",
+                cwd=self.repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout_b, _ = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=5.0,
+            )
+            if proc.returncode == 0 and stdout_b:
+                branch = stdout_b.decode("utf-8").strip()
+                if branch:
+                    return branch
+        except Exception:
+            pass
+        return "main"
 
     async def get_recent_commits(
         self,

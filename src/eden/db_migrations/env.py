@@ -15,16 +15,29 @@ the runtime app still uses asyncpg via the PostgresClient.
 import os
 import sys
 from logging.config import fileConfig
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from alembic import context
 from alembic.config import Config
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection, create_engine
 
-# Add project root to path so we can import Settings
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+# Put ``src`` on sys.path — not the project root. The root has no ``eden``
+# package, so the name would fall through to the editable install, whose
+# ``.pth`` lists ``sdk/python`` (the SDK) before ``src``.
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+)
 
 from eden.config import get_settings  # noqa: E402
+from eden.db_migrations.version_table import (  # noqa: E402
+    ensure_version_table,
+    use_wide_version_table,
+)
+
+# Override alembic's stock varchar(32) version_num so fresh databases can
+# record descriptive revision ids (the longest on disk is 37 chars).
+use_wide_version_table()
 
 settings = get_settings()
 
@@ -43,8 +56,6 @@ _sync_url = _async_url.replace("+asyncpg", "", 1) if "+asyncpg" in _async_url el
 # ``ssl=`` because that's what its connect() accepts; psycopg2 / libpq
 # want ``sslmode=``. Async values are: True / False / 'require' /
 # 'verify-ca' / 'verify-full'.
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-
 _parsed = urlparse(_sync_url)
 _qs = parse_qs(_parsed.query, keep_blank_values=True)
 _ssl_vals = _qs.pop("ssl", None)
@@ -111,7 +122,16 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    """Execute migrations within a transaction."""
+    """Execute migrations within a transaction.
+
+    ``ensure_version_table`` must run and commit *before*
+    ``context.configure``: under SQLAlchemy 2.0 the widening SELECT
+    opens an implicit transaction that alembic will not commit if it
+    treats it as externally managed, silently rolling back every
+    migration on connection close while still exiting 0.
+    """
+    ensure_version_table(connection)
+    connection.commit()
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():

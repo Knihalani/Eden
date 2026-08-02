@@ -386,12 +386,12 @@ class FakerVault:
         """
         first, last = self._pools_for("en")
         f = first[self._index(f"user:f:{real}", len(first))].lower()
-        l = last[self._index(f"user:l:{real}", len(last))].lower()
+        last_part = last[self._index(f"user:l:{real}", len(last))].lower()
         # Strip non-alpha from the first 3 chars of each.
         f = re.sub(r"[^a-z]", "", f)[:1] or "x"
-        l = re.sub(r"[^a-z]", "", l)[:7] or "x"
+        last_part = re.sub(r"[^a-z]", "", last_part)[:7] or "x"
         n = self._index(f"user:n:{real}", 100)
-        return f"{f}{l}{n:02d}"
+        return f"{f}{last_part}{n:02d}"
 
     # ── Public API: contact ──────────────────────────────────
 

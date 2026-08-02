@@ -1362,7 +1362,7 @@ class EdenClient:
             return
         fresh: list[tuple[str, dict[str, Any]]] = []
         durable_updates: list[tuple[int, str, dict[str, Any]]] = []
-        for ev, payload in zip(events, payloads):
+        for ev, payload in zip(events, payloads, strict=True):
             if ev.offline_row_id is not None:
                 durable_updates.append((ev.offline_row_id, source_format, payload))
             else:

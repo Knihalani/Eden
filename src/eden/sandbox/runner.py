@@ -22,6 +22,7 @@ when ``code_change_enabled`` is true.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import shutil
@@ -296,10 +297,8 @@ async def run_in_sandbox(
             )
         except TimeoutError:
             timed_out = True
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 proc.kill()
-            except ProcessLookupError:
-                pass
             try:
                 stdout_b, stderr_b = await asyncio.wait_for(
                     proc.communicate(), timeout=5.0,

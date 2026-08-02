@@ -30,6 +30,9 @@ export type IssueFixture = {
   /** What is blocked or degraded */
   impact: string;
   suggestedFix: string;
+  /** Why Eden could not draft a fix PR (e.g. "repo_not_connected"). */
+  patchBlockedReason?: string;
+  patchBlockedMessage?: string;
   tags: string[];
 };
 

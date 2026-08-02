@@ -16,10 +16,9 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
     require_feature_flag,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.debugger.checkpoints import (
     Checkpoint,
@@ -33,25 +32,13 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/debugger",
     tags=["debugger"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
 
-
 # ─- Schemas ──────────────────────────────────────────────────────
-
 
 class CheckpointResponse(BaseModel):
     id: str
@@ -67,10 +54,8 @@ class CheckpointResponse(BaseModel):
     duration_ms: float
     source: str
 
-
 class CheckpointListResponse(BaseModel):
     checkpoints: list[CheckpointResponse]
-
 
 class RerunRequest(BaseModel):
     trace_id: str = Field(..., description="The trace to replay.")
@@ -91,12 +76,10 @@ class RerunRequest(BaseModel):
         description="Optional F74 debug session to attach this run to.",
     )
 
-
 class CreateDebugSessionRequest(BaseModel):
     title: str = "Debug session"
     source_trace_id: str | None = None
     notes: str = ""
-
 
 class AddDebugRunRequest(BaseModel):
     source_trace_id: str
@@ -104,7 +87,6 @@ class AddDebugRunRequest(BaseModel):
     rerun_mode: str = "hermetic"
     result_trace_id: str | None = None
     diff_summary: list[dict[str, Any]] = Field(default_factory=list)
-
 
 class RerunResponse(BaseModel):
     source_trace_id: str
@@ -114,7 +96,6 @@ class RerunResponse(BaseModel):
     checkpoints: list[CheckpointResponse]
     diff: list[dict[str, Any]]
 
-
 class DiscoverRequest(BaseModel):
     candidates: list[dict[str, Any]] = Field(
         default_factory=list,
@@ -122,13 +103,10 @@ class DiscoverRequest(BaseModel):
     )
     min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
-
 class DiscoverResponse(BaseModel):
     entrypoints: list[dict[str, Any]]
 
-
 # ─- Helpers ───────────────────────────────────────────────────────
-
 
 def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
     return CheckpointResponse(
@@ -140,10 +118,7 @@ def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
         duration_ms=c.duration_ms, source=c.source,
     )
 
-
 # ─- Routes ────────────────────────────────────────────────────────
-
-
 
 @router.get(
     "/checkpoints",
@@ -151,7 +126,7 @@ def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
     summary="List checkpoints for a trace (query: trace_id)",
 )
 async def list_checkpoints_query(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Query(..., min_length=1, description="Trace to list checkpoints for"),
     user: dict = Depends(get_current_user),
 ) -> CheckpointListResponse:
@@ -160,14 +135,13 @@ async def list_checkpoints_query(
     """
     return await list_checkpoints(org_id=org_id, trace_id=trace_id, user=user)
 
-
 @router.get(
     "/checkpoints/{trace_id}",
     response_model=CheckpointListResponse,
     summary="List all checkpoints for a trace, in step order",
 )
 async def list_checkpoints(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> CheckpointListResponse:
@@ -178,14 +152,13 @@ async def list_checkpoints(
         checkpoints=[_checkpoint_to_response(c) for c in cps],
     )
 
-
 @router.post(
     "/rerun",
     summary="Re-run a trace from a given step with an optional prompt override",
 )
 async def rerun(
     body: RerunRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     pg = await get_postgres_client()
@@ -246,14 +219,13 @@ async def rerun(
         out["session_id"] = body.session_id
     return out
 
-
 @router.get(
     "/sessions",
     summary="List debugger sessions (F74)",
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def list_debug_sessions(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -264,14 +236,13 @@ async def list_debug_sessions(
         "count": len(sessions),
     }
 
-
 @router.post(
     "/sessions",
     summary="Create debugger session (F74)",
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def create_debug_session(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: CreateDebugSessionRequest = Body(default=CreateDebugSessionRequest()),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -284,14 +255,13 @@ async def create_debug_session(
     )
     return {"session": session.to_dict()}
 
-
 @router.get(
     "/sessions/{session_id}",
     summary="Get debugger session with runs",
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def get_debug_session(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -301,14 +271,13 @@ async def get_debug_session(
         return {"status": "not_found", "session_id": session_id}
     return {"session": session.to_dict()}
 
-
 @router.get(
     "/sessions/{session_id}/compare",
     summary="Compare two runs in a debug session",
     dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
 )
 async def compare_debug_runs(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
     run_a: str = Query(..., alias="run_a"),
     run_b: str = Query(..., alias="run_b"),
@@ -322,7 +291,6 @@ async def compare_debug_runs(
         return {"status": "not_found"}
     return result
 
-
 @router.post(
     "/discover",
     response_model=DiscoverResponse,
@@ -330,7 +298,7 @@ async def compare_debug_runs(
 )
 async def discover(
     body: DiscoverRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> DiscoverResponse:
     entrypoints = discover_entrypoint(

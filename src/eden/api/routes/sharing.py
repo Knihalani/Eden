@@ -22,9 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.observability.sharing import (
@@ -39,30 +38,18 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 # Two routers: ``sharing`` (auth-required) and ``public`` (no auth).
 sharing_router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["sharing"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
 public_router = APIRouter(
     prefix="/public",
     tags=["public"],
 )
 
-
 # ── Schemas ───────────────────────────────────────────────────────
-
 
 class CreateShareRequest(BaseModel):
     trace_id: str = Field(..., description="The trace to share")
@@ -81,7 +68,6 @@ class CreateShareRequest(BaseModel):
         description="Override the base URL for the share link (testing)",
     )
 
-
 class ShareResponse(BaseModel):
     """A share row + (only on create) the plaintext token + URL."""
     id: str
@@ -99,10 +85,8 @@ class ShareResponse(BaseModel):
     token: str | None = None
     url: str | None = None
 
-
 class ShareListResponse(BaseModel):
     shares: list[ShareResponse]
-
 
 class PublicTraceResponse(BaseModel):
     """The redacted trace view served at the public route."""
@@ -121,7 +105,6 @@ class PublicTraceResponse(BaseModel):
     # Note: PII-redaction pass is the next step; this skeleton
     # returns the raw span list.
 
-
 class CreateSavedSearchRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     query_type: str = Field(..., pattern="^(sql|eql|text)$")
@@ -131,7 +114,6 @@ class CreateSavedSearchRequest(BaseModel):
     is_pinned: bool = False
     tags: list[str] = Field(default_factory=list)
 
-
 class UpdateSavedSearchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     query: str | None = Field(default=None, min_length=1, max_length=10000)
@@ -140,7 +122,6 @@ class UpdateSavedSearchRequest(BaseModel):
     is_shared: bool | None = None
     is_pinned: bool | None = None
     tags: list[str] | None = None
-
 
 class SavedSearchResponse(BaseModel):
     id: str
@@ -158,13 +139,10 @@ class SavedSearchResponse(BaseModel):
     created_at: str
     updated_at: str
 
-
 class SavedSearchListResponse(BaseModel):
     searches: list[SavedSearchResponse]
 
-
 # ── Helpers ───────────────────────────────────────────────────────
-
 
 def _share_to_response(
     share: SharedTrace,
@@ -192,14 +170,11 @@ def _share_to_response(
         url=url,
     )
 
-
 def _search_to_response(s: SavedSearch) -> SavedSearchResponse:
     return SavedSearchResponse(**s.to_dict())
 
-
 # ── Auth dependency (lightweight — we trust the auth route's
 #    get_current_user). Routes are still org-scoped. ──────────────
-
 
 async def _current_user_id(user: dict = Depends(lambda: None)) -> str:
     """Resolve the current user's id from the request.
@@ -217,11 +192,9 @@ async def _current_user_id(user: dict = Depends(lambda: None)) -> str:
         raise HTTPException(status_code=401, detail="Authentication required")
     return str(user["id"])
 
-
 # We re-use the real auth dep. The ai_agent / incident routes do
 # the same — search for ``get_current_user`` in routes/.
 # ── Share routes (auth required) ─────────────────────────────────
-
 
 @sharing_router.post(
     "/traces/{trace_id}/share",
@@ -229,7 +202,7 @@ async def _current_user_id(user: dict = Depends(lambda: None)) -> str:
     summary="Mint a public share link for a trace",
 )
 async def create_share(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(..., description="Trace to share"),
     body: CreateShareRequest = ...,
     user: dict = Depends(get_current_user),
@@ -255,14 +228,13 @@ async def create_share(
     )
     return _share_to_response(share, include_plaintext=True, base_url=body.base_url)
 
-
 @sharing_router.get(
     "/traces/{trace_id}/shares",
     response_model=ShareListResponse,
     summary="List active share links for a trace",
 )
 async def list_shares_for_trace(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> ShareListResponse:
@@ -273,14 +245,13 @@ async def list_shares_for_trace(
         shares=[_share_to_response(s) for s in shares],
     )
 
-
 @sharing_router.get(
     "/shares",
     response_model=ShareListResponse,
     summary="List all share links in the org (admin view)",
 )
 async def list_shares(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     limit: int = Query(default=50, ge=1, le=200),
     user: dict = Depends(get_current_user),
 ) -> ShareListResponse:
@@ -291,13 +262,12 @@ async def list_shares(
         shares=[_share_to_response(s) for s in shares],
     )
 
-
 @sharing_router.delete(
     "/shares/{share_id}",
     summary="Revoke a share link",
 )
 async def revoke_share(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     share_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -311,9 +281,7 @@ async def revoke_share(
         )
     return {"revoked": True}
 
-
 # ── Public route (no auth) ────────────────────────────────────────
-
 
 @public_router.get(
     "/traces/{token}",
@@ -354,9 +322,7 @@ async def public_trace(
         created_at=share.created_at.isoformat(),
     )
 
-
 # ── Saved-search routes (auth required) ──────────────────────────
-
 
 @sharing_router.post(
     "/saved-searches",
@@ -364,7 +330,7 @@ async def public_trace(
     summary="Save a search query",
 )
 async def create_saved_search(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: CreateSavedSearchRequest = ...,
     user: dict = Depends(get_current_user),
 ) -> SavedSearchResponse:
@@ -386,14 +352,13 @@ async def create_saved_search(
     )
     return _search_to_response(search)
 
-
 @sharing_router.get(
     "/saved-searches",
     response_model=SavedSearchListResponse,
     summary="List my saved searches (incl. org-shared)",
 )
 async def list_saved_searches(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     scope: str = Query(
         default="personal",
         pattern="^(personal|shared|recent)$",
@@ -426,14 +391,13 @@ async def list_saved_searches(
         searches=[_search_to_response(s) for s in searches],
     )
 
-
 @sharing_router.patch(
     "/saved-searches/{search_id}",
     response_model=SavedSearchResponse,
     summary="Update a saved search (owner or admin)",
 )
 async def update_saved_search(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     search_id: str = Path(...),
     body: UpdateSavedSearchRequest = ...,
     user: dict = Depends(get_current_user),
@@ -455,13 +419,12 @@ async def update_saved_search(
         raise HTTPException(status_code=404, detail="saved search not found")
     return _search_to_response(updated)
 
-
 @sharing_router.delete(
     "/saved-searches/{search_id}",
     summary="Delete a saved search (owner or admin)",
 )
 async def delete_saved_search(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     search_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:
@@ -472,13 +435,12 @@ async def delete_saved_search(
         raise HTTPException(status_code=404, detail="saved search not found")
     return {"deleted": True}
 
-
 @sharing_router.post(
     "/saved-searches/{search_id}/use",
     summary="Record a use of a saved search (bumps use_count)",
 )
 async def record_saved_search_use(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     search_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, bool]:

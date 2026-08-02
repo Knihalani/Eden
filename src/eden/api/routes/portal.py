@@ -489,11 +489,12 @@ def _message_content_text(content: Any) -> str:
         for part in content:
             if isinstance(part, str):
                 parts.append(part)
-            elif isinstance(part, dict):
-                if part.get("type") == "text" or "text" in part:
-                    parts.append(str(part.get("text") or ""))
-                elif part.get("type") == "output_text":
-                    parts.append(str(part.get("text") or ""))
+            elif isinstance(part, dict) and (
+                part.get("type") == "text"
+                or "text" in part
+                or part.get("type") == "output_text"
+            ):
+                parts.append(str(part.get("text") or ""))
         return "\n".join(p for p in parts if p)
     return str(content)
 
@@ -936,9 +937,8 @@ async def list_portal_agents(
                       AND agent_id IS NOT NULL
                       AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
                     ORDER BY timestamp DESC
-                    -- Bound sample for card metrics (was 15000). Cards are
-                    -- approximate; full-window GROUP BY is too expensive
-                    -- for hot tenants on every agents page load.
+                    -- Bound sample for card metrics. Cards are approximate;
+                    -- full-window GROUP BY is too expensive for hot tenants.
                     LIMIT 4000
                 ),
                 -- Collapse framework instrument ids (pydantic-ai:…) onto the
@@ -950,17 +950,28 @@ async def list_portal_agents(
                            {_PREFERRED_AGENT_ID_SQL} AS agent_id
                     FROM recent
                     GROUP BY trace_id
+                ),
+                scored AS (
+                    SELECT ta.agent_id AS agent_id,
+                           r.trace_id AS trace_id,
+                           r.outcome AS outcome,
+                           r.duration_ms AS duration_ms,
+                           r.metrics AS metrics,
+                           r.timestamp AS timestamp
+                    FROM recent r
+                    INNER JOIN trace_agent ta ON ta.trace_id = r.trace_id
+                    WHERE ta.agent_id IS NOT NULL
                 )
-                SELECT ta.agent_id,
-                       COUNT(DISTINCT r.trace_id)::int AS runs,
-                       {safe_cost_sum_nullable_sql(alias="r.")} AS cost_usd,
-                       {safe_token_sum_sql(alias="r.")} AS tokens,
+                SELECT agent_id,
+                       COUNT(DISTINCT trace_id)::int AS runs,
+                       {safe_cost_sum_nullable_sql(alias="")} AS cost_usd,
+                       {safe_token_sum_sql(alias="")} AS tokens,
                        AVG(
                            CASE
-                               WHEN lower(coalesce(r.outcome, '')) IN
+                               WHEN lower(coalesce(outcome, '')) IN
                                     ('error','failed','failure','fail')
                                THEN 0.0
-                               WHEN lower(coalesce(r.outcome, '')) IN
+                               WHEN lower(coalesce(outcome, '')) IN
                                     ('ok','success','succeeded','completed',
                                      'pass','passed')
                                THEN 1.0
@@ -968,16 +979,14 @@ async def list_portal_agents(
                            END
                        )::float AS success_rate,
                        percentile_cont(0.5) WITHIN GROUP (
-                           ORDER BY r.duration_ms
+                           ORDER BY duration_ms
                        )::float AS p50,
                        percentile_cont(0.95) WITHIN GROUP (
-                           ORDER BY r.duration_ms
+                           ORDER BY duration_ms
                        )::float AS p95,
-                       MAX(r.timestamp) AS last_seen
-                FROM recent r
-                INNER JOIN trace_agent ta ON ta.trace_id = r.trace_id
-                WHERE ta.agent_id IS NOT NULL
-                GROUP BY ta.agent_id
+                       MAX(timestamp) AS last_seen
+                FROM scored
+                GROUP BY agent_id
                 ORDER BY runs DESC
                 LIMIT 200
                 """,
@@ -1008,14 +1017,20 @@ async def list_portal_agents(
                                {_PREFERRED_AGENT_ID_SQL} AS agent_id
                         FROM recent
                         GROUP BY trace_id
+                    ),
+                    joined AS (
+                        SELECT ta.agent_id AS agent_id,
+                               r.trace_id AS trace_id,
+                               r.timestamp AS timestamp
+                        FROM recent r
+                        INNER JOIN trace_agent ta ON ta.trace_id = r.trace_id
+                        WHERE ta.agent_id IS NOT NULL
                     )
-                    SELECT ta.agent_id,
-                           COUNT(DISTINCT r.trace_id)::int AS runs,
-                           MAX(r.timestamp) AS last_seen
-                    FROM recent r
-                    INNER JOIN trace_agent ta ON ta.trace_id = r.trace_id
-                    WHERE ta.agent_id IS NOT NULL
-                    GROUP BY ta.agent_id
+                    SELECT agent_id,
+                           COUNT(DISTINCT trace_id)::int AS runs,
+                           MAX(timestamp) AS last_seen
+                    FROM joined
+                    GROUP BY agent_id
                     ORDER BY runs DESC
                     LIMIT 200
                     """,
@@ -1086,9 +1101,7 @@ async def list_portal_agents(
         # None = unknown (no scored outcomes / degraded metrics). Never invent
         # 0% or 100% — FE renders "—".
         success: float | None
-        if runs <= 0:
-            success = None
-        elif raw_success is None:
+        if runs <= 0 or raw_success is None:
             success = None
         else:
             success = max(0.0, min(1.0, float(raw_success)))
@@ -1201,6 +1214,8 @@ async def list_portal_traces(
                 WHERE tenant_id = $1
                   AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
                 ORDER BY timestamp DESC
+                -- Bound discovery sample; then re-aggregate only those
+                -- trace_ids (complete spans for the listed cards).
                 LIMIT 3000
             ),
             ids AS (
@@ -1616,12 +1631,28 @@ async def list_portal_issues(
             if tid and tid not in seen:
                 seen.add(tid)
                 occurrence.append(tid)
+        # Soft Autonomy Phase 1: triage writes ``root_cause`` +
+        # ``suggested_actions`` — the portal contract reads
+        # ``summary``/``body``/``suggested_fix``/``impact``. Derive the
+        # portal fields from what triage actually produces so Why/Fix
+        # are never blank on real issues.
+        root_cause = str(triage.get("root_cause") or "")
+        fix_text = _triage_fix_text(triage)
+        impact_text = _triage_impact_text(i, triage)
+        patch_blocked = triage.get("patch_blocked")
+        if not isinstance(patch_blocked, dict):
+            patch_blocked = {}
         out.append(
             IssueCard(
                 id=str(i.id),
                 title=_clip_text(i.title or "", 240),
-                summary=_clip_text(triage.get("summary") or i.title or "", 400),
-                body=_clip_text(triage.get("body") or triage.get("detail") or "", 800),
+                summary=_clip_text(
+                    triage.get("summary") or root_cause or i.title or "", 400
+                ),
+                body=_clip_text(
+                    triage.get("body") or triage.get("detail") or root_cause or "",
+                    800,
+                ),
                 severity=_map_issue_severity(getattr(i, "severity", None)),  # type: ignore[arg-type]
                 status=_map_issue_status(getattr(i, "status", None)),  # type: ignore[arg-type]
                 agentId=str(getattr(i, "agent_id", None) or ""),
@@ -1636,14 +1667,57 @@ async def list_portal_issues(
                 errorSample=_clip_text(
                     triage.get("error_sample") or triage.get("error") or "", 400
                 ),
-                impact=_clip_text(triage.get("impact") or "", 400),
-                suggestedFix=_clip_text(
-                    triage.get("suggested_fix") or triage.get("fix") or "", 400
+                impact=_clip_text(impact_text, 400),
+                suggestedFix=_clip_text(fix_text, 400),
+                patchBlockedReason=_clip_text(
+                    str(patch_blocked.get("reason") or ""), 120
+                ),
+                patchBlockedMessage=_clip_text(
+                    str(patch_blocked.get("message") or ""), 400
                 ),
                 tags=[],
             )
         )
     return out
+
+
+def _triage_fix_text(triage: dict[str, Any]) -> str:
+    """Derive the portal ``suggestedFix`` from triage output.
+
+    Triage never writes ``suggested_fix`` — it writes a
+    ``suggested_actions`` list of ``{type, summary, ...}``. Join the
+    actionable summaries into a plain-English Fix so the portal Fix tab
+    is never blank when triage produced recommendations.
+    """
+    direct = triage.get("suggested_fix") or triage.get("fix")
+    if direct:
+        return str(direct)
+    actions = triage.get("suggested_actions")
+    if not isinstance(actions, list) or not actions:
+        return ""
+    parts: list[str] = []
+    for a in actions:
+        if not isinstance(a, dict):
+            continue
+        summary = str(a.get("summary") or "").strip()
+        if summary:
+            parts.append(summary)
+    return "; ".join(parts[:3])
+
+
+def _triage_impact_text(issue: Any, triage: dict[str, Any]) -> str:
+    """Derive the portal ``impact`` from triage + issue metadata."""
+    direct = triage.get("impact")
+    if direct:
+        return str(direct)
+    count = int(getattr(issue, "stumble_count", 0) or 0)
+    severity = str(getattr(issue, "severity", "") or "").upper()
+    if count <= 0 and not severity:
+        return ""
+    sev_label = severity or "UNKNOWN"
+    if count > 0:
+        return f"{sev_label} — {count} stumbles observed for this fingerprint"
+    return f"{sev_label} severity issue"
 
 
 async def _resolve_stumble_refs(
@@ -2019,12 +2093,12 @@ async def get_portal_workspace(
         timezone=str(settings.get("timezone") or defaults.timezone),
         density=(density_raw if density_raw in ("comfortable", "compact") else defaults.density),
         retention_days=(
-            retention_raw  # type: ignore[arg-type]
+            retention_raw
             if retention_raw in (7, 30, 90, 365)
             else defaults.retention_days
         ),
         pii_redaction=bool(
-            settings["pii_redaction"] if "pii_redaction" in settings else defaults.pii_redaction
+            settings.get("pii_redaction", defaults.pii_redaction)
         ),
         default_notify_channel=(
             _normalize_notify_channel(notify_ch)  # type: ignore[arg-type]
@@ -2036,7 +2110,7 @@ async def get_portal_workspace(
         ),
     )
     plan = str(settings.get("plan_label") or settings.get("plan") or "")
-    is_personal = bool(row.get("is_personal")) if "is_personal" in row.keys() else False
+    is_personal = bool(row.get("is_personal")) if "is_personal" in row else False
 
     return WorkspaceCard(
         id=str(row["id"]),
@@ -2067,7 +2141,10 @@ def _map_improve_status(raw: str | None) -> str:
         return "verify"
     if s in ("merged", "done", "completed"):
         return "done"
-    if s in ("rejected", "snoozed", "superseded", "blocked"):
+    # ``closed`` = PR closed on GitHub without merging (migration 118).
+    # It must NOT fall through to needs_you — a dead PR is not
+    # something the user still needs to act on.
+    if s in ("rejected", "snoozed", "superseded", "blocked", "closed"):
         return "blocked"
     return "needs_you"
 
@@ -2608,6 +2685,14 @@ async def list_portal_improve_plans(
             issue_ids = []
         if not isinstance(case_ids, list):
             case_ids = []
+        # RCA: prefer the triage snapshot's root_cause, fall back to the
+        # plan summary so the Why panel is never blank on real plans.
+        rca = str(
+            triage.get("root_cause")
+            or evidence.get("root_cause")
+            or p.get("summary")
+            or ""
+        )
         out.append(
             ImprovePlanCard(
                 id=str(p.get("id") or ""),
@@ -2619,6 +2704,14 @@ async def list_portal_improve_plans(
                 caseIds=[str(x) for x in case_ids],
                 baselineId=(str(evidence["baseline_id"]) if evidence.get("baseline_id") else None),
                 compareId=(str(evidence["compare_id"]) if evidence.get("compare_id") else None),
+                rca=_clip_text(rca, 800),
+                summary=_clip_text(str(p.get("summary") or ""), 400),
+                diff=str(p.get("diff_unified") or ""),
+                prUrl=(str(p["pr_url"]) if p.get("pr_url") else None),
+                updatedAt=_iso(p.get("updated_at")),
+                parentPlanId=(
+                    str(p["parent_plan_id"]) if p.get("parent_plan_id") else None
+                ),
             )
         )
     return out

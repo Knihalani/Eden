@@ -45,10 +45,40 @@ _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
             r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\\n]*[A-Za-z0-9+/=\s\\n]{100,}"
         ),
     ),
-    ("OpenAI-style key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    ("OpenAI-style key", re.compile(r"\bsk-(?!abcdefghijklmnopqrstuvwxyz\b)[A-Za-z0-9]{20,}\b")),
+    # Clerk Backend API secrets (sk_test_ / sk_live_). Publishable pk_* is
+    # public by design and intentionally not matched here. Negative
+    # lookaheads exclude known synthetic PII-masker / governance fixtures.
+    (
+        "Clerk secret key",
+        re.compile(
+            r"\bsk_(?:test|live)_(?!"
+            r"abcdefghijklmnopqrstuvwx\b|"
+            r"abc123def456ghi789jkl012mno\b|"
+            r"abcdefghij0123456789\b"
+            r")[A-Za-z0-9]{20,}\b"
+        ),
+    ),
     ("Anthropic key", re.compile(r"\bsk-ant-[A-Za-z0-9_\-]{20,}\b")),
-    ("Slack bot token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    # Synthetic fixtures in tests/unit/integrations/test_slack.py use
+    # short placeholder suffixes (secret-token / real-token); exclude
+    # those specifically rather than blind-allowlisting the whole file.
+    (
+        "Slack bot token",
+        re.compile(
+            r"\bxox[baprs]-(?!secret-token\b|real-token\b)[A-Za-z0-9-]{10,}\b"
+        ),
+    ),
     ("GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b")),
+    # Hardcoded password assignments in scripts (env refs like ${E2E_PASSWORD}
+    # / process.env are not matched). Word boundaries avoid matching
+    # ``_TEST_USER_PASSWORD`` fixture names.
+    (
+        "hardcoded password literal",
+        re.compile(
+            r"""\b(?:PASSWORD|TEST_PASSWORD|E2E_PASSWORD)\b\s*=\s*["'](?!\$\{)(?!process\.env)[^"']{8,}["']"""
+        ),
+    ),
 )
 
 #: Files that legitimately contain credential-*shaped* text: the template and

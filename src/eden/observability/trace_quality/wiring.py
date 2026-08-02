@@ -148,7 +148,7 @@ def install_cat17_stat_gate_gating() -> None:
     # is symmetric with ``original`` (the unbind path uses
     # ``delattr`` on the class).
     try:
-        cle.ClosedLoopExecutor.apply_approved = _wrapped  # type: ignore[assignment]
+        cle.ClosedLoopExecutor.apply_approved = _wrapped
         logger.info("wiring: Cat 17 apply_approved gated")
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("wiring: cat17 patch failed: %s", exc)
@@ -245,7 +245,7 @@ def install_cat22_sampling_policy() -> None:
         loop_rate = float(settings.detector_keep_rate_loop)
         error_rate = float(settings.detector_keep_rate_error)
         if hasattr(tail_sampling, "DEFAULT_KEEP_RATES"):
-            rates = tail_sampling.DEFAULT_KEEP_RATES  # type: ignore[attr-defined]
+            rates = tail_sampling.DEFAULT_KEEP_RATES
             rates["loop"] = loop_rate
             rates["error"] = error_rate
             enabled = bool(getattr(settings, "sampling_enabled", True))
@@ -360,7 +360,7 @@ def install_cat15_trajectory_replaces_intervention() -> None:
         }
 
     try:
-        intv.InterventionEngine.evaluate_and_act = _wrapped  # type: ignore[assignment]
+        intv.InterventionEngine.evaluate_and_act = _wrapped
         logger.info("wiring: Cat 15 TrajectoryGuardrail hot path installed")
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("wiring: cat15 patch failed: %s", exc)

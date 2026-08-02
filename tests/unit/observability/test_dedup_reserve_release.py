@@ -28,7 +28,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from eden.observability.errors import IngestionUnavailable
+from eden.observability.errors import IngestionUnavailableError
 from eden.observability.telemetry_collector import TelemetryCollector, TelemetryEvent
 
 
@@ -162,12 +162,12 @@ class TestBatchPath:
             patch.object(
                 collector,
                 "_route",
-                new=AsyncMock(side_effect=IngestionUnavailable("pg down")),
+                new=AsyncMock(side_effect=IngestionUnavailableError("pg down")),
             ),
             patch.object(collector, "_emit_billing_events", new=AsyncMock()),
             patch.object(collector, "_spawn_bg", new=lambda coro: coro.close()),
         ):
-            with pytest.raises(IngestionUnavailable):
+            with pytest.raises(IngestionUnavailableError):
                 await collector.ingest_batch([_event(i) for i in range(3)])
 
         assert collector._dedup_cache == {}, (

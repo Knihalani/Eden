@@ -46,12 +46,14 @@ from datetime import datetime
 from typing import Any
 
 from ._common import (
+    _VALID_GRANULARITIES,
     _check_ch_available,
     _delete_then_insert_rollup,
     _json_dumps,
     _not_implemented_envelope,
     _ok_envelope,
     _ok_fallback_envelope,
+    _record_columnar_fallback,
     _rollup_id_for,
     _validate_granularity,
     _validate_source_table,
@@ -103,7 +105,7 @@ class ColumnarAggregator:
             return _not_implemented_envelope(
                 "ColumnarAggregator",
                 f"invalid granularity: {granularity!r} "
-                "(expected one of: hour, day, week)",
+                f"(expected one of: {', '.join(sorted(_VALID_GRANULARITIES))})",
             )
         if window_end <= window_start:
             return _not_implemented_envelope(
@@ -164,6 +166,7 @@ class ColumnarAggregator:
                     },
                 )
             except Exception as exc:  # noqa: BLE001 - fallback path
+                _record_columnar_fallback("aggregations", "query_error")
                 logger.warning(
                     "ClickHouse rollup failed for org=%s table=%s: %s; "
                     "falling back to Postgres",
@@ -246,7 +249,16 @@ class ColumnarAggregator:
         source rows aggregated, and ``compressed_bytes`` is
         the size estimate the rollup will consume on disk.
         """
+        from eden.columnar.tables import (
+            clickhouse_column,
+            clickhouse_datetime,
+            clickhouse_table,
+            has_clickhouse_mirror,
+        )
         from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+
+        if not has_clickhouse_mirror(table):
+            raise KeyError(f"{table!r} has no ClickHouse mirror")
 
         sink = await get_clickhouse_sink()
         trunc = {
@@ -254,6 +266,9 @@ class ColumnarAggregator:
             "day": "toDate",
             "week": "toMonday",
         }[granularity]
+        physical = clickhouse_table(table)
+        ts_col = clickhouse_column(table, "created")
+        org_col = clickhouse_column(table, "org_id")
         # The aggregate columns are source-table-specific:
         # telemetry_events has duration_ms; usage_events
         # has cost_usd; judge_scores has score. We pick
@@ -262,8 +277,9 @@ class ColumnarAggregator:
         # that exist for that table.
         optional_cols: list[str] = []
         if table == "telemetry_events":
+            outcome_col = clickhouse_column(table, "level")
             optional_cols = [
-                "countIf(level = 'error') AS n_errors",
+                f"countIf({outcome_col} = 'error') AS n_errors",
                 "quantile(0.95)(duration_ms) AS p95_ms",
             ]
         elif table == "usage_events":
@@ -275,15 +291,17 @@ class ColumnarAggregator:
             ]
         select_optional = ", ".join(optional_cols)
         select_clause = (
-            f"{trunc}(created) AS bucket, count() AS n"
+            f"{trunc}({ts_col}) AS bucket, count() AS n"
             + (f", {select_optional}" if select_optional else "")
         )
+        start_lit = clickhouse_datetime(window_start)
+        end_lit = clickhouse_datetime(window_end)
         query = (
             f"SELECT {select_clause} "
-            f"FROM {sink.config.qualified_table(table)} "
-            f"WHERE org_id = '{_escape_org_id(org_id)}' "
-            f"AND created >= '{window_start.isoformat()}' "
-            f"AND created < '{window_end.isoformat()}' "
+            f"FROM {sink.config.qualified_table(physical)} "
+            f"WHERE {org_col} = '{_escape_org_id(org_id)}' "
+            f"AND {ts_col} >= '{start_lit}' "
+            f"AND {ts_col} < '{end_lit}' "
             f"GROUP BY bucket ORDER BY bucket ASC"
         )
         raw = await sink._execute(query)  # noqa: SLF001 - intentional

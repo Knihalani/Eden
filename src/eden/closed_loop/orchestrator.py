@@ -138,6 +138,29 @@ class ClosedLoopOrchestrator:
             reason="verification failed",
             detail=event.payload,
         )
+        # Soft Autonomy Phase 9: post-PR guardian. If this issue maps to
+        # a merged Eden PR, draft a revert/follow-up plan and Slack-alert
+        # the agent channel — before the human escalation, so the fix
+        # path is already waiting in Needs-you.
+        try:
+            from eden.improvement.guardian import handle_regression
+
+            payload = event.payload or {}
+            triage = payload.get("triage_result") or payload.get("verify") or {}
+            await handle_regression(
+                event.org_id,
+                event.issue_id,
+                severity=str(
+                    triage.get("severity")
+                    or triage.get("priority")
+                    or getattr(event, "severity", None)
+                    or ""
+                ),
+                agent_id=(str(payload.get("agent_id") or "").strip() or None),
+                verify_detail=payload.get("verify") if isinstance(payload.get("verify"), dict) else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("orchestrator: guardian failed: %s", exc)
         await self._escalate_human(event, event.payload)
 
     # ── remediation decision (Wave 5 replaces with autonomy policy) ──
@@ -206,8 +229,14 @@ class ClosedLoopOrchestrator:
             if decision == "allow" and wants_patch:
                 return "patch"
             if decision == "require_approval":
-                # A pending action row already exists (recorded by the
-                # hook); surface to a human when it's high severity.
+                # Soft Autonomy Phase 8 (PR-first): for PATCHES,
+                # ``require_approval`` must still draft the plan — the
+                # drafted plan landing in Needs-you IS the approval
+                # request (same rule as the closed-loop executor's
+                # fall-through). Only a hard ``deny`` blocks the draft.
+                # Heals stay advisory: they mutate runtime state.
+                if wants_patch:
+                    return "patch"
                 return "human" if escalate else "recommend"
             # deny → advisory only.
             return "human" if escalate else "recommend"
@@ -445,6 +474,32 @@ class ClosedLoopOrchestrator:
         except Exception as exc:  # noqa: BLE001
             logger.debug("orchestrator._maybe_alert email failed: %s", exc)
 
+        # Slack alert — the primary channel when connected. Same sparse
+        # severity policy as email (P0/P1 only for issue_created); the
+        # dispatcher no-ops when the org has no Slack install/channel.
+        try:
+            if not human:
+                from eden.services.slack_notify import notify_issue_detected
+
+                triage = triage_result or {}
+                severity = str(
+                    triage.get("severity")
+                    or triage.get("priority")
+                    or getattr(event, "severity", None)
+                    or ""
+                )
+                payload = getattr(event, "payload", None) or {}
+                await notify_issue_detected(
+                    event.org_id,
+                    issue_id=str(getattr(event, "issue_id", "") or ""),
+                    title=str(triage.get("title") or triage.get("summary") or "Issue detected"),
+                    severity=severity,
+                    agent_id=(str(payload.get("agent_id") or "").strip() or None),
+                    impact=str(triage.get("impact") or ""),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("orchestrator._maybe_alert slack failed: %s", exc)
+
     async def _reload_triage(self, event: LoopEvent) -> dict[str, Any]:
         try:
             from eden.issues.repo import IssuesRepo
@@ -519,7 +574,7 @@ class ClosedLoopOrchestrator:
                 logger.debug("orchestrator.subscribe: emit failed: %s", exc)
             return action_id
 
-        hook.on_issue_created = _wrapped  # type: ignore[assignment]
+        hook.on_issue_created = _wrapped
         hook._loop_wrapped = True  # type: ignore[attr-defined]
         logger.info("orchestrator: subscribed to issue hooks (G9)")
 

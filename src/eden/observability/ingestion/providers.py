@@ -18,6 +18,7 @@ import uuid
 from typing import Any
 
 from eden.observability.ingestion.attribution import Attribution
+from eden.observability.ingestion.decode_skips import SkipTally, is_mapping
 from eden.observability.ingestion.errors import SchemaInvalidError
 from eden.observability.ingestion.json_body import loads_body
 from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
@@ -132,7 +133,7 @@ def _openai_extract_usage(usage: dict[str, Any]) -> dict[str, float]:
         if src in usage:
             n = _as_token_count(usage[src])
             if n is not None:
-                metrics[dst] = n  # type: ignore[assignment]
+                metrics[dst] = n
     return metrics
 
 
@@ -430,14 +431,22 @@ class OpenAIDecoder:
                 problems=["empty"],
             )
         events: list[TelemetryEvent] = []
+        skips = SkipTally()
         for item in items:
-            if not isinstance(item, dict):
+            if not is_mapping(item):
+                skips.add("item")
                 continue
             raw = _openai_to_raw(item)
             event = await normalize_to_telemetry_event(
                 raw, attribution.with_source_format(self.source_format)
             )
             events.append(event)
+        skips.report(self.source_format, kept=len(events))
+        if not events:
+            raise SchemaInvalidError(
+                "OpenAI body parsed but contained no parseable items",
+                problems=["all_unparseable"],
+            )
         return events
 
 
@@ -465,7 +474,7 @@ def _anthropic_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         if src in usage:
             n = _as_token_count(usage[src])
             if n is not None:
-                metrics[dst] = n  # type: ignore[assignment]
+                metrics[dst] = n
     if (
         "input_tokens" in metrics
         and "output_tokens" in metrics
@@ -712,14 +721,22 @@ class AnthropicDecoder:
                 problems=["empty"],
             )
         events: list[TelemetryEvent] = []
+        skips = SkipTally()
         for item in items:
-            if not isinstance(item, dict):
+            if not is_mapping(item):
+                skips.add("item")
                 continue
             raw = _anthropic_to_raw(item)
             event = await normalize_to_telemetry_event(
                 raw, attribution.with_source_format(self.source_format)
             )
             events.append(event)
+        skips.report(self.source_format, kept=len(events))
+        if not events:
+            raise SchemaInvalidError(
+                "Anthropic body parsed but contained no parseable items",
+                problems=["all_unparseable"],
+            )
         return events
 
 
@@ -758,7 +775,7 @@ def _bedrock_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         if src in usage:
             n = _as_token_count(usage[src])
             if n is not None:
-                metrics[dst] = n  # type: ignore[assignment]
+                metrics[dst] = n
 
     # Pull request and response bodies verbatim. Bedrock's wire shape
     # varies; the most common keys are `input` (Converse), `body`
@@ -891,14 +908,22 @@ class BedrockDecoder:
                 problems=["empty"],
             )
         events: list[TelemetryEvent] = []
+        skips = SkipTally()
         for item in items:
-            if not isinstance(item, dict):
+            if not is_mapping(item):
+                skips.add("item")
                 continue
             raw = _bedrock_to_raw(item)
             event = await normalize_to_telemetry_event(
                 raw, attribution.with_source_format(self.source_format)
             )
             events.append(event)
+        skips.report(self.source_format, kept=len(events))
+        if not events:
+            raise SchemaInvalidError(
+                "Bedrock body parsed but contained no parseable items",
+                problems=["all_unparseable"],
+            )
         return events
 
 
@@ -936,7 +961,7 @@ def _gemini_to_raw(item: dict[str, Any]) -> dict[str, Any]:
         if src in usage_metadata:
             n = _as_token_count(usage_metadata[src])
             if n is not None:
-                metrics[dst] = n  # type: ignore[assignment]
+                metrics[dst] = n
 
     # Extract first text from candidates for backward-compat detectors
     candidates = item.get("candidates") or []
@@ -1121,10 +1146,7 @@ class GeminiDecoder:
             return False
         if "candidates" in parsed or "usageMetadata" in parsed:
             return True
-        if "modelVersion" in parsed or "model" in parsed:
-            if "contents" in parsed or "generationConfig" in parsed:
-                return True
-        return False
+        return bool(("modelVersion" in parsed or "model" in parsed) and ("contents" in parsed or "generationConfig" in parsed))
 
     async def decode(
         self, body: bytes, attribution: Attribution
@@ -1143,12 +1165,20 @@ class GeminiDecoder:
                 problems=["empty"],
             )
         events: list[TelemetryEvent] = []
+        skips = SkipTally()
         for item in items:
-            if not isinstance(item, dict):
+            if not is_mapping(item):
+                skips.add("item")
                 continue
             raw = _gemini_to_raw(item)
             event = await normalize_to_telemetry_event(
                 raw, attribution.with_source_format(self.source_format)
             )
             events.append(event)
+        skips.report(self.source_format, kept=len(events))
+        if not events:
+            raise SchemaInvalidError(
+                "Gemini body parsed but contained no parseable items",
+                problems=["all_unparseable"],
+            )
         return events

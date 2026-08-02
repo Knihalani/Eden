@@ -179,7 +179,7 @@ async def health_check() -> dict:
     cached_at = float(_HEALTH_CACHE.get("at") or 0.0)
     cached_val = _HEALTH_CACHE.get("value")
     if cached_val is not None and (now - cached_at) < _HEALTH_CACHE_TTL_S:
-        return dict(cached_val)  # type: ignore[arg-type]
+        return dict(cached_val)
 
     health = {
         "postgres": "unknown",

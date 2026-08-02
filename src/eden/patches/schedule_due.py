@@ -75,10 +75,7 @@ def is_optimization_due(
         return False
 
     now = now or datetime.now(UTC)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=UTC)
-    else:
-        now = now.astimezone(UTC)
+    now = now.replace(tzinfo=UTC) if now.tzinfo is None else now.astimezone(UTC)
 
     try:
         hour = int(policy.get("optimization_hour_utc", 9))

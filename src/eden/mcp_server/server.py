@@ -7,6 +7,7 @@ stdio loop (``tools/list``, ``tools/call``) for IDE wiring.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -33,7 +34,7 @@ def _emit_tool_telemetry(
     duration_ms: float,
 ) -> None:
     """Emit a structured log event with SEP-414 MCP attrs.  Best-effort; never raises."""
-    try:
+    with contextlib.suppress(Exception):
         logger.info(
             "mcp.tool_call",
             extra={
@@ -44,8 +45,6 @@ def _emit_tool_telemetry(
                 "eden.mcp_server.duration_ms": round(duration_ms, 2),
             },
         )
-    except Exception:  # noqa: BLE001
-        pass
 
 ToolHandler = Callable[..., Awaitable[dict[str, Any]]]
 

@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+
 import { MarketingHomeHero } from "@/components/marketing/marketing-home-hero";
 import { MarketingHomeSections } from "@/components/marketing/marketing-home-sections";
 import { SITE_URL } from "@/lib/constants";
 
+
+export const revalidate = 3600;
 const PORTAL = process.env.NEXT_PUBLIC_PORTAL_URL || SITE_URL;
 
 export const metadata: Metadata = {

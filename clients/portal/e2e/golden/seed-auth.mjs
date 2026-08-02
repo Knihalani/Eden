@@ -15,8 +15,7 @@
  *   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY   — Clerk publishable key (pk_test_…)
  * Optional:
  *   BASE / BASE_URL                     — portal origin (default http://127.0.0.1:3000)
- *   CLERK_TEST_EMAIL                    — test user email for ticket sign-in
- *   CLERK_TEST_KEY_FALLBACK=1           — allow committed pk_test/sk_test fallback
+ *   CLERK_TEST_EMAIL / E2E_EMAIL        — test user email for ticket sign-in
  *
  * Production / real domains:
  *   Do NOT use this script against edenobservability.com. Clerk testing tokens
@@ -41,33 +40,18 @@ loadEnv({ path: resolve(PORTAL_ROOT, ".env.local") });
 loadEnv({ path: resolve(PORTAL_ROOT, ".env") });
 
 // ── Env config ─────────────────────────────────────────────────────────────
-// CI injects keys via portal-ci.yml. Local dev loads from .env.local above.
-// Fail loud when either key is missing — no silent skip.
-const TEST_SECRET_KEY = "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
-const TEST_PUBLISHABLE_KEY = "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
-
+// CI / local must inject keys via secrets or .env.local — never commit them.
 function requireClerkKeys() {
-  const allowFallback = process.env.CLERK_TEST_KEY_FALLBACK === "1";
-  if (!process.env.CLERK_SECRET_KEY || !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    if (
-      allowFallback &&
-      !process.env.CLERK_SECRET_KEY &&
-      !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-    ) {
-      console.log("[seed-auth] CLERK_TEST_KEY_FALLBACK=1 — using committed test-mode keys");
-      process.env.CLERK_SECRET_KEY = TEST_SECRET_KEY;
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = TEST_PUBLISHABLE_KEY;
-      return;
-    }
-    const missing = [];
-    if (!process.env.CLERK_SECRET_KEY) missing.push("CLERK_SECRET_KEY");
-    if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-      missing.push("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
-    }
+  const missing = [];
+  if (!process.env.CLERK_SECRET_KEY) missing.push("CLERK_SECRET_KEY");
+  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    missing.push("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+  }
+  if (missing.length) {
     console.error(
       `[seed-auth] FATAL: missing required Clerk env var(s): ${missing.join(", ")}\n` +
         "  Set both CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY in .env.local\n" +
-        "  (or export them) before running golden paths.\n" +
+        "  (or export them / GitHub Actions secrets) before running golden paths.\n" +
         "  Build and start must use the SAME publishable key — rebuild if you changed keys:\n" +
         "    cd clients/portal && bun run build",
     );
@@ -89,7 +73,13 @@ const BASE = (process.env.BASE_URL || process.env.BASE || "http://127.0.0.1:3000
   /\/$/,
   "",
 );
-const EMAIL = process.env.CLERK_TEST_EMAIL || "kaiav.nihalani@gmail.com";
+const EMAIL = process.env.CLERK_TEST_EMAIL || process.env.E2E_EMAIL;
+if (!EMAIL) {
+  console.error(
+    "[seed-auth] FATAL: missing CLERK_TEST_EMAIL or E2E_EMAIL (no committed test email)",
+  );
+  process.exit(1);
+}
 const STATE_PATH = resolve(__dirname, "../.auth-state.json");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

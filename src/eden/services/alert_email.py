@@ -72,9 +72,7 @@ async def _allow_send(org_id: str, dedupe_key: str) -> bool:
         count = await redis.incr(hour_key)
         if count == 1:
             await redis.expire(hour_key, 3600)
-        if count > max_per_hour:
-            return False
-        return True
+        return not count > max_per_hour
     except Exception as exc:  # noqa: BLE001
         logger.debug("alert_email: allow_send redis skipped: %s", exc)
         return True

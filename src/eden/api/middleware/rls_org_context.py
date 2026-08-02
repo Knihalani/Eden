@@ -129,10 +129,6 @@ class RLSOrgContextMiddleware:
         request = Request(scope, receive)
 
         org_id = await self._resolve_org_id(request)
-        conn_ctx = None
-        conn = None
-        tx = None
-        tx_entered = False
         bind_token = None
         if org_id:
             try:
@@ -140,7 +136,8 @@ class RLSOrgContextMiddleware:
                 # imports eden.config, which transitively loads
                 # app.py during settings validation.
                 from eden.storage.postgres import (
-                    bind_request_pg_conn,
+                    RequestConnLease,
+                    bind_request_pg_lease,
                     get_postgres_client,
                 )
 
@@ -163,50 +160,30 @@ class RLSOrgContextMiddleware:
                 if client._pool is None:
                     await client.initialize()
                 if client._pool is not None:
-                    # Pin ONE pooled connection for this request so
-                    # the GUC set in the SET LOCAL transaction is
-                    # the same connection the route handler's queries
-                    # use. We acquire manually (not via
-                    # ``client.execute`` which would acquire+release
-                    # on each call) and commit/release in
-                    # ``_finalize_pg_context`` — either early (before
-                    # a streaming response body starts) or in the
-                    # ``finally`` below as a fallback.
-                    conn_ctx = client._pool.acquire()
-                    conn = await conn_ctx.__aenter__()
-                    tx = conn.transaction()
-                    await tx.__aenter__()
-                    # BEGIN completed — only from this point on is
-                    # ``tx.__aexit__`` meaningful (LOW-MEDIUM fix,
-                    # see ``_release_pg_resources``).
-                    tx_entered = True
-                    # SET LOCAL inside the open transaction. When
-                    # we commit below the GUC reverts — the desired
-                    # scoping.
-                    await conn.execute(
-                        "SELECT set_config('app.current_org_id', $1::text, true)",
+                    # Lazy lease: construct + bind only. Pool checkout,
+                    # BEGIN, and SET LOCAL happen on first query via
+                    # ``RequestConnLease.ensure`` (see postgres.py).
+                    # Requests that never touch Postgres pay ~7 us
+                    # instead of a full pin+GUC round trip.
+                    def _on_materialize(
+                        conn: Any,
+                        conn_ctx: Any,
+                        tx: Any,
+                        tx_entered: bool,
+                    ) -> None:
+                        request.state.pg_conn = conn
+                        request.state._pg_tx = tx
+                        request.state._pg_tx_entered = tx_entered
+                        request.state._pg_conn_ctx = conn_ctx
+
+                    lease = RequestConnLease(
                         str(org_id),
+                        client,
+                        on_materialize=_on_materialize,
                     )
-                    # Stash for routes that want RLS-correct queries.
-                    request.state.pg_conn = conn
-                    request.state._pg_tx = tx
-                    request.state._pg_tx_entered = tx_entered
-                    request.state._pg_conn_ctx = conn_ctx
-                    # Also bind via contextvar so PostgresClient.fetch
-                    # / execute / acquire reuse this connection without
-                    # every route switching to get_request_pg_conn.
-                    bind_token = bind_request_pg_conn(conn)
+                    bind_token = bind_request_pg_lease(lease)
                     request.state._pg_bind_token = bind_token
-                    # Setup fully succeeded and is now tracked on
-                    # ``request.state`` — clear the locals so the
-                    # ``except`` block below (which only fires on a
-                    # genuine failure during THIS try) never touches a
-                    # successfully-pinned connection. From here,
-                    # ``_finalize_pg_context`` (early release or the
-                    # ``finally`` fallback) owns cleanup exclusively.
-                    conn_ctx = None
-                    conn = None
-                    tx = None
+                    request.state._pg_lease = lease
             except Exception as exc:
                 # Fail-soft: the RLS policies treat a missing
                 # GUC as ``NULL`` → empty row set, which is the
@@ -218,15 +195,9 @@ class RLSOrgContextMiddleware:
                     "app.current_org_id for org %s: %s",
                     org_id, exc,
                 )
-                # Best-effort cleanup of a PARTIAL acquisition (locals
-                # are only non-None here if the try above failed
-                # before the success branch cleared them).
-                await self._release_pg_resources(
-                    conn=conn, tx=tx, tx_entered=tx_entered, conn_ctx=conn_ctx,
-                )
 
         if getattr(request.state, "_pg_bind_token", None) is None:
-            # No connection was pinned for this request (anonymous
+            # No lease was bound for this request (anonymous
             # request, pool unavailable, or the setup above failed) —
             # skip the send-wrapping machinery entirely.
             await self.app(scope, receive, send)
@@ -360,12 +331,24 @@ class RLSOrgContextMiddleware:
         state._pg_finalized = True
 
         token = getattr(state, "_pg_bind_token", None)
+        lease = getattr(state, "_pg_lease", None)
+
+        # Close the lease BEFORE reading materialization resources.
+        # ``RequestConnLease.close`` serialises against ``ensure`` so a
+        # racing late redemption cannot check out a connection that
+        # this finalizer will never release.
+        if lease is not None:
+            try:
+                await lease.close()
+            except Exception as exc:
+                logger.debug("RLS lease close failed (non-fatal): %s", exc)
+
         tx = getattr(state, "_pg_tx", None)
         tx_entered = getattr(state, "_pg_tx_entered", False)
         ctx = getattr(state, "_pg_conn_ctx", None)
         conn = getattr(state, "pg_conn", None)
 
-        if token is None and tx is None and ctx is None:
+        if token is None and tx is None and ctx is None and lease is None:
             return
 
         # Clear the pinned connection up front so a route that grabbed
@@ -375,6 +358,7 @@ class RLSOrgContextMiddleware:
         # different tenant. Routes needing DB access during a stream
         # must acquire their own short-lived connection instead.
         state.pg_conn = None
+        state._pg_lease = None
 
         # Reset the bind contextvar directly in THIS Context — unshielded,
         # on the request's own task — BEFORE the shielded release below.

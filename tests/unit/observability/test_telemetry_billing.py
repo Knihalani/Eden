@@ -69,8 +69,9 @@ async def test_emits_billing_for_llm_completion_with_tokens():
     assert call_kwargs["resource"] == "gpt-4o"
     assert call_kwargs["quantity"] == 150  # 100 + 50
     assert call_kwargs["unit"] == "tokens"
-    # cost_usd is left for the server-side pricing lookup to fill in.
-    assert call_kwargs["cost_usd"] is None
+    # Collector stamps cost from the seed pricing catalog when the SDK
+    # omitted it (server-side pricing lookup).
+    assert call_kwargs["cost_usd"] == 0.00075
     md = call_kwargs["metadata"]
     assert md["input_tokens"] == 100
     assert md["output_tokens"] == 50

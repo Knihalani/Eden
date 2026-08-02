@@ -103,13 +103,13 @@ def set_trace_context(
         set_trace_context(span_id=None)
     """
     if trace_id is not _UNSET:
-        _active_trace_id.set(trace_id)  # type: ignore[arg-type]
+        _active_trace_id.set(trace_id)
     if span_id is not _UNSET:
-        _active_span_id.set(span_id)  # type: ignore[arg-type]
+        _active_span_id.set(span_id)
     if project_id is not _UNSET:
-        _active_project_id.set(project_id)  # type: ignore[arg-type]
+        _active_project_id.set(project_id)
     if tenant_id is not _UNSET:
-        _active_tenant_id.set(tenant_id)  # type: ignore[arg-type]
+        _active_tenant_id.set(tenant_id)
 
 
 def clear_trace_context() -> None:

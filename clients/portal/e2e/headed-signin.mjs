@@ -5,15 +5,27 @@
  * storageState to e2e/.auth-state.json for reuse by the headless audit.
  *
  * Falls back to the @clerk/testing helper if the form isn't found.
+ *
+ * Required env: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+ * E2E_EMAIL, E2E_PASSWORD (no committed credentials).
  */
 import { chromium } from "playwright";
 import { clerkSetup, clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 
-process.env.CLERK_SECRET_KEY = "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
-process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`[headed-signin] FATAL: missing required env ${name}`);
+    process.exit(1);
+  }
+  return v;
+}
+
+requireEnv("CLERK_SECRET_KEY");
+requireEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
 const BASE = process.env.BASE || "http://127.0.0.1:3000";
-const EMAIL = "kaiav.nihalani@gmail.com";
-const PASSWORD = "Happydays1!2345";
+const EMAIL = requireEnv("E2E_EMAIL");
+const PASSWORD = requireEnv("E2E_PASSWORD");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

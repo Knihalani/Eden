@@ -331,9 +331,7 @@ def _result_failed(result: object) -> bool:
     """True when a step returned a structured error payload."""
     if isinstance(result, BaseException):
         return True
-    if isinstance(result, dict) and result.get("errors"):
-        return True
-    return False
+    return bool(isinstance(result, dict) and result.get("errors"))
 
 
 async def _tick(*, dry_run: bool) -> dict[str, object]:
@@ -407,6 +405,22 @@ async def run_maintenance_due(
             _queue("daily", _run_daily(now, dry_run=dry_run), claim=day_key)
         else:
             out["daily"] = {"skipped": True, "reason": "already_ran_today"}
+
+    # Soft Autonomy Phase 7 — nightly soft-issue novelty review.
+    # Own 03:30 UTC slot so it never shares the daily retention claim.
+    if now.hour == 3 and 30 <= now.minute < 40 and not dry_run:
+        review_key = f"soft_issue_review:{now.date().isoformat()}"
+        if await _once_per_window(review_key, ttl_seconds=20 * 3600):
+            _queue(
+                "soft_issue_review",
+                _safe_step("soft_issue_review", _run_soft_issue_review()),
+                claim=review_key,
+            )
+        else:
+            out["soft_issue_review"] = {
+                "skipped": True,
+                "reason": "already_ran_today",
+            }
 
     if now.weekday() == 0 and now.hour == 4 and now.minute < 10 and not dry_run:
         iso = now.isocalendar()
@@ -514,7 +528,7 @@ async def run_maintenance_due(
                 if name in claim_keys:
                     failed_claims.add(claim_keys[name])
             else:
-                out[name] = result  # type: ignore[assignment]
+                out[name] = result
                 if _result_failed(result) and name in claim_keys:
                     failed_claims.add(claim_keys[name])
         for claim in failed_claims:
@@ -527,6 +541,12 @@ async def _run_drift_baselines() -> dict[str, object]:
     from eden.insights.drift_baseline_worker import DriftBaselineWorker
 
     return await DriftBaselineWorker().run_once()
+
+
+async def _run_soft_issue_review() -> dict[str, object]:
+    from eden.services.soft_issue_review import SoftIssueReviewer
+
+    return await SoftIssueReviewer().run_once()
 
 
 async def _run_shadow_outcome_join() -> dict[str, object]:

@@ -37,7 +37,7 @@ router = APIRouter(prefix="/orgs/{org_id}/billing", tags=["billing"], dependenci
 _T = TypeVar("_T")
 
 
-async def _stripe_call(fn: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
+async def _stripe_call[T](fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """Run a sync Stripe SDK call off the event loop (K16 / A4)."""
     return await asyncio.to_thread(fn, *args, **kwargs)
 

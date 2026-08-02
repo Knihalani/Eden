@@ -348,7 +348,6 @@ function AgentDetailBody({
     // Only reset when switching agents — `runs` identity changes on
     // every traces refetch and used to yank selection back to the
     // newest error mid-inspection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [agent.id]);
 
   // If the preferred run disappeared after a refetch, fall back once.

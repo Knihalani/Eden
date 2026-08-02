@@ -280,10 +280,7 @@ def is_soft_utu(user_text: str) -> bool:
     if CHITCHAT_RE.match(u) or SOFT_UTU_RE.match(u):
         return True
     # Very short non-question acknowledgements
-    if len(u.split()) <= 3 and not re.search(r"\?|please|can\s+you|could\s+you", u, re.I):
-        if re.match(r"^(yep|yeah|nah|sure|fine|alright|np)\W*$", u, re.I):
-            return True
-    return False
+    return bool(len(u.split()) <= 3 and not re.search(r"\?|please|can\s+you|could\s+you", u, re.I) and re.match(r"^(yep|yeah|nah|sure|fine|alright|np)\W*$", u, re.I))
 
 
 def content_overlap_ratio(a: str, b: str) -> float:
@@ -343,6 +340,4 @@ def is_empty_payload(content: str | None) -> bool:
         return True
     if s in {"{}", "[]", "null", "None", '""', "''"}:
         return True
-    if re.fullmatch(r'\{\s*\}', s) or re.fullmatch(r'\[\s*\]', s):
-        return True
-    return False
+    return bool(re.fullmatch(r'\{\s*\}', s) or re.fullmatch(r'\[\s*\]', s))

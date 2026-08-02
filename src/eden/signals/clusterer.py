@@ -13,6 +13,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from eden.util.stable_hash import stable_hash
+
 logger = logging.getLogger(__name__)
 
 _COSINE_THRESHOLD = 0.82
@@ -205,7 +207,7 @@ class SignalEventClusterer:
             # Deterministic hash fallback for tests / no-embedder envs.
             out: list[list[float]] = []
             for t in texts:
-                h = hash(t) % 1000
+                h = stable_hash(t) % 1000
                 out.append([float((h + i) % 97) / 97.0 for i in range(8)])
             return out
 

@@ -23,7 +23,6 @@ from httpx import ASGITransport, AsyncClient
 
 from eden.api.deps import get_ingest_auth
 
-
 _ORG = "org-w72"
 _EVENT = {
     "event_id": "evt-w72",
@@ -286,7 +285,7 @@ class TestTelemetryIngestUnexpectedIs503:
         from eden.observability import telemetry_collector as tc_module
 
         collector = AsyncMock()
-        collector.ingest = AsyncMock(side_effect=RuntimeError("collector boom"))
+        collector.ingest_one = AsyncMock(side_effect=RuntimeError("collector boom"))
 
         async def _get():
             return collector

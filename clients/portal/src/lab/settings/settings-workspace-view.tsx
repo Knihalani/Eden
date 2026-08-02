@@ -18,6 +18,7 @@ import {
 } from "@/lab/fixtures/settings";
 import { HealthChip } from "@/lab/settings/settings-chrome";
 import type { SettingsMode } from "@/lab/settings/settings-chrome";
+import { SlackSettingsCard } from "@/lab/settings/slack-settings-card";
 import { useLabToast } from "@/lab/lab-toast";
 
 export function SettingsWorkspaceView({
@@ -179,9 +180,10 @@ export function SettingsWorkspaceView({
         />
       </div>
 
+      <SlackSettingsCard />
+
       <section className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
-        <p className="type-label mb-4">Workspace prefs</p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <p className="type-label mb-4">Workspace prefs</p>        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <PrefSelect
             label="Timezone"
             value={workspace.timezone}

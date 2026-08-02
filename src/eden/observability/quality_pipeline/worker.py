@@ -61,10 +61,8 @@ logger = logging.getLogger(__name__)
 # quality pipeline doesn't hit the network-probe bug when loading
 # sentence-transformers / BGE / cross-encoder / MiniCheck models.
 # Idempotent — safe to import multiple times.
-try:
+with contextlib.suppress(Exception):  # pragma: no cover - supplementaries not on path
     from supplementaries import _hf_cache_patch  # noqa: F401  pylint: disable=unused-import
-except Exception:  # pragma: no cover - supplementaries not on path
-    pass
 
 
 # ponytail: keep step labels here (also used as Prometheus label
@@ -405,7 +403,7 @@ async def compute_trace_reports(
         try:
             from eden.llmops.promotion_hooks import get_promotion_hook
             hook = get_promotion_hook()
-            evt = hook.on_drift_alert  # type: ignore[attr-defined]
+            evt = hook.on_drift_alert
             if asyncio.iscoroutinefunction(evt):
                 await evt(
                     drift_type="loop_high_severity",
@@ -572,11 +570,11 @@ def _score_trace_quality(pipeline: Any, events: list[Any]) -> Any:
     avg_hallu = sum(r.hallucination_score for r in scored) / n
     avg_conf = sum(r.confidence for r in scored) / n
     # Aggregate intervention = most-restrictive across steps.
-    RESTRICTIVENESS = {
+    restrictiveness = {
         "allow": 0, "warn": 1, "skip_step": 2, "block": 3, "summarize": 3,
         "escalate": 4,
     }
-    worst = max(scored, key=lambda r: RESTRICTIVENESS.get(r.intervention, 0))
+    worst = max(scored, key=lambda r: restrictiveness.get(r.intervention, 0))
     return QualityReport(
         grounded=all(r.grounded for r in scored),
         hallucination_score=avg_hallu,
@@ -664,12 +662,27 @@ async def persist_reports(
     try:
         from eden.storage.postgres import get_postgres_client
     except Exception:
+        logger.warning(
+            "persist_reports: cannot persist reports for trace %s — "
+            "postgres import unavailable; partial loss cannot be retried",
+            trace_id,
+        )
         return dict.fromkeys(reports)
     try:
         client = await get_postgres_client()
     except Exception:
+        logger.warning(
+            "persist_reports: cannot persist reports for trace %s — "
+            "postgres client raise; partial loss cannot be retried",
+            trace_id,
+        )
         return dict.fromkeys(reports)
     if client is None:
+        logger.warning(
+            "persist_reports: cannot persist reports for trace %s — "
+            "postgres client absent; partial loss cannot be retried",
+            trace_id,
+        )
         return dict.fromkeys(reports)
 
     out: dict[str, str | None] = {}
@@ -687,7 +700,19 @@ async def persist_reports(
                 )
                 out[step] = row_id
             except Exception as exc:
-                logger.debug("persist %s: %s", table, exc)
+                logger.warning(
+                    "persist_reports: step %s write failed for trace %s: %s — "
+                    "partial loss cannot be retried (watermark still advances)",
+                    step,
+                    trace_id,
+                    exc,
+                )
+                try:
+                    from eden.observability.drop_metrics import record_drop
+
+                    record_drop("sink_pg", "write_error")
+                except Exception:
+                    pass
                 out[step] = None
     return dict(out.items())
 
@@ -816,23 +841,42 @@ async def dead_letter(
     trace_id: str,
     error: str,
     events: list[dict[str, Any]],
-) -> None:
+) -> bool:
     """Write a poison trace to ``quality_pipeline_failed_traces``.
 
-    Best-effort — failures are logged at debug. The dead-letter
-    table is created lazily on first write (the worker owns
-    schema management for its own dead-letter table).
+    Returns ``True`` only when a row was actually written. Failures
+    (including an absent Postgres client) are logged at ERROR and
+    counted via ``record_drop`` so callers do not report
+    ``status="dlq"`` for a trace that never landed.
     """
+    def _announce_loss(why: str) -> None:
+        logger.error(
+            "dead-letter write FAILED for trace %s (tenant %s): %s — "
+            "trace is recoverable only by rewinding the watermark",
+            trace_id,
+            tenant_id,
+            why,
+        )
+        try:
+            from eden.observability.drop_metrics import record_drop
+
+            record_drop("sink_pg", "write_error")
+        except Exception:
+            pass
+
     try:
         from eden.storage.postgres import get_postgres_client
-    except Exception:
-        return
+    except Exception as exc:
+        _announce_loss(f"postgres import failed: {exc}")
+        return False
     try:
         client = await get_postgres_client()
-    except Exception:
-        return
+    except Exception as exc:
+        _announce_loss(f"postgres client raise: {exc}")
+        return False
     if client is None:
-        return
+        _announce_loss("postgres client absent")
+        return False
     try:
         await client.execute(
             """
@@ -856,8 +900,10 @@ async def dead_letter(
             tenant_id, trace_id, error[:2000], len(events),
         )
         _STATE.dead_lettered_total += 1
+        return True
     except Exception as exc:
-        logger.debug("dead_letter: %s", exc)
+        _announce_loss(str(exc))
+        return False
 
 
 # The watermark is a *cursor*, so exactly one row is meaningful. It used
@@ -1067,13 +1113,16 @@ class SidecarWorker:
         reports = await compute_trace_reports(tenant_id, trace_id, events, archetype_id=arc_id)
         persisted = await persist_reports(tenant_id, trace_id, reports)
         if all(v is None for v in persisted.values()):
-            await dead_letter(
+            landed = await dead_letter(
                 tenant_id, trace_id,
                 "all_steps_failed",
                 events,
             )
             _STATE.failed_total += 1
-            _Metrics.get().traces_total.labels(status="dlq").inc()
+            if landed:
+                _Metrics.get().traces_total.labels(status="dlq").inc()
+            else:
+                _Metrics.get().traces_total.labels(status="error").inc()
             return False
         _STATE.processed_total += 1
         _Metrics.get().traces_total.labels(status="ok").inc()
@@ -1191,13 +1240,20 @@ class SidecarWorker:
                                 tid, trace_id, self.max_retries, last_exc,
                             )
                             try:
-                                await dead_letter(
+                                landed = await dead_letter(
                                     tid, trace_id,
                                     f"exhausted_retries: {last_exc}",
                                     evs,
                                 )
                                 _STATE.failed_total += 1
-                                _Metrics.get().traces_total.labels(status="dlq").inc()
+                                if landed:
+                                    _Metrics.get().traces_total.labels(
+                                        status="dlq"
+                                    ).inc()
+                                else:
+                                    _Metrics.get().traces_total.labels(
+                                        status="error"
+                                    ).inc()
                             except Exception as dlq_exc:
                                 logger.error(
                                     "quality pipeline: dead-letter failed for "

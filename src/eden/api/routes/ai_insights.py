@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import uuid
 from collections.abc import AsyncIterator
@@ -53,7 +52,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from eden.api.deps import get_current_user, log_audit_event, require_path_org_access
-from eden.api.utils.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
+from eden.api.utils.rate_limit import RateLimitExceededError, SlidingWindowRateLimiter
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.llmops.insights_tools import list_tools
@@ -569,7 +568,7 @@ async def chat(
 
     try:
         await _chat_rate_limiter.check(f"ai-insights:{org_id}:{user_id}")
-    except RateLimitExceeded as exc:
+    except RateLimitExceededError as exc:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Chat rate limit exceeded. Retry after {int(exc.retry_after)}s.",
@@ -773,26 +772,16 @@ async def list_sessions(
             limit,
         )
     except Exception as exc:
-        msg = str(exc).lower()
-        if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
-            logger.warning(
-                "ai_insights: list_sessions store missing for user=%s org=%s: %s",
-                user_id,
-                org_id,
-                redact_all(str(exc)),
-            )
-            return {"sessions": []}
         logger.warning(
             "ai_insights: list_sessions failed for user=%s org=%s: %s",
             user_id,
             org_id,
             redact_all(str(exc)),
         )
-        raise HTTPException(
-            status_code=503,
-            detail="Chat sessions temporarily unavailable; please retry",
-            headers={"Retry-After": "5"},
-        ) from exc
+        # Defensive: any DB blip returns the empty sidebar state rather
+        # than 503ing the conversations list. Missing-table and transient
+        # errors are indistinguishable to the chat UI here.
+        return {"sessions": []}
     return {
         "sessions": [
             {
@@ -897,8 +886,9 @@ async def health(
     return {
         "enabled": bool(settings.ai_insights_enabled),
         "model": settings.ai_insights_model,
-        "anthropic_key_configured": bool(
-            os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
-        ),
+        # Insights route through OpenRouter (internal chat SSOT), not a
+        # native Anthropic key — report the credential that actually
+        # gates the feature.
+        "openrouter_key_configured": bool(settings.openrouter_api_key),
         "tool_count": len(list_tools()),
     }

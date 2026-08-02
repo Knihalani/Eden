@@ -9,9 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import raise_mapped_db_error
@@ -21,22 +20,11 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/datasets",
     tags=["datasets"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
-
 
 class CreateDatasetRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -44,12 +32,10 @@ class CreateDatasetRequest(BaseModel):
     source_type: str = Field(default="manual")
     source_ref: str | None = None
 
-
 class PromoteTraceRequest(BaseModel):
     trace_id: str = Field(..., min_length=1)
     dataset_id: str | None = None
     dataset_name: str | None = None
-
 
 class DatasetResponse(BaseModel):
     id: str
@@ -63,26 +49,22 @@ class DatasetResponse(BaseModel):
     created_at: str
     updated_at: str
 
-
 class DatasetListResponse(BaseModel):
     datasets: list[DatasetResponse]
     total: int
-
 
 class DatasetDetailResponse(DatasetResponse):
     columns: list[dict[str, Any]] = Field(default_factory=list)
     rows: list[dict[str, Any]] = Field(default_factory=list)
     snapshots: list[dict[str, Any]] = Field(default_factory=list)
 
-
 def _to_response(rec: Any) -> DatasetResponse:
     d = rec.to_dict()
     return DatasetResponse(**d)
 
-
 @router.get("", response_model=DatasetListResponse)
 async def list_datasets(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> DatasetListResponse:
     hub = DatasetHub()
@@ -92,11 +74,10 @@ async def list_datasets(
         total=len(datasets),
     )
 
-
 @router.post("", response_model=DatasetResponse)
 async def create_dataset(
     body: CreateDatasetRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> DatasetResponse:
     hub = DatasetHub()
@@ -119,11 +100,10 @@ async def create_dataset(
         )
     return _to_response(rec)
 
-
 @router.post("/promote-from-trace")
 async def promote_from_trace(
     body: PromoteTraceRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     hub = DatasetHub()
@@ -146,10 +126,9 @@ async def promote_from_trace(
         )
     return {"status": "ok", "data": result}
 
-
 @router.get("/{dataset_id}", response_model=DatasetDetailResponse)
 async def get_dataset(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> DatasetDetailResponse:
@@ -173,10 +152,9 @@ async def get_dataset(
         snapshots=snapshots,
     )
 
-
 @router.post("/{dataset_id}/snapshots")
 async def create_snapshot(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -195,16 +173,14 @@ async def create_snapshot(
         )
     return {"status": "ok", "snapshot": snap.to_dict()}
 
-
 class ImportRowsRequest(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
     column_map: dict[str, str] = Field(default_factory=dict)
 
-
 @router.post("/{dataset_id}/import")
 async def import_dataset_rows(
     body: ImportRowsRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:

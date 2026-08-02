@@ -21,18 +21,20 @@
 import { chromium } from "playwright";
 import { clerkSetup, clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { config as loadEnv } from "dotenv";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+// Same env loading as e2e/golden/*.mjs — Clerk keys live in .env.local.
+loadEnv({ path: resolve(__dirname, "../.env.local") });
+loadEnv({ path: resolve(__dirname, "../.env") });
 const PORT = process.env.PORT || "3000";
 const BASE = (process.env.BASE || process.env.BASE_URL || `http://127.0.0.1:${PORT}`).replace(
   /\/$/,
   "",
 );
 const PUBLIC_ONLY = process.env.PUBLIC_ONLY === "1";
-const TEST_EMAIL = process.env.E2E_EMAIL || "kaiav.nihalani@gmail.com";
-const TEST_PASSWORD = process.env.E2E_PASSWORD || "Happydays1!2345";
 const STORAGE = join(__dirname, ".auth-state.json");
 const ROUTE_DELAY_MS = Number(process.env.E2E_ROUTE_DELAY_MS || "2500");
 
@@ -40,15 +42,22 @@ const isLocal =
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(BASE) ||
   BASE.includes("localhost");
 
-// Test Clerk keys only apply to local portal — never inject them for prod audits.
-if (isLocal) {
-  process.env.CLERK_SECRET_KEY =
-    process.env.CLERK_SECRET_KEY ||
-    "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY =
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`[portal-audit] FATAL: missing required env ${name}`);
+    process.exit(1);
+  }
+  return v;
 }
+
+// Clerk keys / credentials must come from the environment — never committed.
+if (isLocal && !PUBLIC_ONLY) {
+  requireEnv("CLERK_SECRET_KEY");
+  requireEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+}
+const TEST_EMAIL = PUBLIC_ONLY ? (process.env.E2E_EMAIL || "") : requireEnv("E2E_EMAIL");
+const TEST_PASSWORD = PUBLIC_ONLY ? (process.env.E2E_PASSWORD || "") : requireEnv("E2E_PASSWORD");
 
 const PUBLIC_ROUTES = [
   "/",
@@ -88,9 +97,10 @@ const PORTAL_ROUTES = [
   "/debugger",
   "/settings",
   "/settings?tab=account",
+  "/unavailable",
+  // retired → redirect smoke (Playwright follows to the live target)
   "/onboarding",
   "/onboarding/connect",
-  "/unavailable",
   // stub → soft-land
   "/analytics",
   "/billing",
@@ -116,11 +126,13 @@ async function visibleText(page) {
 }
 
 async function auditRoute(page, route, authed) {
-  const result = { route, authed, status: null, consoleErrors: [], pageErrors: [], failed5xx: [], badVisible: [], ok: true };
+  const result = { route, authed, status: null, consoleErrors: [], pageErrors: [], failed5xx: [], badVisible: [], rateLimited: 0, ok: true };
 
   const onConsole = (msg) => {
     if (msg.type() === "error") {
       const t = msg.text();
+      // 429s are tracked via onResponse (result.rateLimited) — not
+      // silently dropped, not double-counted as console errors.
       if (!/favicon|chunk|429|too many requests/i.test(t)) result.consoleErrors.push(t.slice(0, 200));
     }
   };
@@ -131,13 +143,24 @@ async function auditRoute(page, route, authed) {
       result.failed5xx.push(url.slice(0, 100));
     }
   };
+  const onResponse = (resp) => {
+    if (resp.status() === 429) result.rateLimited += 1;
+  };
 
   page.on("console", onConsole);
   page.on("pageerror", onPageError);
   page.on("requestfailed", onRequestFailed);
+  page.on("response", onResponse);
 
   try {
-    const resp = await page.goto(`${BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    // Retry the document on 429 with linear backoff — the audit must
+    // measure the app, not the rate limiter's opinion of our crawl pace.
+    let resp = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      resp = await page.goto(`${BASE}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      if (resp?.status() !== 429) break;
+      await sleep(5000 * (attempt + 1));
+    }
     result.status = resp?.status() ?? null;
     const isAuthRoute = /\/(login|sign-in|sign-up|signup)(\/|$)/.test(route);
     const settleMs = isAuthRoute ? 12_000 : authed && route.startsWith("/dashboard") ? 4000 : 1200;
@@ -174,7 +197,12 @@ async function auditRoute(page, route, authed) {
     page.removeListener("console", onConsole);
     page.removeListener("pageerror", onPageError);
     page.removeListener("requestfailed", onRequestFailed);
+    page.removeListener("response", onResponse);
   }
+
+  // A document that stayed 429 after retries means the route was never
+  // actually audited — that is a failure, not a pass.
+  if (result.status === 429) result.ok = false;
 
   return result;
 }
@@ -218,7 +246,13 @@ async function ensureAuth(browser) {
     const me = await page.request.get(`${BASE}/api/proxy/auth/me`).catch(() => null);
     const url = page.url();
     await ctx.close();
-    if (me?.status() === 200 && !/\/(login|sign-in)/.test(url)) return;
+    // The middleware redirect is the strong expiry signal: an invalid
+    // session lands on /sign-in regardless of backend health. auth/me
+    // 200 confirms end-to-end; a 5xx/network failure means the backend
+    // is down (pages render empty states) — still auditable.
+    const onAuthPage = /\/(login|sign-in)/.test(url);
+    const meStatus = me?.status() ?? 0;
+    if (!onAuthPage && (meStatus === 200 || meStatus >= 500 || meStatus === 0)) return;
   }
 
   // Non-local: never auto-fill credentials or inject Clerk testing tokens.
@@ -299,11 +333,15 @@ async function main() {
   await browser.close();
 
   const failed = results.filter((r) => !r.ok);
+  const total429 = results.reduce((n, r) => n + r.rateLimited, 0);
   const outDir = join(__dirname, "reports");
   mkdirSync(outDir, { recursive: true });
   const reportPath = join(outDir, `audit-${Date.now()}.json`);
-  writeFileSync(reportPath, JSON.stringify({ base: BASE, failed: failed.length, total: results.length, results }, null, 2));
+  writeFileSync(reportPath, JSON.stringify({ base: BASE, failed: failed.length, total: results.length, rateLimitedResponses: total429, results }, null, 2));
   console.log(`\n${results.length - failed.length}/${results.length} OK — ${reportPath}`);
+  if (total429 > 0) {
+    console.warn(`[portal-audit] ${total429} responses were 429 rate-limited during the crawl (see report.rateLimitedResponses)`);
+  }
   process.exit(failed.length ? 1 : 0);
 }
 

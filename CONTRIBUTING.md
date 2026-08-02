@@ -18,20 +18,36 @@ assume good faith, no harassment). Report violations to
 git clone https://github.com/eden/eden
 cd eden
 
-# Install (Python 3.12+)
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+# Install (Python 3.12+, managed by uv)
+uv sync --all-extras
+
+# The backend test suite imports the Python SDK — install it
+# editable. NOTE: `uv sync` prunes packages that are not in
+# uv.lock, so re-run this after every sync.
+uv pip install -e sdk/python
+
+# Run the API locally. PYTHONPATH=src is REQUIRED once the SDK is
+# installed editable: the SDK ships an `eden` import shim
+# (sdk/python/eden → eden_sdk) whose .pth sorts ahead of the app's
+# src/eden, so a bare `python -m eden.api.app` imports the SDK shim.
+PYTHONPATH=src uv run python -m eden.api.app
+
+# Full-stack local dev (portal + API + Clerk auth end-to-end): the API
+# verifies the portal's Clerk session JWTs, so `.env` also needs
+# CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY (copy from
+# clients/portal/.env.local, dropping the NEXT_PUBLIC_ prefix).
+# Without them every proxied call returns 401 "Not authenticated".
 
 # Apply DB migrations (requires postgres running)
-alembic upgrade head
+uv run alembic upgrade head
 
 # Run tests
-pytest tests/unit/
+uv run pytest tests/unit/
 
-# Run lint
-ruff check src/ tests/
-mypy src/eden
+# Run lint + types (mypy is ratcheted against tests/baselines/mypy.json —
+# your change must not add errors in any file)
+uv run ruff check src/ --select F,B --ignore B008
+uv run mypy src/eden | uv run python scripts/mypy_ratchet.py
 ```
 
 ## Pull request process

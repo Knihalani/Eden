@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -10,35 +11,22 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
-    get_current_user,
     require_feature_flag,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.evaluation.production.sampler import ProductionEvalSampler
 
 _FLAG = "production_eval_sampling_v1"
-
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
 
 router = APIRouter(
     prefix="/orgs/{org_id}",
     tags=["production-eval"],
     dependencies=[
         Depends(require_feature_flag(_FLAG)),
-        Depends(_require_path_org),
+        Depends(require_path_org_access),
     ],
 )
 _sampler = ProductionEvalSampler()
-
 
 def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -50,23 +38,20 @@ def _ok(feature: str, data: dict[str, Any]) -> dict[str, Any]:
         "data": data,
     }
 
-
 class PolicyPatch(BaseModel):
     sample_rate: float | None = Field(None, ge=0.0, le=1.0)
     max_cost_usd_per_day: float | None = Field(None, ge=0.0)
     enabled: bool | None = None
     agent_id: str | None = None
 
-
 @router.get("/production-eval/policies")
-async def get_policies(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def get_policies(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     policy = await _sampler._resolve_policy(org_id, None)
     return _ok("production_eval", {"policy": policy})
 
-
 @router.patch("/production-eval/policies")
 async def patch_policy(
-    org_id: str = Depends(_require_path_org), body: PolicyPatch = Body(...)
+    org_id: str = Depends(require_path_org_access), body: PolicyPatch = Body(...)
 ) -> dict[str, Any]:
     from eden.storage.postgres import get_postgres_client
 
@@ -81,7 +66,7 @@ async def patch_policy(
         else policy.get("max_cost_usd_per_day", 50.0)
     )
     enabled = body.enabled if body.enabled is not None else policy.get("enabled", True)
-    try:
+    with contextlib.suppress(Exception):
         await client.execute(
             "INSERT INTO production_eval_policies "
             "(org_id, agent_id, sample_rate, max_cost_usd_per_day, enabled) "
@@ -92,8 +77,6 @@ async def patch_policy(
             max_cost,
             enabled,
         )
-    except Exception:
-        pass
     return _ok(
         "production_eval",
         {
@@ -107,20 +90,18 @@ async def patch_policy(
         },
     )
 
-
 @router.get("/agents/{agent_id}/quality/trend")
 async def quality_trend(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     agent_id: str = Path(...),
     hours: int = Query(168, ge=1, le=720),
 ) -> dict[str, Any]:
     trend = await _sampler.get_quality_trend(org_id, agent_id, hours=hours)
     return _ok("production_eval", {"agent_id": agent_id, "trend": trend})
 
-
 @router.post("/production-eval/score/{trace_id}")
 async def manual_score(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     agent_id: str | None = Query(None),
 ) -> dict[str, Any]:

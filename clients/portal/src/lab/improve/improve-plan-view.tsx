@@ -70,6 +70,14 @@ export function ImprovePlanView({
 
   const agent = agentForPlan(plan);
   const primary = primaryHref(plan);
+  // Synthesized deep-link plans (from Issues/Evals handoffs) have no
+  // server row — Approve/Reject would 404. Only real plans mutate.
+  const isSynthesized = plan.id.startsWith("plan_from_");
+  const canDecide =
+    !isSynthesized &&
+    (plan.status === "needs_you" ||
+      plan.status === "in_progress" ||
+      plan.status === "verify");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -97,29 +105,7 @@ export function ImprovePlanView({
           >
             Queue
           </button>
-          {plan.status === "needs_you" ? (
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-              title="Local draft only — not saved to the server"
-              onClick={() => void onStatus(plan.id, "in_progress")}
-            >
-              Start (draft)
-            </button>
-          ) : null}
-          {plan.status === "in_progress" || plan.status === "needs_you" ? (
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm"
-              title="Local draft only — not saved to the server"
-              onClick={() => void onStatus(plan.id, "verify")}
-            >
-              Mark verify (draft)
-            </button>
-          ) : null}
-          {plan.status === "needs_you" ||
-          plan.status === "in_progress" ||
-          plan.status === "verify" ? (
+          {canDecide ? (
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
@@ -129,7 +115,7 @@ export function ImprovePlanView({
               Reject
             </button>
           ) : null}
-          {plan.status === "verify" ? (
+          {canDecide ? (
             <button
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
@@ -138,6 +124,12 @@ export function ImprovePlanView({
             >
               Approve
             </button>
+          ) : null}
+          {isSynthesized ? (
+            <span className="type-meta self-center">
+              Draft from deep link — Eden has not generated a fix plan for
+              this yet.
+            </span>
           ) : null}
           {primary ? (
             <Link href={primary.href} className="ds-btn ds-btn-primary ds-btn-sm">
@@ -151,9 +143,43 @@ export function ImprovePlanView({
         <div className="space-y-8 px-4 py-5 sm:px-6">
           <section>
             <p className="type-label mb-2">Why</p>
-            <p className="type-body text-[var(--text-secondary)]">{plan.rca}</p>
-            <p className="type-meta mt-2">{plan.summary}</p>
+            <p className="type-body text-[var(--text-secondary)]">
+              {plan.rca || "Root cause is attached to the linked issue."}
+            </p>
+            {plan.summary ? (
+              <p className="type-meta mt-2">{plan.summary}</p>
+            ) : null}
           </section>
+
+          {plan.parentPlanId ? (
+            <section>
+              <p className="type-label mb-2">Regression follow-up</p>
+              <p className="type-meta">
+                Eden&apos;s post-merge guardian drafted this after the original
+                fix regressed.{" "}
+                <Link
+                  href={`/improve?plan=${plan.parentPlanId}`}
+                  className="underline"
+                >
+                  View the original plan
+                </Link>
+              </p>
+            </section>
+          ) : null}
+
+          {plan.prUrl ? (
+            <section>
+              <p className="type-label mb-2">Pull request</p>
+              <a
+                href={plan.prUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="ds-btn ds-btn-ghost ds-btn-sm"
+              >
+                Open PR on GitHub
+              </a>
+            </section>
+          ) : null}
 
           <section>
             <p className="type-label mb-2">Evidence</p>
@@ -205,10 +231,14 @@ export function ImprovePlanView({
 
           <section>
             <p className="type-label mb-3">Change</p>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DiffPane label="Before" text={plan.before} />
-              <DiffPane label="After" text={plan.after} />
-            </div>
+            {plan.diff ? (
+              <DiffPane label="Unified diff" text={plan.diff} />
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <DiffPane label="Before" text={plan.before} />
+                <DiffPane label="After" text={plan.after} />
+              </div>
+            )}
           </section>
         </div>
       </div>

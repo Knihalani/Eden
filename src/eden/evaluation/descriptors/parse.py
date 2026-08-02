@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -388,15 +389,11 @@ def _policy_from_events(events: list[dict[str, Any]]) -> tuple[list[str], int | 
         if isinstance(et, list):
             expected = [str(x) for x in et]
         if pol.get("max_tool_calls") is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 max_calls = int(pol["max_tool_calls"])
-            except (TypeError, ValueError):
-                pass
         if pol.get("timeout_ms") is not None:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 timeout_ms = float(pol["timeout_ms"])
-            except (TypeError, ValueError):
-                pass
     return expected, max_calls, timeout_ms
 
 

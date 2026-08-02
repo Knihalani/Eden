@@ -19,6 +19,7 @@ and dropped. This matches the collector's overall best-effort posture.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -86,10 +87,8 @@ class OTelDualExporter:
         return self._session
 
     async def close(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             await self.flush()
-        except Exception:
-            pass
         if self._flush_task and not self._flush_task.done():
             self._flush_task.cancel()
         if self._session and not self._session.closed:
@@ -143,6 +142,14 @@ class OTelDualExporter:
         settings = self._cached_settings()
         endpoint = getattr(settings, "otel_exporter_otlp_endpoint", "") or ""
         if not endpoint:
+            try:
+                from eden.observability.drop_metrics import record_drop
+
+                # Dual-emit is a secondary sink; missing config after the
+                # buffer was already detached is fidelity loss, not a retry.
+                record_drop("sink_ch", "write_error", len(batch))
+            except Exception:
+                pass
             return 0
         include_content = bool(
             getattr(settings, "otel_dual_emit_include_content", False)

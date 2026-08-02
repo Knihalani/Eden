@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 SamplingProfile = Literal["full", "balanced", "aggressive"]
@@ -62,7 +62,7 @@ class SamplingDecision:
     metrics_only: bool = False
 
 
-class KeepPriority(str, Enum):
+class KeepPriority(StrEnum):
     FORCE = "force_trace"
     LOOP = "loop"
     ERROR = "error"

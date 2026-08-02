@@ -1,4 +1,9 @@
-"""F54 sandboxed code evaluators — restricted exec in subprocess-less sandbox."""
+"""F54 code evaluators — gated until a real sandbox exists.
+
+Registration and execution are disabled by default
+(``code_evaluators_exec_enabled=False``). The previous AST denylist +
+in-process ``exec()`` was escape-prone and did not enforce timeout_ms.
+"""
 
 from __future__ import annotations
 
@@ -32,18 +37,48 @@ _FORBIDDEN_NAMES = frozenset(
 )
 
 
+class CodeEvaluatorDisabledError(RuntimeError):
+    """Raised when code-evaluator exec is feature-gated off."""
+
+
+def _exec_enabled() -> bool:
+    try:
+        from eden.config import get_settings
+
+        return bool(getattr(get_settings(), "code_evaluators_exec_enabled", False))
+    except Exception:
+        return False
+
+
+def _require_exec_enabled() -> None:
+    if not _exec_enabled():
+        raise CodeEvaluatorDisabledError(
+            "Code evaluators are disabled until a real sandbox ships "
+            "(set EDEN_CODE_EVALUATORS_EXEC_ENABLED=true only in locked-down "
+            "environments)."
+        )
+
+
 def _validate_source(source: str) -> None:
     tree = ast.parse(source, mode="exec")
     for node in ast.walk(tree):
         if isinstance(node, ast.Import | ast.ImportFrom):
             raise ValueError("imports not allowed in code evaluators")
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            if node.func.id in _FORBIDDEN_NAMES:
-                raise ValueError(f"forbidden call: {node.func.id}")
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in _FORBIDDEN_NAMES
+        ):
+            raise ValueError(f"forbidden call: {node.func.id}")
+        # Attribute-call chains (e.g. __builtins__.__import__) were not
+        # covered by the Name-only denylist — reject dunder attribute access
+        # while the feature stays gated.
+        if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
+            raise ValueError(f"forbidden attribute access: {node.attr}")
 
 
 class CodeEvaluatorRunner:
-    """Run org-scoped Python evaluators in a minimal sandbox."""
+    """Run org-scoped Python evaluators (disabled by default)."""
 
     async def list_evaluators(self, org_id: str) -> list[dict[str, Any]]:
         client = await self._client()
@@ -66,6 +101,7 @@ class CodeEvaluatorRunner:
         entrypoint: str = "evaluate",
         timeout_ms: int = 500,
     ) -> dict[str, Any] | None:
+        _require_exec_enabled()
         _validate_source(source_code)
         client = await self._client()
         if client is None:
@@ -89,6 +125,11 @@ class CodeEvaluatorRunner:
     async def run(
         self, org_id: str, evaluator_id: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
+        if not _exec_enabled():
+            logger.warning(
+                "code_evaluator: run blocked (code_evaluators_exec_enabled=false)"
+            )
+            return None
         client = await self._client()
         if client is None:
             return None
@@ -104,8 +145,31 @@ class CodeEvaluatorRunner:
         entry = str(row["entrypoint"])
         try:
             _validate_source(source)
-            namespace: dict[str, Any] = {}
-            exec(compile(source, f"<evaluator:{evaluator_id}>", "exec"), namespace)
+            # Restricted builtins — still not a real sandbox; feature
+            # remains off by default.
+            safe_builtins = {
+                "abs": abs,
+                "bool": bool,
+                "dict": dict,
+                "enumerate": enumerate,
+                "float": float,
+                "int": int,
+                "len": len,
+                "list": list,
+                "max": max,
+                "min": min,
+                "range": range,
+                "round": round,
+                "str": str,
+                "sum": sum,
+                "tuple": tuple,
+                "zip": zip,
+            }
+            namespace: dict[str, Any] = {"__builtins__": safe_builtins}
+            exec(  # noqa: S102 — gated off by default; restricted builtins
+                compile(source, f"<evaluator:{evaluator_id}>", "exec"),
+                namespace,
+            )
             fn = namespace.get(entry)
             if not callable(fn):
                 return None

@@ -63,6 +63,8 @@ import json
 import logging
 from typing import Any
 
+from eden.util.stable_hash import stable_hash
+
 from ._common import (
     BENCHMARK_TASK_COUNT,
     BOTTLENECK_MIN_CALLS,
@@ -554,13 +556,13 @@ class AgentBenchmarkRunner:
                 f"valid: {sorted(VALID_BENCHMARKS)}",
             )
 
-        # Deterministic score: hash(agent_id + dataset_id) →
+        # Deterministic score: stable_hash(agent_id + dataset_id) →
         # 0.50..0.99. Pure-Python, no RNG, no LLM. This is
         # the v1 placeholder; the real benchmark suites
         # (AgentBench, SWE-bench, τ-bench, GAIA) ship in
         # a later phase. Documented in the appendix and
         # the v0.5 Open Questions.
-        h = abs(hash((agent_id, dataset_id)))
+        h = stable_hash((agent_id, dataset_id))
         score = 0.50 + (h % 50) / 100.0  # 0.50 .. 0.99
 
         # Audit 2026-07-03 B-24 — ``synthetic: True`` flag at both

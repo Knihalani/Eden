@@ -22,7 +22,13 @@ async def test_code_evaluator_runs_user_function() -> None:
     source = "def evaluate(payload):\n    return {'score': 0.9, 'passed': True}"
     _validate_source(source)
     runner = CodeEvaluatorRunner()
-    with patch.object(runner, "_client", new_callable=AsyncMock) as mock_client:
+    with (
+        patch(
+            "eden.evaluation.code_evaluator._exec_enabled",
+            return_value=True,
+        ),
+        patch.object(runner, "_client", new_callable=AsyncMock) as mock_client,
+    ):
         mock_client.return_value.fetchrow = AsyncMock(
             return_value={"source_code": source, "entrypoint": "evaluate"}
         )
@@ -31,6 +37,18 @@ async def test_code_evaluator_runs_user_function() -> None:
     assert result["score"] == 0.9
     assert result["passed"] is True
     assert result["judge_tier"] == "code"
+
+
+@pytest.mark.asyncio
+async def test_code_evaluator_run_blocked_when_gate_off() -> None:
+    """Default posture: exec is gated off until a real sandbox ships."""
+    runner = CodeEvaluatorRunner()
+    with patch(
+        "eden.evaluation.code_evaluator._exec_enabled",
+        return_value=False,
+    ):
+        result = await runner.run("org1", "eval-id", {"text": "hello"})
+    assert result is None
 
 
 @pytest.mark.asyncio

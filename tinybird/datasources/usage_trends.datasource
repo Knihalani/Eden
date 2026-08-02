@@ -14,7 +14,7 @@ SCHEMA >
     model LowCardinality(String) `json:$.model`,
     cost_usd Float64 `json:$.cost_usd`,
     hour DateTime `json:$.hour`,
-    date Date `json:$.date` DEFAULT toDate(hour)
+    date Date DEFAULT toDate(hour) `json:$.date`
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(hour)"

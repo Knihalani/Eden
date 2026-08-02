@@ -22,9 +22,8 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field, model_validator
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
     get_current_user,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import raise_mapped_db_error
@@ -38,16 +37,6 @@ from eden.datasets.spreadsheet import (
 from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
-
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
 
 async def _assert_dataset_org(org_id: str, dataset_id: str) -> None:
     """Reject cross-org dataset access (IDOR)."""
@@ -63,23 +52,19 @@ async def _assert_dataset_org(org_id: str, dataset_id: str) -> None:
     if rec is None:
         raise HTTPException(status_code=404, detail="dataset not found")
 
-
 async def _spreadsheet_svc() -> SpreadsheetService:
     pg = await get_postgres_client()
     if pg is None:
         raise HTTPException(status_code=503, detail="database unavailable")
     return SpreadsheetService(pg)
 
-
 router = APIRouter(
     prefix="/orgs/{org_id}/datasets/{dataset_id}",
     tags=["datasets-spreadsheet"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
 
-
 # ─- Schemas ──────────────────────────────────────────────────────
-
 
 class ColumnResponse(BaseModel):
     id: str
@@ -89,17 +74,14 @@ class ColumnResponse(BaseModel):
     description: str
     created_at: str
 
-
 class ColumnListResponse(BaseModel):
     columns: list[ColumnResponse]
-
 
 class AddColumnRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     type: str = Field(default="text", pattern="^(text|number|json)$")
     source: str = Field(default="user", pattern="^(user|ai)$")
     description: str = Field(default="", max_length=2_000)
-
 
 class RowResponse(BaseModel):
     id: str
@@ -110,11 +92,9 @@ class RowResponse(BaseModel):
     created_at: str
     updated_at: str
 
-
 class RowListResponse(BaseModel):
     rows: list[RowResponse]
     total_count: int
-
 
 class AddRowRequest(BaseModel):
     # Portal historically POSTed ``{values}`` only; accept that and
@@ -138,23 +118,19 @@ class AddRowRequest(BaseModel):
                 self.input = str(first)
         return self
 
-
 class UpdateRowRequest(BaseModel):
     input: str | None = None
     expected_output: str | None = None
     values: dict[str, Any] | None = None
-
 
 class FilterSpec(BaseModel):
     column: str
     op: str = Field(default="==", pattern="^(==|!=|>|>=|<|<=|contains|starts_with)$")
     value: str = ""
 
-
 class SortSpec(BaseModel):
     column: str
     direction: str = Field(default="asc", pattern="^(asc|desc)$")
-
 
 class ListRowsQuery(BaseModel):
     filter: list[FilterSpec] | None = None
@@ -162,23 +138,19 @@ class ListRowsQuery(BaseModel):
     limit: int = Field(default=200, ge=1, le=10_000)
     offset: int = Field(default=0, ge=0)
 
-
 class GenerateRequest(BaseModel):
     # The default stub handler is used unless the caller
     # supplies a real one via the app.state.llm_client.
     # For the v1 surface we always use the stub.
     handler: str | None = Field(default=None)
 
-
 # ─- Helpers ──────────────────────────────────────────────────────
-
 
 def _column_to_response(c: SpreadsheetColumn) -> ColumnResponse:
     return ColumnResponse(
         id=c.id, name=c.name, type=c.type, source=c.source,
         description=c.description, created_at=c.created_at,
     )
-
 
 def _row_to_response(r: SpreadsheetRow) -> RowResponse:
     return RowResponse(
@@ -188,9 +160,7 @@ def _row_to_response(r: SpreadsheetRow) -> RowResponse:
         created_at=r.created_at, updated_at=r.updated_at,
     )
 
-
 # ─- Routes ────────────────────────────────────────────────────────
-
 
 @router.get(
     "/columns",
@@ -198,7 +168,7 @@ def _row_to_response(r: SpreadsheetRow) -> RowResponse:
     summary="List columns for a dataset",
 )
 async def list_columns_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> ColumnListResponse:
@@ -217,7 +187,6 @@ async def list_columns_route(
         columns=[_column_to_response(c) for c in cols],
     )
 
-
 @router.post(
     "/columns",
     response_model=ColumnResponse,
@@ -225,7 +194,7 @@ async def list_columns_route(
 )
 async def add_column_route(
     body: AddColumnRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> ColumnResponse:
@@ -250,7 +219,6 @@ async def add_column_route(
         )
     return _column_to_response(col)
 
-
 @router.post(
     "/columns/{col_id}/generate",
     response_model=RowListResponse,
@@ -258,7 +226,7 @@ async def add_column_route(
 )
 async def generate_column_route(
     body: GenerateRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     col_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -302,14 +270,13 @@ async def generate_column_route(
         total_count=len(updated_rows),
     )
 
-
 @router.get(
     "/rows",
     response_model=RowListResponse,
     summary="List rows for a dataset, with optional filter + sort",
 )
 async def list_rows_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     filter: str | None = Query(default=None, description="JSON-encoded list of filter specs."),
     sort: str | None = Query(default=None, description="JSON-encoded list of sort specs."),
@@ -344,7 +311,6 @@ async def list_rows_route(
         total_count=len(rows),
     )
 
-
 @router.post(
     "/rows",
     response_model=RowResponse,
@@ -352,7 +318,7 @@ async def list_rows_route(
 )
 async def add_row_route(
     body: AddRowRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> RowResponse:
@@ -375,7 +341,6 @@ async def add_row_route(
         )
     return _row_to_response(row)
 
-
 @router.patch(
     "/rows/{row_id}",
     response_model=RowResponse,
@@ -383,7 +348,7 @@ async def add_row_route(
 )
 async def update_row_route(
     body: UpdateRowRequest,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     row_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -420,13 +385,12 @@ async def update_row_route(
         raise HTTPException(status_code=404, detail="row not found")
     return _row_to_response(row)
 
-
 @router.delete(
     "/rows/{row_id}",
     summary="Delete a row",
 )
 async def delete_row_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     row_id: str = Path(...),
     user: dict = Depends(get_current_user),
@@ -455,14 +419,13 @@ async def delete_row_route(
         )
     return {"deleted": True}
 
-
 @router.get(
     "/export",
     response_class=PlainTextResponse,
     summary="Export rows as JSONL",
 )
 async def export_route(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     dataset_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> str:

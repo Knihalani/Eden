@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
+from eden.api.utils.redact import redact_all
 from eden.governance.compliance_pack import (
     AgentAuditLedgerWriter,
     CompliancePackGenerator,
@@ -94,4 +95,3 @@ async def export_agent_pack(
         framework=body.framework,
     )
     return result
-from eden.api.utils.redact import redact_all

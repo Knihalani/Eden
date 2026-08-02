@@ -17,16 +17,17 @@ from starlette.testclient import TestClient
 
 
 def _build_app():
+    from eden.api.deps import get_current_user, require_path_org_access
     from eden.api.routes import judges as judges_routes
 
     app = FastAPI()
     app.include_router(judges_routes.router)
 
-    app.dependency_overrides[judges_routes.get_current_user] = lambda: {
+    app.dependency_overrides[get_current_user] = lambda: {
         "user_id": "u-1",
         "email": "x@y.z",
     }
-    app.dependency_overrides[judges_routes._require_path_org] = lambda: "org-A"
+    app.dependency_overrides[require_path_org_access] = lambda: "org-A"
     return app, judges_routes
 
 

@@ -133,11 +133,11 @@ class TestIngestBatchUnavailableMapsTo503:
     def test_ingestion_unavailable_returns_503_retry_after(
         self, ingest_client
     ) -> None:
-        from eden.observability.errors import IngestionUnavailable
+        from eden.observability.errors import IngestionUnavailableError
 
         client, _auth, mock_collector = ingest_client
         mock_collector.ingest_batch = AsyncMock(
-            side_effect=IngestionUnavailable("Postgres unavailable for telemetry")
+            side_effect=IngestionUnavailableError("Postgres unavailable for telemetry")
         )
         body = json.dumps(
             {

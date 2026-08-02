@@ -136,7 +136,7 @@ class TestP2IngestBatchParallel:
         in_flight = 0
         peak_in_flight = 0
 
-        async def _slow_route(event: TelemetryEvent) -> None:
+        async def _slow_route(event: TelemetryEvent, *, skip_postgres: bool = False) -> None:
             nonlocal in_flight, peak_in_flight
             in_flight += 1
             peak_in_flight = max(peak_in_flight, in_flight)

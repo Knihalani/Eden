@@ -270,6 +270,19 @@ class _FakeClient:
         # In-memory table mimicking trace_messages
         self.rows: dict[tuple[str, str], dict[str, Any]] = {}
 
+    def transaction(self) -> Any:
+        """Mirror nested ``async with client.transaction() as conn``."""
+        outer = self
+
+        class _Tx:
+            async def __aenter__(self) -> _FakeClient:
+                return outer
+
+            async def __aexit__(self, *a: object) -> bool:
+                return False
+
+        return _Tx()
+
     async def executemany(self, sql: str, rows: list[tuple]) -> str:
         self.executemany_calls.append((sql, rows))
         for row in rows:

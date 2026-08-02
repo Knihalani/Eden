@@ -89,6 +89,34 @@ def _window_start(window: str, now: datetime | None = None) -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+def _as_datetime(value: Any) -> datetime | None:
+    """Coerce driver/JSON datetime shapes to aware UTC, or ``None``.
+
+    Postgres async drivers may return ``datetime`` objects; JSON round-trips
+    and mocked consumption rows usually return ISO-8601 strings (with or
+    without a trailing ``Z``, with or without an offset). Unusable values
+    return ``None`` without raising so alert dedup can fail safe.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 async def _get_client():
     """Lazily import the postgres client (deferred for testability)."""
     try:
@@ -449,26 +477,24 @@ async def evaluate_budget_alerts(org_id: str) -> list[int]:
 
     fired: list[int] = []
     recent = await list_actions(org_id, limit=100)
-    already = {
-        int(a.get("threshold_pct") or 0)
-        for a in recent
-        if a.get("action_type") in ("threshold_breached", "budget_alert")
-        and str(a.get("window_start") or "")
-        in ("", str(consumption.get("window_start") or ""))
-    }
-    # Also match by threshold alone within recent window (best-effort).
-    already |= {
-        int(a.get("threshold_pct") or 0)
-        for a in recent
-        if a.get("action_type") in ("threshold_breached", "budget_alert")
-    }
+    # ``record_action`` does not write ``window_start``; scope dedup by
+    # ``created_at`` against the consumption window so alerts re-arm when
+    # the billing window rolls.
+    window_start = _as_datetime(consumption.get("window_start")) or _window_start(
+        str(budget.get("window") or "monthly")
+    )
+    already: set[int] = set()
+    for action in recent:
+        if action.get("action_type") not in ("threshold_breached", "budget_alert"):
+            continue
+        created = _as_datetime(action.get("created_at"))
+        # Fail safe: unreadable timestamps count as current-window so we
+        # cannot duplicate-alert on corrupt audit rows.
+        if created is None or created >= window_start:
+            already.add(int(action.get("threshold_pct") or 0))
 
     for t in thresholds:
         if pct < float(t):
-            continue
-        if t in already and t != 100:
-            # Allow re-fire only for hard exceed (100) once per window
-            # is enough — skip if already logged.
             continue
         if t in already:
             continue

@@ -412,7 +412,6 @@ def test_all_phase_modules_importable():
     from supplementaries.phase_3_loops import (
         ensemble, hash_ring, jaccard_shingles, page_hinkley, semantic_cosine,
     )
-    # hook.py imports eden.multi_agent.planning (removed); skip until restored.
     from supplementaries.phase_4_guardrails import trajectory
     from supplementaries.phase_5_quality import pipeline
     from supplementaries.phase_6_stat_gate import gate

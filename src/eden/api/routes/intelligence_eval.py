@@ -5,14 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
-    get_current_user,
     require_feature_flag,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.evaluation.eval_intel import (
     AutoDatasetBridge,
@@ -32,22 +30,12 @@ from eden.evaluation.eval_intel import (
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/eval",
     tags=["intelligence-eval"],
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
-        Depends(_require_path_org),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -65,28 +53,23 @@ _custom = CustomPythonEval()
 _feedback = UserFeedbackService()
 _auto = AutoDatasetBridge()
 
-
 # ─── Schemas ──────────────────────────────────────────────────────
 class TagRequest(BaseModel):
     deployment_sha: str
     prompt_version: str
     judge_set: list[str]
 
-
 class ClusterRequest(BaseModel):
     judge_name: str
     window: str = "24h"
-
 
 class CLHFRequest(BaseModel):
     name: str
     examples: list[dict[str, Any]]
 
-
 class HILTaskRequest(BaseModel):
     name: str
     spec: dict[str, Any]
-
 
 class HILAnnotationRequest(BaseModel):
     task_id: str
@@ -94,11 +77,9 @@ class HILAnnotationRequest(BaseModel):
     label: str
     rationale: str | None = None
 
-
 class PairwiseQueueRequest(BaseModel):
     name: str
     spec: dict[str, Any]
-
 
 class PairwisePreferenceRequest(BaseModel):
     queue_id: str
@@ -106,33 +87,27 @@ class PairwisePreferenceRequest(BaseModel):
     variant_b_id: str
     preferred: str
 
-
 class MultimodalRequest(BaseModel):
     modality: str
     input_url: str
     spec: dict[str, Any]
 
-
 class PromoteRequest(BaseModel):
     judge_name: str
     threshold: float
-
 
 class ModalityRequest(BaseModel):
     modality: str
     config: dict[str, Any]
 
-
 class BooleanCategoricalRequest(BaseModel):
     score_type: str
     value: str
-
 
 class CustomEvalRequest(BaseModel):
     name: str
     function_ref: str
     spec: dict[str, Any]
-
 
 class FeedbackRequest(BaseModel):
     trace_id: str
@@ -140,17 +115,15 @@ class FeedbackRequest(BaseModel):
     rating: int | None = None
     comment: str | None = None
 
-
 class AutoDatasetRequest(BaseModel):
     judge_name: str
     target_dataset_name: str
     min_confidence: float = 0.85
 
-
 # ─── Routes ───────────────────────────────────────────────────────
 @router.post("/versions/tag")
 async def tag_version(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: TagRequest = Body(...),
 ) -> dict[str, Any]:
     return await _versioner.tag(
@@ -160,45 +133,40 @@ async def tag_version(
         judge_set=body.judge_set,
     )
 
-
 @router.get("/versions")
-async def list_versions(org_id: str = Depends(_require_path_org)) -> dict[str, Any]:
+async def list_versions(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
     return await _registry.list(org_id)
-
 
 @router.post("/failure-clusters")
 async def failure_clusters(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: ClusterRequest = Body(...),
 ) -> dict[str, Any]:
     return await _failure.cluster(
         org_id, judge_name=body.judge_name, window=body.window
     )
 
-
 @router.post("/clhf/generate")
 async def clhf_generate(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: CLHFRequest = Body(...),
 ) -> dict[str, Any]:
     return await _clhf.generate_custom_metric(
         org_id, name=body.name, examples=body.examples
     )
 
-
 @router.post("/hil/tasks")
 async def hil_create_task(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: HILTaskRequest = Body(...),
 ) -> dict[str, Any]:
     return await _hil.create_annotation_task(
         org_id, name=body.name, spec=body.spec
     )
 
-
 @router.post("/hil/annotations")
 async def hil_submit(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: HILAnnotationRequest = Body(...),
 ) -> dict[str, Any]:
     return await _hil.submit_annotation(
@@ -209,20 +177,18 @@ async def hil_submit(
         rationale=body.rationale,
     )
 
-
 @router.post("/pairwise/queues")
 async def pairwise_create_queue(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: PairwiseQueueRequest = Body(...),
 ) -> dict[str, Any]:
     return await _pairwise.create_queue(
         org_id, name=body.name, spec=body.spec
     )
 
-
 @router.post("/pairwise/preferences")
 async def pairwise_submit(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: PairwisePreferenceRequest = Body(...),
 ) -> dict[str, Any]:
     return await _pairwise.submit_preference(
@@ -233,10 +199,9 @@ async def pairwise_submit(
         preferred=body.preferred,
     )
 
-
 @router.post("/multimodal/evaluate")
 async def multimodal(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: MultimodalRequest = Body(...),
 ) -> dict[str, Any]:
     return await _multimodal.evaluate_text_image_audio(
@@ -246,40 +211,36 @@ async def multimodal(
         spec=body.spec,
     )
 
-
 @router.post("/promote-to-guardrail")
 async def promote_to_guardrail(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: PromoteRequest = Body(...),
 ) -> dict[str, Any]:
     return await _promote.promote_to_guardrail(
         org_id, judge_name=body.judge_name, threshold=body.threshold
     )
 
-
 @router.post("/modalities/declare")
 async def declare_modality(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: ModalityRequest = Body(...),
 ) -> dict[str, Any]:
     return await _six_mod.declare_modality(
         org_id, modality=body.modality, config=body.config
     )
 
-
 @router.post("/boolean-categorical")
 async def boolean_categorical(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: BooleanCategoricalRequest = Body(...),
 ) -> dict[str, Any]:
     return await _bool_cat.evaluate(
         org_id, score_type=body.score_type, value=body.value
     )
 
-
 @router.post("/custom-eval/register")
 async def custom_eval_register(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: CustomEvalRequest = Body(...),
 ) -> dict[str, Any]:
     return await _custom.register(
@@ -289,10 +250,9 @@ async def custom_eval_register(
         spec=body.spec,
     )
 
-
 @router.post("/feedback")
 async def feedback(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: FeedbackRequest = Body(...),
 ) -> dict[str, Any]:
     return await _feedback.submit_thumbs_rating(
@@ -303,10 +263,9 @@ async def feedback(
         comment=body.comment,
     )
 
-
 @router.post("/auto-dataset")
 async def auto_dataset(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: AutoDatasetRequest = Body(...),
 ) -> dict[str, Any]:
     return await _auto.from_judge_failures(

@@ -386,8 +386,8 @@ function LabImproveInner() {
 
       {(extraPlans.length > 0 || Object.keys(statusOverrides).length > 0) ? (
         <LocalDraftBanner>
-          Start and Mark verify update local draft status only — Approve and
-          Reject hit the API when available.
+          Items marked “draft from deep link” are local handoffs — Approve and
+          Reject hit the API on real plans.
         </LocalDraftBanner>
       ) : null}
 

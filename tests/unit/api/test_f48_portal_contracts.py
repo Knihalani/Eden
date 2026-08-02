@@ -56,14 +56,10 @@ def test_signals_portal_paths_match_backend() -> None:
 
 
 def test_agent_issues_portal_paths_match_backend() -> None:
+    """Portal ``agentIssuesApi`` was pruned (zero consumers); backend stays."""
     src = portal_api_source()
-    block = src.split("export const agentIssuesApi")[1].split(
-        "// ── Intelligence: Eval"
-    )[0]
-    assert "/agent-issues" in block
-    assert "/stumbles" in block
-    assert "/resolve" in block
-    assert "/triage" in block
+    assert "agentIssuesApi" not in src
+    assert "export const agentIssuesApi" not in src
 
 
 def test_backend_debugger_routes_are_mounted() -> None:
@@ -96,6 +92,7 @@ def test_backend_agent_issues_routes_are_mounted() -> None:
 
 
 def test_nl_alerts_portal_paths_match_backend() -> None:
+    """NL alert paths remain on the portal client; ``nlAlertsApi`` export pruned."""
     src = portal_api_source()
     assert "/alerts/compile" in src
     assert "/nl-alert-rules" in src
@@ -103,7 +100,7 @@ def test_nl_alerts_portal_paths_match_backend() -> None:
     assert "compileNlAlert" in src
     assert "listNlAlertRules" in src
     assert "overrideAlertVerdict" in src
-    assert "nlAlertsApi" in src
+    assert "nlAlertsApi" not in src
 
 
 def test_backend_nl_alert_routes_are_mounted() -> None:
@@ -169,20 +166,16 @@ def test_backend_improve_routes_are_mounted() -> None:
 
 
 def test_phase2_agent_sessions_portal_paths() -> None:
+    """Portal ``agentSessionsApi`` was pruned (zero consumers); backend stays."""
     src = portal_api_source()
-    block = src.split("export const agentSessionsApi")[1].split(
-        "// ── F58"
-    )[0]
-    assert "/agent-sessions" in block
-    assert "start:" in block
-    assert "end:" in block
-    assert "attachTrace:" in block
+    assert "agentSessionsApi" not in src
+    assert "export const agentSessionsApi" not in src
 
 
 def test_phase2_saved_views_portal_paths() -> None:
+    """Portal ``savedViewsApi`` was pruned (zero consumers); backend stays."""
     src = portal_api_source()
-    assert "savedViewsApi" in src
-    assert "/saved-searches" in src
+    assert "savedViewsApi" not in src
 
 
 def test_backend_agent_sessions_routes_are_mounted() -> None:

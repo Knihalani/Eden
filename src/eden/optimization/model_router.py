@@ -7,6 +7,7 @@ from enum import Enum
 
 from eden.config import get_settings
 from eden.llm.client import LLMResponse, OpenRouterClient
+from eden.llm.models import internal_chat_chain
 
 logger = logging.getLogger(__name__)
 
@@ -20,24 +21,17 @@ class ModelTier(Enum):
     T4 = "t4"  # Custom/enterprise: proprietary, compliance, offline
 
 
-# Tier-to-model mapping (configurable via settings)
+# Tier-to-model mapping. Soft Autonomy 2026-08-01: ALL Eden-owned chat
+# tiers resolve to the single internal model SSOT
+# (``eden.llm.models.INTERNAL_CHAT_MODEL`` — deepseek-v4-flash). Tiers
+# still exist so callers keep their max_tokens / latency semantics, but
+# the model id is identical across T1/T2/T3. T4 stays a placeholder for
+# customer fine-tunes and is never an Eden internal chat target.
+_INTERNAL_CHAIN = internal_chat_chain()
 TIER_MODELS: dict[ModelTier, list[str]] = {
-    ModelTier.T1: [
-        "tencent/hy3",
-        "xiaomi/mimo-v2.5",
-    ],
-    ModelTier.T2: [
-        "minimax/minimax-m3",
-        "xiaomi/mimo-v2.5-pro",
-        "tencent/hy3",
-    ],
-    # T3 = Expert tier — portal Cmd-J agent, onboarding integration agent,
-    # and other high-stakes reasoning tasks.
-    ModelTier.T3: [
-        "x-ai/grok-4.5",
-        "minimax/minimax-m3",
-        "xiaomi/mimo-v2.5-pro",
-    ],
+    ModelTier.T1: list(_INTERNAL_CHAIN),
+    ModelTier.T2: list(_INTERNAL_CHAIN),
+    ModelTier.T3: list(_INTERNAL_CHAIN),
     ModelTier.T4: [
         "custom/fine-tuned",
     ],
@@ -438,10 +432,8 @@ class ModelRouter:
         """
         # Use heuristic classification in sync path to avoid blocking
         classification = self.classifier._heuristic_classify(task)
-        if classification is None:
-            start_tier = ModelTier.T2  # Default for sync path
-        else:
-            start_tier = classification
+        # Default for sync path when classification is None
+        start_tier = ModelTier.T2 if classification is None else classification
 
         tiers_to_try = self._get_fallback_chain(start_tier)
         last_error: str | None = None

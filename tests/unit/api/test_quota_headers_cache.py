@@ -211,6 +211,13 @@ class TestQuotaHeadersCache:
             mw = QuotaEnforcementMiddleware(MagicMock())
 
             over_cap = _budget()
+            over_cap["credits"] = {
+                "used": 2000,
+                "soft_limit": 700,
+                "hard_limit": 1000,
+                "status": "hard_exceeded",
+                "percentage": 200.0,
+            }
             over_cap["cost_usd"] = {
                 "used": 2.0,
                 "soft_limit": 0.7,

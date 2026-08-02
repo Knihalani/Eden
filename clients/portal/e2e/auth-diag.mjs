@@ -8,10 +8,19 @@ import { chromium } from "playwright";
 import { clerkSetup, clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 import { writeFileSync } from "node:fs";
 
-process.env.CLERK_SECRET_KEY = "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
-process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
-const BASE = "http://127.0.0.1:3000";
-const EMAIL = "kaiav.nihalani@gmail.com";
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`[auth-diag] FATAL: missing required env ${name}`);
+    process.exit(1);
+  }
+  return v;
+}
+
+requireEnv("CLERK_SECRET_KEY");
+requireEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
+const BASE = process.env.BASE || "http://127.0.0.1:3000";
+const EMAIL = requireEnv("E2E_EMAIL");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

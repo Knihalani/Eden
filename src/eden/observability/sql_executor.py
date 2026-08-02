@@ -304,7 +304,7 @@ class SqlExecutor:
         start = time.monotonic()
         try:
             rows = await self._run_with_timeout(capped_sql, bind_args, self.max_seconds)
-        except _StatementTimeoutSignal:
+        except _StatementTimeoutSignalError:
             raise SqlTimeoutError(
                 f"query exceeded {self.max_seconds}s statement_timeout",
             ) from None
@@ -547,14 +547,14 @@ class SqlExecutor:
             # We translate to our typed error so the API layer
             # can return a structured response.
             if _is_timeout(exc):
-                raise _StatementTimeoutSignal() from exc
+                raise _StatementTimeoutSignalError() from exc
             raise
 
 
 # ── Internal helpers ───────────────────────────────────────────────
 
 
-class _StatementTimeoutSignal(Exception):
+class _StatementTimeoutSignalError(Exception):
     """Internal signal — converted to SqlTimeoutError at the boundary."""
 
 

@@ -45,15 +45,26 @@ const GOLDEN_CI = process.env.GOLDEN_CI === "1";
 const GOLDEN_ALLOW_FAIL = process.env.GOLDEN_ALLOW_FAIL === "1";
 
 // ── Path definitions ────────────────────────────────────────────────────────
+// Routes must be LIVE portal routes (see src/lib/portal-polish.ts
+// U20_CORE_AXE_ROUTES). Retired aliases (/dashboard, /artifacts,
+// /debugger-sessions) redirect via next.config.ts and are covered by the
+// legacy-redirect regression check in main() — not as golden paths.
 const PATHS = [
-  { id: "01-sign-in-home",        route: "/dashboard",         label: "Sign-in → Home (/dashboard)" },
+  { id: "01-sign-in-home",        route: "/home",              label: "Sign-in → Home" },
   { id: "02-traces-hub",          route: "/traces",            label: "Traces hub" },
   { id: "03-issues",              route: "/issues",            label: "Issues list" },
-  { id: "04-artifacts",           route: "/artifacts",         label: "Artifacts" },
+  { id: "04-improve",             route: "/improve",           label: "Improve queue" },
   { id: "05-playgrounds",         route: "/evals?tab=playgrounds",       label: "Playground" },
   { id: "06-alerts",              route: "/alerts",            label: "Alerts" },
   { id: "07-experiments",         route: "/evals?tab=experiments",       label: "Experiments compare" },
-  { id: "08-debugger-sessions",   route: "/debugger-sessions", label: "Debugger sessions" },
+  { id: "08-debugger-sessions",   route: "/debugger",          label: "Debugger sessions" },
+];
+
+// Retired aliases must keep redirecting to their live replacements.
+const LEGACY_REDIRECTS = [
+  { from: "/dashboard", to: "/home" },
+  { from: "/artifacts", to: "/improve" },
+  { from: "/debugger-sessions", to: "/debugger" },
 ];
 
 // ── Deep assertion functions per golden path ────────────────────────────────
@@ -151,46 +162,24 @@ async function assertIssues(page) {
 }
 
 /**
- * Path 4: Artifacts + EvidenceGate
- * Asserts Artifacts page renders. If artifacts exist, checks for a "promote"
- * or "reject" / EvidenceGate affordance. Degrades loudly if no data.
+ * Path 4: Improve queue (successor to the retired /artifacts surface).
+ * Asserts the Improve hub renders its queue/plan chrome or an honest
+ * empty state. Degrades loudly if no data.
  */
-async function assertArtifacts(page) {
+async function assertImprove(page) {
   await assertAuthShell(page);
   const heading = await assertPageLoaded(page);
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
-  const hasArtifacts = /ART-|artifact/i.test(bodyText) && !/no artifact|no data/i.test(bodyText);
+  const hasImprove =
+    /improve|queue|plan|patch|approve|guardian/i.test(bodyText) ||
+    (await page.locator('[data-testid="improve-queue"], [data-testid="improve-plan"], [role="tablist"]').count()) > 0;
 
-  if (!hasArtifacts) {
-    console.log(
-      "  SKIPPED (04-artifact→promote cross-link): no artifacts rendered — backend API not running",
-    );
-    return heading || "(artifacts empty state)";
+  if (!hasImprove) {
+    throw new Error("Improve page rendered no recognisable content");
   }
-
-  // Check for EvidenceGate / promote affordance
-  const promoteBtn = page.locator('button:has-text("Promote"), button:has-text("Review"), [data-testid="evidence-gate"]');
-  if (await promoteBtn.count()) {
-    console.log("  ✓ 04 EvidenceGate / Promote button found");
-  } else {
-    // Try clicking first artifact to open detail panel
-    const row = page.locator('[data-testid="artifact-row"], table tbody tr').first();
-    if (await row.count()) {
-      await row.click().catch(() => {});
-      await page.waitForTimeout(800);
-      await screenshotStep(page, "04-artifact-detail");
-      const gate = await page.locator('button:has-text("Promote"), button:has-text("Reject"), [data-testid="evidence-gate"]').count();
-      if (gate) {
-        console.log("  ✓ 04 EvidenceGate visible in artifact detail");
-      } else {
-        console.log("  SKIPPED (04-artifact EvidenceGate): gate UI not found in detail panel");
-      }
-    } else {
-      console.log("  SKIPPED (04-artifact EvidenceGate): no artifact rows to click");
-    }
-  }
-  return heading || "(artifacts)";
+  console.log("  ✓ 04 Improve queue/plan chrome visible");
+  return heading || "(improve)";
 }
 
 /**
@@ -330,7 +319,7 @@ const DEEP_ASSERTIONS = {
   "01-sign-in-home":      assertDashboard,
   "02-traces-hub":        assertTraces,
   "03-issues":            assertIssues,
-  "04-artifacts":         assertArtifacts,
+  "04-improve":           assertImprove,
   "05-playgrounds":       assertPlaygrounds,
   "06-alerts":            assertAlerts,
   "07-experiments":       assertExperiments,
@@ -386,6 +375,34 @@ async function main() {
 
   const results = [];
   let failed = 0;
+
+  // Legacy-alias regression: retired routes must redirect to their live
+  // replacements, not 404 or strand users on /unavailable. Runs after a
+  // warm-up navigation — the very first goto can race Clerk testing-token
+  // activation and bounce to /sign-in through no fault of the redirect.
+  try {
+    await setupClerkTestingToken({ page });
+  } catch {
+    /* optional when unauthenticated local runs */
+  }
+  await page.goto(`${BASE}/home`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForTimeout(800);
+  for (const { from, to } of LEGACY_REDIRECTS) {
+    try {
+      await page.goto(`${BASE}${from}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await page.waitForTimeout(600);
+      const landed = new URL(page.url()).pathname;
+      if (landed === to || landed.startsWith(`${to}/`) || landed.startsWith(`${to}?`)) {
+        console.log(`✓ legacy ${from} → ${to}`);
+      } else {
+        throw new Error(`legacy ${from} landed on ${landed}, expected ${to}`);
+      }
+    } catch (err) {
+      failed += 1;
+      results.push({ id: `legacy-${from}`, label: `Legacy redirect ${from}`, ok: false, error: String(err) });
+      console.error(`✗ legacy ${from} → ${to}:`, String(err).slice(0, 200));
+    }
+  }
 
   for (const spec of PATHS) {
     try {

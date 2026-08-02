@@ -30,10 +30,8 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 from pydantic import BaseModel
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
-    get_current_user,
     require_feature_flag,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.apm_depth import (
     AgentMetricsCollector,
@@ -41,22 +39,12 @@ from eden.apm_depth import (
     StepJudgeStamper,
 )
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/apm-depth",
     tags=["intelligence-apm-depth"],
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
-        Depends(_require_path_org),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -64,48 +52,40 @@ _enricher = OtelV141Enricher()
 _stamper = StepJudgeStamper()
 _metrics = AgentMetricsCollector()
 
-
 # ─── Schemas ──────────────────────────────────────────────────────
-
 
 class EnrichRequest(BaseModel):
     attributes: dict[str, Any]
 
-
 class EnrichBatchRequest(BaseModel):
     spans: list[dict[str, Any]]
-
 
 class StepStampRequest(BaseModel):
     attributes: dict[str, Any]
     step_index: int
     step_judges: dict[str, float] | None = None
 
-
 # ─── Routes (v1.4 — 4 core, retained) ────────────────────────────
-
 
 @router.post("/enrich")
 async def enrich(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: EnrichRequest = Body(...),
 ) -> dict[str, Any]:
     """Run the OTel v1.41 dual-emit enricher on a single span."""
     return _enricher.enrich(org_id, attributes=body.attributes)
 
-
 @router.post("/enrich-batch")
 async def enrich_batch(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: EnrichBatchRequest = Body(...),
 ) -> dict[str, Any]:
     """Run the OTel v1.41 dual-emit enricher on a batch of spans."""
     return _enricher.enrich_batch(org_id, spans=body.spans)
 
-
 @router.post("/steps/stamp")
 async def stamp_step(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: StepStampRequest = Body(...),
 ) -> dict[str, Any]:
     """Stamp ``step_index`` + ``step_judges`` onto a span's attributes."""
@@ -116,19 +96,17 @@ async def stamp_step(
         step_judges=body.step_judges,
     )
 
-
 @router.get("/steps/{trace_id}")
 async def list_trace_steps(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     """List every step in a trace, in step-index order."""
     return await _stamper.get_trace_steps(org_id, trace_id=trace_id)
 
-
 @router.get("/steps/{trace_id}/{step_index}")
 async def get_step_judges(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     step_index: int = Path(...),
 ) -> dict[str, Any]:
@@ -137,13 +115,11 @@ async def get_step_judges(
         org_id, trace_id=trace_id, step_index=step_index
     )
 
-
 @router.get("/metrics/agents")
 async def agent_metrics(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     window_hours: int = Query(24, ge=1, le=24 * 30),
 ) -> dict[str, Any]:
     """The 3-agent-metric dashboard rollup."""
     return await _metrics.aggregate(org_id, window_hours=window_hours)
-
 

@@ -199,7 +199,7 @@ async def eden_health(
         if hasattr(client, "eden_status"):
             return await client.eden_status(org_id)
         if hasattr(client, "get"):
-            return await client.get(f"/orgs/{org_id}/admin/eden-status")  # type: ignore[attr-defined]
+            return await client.get(f"/orgs/{org_id}/admin/eden-status")
     except Exception as exc:
         return {"status": "error", "error": str(exc), "org_id": org_id}
 
@@ -240,7 +240,7 @@ async def tail_trace(
         }
 
     if hasattr(client, "tail_trace"):
-        return await client.tail_trace(  # type: ignore[attr-defined]
+        return await client.tail_trace(
             org_id,
             session_id=session_id,
             from_event_id=from_event_id,
@@ -281,7 +281,7 @@ async def label_tool_call(
 ) -> dict[str, Any]:
     """F21 — persist a good/bad tool-call label."""
     if hasattr(client, "label_tool_call"):
-        return await client.label_tool_call(  # type: ignore[attr-defined]
+        return await client.label_tool_call(
             org_id,
             span_id=span_id,
             label=label,
@@ -292,7 +292,7 @@ async def label_tool_call(
             args_summary=args_summary,
         )
     if hasattr(client, "post"):
-        return await client.post(  # type: ignore[attr-defined]
+        return await client.post(
             f"/orgs/{org_id}/tool-calls/{span_id}/label",
             json={
                 "trace_id": trace_id,
@@ -336,7 +336,7 @@ async def query_eql(
         if eql:
             body["eql"] = eql
         try:
-            return await client.post(  # type: ignore[attr-defined]
+            return await client.post(
                 f"/orgs/{org_id}/alerts/nl/preview",
                 json=body or {"nl_text": "errors in last hour"},
             )
@@ -362,7 +362,7 @@ async def query_sql(
 ) -> dict[str, Any]:
     """Read-only SQL (org-scoped) — ChatSidebar query_sql mirror."""
     if hasattr(client, "post"):
-        return await client.post(  # type: ignore[attr-defined]
+        return await client.post(
             f"/orgs/{org_id}/sql",
             json={"sql": sql, "limit": limit},
         )
@@ -383,7 +383,7 @@ async def list_datasets(
     limit: int = 50,
 ) -> dict[str, Any]:
     if hasattr(client, "get"):
-        return await client.get(  # type: ignore[attr-defined]
+        return await client.get(
             f"/orgs/{org_id}/datasets",
             params={"limit": limit},
         )
@@ -397,7 +397,7 @@ async def list_experiments(
     limit: int = 50,
 ) -> dict[str, Any]:
     if hasattr(client, "get"):
-        return await client.get(  # type: ignore[attr-defined]
+        return await client.get(
             f"/orgs/{org_id}/experiments/offline",
             params={"limit": limit},
         )
@@ -412,7 +412,7 @@ async def get_judge_scores(
 ) -> dict[str, Any]:
     if hasattr(client, "get"):
         try:
-            return await client.get(  # type: ignore[attr-defined]
+            return await client.get(
                 f"/orgs/{org_id}/observability/traces/{trace_id}/scores",
             )
         except Exception:
@@ -433,7 +433,7 @@ async def get_cost_breakdown(
     window_hours: int = 24,
 ) -> dict[str, Any]:
     if hasattr(client, "get"):
-        return await client.get(  # type: ignore[attr-defined]
+        return await client.get(
             f"/orgs/{org_id}/finops/explorer",
             params={"window_hours": window_hours},
         )
@@ -456,7 +456,7 @@ async def get_agentic_metrics(
         params: dict[str, Any] = {"window_hours": window_hours}
         if agent_id:
             params["agent_id"] = agent_id
-        return await client.get(  # type: ignore[attr-defined]
+        return await client.get(
             f"/orgs/{org_id}/agentic-metrics/summary",
             params=params,
         )

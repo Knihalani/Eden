@@ -352,6 +352,15 @@ async def propose_plan_for_issue(
     issue_agent_id = (ctx.get("agent_id") or "").strip() or None
     repo_id = await _resolve_repo_id(org_id, agent_id=issue_agent_id)
     if not repo_id:
+        # Soft Autonomy Phase 3: never fail silently. Stamp the issue so
+        # the portal can render a "Connect GitHub" state instead of the
+        # fix PR just never appearing.
+        await _stamp_patch_blocked(
+            org_id,
+            issue_id,
+            reason="repo_not_connected",
+            message="Connect a GitHub repo for this agent so Eden can open fix PRs",
+        )
         return {
             "status": "error",
             "reason": "repo_not_connected",
@@ -490,6 +499,21 @@ async def propose_plan_for_issue(
     if plan is None:
         return {"status": "error", "reason": "persist_failed", "issue_id": issue_id}
 
+    # Soft Autonomy Phase 6: a drafted plan IS the approval request —
+    # alert the agent's Slack channel with a deep link to the plan.
+    try:
+        from eden.services.slack_notify import notify_needs_approval
+
+        await notify_needs_approval(
+            org_id,
+            plan_id=str(plan["id"]),
+            title=str(plan.get("title") or payload.get("title") or "Improvement plan"),
+            kind=str(payload.get("plan_kind") or "code_patch"),
+            agent_id=(ctx.get("agent_id") or "").strip() or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("issue_patch_trigger: slack needs_approval notify failed: %s", exc)
+
     cost = float(data.get("cost_usd") or payload.get("llm_cost_usd") or 0)
     if cost > 0:
         try:
@@ -519,6 +543,36 @@ async def propose_plan_for_issue(
         "hermetic_preverify": hermetic_preverify.get("status"),
         "stumble_count": stumble_count,
     }
+
+
+async def _stamp_patch_blocked(
+    org_id: str,
+    issue_id: str,
+    *,
+    reason: str,
+    message: str,
+) -> None:
+    """Best-effort: record on the issue why Eden could not draft a fix PR.
+
+    Merges ``patch_blocked`` into the existing ``triage_result`` so the
+    portal Issues page can surface the blocker (e.g. "Connect GitHub")
+    instead of the fix silently never appearing.
+    """
+    try:
+        from eden.issues.repo import IssuesRepo
+
+        repo = IssuesRepo()
+        issue = await repo.get_issue(org_id, issue_id)
+        if issue is None:
+            return
+        triage = dict(issue.triage_result or {})
+        triage["patch_blocked"] = {
+            "reason": reason,
+            "message": message,
+        }
+        await repo.set_triage_result(org_id, issue_id, triage)
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: stamp patch_blocked failed: %s", exc)
 
 
 async def _resolve_repo_id(

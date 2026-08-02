@@ -154,6 +154,15 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return intlResponse;
   }
 
+  // Lab compile-signal spends OPENROUTER_API_KEY in the Next handler —
+  // require a Clerk session at the edge (handler also checks auth()).
+  if (path.startsWith("/api/lab/")) {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   // Auth gate — only known portal prefixes require a session.
   //
   // Explicit redirect (not bare auth.protect()): with Next 16 + empty

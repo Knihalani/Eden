@@ -31,10 +31,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
-    _try_resolve_token_payload,
-    get_current_user,
     require_feature_flag,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.api.utils.redact import redact_all
 from eden.observability.checkpoint.rewind import CheckpointService
@@ -46,22 +44,12 @@ from eden.observability.workflow.graph_builder import WorkflowGraphBuilder
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/intelligence/replay",
     tags=["intelligence-replay"],
     dependencies=[
         Depends(require_feature_flag("intelligence_gap_v0")),
-        Depends(_require_path_org),
+        Depends(require_path_org_access),
     ],
 )
 
@@ -73,25 +61,20 @@ _checkpoint = CheckpointService()
 _messages = MessageViewService()
 _custom_props = CustomPropertiesService()
 
-
 # ─── Schemas ───────────────────────────────────────────────────────
 class ReplayRequest(BaseModel):
     cursor: int = Field(0, ge=0)
     page_size: int = Field(100, ge=1, le=1000)
 
-
 class DiffRequest(BaseModel):
     trace_id_a: str
     trace_id_b: str
 
-
 class SubgraphRequest(BaseModel):
     root_span_id: str
 
-
 class RewindRequest(BaseModel):
     step_index: int = Field(0, ge=0)
-
 
 class AddMessageRequest(BaseModel):
     session_id: str
@@ -99,16 +82,13 @@ class AddMessageRequest(BaseModel):
     content: str
     conversation_id: str | None = None
 
-
 class CustomPropertiesRequest(BaseModel):
     properties: dict[str, str]
-
 
 class ListCustomPropertiesRequest(BaseModel):
     """Body schema for ``POST /properties/list`` — we use POST
     rather than GET to keep the org_id scoping pattern
     consistent with the other replay routes."""
-
 
 class CreateReplaySessionRequest(BaseModel):
     """Body for ``POST /sessions`` (Phase A.6).
@@ -121,11 +101,10 @@ class CreateReplaySessionRequest(BaseModel):
     trace_id: str = Field(..., min_length=1, max_length=128)
     name: str | None = Field(None, max_length=128)
 
-
 # ─── Routes ────────────────────────────────────────────────────────
 @router.post("/sessions")
 async def create_replay_session(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: CreateReplaySessionRequest = Body(...),
 ) -> dict[str, Any]:
     """Create a new replay session anchored to ``trace_id``.
@@ -163,7 +142,6 @@ async def create_replay_session(
             raise HTTPException(status_code=409, detail="Replay session conflict") from exc
         logger.warning("create_replay_session failed: %s", redact_all(str(exc)))
         raise HTTPException(status_code=503, detail="Failed to create replay session") from exc
-
 
 async def _create_replay_session_row(client: Any, org_id: str, body: CreateReplaySessionRequest) -> dict[str, Any]:
     import uuid as _uuid
@@ -203,10 +181,9 @@ async def _create_replay_session_row(client: Any, org_id: str, body: CreateRepla
         "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
     }
 
-
 @router.post("/{trace_id}/replay")
 async def replay_trace(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     body: ReplayRequest = ReplayRequest(),
 ) -> dict[str, Any]:
@@ -214,28 +191,25 @@ async def replay_trace(
         org_id, trace_id, cursor=body.cursor, page_size=body.page_size
     )
 
-
 @router.post("/diff")
 async def diff_traces(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: DiffRequest = Body(...),
 ) -> dict[str, Any]:
     return await _replay.diff_traces(
         org_id, body.trace_id_a, body.trace_id_b
     )
 
-
 @router.get("/{trace_id}/workflow")
 async def workflow_graph(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _workflow.build(org_id, trace_id)
 
-
 @router.post("/{trace_id}/subgraph")
 async def workflow_subgraph(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     body: SubgraphRequest = Body(...),
 ) -> dict[str, Any]:
@@ -243,10 +217,9 @@ async def workflow_subgraph(
         org_id, trace_id, root_span_id=body.root_span_id
     )
 
-
 @router.get("/live-tail")
 async def live_tail(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     filter_agent_id: str | None = None,
     filter_event_type: str | None = None,
 ) -> StreamingResponse:
@@ -272,10 +245,9 @@ async def live_tail(
         },
     )
 
-
 @router.post("/{trace_id}/checkpoint/rewind")
 async def rewind_checkpoint(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     body: RewindRequest = Body(...),
 ) -> dict[str, Any]:
@@ -283,14 +255,12 @@ async def rewind_checkpoint(
         org_id, trace_id, step_index=body.step_index
     )
 
-
 @router.get("/{trace_id}/checkpoints")
 async def list_checkpoints(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _checkpoint.list_checkpoints(org_id, trace_id)
-
 
 # ─── Decision Intelligence (Cat 16) — co-located per plan ────────
 # Per the plan, Decision Intelligence routes live under
@@ -304,57 +274,52 @@ async def list_checkpoints(
 # themselves are stateless and safe to instantiate per request.
 @router.post("/{trace_id}/decision/path")
 async def decision_path(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.path_reconstructor import DecisionPathReconstructor
 
     return await DecisionPathReconstructor().reconstruct(org_id, trace_id)
 
-
 @router.post("/{trace_id}/decision/explain")
 async def decision_explain(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.reasoning_explainer import ReasoningTraceExplainer
 
     return await ReasoningTraceExplainer().explain(org_id, trace_id)
 
-
 @router.get("/{trace_id}/decision/alternatives")
 async def decision_alternatives(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.alternatives import DecisionAlternatives
 
     return await DecisionAlternatives().list_considered(org_id, trace_id)
 
-
 @router.post("/{trace_id}/decision/score")
 async def decision_score(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.decision_scorer import DecisionScorer
 
     return await DecisionScorer().score(org_id, trace_id)
 
-
 @router.get("/{trace_id}/decision/trajectory")
 async def decision_trajectory(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     from eden.decision.trajectory_analyzer import AgentTrajectoryAnalyzer
 
     return await AgentTrajectoryAnalyzer().analyze(org_id, trace_id)
 
-
 @router.get("/conversation/{session_id}")
 async def conversation_history(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
     limit: int = 100,
     conversation_id: str | None = None,
@@ -363,10 +328,9 @@ async def conversation_history(
         org_id, session_id=session_id, limit=limit, conversation_id=conversation_id
     )
 
-
 @router.post("/conversation/message")
 async def add_message(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     body: AddMessageRequest = Body(...),
 ) -> dict[str, Any]:
     return await _messages.add_message(
@@ -377,10 +341,9 @@ async def add_message(
         conversation_id=body.conversation_id,
     )
 
-
 @router.post("/{trace_id}/properties")
 async def set_custom_properties(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
     body: CustomPropertiesRequest = Body(...),
 ) -> dict[str, Any]:
@@ -388,10 +351,9 @@ async def set_custom_properties(
         org_id, trace_id=trace_id, properties=body.properties
     )
 
-
 @router.get("/{trace_id}/properties")
 async def list_custom_properties(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
 ) -> dict[str, Any]:
     return await _custom_props.list(org_id, trace_id=trace_id)

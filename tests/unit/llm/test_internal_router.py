@@ -63,4 +63,6 @@ async def test_resolve_models_returns_tier_chain() -> None:
         tier, models = await resolve_models("chat", slot="fast")
 
     assert tier == ModelTier.T1
-    assert "xiaomi/mimo-v2.5" in models
+    from eden.llm.models import INTERNAL_CHAT_MODEL
+
+    assert INTERNAL_CHAT_MODEL in models

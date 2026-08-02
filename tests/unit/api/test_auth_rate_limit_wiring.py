@@ -60,11 +60,11 @@ async def test_password_reset_limiter_caps_at_3_per_5min():
 
 
 def test_rate_limit_exception_carries_retry_after():
-    """RateLimitExceeded carries a retry_after value the route handler
+    """RateLimitExceededError carries a retry_after value the route handler
     can put in the Retry-After header (RFC 7231 §7.1.3)."""
-    from eden.api.utils.rate_limit import RateLimitExceeded
+    from eden.api.utils.rate_limit import RateLimitExceededError
 
-    exc = RateLimitExceeded(retry_after=42.5)
+    exc = RateLimitExceededError(retry_after=42.5)
     assert exc.retry_after == 42.5
     assert "42" in str(exc) or "Retry" in str(exc)
 

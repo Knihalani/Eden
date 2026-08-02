@@ -13,8 +13,8 @@ Use one of these flows instead.
 | `CLERK_SECRET_KEY` | Local seed + CI | Clerk Backend API / `@clerk/testing` ticket sign-in (`sk_test_…`) |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Local seed + CI | Must match the secret's Clerk instance (`pk_test_…`); baked at **build** time |
 | `BASE` / `BASE_URL` | All e2e | Portal origin (default `http://127.0.0.1:3000`). Auth cookies must match this host |
-| `CLERK_TEST_EMAIL` | Optional local seed | Test user for `seed-auth.mjs` ticket strategy |
-| `CLERK_TEST_KEY_FALLBACK=1` | CI / local convenience | Allow committed `pk_test`/`sk_test` fallback when secrets are unset |
+| `CLERK_TEST_EMAIL` / `E2E_EMAIL` | Local seed / headed sign-in | Test user email (required; no committed fallback) |
+| `E2E_PASSWORD` | Headed / audit sign-in | Test user password (required; never commit) |
 | `GOLDEN_CI=1` | CI golden job | Missing / domain-mismatched `e2e/.auth-state.json` → **exit 1** |
 | `GOLDEN_ALLOW_FAIL=1` | Local exploratory only | Soft-exit 0 after path failures — **never set in CI** |
 

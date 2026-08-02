@@ -179,9 +179,11 @@ class TestParseSince:
 
 class TestSettings:
     def test_ai_insights_defaults(self) -> None:
-        """Spec: ai_insights_model = 'claude-sonnet-4-6', enabled by default."""
+        """Insights default to the internal chat SSOT (DeepSeek), enabled."""
+        from eden.llm.models import INTERNAL_CHAT_MODEL
+
         s = get_settings()
-        assert s.ai_insights_model == "claude-sonnet-4-6"
+        assert s.ai_insights_model == INTERNAL_CHAT_MODEL
         assert s.ai_insights_enabled is True
 
 

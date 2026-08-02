@@ -177,7 +177,10 @@ def render(t: Table, *, forward_query: str | None = None) -> str:
         # (``Column X has no jsonpath`` otherwise). Keep DEFAULT so a
         # missing JSON field still materializes the derived value.
         if default is not None:
-            body.append(f"    {col} {ctype} `json:$.{col}` DEFAULT {default}")
+            # DEFAULT before jsonpath so the substring
+            # ``date Date DEFAULT <expr>`` matches the DDL and the
+            # drift guard can assert the expression survived.
+            body.append(f"    {col} {ctype} DEFAULT {default} `json:$.{col}`")
         else:
             body.append(f"    {col} {ctype} `json:$.{col}`")
     lines.append(",\n".join(body) + "\n")

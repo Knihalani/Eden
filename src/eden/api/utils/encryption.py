@@ -59,7 +59,7 @@ def _get_legacy_fernet() -> Fernet | None:
     # If the configured key derives to the same material, the fallback
     # would be a pointless second attempt at the identical key.
     try:
-        if _get_fernet()._signing_key == Fernet(legacy_key)._signing_key:  # type: ignore[attr-defined]
+        if _get_fernet()._signing_key == Fernet(legacy_key)._signing_key:
             _legacy_fernet = None
             return None
     except Exception:  # pragma: no cover - defensive

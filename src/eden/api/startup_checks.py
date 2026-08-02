@@ -142,10 +142,7 @@ def is_ready(checks: dict[str, str] | None) -> bool:
     """
     if not checks:
         return False
-    for name in REQUIRED_FOR_READY:
-        if checks.get(name) != "ok":
-            return False
-    return True
+    return all(checks.get(name) == "ok" for name in REQUIRED_FOR_READY)
 
 
 def health_probe_http_status(overall: str, mode: str = "auto") -> int:

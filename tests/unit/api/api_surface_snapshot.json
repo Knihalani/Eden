@@ -89,6 +89,14 @@
       "200:application/json",
       "422:application/json"
     ],
+    "DELETE /orgs/{org_id}/slack/install": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/slack/routes": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "DELETE /orgs/{org_id}/tool-calls/{span_id}/label": [
       "200:application/json",
       "422:application/json"
@@ -161,6 +169,17 @@
       "200:application/json"
     ],
     "GET /integrations/runloop/status": [
+      "200:application/json"
+    ],
+    "GET /integrations/slack/authorize": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /integrations/slack/callback": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /integrations/slack/configured": [
       "200:application/json"
     ],
     "GET /integrations/wandb/status": [
@@ -1227,6 +1246,18 @@
       "422:application/json"
     ],
     "GET /orgs/{org_id}/signals/{signal_id}/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/slack/channels": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/slack/install": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/slack/routes": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2446,6 +2477,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/slack/test": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/sql/execute": [
       "200:application/json",
       "400:application/json",
@@ -2640,13 +2675,17 @@
     "PUT /orgs/{org_id}/sidebar-prefs": [
       "200:application/json",
       "422:application/json"
+    ],
+    "PUT /orgs/{org_id}/slack/routes": [
+      "200:application/json",
+      "422:application/json"
     ]
   },
   "response_media_types": [
     "application/json",
     "text/plain"
   ],
-  "route_count": 677,
+  "route_count": 687,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -2672,6 +2711,8 @@
     "DELETE /orgs/{org_id}/saved-searches/{search_id}",
     "DELETE /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
     "DELETE /orgs/{org_id}/shares/{share_id}",
+    "DELETE /orgs/{org_id}/slack/install",
+    "DELETE /orgs/{org_id}/slack/routes",
     "DELETE /orgs/{org_id}/tool-calls/{span_id}/label",
     "DELETE /orgs/{org_id}/webhooks/{webhook_id}",
     "GET /api/v1/me/data",
@@ -2694,6 +2735,9 @@
     "GET /integrations/langfuse/status",
     "GET /integrations/langsmith/status",
     "GET /integrations/runloop/status",
+    "GET /integrations/slack/authorize",
+    "GET /integrations/slack/callback",
+    "GET /integrations/slack/configured",
     "GET /integrations/wandb/status",
     "GET /kb/query",
     "GET /live",
@@ -2965,6 +3009,9 @@
     "GET /orgs/{org_id}/signals/{signal_id}/backfill/{job_id}",
     "GET /orgs/{org_id}/signals/{signal_id}/classifier",
     "GET /orgs/{org_id}/signals/{signal_id}/events",
+    "GET /orgs/{org_id}/slack/channels",
+    "GET /orgs/{org_id}/slack/install",
+    "GET /orgs/{org_id}/slack/routes",
     "GET /orgs/{org_id}/spans/{span_id}/scores",
     "GET /orgs/{org_id}/sql/limits",
     "GET /orgs/{org_id}/sql/schema",
@@ -3275,6 +3322,7 @@
     "POST /orgs/{org_id}/signals/{signal_id}/classifier/shadow-report",
     "POST /orgs/{org_id}/signals/{signal_id}/classifier/train",
     "POST /orgs/{org_id}/signals/{signal_id}/match",
+    "POST /orgs/{org_id}/slack/test",
     "POST /orgs/{org_id}/sql/execute",
     "POST /orgs/{org_id}/sql/export/dataset",
     "POST /orgs/{org_id}/sql/export/queue",
@@ -3324,9 +3372,10 @@
     "PUT /orgs/{org_id}/prompts/{name}/pins/{env}",
     "PUT /orgs/{org_id}/roles/{role_id}",
     "PUT /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
-    "PUT /orgs/{org_id}/sidebar-prefs"
+    "PUT /orgs/{org_id}/sidebar-prefs",
+    "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 415,
+  "schema_count": 423,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -3364,7 +3413,6 @@
     "AuditLogResponse",
     "AuditPackCard",
     "AuthFailureRequest",
-    "AuthorizeResponse",
     "AutofixRequest",
     "AutomationCreate",
     "AutonomyPatch",
@@ -3386,10 +3434,12 @@
     "CanaryCreateRequest",
     "ChainVerifyEntry",
     "ChainVerifyResponse",
+    "ChannelOut",
     "CheckpointListResponse",
     "CheckpointResponse",
     "ChunksIngestResponse",
     "ClassifierCreate",
+    "ClearRouteRequest",
     "ClusterRequest",
     "ClusterResponse",
     "CodeEvaluatorCreate",
@@ -3403,7 +3453,6 @@
     "CompileResponse",
     "CompiledRuleResponse",
     "ComputerUseStepCreate",
-    "ConfiguredResponse",
     "ConnectRepoRequest",
     "ConversationDetail",
     "ConversationSummary",
@@ -3487,6 +3536,7 @@
     "ImportRowsRequest",
     "ImprovePlanCard",
     "InsightResponse",
+    "InstallOut",
     "InstallationOut",
     "IntegrationStatusItem",
     "IntegrationsStatusResponse",
@@ -3594,6 +3644,7 @@
     "RoleResponse",
     "RoleUpdateRequest",
     "RollbackRequest",
+    "RouteOut",
     "RoutingStatsResponse",
     "RowListResponse",
     "RowResponse",
@@ -3625,6 +3676,7 @@
     "SeedItemResponse",
     "SessionRollup",
     "SessionStartResponse",
+    "SetRouteRequest",
     "ShadowPromoteBody",
     "ShareListResponse",
     "ShareResponse",
@@ -3662,6 +3714,7 @@
     "TelemetryIngestResponse",
     "TestCreateRequest",
     "TestLogRequest",
+    "TestMessageRequest",
     "TicketRequest",
     "TimelineResponse",
     "TokenSavingsResponse",
@@ -3724,6 +3777,8 @@
     "eden__api__routes__datasets_hub__DatasetResponse",
     "eden__api__routes__datasets_spreadsheet__GenerateRequest",
     "eden__api__routes__experiments_offline__CreateExperimentRequest",
+    "eden__api__routes__github__AuthorizeResponse",
+    "eden__api__routes__github__ConfiguredResponse",
     "eden__api__routes__ingest_agent_sessions__SessionEndRequest",
     "eden__api__routes__ingest_agent_sessions__SessionIdentifyRequest",
     "eden__api__routes__ingest_agent_sessions__SessionStartRequest",
@@ -3742,6 +3797,8 @@
     "eden__api__routes__prompts__CompareResponse",
     "eden__api__routes__qa_generator__GenerateRequest",
     "eden__api__routes__sessions__SessionIdentifyRequest",
-    "eden__api__routes__sessions__SessionStartRequest"
+    "eden__api__routes__sessions__SessionStartRequest",
+    "eden__api__routes__slack__AuthorizeResponse",
+    "eden__api__routes__slack__ConfiguredResponse"
   ]
 }

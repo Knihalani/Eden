@@ -374,9 +374,28 @@ function IssueDetail({
 
         {tab === "fix" ? (
           <div className="space-y-5 px-5 py-6 sm:px-6">
+            {issue.patchBlockedReason ? (
+              <section className="rounded-[var(--radius)] border border-[var(--line)] bg-[var(--bg-inset)] px-4 py-3">
+                <p className="type-label mb-1 text-[var(--warn)]">
+                  Eden can’t draft a fix PR yet
+                </p>
+                <p className="type-body text-[var(--text-secondary)]">
+                  {issue.patchBlockedMessage || issue.patchBlockedReason}
+                </p>
+                {issue.patchBlockedReason === "repo_not_connected" ? (
+                  <Link
+                    href={`/settings?agent=${issue.agentId}`}
+                    className="ds-btn ds-btn-primary ds-btn-sm mt-3 inline-block"
+                  >
+                    Connect GitHub
+                  </Link>
+                ) : null}
+              </section>
+            ) : null}
             <section className="space-y-3">
               <p className="type-body text-[var(--text-secondary)]">
-                {issue.suggestedFix}
+                {issue.suggestedFix ||
+                  "Eden is still gathering evidence for a concrete fix."}
               </p>
             </section>
             <div className="flex flex-wrap gap-2">

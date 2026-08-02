@@ -19,6 +19,7 @@ signal library feeds the F28→F29→F30 loop.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -121,10 +122,8 @@ def _eval_statgate_rule(
 
     if "tool_call_rate" in rule_l:
         threshold = 0.05
-        try:
+        with contextlib.suppress(IndexError, ValueError):
             threshold = float(rule_l.split(">", 1)[1].strip())
-        except (IndexError, ValueError):
-            pass
         tools = [
             _s(e.get("name")) or _s((e.get("attributes") or {}).get("tool_name"))
             for e in events

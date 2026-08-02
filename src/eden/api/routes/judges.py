@@ -31,7 +31,7 @@ from eden.api.deps import (
     _try_resolve_token_payload,
     get_current_user,
     require_judges_run,
-    resolve_path_org_access,
+    require_path_org_access,
 )
 from eden.llmops.judges.base import JudgeScore
 from eden.llmops.judges.registry import get_judge_registry
@@ -45,25 +45,13 @@ from eden.llmops.judges.schema import (
 
 logger = logging.getLogger(__name__)
 
-
-async def _require_path_org(
-    org_id: str = Path(..., description="Organization ID"),
-    user: dict = Depends(get_current_user),
-    payload: dict | None = Depends(_try_resolve_token_payload),
-) -> str:
-    _, eden_org = await resolve_path_org_access(org_id, user, payload)
-    return eden_org
-
-
 router = APIRouter(
     prefix="/orgs/{org_id}/observability/judges",
     tags=["judges"],
-    dependencies=[Depends(_require_path_org)],
+    dependencies=[Depends(require_path_org_access)],
 )
 
-
 # ── helpers ────────────────────────────────────────────────────────
-
 
 def _score_to_response(score: JudgeScore) -> JudgeScoreResponse:
     return JudgeScoreResponse(
@@ -79,7 +67,6 @@ def _score_to_response(score: JudgeScore) -> JudgeScoreResponse:
         metadata=score.metadata,
     )
 
-
 # Audit 2026-06-22 B1.20 — module-scope _LightEvent (was redefined each loop iteration).
 class _LightEvent:
     __slots__ = (
@@ -87,7 +74,6 @@ class _LightEvent:
         "payload", "attributes", "tags", "source_format",
         "tenant_id",
     )
-
 
 async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
     """Read all telemetry_events for one (tenant, trace) from Postgres.
@@ -116,15 +102,13 @@ async def _fetch_events_for_trace(tenant_id: str, trace_id: str) -> list:
     )
     return [dict(r) for r in rows]
 
-
 # ── POST /run ─────────────────────────────────────────────────────
-
 
 @router.post("/run", response_model=JudgeRunResponse)
 async def run_judges(
     body: JudgeRunRequest,
     response: Response,
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> JudgeRunResponse:
@@ -201,13 +185,11 @@ async def run_judges(
         count=len(all_scores),
     )
 
-
 # ── GET / ──────────────────────────────────────────────────────────
-
 
 @router.get("", response_model=JudgeListResponse)
 async def list_judge_scores(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     trace_id: str | None = Query(None),
     judge_name: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
@@ -270,13 +252,11 @@ async def list_judge_scores(
         offset=offset,
     )
 
-
 # ── GET /{judge_run_id} ────────────────────────────────────────────
-
 
 @router.get("/{judge_run_id}", response_model=JudgeScoreResponse)
 async def get_judge_score(
-    org_id: str = Depends(_require_path_org),
+    org_id: str = Depends(require_path_org_access),
     judge_run_id: str = Path(..., description="The judge score id"),
     user: dict = Depends(get_current_user),
 ) -> JudgeScoreResponse:

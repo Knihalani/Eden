@@ -33,14 +33,14 @@ const isLocal =
   /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(BASE) ||
   BASE.includes("localhost");
 
-// Test Clerk keys only apply to local portal — never inject them for prod audits.
+// Local Clerk testing requires keys from the environment (never committed).
 if (isLocal) {
-  process.env.CLERK_SECRET_KEY =
-    process.env.CLERK_SECRET_KEY ||
-    "sk_test_PXZfewH5OceW7H1BFN2mRSvkouyt0EgprOzjq0cBWm";
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY =
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    "pk_test_bW9kZXN0LWJ1Zy03LmNsZXJrLmFjY291bnRzLmRldiQ";
+  for (const name of ["CLERK_SECRET_KEY", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"]) {
+    if (!process.env[name]) {
+      console.error(`[wait-for-signin] FATAL: missing required env ${name} for local BASE`);
+      process.exit(1);
+    }
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

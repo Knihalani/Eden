@@ -132,7 +132,7 @@ async def _redis_sliding_window_check(
         return False, None
 
 
-class RateLimitExceeded(Exception):
+class RateLimitExceededError(Exception):
     """Raised when a rate limit is exceeded."""
     def __init__(self, retry_after: float = 60.0):
         self.retry_after = retry_after
@@ -165,7 +165,7 @@ class SlidingWindowRateLimiter:
             key: Identifier to rate limit (e.g., IP address, user ID).
 
         Raises:
-            RateLimitExceeded: If the rate limit has been exceeded.
+            RateLimitExceededError: If the rate limit has been exceeded.
         """
         # Redis path is opt-in (RATE_LIMIT_DISTRIBUTED=true). Default
         # in-memory keeps Upstash Free under the monthly command quota.
@@ -186,7 +186,7 @@ class SlidingWindowRateLimiter:
                 # in-memory window (that previously doubled work and
                 # desynced multi-worker counters when distributed).
                 if retry_after is not None:
-                    raise RateLimitExceeded(retry_after=retry_after)
+                    raise RateLimitExceededError(retry_after=retry_after)
                 return
 
         now = time.monotonic()
@@ -207,7 +207,7 @@ class SlidingWindowRateLimiter:
             if len(bucket) >= self.max_requests:
                 oldest = min(bucket)
                 retry_after = max(1.0, cutoff + self.window_seconds - oldest)
-                raise RateLimitExceeded(retry_after=retry_after)
+                raise RateLimitExceededError(retry_after=retry_after)
 
             bucket.append(now)
 
