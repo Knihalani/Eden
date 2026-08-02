@@ -120,6 +120,17 @@ class ClickHouseSink:
             await self._session.close()
             self._session = None
 
+    @staticmethod
+    def _sql_literal(value: str | None) -> str:
+        """Escape a string for safe single-quoted SQL interpolation.
+
+        ClickHouse/Tinybird HTTP SQL does not take bind params the way
+        asyncpg does, so filters must be escaped (SQL-standard ``''``).
+        """
+        if value is None:
+            return ""
+        return str(value).replace("'", "''")
+
     async def _execute(self, query: str, params: dict | None = None) -> str:
         """Execute a ClickHouse / Tinybird SQL query via HTTP."""
         session = await self._get_session()
@@ -1137,15 +1148,24 @@ class ClickHouseSink:
         params: dict[str, Any] = {}
 
         if tenant_id:
-            conditions.append(f"tenant_id = toUUID('{tenant_id}')")
+            conditions.append(
+                f"tenant_id = toUUID('{self._sql_literal(tenant_id)}')"
+            )
         if agent_name:
-            conditions.append(f"agent_name = '{agent_name}'")
+            conditions.append(
+                f"agent_name = '{self._sql_literal(agent_name)}'"
+            )
         if start_time:
-            conditions.append(f"timestamp >= '{start_time}'")
+            conditions.append(
+                f"timestamp >= '{self._sql_literal(start_time)}'"
+            )
         if end_time:
-            conditions.append(f"timestamp <= '{end_time}'")
+            conditions.append(
+                f"timestamp <= '{self._sql_literal(end_time)}'"
+            )
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        safe_limit = max(1, min(int(limit), 100_000))
         query = f"""
             SELECT
                 tenant_id,
@@ -1160,7 +1180,7 @@ class ClickHouseSink:
             {where}
             GROUP BY tenant_id, agent_name
             ORDER BY total_cost_usd DESC
-            LIMIT {limit}
+            LIMIT {safe_limit}
         """
         result = await self._execute(query, params)
         return self._parse_tsv(result)
@@ -1175,13 +1195,20 @@ class ClickHouseSink:
         """Identify pipeline bottlenecks by stage duration."""
         conditions = []
         if tenant_id:
-            conditions.append(f"tenant_id = toUUID('{tenant_id}')")
+            conditions.append(
+                f"tenant_id = toUUID('{self._sql_literal(tenant_id)}')"
+            )
         if start_time:
-            conditions.append(f"timestamp >= '{start_time}'")
+            conditions.append(
+                f"timestamp >= '{self._sql_literal(start_time)}'"
+            )
         if end_time:
-            conditions.append(f"timestamp <= '{end_time}'")
+            conditions.append(
+                f"timestamp <= '{self._sql_literal(end_time)}'"
+            )
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        safe_limit = max(1, min(int(limit), 100_000))
         query = f"""
             SELECT
                 stage,
@@ -1194,7 +1221,7 @@ class ClickHouseSink:
             {where}
             GROUP BY stage
             ORDER BY avg_duration_ms DESC
-            LIMIT {limit}
+            LIMIT {safe_limit}
         """
         result = await self._execute(query)
         return self._parse_tsv(result)
@@ -1210,15 +1237,18 @@ class ClickHouseSink:
         """Query usage trends with configurable granularity."""
         conditions = []
         if tenant_id:
-            conditions.append(f"tenant_id = toUUID('{tenant_id}')")
+            conditions.append(
+                f"tenant_id = toUUID('{self._sql_literal(tenant_id)}')"
+            )
         if start_time:
-            conditions.append(f"hour >= '{start_time}'")
+            conditions.append(f"hour >= '{self._sql_literal(start_time)}'")
         if end_time:
-            conditions.append(f"hour <= '{end_time}'")
+            conditions.append(f"hour <= '{self._sql_literal(end_time)}'")
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         time_bucket = "toDate(hour)" if granularity == "day" else "hour"
+        safe_limit = max(1, min(int(limit), 100_000))
 
         query = f"""
             SELECT
@@ -1232,7 +1262,7 @@ class ClickHouseSink:
             {where}
             GROUP BY time_bucket, event_type, resource
             ORDER BY time_bucket DESC
-            LIMIT {limit}
+            LIMIT {safe_limit}
         """
         result = await self._execute(query)
         return self._parse_tsv(result)
@@ -1253,8 +1283,7 @@ class ClickHouseSink:
         the Home KPI contract stable; cost tiles come from the ledger / PG.
         """
         hours = max(1, int(window_hours))
-        # SQL-standard string-literal escape (not backslash).
-        safe_tid = str(tenant_id).replace("'", "''")
+        safe_tid = self._sql_literal(tenant_id)
         table = self.config.qualified_table("telemetry_events_ch")
         query = f"""
             SELECT

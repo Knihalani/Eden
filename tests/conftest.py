@@ -92,6 +92,10 @@ def test_settings() -> Settings:
         postgres_db="eden_test",
         postgres_user="eden_test",
         postgres_password="eden_test",
+        # Wave 4: keep legacy password auth available in the test suite
+        # even when the developer's shell has CLERK_SECRET_KEY set.
+        clerk_secret_key="",
+        eden_production=False,
         # Disable quota enforcement (DL-14 Fail-closed would
         # otherwise return 429 because the test suite has no
         # org_resource_limits snapshot to read).

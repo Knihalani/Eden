@@ -82,14 +82,14 @@ const nextConfig: NextConfig = {
       // Lab → product cutover (preserve bookmarks)
       { source: "/lab", destination: "/home", permanent: false },
       { source: "/lab/home", destination: "/home", permanent: false },
-      { source: "/lab/shell", destination: "/shell", permanent: false },
+      { source: "/lab/shell", destination: "/home", permanent: false },
       { source: "/lab/agents", destination: "/agents", permanent: false },
       { source: "/lab/traces", destination: "/traces", permanent: false },
       { source: "/lab/sessions", destination: "/traces?view=sessions", permanent: false },
       { source: "/lab/issues", destination: "/issues", permanent: false },
       { source: "/lab/signals", destination: "/signals", permanent: false },
-      // Legacy /alerts soft-lands on Detectors (/signals)
-      { source: "/lab/alerts", destination: "/signals", permanent: false },
+      // Legacy /lab/alerts → soft-land /alerts (bell Inbox guidance)
+      { source: "/lab/alerts", destination: "/alerts", permanent: false },
       { source: "/lab/evals", destination: "/evals", permanent: false },
       { source: "/lab/improve", destination: "/improve", permanent: false },
       { source: "/lab/cost", destination: "/cost", permanent: false },
@@ -100,6 +100,18 @@ const nextConfig: NextConfig = {
       { source: "/lab/settings", destination: "/settings", permanent: false },
       { source: "/dashboard", destination: "/home", permanent: false },
       { source: "/dashboard/:path*", destination: "/home", permanent: false },
+      // /shell is a lab/dev surface — hide from prod discovery (robots
+      // already disallows it). Non-dev redirects to /home.
+      ...(process.env.NODE_ENV === "development"
+        ? []
+        : [
+            { source: "/shell", destination: "/home", permanent: false as const },
+            {
+              source: "/shell/:path*",
+              destination: "/home",
+              permanent: false as const,
+            },
+          ]),
 
       // Auth cutover to Clerk — keep
       // Unhyphenated spellings are what users type and what external
@@ -186,7 +198,8 @@ const nextConfig: NextConfig = {
         destination: "/issues?id=:id&tab=fix",
         permanent: false,
       },
-      // Signals is the product leaf; /alerts soft-lands → /signals (hub redirect)
+      // Signals is the product leaf; /alerts soft-lands with Inbox guidance
+      // (page.tsx) rather than dumping on Detectors.
       { source: "/inspector", destination: "/traces", permanent: false },
       {
         source: "/observability/mcp",

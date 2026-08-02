@@ -464,6 +464,62 @@ async def _critic_review(
         return {"passed": True, "reason": "critic_skipped", "raw": ""}
 
 
+async def _run_static_preverify(
+    diff: str,
+    linked_files: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Free apply + syntax check for a candidate diff (no LLM cost)."""
+    from eden.improvement.evidence_plane import (
+        apply_diff_to_files,
+        format_static_errors_for_prompt,
+    )
+
+    if not linked_files:
+        return {
+            "status": "skipped",
+            "reason": "no_linked_file_content",
+            "errors": [],
+            "feedback": "",
+        }
+    try:
+        result = await apply_diff_to_files(diff, linked_files, run_static=True)
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "reason": f"static_preverify_error:{exc}",
+            "errors": [
+                {
+                    "path": "",
+                    "kind": "apply_error",
+                    "message": str(exc)[:400],
+                }
+            ],
+            "feedback": f"Static preverify failed: {exc}",
+        }
+
+    status = str(result.get("status") or "skipped")
+    detail = result.get("detail") or {}
+    static = detail.get("static_check") or {}
+    errors: list[dict[str, Any]] = list(static.get("errors") or [])
+    if status == "failed" and not errors:
+        reason = str(detail.get("reason") or "diff_apply_failed")
+        err_msg = str(detail.get("error") or reason)
+        errors = [{"path": "", "kind": "diff_apply", "message": err_msg[:400]}]
+    feedback = format_static_errors_for_prompt(errors)
+    if not feedback and status == "failed":
+        feedback = (
+            "Static preverify failed — "
+            f"{detail.get('reason') or 'diff_apply_or_syntax_failed'}"
+        )
+    return {
+        "status": status,
+        "reason": detail.get("reason") or status,
+        "errors": errors,
+        "feedback": feedback,
+        "static_check": static,
+    }
+
+
 class PatchGenerator:
     """Generate a unified diff + test plan + blast-radius estimate."""
 
@@ -496,6 +552,7 @@ class PatchGenerator:
         test_plan: list[str] | None = None,
         rca_summary: str = "",
         persist: bool = True,
+        static_feedback: str = "",
     ) -> dict[str, Any]:
         """Generate a real unified diff via T2 with style + KG context.
 
@@ -512,8 +569,11 @@ class PatchGenerator:
         * ``False`` — N23/improvement path; return diff in the
           envelope only; caller writes ``improvement_plans``.
 
-        Pipeline (Phase 3b): generate → critic → size check →
-        similarity dedup → quality floor → persist (if enabled).
+        ``static_feedback`` seeds the first attempt with prior free
+        static-preverify errors (approve-time regenerate path).
+
+        Pipeline (Phase 3b): generate → critic → static preverify →
+        size check → similarity dedup → quality floor → persist.
         Each rejected gate returns an envelope that names the
         gate so the caller knows what to do next.
         """
@@ -636,6 +696,12 @@ class PatchGenerator:
             test_plan=test_plan or [],
             rca_summary=rca_summary,
         )
+        if (static_feedback or "").strip():
+            prompt = (
+                prompt
+                + "\n\n## Static preverify feedback (must address)\n"
+                + static_feedback.strip()
+            )
 
         # Lazy import — see module-level __getattr__.
         from eden.optimization.model_router import PipelineTask
@@ -666,13 +732,14 @@ class PatchGenerator:
         )
         critic_fail_closed = not persist
 
-        # ── Generate → critic loop (max 2 attempts) ────────────────
+        # ── Generate → critic → static preverify loop (max 2) ──────
         diff = ""
         cost_usd = 0.0
         # Placeholder until the first routed response reports its real
         # model id (internal chat SSOT — see eden.llm.models).
         model_used = "deepseek/deepseek-v4-flash-0731"
         critic_verdict: dict[str, Any] | None = None
+        static_preverify: dict[str, Any] | None = None
         critic_attempts = 0
         last_response_content = ""
         for attempt in range(2):
@@ -692,6 +759,7 @@ class PatchGenerator:
                             f"({cost_usd:.4f}>={max_cost_per_patch})"
                         ),
                         "critic_verdict": critic_verdict or {},
+                        "static_preverify": static_preverify or {},
                         "attempts": critic_attempts,
                     },
                 )
@@ -708,6 +776,7 @@ class PatchGenerator:
                         "status": "low_quality",
                         "reason": "llm_budget_exhausted",
                         "critic_verdict": critic_verdict or {},
+                        "static_preverify": static_preverify or {},
                         "attempts": critic_attempts,
                     },
                 )
@@ -756,6 +825,7 @@ class PatchGenerator:
                             f"max_cost_per_patch_usd exceeded "
                             f"({cost_usd:.4f}>={max_cost_per_patch})"
                         ),
+                        "static_preverify": static_preverify or {},
                         "attempts": critic_attempts,
                     },
                 )
@@ -770,22 +840,42 @@ class PatchGenerator:
             )
             cost_usd += float(critic_verdict.get("cost_usd") or 0.0)
             critic_attempts += 1
-            if critic_verdict.get("passed"):
-                diff = candidate
-                break
-            # Critic rejected. Inject the reason into the prompt and
-            # retry once. If still rejected, leave diff empty so the
-            # caller gets a low_quality envelope.
-            if attempt == 0 and critic_verdict.get("reason") != "critic_error":
-                prompt = (
-                    prompt
-                    + "\n\n## Critic feedback (must address)\n"
-                    + str(critic_verdict.get("reason", ""))
-                )
-            else:
-                # Second attempt also failed, or critic hard-failed.
+            if not critic_verdict.get("passed"):
+                # Critic rejected. Inject the reason into the prompt and
+                # retry once. If still rejected, leave diff empty so the
+                # caller gets a low_quality envelope.
+                if attempt == 0 and critic_verdict.get("reason") != "critic_error":
+                    prompt = (
+                        prompt
+                        + "\n\n## Critic feedback (must address)\n"
+                        + str(critic_verdict.get("reason", ""))
+                    )
+                    continue
                 diff = candidate if not critic_fail_closed else ""
                 break
+
+            # Critic passed — free static preverify (apply + syntax).
+            static_preverify = await _run_static_preverify(
+                candidate, linked_files or []
+            )
+            if static_preverify.get("status") == "failed":
+                feedback = str(static_preverify.get("feedback") or "")
+                if attempt == 0 and feedback:
+                    prompt = (
+                        prompt
+                        + "\n\n## Static preverify feedback (must address)\n"
+                        + feedback
+                    )
+                    continue
+                # Exhausted retries with static still failing.
+                if critic_fail_closed:
+                    diff = ""
+                else:
+                    diff = candidate
+                break
+
+            diff = candidate
+            break
 
         if critic_fail_closed and critic_verdict and not critic_verdict.get("passed"):
             return _ok_envelope(
@@ -800,6 +890,30 @@ class PatchGenerator:
                     "status": "low_quality",
                     "reason": str(critic_verdict.get("reason") or "critic_failed"),
                     "critic_verdict": critic_verdict,
+                    "static_preverify": static_preverify or {},
+                    "attempts": critic_attempts,
+                },
+            )
+
+        if (
+            critic_fail_closed
+            and static_preverify
+            and static_preverify.get("status") == "failed"
+            and not diff
+        ):
+            return _ok_envelope(
+                self.name,
+                {
+                    "rca_id": rca_id,
+                    "trace_id": trace_id,
+                    "repo_id": repo_id,
+                    "diff": "",
+                    "model_used": model_used,
+                    "cost_usd": cost_usd,
+                    "status": "low_quality",
+                    "reason": "static_preverify_failed",
+                    "critic_verdict": critic_verdict or {},
+                    "static_preverify": static_preverify,
                     "attempts": critic_attempts,
                 },
             )
@@ -825,6 +939,7 @@ class PatchGenerator:
                     "trace_id": trace_id,
                     "repo_id": repo_id,
                     "critic_verdict": critic_verdict,
+                    "static_preverify": static_preverify or {},
                     "attempts": critic_attempts,
                 },
             )
@@ -977,6 +1092,7 @@ class PatchGenerator:
                 "size_class": size_verdict["size_class"],
                 "critic_verdict": critic_verdict or {},
                 "critic_attempts": critic_attempts,
+                "static_preverify": static_preverify or {},
             },
         )
 

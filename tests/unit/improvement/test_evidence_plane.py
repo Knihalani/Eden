@@ -297,6 +297,9 @@ async def test_apply_diff_to_files_passes() -> None:
     )
     assert result["status"] == "passed"
     assert result["detail"]["files_changed"] == 1
+    assert "content" in result["detail"]["files_after"][0]
+    assert "return 2" in result["detail"]["files_after"][0]["content"]
+    assert result["detail"]["static_check"]["status"] == "passed"
 
 
 @pytest.mark.asyncio
@@ -317,6 +320,166 @@ async def test_apply_diff_to_files_fails_on_mismatch() -> None:
         diff, [{"path": "agent/checkout.py", "content": base}]
     )
     assert result["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_apply_diff_fails_on_broken_python_syntax() -> None:
+    from eden.improvement.evidence_plane import apply_diff_to_files
+
+    base = "def checkout():\n    return 1\n"
+    diff = (
+        "diff --git a/agent/checkout.py b/agent/checkout.py\n"
+        "--- a/agent/checkout.py\n"
+        "+++ b/agent/checkout.py\n"
+        "@@ -1,2 +1,2 @@\n"
+        " def checkout():\n"
+        "-    return 1\n"
+        "+    return (\n"
+    )
+    result = await apply_diff_to_files(
+        diff, [{"path": "agent/checkout.py", "content": base}]
+    )
+    assert result["status"] == "failed"
+    assert result["detail"]["reason"] == "static_syntax_failed"
+    errors = result["detail"]["static_check"]["errors"]
+    assert errors
+    assert errors[0]["kind"] == "python_syntax"
+
+
+def test_static_check_files_json_and_skip_unknown() -> None:
+    from eden.improvement.evidence_plane import static_check_files
+
+    ok = static_check_files(
+        [
+            {"path": "cfg.json", "content": '{"a": 1}'},
+            {"path": "readme.md", "content": "# hi"},
+        ]
+    )
+    assert ok["status"] == "passed"
+    assert ok["files_checked"] == 1
+    assert ok["files_skipped"] == 1
+
+    bad = static_check_files(
+        [{"path": "cfg.json", "content": '{"a": '}]
+    )
+    assert bad["status"] == "failed"
+    assert bad["errors"][0]["kind"] == "json_syntax"
+
+
+@pytest.mark.asyncio
+async def test_propose_plan_suppresses_on_static_preverify_failed() -> None:
+    from eden.improvement.issue_patch_trigger import propose_plan_for_issue
+
+    issue = MagicMock()
+    issue.id = "iss-1"
+    issue.title = "Checkout fails"
+    issue.kind = "code_bug"
+    issue.fingerprint = "fp1"
+    issue.severity = "high"
+    issue.stumble_count = 6
+    issue.user_count = 2
+    issue.agent_id = "agent-a"
+    issue.triage_result = {
+        "summary": "null deref",
+        "confidence": 0.9,
+        "recommended_action": "propose_patch",
+        "candidate_files": ["agent/checkout.py"],
+        "example_trace_id": "trc_prod_99",
+    }
+
+    generate = AsyncMock(
+        return_value={
+            "data": {
+                "status": "proposed",
+                "diff": "diff --git a/x b/x\n@@\n-a\n+b\n",
+                "cost_usd": 0.01,
+                "files": ["agent/checkout.py"],
+                "description": "fix",
+                "explanation": "why",
+                "critic_verdict": {"passed": True},
+            }
+        }
+    )
+    create_plan = AsyncMock(return_value={"id": "plan-1"})
+
+    with (
+        patch(
+            "eden.improvement.issue_patch_trigger._improvement_enabled",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._issue_context",
+            AsyncMock(
+                return_value={
+                    "issue": issue,
+                    "agent_id": "agent-a",
+                    "kind": issue.kind,
+                    "fingerprint": issue.fingerprint,
+                    "triage": issue.triage_result,
+                    "rca_summary": "rca text",
+                }
+            ),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._n22_may_propose",
+            AsyncMock(return_value=(True, "ok")),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._budget_ok",
+            AsyncMock(return_value=(True, "ok")),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._find_open_plan",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.plans_repo.is_rejection_active",
+            AsyncMock(return_value=False),
+        ),
+        patch(
+            "eden.closed_loop.efficiency.AgentEfficiencyController.should_run_patch",
+            AsyncMock(return_value=(True, "ok")),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._resolve_repo_id",
+            AsyncMock(return_value="repo-1"),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._linked_files",
+            AsyncMock(
+                return_value=[
+                    {"path": "agent/checkout.py", "content": "def checkout():\n    pass\n"}
+                ]
+            ),
+        ),
+        patch(
+            "eden.improvement.evidence_plane.build_failure_pack",
+            AsyncMock(
+                return_value={
+                    "status": "ok",
+                    "example_trace_ids": ["trc_prod_99"],
+                    "excerpt": "span=tool.error boom",
+                    "format": "eden-failure-fixture-v1",
+                }
+            ),
+        ),
+        patch(
+            "eden.improvement.evidence_plane.run_hermetic_preverify",
+            AsyncMock(
+                return_value={
+                    "status": "failed",
+                    "detail": {"reason": "static_syntax_failed"},
+                }
+            ),
+        ),
+        patch("eden.patches.patch_generator.PatchGenerator.generate", generate),
+        patch("eden.improvement.plans_repo.create_plan", create_plan),
+    ):
+        result = await propose_plan_for_issue("org_test", "iss-1")
+
+    assert result["status"] == "suppressed"
+    assert result["reason"] == "static_preverify_failed"
+    create_plan.assert_not_awaited()
 
 
 @pytest.mark.asyncio

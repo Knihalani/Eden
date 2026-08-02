@@ -137,6 +137,10 @@ async def get_budget(org_id: str) -> dict[str, Any]:
     Falls back to :data:`FREE_TIER_DEFAULTS` when no row
     exists (the common case for new orgs). Best-effort:
     any DB error returns the defaults.
+
+    Missing-row defaults always include
+    ``enforcement_enabled=True`` (Wave 4) — never return a synthetic
+    ``False`` that would disable hard caps for orgs without a row.
     """
     client = await _get_client()
     if client is None:
@@ -179,6 +183,9 @@ async def get_budget(org_id: str) -> dict[str, Any]:
     d = dict(row)
     d["source"] = "db"
     d["alert_thresholds"] = _normalize_thresholds(d.get("alert_thresholds"))
+    # Defensive: treat NULL enforcement_enabled as True (Wave 4 free-tier).
+    if d.get("enforcement_enabled") is None:
+        d["enforcement_enabled"] = True
     return d
 
 

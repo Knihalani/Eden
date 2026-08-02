@@ -43,6 +43,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { FirstEventWaitAction } from "@/components/shell/first-event-wait";
 import {
   agentScopeCounts,
   groupByAgent,
@@ -69,7 +70,10 @@ import {
   type HubView,
 } from "@/lab/traces-session-lens";
 import { cn } from "@/lib/utils";
-import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
+import {
+  FIRST_EVENT_WAIT,
+  U20_FILTER_EMPTY_COPY,
+} from "@/lib/portal-polish";
 
 const panelFallback = (
   <div className="flex min-h-[8rem] items-center justify-center px-5">
@@ -183,6 +187,17 @@ function LabTracesInner() {
   const traces = tracesQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
   void agentsQuery.data;
+
+  // Soft-poll while nothing has been ingested yet.
+  useEffect(() => {
+    if (!orgId || traces.length > 0) return;
+    const id = window.setInterval(() => {
+      void tracesQuery.refetch();
+      void sessionsQuery.refetch();
+    }, FIRST_EVENT_WAIT.pollMs);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [orgId, traces.length]);
 
   // Subscribe to issues so Open issue / Ask issueId re-render when the
   // catalog sibling finishes — reading catalogIssues() alone does not.
@@ -997,17 +1012,31 @@ function LabTracesInner() {
                       ? `No matches for “${query}”`
                       : scopeAgent
                         ? `No sessions for ${scopeAgent.name}`
-                        : "No sessions yet"
+                        : FIRST_EVENT_WAIT.title
                     : query
                       ? `No matches for “${query}”`
                       : scopeAgent
                         ? `No runs for ${scopeAgent.name}`
-                        : "No runs yet"
+                        : FIRST_EVENT_WAIT.title
                 }
                 body={
                   query || scopeAgent
                     ? U20_FILTER_EMPTY_COPY.traces
-                    : U20_EMPTY_COPY.traces
+                    : FIRST_EVENT_WAIT.description
+                }
+                action={
+                  query || scopeAgent ? undefined : (
+                    <FirstEventWaitAction
+                      onCheck={() => {
+                        void tracesQuery.refetch();
+                        void sessionsQuery.refetch();
+                      }}
+                      checking={
+                        tracesQuery.isFetching || sessionsQuery.isFetching
+                      }
+                      showTracesLink={false}
+                    />
+                  )
                 }
               />
             ) : (

@@ -76,22 +76,30 @@ class TestClickHouseBatchLoss:
         collector = TelemetryCollector()
         with patch.object(
             collector, "_get_clickhouse", new=AsyncMock(return_value=None)
-        ):
+        ), patch.object(
+            collector, "_park_ch_batch_fallback", new=AsyncMock()
+        ) as park:
             await collector._insert_ch_batch([{"x": 1}] * 150)
 
         assert get_drop_metrics().get(("sink_ch", "write_error"), 0.0) == 150.0
+        park.assert_awaited_once()
+        assert park.await_args.args[0] == [{"x": 1}] * 150
 
     @pytest.mark.asyncio
     async def test_failed_insert_counts_every_row(self) -> None:
         collector = TelemetryCollector()
         sink = AsyncMock()
         sink.insert = AsyncMock(side_effect=RuntimeError("ch down"))
+        sink._fallback_to_postgres = AsyncMock()
         with patch.object(
             collector, "_get_clickhouse", new=AsyncMock(return_value=sink)
         ):
             await collector._insert_ch_batch([{"x": 1}] * 120)
 
         assert get_drop_metrics().get(("sink_ch", "write_error"), 0.0) == 120.0
+        sink._fallback_to_postgres.assert_awaited_once()
+        assert sink._fallback_to_postgres.await_args.args[0] == "telemetry_events_ch"
+        assert len(sink._fallback_to_postgres.await_args.args[1]) == 120
 
     @pytest.mark.asyncio
     async def test_a_successful_insert_counts_nothing(self) -> None:

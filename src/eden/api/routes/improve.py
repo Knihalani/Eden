@@ -15,6 +15,7 @@ from eden.api.deps import (
     require_org_admin,
     require_path_org_access,
 )
+from eden.api.utils.clerk_auth import extract_user_id
 from eden.api.utils.redact import redact_all
 from eden.improvement import plans_repo, runs_repo
 from eden.improvement import settings as imp_settings
@@ -151,13 +152,22 @@ async def patch_plan(
     )
     return _ok("improvement_plans", {"plan": updated})
 
+def _actor_from_payload(payload: dict | None) -> str | None:
+    """Derive actor id from the authenticated session (ignore client params)."""
+    if not payload:
+        return None
+    return extract_user_id(payload) or payload.get("sub")
+
+
 @router.post("/plans/{plan_id}/approve")
 async def approve_plan_route(
     org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
-    applied_by: str | None = Query(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
+    await require_org_admin(org_id, payload)
     await _require_agent_v1_async(org_id)
+    applied_by = _actor_from_payload(payload)
     try:
         result = await approve_plan(org_id, plan_id, approved_by=applied_by)
     except ApproveBlockedError as exc:
@@ -182,9 +192,11 @@ async def reject_plan_route(
     org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
     body: RejectRequest = Body(default=RejectRequest()),
-    rejected_by: str | None = Query(None),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
+    await require_org_admin(org_id, payload)
     await _require_agent_v1_async(org_id)
+    rejected_by = _actor_from_payload(payload)
     plan = await plans_repo.get_plan(org_id, plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="plan not found")
@@ -204,7 +216,9 @@ async def snooze_plan_route(
     org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
     body: SnoozePlanRequest = Body(default=SnoozePlanRequest()),
+    payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
+    await require_org_admin(org_id, payload)
     await _require_agent_v1_async(org_id)
     if body.snoozed_until:
         try:

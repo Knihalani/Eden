@@ -418,13 +418,32 @@ class QuotaEnforcementMiddleware:
                             await response(scope, receive, send)
                             return
                     except Exception as exc:
-                        # Live check failed but cache says we're under the
-                        # cap. Log + proceed (graceful degrade) since the
-                        # cache is recent enough to be trustworthy.
+                        # Live check raised unexpectedly. Fresh under-cap
+                        # cache → proceed; missing/stale → fail-closed
+                        # (Wave 4) so mutations cannot bypass hard limits.
                         logger.warning(
-                            f"Hard-limit check failed for org {org_id}, "
-                            f"proceeding with cached snapshot: {exc}"
+                            f"Hard-limit check failed for org {org_id}: {exc}"
                         )
+                        staleness_after = self._budget_staleness(org_id)
+                        fresh = (
+                            staleness_after is not None
+                            and staleness_after <= self._BUDGET_STALENESS_LIMIT_S
+                        )
+                        if not fresh:
+                            response = JSONResponse(
+                                status_code=429,
+                                content={
+                                    "detail": (
+                                        "No recent quota snapshot — Fail-closed: "
+                                        "cannot verify hard limits for this "
+                                        "mutation. Retry shortly."
+                                    ),
+                                    "type": "quota_exceeded",
+                                },
+                                headers=apply_security_headers(quota_headers),
+                            )
+                            await response(scope, receive, send)
+                            return
 
         # ── Proceed to handler; inject quota headers via send-wrapper ──
         header_pairs = [
@@ -444,7 +463,7 @@ class QuotaEnforcementMiddleware:
         """Fetch budget status and return as HTTP headers.
 
         Also warms ``_last_known_hard_limits`` so a subsequent
-        mutating request has a fresh snapshot (LP-10) — without
+        mutating request has a fresh snapshot (Wave 4) — without
         this, GETs (e.g. ``/auth/me``) built headers but left the
         cache empty and mutations 429'd on "No recent quota snapshot".
 
@@ -526,18 +545,19 @@ class QuotaEnforcementMiddleware:
         headline for free-tier overage; the others fall back to a generic
         resource-specific message.
 
-        LP-10: on live-fetch failure, enforce from a fresh cache when
-        available; otherwise fail-open so mutations are not stuck on
-        "No recent quota snapshot".
+        LP-10 / Wave 4: on live-fetch failure, enforce from a fresh
+        cache when available; otherwise fail-closed for mutations —
+        a missing/stale snapshot must not admit writes that may be
+        over cap. GET/HEAD never reach this path.
         """
         service = await self._get_usage_service()
         try:
             budget = await service.get_budget_status(org_id)
         except Exception as exc:
-            # LP-10: live fetch failed. If we still have a *fresh*
-            # cached snapshot, enforce against it. Otherwise fail-open
-            # — a missing/stale snapshot must not 429 every mutation
-            # (portal sidebar save, predict, investigate, …).
+            # Live fetch failed. If we still have a *fresh* cached
+            # snapshot, enforce against it. Otherwise fail-closed
+            # (Wave 4) — mutations must not proceed without a
+            # trustworthy quota view.
             logger.debug("quota: live fetch failed: %s", exc)
             cached = self._last_known_hard_limits.get(org_id)
             if cached is not None:
@@ -545,10 +565,14 @@ class QuotaEnforcementMiddleware:
                 if time.monotonic() - ts <= self._BUDGET_STALENESS_LIMIT_S:
                     return self._evaluate_hard_limits(view.budget, resources)
             logger.warning(
-                "quota: fail-open for org %s — no fresh snapshot after live fetch failure",
+                "quota: fail-closed for org %s — no fresh snapshot after live fetch failure",
                 org_id,
             )
-            return False, ""
+            return (
+                True,
+                "No recent quota snapshot — Fail-closed: cannot verify "
+                "hard limits for this mutation. Retry shortly.",
+            )
         return self._record_hard_limits(org_id, budget, resources)
 
     def _record_hard_limits(
@@ -588,16 +612,16 @@ class QuotaEnforcementMiddleware:
     ) -> tuple[bool, str]:
         """Check hard limits using the cached budget snapshot.
 
-        LP-10 Fail-open on missing/stale cache: return
-        ``(False, "")`` so ``__call__`` proceeds to the live
-        ``_check_hard_limits`` path (which warms the cache on
-        success). Only block when a *fresh* snapshot shows the
-        org is over / near a hard cap.
+        Wave 4 / mutations: a *fresh* over-cap snapshot blocks
+        immediately. Missing or stale cache returns ``(False, "")`` so
+        ``__call__`` proceeds to the live ``_check_hard_limits`` path
+        (which warms the cache on success, or fail-closes when the
+        live fetch also fails). GET/HEAD never call this helper.
 
-        Previously missing cache returned 429 with
-        "No recent quota snapshot — Fail-closed…", which blocked
-        all portal mutations for orgs that had never warmed a
-        snapshot (typical free-tier / cold worker).
+        Previously missing cache alone returned 429 with
+        "No recent quota snapshot", which blocked portal mutations
+        for cold workers before a live fetch could warm the snapshot;
+        live-fetch failure is now the fail-closed gate instead.
         """
         cached = self._last_known_hard_limits.get(org_id)
         if cached is None:

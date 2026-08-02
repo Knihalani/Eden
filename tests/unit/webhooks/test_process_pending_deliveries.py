@@ -106,6 +106,41 @@ class TestProcessPendingDeliveriesSqlContract:
         # Never format the limit into the string.
         assert "LIMIT {limit" not in src
         assert "LIMIT " + "%" not in src
+        # Stuck in_flight reclaim before claim.
+        assert "status = 'in_flight'" in src
+        assert "INTERVAL '5 minutes'" in src
+        assert "last_attempt_at" in src
+
+
+class TestReclaimStuckInFlight:
+    """Stuck ``in_flight`` rows must be reclaimed before the outbox claim."""
+
+    @pytest.mark.asyncio
+    async def test_reclaim_update_runs_before_fetch(self) -> None:
+        from eden.services.webhook_delivery import (
+            WebhookDeliveryService,
+        )
+
+        service = WebhookDeliveryService()
+        mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
+        mock_pg.fetch = AsyncMock(return_value=[])
+        mock_pg.fetchrow = AsyncMock(return_value=None)
+        with patch(
+            "eden.services.webhook_delivery.get_postgres_client",
+            new=AsyncMock(return_value=mock_pg),
+        ):
+            n = await service.process_pending_deliveries()
+
+        assert n == 0
+        mock_pg.execute.assert_awaited()
+        reclaim_sql = mock_pg.execute.await_args.args[0]
+        assert "in_flight" in reclaim_sql
+        assert "retrying" in reclaim_sql
+        assert "5 minutes" in reclaim_sql
+        # Reclaim must precede the outbox SELECT.
+        assert mock_pg.execute.await_count >= 1
+        assert mock_pg.fetch.await_count == 1
 
 
 class TestProcessPendingDeliveriesEmptyOutbox:
@@ -119,7 +154,9 @@ class TestProcessPendingDeliveriesEmptyOutbox:
 
         service = WebhookDeliveryService()
         mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
         mock_pg.fetch = AsyncMock(return_value=[])
+        mock_pg.fetchrow = AsyncMock(return_value=None)
         with patch(
             "eden.services.webhook_delivery.get_postgres_client",
             new=AsyncMock(return_value=mock_pg),
@@ -148,6 +185,7 @@ class TestProcessPendingDeliveriesSchedulesOnePerRow:
             _make_row("d-3", payload={"event_type": "c"}),
         ]
         mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
         mock_pg.fetch = AsyncMock(return_value=rows)
 
         scheduled: list[tuple[str, str, str, object]] = []
@@ -202,6 +240,7 @@ class TestProcessPendingDeliveriesLimit:
 
         service = WebhookDeliveryService()
         mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
         captured: dict[str, int] = {}
 
         async def capturing_fetch(query, *args, **kwargs):
@@ -226,6 +265,7 @@ class TestProcessPendingDeliveriesLimit:
 
         service = WebhookDeliveryService()
         mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
         captured: dict[str, int] = {}
 
         async def capturing_fetch(query, *args, **kwargs):
@@ -283,6 +323,7 @@ class TestProcessPendingDeliveriesDbDownIsStable:
 
         service = WebhookDeliveryService()
         mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
         mock_pg.fetch = AsyncMock(
             side_effect=RuntimeError("query failed"),
         )
@@ -312,6 +353,7 @@ class TestProcessPendingDeliveriesScheduleFailureIsolated:
             _make_row("d-good", payload={"event_type": "good"}),
         ]
         mock_pg = MagicMock()
+        mock_pg.execute = AsyncMock(return_value="UPDATE 0")
         mock_pg.fetch = AsyncMock(return_value=rows)
 
         def flaky_schedule(*, delivery_id, url, secret, payload):
@@ -369,6 +411,7 @@ class TestProcessPendingDeliveriesPayloadDecoding:
         try:
             row = _make_row("d-1", payload={"event_type": "ok"})
             mock_pg = MagicMock()
+            mock_pg.execute = AsyncMock(return_value="UPDATE 0")
             mock_pg.fetch = AsyncMock(return_value=[row])
 
             with patch(
@@ -409,6 +452,7 @@ class TestProcessPendingDeliveriesPayloadDecoding:
         try:
             row = _make_row("d-1", payload='{"event_type":"late"}')
             mock_pg = MagicMock()
+            mock_pg.execute = AsyncMock(return_value="UPDATE 0")
             mock_pg.fetch = AsyncMock(return_value=[row])
 
             with patch(

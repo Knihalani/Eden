@@ -3,13 +3,18 @@
 Feeds N20 ``propose_plan_for_issue`` with real bad-run artifacts and
 source file contents, then records a hermetic/fixture smoke check on
 the bound example traces (Phase 1–2 of the autonomy evidence plane).
+
+Free static preverify (diff apply + syntax) is a hard signal for the
+fix→PR loop; hermetic debugger rerun stays secondary/soft.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import uuid
+from pathlib import PurePosixPath
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -17,6 +22,96 @@ logger = logging.getLogger(__name__)
 _MAX_FILES = 8
 _MAX_FILE_BYTES = 32_000
 _MAX_PACK_CHARS = 6_000
+
+
+def static_check_files(
+    files: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Free syntax checks on patched file contents (stdlib only).
+
+    ``.py`` → ``ast.parse``; ``.json`` → ``json.loads``. Unknown
+    extensions are skipped (do not fail). Returns
+    ``{status, errors, files_checked, files_skipped}``.
+    """
+    errors: list[dict[str, str]] = []
+    checked = 0
+    skipped = 0
+    for item in files:
+        path = str(item.get("path") or "").strip()
+        content = item.get("content")
+        if content is None:
+            content = ""
+        if not isinstance(content, str):
+            content = str(content)
+        if not path:
+            skipped += 1
+            continue
+        suffix = PurePosixPath(path).suffix.lower()
+        if suffix == ".py":
+            checked += 1
+            try:
+                ast.parse(content, filename=path)
+            except SyntaxError as exc:
+                loc = f"line {exc.lineno}" if exc.lineno else "unknown line"
+                msg = exc.msg or "syntax error"
+                errors.append(
+                    {
+                        "path": path,
+                        "kind": "python_syntax",
+                        "message": f"{msg} ({loc})",
+                    }
+                )
+            except Exception as exc:
+                errors.append(
+                    {
+                        "path": path,
+                        "kind": "python_syntax",
+                        "message": str(exc)[:400],
+                    }
+                )
+        elif suffix == ".json":
+            checked += 1
+            try:
+                json.loads(content)
+            except json.JSONDecodeError as exc:
+                errors.append(
+                    {
+                        "path": path,
+                        "kind": "json_syntax",
+                        "message": f"{exc.msg} (line {exc.lineno})",
+                    }
+                )
+            except Exception as exc:
+                errors.append(
+                    {
+                        "path": path,
+                        "kind": "json_syntax",
+                        "message": str(exc)[:400],
+                    }
+                )
+        else:
+            skipped += 1
+
+    status = "failed" if errors else "passed"
+    return {
+        "status": status,
+        "errors": errors,
+        "files_checked": checked,
+        "files_skipped": skipped,
+    }
+
+
+def format_static_errors_for_prompt(errors: list[dict[str, Any]]) -> str:
+    """Compact feedback block for PatchGenerator regenerate prompts."""
+    if not errors:
+        return ""
+    lines = ["Static preverify failed — fix these issues:"]
+    for err in errors[:12]:
+        path = err.get("path") or "?"
+        kind = err.get("kind") or "error"
+        message = err.get("message") or ""
+        lines.append(f"- [{kind}] {path}: {message}")
+    return "\n".join(lines)
 
 
 async def build_failure_pack(org_id: str, issue_id: str) -> dict[str, Any]:
@@ -145,10 +240,15 @@ async def hydrate_linked_files(
 async def apply_diff_to_files(
     diff: str,
     linked_files: list[dict[str, str]],
+    *,
+    run_static: bool = True,
 ) -> dict[str, Any]:
     """Apply a unified diff to in-memory linked file contents.
 
     Returns ``{status, detail}`` where status is passed|failed|skipped.
+    On success ``detail.files_after`` includes ``content`` for each
+    patched file. When ``run_static`` is True (default), free syntax
+    checks run after apply and fail the result on parse errors.
     """
     import hashlib
 
@@ -209,6 +309,7 @@ async def apply_diff_to_files(
             files_after.append(
                 {
                     "path": path,
+                    "content": after,
                     "before_sha": hashlib.sha256(
                         base.encode("utf-8", errors="replace")
                     ).hexdigest()[:16],
@@ -235,14 +336,25 @@ async def apply_diff_to_files(
             "detail": {"reason": "no_applicable_files"},
         }
 
-    return {
-        "status": "passed",
-        "detail": {
-            "reason": "diff_applied",
-            "files_after": files_after,
-            "files_changed": sum(1 for f in files_after if f.get("changed")),
-        },
+    detail: dict[str, Any] = {
+        "reason": "diff_applied",
+        "files_after": files_after,
+        "files_changed": sum(1 for f in files_after if f.get("changed")),
     }
+
+    if run_static:
+        static = static_check_files(files_after)
+        detail["static_check"] = {
+            "status": static.get("status"),
+            "errors": static.get("errors") or [],
+            "files_checked": static.get("files_checked"),
+            "files_skipped": static.get("files_skipped"),
+        }
+        if static.get("status") == "failed":
+            detail["reason"] = "static_syntax_failed"
+            return {"status": "failed", "detail": detail}
+
+    return {"status": "passed", "detail": detail}
 
 
 async def run_hermetic_preverify(
@@ -254,12 +366,11 @@ async def run_hermetic_preverify(
     diff_unified: str = "",
     linked_files: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Preverify: apply patch in-memory, then hermetic rerun on example traces.
+    """Preverify: apply patch + free syntax, then hermetic rerun on traces.
 
-    Diff apply is the primary signal (does the patch apply to linked
-    sources?). Hermetic debugger rerun is secondary evidence that bound
-    traces are loadable. Persists ``issue_verifications`` with
-    ``ref=hermetic_preverify``.
+    Diff apply and static syntax are hard signals. Hermetic debugger
+    rerun is secondary evidence that bound traces are loadable.
+    Persists ``issue_verifications`` with ``ref=hermetic_preverify``.
     """
     detail: dict[str, Any] = {
         "kind": "hermetic_preverify",
@@ -268,12 +379,15 @@ async def run_hermetic_preverify(
     }
 
     apply_result = await apply_diff_to_files(
-        diff_unified, list(linked_files or [])
+        diff_unified, list(linked_files or []), run_static=True
     )
-    detail["diff_apply"] = apply_result.get("detail") or {}
+    apply_detail = apply_result.get("detail") or {}
+    detail["diff_apply"] = apply_detail
+    detail["static_check"] = apply_detail.get("static_check") or {}
     apply_status = str(apply_result.get("status") or "skipped")
 
     if apply_status == "failed":
+        # Hard fail: diff did not apply or patched files failed syntax.
         result = {"status": "failed", "detail": detail}
         await _persist_preverify(org_id, issue_id, fingerprint, result)
         return result
@@ -299,7 +413,7 @@ async def run_hermetic_preverify(
         engine = ReRunEngine(store)
     except Exception as exc:
         detail["reason"] = f"debugger_unavailable:{exc}"
-        # Diff apply still counts if it passed.
+        # Diff apply + static still count if they passed.
         status = "passed" if apply_status == "passed" else "skipped"
         result = {"status": status, "detail": detail}
         await _persist_preverify(org_id, issue_id, fingerprint, result)
@@ -388,6 +502,8 @@ async def _persist_preverify(
 __all__ = [
     "apply_diff_to_files",
     "build_failure_pack",
+    "format_static_errors_for_prompt",
     "hydrate_linked_files",
     "run_hermetic_preverify",
+    "static_check_files",
 ]

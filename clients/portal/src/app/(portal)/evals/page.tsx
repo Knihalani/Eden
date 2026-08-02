@@ -24,7 +24,6 @@ import {
   defaultPlaygroundId,
   draftCaseFromSource,
   experimentsForDataset,
-  matrixForPlayground,
   playgroundById,
   type CompareGrade,
   type DatasetCaseFixture,
@@ -50,10 +49,16 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import {
+  datasetsApi,
+  offlineExperimentsApi,
+  playgroundApi,
+} from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
-import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { useLabToast } from "@/lab/lab-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 const viewFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -112,6 +117,75 @@ function cloneDatasetIntoExtras(
   return [{ ...base }, ...prev];
 }
 
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function mapCreatedDataset(
+  created: { id: string; name: string; description?: string },
+  agentId: string | "all",
+): DatasetFixture {
+  return {
+    id: created.id,
+    name: created.name,
+    description: created.description ?? "",
+    agentId: agentId === "all" ? null : agentId,
+    source: "manual",
+    version: "1",
+    updatedAt: "just now",
+    caseIds: [],
+  };
+}
+
+function mapPersistedPlayground(
+  playground: {
+    id: string;
+    name: string;
+    config?: Record<string, unknown>;
+  },
+  fallback?: Partial<PlaygroundFixture>,
+): PlaygroundFixture {
+  const cfg = playground.config ?? {};
+  const variantsRaw = Array.isArray(cfg.variants) ? cfg.variants : null;
+  const variants =
+    variantsRaw && variantsRaw.length > 0
+      ? variantsRaw
+          .filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === "object")
+          .map((v, i) => ({
+            id: String(v.id ?? `var_${i}`),
+            label: String(v.label ?? `Variant ${i + 1}`),
+            provider: typeof v.provider === "string" ? v.provider : undefined,
+            promptSnippet:
+              typeof v.promptSnippet === "string" ? v.promptSnippet : undefined,
+          }))
+      : fallback?.variants ?? [
+          { id: "var_base", label: "Baseline", provider: "baseline" },
+          { id: "var_cand", label: "Candidate", provider: "candidate" },
+        ];
+  return {
+    id: playground.id,
+    name: playground.name,
+    agentId:
+      (typeof cfg.agent_id === "string" ? cfg.agent_id : undefined) ??
+      fallback?.agentId,
+    datasetId:
+      (typeof cfg.dataset_id === "string" ? cfg.dataset_id : undefined) ??
+      fallback?.datasetId,
+    prompt:
+      (typeof cfg.prompt === "string" ? cfg.prompt : undefined) ??
+      fallback?.prompt ??
+      "You are a careful agent. Follow the task exactly.",
+    model:
+      (typeof cfg.model === "string" ? cfg.model : undefined) ??
+      fallback?.model ??
+      "eden-router / deepseek-v4-flash",
+    dirty: Boolean(cfg.dirty ?? fallback?.dirty ?? true),
+    variants,
+    lastRunId:
+      typeof cfg.last_run_id === "string" ? cfg.last_run_id : fallback?.lastRunId,
+  };
+}
+
 function LabEvalsInner() {
   const searchParams = useSearchParams();
   const paramMode = searchParams.get("mode");
@@ -128,6 +202,8 @@ function LabEvalsInner() {
 
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
+  const { pushToast } = useLabToast();
   const agentsQuery = useOrgQuery(
     queryKeys.portal.agents(orgId),
     orgId,
@@ -189,23 +265,14 @@ function LabEvalsInner() {
   const [focusCaseId, setFocusCaseId] = useState<string | null>(paramCase);
   const [dockCaseId, setDockCaseId] = useState<string | null>(null);
   const [fromHint, setFromHint] = useState<string | null>(null);
-  // No backend endpoints yet for dataset/case CRUD, experiment runs, or
-  // playground create/rename/link/promote — every mutation below
-  // (createDataset, renameDataset, deleteDataset, addCase, updateCase,
-  // deleteCase, createPlayground, renamePlayground, linkPlaygroundDataset,
-  // runExperiment, promotePlayground) only ever touches this local React
-  // state. None of it is sent to the API, so it is silently lost on
-  // refresh/navigation. A standing LocalDraftBanner warns the user about
-  // this; do not remove that banner without wiring real persistence first.
+  // Optimistic overlays for in-flight CRUD; settled by portal query invalidation.
   const [extraDatasets, setExtraDatasets] = useState<DatasetFixture[]>([]);
   const [hiddenDatasetIds, setHiddenDatasetIds] = useState<string[]>([]);
   const [extraCases, setExtraCases] = useState<DatasetCaseFixture[]>([]);
   const [extraExperiments, setExtraExperiments] = useState<
     ExperimentFixture[]
   >([]);
-  const [extraResults, setExtraResults] = useState<ExperimentCaseResult[]>(
-    [],
-  );
+  const [extraResults] = useState<ExperimentCaseResult[]>([]);
   const [extraPlaygrounds, setExtraPlaygrounds] = useState<
     PlaygroundFixture[]
   >([]);
@@ -213,6 +280,36 @@ function LabEvalsInner() {
     null,
   );
   const handledFrom = useRef<string | null>(null);
+
+  const invalidateEvals = useCallback(
+    async (which: "datasets" | "playgrounds" | "experiments" | "all" = "all") => {
+      if (!orgId) return;
+      const jobs: Promise<unknown>[] = [];
+      if (which === "datasets" || which === "all") {
+        jobs.push(
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.evalDatasets(orgId),
+          }),
+        );
+      }
+      if (which === "playgrounds" || which === "all") {
+        jobs.push(
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.evalPlaygrounds(orgId),
+          }),
+        );
+      }
+      if (which === "experiments" || which === "all") {
+        jobs.push(
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.evalExperiments(orgId),
+          }),
+        );
+      }
+      await Promise.all(jobs);
+    },
+    [orgId, queryClient],
+  );
 
   const allDatasets = useMemo(() => {
     const hidden = new Set(hiddenDatasetIds);
@@ -264,23 +361,47 @@ function LabEvalsInner() {
   );
 
   const createDataset = useCallback(() => {
-    const id = `ds_local_${Date.now().toString(36)}`;
-    const draft: DatasetFixture = {
-      id,
-      name: "Untitled dataset",
-      description: "",
-      agentId: agentId === "all" ? null : agentId,
-      source: "manual",
-      version: "v1",
-      updatedAt: "just now",
-      caseIds: [],
-    };
+    if (!orgId) {
+      pushToast({ title: "Not available", tone: "fail" });
+      return;
+    }
+    const tempId = `ds_local_${Date.now().toString(36)}`;
+    const draft = mapCreatedDataset(
+      { id: tempId, name: "Untitled dataset" },
+      agentId,
+    );
     setExtraDatasets((prev) => [draft, ...prev]);
-    setDatasetId(id);
-    setRenamingDatasetId(id);
+    setDatasetId(tempId);
+    setRenamingDatasetId(tempId);
     setMode("datasets");
-    patchQuery({ mode: "datasets", id, from: null });
-  }, [agentId, patchQuery]);
+    patchQuery({ mode: "datasets", id: tempId, from: null });
+
+    void (async () => {
+      try {
+        const created = await datasetsApi.create(orgId, {
+          name: "Untitled dataset",
+        });
+        const mapped = mapCreatedDataset(created, agentId);
+        setExtraDatasets((prev) =>
+          prev.map((d) => (d.id === tempId ? mapped : d)),
+        );
+        setDatasetId(mapped.id);
+        setRenamingDatasetId(mapped.id);
+        patchQuery({ mode: "datasets", id: mapped.id, from: null });
+      } catch (err) {
+        setExtraDatasets((prev) => prev.filter((d) => d.id !== tempId));
+        setDatasetId("");
+        setRenamingDatasetId(null);
+        pushToast({
+          title: "Create dataset failed",
+          body: errMessage(err),
+          tone: "fail",
+        });
+      } finally {
+        await invalidateEvals("datasets");
+      }
+    })();
+  }, [agentId, invalidateEvals, orgId, patchQuery, pushToast]);
 
   const renameDataset = useCallback(
     (id: string, name: string) => {
@@ -291,8 +412,25 @@ function LabEvalsInner() {
         );
       });
       setRenamingDatasetId(null);
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          await datasetsApi.patch(orgId, id, { name });
+        } catch (err) {
+          pushToast({
+            title: "Rename failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("datasets");
+        }
+      })();
     },
-    [liveDatasets],
+    [invalidateEvals, liveDatasets, orgId, pushToast],
   );
 
   const deleteDataset = useCallback(
@@ -307,15 +445,34 @@ function LabEvalsInner() {
       setDatasetId(nextId);
       if (nextId) patchQuery({ mode: "datasets", id: nextId, from: null });
       else patchQuery({ mode: "datasets", id: null, from: null });
+
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          await datasetsApi.delete(orgId, id);
+        } catch (err) {
+          setHiddenDatasetIds((prev) => prev.filter((x) => x !== id));
+          pushToast({
+            title: "Delete failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("datasets");
+        }
+      })();
     },
-    [allDatasets, patchQuery],
+    [allDatasets, invalidateEvals, orgId, patchQuery, pushToast],
   );
 
   const addCase = useCallback(
     (dsId: string) => {
-      const caseId = `case_local_${Date.now().toString(36)}`;
+      const tempId = `case_local_${Date.now().toString(36)}`;
       const draft: DatasetCaseFixture = {
-        id: caseId,
+        id: tempId,
         datasetId: dsId,
         input: "",
         tags: ["manual"],
@@ -327,19 +484,80 @@ function LabEvalsInner() {
           d.id === dsId
             ? {
                 ...d,
-                caseIds: [...d.caseIds, caseId],
+                caseIds: [...d.caseIds, tempId],
                 updatedAt: "just now",
               }
             : d,
         );
       });
-      setDockCaseId(caseId);
+      setDockCaseId(tempId);
+
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          const row = await datasetsApi.addRow(orgId, dsId, { input: "" });
+          setExtraCases((prev) =>
+            prev.map((c) =>
+              c.id === tempId
+                ? {
+                    ...c,
+                    id: row.id,
+                    input: row.input ?? "",
+                    expected: row.expected_output || undefined,
+                  }
+                : c,
+            ),
+          );
+          setExtraDatasets((prev) =>
+            prev.map((d) =>
+              d.id === dsId
+                ? {
+                    ...d,
+                    caseIds: d.caseIds.map((cid) =>
+                      cid === tempId ? row.id : cid,
+                    ),
+                  }
+                : d,
+            ),
+          );
+          setDockCaseId((cur) => (cur === tempId ? row.id : cur));
+        } catch (err) {
+          setExtraCases((prev) => prev.filter((c) => c.id !== tempId));
+          setExtraDatasets((prev) =>
+            prev.map((d) =>
+              d.id === dsId
+                ? {
+                    ...d,
+                    caseIds: d.caseIds.filter((cid) => cid !== tempId),
+                  }
+                : d,
+            ),
+          );
+          setDockCaseId((cur) => (cur === tempId ? null : cur));
+          pushToast({
+            title: "Add case failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("datasets");
+        }
+      })();
     },
-    [liveDatasets],
+    [invalidateEvals, liveDatasets, orgId, pushToast],
   );
 
   const updateCase = useCallback(
     (caseId: string, patch: { input?: string; expected?: string }) => {
+      const datasetId =
+        extraCases.find((c) => c.id === caseId)?.datasetId ??
+        allDatasets.find((d) => d.caseIds.includes(caseId))?.id ??
+        DATASET_CASES.find((c) => c.id === caseId)?.datasetId ??
+        "";
+
       setExtraCases((prev) => {
         const hit = prev.find((c) => c.id === caseId);
         if (hit) {
@@ -347,14 +565,35 @@ function LabEvalsInner() {
         }
         const fixture =
           DATASET_CASES.find((c) => c.id === caseId) ??
-          casesFor(
-            allDatasets.find((d) => d.caseIds.includes(caseId))?.id ?? "",
-          ).find((c) => c.id === caseId);
+          (datasetId
+            ? casesFor(datasetId).find((c) => c.id === caseId)
+            : undefined);
         if (!fixture) return prev;
         return [{ ...fixture, ...patch }, ...prev];
       });
+
+      if (!orgId || !datasetId) {
+        if (!orgId) pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          await datasetsApi.updateRow(orgId, datasetId, caseId, {
+            input: patch.input,
+            expected_output: patch.expected,
+          });
+        } catch (err) {
+          pushToast({
+            title: "Update case failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("datasets");
+        }
+      })();
     },
-    [allDatasets, casesFor],
+    [allDatasets, casesFor, extraCases, invalidateEvals, orgId, pushToast],
   );
 
   const deleteCase = useCallback(
@@ -373,21 +612,43 @@ function LabEvalsInner() {
         );
       });
       setDockCaseId((cur) => (cur === caseId ? null : cur));
+
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          await datasetsApi.deleteRow(orgId, dsId, caseId);
+        } catch (err) {
+          pushToast({
+            title: "Delete case failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("datasets");
+        }
+      })();
     },
-    [liveDatasets],
+    [invalidateEvals, liveDatasets, orgId, pushToast],
   );
 
   const createPlayground = useCallback(
     (linkedDatasetId?: string) => {
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
       const ds =
         allDatasets.find((d) => d.id === linkedDatasetId) ??
         allDatasets.find((d) =>
           agentId === "all" ? true : d.agentId === agentId,
         ) ??
         allDatasets[0];
-      const id = `pg_local_${Date.now().toString(36)}`;
+      const tempId = `pg_local_${Date.now().toString(36)}`;
       const draft: PlaygroundFixture = {
-        id,
+        id: tempId,
         name: ds ? `${ds.name} · draft` : "Untitled draft",
         agentId:
           ds?.agentId ?? (agentId === "all" ? undefined : agentId) ?? undefined,
@@ -401,11 +662,50 @@ function LabEvalsInner() {
         ],
       };
       setExtraPlaygrounds((prev) => [draft, ...prev]);
-      setPlaygroundId(id);
+      setPlaygroundId(tempId);
       setMode("playground");
-      patchQuery({ mode: "playground", id, from: null });
+      patchQuery({ mode: "playground", id: tempId, from: null });
+
+      void (async () => {
+        try {
+          const { playground } = await playgroundApi.create(orgId, {
+            name: draft.name,
+          });
+          let next = playground;
+          if (ds?.id) {
+            const patched = await playgroundApi.patch(orgId, playground.id, {
+              config: {
+                ...playground.config,
+                dataset_id: ds.id,
+                agent_id: ds.agentId ?? draft.agentId,
+                prompt: draft.prompt,
+                model: draft.model,
+                dirty: true,
+                variants: draft.variants,
+              },
+            });
+            next = patched.playground;
+          }
+          const mapped = mapPersistedPlayground(next, draft);
+          setExtraPlaygrounds((prev) =>
+            prev.map((p) => (p.id === tempId ? mapped : p)),
+          );
+          setPlaygroundId(mapped.id);
+          patchQuery({ mode: "playground", id: mapped.id, from: null });
+        } catch (err) {
+          setExtraPlaygrounds((prev) => prev.filter((p) => p.id !== tempId));
+          setPlaygroundId("");
+          pushToast({
+            title: "Create playground failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("playgrounds");
+        }
+      })();
     },
-    [allDatasets, agentId, patchQuery],
+    [allDatasets, agentId, invalidateEvals, orgId, patchQuery, pushToast],
   );
 
   const renamePlayground = useCallback(
@@ -421,29 +721,62 @@ function LabEvalsInner() {
         if (!base) return prev;
         return [{ ...base, name, dirty: true }, ...prev];
       });
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          await playgroundApi.patch(orgId, id, { name });
+        } catch (err) {
+          pushToast({
+            title: "Rename failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("playgrounds");
+        }
+      })();
     },
-    [livePlaygrounds],
+    [invalidateEvals, livePlaygrounds, orgId, pushToast],
   );
 
   const linkPlaygroundDataset = useCallback(
     (pgId: string, dsId: string) => {
       const ds = allDatasets.find((d) => d.id === dsId);
+      let baseConfig: Record<string, unknown> = {};
       setExtraPlaygrounds((prev) => {
         if (prev.some((p) => p.id === pgId)) {
-          return prev.map((p) =>
-            p.id === pgId
-              ? {
-                  ...p,
-                  datasetId: dsId,
-                  agentId: ds?.agentId ?? p.agentId,
-                  dirty: true,
-                }
-              : p,
-          );
+          return prev.map((p) => {
+            if (p.id !== pgId) return p;
+            baseConfig = {
+              prompt: p.prompt,
+              model: p.model,
+              dirty: true,
+              variants: p.variants,
+              dataset_id: dsId,
+              agent_id: ds?.agentId ?? p.agentId,
+            };
+            return {
+              ...p,
+              datasetId: dsId,
+              agentId: ds?.agentId ?? p.agentId,
+              dirty: true,
+            };
+          });
         }
         const base =
           livePlaygrounds.find((p) => p.id === pgId) ?? playgroundById(pgId);
         if (!base) return prev;
+        baseConfig = {
+          prompt: base.prompt,
+          model: base.model,
+          dirty: true,
+          variants: base.variants,
+          dataset_id: dsId,
+          agent_id: ds?.agentId ?? base.agentId,
+        };
         return [
           {
             ...base,
@@ -454,8 +787,33 @@ function LabEvalsInner() {
           ...prev,
         ];
       });
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
+      void (async () => {
+        try {
+          const current = await playgroundApi.get(orgId, pgId);
+          await playgroundApi.patch(orgId, pgId, {
+            config: {
+              ...current.playground.config,
+              ...baseConfig,
+              dataset_id: dsId,
+              agent_id: ds?.agentId ?? current.playground.config?.agent_id,
+            },
+          });
+        } catch (err) {
+          pushToast({
+            title: "Link dataset failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("playgrounds");
+        }
+      })();
     },
-    [allDatasets, livePlaygrounds],
+    [allDatasets, invalidateEvals, livePlaygrounds, orgId, pushToast],
   );
 
   useEffect(() => {
@@ -722,6 +1080,10 @@ function LabEvalsInner() {
       const ds = allDatasets.find((d) => d.id === dsId);
       const cases = casesFor(dsId);
       if (!ds || cases.length === 0) return;
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
 
       const prior = [
         ...extraExperiments.filter((e) => e.datasetId === dsId),
@@ -734,51 +1096,56 @@ function LabEvalsInner() {
         completedPrior[completedPrior.length - 1]?.id ??
         "";
 
-      const expId = `exp_run_${Date.now().toString(36)}`;
-      const avg =
-        0.55 +
-        (cases.reduce((s, c) => s + c.input.length, 0) % 40) / 100;
-
-      const synthetic: ExperimentFixture = {
-        id: expId,
-        name: `${ds.name} · run ${runN}`,
-        datasetId: dsId,
-        status: "completed",
-        createdAt: "just now",
-        avgScores: { score: Number(avg.toFixed(2)) },
-        latencyMs: 2800 + cases.length * 120,
-        costUsd: 0.02 + cases.length * 0.008,
-        errorRate: 0.1,
-        suggestedBaselineId: olderId || undefined,
-      };
-
-      const results: ExperimentCaseResult[] = cases.map((c, i) => {
-        const score = Math.max(
-          0.1,
-          Math.min(0.98, avg + ((i % 3) - 1) * 0.08),
-        );
-        const pass = score >= 0.55;
-        return {
-          experimentId: expId,
-          caseId: c.id,
-          output: pass
-            ? `Pass · ${c.input.slice(0, 48)}`
-            : `Fail · ${c.input.slice(0, 48)}`,
-          scores: { score: Number(score.toFixed(2)) },
-          latencyMs: 800 + i * 100,
-          costUsd: 0.01,
-          error: pass ? undefined : "below threshold",
-        };
-      });
-
-      setExtraExperiments((prev) => [synthetic, ...prev]);
-      setExtraResults((prev) => [...results, ...prev]);
-      openComparePair({
-        baselineId: olderId || expId,
-        compareId: expId,
-      });
+      void (async () => {
+        try {
+          const { experiment } = await offlineExperimentsApi.create(orgId, {
+            name: `${ds.name} · run ${runN}`,
+            dataset_id: dsId,
+          });
+          const expId = String(experiment.id ?? "");
+          if (!expId) throw new Error("No experiment id returned");
+          await offlineExperimentsApi.run(orgId, expId);
+          const mapped: ExperimentFixture = {
+            id: expId,
+            name: String(experiment.name ?? `${ds.name} · run ${runN}`),
+            datasetId: dsId,
+            status: "completed",
+            createdAt: "just now",
+            avgScores: {},
+            latencyMs: null,
+            costUsd: null,
+            errorRate: null,
+            suggestedBaselineId: olderId || undefined,
+          };
+          setExtraExperiments((prev) => [
+            mapped,
+            ...prev.filter((e) => e.id !== expId),
+          ]);
+          openComparePair({
+            baselineId: olderId || expId,
+            compareId: expId,
+          });
+        } catch (err) {
+          pushToast({
+            title: "Run experiment failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("experiments");
+        }
+      })();
     },
-    [allDatasets, casesFor, allExperiments, extraExperiments, openComparePair],
+    [
+      allDatasets,
+      allExperiments,
+      casesFor,
+      extraExperiments,
+      invalidateEvals,
+      openComparePair,
+      orgId,
+      pushToast,
+    ],
   );
 
   const openRun = useCallback(
@@ -811,22 +1178,15 @@ function LabEvalsInner() {
   const promotePlayground = useCallback(
     (pg: PlaygroundFixture, _prompt: string) => {
       if (!pg.datasetId) return;
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
+      }
 
       const fixtureLinked = [
         ...extraExperiments,
         ...experimentsForDataset(pg.datasetId),
       ].find((e) => e.playgroundId === pg.id && e.status === "completed");
-
-      const matrix = matrixForPlayground(pg);
-      const candidate =
-        pg.variants.find((v) => v.provider === "candidate") ??
-        pg.variants[pg.variants.length - 1];
-      const cells = matrix.filter((m) => m.variantId === candidate?.id);
-      const avg =
-        cells.length === 0
-          ? 0.5
-          : cells.reduce((s, c) => s + c.score, 0) / cells.length;
-      const expId = `exp_local_${pg.id}_${Date.now().toString(36)}`;
       const baselinePair = comparePairForDataset(
         pg.datasetId,
         allExperiments,
@@ -837,57 +1197,67 @@ function LabEvalsInner() {
         baselinePair?.baselineId ??
         "";
 
-      const synthetic: ExperimentFixture = {
-        id: expId,
-        name: `${pg.name} · saved`,
-        datasetId: pg.datasetId,
-        playgroundId: pg.id,
-        status: "completed",
-        createdAt: "just now",
-        avgScores: { score: avg },
-        latencyMs: 3200,
-        costUsd: 0.05,
-        errorRate:
-          cells.filter((c) => !c.pass).length / Math.max(cells.length, 1),
-        suggestedBaselineId: olderId || undefined,
-      };
+      void (async () => {
+        try {
+          const result = await playgroundApi.promoteExperiment(orgId, pg.id, {
+            name: `${pg.name} · saved`,
+            dataset_id: pg.datasetId,
+          });
+          const experiment = (result.experiment ?? {}) as Record<
+            string,
+            unknown
+          >;
+          const expId = String(experiment.id ?? "");
+          if (!expId) throw new Error("No experiment id returned");
 
-      const results: ExperimentCaseResult[] =
-        cells.length > 0
-          ? cells.map((c) => ({
-              experimentId: expId,
-              caseId: c.caseId,
-              output: c.output,
-              scores: { score: c.score },
-              latencyMs: 1000,
-              costUsd: 0.01,
-              error: c.pass ? undefined : "fail",
-            }))
-          : casesFor(pg.datasetId).map((c, i) => ({
-              experimentId: expId,
-              caseId: c.id,
-              output: c.input.slice(0, 60),
-              scores: { score: 0.5 + (i % 3) * 0.1 },
-              latencyMs: 900,
-              costUsd: 0.01,
-            }));
-
-      setExtraExperiments((prev) => [synthetic, ...prev]);
-      setExtraResults((prev) => [...results, ...prev]);
-      setExtraPlaygrounds((prev) => {
-        if (prev.some((p) => p.id === pg.id)) {
-          return prev.map((p) =>
-            p.id === pg.id ? { ...p, dirty: false, name: pg.name } : p,
-          );
+          const mapped: ExperimentFixture = {
+            id: expId,
+            name: String(experiment.name ?? `${pg.name} · saved`),
+            datasetId: pg.datasetId!,
+            playgroundId: pg.id,
+            status: "completed",
+            createdAt: "just now",
+            avgScores: {},
+            latencyMs: null,
+            costUsd: null,
+            errorRate: null,
+            suggestedBaselineId: olderId || undefined,
+          };
+          setExtraExperiments((prev) => [
+            mapped,
+            ...prev.filter((e) => e.id !== expId),
+          ]);
+          setExtraPlaygrounds((prev) => {
+            if (prev.some((p) => p.id === pg.id)) {
+              return prev.map((p) =>
+                p.id === pg.id ? { ...p, dirty: false, name: pg.name } : p,
+              );
+            }
+            return prev;
+          });
+          openComparePair({
+            baselineId: olderId || expId,
+            compareId: expId,
+          });
+        } catch (err) {
+          pushToast({
+            title: "Promote failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("all");
         }
-        return prev;
-      });
-      openComparePair({
-        baselineId: olderId || expId,
-        compareId: expId,
-      });
+      })();
     },
-    [extraExperiments, allExperiments, openComparePair, casesFor],
+    [
+      allExperiments,
+      extraExperiments,
+      invalidateEvals,
+      openComparePair,
+      orgId,
+      pushToast,
+    ],
   );
 
   const scopeCounts = useMemo(() => {
@@ -992,11 +1362,6 @@ function LabEvalsInner() {
           </div>
         }
       />
-
-      <LocalDraftBanner>
-        Dataset/case edits, experiment runs, and playground promotions on this
-        page are local drafts and are not saved to the server yet.
-      </LocalDraftBanner>
 
       {datasetsUnavailable && mode === "datasets" ? (
         <div

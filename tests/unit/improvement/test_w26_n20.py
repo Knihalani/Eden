@@ -173,6 +173,21 @@ async def test_propose_creates_improvement_plan_no_f22() -> None:
             AsyncMock(return_value=[{"path": "agent/checkout.py", "content": ""}]),
         ),
         patch(
+            "eden.improvement.evidence_plane.build_failure_pack",
+            AsyncMock(
+                return_value={
+                    "status": "ok",
+                    "example_trace_ids": [],
+                    "excerpt": "",
+                    "format": "eden-failure-fixture-v1",
+                }
+            ),
+        ),
+        patch(
+            "eden.improvement.evidence_plane.run_hermetic_preverify",
+            AsyncMock(return_value={"status": "passed", "detail": {}}),
+        ),
+        patch(
             "eden.patches.patch_generator.PatchGenerator.generate",
             generate,
         ),

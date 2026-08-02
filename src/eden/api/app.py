@@ -698,6 +698,15 @@ async def lifespan(app: FastAPI):
             raise
         logger.warning(f"KB initialization warning: {e}")
 
+    # Cross-pod WebSocket fanout listener (Redis eden:ws:fanout).
+    try:
+        from eden.api.routes.websocket import ensure_ws_fanout_listener
+
+        await ensure_ws_fanout_listener()
+        logger.info("WebSocket cross-pod fanout listener started")
+    except Exception as e:
+        logger.warning("WebSocket fanout listener skipped: %s", e)
+
     # N14 — StatGate / Cat 15/17/22 wiring on every API pod (idempotent).
     # Worker start remains leader-gated in background workers below.
     try:
@@ -1122,6 +1131,7 @@ app.include_router(audit.router)  # /orgs/{org_id}/audit-log
 app.include_router(orgs.router)
 app.include_router(references.router)
 app.include_router(api_keys.router)
+app.include_router(billing.webhook_router)  # /webhooks/stripe (public, signature-only)
 app.include_router(billing.router)  # /orgs/{org_id}/billing
 app.include_router(
     budgets.router

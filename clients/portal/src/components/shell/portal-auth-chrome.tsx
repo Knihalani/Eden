@@ -388,6 +388,7 @@ export function PortalStatusBanners() {
   const { pushToast } = useLabToast();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const autoCreateAttemptedRef = useRef(false);
 
   const onCreateWorkspace = useCallback(async () => {
     setCreating(true);
@@ -451,6 +452,15 @@ export function PortalStatusBanners() {
     serverBanner ||
     syncBanner ||
     emptyBanner;
+
+  // First-run: auto-create a personal workspace once when /auth/me
+  // returns no orgs. Ref guards against Strict Mode / re-render loops;
+  // failures leave the manual Create workspace button.
+  useEffect(() => {
+    if (!emptyBanner || autoCreateAttemptedRef.current || creating) return;
+    autoCreateAttemptedRef.current = true;
+    void onCreateWorkspace();
+  }, [emptyBanner, creating, onCreateWorkspace]);
 
   let banner: ReactNode = null;
   if (loadingBanner) {
@@ -528,9 +538,13 @@ export function PortalStatusBanners() {
         role="status"
       >
         <div className="min-w-0">
-          <p className="type-ui text-[var(--text)]">No workspace yet</p>
+          <p className="type-ui text-[var(--text)]">
+            {creating ? "Creating workspace…" : "No workspace yet"}
+          </p>
           <p className="type-meta text-[var(--text-faint)]">
-            Create a workspace to start ingesting traces and managing agents.
+            {creating
+              ? "Setting up My workspace so you can start ingesting traces."
+              : "Create a workspace to start ingesting traces and managing agents."}
           </p>
           {createError ? (
             <p className="type-meta mt-1 text-[var(--danger)]">{createError}</p>

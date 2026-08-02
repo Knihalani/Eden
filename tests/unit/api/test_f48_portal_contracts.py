@@ -56,10 +56,17 @@ def test_signals_portal_paths_match_backend() -> None:
 
 
 def test_agent_issues_portal_paths_match_backend() -> None:
-    """Portal ``agentIssuesApi`` was pruned (zero consumers); backend stays."""
+    """Portal ``agentIssuesApi`` resolve path matches backend route."""
     src = portal_api_source()
-    assert "agentIssuesApi" not in src
-    assert "export const agentIssuesApi" not in src
+    assert "export const agentIssuesApi" in src
+    assert "/agent-issues/" in src
+    assert "/resolve" in src
+    from eden.api.routes import agent_issues
+
+    paths = {
+        r.path for r in agent_issues.router.routes if isinstance(r, APIRoute)
+    }
+    assert "/orgs/{org_id}/agent-issues/{issue_id}/resolve" in paths
 
 
 def test_backend_debugger_routes_are_mounted() -> None:

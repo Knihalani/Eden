@@ -380,20 +380,14 @@ class AlertStreamProcessor:
     async def _dispatch_websocket(self, alert: GeneratedAlert) -> None:
         """Push alert to connected WebSocket clients for the entity."""
         try:
-            from eden.api.routes.websocket import _job_connections
-            if alert.entity_id in _job_connections:
-                message = {
-                    "type": "alert",
-                    "alert": alert.to_dict(),
-                }
-                for ws in list(_job_connections[alert.entity_id]):
-                    try:
-                        await ws.send_json(message)
-                    except Exception:
-                        _job_connections[alert.entity_id].discard(ws)
-                        if not _job_connections[alert.entity_id]:
-                            del _job_connections[alert.entity_id]
-                            break
+            from eden.api.routes.websocket import broadcast_to_job_websockets
+
+            if not alert.entity_id:
+                return
+            await broadcast_to_job_websockets(
+                alert.entity_id,
+                {"type": "alert", "alert": alert.to_dict()},
+            )
         except Exception as exc:
             logger.debug(f"WebSocket alert dispatch failed: {exc}")
 

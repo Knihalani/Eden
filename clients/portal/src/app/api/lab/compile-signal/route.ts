@@ -21,6 +21,34 @@ const _compileCache = new Map<
 >();
 const COMPILE_CACHE_TTL_MS = 60_000;
 
+/** Per-user sliding window: 20 compiles / hour (Wave 4 cost control). */
+const COMPILE_RATE_LIMIT = 20;
+const COMPILE_RATE_WINDOW_MS = 60 * 60 * 1000;
+const _compileRateByUser = new Map<string, number[]>();
+
+function checkCompileRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const windowStart = now - COMPILE_RATE_WINDOW_MS;
+  const prior = (_compileRateByUser.get(userId) ?? []).filter(
+    (t) => t > windowStart,
+  );
+  if (prior.length >= COMPILE_RATE_LIMIT) {
+    _compileRateByUser.set(userId, prior);
+    return false;
+  }
+  prior.push(now);
+  _compileRateByUser.set(userId, prior);
+  // Bound map growth in long-lived serverless isolates.
+  if (_compileRateByUser.size > 5_000) {
+    for (const [uid, times] of _compileRateByUser) {
+      const kept = times.filter((t) => t > windowStart);
+      if (kept.length === 0) _compileRateByUser.delete(uid);
+      else _compileRateByUser.set(uid, kept);
+    }
+  }
+  return true;
+}
+
 function cacheKey(prompt: string): string {
   return prompt.trim().toLowerCase().slice(0, 500);
 }
@@ -133,6 +161,19 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session.userId) {
     return NextResponse.json({ detail: "Unauthorized" }, { status: 401 });
+  }
+  // Require an active Clerk org membership (not personal-account mode).
+  if (!session.orgId) {
+    return NextResponse.json(
+      { detail: "Organization membership required" },
+      { status: 403 },
+    );
+  }
+  if (!checkCompileRateLimit(session.userId)) {
+    return NextResponse.json(
+      { detail: "Rate limit exceeded: 20 compiles per hour" },
+      { status: 429, headers: { "Retry-After": "3600" } },
+    );
   }
 
   let body: Body;

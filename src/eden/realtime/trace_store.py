@@ -216,20 +216,12 @@ class TraceEventStore:
     async def _publish_event(self, entity_id: str, event: TraceEvent) -> None:
         """Publish event to real-time WebSocket subscribers."""
         try:
-            from eden.api.routes.websocket import _job_connections
-            if entity_id in _job_connections:
-                message = {
-                    "type": "trace_event",
-                    "event": event.to_dict(),
-                }
-                for ws in list(_job_connections[entity_id]):
-                    try:
-                        await ws.send_json(message)
-                    except Exception:
-                        _job_connections[entity_id].discard(ws)
-                        if not _job_connections[entity_id]:
-                            del _job_connections[entity_id]
-                            break
+            from eden.api.routes.websocket import broadcast_to_job_websockets
+
+            await broadcast_to_job_websockets(
+                entity_id,
+                {"type": "trace_event", "event": event.to_dict()},
+            )
         except Exception as exc:
             logger.debug(f"WebSocket publish failed for {entity_id}: {exc}")
 

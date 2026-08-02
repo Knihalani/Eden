@@ -485,6 +485,17 @@ async def propose_plan_for_issue(
             "detail": {"reason": str(exc)[:240]},
         }
 
+    # Hard gate: failed apply/syntax must not enter the Improve inbox.
+    # PatchGenerator already retried; this is the final belt.
+    if hermetic_preverify.get("status") == "failed":
+        return {
+            "status": "suppressed",
+            "reason": "static_preverify_failed",
+            "issue_id": issue_id,
+            "hermetic_preverify": hermetic_preverify.get("status"),
+            "hermetic_detail": hermetic_preverify.get("detail") or {},
+        }
+
     payload = _plan_payload_from_patch(
         org_id,
         issue_id,

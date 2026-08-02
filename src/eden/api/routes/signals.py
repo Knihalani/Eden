@@ -1,11 +1,13 @@
 """Phase Q — Plain English Signals API routes.
 
-Three routes:
+Routes:
 
-  * ``POST /orgs/{org}/signals`` — create a signal from NL
-  * ``GET  /orgs/{org}/signals`` — list signals
-  * ``POST /orgs/{org}/signals/{id}/match`` — test a value
-  * ``POST /orgs/{org}/signals/cluster`` — group similar signals
+  * ``POST   /orgs/{org}/signals`` — create a signal from NL
+  * ``GET    /orgs/{org}/signals`` — list signals
+  * ``PATCH  /orgs/{org}/signals/{id}`` — enable/disable a signal
+  * ``PATCH  /orgs/{org}/signals/library/{template_id}`` — library toggle
+  * ``POST   /orgs/{org}/signals/{id}/match`` — test a value
+  * ``POST   /orgs/{org}/signals/cluster`` — group similar signals
 """
 
 from __future__ import annotations
@@ -122,6 +124,10 @@ class LibraryToggleResponse(BaseModel):
         description="Approx. finalized traces (7d) that a backfill would "
         "re-investigate for this template.",
     )
+
+
+class UpdateSignalRequest(BaseModel):
+    enabled: bool = Field(..., description="Enable or disable the NL signal.")
 
 
 class BackfillEstimateResponse(BaseModel):
@@ -568,6 +574,77 @@ async def toggle_library_signal(
         updated=updated,
         backfill_estimate=estimate,
     )
+
+
+@router.patch(
+    "/{signal_id}",
+    response_model=SignalResponse,
+    summary="Enable/disable an NL signal",
+)
+async def update_signal(
+    body: UpdateSignalRequest,
+    org_id: str = Depends(require_path_org_access),
+    signal_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> SignalResponse:
+    """Flip ``nl_signals.enabled`` and dual-write to ``signal_definitions``.
+
+    The F06 investigator reads ``signal_definitions`` rows keyed by
+    ``template_id = nl:{signal_id}`` (created on signal create / seed).
+    """
+    _ = user
+    try:
+        pg = await get_postgres_client()
+        row = await pg.fetchrow(
+            f"""
+            UPDATE nl_signals
+            SET enabled = $3
+            WHERE id = $1 AND org_id = $2
+            RETURNING {_SELECT_COLS}
+            """,
+            signal_id,
+            org_id,
+            body.enabled,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="signal not found")
+
+        # Dual-write enabled into signal_definitions when the bridge row exists.
+        try:
+            await pg.execute(
+                """
+                UPDATE signal_definitions
+                SET enabled = $3
+                WHERE org_id = $1 AND template_id = $2
+                """,
+                org_id,
+                f"nl:{signal_id}",
+                body.enabled,
+            )
+        except Exception as bridge_exc:
+            logger.info(
+                "update_signal: signal_definitions bridge skipped org=%s: %s",
+                org_id,
+                bridge_exc,
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "update_signal failed org_id=%s signal=%s", org_id, signal_id,
+        )
+        if _is_missing_relation(exc):
+            raise HTTPException(
+                status_code=503,
+                detail="Signals storage unavailable (nl_signals migration pending)",
+            ) from None
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Signals unavailable"),
+        ) from None
+
+    signal, match_count = _row_to_signal(row)
+    return _signal_to_response(signal, match_count=match_count)
 
 
 @router.post(

@@ -32,6 +32,7 @@ const STUB_TRY_INSTEAD: Record<string, { href: string; label: string }> = {
   "/fleet": { href: "/agents", label: "Agents" },
   "/incidents": { href: "/issues", label: "Issues" },
   "/profile": { href: "/settings", label: "Settings" },
+  "/insights": { href: "/home", label: "Home" },
 };
 
 const DEFAULT_LINKS = [

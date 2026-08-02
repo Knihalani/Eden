@@ -18,7 +18,6 @@ describe("zero-consumer Api namespaces stay deleted", () => {
   const deletedNamespaces = [
     "a2aApi",
     "adminStatusApi",
-    "agentIssuesApi",
     "agentSessionsApi",
     "apmApi",
     "autonomousApi",
@@ -62,5 +61,12 @@ describe("zero-consumer Api namespaces stay deleted", () => {
     for (const name of deletedNamespaces) {
       expect(resources).not.toHaveProperty(name);
     }
+  });
+});
+
+describe("wave6Api stays exported (restored online-quality surface)", () => {
+  it("is exported from resources.ts", async () => {
+    const resources = await import("../resources");
+    expect(resources).toHaveProperty("wave6Api");
   });
 });

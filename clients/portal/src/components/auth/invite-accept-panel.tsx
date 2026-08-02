@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAuth, useOrganizationList } from "@clerk/nextjs";
+import { useAuth, useClerk, useOrganizationList } from "@clerk/nextjs";
 import { api, ApiError } from "@/lib/api";
 
 type InviteDetails = {
@@ -22,7 +22,10 @@ type Phase =
   | "accepting"
   | "accepted"
   | "accepted-unactivated"
-  | "error";
+  | "error"
+  | "wrong-account";
+
+const WRONG_ACCOUNT_DETAIL = "Invitation was not sent to this account";
 
 function formatExpiry(iso: string): string {
   try {
@@ -35,12 +38,19 @@ function formatExpiry(iso: string): string {
   }
 }
 
+function isWrongAccountError(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 403) return false;
+  const haystack = `${err.message} ${err.detail}`.toLowerCase();
+  return haystack.includes(WRONG_ACCOUNT_DETAIL.toLowerCase());
+}
+
 /**
  * Full invite flow: verify token → sign in/up if needed → accept → /home.
  */
 export function InviteAcceptPanel({ token }: { token: string }) {
   const router = useRouter();
   const { isLoaded: authLoaded, isSignedIn } = useAuth();
+  const { signOut } = useClerk();
   const { isLoaded: orgListLoaded, setActive } = useOrganizationList({
     userMemberships: { infinite: false },
   });
@@ -112,6 +122,11 @@ export function InviteAcceptPanel({ token }: { token: string }) {
         router.replace("/home");
       }, activated ? 600 : 1200);
     } catch (err) {
+      if (isWrongAccountError(err)) {
+        setPhase("wrong-account");
+        setError(WRONG_ACCOUNT_DETAIL);
+        return;
+      }
       setPhase("ready");
       if (err instanceof ApiError && err.status === 401) {
         setError("Sign in to accept this invitation.");
@@ -157,6 +172,45 @@ export function InviteAcceptPanel({ token }: { token: string }) {
         >
           Go to sign in
         </Link>
+      </div>
+    );
+  }
+
+  if (phase === "wrong-account") {
+    return (
+      <div className="text-center">
+        <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+          Invite
+        </p>
+        <h1 className="mt-3 text-[1.0625rem] font-semibold tracking-[-0.02em] text-[var(--text)]">
+          Wrong account
+        </h1>
+        <p className="mt-3 text-[0.8125rem] leading-relaxed text-[var(--text-muted)]">
+          This invitation was sent to{" "}
+          <span className="font-mono text-[var(--text-secondary)]">
+            {details?.email ?? "another email"}
+          </span>
+          . Sign out and switch to that account to accept.
+        </p>
+        <div className="mt-8 flex flex-col gap-2.5">
+          <button
+            type="button"
+            className="ds-btn ds-btn-primary inline-flex w-full justify-center px-5"
+            onClick={() =>
+              void signOut({
+                redirectUrl: `/invite/${token}`,
+              })
+            }
+          >
+            Sign out / switch account
+          </button>
+          <Link
+            href={signInHref}
+            className="ds-btn ds-btn-outline inline-flex w-full justify-center px-5"
+          >
+            Sign in with invited email
+          </Link>
+        </div>
       </div>
     );
   }

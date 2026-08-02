@@ -243,13 +243,13 @@ class TestC11MaxTokensGuard:
         )
         assert body.max_tokens == 512
 
-    def test_max_tokens_absent_passes(self) -> None:
-        """No ``max_tokens`` set → no error (cap doesn't apply)."""
+    def test_max_tokens_absent_defaults_to_cap(self) -> None:
+        """No ``max_tokens`` set → defaults to gateway_max_tokens_cap."""
         body = ChatCompletionRequest(
             model="openai/gpt-4o",
             messages=[{"role": "user", "content": "hi"}],
         )
-        assert body.max_tokens is None
+        assert body.max_tokens == 4096
 
     def test_chat_to_provider_kwargs_preserves_max_tokens(self) -> None:
         """Below cap → passes through unchanged."""

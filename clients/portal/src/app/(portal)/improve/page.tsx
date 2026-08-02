@@ -26,6 +26,7 @@ import { improvePlansApi } from "@/lib/api/resources";
 import { isGithubPermissionsMissing } from "@/lib/improve-feature";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -87,9 +88,6 @@ function LabImproveInner() {
   const patchQuery = useQueryPatch();
 
   const [extraPlans, setExtraPlans] = useState<ImprovePlanFixture[]>([]);
-  const [statusOverrides, setStatusOverrides] = useState<
-    Record<string, ImprovePlanFixture["status"]>
-  >({});
   const [mode, setMode] = useState<ImproveMode>(() =>
     parseImproveMode(
       paramMode,
@@ -102,14 +100,11 @@ function LabImproveInner() {
 
   const allPlans = useMemo(() => {
     const extraIds = new Set(extraPlans.map((p) => p.id));
-    const merged = [
+    return [
       ...extraPlans,
       ...livePlans.filter((p) => !extraIds.has(p.id)),
     ];
-    return merged.map((p) =>
-      statusOverrides[p.id] ? { ...p, status: statusOverrides[p.id]! } : p,
-    );
-  }, [extraPlans, livePlans, statusOverrides]);
+  }, [extraPlans, livePlans]);
 
   const scopedPlans = useMemo(
     () =>
@@ -296,21 +291,11 @@ function LabImproveInner() {
         return;
       }
 
-      // Intermediate statuses have no matching mutation yet — local overlay.
-      setStatusOverrides((prev) => ({ ...prev, [id]: status }));
-      setExtraPlans((prev) => {
-        const hit = prev.find((p) => p.id === id);
-        if (hit) {
-          return prev.map((p) =>
-            p.id === id ? { ...p, status, updatedAt: "just now" } : p,
-          );
-        }
-        const base = livePlans.find((p) => p.id === id);
-        if (!base) return prev;
-        return [{ ...base, status, updatedAt: "just now" }, ...prev];
-      });
+      // Portal fixture has no ``snoozed`` status (API snoozed → blocked in
+      // portal mapping). Intermediate statuses (needs_you / in_progress /
+      // verify) have no mutation — do not apply a local overlay.
     },
-    [orgId, queryClient, pushToast, livePlans],
+    [orgId, queryClient, pushToast],
   );
 
   const scopeCounts = useMemo(() => {
@@ -320,6 +305,15 @@ function LabImproveInner() {
     }
     return map;
   }, [allPlans]);
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Improve"
+        message="Select a workspace to view improve plans."
+      />
+    );
+  }
 
   if (plansQuery.isLoading) {
     return (
@@ -384,10 +378,10 @@ function LabImproveInner() {
         }
       />
 
-      {(extraPlans.length > 0 || Object.keys(statusOverrides).length > 0) ? (
+      {extraPlans.length > 0 ? (
         <LocalDraftBanner>
-          Items marked “draft from deep link” are local handoffs — Approve and
-          Reject hit the API on real plans.
+          Deep-link draft plans are local until you Approve or Reject — those
+          actions hit the API on real server plans.
         </LocalDraftBanner>
       ) : null}
 

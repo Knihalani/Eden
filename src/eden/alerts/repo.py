@@ -199,6 +199,28 @@ async def list_alert_events(
     return [_event_row(r) for r in rows], total
 
 
+async def set_alert_acknowledged(
+    *,
+    alert_event_id: str,
+    org_id: str,
+    acknowledged: bool,
+) -> dict[str, Any] | None:
+    """Set ``alert_events.acknowledged`` for an org-scoped event."""
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        f"""
+        UPDATE alert_events
+        SET acknowledged = $3, updated_at = NOW()
+        WHERE id = $1 AND org_id = $2
+        RETURNING {_ALERT_EVENT_COLUMNS}
+        """,
+        alert_event_id,
+        org_id,
+        acknowledged,
+    )
+    return _event_row(row) if row else None
+
+
 async def record_triage_feedback(
     *,
     alert_event_id: str,

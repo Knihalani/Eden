@@ -42,7 +42,7 @@ router = APIRouter(
 class UpsertBudgetRequest(BaseModel):
     cost_soft_limit_usd: float = Field(..., ge=0)
     cost_hard_limit_usd: float = Field(..., ge=0)
-    enforcement_enabled: bool = False
+    enforcement_enabled: bool = True
     window: str = Field(default="monthly", pattern="^(daily|weekly|monthly)$")
     action_on_exceed: str = Field(
         default="throttle", pattern="^(throttle|kill|alert)$"

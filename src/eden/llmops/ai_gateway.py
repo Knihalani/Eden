@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from eden.config import get_settings as _get_settings
+from eden.llm.models import INTERNAL_CHAT_MODEL
 from eden.llmops.filters import (
     FilterRegistry,
     GatewayFilter,
@@ -146,12 +147,12 @@ PROVIDER_SPECS: dict[Provider, ProviderSpec] = {
         wire_format=WireFormat.OPENAI,
         base_url="https://openrouter.ai/api/v1",
         api_key_env="OPENROUTER_API_KEY",
-        default_model="anthropic/claude-sonnet-4.6",
-        # OpenRouter charges a small markup on top of the underlying
-        # provider's API price. The blend below matches the 2026-07
-        # mix of Sonnet 4.6 + GPT-5-mini + Llama 4 traffic.
-        cost_per_1k_input=0.0032, cost_per_1k_output=0.016,
-        quality=0.94, latency_p95_ms=950, reliability=0.999,
+        # Wave 5: align with INTERNAL_CHAT_MODEL SSOT (deepseek flash),
+        # not Sonnet — callers that omit model should not burn frontier $.
+        default_model=INTERNAL_CHAT_MODEL,
+        # deepseek-v4-flash list (~$0.09/$0.18 per 1M) as provider default.
+        cost_per_1k_input=0.00009, cost_per_1k_output=0.00018,
+        quality=0.90, latency_p95_ms=800, reliability=0.999,
     ),
     Provider.MINIMAX: ProviderSpec(
         wire_format=WireFormat.OPENAI,
@@ -168,12 +169,11 @@ PROVIDER_SPECS: dict[Provider, ProviderSpec] = {
         wire_format=WireFormat.ANTHROPIC,
         base_url="https://api.anthropic.com",
         api_key_env="ANTHROPIC_API_KEY",
-        default_model="claude-sonnet-4-6",
-        # Anthropic Sonnet 4 held pricing at $3/$15 per 1M through
-        # 2026. Opus 4.5 raised to $15/$75 per 1M; per-model overrides
-        # carry that.
-        cost_per_1k_input=0.003, cost_per_1k_output=0.015,
-        quality=0.94, latency_p95_ms=900, reliability=0.999,
+        # Cheap Anthropic default (Haiku) — INTERNAL_CHAT_MODEL is an
+        # OpenRouter id and is not valid on the Anthropic Messages API.
+        default_model="claude-haiku-4-5",
+        cost_per_1k_input=0.001, cost_per_1k_output=0.005,
+        quality=0.88, latency_p95_ms=350, reliability=0.999,
     ),
     # ── Local: Ollama (default localhost) + Ollama Cloud ─────────────
     Provider.OLLAMA: ProviderSpec(

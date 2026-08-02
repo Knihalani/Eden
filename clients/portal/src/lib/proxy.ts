@@ -225,6 +225,18 @@ export function streamHandshakeFailure(options: {
 //   2. localhost:8000 — dev default; matches FastAPI's default port.
 // We explicitly drop NEXT_PUBLIC_API_URL from the lookup because it
 // would crash server-side fetches when set to `/api/proxy`.
+if (
+  process.env.VERCEL_ENV === "production" &&
+  !process.env.API_INTERNAL_URL
+) {
+  // Fatal: silent localhost fallback would black-hole every portal
+  // API call in production. Fail at module load so the deploy is
+  // obviously broken instead of serving 502s to every user.
+  const msg =
+    "[portal] FATAL: API_INTERNAL_URL is required when VERCEL_ENV=production";
+  console.error(msg);
+  throw new Error(msg);
+}
 const API_BASE =
   process.env.API_INTERNAL_URL || "http://localhost:8000";
 

@@ -195,6 +195,7 @@ class SignalCard(BaseModel):
     lastHit: str | None = None
     relatedIssueIds: list[str] = Field(default_factory=list)
     exampleTraceIds: list[str] = Field(default_factory=list)
+    templateId: str | None = None
 
 
 # ── Alerts (AlertRule / AlertEvent) ───────────────────────────────

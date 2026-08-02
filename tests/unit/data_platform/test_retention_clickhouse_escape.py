@@ -126,3 +126,15 @@ async def test_delete_from_clickhouse_returns_zero_when_unconfigured() -> None:
                SimpleNamespace(clickhouse_url="")):
         out = await mgr._delete_from_clickhouse("anything")
     assert out == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_from_clickhouse_tinybird_raises_incomplete() -> None:
+    """Tinybird skip must not look like a successful empty purge."""
+    mgr = DataRetentionManager()
+    with patch(
+        "eden.data_platform.retention.settings",
+        SimpleNamespace(clickhouse_url="https://api.us-east.tinybird.co"),
+    ):
+        with pytest.raises(RuntimeError, match="incomplete|Tinybird"):
+            await mgr._delete_from_clickhouse("tenant-1")

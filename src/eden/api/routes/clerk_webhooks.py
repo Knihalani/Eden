@@ -13,6 +13,8 @@ event we subscribed to in the Clerk dashboard:
 - ``organization.created`` / ``organization.updated`` — sync the
   Clerk org to Eden's ``organizations`` table. The Clerk ``id`` is
   the Eden ``org_id``.
+- ``organization.deleted`` — soft-archive the Eden org
+  (``archived_at = NOW()``), matching portal archive semantics.
 - ``organizationMembership.created`` / ``.updated`` — write the
   ``org_members`` row with the role mapped from Clerk's
   ``org:<slug>`` string onto Eden's ``owner``/``admin``/
@@ -24,6 +26,10 @@ Verification uses Clerk's signing secret (configured via
 ``CLERK_WEBHOOK_SIGNING_SECRET``). When unset, the endpoint refuses
 every request — a misconfigured secret should never let unsigned
 payloads mutate production data.
+
+Idempotency: ``svix-id`` is claimed in Redis (``clerk:svix:{id}``,
+SET NX EX 86400). Duplicates return 200 without reprocessing; the
+key is released on handler failure so Clerk retries can succeed.
 
 Surface: ``POST /webhooks/clerk``.
 """
@@ -46,6 +52,45 @@ from eden.storage.postgres import get_postgres_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+_SVIX_IDEMPOTENCY_TTL_S = 86400
+
+
+async def _claim_svix_id(svix_id: str | None) -> bool:
+    """Claim a Svix delivery id. Return False if already processed."""
+    if not svix_id:
+        return True
+    try:
+        from eden.storage.redis import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is None:
+            return True
+        was_set = await redis.set(
+            f"clerk:svix:{svix_id}",
+            "1",
+            nx=True,
+            ex=_SVIX_IDEMPOTENCY_TTL_S,
+        )
+        return bool(was_set)
+    except Exception as exc:  # noqa: BLE001 — fail open on redis blips
+        logger.debug("clerk svix idempotency claim failed: %s", exc)
+        return True
+
+
+async def _release_svix_id(svix_id: str | None) -> None:
+    """Drop the claim so Clerk can redeliver after a 503/handler failure."""
+    if not svix_id:
+        return
+    try:
+        from eden.storage.redis import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is None:
+            return
+        await redis.delete(f"clerk:svix:{svix_id}")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("clerk svix idempotency release failed: %s", exc)
 
 
 class WebhookNotReadyError(RuntimeError):
@@ -523,6 +568,27 @@ async def _delete_membership(data: dict[str, Any]) -> None:
     )
 
 
+async def _archive_org(data: dict[str, Any]) -> None:
+    """Soft-archive an Eden org when Clerk sends ``organization.deleted``.
+
+    Matches portal archive semantics (``archived_at``), not hard DELETE.
+    Idempotent when the row is already archived or missing.
+    """
+    clerk_id = data.get("id")
+    if not clerk_id:
+        return
+    client = await get_postgres_client()
+    await client.execute(
+        """
+        UPDATE organizations
+        SET archived_at = NOW(), updated_at = NOW()
+        WHERE archived_at IS NULL
+          AND (clerk_org_id = $1 OR id::text = $1)
+        """,
+        clerk_id,
+    )
+
+
 @router.post("/clerk")
 async def clerk_webhook(
     request: Request,
@@ -541,6 +607,9 @@ async def clerk_webhook(
     if not _verify_svix_signature(body, svix_id, svix_timestamp, svix_signature, secret):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
+    if not await _claim_svix_id(svix_id):
+        return {"status": "ok", "duplicate": True, "svix_id": svix_id}
+
     event = await request.json()
     event_type = event.get("type") or ""
     payload = event.get("data") or {}
@@ -551,6 +620,7 @@ async def clerk_webhook(
         "user.deleted": _deactivate_user,
         "organization.created": _upsert_org,
         "organization.updated": _upsert_org,
+        "organization.deleted": _archive_org,
         "organizationMembership.created": _upsert_membership,
         "organizationMembership.updated": _upsert_membership,
         "organizationMembership.deleted": _delete_membership,
@@ -573,8 +643,16 @@ async def clerk_webhook(
             clerk_id = payload.get("id") if isinstance(payload, dict) else None
             if clerk_id:
                 invalidate_user_cache(clerk_id)
+    except WebhookNotReadyError:
+        await _release_svix_id(svix_id)
+        raise HTTPException(
+            status_code=503,
+            detail="Webhook dependencies not ready; please retry",
+        ) from None
     except (ValueError, TypeError, KeyError) as exc:
         # Malformed Clerk payload / missing required fields — client error.
+        # Keep the svix claim: retries with the same id would hit the same
+        # bad payload.
         logger.warning(
             "Clerk webhook bad payload for %s: %s",
             event_type,
@@ -587,8 +665,9 @@ async def clerk_webhook(
             detail=safe_detail(exc, fallback="Invalid webhook payload"),
         ) from exc
     except Exception as exc:  # noqa: BLE001
-        # True infra / DB failure — 503 so Clerk retries; never leak
-        # exception text (schema / constraint names) in the body.
+        # True infra / DB failure — 503 so Clerk retries; release claim
+        # so the redelivery is not treated as a duplicate.
+        await _release_svix_id(svix_id)
         logger.exception(
             "Clerk webhook handler failed for %s: %s",
             event_type,

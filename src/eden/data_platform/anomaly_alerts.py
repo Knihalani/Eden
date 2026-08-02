@@ -545,21 +545,30 @@ class AnomalyDetector:
             )
 
     async def _dispatch_websocket(self, alert: AnomalyAlert) -> None:
-        """Push alert to connected WebSocket clients."""
-        try:
-            from eden.api.routes.websocket import _job_connections
+        """Push alert to connected WebSocket clients for the scoped org/entity.
 
-            for _job_id, connections in _job_connections.items():
-                for ws in list(connections):
-                    try:
-                        await ws.send_json({
-                            "type": "anomaly_alert",
-                            "alert": alert.to_dict(),
-                        })
-                    except Exception:
-                        connections.discard(ws)
+        Prefer entity_id / org_id from alert context over broadcasting to
+        every local socket (cross-job leak on a replica).
+        """
+        try:
+            from eden.api.routes.websocket import broadcast_to_job_websockets
+
+            target = str(
+                alert.context.get("entity_id")
+                or alert.context.get("org_id")
+                or alert.context.get("trace_id")
+                or ""
+            )
+            if not target:
+                return
+            await broadcast_to_job_websockets(
+                target,
+                {"type": "anomaly_alert", "alert": alert.to_dict()},
+            )
         except ImportError:
             pass
+        except Exception as exc:
+            logger.debug("WebSocket anomaly dispatch failed: %s", exc)
 
     async def _dispatch_email(self, alert: AnomalyAlert) -> None:
         """Sparse email via SendKit (alerts@) — best-effort."""

@@ -91,6 +91,73 @@ async def test_backfill_estimate_route() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_signal_toggles_enabled_and_dual_writes() -> None:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    updated_row = {
+        "id": "sig-1",
+        "org_id": "org-1",
+        "description": "error rate high",
+        "rule": {
+            "metric": "error_rate",
+            "op": ">",
+            "threshold": 0.05,
+            "window_hours": 24,
+            "scope": {},
+            "keywords": [],
+        },
+        "enabled": False,
+        "created_by": "user-1",
+        "cluster_id": None,
+        "match_count": 3,
+        "created_at": now,
+        "updated_at": now,
+    }
+    pg = MagicMock()
+    pg.fetchrow = AsyncMock(return_value=updated_row)
+    pg.execute = AsyncMock(return_value="UPDATE 1")
+
+    with patch.object(
+        signals_mod, "get_postgres_client", AsyncMock(return_value=pg)
+    ):
+        resp = await signals_mod.update_signal(
+            body=signals_mod.UpdateSignalRequest(enabled=False),
+            org_id="org-1",
+            signal_id="sig-1",
+            user=_user(),
+        )
+
+    assert resp.id == "sig-1"
+    assert resp.enabled is False
+    assert resp.match_count == 3
+    # Dual-write to signal_definitions with nl:{id} template
+    bridge_call = pg.execute.await_args_list[0]
+    assert "signal_definitions" in bridge_call.args[0]
+    assert bridge_call.args[1:] == ("org-1", "nl:sig-1", False)
+
+
+@pytest.mark.asyncio
+async def test_update_signal_missing_returns_404() -> None:
+    pg = MagicMock()
+    pg.fetchrow = AsyncMock(return_value=None)
+    pg.execute = AsyncMock()
+
+    with patch.object(
+        signals_mod, "get_postgres_client", AsyncMock(return_value=pg)
+    ):
+        with pytest.raises(HTTPException) as excinfo:
+            await signals_mod.update_signal(
+                body=signals_mod.UpdateSignalRequest(enabled=True),
+                org_id="org-1",
+                signal_id="missing",
+                user=_user(),
+            )
+    assert excinfo.value.status_code == 404
+    pg.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_rows_affected_parsing() -> None:
     assert signals_mod._rows_affected("UPDATE 3") == 3
     assert signals_mod._rows_affected("UPDATE 0") == 0

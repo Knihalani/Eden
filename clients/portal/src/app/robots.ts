@@ -3,6 +3,7 @@
 
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/constants";
+import { MARKETING_SITEMAP_ROUTES } from "@/lib/marketing-routes";
 
 const PORTAL =
   process.env.NEXT_PUBLIC_PORTAL_URL ||
@@ -15,18 +16,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: [
-          "/",
-          "/pricing",
-          "/about",
-          "/contact",
-          "/changelog",
-          "/privacy",
-          "/terms",
-          "/dpa",
-          "/security",
-          "/subprocessors",
-          "/do-not-sell",
-          "/status",
+          ...MARKETING_SITEMAP_ROUTES,
           "/og.png",
           "/og-pricing.png",
         ],
