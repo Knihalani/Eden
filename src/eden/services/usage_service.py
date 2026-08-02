@@ -258,7 +258,7 @@ class UsageService:
                 SELECT COALESCE(SUM(cost_usd), 0) AS total
                 FROM budget_consumption
                 WHERE org_id = $1
-                  AND window = 'monthly'
+                  AND "window" = 'monthly'
                   AND window_start >= $2
                 """,
                 org_id,

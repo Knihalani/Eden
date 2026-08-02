@@ -144,7 +144,7 @@ async def get_budget(org_id: str) -> dict[str, Any]:
     try:
         row = await client.fetchrow(
             """
-            SELECT id, org_id, window, cost_soft_limit_usd,
+            SELECT id, org_id, "window", cost_soft_limit_usd,
                    cost_hard_limit_usd, enforcement_enabled,
                    action_on_exceed, threshold_alert_pct,
                    alert_thresholds
@@ -161,7 +161,7 @@ async def get_budget(org_id: str) -> dict[str, Any]:
         try:
             row = await client.fetchrow(
                 """
-                SELECT id, org_id, window, cost_soft_limit_usd,
+                SELECT id, org_id, "window", cost_soft_limit_usd,
                        cost_hard_limit_usd, enforcement_enabled,
                        action_on_exceed, threshold_alert_pct
                   FROM budgets
@@ -229,7 +229,7 @@ async def get_consumption(
             """
             SELECT cost_usd, requests_count, window_start, window_end
               FROM budget_consumption
-             WHERE org_id = $1 AND window = $2 AND window_start = $3
+             WHERE org_id = $1 AND "window" = $2 AND window_start = $3
              LIMIT 1
             """,
             org_id,
@@ -313,7 +313,7 @@ async def record_usage(
         await client.execute(
             """
             INSERT INTO budget_consumption (
-                id, org_id, window, window_start, window_end,
+                id, org_id, "window", window_start, window_end,
                 cost_usd, requests_count, last_request_at,
                 created_at, updated_at
             ) VALUES (
@@ -335,7 +335,7 @@ async def record_usage(
             -- ``window_start`` is part of the unique key, so
             -- a new-month row never conflicts with the prior
             -- month's row anyway.
-            ON CONFLICT (org_id, window, window_start) DO UPDATE SET
+            ON CONFLICT (org_id, "window", window_start) DO UPDATE SET
                 cost_usd = budget_consumption.cost_usd + EXCLUDED.cost_usd,
                 requests_count = budget_consumption.requests_count + 1,
                 last_request_at = NOW(),

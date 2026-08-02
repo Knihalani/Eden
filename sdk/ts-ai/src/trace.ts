@@ -16,10 +16,23 @@
  * telemetry path are caught and logged at debug level.
  */
 
-import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getDefaultClient } from "./client.js";
 import { SOURCE_FORMATS, type TraceOptions } from "./types.js";
+
+// 24-char base-36 id. Duplicated here (as ``client.ts`` duplicates
+// ``randomUUID``) because importing ``ids.js`` would close a module
+// cycle (ids → trace → ids) that dual-instantiates this module's
+// AsyncLocalStorage and silently breaks ``currentTrace()`` for every
+// instrumentation. Two random suffixes keep the full 24-char length —
+// a single ``Date.now() + Math.random()`` pair tops out at ~17 chars.
+function traceRandomId(): string {
+  const ts = Date.now().toString(36);
+  const rand =
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 10);
+  return `${ts}${rand}`.slice(0, 24);
+}
 
 /**
  * Public trace context — same shape as the Python SDK's `Span` (the
@@ -123,8 +136,13 @@ export class TraceController implements TraceContext {
     this.name = name;
     this.options = options;
     this.startMs = Date.now();
-    this.traceId = parent?.traceId ?? randomUUID().slice(0, 24);
-    this.spanId = randomUUID().slice(0, 16);
+    // 24/16-char base36 ids (same shape as the instrumentations via
+    // ``ids.randomId()``). The previous ``randomUUID().slice(0, 24)``
+    // truncated a dashed UUID mid-segment — trace ids landed on the
+    // wire as ``"a6fe688f-0623-42a1-83c4-"`` with a dangling dash and
+    // most of the UUID's entropy discarded.
+    this.traceId = parent?.traceId ?? traceRandomId();
+    this.spanId = traceRandomId().slice(0, 16);
     this.parentSpanId = parent?.spanId;
     // Pre-seed tags from the config + options.
     const client = getDefaultClient();
