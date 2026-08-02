@@ -171,6 +171,27 @@ async def normalize_to_telemetry_event(
         or payload.get("status")
     )
 
+    # The Python SDK's framework emitter hoists ``set_input`` /
+    # ``set_output`` to top-level ``input`` / ``output`` fields (see
+    # ``eden_sdk.trace._emit_trace_event``). Without this fallback those
+    # payloads were silently dropped — spans landed with empty
+    # request_body / response_body and the transcript view had nothing
+    # to render. Non-dict values (``set_output("text")``) are wrapped so
+    # downstream message-hash extraction always sees a mapping.
+    request_body = raw.get("request_body")
+    if request_body is None:
+        # TS SDK nests them inside ``payload`` instead (eventToWire).
+        _in = raw.get("input") if raw.get("input") is not None else payload.get("input")
+        if _in is not None:
+            request_body = _in if isinstance(_in, dict) else {"content": _in}
+    response_body = raw.get("response_body")
+    if response_body is None:
+        _out = raw.get("output") if raw.get("output") is not None else payload.get("output")
+        if _out is not None:
+            response_body = _out if isinstance(_out, dict) else {"content": _out}
+    reasoning = raw.get("reasoning")
+    logprobs = raw.get("logprobs")
+
     if settings.ingestion_pii_pre_mask:
         # Mask payload + attributes concurrently (policy resolve is cached).
         payload, attributes = await asyncio.gather(
@@ -180,22 +201,25 @@ async def normalize_to_telemetry_event(
         # PII mask the new capture fields too (reasoning, request_body,
         # response_body) — these can leak credentials via example
         # tool-call arguments or seeded user data.
-        pii_fields = (
-            "request_body",
-            "response_body",
-            "reasoning",
-            "logprobs",
-        )
-        to_mask: list[tuple[str, dict]] = []
-        for pii_field in pii_fields:
-            value = raw.get(pii_field)
-            if isinstance(value, dict):
-                to_mask.append((pii_field, value))
+        capture_fields = {
+            "request_body": request_body,
+            "response_body": response_body,
+            "reasoning": reasoning,
+            "logprobs": logprobs,
+        }
+        to_mask = [v for v in capture_fields.values() if isinstance(v, dict)]
         if to_mask:
             masked_vals = await asyncio.gather(
-                *(mask_payload(value, tenant_id=attribution.tenant_id) for _, value in to_mask)
+                *(mask_payload(v, tenant_id=attribution.tenant_id) for v in to_mask)
             )
-            raw = {**raw, **{k: m for (k, _), m in zip(to_mask, masked_vals, strict=False)}}
+            masked_iter = iter(masked_vals)
+            for field, value in capture_fields.items():
+                if isinstance(value, dict):
+                    capture_fields[field] = next(masked_iter)
+            request_body = capture_fields["request_body"]
+            response_body = capture_fields["response_body"]
+            reasoning = capture_fields["reasoning"]
+            logprobs = capture_fields["logprobs"]
 
     return TelemetryEvent(
         event_id=event_id,
@@ -227,14 +251,14 @@ async def normalize_to_telemetry_event(
         tags=tags,
         outcome=outcome,
         source_format=attribution.source_format,
-        request_body=raw.get("request_body"),
-        response_body=raw.get("response_body"),
-        reasoning=raw.get("reasoning"),
+        request_body=request_body,
+        response_body=response_body,
+        reasoning=reasoning,
         tool_calls_full=raw.get("tool_calls_full") or [],
         tool_results=raw.get("tool_results") or [],
         images=raw.get("images") or [],
         audio=raw.get("audio") or [],
-        logprobs=raw.get("logprobs"),
+        logprobs=logprobs,
         citations=raw.get("citations") or [],
         finish_reason=raw.get("finish_reason"),
         stop_sequence=raw.get("stop_sequence"),

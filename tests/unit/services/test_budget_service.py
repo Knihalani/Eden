@@ -96,8 +96,9 @@ class TestF44BudgetConsumptionOnConflict:
         # conflict_target, but not a WHERE after the target.)
         assert " ON CONFLICT " in sql.upper()
         # The conflict_target must reference the three unique-key
-        # columns.
-        assert "(org_id, window, window_start)" in on_conflict.lower()
+        # columns. ``window`` is a Postgres reserved word and MUST be
+        # double-quoted — unquoted it is a syntax error on PG16/17/18.
+        assert '(org_id, "window", window_start)' in on_conflict.lower()
         # The forbidden pattern: ``... window_start) WHERE ...``
         assert not re.search(
             r"window_start\)\s+WHERE",
