@@ -395,7 +395,7 @@ function MemberDialog({
           {member.role !== "owner" && member.status === "active" && canRemove ? (
             <button
               type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm mr-auto text-[var(--danger)]"
+              className="ds-btn ds-btn-ghost ds-btn-sm mr-auto text-[var(--error)]"
               disabled={removing}
               onClick={() => {
                 void (async () => {

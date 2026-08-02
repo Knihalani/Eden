@@ -38,7 +38,6 @@ export default function LabShellPage() {
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusChip tone="ok">ok</StatusChip>
             <StatusChip tone="fail">fail</StatusChip>
-            <StatusChip tone="fail">warn</StatusChip>
             <StatusChip tone="live">live</StatusChip>
             <StatusChip tone="neutral">idle</StatusChip>
           </div>

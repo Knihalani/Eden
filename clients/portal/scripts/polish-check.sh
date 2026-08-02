@@ -8,13 +8,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "→ checking for hardcoded hex outside globals.css / clerk-theme.ts…"
+echo "→ checking for hardcoded hex outside tokens / globals / clerk-theme…"
 # The analytics-tab holds a known SSR fallback const (CHART_COLORS_FALLBACK)
 # for when window is undefined. BrowserReplayPanel embeds a sandboxed HTML
 # shell for the replay iframe (not product chrome). global-error.tsx renders
 # its own <html>/<body> to replace a root layout that itself threw, so
 # globals.css is not guaranteed to be loaded and inline hex is the only thing
-# that can be relied on there. Every other hex should be a design token.
+# that can be relied on there. tokens.css is the canonical hex palette —
+# every other hex (including composer greys in components.css) should be a
+# design token.
 #
 # Two classes of match are filtered out rather than excluded by filename,
 # because excluding whole files would blind the check to real regressions in
@@ -25,8 +27,9 @@ echo "→ checking for hardcoded hex outside globals.css / clerk-theme.ts…"
 #     definition only reached when a token lookup returned nothing (see
 #     gateway-client.tsx reading getPropertyValue("--bg")) — a token cannot
 #     be its own fallback.
-HEX_MATCHES=$(grep -rEn '#[0-9a-fA-F]{6}' src/app src/components 2>/dev/null \
+HEX_MATCHES=$(grep -rEn '#[0-9a-fA-F]{6}' src/app src/components src/styles 2>/dev/null \
   | grep -v 'globals.css' | grep -v 'clerk-theme.ts' \
+  | grep -v 'tokens.css' \
   | grep -v 'analytics-tab.tsx' \
   | grep -v 'BrowserReplayPanel.tsx' \
   | grep -v 'global-error.tsx' \
