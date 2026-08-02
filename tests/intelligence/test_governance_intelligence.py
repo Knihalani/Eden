@@ -60,6 +60,7 @@ def _pg_router(
     scan_runs: list[dict[str, Any]] | None = None,
     approvals_state_counts: list[dict[str, Any]] | None = None,
     rtbf_audit_rollup: list[dict[str, Any]] | None = None,
+    rtbf_conversation_ids: list[Any] | None = None,
 ) -> MagicMock:
     """Build a Postgres mock whose ``fetch`` / ``execute`` route
     on SQL fragments. Defaults to empty for every branch — tests
@@ -137,6 +138,9 @@ def _pg_router(
             if "distinct trace_id" in q:
                 return list(telemetry_by_user or [])
             return list(telemetry_events or [])
+        # ── RTBF scope derivation: the user's conversation ids ──
+        if "select id from conversations" in q:
+            return [{"id": cid} for cid in (rtbf_conversation_ids or [])]
         if "from outcomes" in q:
             if "select trace_id" in q:
                 return list(outcome_to_trace or [])
@@ -939,6 +943,11 @@ class TestRTBF:
                 "conversation_messages": 10,
                 "conversations": 1,
             },
+            # Scope-derivation results so judge_scores (via
+            # trace_ids) and conversation_messages (via
+            # conversation ids) are in scope.
+            telemetry_by_user=[{"trace_id": f"trace_{i}"} for i in range(3)],
+            rtbf_conversation_ids=["conv_1"],
         )
         # Stub cross-store fanout so retention/ClickHouse noise cannot
         # poison the JSON audit metadata (CI had MagicMock await errors).
@@ -1026,6 +1035,122 @@ class TestRTBF:
                 "org_test", user_id="u", sla_days=999, dry_run=True,
             )
         assert out["data"]["sla_days"] == 90
+
+    @pytest.mark.asyncio
+    async def test_rtbf_fails_closed_when_postgres_unavailable(
+        self, gov_modules,
+    ) -> None:
+        """No database must never look like a completed erasure."""
+        svc = gov_modules["rtbf"]()
+        with patch(
+            "eden.storage.postgres.get_postgres_client", return_value=None
+        ):
+            out = await svc.process_request("org_test", user_id="u")
+        assert out["status"] == "error"
+        assert out["data"]["complete"] is False
+
+    @pytest.mark.asyncio
+    async def test_rtbf_fails_closed_on_sql_error(
+        self, gov_modules,
+    ) -> None:
+        """A table whose SQL raises must surface as a named failure
+        in an ``error`` envelope — pre-fix this was swallowed and the
+        response reported ``rows_matched: 0`` inside a success
+        envelope (the ``gdpr.py:222`` silent-zero bug).
+        """
+        svc = gov_modules["rtbf"]()
+        pg = _pg_router(rtbf_table_counts={"telemetry_events": 3})
+
+        original_fetch = pg.fetch
+
+        async def _boom_on_conversations(query, *args):
+            q = query.lower()
+            if "from conversations" in q and "count(*)" in q:
+                raise RuntimeError("relation conversations does not exist")
+            return await original_fetch(query, *args)
+
+        pg.fetch = AsyncMock(side_effect=_boom_on_conversations)
+        with patch(
+            "eden.storage.postgres.get_postgres_client", return_value=pg
+        ), patch(
+            "eden.services.governance_intel.rtbf_fanout.fanout_rtbf",
+            new=AsyncMock(return_value=[{"store": "redis", "status": "ok"}]),
+        ):
+            out = await svc.process_request(
+                "org_test", user_id="user_to_forget", dry_run=True,
+            )
+        assert out["status"] == "error"
+        assert out["data"]["complete"] is False
+        failed_tables = {f["table"] for f in out["data"]["failures"]}
+        assert failed_tables == {"conversations"}
+        # The healthy tables still reported their real counts.
+        by_table = {t["table"]: t for t in out["data"]["tables"]}
+        assert by_table["telemetry_events"]["rows_matched"] == 3
+        assert by_table["conversations"]["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_rtbf_sql_matches_live_schema(self, gov_modules) -> None:
+        """Regression lock for the 2026-07-31 disabled-features entry:
+        the erase path previously named columns that do not exist on
+        the three tables holding user content. Assert the issued SQL
+        uses the live-schema columns instead.
+        """
+        svc = gov_modules["rtbf"]()
+        pg = _pg_router(
+            rtbf_table_counts={
+                "telemetry_events": 2,
+                "judge_scores": 1,
+                "user_feedback": 1,
+                "user_sessions": 1,
+                "conversation_messages": 4,
+                "conversations": 1,
+            },
+            telemetry_by_user=[{"trace_id": "trace_1"}],
+            rtbf_conversation_ids=["conv_1"],
+        )
+        with patch(
+            "eden.storage.postgres.get_postgres_client", return_value=pg
+        ), patch(
+            "eden.services.governance_intel.rtbf_fanout.fanout_rtbf",
+            new=AsyncMock(return_value=[{"store": "redis", "status": "ok"}]),
+        ):
+            out = await svc.process_request(
+                "org_test", user_id="user_to_forget",
+            )
+        assert out["status"] == "ok", out["data"].get("failures")
+
+        executed = "\n".join(
+            str(c.args[0]).lower() for c in pg.execute.await_args_list
+        )
+        fetched = "\n".join(
+            str(c.args[0]).lower() for c in pg.fetch.await_args_list
+        )
+        all_sql = executed + "\n" + fetched
+
+        # Dead columns from the pre-fix _RTBF_TABLES must be gone.
+        for dead in ("payload_json", "metadata_json", "raw_input", "raw_output"):
+            assert dead not in all_sql, f"dead column {dead} still referenced"
+
+        # telemetry_events: tenant-scoped, user matched via attributes
+        # keys, content columns scrubbed, zstd shadows nulled.
+        assert "update telemetry_events" in executed
+        assert "tenant_id" in executed
+        assert "attributes->>'user_id'" in executed
+        assert "request_body" in executed
+        assert "payload_zstd = null" in executed
+
+        # judge_scores: scoped through the user's trace_ids, not a
+        # nonexistent user_id column.
+        assert "update judge_scores set rationale" in executed
+        assert "trace_id = any(" in executed
+
+        # conversation_messages: scoped through conversation ids.
+        assert "update conversation_messages set content" in executed
+        assert "conversation_id = any(" in executed
+
+        # Re-key tables still hash the user id.
+        assert "update user_sessions set user_id" in executed
+        assert "update conversations set user_id" in executed
 
 
 # ─── 5. DataLineageService ──────────────────────────────────────────
