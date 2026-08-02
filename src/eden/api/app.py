@@ -189,6 +189,7 @@ from eden.api.routes import (
     redteam,
     references,
     replay,
+    retention_policy,
     scim,
     search_signals,
     sessions,
@@ -1250,7 +1251,10 @@ app.include_router(
 app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
 app.include_router(
     cost_overrides.router
-)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)  # /orgs/{org_id}/retention-policy
+)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)
+app.include_router(
+    retention_policy.router
+)  # /orgs/{org_id}/retention-policy (Phase 7.3b per-tenant retention overrides)
 app.include_router(
     notifications.router
 )  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
