@@ -8,7 +8,7 @@ while doing nothing is worse than a feature that is absent.** An absent
 feature costs a customer nothing. A lying one costs them their trust and
 sends them debugging their own code.
 
-Last reviewed: 2026-07-31.
+Last reviewed: 2026-08-02.
 
 ---
 
@@ -34,108 +34,87 @@ recording; edits applied to step root; empty prompt returned recorded hash).
 
 ---
 
-## 1b. SSO routes — `sso_enabled = False`
+## 1b. SSO routes — `sso_enabled = True` (fixed 2026-08-02)
 
-**Routes:** everything under `/sso` (11 handlers). Not mounted at all,
-so they no longer appear in the OpenAPI surface.
+**Fixed.** All 11 handlers in `api/routes/sso.py` were repointed from
+the nonexistent `org_sso_providers` to the live schema, verified
+against `information_schema` and EXPLAIN-validated (16/16 statements)
+against the production database:
 
-**Why.** Every handler in `api/routes/sso.py` queries
-`org_sso_providers`, which does not exist. The live schema has
-`org_sso_settings` and `sso_configurations` — verified directly against
-the database.
+- **List/login** JOIN `org_sso_settings` × `sso_configurations`
+  (+ LEFT JOIN `org_scim_config` for SCIM status).
+- **Create** runs in one transaction: INSERT `sso_configurations`,
+  then INSERT `org_sso_settings` referencing it.
+- **Update / enable / disable / enforce** write `sso_configurations`
+  columns and touch `org_sso_settings.updated_at`.
+- **SCIM token generate/revoke** now UPSERT/UPDATE `org_scim_config` —
+  the same table `scim.py:157` reads from (mirroring the existing SCIM
+  upsert pattern in `orgs.py`), closing the write/read table mismatch
+  that made SCIM permanently unconfigurable.
 
-`PostgresClient.fetch` does not swallow, so `GET /sso/providers` was an
-unhandled 500 and `POST /sso/providers` a 503. Endpoints that can only
-fail should not be advertised.
+Fields with no live counterpart are handled honestly rather than
+silently: `name` is accepted on create but not stored (list returns the
+`provider` slug), `default_for_domain` is always `None`, and SAML
+`entity_id` / `certificate` / `scopes` are not stored.
 
-**Re-enabling needs more than creating the table.** The SCIM token is
-*written* to `org_sso_providers.scim_token_hash` but *read* from
-`org_scim_config.scim_token_hash` (`scim.py:166`), and nothing in the
-codebase ever writes the latter — so SCIM could never be enabled
-either, and every SCIM request 401s "SCIM not configured".
-
-**Re-enable when:** the queries are repointed at `org_sso_settings` /
-`sso_configurations`, the SCIM token is written where it is read, and a
-test exercises one full provider round-trip. Then set `SSO_ENABLED=1`.
-
-No customer-facing loss today: SSO was never functional, so nothing
-that used to work has stopped.
-
----
-
-## 1c. Signup email verification — `email_verification_enabled = False`
-
-**What changed for users:** the signup response no longer says "Check
-your email to verify before signing in." It now says the account was
-created and they can sign in — which is what actually happens.
-
-**Why.** None of the verification flow exists, in three independent
-ways:
-
-- `email_verification_tokens` is not a table, so the INSERT raised
-  `UndefinedTable` on **every** signup;
-- `send_verification_email` is not defined in `email_service.py`;
-- there is no `/auth/verify-email` route anywhere in `src/eden/` — only
-  a string in `default_deny.py`'s allowlist.
-
-All three were swallowed by one `except Exception`, so each signup
-issued a doomed database write and then told the user to check an inbox
-that would never receive anything.
-
-Accounts were never actually blocked: `login` does not check
-`email_verified`. So the only damage was the false instruction and a
-failing write per signup — but "go check your email" with no email is a
-dead end on a customer's first minute with the product.
-
-The enumeration-safe "If that email is not already registered…" prefix
-is unchanged; only the verification sentence is conditional.
-
-**Re-enable when:** the table, the sender and the `/auth/verify-email`
-route ship together, and a test walks one signup through to a verified
-login.
+`tests/unit/api/test_sso_live_schema.py` exercises a full
+create→list round-trip and source-locks the dead table name out of the
+module. Routes remounted; default flag is **True**; set
+`SSO_ENABLED=0` to disable.
 
 ---
 
-## 2. Right-to-be-forgotten fanout — `rtbf_fanout_v1 = False` (deferred for free beta)
+## 1c. Signup email verification — `email_verification_enabled = True` (fixed 2026-08-02)
+
+**Fixed.** All three missing pieces shipped together:
+
+1. `email_verification_tokens` table — Alembic migration
+   `133_email_verification_tokens` (hash-only storage, mirrors
+   `password_reset_tokens`).
+2. `send_verification_email` in `email_service.py`, reusing the
+   password-reset dispatch fixed 2026-07-30.
+3. `POST /auth/verify-email` route — validates the token hash, marks it
+   used and sets `users.email_verified = TRUE` in one transaction;
+   enumeration-safe; 404 when the flag is off.
+
+Portal page at `/verify-email` (`clients/portal/src/app/(auth)/verify-email/`)
+consumes the link. Integration tests
+(`tests/integration/test_email_verification.py`) walk one signup through
+to a verified login and cover unknown / used / expired tokens plus the
+flag-off 404. Default flag is **True**; set
+`EMAIL_VERIFICATION_ENABLED=0` to disable.
+
+---
+
+## 2. Right-to-be-forgotten fanout — `rtbf_fanout_v1 = False` (Postgres path fixed 2026-08-02; flag stays off)
 
 **What it is:** GDPR Art. 17 erase (`POST …/rtbf`). Not a free-beta feature.
 
-**When to enable:** only after Postgres erase maps to live columns on
-content tables, fail-closed on SQL errors, and secondary-store deletes
-are real. Until then, enabling certifies erasure we cannot perform.
+**Code-fixed 2026-08-02 — what changed in `services/governance_intel/gdpr.py`:**
 
-Already off; left off, but the reason on record was misleading and has
-been corrected.
+- **Live-column SQL.** Per-table statements were rewritten against
+  `information_schema`: `telemetry_events` is keyed by
+  `attributes->>'user_id'` (redacts the JSONB content columns, nulls
+  their zstd bytea shadows plus media blobs, strips user-id keys from
+  `attributes`); `judge_scores`
+  and `conversation_messages` are re-keyed through derived `trace_id` /
+  `conversation_id` scopes; `user_feedback`, `user_sessions`,
+  `conversations` keep direct user columns.
+- **Fail-closed.** The `except … return rows_matched: 0` swallow is
+  gone. A SQL error on any table now surfaces in the error envelope with
+  the named failing tables — no silent `rows_matched: 0` success.
+- **Dead auto-fire deleted.** `promotion_hooks.py`'s compliance-gap hook
+  no longer calls `process_request` without `org_id` (it raised into a
+  swallowed `except` on every fire). A regression test
+  (`tests/intelligence/test_session10_rtbf_hash_ssrf.py`) pins the
+  removal. `rtbf_tracker.py:153` still has no production callers.
 
-The stated reason was that the cross-store fanout cannot yet erase from
-Typesense / Redis / Qdrant / ClickHouse / S3. True, but it points an
-implementer at `rtbf_fanout.py` — the wrong file.
-
-The larger problem is in the **primary Postgres path**,
-`services/governance_intel/gdpr.py:60-67`. Of six tables, three name
-columns that do not exist, verified against live `information_schema`:
-
-| table | fails on |
-|---|---|
-| `telemetry_events` | no `org_id`; no `payload_json` / `metadata_json` |
-| `judge_scores` | no `org_id`; no `raw_input` / `raw_output` |
-| `conversation_messages` | no `user_id` (keyed by `org_id` + `conversation_id`) |
-
-The split falls exactly along the content line. The three that fail are
-the three holding actual user content — prompts, completions, tool
-calls, reasoning, judge rationales, chat message bodies. The three that
-work hold a feedback comment, session counters and a conversation title.
-
-It fails **silently**: `gdpr.py:222` catches and returns 0, so the
-response reports `rows_matched: 0` and an overall success envelope.
-
-**Do not enable** until the Postgres path is fixed. Enabling it as-is
-issues an erasure certificate for data that was never erased.
-
-Note: the two callers that bypass the route are both dead —
-`rtbf_tracker.py:153` has no production callers, and
-`promotion_hooks.py:678` calls `process_request` without its required
-`org_id` and raises into a swallowed `except`.
+**Flag stays OFF.** What remains before `RTBF_FANOUT_V1=1` is safe:
+secondary-store erasure must be proven real — Typesense, Redis streams,
+Qdrant vectors, ClickHouse mirror, S3 media blobs. The Postgres path
+now tells the truth; the fanout across the other stores has not been
+verified, and enabling without it certifies erasure we cannot perform
+there. That is the only remaining blocker.
 
 ---
 
