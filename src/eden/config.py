@@ -257,15 +257,16 @@ def _build_settings_class():
         # Portal wizard ``/orgs/{org}/onboarding/state`` is separate.
         # See docs/ops/known-issues.md #9.
         onboarding_state_machine_v2_enabled: bool = True
-        # Email verification on password signup. OFF since 2026-07-30
-        # because none of it exists: email_verification_tokens is not a
-        # table, send_verification_email is not a function, and there is
-        # no /auth/verify-email route. Every signup issued a doomed
-        # INSERT and then told the user to check their email. login()
-        # does not check email_verified, so accounts work regardless.
-        # Enabling requires all three pieces to ship together.
-        # See docs/ops/disabled-features.md.
-        email_verification_enabled: bool = False
+        # Email verification on password signup. Shipped 2026-08-02 as
+        # one unit: the ``email_verification_tokens`` table (migration
+        # ``133_email_verification_tokens``),
+        # ``email_service.send_verification_email``, and the
+        # ``/auth/verify-email`` route — the register's re-enable
+        # condition (docs/ops/disabled-features.md §1c). login() still
+        # does not gate on ``email_verified``: verification records
+        # trust, it does not block sign-in. Kill-switch:
+        # ``EMAIL_VERIFICATION_ENABLED=0``.
+        email_verification_enabled: bool = True
         # Cat 14 (autonomous) destructive-action flag. The
         # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
         # require this + the per-action two-stage opt-in. OFF by

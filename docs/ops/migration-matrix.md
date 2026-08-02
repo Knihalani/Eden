@@ -167,6 +167,7 @@
 | 130_portal_rpm_floor | rate_limit_snapshots | yes | forever | soft | low | Raise free-tier portal RPM floor 60 → 300 so hub React Query fan-out does not 429 | Reliability |
 | 131_slack_integration | org_slack_installs, agent_slack_channels | yes | forever | soft | medium | Soft Autonomy Slack bot installs + per-agent channel routing | Integrations |
 | 132_plan_parent | improvement_plans | yes | forever | soft | low | Soft Autonomy parent_plan_id for post-merge regression follow-ups | Improve |
+| 133_email_verification_tokens | email_verification_tokens | yes | forever | soft | low | Signup email verification (hash-only tokens, mirrors password_reset_tokens) | Auth |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)
