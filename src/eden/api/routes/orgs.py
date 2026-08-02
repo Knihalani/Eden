@@ -35,6 +35,7 @@ from eden.services.invitation_service import (
     create_invitation,
     decline_invitation,
     get_pending_invitations,
+    resend_invitation,
     send_invite_email,
 )
 from eden.storage.postgres import get_postgres_client
@@ -841,6 +842,65 @@ async def list_invitations(
     _ = org_id, user
     invitations = await get_pending_invitations(org["org_id"])
     return invitations
+
+
+@router.post("/{org_id}/invites/{invitation_id}/resend", response_model=dict)
+async def resend_org_invitation(
+    org_id: str,
+    invitation_id: str,
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(require_org_permission_dep("members:invite")),
+):
+    """Resend a pending invitation (rotates token, extends expiry).
+
+    The portal's "Resend invite" button used to re-POST ``/invites``,
+    which ``create_invitation`` rejects with "already pending" — so the
+    button failed for exactly the invites it exists for.
+    """
+    eden_org_id = org["org_id"]
+    try:
+        plain_token, invitation = await resend_invitation(invitation_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    if str(invitation["org_id"]) != str(eden_org_id):
+        # Cross-tenant guard — same 404 shape as the accept path.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found for this organization",
+        )
+
+    email_result = await send_invite_email(
+        to_email=invitation["email"],
+        org_name=invitation["org_name"],
+        inviter_name=invitation["inviter_name"],
+        role=invitation["role"],
+        token=plain_token,
+        expires_at=invitation["expires_at"],
+    )
+    invite_url = f"{settings.portal_base_url}/invite/{plain_token}"
+
+    client = await get_postgres_client()
+    await log_audit_event(
+        client=client,
+        org_id=eden_org_id,
+        user_id=user["user_id"],
+        action="member.invite_resent",
+        target_type="user",
+        target_id=invitation["id"],
+        metadata={"invitee_email": invitation["email"], "role": invitation["role"]},
+    )
+
+    return {
+        "message": f"Invitation resent to {invitation['email']}",
+        "invitation_id": invitation["id"],
+        "expires_at": invitation["expires_at"],
+        "email_status": email_result.status,
+        "invite_url": invite_url,
+    }
 
 
 @router.post("/{org_id}/invites/{invitation_id}/accept", response_model=dict)

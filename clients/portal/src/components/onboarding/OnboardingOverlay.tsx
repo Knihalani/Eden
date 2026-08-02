@@ -106,9 +106,13 @@ function OnboardingOverlayInner() {
       sessionOpenRef.current = false;
       seededStepRef.current = false;
       setOpen(false);
-      // True no-workspace after load completed — send to workspace setup.
+      // True no-workspace after load completed — send to workspace
+      // setup. Preserve the force-open flag so the post-signup tour
+      // still opens once the workspace exists; dropping it stranded
+      // new users on settings with no walkthrough.
       if (forceOpen) {
-        router.replace("/settings?mode=workspace");
+        const flag = searchParams.get("tour") === "1" ? "tour" : "onboarding";
+        router.replace(`/settings?mode=workspace&${flag}=1`);
       }
       return;
     }

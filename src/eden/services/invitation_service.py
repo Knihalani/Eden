@@ -330,6 +330,66 @@ async def accept_invitation(invitation_id: str, user_id: str) -> dict:
     }
 
 
+async def resend_invitation(invitation_id: str) -> tuple[str, dict]:
+    """Regenerate the token + expiry for a pending invite so it can be re-sent.
+
+    The portal's "Resend invite" button used to re-POST ``/invites``,
+    which ``create_invitation`` rejects with "already pending" — so the
+    button failed for exactly the invites it exists for. Resending
+    rotates the token (the old link dies) and extends expiry by the
+    default window. Returns ``(plain_token, invitation_record)``.
+    """
+    client = await get_postgres_client()
+    invitation = await client.fetchrow(
+        """
+        SELECT id, org_id, email, role, status, invited_by
+        FROM org_invitations
+        WHERE id = $1
+        """,
+        invitation_id,
+    )
+    if not invitation:
+        raise ValueError("Invitation not found")
+    if invitation["status"] != "pending":
+        raise ValueError(
+            f"Invitation is {invitation['status']}, cannot resend"
+        )
+
+    plain_token = generate_invite_token()
+    expires_at = datetime.now(UTC) + timedelta(days=DEFAULT_EXPIRY_DAYS)
+    await client.execute(
+        """
+        UPDATE org_invitations
+        SET token_hash = $1, expires_at = $2
+        WHERE id = $3
+        """,
+        hash_invite_token(plain_token),
+        expires_at,
+        invitation_id,
+    )
+
+    inviter = await client.fetchrow(
+        "SELECT name FROM users WHERE id = $1",
+        invitation["invited_by"],
+    )
+    org = await client.fetchrow(
+        "SELECT name FROM organizations WHERE id = $1",
+        invitation["org_id"],
+    )
+
+    return plain_token, {
+        "id": str(invitation["id"]),
+        "org_id": str(invitation["org_id"]),
+        "org_name": org["name"] if org else "Unknown",
+        "email": invitation["email"],
+        "role": invitation["role"],
+        "invited_by": str(invitation["invited_by"]),
+        "inviter_name": inviter["name"] if inviter else "Unknown",
+        "expires_at": expires_at.isoformat(),
+        "status": "pending",
+    }
+
+
 async def decline_invitation(invitation_id: str, user_id: str) -> None:
     """Decline an invitation."""
     client = await get_postgres_client()

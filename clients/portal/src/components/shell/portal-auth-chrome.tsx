@@ -20,7 +20,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LogOut } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { useAuth } from "@/hooks/use-auth";
+import { useLabToast } from "@/lab/lab-toast";
 import { api } from "@/lib/api/auth-api";
+import {
+  clerkOrgIdToActivate,
+  isCreateOrgDegraded,
+  organizationFromCreate,
+  CREATE_ORG_DEGRADED_DESCRIPTION,
+} from "@/lib/create-org";
 import { CHROME_BANNER_ATTR } from "@/lib/overlay-defer";
 import { dropOrgScopedQueries } from "@/lib/portal-query";
 import { cn } from "@/lib/utils";
@@ -67,44 +74,59 @@ function useDismissibleOpen(initial = false) {
 
 /** Eden workspace picker — no Clerk OrganizationSwitcher (avoids clerk.ui). */
 function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { currentOrg, organizations } = useOrg();
+  const { currentOrg, organizations, setCurrentOrg } = useOrg();
   const { setActive, isLoaded } = useOrganizationList();
   const { open, setOpen, rootRef } = useDismissibleOpen();
   const router = useRouter();
   const queryClient = useQueryClient();
   const listId = useId();
   const [busy, setBusy] = useState(false);
+  const [selectError, setSelectError] = useState<string | null>(null);
 
   const label = currentOrg?.name ?? "Select workspace";
   const ariaLabel = `Switch workspace: ${label}`;
 
+  const finishSelect = useCallback(async () => {
+    setOpen(false);
+    // Soft navigate — hard assign used to flash a full reload.
+    // Drop cached org shards so the new workspace cannot paint
+    // stale agents/traces under the previous org id.
+    await queryClient.cancelQueries();
+    dropOrgScopedQueries(queryClient);
+    router.push("/home");
+    router.refresh();
+  }, [queryClient, router, setOpen]);
+
   const onSelect = useCallback(
     async (org: Organization) => {
-      if (!setActive || busy) return;
-      const clerkId = org.clerk_org_id || org.id;
-      if (!clerkId) return;
+      if (busy) return;
       if (currentOrg?.id === org.id) {
         setOpen(false);
         return;
       }
       setBusy(true);
+      setSelectError(null);
       try {
-        await setActive({ organization: clerkId });
-        setOpen(false);
-        // Soft navigate — hard assign used to flash a full reload.
-        // Drop cached org shards so the new workspace cannot paint
-        // stale agents/traces under the previous org id.
-        await queryClient.cancelQueries();
-        dropOrgScopedQueries(queryClient);
-        router.push("/home");
-        router.refresh();
+        if (org.clerk_org_id && setActive) {
+          await setActive({ organization: org.clerk_org_id });
+        } else {
+          // Eden-only org (Clerk create was degraded or the Clerk link
+          // is dead): setActive on a raw Eden UUID throws and the old
+          // catch swallowed it, so the entry looked unclickable.
+          // Select it Eden-side instead — the org context already
+          // supports orgs without a Clerk counterpart.
+          setCurrentOrg(org);
+        }
+        await finishSelect();
       } catch {
-        /* keep picker open */
+        // Keep the picker open, but SAY something — a silent catch
+        // made failed switches look like dead clicks.
+        setSelectError("Could not switch workspaces. Try again.");
       } finally {
         setBusy(false);
       }
     },
-    [busy, currentOrg?.id, queryClient, router, setActive, setOpen],
+    [busy, currentOrg?.id, finishSelect, setActive, setCurrentOrg, setOpen],
   );
 
   if (collapsed) {
@@ -132,6 +154,11 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
             onSelect={onSelect}
             className="absolute bottom-full left-0 z-50 mb-1 w-56"
           />
+        ) : null}
+        {selectError ? (
+          <p className="mt-1 type-meta text-[var(--danger)]" role="alert">
+            {selectError}
+          </p>
         ) : null}
       </div>
     );
@@ -166,6 +193,11 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           onSelect={onSelect}
           className="absolute bottom-full left-0 z-50 mb-1 w-full min-w-[12rem]"
         />
+      ) : null}
+      {selectError ? (
+        <p className="mt-1 type-meta text-[var(--danger)]" role="alert">
+          {selectError}
+        </p>
       ) : null}
     </div>
   );
@@ -265,7 +297,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
       </button>
       {!collapsed ? (
         <span className="type-meta truncate text-[var(--text-faint)]">
-          Account
+          {name}
         </span>
       ) : null}
       {open ? (
@@ -349,8 +381,11 @@ export function PortalStatusBanners() {
     orgSyncing,
     orgSyncTimedOut,
     refreshOrgs,
+    setCurrentOrg,
   } = useOrg();
+  const { setActive } = useOrganizationList();
   const { refreshUserWithRetry } = useAuth();
+  const { pushToast } = useLabToast();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -358,7 +393,40 @@ export function PortalStatusBanners() {
     setCreating(true);
     setCreateError(null);
     try {
-      await api.createOrg("My workspace", true);
+      const created = await api.createOrg("My workspace", true);
+      // The create response used to be discarded here: no setActive,
+      // no Eden fallback selection, no degraded warning — so a
+      // Clerk-degraded create looked fully successful while the
+      // session still had no org (org APIs then 403'd with no
+      // explanation). Wire it like the invite-accept flow.
+      const clerkId = clerkOrgIdToActivate(created);
+      if (clerkId && setActive) {
+        let activated = false;
+        for (let i = 0; i < 8 && !activated; i++) {
+          try {
+            await setActive({ organization: clerkId });
+            activated = true;
+          } catch {
+            await new Promise((r) => window.setTimeout(r, 150));
+          }
+        }
+        if (!activated) {
+          pushToast({
+            title: "Workspace created",
+            body: "Switching to it may take a moment.",
+            tone: "accent",
+          });
+        }
+      } else {
+        setCurrentOrg(organizationFromCreate(created));
+        if (isCreateOrgDegraded(created)) {
+          pushToast({
+            title: "Workspace created — sync delayed",
+            body: CREATE_ORG_DEGRADED_DESCRIPTION,
+            tone: "fail",
+          });
+        }
+      }
       await refreshOrgs();
       await refreshUserWithRetry();
     } catch (e) {
@@ -368,7 +436,7 @@ export function PortalStatusBanners() {
     } finally {
       setCreating(false);
     }
-  }, [refreshOrgs, refreshUserWithRetry]);
+  }, [refreshOrgs, refreshUserWithRetry, setActive, setCurrentOrg, pushToast]);
 
   const loadingBanner =
     loading && !currentOrg && organizations.length === 0 && !authError;
@@ -435,13 +503,22 @@ export function PortalStatusBanners() {
   } else if (syncBanner) {
     banner = (
       <div
-        className="border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2"
+        className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-elevated)] px-4 py-2"
         role="status"
       >
         <p className="type-meta text-[var(--text-faint)]">
           Syncing organization with Eden…
           {orgSyncTimedOut ? " Taking longer than usual." : null}
         </p>
+        {orgSyncTimedOut ? (
+          <button
+            type="button"
+            className="ds-btn ds-btn-secondary ds-btn-sm shrink-0"
+            onClick={() => void refreshOrgs()}
+          >
+            Retry
+          </button>
+        ) : null}
       </div>
     );
   } else if (emptyBanner) {

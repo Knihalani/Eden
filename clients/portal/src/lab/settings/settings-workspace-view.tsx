@@ -27,6 +27,7 @@ export function SettingsWorkspaceView({
   members,
   packs,
   events,
+  canEdit = true,
   onGo,
   onRename,
   onPatch,
@@ -36,6 +37,8 @@ export function SettingsWorkspaceView({
   members: MemberFixture[];
   packs: AuditPackFixture[];
   events: AuditEventFixture[];
+  /** False for member/viewer roles — hides rename and pref controls. */
+  canEdit?: boolean;
   onGo: (mode: SettingsMode, opts?: { tab?: "events" | "packs" }) => void;
   onRename: (name: string) => void | Promise<void>;
   onPatch: (
@@ -45,6 +48,7 @@ export function SettingsWorkspaceView({
 }) {
   const { pushToast } = useLabToast();
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(workspace.name);
 
   const snap = auditSnapshot({ keys, members, packs, events });
@@ -69,6 +73,7 @@ export function SettingsWorkspaceView({
                     setDraft(workspace.name);
                     return;
                   }
+                  setSaving(true);
                   void (async () => {
                     try {
                       await onRename(next);
@@ -80,6 +85,8 @@ export function SettingsWorkspaceView({
                       });
                     } catch {
                       /* parent toasts failure */
+                    } finally {
+                      setSaving(false);
                     }
                   })();
                 }}
@@ -91,8 +98,12 @@ export function SettingsWorkspaceView({
                   aria-label="Workspace name"
                   autoFocus
                 />
-                <button type="submit" className="ds-btn ds-btn-primary ds-btn-sm">
-                  Save
+                <button
+                  type="submit"
+                  className="ds-btn ds-btn-primary ds-btn-sm"
+                  disabled={saving}
+                >
+                  {saving ? "Saving…" : "Save"}
                 </button>
                 <button
                   type="button"
@@ -110,16 +121,18 @@ export function SettingsWorkspaceView({
                 <h2 className="type-display !text-[1.5rem] text-[var(--text)]">
                   {workspace.name}
                 </h2>
-                <button
-                  type="button"
-                  className="ds-btn ds-btn-ghost ds-btn-sm"
-                  onClick={() => {
-                    setDraft(workspace.name);
-                    setEditing(true);
-                  }}
-                >
-                  Rename
-                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn-ghost ds-btn-sm"
+                    onClick={() => {
+                      setDraft(workspace.name);
+                      setEditing(true);
+                    }}
+                  >
+                    Rename
+                  </button>
+                ) : null}
               </div>
             )}
             <p className="type-meta mt-2">
@@ -187,6 +200,7 @@ export function SettingsWorkspaceView({
           <PrefSelect
             label="Timezone"
             value={workspace.timezone}
+            disabled={!canEdit}
             options={TIMEZONE_OPTIONS.map((t) => ({ value: t, label: t }))}
             onChange={(timezone) => {
               void (async () => {
@@ -206,6 +220,7 @@ export function SettingsWorkspaceView({
           <PrefSelect
             label="Retention"
             value={String(workspace.retentionDays)}
+            disabled={!canEdit}
             options={RETENTION_OPTIONS.map((d) => ({
               value: String(d),
               label: `${d} days`,
@@ -237,6 +252,7 @@ export function SettingsWorkspaceView({
                   key={d}
                   type="button"
                   className="ds-tab"
+                  disabled={!canEdit}
                   aria-pressed={workspace.density === d}
                   onClick={() => {
                     if (d === workspace.density) return;
@@ -264,6 +280,7 @@ export function SettingsWorkspaceView({
             <button
               type="button"
               className="ds-tab mt-1.5"
+              disabled={!canEdit}
               aria-pressed={workspace.piiRedaction}
               onClick={() => {
                 const piiRedaction = !workspace.piiRedaction;
@@ -301,11 +318,13 @@ function PrefSelect({
   label,
   value,
   options,
+  disabled,
   onChange,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const safeOptions =
@@ -319,6 +338,7 @@ function PrefSelect({
       <select
         className="ds-input mt-1.5 w-full"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         aria-label={label}
       >

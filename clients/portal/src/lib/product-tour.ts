@@ -29,7 +29,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "welcome",
     href: "/home",
     title: "Welcome to Eden",
-    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — Skip anytime and resume from the banner.",
+    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — skip anytime.",
   },
   {
     id: "home",

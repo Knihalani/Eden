@@ -305,6 +305,17 @@ export const api = {
       }
     ),
 
+  resendOrgInvite: (orgId: string, invitationId: string) =>
+    fetchApi<{
+      message: string;
+      invitation_id: string;
+      expires_at: string;
+      email_status?: string;
+      invite_url?: string;
+    }>(`/orgs/${orgId}/invites/${invitationId}/resend`, {
+      method: "POST",
+    }),
+
   updateOrgMemberRole: (orgId: string, userId: string, role: string) =>
     fetchApi<{ message: string; user_id: string; role: string }>(
       `/orgs/${orgId}/members/${userId}`,
