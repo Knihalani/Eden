@@ -47,7 +47,8 @@ async def test_from_metrics_cost_spike() -> None:
         out = await agent._from_metrics("org-1", None)
 
     assert len(out) == 1
-    assert out[0].plan_kind == "config_change"
+    # M6 (D10): cost/latency anomalies are advisory — no config-apply path.
+    assert out[0].plan_kind == "advisory"
     assert out[0].agent_id == "agent-a"
     assert out[0].evidence["metric"] == "cost"
 
@@ -89,14 +90,18 @@ async def test_from_metrics_routing_mismatch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_from_repo_health_cve_finding() -> None:
+async def test_from_repo_health_stale_lockfile_advisory() -> None:
+    """M6: CVE hints dict deleted (spec §11); the lane still flags a
+    manifest-without-lockfile as an org-scoped advisory plan."""
     agent = ImprovementAgent()
     mock_provider = MagicMock()
+    # Manifest exists (comment-only → no parseable deps), no lockfile.
     mock_provider.read_file = AsyncMock(
-        side_effect=lambda path: "pillow>=9.0\nrequests>=2.0"
+        side_effect=lambda path: "# deps pinned by hand\n"
         if path == "requirements.txt"
         else ""
     )
+    provider_for_org = AsyncMock(return_value=mock_provider)
 
     with (
         patch("eden.improvement.agent._github_linked", AsyncMock(return_value=True)),
@@ -109,15 +114,17 @@ async def test_from_repo_health_cve_finding() -> None:
             AsyncMock(return_value=None),
         ),
         patch(
-            "eden.providers.repo.get_default_repo_provider",
-            return_value=mock_provider,
+            "eden.providers.factory.get_repo_provider_for_org",
+            provider_for_org,
         ),
     ):
         out = await agent._from_repo_health("org-1", None)
 
     assert len(out) == 1
-    assert out[0].plan_kind == "config_change"
-    assert any(f["kind"] == "cve_advisory" for f in out[0].evidence["findings"])
+    assert out[0].plan_kind == "advisory"
+    assert any(f["kind"] == "stale_lockfile" for f in out[0].evidence["findings"])
+    # Drift #10: provider must be resolved for the org (+agent), never default.
+    provider_for_org.assert_awaited_once_with("org-1", agent_id="repo-a")
 
 
 @pytest.mark.asyncio
@@ -148,7 +155,7 @@ async def test_from_cost_anomalies_budget_breach() -> None:
         out = await agent._from_cost_anomalies("org-1", None)
 
     assert len(out) == 1
-    assert out[0].plan_kind == "config_change"
+    assert out[0].plan_kind == "advisory"
     assert out[0].evidence["metric"] == "budget_breach"
 
 
@@ -179,5 +186,6 @@ async def test_from_cost_anomalies_agent_spend_spike() -> None:
         out = await agent._from_cost_anomalies("org-1", None)
 
     assert len(out) == 1
+    assert out[0].plan_kind == "advisory"
     assert out[0].agent_id == "agent-x"
     assert out[0].evidence["metric"] == "agent_spend_spike"

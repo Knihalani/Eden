@@ -507,7 +507,12 @@ async def _approve_non_code(
     *,
     approved_by: str | None = None,
 ) -> dict[str, Any]:
-    """Route prompt/nudge/guardrail plans to F41 promotion queue (v1)."""
+    """Route non-code plans: F41 promotion, F68 deploy, or advisory-only.
+
+    ``config_change`` / ``advisory`` plans have no apply automation (M6,
+    spec §11) — approve records the recommendation to the N06 ledger and
+    returns ``advisory_only``.
+    """
     plan_kind = plan.get("plan_kind") or ""
     evidence = plan.get("evidence") or {}
     ref_id = (
@@ -521,6 +526,42 @@ async def _approve_non_code(
         source = plan.get("source_ref") or ""
         if ":" in source:
             ref_id = source.split(":", 1)[1]
+
+    if plan_kind in ("config_change", "advisory"):
+        # M6 (D10, spec §3.7/§11): advisory-only kinds. Config-apply
+        # automation was deliberately pruned — the config surface is too
+        # heterogeneous — so approve acknowledges the recommendation,
+        # records it to the N06 ledger, and applies nothing.
+        updated = await plans_repo.mark_approved(
+            org_id,
+            plan_id,
+            approved_by=approved_by,
+            status="approved",
+            metadata={"route_status": "advisory_only"},
+        )
+        await _n06_ledger(
+            org_id,
+            plan_id,
+            event_subtype="advisory_acknowledged",
+            actor_id=approved_by,
+            payload={
+                "plan_kind": plan_kind,
+                "title": plan.get("title") or "",
+                "summary": plan.get("summary") or "",
+                "recommendation": evidence if isinstance(evidence, dict) else {},
+            },
+        )
+        return {
+            "plan_id": plan_id,
+            "status": "advisory_only",
+            "plan_kind": plan_kind,
+            "message": (
+                "Recommendation acknowledged and recorded to the N06 ledger. "
+                "No automated apply path exists for this plan kind — action "
+                "is manual by design."
+            ),
+            "plan": updated,
+        }
 
     kind_map = {
         "nudge_promote": "nudge",
