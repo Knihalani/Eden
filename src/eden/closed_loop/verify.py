@@ -24,7 +24,10 @@ import asyncio
 import contextlib
 import json
 import logging
+import time
 import uuid
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 from eden.closed_loop.events import EventType, LoopEvent
@@ -68,8 +71,66 @@ def _reset_state_for_tests() -> None:
     calling :func:`run_due_verifications` gets the early cooldown return
     and sees ``checked == 0``. Mirrors
     ``eden.workers.sidecars._reset_state_for_tests``.
+
+    Also clears the idle-chore registry + last-run clocks (the defaults
+    re-register on the next :func:`start_verify_worker`).
     """
     _verify_clear_cooldown()
+    _IDLE_CHORES.clear()
+    _CHORE_LAST_RUN.clear()
+
+
+# ── Idle chores ─────────────────────────────────────────────────────
+#
+# The verify worker is the loop's one always-on poller; rather than add
+# new pollers per maintenance task (spec §11: no new pollers), small
+# best-effort chores piggyback on its tick. Each chore has its own
+# interval cooldown and is exception-isolated — one failing chore never
+# kills the worker or the other chores.
+
+
+@dataclass
+class IdleChore:
+    name: str
+    interval_s: float
+    fn: Callable[[], Awaitable[Any]]
+
+
+_IDLE_CHORES: list[IdleChore] = []
+_CHORE_LAST_RUN: dict[str, float] = {}
+
+
+def register_idle_chore(
+    name: str, interval_s: float, fn: Callable[[], Awaitable[Any]]
+) -> None:
+    """Register (or replace, by name) a chore run on the worker tick."""
+    global _IDLE_CHORES
+    _IDLE_CHORES = [c for c in _IDLE_CHORES if c.name != name]
+    _IDLE_CHORES.append(IdleChore(name=name, interval_s=float(interval_s), fn=fn))
+
+
+async def _run_idle_chores() -> None:
+    """Run every due chore once; failures are logged and isolated."""
+    now = time.monotonic()
+    for chore in list(_IDLE_CHORES):
+        last = _CHORE_LAST_RUN.get(chore.name)
+        if last is not None and now - last < chore.interval_s:
+            continue
+        _CHORE_LAST_RUN[chore.name] = now
+        try:
+            await chore.fn()
+        except Exception as exc:
+            logger.warning("idle chore %s failed: %s", chore.name, exc)
+
+
+def _register_default_chores() -> None:
+    """Chores every deployment wants (M2): outbox drain + TTL cleanup."""
+    from eden.closed_loop import event_bus
+
+    register_idle_chore("outbox_drain", 60.0, event_bus.drain_outbox)
+    register_idle_chore(
+        "outbox_ttl_cleanup", 6 * 3600.0, event_bus.cleanup_drained
+    )
 
 
 # ── Scheduling ──────────────────────────────────────────────────────
@@ -331,6 +392,10 @@ async def _run(stop: asyncio.Event) -> None:
             await run_due_verifications()
         except Exception as exc:
             logger.debug("verify worker: pass failed: %s", exc)
+        try:
+            await _run_idle_chores()
+        except Exception as exc:
+            logger.debug("verify worker: idle chores failed: %s", exc)
         # Wait for the next shared grid boundary rather than a fixed
         # offset from wherever this pass finished. The PG hit is already
         # cooldown-gated in run_due_verifications, but an unaligned *phase*
@@ -353,6 +418,7 @@ async def start_verify_worker() -> None:
         pass
     if _TASK is not None and not _TASK.done():
         return
+    _register_default_chores()
     _STOP = asyncio.Event()
     _TASK = asyncio.create_task(_run(_STOP), name="closed_loop_verify")
 

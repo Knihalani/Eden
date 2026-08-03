@@ -160,6 +160,7 @@ from eden.api.routes import (
     labeling,
     learn,
     llmops,
+    loop_health,
     media,
     model_compare,
     notifications,
@@ -1188,6 +1189,9 @@ app.include_router(
 app.include_router(
     internal_health.router
 )  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
+app.include_router(
+    loop_health.router
+)  # /internal/loop-health — closed-loop bus liveness (M2, D4; bearer auth)
 app.include_router(
     optimization.router
 )  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}

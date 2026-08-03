@@ -106,6 +106,7 @@ class ImprovementCockpitAggregator:
             evolution_t,
             heals_t,
             denials_t,
+            loop_health_t,
         ) = await asyncio.gather(
             self._from_issues(org_id, agent_id),
             self._from_closed_loop(org_id),
@@ -117,6 +118,7 @@ class ImprovementCockpitAggregator:
             self._from_evolution_canaries(org_id, agent_id),
             self._from_self_heals(org_id),
             self._from_autonomy_denials(org_id, agent_id),
+            self._from_loop_health(org_id),
             return_exceptions=True,
         )
         items: list[ImprovementItem] = []
@@ -131,6 +133,7 @@ class ImprovementCockpitAggregator:
             evolution_t,
             heals_t,
             denials_t,
+            loop_health_t,
         ):
             if isinstance(result, BaseException):
                 logger.debug("cockpit source failed: %s", result)
@@ -177,6 +180,39 @@ class ImprovementCockpitAggregator:
         except Exception as exc:
             logger.debug("cockpit fleet severity: %s", exc)
             return {}
+
+    async def _from_loop_health(self, org_id: str) -> list[ImprovementItem]:
+        """URGENT banner when the closed-loop event bus is unreachable (M2).
+
+        Best-effort like every other source — a probe failure yields no
+        item rather than breaking the cockpit.
+        """
+        try:
+            from eden.api.routes.loop_health import probe_loop_health
+
+            health = await probe_loop_health()
+            if health.get("bus") != "dead":
+                return []
+            return [
+                ImprovementItem(
+                    ref="loop_health:bus",
+                    item_type="loop_health",
+                    title="Autonomy paused — event bus unreachable",
+                    column=COLUMN_URGENT,
+                    severity="critical",
+                    payload={
+                        "bus": health.get("bus"),
+                        "outbox_depth": health.get("outbox_depth"),
+                        "last_publish_failure_age_s": health.get(
+                            "last_publish_failure_age_s"
+                        ),
+                    },
+                    source="loop_health",
+                )
+            ]
+        except Exception as exc:
+            logger.debug("cockpit loop-health source failed: %s", exc)
+            return []
 
     async def _from_issues(self, org_id: str, agent_id: str | None) -> list[ImprovementItem]:
         try:
