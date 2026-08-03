@@ -86,7 +86,7 @@ export function ImproveQueueView({
             scroll
             options={[
               { id: "all", label: "All", count: counts.all },
-              { id: "needs_you", label: "Needs you", count: counts.needs_you },
+              { id: "needs_you", label: "Fix now", count: counts.needs_you },
               {
                 id: "in_progress",
                 label: "In progress",

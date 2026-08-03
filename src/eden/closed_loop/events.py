@@ -24,6 +24,10 @@ class EventType:
     VERIFY_PASSED = "verify_passed"
     VERIFY_FAILED = "verify_failed"
     ESCALATED_HUMAN = "escalated_human"
+    # M13 (§6.4): LEARNING flywheel — resolved → learning → resolved
+    # (or sticky learning on N01 case persist failure).
+    LEARNING_STARTED = "learning_started"
+    LEARNING_COMPLETED = "learning_completed"
 
 
 ALL_EVENT_TYPES = frozenset(

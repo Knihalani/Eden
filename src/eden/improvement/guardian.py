@@ -164,6 +164,15 @@ async def handle_regression(
                 revert_conflict=revert_conflict,
             )
 
+        # M13 (§6.3): guardian regression → KG ``reverted`` so future
+        # PatchGenerator calls see the revert-rate penalty.
+        try:
+            from eden.patches.knowledge_graph import record_plan_outcome
+
+            await record_plan_outcome(org_id, plan, "reverted")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("guardian: KG reverted outcome failed: %s", exc)
+
         # Slack regression alert — deep link to the issue.
         try:
             from eden.services.slack_notify import notify_regression

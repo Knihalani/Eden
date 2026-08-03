@@ -100,6 +100,7 @@ async def finish_run(
     plans_skipped_dedup: int = 0,
     llm_cost_usd: float = 0.0,
     error: str | None = None,
+    metadata_patch: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     client = await get_postgres_client()
     if client is None:
@@ -123,7 +124,35 @@ async def finish_run(
         llm_cost_usd,
         error,
     )
+    if metadata_patch:
+        await merge_run_metadata(org_id, run_id, metadata_patch)
     return await get_run(org_id, run_id)
+
+
+async def merge_run_metadata(
+    org_id: str,
+    run_id: str,
+    patch: dict[str, Any],
+) -> None:
+    """M13 (§6.1): merge keys into improvement_runs.metadata without finishing."""
+    if not patch:
+        return
+    client = await get_postgres_client()
+    if client is None:
+        return
+    try:
+        await client.execute(
+            """
+            UPDATE improvement_runs SET
+                metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            org_id,
+            run_id,
+            json.dumps(patch),
+        )
+    except Exception:
+        pass
 
 
 async def get_run(org_id: str, run_id: str) -> dict[str, Any] | None:

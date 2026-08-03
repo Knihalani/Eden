@@ -436,6 +436,19 @@ async def run_maintenance_due(
                 "skipped": True,
                 "reason": "already_ran_this_week",
             }
+        # M13 (§6.5): weekly shadow detector promote / delete.
+        shadow_key = f"shadow_promote:{iso.year}-W{iso.week:02d}"
+        if await _once_per_window(shadow_key, ttl_seconds=6 * 24 * 3600):
+            _queue(
+                "shadow_promote",
+                _safe_step("shadow_promote", _run_shadow_promote()),
+                claim=shadow_key,
+            )
+        else:
+            out["shadow_promote"] = {
+                "skipped": True,
+                "reason": "already_ran_this_week",
+            }
 
     if now.minute % 15 < 5:
         mcp_key = _slot_key("mcp", now, minutes=15)
@@ -547,6 +560,13 @@ async def _run_soft_issue_review() -> dict[str, object]:
     from eden.services.soft_issue_review import SoftIssueReviewer
 
     return await SoftIssueReviewer().run_once()
+
+
+async def _run_shadow_promote() -> dict[str, object]:
+    """M13 (§6.5): weekly shadow detector promote / delete."""
+    from eden.services.soft_issue_review import SoftIssueReviewer
+
+    return await SoftIssueReviewer().promote_shadow_detectors()
 
 
 async def _run_shadow_outcome_join() -> dict[str, object]:

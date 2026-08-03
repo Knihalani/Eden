@@ -1030,7 +1030,76 @@ class ClosedLoopOrchestrator:
         logger.info("orchestrator: subscribed to issue hooks (G9)")
 
     async def _flywheel_on_resolved(self, event: LoopEvent) -> None:
-        """N19 — issue verified → KB flywheel + F39 shadow nudge draft."""
+        """N19 — issue verified → LEARNING → N01 case → resolved (M13 §6.4).
+
+        VERIFY_PASSED already wrote ``resolved``. We then:
+        1. ``resolved → learning``
+        2. create permanent N01 regression case(s)
+        3. on success ``learning → resolved``; on persist failure leave
+           the issue in ``learning`` with an audit row (visible, retryable)
+           instead of silently continuing.
+        Also runs the KB flywheel + F39 shadow nudge draft best-effort.
+        """
+        from eden.closed_loop.state_machine import apply_transition
+
+        # M13 (§6.4): enter LEARNING before case persist.
+        learning = await apply_transition(
+            event.org_id,
+            event.issue_id,
+            event_type=EventType.LEARNING_STARTED,
+            reason="verify_passed → learning for N01 regression case",
+            actor="orchestrator",
+            detail=event.payload or {},
+            set_resolved_at=False,
+        )
+        case_ok = False
+        case_error: str | None = None
+        cases: list[dict[str, Any]] = []
+        try:
+            from eden.evaluation.regression_builder import on_issue_resolved
+
+            cases = await on_issue_resolved(event.org_id, event.issue_id)
+            case_ok = True
+        except Exception as exc:
+            case_error = str(exc)[:500]
+            logger.warning(
+                "orchestrator: N01 regression case persist failed "
+                "org=%s issue=%s: %s",
+                event.org_id,
+                event.issue_id,
+                exc,
+            )
+
+        if learning == "learning" and case_ok:
+            await apply_transition(
+                event.org_id,
+                event.issue_id,
+                event_type=EventType.LEARNING_COMPLETED,
+                reason="N01 regression case persisted",
+                actor="orchestrator",
+                detail={"cases": len(cases)},
+                set_resolved_at=True,
+            )
+        elif learning == "learning" and not case_ok:
+            # Sticky LEARNING — audit so cockpit/retry can see it.
+            try:
+                from eden.closed_loop.autonomy_policy import audit
+
+                await audit(
+                    event.org_id,
+                    agent_id=(event.payload or {}).get("agent_id"),
+                    action="learning_case_persist_failed",
+                    tier="learning",
+                    decision="retryable",
+                    reason=(
+                        f"issue {event.issue_id} stuck in learning; "
+                        f"N01 case persist failed: {case_error or 'unknown'}"
+                    ),
+                )
+            except Exception as exc:
+                logger.debug("orchestrator: learning audit failed: %s", exc)
+
+        # Existing N19 flywheel + F39 nudge (best-effort, non-blocking).
         try:
             from eden.issues.repo import IssuesRepo
             from eden.kb.flywheel.coordinator import get_flywheel_coordinator
