@@ -17,6 +17,8 @@ import uuid
 from pathlib import PurePosixPath
 from typing import Any
 
+from eden.prompt_safety import wrap_untrusted_data
+
 logger = logging.getLogger(__name__)
 
 _MAX_FILES = 8
@@ -369,9 +371,15 @@ async def build_failure_pack(org_id: str, issue_id: str) -> dict[str, Any]:
     """Return a size-capped redacted failure pack + example trace ids.
 
     Reuses D6 :func:`export_issue_fixture` so PatchGenerator / MCP share
-    one redaction path.
+    one redaction path. M12 (§7.2): re-apply value-level redaction at
+    this choke point so secrets never leave the pack even if an upstream
+    path skipped ``_redact``.
     """
-    from eden.issues.fixture_export import export_issue_fixture
+    from eden.issues.fixture_export import (
+        _redact,
+        export_issue_fixture,
+        redact_secret_values,
+    )
 
     exported = await export_issue_fixture(org_id, issue_id)
     if exported.get("status") != "ok":
@@ -382,7 +390,9 @@ async def build_failure_pack(org_id: str, issue_id: str) -> dict[str, Any]:
             "fixture": None,
         }
 
-    fixture = exported.get("fixture") or {}
+    # M12 (§7.2) choke point: deep value-level redaction before excerpt /
+    # signature / plan evidence consume the fixture.
+    fixture = _redact(exported.get("fixture") or {})
     traces = fixture.get("traces") or []
     example_ids: list[str] = []
     for t in traces[:3]:
@@ -390,7 +400,7 @@ async def build_failure_pack(org_id: str, issue_id: str) -> dict[str, Any]:
         if isinstance(tid, str) and tid.strip():
             example_ids.append(tid.strip())
 
-    excerpt = _pack_excerpt(fixture)
+    excerpt = redact_secret_values(_pack_excerpt(fixture))
     return {
         "status": "ok",
         "example_trace_ids": example_ids,
@@ -398,7 +408,7 @@ async def build_failure_pack(org_id: str, issue_id: str) -> dict[str, Any]:
         "fixture": fixture,
         "format": fixture.get("format") or "eden-failure-fixture-v1",
         # M7 (§4.1): machine-checkable failure signature for replay verify.
-        "failure_signature": _pack_failure_signature(fixture),
+        "failure_signature": _redact(_pack_failure_signature(fixture)),
     }
 
 
@@ -442,7 +452,12 @@ def _pack_failure_signature(fixture: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _pack_excerpt(fixture: dict[str, Any]) -> str:
-    """Compact text for the patch LLM (not the full fixture JSON)."""
+    """Compact text for the patch LLM (not the full fixture JSON).
+
+    M11 (§7.1): the whole excerpt is untrusted production evidence —
+    wrap it in randomized ``<<EDEN_DATA_*>>`` delimiters after
+    truncating so markers stay intact.
+    """
     parts: list[str] = []
     issue = fixture.get("issue") or {}
     if issue:
@@ -478,8 +493,8 @@ def _pack_excerpt(fixture: dict[str, Any]) -> str:
             parts.append(f"span={name} {err}".strip())
         if t.get("error"):
             parts.append(f"fetch_error={t.get('error')}")
-    text = "\n".join(parts)
-    return text[:_MAX_PACK_CHARS]
+    text = "\n".join(parts)[:_MAX_PACK_CHARS]
+    return wrap_untrusted_data(text)
 
 
 async def hydrate_linked_files(

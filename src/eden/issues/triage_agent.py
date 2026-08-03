@@ -20,12 +20,14 @@ the standard envelope shape.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
 from eden.issues.repo import IssuesRepo
 from eden.issues.statgate_scorer import StatGateIncidentScorer
+from eden.prompt_safety import wrap_untrusted_data
 
 logger = logging.getLogger(__name__)
 
@@ -207,12 +209,17 @@ class TriageAgent:
 
         # ── LLM triage via InvestigationAgent (issue: trigger) ──
         # Hard 90s ceiling → partial ``source="timeout"`` on breach.
+        # M11 (§7.1): stumble/user content enters the investigation
+        # prompt only behind EDEN_DATA delimiters.
+        untrusted_evidence = _trace_content_for_prompt(stumbles)
         try:
             from eden.autonomous import InvestigationAgent
 
             inv = await asyncio.wait_for(
                 InvestigationAgent().investigate(
-                    org_id, trigger=f"issue:{issue_id}"
+                    org_id,
+                    trigger=f"issue:{issue_id}",
+                    untrusted_evidence=untrusted_evidence,
                 ),
                 timeout=_LLM_TIMEOUT_S,
             )
@@ -324,6 +331,8 @@ class TriageAgent:
             "span_ids": span_ids,
             "linked_files": linked_files,
             "react_calls": calls,
+            # M11: pre-wrapped blob for any downstream LLM prompt use.
+            "prompt_evidence": _trace_content_for_prompt(pool),
         }
 
     async def _manual_rate_ok(self, org_id: str) -> bool:
@@ -492,6 +501,42 @@ class TriageAgent:
     def _statgate_root_cause(score: Any, issue: Any) -> str:
         checks = ", ".join(score.p0_checks) or "p0"
         return f"Deterministic P0 escalation ({checks}) for {issue.kind} issue"
+
+
+def _trace_content_for_prompt(stumbles: list[dict[str, Any]]) -> str:
+    """M11 (§7.1): serialize stumble/user content for LLM prompts.
+
+    Titles and detail payloads are production-derived and may contain
+    adversarial instructions — wrap them before they enter a prompt.
+    """
+    parts: list[str] = []
+    for s in stumbles[:5]:
+        if not isinstance(s, dict):
+            continue
+        title = str(s.get("title") or "")
+        detail = s.get("detail")
+        if detail is None:
+            detail_s = ""
+        elif isinstance(detail, str):
+            detail_s = detail
+        else:
+            try:
+                detail_s = json.dumps(detail, default=str)
+            except Exception:
+                detail_s = str(detail)
+        user_msg = ""
+        if isinstance(detail, dict):
+            user_msg = str(
+                detail.get("user_message")
+                or detail.get("message")
+                or detail.get("prompt")
+                or ""
+            )
+        parts.append(
+            f"title={title}\ndetail={detail_s}\nuser_message={user_msg}"
+        )
+    body = "\n---\n".join(parts) if parts else "(no stumbles)"
+    return wrap_untrusted_data(body)
 
 
 def _append_debugger_handoff(
