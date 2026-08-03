@@ -551,8 +551,11 @@ async def approve_plan(
     # M15 (§9): eligibility gate — when all conditions pass, open
     # non-draft and merge (canary). Otherwise draft-PR flow unchanged.
     from eden.improvement.auto_merge import (
+        AutoMergeDecision,
+        claim_auto_merge_slot,
         evaluate_auto_merge_eligibility,
         merge_pull_request,
+        release_auto_merge_slot,
     )
 
     auto_decision = await evaluate_auto_merge_eligibility(
@@ -563,6 +566,40 @@ async def approve_plan(
         repo_id=repo_id,
     )
     use_auto_merge = bool(auto_decision.eligible)
+    # M15 harden: atomically claim the weekly seat before opening a
+    # non-draft PR so two concurrent approves cannot both pass the soft
+    # count check and both merge (TOCTOU). Guardian canary reverts
+    # (force_canary_revert) do not consume the weekly merge cap.
+    slot_claimed = False
+    force_revert = bool(
+        ((plan.get("evidence") or {}).get("auto_merge") or {}).get(
+            "force_canary_revert"
+        )
+    )
+    if use_auto_merge and not force_revert:
+        ok, claim_details = await claim_auto_merge_slot(
+            org_id,
+            plan_id,
+            agent_id=plan_agent_id,
+            cap=(auto_decision.details or {}).get("weekly_cap"),
+        )
+        if not ok:
+            use_auto_merge = False
+            auto_decision = AutoMergeDecision(
+                eligible=False,
+                reasons=[
+                    f"auto_merge_blocked:{claim_details.get('reason', 'weekly_cap')}"
+                ],
+                blocked_by="weekly_cap",
+                details={**(auto_decision.details or {}), **claim_details},
+            )
+        else:
+            slot_claimed = True
+            auto_decision.details = {
+                **(auto_decision.details or {}),
+                **claim_details,
+            }
+
     # Stamp decision reasons onto the plan before opening the PR so the
     # draft fallback still carries ``auto_merge_blocked:*`` evidence.
     try:
@@ -587,6 +624,8 @@ async def approve_plan(
     try:
         info = await pr_provider.create_pr(req)
     except NotImplementedError as exc:
+        if slot_claimed:
+            await release_auto_merge_slot(org_id, plan_id)
         return {
             "status": "error",
             "plan_id": plan_id,
@@ -596,6 +635,8 @@ async def approve_plan(
     except Exception as exc:
         from eden.providers.pr import GitHubPRPermissionError
 
+        if slot_claimed:
+            await release_auto_merge_slot(org_id, plan_id)
         logger.warning("approve_plan: PR create failed: %s", exc)
         error = (
             "github_permissions_missing"
@@ -610,6 +651,8 @@ async def approve_plan(
         }
 
     if _pr_create_failed(info):
+        if slot_claimed:
+            await release_auto_merge_slot(org_id, plan_id)
         logger.warning(
             "approve_plan: create_pr returned failure envelope " "(state=%s number=%s url=%r)",
             getattr(info, "state", None),
@@ -682,6 +725,13 @@ async def approve_plan(
                 logger.debug("approve_plan: auto_merge verify queue failed: %s", exc)
         else:
             block = str(merge_result.get("reason") or "merge_failed")
+            if slot_claimed:
+                try:
+                    await release_auto_merge_slot(org_id, plan_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "approve_plan: release auto_merge slot failed: %s", exc
+                    )
             try:
                 updated = await _merge_plan_evidence(
                     org_id,

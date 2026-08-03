@@ -96,7 +96,11 @@ async def weekly_cap_for_org(org_id: str, agent_id: str | None = None) -> int:
 
 
 async def count_auto_merges_this_week(org_id: str) -> int:
-    """Count canary auto-merges for ``org_id`` in the trailing 7 days."""
+    """Count canary auto-merges **and reserved slots** for ``org_id`` (7d).
+
+    Includes merged canaries and open ``slot_claimed`` reservations so a
+    claim that has not yet merged still occupies the weekly seat.
+    """
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -110,18 +114,186 @@ async def count_auto_merges_this_week(org_id: str) -> int:
             SELECT COUNT(*)::int AS n
             FROM improvement_plans
             WHERE org_id = $1
-              AND status = 'merged'
-              AND COALESCE((evidence->'auto_merge'->>'merged')::boolean, false) = true
               AND updated_at >= $2
+              AND (
+                (
+                  status = 'merged'
+                  AND COALESCE(
+                    (evidence->'auto_merge'->>'merged')::boolean, false
+                  ) = true
+                )
+                OR COALESCE(
+                  (evidence->'auto_merge'->>'slot_claimed')::boolean, false
+                ) = true
+              )
             """,
             org_id,
             since,
         )
         return int((row or {}).get("n") or 0)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("auto_merge: weekly count failed: %s", exc)
-        # Fail closed — unknown count blocks eligibility.
+        logger.warning("auto_merge: weekly count failed (fail-closed): %s", exc)
         return 10**9
+
+
+async def claim_auto_merge_slot(
+    org_id: str,
+    plan_id: str,
+    *,
+    agent_id: str | None = None,
+    cap: int | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Atomically reserve one weekly auto-merge slot (closes TOCTOU).
+
+    Serializes concurrent approves for the same org via
+    ``pg_advisory_xact_lock``, re-counts merged+claimed slots, and stamps
+    ``evidence.auto_merge.slot_claimed=true`` before the lock releases.
+    Fail-closed when Postgres is unavailable.
+    """
+    import json as _json
+
+    details: dict[str, Any] = {}
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception as exc:  # noqa: BLE001
+        return False, {"reason": f"pg_init_failed:{str(exc)[:80]}"}
+
+    if client is None:
+        return False, {"reason": "no_postgres"}
+
+    if cap is None:
+        cap = await weekly_cap_for_org(org_id, agent_id)
+    cap = max(0, int(cap))
+    details["weekly_cap"] = cap
+    if cap <= 0:
+        return False, {**details, "reason": "weekly_cap:0"}
+
+    since = datetime.now(UTC) - timedelta(days=7)
+    lock_key = f"eden:auto_merge:{org_id}"
+    claimed_at = datetime.now(UTC).isoformat()
+
+    try:
+        async with client.transaction() as conn:
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtext($1::text))",
+                lock_key,
+            )
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*)::int AS n
+                FROM improvement_plans
+                WHERE org_id = $1
+                  AND updated_at >= $2
+                  AND (
+                    (
+                      status = 'merged'
+                      AND COALESCE(
+                        (evidence->'auto_merge'->>'merged')::boolean, false
+                      ) = true
+                    )
+                    OR COALESCE(
+                      (evidence->'auto_merge'->>'slot_claimed')::boolean, false
+                    ) = true
+                  )
+                """,
+                org_id,
+                since,
+            )
+            used = int((row or {}).get("n") or 0)
+            details["weekly_used"] = used
+
+            self_row = await conn.fetchrow(
+                """
+                SELECT
+                  COALESCE(
+                    (evidence->'auto_merge'->>'slot_claimed')::boolean, false
+                  ) AS claimed,
+                  COALESCE(
+                    (evidence->'auto_merge'->>'merged')::boolean, false
+                  ) AS merged
+                FROM improvement_plans
+                WHERE id = $1::uuid AND org_id = $2
+                """,
+                plan_id,
+                org_id,
+            )
+            already = bool(
+                self_row
+                and (self_row.get("claimed") or self_row.get("merged"))
+            )
+            details["already_holds_slot"] = already
+
+            if used >= cap and not already:
+                return False, {
+                    **details,
+                    "reason": f"weekly_cap:{used}>={cap}",
+                }
+
+            patch = _json.dumps(
+                {
+                    "auto_merge": {
+                        "slot_claimed": True,
+                        "slot_claimed_at": claimed_at,
+                    }
+                }
+            )
+            await conn.execute(
+                """
+                UPDATE improvement_plans SET
+                  evidence = jsonb_set(
+                    COALESCE(evidence, '{}'::jsonb),
+                    '{auto_merge}',
+                    COALESCE(evidence->'auto_merge', '{}'::jsonb)
+                      || $3::jsonb->'auto_merge',
+                    true
+                  ),
+                  updated_at = NOW()
+                WHERE id = $1::uuid AND org_id = $2
+                """,
+                plan_id,
+                org_id,
+                patch,
+            )
+        details["slot_claimed_at"] = claimed_at
+        return True, details
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("auto_merge: claim_slot failed (fail-closed): %s", exc)
+        return False, {**details, "reason": f"claim_failed:{str(exc)[:120]}"}
+
+
+async def release_auto_merge_slot(org_id: str, plan_id: str) -> None:
+    """Clear ``slot_claimed`` when merge fails so the weekly seat is freed."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return
+        await client.execute(
+            """
+            UPDATE improvement_plans SET
+              evidence = jsonb_set(
+                COALESCE(evidence, '{}'::jsonb),
+                '{auto_merge}',
+                (COALESCE(evidence->'auto_merge', '{}'::jsonb)
+                   - 'slot_claimed'
+                   - 'slot_claimed_at')
+                  || '{"slot_released": true}'::jsonb,
+                true
+              ),
+              updated_at = NOW()
+            WHERE id = $1::uuid AND org_id = $2
+              AND COALESCE(
+                (evidence->'auto_merge'->>'merged')::boolean, false
+              ) IS NOT TRUE
+            """,
+            plan_id,
+            org_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("auto_merge: release_slot failed: %s", exc)
 
 
 def _paths_from_plan(plan: dict[str, Any]) -> list[str]:
