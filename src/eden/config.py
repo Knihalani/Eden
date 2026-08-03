@@ -1193,6 +1193,23 @@ def _build_settings_class():
         replay_max_llm_steps: int = 3
         replay_max_cost_usd: float = 0.05
 
+        # ── M8 (§4.2) sandbox test gate ─────────────────────────────────
+        # Convention-discovered targeted tests run in the subprocess
+        # sandbox before a code_patch plan enters the inbox.
+        # ``test_gate_enabled`` is org-overridable via
+        # organizations.features JSONB
+        # (eden.preview.gates.test_gate_enabled_for_org).
+        test_gate_enabled: bool = True
+        test_gate_timeout_s: int = 120
+        # Default OFF (spec §4.2 rationale): LLM-synthesized regression
+        # tests in customer PRs are a trust risk until dogfood review of
+        # ≥20 synthesized tests, and the sandbox executing LLM-authored
+        # test code raises the injection stakes (§7.3 — synthesized
+        # tests run only under mandatory network isolation). Promote
+        # after dogfood review. Org-overridable
+        # (eden.preview.gates.test_gate_synthesis_enabled_for_org).
+        test_gate_synthesis_v1: bool = False
+
         @property
         def verify_poll_interval_seconds(self) -> float:
             """Deprecated alias (M3, D7) — this used to be a dead field
