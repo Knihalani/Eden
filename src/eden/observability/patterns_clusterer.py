@@ -78,16 +78,20 @@ class PatternsClusterer:
         min_cluster_size = getattr(settings, "patterns_clusterer_min_cluster_size", 20)
         cutoff = datetime.now(UTC) - timedelta(days=lookback)
 
-        # 1) Pull events with non-null request_body
+        # 1) Pull events with a request body on either the plaintext
+        # JSONB column or its zstd shadow — Phase 4 storage: reads must
+        # not depend on ``request_body`` staying populated once
+        # ``telemetry_plaintext_jsonb_write_enabled`` flips to False.
         from eden.storage.postgres import get_postgres_client
         client = await get_postgres_client()
         rows = await client.fetch(
             """
-            SELECT event_id, trace_id, name, request_body, metrics, attributes
+            SELECT event_id, trace_id, name, request_body, request_body_zstd,
+                   metrics, attributes
             FROM telemetry_events
             WHERE tenant_id = $1
               AND timestamp >= $2
-              AND request_body IS NOT NULL
+              AND (request_body IS NOT NULL OR request_body_zstd IS NOT NULL)
               AND source_format IN ('openai', 'anthropic', 'gemini', 'bedrock', 'otel')
             ORDER BY timestamp DESC
             LIMIT 5000
@@ -103,7 +107,23 @@ class PatternsClusterer:
         topics: list[str] = []
         trace_ids: list[str] = []
         for r in rows:
-            req = r.get("request_body") or {}
+            # zstd first — matches the canonical reader
+            # (telemetry_collector.get_trace_tree) and rules_engine's
+            # _load_span_content, so this stays correct once
+            # telemetry_plaintext_jsonb_write_enabled=False stops
+            # populating the plaintext column on new rows.
+            req = None
+            zstd_val = r.get("request_body_zstd")
+            if zstd_val:
+                try:
+                    from eden.storage.compression import decompress_jsonb
+
+                    req = decompress_jsonb(zstd_val)
+                except Exception:
+                    req = None
+            if req is None:
+                req = r.get("request_body")
+            req = req or {}
             if not isinstance(req, dict):
                 continue
             messages = req.get("messages") or []

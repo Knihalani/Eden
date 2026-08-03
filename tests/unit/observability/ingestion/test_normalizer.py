@@ -8,6 +8,7 @@ from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.normalizer import (
     _coerce_outcome,
     _normalize_timestamp,
+    normalize_many,
     normalize_to_telemetry_event,
 )
 
@@ -191,3 +192,70 @@ async def test_normalize_lifts_outcome_and_error_from_payload():
     assert event.outcome == "failure"
     assert event.attributes.get("error") == "boom"
     assert event.attributes.get("error_type") == "RuntimeError"
+
+
+# ── normalize_many (Phase 3: bounded-concurrency batch normalize) ─────
+
+
+@pytest.mark.asyncio
+async def test_normalize_many_empty_list():
+    attr = Attribution(tenant_id="org_abc")
+    assert await normalize_many([], attr) == []
+
+
+@pytest.mark.asyncio
+async def test_normalize_many_single_item_matches_single_call():
+    attr = Attribution(tenant_id="org_abc", source_format="otel")
+    raw = {"event_type": "otel.chat", "trace_id": "t1"}
+    [batched] = await normalize_many([raw], attr)
+    single = await normalize_to_telemetry_event(raw, attr)
+    assert batched.trace_id == single.trace_id == "t1"
+    assert batched.event_type == single.event_type == "otel.chat"
+
+
+@pytest.mark.asyncio
+async def test_normalize_many_preserves_order():
+    attr = Attribution(tenant_id="org_abc", source_format="otel")
+    raws = [{"event_type": "x", "trace_id": f"t{i}"} for i in range(30)]
+    events = await normalize_many(raws, attr)
+    assert [e.trace_id for e in events] == [f"t{i}" for i in range(30)]
+
+
+@pytest.mark.asyncio
+async def test_normalize_many_caps_concurrency():
+    """A batch larger than the concurrency cap must never have more than
+    the cap in flight at once."""
+    import asyncio
+
+    from eden.observability.ingestion import normalizer as normalizer_mod
+
+    in_flight = 0
+    max_in_flight = 0
+    lock = asyncio.Lock()
+
+    async def _fake_normalize(raw, attribution):
+        nonlocal in_flight, max_in_flight
+        async with lock:
+            in_flight += 1
+            max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0.01)
+        async with lock:
+            in_flight -= 1
+        return await normalize_to_telemetry_event(raw, attribution)
+
+    attr = Attribution(tenant_id="org_abc", source_format="otel")
+    raws = [{"event_type": "x", "trace_id": f"t{i}"} for i in range(40)]
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(normalizer_mod, "normalize_to_telemetry_event", _fake_normalize)
+        events = await normalize_many(raws, attr)
+
+    assert len(events) == 40
+    assert max_in_flight <= normalizer_mod._NORMALIZE_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_normalize_many_propagates_exceptions():
+    attr = Attribution(tenant_id="org_abc", source_format="otel")
+    raws = [{"event_type": "x", "trace_id": "t0"}, "not_a_dict"]
+    with pytest.raises(AttributeError):
+        await normalize_many(raws, attr)

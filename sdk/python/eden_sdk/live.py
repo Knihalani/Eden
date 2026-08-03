@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gzip
+import json
 import logging
 import os
 import time
@@ -10,6 +12,16 @@ from typing import Any
 logger = logging.getLogger("eden_sdk.live")
 
 _ENV_LIVE = "EDEN_LIVE"
+
+#: Match ``EdenClient``'s compact JSON separators (``client.py``'s
+#: ``_JSON_SEPARATORS``) — fewer bytes to gzip, faster dumps.
+_JSON_SEPARATORS = (",", ":")
+
+
+def _gzip_json_body(body: dict[str, Any]) -> bytes:
+    """Compact-encode + gzip a JSON body, mirroring the main ingest path."""
+    raw = json.dumps(body, default=str, separators=_JSON_SEPARATORS).encode("utf-8")
+    return gzip.compress(raw, compresslevel=1)
 
 
 def live_mode_enabled(*, stream: bool | None = None) -> bool:
@@ -87,7 +99,12 @@ class LiveSpanPublisher:
         )
         try:
             client = self._client(cfg.timeout_s)
-            resp = client.post(url, json=event, headers=cfg.auth_headers())
+            headers = cfg.auth_headers()
+            headers["Content-Type"] = "application/json"
+            headers["Content-Encoding"] = "gzip"
+            resp = client.post(
+                url, content=_gzip_json_body(event), headers=headers
+            )
             if resp.status_code >= 400:
                 self._buffer(event)
                 return {
@@ -128,7 +145,12 @@ class LiveSpanPublisher:
         }
         try:
             client = self._client(cfg.timeout_s)
-            resp = client.post(url, json=body, headers=cfg.auth_headers())
+            headers = cfg.auth_headers()
+            headers["Content-Type"] = "application/json"
+            headers["Content-Encoding"] = "gzip"
+            resp = client.post(
+                url, content=_gzip_json_body(body), headers=headers
+            )
             if resp.status_code >= 400:
                 return {
                     "status": "error",

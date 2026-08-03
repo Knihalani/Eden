@@ -112,6 +112,36 @@ def _not_implemented_envelope(
     }
 
 
+def _not_applicable_envelope(
+    feature: str, data: dict[str, Any], message: str
+) -> dict[str, Any]:
+    """Envelope for an operation the active substrate structurally lacks.
+
+    Distinct from both :func:`_not_implemented_envelope` (bad *input*,
+    ``live=False``) and :func:`_ok_fallback_envelope` (a real numeric
+    estimate computed because ClickHouse is *unhealthy*): this is neither.
+    Tinybird manages its own background part merges and does not expose
+    ``OPTIMIZE`` or ``system.parts`` via ``/v0/sql`` — there is nothing
+    wrong and nothing to retry, the operation just does not exist on this
+    substrate. Before this envelope existed, :class:`ColumnarCompactor`
+    treated Tinybird's deterministic ``OPTIMIZE`` rejection as a
+    compaction *failure* and fired a ``severity="high"`` closed-loop hook
+    on every scheduled tick, forever, on any Tinybird-backed deployment.
+
+    ``live`` stays ``True`` and top-level ``status`` stays ``"ok"`` — this
+    is the expected, steady-state shape of the substrate, not a degraded
+    one — with ``data["data_source"] = "not_applicable"`` as the signal
+    the UI/caller can key off of.
+    """
+    return {
+        "status": "ok",
+        "feature": feature,
+        "live": True,
+        "message": message,
+        "data": {**data, "data_source": "not_applicable"},
+    }
+
+
 # ─── ClickHouse availability probe ───────────────────────────
 
 
@@ -160,6 +190,26 @@ async def _check_ch_available() -> bool:
 
 
 _ch_health_cache: tuple[bool, float] | None = None
+
+
+async def _is_tinybird_substrate() -> bool:
+    """Return ``True`` if the active :class:`ClickHouseSink` is Tinybird.
+
+    Reads ``sink.config.is_tinybird`` only — no network call — so callers
+    can cheaply branch to a :func:`_not_applicable_envelope` *before*
+    attempting an ``OPTIMIZE`` or a ``system.parts`` query that Tinybird's
+    ``/v0/sql`` will always reject or cannot answer. ``get_clickhouse_sink()``
+    itself does not make a network call for a Tinybird config either —
+    ``init_schema()`` no-ops (schema is owned by ``tb deploy``).
+    """
+    try:
+        from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+
+        sink = await get_clickhouse_sink()
+        return sink.config.is_tinybird
+    except Exception as exc:  # noqa: BLE001 - best-effort, treat as non-Tinybird
+        logger.debug("columnar._is_tinybird_substrate probe failed: %s", exc)
+        return False
 
 
 def _reset_ch_health_cache() -> None:
@@ -584,7 +634,9 @@ __all__ = [
     "_delete_then_insert_rollup",
     "_fire_compaction_drift_hook",
     "_insert_compaction_log",
+    "_is_tinybird_substrate",
     "_json_dumps",
+    "_not_applicable_envelope",
     "_not_implemented_envelope",
     "_ok_envelope",
     "_record_columnar_fallback",

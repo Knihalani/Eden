@@ -136,12 +136,33 @@ export interface EdenSDKOptions {
   maxChunkBuffer?: number;
 
   /**
-   * N16-mirroring client sampling profile. Defaults to ``full``.
+   * N16-mirroring client sampling profile. Defaults to `"full"` (100%
+   * keep) for soft-launch / new integrations so nothing is silently
+   * dropped before an operator has looked at their traffic. For
+   * production traffic once volume is understood, set `"balanced"`
+   * (~15% non-signal keep — errors, and slow calls are still always
+   * kept via force-keep, see `sampling.ts`) to cut ingestion cost.
+   * `"aggressive"` (~5%) trades more fidelity for cost on very
+   * high-volume tenants. Falls back to `EDEN_SAMPLING_PROFILE` when
+   * unset. This is a client-side mirror of the server's own
+   * `sampling_profile` setting (`src/eden/config.py`) — the two are
+   * independent knobs and either can filter a trace.
    */
   samplingProfile?: "full" | "balanced" | "aggressive";
 
   /** Keep error events even when sampling (default true). */
   sampleKeepErrors?: boolean;
+
+  /**
+   * SDK x server sampling compounding guard. Default `false` — see
+   * `ClientSampler`'s doc comment in `sampling.ts` for the full
+   * rationale. Falls back to `EDEN_CLIENT_PROBABILISTIC_SAMPLING`
+   * when unset. Leave this `false` (the default) when the server
+   * also applies `sampling_profile`; the two gates would otherwise
+   * compound multiplicatively instead of the operator's intended
+   * single rate.
+   */
+  clientProbabilisticSampling?: boolean;
 
   /** Durable offline JSONL path; set or use EDEN_OFFLINE_QUEUE=1. */
   offlineQueuePath?: string;
@@ -178,6 +199,25 @@ export interface EdenSDKOptions {
   coalesce?: boolean;
   providerCacheLayout?: boolean;
   responseRepair?: boolean;
+
+  /**
+   * Bounded-capture policy for `setInput`/`setOutput` content on
+   * manual `trace()`/`traceAgent()` spans — one of `"bounded"`
+   * (default: head+tail truncate long strings, but keep errors and
+   * slow calls in full), `"full"` (never truncate), or
+   * `"metrics_only"` (never capture content). Auto-instrumentation
+   * (`wrapOpenAI`, `wrapAnthropic`, ...) already ships metrics-only
+   * and is unaffected by this setting. See `capture.ts`. Falls back
+   * to `EDEN_CAPTURE_MODE` when unset.
+   */
+  captureMode?: "bounded" | "full" | "metrics_only";
+
+  /**
+   * Per-string-field truncation cap in bytes for `"bounded"`
+   * `captureMode`. Falls back to `EDEN_CAPTURE_MAX_STRING_BYTES`
+   * when unset. Defaults to 8192.
+   */
+  captureMaxStringBytes?: number;
 }
 
 // ── Telemetry events ──────────────────────────────────────────────
@@ -249,6 +289,19 @@ export interface TraceOptions {
   environmentId?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  /**
+   * Span attributes, mirroring the Python SDK's
+   * `trace(attributes={...})` / `@trace_agent(attributes={...})`.
+   * Merged into the wire event's `attributes` map by `finishTrace`
+   * using the same naming rule as the Python SDK: a key of
+   * `force_trace` is renamed to `eden.force_trace` (the key the N16
+   * server-side keep-rule reader looks for), any key already
+   * namespaced under `eden.` passes through unchanged, and everything
+   * else is prefixed with `eden.span.`. Set `{ force_trace: true }` to
+   * force this trace to be kept regardless of the active sampling
+   * profile (client and server).
+   */
+  attributes?: Record<string, unknown>;
 }
 
 // ── Provider metadata ────────────────────────────────────────────

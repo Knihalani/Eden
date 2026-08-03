@@ -276,3 +276,53 @@ async def normalize_to_telemetry_event(
         ),
         model_name=raw.get("model_name") or raw.get("model"),
     )
+
+
+# Cap on in-flight ``normalize_to_telemetry_event`` calls per batch. PII
+# masking dominates the per-event cost (regex scans + one ``asyncio.to_thread``
+# dispatch), so unbounded concurrency on a large batch would both flood the
+# default thread pool and race every event's PII policy resolve at once.
+# 12 sits in the middle of the 8-16 range other Phase 3 batch call sites use.
+_NORMALIZE_CONCURRENCY = 12
+
+
+async def normalize_many(
+    raws: list[dict[str, Any]],
+    attribution: Attribution,
+) -> list[TelemetryEvent]:
+    """Normalize a batch of raw dicts concurrently, capped at
+    ``_NORMALIZE_CONCURRENCY`` in flight.
+
+    Decoders (``otel.py``, ``providers.py``) used to build each ``raw``
+    dict and immediately ``await normalize_to_telemetry_event(...)``
+    before moving to the next item — fully sequential even though PII
+    masking and the per-event work is otherwise independent across items.
+    This fans the batch out with a bounded semaphore instead.
+
+    Every raw shares the same ``attribution`` — decoders should call
+    ``attribution.with_source_format(...)`` once before invoking this,
+    same as the old per-event loop did on every iteration (the copy is
+    pure, so hoisting it out changes nothing but avoids redoing it N
+    times).
+
+    Order is preserved: ``asyncio.gather`` returns results positionally,
+    regardless of completion order, so ``result[i]`` is always
+    ``raws[i]`` normalized — callers that build reject/skip counts from
+    the synchronous pre-pass (before calling this) and only need the
+    *count* of successfully normalized events don't need to change
+    anything. A raw that fails to normalize propagates its exception out
+    of ``gather`` exactly as it would have out of a sequential ``await``
+    loop — no result is swallowed or reordered.
+    """
+    if not raws:
+        return []
+    if len(raws) == 1:
+        return [await normalize_to_telemetry_event(raws[0], attribution)]
+
+    semaphore = asyncio.Semaphore(_NORMALIZE_CONCURRENCY)
+
+    async def _bounded(raw: dict[str, Any]) -> TelemetryEvent:
+        async with semaphore:
+            return await normalize_to_telemetry_event(raw, attribution)
+
+    return list(await asyncio.gather(*(_bounded(r) for r in raws)))

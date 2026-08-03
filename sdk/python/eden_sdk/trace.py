@@ -25,6 +25,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
+from eden_sdk.capture import capture_value, limits_from_config, stamp_capture_attributes
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 
@@ -282,6 +283,32 @@ def trace(
         _active_trace.reset(trace_token)
 
 
+def _map_attr_key(key: str) -> str:
+    """Map a user-supplied span attribute key to its wire name.
+
+    Every attribute used to get an unconditional ``eden.span.`` prefix,
+    so a caller setting ``force_trace`` (via
+    ``@trace_agent(attributes={"force_trace": True})`` or
+    ``span.set_attribute(...)``) shipped as ``eden.span.force_trace`` —
+    a key the server's N16 keep-rule reader
+    (``eden.observability.sampling.summaries.signals_from_attributes``,
+    which looks for the literal ``eden.force_trace``) never sees. Same
+    problem for any other ``eden.*``-namespaced key a caller sets by
+    hand: it got double-namespaced to ``eden.span.eden.*`` instead of
+    reaching the server under its own name.
+
+    * ``force_trace`` → ``eden.force_trace`` (the one key rename).
+    * Anything already namespaced under ``eden.`` passes through as-is.
+    * Everything else keeps the ``eden.span.`` prefix (back-compat /
+      namespacing against framework-internal keys like ``eden.args``).
+    """
+    if key == "force_trace":
+        return "eden.force_trace"
+    if key.startswith("eden."):
+        return key
+    return f"eden.span.{key}"
+
+
 def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
     """Build and enqueue a framework-format event for a closed span."""
     from eden_sdk.config import get_config as _gc
@@ -313,6 +340,30 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
         extra_tags = []
     status_val = raw_attrs.pop("eden.status", None)
     pending_outcome = raw_attrs.pop("eden._pending_outcome", None)
+    final_outcome = pending_outcome or span.outcome
+
+    # Bounded capture applies at emission time (not when set_input/
+    # set_output was called) so the error/slow bypass sees the span's
+    # FINAL outcome and duration regardless of call order — a span
+    # that calls set_input() before it knows it will error still gets
+    # the full-fidelity keep.
+    limits = limits_from_config(get_config())
+    has_error = bool(span.error) or final_outcome == "error"
+    input_result = capture_value(
+        input_val, has_error=has_error, duration_ms=duration_ms, limits=limits
+    )
+    output_result = capture_value(
+        output_val, has_error=has_error, duration_ms=duration_ms, limits=limits
+    )
+    input_val = input_result.value
+    output_val = output_result.value
+
+    attributes: dict[str, Any] = {
+        **{f"eden.span.{k}": str(v) for k, v in raw_attrs.items()},
+        "eden.span_id": span.span_id,
+        "eden.trace_name": ctx.name,
+    }
+    stamp_capture_attributes(attributes, input_result, output_result)
 
     payload: dict[str, Any] = {
         "event_id": f"eden_span_{span.span_id}",
@@ -322,15 +373,11 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
         "agent_id": (getattr(get_config(), "agent_id", None) or ctx.name),
         "agent_version": None,
         "duration_ms": duration_ms,
-        "outcome": pending_outcome or span.outcome,
+        "outcome": final_outcome,
         "status": status_val,
         "input": input_val,
         "output": output_val,
-        "attributes": {
-            **{f"eden.span.{k}": str(v) for k, v in raw_attrs.items()},
-            "eden.span_id": span.span_id,
-            "eden.trace_name": ctx.name,
-        },
+        "attributes": attributes,
         "tags": ["eden-sdk", "framework", *extra_tags],
         "source_format": "framework",
         "span_id": span.span_id,

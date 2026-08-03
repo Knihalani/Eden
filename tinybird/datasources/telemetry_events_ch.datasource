@@ -5,28 +5,28 @@ DESCRIPTION >
     (they previously disagreed on ~40 column types).
 
 SCHEMA >
-    event_id String `json:$.event_id`,
-    tenant_id String `json:$.tenant_id`,
-    project_id String `json:$.project_id`,
-    trace_id String `json:$.trace_id`,
+    event_id String `json:$.event_id` CODEC(ZSTD(3)),
+    tenant_id String `json:$.tenant_id` CODEC(ZSTD(3)),
+    project_id String `json:$.project_id` CODEC(ZSTD(3)),
+    trace_id String `json:$.trace_id` CODEC(ZSTD(3)),
     realm LowCardinality(String) `json:$.realm`,
     event_type LowCardinality(String) `json:$.event_type`,
-    timestamp DateTime64(3) `json:$.timestamp`,
-    agent_id String `json:$.agent_id`,
-    agent_version String `json:$.agent_version`,
-    environment_id String `json:$.environment_id`,
-    span_id String `json:$.span_id`,
-    name String `json:$.name`,
-    duration_ms Float64 `json:$.duration_ms`,
-    metrics String `json:$.metrics`,
-    tags String `json:$.tags`,
+    timestamp DateTime64(3) `json:$.timestamp` CODEC(Delta, ZSTD(3)),
+    agent_id String `json:$.agent_id` CODEC(ZSTD(3)),
+    agent_version String `json:$.agent_version` CODEC(ZSTD(3)),
+    environment_id String `json:$.environment_id` CODEC(ZSTD(3)),
+    span_id String `json:$.span_id` CODEC(ZSTD(3)),
+    name String `json:$.name` CODEC(ZSTD(3)),
+    duration_ms Float64 `json:$.duration_ms` CODEC(ZSTD(3)),
+    metrics String `json:$.metrics` CODEC(ZSTD(3)),
+    tags String `json:$.tags` CODEC(ZSTD(3)),
     outcome LowCardinality(String) `json:$.outcome`,
     finish_reason LowCardinality(String) `json:$.finish_reason`,
     model LowCardinality(String) `json:$.model`,
-    model_version String `json:$.model_version`,
-    cache_hit UInt8 `json:$.cache_hit`,
-    prompt_cache_savings_usd Float64 `json:$.prompt_cache_savings_usd`,
-    ingested_at DateTime64(3) `json:$.ingested_at`
+    model_version String `json:$.model_version` CODEC(ZSTD(3)),
+    cache_hit UInt8 `json:$.cache_hit` CODEC(ZSTD(3)),
+    prompt_cache_savings_usd Float64 `json:$.prompt_cache_savings_usd` CODEC(ZSTD(3)),
+    ingested_at DateTime64(3) `json:$.ingested_at` CODEC(Delta, ZSTD(3))
 
 INDEXES >
     INDEX idx_trace_id trace_id TYPE bloom_filter(0.01) GRANULARITY 1
@@ -35,6 +35,3 @@ ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
 ENGINE_SORTING_KEY "tenant_id, timestamp"
 ENGINE_TTL "toDateTime(timestamp) + toIntervalDay(90)"
-
-FORWARD_QUERY >
-    SELECT event_id, tenant_id, project_id, trace_id, CAST(realm, 'LowCardinality(String)') AS realm, CAST(event_type, 'LowCardinality(String)') AS event_type, CAST(timestamp, 'DateTime64(3)') AS timestamp, agent_id, agent_version, environment_id, span_id, name, CAST(duration_ms, 'Float64') AS duration_ms, metrics, tags, CAST(outcome, 'LowCardinality(String)') AS outcome, CAST(finish_reason, 'LowCardinality(String)') AS finish_reason, CAST(model, 'LowCardinality(String)') AS model, model_version, CAST(cache_hit, 'UInt8') AS cache_hit, CAST(prompt_cache_savings_usd, 'Float64') AS prompt_cache_savings_usd, CAST(ingested_at, 'DateTime64(3)') AS ingested_at

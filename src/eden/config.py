@@ -805,6 +805,16 @@ def _build_settings_class():
         tinybird_api_host: str = ""
         tinybird_admin_token: str = ""
         tinybird_branch_token: str = ""
+        # Phase 1 Tinybird cost control — ``agent_performance``,
+        # ``pipeline_stages``, ``usage_trends``, and ``benchmark_results``
+        # have zero readers in this codebase (no route/pipe query calls
+        # them) and their only writer, ``KafkaEventConsumer.consume_clickhouse``,
+        # is never invoked by any worker/app startup path — so every row
+        # written to them is pure unpaid Tinybird storage with nothing ever
+        # reading it back. Default OFF; set true only if a real consumer of
+        # these four datasources appears. ``telemetry_events_ch`` ingest is
+        # unaffected by this flag.
+        tinybird_ingest_unread_datasources_enabled: bool = False
 
         # Prometheus /metrics scrape auth. When set, scrapers must present
         # ``Authorization: Bearer <token>`` to read /metrics. When empty,
@@ -930,13 +940,20 @@ def _build_settings_class():
         # OTel edge sampling is configured separately in
         # ``deploy/otel-collector-config.yaml``.
         #
-        # Soft-launch / Wave-1 default is ``full`` (100% keep) so new
-        # installs match SDK ``EDEN_SAMPLING_PROFILE`` default. For cost
-        # reduction after soft-launch, set ``EDEN_SAMPLING_PROFILE=balanced``
-        # (~15% non-signal keep; errors/loops/stumbles always kept) or
-        # ``aggressive`` (~5%). ``sampling_enabled=False`` also keeps 100%.
-        # ``probabilistic_sample_rate`` overrides the profile fallback when
-        # set below 1.0; default 1.0 means "use profile rate".
+        # Soft-launch / default is ``full`` (100% keep). Opt into cost
+        # reduction with ``EDEN_SAMPLING_PROFILE=balanced`` (~15% of
+        # non-signal traces; errors/slow/high_cost/force_trace always
+        # kept) or ``aggressive`` (~5%). See
+        # ``docs/docs/explanation/sampling-and-retention.md``.
+        # ``sampling_enabled=False`` also forces 100% keep (rollback).
+        # ``probabilistic_sample_rate`` overrides the profile fallback
+        # when set below 1.0; default 1.0 means "use profile rate".
+        #
+        # M14 (§8.3): do NOT flip this global default from ``full`` to
+        # ``balanced``. Orgs opt in via ``sampling_profile_override`` in
+        # organizations.settings (see
+        # ``eden.preview.gates.sampling_profile_for_org``). Fleet-wide
+        # promotion waits on M13 §6.5 shadow-detector measurement.
         sampling_enabled: bool = Field(
             default=True,
             validation_alias=AliasChoices(
@@ -946,7 +963,10 @@ def _build_settings_class():
             ),
         )
         sampling_profile: str = Field(
-            default="full",  # full | balanced | aggressive
+            # full | balanced | aggressive. Default ``full`` = 100% keep.
+            # Set ``EDEN_SAMPLING_PROFILE=balanced`` for production cost
+            # reduction (~15% non-signal keep; signal traces always kept).
+            default="full",
             validation_alias=AliasChoices(
                 "sampling_profile",
                 "SAMPLING_PROFILE",
@@ -961,7 +981,30 @@ def _build_settings_class():
                 "EDEN_PROBABILISTIC_SAMPLE_RATE",
             ),
         )
-        sampling_slow_threshold_ms: float = 5_000.0
+        sampling_slow_threshold_ms: float = Field(
+            default=5_000.0,
+            validation_alias=AliasChoices(
+                "sampling_slow_threshold_ms",
+                "SAMPLING_SLOW_THRESHOLD_MS",
+                "EDEN_SAMPLING_SLOW_THRESHOLD_MS",
+            ),
+        )
+        # High-cost keep-rule threshold (USD). A trace whose enriched
+        # ``metrics.cost_usd`` (stamped by
+        # ``TelemetryCollector._stamp_cost_usd`` BEFORE this policy runs)
+        # is at or above this is always kept, regardless of profile.
+        # Default mirrors the ballpark "expensive single call" cost for
+        # a frontier model with a long context window — well above a
+        # typical completion, so it flags genuine cost outliers rather
+        # than ordinary traffic.
+        sampling_high_cost_usd: float = Field(
+            default=0.50,
+            validation_alias=AliasChoices(
+                "sampling_high_cost_usd",
+                "SAMPLING_HIGH_COST_USD",
+                "EDEN_SAMPLING_HIGH_COST_USD",
+            ),
+        )
         # ── N09 content-addressed / message dedupe ─────────────────────
         # Gates ``message_store`` upserts on ingest and ``BlobStore``
         # intern. When False, payloads stay fully inline (N09 rollback).
@@ -969,9 +1012,39 @@ def _build_settings_class():
         # blob store is additive for large system/tool payloads.
         content_dedupe_enabled: bool = True
 
+        # ── zstd dual-write (migration 033 drop gate) ───────────────────
+        # ``TelemetryCollector`` always writes ``*_zstd`` columns. This flag
+        # additionally gates the legacy plaintext JSONB columns
+        # (``request_body``, ``response_body``, ``reasoning``,
+        # ``tool_calls_full``, ``tool_results``, ``payload``, ``metrics``,
+        # ``attributes``) on ``telemetry_events``. Default True (dual-write)
+        # because not every reader has been migrated to prefer ``*_zstd``
+        # yet — see ``scripts/check_zstd_drop_prerequisites.py`` gate (b).
+        #
+        # Flip to False only after:
+        #   1. ``check_zstd_drop_prerequisites.py`` passes gates (a)-(c), AND
+        #   2. every reader of the plaintext columns (rules_engine,
+        #      patterns_clusterer, get_trace_tree, ...) has a ``*_zstd``
+        #      first / plaintext-fallback read path (so it keeps working
+        #      once plaintext stops being written), AND
+        #   3. a burn-in period has passed with the flag off in a
+        #      non-prod environment.
+        # Migration 033 (the actual ``DROP COLUMN``) stays manual and
+        # gated separately — this flag only stops *new* plaintext writes,
+        # it does not touch existing rows or the schema.
+        telemetry_plaintext_jsonb_write_enabled: bool = True
+
         quality_pipeline_workers: int = 8
         quality_pipeline_watermark_poll_ms: int = 1000
         quality_pipeline_batch_size: int = 100
+        # Phase 5 — the Detection step (phase_7_detection.run_all_detectors,
+        # ~200ms CPU/trace) has no ``_TABLES`` entry in
+        # ``quality_pipeline/worker.py``: ``persist_reports`` computes it and
+        # then silently discards the result on every single trace. Default
+        # OFF until a ``trace_detection_reports`` table + persist branch
+        # exist; flip on only after that lands. See ``worker.py``'s
+        # ``compute_trace_reports._detection`` for the gate.
+        quality_pipeline_detection_enabled: bool = False
         # ── Idle-poll cadences (Neon scale-to-zero) ────────────────────
         # These MUST share one value. ``eden.storage.empty_cooldown``
         # quantises every deadline onto a wall-clock grid of the
@@ -1184,55 +1257,36 @@ def _build_settings_class():
         # not the 30/30 a code merge needs. Merge verifies unchanged.
         verify_delay_seconds_heal: int = 300
         verify_quiet_window_minutes_heal: int = 10
-
-        # ── M13 Phase 4 improvement brain ─────────────────────────
-        # ── M13 (§6.1) expected-value ranking ───────────────────────────
-        # EV = severity_w × confidence × recurrence_rate × user_count_w
-        #      × est_cost_of_issue − est_fix_cost (incl. KG revert premium).
-        # Default True so dogfood captures ranked-vs-chronological scores.
-        sweep_ev_ranking_v1: bool = True
-        # ── M13 (§6.6) plan staleness ───────────────────────────────────
-        # Cockpit "stale" badge after this many days; janitor auto-closes
-        # drafts at 2× this window (30d when default 14).
-        plan_stale_after_days: int = 14
-        # ── M13 (§6.2) cockpit queues + Slack ───────────────────────────
-        # When True (default), Slack only notifies Fix-now items
-        # (code_patch / prompt_update with evidence); Improve-later
-        # (advisory, config, cost digests) stays quiet.
-        slack_notify_fix_now_only: bool = True
-        # ── M13 (§6.5) shadow detector promotion ────────────────────────
-        shadow_promote_min_firings: int = 20
-
-        # ── M14 (§8) cost & speed ───────────────────────────────────────
-        # §8.1 Neon scale-to-zero: **env-gated for dev/staging only**.
-        # Unset (default) → prod warm-demo tradeoff. Set
-        # ``EDEN_NEON_SCALE_TO_ZERO=1`` on non-prod so idle/cooldown hooks
-        # may force pool ``min_size=0``. Never flip this on in production.
-        neon_scale_to_zero: bool = Field(
-            default=False,
-            validation_alias=AliasChoices(
-                "neon_scale_to_zero",
-                "NEON_SCALE_TO_ZERO",
-                "EDEN_NEON_SCALE_TO_ZERO",
-            ),
-        )
-        # §8.4: per-signal-class timeout inside improvement sweep gather.
-        sweep_signal_timeout_s: float = 45.0
-        # §8.4: propose→Slack p95 budget (harness measurement note).
-        propose_to_slack_p95_budget_s: float = 90.0
-
-        # ── M15 (§9) auto-merge ladder (canary) ─────────────────────────
-        # Weekly volume cap; org-overridable via policy. Kill switch:
-        # feature_kills ``auto_merge``. Requires N22 T4
-        # ``auto_code_patch_merge=True`` (defaults False — DARK).
-        auto_merge_max_per_week: int = 2
-        verify_delay_seconds_auto_merge: int = 600
-        verify_quiet_window_minutes_auto_merge: int = 10
         # M3 (D3) janitor: issues stuck in ``fix_pending`` longer than
         # this are returned to ``triaged`` (+ audit row + cockpit
         # "stuck" badge) by the verify worker's ``fix_pending_janitor``
         # idle chore.
         fix_pending_max_age_minutes: int = 120
+
+        # ── M13 (§6.1) expected-value ranking ───────────────────────────
+        # EV = severity_w × confidence × recurrence_rate × user_count_w
+        #      × est_cost_of_issue − est_fix_cost (incl. KG revert premium).
+        # Default True so dogfood captures ranked-vs-chronological scores.
+        sweep_ev_ranking_v1: bool = True
+        # Optional override map severity → weight (JSON via env not needed;
+        # code falls back to planner defaults when unset).
+        ev_severity_weights: dict | None = None
+
+        # ── M13 (§6.2) cockpit queues + Slack ───────────────────────────
+        # When True (default), Slack only notifies Fix-now items
+        # (code_patch / prompt_update with evidence); Improve-later
+        # (advisory, config, cost digests) stays quiet.
+        slack_notify_fix_now_only: bool = True
+
+        # ── M13 (§6.6) plan staleness ───────────────────────────────────
+        # Cockpit "stale" badge after this many days; janitor auto-closes
+        # drafts at 2× this window (30d when default 14).
+        plan_stale_after_days: int = 14
+
+        # ── M13 (§6.5) shadow detector promotion ────────────────────────
+        shadow_promote_min_firings: int = 20
+        shadow_promote_precision: float = 0.8
+        shadow_delete_precision: float = 0.3
 
         # ── M7 (§4.1) replay-before-PR verify ───────────────────────────
         # Signature-based replay of the checkpointed failing step before
@@ -1273,6 +1327,45 @@ def _build_settings_class():
         # App registration lacks it (§7.4).
         pr_evidence_body_v1: bool = True
         ci_ingestion_v1: bool = True
+
+        # ── M14 (§8) cost & speed ───────────────────────────────────────
+        # §8.1 Neon scale-to-zero: **env-gated for dev/staging only**.
+        # Unset (default) → prod warm-demo tradeoff ($19/mo Launch stays
+        # reachable). Set ``EDEN_NEON_SCALE_TO_ZERO=1`` on non-prod so
+        # idle/cooldown hooks may force pool ``min_size=0`` and target
+        # ≤60 CU-h/mo. Never flip this on in production paths.
+        neon_scale_to_zero: bool = Field(
+            default=False,
+            validation_alias=AliasChoices(
+                "neon_scale_to_zero",
+                "NEON_SCALE_TO_ZERO",
+                "EDEN_NEON_SCALE_TO_ZERO",
+            ),
+        )
+        # §8.4: per-signal-class timeout inside improvement sweep gather
+        # (traces / metrics / repo / cost). Overall sweep cap is 60s.
+        sweep_signal_timeout_s: float = 45.0
+        # §8.4: propose→Slack latency budget (harness / golden-path
+        # measurement). Pre-triaged ISSUE_CREATED → Slack notify p95
+        # target < 90s. Not a hard runtime kill — observability note.
+        propose_to_slack_p95_budget_s: float = 90.0
+        # §8.3 sampling: global ``sampling_profile`` stays ``full``.
+        # Per-org opt-in to ``balanced`` (non-error traffic) via
+        # organizations.settings ``sampling_profile_override``. Fleet-wide
+        # promotion waits on M13 §6.5 shadow-detector precision/recall
+        # measurement — do NOT flip the global default.
+
+        # ── M15 (§9) auto-merge ladder (canary) ─────────────────────────
+        # Weekly volume cap on canary auto-merges per org. Org-overridable
+        # via ``AutonomousMaintenancePolicy.auto_merge_max_per_week``.
+        # Kill switch reuses ``feature_kills`` (``auto_merge`` key).
+        # Eligibility still requires N22 T4 ``auto_code_patch_merge=True``
+        # (defaults False — DARK; customer offer stays process-gated).
+        auto_merge_max_per_week: int = 2
+        # 10-min fast verify window for canary auto-merges
+        # (``issue_verifications.ref`` prefixed ``auto_merge:``).
+        verify_delay_seconds_auto_merge: int = 600
+        verify_quiet_window_minutes_auto_merge: int = 10
 
         @property
         def verify_poll_interval_seconds(self) -> float:

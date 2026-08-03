@@ -22,6 +22,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from eden.api.utils.redact import redact_all
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,41 +72,79 @@ async def _probe_postgres() -> dict[str, Any]:
 
 
 async def _probe_clickhouse() -> dict[str, Any]:
-    """ClickHouse partition count + rollback p95 + compaction lag."""
+    """ClickHouse / Tinybird substrate health + (self-hosted only) partition count.
+
+    ``eden.columnar._common._get_ch_client`` never existed — this probe
+    imported it unconditionally, so every call to ``/v1/internal/health``
+    raised ``ImportError`` inside the ``try`` and reported the substrate
+    ``unhealthy`` regardless of its actual state. There is no separate
+    "CH client" in this codebase: the one substrate client is
+    :class:`eden.data_platform.clickhouse_sink.ClickHouseSink`, reached
+    via :func:`get_clickhouse_sink`, and its own :meth:`health_check`
+    already runs the right probe (a ``SELECT 1`` over the Tinybird
+    ``/v0/sql`` endpoint when Tinybird is configured, or the local
+    ClickHouse HTTP interface otherwise). Tinybird is the only substrate
+    in production, so "healthy" here means "the Tinybird Events/SQL API
+    answered", not "a self-hosted ClickHouse cluster is up".
+    """
     t0 = time.perf_counter()
     try:
-        # The columnar engine caches CH availability (see
-        # eden.columnar._common._check_ch_available). We re-use that
-        # check rather than re-implementing the probe.
-        from eden.columnar._common import _check_ch_available
+        from eden.data_platform.clickhouse_sink import get_clickhouse_sink
 
-        ch_up = await _check_ch_available()
-        if not ch_up:
+        sink = await get_clickhouse_sink()
+        result = await sink.health_check()
+        if result != "connected":
             return {
                 "status": "degraded",
-                "note": "ClickHouse unavailable — columnar engine is on postgres_fallback",
+                "note": (
+                    "Tinybird Events API unavailable — columnar engine is "
+                    "on postgres_fallback"
+                    if sink.config.is_tinybird
+                    else "ClickHouse unavailable — columnar engine is on postgres_fallback"
+                ),
+                "substrate": "tinybird" if sink.config.is_tinybird else "clickhouse",
+                "detail": result,
                 "partition_count": None,
                 "rollback_p95_ms": None,
                 "compaction_lag_seconds": None,
                 "probe_ms": round((time.perf_counter() - t0) * 1000, 2),
             }
-        # CH is up — query the system tables. The exact SQL depends
-        # on the ClickHouse version; this query works on 23.x.
-        from eden.columnar._common import _get_ch_client
 
-        client = await _get_ch_client()
-        if client is None:
+        # Tinybird owns partitioning/compaction internally and has no
+        # queryable ``system.parts`` over its /v0/sql surface — reporting
+        # "healthy" from the Events API check is the whole probe there.
+        if sink.config.is_tinybird:
             return {
-                "status": "unknown",
-                "note": "CH client not initialised",
+                "status": "healthy",
+                "substrate": "tinybird",
+                "note": "Tinybird Events API reachable",
+                "partition_count": None,
+                "rollback_p95_ms": None,
+                "compaction_lag_seconds": None,
                 "probe_ms": round((time.perf_counter() - t0) * 1000, 2),
             }
-        row = await client.fetchrow(
-            "SELECT count() AS n FROM system.parts WHERE database = currentDatabase()"
-        )
+
+        # Self-hosted ClickHouse — query system.parts for a partition
+        # count. Best-effort: a failure here does not mean the substrate
+        # is down (health_check() above already confirmed connectivity),
+        # so it degrades the extra detail rather than the whole probe.
+        try:
+            raw = await sink._execute(  # noqa: SLF001 - internal HTTP helper, no public query API
+                "SELECT count() AS n FROM system.parts "
+                f"WHERE database = '{sink.config.database}'"
+            )
+            rows = sink._parse_tsv(raw)  # noqa: SLF001
+            partition_count = int(rows[0]["n"]) if rows else None
+        except Exception as exc:  # noqa: BLE001 - detail-only, substrate is confirmed up
+            logger.debug(
+                "clickhouse partition_count probe failed: %s", redact_all(str(exc))
+            )
+            partition_count = None
+
         return {
             "status": "healthy",
-            "partition_count": row["n"] if row else None,
+            "substrate": "clickhouse",
+            "partition_count": partition_count,
             "rollback_p95_ms": None,  # Query from system.query_log if needed (deferred to v2)
             "compaction_lag_seconds": None,  # Same — query from system.parts
             "probe_ms": round((time.perf_counter() - t0) * 1000, 2),

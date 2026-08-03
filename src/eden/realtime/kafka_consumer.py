@@ -1,13 +1,36 @@
 """Kafka consumer for event sourcing and real-time stream processing.
 
-Phase 5.4: Ingests events from Kafka topics into the Eden data platform.
-Supports multiple consumer groups for different processing paths:
+.. warning::
+    **NOT WIRED — do not enable.** Phase 6 (Eden Observability
+    overhaul) audit, 2026-08: nothing in this codebase calls
+    :func:`get_kafka_consumer` or starts a
+    :class:`KafkaEventConsumer` outside of this module's own tests
+    and :func:`eden.api.app`'s shutdown hook, which only closes the
+    singleton *if one was ever created* — a no-op today. No process
+    subscribes to ``consume_bronze`` / ``consume_silver_etl`` /
+    ``consume_clickhouse``. Ingestion in production goes through the
+    HTTP routes (``api/routes/ingestion.py``) → ``TelemetryCollector``
+    → ``UsageService.track_events_batch`` (see
+    ``eden.storage.postgres.PostgresClient.insert_usage_event`` for
+    why that one Postgres helper — the one ``consume_bronze`` would
+    have used via :mod:`eden.data_platform.bronze_sink` — is also
+    dead). Kept in-tree (not deleted) because the dataclasses/topic
+    map/DLQ logic are a real starting point for a future Kafka
+    ingestion path; kept in this package rather than moved under
+    ``experimental/`` so the small set of existing imports (this
+    module's own regression tests, ``app.py``'s shutdown drain list)
+    don't need updating for a purely-documentation change. Do not
+    call ``.start()`` / ``get_kafka_consumer()`` from new code without
+    first wiring a real caller and re-verifying this note.
+
+Phase 5.4 (original): Ingests events from Kafka topics into the Eden data
+platform. Supports multiple consumer groups for different processing paths:
 - Bronze ingestion (raw events → usage_events table)
 - Silver ETL (transformed events → silver_events table)
 - ClickHouse analytics (aggregated metrics)
 - Alerting (anomaly detection triggers)
 
-Usage:
+Usage (once a real caller wires it up):
     from eden.realtime.kafka_consumer import KafkaEventConsumer
     consumer = KafkaEventConsumer(
         bootstrap_servers="localhost:9092",

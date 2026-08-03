@@ -148,11 +148,7 @@ class MessageStore:
     ) -> list[str]:
         if not messages:
             return []
-        hashes = hash_messages(messages)
-        rows = [
-            (trace_id, h, m.get("role", "user"), json.dumps(m, default=str))
-            for h, m in zip(hashes, messages, strict=False)
-        ]
+        hashes, rows = self._hash_and_build_rows(trace_id, messages)
         client = await self._get_client()
         if client is None:
             logger.warning("MessageStore: no Postgres client, skipping upsert")
@@ -177,6 +173,83 @@ class MessageStore:
         except Exception as exc:
             logger.warning(f"MessageStore._upsert failed: {exc}")
         return hashes
+
+    @staticmethod
+    def _hash_and_build_rows(
+        trace_id: str, messages: list[dict[str, Any]],
+    ) -> tuple[list[str], list[tuple[str, str, str, str]]]:
+        """Hash ``messages`` and build the ``trace_messages`` row tuples.
+
+        Pure / synchronous — shared by :meth:`_upsert` and
+        :meth:`upsert_batch` so the two call sites can never disagree on
+        row shape.
+        """
+        hashes = hash_messages(messages)
+        rows = [
+            (trace_id, h, m.get("role", "user"), json.dumps(m, default=str))
+            for h, m in zip(hashes, messages, strict=False)
+        ]
+        return hashes, rows
+
+    async def upsert_batch(
+        self, entries: list[tuple[str, list[dict[str, Any]]]],
+    ) -> list[list[str]]:
+        """Hash + insert messages for many ``(trace_id, messages)`` entries
+        in a single transaction / ``executemany``.
+
+        Ingest batching (Phase 3): ``ingest_batch`` used to call
+        :meth:`upsert_request` / :meth:`upsert_response` once per event,
+        so a batch of N events with both request and response messages
+        opened up to 2N separate transactions (each its own round trip).
+        This collects every event's messages into one pass: the caller
+        builds ``entries`` (one per request/response side that needs
+        dedup), and this issues exactly one ``executemany`` in one
+        transaction for the whole batch — mirroring ``_route_postgres_many``'s
+        batched telemetry INSERT.
+
+        Hashing is pure/synchronous (content-addressed, not DB-generated),
+        so the returned hash lists are computed and returned *before* the
+        write is attempted — matching ``upsert_request``/``upsert_response``'s
+        contract that hashes come back even when Postgres is unavailable or
+        the write fails (dedup is best-effort; the row's hash-array columns
+        must still populate so reconstruction has something to look up once
+        the message lands, e.g. via retry or backfill).
+
+        Returns one hash list per input entry, in input order. An entry
+        with no messages contributes ``[]`` and no rows.
+        """
+        hash_lists: list[list[str]] = []
+        rows: list[tuple[str, str, str, str]] = []
+        for trace_id, messages in entries:
+            if not messages:
+                hash_lists.append([])
+                continue
+            hashes, entry_rows = self._hash_and_build_rows(trace_id, messages)
+            hash_lists.append(hashes)
+            rows.extend(entry_rows)
+        if not rows:
+            return hash_lists
+        client = await self._get_client()
+        if client is None:
+            logger.warning("MessageStore: no Postgres client, skipping batch upsert")
+            return hash_lists
+        try:
+            # Same SAVEPOINT-under-outer-tx reasoning as ``_upsert``: this
+            # must not abort the RLS-pinned connection's outer transaction
+            # on failure, since the batch's telemetry INSERT still has to
+            # land after this returns.
+            async with client.transaction() as conn:
+                await conn.executemany(
+                    """
+                    INSERT INTO trace_messages (trace_id, msg_hash, role, content)
+                    VALUES ($1, $2, $3, $4::jsonb)
+                    ON CONFLICT (trace_id, msg_hash) DO NOTHING
+                    """,
+                    rows,
+                )
+        except Exception as exc:
+            logger.warning(f"MessageStore.upsert_batch failed ({len(rows)} rows): {exc}")
+        return hash_lists
 
     # ── Read path ────────────────────────────────────────────────────
 

@@ -386,6 +386,142 @@ class TestMessageStoreUpsert:
         assert ("trace-B", h2[0]) in fake_client.rows
 
 
+class TestMessageStoreUpsertBatch:
+    """Phase 3 (ingest hot-path batching): ``upsert_batch`` collects the
+    request/response messages of a whole ``ingest_batch`` into ONE
+    ``executemany`` / one transaction, instead of ``upsert_request`` /
+    ``upsert_response`` opening a transaction per event (up to 2N for a
+    batch of N)."""
+
+    @pytest.mark.asyncio
+    async def test_hashes_match_single_upsert(self, fake_client):
+        """Hash output must be identical to the non-batched path — batching
+        the write must not change dedup semantics."""
+        store = MessageStore()
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        expected = hash_messages(extract_request_messages(body))
+
+        hash_lists = await store.upsert_batch([("trace-1", extract_request_messages(body))])
+
+        assert hash_lists == [expected]
+
+    @pytest.mark.asyncio
+    async def test_one_executemany_for_the_whole_batch(self, fake_client):
+        """N events with both request + response messages must issue
+        exactly one ``executemany`` call, not up to 2N."""
+        store = MessageStore()
+        entries = [
+            (f"trace-{i}", [{"role": "user", "content": f"hi {i}"}])
+            for i in range(4)
+        ] + [
+            (f"trace-{i}", [{"role": "assistant", "content": f"ok {i}"}])
+            for i in range(4)
+        ]
+
+        hash_lists = await store.upsert_batch(entries)
+
+        assert len(hash_lists) == 8
+        assert len(fake_client.executemany_calls) == 1, (
+            "upsert_batch must write the whole batch in a single executemany"
+        )
+        _, rows = fake_client.executemany_calls[0]
+        assert len(rows) == 8
+        assert len(fake_client.rows) == 8
+
+    @pytest.mark.asyncio
+    async def test_idempotent_on_conflict(self, fake_client):
+        """Re-running the same batch (SDK retry) must not duplicate rows."""
+        store = MessageStore()
+        entries = [("trace-1", [{"role": "user", "content": "hi"}])]
+
+        await store.upsert_batch(entries)
+        await store.upsert_batch(entries)
+
+        assert len(fake_client.rows) == 1
+        assert len(fake_client.executemany_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_empty_messages_entry_contributes_no_rows(self, fake_client):
+        """An entry with no messages returns ``[]`` and writes nothing —
+        matching ``upsert_request``/``upsert_response`` on an empty body."""
+        store = MessageStore()
+        entries = [
+            ("trace-1", []),
+            ("trace-2", [{"role": "user", "content": "hi"}]),
+        ]
+
+        hash_lists = await store.upsert_batch(entries)
+
+        assert hash_lists[0] == []
+        assert len(hash_lists[1]) == 1
+        assert len(fake_client.rows) == 1
+
+    @pytest.mark.asyncio
+    async def test_all_empty_skips_the_write_entirely(self, fake_client):
+        store = MessageStore()
+        hash_lists = await store.upsert_batch([("trace-1", []), ("trace-2", [])])
+        assert hash_lists == [[], []]
+        assert fake_client.executemany_calls == []
+
+    @pytest.mark.asyncio
+    async def test_preserves_input_order(self, fake_client):
+        """Hash lists must line up positionally with ``entries`` so the
+        caller can zip them back onto the right event/side."""
+        store = MessageStore()
+        entries = [
+            ("trace-1", [{"role": "user", "content": "first"}]),
+            ("trace-1", [{"role": "assistant", "content": "second"}]),
+            ("trace-2", [{"role": "user", "content": "third"}]),
+        ]
+
+        hash_lists = await store.upsert_batch(entries)
+
+        assert hash_lists[0] == hash_messages([{"role": "user", "content": "first"}])
+        assert hash_lists[1] == hash_messages([{"role": "assistant", "content": "second"}])
+        assert hash_lists[2] == hash_messages([{"role": "user", "content": "third"}])
+
+    @pytest.mark.asyncio
+    async def test_returns_hashes_even_when_postgres_unavailable(self, monkeypatch):
+        """Hashing is pure/synchronous — hashes must come back even when the
+        write can't happen, matching ``upsert_request``'s contract."""
+        async def _get_client():
+            return None
+
+        monkeypatch.setattr(
+            "eden.storage.postgres.get_postgres_client", _get_client,
+        )
+        store = MessageStore()
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        expected = hash_messages(extract_request_messages(body))
+
+        hash_lists = await store.upsert_batch([("trace-1", extract_request_messages(body))])
+
+        assert hash_lists == [expected]
+
+    @pytest.mark.asyncio
+    async def test_write_failure_still_returns_hashes(self, monkeypatch):
+        """A DB error during the batch write must not lose the hashes —
+        dedup is best-effort, but the caller still needs hashes to stamp
+        onto the row's hash-array columns."""
+        class _BrokenClient:
+            def transaction(self):
+                raise RuntimeError("connection reset")
+
+        async def _get_client():
+            return _BrokenClient()
+
+        monkeypatch.setattr(
+            "eden.storage.postgres.get_postgres_client", _get_client,
+        )
+        store = MessageStore()
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        expected = hash_messages(extract_request_messages(body))
+
+        hash_lists = await store.upsert_batch([("trace-1", extract_request_messages(body))])
+
+        assert hash_lists == [expected]
+
+
 class TestMessageStoreRead:
     @pytest.mark.asyncio
     async def test_get_many_returns_in_input_order(self, fake_client):

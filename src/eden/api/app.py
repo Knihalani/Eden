@@ -930,6 +930,15 @@ if getattr(settings, "rate_limit_enabled", True):
 # whether or not it is compressed, so below that the CPU buys nothing.
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=1)
 
+# Request-side counterpart for the agent-session lifecycle and
+# live-trace-streaming ingest routers only (see module docstring for
+# why this must be ASGI-level middleware rather than a FastAPI
+# dependency). The main ``/orgs/{org_id}/ingest/{format}`` telemetry
+# routes are untouched — they already gunzip themselves.
+from eden.api.middleware.gzip_request import GunzipRequestMiddleware
+
+app.add_middleware(GunzipRequestMiddleware)
+
 # Audit 2026-07-06 — pre-existing bug fix. Both middlewares were
 # implemented and unit-tested but never registered on the app.
 # Wire them now so:

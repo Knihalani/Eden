@@ -98,7 +98,8 @@ async def test_tinybird_execute_appends_tsv_format() -> None:
 
 
 @pytest.mark.asyncio
-async def test_query_home_kpis_sql_has_no_cost_usd() -> None:
+async def test_query_home_kpis_live_sql_has_no_cost_usd() -> None:
+    """``_query_home_kpis_live`` (the ``telemetry_events_ch`` fallback path)."""
     sink = ClickHouseSink(
         ClickHouseConfig(
             url="https://api.us-east.tinybird.co",
@@ -110,12 +111,43 @@ async def test_query_home_kpis_sql_has_no_cost_usd() -> None:
 
     async def capture(query: str, params=None) -> str:  # noqa: ANN001
         captured.append(query)
-        if len(captured) == 1:
-            return (
-                "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\n"
-                "10\t1\t12.5\t40.0\n"
-            )
-        return "event_count\n5\n"
+        return (
+            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+            "10\t1\t12.5\t40.0\t5\n"
+        )
+
+    with patch.object(sink, "_execute", side_effect=capture):
+        out = await sink._query_home_kpis_live("org-1", 24)
+
+    assert out["event_count"] == 10
+    assert out["prev_event_count"] == 5
+    assert out["cost_usd"] == 0.0
+    # Single-scan: current + previous window collapsed into one query.
+    assert len(captured) == 1
+    assert "FROM telemetry_events_ch" in captured[0]
+    assert "eden.telemetry_events_ch" not in captured[0]
+    assert "sum(cost_usd)" not in captured[0]
+    assert "\\'" not in captured[0]  # SQL-standard escape, not backslash
+
+
+@pytest.mark.asyncio
+async def test_query_home_kpis_prefers_rollup_on_tinybird() -> None:
+    """``query_home_kpis`` reads ``home_kpi_hourly`` first when on Tinybird."""
+    sink = ClickHouseSink(
+        ClickHouseConfig(
+            url="https://api.us-east.tinybird.co",
+            database="eden",
+            tinybird_token="tok",
+        )
+    )
+    captured: list[str] = []
+
+    async def capture(query: str, params=None) -> str:  # noqa: ANN001
+        captured.append(query)
+        return (
+            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+            "10\t1\t12.5\t40.0\t5\n"
+        )
 
     with patch.object(sink, "_execute", side_effect=capture):
         out = await sink.query_home_kpis("org-1", window_hours=24)
@@ -123,10 +155,136 @@ async def test_query_home_kpis_sql_has_no_cost_usd() -> None:
     assert out["event_count"] == 10
     assert out["prev_event_count"] == 5
     assert out["cost_usd"] == 0.0
-    assert "FROM telemetry_events_ch" in captured[0]
-    assert "eden.telemetry_events_ch" not in captured[0]
+    assert len(captured) == 1
+    assert "FROM home_kpi_hourly" in captured[0]
+    assert "telemetry_events_ch" not in captured[0]
+    assert "countMerge(event_count)" in captured[0]
+    assert "sumMerge(error_count)" in captured[0]
+    assert "avgMerge(avg_duration_state)" in captured[0]
+    assert "quantileMerge(0.95)(p95_duration_state)" in captured[0]
     assert "sum(cost_usd)" not in captured[0]
-    assert "\\'" not in captured[0]  # SQL-standard escape, not backslash
+
+
+@pytest.mark.asyncio
+async def test_query_home_kpis_rollup_floors_window_to_hour_boundary() -> None:
+    """Regression: comparing the hour-floored ``hour`` bucket column against
+    a raw ``now() - INTERVAL n HOUR`` instant (non-zero minutes) pushed the
+    single bucket straddling that instant entirely into ``prev``, silently
+    undercounting ``cur``. Both sides of the cur/prev split must floor the
+    threshold with ``toStartOfHour`` so the split is bucket-aligned and
+    disjoint.
+    """
+    sink = ClickHouseSink(
+        ClickHouseConfig(
+            url="https://api.us-east.tinybird.co",
+            database="eden",
+            tinybird_token="tok",
+        )
+    )
+    captured: list[str] = []
+
+    async def capture(query: str, params=None) -> str:  # noqa: ANN001
+        captured.append(query)
+        return (
+            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+            "10\t1\t12.5\t40.0\t5\n"
+        )
+
+    with patch.object(sink, "_execute", side_effect=capture):
+        await sink.query_home_kpis("org-1", window_hours=24)
+
+    query = captured[0]
+    assert "toStartOfHour(now() - INTERVAL 24 HOUR)" in query
+    assert "toStartOfHour(now() - INTERVAL 48 HOUR)" in query
+    # cur and prev must key off the *same* floored threshold instant so the
+    # windows stay disjoint (no double count, no gap).
+    assert query.count("toStartOfHour(now() - INTERVAL 24 HOUR)") == 2
+
+
+@pytest.mark.asyncio
+async def test_query_home_kpis_falls_back_when_rollup_raises() -> None:
+    """A rollup-query error (e.g. not yet deployed) falls back to the live scan."""
+    sink = ClickHouseSink(
+        ClickHouseConfig(
+            url="https://api.us-east.tinybird.co",
+            database="eden",
+            tinybird_token="tok",
+        )
+    )
+    calls: list[str] = []
+
+    async def flaky(query: str, params=None) -> str:  # noqa: ANN001
+        calls.append(query)
+        if "home_kpi_hourly" in query:
+            raise ClickHouseError("HTTP 404: Unknown datasource 'home_kpi_hourly'")
+        return (
+            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+            "7\t0\t9.0\t20.0\t3\n"
+        )
+
+    with patch.object(sink, "_execute", side_effect=flaky):
+        out = await sink.query_home_kpis("org-1", window_hours=24)
+
+    assert out["event_count"] == 7
+    assert out["prev_event_count"] == 3
+    assert len(calls) == 2
+    assert "home_kpi_hourly" in calls[0]
+    assert "FROM telemetry_events_ch" in calls[1]
+
+
+@pytest.mark.asyncio
+async def test_query_home_kpis_falls_back_when_rollup_empty() -> None:
+    """A rollup row with zero current-window events falls back (new datasource)."""
+    sink = ClickHouseSink(
+        ClickHouseConfig(
+            url="https://api.us-east.tinybird.co",
+            database="eden",
+            tinybird_token="tok",
+        )
+    )
+    calls: list[str] = []
+
+    async def empty_then_live(query: str, params=None) -> str:  # noqa: ANN001
+        calls.append(query)
+        if "home_kpi_hourly" in query:
+            return (
+                "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+                "0\t0\t0\t0\t0\n"
+            )
+        return (
+            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+            "4\t1\t15.0\t30.0\t2\n"
+        )
+
+    with patch.object(sink, "_execute", side_effect=empty_then_live):
+        out = await sink.query_home_kpis("org-1", window_hours=24)
+
+    assert out["event_count"] == 4
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_query_home_kpis_local_clickhouse_skips_rollup() -> None:
+    """Local (non-Tinybird) ClickHouse always uses the live query directly."""
+    sink = ClickHouseSink(ClickHouseConfig(url="http://localhost:8123"))
+    captured: list[str] = []
+
+    async def capture(query: str, params=None) -> str:  # noqa: ANN001
+        captured.append(query)
+        return (
+            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
+            "10\t1\t12.5\t40.0\t5\n"
+        )
+
+    with patch.object(sink, "_execute", side_effect=capture):
+        out = await sink.query_home_kpis("org-1", window_hours=24)
+
+    assert out["event_count"] == 10
+    assert len(captured) == 1
+    assert "FROM eden.telemetry_events_ch" in captured[0]
+    assert "countIf(" in captured[0]
+    assert "avgIf(" in captured[0]
+    assert "quantileIf(" in captured[0]
 
 
 @pytest.mark.asyncio
@@ -192,7 +350,13 @@ async def test_aggregator_both_down_returns_envelope() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gdpr_ch_purge_skips_tinybird() -> None:
+async def test_gdpr_ch_purge_raises_on_tinybird() -> None:
+    """Tinybird cannot ALTER DELETE via /v0/sql — the purge must raise
+    rather than silently report an empty-but-successful erasure. The
+    caller (``delete_tenant_data``) catches this and records it on
+    ``RetentionReport.errors`` so the incomplete erasure is visible,
+    not swallowed as ``deleted_clickhouse_rows == 0``.
+    """
     from eden.data_platform.retention import DataRetentionManager
 
     mgr = DataRetentionManager(dry_run=False)
@@ -200,8 +364,8 @@ async def test_gdpr_ch_purge_skips_tinybird() -> None:
         "eden.data_platform.retention.settings"
     ) as fake_settings:
         fake_settings.clickhouse_url = "https://api.us-east.tinybird.co"
-        n = await mgr._delete_from_clickhouse("tenant-1")
-    assert n == 0
+        with pytest.raises(RuntimeError, match="Tinybird cannot ALTER DELETE"):
+            await mgr._delete_from_clickhouse("tenant-1")
 
 
 def test_gdpr_ch_purge_uses_tenant_id_column() -> None:

@@ -47,6 +47,58 @@ _ws_fanout_listener_started = False
 # Skip Redis fanout echoes that this pod already delivered locally.
 _POD_ORIGIN = f"ws-{id(_job_connections):x}"
 
+# Phase 3 (ingest hot-path batching) — K24-style NUMSUB gate for the
+# cross-pod fanout PUBLISH, mirroring
+# ``observability_stream.publish_trace_event``'s SSE gate. This pod's own
+# ``ensure_ws_fanout_listener`` subscribes to ``_WS_FANOUT_CHANNEL`` for
+# the lifetime of the process, so NUMSUB is always >= 1 once that starts —
+# a PUBLISH whose only possible subscriber is this pod is pure waste: the
+# message already went out via ``_send_local_job_websockets`` above, and
+# this pod's own listener would just filter the echo by ``origin``. NUMSUB
+# > 1 means some other pod is (at least) running the listener, so the
+# PUBLISH still goes out — we cannot cheaply tell whether that other pod
+# actually has a connection for *this* job_id (the channel is shared
+# across all jobs), so this is deliberately conservative: it only skips
+# the round trip when skipping cannot drop a message.
+_WS_NUMSUB_CACHE: dict[str, tuple[int, float]] = {}
+_WS_NUMSUB_IDLE_TTL_S = 30.0
+_WS_NUMSUB_ACTIVE_TTL_S = 2.0
+
+
+async def _ws_fanout_subscriber_count(redis: Any) -> int:
+    """Cached ``PUBSUB NUMSUB`` on the fanout channel.
+
+    Cached with a short TTL (same idle/active split as the SSE NUMSUB
+    cache) so a busy ingest hot path pays one NUMSUB round trip per TTL
+    window rather than one per broadcast.
+    """
+    now = time.monotonic()
+    cached = _WS_NUMSUB_CACHE.get(_WS_FANOUT_CHANNEL)
+    if cached is not None and cached[1] > now:
+        return cached[0]
+    from eden.observability.ingest_hot_path_metrics import (
+        record_ingest_redis_commands,
+    )
+
+    numsub = await redis.pubsub_numsub(_WS_FANOUT_CHANNEL)
+    record_ingest_redis_commands(1)
+    count = 0
+    if numsub:
+        entry = numsub[0]
+        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+            count = int(entry[1])
+        else:
+            count = int(entry)
+    ttl = _WS_NUMSUB_ACTIVE_TTL_S if count > 1 else _WS_NUMSUB_IDLE_TTL_S
+    _WS_NUMSUB_CACHE[_WS_FANOUT_CHANNEL] = (count, now + ttl)
+    if len(_WS_NUMSUB_CACHE) > 64:
+        # Single global channel today, but keep the cache bounded in case
+        # a future caller parameterises it per-job.
+        expired = [k for k, (_, exp) in _WS_NUMSUB_CACHE.items() if exp <= now]
+        for k in expired:
+            _WS_NUMSUB_CACHE.pop(k, None)
+    return count
+
 
 def job_event_channel(job_id: str) -> str:
     """Redis pub/sub channel for a job's live updates."""
@@ -57,6 +109,11 @@ async def _send_local_job_websockets(job_id: str, message: dict[str, Any]) -> No
     """Deliver ``message`` to WebSockets on this pod only."""
     conns = _job_connections.get(job_id)
     if not conns:
+        from eden.observability.ingest_hot_path_metrics import (
+            record_ws_fanout_skipped,
+        )
+
+        record_ws_fanout_skipped()
         return
     for ws in list(conns):
         try:
@@ -74,9 +131,13 @@ async def broadcast_to_job_websockets(
 ) -> None:
     """Fan out a WS payload to every pod that has subscribers for ``job_id``.
 
-    Local sockets get the message immediately; other pods receive it via
-    Redis ``eden:ws:fanout``. Prefer this over touching ``_job_connections``
-    directly from collectors / alert paths.
+    Local sockets get the message immediately (unconditionally — this must
+    never be skipped just because the cross-pod gate below decides not to
+    PUBLISH). Other pods receive it via Redis ``eden:ws:fanout``, gated by
+    a NUMSUB check so an all-local deployment (or a lull with no fanout
+    listener up) doesn't pay a PUBLISH round trip nobody can receive.
+    Prefer this over touching ``_job_connections`` directly from
+    collectors / alert paths.
     """
     await _send_local_job_websockets(job_id, message)
     try:
@@ -85,12 +146,33 @@ async def broadcast_to_job_websockets(
         return
     if redis is None:
         return
+
+    try:
+        sub_count = await _ws_fanout_subscriber_count(redis)
+    except Exception:
+        # NUMSUB failed (e.g. a test double / backend without pubsub
+        # introspection) — fail open and publish rather than silently
+        # dropping cross-pod delivery.
+        sub_count = 2
+    if sub_count <= 1:
+        from eden.observability.ingest_hot_path_metrics import (
+            record_ws_fanout_publish_skipped,
+        )
+
+        record_ws_fanout_publish_skipped()
+        return
+
     body = json.dumps(
         {"job_id": job_id, "message": message, "origin": _POD_ORIGIN},
         default=str,
     )
     try:
         await redis.publish(_WS_FANOUT_CHANNEL, body)
+        from eden.observability.ingest_hot_path_metrics import (
+            record_ingest_redis_commands,
+        )
+
+        record_ingest_redis_commands(1)
     except Exception as exc:
         logger.debug(
             "broadcast_to_job_websockets redis failed for %s: %s",

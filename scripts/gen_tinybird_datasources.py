@@ -25,6 +25,17 @@ time it recurs; it is a missing generator. The DDL is the source of truth and
 this script derives the datasources from it, so the only way to change a
 Tinybird schema is to change the DDL and re-run.
 
+CODEC handling (Phase 1, 2026-08): earlier revisions of this script stripped
+every ``CODEC(...)`` clause on the assumption that it was a ClickHouse-only
+storage concept Tinybird datasources don't accept. That assumption was never
+verified and was wrong — Tinybird's own datafile reference documents
+``CODEC()`` as a supported field on a ``.datasource`` SCHEMA column
+(https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-files
+, "Column compression codecs"), in the same position ClickHouse DDL puts it.
+The generator now round-trips the codec into the generated file instead of
+discarding it, so ``telemetry_events_ch`` on Tinybird gets the same
+``ZSTD(3)``/``Delta, ZSTD(3)`` compression as local ClickHouse.
+
 Usage:
     python scripts/gen_tinybird_datasources.py           # write the files
     python scripts/gen_tinybird_datasources.py --check   # fail if stale
@@ -64,7 +75,9 @@ _HEADER = (
 class Table:
     def __init__(self, name: str) -> None:
         self.name = name
-        self.columns: list[tuple[str, str, str | None]] = []  # (name, type, default)
+        # (name, type, default, codec) — codec is the raw ``ZSTD(3)`` /
+        # ``Delta, ZSTD(3)`` text with no surrounding ``CODEC(...)``.
+        self.columns: list[tuple[str, str, str | None, str | None]] = []
         self.indexes: list[str] = []
         self.engine = "MergeTree"
         self.partition_by = ""
@@ -72,11 +85,25 @@ class Table:
         self.ttl = ""
 
 
-def _strip_codec(decl: str) -> str:
-    """Remove a trailing ``CODEC(...)``, counting nested parentheses."""
+def _split_codec(decl: str) -> tuple[str, str | None]:
+    """Split a trailing ``CODEC(...)`` off ``decl``, counting nested parens.
+
+    Returns ``(decl_without_codec, codec_body_or_None)``. Verified against
+    Tinybird's own datafile reference
+    (https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-files
+    — "Column compression codecs": ``CODEC()`` is a documented, supported
+    field on a ``.datasource`` SCHEMA column, in the same position
+    ClickHouse DDL puts it. Earlier revisions of this script stripped the
+    clause outright on the (incorrect) assumption that Tinybird datasources
+    don't accept it; this now round-trips it into the generated file
+    instead.
+
+    ``CODEC\\([^)]*\\)`` does not work here: ``CODEC(Delta, ZSTD(3))`` nests
+    parentheses, so a naive character class stops at the first ``)``.
+    """
     i = decl.upper().find("CODEC(")
     if i < 0:
-        return decl.strip()
+        return decl.strip(), None
     open_paren = i + len("CODEC(") - 1  # index of the '(' itself
     depth = 0
     for j in range(open_paren, len(decl)):
@@ -85,9 +112,10 @@ def _strip_codec(decl: str) -> str:
         elif decl[j] == ")":
             depth -= 1
             if depth == 0:
-                return (decl[:i] + decl[j + 1 :]).strip()
+                codec_body = decl[open_paren + 1 : j]
+                return (decl[:i] + decl[j + 1 :]).strip(), codec_body
     # Unbalanced — drop everything from CODEC onward rather than emit garbage.
-    return decl[:i].strip()
+    return decl[:i].strip(), None
 
 
 def _translate_ttl(expr: str) -> str:
@@ -141,16 +169,17 @@ def parse_ddl(source: str) -> dict[str, Table]:
             if dm:
                 default = dm.group(1).strip()
                 rest = rest[: dm.start()].strip()
-            # Codecs are a ClickHouse-side storage concern; Tinybird manages
-            # compression for its own datasources, so only the *type* has to
-            # agree. Strip the clause.
-            #
-            # ``CODEC\([^)]*\)`` does not work here: ``CODEC(Delta, ZSTD(3))``
-            # nests parentheses, so the character class stops at the first
-            # ``)`` and the substitution silently does not apply — the first
-            # run of this script emitted the codecs verbatim.
-            rest = _strip_codec(rest)
-            t.columns.append((col, rest, default))
+            # CODEC can appear before or after DEFAULT in the DDL text
+            # (``rest`` still holds it either way — DEFAULT was matched
+            # greedily above, so a DDL codec written *before* DEFAULT was
+            # already split off into ``rest``; one written after DEFAULT
+            # never reaches here because it's inside ``dm``'s match). The
+            # sink's DDL always writes CODEC before DEFAULT, so check
+            # ``rest`` first, then the captured default text.
+            rest, codec = _split_codec(rest)
+            if codec is None and default is not None:
+                default, codec = _split_codec(default)
+            t.columns.append((col, rest, default, codec))
         for key, attr in (
             (r"PARTITION BY\s+([^\n]+)", "partition_by"),
             (r"ORDER BY\s+([^\n]+)", "sorting_key"),
@@ -172,17 +201,24 @@ def parse_ddl(source: str) -> dict[str, Table]:
 def render(t: Table, *, forward_query: str | None = None) -> str:
     lines = [_HEADER, "\nSCHEMA >\n"]
     body: list[str] = []
-    for col, ctype, default in t.columns:
+    for col, ctype, default, codec in t.columns:
         # Tinybird Forward requires a jsonpath on every SCHEMA column
         # (``Column X has no jsonpath`` otherwise). Keep DEFAULT so a
         # missing JSON field still materializes the derived value.
+        # CODEC is appended last — Tinybird's own datafile reference
+        # (Column definition: ``<name> <type> <json_path> DEFAULT <default>
+        # CODEC(<codec>)``) puts it after DEFAULT, and this is a real,
+        # supported field, not a ClickHouse-only concept Tinybird ignores.
         if default is not None:
             # DEFAULT before jsonpath so the substring
             # ``date Date DEFAULT <expr>`` matches the DDL and the
             # drift guard can assert the expression survived.
-            body.append(f"    {col} {ctype} DEFAULT {default} `json:$.{col}`")
+            line = f"    {col} {ctype} DEFAULT {default} `json:$.{col}`"
         else:
-            body.append(f"    {col} {ctype} `json:$.{col}`")
+            line = f"    {col} {ctype} `json:$.{col}`"
+        if codec is not None:
+            line += f" CODEC({codec})"
+        body.append(line)
     lines.append(",\n".join(body) + "\n")
     if t.indexes:
         lines.append("\nINDEXES >\n")

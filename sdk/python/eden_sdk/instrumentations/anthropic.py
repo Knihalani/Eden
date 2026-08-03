@@ -14,6 +14,7 @@ from typing import Any
 
 from eden_sdk._instrumentation_ids import _get_attr, _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
+from eden_sdk.capture import capture_request_response, limits_from_config
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.instrumentations.openai import _to_dict
@@ -150,6 +151,29 @@ def _enqueue_anthropic_event(
     cfg = get_config()
     if not cfg.enabled:
         return
+    # Pull model/usage from the *original* response before capture —
+    # see openai.py's ``_enqueue_openai_event`` for why: in
+    # ``capture_mode="metrics_only"`` response_payload collapses to
+    # None below, and that's where model/usage live for this provider.
+    _orig_model = None
+    _orig_usage = None
+    if isinstance(response_payload, dict):
+        m = response_payload.get("model")
+        _orig_model = m if isinstance(m, str) else None
+        _orig_usage = response_payload.get("usage")
+    if _orig_model is None and isinstance(request_payload, dict):
+        m = request_payload.get("model")
+        _orig_model = m if isinstance(m, str) else None
+    # Bounded capture before response_payload's fields flatten onto
+    # ``payload`` below — see openai.py's ``_enqueue_openai_event``
+    # for why truncation must happen first.
+    request_payload, response_payload, capture_attrs = capture_request_response(
+        request_payload,
+        response_payload,
+        error=error,
+        duration_ms=duration_ms,
+        limits=limits_from_config(cfg),
+    )
     payload: dict[str, Any] = {
         "duration_ms": duration_ms,
         "request_payload": request_payload,
@@ -164,6 +188,11 @@ def _enqueue_anthropic_event(
         m = payload.get("model")
         if isinstance(m, str):
             payload["model_normalized"] = normalize_model_name(m)
+    if "model" not in payload and _orig_model is not None:
+        payload["model"] = _orig_model
+        payload["model_normalized"] = normalize_model_name(_orig_model)
+    if "usage" not in payload and _orig_usage is not None:
+        payload["usage"] = _orig_usage
 
     # Always stamp a trace_id — joining the active trace when one
     # exists, otherwise a fresh uuid4 — so the payload shape matches
@@ -178,11 +207,12 @@ def _enqueue_anthropic_event(
     _cur = current_span()
     if _cur is not None:
         payload.setdefault("parent_span_id", _cur.span_id)
+    attrs = payload.get("attributes")
+    if not isinstance(attrs, dict):
+        attrs = {}
+        payload["attributes"] = attrs
+    attrs.update(capture_attrs)
     if error is not None:
-        attrs = payload.get("attributes")
-        if not isinstance(attrs, dict):
-            attrs = {}
-            payload["attributes"] = attrs
         attrs.setdefault("error", error)
         attrs.setdefault("eden.error", error)
 

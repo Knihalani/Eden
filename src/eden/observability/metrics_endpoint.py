@@ -431,6 +431,26 @@ async def metrics() -> Response:
             "# TYPE eden_sse_publish_skipped counter\n"
             f"eden_sse_publish_skipped {int(hm.get('eden_sse_publish_skipped', 0))}\n"
         )
+        lines.append(
+            "# HELP eden_ingest_sampled_out Events dropped by the N16 sampling gate.\n"
+            "# TYPE eden_ingest_sampled_out counter\n"
+            f"eden_ingest_sampled_out {int(hm.get('eden_ingest_sampled_out', 0))}\n"
+        )
+        lines.append(
+            "# HELP eden_ws_fanout_skipped WebSocket fan-outs skipped, no local subscriber.\n"
+            "# TYPE eden_ws_fanout_skipped counter\n"
+            f"eden_ws_fanout_skipped {int(hm.get('eden_ws_fanout_skipped', 0))}\n"
+        )
+        lines.append(
+            "# HELP eden_ws_fanout_publish_skipped Cross-pod WS fanout PUBLISHes skipped, no subscriber.\n"
+            "# TYPE eden_ws_fanout_publish_skipped counter\n"
+            f"eden_ws_fanout_publish_skipped {int(hm.get('eden_ws_fanout_publish_skipped', 0))}\n"
+        )
+        lines.append(
+            "# HELP eden_ingest_bytes Raw request body bytes accepted by ingest.\n"
+            "# TYPE eden_ingest_bytes counter\n"
+            f"eden_ingest_bytes {int(hm.get('eden_ingest_bytes', 0))}\n"
+        )
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read ingest hot-path stats: %s", exc)
 

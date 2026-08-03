@@ -215,7 +215,13 @@ class DataRetentionManager:
         return archived, s3_objects
 
     async def _write_s3_archive(self, rows: list[dict], table: str) -> int:
-        """Write archived rows to S3 as NDJSON. Returns number of S3 objects."""
+        """Write archived rows to S3, preferring Parquet+zstd (via
+        pyarrow) and falling back to NDJSON when pyarrow is not
+        installed or the batch fails to convert. Returns the number of
+        S3 objects written (0 on any failure — the caller in
+        :meth:`archive_to_cold` treats 0 as "verify write before
+        DELETE" failed and skips the DELETE of the hot rows).
+        """
         bucket = getattr(settings, "bronze_s3_bucket", "")
         if not bucket:
             logger.warning("S3 archiving skipped: bronze_s3_bucket not configured")
@@ -223,24 +229,36 @@ class DataRetentionManager:
 
         try:
             import boto3
+
+            from eden.storage.cold_archive import serialize_rows
+
             s3 = boto3.client("s3")
             prefix = f"cold/{table}"
             ts = datetime.now(UTC)
-            key = f"{prefix}/year={ts.year}/month={ts.month:02d}/day={ts.day:02d}/{ts.isoformat()}.ndjson"
 
-            body = "\n".join(json.dumps(dict(r), default=str) for r in rows)
+            payload = await asyncio.to_thread(
+                serialize_rows, [dict(r) for r in rows]
+            )
+            key = (
+                f"{prefix}/year={ts.year}/month={ts.month:02d}/day={ts.day:02d}"
+                f"/{ts.isoformat()}.{payload.file_extension}"
+            )
+
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
                 lambda: s3.put_object(
                     Bucket=bucket,
                     Key=key,
-                    Body=body,
-                    ContentType="application/x-ndjson",
+                    Body=payload.body,
+                    ContentType=payload.content_type,
                     StorageClass="GLACIER_IR",
                 ),
             )
-            logger.info(f"S3 archive written: s3://{bucket}/{key} ({len(rows)} rows)")
+            logger.info(
+                f"S3 archive written: s3://{bucket}/{key} "
+                f"({len(rows)} rows, {payload.format})"
+            )
             return 1
         except Exception as exc:
             logger.error(f"S3 archive write failed: {exc}")
