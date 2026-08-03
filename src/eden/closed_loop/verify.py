@@ -28,6 +28,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from eden.closed_loop.events import EventType, LoopEvent
@@ -124,13 +125,89 @@ async def _run_idle_chores() -> None:
 
 
 def _register_default_chores() -> None:
-    """Chores every deployment wants (M2): outbox drain + TTL cleanup."""
+    """Chores every deployment wants: outbox drain + TTL cleanup (M2),
+    fix_pending janitor (M3, D3)."""
     from eden.closed_loop import event_bus
 
     register_idle_chore("outbox_drain", 60.0, event_bus.drain_outbox)
     register_idle_chore(
         "outbox_ttl_cleanup", 6 * 3600.0, event_bus.cleanup_drained
     )
+    register_idle_chore("fix_pending_janitor", 300.0, fix_pending_janitor)
+
+
+async def fix_pending_janitor(limit: int = 50) -> int:
+    """M3 (D3): unstick issues stranded in ``fix_pending``.
+
+    Issues sitting in ``fix_pending`` longer than
+    ``fix_pending_max_age_minutes`` (a crash between transitions, a heal
+    or patch that never reported back) are returned to ``triaged``, an
+    ``autonomy_audit_log`` row records the sweep, and the issue's
+    ``triage_result`` gains a ``stuck`` badge for the cockpit. Returns
+    the number of issues swept.
+    """
+    client = await _pg()
+    if client is None:
+        return 0
+    max_age_min = _cfg("fix_pending_max_age_minutes", 120)
+    try:
+        rows = await client.fetch(
+            "SELECT id, org_id, "
+            "EXTRACT(EPOCH FROM (NOW() - updated_at)) AS age_seconds "
+            "FROM agent_issues WHERE status = 'fix_pending' "
+            "AND updated_at < NOW() - ($1 || ' minutes')::interval "
+            "ORDER BY updated_at ASC LIMIT $2",
+            str(int(max_age_min)),
+            int(limit),
+        )
+    except Exception as exc:
+        logger.debug("fix_pending_janitor: scan failed: %s", exc)
+        return 0
+    swept = 0
+    for row in rows or []:
+        r = dict(row)
+        org_id = r["org_id"]
+        issue_id = str(r["id"])
+        age_min = int(float(r.get("age_seconds") or 0) / 60)
+        try:
+            from eden.issues.repo import IssuesRepo
+
+            repo = IssuesRepo()
+            ok = await repo.set_status(org_id, issue_id, "triaged")
+            if not ok:
+                continue
+            # Cockpit "stuck" badge — merged into triage_result like the
+            # patch_blocked stamp.
+            issue = await repo.get_issue(org_id, issue_id)
+            if issue is not None:
+                triage = dict(issue.triage_result or {})
+                triage["stuck"] = {
+                    "by": "fix_pending_janitor",
+                    "age_minutes": age_min,
+                    "returned_to": "triaged",
+                }
+                await repo.set_triage_result(org_id, issue_id, triage)
+            from eden.closed_loop.autonomy_policy import audit
+
+            await audit(
+                org_id,
+                agent_id=None,
+                action="fix_pending_janitor",
+                tier="janitor",
+                decision="allow",
+                reason=(
+                    f"issue {issue_id} stuck in fix_pending for "
+                    f"{age_min}m (max {max_age_min}m); returned to triaged"
+                ),
+            )
+            swept += 1
+        except Exception as exc:
+            logger.warning(
+                "fix_pending_janitor: sweep failed for %s: %s", issue_id, exc
+            )
+    if swept:
+        logger.info("fix_pending_janitor: swept %s stuck issue(s)", swept)
+    return swept
 
 
 # ── Scheduling ──────────────────────────────────────────────────────
@@ -201,17 +278,60 @@ async def schedule_verify(
 # ── Checks ──────────────────────────────────────────────────────────
 
 
-async def _verify_issue(org_id: str, issue_id: str, fingerprint: str) -> tuple[bool, dict[str, Any]]:
-    """Return ``(passed, detail)`` — did the fix hold?"""
+def _recent_only(
+    stumbles: list[dict[str, Any]], since: datetime
+) -> list[dict[str, Any]]:
+    """Keep only stumbles detected at/after ``since`` (belt-and-braces
+    client-side filter on top of the SQL ``since`` clause)."""
+    out: list[dict[str, Any]] = []
+    for s in stumbles:
+        ts = s.get("detected_at")
+        if isinstance(ts, str):
+            try:
+                ts = datetime.fromisoformat(ts)
+            except ValueError:
+                ts = None
+        if isinstance(ts, datetime):
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=UTC)
+            if ts < since:
+                continue
+        out.append(s)
+    return out
+
+
+async def _verify_issue(
+    org_id: str, issue_id: str, fingerprint: str
+) -> tuple[bool | None, dict[str, Any]]:
+    """Return ``(passed, detail)`` — did the fix hold?
+
+    ``passed`` is ``True`` (fix held), ``False`` (failed) or ``None``
+    (**inconclusive** — the StatGate re-score errored; the caller
+    consumes an attempt and retries, failing with
+    ``reason="statgate_error"`` once attempts run out) (M3, D6).
+    """
     from eden.issues.repo import IssuesRepo
 
     repo = IssuesRepo()
     window = _cfg("verify_quiet_window_minutes", 30)
-    recent = 0
-    if fingerprint:
-        recent = await repo.count_recent_stumbles(
-            org_id, fingerprint, minutes=window
-        )
+    issue = None
+    # M3 (D6): an empty fingerprint must never auto-pass — re-derive it
+    # from the issue row, and fail the verification when still empty.
+    if not fingerprint:
+        try:
+            issue = await repo.get_issue(org_id, issue_id)
+            fingerprint = (issue.fingerprint if issue else "") or ""
+        except Exception:
+            fingerprint = ""
+        if not fingerprint:
+            return False, {
+                "recent_stumbles": None,
+                "quiet_window_minutes": window,
+                "reason": "no_fingerprint",
+            }
+    recent = await repo.count_recent_stumbles(
+        org_id, fingerprint, minutes=window
+    )
     detail: dict[str, Any] = {
         "recent_stumbles": recent,
         "quiet_window_minutes": window,
@@ -220,30 +340,43 @@ async def _verify_issue(org_id: str, issue_id: str, fingerprint: str) -> tuple[b
         detail["reason"] = "new stumbles within quiet window"
         return False, detail
 
-    # StatGate P0 must be clear.
+    # StatGate P0 must be clear — judged on RECENT evidence only (M3,
+    # D29): the issue's stored severity/stumble_count date from detection
+    # time; re-scoring them verbatim meant a healed P0 could never pass.
+    # With a clean quiet window the recent-stumble list is what decides.
     try:
-        issue = await repo.get_issue(org_id, issue_id)
+        if issue is None:
+            issue = await repo.get_issue(org_id, issue_id)
         if issue is not None:
             from eden.issues.statgate_scorer import StatGateIncidentScorer
 
+            since = datetime.now(UTC) - timedelta(minutes=window)
             stumbles = await repo.list_stumbles(
-                org_id, fingerprint=fingerprint, limit=20
+                org_id, fingerprint=fingerprint, since=since, limit=20
             )
+            recent_stumbles = _recent_only(stumbles, since)
             score = StatGateIncidentScorer().score(
                 {
                     "id": issue.id,
                     "kind": issue.kind,
-                    "severity": issue.severity,
-                    "stumble_count": issue.stumble_count,
+                    # Stored severity is only as fresh as the stumbles
+                    # backing it — with zero recent stumbles it must not
+                    # re-flag P0 on its own.
+                    "severity": issue.severity if recent_stumbles else "",
+                    "stumble_count": len(recent_stumbles),
                 },
-                stumbles,
+                recent_stumbles,
             )
             detail["statgate_p0"] = score.p0
             if score.p0:
                 detail["reason"] = "StatGate still flags P0"
                 return False, detail
     except Exception as exc:
-        logger.debug("verify: statgate re-score failed: %s", exc)
+        # M3 (D6): a broken scorer is not a pass — report inconclusive.
+        logger.warning("verify: statgate re-score failed (inconclusive): %s", exc)
+        detail["reason"] = "statgate_error"
+        detail["error"] = str(exc)[:300]
+        return None, detail
 
     detail["reason"] = "quiet window clean + no P0"
     return True, detail
@@ -308,6 +441,18 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
             await _complete(client, r["id"], "passed", detail, attempts)
             await _emit(org_id, issue_id, r.get("ref") or fingerprint, True, detail)
             return "passed"
+        if passed is None:
+            # Inconclusive (M3, D6): consume the attempt + retry; once
+            # attempts run out the row fails with reason=statgate_error.
+            if attempts >= max_attempts:
+                detail = {**detail, "reason": "statgate_error"}
+                await _complete(client, r["id"], "failed", detail, attempts)
+                await _emit(
+                    org_id, issue_id, r.get("ref") or fingerprint, False, detail
+                )
+                return "failed"
+            await _reschedule(client, r["id"], attempts)
+            return "retried"
         if attempts >= max_attempts:
             await _complete(client, r["id"], "failed", detail, attempts)
             await _emit(org_id, issue_id, r.get("ref") or fingerprint, False, detail)

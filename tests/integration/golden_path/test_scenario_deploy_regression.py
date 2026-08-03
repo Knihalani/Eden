@@ -169,20 +169,11 @@ async def test_heal_executed_schedules_verify(loop_db, bus, wait_until) -> None:
     assert not any(e.type == EventType.ESCALATED_HUMAN for e in bus)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D29 (new, M1 discovery): verify's StatGate re-score flags P0 from "
-        "the issue's stored severity=='p0' alone (statgate_scorer "
-        "p0_severity check via verify.py:162–183), so a healed P0 issue "
-        "can never pass verification — it exhausts attempts and regresses "
-        "instead of resolving"
-    ),
-)
 @pytest.mark.asyncio
 async def test_heal_verify_resolves_zero_clicks(loop_db, bus, wait_until) -> None:
-    """End of scenario 2: quiet window clean after the rollback → verify
-    passes → issue resolved, zero human clicks."""
+    """End of scenario 2 (D29 fixed in M3): the verify re-score judges on
+    recent evidence, so a healed P0 with a clean quiet window passes →
+    issue resolved, zero human clicks."""
     _seed(loop_db)
     orch = await _drive_heal_to_verifying(loop_db, bus, wait_until)
 

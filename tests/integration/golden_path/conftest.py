@@ -515,27 +515,7 @@ def _reset_verify_cooldown():
     _reset_state_for_tests()
 
 
-@pytest.fixture
-def create_plan_shim(monkeypatch: pytest.MonkeyPatch):
-    """Bridge the duplicate-org_id defect in the propose persist path.
-
-    ``propose_plan_for_issue`` calls ``plans_repo.create_plan(org_id,
-    **payload)`` with ``payload["org_id"]`` present — a TypeError against
-    the real signature (M1 discovery, tracked as D28 in
-    test_scenario_code_bug.py). This shim strips the duplicate and
-    delegates to the REAL ``create_plan`` so the rest of the persist path
-    (real SQL against the fake DB, re-fetch via get_plan) still runs.
-    """
-    from eden.improvement import plans_repo
-
-    real_create_plan = plans_repo.create_plan
-
-    async def _shim(*args: Any, **kwargs: Any):
-        org_id = args[0] if args else kwargs.pop("org_id")
-        kwargs.pop("org_id", None)
-        return await real_create_plan(org_id, **kwargs)
-
-    monkeypatch.setattr(
-        "eden.improvement.plans_repo.create_plan", AsyncMock(side_effect=_shim)
-    )
-    return _shim
+# NOTE: the ``create_plan_shim`` fixture that bridged D28 (duplicate
+# org_id in the propose persist payload) was removed in M3 — the strip
+# behavior it provided is now the real behavior of
+# ``_plan_payload_from_patch`` + ``plans_repo.create_plan``.

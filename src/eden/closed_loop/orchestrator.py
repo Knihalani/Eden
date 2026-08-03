@@ -25,6 +25,16 @@ logger = logging.getLogger(__name__)
 # Heal action_types SelfHealer understands (fast-path autonomous heals).
 _HEALABLE = {"rollback", "reweight", "cache_bust"}
 
+#: M3 (D5): triage retries re-enter via the outbox as ISSUE_CREATED
+#: events. The retry's ``ref`` is suffixed so the consumer's idempotency
+#: key ``{issue_id}:{type}:{ref}`` does not collide with the original
+#: delivery; ``_on_issue_created`` strips it before doing real work.
+_RETRY_REF_SEP = "::triage-retry"
+
+#: Total triage attempts (original + one outbox retry).
+_TRIAGE_MAX_ATTEMPTS = 2
+_TRIAGE_RETRY_DELAY_S = 300
+
 
 class ClosedLoopOrchestrator:
     async def emit(self, event: LoopEvent) -> None:
@@ -49,6 +59,12 @@ class ClosedLoopOrchestrator:
         from eden.closed_loop.efficiency import AgentEfficiencyController
         from eden.issues.triage_agent import TriageAgent
 
+        # Outbox retries carry a suffixed ref (idempotency-key spacing) —
+        # restore the original ref before anything downstream sees it.
+        if _RETRY_REF_SEP in (event.ref or ""):
+            event.ref = event.ref.split(_RETRY_REF_SEP, 1)[0]
+        attempt = int(event.payload.get("triage_attempt") or 1)
+
         triage_result: dict[str, Any] | None = None
         try:
             ctrl = AgentEfficiencyController()
@@ -70,7 +86,35 @@ class ClosedLoopOrchestrator:
                 )
                 triage_result = (res or {}).get("data", {}).get("triage_result")
         except Exception as exc:
+            # M3 (D5): an exception is NOT a triage — no TRIAGE_COMPLETED.
             logger.warning("orchestrator: triage failed: %s", exc)
+            await self._on_triage_error(event, exc, attempt)
+            return
+
+        # M3 (D5): a budget-deferred triage is not a triage either — leave
+        # the issue open + visible instead of pretending it was triaged.
+        if (triage_result or {}).get("source") == "budget_exceeded":
+            await apply_transition(
+                event.org_id,
+                event.issue_id,
+                event_type=EventType.TRIAGE_FAILED,
+                reason="triage deferred: daily triage budget exhausted",
+                detail={"source": "budget_exceeded", "attempt": attempt},
+            )
+            await self.emit(
+                LoopEvent(
+                    type=EventType.TRIAGE_FAILED,
+                    org_id=event.org_id,
+                    issue_id=event.issue_id,
+                    ref=event.ref,
+                    payload={
+                        "reason": "budget",
+                        "attempt": attempt,
+                        "triage_result": triage_result or {},
+                    },
+                )
+            )
+            return
 
         await apply_transition(
             event.org_id,
@@ -89,6 +133,71 @@ class ClosedLoopOrchestrator:
                 payload={"triage_result": triage_result or {}},
             )
         )
+
+    async def _on_triage_error(
+        self, event: LoopEvent, exc: Exception, attempt: int
+    ) -> None:
+        """M3 (D5) truthful triage failure path.
+
+        Stamp the error on the issue (portal visibility), record the
+        attempt via the TRIAGE_FAILED self-loop, emit TRIAGE_FAILED, and
+        either schedule one durable retry through the outbox
+        (``retry_after_ts``) or — attempts exhausted — escalate to a
+        human with reason ``triage_failed``.
+        """
+        error = str(exc)[:500]
+        try:
+            from eden.issues.repo import IssuesRepo
+
+            await IssuesRepo().set_triage_result(
+                event.org_id,
+                event.issue_id,
+                {"source": "error", "error": error, "attempt": attempt},
+            )
+        except Exception as stamp_exc:
+            logger.debug(
+                "orchestrator: triage error stamp failed: %s", stamp_exc
+            )
+        await apply_transition(
+            event.org_id,
+            event.issue_id,
+            event_type=EventType.TRIAGE_FAILED,
+            reason=f"triage attempt {attempt} failed: {error}",
+            detail={"error": error, "attempt": attempt},
+        )
+        await self.emit(
+            LoopEvent(
+                type=EventType.TRIAGE_FAILED,
+                org_id=event.org_id,
+                issue_id=event.issue_id,
+                ref=event.ref,
+                payload={"error": error, "attempt": attempt},
+            )
+        )
+        if attempt >= _TRIAGE_MAX_ATTEMPTS:
+            await self._escalate_human(event, None, reason="triage_failed")
+            return
+        try:
+            from eden.closed_loop.event_bus import schedule_retry
+
+            queued = await schedule_retry(
+                LoopEvent(
+                    type=EventType.ISSUE_CREATED,
+                    org_id=event.org_id,
+                    issue_id=event.issue_id,
+                    ref=f"{event.ref}{_RETRY_REF_SEP}{attempt + 1}",
+                    payload={**event.payload, "triage_attempt": attempt + 1},
+                ),
+                delay_seconds=_TRIAGE_RETRY_DELAY_S,
+            )
+        except Exception as retry_exc:
+            logger.warning(
+                "orchestrator: triage retry enqueue failed: %s", retry_exc
+            )
+            queued = False
+        if not queued:
+            # Can't durably retry → don't silently drop the issue.
+            await self._escalate_human(event, None, reason="triage_failed")
 
     # ── triage_completed → recommend | heal | patch | human ─────────
 
@@ -366,21 +475,61 @@ class ClosedLoopOrchestrator:
             if heal_from_issue is None:
                 return
             result = await heal_from_issue(event.org_id, event.issue_id)
-            if (result or {}).get("data", {}).get("status") in (
-                "executed",
-                "applied",
-            ):
+            data = (result or {}).get("data") or {}
+            if data.get("status") in ("executed", "applied"):
                 await self.emit(
                     LoopEvent(
                         type=EventType.HEAL_EXECUTED,
                         org_id=event.org_id,
                         issue_id=event.issue_id,
                         ref=event.ref,
-                        payload={"heal": result.get("data", {})},
+                        payload={"heal": data},
                     )
                 )
+            else:
+                # M3 (D3/D16): a heal that did not execute must not
+                # strand the issue in fix_pending.
+                await self._heal_failed(event, triage_result, data)
         except Exception as exc:
             logger.warning("orchestrator: heal failed: %s", exc)
+            await self._heal_failed(
+                event,
+                triage_result,
+                {
+                    "status": "failed",
+                    "failure_reason": "heal_exception",
+                    "error": str(exc)[:500],
+                },
+            )
+
+    async def _heal_failed(
+        self,
+        event: LoopEvent,
+        triage_result: dict[str, Any],
+        data: dict[str, Any],
+    ) -> None:
+        """M3 (D3): failed heal → HEAL_FAILED (fix_pending→triaged) +
+        human escalation carrying the executor's ``failure_reason``."""
+        failure_reason = str(
+            data.get("failure_reason") or data.get("status") or "unknown"
+        )
+        await apply_transition(
+            event.org_id,
+            event.issue_id,
+            event_type=EventType.HEAL_FAILED,
+            reason=f"heal failed: {failure_reason}",
+            detail={"heal": data, "failure_reason": failure_reason},
+        )
+        await self.emit(
+            LoopEvent(
+                type=EventType.HEAL_FAILED,
+                org_id=event.org_id,
+                issue_id=event.issue_id,
+                ref=event.ref,
+                payload={"heal": data, "failure_reason": failure_reason},
+            )
+        )
+        await self._escalate_human(event, triage_result, reason=failure_reason)
 
     async def _request_patch(
         self, event: LoopEvent, triage_result: dict[str, Any]
@@ -412,7 +561,28 @@ class ClosedLoopOrchestrator:
                 issue_id=event.issue_id,
             )
         except Exception as exc:
-            logger.debug("orchestrator: improvement sweep unavailable: %s", exc)
+            # M3 (D3): a swallowed patch request left the portal with no
+            # trace of *why* a fix never appeared — stamp the blocker.
+            logger.warning(
+                "orchestrator: patch request failed issue=%s: %s",
+                event.issue_id,
+                exc,
+            )
+            try:
+                from eden.improvement.issue_patch_trigger import (
+                    stamp_patch_blocked,
+                )
+
+                await stamp_patch_blocked(
+                    event.org_id,
+                    event.issue_id,
+                    reason=f"patch_request_error:{type(exc).__name__}",
+                    message=str(exc)[:500],
+                )
+            except Exception as stamp_exc:
+                logger.debug(
+                    "orchestrator: patch_blocked stamp failed: %s", stamp_exc
+                )
 
     async def _schedule_verify(self, event: LoopEvent) -> None:
         try:
@@ -423,15 +593,22 @@ class ClosedLoopOrchestrator:
             logger.debug("orchestrator: verify scheduler unavailable: %s", exc)
 
     async def _escalate_human(
-        self, event: LoopEvent, triage_result: dict[str, Any] | None
+        self,
+        event: LoopEvent,
+        triage_result: dict[str, Any] | None,
+        *,
+        reason: str = "",
     ) -> None:
+        payload: dict[str, Any] = {"triage_result": triage_result or {}}
+        if reason:
+            payload["reason"] = reason
         await self.emit(
             LoopEvent(
                 type=EventType.ESCALATED_HUMAN,
                 org_id=event.org_id,
                 issue_id=event.issue_id,
                 ref=event.ref,
-                payload={"triage_result": triage_result or {}},
+                payload=payload,
             )
         )
         await self._maybe_alert(event, triage_result, human=True)

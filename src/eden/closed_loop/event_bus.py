@@ -128,6 +128,34 @@ async def _outbox_insert(event: LoopEvent) -> bool:
         return False
 
 
+async def schedule_retry(event: LoopEvent, *, delay_seconds: float) -> bool:
+    """Durably queue an event for replay after ``delay_seconds`` (M3, D5).
+
+    Inserts an outbox row with a future ``retry_after_ts`` — the drain
+    pass skips it until due, then replays it onto the stream like any
+    other outbox row. Never raises; returns False when Postgres is down.
+    """
+    try:
+        client = await _pg()
+        if client is None:
+            raise ConnectionError("no postgres client")
+        await client.execute(
+            "INSERT INTO loop_events_outbox (org_id, event, retry_after_ts) "
+            "VALUES ($1, $2::jsonb, NOW() + ($3 || ' seconds')::interval)",
+            event.org_id,
+            json.dumps(event.to_fields(), default=str),
+            str(int(delay_seconds)),
+        )
+        return True
+    except Exception as exc:
+        logger.error(
+            "event_bus: retry enqueue failed — event %s dropped: %s",
+            getattr(event, "type", "?"),
+            exc,
+        )
+        return False
+
+
 async def drain_outbox(limit: int = 500) -> int:
     """Replay undrained outbox rows onto the stream, oldest-first.
 
