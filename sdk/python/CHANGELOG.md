@@ -4,6 +4,13 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.1 — 2026-08-03
+
+### Fixed
+- `ModelAdvisor` now sends `X-Org-Api-Key` + `X-Org-Id` (matching
+  telemetry ingest auth) instead of Bearer-only headers that failed
+  against Eden's org API-key scheme.
+
 ## 0.4.0 — 2026-07-28
 
 Versioned in lockstep with `@eden-ai/sdk` 0.4.0 — same number, same
