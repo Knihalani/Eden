@@ -243,6 +243,9 @@ async def approve_plan(
     hermetic = evidence.get("hermetic_preverify") if isinstance(evidence, dict) else None
     hermetic_status = None
     if isinstance(hermetic, dict):
+        # M7 (§4.1): new plans carry the honest "static_passed" label;
+        # legacy plans carry "passed". Both are surfaced verbatim — this
+        # is a pass-through, never a gate.
         hermetic_status = hermetic.get("status")
 
     plan_kind = plan.get("plan_kind") or "code_patch"

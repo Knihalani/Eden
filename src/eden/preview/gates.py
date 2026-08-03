@@ -98,6 +98,21 @@ async def improvement_agent_enabled(org_id: str) -> bool:
     return bool(getattr(get_settings(), "improvement_agent_v1", False))
 
 
+async def replay_verify_enabled_for_org(org_id: str) -> bool:
+    """M7 (spec §10.2) — replay-before-PR verify, org-overridable.
+
+    Explicit org ``False`` is a kill-switch even when the global setting
+    (default True) is ON. Missing org key falls back to
+    ``Settings.replay_verify_enabled``.
+    """
+    from eden.config import get_settings
+
+    features = await _load_org_features(org_id)
+    if "replay_verify_enabled" in features:
+        return bool(features["replay_verify_enabled"])
+    return bool(getattr(get_settings(), "replay_verify_enabled", True))
+
+
 async def improvement_schedule_enabled_for_org(org_id: str) -> bool:
     """Weekly sweep cron — global flag or per-org features row."""
     from eden.config import get_settings

@@ -1184,6 +1184,15 @@ def _build_settings_class():
         # idle chore.
         fix_pending_max_age_minutes: int = 120
 
+        # ── M7 (§4.1) replay-before-PR verify ───────────────────────────
+        # Signature-based replay of the checkpointed failing step before
+        # a code_patch plan enters the inbox. ``replay_verify_enabled``
+        # is org-overridable via organizations.features JSONB
+        # (eden.preview.gates.replay_verify_enabled_for_org).
+        replay_verify_enabled: bool = True
+        replay_max_llm_steps: int = 3
+        replay_max_cost_usd: float = 0.05
+
         @property
         def verify_poll_interval_seconds(self) -> float:
             """Deprecated alias (M3, D7) — this used to be a dead field
