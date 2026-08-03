@@ -278,15 +278,6 @@ async def test_quiet_window_verify_emits_pass(loop_db, bus) -> None:
     assert passed and passed[0].issue_id == ISSUE_ID
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D15: the patch path never moves the issue to 'verifying' "
-        "(VERIFY_SCHEDULED transition exists but is applied nowhere), so "
-        "VERIFY_PASSED's verifying→resolved transition no-ops and the "
-        "issue stays fix_pending"
-    ),
-)
 @pytest.mark.asyncio
 async def test_verify_pass_resolves_issue(loop_db, bus) -> None:
     """End of scenario 1: the passing verify must resolve the issue."""
