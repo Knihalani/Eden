@@ -927,7 +927,7 @@ async def get_insights(org_id: str, since: str = "7d") -> dict[str, Any]:
             await client.fetchval(
                 """
                 SELECT COUNT(*) FROM agent_issues
-                WHERE org_id = $1 AND status IN ('open', 'triaged', 'fix_pending', 'verifying', 'regressed')
+                WHERE org_id = $1 AND status IN ('open', 'triaged', 'fix_pending', 'verifying', 'regressed', 'escalated')
                 """,
                 org_id,
             )
@@ -1020,7 +1020,7 @@ async def list_agent_issues(
                    first_seen, last_seen, stumble_count
             FROM agent_issues
             WHERE org_id = $1
-              AND status IN ('open', 'triaged', 'fix_pending', 'verifying', 'regressed')
+              AND status IN ('open', 'triaged', 'fix_pending', 'verifying', 'regressed', 'escalated')
             ORDER BY last_seen DESC
             LIMIT $2
             """,

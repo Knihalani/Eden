@@ -6,7 +6,7 @@
 | **Slug** | `production-trace-regression-eval` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **MISSING** |
+| **Eden status** | **SHIPPED (v0)** — builder + runner + gates live (`src/eden/evaluation/regression_builder.py`, `regression_runner.py`, `ci_webhook.py`; tables in migrations 092/101; wired to issue-resolve, canary >5% traffic, GitHub CI webhook). Honest caveat: the runner verifies existing traces post-hoc — it does **not** replay the stored case input — and passes open when a case has no attached trace (`regression_runner.py:130–137`) |
 | **Market hypothesis** | Eval+observability convergence — buyers want production failures to auto-become CI gates |
 | **Dependencies** | F29 (issues), F44 (eval slices), F04 (MCP), F41 (EvidenceGate), N22 (policy) |
 

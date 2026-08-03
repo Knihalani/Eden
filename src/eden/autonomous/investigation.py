@@ -883,8 +883,11 @@ def _heal_action_from_triage(triage_result: dict[str, Any]) -> str | None:
     """Extract a valid heal action_type from a triage result."""
     from eden.closed_loop.playbooks import resolve_playbook
 
+    # M4 (D8): the kind router can also resolve Improve-inbox playbooks
+    # (nudge_shadow / prompt_canary) — those must never reach
+    # ``execute_heal`` as an "unknown action_type" strand.
     playbook = resolve_playbook(None, triage_result)
-    if playbook:
+    if playbook and playbook in VALID_HEAL_ACTION_TYPES:
         return playbook
     sh = triage_result.get("suggested_heal")
     if isinstance(sh, str) and sh in VALID_HEAL_ACTION_TYPES:

@@ -178,19 +178,19 @@ N22 answers: *"How far may Eden go fixing this agent without asking?"* It is **n
 
 ## 6. Spec map (by loop stage)
 
-| Stage | Specs | Shipped today |
-|---|---|---|
-| **Activate** | N14 | ❌ worker/wiring not started |
-| **Monitor** | N03, N05, N02, F42, N08 | Partial — hooks exist, UX missing |
-| **Detect** | F20, F28, F29, F35, F06/F34 | ❌ issues/ greenfield |
-| **Diagnose** | F30, InvestigationAgent | Partial — proposes only |
-| **Fix (runtime)** | N21, F39, N15, N18 | Partial — queue only / missing |
-| **Fix (code)** | N20, F22, F04 | Partial — Cat 23 not issue-linked |
-| **Verify** | N01, N03, F33, N04 | ❌ |
-| **Learn** | N19, F40, N01 | Partial — detector_loop running |
-| **Orchestrate** | F46 | ❌ greenfield |
-| **Visibility** | N17, F47 | Partial |
-| **Safety** | N22, F41, N06 | Partial governance |
+The per-stage "Shipped today" table that used to live here went stale
+(it still called `src/eden/closed_loop/` and `src/eden/issues/`
+greenfield long after both shipped) and was removed in the M4 (D20)
+docs-alignment pass. Ground truth now lives in exactly two places —
+do not re-grow a third copy here:
+
+- **Per-feature status** — line 9 ("Eden status") of each spec in
+  [`docs/specs/features/`](features/) (f46 for orchestrate, n21 for
+  runtime fix, n20/n23 for code fix, n01 for verify/learn, n22 for
+  safety, n17/f47 for visibility).
+- **Live flag defaults** — `src/eden/config.py`, mirrored in
+  [AUTONOMY-OVERHAUL-PLAN.md §1.4](AUTONOMY-OVERHAUL-PLAN.md), which
+  `scripts/spec_drift_check.py` asserts against `config.py` in CI.
 
 ---
 

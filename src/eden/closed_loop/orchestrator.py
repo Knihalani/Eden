@@ -25,6 +25,15 @@ logger = logging.getLogger(__name__)
 # Heal action_types SelfHealer understands (fast-path autonomous heals).
 _HEALABLE = {"rollback", "reweight", "cache_bust"}
 
+# M4 (D8): playbook kinds that are NOT runtime heals but Improve-inbox
+# plan kinds — routed to ``request_sweep`` with a plan-kind hint instead
+# of dying as advisory dead ends. Maps playbook → (N22 action for the T3
+# tier gate, plan_kind_hint for the sweep).
+_IMPROVE_PLAYBOOKS: dict[str, tuple[str, str]] = {
+    "nudge_shadow": ("nudge_promote", "nudge_promote"),
+    "prompt_canary": ("prompt_canary", "prompt_update"),
+}
+
 #: M3 (D5): triage retries re-enter via the outbox as ISSUE_CREATED
 #: events. The retry's ``ref`` is suffixed so the consumer's idempotency
 #: key ``{issue_id}:{type}:{ref}`` does not collide with the original
@@ -214,6 +223,11 @@ class ClosedLoopOrchestrator:
             await self._request_heal(event, triage_result)
         elif decision == "patch":
             await self._request_patch(event, triage_result)
+        elif decision.startswith("improve"):
+            # M4 (D8): "improve:<plan_kind_hint>" — nudge/prompt playbooks
+            # land in the Improve inbox instead of dying as advisory.
+            hint = decision.partition(":")[2] or None
+            await self._request_improve(event, plan_kind_hint=hint)
         elif decision == "human":
             await self._escalate_human(event, triage_result)
         # "recommend"/"observe" → stay triaged (advisory only).
@@ -296,9 +310,11 @@ class ClosedLoopOrchestrator:
 
         wants_heal = first_type in _HEALABLE
         wants_patch = first_type in ("propose_patch", "patch", "code_change")
+        # M4 (D8): first suggested action may itself be a nudge/prompt kind.
+        wants_improve = first_type in _IMPROVE_PLAYBOOKS
 
         # D3 playbook router — fill missing heal action from issue kind.
-        if not wants_heal and not wants_patch:
+        if not wants_heal and not wants_patch and not wants_improve:
             try:
                 from eden.closed_loop.playbooks import resolve_playbook
                 from eden.issues.repo import IssuesRepo
@@ -317,6 +333,11 @@ class ClosedLoopOrchestrator:
                         "suggested_heal": playbook,
                         "playbook_source": "kind_router",
                     }
+                elif playbook in _IMPROVE_PLAYBOOKS:
+                    # M4 (D8): nudge_shadow / prompt_canary are not heals —
+                    # route them to the Improve sweep instead of a dead end.
+                    wants_improve = True
+                    first_type = playbook
             except Exception as exc:
                 logger.debug("orchestrator: playbook router failed: %s", exc)
 
@@ -330,6 +351,17 @@ class ClosedLoopOrchestrator:
 
         if mode == "observe":
             return "human" if escalate else "recommend"
+
+        if wants_improve and first_type in _IMPROVE_PLAYBOOKS:
+            # M4 (D8): audit the T3 decision, then hand the issue to the
+            # Improve sweep. ``require_approval`` still routes to improve —
+            # a drafted plan in Needs-you IS the approval request (same
+            # rule as the patch path); only a hard deny stays advisory.
+            n22_action, plan_kind_hint = _IMPROVE_PLAYBOOKS[first_type]
+            verdict = await self._decide_action(event, n22_action)
+            if verdict == "deny":
+                return "recommend"
+            return f"improve:{plan_kind_hint}"
 
         if wants_heal or wants_patch:
             decision = await self._decide_action(event, first_type or "")
@@ -584,6 +616,33 @@ class ClosedLoopOrchestrator:
                     "orchestrator: patch_blocked stamp failed: %s", stamp_exc
                 )
 
+    async def _request_improve(
+        self, event: LoopEvent, *, plan_kind_hint: str | None = None
+    ) -> None:
+        """M4 (D8): route nudge/prompt playbooks into the Improve sweep.
+
+        The issue stays ``triaged`` — the sweep drafts an inbox plan
+        (``nudge_promote`` / ``prompt_update``) and the plan approval is
+        the state that moves things forward. The hint is plumbing for the
+        sweep's plan-kind producers (M6); the sweep may ignore it today.
+        """
+        try:
+            from eden.improvement.agent import request_sweep
+
+            await request_sweep(
+                event.org_id,
+                agent_id=event.payload.get("agent_id"),
+                issue_id=event.issue_id,
+                plan_kind_hint=plan_kind_hint,
+            )
+        except Exception as exc:
+            logger.warning(
+                "orchestrator: improve request failed issue=%s hint=%s: %s",
+                event.issue_id,
+                plan_kind_hint,
+                exc,
+            )
+
     async def _schedule_verify(self, event: LoopEvent) -> None:
         try:
             from eden.closed_loop.verify import schedule_verify
@@ -602,6 +661,17 @@ class ClosedLoopOrchestrator:
         payload: dict[str, Any] = {"triage_result": triage_result or {}}
         if reason:
             payload["reason"] = reason
+        # M4 (D17): escalation is a real status, not just an event — the
+        # cockpit's "waiting on human" filter reads it. Declared sources
+        # only (open/triaged/fix_pending/verifying); e.g. a ``regressed``
+        # issue keeps its more specific status and this is a no-op.
+        await apply_transition(
+            event.org_id,
+            event.issue_id,
+            event_type=EventType.ESCALATED_HUMAN,
+            reason=reason or "escalated to human",
+            detail={"reason": reason} if reason else {},
+        )
         await self.emit(
             LoopEvent(
                 type=EventType.ESCALATED_HUMAN,

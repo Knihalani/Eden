@@ -7,6 +7,7 @@ surfaces the decision audit log for the N06 compliance pack.
     GET   /orgs/{org_id}/settings/autonomy
     PATCH /orgs/{org_id}/settings/autonomy
     GET   /orgs/{org_id}/settings/autonomy/audit
+    GET   /orgs/{org_id}/settings/autonomy/budget
 
 An optional ``agent_id`` query param scopes to a per-agent override.
 Gated behind ``closed_loop_orchestrator_v1`` (the loop that consumes it).
@@ -127,6 +128,78 @@ async def patch_autonomy(
     data = policy.to_json()
     data["effective_mode"] = policy.effective_mode()
     return _ok(data)
+
+
+@router.get("/budget")
+async def get_budget(
+    org_id: str = Depends(require_path_org_access),
+) -> dict[str, Any]:
+    """M4 (D12): today's maintenance budget in one place — the unified
+    ``autonomy:spend:`` ledger (``check_budget``), the patch count vs
+    ``patch_max_per_day``, and today's suppressed-by-budget audit rows."""
+    from eden.closed_loop.autonomy_policy import check_budget, resolve
+
+    policy = await resolve(org_id)
+    ok, spent, limit = await check_budget(org_id, policy)
+
+    patches_used = 0
+    patch_cap = 0
+    try:
+        from eden.config import get_settings
+        from eden.improvement import plans_repo
+
+        patch_cap = int(getattr(get_settings(), "patch_max_per_day", 10) or 0)
+        patches_used = await plans_repo.count_code_patches_today(org_id)
+    except Exception as exc:
+        logger.debug("autonomy budget patch count failed: %s", redact_all(str(exc)))
+
+    suppressed: list[dict[str, Any]] = []
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            fetched = await client.fetch(
+                """
+                SELECT id, agent_id, action, tier_applied, decision,
+                       reason, created_at
+                FROM autonomy_audit_log
+                WHERE org_id = $1
+                  AND decision = 'deny'
+                  AND tier_applied = 'budget'
+                  AND created_at >= date_trunc('day', NOW() AT TIME ZONE 'UTC')
+                ORDER BY created_at DESC
+                LIMIT 50
+                """,
+                org_id,
+            )
+            for r in fetched or []:
+                d = dict(r)
+                for k, v in list(d.items()):
+                    if isinstance(v, datetime):
+                        d[k] = v.isoformat()
+                    elif isinstance(v, uuid.UUID):
+                        d[k] = str(v)
+                suppressed.append(d)
+    except Exception as exc:
+        logger.debug("autonomy budget audit fetch failed: %s", redact_all(str(exc)))
+
+    return _ok(
+        {
+            "budget": {
+                "spent_usd": round(spent, 4),
+                "limit_usd": limit,
+                "within_budget": ok,
+            },
+            "patches": {
+                "used_today": patches_used,
+                "max_per_day": patch_cap,
+                "within_cap": patch_cap <= 0 or patches_used < patch_cap,
+            },
+            "suppressed_by_budget": suppressed,
+            "suppressed_count": len(suppressed),
+        }
+    )
 
 
 @router.get("/audit")
