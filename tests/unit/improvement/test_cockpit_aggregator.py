@@ -153,3 +153,21 @@ def test_item_to_dict() -> None:
     d = item.to_dict()
     assert d["ref"] == "issue:1"
     assert d["column"] == COLUMN_URGENT
+@pytest.fixture(autouse=True)
+def _quiet_loop_health(monkeypatch):
+    """Stub the M2 loop-health source for this module.
+
+    The unit-test environment has no Redis, so the real probe honestly
+    reports the bus dead and injects an URGENT "Autonomy paused" banner —
+    which would skew the pre-existing source-merge/snooze assertions.
+    test_loop_health_route.py covers the probe itself.
+    """
+
+    async def _none(self, org_id):
+        return []
+
+    from eden.improvement.cockpit_aggregator import ImprovementCockpitAggregator
+
+    monkeypatch.setattr(
+        ImprovementCockpitAggregator, "_from_loop_health", _none
+    )
