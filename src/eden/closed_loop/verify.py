@@ -286,10 +286,16 @@ async def stale_plans_janitor(limit: int = 50) -> int:
 #: ``ref`` is a raw fingerprint/branch keep the default behaviour.
 HEAL_REF_PREFIX = "heal:"
 MERGE_REF_PREFIX = "merge:"
+# M15 (§9): canary auto-merge uses a 10-min fast verify window.
+AUTO_MERGE_REF_PREFIX = "auto_merge:"
 
 
 def _is_heal_ref(ref: str | None) -> bool:
     return bool(ref) and str(ref).startswith(HEAL_REF_PREFIX)
+
+
+def _is_auto_merge_ref(ref: str | None) -> bool:
+    return bool(ref) and str(ref).startswith(AUTO_MERGE_REF_PREFIX)
 
 
 def _quiet_window_minutes(ref: str | None) -> int:
@@ -301,6 +307,9 @@ def _quiet_window_minutes(ref: str | None) -> int:
     """
     if _is_heal_ref(ref):
         return _cfg("verify_quiet_window_minutes_heal", 10)
+    if _is_auto_merge_ref(ref):
+        # M15 (§9): canary auto-merge fast window.
+        return _cfg("verify_quiet_window_minutes_auto_merge", 10)
     return _cfg("verify_quiet_window_minutes", 30)
 
 
@@ -323,12 +332,18 @@ async def schedule_verify(
     elif _is_heal_ref(ref):
         # M10 (§5.3): heal fast-path — verify a rollback in minutes.
         delay = _cfg("verify_delay_seconds_heal", 300)
+    elif _is_auto_merge_ref(ref):
+        # M15 (§9): canary auto-merge — 10-min fast verify window.
+        delay = _cfg("verify_delay_seconds_auto_merge", 600)
     else:
         delay = _cfg("verify_delay_seconds", 1800)
-    # A prefixed ref (``heal:``/``merge:``) is a source tag, not a
-    # fingerprint — derive the fingerprint from the issue row instead.
-    # Legacy callers passing a raw fingerprint keep the old behaviour.
-    prefixed = str(ref or "").startswith((HEAL_REF_PREFIX, MERGE_REF_PREFIX))
+    # A prefixed ref (``heal:``/``merge:``/``auto_merge:``) is a source
+    # tag, not a fingerprint — derive the fingerprint from the issue
+    # row instead. Legacy callers passing a raw fingerprint keep the
+    # old behaviour.
+    prefixed = str(ref or "").startswith(
+        (HEAL_REF_PREFIX, MERGE_REF_PREFIX, AUTO_MERGE_REF_PREFIX)
+    )
     fingerprint = "" if prefixed else ref
     if not fingerprint:
         try:

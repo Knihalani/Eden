@@ -13,7 +13,12 @@ guardian turns that signal into action instead of just an alert:
      inverted (``invert_unified_diff``), applied + statically checked
      against current HEAD, and drafted as a real ``code_patch``. Drift
      or static failure falls back to a follow-up with the conflict
-     noted. The plan is the revert vehicle — auto-execution is M15.
+     noted. The plan is the revert vehicle.
+   * M15 (§9): when the parent rode the canary auto-merge ladder,
+     guardian **auto-executes** the revert (approve + merge) provided
+     ``auto_revert_enabled`` and the kill switch allow it — using the
+     same M5 inverse-diff plan. Non-canary parents still wait for a
+     human Approve.
    * Otherwise draft a follow-up via the real generation path
      (``PatchGenerator``, ``persist=False``) with the verify failure +
      parent diff as feedback; failed generation degrades to
@@ -164,6 +169,26 @@ async def handle_regression(
                 revert_conflict=revert_conflict,
             )
 
+        # M15 (§9): canary auto-merge class → auto-execute the revert
+        # plan (M5 inverse diff) when auto_revert is permitted.
+        auto_revert_result: dict[str, Any] | None = None
+        if (
+            action == "revert"
+            and follow_up is not None
+            and follow_up.get("id")
+        ):
+            auto_revert_result = await _maybe_auto_execute_revert(
+                org_id,
+                parent=plan,
+                revert_plan=follow_up,
+                agent_id=plan_agent,
+            )
+            if auto_revert_result and auto_revert_result.get("status") in (
+                "merged",
+                "pr_opened",
+            ):
+                action = "auto_revert"
+
         # M13 (§6.3): guardian regression → KG ``reverted`` so future
         # PatchGenerator calls see the revert-rate penalty.
         try:
@@ -188,14 +213,86 @@ async def handle_regression(
         except Exception as exc:  # noqa: BLE001
             logger.debug("guardian: slack regression notify failed: %s", exc)
 
-        return {
+        out: dict[str, Any] = {
             "status": "drafted",
             "action": action,
             "plan_id": plan_id,
             "follow_up_plan_id": (follow_up or {}).get("id"),
         }
+        if auto_revert_result is not None:
+            out["auto_revert"] = auto_revert_result
+            if auto_revert_result.get("status") in ("merged", "pr_opened"):
+                out["status"] = "auto_reverted"
+        return out
     except Exception as exc:  # noqa: BLE001
         logger.warning("guardian.handle_regression failed: %s", exc)
+        return {"status": "error", "reason": str(exc)[:200]}
+
+
+async def _maybe_auto_execute_revert(
+    org_id: str,
+    *,
+    parent: dict[str, Any],
+    revert_plan: dict[str, Any],
+    agent_id: str | None,
+) -> dict[str, Any] | None:
+    """M15 (§9): auto-approve+merge a canary-class revert plan.
+
+    Returns ``None`` when the parent was not a canary auto-merge or
+    auto-revert is not permitted (human Approve remains the path).
+    """
+    from eden.improvement.auto_merge import (
+        auto_revert_permitted,
+        parent_is_canary_auto_merged,
+    )
+
+    if not parent_is_canary_auto_merged(parent):
+        return None
+    if not await auto_revert_permitted(org_id, agent_id):
+        return {"status": "skipped", "reason": "auto_revert_not_permitted"}
+
+    revert_id = str(revert_plan.get("id") or "")
+    if not revert_id:
+        return {"status": "error", "reason": "missing_revert_plan_id"}
+
+    # Stamp force_canary_revert so approve's eligibility gate bypasses
+    # the ladder checks (the original canary merge already passed them).
+    try:
+        from eden.improvement.approve import _merge_plan_evidence
+
+        stamped = await _merge_plan_evidence(
+            org_id,
+            revert_id,
+            {
+                "auto_merge": {
+                    "force_canary_revert": True,
+                    "parent_plan_id": str(parent.get("id") or ""),
+                    "canary_auto_revert": True,
+                }
+            },
+        )
+        if stamped is not None:
+            revert_plan = stamped
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("guardian: stamp force_canary_revert failed: %s", exc)
+
+    try:
+        from eden.improvement.approve import approve_plan
+
+        result = await approve_plan(
+            org_id,
+            revert_id,
+            approved_by="eden:guardian_auto_revert",
+        )
+        return {
+            "status": result.get("status"),
+            "pr_url": result.get("pr_url"),
+            "pr_number": result.get("pr_number"),
+            "auto_merged": result.get("auto_merged"),
+            "plan_id": revert_id,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("guardian: auto-revert execute failed: %s", exc)
         return {"status": "error", "reason": str(exc)[:200]}
 
 
@@ -262,9 +359,10 @@ async def _draft_revert(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Draft a revert ``code_patch`` carrying the parent diff inverted.
 
-    The plan *is* the revert vehicle — nothing executes here (auto-
-    revert is M15); a human approves the plan and the normal approve
-    flow opens the PR. Returns ``(plan, None)`` on success or
+    The plan *is* the revert vehicle. For non-canary parents a human
+    approves and the normal approve flow opens the PR. M15 (§9): when
+    the parent was a canary auto-merge, :func:`handle_regression`
+    auto-executes this plan. Returns ``(plan, None)`` on success or
     ``(None, reason)`` when the inverse diff no longer applies to HEAD
     (drift), fails static checks, or cannot be computed — the caller
     falls back to a follow-up fix with the conflict noted.
@@ -432,8 +530,9 @@ async def _draft_follow_up(
     if revert_conflict:
         evidence["revert_conflict"] = revert_conflict
         if parent.get("pr_number") is not None:
-            # M15 owns auto-revert; until then the human fallback is
-            # PRProvider.revert(strategy="revert_pr") on the parent PR.
+            # M15 (§9): canary auto-merges auto-execute the inverse-diff
+            # revert above; non-canary / failed auto-revert still expose
+            # PRProvider.revert(strategy="revert_pr") as a human fallback.
             evidence["revert_fallback"] = "pr_provider_revert:revert_pr"
 
     diff = "" if fail_reason else str(data.get("diff") or "")

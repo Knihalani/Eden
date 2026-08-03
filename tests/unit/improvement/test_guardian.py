@@ -504,8 +504,8 @@ class TestDraftFollowUp:
     @pytest.mark.asyncio
     async def test_revert_conflict_noted_with_pr_fallback(self) -> None:
         """A failed inverse-diff revert is recorded on the follow-up,
-        including the manual PRProvider.revert fallback (auto-revert
-        is M15 — nothing executes here)."""
+        including the manual PRProvider.revert fallback (M15 auto-revert
+        only applies to canary auto-merged parents)."""
         captured: dict = {}
 
         async def _create(org_id, **kwargs):

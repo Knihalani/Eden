@@ -1220,6 +1220,14 @@ def _build_settings_class():
         sweep_signal_timeout_s: float = 45.0
         # §8.4: propose→Slack p95 budget (harness measurement note).
         propose_to_slack_p95_budget_s: float = 90.0
+
+        # ── M15 (§9) auto-merge ladder (canary) ─────────────────────────
+        # Weekly volume cap; org-overridable via policy. Kill switch:
+        # feature_kills ``auto_merge``. Requires N22 T4
+        # ``auto_code_patch_merge=True`` (defaults False — DARK).
+        auto_merge_max_per_week: int = 2
+        verify_delay_seconds_auto_merge: int = 600
+        verify_quiet_window_minutes_auto_merge: int = 10
         # M3 (D3) janitor: issues stuck in ``fix_pending`` longer than
         # this are returned to ``triaged`` (+ audit row + cockpit
         # "stuck" badge) by the verify worker's ``fix_pending_janitor``
