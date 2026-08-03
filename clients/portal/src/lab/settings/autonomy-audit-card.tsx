@@ -6,6 +6,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { formatRelativeTime } from "@/lib/format";
+import { QueryErrorPanel } from "@/components/shell/query-error-panel";
 
 type AutonomyBudgetPayload = {
   budget?: {
@@ -41,7 +42,20 @@ export function AutonomyAuditCard() {
     SETTINGS_QUERY,
   );
 
-  if (auditQuery.isError && budgetQuery.isError) return null;
+  if (auditQuery.isError && budgetQuery.isError) {
+    return (
+      <section id="autonomy-audit" className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
+        <QueryErrorPanel
+          title="Couldn’t load autonomy audit"
+          error={auditQuery.error ?? budgetQuery.error}
+          onRetry={() => {
+            void auditQuery.refetch();
+            void budgetQuery.refetch();
+          }}
+        />
+      </section>
+    );
+  }
 
   const entries: AutonomyAuditEntry[] = auditQuery.data?.entries ?? [];
   const budget = budgetQuery.data;

@@ -594,12 +594,96 @@ describe("EdenSDK offline spill policy", () => {
       timestamp: new Date().toISOString(),
       sourceFormat: "openai",
       payload: { event_id: "tmp" },
+      metrics: { latency_ms: 42 },
+      durationMs: 42,
     });
     await sdk.flush();
     const q = new OfflineQueue(qpath);
     expect(q.size()).toBeGreaterThanOrEqual(1);
     const drained = q.drain(10);
-    expect(drained[0]?.payload).toEqual({ event_id: "tmp" });
+    // Full wire envelope — not just the nested payload.
+    expect(drained[0]?.payload?.event_id).toBe("e1");
+    expect(drained[0]?.payload?.trace_id).toBe("t1");
+    expect(drained[0]?.payload?.event_type).toBe("agent.run");
+    expect(drained[0]?.payload?.duration_ms).toBe(42);
+    expect(drained[0]?.payload?.metrics).toEqual({ latency_ms: 42 });
+    expect(drained[0]?.payload?.payload).toEqual({ event_id: "tmp" });
+  });
+
+  it("re-queues transient failures when offline queue is disabled", async () => {
+    let attempts = 0;
+    globalThis.fetch = (async () => {
+      attempts += 1;
+      return new Response("unavailable", { status: 503 });
+    }) as unknown as typeof fetch;
+
+    const sdk = new EdenSDK({
+      orgId: "o",
+      apiKey: "k_requeue",
+      baseUrl: "http://localhost:8000",
+      flushIntervalMs: 60_000,
+      maxQueueSize: 100,
+      timeoutS: 1,
+      // no offlineQueuePath — memory re-queue path
+    });
+    sdk.emit({
+      eventId: "e_requeue",
+      tenantId: "o",
+      projectId: "default",
+      traceId: "t_requeue",
+      realm: "production",
+      eventType: "agent.run",
+      timestamp: new Date().toISOString(),
+      sourceFormat: "openai",
+      payload: { keep: true },
+    });
+    const ok = await sdk.flush();
+    expect(ok).toBe(false);
+    // postJson retries 3x per flush attempt; events must still be in memory.
+    expect(attempts).toBeGreaterThanOrEqual(3);
+    // Second flush should see the same event again (re-queued).
+    const attemptsBefore = attempts;
+    await sdk.flush();
+    expect(attempts).toBeGreaterThan(attemptsBefore);
+    // Don't dispose against a 503 stub (would re-retry and hang the suite).
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ accepted: 1 }), { status: 200 })) as unknown as typeof fetch;
+    await sdk.dispose();
+  });
+
+  it("still drops permanent 4xx when offline queue is disabled", async () => {
+    globalThis.fetch = (async () =>
+      new Response("bad request", { status: 400 })) as unknown as typeof fetch;
+
+    const sdk = new EdenSDK({
+      orgId: "o",
+      apiKey: "k_drop4xx",
+      baseUrl: "http://localhost:8000",
+      flushIntervalMs: 60_000,
+      timeoutS: 1,
+    });
+    sdk.emit({
+      eventId: "e_drop",
+      tenantId: "o",
+      projectId: "default",
+      traceId: "t_drop",
+      realm: "production",
+      eventType: "agent.run",
+      timestamp: new Date().toISOString(),
+      sourceFormat: "openai",
+      payload: { bad: true },
+    });
+    const ok = await sdk.flush();
+    expect(ok).toBe(false);
+    // Permanent failure must not re-queue (would poison forever).
+    let secondAttempts = 0;
+    globalThis.fetch = (async () => {
+      secondAttempts += 1;
+      return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await sdk.flush();
+    expect(secondAttempts).toBe(0);
+    await sdk.dispose();
   });
 });
 
@@ -1410,6 +1494,53 @@ describe("EdenSDK flushOffline()", () => {
       expect(posts.length).toBeGreaterThanOrEqual(1);
       const freshQ = new OfflineQueue(qpath);
       expect(freshQ.size()).toBe(0);
+    },
+  );
+
+  it(
+    "replays a full wire envelope preserving eventId / traceId / eventType / metrics",
+    async () => {
+      const qpath = join(tmpDir, "flush-wire.jsonl");
+      const q = new OfflineQueue(qpath);
+      q.enqueue("openai", {
+        event_id: "evt_wire_1",
+        tenant_id: "o",
+        project_id: "default",
+        trace_id: "trc_wire_1",
+        realm: "production",
+        event_type: "llm_completion",
+        timestamp: "2026-01-15T12:00:00.000Z",
+        source_format: "openai",
+        payload: { model: "gpt-4o" },
+        metrics: { tokens: 12 },
+        duration_ms: 88,
+        name: "chat.completions",
+      });
+
+      let posted: unknown[] = [];
+      globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+        posted = parseFetchBody(init) as unknown[];
+        return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+      }) as unknown as typeof fetch;
+
+      const sdk = new EdenSDK({
+        orgId: "o",
+        apiKey: "k",
+        baseUrl: "http://localhost:8000",
+        offlineQueuePath: qpath,
+        flushIntervalMs: 60_000,
+      });
+      const n = await sdk.flushOffline(10);
+      expect(n).toBe(1);
+      expect(Array.isArray(posted)).toBe(true);
+      const ev = posted[0] as Record<string, unknown>;
+      expect(ev.event_id).toBe("evt_wire_1");
+      expect(ev.trace_id).toBe("trc_wire_1");
+      expect(ev.event_type).toBe("llm_completion");
+      expect(ev.duration_ms).toBe(88);
+      expect(ev.metrics).toEqual({ tokens: 12 });
+      expect(ev.name).toBe("chat.completions");
+      expect(ev.payload).toEqual({ model: "gpt-4o" });
     },
   );
 

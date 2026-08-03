@@ -41,6 +41,7 @@ export const STUB_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/replay",
   "/_stub",
   "/audit",
+  "/shell",
 ] as const;
 
 /** @deprecated Use STUB_PORTAL_PATH_PREFIXES — kept for older imports. */
@@ -76,7 +77,6 @@ export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/settings",
   "/prompts",
   "/guardrails",
-  "/shell",
   "/unavailable",
   "/onboarding", // redirects to /home (no forced tour)
 ] as const;

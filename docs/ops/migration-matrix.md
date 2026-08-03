@@ -173,6 +173,7 @@
 | 135_loop_events_outbox | loop_events_outbox | yes | 7d drained / forever undrained | soft | low | Durable Redis-down fallback for closed-loop events; drained back onto the stream by idle chore (M2, D4) | Improve |
 | 136_issue_status_escalated | agent_issues | yes | forever | soft | low | Widen issues status CHECK with 'escalated' so human escalation writes a real status (M4, D17) | Improve |
 | 137_guardian_followup_advisory | improvement_plans | yes | forever | soft | low | Widen plan_kind CHECK with 'advisory' + unique draft-follow-up-per-parent partial index race-proofing the guardian (M5, D9) | Improve |
+| 138_improvement_item_snoozes | improvement_item_snoozes | yes | forever | soft | low | Durable (org_id, item_ref) snooze expiry for N17 cockpit queue cards (mirrors plan snooze persistence) | Improve |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)

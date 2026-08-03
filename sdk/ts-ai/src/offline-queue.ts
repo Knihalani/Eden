@@ -20,6 +20,13 @@ import { homedir } from "node:os";
 
 export interface OfflineEvent {
   sourceFormat: string;
+  /**
+   * Durable spill body. Current writers store the full snake_case
+   * wire envelope from ``eventToWire`` (event_id / trace_id /
+   * event_type / nested payload / metrics / …). Older rows may
+   * contain only the nested ``TelemetryEvent.payload`` object —
+   * ``EdenSDK`` reconstruction handles both shapes.
+   */
   payload: Record<string, unknown>;
 }
 

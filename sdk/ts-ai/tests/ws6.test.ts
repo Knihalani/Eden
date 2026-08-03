@@ -11,6 +11,8 @@ import {
   uninstallHttpCapture,
 } from "../src/http-capture.js";
 import { wrapMastra } from "../src/instrumentations/mastra.js";
+import { parseFetchBody } from "./_parseBody.js";
+import { currentTrace, trace } from "../src/trace.js";
 
 let originalFetch: typeof fetch;
 
@@ -132,6 +134,48 @@ describe("installHttpCapture", () => {
     });
     await getDefaultClient().flush();
     expect(captured.length).toBeGreaterThan(0);
+  });
+
+  it("attaches the active currentTrace().traceId instead of inventing a new one", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/ingest/")) {
+        const parsed = parseFetchBody(init);
+        if (Array.isArray(parsed)) {
+          for (const row of parsed) {
+            bodies.push(row as Record<string, unknown>);
+          }
+        }
+        return new Response(JSON.stringify({ accepted: 1 }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({
+          id: "cmpl-1",
+          model: "gpt-4o-mini",
+          choices: [{ message: { content: "hi" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    installHttpCapture();
+    let activeTraceId: string | undefined;
+    await trace("http-parent", async (ctx) => {
+      activeTraceId = ctx.traceId;
+      expect(currentTrace()?.traceId).toBe(ctx.traceId);
+      await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      });
+    });
+    await getDefaultClient().flush();
+    const httpEv = bodies.find((b) => b.event_type === "llm_completion");
+    expect(httpEv).toBeDefined();
+    expect(httpEv!.trace_id).toBe(activeTraceId);
   });
 });
 

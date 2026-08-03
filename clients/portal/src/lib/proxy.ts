@@ -392,12 +392,29 @@ export function pipeSseUpstream(
           }
           controller.enqueue(value);
         }
-      } catch {
+      } catch (err) {
         stopHeartbeat();
+        // Mirror ai-insights/chat: emit SSE `event: error` before tearing
+        // down so clients are not left stuck in a connected/streaming state.
+        const msg =
+          err instanceof Error ? err.message : "stream interrupted";
         try {
-          controller.close();
+          controller.enqueue(
+            new TextEncoder().encode(
+              `event: error\ndata: ${JSON.stringify({ detail: msg })}\n\n`,
+            ),
+          );
         } catch {
-          /* already closed */
+          /* controller already closed by the runtime */
+        }
+        try {
+          controller.error(err);
+        } catch {
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
         }
       } finally {
         if (clientSignal) {

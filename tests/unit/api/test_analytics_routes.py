@@ -331,7 +331,67 @@ def test_throughput_by_hour_happy_path(client, stub_pg):
 def test_throughput_empty_data(client, stub_pg):
     resp = client.get("/orgs/org-test/analytics/throughput?days=7")
     assert resp.status_code == 200
-    assert resp.json() == {"by_hour": []}
+    body = resp.json()
+    assert body["by_hour"] == []
+    assert body.get("data_source") == "postgres"
+
+
+# ── Tests: CH preference for latency / throughput ─────────────────
+
+
+def test_latency_prefers_clickhouse_when_populated(client, stub_pg, monkeypatch):
+    """When CH returns rows, PG telemetry_events is not queried."""
+    async def _ch(org_id, *, days, kind):
+        assert kind == "latency"
+        return [{"day": "2026-08-01", "p50_ms": 10.0, "p95_ms": 20.0, "p99_ms": 30.0}]
+
+    monkeypatch.setattr(analytics, "_telemetry_from_clickhouse", _ch)
+    stub_pg.telemetry_events.append({
+        "tenant_id": "org-test", "duration_ms": 999.0,
+        "timestamp": _now(),
+    })
+
+    resp = client.get("/orgs/org-test/analytics/latency?days=7")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data_source"] == "clickhouse"
+    assert body["by_day"][0]["p50_ms"] == 10.0
+
+
+def test_throughput_falls_back_to_postgres_when_ch_empty(client, stub_pg, monkeypatch):
+    async def _ch(org_id, *, days, kind):
+        return None
+
+    monkeypatch.setattr(analytics, "_telemetry_from_clickhouse", _ch)
+    today = _now()
+    weekday = today.weekday()
+    pg_dow = (weekday + 1) % 7
+    stub_pg.telemetry_events.append({
+        "tenant_id": "org-test",
+        "timestamp": today.replace(hour=11, minute=0, second=0, microsecond=0),
+    })
+
+    resp = client.get("/orgs/org-test/analytics/throughput?days=7")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data_source"] == "postgres"
+    assert body["by_hour"][0]["hour"] == 11
+    assert body["by_hour"][0]["weekday"] == pg_dow
+
+
+def test_token_usage_stays_on_postgres(client, stub_pg, monkeypatch):
+    """Token-usage must not call the CH telemetry helper."""
+    called = {"n": 0}
+
+    async def _ch(*a, **k):
+        called["n"] += 1
+        return [{"should": "not appear"}]
+
+    monkeypatch.setattr(analytics, "_telemetry_from_clickhouse", _ch)
+    resp = client.get("/orgs/org-test/analytics/token-usage?days=7")
+    assert resp.status_code == 200
+    assert called["n"] == 0
+    assert "data_source" not in resp.json()
 
 
 # ── Tests: top-agents ────────────────────────────────────────────

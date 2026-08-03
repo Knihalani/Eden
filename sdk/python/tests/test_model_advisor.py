@@ -353,10 +353,11 @@ def test_advisor_user_agent_includes_version() -> None:
     """
     from eden_sdk.client import _USER_AGENT
     from eden_sdk.client import __version__ as _v
+    from eden_sdk.config import EdenConfig
     from eden_sdk.model_advisor import ModelAdvisor
 
     adv = ModelAdvisor(
-        config=None,
+        config=EdenConfig(org_id="org_ua", api_key="sk-ua"),
         base_url="https://test.eden.local",
     )
     headers = adv._headers()
@@ -365,3 +366,37 @@ def test_advisor_user_agent_includes_version() -> None:
     assert _v in ua
     assert ua.startswith("eden-sdk/")
     assert ua.endswith(" (python)")
+
+
+def test_advisor_headers_use_org_api_key() -> None:
+    """Advisor auth must match telemetry: X-Org-Api-Key + X-Org-Id,
+    not Bearer-only.
+    """
+    from eden_sdk.config import EdenConfig
+    from eden_sdk.model_advisor import ModelAdvisor
+
+    adv = ModelAdvisor(
+        config=EdenConfig(org_id="org_adv", api_key="sk-adv"),
+        base_url="https://test.eden.local",
+    )
+    headers = adv._headers()
+    assert headers.get("X-Org-Id") == "org_adv"
+    assert headers.get("X-Org-Api-Key") == "sk-adv"
+    assert "Authorization" not in headers
+
+
+def test_advisor_headers_omit_auth_when_unset() -> None:
+    from eden_sdk.config import EdenConfig
+    from eden_sdk.model_advisor import ModelAdvisor
+
+    adv = ModelAdvisor(
+        config=EdenConfig(org_id="", api_key=""),
+        base_url="https://test.eden.local",
+    )
+    # Force empty credentials even if process-wide config leaks in.
+    adv.api_key = ""
+    adv.org_id = ""
+    headers = adv._headers()
+    assert "X-Org-Id" not in headers
+    assert "X-Org-Api-Key" not in headers
+    assert "Authorization" not in headers

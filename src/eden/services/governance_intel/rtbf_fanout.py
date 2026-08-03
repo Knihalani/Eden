@@ -184,6 +184,13 @@ async def _fanout_s3(
 async def _fanout_clickhouse(
     org_id: str, *, user_id: str, dry_run: bool
 ) -> dict[str, Any]:
+    """Purge tenant analytics rows on self-hosted ClickHouse.
+
+    ``telemetry_events_ch`` has no ``user_id`` column — only ``tenant_id`` —
+    so this is a tenant-scoped ALTER DELETE (via
+    ``ClickHouseSink.delete_tenant_rows``), not a per-user wipe. Tinybird
+    cannot ALTER DELETE via ``/v0/sql`` and stays ``unavailable``.
+    """
     store = "clickhouse"
     try:
         from eden.data_platform.clickhouse_sink import get_clickhouse_sink
@@ -212,15 +219,38 @@ async def _fanout_clickhouse(
             "org_id": org_id,
         }
     if dry_run:
-        return {"store": store, "status": "dry_run", "detail": "would ALTER DELETE by user_id"}
-    try:
-        if hasattr(sink, "delete_user_data"):
-            await sink.delete_user_data(org_id, user_id)
-            return {"store": store, "status": "ok"}
         return {
             "store": store,
-            "status": "failed",
-            "error": "ClickHouse sink lacks delete_user_data",
+            "status": "dry_run",
+            "detail": (
+                "would ALTER DELETE tenant rows on telemetry_events_ch "
+                "(no user_id column; scope=tenant)"
+            ),
+            "user_id": user_id,
+            "org_id": org_id,
+            "scope": "tenant",
+        }
+    try:
+        if not hasattr(sink, "delete_tenant_rows"):
+            return {
+                "store": store,
+                "status": "failed",
+                "error": "ClickHouse sink lacks delete_tenant_rows",
+                "user_id": user_id,
+                "org_id": org_id,
+            }
+        purged = await sink.delete_tenant_rows(org_id)
+        return {
+            "store": store,
+            "status": "ok",
+            "tables_purged": purged,
+            "user_id": user_id,
+            "org_id": org_id,
+            "scope": "tenant",
+            "detail": (
+                "tenant-scoped CH purge (telemetry has no user_id); "
+                "user_id recorded for audit only"
+            ),
         }
     except Exception as exc:
         logger.warning("rtbf clickhouse fanout failed: %s", exc)

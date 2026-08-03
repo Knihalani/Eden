@@ -8,6 +8,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { useLabToast } from "@/lab/lab-toast";
+import { QueryErrorPanel } from "@/components/shell/query-error-panel";
 
 /**
  * Runtime self-heal defaults ON (reversible actions). Settings is opt-out.
@@ -61,7 +62,19 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
     [orgId, invalidate, pushToast],
   );
 
-  if (policyQuery.isError) return null;
+  if (policyQuery.isError) {
+    return (
+      <section id="autonomy-settings" className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
+        <QueryErrorPanel
+          title="Couldn’t load autonomy settings"
+          error={policyQuery.error}
+          onRetry={() => {
+            void policyQuery.refetch();
+          }}
+        />
+      </section>
+    );
+  }
 
   const policy = policyQuery.data;
   const mode = policy?.effective_mode ?? policy?.maintenance_mode ?? "assisted";

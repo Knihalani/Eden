@@ -204,8 +204,13 @@ class TestDdlIsWellFormedBeforeItEverRuns:
         """
         checked = 0
         for name in ("event_count", "error_count", "run_count", "pass_count"):
-            for m in re.finditer(rf"^\s*{name}\s+([^,\n]+)", SINK_SRC, re.M):
+            # DDL only: ``name Type…`` — skip Python assigns like
+            # ``event_count = int(float(cur.get(...)))`` introduced by
+            # Home KPI dict builders that share the same identifiers.
+            for m in re.finditer(rf"^\s*{name}\s+([^,\n=]+)", SINK_SRC, re.M):
                 decl = m.group(1).strip()
+                if not decl or decl.startswith("(") or "get(" in decl:
+                    continue
                 checked += 1
                 assert "SimpleAggregateFunction" in decl or "AggregateFunction" in decl, (
                     f"{name} declared as {decl!r}; under AggregatingMergeTree a "
@@ -691,6 +696,8 @@ class TestEmptyClickHouseDoesNotZeroTheDashboard:
         src = Path(mod.__file__).read_text()
         # The guard must test the count, not just non-None.
         assert 'ch_tiles is not None and int(ch_tiles.get("event_count") or 0) > 0' in src
+        # Home "traces" tile prefers distinct trace_count over event rows.
+        assert '"trace_count" in ch_tiles' in src
         assert get_fallback_metrics() == {}
         reset_for_tests()
 

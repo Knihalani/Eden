@@ -5,11 +5,13 @@ DESCRIPTION >
     `window='current'` covering the last `hours` hours, one
     `window='previous'` covering the `hours` before that — so the
     caller computes any delta/percent-change itself (matches
-    `ClickHouseSink.query_home_kpis`'s existing `prev_event_count`
-    contract, generalized to every column here). Mirrors, but does not
-    replace, the live single-scan query `ClickHouseSink.query_home_kpis`
-    runs against `telemetry_events_ch` as a fallback for tenants/hours
-    the rollup hasn't materialized yet.
+    `ClickHouseSink.query_home_kpis`'s existing `prev_event_count` /
+    `prev_trace_count` contract, generalized to every column here).
+    `event_count` is raw event rows; `trace_count` is distinct
+    `trace_id` via `uniqExactMerge`. Mirrors, but does not replace, the
+    live single-scan query `ClickHouseSink.query_home_kpis` runs against
+    `telemetry_events_ch` as a fallback for tenants/hours the rollup
+    hasn't materialized yet.
 
 NODE current_window
 SQL >
@@ -17,6 +19,7 @@ SQL >
     SELECT
         'current' AS window,
         countMerge(event_count) AS event_count,
+        uniqExactMerge(trace_count) AS trace_count,
         sumMerge(error_count) AS error_count,
         avgMerge(avg_duration_state) AS avg_duration_ms,
         quantileMerge(0.95)(p95_duration_state) AS p95_duration_ms
@@ -31,6 +34,7 @@ SQL >
     SELECT
         'previous' AS window,
         countMerge(event_count) AS event_count,
+        uniqExactMerge(trace_count) AS trace_count,
         sumMerge(error_count) AS error_count,
         avgMerge(avg_duration_state) AS avg_duration_ms,
         quantileMerge(0.95)(p95_duration_state) AS p95_duration_ms

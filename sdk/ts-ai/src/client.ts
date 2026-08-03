@@ -14,7 +14,7 @@
  */
 
 import { SDK_USER_AGENT } from "./version.js";
-import { eventToWire, chunkToWire } from "./wire.js";
+import { eventToWire, chunkToWire, wireToEvent } from "./wire.js";
 import {
   type EdenSDKOptions,
   type StreamChunk,
@@ -52,6 +52,29 @@ const INGEST_CHUNKS_MAX_PER_REQUEST = 1000;
  * spilled telemetry-event payload.
  */
 const OFFLINE_CHUNKS_FORMAT = "chunks";
+
+/**
+ * True when ``stored`` looks like a full `eventToWire` envelope
+ * (top-level snake_case ids + nested ``payload`` object) rather than
+ * the legacy nested-payload-only spill shape.
+ */
+function _isWireEnvelope(stored: Record<string, unknown>): boolean {
+  if (
+    stored.payload === undefined ||
+    typeof stored.payload !== "object" ||
+    stored.payload === null ||
+    Array.isArray(stored.payload)
+  ) {
+    return false;
+  }
+  return (
+    typeof stored.event_id === "string" ||
+    typeof stored.event_type === "string" ||
+    typeof stored.trace_id === "string" ||
+    typeof stored.tenant_id === "string" ||
+    typeof stored.source_format === "string"
+  );
+}
 
 /**
  * Lazily-cached ``gzipSync`` so each ingest POST does not pay for
@@ -507,7 +530,11 @@ function warnOnceAboutSdkServerCompounding(profile: string): void {
 export class EdenSDK {
   private config: ResolvedConfig;
   private queue: TelemetryEvent[] = [];
+  /** Logical start index into {@link queue}; avoids O(n) `shift()` drops. */
+  private queueHead = 0;
   private chunkBuffer: StreamChunk[] = [];
+  /** Logical start index into {@link chunkBuffer}; same as {@link queueHead}. */
+  private chunkHead = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private chunkTimer: ReturnType<typeof setTimeout> | null = null;
   private inflight = false;
@@ -520,7 +547,9 @@ export class EdenSDK {
   // POST — racing the first one for the same batch.
   /**
    * The in-flight batch POST, resolving to whether that batch fully
-   * succeeded (every group 2xx).
+   * succeeded (``"ok"``), permanently failed / spilled to disk
+   * (``"fail"``), or was put back in memory for a later retry
+   * (``"requeued"`` — offline queue disabled).
    *
    * This used to be a ``Promise<void>``, which quietly broke
    * ``flush()``'s contract. ``flush()`` accumulates into a *local*
@@ -534,7 +563,7 @@ export class EdenSDK {
    * doing ``if (!(await sdk.flush())) alert()`` could never fire.
    * Carrying the outcome on the promise lets every waiter inherit it.
    */
-  private inflightPromise: Promise<boolean> | null = null;
+  private inflightPromise: Promise<"ok" | "fail" | "requeued"> | null = null;
   // Separate inflight flag for the chunk flush path.
   // Concurrent `flushChunks()` calls would otherwise both grab
   // the same buffer and double-POST chunks.
@@ -753,10 +782,10 @@ export class EdenSDK {
     }
     // Drop the oldest event when we exceed the queue ceiling. This
     // mirrors the Python SDK's behaviour and prevents unbounded
-    // memory growth in long-lived processes.
-    if (this.queue.length >= this.config.maxQueueSize) {
-      this.queue.shift();
-      this.droppedTotal += 1;
+    // memory growth in long-lived processes. Use an index cursor
+    // instead of ``Array.shift()`` (O(n) per drop under backpressure).
+    if (this._queueLen() >= this.config.maxQueueSize) {
+      this._dropOldestFromQueue(1);
       if (this.config.debug) {
         // eslint-disable-next-line no-console
         console.debug(
@@ -767,7 +796,7 @@ export class EdenSDK {
       }
     }
     this.queue.push(event);
-    if (this.queue.length >= this.config.maxBatchSize) {
+    if (this._queueLen() >= this.config.maxBatchSize) {
       void this.flush();
     } else {
       this.scheduleFlush();
@@ -784,13 +813,10 @@ export class EdenSDK {
     // Drop the oldest on overflow (a runaway streaming
     // response producing millions of small chunks would
     // OOM the process before this). Mirrors the Python
-    // SDK's ``_chunk_buffer_max`` from 0.2.13. We use
-    // ``shift`` (O(n)) rather than a deque because the
-    // producer pace is throttled by the worker tick
-    // (default 250ms) so total work per cycle stays
-    // bounded.
-    if (this.chunkBuffer.length >= this.config.maxChunkBuffer) {
-      this.chunkBuffer.shift();
+    // SDK's ``_chunk_buffer_max`` from 0.2.13. Index cursor
+    // avoids O(n) ``shift()`` under sustained backpressure.
+    if (this._chunkLen() >= this.config.maxChunkBuffer) {
+      this._dropOldestFromChunks(1);
       if (this.config.debug) {
         // eslint-disable-next-line no-console
         console.debug(
@@ -799,7 +825,7 @@ export class EdenSDK {
       }
     }
     this.chunkBuffer.push(chunk);
-    if (this.chunkBuffer.length >= this.config.maxBatchSize) {
+    if (this._chunkLen() >= this.config.maxBatchSize) {
       // Trigger an immediate flush. ``flushChunks()`` itself
       // claims the inflight slot atomically, so this is safe
       // even if a POST is already in flight (the new caller
@@ -844,10 +870,17 @@ export class EdenSDK {
       if (this.inflight) {
         // Inherit the outcome of the batch we are waiting on, rather
         // than discarding it and reporting our own untouched ``true``.
-        if ((await this.inflightPromise) === false) allOk = false;
+        const waited = await this.inflightPromise;
+        if (waited !== "ok") allOk = false;
+        // Same hot-loop guard as the primary caller: a requeued batch
+        // must not be immediately drained again in this flush cycle.
+        if (waited === "requeued") return allOk;
         continue;
       }
-      if (this.queue.length === 0) return allOk;
+      if (this._queueLen() === 0) {
+        this._compactQueue(true);
+        return allOk;
+      }
       // Atomically claim the in-flight slot so concurrent flush()
       // callers can't both grab the same batch (race that
       // previously produced >1 POST). The check + set must be
@@ -872,7 +905,7 @@ export class EdenSDK {
       // always capped here (``self._drain(self.config.batch_size)``);
       // this is the parity fix. The loop below re-drains until empty, so
       // capping costs an extra iteration, not throughput.
-      const batch = this.queue.splice(0, this.config.maxBatchSize);
+      const batch = this._takeQueueBatch(this.config.maxBatchSize);
       // Track the in-flight POST so ``dispose()`` can await it
       // before releasing ``this.inflight``. Without this the
       // ``dispose() → flush()`` chain could start a second
@@ -880,7 +913,7 @@ export class EdenSDK {
       // Held in a local as well as on the instance: the ``finally``
       // below nulls the field, so awaiting the field rather than the
       // local would be a race against our own cleanup.
-      const inflight = (async (): Promise<boolean> => {
+      const inflight = (async (): Promise<"ok" | "fail" | "requeued"> => {
         try {
           return await this.postBatch(batch);
         } catch (err) {
@@ -888,7 +921,7 @@ export class EdenSDK {
             // eslint-disable-next-line no-console
             console.debug("[eden-ai] flush failed (swallowed)", err);
           }
-          return false;
+          return "fail";
         } finally {
           this.inflight = false;
           this.inflightPromise = null;
@@ -899,7 +932,12 @@ export class EdenSDK {
         }
       })();
       this.inflightPromise = inflight;
-      if (!(await inflight)) allOk = false;
+      const outcome = await inflight;
+      if (outcome !== "ok") allOk = false;
+      // Transient failure with offline disabled re-queues the batch.
+      // Stop this flush cycle so we don't hot-loop the same events;
+      // ``scheduleFlush`` (above) will retry after ``flushIntervalMs``.
+      if (outcome === "requeued") return allOk;
     }
   }
 
@@ -910,7 +948,7 @@ export class EdenSDK {
    */
   private scheduleFlush(): void {
     if (this.disposed) return;
-    if (this.queue.length === 0) return;
+    if (this._queueLen() === 0) return;
     if (this.inflight) return;
     if (this.flushTimer !== null) return;
     this.flushTimer = setTimeout(() => {
@@ -951,7 +989,7 @@ export class EdenSDK {
         await this.chunkInflightPromise;
         continue;
       }
-      if (this.chunkBuffer.length === 0) return;
+      if (this._chunkLen() === 0) return;
       await this._drainChunksOnce();
     }
   }
@@ -966,8 +1004,7 @@ export class EdenSDK {
    */
   private async _drainChunksOnce(): Promise<void> {
     this.chunkInflight = true;
-    const chunks = this.chunkBuffer;
-    this.chunkBuffer = [];
+    const chunks = this._takeAllChunks();
     this.chunkInflightPromise = this._postChunksTracked(chunks).finally(() => {
       this.chunkInflight = false;
       this.chunkInflightPromise = null;
@@ -986,7 +1023,7 @@ export class EdenSDK {
     }
     // Re-arm the timer if more chunks arrived during the POST so
     // they don't sit in the buffer indefinitely.
-    if (this.chunkBuffer.length > 0 && this.chunkTimer === null && !this.disposed) {
+    if (this._chunkLen() > 0 && this.chunkTimer === null && !this.disposed) {
       this.chunkTimer = setTimeout(() => {
         this.chunkTimer = null;
         void this.flushChunks();
@@ -1145,17 +1182,87 @@ export class EdenSDK {
   }
 
   /**
-   * Reconstruct a wire-ready `TelemetryEvent` envelope for an
-   * offline-queue row. The offline queue only durably stores
-   * `{ sourceFormat, payload }` (see `postBatch`'s spill path) --
-   * the original event's own `eventId`/`traceId`/`eventType` are
-   * not part of that stored shape, so a replay synthesizes fresh
-   * ones from the current config, preferring whatever the stored
-   * payload itself already carries (e.g. an `event_id`/`trace_id`/
-   * `event_type` field the original payload happened to include).
+   * Reconstruct a wire-ready `TelemetryEvent` from an offline-queue row.
+   *
+   * Current spill path stores the full snake_case wire envelope
+   * (`eventToWire(event)`). Older rows may still hold only the nested
+   * `payload` object — those keep the legacy synthesis path so replay
+   * does not crash on pre-fix JSONL files.
    */
   private _offlineRowToEvent(row: OfflineRow): TelemetryEvent {
-    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    const stored = (row.payload ?? {}) as Record<string, unknown>;
+    if (_isWireEnvelope(stored)) {
+      const camel = wireToEvent(stored);
+      const nested =
+        camel.payload !== undefined &&
+        typeof camel.payload === "object" &&
+        camel.payload !== null
+          ? (camel.payload as Record<string, unknown>)
+          : {};
+      const event: TelemetryEvent = {
+        eventId:
+          typeof camel.eventId === "string" && camel.eventId
+            ? camel.eventId
+            : `offline_${randomUUID()}`,
+        tenantId:
+          typeof camel.tenantId === "string" && camel.tenantId
+            ? camel.tenantId
+            : (this.config.orgId ?? "default"),
+        projectId:
+          typeof camel.projectId === "string" && camel.projectId
+            ? camel.projectId
+            : this.config.projectId,
+        traceId:
+          typeof camel.traceId === "string" && camel.traceId
+            ? camel.traceId
+            : randomUUID(),
+        realm:
+          typeof camel.realm === "string" && camel.realm
+            ? camel.realm
+            : this.config.realm,
+        eventType:
+          typeof camel.eventType === "string" && camel.eventType
+            ? camel.eventType
+            : "offline_replay",
+        timestamp:
+          typeof camel.timestamp === "string" && camel.timestamp
+            ? camel.timestamp
+            : new Date().toISOString(),
+        sourceFormat:
+          typeof camel.sourceFormat === "string" && camel.sourceFormat
+            ? camel.sourceFormat
+            : row.sourceFormat,
+        payload: nested,
+      };
+      if (camel.metrics !== undefined) {
+        event.metrics = camel.metrics as Record<string, number>;
+      }
+      if (Array.isArray(camel.tags)) event.tags = camel.tags as string[];
+      if (camel.attributes !== undefined) {
+        event.attributes = camel.attributes as Record<string, unknown>;
+      }
+      if (typeof camel.agentId === "string") event.agentId = camel.agentId;
+      if (typeof camel.agentVersion === "string") {
+        event.agentVersion = camel.agentVersion;
+      }
+      if (typeof camel.environmentId === "string") {
+        event.environmentId = camel.environmentId;
+      }
+      if (typeof camel.parentSpanId === "string") {
+        event.parentSpanId = camel.parentSpanId;
+      }
+      if (typeof camel.spanId === "string") event.spanId = camel.spanId;
+      if (typeof camel.name === "string") event.name = camel.name;
+      if (typeof camel.durationMs === "number") {
+        event.durationMs = camel.durationMs;
+      }
+      if (typeof camel.modelNormalized === "string") {
+        event.modelNormalized = camel.modelNormalized;
+      }
+      return event;
+    }
+    // Legacy: only the nested payload was spilled.
+    const payload = stored;
     const eventId =
       typeof payload.event_id === "string"
         ? payload.event_id
@@ -1181,6 +1288,96 @@ export class EdenSDK {
 
   // ── HTTP ───────────────────────────────────────────────────────
 
+  private _queueLen(): number {
+    return this.queue.length - this.queueHead;
+  }
+
+  private _chunkLen(): number {
+    return this.chunkBuffer.length - this.chunkHead;
+  }
+
+  private _compactQueue(force = false): void {
+    if (this.queueHead === 0) {
+      if (force && this.queue.length === 0) return;
+      return;
+    }
+    if (
+      force ||
+      this.queueHead > 64 ||
+      this.queueHead * 2 >= this.queue.length
+    ) {
+      this.queue = this.queue.slice(this.queueHead);
+      this.queueHead = 0;
+    }
+  }
+
+  private _compactChunks(force = false): void {
+    if (this.chunkHead === 0) return;
+    if (
+      force ||
+      this.chunkHead > 64 ||
+      this.chunkHead * 2 >= this.chunkBuffer.length
+    ) {
+      this.chunkBuffer = this.chunkBuffer.slice(this.chunkHead);
+      this.chunkHead = 0;
+    }
+  }
+
+  private _dropOldestFromQueue(n: number): void {
+    if (n <= 0) return;
+    const drop = Math.min(n, this._queueLen());
+    this.queueHead += drop;
+    this.droppedTotal += drop;
+    this._compactQueue();
+  }
+
+  private _dropOldestFromChunks(n: number): void {
+    if (n <= 0) return;
+    const drop = Math.min(n, this._chunkLen());
+    this.chunkHead += drop;
+    this._compactChunks();
+  }
+
+  private _takeQueueBatch(limit: number): TelemetryEvent[] {
+    const take = Math.min(limit, this._queueLen());
+    if (take <= 0) return [];
+    const batch = this.queue.slice(this.queueHead, this.queueHead + take);
+    this.queueHead += take;
+    this._compactQueue(this._queueLen() === 0);
+    return batch;
+  }
+
+  private _takeAllChunks(): StreamChunk[] {
+    if (this._chunkLen() === 0) {
+      this.chunkBuffer = [];
+      this.chunkHead = 0;
+      return [];
+    }
+    const chunks = this.chunkBuffer.slice(this.chunkHead);
+    this.chunkBuffer = [];
+    this.chunkHead = 0;
+    return chunks;
+  }
+
+  /**
+   * Prepend a failed batch back onto the in-memory queue, capped at
+   * ``maxQueueSize``. Used when offline spill is disabled so a
+   * transient POST failure does not silently drop events. Excess is
+   * shed from the tail (newest) and counted in ``droppedTotal``.
+   */
+  private _requeueFront(events: TelemetryEvent[]): void {
+    if (events.length === 0) return;
+    const rest = this.queue.slice(this.queueHead);
+    let combined = events.concat(rest);
+    if (combined.length > this.config.maxQueueSize) {
+      const overflow = combined.length - this.config.maxQueueSize;
+      this.droppedTotal += overflow;
+      combined = combined.slice(0, this.config.maxQueueSize);
+    }
+    this.queue = combined;
+    this.queueHead = 0;
+  }
+
   private buildIngestUrl(sourceFormat: string): string {
     if (!this.config.orgId) return ""; // dev-mode: no-op
     return `${this.config.baseUrl}/orgs/${this.config.orgId}/ingest/${sourceFormat}`;
@@ -1205,7 +1402,9 @@ export class EdenSDK {
     return headers;
   }
 
-  private async postBatch(events: TelemetryEvent[]): Promise<boolean> {
+  private async postBatch(
+    events: TelemetryEvent[],
+  ): Promise<"ok" | "fail" | "requeued"> {
     // Group by remapped ingest path — gateway allow-list is narrow;
     // resolveIngestPath collapses custom/framework aliases to webhook.
     const byFormat = new Map<string, TelemetryEvent[]>();
@@ -1219,7 +1418,7 @@ export class EdenSDK {
       list.push(ev);
     }
 
-    let allOk = true;
+    let worst: "ok" | "fail" | "requeued" = "ok";
     const tasks: Promise<void>[] = [];
     for (const [format, items] of byFormat) {
       // Apply the client-side safety-net PII redactor to every nested
@@ -1243,13 +1442,14 @@ export class EdenSDK {
           }))
         : items;
       tasks.push(
-        this.postFormat(format, redacted).then((ok) => {
-          if (!ok) allOk = false;
+        this.postFormat(format, redacted).then((outcome) => {
+          if (outcome === "requeued") worst = "requeued";
+          else if (outcome === "fail" && worst === "ok") worst = "fail";
         }),
       );
     }
     await Promise.all(tasks);
-    return allOk;
+    return worst;
   }
 
   /**
@@ -1275,19 +1475,19 @@ export class EdenSDK {
   private async postFormat(
     format: string,
     redacted: TelemetryEvent[],
-  ): Promise<boolean> {
-    if (redacted.length === 0) return true;
+  ): Promise<"ok" | "fail" | "requeued"> {
+    if (redacted.length === 0) return "ok";
     const url = this.buildIngestUrl(format);
     if (!url) {
       if (this.config.debug) {
         // eslint-disable-next-line no-console
         console.debug("[eden-ai] no orgId; dropping", redacted.length, "events");
       }
-      return false;
+      return "fail";
     }
     const wired = redacted.map(eventToWire);
     const outcome = await this.postJson(url, wired);
-    if (outcome === "ok") return true;
+    if (outcome === "ok") return "ok";
     if (outcome === "too_large" && redacted.length > 1) {
       const mid = Math.floor(redacted.length / 2);
       if (this.config.debug) {
@@ -1303,24 +1503,32 @@ export class EdenSDK {
       }
       const first = await this.postFormat(format, redacted.slice(0, mid));
       const second = await this.postFormat(format, redacted.slice(mid));
-      return first && second;
+      if (first === "requeued" || second === "requeued") return "requeued";
+      if (first === "ok" && second === "ok") return "ok";
+      return "fail";
     }
     // Only spill transient failures. Permanent 4xx would poison the
     // offline queue with payloads that can never succeed. A lone event
     // that still 413s is genuinely unsendable, so it lands here too.
-    if (outcome === "spill" && this.offline) {
-      for (const item of redacted) {
-        try {
-          this.offline.enqueue(
-            format,
-            (item.payload ?? {}) as Record<string, unknown>,
-          );
-        } catch {
-          // ignore spill errors
+    if (outcome === "spill") {
+      if (this.offline) {
+        for (const item of redacted) {
+          try {
+            // Persist the full wire envelope so replay keeps eventId /
+            // traceId / eventType / metrics / durationMs / etc.
+            this.offline.enqueue(format, eventToWire(item));
+          } catch {
+            // ignore spill errors
+          }
         }
+        return "fail";
       }
+      // Offline queue not configured: put the batch back in memory
+      // (bounded by maxQueueSize) instead of silently dropping it.
+      this._requeueFront(redacted);
+      return "requeued";
     }
-    return false;
+    return "fail";
   }
 
   private async postChunks(chunks: StreamChunk[]): Promise<void> {
