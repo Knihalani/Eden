@@ -1239,6 +1239,13 @@ describe("EdenSDK error-sampling safety net (hasError broadening)", () => {
         apiKey: "key_test",
         samplingProfile: "aggressive",
         sampleKeepErrors: true,
+        // Opt into client-side probabilistic dropping for this
+        // assertion -- the SDK x server compounding guard makes this
+        // `false` by default (see `sampling.ts`), under which a
+        // non-"full" profile alone no longer probabilistically drops
+        // anything on the client (only error/slow/force force-keeps
+        // apply; the probabilistic decision is left to the server).
+        clientProbabilisticSampling: true,
         flushIntervalMs: 60_000,
         maxBatchSize: 1000,
       });

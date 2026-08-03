@@ -14,14 +14,20 @@ class EventType:
 
     ISSUE_CREATED = "issue_created"
     TRIAGE_COMPLETED = "triage_completed"
+    TRIAGE_FAILED = "triage_failed"
     HEAL_REQUESTED = "heal_requested"
     HEAL_EXECUTED = "heal_executed"
+    HEAL_FAILED = "heal_failed"
     PATCH_PROPOSED = "patch_proposed"
     RECOMMENDED = "recommended"
     VERIFY_SCHEDULED = "verify_scheduled"
     VERIFY_PASSED = "verify_passed"
     VERIFY_FAILED = "verify_failed"
     ESCALATED_HUMAN = "escalated_human"
+    # M13 (§6.4): LEARNING flywheel — resolved → learning → resolved
+    # (or sticky learning on N01 case persist failure).
+    LEARNING_STARTED = "learning_started"
+    LEARNING_COMPLETED = "learning_completed"
 
 
 ALL_EVENT_TYPES = frozenset(

@@ -5,12 +5,17 @@ Firecracker / ``sandbox_isolated`` subsystem was retired
 (2026-07-04). This module is intentionally pragmatic — it is
 **not** a multi-tenant microVM:
 
-* Temp workdir per run (cleaned up on exit)
+* Temp workdir per run (cleaned up on exit); prefers size-capped
+  tmpfs (``/dev/shm``) when available (M12, §7.3)
 * Patch file application with path-traversal rejection
 * Allowlisted commands only (``pytest``, ``npm test``, ``go test``)
 * Wall-clock timeout via ``subprocess`` / ``asyncio.wait_for``
+* Hard ``ulimit`` via ``setrlimit`` in the spawn preamble
+  (CPU seconds, file size, nproc) — M12, §7.3
 * Best-effort network isolation via ``unshare --net`` when available
   on Linux (falls back to plain subprocess otherwise)
+* Mandatory isolation for synthesis-origin tests
+  (``require_isolation=True`` → refuse when unshare unavailable)
 
 Full Firecracker isolation (per-tenant VM, read-only rootfs,
 cgroup memory/CPU caps beyond wall-clock timeout) remains a
@@ -36,6 +41,11 @@ logger = logging.getLogger(__name__)
 
 # Default wall-clock budget matches TestPlanRunner.SANDBOX_WALL_CLOCK_SEC.
 DEFAULT_TIMEOUT_SEC = 600
+
+# M12 (§7.3): hard resource caps applied in the child via setrlimit.
+SANDBOX_CPU_SEC = 120
+SANDBOX_FSIZE_BYTES = 64 * 1024 * 1024  # 64 MiB per-file write cap
+SANDBOX_NPROC = 256
 
 # Commands the sandbox is allowed to exec. Each entry is the
 # argv prefix that must match exactly (case-sensitive). Extra
@@ -186,6 +196,57 @@ def _unshare_net_available() -> bool:
 _UNSHARE_NET_OK: bool | None = None
 
 
+def _apply_ulimits() -> None:
+    """M12 (§7.3): ``preexec_fn`` — hard CPU / file-size / nproc caps.
+
+    Best-effort: some platforms reject individual ``setrlimit`` calls;
+    those are skipped without aborting the spawn. No-op when the
+    ``resource`` module is unavailable.
+    """
+    try:
+        import resource
+    except ImportError:
+        return
+
+    def _set(res: int, value: int) -> None:
+        try:
+            _soft, hard = resource.getrlimit(res)
+            # Never raise the existing hard ceiling.
+            limit = (
+                value
+                if hard == resource.RLIM_INFINITY
+                else min(value, hard)
+            )
+            resource.setrlimit(res, (limit, limit))
+        except (ValueError, OSError, AttributeError):
+            pass
+
+    _set(resource.RLIMIT_CPU, SANDBOX_CPU_SEC)
+    _set(resource.RLIMIT_FSIZE, SANDBOX_FSIZE_BYTES)
+    nproc = getattr(resource, "RLIMIT_NPROC", None)
+    if nproc is not None:
+        _set(nproc, SANDBOX_NPROC)
+
+
+def _alloc_workdir() -> Path:
+    """M12 (§7.3): prefer a size-capped tmpfs workdir when available.
+
+    ``/dev/shm`` (and ``/run/shm``) are typically tmpfs with a system
+    size cap — good enough without requiring CAP_SYS_ADMIN to mount a
+    private tmpfs. Falls back to the default temp dir otherwise.
+    """
+    for base in ("/dev/shm", "/run/shm"):
+        root = Path(base)
+        if root.is_dir() and os.access(root, os.W_OK):
+            try:
+                return Path(
+                    tempfile.mkdtemp(prefix="eden-sandbox-", dir=base)
+                )
+            except OSError:
+                continue
+    return Path(tempfile.mkdtemp(prefix="eden-sandbox-"))
+
+
 def _build_exec_argv(command: Sequence[str]) -> tuple[list[str], str]:
     """Wrap ``command`` with ``unshare --net`` when available.
 
@@ -199,6 +260,55 @@ def _build_exec_argv(command: Sequence[str]) -> tuple[list[str], str]:
     return argv, "subprocess"
 
 
+#: Test-file suffix → language key for :func:`build_test_command`.
+_TEST_SUFFIX_LANG: tuple[tuple[str, str], ...] = (
+    (".py", "python"),
+    (".ts", "node"),
+    (".tsx", "node"),
+    (".js", "node"),
+    (".jsx", "node"),
+    (".go", "go"),
+)
+
+
+def _test_file_lang(path: str) -> str | None:
+    lowered = path.lower()
+    for suffix, lang in _TEST_SUFFIX_LANG:
+        if lowered.endswith(suffix):
+            return lang
+    return None
+
+
+def build_test_command(test_files: Sequence[str]) -> list[str] | None:
+    """The allowlisted argv that runs exactly ``test_files`` (M8, §4.2).
+
+    All files must share one language; mixed-language or unknown
+    suffixes return ``None`` (caller groups by language first).
+
+    * ``.py`` → ``sys.executable -m pytest -q <files>`` (same
+      interpreter as the host so pytest resolves; allowlisted via the
+      ``python* -m pytest`` prefix rule).
+    * ``.ts/.tsx/.js/.jsx`` → ``npm test -- <files>``
+    * ``.go`` → ``go test <files>``
+    """
+    paths = [str(p).strip() for p in test_files or () if str(p or "").strip()]
+    if not paths:
+        return None
+    langs = {_test_file_lang(p) for p in paths}
+    if len(langs) != 1 or None in langs:
+        return None
+    lang = langs.pop()
+    if lang == "python":
+        import sys
+
+        return [sys.executable, "-m", "pytest", "-q", *paths]
+    if lang == "node":
+        return ["npm", "test", "--", *paths]
+    if lang == "go":
+        return ["go", "test", *paths]
+    return None
+
+
 async def run_in_sandbox(
     command: Sequence[str],
     *,
@@ -207,6 +317,7 @@ async def run_in_sandbox(
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     env: dict[str, str] | None = None,
     cleanup: bool = True,
+    require_isolation: bool = False,
 ) -> SandboxResult:
     """Create a temp workdir, apply patches, run an allowlisted command.
 
@@ -219,6 +330,10 @@ async def run_in_sandbox(
         env: Extra env vars (merged over a scrubbed base). Secrets
             should not be passed — caller responsibility.
         cleanup: Remove the temp workdir after the run.
+        require_isolation: §7.3 — refuse to execute at all when
+            ``unshare --net`` network isolation is unavailable
+            (``error="isolation_unavailable"``, nothing is run).
+            Mandatory for LLM-synthesized tests (M8, §4.2).
 
     Returns:
         :class:`SandboxResult` with stdout/stderr/exit_code.
@@ -233,9 +348,8 @@ async def run_in_sandbox(
         )
 
     owns_workdir = workdir is None
-    root = Path(workdir) if workdir else Path(
-        tempfile.mkdtemp(prefix="eden-sandbox-")
-    )
+    # M12 (§7.3): size-capped tmpfs when available.
+    root = Path(workdir) if workdir else _alloc_workdir()
     try:
         try:
             written = apply_patch_files(root, files)
@@ -250,6 +364,18 @@ async def run_in_sandbox(
             )
 
         argv, isolation = _build_exec_argv(command)
+        if require_isolation and isolation != "unshare-net":
+            # §7.3: synthesis-origin tests are skipped, never run
+            # unisolated. Exit 125 mirrors the other refuse-to-run path.
+            return SandboxResult(
+                exit_code=125,
+                stdout="",
+                stderr="network isolation (unshare --net) unavailable",
+                workdir=str(root),
+                command=list(command),
+                isolation=isolation,
+                error="isolation_unavailable",
+            )
         # Scrubbed env: inherit PATH/HOME/LANG so pytest/npm/go
         # resolve, drop obvious credential-bearing vars.
         base_env = {
@@ -271,13 +397,20 @@ async def run_in_sandbox(
             argv, root, written, isolation,
         )
 
+        # M12 (§7.3): hard ulimits in the spawn preamble (POSIX only).
+        spawn_kwargs: dict[str, Any] = {
+            "cwd": str(root),
+            "stdout": asyncio.subprocess.PIPE,
+            "stderr": asyncio.subprocess.PIPE,
+            "env": base_env,
+        }
+        if os.name == "posix":
+            spawn_kwargs["preexec_fn"] = _apply_ulimits
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
-                cwd=str(root),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=base_env,
+                **spawn_kwargs,
             )
         except FileNotFoundError as exc:
             return SandboxResult(
@@ -340,6 +473,7 @@ class SandboxRunner:
         files: Sequence[dict[str, Any]] | None = None,
         workdir: str | Path | None = None,
         env: dict[str, str] | None = None,
+        require_isolation: bool = False,
     ) -> SandboxResult:
         return await run_in_sandbox(
             command,
@@ -347,14 +481,19 @@ class SandboxRunner:
             workdir=workdir,
             timeout_sec=self.timeout_sec,
             env=env,
+            require_isolation=require_isolation,
         )
 
 
 __all__ = [
     "ALLOWED_COMMAND_PREFIXES",
     "DEFAULT_TIMEOUT_SEC",
+    "SANDBOX_CPU_SEC",
+    "SANDBOX_FSIZE_BYTES",
+    "SANDBOX_NPROC",
     "SandboxResult",
     "SandboxRunner",
     "apply_patch_files",
+    "build_test_command",
     "run_in_sandbox",
 ]

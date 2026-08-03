@@ -206,6 +206,25 @@ class PRProvider(Protocol):
         """Post a comment on a PR. No-op for ``close_pr``."""
         ...
 
+    async def merge_pr(
+        self,
+        pr_number: int,
+        *,
+        merge_method: str = "squash",
+        commit_title: str | None = None,
+    ) -> PullRequestInfo:
+        """M15 (§9): merge an open (non-draft) PR. Returns the
+        updated :class:`PullRequestInfo` with ``state='merged'``."""
+        ...
+
+    async def branch_allows_app_merge(self, branch: str) -> tuple[bool, str]:
+        """M15 (§9): whether branch protection lets the App merge.
+
+        Returns ``(allowed, reason)``. Callers fall back to the
+        draft-PR flow when ``allowed`` is False.
+        """
+        ...
+
 
 # ── LocalPRProvider ────────────────────────────────────────────
 
@@ -404,6 +423,28 @@ class LocalPRProvider:
         )
         await self._write_pr_record(info, commit, req.labels, req.reviewers)
         return info
+
+    async def merge_pr(
+        self,
+        pr_number: int,
+        *,
+        merge_method: str = "squash",
+        commit_title: str | None = None,
+    ) -> PullRequestInfo:
+        """M15 (§9): mark a local PR record as merged."""
+        del merge_method, commit_title  # local has no remote merge API
+        record = await self._read_pr_record(pr_number)
+        if record is None:
+            raise RuntimeError(f"LocalPRProvider.merge_pr: PR #{pr_number} not found")
+        record["state"] = "merged"
+        record["merged_at"] = datetime.now(UTC).isoformat()
+        await self._write_json(f"{int(pr_number)}.json", record)
+        return _pr_info_from_dict(record)
+
+    async def branch_allows_app_merge(self, branch: str) -> tuple[bool, str]:
+        """Local checkouts have no branch protection."""
+        del branch
+        return True, "local_no_protection"
 
     async def _resolve_local_base(self, original: dict[str, Any]) -> str:
         """Resolve revert base from the original PR or local git default."""
@@ -1043,6 +1084,106 @@ class GitHubPRProvider:
         )
         if r.status_code not in (200, 201):
             logger.warning("GitHubPRProvider.comment: %s", r.text[:200])
+
+    async def merge_pr(
+        self,
+        pr_number: int,
+        *,
+        merge_method: str = "squash",
+        commit_title: str | None = None,
+    ) -> PullRequestInfo:
+        """M15 (§9): PUT /repos/.../pulls/{n}/merge."""
+        from .repo import _pr_info_from_github
+
+        method = (merge_method or "squash").strip().lower()
+        if method not in ("merge", "squash", "rebase"):
+            method = "squash"
+        payload: dict[str, Any] = {"merge_method": method}
+        if commit_title:
+            payload["commit_title"] = commit_title
+        client = _shared_httpx()
+        r = await client.put(
+            f"https://api.github.com/repos/{self.repo}/pulls/{int(pr_number)}/merge",
+            headers=self._headers,
+            json=payload,
+        )
+        if r.status_code not in (200, 201):
+            _raise_if_permission_denied(r.status_code, "merge_pr", r.text)
+            raise RuntimeError(
+                f"GitHub merge_pr failed ({r.status_code}): {r.text[:300]}"
+            )
+        # Re-fetch PR for canonical PullRequestInfo (merge endpoint
+        # returns {sha, merged, message} only).
+        pr_r = await client.get(
+            f"https://api.github.com/repos/{self.repo}/pulls/{int(pr_number)}",
+            headers=self._headers,
+        )
+        if pr_r.status_code == 200:
+            info = _pr_info_from_github(pr_r.json())
+            # GitHub may still report state=closed; normalize to merged.
+            if info.state != "merged":
+                info = PullRequestInfo(
+                    number=info.number,
+                    title=info.title,
+                    body=info.body,
+                    branch=info.branch,
+                    base=info.base,
+                    url=info.url,
+                    state="merged",
+                    created_at=info.created_at,
+                )
+            return info
+        return PullRequestInfo(
+            number=int(pr_number),
+            title=commit_title or "",
+            body="",
+            branch="",
+            base="",
+            url=f"https://github.com/{self.repo}/pull/{int(pr_number)}",
+            state="merged",
+            created_at=datetime.now(UTC),
+        )
+
+    async def branch_allows_app_merge(self, branch: str) -> tuple[bool, str]:
+        """M15 (§9): GET /repos/.../branches/{branch}/protection.
+
+        Unprotected branches (404) are allowed. Required approving
+        reviews or push restrictions block the App → draft-PR fallback.
+        Inability to read protection (403) fails closed.
+        """
+        if not (branch or "").strip():
+            return False, "branch_protection:empty_branch"
+        client = _shared_httpx()
+        r = await client.get(
+            f"https://api.github.com/repos/{self.repo}/branches/{branch}/protection",
+            headers=self._headers,
+        )
+        if r.status_code == 404:
+            return True, "unprotected"
+        if r.status_code == 403:
+            return False, "branch_protection:cannot_read"
+        if r.status_code != 200:
+            return False, f"branch_protection:http_{r.status_code}"
+        try:
+            data = r.json()
+        except Exception:
+            return False, "branch_protection:unreadable"
+        reviews = data.get("required_pull_request_reviews") or {}
+        required = int(reviews.get("required_approving_review_count") or 0)
+        if required > 0:
+            return False, "branch_protection:required_reviews"
+        restrictions = data.get("restrictions")
+        if isinstance(restrictions, dict) and (
+            restrictions.get("users")
+            or restrictions.get("teams")
+            or restrictions.get("apps")
+        ):
+            # Push restrictions present — App may not be allow-listed.
+            apps = restrictions.get("apps") or []
+            # Without knowing our App slug reliably, fail closed.
+            if apps or restrictions.get("users") or restrictions.get("teams"):
+                return False, "branch_protection:push_restrictions"
+        return True, "protection_allows_app"
 
     # ── Internal ───────────────────────────────────────────────
 

@@ -75,21 +75,15 @@
     },
     {
       "file": "src/eden/dsl/_common.py",
-      "line": 412,
+      "line": 511,
       "table": "telemetry_events",
       "column": "org_id"
     },
     {
       "file": "src/eden/dsl/_common.py",
-      "line": 428,
+      "line": 527,
       "table": "telemetry_events",
       "column": "org_id"
-    },
-    {
-      "file": "src/eden/improvement/settings.py",
-      "line": 21,
-      "table": "organizations",
-      "column": "features"
     }
   ]
 }

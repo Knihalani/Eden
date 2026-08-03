@@ -29,6 +29,9 @@ from eden.observability.bounded_expiry_cache import (
 )
 from eden.observability.drop_metrics import record_drop
 from eden.observability.errors import IngestionUnavailableError
+from eden.observability.ingest_hot_path_metrics import (
+    record_ingest_sampled_out as _record_ingest_sampled_out,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -454,9 +457,11 @@ class TelemetryCollector:
             logger.debug(f"Telemetry event {event.event_id} deduplicated")
             return self._single_result(deduplicated=1)
 
-        # 3b. N16 intelligence-aware sampling (soft-launch default: full /
-        # 100% keep). When EDEN_SAMPLING_PROFILE=balanced|aggressive,
-        # sampled-out events get a metrics-only summary and skip sinks.
+        # 3b. N16 intelligence-aware sampling. Soft-launch default is
+        # EDEN_SAMPLING_PROFILE=full (100% keep). Opt into balanced /
+        # aggressive for cost reduction — see src/eden/config.py.
+        # Sampled-out events get a metrics-only summary and skip sinks
+        # (including Postgres — see below).
         try:
             from eden.observability.sampling.apply import should_route_event
 
@@ -464,6 +469,7 @@ class TelemetryCollector:
                 # Skips all six sinks, so it is not stored and must not be
                 # reported as accepted — it is reported as ``sampled_out``.
                 record_drop("sample", "sampled_out")
+                _record_ingest_sampled_out(1)
                 logger.debug(
                     "Telemetry event %s sampled out (N16 metrics-only)",
                     event.event_id,
@@ -569,6 +575,7 @@ class TelemetryCollector:
 
                 if not await should_route_event(event):
                     record_drop("sample", "sampled_out")
+                    _record_ingest_sampled_out(1)
                     sampled_out += 1
                     continue
             except Exception:  # noqa: BLE001
@@ -778,16 +785,16 @@ class TelemetryCollector:
             except Exception:  # noqa: BLE001
                 cost_usd = None
             pending.append(
-                service.track_event(
-                    org_id=event.tenant_id,
-                    event_type="llm_call",
-                    resource=str(model),
-                    quantity=total,
-                    unit="tokens",
-                    user_id=None,
-                    model=str(model),
-                    cost_usd=cost_usd,
-                    metadata={
+                {
+                    "org_id": event.tenant_id,
+                    "event_type": "llm_call",
+                    "resource": str(model),
+                    "quantity": total,
+                    "unit": "tokens",
+                    "user_id": None,
+                    "model": str(model),
+                    "cost_usd": cost_usd,
+                    "metadata": {
                         "input_tokens": int(input_tokens),
                         "output_tokens": int(output_tokens),
                         "cache_read_tokens": int(cache_read),
@@ -796,11 +803,20 @@ class TelemetryCollector:
                         "event_id": event.event_id,
                         "trace_id": event.trace_id,
                     },
-                    correlation_id=event.event_id,
-                )
+                    "correlation_id": event.event_id,
+                }
             )
         if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+            # Phase 3 (ingest hot-path batching): one ``executemany`` for
+            # the whole batch's billable events instead of N single-row
+            # INSERTs (was N ``track_event`` calls fanned out via
+            # ``asyncio.gather``). ``track_event`` itself stays untouched
+            # for its other callers (job/storage/sandbox metering, which
+            # aren't batch-shaped).
+            try:
+                await service.track_events_batch(pending)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"billing roll-up batch failed ({len(pending)} events): {exc}")
 
     def _spawn_bg(self, coro: Any) -> None:
         """Fire-and-forget a coroutine; keep a strong ref until done.
@@ -1215,147 +1231,245 @@ class TelemetryCollector:
             )
         return client
 
+    # Fields compressed per-event, in the fixed order ``compress_many``
+    # expects and ``_build_postgres_row`` unpacks. Module-level tuple (not
+    # a method) so both the single-event and batch compress call sites
+    # can never drift on ordering.
+    @staticmethod
+    def _compress_fields(event: TelemetryEvent) -> list[Any]:
+        return [
+            event.request_body,
+            event.response_body,
+            event.reasoning,
+            event.tool_calls_full,
+            event.tool_results,
+            event.payload,
+            event.metrics,
+            event.attributes,
+        ]
+
+    async def _dedupe_event(self, event: TelemetryEvent) -> None:
+        """Content-addressed message dedup for one event (Phase A / N09).
+
+        Hashes every message in request_body / response_body via the
+        canonical-JSON SHA-256 in :mod:`eden.observability.canonical` and
+        upserts into ``trace_messages``. Kill switch:
+        ``Settings.content_dedupe_enabled`` / ``EDEN_CONTENT_DEDUPE_ENABLED``.
+        Mutates ``event.request_message_hashes`` / ``response_message_hashes``
+        in place; best-effort (a failure here must not fail ingest).
+
+        Used by the single-event path (``_prepare_postgres_row``). The batch
+        path uses :meth:`_dedupe_batch_messages` instead, which collects
+        every event's messages into one ``MessageStore.upsert_batch`` call.
+        """
+        _dedupe_on = True
+        try:
+            from eden.config import get_settings
+
+            _dedupe_on = bool(get_settings().content_dedupe_enabled)
+        except Exception:
+            _dedupe_on = True
+        if not _dedupe_on:
+            return
+        if event.request_body is not None and not event.request_message_hashes:
+            try:
+                from eden.observability.message_store import get_message_store
+
+                event.request_message_hashes = await get_message_store().upsert_request(
+                    event.trace_id,
+                    event.request_body,
+                )
+            except Exception as exc:
+                logger.debug(f"dedup upsert_request failed (non-fatal): {exc}")
+        if event.response_body is not None and not event.response_message_hashes:
+            try:
+                from eden.observability.message_store import get_message_store
+
+                event.response_message_hashes = await get_message_store().upsert_response(
+                    event.trace_id,
+                    event.response_body,
+                )
+            except Exception as exc:
+                logger.debug(f"dedup upsert_response failed (non-fatal): {exc}")
+
+    async def _dedupe_batch_messages(self, events: list[TelemetryEvent]) -> None:
+        """Batched content-addressed dedup for :meth:`_route_postgres_many`.
+
+        Same semantics/kill-switch as :meth:`_dedupe_event` (best-effort,
+        idempotent, mutates events in place), but collects every event's
+        request/response messages that need dedup into ONE
+        :meth:`MessageStore.upsert_batch` call instead of up to 2N separate
+        transactions — the batch equivalent of what ``_dedupe_event`` does
+        per event.
+        """
+        _dedupe_on = True
+        try:
+            from eden.config import get_settings
+
+            _dedupe_on = bool(get_settings().content_dedupe_enabled)
+        except Exception:
+            _dedupe_on = True
+        if not _dedupe_on or not events:
+            return
+        try:
+            from eden.observability.message_store import (
+                extract_request_messages,
+                extract_response_messages,
+                get_message_store,
+            )
+        except Exception as exc:
+            logger.debug(f"dedup batch import failed (non-fatal): {exc}")
+            return
+
+        # Plan mirrors ``entries`` 1:1 so the returned hash lists can be
+        # scattered back onto the right event/side without a second pass.
+        plan: list[tuple[TelemetryEvent, bool]] = []  # (event, is_request)
+        entries: list[tuple[str, list[dict[str, Any]]]] = []
+        for event in events:
+            if event.request_body is not None and not event.request_message_hashes:
+                entries.append((event.trace_id, extract_request_messages(event.request_body)))
+                plan.append((event, True))
+            if event.response_body is not None and not event.response_message_hashes:
+                entries.append((event.trace_id, extract_response_messages(event.response_body)))
+                plan.append((event, False))
+        if not entries:
+            return
+        try:
+            hash_lists = await get_message_store().upsert_batch(entries)
+        except Exception as exc:
+            logger.debug(f"dedup upsert_batch failed (non-fatal): {exc}")
+            return
+        for (event, is_request), hashes in zip(plan, hash_lists, strict=True):
+            if is_request:
+                event.request_message_hashes = hashes
+            else:
+                event.response_message_hashes = hashes
+
+    @staticmethod
+    def _build_postgres_row(
+        event: TelemetryEvent, compressed: tuple[Any, ...] | list[Any],
+    ) -> tuple[Any, ...]:
+        """Assemble one ``telemetry_events`` row from an event plus its
+        already-computed zstd columns (from ``compress_many``, in the order
+        :meth:`_compress_fields` lists them).
+
+        Pure — no I/O — so both the single-event and batch write paths
+        (which compute ``compressed`` differently, but always in this
+        order) share the exact same row shape.
+        """
+        (
+            request_body_zstd,
+            response_body_zstd,
+            reasoning_zstd,
+            tool_calls_full_zstd,
+            tool_results_zstd,
+            payload_zstd,
+            metrics_zstd,
+            attributes_zstd,
+        ) = compressed
+        # Dual-write note (Wave 3 / PERF+COST deferred, Phase 4 storage):
+        # ``*_zstd`` columns are always populated. The five nullable
+        # plaintext JSONB blob columns below (request_body, response_body,
+        # reasoning, tool_calls_full, tool_results) are additionally gated
+        # on ``telemetry_plaintext_jsonb_write_enabled`` (default True —
+        # dual-write). Flip to False only once every reader prefers
+        # ``*_zstd`` first (see the flag's docstring in config.py) and
+        # scripts/check_zstd_drop_prerequisites.py passes. ``payload``,
+        # ``metrics``, ``attributes`` are NOT NULL columns with a `{}`
+        # DEFAULT and are always written (see comment above); ``images``,
+        # ``audio``, ``logprobs``, ``citations`` have no ``*_zstd``
+        # counterpart yet and are always written too.
+        try:
+            from eden.config import get_settings
+
+            _plaintext_on = bool(get_settings().telemetry_plaintext_jsonb_write_enabled)
+        except Exception:
+            _plaintext_on = True
+        return (
+            event.event_id,
+            event.tenant_id,
+            event.project_id,
+            event.trace_id,
+            event.realm,
+            event.event_type,
+            # asyncpg requires datetime for timestamptz — TelemetryEvent
+            # keeps ISO strings on the wire / dataclass.
+            event.timestamp
+            if isinstance(event.timestamp, datetime)
+            else datetime.fromisoformat(str(event.timestamp).replace("Z", "+00:00")),
+            event.agent_id,
+            event.agent_version,
+            event.environment_id,
+            event.parent_span_id,
+            event.span_id,
+            event.name,
+            event.duration_ms,
+            # NOT NULL JSONB cols: _dump_jsonb maps {} / [] → None, but
+            # an explicit NULL bypasses the column DEFAULT and raises
+            # not-null (webhook/telemetry with empty payload/tags).
+            _dump_jsonb(event.payload) or "{}",
+            _dump_jsonb(event.metrics) or "{}",
+            _dump_jsonb(event.attributes) or "{}",
+            _dump_jsonb(event.tags) or "[]",
+            event.outcome,
+            event.source_format or "eden_native",
+            _dump_jsonb(event.request_body) if _plaintext_on else None,
+            _dump_jsonb(event.response_body) if _plaintext_on else None,
+            _dump_jsonb(event.reasoning) if _plaintext_on else None,
+            _dump_jsonb(event.tool_calls_full) if (_plaintext_on and event.tool_calls_full) else None,
+            _dump_jsonb(event.tool_results) if (_plaintext_on and event.tool_results) else None,
+            _dump_jsonb(event.images) if event.images else None,
+            _dump_jsonb(event.audio) if event.audio else None,
+            _dump_jsonb(event.logprobs) if event.logprobs is not None else None,
+            _dump_jsonb(event.citations) if event.citations else None,
+            event.finish_reason,
+            event.stop_sequence,
+            event.system_fingerprint,
+            event.cache_hit,
+            event.prompt_cache_savings_usd,
+            event.model_version,
+            event.service_tier,
+            event.model
+            or (event.attributes or {}).get("model")
+            or (event.attributes or {}).get("openai.model")
+            or (event.attributes or {}).get("anthropic.model"),
+            event.model_name or event.model,
+            request_body_zstd,
+            response_body_zstd,
+            reasoning_zstd,
+            tool_calls_full_zstd,
+            tool_results_zstd,
+            payload_zstd,
+            metrics_zstd,
+            attributes_zstd,
+            event.request_message_hashes or None,
+            event.response_message_hashes or None,
+        )
+
     async def _prepare_postgres_row(self, event: TelemetryEvent) -> tuple[Any, ...]:
         """Compress, dedup, and build one ``telemetry_events`` row.
 
-        Split out of ``_route_postgres`` so a batch can build every row and
-        then write them all in one statement — see
-        :meth:`_route_postgres_many`. Everything here is per-event work that
-        has to happen either way; only the write is batchable.
+        Single-event path (``_route_postgres``). ``_route_postgres_many``
+        does the same work batched — one ``compress_many`` call and one
+        ``MessageStore.upsert_batch`` call for the whole batch instead of
+        N of each — see :meth:`_dedupe_batch_messages` and
+        :meth:`_route_postgres_many`.
         """
-        if True:
-            # v1.8 (storage-optimisation pass): dispatch the 8 zstd
-            # compress calls via :func:`compress_many` so the work
-            # fans out across the storage layer's worker pool (each
-            # worker owns its own ZstdCompressor — sharing a
-            # compressor across threads is unsafe under zstd). The
-            # old path used 8 ``asyncio.to_thread`` dispatches inside
-            # a gather, which both had higher scheduling overhead
-            # (~0.5 ms each) and shared the loop's default
-            # ThreadPoolExecutor (unbounded). The new path has one
-            # dispatch per event and the worker pool is fixed-size.
-            from eden.storage.compression import compress_many
+        # v1.8 (storage-optimisation pass): dispatch the 8 zstd
+        # compress calls via :func:`compress_many` so the work
+        # fans out across the storage layer's worker pool (each
+        # worker owns its own ZstdCompressor — sharing a
+        # compressor across threads is unsafe under zstd). The
+        # old path used 8 ``asyncio.to_thread`` dispatches inside
+        # a gather, which both had higher scheduling overhead
+        # (~0.5 ms each) and shared the loop's default
+        # ThreadPoolExecutor (unbounded). The new path has one
+        # dispatch per event and the worker pool is fixed-size.
+        from eden.storage.compression import compress_many
 
-            (
-                request_body_zstd,
-                response_body_zstd,
-                reasoning_zstd,
-                tool_calls_full_zstd,
-                tool_results_zstd,
-                payload_zstd,
-                metrics_zstd,
-                attributes_zstd,
-            ) = await asyncio.to_thread(
-                compress_many,
-                [
-                    event.request_body,
-                    event.response_body,
-                    event.reasoning,
-                    event.tool_calls_full,
-                    event.tool_results,
-                    event.payload,
-                    event.metrics,
-                    event.attributes,
-                ],
-            )
-            # Phase A / N09 — content-addressed message dedup (Laminar 20x).
-            # Hash every message in request_body / response_body via the
-            # canonical-JSON SHA-256 in :mod:`eden.observability.canonical`
-            # and upsert into ``trace_messages``. Kill switch:
-            # ``Settings.content_dedupe_enabled`` / ``EDEN_CONTENT_DEDUPE_ENABLED``.
-            _dedupe_on = True
-            try:
-                from eden.config import get_settings
-
-                _dedupe_on = bool(get_settings().content_dedupe_enabled)
-            except Exception:
-                _dedupe_on = True
-            if _dedupe_on and event.request_body is not None and not event.request_message_hashes:
-                try:
-                    from eden.observability.message_store import get_message_store
-
-                    event.request_message_hashes = await get_message_store().upsert_request(
-                        event.trace_id,
-                        event.request_body,
-                    )
-                except Exception as exc:
-                    logger.debug(f"dedup upsert_request failed (non-fatal): {exc}")
-            if _dedupe_on and event.response_body is not None and not event.response_message_hashes:
-                try:
-                    from eden.observability.message_store import get_message_store
-
-                    event.response_message_hashes = await get_message_store().upsert_response(
-                        event.trace_id,
-                        event.response_body,
-                    )
-                except Exception as exc:
-                    logger.debug(f"dedup upsert_response failed (non-fatal): {exc}")
-            # Dual-write note (Wave 3 / PERF+COST deferred): plaintext JSONB
-            # columns AND *_zstd are both populated. Primary readers prefer
-            # zstd, but online rules_engine still prefers JSONB first.
-            # Stopping plaintext writes is gated on
-            # scripts/check_zstd_drop_prerequisites.py + mig 033/039.
-            return (
-                event.event_id,
-                event.tenant_id,
-                event.project_id,
-                event.trace_id,
-                event.realm,
-                event.event_type,
-                # asyncpg requires datetime for timestamptz — TelemetryEvent
-                # keeps ISO strings on the wire / dataclass.
-                event.timestamp
-                if isinstance(event.timestamp, datetime)
-                else datetime.fromisoformat(str(event.timestamp).replace("Z", "+00:00")),
-                event.agent_id,
-                event.agent_version,
-                event.environment_id,
-                event.parent_span_id,
-                event.span_id,
-                event.name,
-                event.duration_ms,
-                # NOT NULL JSONB cols: _dump_jsonb maps {} / [] → None, but
-                # an explicit NULL bypasses the column DEFAULT and raises
-                # not-null (webhook/telemetry with empty payload/tags).
-                _dump_jsonb(event.payload) or "{}",
-                _dump_jsonb(event.metrics) or "{}",
-                _dump_jsonb(event.attributes) or "{}",
-                _dump_jsonb(event.tags) or "[]",
-                event.outcome,
-                event.source_format or "eden_native",
-                _dump_jsonb(event.request_body),
-                _dump_jsonb(event.response_body),
-                _dump_jsonb(event.reasoning),
-                _dump_jsonb(event.tool_calls_full) if event.tool_calls_full else None,
-                _dump_jsonb(event.tool_results) if event.tool_results else None,
-                _dump_jsonb(event.images) if event.images else None,
-                _dump_jsonb(event.audio) if event.audio else None,
-                _dump_jsonb(event.logprobs) if event.logprobs is not None else None,
-                _dump_jsonb(event.citations) if event.citations else None,
-                event.finish_reason,
-                event.stop_sequence,
-                event.system_fingerprint,
-                event.cache_hit,
-                event.prompt_cache_savings_usd,
-                event.model_version,
-                event.service_tier,
-                event.model
-                or (event.attributes or {}).get("model")
-                or (event.attributes or {}).get("openai.model")
-                or (event.attributes or {}).get("anthropic.model"),
-                event.model_name or event.model,
-                request_body_zstd,
-                response_body_zstd,
-                reasoning_zstd,
-                tool_calls_full_zstd,
-                tool_results_zstd,
-                payload_zstd,
-                metrics_zstd,
-                attributes_zstd,
-                event.request_message_hashes or None,
-                event.response_message_hashes or None,
-            )
-        raise AssertionError("unreachable")  # pragma: no cover
+        compressed = await asyncio.to_thread(compress_many, self._compress_fields(event))
+        await self._dedupe_event(event)
+        return self._build_postgres_row(event, compressed)
 
     async def _route_postgres(self, event: TelemetryEvent) -> None:
         """Write one event. Unchanged semantics; the row build moved out."""
@@ -1403,7 +1517,37 @@ class TelemetryCollector:
             return
         client = await self._require_postgres()
         try:
-            rows = await asyncio.gather(*(self._prepare_postgres_row(e) for e in events))
+            # Phase 3 (ingest hot-path batching): the row-prep used to be
+            # ``asyncio.gather(*(self._prepare_postgres_row(e) for e in events))``,
+            # which meant N separate ``compress_many`` dispatches (each its
+            # own ``asyncio.to_thread`` + worker-pool round trip) and up to
+            # 2N separate ``MessageStore`` dedup transactions for one
+            # batch. Both fan out from *this* batch, so they collapse into
+            # one call each: flatten every event's 8 compressible fields
+            # into a single ``compress_many`` dispatch, and let
+            # ``_dedupe_batch_messages`` do one ``executemany`` for every
+            # event's request/response messages. The two are independent
+            # (compression never touches ``trace_messages``), so they run
+            # concurrently rather than one after the other.
+            from eden.storage.compression import compress_many
+
+            flat_fields = [f for event in events for f in self._compress_fields(event)]
+            compress_task = asyncio.create_task(
+                asyncio.to_thread(compress_many, flat_fields)
+            )
+            try:
+                await self._dedupe_batch_messages(events)
+                flat_compressed = await compress_task
+            except BaseException:
+                compress_task.cancel()
+                raise
+
+            rows = [
+                self._build_postgres_row(
+                    event, flat_compressed[i * 8 : (i + 1) * 8],
+                )
+                for i, event in enumerate(events)
+            ]
             await client.executemany(TELEMETRY_INSERT_SQL, rows)
         except Exception as exc:
             from eden.observability.errors import IngestionUnavailableError

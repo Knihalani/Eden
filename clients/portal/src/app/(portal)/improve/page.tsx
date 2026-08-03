@@ -82,7 +82,18 @@ function LabImproveInner() {
     () => portalApi.improvePlans(orgId!),
     SHELL_QUERY,
   );
+  // M13: live cockpit dual queue (Fix now / Improve later columns).
+  const queueQuery = useOrgQuery(
+    queryKeys.portal.improveQueue(orgId),
+    orgId,
+    async () => {
+      const envelope = await improvePlansApi.getQueue(orgId!);
+      return envelope.data?.items ?? [];
+    },
+    SHELL_QUERY,
+  );
   const livePlans = plansQuery.data ?? [];
+  const queueItems = queueQuery.data ?? [];
 
   const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
@@ -389,6 +400,7 @@ function LabImproveInner() {
         <ImproveQueueView
           agentId={agentId}
           plans={allPlans}
+          queueItems={queueItems}
           selectedId={planId}
           onSelect={setPlanId}
           onOpenPlan={openPlan}

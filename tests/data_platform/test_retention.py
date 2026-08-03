@@ -157,6 +157,86 @@ async def test_archive_to_cold_skips_delete_when_s3_fails():
 
 
 @pytest.mark.asyncio
+async def test_write_s3_archive_prefers_parquet_when_pyarrow_available():
+    """Phase 4 storage: _write_s3_archive prefers Parquet+zstd."""
+    from unittest.mock import MagicMock, patch
+
+    pytest.importorskip("pyarrow")
+    mgr = DataRetentionManager(dry_run=False)
+    rows = [
+        {"silver_event_id": "id-1", "timestamp": datetime.now(UTC), "metadata": {"a": 1}},
+        {"silver_event_id": "id-2", "timestamp": datetime.now(UTC), "metadata": {"b": 2}},
+    ]
+    fake_s3 = MagicMock()
+    with (
+        patch("eden.data_platform.retention.settings") as mock_settings,
+        patch("boto3.client", return_value=fake_s3),
+    ):
+        mock_settings.bronze_s3_bucket = "cold-bucket"
+        written = await mgr._write_s3_archive(rows, "silver_events")
+
+    assert written == 1
+    fake_s3.put_object.assert_called_once()
+    kwargs = fake_s3.put_object.call_args.kwargs
+    assert kwargs["Key"].endswith(".parquet")
+    assert kwargs["ContentType"] == "application/vnd.apache.parquet"
+    assert kwargs["StorageClass"] == "GLACIER_IR"
+    assert isinstance(kwargs["Body"], bytes)
+
+
+@pytest.mark.asyncio
+async def test_write_s3_archive_falls_back_to_ndjson_without_pyarrow():
+    from unittest.mock import MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    rows = [{"silver_event_id": "id-1", "timestamp": datetime.now(UTC)}]
+    fake_s3 = MagicMock()
+    with (
+        patch("eden.data_platform.retention.settings") as mock_settings,
+        patch("boto3.client", return_value=fake_s3),
+        patch("eden.storage.cold_archive._rows_to_parquet_zstd", return_value=None),
+    ):
+        mock_settings.bronze_s3_bucket = "cold-bucket"
+        written = await mgr._write_s3_archive(rows, "silver_events")
+
+    assert written == 1
+    kwargs = fake_s3.put_object.call_args.kwargs
+    assert kwargs["Key"].endswith(".ndjson")
+    assert kwargs["ContentType"] == "application/x-ndjson"
+
+
+@pytest.mark.asyncio
+async def test_write_s3_archive_no_bucket_configured_returns_zero():
+    from unittest.mock import patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    rows = [{"silver_event_id": "id-1", "timestamp": datetime.now(UTC)}]
+    with patch("eden.data_platform.retention.settings") as mock_settings:
+        mock_settings.bronze_s3_bucket = ""
+        written = await mgr._write_s3_archive(rows, "silver_events")
+    assert written == 0
+
+
+@pytest.mark.asyncio
+async def test_write_s3_archive_failure_returns_zero_not_raises():
+    """Verify-before-delete safety: any S3 write failure must return 0
+    (not raise) so archive_to_cold's caller skips the DELETE."""
+    from unittest.mock import MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    rows = [{"silver_event_id": "id-1", "timestamp": datetime.now(UTC)}]
+    fake_s3 = MagicMock()
+    fake_s3.put_object.side_effect = RuntimeError("S3 down")
+    with (
+        patch("eden.data_platform.retention.settings") as mock_settings,
+        patch("boto3.client", return_value=fake_s3),
+    ):
+        mock_settings.bronze_s3_bucket = "cold-bucket"
+        written = await mgr._write_s3_archive(rows, "silver_events")
+    assert written == 0
+
+
+@pytest.mark.asyncio
 async def test_purge_pii_passes_datetime_not_isoformat():
     from unittest.mock import AsyncMock, MagicMock, patch
 

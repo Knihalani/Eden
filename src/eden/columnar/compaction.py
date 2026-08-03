@@ -54,6 +54,8 @@ from ._common import (
     _compaction_id_for,
     _fire_compaction_drift_hook,
     _insert_compaction_log,
+    _is_tinybird_substrate,
+    _not_applicable_envelope,
     _not_implemented_envelope,
     _ok_envelope,
     _ok_fallback_envelope,
@@ -115,6 +117,43 @@ class ColumnarCompactor:
             partition_id=partition_id,
             started_at=started_at,
         )
+
+        # Tinybird is the only ClickHouse-compatible substrate this ships
+        # against (Phase 1 of the observability overhaul) — it owns its own
+        # background part merges and does not expose ``OPTIMIZE`` or
+        # ``system.parts`` via ``/v0/sql``. ``_ch_optimize`` below would
+        # deterministically raise on every call (``_execute`` rejects
+        # ``OPTIMIZE`` outright), which the except-branch used to record as
+        # a *compaction failure* and escalate with a ``severity="high"``
+        # hook — forever, on every scheduled tick, for a condition that is
+        # not a failure at all. Checked before the availability probe so
+        # this never touches the network.
+        if await _is_tinybird_substrate():
+            await _insert_compaction_log(
+                org_id=org_id,
+                compaction_id=compaction_id,
+                partition_id=partition_id,
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                rows_in=0,
+                rows_out=0,
+                bytes_in=0,
+                bytes_out=0,
+                status="not_applicable",
+                error=None,
+            )
+            return _not_applicable_envelope(
+                "ColumnarCompactor",
+                {
+                    "compaction_id": compaction_id,
+                    "org_id": org_id,
+                    "partition_id": partition_id,
+                    "sla_seconds": SLA_SECONDS,
+                },
+                "Tinybird manages its own background part merges; "
+                "OPTIMIZE TABLE ... FINAL is not available via /v0/sql. "
+                "No compaction attempted, no failure hook fired.",
+            )
 
         if await _check_ch_available():
             try:

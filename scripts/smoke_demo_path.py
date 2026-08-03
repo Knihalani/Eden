@@ -166,6 +166,21 @@ async def main() -> int:
             # customer's SDK actually puts on the wire.
             "trace_id": trace_id,
             "metadata": {"trace_id": trace_id},
+            # Production's N16 sampling default is `balanced` (~15%
+            # probabilistic keep of non-signal traces —
+            # src/eden/observability/sampling/apply.py). This event has no
+            # error/loop/high-cost signal of its own, so without this it
+            # would be sampled out (not stored at all — the "findable by MY
+            # trace_id" / "landed" checks below hit Postgres, which the N16
+            # gate skips writing to on drop) roughly 85% of runs. That would
+            # make this script flake on a perfectly healthy ingest path,
+            # exactly the "cries wolf" failure mode noted above.
+            # `eden.observability.sampling.summaries.signals_from_attributes`
+            # folds `attributes["eden.force_trace"]` (via `item.get(
+            # "attributes")` in the openai decoder) into a FORCE keep
+            # decision that bypasses the probabilistic gate regardless of
+            # the deployed profile.
+            "attributes": {"eden.force_trace": "true"},
         }
         code, body = _post(f"/orgs/{org_id}/ingest/openai", payload, raw)
         ok = 200 <= code < 300

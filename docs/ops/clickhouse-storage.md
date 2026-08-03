@@ -88,6 +88,25 @@ or add them back **with `CODEC(ZSTD(3))` and a considered TTL**, and note that
 `images`/`audio` as raw `String` in a 90-day table is the single most expensive
 thing this schema can do.
 
+## 4. Not writing `metrics` / `tags` into the mirror (Phase 1, 2026-08)
+
+Same finding as the nine blob columns above, smaller scope: no `SELECT`
+anywhere in `src/` reads `metrics` or `tags` back from
+`telemetry_events_ch`, and `telemetry_events_query_api.pipe` — the only
+Tinybird pipe over this table — selects a fixed column list that omits
+both. Postgres remains the real source of truth (`telemetry_collector`
+still writes the full JSON there; other code reads `metrics->>'cost_usd'`
+etc. straight from Postgres).
+
+Unlike the blob columns, this does **not** `ALTER TABLE ... DROP COLUMN`.
+Both columns stay in the DDL and the `.datasource` schema — only
+`ClickHouseSink._insert_json` stops populating them
+(`_UNREAD_TELEMETRY_MIRROR_FIELDS`), so every future row gets the column's
+own default (empty string) instead of a second, unread copy of the JSON
+blob. Chosen over a schema change because Tinybird's DDL is
+`tb deploy`-owned; stopping the write is reversible (re-add the two keys
+to the outgoing row) in a way an already-applied `DROP COLUMN` is not.
+
 ## Migration behaviour
 
 Codecs, skip indexes and column drops are all `ALTER`-able in place, so
@@ -110,15 +129,63 @@ failing the batch with `UNKNOWN_FIELD`. That also decouples the two schemas
 going forward: the collector can add a field without the mirror needing to
 learn about it first.
 
-## Known remaining drift
+## Drift fixed (2026-08, Phase 1 of the observability overhaul)
 
-The `tinybird/datasources/*.datasource` files were auto-generated from NDJSON
-samples and systematically widen every type: all 17 `LowCardinality(String)`
-columns became plain `String`, all six `DateTime64(3)` became `DateTime`
-(**truncating to whole seconds, which breaks span ordering within a trace**),
-all nine `UUID` became `String`, all seven `Float64` became `Float32`
-(including three currency columns), every unsigned integer became signed, and
-the `date` DEFAULT column is missing from all four datasources that define it.
+The paragraph that used to live here described the `tinybird/datasources/*.datasource`
+files as auto-generated from NDJSON samples that systematically widened every
+type. That is fixed: `scripts/gen_tinybird_datasources.py` now derives all
+five `.datasource` files from this module's DDL (the single source of
+truth), and `tests/data_platform/test_tinybird_datasource_drift.py` is the
+ratchet that keeps them from drifting apart again. Run
+`python scripts/gen_tinybird_datasources.py --check` after touching any
+`CREATE TABLE` above.
 
-`toUUID()` in `query_agent_performance` is therefore valid against local
-ClickHouse and invalid against Tinybird. Not yet addressed.
+`toUUID()` was also removed from `query_agent_performance` and the other
+`query_*` helpers — see `ClickHouseSink._uuid_column_eq`, which compares the
+UUID column against a bare string literal instead (works on both
+substrates; `tenant_id = toUUID('org_test')` fails outright on Tinybird for
+any tenant id that isn't a syntactically valid UUID).
+
+**CODEC is preserved, not stripped.** An earlier revision of the generator
+dropped every `CODEC(...)` clause on the assumption that Tinybird
+datasources don't accept it. That assumption was wrong and unverified —
+Tinybird's own datafile reference documents `CODEC()` as a supported
+`.datasource` SCHEMA field, in the same position ClickHouse DDL puts it
+(https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-files,
+"Column compression codecs"). `telemetry_events_ch.datasource` now carries
+the same `ZSTD(3)` / `Delta, ZSTD(3)` codecs as the DDL above; the other four
+datasources have no codec in their DDL and correspondingly carry none.
+
+## Home KPI hourly rollup (`home_kpi_hourly`, 2026-08)
+
+`ClickHouseSink.query_home_kpis` (the Home tiles endpoint's data source) used
+to re-aggregate `telemetry_events_ch` from scratch on every request —
+`countIf`/`avgIf`/`quantileIf` over the raw per-event rows for the current
+and previous window. `tinybird/datasources/home_kpi_hourly.datasource` adds a
+Tinybird-native `AggregatingMergeTree` rollup, one row per
+`(tenant_id, hour)`, fed by `tinybird/pipes/home_kpi_hourly_mv.pipe` (`TYPE
+MATERIALIZED`, an insert trigger on `telemetry_events_ch` — it does **not**
+backfill history, only rows ingested after deploy). `home_kpi_hourly_api.pipe`
+exposes it directly (`countMerge`/`sumMerge`/`avgMerge`/`quantileMerge` over
+the `AggregateFunction` state columns) for callers that want the endpoint
+rather than going through `ClickHouseSink`.
+
+**Not a self-hosted ClickHouse feature.** This lives entirely under
+`tinybird/` and is owned by `tb deploy`, same as every other datasource/pipe
+in this project — there is no local ClickHouse-side equivalent table or
+migration for it.
+
+**Fallback, not a replacement.** `query_home_kpis` tries the rollup first
+only when `ClickHouseConfig.is_tinybird` is true, and falls back to the
+original live `telemetry_events_ch` scan (now `_query_home_kpis_live`)
+whenever the rollup query raises (datasource not deployed yet, or any other
+error) or comes back with zero current-window events (the datasource exists
+but genuinely has no materialized rows yet for that tenant/hour — a brand
+new rollup starts empty and only fills in from the next inserted
+`telemetry_events_ch` block onward). Either fallback path preserves the
+existing behaviour exactly, including the outer
+`wave6_online._home_kpi_from_clickhouse` → Postgres soft-fail contract this
+was already built on.
+
+**Rollback:** delete/skip `home_kpi_hourly_mv.pipe` and `query_home_kpis`
+falls straight back to the always-correct live scan — nothing else changes.

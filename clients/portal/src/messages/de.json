@@ -1511,8 +1511,11 @@
     "queue": {
       "views": {
         "needsYou": "Braucht dich",
+        "fixNow": "Jetzt beheben",
+        "improveLater": "Später verbessern",
         "inProgress": "In Arbeit",
-        "verify": "Prüfen"
+        "verify": "Prüfen",
+        "stale": "Veraltet"
       },
       "col": {
         "title": "Eintrag",

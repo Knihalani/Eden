@@ -20,9 +20,17 @@ _SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 # Column keys for portal Automate /improve dual-pane.
 COLUMN_URGENT = "urgent"
 COLUMN_NEEDS_YOU = "needs_you"
+# M13 (§6.2): split Needs-you into Fix now / Improve later.
+COLUMN_FIX_NOW = "fix_now"
+COLUMN_IMPROVE_LATER = "improve_later"
 COLUMN_AUTONOMOUS = "autonomous"
 COLUMN_PROPOSED = "proposed"
 COLUMN_VERIFY = "verify"
+
+_FIX_NOW_KINDS = frozenset({"code_patch", "prompt_update"})
+_IMPROVE_LATER_KINDS = frozenset(
+    {"advisory", "config_change", "nudge_promote", "guardrail_tune", "cost_digest"}
+)
 
 
 @dataclass
@@ -106,6 +114,7 @@ class ImprovementCockpitAggregator:
             evolution_t,
             heals_t,
             denials_t,
+            loop_health_t,
         ) = await asyncio.gather(
             self._from_issues(org_id, agent_id),
             self._from_closed_loop(org_id),
@@ -117,6 +126,7 @@ class ImprovementCockpitAggregator:
             self._from_evolution_canaries(org_id, agent_id),
             self._from_self_heals(org_id),
             self._from_autonomy_denials(org_id, agent_id),
+            self._from_loop_health(org_id),
             return_exceptions=True,
         )
         items: list[ImprovementItem] = []
@@ -131,6 +141,7 @@ class ImprovementCockpitAggregator:
             evolution_t,
             heals_t,
             denials_t,
+            loop_health_t,
         ):
             if isinstance(result, BaseException):
                 logger.debug("cockpit source failed: %s", result)
@@ -177,6 +188,39 @@ class ImprovementCockpitAggregator:
         except Exception as exc:
             logger.debug("cockpit fleet severity: %s", exc)
             return {}
+
+    async def _from_loop_health(self, org_id: str) -> list[ImprovementItem]:
+        """URGENT banner when the closed-loop event bus is unreachable (M2).
+
+        Best-effort like every other source — a probe failure yields no
+        item rather than breaking the cockpit.
+        """
+        try:
+            from eden.api.routes.loop_health import probe_loop_health
+
+            health = await probe_loop_health()
+            if health.get("bus") != "dead":
+                return []
+            return [
+                ImprovementItem(
+                    ref="loop_health:bus",
+                    item_type="loop_health",
+                    title="Autonomy paused — event bus unreachable",
+                    column=COLUMN_URGENT,
+                    severity="critical",
+                    payload={
+                        "bus": health.get("bus"),
+                        "outbox_depth": health.get("outbox_depth"),
+                        "last_publish_failure_age_s": health.get(
+                            "last_publish_failure_age_s"
+                        ),
+                    },
+                    source="loop_health",
+                )
+            ]
+        except Exception as exc:
+            logger.debug("cockpit loop-health source failed: %s", exc)
+            return []
 
     async def _from_issues(self, org_id: str, agent_id: str | None) -> list[ImprovementItem]:
         try:
@@ -363,11 +407,17 @@ class ImprovementCockpitAggregator:
             action = str(r.get("action") or "action")
             decision = str(r.get("decision") or "deny")
             reason = str(r.get("reason") or f"policy {decision}")
+            tier = str(r.get("tier_applied") or "")
+            # M10 (§5.2): heal denials become opt-in counterfactuals.
+            if tier == "auto_runtime_heal":
+                title = f"Eden would have fixed this: {action}"
+            else:
+                title = f"Policy {decision}: {action}"
             out.append(
                 ImprovementItem(
                     ref=f"autonomy_denial:{eid}",
                     item_type="policy_denial",
-                    title=f"Policy {decision}: {action}",
+                    title=title,
                     column=COLUMN_NEEDS_YOU,
                     severity="medium",
                     agent_id=str(row_agent) if row_agent else None,
@@ -379,7 +429,7 @@ class ImprovementCockpitAggregator:
                         "decision": decision,
                         "tier": r.get("tier_applied"),
                     },
-                    autonomy_tier_required=str(r.get("tier_applied") or "") or None,
+                    autonomy_tier_required=tier or None,
                     blocked_reason=reason[:240],
                     source="autonomy_audit",
                 )
@@ -402,17 +452,45 @@ class ImprovementCockpitAggregator:
             logger.debug("cockpit improvement_plans: %s", exc)
             return []
         out: list[ImprovementItem] = []
+        stale_days = 14
+        try:
+            from eden.config import get_settings
+
+            stale_days = int(getattr(get_settings(), "plan_stale_after_days", 14) or 14)
+        except Exception:
+            pass
         for r in rows:
             status = str(r.get("status") or "draft")
-            if status in ("rejected", "snoozed", "superseded", "merged"):
+            if status in ("rejected", "snoozed", "superseded", "merged", "closed"):
                 continue
             pid = str(r["id"])
             title = (r.get("title") or "Improvement plan")[:160]
+            plan_kind = str(r.get("plan_kind") or "")
+            evidence = r.get("evidence") or {}
+            if isinstance(evidence, str):
+                try:
+                    import json as _json
+
+                    evidence = _json.loads(evidence)
+                except Exception:
+                    evidence = {}
             column = COLUMN_PROPOSED
             if status == "pr_opened":
                 column = COLUMN_VERIFY
-            elif status == "draft":
-                column = COLUMN_NEEDS_YOU
+            elif status in ("draft", "pending_review"):
+                # M13 (§6.2): Fix now vs Improve later (draft + pending_review).
+                column = _queue_column_for_plan(plan_kind, evidence)
+            payload: dict[str, Any] = {
+                "plan_id": pid,
+                "plan_kind": plan_kind,
+                "source_ref": r.get("source_ref"),
+                "base_ref_sha": evidence.get("base_ref_sha"),
+                "ev_score": evidence.get("ev_score"),
+            }
+            # M13 (§6.6): stale badge when draft older than plan_stale_after_days.
+            if status == "draft" and _plan_is_stale(r, stale_days):
+                payload["stale"] = True
+                payload["stale_after_days"] = stale_days
             out.append(
                 ImprovementItem(
                     ref=f"improvement_plan:{pid}",
@@ -424,16 +502,11 @@ class ImprovementCockpitAggregator:
                     agent_id=r.get("agent_id"),
                     status=status,
                     href=f"/improve/plans/{pid}",
-                    payload={
-                        "plan_id": pid,
-                        "plan_kind": r.get("plan_kind"),
-                        "source_ref": r.get("source_ref"),
-                    },
+                    payload=payload,
                     source="improvement_plans",
                 )
             )
         return out
-
     async def _from_proposed_patches(
         self, org_id: str, agent_id: str | None
     ) -> list[ImprovementItem]:
@@ -799,3 +872,50 @@ async def _autonomy_block_reason(
     except Exception as exc:
         logger.debug("cockpit autonomy block reason: %s", exc)
         return None, None
+
+
+def _queue_column_for_plan(plan_kind: str, evidence: dict[str, Any]) -> str:
+    """M13 (§6.2): Fix now (code/prompt + evidence) vs Improve later."""
+    kind = (plan_kind or "").lower()
+    has_evidence = bool(
+        evidence.get("evidence_tier")
+        or evidence.get("example_trace_ids")
+        or evidence.get("issue_id")
+        or evidence.get("failure_pack_status")
+    )
+    high_ev = False
+    try:
+        high_ev = float(evidence.get("ev_score") or 0) >= 1.0
+    except (TypeError, ValueError):
+        high_ev = False
+    if kind in _FIX_NOW_KINDS and (has_evidence or high_ev):
+        return COLUMN_FIX_NOW
+    if kind in _IMPROVE_LATER_KINDS or kind in ("advisory", "config_change"):
+        return COLUMN_IMPROVE_LATER
+    if kind in _FIX_NOW_KINDS:
+        return COLUMN_FIX_NOW
+    return COLUMN_IMPROVE_LATER
+
+
+def _plan_is_stale(plan: dict[str, Any], stale_days: int) -> bool:
+    """True when draft ``created_at`` is older than ``stale_days`` (M13 §6.6)."""
+    from datetime import timedelta
+
+    created = plan.get("created_at")
+    if created is None:
+        return False
+    if isinstance(created, str):
+        try:
+            created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if getattr(created, "tzinfo", None) is None:
+        created = created.replace(tzinfo=UTC)
+    return datetime.now(UTC) - created > timedelta(days=max(1, int(stale_days)))
+
+
+def is_fix_now_item(item: ImprovementItem | dict[str, Any]) -> bool:
+    """True when an item belongs on the Fix-now Slack notify path."""
+    if isinstance(item, ImprovementItem):
+        return item.column == COLUMN_FIX_NOW
+    return str(item.get("column") or "") == COLUMN_FIX_NOW

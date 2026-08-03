@@ -145,6 +145,12 @@ jobs:
       - name: settings drift (blocking)
         run: uv run python scripts/settings_drift_check.py
 
+      # Spec flag-table drift (M4, D20): the AUTONOMY-OVERHAUL-PLAN §1.4
+      # table must match config.py defaults — documented autonomy
+      # posture may not diverge from the shipped one.
+      - name: spec drift (blocking)
+        run: uv run python scripts/spec_drift_check.py
+
   test:
     name: pytest
     runs-on: ubuntu-latest

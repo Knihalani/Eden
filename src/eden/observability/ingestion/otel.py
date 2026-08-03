@@ -45,7 +45,7 @@ from typing import Any
 from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.errors import SchemaInvalidError
 from eden.observability.ingestion.json_body import loads_body
-from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
+from eden.observability.ingestion.normalizer import normalize_many
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
@@ -602,7 +602,12 @@ class OtelDecoder:
                 problems=["missing_resource_spans"],
             )
 
-        events: list[TelemetryEvent] = []
+        # Build every span's intermediate dict synchronously first (cheap,
+        # no I/O), then normalize the whole batch concurrently in one
+        # ``normalize_many`` call instead of awaiting each span in turn —
+        # order matches the walk order below, which ``events.append``
+        # used to preserve one at a time.
+        raws: list[dict[str, Any]] = []
         for rs in resource_spans:
             if not isinstance(rs, dict):
                 continue
@@ -615,15 +620,14 @@ class OtelDecoder:
                 for span in ss.get("spans") or []:
                     if not isinstance(span, dict):
                         continue
-                    raw = _span_to_raw_dict(span, resource_attrs, scope)
-                    event = await normalize_to_telemetry_event(
-                        raw, attribution.with_source_format(self.source_format)
-                    )
-                    events.append(event)
+                    raws.append(_span_to_raw_dict(span, resource_attrs, scope))
 
-        if not events:
+        if not raws:
             raise SchemaInvalidError(
                 "OTel body parsed but contained no spans",
                 problems=["no_spans"],
             )
+        events = await normalize_many(
+            raws, attribution.with_source_format(self.source_format)
+        )
         return events

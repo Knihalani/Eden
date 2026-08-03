@@ -2,23 +2,116 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import gzip
+import json
 import logging
+import os
+import threading
 import uuid
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from eden_sdk.client import get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import TraceContext, current_trace, trace
+
+if TYPE_CHECKING:
+    import httpx
 
 logger = logging.getLogger("eden_sdk.session")
 
 _current_session: ContextVar[AgentSession | None] = ContextVar(
     "eden_current_session", default=None
 )
+
+# ── Shared transport for lifecycle notifies ─────────────────────────
+#
+# ``_notify_session`` used to open a brand-new ``httpx`` connection
+# (via the module-level ``httpx.post``) AND spawn a brand-new OS
+# thread on every single ``begin``/``identify``/``complete`` call.
+# For agents that run many short-lived sessions per process (a common
+# pattern for batch/eval harnesses), that is a fresh TCP+TLS handshake
+# and a fresh thread per lifecycle event instead of a handful of
+# pooled connections and a couple of long-lived worker threads.
+#
+# A small thread pool + one lazily-built, process-wide ``httpx.Client``
+# fixes both: the client keeps a keep-alive connection pool (mirrors
+# ``EdenClient``'s ``httpx.AsyncClient`` pool in ``client.py``), and
+# the pool caps concurrent lifecycle notifies without a thread per call.
+_SESSION_HTTP_LOCK = threading.Lock()
+_session_http_client: httpx.Client | None = None
+_SESSION_EXECUTOR_LOCK = threading.Lock()
+_session_executor: concurrent.futures.ThreadPoolExecutor | None = None
+
+#: Small pool — lifecycle notifies are infrequent relative to trace
+#: events (which go through the batched ``EdenClient`` instead), so a
+#: handful of workers is enough to keep ``wait=True`` calls (start/
+#: identify/end) from queueing behind each other under moderate
+#: concurrency without spinning up unbounded threads.
+_SESSION_EXECUTOR_MAX_WORKERS = 4
+
+
+def _get_session_http_client() -> httpx.Client:
+    """Lazily build (once) the pooled sync client used for lifecycle notifies."""
+    global _session_http_client
+    if _session_http_client is not None:
+        return _session_http_client
+    with _SESSION_HTTP_LOCK:
+        if _session_http_client is None:
+            import httpx
+
+            _session_http_client = httpx.Client(
+                timeout=5.0,
+                limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+            )
+    return _session_http_client
+
+
+def _get_session_executor() -> concurrent.futures.ThreadPoolExecutor:
+    """Lazily build (once) the small worker pool for lifecycle notifies."""
+    global _session_executor
+    if _session_executor is not None:
+        return _session_executor
+    with _SESSION_EXECUTOR_LOCK:
+        if _session_executor is None:
+            _session_executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=_SESSION_EXECUTOR_MAX_WORKERS,
+                thread_name_prefix="eden-sdk-session",
+            )
+    return _session_executor
+
+
+def _reset_session_transport_after_fork() -> None:
+    """Rebuild the pooled client/executor in a forked child.
+
+    Mirrors ``EdenClient``'s ``_reset_after_fork`` (``client.py``): an
+    ``httpx.Client``'s sockets and the executor's worker threads do not
+    survive ``fork()`` — only the calling thread does — so both must be
+    dropped and lazily rebuilt in the child rather than reused.
+    """
+    global _session_http_client, _session_executor
+    with _SESSION_HTTP_LOCK:
+        if _session_http_client is not None:
+            try:
+                _session_http_client.close()
+            except Exception:  # noqa: BLE001
+                pass
+        _session_http_client = None
+    with _SESSION_EXECUTOR_LOCK:
+        # Do not call .shutdown() on the inherited executor: its worker
+        # threads did not survive the fork, and joining threads that no
+        # longer exist in this process is at best a no-op and at worst
+        # a hang. Just drop the reference so a fresh pool is built
+        # on-demand.
+        _session_executor = None
+
+
+if hasattr(os, "register_at_fork"):  # POSIX only; absent on Windows
+    os.register_at_fork(after_in_child=_reset_session_transport_after_fork)
 
 
 def current_session() -> AgentSession | None:
@@ -181,6 +274,11 @@ def identify(user_id: str, *, session: AgentSession | None = None) -> None:
     target.identify(user_id)
 
 
+#: Match ``EdenClient``'s compact JSON separators — fewer bytes to
+#: gzip, faster dumps (``client.py``'s ``_JSON_SEPARATORS``).
+_JSON_SEPARATORS = (",", ":")
+
+
 def _notify_session(
     phase: str,
     payload: dict[str, Any],
@@ -189,18 +287,21 @@ def _notify_session(
 ) -> None:
     """Best-effort HTTP notify for agent session lifecycle (ingest path).
 
-    ``wait=True`` joins the worker thread (used for ``start``,
-    ``identify``, and ``end``). Daemon fire-and-forget left a race where
-    ``end`` could finish before ``start`` persisted the row — the API
-    answered 200 ``not_found`` and the later start left ``success`` NULL
-    forever. Attach-trace notifies stay async.
+    Reuses a pooled ``httpx.Client`` and a small shared thread pool
+    (see the module-level ``_get_session_http_client`` /
+    ``_get_session_executor``) instead of opening a fresh connection
+    and spawning a fresh OS thread on every call.
+
+    ``wait=True`` blocks (bounded, 6s) on the submitted pool job (used
+    for ``start``, ``identify``, and ``end``). Fire-and-forget left a
+    race where ``end`` could finish before ``start`` persisted the row
+    — the API answered 200 ``not_found`` and the later start left
+    ``success`` NULL forever. Attach-trace notifies stay async
+    (``wait=False``) so they never add latency to the user's call.
     """
-    import threading
 
     def _post() -> None:
         try:
-            import httpx
-
             cfg = get_config()
             if not cfg.org_id or not cfg.base_url:
                 return
@@ -209,7 +310,7 @@ def _notify_session(
             root = f"{base}/orgs/{cfg.org_id}/ingest/agent-sessions"
             if phase == "start":
                 url = f"{root}/start"
-                body = {
+                body: dict[str, Any] = {
                     "agent_id": payload.get("agent_id"),
                     "user_id": payload.get("user_id"),
                     "metadata": payload.get("metadata"),
@@ -231,7 +332,21 @@ def _notify_session(
                 }
             headers = cfg.auth_headers()
             headers.setdefault("Content-Type", "application/json")
-            resp = httpx.post(url, json=body, headers=headers, timeout=5.0)
+            # Gzip like the main ingest path (``client.py``'s
+            # ``_send_format``) — these bodies are small but a bursty
+            # ``end`` with a long ``trace_ids`` list is still worth
+            # compressing, and the server (``GunzipRequestMiddleware``)
+            # always accepts either encoding, so there's no case where
+            # this is wrong, only sometimes not worth the CPU. gzip's
+            # own header/footer overhead (~20 bytes) means it is never
+            # a net loss even for the smallest bodies here.
+            raw = json.dumps(
+                body, default=str, separators=_JSON_SEPARATORS
+            ).encode("utf-8")
+            compressed = gzip.compress(raw, compresslevel=1)
+            headers["Content-Encoding"] = "gzip"
+            client = _get_session_http_client()
+            resp = client.post(url, content=compressed, headers=headers, timeout=5.0)
             if resp.status_code >= 400:
                 logger.warning(
                     "session %s notify returned %s: %s",
@@ -242,10 +357,19 @@ def _notify_session(
         except Exception as exc:  # noqa: BLE001
             logger.warning("session %s notify failed: %s", phase, exc)
 
-    thread = threading.Thread(target=_post, daemon=True, name="eden-sdk-session")
-    thread.start()
+    future = _get_session_executor().submit(_post)
     if wait:
-        thread.join(timeout=6.0)
+        try:
+            future.result(timeout=6.0)
+        except concurrent.futures.TimeoutError:
+            # Best-effort: the job keeps running in the pool; the
+            # caller (start/identify/end) proceeds rather than hang.
+            logger.debug("session %s notify timed out after 6s", phase)
+        except Exception:  # noqa: BLE001
+            # _post() already caught and logged its own exceptions;
+            # this only guards against something escaping that try
+            # block (e.g. a bug in the logging call itself).
+            pass
 
 
 def complete_session(

@@ -827,15 +827,21 @@ async def _leader_webhook_drain_loop(stop: asyncio.Event) -> None:
 
 
 async def _webhook_drain_loop() -> None:
-    """30s cadence webhook delivery drain. Best-effort — never crashes.
+    """Webhook delivery drain. Best-effort — never crashes.
 
     Legacy non-leader path retained for tests that pin the symbol;
     production uses :func:`_leader_webhook_drain_loop`.
+
+    M14 (§8.1): after an empty claim, sleep on the shared idle grid
+    (via ``next_grid_delay``) instead of a fixed 30s poll — the
+    delivery service already applies ``empty_cooldown``; this loop
+    must not defeat that with a sub-grid busy-wait.
     """
     try:
         from eden.services.webhook_delivery import (
             get_webhook_delivery_service,
         )
+        from eden.storage.empty_cooldown import next_grid_delay
 
         svc = get_webhook_delivery_service()
     except Exception as exc:  # pragma: no cover - import failure
@@ -850,6 +856,11 @@ async def _webhook_drain_loop() -> None:
             n = await svc.process_pending_deliveries()
             if n:
                 logger.info("worker: webhook_drain delivered=%d", n)
+                # Short pause on the grid fraction so back-to-back
+                # deliveries stay responsive without busy-looping.
+                await asyncio.sleep(max(1.0, next_grid_delay(_idle_poll_period()) * 0.05))
+            else:
+                await asyncio.sleep(next_grid_delay(_idle_poll_period()))
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -858,7 +869,7 @@ async def _webhook_drain_loop() -> None:
                 exc,
                 exc_info=True,
             )
-        await asyncio.sleep(30)
+            await asyncio.sleep(next_grid_delay(_idle_poll_period()))
 
 
 def _install_signal_handlers(stop: asyncio.Event) -> None:

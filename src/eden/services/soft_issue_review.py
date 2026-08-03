@@ -375,6 +375,108 @@ class SoftIssueReviewer:
             logger.debug("soft_issue_review: detector insert failed: %s", exc)
             return False
 
+    # ── M13 (§6.5): weekly shadow promote / delete ──────────────────
+
+    async def promote_shadow_detectors(
+        self, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """Weekly job: precision ≥ 0.8 over ≥ 20 firings → enable + Slack;
+        precision < 0.3 → auto-delete. Uses operator confirm/dismiss
+        counters in ``rule`` JSONB when present; else falls back to
+        ``match_count`` as firings with precision=1.0 only when an
+        explicit ``operator_confirms`` key exists (never auto-promote
+        on match_count alone without labels).
+        """
+        settings = get_settings()
+        min_firings = int(getattr(settings, "shadow_promote_min_firings", 20) or 20)
+        promote_p = float(getattr(settings, "shadow_promote_precision", 0.8) or 0.8)
+        delete_p = float(getattr(settings, "shadow_delete_precision", 0.3) or 0.3)
+
+        from eden.storage.postgres import get_postgres_client
+
+        pg = await get_postgres_client()
+        if pg is None:
+            return {"skipped": True, "reason": "postgres_unavailable"}
+
+        try:
+            rows = await pg.fetch(
+                """
+                SELECT id, org_id, description, rule, match_count, cluster_id
+                FROM nl_signals
+                WHERE enabled = FALSE
+                  AND cluster_id LIKE 'auto:%'
+                ORDER BY created_at ASC
+                LIMIT 200
+                """
+            )
+        except Exception as exc:
+            logger.debug("promote_shadow_detectors: scan failed: %s", exc)
+            return {"skipped": True, "reason": str(exc)[:200]}
+
+        promoted = 0
+        deleted = 0
+        inspected = 0
+        details: list[dict[str, Any]] = []
+        for row in rows or []:
+            r = dict(row)
+            inspected += 1
+            decision = evaluate_shadow_precision(
+                r,
+                min_firings=min_firings,
+                promote_precision=promote_p,
+                delete_precision=delete_p,
+            )
+            action = decision["action"]
+            if action == "hold" or dry_run:
+                details.append({**decision, "id": str(r["id"]), "dry_run": dry_run})
+                continue
+            sig_id = str(r["id"])
+            org_id = str(r["org_id"])
+            try:
+                if action == "promote":
+                    await pg.execute(
+                        "UPDATE nl_signals SET enabled = TRUE WHERE id = $1 AND org_id = $2",
+                        sig_id,
+                        org_id,
+                    )
+                    promoted += 1
+                    await _notify_shadow_promoted(
+                        org_id,
+                        signal_id=sig_id,
+                        description=str(r.get("description") or "")[:200],
+                        precision=decision["precision"],
+                        firings=decision["firings"],
+                    )
+                elif action == "delete":
+                    await pg.execute(
+                        "DELETE FROM nl_signals WHERE id = $1 AND org_id = $2",
+                        sig_id,
+                        org_id,
+                    )
+                    deleted += 1
+            except Exception as exc:
+                logger.debug(
+                    "promote_shadow_detectors: %s failed id=%s: %s",
+                    action,
+                    sig_id,
+                    exc,
+                )
+                details.append(
+                    {
+                        **decision,
+                        "id": sig_id,
+                        "error": str(exc)[:160],
+                    }
+                )
+                continue
+            details.append({**decision, "id": sig_id})
+        return {
+            "inspected": inspected,
+            "promoted": promoted,
+            "deleted": deleted,
+            "details": details,
+        }
+
     # ── Multi-pod claims ────────────────────────────────────────────
 
     async def _claim_org(self, org_id: str) -> bool:
@@ -405,4 +507,144 @@ class SoftIssueReviewer:
             return True
 
 
-__all__ = ["SoftIssueReviewer"]
+def evaluate_shadow_precision(
+    row: dict[str, Any],
+    *,
+    min_firings: int = 20,
+    promote_precision: float = 0.8,
+    delete_precision: float = 0.3,
+) -> dict[str, Any]:
+    """Pure decision helper for §6.5 (testable without DB).
+
+    Operator confirm/dismiss live in ``rule.operator_confirms`` /
+    ``rule.operator_dismisses`` (or top-level keys). Firings prefer
+    ``rule.firings`` then ``match_count``.
+    """
+    rule = row.get("rule") or {}
+    if isinstance(rule, str):
+        try:
+            rule = json.loads(rule)
+        except Exception:
+            rule = {}
+    confirms = int(
+        rule.get("operator_confirms")
+        or row.get("operator_confirms")
+        or 0
+    )
+    dismisses = int(
+        rule.get("operator_dismisses")
+        or row.get("operator_dismisses")
+        or 0
+    )
+    labeled = confirms + dismisses
+    firings = int(
+        rule.get("firings")
+        or row.get("firings")
+        or row.get("match_count")
+        or 0
+    )
+    if labeled > 0:
+        precision = confirms / labeled
+        # Prefer labeled count as the sample size when present.
+        sample = max(firings, labeled)
+    else:
+        # No operator labels — never auto-promote; may delete only if
+        # match_count is huge and we have an explicit low-precision hint.
+        precision = None
+        sample = firings
+
+    action = "hold"
+    if sample >= min_firings and precision is not None:
+        if precision >= promote_precision:
+            action = "promote"
+        elif precision < delete_precision:
+            action = "delete"
+    return {
+        "action": action,
+        "precision": precision,
+        "firings": sample,
+        "confirms": confirms,
+        "dismisses": dismisses,
+    }
+
+
+async def record_shadow_feedback(
+    org_id: str,
+    signal_id: str,
+    *,
+    confirm: bool | None = None,
+    dismiss: bool | None = None,
+) -> bool:
+    """M13 (§6.5): bump operator confirm/dismiss on a shadow detector."""
+    if confirm is None and dismiss is None:
+        return False
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        pg = await get_postgres_client()
+        if pg is None:
+            return False
+        bump_c = 1 if confirm else 0
+        bump_d = 1 if dismiss else 0
+        await pg.execute(
+            """
+            UPDATE nl_signals SET
+                rule = jsonb_set(
+                    jsonb_set(
+                        COALESCE(rule, '{}'::jsonb),
+                        '{operator_confirms}',
+                        to_jsonb(
+                            COALESCE((rule->>'operator_confirms')::int, 0) + $3
+                        ),
+                        true
+                    ),
+                    '{operator_dismisses}',
+                    to_jsonb(
+                        COALESCE((rule->>'operator_dismisses')::int, 0) + $4
+                    ),
+                    true
+                ),
+                updated_at = NOW()
+            WHERE id = $1 AND org_id = $2
+            """,
+            signal_id,
+            org_id,
+            bump_c,
+            bump_d,
+        )
+        return True
+    except Exception as exc:
+        logger.debug("record_shadow_feedback failed: %s", exc)
+        return False
+
+
+async def _notify_shadow_promoted(
+    org_id: str,
+    *,
+    signal_id: str,
+    description: str,
+    precision: float | None,
+    firings: int,
+) -> None:
+    try:
+        from eden.services import slack_notify
+
+        prec = f"{precision:.2f}" if precision is not None else "?"
+        # Reuse needs_approval plumbing with a synthetic plan id so Slack
+        # still resolves channel + dedupe without a new public helper.
+        await slack_notify.notify_needs_approval(
+            org_id,
+            plan_id=f"shadow-{signal_id}",
+            title=f"Shadow detector promoted ({prec}, n={firings}): {description[:120]}",
+            kind="prompt_update",  # Fix-now lane so Slack fires
+            queue="fix_now",
+        )
+    except Exception as exc:
+        logger.debug("shadow promote slack failed: %s", exc)
+
+
+__all__ = [
+    "SoftIssueReviewer",
+    "evaluate_shadow_precision",
+    "record_shadow_feedback",
+]

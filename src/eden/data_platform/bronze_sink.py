@@ -221,21 +221,30 @@ class BronzeEventSink:
             self._flushing = False
 
     async def _flush_s3(self, batch: list[RawEvent]) -> None:
-        """Offload a batch to S3 as newline-delimited JSON (NDJSON).
+        """Offload a batch to S3, preferring Parquet+zstd (via pyarrow)
+        and falling back to newline-delimited JSON (NDJSON) when
+        pyarrow is not installed or the batch fails to convert.
 
-        In production this would write Parquet via pyarrow; NDJSON is a
-        pragmatic starting point that requires no extra dependencies.
+        See :mod:`eden.storage.cold_archive` for the serialisation
+        logic shared with :mod:`eden.data_platform.retention`.
         """
         try:
             import boto3
+
+            from eden.storage.cold_archive import serialize_rows
 
             s = get_settings()
             bucket = s.bronze_s3_bucket
             prefix = getattr(s, "bronze_s3_prefix", "bronze/events")
             ts = datetime.now(UTC)
-            key = f"{prefix}/year={ts.year}/month={ts.month:02d}/day={ts.day:02d}/hour={ts.hour:02d}/{int(time.time() * 1000)}.ndjson"
 
-            body = "\n".join(_jsonx_dumps(e.to_dict(), default=str) for e in batch)
+            payload = await asyncio.to_thread(
+                serialize_rows, [e.to_dict() for e in batch]
+            )
+            key = (
+                f"{prefix}/year={ts.year}/month={ts.month:02d}/day={ts.day:02d}"
+                f"/hour={ts.hour:02d}/{int(time.time() * 1000)}.{payload.file_extension}"
+            )
 
             if self._s3_client is None:
                 self._s3_client = boto3.client("s3")
@@ -244,10 +253,16 @@ class BronzeEventSink:
             await loop.run_in_executor(
                 None,
                 lambda: self._s3_client.put_object(
-                    Bucket=bucket, Key=key, Body=body, ContentType="application/x-ndjson"
+                    Bucket=bucket,
+                    Key=key,
+                    Body=payload.body,
+                    ContentType=payload.content_type,
                 ),
             )
-            logger.debug(f"BronzeEventSink flushed {len(batch)} events to s3://{bucket}/{key}")
+            logger.debug(
+                f"BronzeEventSink flushed {len(batch)} events to s3://{bucket}/{key} "
+                f"({payload.format})"
+            )
         except Exception as exc:
             logger.warning(f"BronzeEventSink S3 flush failed: {exc}")
 

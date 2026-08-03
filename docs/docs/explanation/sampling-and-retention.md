@@ -13,22 +13,62 @@ costs predictable.
 
 ## Sampling
 
-### Soft-launch default (100% keep)
+### Soft-launch default (`full`, 100% keep)
 
 API Settings and SDKs default to **`EDEN_SAMPLING_PROFILE=full`** so
-soft-launch traffic is never dropped. Server-side N16
+traffic is never dropped unless you opt in. Server-side N16
 `decide()` runs on every ingest event but is a no-op under `full`.
 
-For cost reduction after soft-launch:
+For **production cost reduction**, keep 100% of important traces
+(error / slow / high-cost / `force_trace`, plus other ingest-time
+signals) and sample ordinary success traffic:
 
 ```bash
-# ~15% keep of non-signal traces; errors / loops / stumbles always kept
+# ~15% keep of non-signal traces; important traces always kept
 export EDEN_SAMPLING_PROFILE=balanced
 # or ~5%:
 # export EDEN_SAMPLING_PROFILE=aggressive
 ```
 
+The SDKs still default to `sampling_profile = "full"` with
+`client_probabilistic_sampling = False`, so even if you set
+`EDEN_SAMPLING_PROFILE=balanced` for the server, leave the SDK on
+force-keep-only (or `full`) — that way the probabilistic 15% runs
+once on the server and does **not** compound with a second client drop.
+
 Rollback: `EDEN_SAMPLING_ENABLED=false` (forces 100% keep).
+
+Two other server-side knobs feed the keep rules directly (both are
+`Settings` fields in `src/eden/config.py`, with the usual
+`EDEN_*`-prefixed env alias):
+
+- `sampling_high_cost_usd` (default `0.50`) — a trace is force-kept
+  once its enriched `metrics.cost_usd` reaches this many dollars.
+- `sampling_slow_threshold_ms` (default `5000`) — a trace is
+  force-kept once `duration_ms` exceeds this.
+
+#### SDK + server: don't set the same profile on both without meaning to
+
+`EDEN_SAMPLING_PROFILE` is read by **both** the server (`Settings`)
+and the Python/TypeScript SDKs (`EdenConfig.sampling_profile` /
+`ResolvedConfig`) — they are independent gates, not one shared knob.
+If you set `EDEN_SAMPLING_PROFILE=balanced` intending to enable the
+*server's* N16 gate, but an SDK in the same environment also reads
+that var, two independent ~15% gates compound **multiplicatively**
+(0.15 × 0.15 ≈ 2.25% effective keep), not additively — with nothing in
+either layer's logs to explain the drop.
+
+To make "set the profile on the server alone" behave exactly as
+documented, the SDKs' client-side probabilistic drop is **off by
+default**: with a non-`full` profile, the SDK only force-keeps
+error/slow/`force_trace` traces and otherwise sends everything,
+leaving the probabilistic decision to the server. Set
+`EDEN_CLIENT_PROBABILISTIC_SAMPLING=1` (Python)
+/ `clientProbabilisticSampling: true` (TypeScript) only for a
+deployment that has no server-side N16 gate to defer to. Setting a
+non-`full` SDK profile without this flag still logs one
+process-lifetime warning as a heads-up that the *server* may also be
+sampling.
 
 ### Where it lives
 
@@ -40,26 +80,54 @@ metrics-only row via `trace_sampling_summaries`.
 
 OTel edge sampling (optional): `deploy/otel-collector-config.yaml`.
 
-### Keep rules (default)
+### Keep rules — what actually runs where
 
-| Rule | Effect |
-|------|--------|
-| `error` / failure outcomes | Keep |
-| `loop` / `tool_error` / `stumble` / judge / stat-gate / MCP auth | Keep |
-| `force_trace` attribute | Keep |
-| `slow` (`duration_ms` > threshold, default 5s) | Keep |
-| `probabilistic` | Keep `profile` rate of the rest (`full`=1.0, `balanced`=0.15, `aggressive`=0.05) |
+The keep rules in the table below are all evaluated by
+`IntelligenceAwareSamplingPolicy.decide()`
+(`src/eden/observability/sampling/policy.py`), but not all of them can
+fire at the point this table implies. **Ingest time** — inside
+`should_route_event` / `keep_signals_for_event`
+(`src/eden/observability/sampling/apply.py`), which runs once per event
+right after `_enrich()` and before sink routing — only has the signals
+that are computable from a *single event* the instant it arrives:
 
-### Tail sampling
+| Rule | Available at ingest? | Source |
+|------|----------------------|--------|
+| `error` / failure outcomes | Yes | `event.outcome`, `attributes["error"]` / `otel.status_code` |
+| `force_trace` attribute | Yes | `attributes["eden.force_trace"]` (see the SDK example below) |
+| `high_cost` | Yes | `metrics["cost_usd"]` (stamped by `_enrich` from token counts before this gate runs) vs. `sampling_high_cost_usd` (default `$0.50`) |
+| `slow` (`duration_ms` > threshold, default 5s) | Yes | `event.duration_ms` vs. `sampling_slow_threshold_ms` |
+| `tool_error` | Yes, if the SDK/attribute sets `eden.tool_error` on the event | — |
+| `loop` / `judge_failure` / `stumble` / `stat_gate_fail` / `mcp_auth_failure` | **No — post-hoc only** | These are trace-quality verdicts computed by the async quality pipeline (`src/eden/observability/quality_pipeline/`) AFTER the trace is stored; a single event at ingest time has no loop/judge/stumble verdict yet to read. They only take effect through the OTel-collector tail-sampling path below (which waits `decision_wait` before deciding) or when something upstream stamps the attribute onto the event before it reaches ingest. |
+| `probabilistic` | Yes | Fallback for everything else — keeps `profile` rate (`full`=1.0, `balanced`=0.15, `aggressive`=0.05) |
 
-For very high-volume orgs, tail sampling buffers events in Redis
-and decides keep / drop at trace completion. The buffer is sized
-for 1k traces/sec × 10s × 1.5 = 15,000 slots per the Sematext
-2026 formula. Older slots are evicted FIFO when full.
+In short: at ingest, Eden can only ever force-keep on signals a single
+event already carries (error / force_trace / high_cost / slow /
+explicitly-stamped tool_error). Loop, judge-failure, and stumble
+detection are real, but they run later against already-stored traces —
+they cannot retroactively un-sample an event ingest already dropped.
+
+### Tail sampling (OTel collector only)
+
+Eden's in-process N16 gate (the table above) makes its keep/drop
+decision per-event, with no cross-span buffering. If you want a
+decision made at *trace completion* instead — so a loop/judge/stumble
+verdict computed from the whole trace can influence sampling — that is
+a separate, optional deployment piece: the OTel Collector's
+`tail_sampling` processor (`deploy/otel-collector-config.yaml`), which
+buffers spans **in the collector's own process memory** (not Redis;
+this codebase has no Redis-backed sampling buffer anywhere) for
+`decision_wait: 10s`, sized for `num_traces: 20000` in-flight traces.
+Older/completed traces are evicted from that in-memory buffer as
+decisions are made — there's no separate FIFO-eviction formula beyond
+the collector's own `num_traces` cap.
 
 ### Per-trace opt-in
 
-For debugging or compliance, force a single trace to be kept:
+For debugging or compliance, force a single trace to be kept. The
+attribute must reach the server as `eden.force_trace` — the Python and
+TypeScript SDKs both map a `force_trace` key to that wire name
+automatically:
 
 ```python
 import eden
@@ -68,6 +136,19 @@ import eden
 def run(question: str) -> str:
     ...
 ```
+
+```typescript
+import { trace } from "@eden-ai/sdk";
+
+const t = trace("checkout", { attributes: { force_trace: true } });
+// ... t.setOutput(result);
+t.end();
+```
+
+Any other attribute key you pass through `attributes={...}` follows
+the same rule: a key already namespaced under `eden.` (e.g.
+`eden.tool_error`) is sent as-is; everything else is prefixed with
+`eden.span.` so it doesn't collide with Eden's own reserved keys.
 
 ## Retention
 

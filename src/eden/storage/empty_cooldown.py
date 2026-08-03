@@ -25,6 +25,12 @@ coordination between them.
 Because the grid is shared, raising any single loop's interval no longer
 helps on its own — set the intervals to a common period so they land on
 the same boundaries.
+
+M14 (§8.1): full Neon *compute* autosuspend for dev/staging is further
+gated by ``EDEN_NEON_SCALE_TO_ZERO=1`` (see
+:func:`neon_scale_to_zero_enabled`). Empty-poll cooldowns still reduce
+idle *writes* either way; the env flag is what allows non-prod stacks
+to actually reach ≤60 CU-h/mo. Prod leaves it unset (warm-demo).
 """
 
 from __future__ import annotations
@@ -36,6 +42,22 @@ from collections.abc import Callable
 # Floor for any cooldown period. Also the floor for the alignment grid,
 # so a misconfigured near-zero setting cannot produce a busy loop.
 MIN_COOLDOWN_SECONDS = 30.0
+
+
+def neon_scale_to_zero_enabled() -> bool:
+    """M14 (§8.1): ``EDEN_NEON_SCALE_TO_ZERO=1`` for **dev/staging only**.
+
+    When True, idle hooks may optimise for Neon autosuspend (pool
+    ``min_size`` forced to 0, short inactive lifetime). Unset/False
+    (prod default) keeps the warm-demo tradeoff — do not enable on
+    production paths.
+    """
+    try:
+        from eden.config import get_settings
+
+        return bool(getattr(get_settings(), "neon_scale_to_zero", False))
+    except Exception:
+        return False
 
 
 def aligned_deadline(

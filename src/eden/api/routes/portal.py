@@ -157,8 +157,10 @@ def _map_issue_status(raw: str | None) -> str:
         return "open"
     if s in ("resolved", "ignored"):
         return "resolved"
-    # triaged / fix_pending / verifying / learning / regressed / acknowledged
-    if s in ("acknowledged", "triaged", "fix_pending", "verifying", "learning", "regressed"):
+    # triaged / fix_pending / verifying / learning / regressed / escalated
+    # / acknowledged — ``escalated`` (M4, D17) is "waiting on a human",
+    # which the portal renders as In progress.
+    if s in ("acknowledged", "triaged", "fix_pending", "verifying", "learning", "regressed", "escalated"):
         return "acknowledged"
     return "open"
 
@@ -2150,12 +2152,15 @@ def _map_improve_status(raw: str | None) -> str:
 
 
 def _map_improve_kind(raw: str | None) -> str:
+    # M13: code_patch must map to itself (not fall through to "config").
     s = (raw or "config").lower()
+    if s in ("code_patch", "code"):
+        return "code_patch"
     if "prompt" in s:
         return "prompt_update"
     if "tool" in s or "policy" in s:
         return "tool_policy"
-    if s in ("prompt_update", "tool_policy", "config"):
+    if s in ("prompt_update", "tool_policy", "config", "code_patch"):
         return s
     return "config"
 

@@ -34,6 +34,10 @@ class _Hunk:
     new_start: int
     new_count: int
     lines: list[str] = field(default_factory=list)
+    #: Indices into ``lines`` followed by a ``\ No newline at end of
+    #: file`` marker. ``_apply_hunks`` ignores this (it normalizes
+    #: trailing newlines); ``invert_unified_diff`` re-serializes it.
+    no_newline_after: set[int] = field(default_factory=set)
 
 
 @dataclass
@@ -134,9 +138,14 @@ def _parse_unified_diff_files(diff: str) -> list[_FileDiff]:
             or line == "\\"
             or line.startswith("\\ ")
         ):
-            # Preserve "No newline at end of file" markers as data lines
-            # only when they are true hunk body; otherwise skip.
+            # Record "No newline at end of file" markers against the
+            # preceding body line so invert can re-emit them; they are
+            # not body lines themselves.
             if line.startswith("\\"):
+                if current_hunk.lines:
+                    current_hunk.no_newline_after.add(
+                        len(current_hunk.lines) - 1
+                    )
                 continue
             current_hunk.lines.append(line)
             continue
@@ -350,7 +359,81 @@ async def materialize_unified_diff(
     return entries
 
 
+_NO_NEWLINE_MARKER = "\\ No newline at end of file"
+
+
+def invert_unified_diff(diff: str) -> str:
+    """Invert a unified diff so applying it undoes the original.
+
+    Pure text transform reusing :func:`_parse_unified_diff_files`:
+
+    * per file the old/new paths swap (a new-file diff becomes a
+      delete and vice versa — the ``/dev/null`` side flips);
+    * per hunk ``old_start``/``old_count`` swap with
+      ``new_start``/``new_count`` and ``-``/``+`` prefixes flip
+      (context lines are unchanged, ``\\ No newline at end of file``
+      markers stay attached to their — now flipped — line).
+
+    The output is a valid unified diff that
+    :func:`_parse_unified_diff_files` re-parses, so for any base ``b``
+    where ``apply(d, b)`` succeeds, ``apply(invert(d), apply(d, b))``
+    restores ``b`` (modulo the trailing-newline normalization
+    ``_apply_hunks`` itself performs). Inverting twice returns the
+    canonical serialization of the original diff.
+
+    Raises:
+        DiffMaterializeError: On binary diffs, missing paths, or
+            malformed hunk lines.
+    """
+    parsed = _parse_unified_diff_files(diff)
+    out: list[str] = []
+    for fd in parsed:
+        if fd.is_binary:
+            raise DiffMaterializeError("cannot invert a binary diff")
+        # Swap sides: the original's new side is the inverse's old side.
+        inv_old = fd.new_path
+        inv_new = fd.old_path
+        real = next(
+            (p for p in (inv_old, inv_new) if p and p != _DEV_NULL), None
+        )
+        if real is None:
+            raise DiffMaterializeError("cannot invert file diff without a path")
+        out.append(f"diff --git a/{real} b/{real}")
+        old_label = (
+            _DEV_NULL if inv_old == _DEV_NULL else f"a/{inv_old or real}"
+        )
+        new_label = (
+            _DEV_NULL if inv_new == _DEV_NULL else f"b/{inv_new or real}"
+        )
+        out.append(f"--- {old_label}")
+        out.append(f"+++ {new_label}")
+        for hunk in fd.hunks:
+            out.append(
+                f"@@ -{hunk.new_start},{hunk.new_count} "
+                f"+{hunk.old_start},{hunk.old_count} @@"
+            )
+            for idx, line in enumerate(hunk.lines):
+                tag = line[0] if line else " "
+                body = line[1:] if line else ""
+                if tag == "+":
+                    out.append(f"-{body}")
+                elif tag == "-":
+                    out.append(f"+{body}")
+                elif tag == " ":
+                    out.append(f" {body}")
+                else:
+                    raise DiffMaterializeError(
+                        f"cannot invert hunk line: {line!r}"
+                    )
+                if idx in hunk.no_newline_after:
+                    out.append(_NO_NEWLINE_MARKER)
+    if not out:
+        return ""
+    return "\n".join(out) + "\n"
+
+
 __all__ = [
     "DiffMaterializeError",
+    "invert_unified_diff",
     "materialize_unified_diff",
 ]

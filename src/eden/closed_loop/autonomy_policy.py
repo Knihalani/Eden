@@ -72,23 +72,23 @@ _ACTION_TIERS: dict[str, tuple[str, int]] = {
     "auto_merge": ("auto_code_patch_merge", 4),
 }
 
-# Tiers that spend from the maintenance LLM budget (triage + patch).
-_BUDGETED_TIERS = {1, 2, 3, 4}
-
-
 @dataclass(slots=True)
 class AutonomousMaintenancePolicy:
     org_id: str
     agent_id: str | None = None
     maintenance_mode: MaintenanceMode = "assisted"
-    auto_runtime_heal: bool = True
-    auto_code_patch_pr: bool = True
+    # M10 (§5.2): heal is opt-in. Global autonomous_actions_v0 defaults
+    # False; Settings toggle writes auto_runtime_heal=true per org.
+    auto_runtime_heal: bool = False
+    auto_code_patch_pr: bool = False
     auto_code_patch_merge: bool = False
     auto_prompt_canary: bool = True
     auto_nudge_promote: bool = False
     auto_guardrail_promote: bool = False
     daily_maintenance_budget_usd: float = 25.0
     max_auto_rollbacks_per_day: int = 3
+    # M15 (§9): weekly canary auto-merge volume cap (org-overridable).
+    auto_merge_max_per_week: int = 2
     compliance_profile: ComplianceProfile = "standard"
 
     def effective_mode(self) -> MaintenanceMode:
@@ -115,7 +115,7 @@ def _defaults_from_settings(org_id: str, agent_id: str | None) -> AutonomousMain
             org_id=org_id,
             agent_id=agent_id,
             maintenance_mode=mode if mode in ("autonomous", "assisted", "observe") else "assisted",
-            auto_runtime_heal=bool(getattr(s, "autonomous_actions_v0", True)),
+            auto_runtime_heal=bool(getattr(s, "autonomous_actions_v0", False)),
             auto_code_patch_pr=bool(getattr(s, "code_change_enabled", False)),
             auto_code_patch_merge=bool(getattr(s, "auto_pr_enabled", False)),
             daily_maintenance_budget_usd=float(
@@ -123,6 +123,9 @@ def _defaults_from_settings(org_id: str, agent_id: str | None) -> AutonomousMain
             ),
             max_auto_rollbacks_per_day=int(
                 getattr(s, "max_auto_rollbacks_per_day", 3)
+            ),
+            auto_merge_max_per_week=int(
+                getattr(s, "auto_merge_max_per_week", 2) or 2
             ),
             compliance_profile=profile
             if profile in ("standard", "hipaa", "soc2_strict")

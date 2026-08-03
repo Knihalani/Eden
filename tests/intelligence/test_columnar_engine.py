@@ -94,10 +94,18 @@ class TestColumnarPartitionManager:
         from eden.columnar._common import _reset_ch_health_cache
 
         _reset_ch_health_cache()
-        # Force the probe to return False.
-        with patch(
-            "eden.columnar._common._check_ch_available",
-            new=AsyncMock(return_value=False),
+        # Force a non-Tinybird substrate whose health probe fails so we
+        # exercise the postgres_fallback path (distinct from Tinybird's
+        # not_applicable path covered below).
+        with (
+            patch(
+                "eden.columnar.partitions._is_tinybird_substrate",
+                new=AsyncMock(return_value=False),
+            ),
+            patch(
+                "eden.columnar.partitions._check_ch_available",
+                new=AsyncMock(return_value=False),
+            ),
         ):
             mock_postgres_client.fetchrow = AsyncMock(
                 return_value={"n": 5000}
@@ -125,6 +133,7 @@ class TestColumnarPartitionManager:
         # the sink.
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(
             return_value=_tsv_row(n=10000, b=2560000)
@@ -165,6 +174,49 @@ class TestColumnarPartitionManager:
         assert result["live"] is False
         assert "hour" in result["message"]
 
+    async def test_tinybird_reports_not_applicable_via_postgres_estimate(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
+        """Tinybird's ``/v0/sql`` does not expose ``system.parts``.
+
+        Phase 1 of the observability overhaul (2026-08): this must not
+        attempt the query (it would always raise) and must not label the
+        result ``postgres_fallback`` (nothing about ClickHouse is
+        unhealthy — the operation just does not exist on this substrate),
+        nor record a ``query_error`` fallback metric for a condition that
+        is permanent and expected rather than an actual outage.
+        """
+        from eden.columnar import ColumnarPartitionManager
+        from eden.columnar._common import _reset_ch_health_cache
+
+        _reset_ch_health_cache()
+        mock_sink = MagicMock()
+        mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = True
+        mock_sink.health_check = AsyncMock(return_value="connected")
+        mock_postgres_client.fetchrow = AsyncMock(return_value={"n": 4200})
+        with (
+            patch(
+                "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+                new=AsyncMock(return_value=mock_sink),
+            ),
+            patch(
+                "eden.columnar.partitions._record_columnar_fallback",
+            ) as mock_record_fallback,
+        ):
+            result = await ColumnarPartitionManager().ensure(
+                "org_test",
+                granularity="day",
+                source_table="telemetry_events",
+            )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert result["data"]["data_source"] == "not_applicable"
+        assert result["data"]["rows_estimate"] == 4200
+        assert result["data"]["bytes_estimate"] == 4200 * 256
+        mock_sink._execute.assert_not_called()
+        mock_record_fallback.assert_not_called()
+
     async def test_clickhouse_exception_falls_back(
         self, mock_postgres_client: MagicMock
     ) -> None:
@@ -175,6 +227,7 @@ class TestColumnarPartitionManager:
         _reset_ch_health_cache()
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(
             side_effect=RuntimeError("ch timeout")
@@ -255,6 +308,7 @@ class TestColumnarAggregator:
         # 3 buckets × varying counts.
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(
             return_value=(
@@ -360,6 +414,7 @@ class TestColumnarCompactor:
         # + optimize call.
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(side_effect=[
             _tsv_row(n=10000, b=2560000),  # rows_in
@@ -385,6 +440,51 @@ class TestColumnarCompactor:
         assert result["data"]["compression_ratio"] == 50.0
         assert result["data"]["status"] == "ok"
         assert result["data"]["sla_breached"] is False
+
+    async def test_tinybird_reports_not_applicable_without_firing_hook(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
+        """Tinybird owns its own background merges; there is no OPTIMIZE.
+
+        Phase 1 of the observability overhaul (2026-08): before this fix,
+        the ``OPTIMIZE`` call's deterministic rejection on Tinybird was
+        recorded as a compaction *failure* and fired a
+        ``severity="high"`` closed-loop hook — forever, on every
+        scheduled tick, on any Tinybird-backed deployment. It must
+        instead report ``not_applicable`` without ever attempting the
+        (guaranteed-failing) ClickHouse call or firing the hook.
+        """
+        from eden.columnar import ColumnarCompactor
+        from eden.columnar._common import _reset_ch_health_cache
+
+        _reset_ch_health_cache()
+        mock_sink = MagicMock()
+        mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = True
+        mock_sink.health_check = AsyncMock(return_value="connected")
+        mock_postgres_client.execute = AsyncMock(return_value=None)
+        with (
+            patch(
+                "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+                new=AsyncMock(return_value=mock_sink),
+            ),
+            patch(
+                "eden.columnar.compaction._fire_compaction_drift_hook",
+                new=AsyncMock(),
+            ) as mock_fire,
+        ):
+            result = await ColumnarCompactor().compact_segments(
+                "org_test", partition_id="eden.org_test.2026_06"
+            )
+        assert result["status"] == "ok"
+        assert result["live"] is True
+        assert result["data"]["data_source"] == "not_applicable"
+        mock_fire.assert_not_awaited()
+        # _ch_size / _ch_optimize never ran — they would always raise.
+        mock_sink._execute.assert_not_called()
+        # The audit log still gets a row, just an honest one.
+        log_call = mock_postgres_client.execute.await_args_list[0]
+        assert log_call.args[10] == "not_applicable"  # status column
 
     async def test_postgres_fallback_synthesises_compression(
         self, mock_postgres_client: MagicMock
@@ -428,6 +528,7 @@ class TestColumnarCompactor:
         _reset_ch_health_cache()
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(side_effect=[
             _tsv_row(n=1000, b=256000),
@@ -521,6 +622,7 @@ class TestColumnarQueryEngine:
         _reset_ch_health_cache()
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(
             return_value="model\tn\nclaude-sonnet-4\t452000\n"
@@ -555,6 +657,7 @@ class TestColumnarQueryEngine:
         _reset_ch_health_cache()
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(
             side_effect=RuntimeError("ch timeout")
@@ -597,6 +700,7 @@ class TestColumnarQueryEngine:
         _reset_ch_health_cache()
         mock_sink = MagicMock()
         mock_sink.config.database = "eden"
+        mock_sink.config.is_tinybird = False
         mock_sink.health_check = AsyncMock(return_value="connected")
         mock_sink._execute = AsyncMock(
             side_effect=RuntimeError("ch boom")

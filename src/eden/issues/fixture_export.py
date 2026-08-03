@@ -1,10 +1,17 @@
-"""D6 — redacted failure fixture export for local replay."""
+"""D6 — redacted failure fixture export for local replay.
+
+M12 (§7.2): after the key-name pass, every string leaf is scanned for
+secret *values* (JWT / ``sk-`` / ``ghp_`` / ``xoxb-`` / PEM / the
+``security_scanner`` regex set) and replaced with ``[REDACTED:pattern]``.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -21,8 +28,56 @@ _REDACT_KEYS = frozenset(
     }
 )
 
+# M12 (§7.2): value-level patterns. Applied after the key-name pass on
+# every string leaf (and at pack-build / PR-body choke points).
+_VALUE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    (
+        "pem",
+        re.compile(
+            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"
+            r".*?"
+            r"-----END [A-Z0-9 ]*PRIVATE KEY-----",
+            re.DOTALL,
+        ),
+    ),
+    (
+        "jwt",
+        re.compile(
+            r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
+        ),
+    ),
+    ("sk-", re.compile(r"\bsk-[A-Za-z0-9]{16,}\b")),
+    ("ghp_", re.compile(r"\bghp_[A-Za-z0-9]{20,}\b")),
+    ("xoxb-", re.compile(r"\bxoxb-[A-Za-z0-9-]{10,}\b")),
+]
+
+
+@lru_cache(maxsize=1)
+def _security_scanner_patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
+    """Reuse SASTScanner._SECRET_PATTERNS (cached — hot path)."""
+    from eden.evaluation.security_scanner import SASTScanner
+
+    return tuple(SASTScanner._SECRET_PATTERNS)
+
+
+def redact_secret_values(text: str) -> str:
+    """M12 (§7.2): replace secret-shaped substrings with ``[REDACTED:pattern]``.
+
+    Pure string scan — used on free-form leaves, pack excerpts, and
+    rendered PR bodies (choke-point defense in depth).
+    """
+    if not text or not isinstance(text, str):
+        return text
+    out = text
+    for name, pattern in _VALUE_PATTERNS:
+        out = pattern.sub(f"[REDACTED:{name}]", out)
+    for name, pattern in _security_scanner_patterns():
+        out = pattern.sub(f"[REDACTED:{name}]", out)
+    return out
+
 
 def _redact(obj: Any) -> Any:
+    """Key-name redaction, then M12 (§7.2) value-pattern scan on string leaves."""
     if isinstance(obj, dict):
         out: dict[str, Any] = {}
         for k, v in obj.items():
@@ -33,6 +88,8 @@ def _redact(obj: Any) -> Any:
         return out
     if isinstance(obj, list):
         return [_redact(x) for x in obj]
+    if isinstance(obj, str):
+        return redact_secret_values(obj)
     return obj
 
 

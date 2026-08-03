@@ -125,7 +125,15 @@ class TestP2IngestBatchParallel:
         which is a flaky gate, not a regression signal. Measuring peak
         concurrency instead tests the actual invariant (``gather`` vs a
         sequential loop) and is immune to how busy the machine is.
+
+        This test is about routing concurrency, not sampling — it forces
+        the N16 policy to ``full`` (100% keep) so the production default
+        (``balanced``, ~15% keep — see ``src/eden/config.py``) can't
+        randomly sample away some of the 10 fixture events before they
+        ever reach ``_route`` and turn this into a flaky assertion on
+        ``accepted``/``peak_in_flight``.
         """
+        from eden.observability.sampling.policy import IntelligenceAwareSamplingPolicy
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
             TelemetryEvent,
@@ -168,7 +176,11 @@ class TestP2IngestBatchParallel:
         ]
 
         t0 = time.monotonic()
-        result = asyncio.run(c.ingest_batch(events))
+        with patch(
+            "eden.observability.sampling.apply.get_sampling_policy",
+            return_value=IntelligenceAwareSamplingPolicy(profile="full"),
+        ):
+            result = asyncio.run(c.ingest_batch(events))
         elapsed = time.monotonic() - t0
 
         assert result["accepted"] == 10
@@ -190,7 +202,13 @@ class TestP2IngestBatchParallel:
         The audit's risk: ``asyncio.gather`` on the pre-pass would
         race on the counter dict. Verify the pre-pass is still
         sequential by sending a duplicate event and asserting the
-        dedup count is correct."""
+        dedup count is correct.
+
+        Forces the N16 policy to ``full`` — see
+        ``test_ingest_batch_routes_in_parallel`` above for why (this test
+        also asserts an exact ``accepted`` count unrelated to sampling).
+        """
+        from eden.observability.sampling.policy import IntelligenceAwareSamplingPolicy
         from eden.observability.telemetry_collector import (
             TelemetryCollector,
             TelemetryEvent,
@@ -225,7 +243,11 @@ class TestP2IngestBatchParallel:
             payload={"x": 1},
         )
 
-        result = asyncio.run(c.ingest_batch([ev, ev_copy]))
+        with patch(
+            "eden.observability.sampling.apply.get_sampling_policy",
+            return_value=IntelligenceAwareSamplingPolicy(profile="full"),
+        ):
+            result = asyncio.run(c.ingest_batch([ev, ev_copy]))
         # Pre-fix this would be 2 (sequential pre-pass).
         # Post-fix it's still 2 — gather is on routing only.
         assert result["accepted"] == 1

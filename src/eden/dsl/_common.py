@@ -45,7 +45,106 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.columnar.tables import CLICKHOUSE_COLUMNS as _CH_COLUMNS
+from eden.columnar.tables import clickhouse_table, has_clickhouse_mirror
+
 logger = logging.getLogger(__name__)
+
+
+# ─── Logical → physical (Tinybird) SQL translation ────────────
+#
+# The EQL compiler (below, and :mod:`eden.dsl.parser`) generates SQL
+# against a *logical* schema — table ``telemetry_events``, column
+# ``org_id`` — because that is the vocabulary the read-only allowlist
+# (:data:`_ALLOWED_TABLES`), the tenant-isolation injector
+# (:func:`_inject_org_id`), and every pinned security test in
+# ``tests/unit/dsl/test_common.py`` are written against. Changing that
+# vocabulary would mean re-deriving (and re-reviewing) the whole
+# boolean-bypass / comment-swallow hardening above for a new column
+# name, for no safety benefit.
+#
+# But neither Postgres nor Tinybird actually has that schema: Tinybird
+# only has ``telemetry_events_ch`` with a ``tenant_id`` column (see
+# ``tinybird/datasources/telemetry_events_ch.datasource`` and
+# :mod:`eden.columnar.tables`, which is the single source of truth
+# for this mapping and already carries the "why" for each rename).
+# ``AlertAsCode._run_alert_sql`` therefore compiled a query that Cat 19
+# validated and org-scoped correctly, then sent it to Tinybird where
+# every single execution failed with UNKNOWN_TABLE / UNKNOWN_IDENTIFIER
+# — every EQL alert silently fell back to the (also wrong, but
+# differently wrong) Postgres path or errored out, and n_errors crossed
+# the 3-strike auto-disable threshold on the very first fire.
+#
+# :func:`_to_columnar_physical_sql` is the translation boundary: it
+# runs on the fully-compiled, already org-scoped SQL immediately before
+# that SQL is handed to :class:`ClickHouseSink`, and nowhere else — the
+# compile-time representation (what's persisted as
+# ``eql_alert_rules.clickhouse_sql`` and asserted on by the parser
+# tests) is unchanged.
+
+_EQL_LOGICAL_TABLE = "telemetry_events"
+
+
+def _columnar_column_renames() -> dict[str, str]:
+    """Logical→physical column renames that actually change the name.
+
+    Pulled live from :data:`eden.columnar.tables.CLICKHOUSE_COLUMNS` on
+    every call (cheap — a handful of dict entries) rather than copied,
+    so a future edit to that mapping doesn't silently drift out of
+    sync with the EQL substrate-translation path the way the original
+    ``telemetry_events``/``org_id`` mismatch did.
+    """
+    mapping = _CH_COLUMNS.get(_EQL_LOGICAL_TABLE, {})
+    return {logical: physical for logical, physical in mapping.items() if logical != physical}
+
+
+def _to_columnar_physical_sql(sql: str) -> str:
+    """Rewrite compiled EQL SQL to the physical Tinybird/ClickHouse names.
+
+    Replaces the whole-word table reference ``telemetry_events`` with
+    :func:`eden.columnar.tables.clickhouse_table`'s physical name
+    (``telemetry_events_ch``), and every whole-word occurrence of a
+    renamed logical column (currently just ``org_id`` → ``tenant_id``;
+    ``created``/``created_at`` → ``timestamp`` and ``level`` →
+    ``outcome`` are included for free if a query ever references them)
+    with its physical name — including table-qualified references like
+    ``t.org_id`` or ``e.org_id``, since only the bare identifier after
+    the dot needs to change.
+
+    Literal-aware: string-literal spans (:func:`_string_literal_spans`)
+    are skipped, so a customer's filter value that happens to contain
+    the text ``org_id`` (e.g. ``WHERE message = 'saw org_id in logs'``)
+    is left untouched — only real identifier references are rewritten.
+
+    A no-op if :mod:`eden.columnar.tables` has no ClickHouse mirror for
+    the logical table (defensive: keeps this function harmless if the
+    mapping is ever removed rather than raising deep inside an alert
+    evaluation).
+    """
+    if not sql or not has_clickhouse_mirror(_EQL_LOGICAL_TABLE):
+        return sql
+    physical_table = clickhouse_table(_EQL_LOGICAL_TABLE)
+    column_renames = _columnar_column_renames()
+
+    alternatives = [re.escape(_EQL_LOGICAL_TABLE)]
+    alternatives.extend(
+        re.escape(c) for c in sorted(column_renames, key=len, reverse=True)
+    )
+    token_re = re.compile(r"\b(?:" + "|".join(alternatives) + r")\b")
+
+    spans = _string_literal_spans(sql)
+    out: list[str] = []
+    last = 0
+    for m in token_re.finditer(sql):
+        if any(start <= m.start() < end for start, end in spans):
+            continue
+        token = m.group(0)
+        replacement = physical_table if token == _EQL_LOGICAL_TABLE else column_renames[token]
+        out.append(sql[last : m.start()])
+        out.append(replacement)
+        last = m.end()
+    out.append(sql[last:])
+    return "".join(out)
 
 
 # ─── Envelope helpers ────────────────────────────────────────
@@ -1249,6 +1348,8 @@ __all__ = [
     "_ok_with_warnings",
     "_string_literal_spans",
     "_strip_sql_comments",
+    "_to_columnar_physical_sql",
+    "_columnar_column_renames",
     "_upsert_alert_rule",
     "_DISALLOWED_DML_KEYWORDS",
     "_DISALLOWED_SET_OPS",

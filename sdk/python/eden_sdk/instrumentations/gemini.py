@@ -16,6 +16,7 @@ from typing import Any
 
 from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
+from eden_sdk.capture import capture_value, limits_from_config, stamp_capture_attributes
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import current_span
@@ -113,10 +114,19 @@ def _wrap_generate(original, *, provider: str):  # type: ignore[no-untyped-def]
 
 
 def _extract_text(resp: Any) -> str | None:
+    """Extract the raw response text.
+
+    Deliberately does NOT truncate here — hard-slicing to a fixed
+    length here would silently drop content with no metadata to
+    signal that anything was cut. Bounded capture (with
+    ``eden.truncated`` / ``eden.original_bytes`` stamping) is applied
+    uniformly in :func:`_enqueue` instead, same as every other
+    provider instrumentation.
+    """
     try:
         text = getattr(resp, "text", None)
         if isinstance(text, str):
-            return text[:2000]
+            return text
     except Exception:  # noqa: BLE001
         return None
     return None
@@ -178,6 +188,12 @@ def _enqueue(
         "cache_read_tokens": None,
         "cache_creation_tokens": None,
     }
+    response_result = capture_value(
+        {"text": text} if text else None,
+        has_error=error is not None,
+        duration_ms=duration_ms,
+        limits=limits_from_config(get_config()),
+    )
     payload: dict[str, Any] = {
         "event_id": f"eden_gemini_{uuid.uuid4().hex[:16]}",
         "trace_id": _trace_id_or_random(),
@@ -187,7 +203,7 @@ def _enqueue(
         "model": model,
         "model_normalized": normalize_model_name(model) if model else None,
         "duration_ms": duration_ms,
-        "response_payload": {"text": text} if text else None,
+        "response_payload": response_result.value,
         "source_format": "gemini",
         "attributes": {"provider": provider},
         "input_tokens": usage["input_tokens"],
@@ -195,6 +211,7 @@ def _enqueue(
         "cache_read_input_tokens": usage["cache_read_tokens"],
         "cache_creation_input_tokens": usage["cache_creation_tokens"],
     }
+    stamp_capture_attributes(payload["attributes"], response_result)
     _cur = current_span()
     if _cur is not None:
         payload["parent_span_id"] = _cur.span_id

@@ -18,6 +18,7 @@ import {
 } from "@/lab/fixtures/settings";
 import { HealthChip } from "@/lab/settings/settings-chrome";
 import type { SettingsMode } from "@/lab/settings/settings-chrome";
+import { AutonomySettingsCard } from "@/lab/settings/autonomy-settings-card";
 import { SlackSettingsCard } from "@/lab/settings/slack-settings-card";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -192,6 +193,8 @@ export function SettingsWorkspaceView({
           }
         />
       </div>
+
+      <AutonomySettingsCard canEdit={canEdit} />
 
       <SlackSettingsCard />
 

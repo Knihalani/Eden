@@ -222,6 +222,7 @@ async def live_tail(
     org_id: str = Depends(require_path_org_access),
     filter_agent_id: str | None = None,
     filter_event_type: str | None = None,
+    full: bool = False,
 ) -> StreamingResponse:
     """SSE stream of new telemetry events for ``org_id``.
 
@@ -230,11 +231,18 @@ async def live_tail(
     ``EventSource`` works without a polyfill. The first
     line is a heartbeat (``": heartbeat"``) so the client
     knows the connection is live before any events arrive.
+
+    Each event is a summary projection by default (ids, name,
+    event_type, outcome, duration_ms, model, tags, timestamps —
+    no ``payload``/``metrics``/``attributes``). Pass ``?full=1``
+    to inline full detail on every event instead of following up
+    with ``GET .../live-tail/{event_id}`` per row on expand/click.
     """
     generator = _live_tail.stream(
         org_id,
         filter_agent_id=filter_agent_id,
         filter_event_type=filter_event_type,
+        full=full,
     )
     return StreamingResponse(
         generator,
@@ -244,6 +252,25 @@ async def live_tail(
             "X-Accel-Buffering": "no",  # disable proxy buffering
         },
     )
+
+@router.get("/live-tail/{event_id}")
+async def live_tail_event_detail(
+    org_id: str = Depends(require_path_org_access),
+    event_id: str = Path(...),
+) -> dict[str, Any]:
+    """Full-detail fetch for one live-tail event (expand/click path).
+
+    ``live_tail`` above only streams a summary projection; this
+    returns the same row with ``payload``/``metrics``/``attributes``
+    included, for a UI that expands one row at a time instead of
+    paying that cost on every polled event.
+    """
+    from eden.observability._trace_common import not_found_envelope, ok_envelope
+
+    detail = await _live_tail.fetch_detail(org_id, event_id)
+    if detail is None:
+        return not_found_envelope("live_tail_detail", event_id)
+    return ok_envelope("live_tail_detail", detail)
 
 @router.post("/{trace_id}/checkpoint/rewind")
 async def rewind_checkpoint(

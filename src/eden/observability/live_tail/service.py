@@ -87,6 +87,7 @@ class LiveTailService:
         *,
         filter_agent_id: str | None = None,
         filter_event_type: str | None = None,
+        full: bool = False,
     ) -> AsyncIterator[str]:
         """Async-iterate over new events for ``org_id``.
 
@@ -105,6 +106,13 @@ class LiveTailService:
 
         Both filters are optional; the consumer gets
         everything for the org by default.
+
+        ``full`` (default ``False``) — the poll path normally
+        projects only summary columns (see
+        ``_SUMMARY_COLUMNS``); pass ``full=True`` (``?full=1`` on
+        the route) to inline ``payload``/``metrics``/``attributes``
+        on every event instead of using :meth:`fetch_detail` per
+        row on expand/click.
         """
         started = time.monotonic()
         last_seen_at: str | None = None
@@ -154,6 +162,7 @@ class LiveTailService:
                         filter_event_type=filter_event_type,
                         limit=200,
                         client=client,
+                        full=full,
                     )
                 except Exception as exc:
                     logger.debug("live_tail: poll failed: %s", exc)
@@ -204,6 +213,21 @@ class LiveTailService:
                         f"{_OBS_STREAM_CHANNEL_PREFIX}{org_id}"
                     )
                     await pubsub.close()
+
+    async def fetch_detail(
+        self, org_id: str, event_id: str
+    ) -> dict[str, Any] | None:
+        """Full-detail fetch for one event — the expand/click path.
+
+        Returns the serialised row (including ``payload``/``metrics``/
+        ``attributes``) or ``None`` if the event doesn't exist (or
+        doesn't belong to ``org_id``). Pairs with the summary rows
+        yielded by :meth:`stream`, which omit those JSONB columns.
+        """
+        row = await _fetch_event_detail(org_id, event_id)
+        if row is None:
+            return None
+        return serialise_event(row)
 
 
 async def _get_pg_client() -> Any | None:
@@ -299,6 +323,43 @@ async def _fetch_latest_timestamp(
     return ts
 
 
+#: Summary projection for the poll path — the live-tail dashboard
+#: renders a scrolling list of rows and only needs enough to identify
+#: + label each one. Deliberately excludes ``payload`` / ``metrics`` /
+#: ``attributes``: those JSONB blobs can run tens of KB per row (full
+#: LLM request/response bodies), and at a 1s poll interval that's the
+#: dominant cost of the whole endpoint for a busy org. Expand/click
+#: uses :func:`_fetch_event_detail` instead, which reads exactly one
+#: row.
+#:
+#: NB: earlier revisions of this query also selected ``error``, which
+#: has never existed on ``telemetry_events`` (see migration 009 — the
+#: only per-event status column is ``outcome``). Every poll therefore
+#: raised ``UndefinedColumn``, was swallowed by the ``except Exception``
+#: in ``LiveTailService.stream``, and silently returned an empty batch
+#: — live tail has been a no-op in any environment that actually hits
+#: Postgres. Dropped here rather than added to the schema since
+#: ``outcome`` already covers the "did this fail" signal this view
+#: needs.
+_SUMMARY_COLUMNS = (
+    "event_id, trace_id, span_id, parent_span_id, event_type, "
+    "timestamp, name, duration_ms, outcome, model, tags, "
+    "agent_id, agent_version, environment_id, realm, "
+    "source_format, project_id, tenant_id, created_at"
+)
+
+#: Full projection — same column set plus the JSONB payload columns.
+#: Used only for the explicit ``full=True`` opt-in and for
+#: :func:`_fetch_event_detail` (single-row expand/click fetch).
+_FULL_COLUMNS = (
+    "event_id, trace_id, span_id, parent_span_id, event_type, "
+    "timestamp, name, duration_ms, outcome, model, tags, "
+    "agent_id, agent_version, environment_id, realm, "
+    "payload, metrics, attributes, "
+    "source_format, project_id, tenant_id, created_at"
+)
+
+
 async def _fetch_events_after(
     org_id: str,
     *,
@@ -307,11 +368,17 @@ async def _fetch_events_after(
     filter_event_type: str | None = None,
     limit: int = 200,
     client: Any | None = None,
+    full: bool = False,
 ) -> list[dict[str, Any]]:
     """Return events newer than ``after_timestamp`` for ``org_id``.
 
     Used by the polling loop. Builds a parameterised query
     so the caller-supplied filter strings can't inject SQL.
+
+    ``full=False`` (default) selects the summary projection
+    (``_SUMMARY_COLUMNS``) — no ``payload``/``metrics``/``attributes``.
+    Pass ``full=True`` to get every column, e.g. for a caller that
+    wants full detail inline rather than a follow-up per-row fetch.
     """
     if client is None:
         client = await _get_pg_client()
@@ -330,12 +397,9 @@ async def _fetch_events_after(
         # event types. Escape any wildcards in the input.
         where.append(f"event_type LIKE ${len(args) + 1}")
         args.append(filter_event_type + "%")
+    columns = _FULL_COLUMNS if full else _SUMMARY_COLUMNS
     query = f"""
-        SELECT event_id, trace_id, span_id, parent_span_id, event_type,
-               timestamp, name, duration_ms, outcome, error,
-               agent_id, agent_version, environment_id, realm,
-               payload, metrics, attributes, tags,
-               source_format, project_id, tenant_id, created_at
+        SELECT {columns}
         FROM telemetry_events
         WHERE {' AND '.join(where)}
         ORDER BY created_at ASC
@@ -347,3 +411,34 @@ async def _fetch_events_after(
         logger.debug("live_tail: fetch events_after failed: %s", exc)
         return []
     return [dict(r) for r in rows]
+
+
+async def _fetch_event_detail(
+    org_id: str,
+    event_id: str,
+    *,
+    client: Any | None = None,
+) -> dict[str, Any] | None:
+    """Return the full row (incl. payload/metrics/attributes) for one
+    event — the expand/click path for a summary-projected live-tail
+    row. Scoped by ``tenant_id`` so a caller can't read cross-tenant.
+    """
+    if client is None:
+        client = await _get_pg_client()
+    if client is None:
+        return None
+    try:
+        row = await client.fetchrow(
+            f"""
+            SELECT {_FULL_COLUMNS}
+            FROM telemetry_events
+            WHERE tenant_id = $1 AND event_id = $2
+            LIMIT 1
+            """,
+            org_id,
+            event_id,
+        )
+    except Exception as exc:
+        logger.debug("live_tail: fetch event detail failed: %s", exc)
+        return None
+    return dict(row) if row is not None else None

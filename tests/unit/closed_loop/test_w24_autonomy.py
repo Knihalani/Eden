@@ -7,6 +7,7 @@ surfaces.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -124,8 +125,8 @@ async def test_orchestrator_deny_blocks_heal_execute() -> None:
     orch = ClosedLoopOrchestrator()
     with patch.object(
         ClosedLoopOrchestrator,
-        "_decide_action",
-        new=AsyncMock(return_value="deny"),
+        "_decide_action_recorded",
+        new=AsyncMock(return_value=("deny", "dec-w24-deny", time.time())),
     ), patch(
         "eden.closed_loop.orchestrator.apply_transition",
         new=AsyncMock(),
@@ -161,8 +162,8 @@ async def test_orchestrator_allow_executes_heal() -> None:
     )
     with patch.object(
         ClosedLoopOrchestrator,
-        "_decide_action",
-        new=AsyncMock(return_value="allow"),
+        "_decide_action_recorded",
+        new=AsyncMock(return_value=("allow", "dec-w24-allow", time.time())),
     ), patch(
         "eden.llmops.feature_kills.is_autonomy_action_enabled",
         new=AsyncMock(return_value=True),
@@ -182,7 +183,11 @@ async def test_orchestrator_allow_executes_heal() -> None:
             {"suggested_actions": [{"action_type": "cache_bust"}]},
         )
     at.assert_awaited()
-    healer.heal_from_issue.assert_awaited_once_with("org_test", "iss-1")
+    healer.heal_from_issue.assert_awaited_once()
+    call = healer.heal_from_issue.await_args
+    assert call.args == ("org_test", "iss-1")
+    # M10 (§5.4): the audited decision id threads into the executor.
+    assert call.kwargs.get("decision_id") == "dec-w24-allow"
     emit.assert_awaited()
     assert emit.await_args.args[0].type == EventType.HEAL_EXECUTED
 
@@ -194,8 +199,8 @@ async def test_orchestrator_kill_switch_blocks_even_when_policy_allows() -> None
     orch = ClosedLoopOrchestrator()
     with patch.object(
         ClosedLoopOrchestrator,
-        "_decide_action",
-        new=AsyncMock(return_value="allow"),
+        "_decide_action_recorded",
+        new=AsyncMock(return_value=("allow", "dec-w24-kill", time.time())),
     ), patch(
         "eden.llmops.feature_kills.is_autonomy_action_enabled",
         new=AsyncMock(return_value=False),

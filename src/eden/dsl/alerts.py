@@ -40,6 +40,7 @@ from ._common import (
     _looks_like_readonly_sql,
     _not_implemented_envelope,
     _ok_envelope,
+    _to_columnar_physical_sql,
     _upsert_alert_rule,
 )
 from .parser import EQLParser
@@ -543,7 +544,19 @@ async def _trigger_triage(
 async def _run_alert_sql(
     sql: str,
 ) -> tuple[list[dict[str, Any]], str]:
-    """Execute alert SQL via ClickHouse when healthy, else Postgres."""
+    """Execute alert SQL via ClickHouse when healthy, else Postgres.
+
+    ``sql`` is compiled against the DSL's *logical* schema
+    (``telemetry_events`` / ``org_id``) — the vocabulary the read-only
+    allowlist and tenant-isolation injector in :mod:`eden.dsl._common`
+    are hardened against. Tinybird (the only ClickHouse substrate)
+    only has the physical ``telemetry_events_ch`` table with a
+    ``tenant_id`` column, so :func:`_to_columnar_physical_sql`
+    translates just before this SQL is handed to
+    :class:`ClickHouseSink` — every query used to fail with
+    UNKNOWN_TABLE/UNKNOWN_IDENTIFIER on this path and fall through to
+    Postgres (or an ``error`` firing) unconditionally.
+    """
     from eden.columnar._common import _check_ch_available
 
     if await _check_ch_available():
@@ -551,7 +564,8 @@ async def _run_alert_sql(
             from eden.data_platform.clickhouse_sink import get_clickhouse_sink
 
             sink = await get_clickhouse_sink()
-            raw = await sink._execute(sql)  # noqa: SLF001
+            physical_sql = _to_columnar_physical_sql(sql)
+            raw = await sink._execute(physical_sql)  # noqa: SLF001
             rows = sink._parse_tsv(raw)  # noqa: SLF001
             return list(rows or []), "clickhouse"
         except Exception as exc:

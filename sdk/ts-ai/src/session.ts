@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { getDefaultClient } from "./client.js";
+import { getDefaultClient, gzipJsonBody } from "./client.js";
 import { trace, type TraceContext } from "./trace.js";
 
 export interface AgentSessionOptions {
@@ -163,10 +163,18 @@ async function notifySession(
         trace_ids: payload.traceIds,
       };
     }
+    // Gzip like the main ingest path (``client.ts``'s ``gzipJsonBody``)
+    // — the request-side counterpart is the ASGI ``GunzipRequestMiddleware``
+    // (server ``eden.api.middleware.gzip_request``), scoped to exactly
+    // ``/ingest/agent-sessions`` and ``/stream/traces``. Node's global
+    // ``fetch`` (undici) already keeps the underlying connection pooled
+    // across calls, so no separate agent/pool management is needed here.
+    headers["Content-Encoding"] = "gzip";
+    const compressed = await gzipJsonBody(body);
     const resp = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: compressed as BodyInit,
     });
     if (!resp.ok) {
       // surface non-2xx without throwing into user code

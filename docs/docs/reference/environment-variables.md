@@ -59,7 +59,7 @@ a dedicated tenancy.
 | `EDEN_DEBUG` | `false` | Python SDK | |
 | `EDEN_ENV` | `default` | SDKs | |
 | `EDEN_ORG_ID` | unset | SDKs | |
-| `EDEN_SAMPLING_PROFILE` | `full` | API + SDKs | Soft-launch default: **100% keep**. Cost win after soft-launch: set `balanced` (~15% non-signal keep; errors/loops/stumbles always kept) or `aggressive` (~5%). Applied server-side via N16 `decide()` on ingest; SDKs also honour the same env for client-side enqueue filtering. |
+| `EDEN_SAMPLING_PROFILE` | `full` | API + SDKs | Default 100% keep. Set `balanced` (~15% of non-signal traces; errors/slow/high_cost/force_trace always kept) or `aggressive` (~5%) for cost reduction. SDKs honour the same env for client-side enqueue filtering; leave `EDEN_CLIENT_PROBABILISTIC_SAMPLING` off so only the server applies the probabilistic gate. |
 | `EDEN_SAMPLING_ENABLED` | `true` / `1` | API + SDKs | `false` / `0` forces 100% keep (safe rollback). |
 | `EDEN_SAMPLE_KEEP_ERRORS` | `1` | SDKs | Client sampler always keeps error signals when on. |
 | `EDEN_PROBABILISTIC_SAMPLE_RATE` | `1.0` | API | When `< 1.0`, overrides profile fallback rate only. |

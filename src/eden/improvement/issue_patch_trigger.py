@@ -186,14 +186,27 @@ def _plan_payload_from_patch(
     failure_pack: dict[str, Any] | None = None,
     hermetic_preverify: dict[str, Any] | None = None,
     example_trace_ids: list[str] | None = None,
+    replay: dict[str, Any] | None = None,
+    sandbox_tests: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     issue = ctx["issue"]
     triage = ctx.get("triage") or {}
     files = patch_data.get("files") or []
     sev = normalize_severity(issue.severity)
     pack = failure_pack or {}
+    # Evidence tier ladder (§4.1/§4.2): "tested" only when the M8
+    # sandbox test gate actually passed; else "replay" only when replay
+    # actually passed; else this plan carries static evidence only.
+    if (sandbox_tests or {}).get("status") == "passed":
+        evidence_tier = "tested"
+    elif (replay or {}).get("status") == "passed":
+        evidence_tier = "replay"
+    else:
+        evidence_tier = "static"
+    # NOTE (M3, D28): no ``org_id`` key here — the payload is splatted
+    # into ``plans_repo.create_plan(org_id, **payload)``, which takes
+    # org_id positionally; a duplicate key is a TypeError.
     return {
-        "org_id": org_id,
         "run_id": run_id,
         "plan_kind": "code_patch",
         "title": patch_data.get("description") or issue.title,
@@ -212,7 +225,16 @@ def _plan_payload_from_patch(
             "example_trace_ids": list(example_trace_ids or pack.get("example_trace_ids") or []),
             "failure_pack_format": pack.get("format"),
             "failure_pack_status": pack.get("status"),
+            # M7 (§4.1): honest label — success is "static_passed"
+            # (readers accept legacy "passed" too).
             "hermetic_preverify": hermetic_preverify,
+            "evidence_tier": evidence_tier,
+            "replay": replay,
+            # M8 (§4.2): targeted sandbox test summary — carries
+            # ``synthesized: true`` when the test was LLM-written
+            # (PR-body annotation lands in M9).
+            "sandbox_tests": sandbox_tests,
+            "failure_signature": pack.get("failure_signature"),
         },
         "triage_snapshot": triage,
         "llm_cost_usd": float(patch_data.get("cost_usd") or 0),
@@ -242,25 +264,29 @@ async def _n22_may_propose(org_id: str, agent_id: str | None) -> tuple[bool, str
 
 
 async def _budget_ok(org_id: str) -> tuple[bool, str]:
-    """Budgets from cost ledger (W7/W8) + daily maintenance cap + patch_max_per_day."""
+    """M4 (D12): single budget ledger — ``autonomy_policy.check_budget``
+    (the Redis ``autonomy:spend:`` counter every ``record_spend`` writer
+    feeds) + ``patch_max_per_day``. The parallel ``cost_ledger`` read is
+    gone; a broken budget check FAILS CLOSED (``budget_check_error``) —
+    the caller stamps the blocker on the issue."""
     try:
+        from eden.closed_loop.autonomy_policy import check_budget
         from eden.config import get_settings
-        from eden.llmops.cost_ledger import sum_feature_spend_today
 
-        settings = get_settings()
-        cap = float(getattr(settings, "daily_maintenance_budget_usd", 25.0) or 0)
-        if cap > 0:
-            spent = await sum_feature_spend_today(org_id, features=("patches", "autonomy"))
-            if spent >= cap:
-                return False, f"budget_exhausted:{spent:.2f}>={cap:.2f}"
+        ok, spent, limit = await check_budget(org_id)
+        if not ok:
+            return False, f"budget_exhausted:{spent:.2f}>={limit:.2f}"
 
-        day_cap = int(getattr(settings, "patch_max_per_day", 10) or 10)
+        day_cap = int(getattr(get_settings(), "patch_max_per_day", 10) or 10)
         if day_cap > 0:
             used = await plans_repo.count_code_patches_today(org_id)
             if used >= day_cap:
                 return False, f"patch_max_per_day:{used}>={day_cap}"
     except Exception as exc:
-        logger.debug("issue_patch_trigger: cost_ledger budget: %s", exc)
+        logger.warning(
+            "issue_patch_trigger: budget check failed (fail closed): %s", exc
+        )
+        return False, "budget_check_error"
 
     return True, "ok"
 
@@ -302,6 +328,18 @@ async def propose_plan_for_issue(
 
     budget_ok, budget_reason = await _budget_ok(org_id)
     if not budget_ok:
+        if budget_reason == "budget_check_error":
+            # M4 (D12): a broken budget check fails closed — stamp the
+            # blocker so the portal shows *why* no fix appeared.
+            await _stamp_patch_blocked(
+                org_id,
+                issue_id,
+                reason="budget_check_error",
+                message=(
+                    "Budget check failed — patch generation suppressed "
+                    "(fail closed)"
+                ),
+            )
         return {
             "status": "suppressed",
             "reason": budget_reason,
@@ -496,6 +534,89 @@ async def propose_plan_for_issue(
             "hermetic_detail": hermetic_preverify.get("detail") or {},
         }
 
+    # M7 (§4.1) — replay-before-PR: signature-based check of the patched
+    # context on checkpointed example traces. "failed" gates like a
+    # static failure; every "skipped" is allowed through, labeled.
+    replay_summary: dict[str, Any] = {"status": "skipped", "reason": "replay_error"}
+    try:
+        from eden.improvement.replay_verify import run_replay_verify
+
+        replay_result = await run_replay_verify(
+            org_id,
+            issue_id,
+            str(data.get("diff") or ""),
+            linked_files,
+            failure_pack,
+        )
+        replay_summary = replay_result.to_json()
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: replay verify failed: %s", exc)
+        replay_summary = {
+            "status": "skipped",
+            "reason": "replay_error",
+            "error": str(exc)[:200],
+        }
+
+    if replay_summary.get("status") == "failed":
+        # Same stamp path as a static failure: the portal must show why
+        # no fix appeared instead of the plan silently not existing.
+        await _stamp_patch_blocked(
+            org_id,
+            issue_id,
+            reason="replay_failed",
+            message=(
+                "Replay verify: the failure signature is still present "
+                "after applying the patch — plan suppressed"
+            ),
+        )
+        return {
+            "status": "suppressed",
+            "reason": "replay_failed",
+            "issue_id": issue_id,
+            "replay": replay_summary,
+        }
+
+    # M8 (§4.2) — sandbox test gate: run convention-discovered targeted
+    # tests on the patched files. "failed" earns exactly one regenerate
+    # with the failure excerpt on the PatchGenerator static_feedback
+    # channel; still failing → suppress. Every "skipped" is allowed
+    # through, labeled. "passed" upgrades the evidence tier to "tested".
+    test_gate_summary = await _run_sandbox_test_gate(
+        org_id,
+        repo_id,
+        str(data.get("diff") or ""),
+        linked_files,
+        agent_id=issue_agent_id,
+    )
+    if test_gate_summary.get("status") == "failed":
+        data, test_gate_summary, regen_ok = await _regenerate_after_test_failure(
+            org_id,
+            rca_id=rca_id,
+            trace_id=generator_trace_id,
+            repo_id=repo_id,
+            rca_summary=rca_summary,
+            linked_files=linked_files,
+            agent_id=issue_agent_id,
+            data=data,
+            test_gate_summary=test_gate_summary,
+        )
+        if not regen_ok:
+            await _stamp_patch_blocked(
+                org_id,
+                issue_id,
+                reason="test_gate_failed",
+                message=(
+                    "Sandbox test gate: targeted tests still failing "
+                    "after one regenerate — plan suppressed"
+                ),
+            )
+            return {
+                "status": "suppressed",
+                "reason": "test_gate_failed",
+                "issue_id": issue_id,
+                "sandbox_tests": test_gate_summary,
+            }
+
     payload = _plan_payload_from_patch(
         org_id,
         issue_id,
@@ -505,6 +626,8 @@ async def propose_plan_for_issue(
         failure_pack=failure_pack,
         hermetic_preverify=hermetic_preverify,
         example_trace_ids=example_trace_ids,
+        replay=replay_summary,
+        sandbox_tests=test_gate_summary,
     )
     plan = await plans_repo.create_plan(org_id, **payload)
     if plan is None:
@@ -552,8 +675,113 @@ async def propose_plan_for_issue(
         ),
         "example_trace_ids": example_trace_ids,
         "hermetic_preverify": hermetic_preverify.get("status"),
+        "replay": replay_summary.get("status"),
+        "sandbox_tests": test_gate_summary.get("status"),
+        "evidence_tier": (payload.get("evidence") or {}).get("evidence_tier"),
         "stumble_count": stumble_count,
     }
+
+
+async def _run_sandbox_test_gate(
+    org_id: str,
+    repo_id: str | None,
+    diff: str,
+    linked_files: list[dict[str, str]],
+    *,
+    agent_id: str | None,
+) -> dict[str, Any]:
+    """M8 (§4.2): one guarded test-gate run. Never raises."""
+    try:
+        from eden.improvement.test_gate import run_test_gate
+
+        provider = None
+        try:
+            from eden.providers.factory import get_repo_provider_for_org
+
+            provider = await get_repo_provider_for_org(org_id, agent_id=agent_id)
+        except Exception as exc:
+            logger.debug("issue_patch_trigger: repo provider unavailable: %s", exc)
+        result = await run_test_gate(
+            org_id,
+            str(repo_id or ""),
+            diff,
+            linked_files,
+            provider=provider,
+            base_files=linked_files,
+        )
+        return result.to_json()
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: test gate failed: %s", exc)
+        return {
+            "status": "skipped",
+            "reason": "test_gate_error",
+            "error": str(exc)[:200],
+        }
+
+
+async def _regenerate_after_test_failure(
+    org_id: str,
+    *,
+    rca_id: str,
+    trace_id: str,
+    repo_id: str | None,
+    rca_summary: str,
+    linked_files: list[dict[str, str]],
+    agent_id: str | None,
+    data: dict[str, Any],
+    test_gate_summary: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    """One regenerate with the test failure as static feedback (§4.2).
+
+    Mirrors the static-preverify regenerate pattern: the failure
+    excerpt rides the ``static_feedback`` channel (origin marked
+    ``test_gate``) and the new candidate is re-gated. Returns
+    ``(data, test_gate_summary, ok)`` — ``ok=False`` means suppress.
+    """
+    tests_run = ", ".join(test_gate_summary.get("tests_run") or []) or "(unknown)"
+    excerpt = str(test_gate_summary.get("output_excerpt") or "")[:2000]
+    feedback = (
+        f"[origin: test_gate] Sandbox test gate: targeted tests failed "
+        f"({tests_run}). Fix the diff so these tests pass.\n{excerpt}"
+    )
+    try:
+        from eden.patches.patch_generator import PatchGenerator
+
+        regen = await PatchGenerator().generate(
+            org_id=org_id,
+            rca_id=rca_id,
+            trace_id=trace_id,
+            repo_id=repo_id,
+            rca_summary=rca_summary,
+            test_plan=[],
+            linked_files=linked_files,
+            persist=False,
+            static_feedback=feedback,
+        )
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: test-gate regenerate failed: %s", exc)
+        return data, test_gate_summary, False
+    regen_data = (regen or {}).get("data") or {}
+    if regen_data.get("status") != "proposed" or not regen_data.get("diff"):
+        return data, test_gate_summary, False
+    retry_summary = await _run_sandbox_test_gate(
+        org_id,
+        repo_id,
+        str(regen_data.get("diff") or ""),
+        linked_files,
+        agent_id=agent_id,
+    )
+    retry_summary["regenerated"] = True
+    if retry_summary.get("status") == "failed":
+        return data, retry_summary, False
+    # Fold the first attempt's cost into the accepted candidate.
+    try:
+        regen_data["cost_usd"] = float(regen_data.get("cost_usd") or 0.0) + float(
+            data.get("cost_usd") or 0.0
+        )
+    except Exception:
+        pass
+    return regen_data, retry_summary, True
 
 
 async def _stamp_patch_blocked(
@@ -584,6 +812,11 @@ async def _stamp_patch_blocked(
         await repo.set_triage_result(org_id, issue_id, triage)
     except Exception as exc:
         logger.debug("issue_patch_trigger: stamp patch_blocked failed: %s", exc)
+
+
+#: Public export (M3, D3): the orchestrator stamps patch-request failures
+#: through this seam so the portal shows why no plan appeared.
+stamp_patch_blocked = _stamp_patch_blocked
 
 
 async def _resolve_repo_id(

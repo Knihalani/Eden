@@ -160,6 +160,7 @@ from eden.api.routes import (
     labeling,
     learn,
     llmops,
+    loop_health,
     media,
     model_compare,
     notifications,
@@ -929,6 +930,15 @@ if getattr(settings, "rate_limit_enabled", True):
 # whether or not it is compressed, so below that the CPU buys nothing.
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=1)
 
+# Request-side counterpart for the agent-session lifecycle and
+# live-trace-streaming ingest routers only (see module docstring for
+# why this must be ASGI-level middleware rather than a FastAPI
+# dependency). The main ``/orgs/{org_id}/ingest/{format}`` telemetry
+# routes are untouched — they already gunzip themselves.
+from eden.api.middleware.gzip_request import GunzipRequestMiddleware
+
+app.add_middleware(GunzipRequestMiddleware)
+
 # Audit 2026-07-06 — pre-existing bug fix. Both middlewares were
 # implemented and unit-tested but never registered on the app.
 # Wire them now so:
@@ -1188,6 +1198,9 @@ app.include_router(
 app.include_router(
     internal_health.router
 )  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
+app.include_router(
+    loop_health.router
+)  # /internal/loop-health — closed-loop bus liveness (M2, D4; bearer auth)
 app.include_router(
     optimization.router
 )  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
