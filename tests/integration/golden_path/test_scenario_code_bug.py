@@ -164,7 +164,7 @@ def _propose_patches() -> list:
 
 @pytest.mark.asyncio
 async def test_propose_plan_yields_diff_and_evidence(
-    loop_db, local_providers, create_plan_shim
+    loop_db, local_providers
 ) -> None:
     """propose_plan_for_issue produces a draft plan with a non-empty
     diff and the evidence keys the spec requires."""
@@ -196,21 +196,12 @@ async def test_propose_plan_yields_diff_and_evidence(
     assert loop_db.plans, "plan row must be persisted"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D28 (new, M1 discovery): propose persist calls "
-        "plans_repo.create_plan(org_id, **payload) with payload['org_id'] "
-        "present — TypeError against the real signature; only mocked "
-        "create_plan ever passed"
-    ),
-)
 @pytest.mark.asyncio
 async def test_propose_persists_through_real_create_plan(
     loop_db, local_providers
 ) -> None:
-    """Same propose flow WITHOUT the shim: the real create_plan must
-    accept the persist call."""
+    """D28 (fixed in M3): the real create_plan accepts the persist call —
+    the payload no longer carries a duplicate org_id."""
     loop_db.seed_issue(ISSUE_ID, status="triaged", triage_result=TRIAGE_CODE_BUG)
     loop_db.seed_stumbles(6)
     loop_db.seed_policy()

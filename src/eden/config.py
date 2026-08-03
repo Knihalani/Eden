@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 # Module-level cache for the lazily-built Settings class.
 _settings_class = None
 
+# One-time deprecation flag for the ``verify_poll_interval_seconds``
+# read-through alias (M3, D7).
+_VERIFY_POLL_ALIAS_WARNED = False
+
 
 def _build_settings_class():
     """Build and return the Settings class (lazy, PEP 562).
@@ -1169,11 +1173,30 @@ def _build_settings_class():
         # trailing ``verify_quiet_window_minutes`` AND StatGate P0
         # cleared). Pass → issue ``resolved``; fail → ``regressed`` +
         # human escalation. The worker polls every
-        # ``verify_poll_interval_seconds``.
+        # ``verify_loop_interval_seconds`` (declared above with the other
+        # leader-gated loop cadences — the SSOT for this interval).
         verify_delay_seconds: int = 1800
         verify_quiet_window_minutes: int = 30
-        verify_poll_interval_seconds: int = 180
         verify_max_attempts: int = 3
+        # M3 (D3) janitor: issues stuck in ``fix_pending`` longer than
+        # this are returned to ``triaged`` (+ audit row + cockpit
+        # "stuck" badge) by the verify worker's ``fix_pending_janitor``
+        # idle chore.
+        fix_pending_max_age_minutes: int = 120
+
+        @property
+        def verify_poll_interval_seconds(self) -> float:
+            """Deprecated alias (M3, D7) — this used to be a dead field
+            that disagreed with the interval the worker actually reads.
+            It now reads through to ``verify_loop_interval_seconds``."""
+            global _VERIFY_POLL_ALIAS_WARNED
+            if not _VERIFY_POLL_ALIAS_WARNED:
+                _VERIFY_POLL_ALIAS_WARNED = True
+                logger.warning(
+                    "config: verify_poll_interval_seconds is deprecated; "
+                    "reading through to verify_loop_interval_seconds"
+                )
+            return self.verify_loop_interval_seconds
 
         # ── Artifacts + Ledger (GA — default on; org features can kill) ─
         artifacts_v1: bool = True

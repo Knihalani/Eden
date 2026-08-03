@@ -192,8 +192,10 @@ def _plan_payload_from_patch(
     files = patch_data.get("files") or []
     sev = normalize_severity(issue.severity)
     pack = failure_pack or {}
+    # NOTE (M3, D28): no ``org_id`` key here — the payload is splatted
+    # into ``plans_repo.create_plan(org_id, **payload)``, which takes
+    # org_id positionally; a duplicate key is a TypeError.
     return {
-        "org_id": org_id,
         "run_id": run_id,
         "plan_kind": "code_patch",
         "title": patch_data.get("description") or issue.title,
@@ -584,6 +586,11 @@ async def _stamp_patch_blocked(
         await repo.set_triage_result(org_id, issue_id, triage)
     except Exception as exc:
         logger.debug("issue_patch_trigger: stamp patch_blocked failed: %s", exc)
+
+
+#: Public export (M3, D3): the orchestrator stamps patch-request failures
+#: through this seam so the portal shows why no plan appeared.
+stamp_patch_blocked = _stamp_patch_blocked
 
 
 async def _resolve_repo_id(

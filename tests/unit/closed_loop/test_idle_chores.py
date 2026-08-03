@@ -105,11 +105,17 @@ def test_default_chores_registered():
     verify._register_default_chores()
 
     by_name = {c.name: c for c in verify._IDLE_CHORES}
-    assert set(by_name) == {"outbox_drain", "outbox_ttl_cleanup"}
+    assert set(by_name) == {
+        "outbox_drain",
+        "outbox_ttl_cleanup",
+        "fix_pending_janitor",  # M3
+    }
     assert by_name["outbox_drain"].interval_s == 60.0
     assert by_name["outbox_ttl_cleanup"].interval_s == 6 * 3600.0
+    assert by_name["fix_pending_janitor"].interval_s == 300.0
 
     from eden.closed_loop import event_bus
 
     assert by_name["outbox_drain"].fn is event_bus.drain_outbox
     assert by_name["outbox_ttl_cleanup"].fn is event_bus.cleanup_drained
+    assert by_name["fix_pending_janitor"].fn is verify.fix_pending_janitor
