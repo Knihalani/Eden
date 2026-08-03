@@ -568,13 +568,13 @@ async def create_org(
 
         from eden.closed_loop.autonomy_policy import AutonomousMaintenancePolicy
 
-        # M10 (§5.2): seed heal-off. Runtime self-heal is a Settings
-        # opt-in (auto_runtime_heal=true), not an org-create default.
+        # Runtime self-heal on by default (reversible only). Orgs opt out
+        # in Settings. Code PR / auto-merge stay off until separately enabled.
         policy = AutonomousMaintenancePolicy(
             org_id=org_id,
             agent_id=None,
             maintenance_mode="assisted",
-            auto_runtime_heal=False,
+            auto_runtime_heal=True,
             auto_code_patch_pr=False,
             auto_code_patch_merge=False,
             auto_prompt_canary=True,

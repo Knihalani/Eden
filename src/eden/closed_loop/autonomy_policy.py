@@ -77,9 +77,9 @@ class AutonomousMaintenancePolicy:
     org_id: str
     agent_id: str | None = None
     maintenance_mode: MaintenanceMode = "assisted"
-    # M10 (§5.2): heal is opt-in. Global autonomous_actions_v0 defaults
-    # False; Settings toggle writes auto_runtime_heal=true per org.
-    auto_runtime_heal: bool = False
+    # Runtime self-heal defaults ON (reversible actions only). Settings
+    # is opt-out; code PR / auto-merge stay off unless separately enabled.
+    auto_runtime_heal: bool = True
     auto_code_patch_pr: bool = False
     auto_code_patch_merge: bool = False
     auto_prompt_canary: bool = True

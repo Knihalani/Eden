@@ -106,6 +106,10 @@ export const queryKeys = {
       ["portal", "slackRoutes", orgId] as const,
     autonomyPolicy: (orgId: string | null | undefined) =>
       ["portal", "autonomyPolicy", orgId] as const,
+    autonomyAudit: (orgId: string | null | undefined) =>
+      ["portal", "autonomyAudit", orgId] as const,
+    autonomyBudget: (orgId: string | null | undefined) =>
+      ["portal", "autonomyBudget", orgId] as const,
     evalDatasets: (orgId: string | null | undefined) =>
       ["portal", "evalDatasets", orgId] as const,
     evalPlaygrounds: (orgId: string | null | undefined) =>

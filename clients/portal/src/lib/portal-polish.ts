@@ -51,7 +51,7 @@ export const U20_EMPTY_COPY = {
   agents:
     "No agents registered. Create an API key, then register via the SDK or CLI.",
   improveQueue:
-    "Queue is empty. Needs production traces and Agent Issues before triage items appear.",
+    "Queue is empty. Send traffic via the Gateway or SDK so detectors can open issues — then Fix now plans appear here.",
   datasets:
     "No datasets yet. Create one from a failing trace, or add cases under Evals to score prompts.",
   guardrailsPolicies:

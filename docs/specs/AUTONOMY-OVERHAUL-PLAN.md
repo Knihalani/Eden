@@ -90,7 +90,7 @@ github.py:_sync_improvement_plan_on_pr_close :594
 | `closed_loop_orchestrator_v1` | True | Loop consumer + verify worker on |
 | `auto_issue_detection_v1` | True | Scanner on |
 | `improvement_agent_v1` | True | Propose path on |
-| `autonomous_actions_v0` | **False** | → `auto_runtime_heal=False` → all heals **denied** |
+| `autonomous_actions_v0` | **True** | → `auto_runtime_heal=True` → reversible heals **allowed** (Settings opt-out) |
 | `code_change_enabled` | **False** | Seeds `auto_code_patch_pr=False`; assisted still drafts (PR-first) |
 | `auto_pr_enabled` | **False** | Seeds `auto_code_patch_merge=False` |
 | `default_maintenance_mode` | `assisted` | Patch → require_approval (drafts anyway); heals need allow |

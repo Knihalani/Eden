@@ -10,14 +10,7 @@ import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { useLabToast } from "@/lab/lab-toast";
 
 /**
- * M10 (D2) — per-org runtime self-heal opt-in.
- *
- * Rendered on the Settings workspace view (same section chrome as the
- * Slack card). Shows the effective maintenance mode, the "Runtime
- * self-heal (reversible actions only)" toggle bound to
- * `auto_runtime_heal` via PATCH /orgs/{org}/settings/autonomy, the
- * daily rollback cap, and today's maintenance budget. The global
- * default stays off — this row write is the opt-in.
+ * Runtime self-heal defaults ON (reversible actions). Settings is opt-out.
  */
 export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) {
   const { currentOrg } = useOrg();
@@ -68,16 +61,15 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
     [orgId, invalidate, pushToast],
   );
 
-  // No policy endpoint / query failed → keep Settings usable without
-  // painting a broken card (the audit trail still records decisions).
   if (policyQuery.isError) return null;
 
   const policy = policyQuery.data;
   const mode = policy?.effective_mode ?? policy?.maintenance_mode ?? "assisted";
   const budget = policy?.budget ?? null;
+  const healOn = Boolean(policy?.auto_runtime_heal);
 
   return (
-    <section className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
+    <section id="autonomy-settings" className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="type-label">Autonomy</p>
@@ -106,29 +98,31 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
           type="button"
           className="ds-tab mt-1.5"
           disabled={!canEdit || saving || !policy}
-          aria-pressed={Boolean(policy?.auto_runtime_heal)}
+          aria-pressed={healOn}
           onClick={() => {
             if (policy) void toggleSelfHeal(policy);
           }}
         >
-          {policyQuery.isLoading
-            ? "Loading…"
-            : policy?.auto_runtime_heal
-              ? "On"
-              : "Off"}
+          {policyQuery.isLoading ? "Loading…" : healOn ? "On" : "Off"}
         </button>
         <p className="type-meta mt-1.5">
-          Roll back a bad canary, reweight routing, or bust a cache without a
-          human click — capped at {policy?.max_auto_rollbacks_per_day ?? 3}{" "}
-          rollbacks/day. P0s still page you, with the mitigation already
-          applied.
+          On by default. Roll back a bad canary, reweight routing, or bust a
+          cache without a human click — capped at{" "}
+          {policy?.max_auto_rollbacks_per_day ?? 3} rollbacks/day. P0s still
+          page you, with the mitigation already applied. Turn off to
+          recommend-only.
         </p>
-        {!policy?.auto_runtime_heal &&
-        (policy?.would_have_healed_count ?? 0) > 0 ? (
+        {!healOn && (policy?.would_have_healed_count ?? 0) > 0 ? (
           <p className="type-meta mt-2 text-[var(--text)]">
             Eden would have fixed {policy!.would_have_healed_count} reversible
             heal{policy!.would_have_healed_count === 1 ? "" : "s"} in the last
-            7 days. Turn self-heal on to let it act next time.
+            7 days while self-heal was off. Turn it back on to act next time.
+          </p>
+        ) : null}
+        {healOn && budget && !budget.within_budget ? (
+          <p className="type-meta mt-2 text-[var(--text)]">
+            Maintenance budget exhausted — further heals pause until tomorrow
+            or you raise the daily limit.
           </p>
         ) : null}
       </div>

@@ -542,6 +542,11 @@ def _shutdown_steps(
 
         await get_webhook_delivery_service().aclose()
 
+    async def _dogfood_sdk() -> None:
+        from eden.dogfood import flush_dogfood_sdk
+
+        await flush_dogfood_sdk()
+
     async def _redis() -> None:
         from eden.storage.redis import close_redis_client
 
@@ -558,6 +563,7 @@ def _shutdown_steps(
     if background_workers:
         steps.append(("background_workers", _stop_background_workers, _SHUTDOWN_TIMEOUT_DRAIN))
     steps += [
+        ("dogfood_sdk", _dogfood_sdk, _SHUTDOWN_TIMEOUT_CLIENT),
         ("trace_quality", _trace_quality, _SHUTDOWN_TIMEOUT_DRAIN),
         ("telemetry_collector", _telemetry_collector, _SHUTDOWN_TIMEOUT_DRAIN),
         ("bronze_sink", _bronze, _SHUTDOWN_TIMEOUT_DRAIN),
@@ -605,6 +611,15 @@ async def lifespan(app: FastAPI):
         bind_event_loop()
     except Exception as exc:  # noqa: BLE001 - never block startup on this
         logger.warning("cost ledger loop binding failed: %s", exc)
+
+    # Dogfood: instrument this process as an Eden customer when
+    # EDEN_API_KEY + EDEN_ORG_ID are set (same path as any other agent).
+    try:
+        from eden.dogfood import bootstrap_dogfood_sdk
+
+        bootstrap_dogfood_sdk()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("dogfood SDK bootstrap failed: %s", exc)
 
     # B26 — mount deferred intelligence routers before accepting traffic
     # so OpenAPI and route tables are complete for the first request.

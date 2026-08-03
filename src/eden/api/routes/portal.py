@@ -2698,6 +2698,16 @@ async def list_portal_improve_plans(
             or p.get("summary")
             or ""
         )
+        hermetic = evidence.get("hermetic_preverify")
+        hermetic_status = None
+        if isinstance(hermetic, dict):
+            hermetic_status = hermetic.get("status")
+        ev_raw = evidence.get("ev_score")
+        ev_score: float | None
+        try:
+            ev_score = float(ev_raw) if ev_raw is not None else None
+        except (TypeError, ValueError):
+            ev_score = None
         out.append(
             ImprovePlanCard(
                 id=str(p.get("id") or ""),
@@ -2717,6 +2727,18 @@ async def list_portal_improve_plans(
                 parentPlanId=(
                     str(p["parent_plan_id"]) if p.get("parent_plan_id") else None
                 ),
+                evidenceTier=(
+                    str(evidence["evidence_tier"])
+                    if evidence.get("evidence_tier")
+                    else None
+                ),
+                hermeticStatus=str(hermetic_status) if hermetic_status else None,
+                failurePackStatus=(
+                    str(evidence["failure_pack_status"])
+                    if evidence.get("failure_pack_status")
+                    else None
+                ),
+                evScore=ev_score,
             )
         )
     return out
