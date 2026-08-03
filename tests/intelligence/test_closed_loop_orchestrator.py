@@ -239,7 +239,12 @@ async def test_triage_completed_autonomous_heals() -> None:
     with patch.object(
         ClosedLoopOrchestrator, "_gate", new=AsyncMock(return_value="autonomous")
     ), patch.object(
-        ClosedLoopOrchestrator, "_decide_action", new=AsyncMock(return_value="allow")
+        ClosedLoopOrchestrator,
+        "_decide_action_recorded",
+        new=AsyncMock(return_value=("allow", "dec-heal-1", 1_700_000_000.0)),
+    ), patch(
+        "eden.closed_loop.autonomy_policy.resolve",
+        new=AsyncMock(return_value=_policy_allow()),
     ), patch(
         "eden.llmops.feature_kills.is_autonomy_action_enabled",
         new=AsyncMock(return_value=True),
@@ -258,7 +263,12 @@ async def test_triage_completed_autonomous_heals() -> None:
             )
         )
 
-    healer.heal_from_issue.assert_awaited_once_with("org_test", "iss-1")
+    healer.heal_from_issue.assert_awaited_once_with(
+        "org_test",
+        "iss-1",
+        decision_id="dec-heal-1",
+        decided_at=1_700_000_000.0,
+    )
     # heal executed → emits HEAL_EXECUTED
     assert any(
         c.args[0].type == EventType.HEAL_EXECUTED

@@ -81,24 +81,53 @@ async def _merge_plan_evidence(
     plan_id: str,
     patch: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Merge keys into ``improvement_plans.evidence`` (jsonb ||)."""
+    """Merge keys into ``improvement_plans.evidence``.
+
+    Top-level keys use jsonb ``||``. Nested ``auto_merge`` is deep-merged
+    so claim seats (``slot_claimed``) and guardian stamps
+    (``force_canary_revert``) survive later approve stamps (M15 TOCTOU).
+    """
     from eden.storage.postgres import get_postgres_client
 
     client = await get_postgres_client()
     if client is None:
         return await plans_repo.get_plan(org_id, plan_id)
     try:
-        await client.execute(
-            """
-            UPDATE improvement_plans SET
-                evidence = evidence || $3::jsonb,
-                updated_at = NOW()
-            WHERE org_id = $1 AND id = $2::uuid
-            """,
-            org_id,
-            plan_id,
-            json.dumps(patch, default=str),
-        )
+        am_patch = patch.get("auto_merge") if isinstance(patch, dict) else None
+        if isinstance(am_patch, dict):
+            # Deep-merge auto_merge, then shallow-merge the rest of patch
+            # without replacing the nested object we just built.
+            rest = {k: v for k, v in patch.items() if k != "auto_merge"}
+            await client.execute(
+                """
+                UPDATE improvement_plans SET
+                    evidence = jsonb_set(
+                        COALESCE(evidence, '{}'::jsonb) || $4::jsonb,
+                        '{auto_merge}',
+                        COALESCE(evidence->'auto_merge', '{}'::jsonb)
+                          || $3::jsonb,
+                        true
+                    ),
+                    updated_at = NOW()
+                WHERE org_id = $1 AND id = $2::uuid
+                """,
+                org_id,
+                plan_id,
+                json.dumps(am_patch, default=str),
+                json.dumps(rest, default=str),
+            )
+        else:
+            await client.execute(
+                """
+                UPDATE improvement_plans SET
+                    evidence = COALESCE(evidence, '{}'::jsonb) || $3::jsonb,
+                    updated_at = NOW()
+                WHERE org_id = $1 AND id = $2::uuid
+                """,
+                org_id,
+                plan_id,
+                json.dumps(patch, default=str),
+            )
     except Exception as exc:
         logger.debug("approve: merge evidence failed: %s", exc)
     return await plans_repo.get_plan(org_id, plan_id)
@@ -267,7 +296,8 @@ async def regenerate_plan_diff_from_static_errors(
     from eden.patches.patch_generator import PatchGenerator
 
     plan_id = str(plan.get("id") or "")
-    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    _raw_ev = plan.get("evidence")
+    evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
     feedback = format_static_errors_for_prompt(static_errors)
     if not feedback:
         feedback = "Static preverify failed — regenerate a syntactically valid patch."
@@ -390,8 +420,9 @@ async def approve_plan(
     if blocked:
         raise ApproveBlockedError(blocked)
 
-    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
-    hermetic = evidence.get("hermetic_preverify") if isinstance(evidence, dict) else None
+    _raw_ev = plan.get("evidence")
+    evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
+    hermetic = evidence.get("hermetic_preverify")
     hermetic_status = None
     if isinstance(hermetic, dict):
         # M7 (§4.1): new plans carry the honest "static_passed" label;
@@ -765,7 +796,8 @@ async def approve_plan(
     try:
         from eden.services.slack_notify import notify_pr_opened
 
-        evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+        _raw_ev = plan.get("evidence")
+        evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
         await notify_pr_opened(
             org_id,
             plan_id=plan_id,
@@ -1077,7 +1109,8 @@ async def _approve_prompt_update(
             "message": f"prompt_version {ref_id} not found for this org",
         }
 
-    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    _raw_ev = plan.get("evidence")
+    evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
     env = str(evidence.get("env") or "prod")
 
     try:
@@ -1169,8 +1202,10 @@ async def queue_verify_for_plan(
     GitHub webhook (Phase 2b, PR-merge time) when a linked improvement
     plan's PR lands.
     """
-    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
-    am = evidence.get("auto_merge") if isinstance(evidence.get("auto_merge"), dict) else {}
+    _raw_ev = plan.get("evidence")
+    evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
+    _raw_am = evidence.get("auto_merge")
+    am: dict[str, Any] = _raw_am if isinstance(_raw_am, dict) else {}
     # Explicit canary=True required (M15 harden — no default-True).
     canary = bool(am.get("merged")) and am.get("canary") is True
     return await _queue_verify(

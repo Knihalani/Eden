@@ -219,10 +219,10 @@ async def claim_auto_merge_slot(
                 plan_id,
                 org_id,
             )
-            already = bool(
-                self_row
-                and (self_row.get("claimed") or self_row.get("merged"))
-            )
+            if self_row is None:
+                return False, {**details, "reason": "plan_not_found"}
+
+            already = bool(self_row.get("claimed") or self_row.get("merged"))
             details["already_holds_slot"] = already
 
             if used >= cap and not already:
@@ -239,7 +239,7 @@ async def claim_auto_merge_slot(
                     }
                 }
             )
-            await conn.execute(
+            status = await conn.execute(
                 """
                 UPDATE improvement_plans SET
                   evidence = jsonb_set(
@@ -256,6 +256,12 @@ async def claim_auto_merge_slot(
                 org_id,
                 patch,
             )
+            try:
+                updated_n = int(str(status).split()[-1])
+            except (ValueError, IndexError):
+                updated_n = 0
+            if updated_n <= 0:
+                return False, {**details, "reason": "plan_not_found"}
         details["slot_claimed_at"] = claimed_at
         return True, details
     except Exception as exc:  # noqa: BLE001
@@ -391,7 +397,8 @@ async def evaluate_auto_merge_eligibility(
 
     # Canary auto-revert force path (guardian) — bypasses the ladder
     # gates; the original merge already passed them.
-    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    _raw_ev = plan.get("evidence")
+    evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
     if bool((evidence.get(EVIDENCE_KEY) or {}).get("force_canary_revert")):
         return AutoMergeDecision(
             eligible=True,
@@ -510,7 +517,7 @@ async def evaluate_auto_merge_eligibility(
         if not ok:
             return AutoMergeDecision(
                 eligible=False,
-                reasons=[f"auto_merge_blocked:branch_protection"],
+                reasons=["auto_merge_blocked:branch_protection"],
                 blocked_by="branch_protection",
                 details=details,
             )
@@ -558,8 +565,10 @@ def parent_is_canary_auto_merged(parent: dict[str, Any]) -> bool:
     Requires an explicit ``canary: true`` stamp — missing key is not
     treated as canary (avoids accidental auto-revert on non-canary merges).
     """
-    evidence = parent.get("evidence") if isinstance(parent.get("evidence"), dict) else {}
-    am = evidence.get(EVIDENCE_KEY) if isinstance(evidence.get(EVIDENCE_KEY), dict) else {}
+    _raw_ev = parent.get("evidence")
+    evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
+    _raw_am = evidence.get(EVIDENCE_KEY)
+    am: dict[str, Any] = _raw_am if isinstance(_raw_am, dict) else {}
     return bool(am.get("merged")) and am.get("canary") is True
 
 

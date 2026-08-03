@@ -72,7 +72,7 @@ class TestF62UpstreamClientCacheCap:
         # Bypass the AsyncOpenAI real class via the
         # ``__getattr__``-resolved lookup the function
         # does at call time.
-        def fake_client_factory(*, api_key, base_url):
+        def fake_client_factory(*, api_key, base_url, **kwargs):
             client = MagicMock()
             client.api_key = api_key
             client.base_url = base_url
@@ -97,7 +97,7 @@ class TestF62UpstreamClientCacheCap:
 
         counter = {"n": 0}
 
-        def fake_client_factory(*, api_key, base_url):
+        def fake_client_factory(*, api_key, base_url, **kwargs):
             counter["n"] += 1
             client = MagicMock()
             client.api_key = api_key
@@ -136,7 +136,7 @@ class TestF62UpstreamClientCacheCap:
 
         counter = {"n": 0}
 
-        def fake_client_factory(*, api_key, base_url):
+        def fake_client_factory(*, api_key, base_url, **kwargs):
             counter["n"] += 1
             client = MagicMock()
             client._id = counter["n"]
@@ -234,7 +234,7 @@ class TestF62ExistingKeysUnchanged:
         gateway = _reset_cache()
         counter = {"n": 0}
 
-        def fake_client_factory(*, api_key, base_url):
+        def fake_client_factory(*, api_key, base_url, **kwargs):
             counter["n"] += 1
             client = MagicMock()
             client._id = counter["n"]
