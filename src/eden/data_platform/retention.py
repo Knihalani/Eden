@@ -347,34 +347,16 @@ class DataRetentionManager:
         return report
 
     async def _delete_from_clickhouse(self, tenant_id: str) -> int:
-        """Delete tenant data from ClickHouse analytics tables.
+        """Delete tenant data from ClickHouse / Tinybird analytics tables.
 
-        Delegates to ``ClickHouseSink.delete_tenant_rows``, which uses
-        ``qualified_table`` names (``{database}.agent_performance``,
-        ``{database}.telemetry_events_ch``, ``{database}.home_kpi_hourly``)
-        — never the stale ``metrics.*`` / ``default.*`` literals.
-
-        Tinybird workspaces reject ALTER DELETE via ``/v0/sql``.
-        ``delete_tenant_rows`` raises so the caller records an error on
-        ``RetentionReport`` — returning 0 used to look like a successful
-        empty purge.
+        Delegates to ``ClickHouseSink.delete_tenant_rows``:
+        - Self-hosted: ``ALTER TABLE … DELETE`` on ``qualified_table`` names
+        - Tinybird: ``POST /v0/datasources/{name}/delete`` Jobs API
+          (same as ``tb datasource delete`` — not ``/v0/sql`` ALTER)
         """
         clickhouse_url = getattr(settings, "clickhouse_url", "")
         if not clickhouse_url:
             return 0
-
-        # Fast-path Tinybird check before constructing the sink (same
-        # raise contract as ClickHouseSink.delete_tenant_rows).
-        if "tinybird.co" in clickhouse_url.lower():
-            logger.warning(
-                "GDPR ClickHouse purge incomplete: Tinybird host cannot "
-                "ALTER DELETE via /v0/sql (tenant=%s)",
-                tenant_id,
-            )
-            raise RuntimeError(
-                "ClickHouse purge incomplete: Tinybird cannot ALTER DELETE "
-                "via /v0/sql — erasure must not be reported complete"
-            )
 
         try:
             from eden.data_platform.clickhouse_sink import get_clickhouse_sink

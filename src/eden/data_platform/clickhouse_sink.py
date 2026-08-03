@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -1834,28 +1835,35 @@ class ClickHouseSink:
             for row in rows
         ]
 
+    #: Live Tinybird datasources purged on tenant GDPR (Events + Home KPI).
+    _TINYBIRD_GDPR_REQUIRED: tuple[str, ...] = (
+        "telemetry_events_ch",
+        "home_kpi_hourly",
+    )
+    #: Optional / historically gated datasources — best-effort delete.
+    _TINYBIRD_GDPR_OPTIONAL: tuple[str, ...] = (
+        "agent_performance",
+        "pipeline_stages",
+        "usage_trends",
+        "benchmark_results",
+    )
+
     async def delete_tenant_rows(self, tenant_id: str) -> int:
-        """ALTER DELETE tenant rows from analytics tables (self-hosted only).
+        """Purge tenant analytics rows (self-hosted ALTER DELETE or Tinybird Jobs).
 
-        Purges ``agent_performance``, ``telemetry_events_ch``, and
-        ``home_kpi_hourly`` using ``qualified_table`` names
-        (``{database}.table`` locally; bare names are Tinybird-only and
-        cannot be deleted here).
+        Self-hosted ClickHouse: ``ALTER TABLE … DELETE WHERE tenant_id = …``
+        on ``qualified_table`` names.
 
-        Tinybird workspaces reject ALTER DELETE via ``/v0/sql``. Raises
-        so callers record incomplete erasure instead of reporting success.
-        Returns the number of tables whose DELETE statement succeeded.
+        Tinybird: ``POST /v0/datasources/{name}/delete`` with
+        ``delete_condition`` (same API as ``tb datasource delete``).
+        ``/v0/sql`` ALTER DELETE is still rejected — this path uses the
+        datasource Jobs API instead. Required datasources must succeed;
+        optional ones log and continue on 404/empty.
+
+        Returns the number of datasources / tables whose delete completed.
         """
         if self.config.is_tinybird:
-            logger.warning(
-                "GDPR ClickHouse purge incomplete: Tinybird host cannot "
-                "ALTER DELETE via /v0/sql (tenant=%s)",
-                tenant_id,
-            )
-            raise RuntimeError(
-                "ClickHouse purge incomplete: Tinybird cannot ALTER DELETE "
-                "via /v0/sql — erasure must not be reported complete"
-            )
+            return await self._delete_tenant_rows_tinybird(tenant_id)
 
         safe_tid = self._sql_literal(tenant_id)
         tables = (
@@ -1878,6 +1886,118 @@ class ClickHouseSink:
                     exc,
                 )
         return deleted
+
+    async def _delete_tenant_rows_tinybird(self, tenant_id: str) -> int:
+        """Delete tenant rows via Tinybird datasource delete Jobs API."""
+        token = self.config.tinybird_token or self.config.password
+        if not token:
+            raise RuntimeError(
+                "ClickHouse purge incomplete: Tinybird token missing "
+                "(set TINYBIRD_ADMIN_TOKEN)"
+            )
+
+        safe_tid = self._sql_literal(tenant_id)
+        condition = f"tenant_id = '{safe_tid}'"
+        session = await self._get_session()
+        base = self.config.url.rstrip("/")
+        headers = {"Authorization": f"Bearer {token}"}
+        completed = 0
+        errors: list[str] = []
+
+        async def _one(ds: str, *, required: bool) -> None:
+            nonlocal completed
+            url = f"{base}/v0/datasources/{ds}/delete"
+            try:
+                async with session.post(
+                    url,
+                    data={"delete_condition": condition},
+                    headers=headers,
+                ) as resp:
+                    text = await resp.text()
+                    if resp.status == 404:
+                        if required:
+                            errors.append(f"{ds}: not found ({text[:200]})")
+                        else:
+                            logger.info(
+                                "Tinybird GDPR skip missing optional DS %s", ds
+                            )
+                        return
+                    if resp.status >= 400:
+                        msg = f"{ds}: HTTP {resp.status} {text[:300]}"
+                        if required:
+                            errors.append(msg)
+                        else:
+                            logger.warning("Tinybird GDPR optional delete %s", msg)
+                        return
+                    try:
+                        payload = json.loads(text) if text else {}
+                    except json.JSONDecodeError:
+                        payload = {}
+                    job_id = payload.get("job_id")
+                    if not job_id:
+                        # Immediate/no-job response — treat as done.
+                        completed += 1
+                        return
+                    await self._wait_tinybird_job(session, base, headers, str(job_id))
+                    completed += 1
+            except Exception as exc:
+                msg = f"{ds}: {exc}"
+                if required:
+                    errors.append(msg)
+                else:
+                    logger.warning("Tinybird GDPR optional delete failed: %s", msg)
+
+        for ds in self._TINYBIRD_GDPR_REQUIRED:
+            await _one(ds, required=True)
+        for ds in self._TINYBIRD_GDPR_OPTIONAL:
+            await _one(ds, required=False)
+
+        if errors:
+            raise RuntimeError(
+                "ClickHouse purge incomplete on Tinybird: " + "; ".join(errors)
+            )
+        return completed
+
+    async def _wait_tinybird_job(
+        self,
+        session: Any,
+        base: str,
+        headers: dict[str, str],
+        job_id: str,
+        *,
+        timeout_s: float = 300.0,
+        poll_s: float = 1.0,
+    ) -> None:
+        """Poll ``GET /v0/jobs/{id}`` until done or error."""
+        import asyncio
+        import time
+
+        deadline = time.monotonic() + timeout_s
+        url = f"{base}/v0/jobs/{job_id}"
+        while time.monotonic() < deadline:
+            async with session.get(url, headers=headers) as resp:
+                text = await resp.text()
+                if resp.status >= 400:
+                    raise ClickHouseError(
+                        f"Tinybird job {job_id} status HTTP {resp.status}: "
+                        f"{text[:300]}"
+                    )
+                try:
+                    payload = json.loads(text) if text else {}
+                except json.JSONDecodeError as exc:
+                    raise ClickHouseError(
+                        f"Tinybird job {job_id} bad JSON: {text[:200]}"
+                    ) from exc
+                status = str(payload.get("status") or "")
+                if status == "done":
+                    return
+                if status == "error":
+                    raise ClickHouseError(
+                        f"Tinybird job {job_id} error: "
+                        f"{payload.get('error') or text[:300]}"
+                    )
+            await asyncio.sleep(poll_s)
+        raise ClickHouseError(f"Tinybird job {job_id} timed out after {timeout_s}s")
 
     async def health_check(self) -> str:
         """Check ClickHouse / Tinybird connectivity."""
