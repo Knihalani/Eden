@@ -71,6 +71,13 @@ async def create_plan(
     client = await get_postgres_client()
     if client is None:
         return None
+    # M13 (§6.6): stamp base_ref_sha at draft so cockpit can badge stale
+    # plans and approve can detect HEAD drift.
+    evid = dict(evidence or {})
+    if "base_ref_sha" not in evid:
+        sha = await _resolve_base_ref_sha(org_id, agent_id)
+        if sha:
+            evid["base_ref_sha"] = sha
     try:
         await client.execute(
             """
@@ -98,7 +105,7 @@ async def create_plan(
             source_fingerprint,
             diff_unified,
             json.dumps(files_changed or []),
-            json.dumps(evidence or {}),
+            json.dumps(evid),
             json.dumps(triage_snapshot) if triage_snapshot else None,
             estimated_blast_radius,
             llm_cost_usd,
@@ -107,6 +114,26 @@ async def create_plan(
     except Exception:
         return None
     return await get_plan(org_id, plan_id)
+
+
+async def _resolve_base_ref_sha(org_id: str, agent_id: str | None) -> str | None:
+    """Best-effort HEAD sha for the org's linked repo (M13 §6.6)."""
+    try:
+        from eden.providers.factory import get_repo_provider_for_org
+
+        provider = await get_repo_provider_for_org(org_id, agent_id=agent_id)
+        if provider is None:
+            return None
+        commits = await provider.get_recent_commits(limit=1)
+        if commits:
+            sha = getattr(commits[0], "sha", None) or (
+                commits[0].get("sha") if isinstance(commits[0], dict) else None
+            )
+            if isinstance(sha, str) and sha:
+                return sha
+    except Exception:
+        return None
+    return None
 
 
 async def get_plan(org_id: str, plan_id: str) -> dict[str, Any] | None:
@@ -392,6 +419,9 @@ async def mark_merged(
     Only transitions plans still in an "open" state — a plan already
     ``rejected``/``superseded``/``merged``/``closed`` is left alone so a
     duplicate or out-of-order webhook delivery can't clobber it.
+
+    M13 (§6.3): also records ``merged`` outcomes into the codebase
+    knowledge graph so PatchGenerator priors compound.
     """
     client = await get_postgres_client()
     if client is None:
@@ -408,7 +438,15 @@ async def mark_merged(
         plan_id,
         list(_OPEN_STATUSES),
     )
-    return await get_plan(org_id, plan_id)
+    plan = await get_plan(org_id, plan_id)
+    if plan is not None and plan.get("status") == "merged":
+        try:
+            from eden.patches.knowledge_graph import record_plan_outcome
+
+            await record_plan_outcome(org_id, plan, "merged")
+        except Exception:
+            pass
+    return plan
 
 
 async def mark_closed(
@@ -416,8 +454,13 @@ async def mark_closed(
     plan_id: str,
     *,
     reason: str | None = None,
+    write_rejection: bool = True,
 ) -> dict[str, Any] | None:
-    """PR linked to this plan closed on GitHub without merging (2b)."""
+    """PR linked to this plan closed on GitHub without merging (2b).
+
+    M13 (§6.3): records ``rejected`` KG outcomes + rejection-memory
+    so the next sweep does not regenerate the same closed-unmerged fix.
+    """
     client = await get_postgres_client()
     if client is None:
         return None
@@ -435,7 +478,24 @@ async def mark_closed(
         reason,
         list(_OPEN_STATUSES),
     )
-    return await get_plan(org_id, plan_id)
+    plan = await get_plan(org_id, plan_id)
+    if plan is not None and plan.get("status") == "closed":
+        try:
+            from eden.patches.knowledge_graph import record_plan_outcome
+
+            await record_plan_outcome(org_id, plan, "rejected")
+        except Exception:
+            pass
+        if write_rejection:
+            try:
+                await write_rejection_memory(
+                    org_id,
+                    plan,
+                    rejection_reason=reason or "pr_closed_without_merge",
+                )
+            except Exception:
+                pass
+    return plan
 
 
 async def reject_plan(

@@ -246,8 +246,34 @@ async def notify_needs_approval(
     title: str,
     kind: str = "config",
     agent_id: str | None = None,
+    queue: str | None = None,
 ) -> dict[str, Any]:
-    """A plan landed in Needs-you. Deep link to the plan view."""
+    """A plan landed in Needs-you. Deep link to the plan view.
+
+    M13 (§6.2): when ``slack_notify_fix_now_only`` (default True),
+    Improve-later kinds (advisory/config/cost) are suppressed — only
+    Fix-now (code_patch / prompt_update) notifies Slack.
+    """
+    kind_l = (kind or "").lower()
+    queue_l = (queue or "").lower()
+    try:
+        from eden.config import get_settings
+
+        fix_now_only = bool(
+            getattr(get_settings(), "slack_notify_fix_now_only", True)
+        )
+    except Exception:
+        fix_now_only = True
+    if fix_now_only:
+        fix_now_kinds = {"code_patch", "prompt_update"}
+        if queue_l == "improve_later" or (
+            queue_l != "fix_now" and kind_l not in fix_now_kinds
+        ):
+            return {
+                "status": "skipped",
+                "reason": "improve_later_no_slack",
+                "kind": kind_l,
+            }
     url = _deep_link(f"/improve?plan={plan_id}")
     return await _send(
         org_id,

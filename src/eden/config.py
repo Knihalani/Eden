@@ -1184,6 +1184,24 @@ def _build_settings_class():
         # not the 30/30 a code merge needs. Merge verifies unchanged.
         verify_delay_seconds_heal: int = 300
         verify_quiet_window_minutes_heal: int = 10
+
+        # ── M13 Phase 4 improvement brain ─────────────────────────
+        # ── M13 (§6.1) expected-value ranking ───────────────────────────
+        # EV = severity_w × confidence × recurrence_rate × user_count_w
+        #      × est_cost_of_issue − est_fix_cost (incl. KG revert premium).
+        # Default True so dogfood captures ranked-vs-chronological scores.
+        sweep_ev_ranking_v1: bool = True
+        # ── M13 (§6.6) plan staleness ───────────────────────────────────
+        # Cockpit "stale" badge after this many days; janitor auto-closes
+        # drafts at 2× this window (30d when default 14).
+        plan_stale_after_days: int = 14
+        # ── M13 (§6.2) cockpit queues + Slack ───────────────────────────
+        # When True (default), Slack only notifies Fix-now items
+        # (code_patch / prompt_update with evidence); Improve-later
+        # (advisory, config, cost digests) stays quiet.
+        slack_notify_fix_now_only: bool = True
+        # ── M13 (§6.5) shadow detector promotion ────────────────────────
+        shadow_promote_min_firings: int = 20
         # M3 (D3) janitor: issues stuck in ``fix_pending`` longer than
         # this are returned to ``triaged`` (+ audit row + cockpit
         # "stuck" badge) by the verify worker's ``fix_pending_janitor``

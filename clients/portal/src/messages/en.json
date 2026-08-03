@@ -1511,8 +1511,11 @@
     "queue": {
       "views": {
         "needsYou": "Needs you",
+        "fixNow": "Fix now",
+        "improveLater": "Improve later",
         "inProgress": "In progress",
-        "verify": "Verify"
+        "verify": "Verify",
+        "stale": "Stale"
       },
       "col": {
         "title": "Item",

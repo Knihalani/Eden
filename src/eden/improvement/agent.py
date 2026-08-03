@@ -10,7 +10,12 @@ from typing import Any
 
 from eden.improvement import plans_repo, runs_repo
 from eden.improvement import settings as imp_settings
-from eden.improvement.planner import PlanCandidate, persist_candidates, rank_candidates
+from eden.improvement.planner import (
+    PlanCandidate,
+    ev_capture,
+    persist_candidates,
+    rank_candidates,
+)
 from eden.improvement.sweep_budget import (
     begin_sweep_llm_budget,
     clear_sweep_llm_budget,
@@ -265,6 +270,13 @@ class ImprovementAgent:
             issue_skipped_n = int(gen.get("skipped") or 0)
             llm_cost += float(gen.get("cost_usd") or 0)
             issue_plan_ids = list(gen.get("plan_ids") or [])
+            ev_meta = {
+                k: gen[k]
+                for k in ("ev_capture", "ev_scores", "sweep.ev_capture")
+                if k in gen
+            }
+            if "ev_capture" in gen and "sweep.ev_capture" not in ev_meta:
+                ev_meta["sweep.ev_capture"] = gen["ev_capture"]
 
             candidates.extend(await self._from_traces(org_id, watermark, agent_id))
             candidates.extend(await self._from_metrics(org_id, agent_id))
@@ -302,6 +314,7 @@ class ImprovementAgent:
                 plans_created=total_created,
                 plans_skipped_dedup=total_skipped,
                 llm_cost_usd=llm_cost,
+                metadata_patch=ev_meta or None,
             )
             await _emit_sweep_completed(org_id, run_id, total_created)
             return {
@@ -428,6 +441,42 @@ class ImprovementAgent:
                 )
             else:
                 skipped += 1
+
+        # M13 (§6.1): log EV scores + sweep.ev_capture on the run row.
+        capture = ev_capture(ranked, top)
+        score_rows = [
+            {
+                "fingerprint": c.source_fingerprint,
+                "title": c.title[:80],
+                "ev": round(float(c.ev_score if c.ev_score is not None else c.score), 4),
+                "kind": c.plan_kind,
+                "selected": c in top or c.source_fingerprint
+                in {t.source_fingerprint for t in top},
+            }
+            for c in ranked[:20]
+        ]
+        logger.info(
+            "sweep.ev_capture org=%s run=%s capture=%.3f ranked=%d generated=%d",
+            org_id,
+            run_id,
+            capture,
+            len(ranked),
+            len(top),
+        )
+        try:
+            await runs_repo.merge_run_metadata(
+                org_id,
+                run_id,
+                {
+                    "ev_scores": score_rows,
+                    "sweep.ev_capture": capture,
+                    "ev_ranked": len(ranked),
+                    "ev_generated": len(top),
+                },
+            )
+        except Exception as exc:
+            logger.debug("sweep: ev_capture metadata write failed: %s", exc)
+
         return {
             "created": created,
             "skipped": skipped,
@@ -435,6 +484,8 @@ class ImprovementAgent:
             "plan_ids": plan_ids,
             "ranked": len(ranked),
             "generated": len(top),
+            "ev_capture": capture,
+            "ev_scores": score_rows,
         }
 
     async def _from_issues(

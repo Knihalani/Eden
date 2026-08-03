@@ -70,6 +70,13 @@ ISSUE_STATE_TRANSITIONS: dict[str, dict[str, str]] = {
         IssueStatus.FIX_PENDING: IssueStatus.ESCALATED,
         IssueStatus.VERIFYING: IssueStatus.ESCALATED,
     },
+    # M13 (§6.4): LEARNING state around permanent N01 regression case.
+    EventType.LEARNING_STARTED: {
+        IssueStatus.RESOLVED: IssueStatus.LEARNING,
+    },
+    EventType.LEARNING_COMPLETED: {
+        IssueStatus.LEARNING: IssueStatus.RESOLVED,
+    },
 }
 
 

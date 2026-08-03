@@ -126,7 +126,7 @@ async def _run_idle_chores() -> None:
 
 def _register_default_chores() -> None:
     """Chores every deployment wants: outbox drain + TTL cleanup (M2),
-    fix_pending janitor (M3, D3)."""
+    fix_pending janitor (M3, D3), stale draft plans (M13 §6.6)."""
     from eden.closed_loop import event_bus
 
     register_idle_chore("outbox_drain", 60.0, event_bus.drain_outbox)
@@ -134,6 +134,7 @@ def _register_default_chores() -> None:
         "outbox_ttl_cleanup", 6 * 3600.0, event_bus.cleanup_drained
     )
     register_idle_chore("fix_pending_janitor", 300.0, fix_pending_janitor)
+    register_idle_chore("stale_plans_janitor", 3600.0, stale_plans_janitor)
 
 
 async def fix_pending_janitor(limit: int = 50) -> int:
@@ -208,6 +209,73 @@ async def fix_pending_janitor(limit: int = 50) -> int:
     if swept:
         logger.info("fix_pending_janitor: swept %s stuck issue(s)", swept)
     return swept
+
+
+async def stale_plans_janitor(limit: int = 50) -> int:
+    """M13 (§6.6): auto-close draft plans older than 2× plan_stale_after_days.
+
+    Default: plan_stale_after_days=14 → close at 30d with
+    ``closed_reason=\"stale\"`` (stored as rejection_reason + evidence patch).
+    """
+    client = await _pg()
+    if client is None:
+        return 0
+    stale_after = int(_cfg("plan_stale_after_days", 14) or 14)
+    close_after = max(stale_after * 2, stale_after + 1)  # 30d when default 14
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id, org_id
+            FROM improvement_plans
+            WHERE status = 'draft'
+              AND created_at < NOW() - ($1 || ' days')::interval
+            ORDER BY created_at ASC
+            LIMIT $2
+            """,
+            str(int(close_after)),
+            int(limit),
+        )
+    except Exception as exc:
+        logger.debug("stale_plans_janitor: scan failed: %s", exc)
+        return 0
+    closed = 0
+    for row in rows or []:
+        r = dict(row)
+        org_id = str(r["org_id"])
+        plan_id = str(r["id"])
+        try:
+            # Stamp closed_reason into evidence jsonb.
+            try:
+                await client.execute(
+                    """
+                    UPDATE improvement_plans SET
+                        evidence = COALESCE(evidence, '{}'::jsonb)
+                                   || '{"closed_reason":"stale"}'::jsonb,
+                        updated_at = NOW()
+                    WHERE org_id = $1 AND id = $2::uuid AND status = 'draft'
+                    """,
+                    org_id,
+                    plan_id,
+                )
+            except Exception:
+                pass
+            from eden.improvement import plans_repo
+
+            updated = await plans_repo.mark_closed(
+                org_id,
+                plan_id,
+                reason="stale",
+                write_rejection=False,  # don't poison rejection memory for age
+            )
+            if updated and updated.get("status") == "closed":
+                closed += 1
+        except Exception as exc:
+            logger.debug(
+                "stale_plans_janitor: close failed plan=%s: %s", plan_id, exc
+            )
+    if closed:
+        logger.info("stale_plans_janitor: closed %s stale draft(s)", closed)
+    return closed
 
 
 # ── Scheduling ──────────────────────────────────────────────────────
