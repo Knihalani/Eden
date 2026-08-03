@@ -74,7 +74,7 @@ async def _claim_svix_id(svix_id: str | None) -> bool:
         )
         return bool(was_set)
     except Exception as exc:  # noqa: BLE001 — fail open on redis blips
-        logger.debug("clerk svix idempotency claim failed: %s", exc)
+        logger.debug("clerk svix idempotency claim failed: %s", redact_all(str(exc)))
         return True
 
 
@@ -90,7 +90,7 @@ async def _release_svix_id(svix_id: str | None) -> None:
             return
         await redis.delete(f"clerk:svix:{svix_id}")
     except Exception as exc:  # noqa: BLE001
-        logger.debug("clerk svix idempotency release failed: %s", exc)
+        logger.debug("clerk svix idempotency release failed: %s", redact_all(str(exc)))
 
 
 class WebhookNotReadyError(RuntimeError):

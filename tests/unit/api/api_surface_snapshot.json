@@ -41,6 +41,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "DELETE /orgs/{org_id}/datasets/{dataset_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "DELETE /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}": [
       "200:application/json",
       "422:application/json"
@@ -187,6 +191,10 @@
       "200:application/json"
     ],
     "GET /integrations/wandb/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /internal/loop-health": [
       "200:application/json",
       "422:application/json"
     ],
@@ -1217,6 +1225,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/settings/autonomy/budget": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/settings/detection": [
       "200:application/json",
       "422:application/json"
@@ -1490,6 +1502,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "PATCH /orgs/{org_id}/datasets/{dataset_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "PATCH /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}": [
       "200:application/json",
       "422:application/json"
@@ -1555,6 +1571,10 @@
       "422:application/json"
     ],
     "PATCH /orgs/{org_id}/signals/library/{template_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "PATCH /orgs/{org_id}/signals/{signal_id}": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2704,6 +2724,9 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /webhooks/stripe": [
+      "200:application/json"
+    ],
     "PUT /orgs/{org_id}/improve/schedule": [
       "200:application/json",
       "422:application/json"
@@ -2741,7 +2764,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 703,
+  "route_count": 707,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -2753,6 +2776,7 @@
     "DELETE /orgs/{org_id}/api-keys/{key_id}",
     "DELETE /orgs/{org_id}/cost-overrides/{override_id}",
     "DELETE /orgs/{org_id}/data-platform/gdpr/tenant",
+    "DELETE /orgs/{org_id}/datasets/{dataset_id}",
     "DELETE /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
     "DELETE /orgs/{org_id}/export/destinations/{destination_id}",
     "DELETE /orgs/{org_id}/export/schedules/{schedule_id}",
@@ -3129,6 +3153,7 @@
     "PATCH /orgs/{org_id}/agents/{agent_id}",
     "PATCH /orgs/{org_id}/agents/{agent_id}/book/config",
     "PATCH /orgs/{org_id}/agents/{agent_id}/ledger/config",
+    "PATCH /orgs/{org_id}/datasets/{dataset_id}",
     "PATCH /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
     "PATCH /orgs/{org_id}/domain-restriction",
     "PATCH /orgs/{org_id}/fleet/agents/{agent_id}",
@@ -3148,6 +3173,7 @@
     "PATCH /orgs/{org_id}/settings/autonomy",
     "PATCH /orgs/{org_id}/settings/detection",
     "PATCH /orgs/{org_id}/signals/library/{template_id}",
+    "PATCH /orgs/{org_id}/signals/{signal_id}",
     "PATCH /orgs/{org_id}/webhooks/{webhook_id}",
     "PATCH /sso/providers/{provider_id}",
     "POST /api/v1/dsar",
@@ -3436,6 +3462,7 @@
     "POST /v1/voice_sessions/{org_id}/barge_in",
     "POST /v1/webhooks/openai/fine_tuning",
     "POST /webhooks/clerk",
+    "POST /webhooks/stripe",
     "PUT /orgs/{org_id}/improve/schedule",
     "PUT /orgs/{org_id}/intelligence/code-change",
     "PUT /orgs/{org_id}/intelligence/code-change/{path:path}",
@@ -3447,11 +3474,12 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 428,
+  "schema_count": 431,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
     "AbExperimentCard",
+    "AcknowledgeRequest",
     "AddAllowedDomainRequest",
     "AddColumnRequest",
     "AddRowRequest",
@@ -3666,6 +3694,7 @@
     "PageContext",
     "PaginatedAPIEnvelope",
     "PaginatedMeta",
+    "PatchDatasetRequest",
     "PatchPlaygroundRequest",
     "PatternOut",
     "PendingActionsResponse",
@@ -3822,6 +3851,7 @@
     "UpdateMemberRoleRequest",
     "UpdateRowRequest",
     "UpdateSavedSearchRequest",
+    "UpdateSignalRequest",
     "UpdateTemplateRequest",
     "UpsertBudgetRequest",
     "UserResponse",
