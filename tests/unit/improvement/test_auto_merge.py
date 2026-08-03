@@ -276,6 +276,63 @@ class TestWeeklyCap:
         assert d.eligible is True
         assert d.details.get("weekly_cap") == 5
 
+    @pytest.mark.asyncio
+    async def test_claim_slot_serializes_cap(self) -> None:
+        """Second claim while first holds slot_claimed must fail at cap=1."""
+        from eden.improvement.auto_merge import claim_auto_merge_slot
+
+        plan_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        plan_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        claimed: set[str] = set()
+
+        class _Conn:
+            async def execute(self, query: str, *args: Any) -> str:
+                if "pg_advisory_xact_lock" in query:
+                    return "SELECT 1"
+                if "UPDATE improvement_plans" in query:
+                    claimed.add(str(args[0]))
+                    return "UPDATE 1"
+                return "OK"
+
+            async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
+                if "COUNT(*)" in query:
+                    return {"n": len(claimed)}
+                # self_row for this plan_id
+                pid = str(args[0])
+                return {
+                    "claimed": pid in claimed,
+                    "merged": False,
+                }
+
+        class _Txn:
+            async def __aenter__(self) -> _Conn:
+                return _Conn()
+
+            async def __aexit__(self, *args: Any) -> None:
+                return None
+
+        client = MagicMock()
+        client.transaction = MagicMock(return_value=_Txn())
+
+        with (
+            patch(
+                "eden.improvement.auto_merge.weekly_cap_for_org",
+                AsyncMock(return_value=1),
+            ),
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=client),
+            ),
+        ):
+            ok1, d1 = await claim_auto_merge_slot("org-1", plan_a, cap=1)
+            ok2, d2 = await claim_auto_merge_slot("org-1", plan_b, cap=1)
+
+        assert ok1 is True
+        assert ok2 is False
+        assert "weekly_cap" in str(d2.get("reason", ""))
+        assert plan_a in claimed
+        assert plan_b not in claimed
+
 
 # ── Branch protection fallback ───────────────────────────────────────
 
@@ -463,6 +520,10 @@ class TestApproveCanaryMerge:
             patch(
                 "eden.improvement.auto_merge.evaluate_auto_merge_eligibility",
                 AsyncMock(return_value=decision),
+            ),
+            patch(
+                "eden.improvement.auto_merge.claim_auto_merge_slot",
+                AsyncMock(return_value=(True, {"weekly_used": 0, "weekly_cap": 2})),
             ),
             patch(
                 "eden.improvement.approve._merge_plan_evidence",
