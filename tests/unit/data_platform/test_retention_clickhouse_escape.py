@@ -6,7 +6,8 @@ names (``eden.agent_performance``, ``eden.telemetry_events_ch``,
 ``eden.home_kpi_hourly`` by default) — never the stale
 ``metrics.*`` / ``default.*`` literals.
 
-Tinybird hosts must raise incomplete erasure rather than return 0.
+Tinybird uses ``POST /v0/datasources/{name}/delete`` (Jobs API), not
+``/v0/sql`` ALTER DELETE.
 """
 
 from __future__ import annotations
@@ -46,12 +47,52 @@ async def test_delete_tenant_rows_uses_qualified_table_names() -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_tenant_rows_tinybird_raises() -> None:
+async def test_delete_tenant_rows_tinybird_uses_datasource_delete_api() -> None:
+    """Tinybird path posts to /v0/datasources/{ds}/delete and waits on jobs."""
     sink = ClickHouseSink(
-        ClickHouseConfig(url="https://api.us-east.tinybird.co", database="eden")
+        ClickHouseConfig(
+            url="https://api.us-east.tinybird.co",
+            tinybird_token="tok",
+            database="eden",
+        )
     )
-    with pytest.raises(RuntimeError, match="incomplete|Tinybird"):
-        await sink.delete_tenant_rows("tenant-1")
+    posts: list[tuple[str, dict[str, str]]] = []
+    gets: list[str] = []
+
+    class _Resp:
+        def __init__(self, status: int, body: str) -> None:
+            self.status = status
+            self._body = body
+
+        async def text(self) -> str:
+            return self._body
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):  # noqa: ANN002
+            return False
+
+    class _Session:
+        def post(self, url, *, data=None, headers=None):  # noqa: ANN001, ARG002
+            posts.append((url, dict(data or {})))
+            job = "job-" + str(len(posts))
+            return _Resp(200, f'{{"job_id": "{job}", "job_url": "https://x/{job}"}}')
+
+        def get(self, url, *, headers=None):  # noqa: ANN001, ARG002
+            gets.append(url)
+            return _Resp(200, '{"status": "done"}')
+
+    sink._get_session = AsyncMock(return_value=_Session())  # type: ignore[method-assign]
+    out = await sink.delete_tenant_rows("tenant-1")
+
+    # Required (2) + optional (4) = 6 posts when all succeed
+    assert out == 6
+    assert any("/v0/datasources/telemetry_events_ch/delete" in u for u, _ in posts)
+    assert any("/v0/datasources/home_kpi_hourly/delete" in u for u, _ in posts)
+    assert posts[0][1]["delete_condition"] == "tenant_id = 'tenant-1'"
+    assert all("/v0/jobs/" in g for g in gets)
+    assert "ALTER TABLE" not in str(posts)
 
 
 @pytest.mark.asyncio
@@ -90,11 +131,22 @@ async def test_delete_from_clickhouse_returns_zero_when_unconfigured() -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_from_clickhouse_tinybird_raises_incomplete() -> None:
-    mgr = DataRetentionManager()
-    with patch(
-        "eden.data_platform.retention.settings",
-        SimpleNamespace(clickhouse_url="https://api.us-east.tinybird.co"),
+async def test_delete_from_clickhouse_tinybird_delegates_to_sink() -> None:
+    sink = MagicMock()
+    sink.delete_tenant_rows = AsyncMock(return_value=2)
+
+    with (
+        patch(
+            "eden.data_platform.retention.settings",
+            SimpleNamespace(clickhouse_url="https://api.us-east.tinybird.co"),
+        ),
+        patch(
+            "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+            AsyncMock(return_value=sink),
+        ),
     ):
-        with pytest.raises(RuntimeError, match="incomplete|Tinybird"):
-            await mgr._delete_from_clickhouse("tenant-1")
+        mgr = DataRetentionManager()
+        out = await mgr._delete_from_clickhouse("tenant-1")
+
+    assert out == 2
+    sink.delete_tenant_rows.assert_awaited_once_with("tenant-1")

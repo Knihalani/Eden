@@ -1,36 +1,40 @@
 #!/usr/bin/env python3
-"""Operator helper: export + document Tinybird GDPR tenant erasure.
+"""Operator helper: export + erase Tinybird tenant rows (GDPR / RTBF).
 
-Tinybird workspaces reject ``ALTER TABLE … DELETE`` via ``/v0/sql``.
-App code therefore raises / reports incomplete erasure for Tinybird
-hosts (see ``ClickHouseSink.delete_tenant_rows`` and
-``DataRetentionManager._delete_from_clickhouse``).
+Tinybird rejects ``ALTER TABLE … DELETE`` via ``/v0/sql``. Erasure uses the
+datasource Jobs API instead — the same path as::
 
-This script does **not** auto-destroy production data. It:
+    tb --cloud datasource delete <ds> --sql-condition "tenant_id='…'" --wait
 
-1. Exports tenant rows from ``telemetry_events_ch`` (and optionally
-   ``home_kpi_hourly``) via Tinybird ``/v0/sql`` for evidence / backup.
-2. Prints the operator runbook for filter + ``tb deploy`` / re-ingest
-   replace (the only durable Tinybird erasure path today).
-3. Emits a clear **incomplete-erasure** warning unless the operator
-   passes ``--i-understand-incomplete-erasure``.
+This script can:
 
-Destructive replace steps require ``--confirm-replace`` **and**
-``--tenant-id``; even then this script only prints the steps — it does
-not call Tinybird delete/replace APIs.
+1. Count / export tenant rows (audit artifact).
+2. Dry-run the delete Jobs API (``--dry-run-delete``).
+3. Execute deletes and wait for jobs (``--execute-delete`` + confirm flags).
+
+App code (``ClickHouseSink.delete_tenant_rows``) uses the same HTTP API so
+production GDPR / RTBF fanout no longer reports Tinybird as permanently
+unavailable.
 
 Usage:
-    export TINYBIRD_ADMIN_TOKEN=...
+    export TINYBIRD_ADMIN_TOKEN=...   # or rely on ``tb`` / ``.tinyb``
     export TINYBIRD_API_HOST=https://api.us-east.tinybird.co   # optional
 
-    # Export only (safe default)
+    # Count only
     python scripts/tinybird_gdpr_tenant_export_filter.py \\
-        --tenant-id ORG_UUID --out /tmp/tenant_export.jsonl
+        --tenant-id ORG_UUID --count-only
 
-    # Print replace runbook (still no network destroy)
+    # Export audit JSONL
     python scripts/tinybird_gdpr_tenant_export_filter.py \\
-        --tenant-id ORG_UUID --confirm-replace \\
-        --i-understand-incomplete-erasure
+        --tenant-id ORG_UUID --out /tmp/tenant_export.jsonl --include-home-kpi
+
+    # Dry-run delete (no mutation)
+    python scripts/tinybird_gdpr_tenant_export_filter.py \\
+        --tenant-id ORG_UUID --dry-run-delete
+
+    # Execute delete (real erasure)
+    python scripts/tinybird_gdpr_tenant_export_filter.py \\
+        --tenant-id ORG_UUID --execute-delete --yes-delete-tenant-rows
 """
 
 from __future__ import annotations
@@ -39,55 +43,24 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-INCOMPLETE_WARNING = """
-╔══════════════════════════════════════════════════════════════════╗
-║  INCOMPLETE ERASURE WARNING                                      ║
-║                                                                  ║
-║  Tinybird cannot ALTER DELETE via /v0/sql. Exporting rows or     ║
-║  printing a filter/replace runbook does NOT complete GDPR RTBF.  ║
-║  Until you filter + redeploy/re-ingest the datasources below,    ║
-║  tenant data remains in Tinybird. Do not mark erasure complete.  ║
-╚══════════════════════════════════════════════════════════════════╝
-""".strip()
+REQUIRED_DS = ("telemetry_events_ch", "home_kpi_hourly")
+OPTIONAL_DS = (
+    "agent_performance",
+    "pipeline_stages",
+    "usage_trends",
+    "benchmark_results",
+)
 
-REPLACE_RUNBOOK = """
-Tinybird tenant erase runbook (manual — this script will not do it)
-------------------------------------------------------------------
-Datasources: telemetry_events_ch, home_kpi_hourly
-(also review agent_performance / pipeline_stages / usage_trends /
-benchmark_results if those unread ingest flags were ever enabled)
-
-Recommended approach (replace, not in-place DELETE):
-
-  1. Export full datasource (or use this script's JSONL export for the
-     tenant slice as an audit artifact — keep a separate full backup).
-
-  2. Filter out the tenant locally, e.g.:
-       jq -c 'select(.tenant_id != "{tenant_id}")' full.jsonl \\
-         > filtered.jsonl
-
-  3. For AggregateFunction tables (home_kpi_hourly), prefer rebuilding
-     from filtered telemetry via the existing MV pipe after replace,
-     rather than hand-editing AggregateFunction state columns.
-
-  4. Replace / truncate+re-ingest via Tinybird tooling:
-       - tb datasource truncate <name>   # destructive; confirm workspace
-       - tb datasource append <name> filtered.jsonl
-     Or: create a replacement datasource, ``tb deploy``, cut readers
-     over, then drop the old one.
-
-  5. Re-verify with /v0/sql:
-       SELECT count() FROM telemetry_events_ch
-       WHERE tenant_id = '{tenant_id}'
-     Expect 0 before marking erasure complete.
-
-  6. Record the incomplete→complete transition in the GDPR ticket with
-     export checksums and the SQL count proof.
+DELETE_API_NOTE = """
+Tinybird erase uses POST /v0/datasources/{name}/delete (Jobs API),
+equivalent to: tb --cloud datasource delete <name> --sql-condition "…" --wait
+ALTER DELETE via /v0/sql remains unsupported and is not used here.
 """.strip()
 
 
@@ -100,31 +73,62 @@ def _host() -> str:
 
 
 def _token() -> str:
-    return (
+    token = (
         os.environ.get("TINYBIRD_ADMIN_TOKEN")
         or os.environ.get("TINYBIRD_BRANCH_TOKEN")
         or os.environ.get("CLICKHOUSE_PASSWORD")
         or ""
     )
+    if token:
+        return token
+    # Fall back to .tinyb workspace token (local operator machine).
+    tinyb = Path.home() / ".tinyb"
+    # Also try repo .tinyb when run from Eden checkout.
+    for candidate in (Path.cwd() / ".tinyb", Path.cwd().parent / ".tinyb", tinyb):
+        if not candidate.is_file():
+            continue
+        try:
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        host = _host()
+        tokens = data.get("tokens") or {}
+        if isinstance(tokens, dict) and host in tokens:
+            return str(tokens[host])
+        if data.get("token"):
+            return str(data["token"])
+    return ""
 
 
 def _sql_literal(value: str) -> str:
     return value.replace("'", "''")
 
 
+def _request(
+    method: str,
+    url: str,
+    *,
+    token: str,
+    data: dict[str, str] | None = None,
+    timeout: float = 120.0,
+) -> tuple[int, str]:
+    body = urllib.parse.urlencode(data).encode() if data else None
+    headers = {"Authorization": f"Bearer {token}"}
+    if data is not None:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="replace")
+
+
 def _run_sql(sql: str, *, token: str, host: str) -> dict:
     url = f"{host}/v0/sql?{urllib.parse.urlencode({'q': sql})}"
-    req = urllib.request.Request(
-        url,
-        headers={"Authorization": f"Bearer {token}"},
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            body = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:800]
-        raise SystemExit(f"Tinybird /v0/sql HTTP {exc.code}: {detail}") from exc
+    status, body = _request("GET", url, token=token)
+    if status >= 400:
+        raise SystemExit(f"Tinybird /v0/sql HTTP {status}: {body[:800]}")
     try:
         return json.loads(body)
     except json.JSONDecodeError:
@@ -140,7 +144,6 @@ def _export_table(
     limit: int,
 ) -> list[dict]:
     safe = _sql_literal(tenant_id)
-    # Force JSON so we can write JSONL without parsing TSV.
     sql = (
         f"SELECT * FROM {table} "
         f"WHERE tenant_id = '{safe}' "
@@ -154,72 +157,122 @@ def _export_table(
     return [r for r in data if isinstance(r, dict)]
 
 
+def _wait_job(host: str, token: str, job_id: str, *, timeout_s: float = 300.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    url = f"{host}/v0/jobs/{job_id}"
+    while time.monotonic() < deadline:
+        status, body = _request("GET", url, token=token)
+        if status >= 400:
+            raise SystemExit(f"job {job_id} HTTP {status}: {body[:300]}")
+        try:
+            payload = json.loads(body) if body else {}
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"job {job_id} bad JSON: {body[:200]}") from exc
+        st = str(payload.get("status") or "")
+        if st == "done":
+            return
+        if st == "error":
+            raise SystemExit(f"job {job_id} error: {payload.get('error') or body[:300]}")
+        time.sleep(1.0)
+    raise SystemExit(f"job {job_id} timed out after {timeout_s}s")
+
+
+def _delete_ds(
+    ds: str,
+    tenant_id: str,
+    *,
+    token: str,
+    host: str,
+    dry_run: bool,
+    wait: bool,
+) -> dict:
+    safe = _sql_literal(tenant_id)
+    condition = f"tenant_id = '{safe}'"
+    url = f"{host}/v0/datasources/{ds}/delete"
+    data = {"delete_condition": condition}
+    if dry_run:
+        data["dry_run"] = "true"
+    status, body = _request("POST", url, token=token, data=data)
+    if status == 404:
+        return {"datasource": ds, "status": "missing", "detail": body[:200]}
+    if status >= 400:
+        return {"datasource": ds, "status": "error", "detail": f"HTTP {status}: {body[:400]}"}
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        payload = {"raw": body}
+    if dry_run:
+        return {
+            "datasource": ds,
+            "status": "dry_run",
+            "rows_to_be_deleted": payload.get("rows_to_be_deleted"),
+            "payload": payload,
+        }
+    job_id = payload.get("job_id")
+    if job_id and wait:
+        _wait_job(host, token, str(job_id))
+        return {"datasource": ds, "status": "done", "job_id": job_id}
+    return {"datasource": ds, "status": "submitted", "payload": payload}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--tenant-id", required=True, help="Tenant / org id to export")
+    parser.add_argument("--tenant-id", required=True, help="Tenant / org id")
     parser.add_argument(
         "--out",
         type=Path,
         default=None,
         help="Write JSONL export (telemetry_events_ch [+ home_kpi_hourly])",
     )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=100_000,
-        help="Max rows per table (default 100000)",
-    )
+    parser.add_argument("--limit", type=int, default=100_000)
     parser.add_argument(
         "--include-home-kpi",
         action="store_true",
         help="Also export home_kpi_hourly for the tenant",
     )
     parser.add_argument(
-        "--confirm-replace",
-        action="store_true",
-        help="Print the filter + tb deploy / re-ingest replace runbook",
-    )
-    parser.add_argument(
-        "--i-understand-incomplete-erasure",
-        action="store_true",
-        help="Acknowledge that this script does not complete GDPR erasure",
-    )
-    parser.add_argument(
         "--count-only",
         action="store_true",
-        help="Only print SELECT count() for the tenant (no export file)",
+        help="Only print SELECT count() for the tenant",
+    )
+    parser.add_argument(
+        "--dry-run-delete",
+        action="store_true",
+        help="Call Tinybird delete Jobs API with dry_run=true (no mutation)",
+    )
+    parser.add_argument(
+        "--execute-delete",
+        action="store_true",
+        help="Execute Tinybird datasource deletes and wait for jobs",
+    )
+    parser.add_argument(
+        "--yes-delete-tenant-rows",
+        action="store_true",
+        help="Required with --execute-delete (explicit confirmation)",
+    )
+    parser.add_argument(
+        "--include-optional-datasources",
+        action="store_true",
+        help="Also delete unread analytics DS (agent_performance, …)",
     )
     args = parser.parse_args(argv)
 
-    print(INCOMPLETE_WARNING, file=sys.stderr)
-    if not args.i_understand_incomplete_erasure:
-        print(
-            "\nPass --i-understand-incomplete-erasure to continue "
-            "(export/runbook only; still incomplete erasure).\n",
-            file=sys.stderr,
-        )
-        return 2
+    print(DELETE_API_NOTE, file=sys.stderr)
 
     token = _token()
     if not token:
         print(
-            "Set TINYBIRD_ADMIN_TOKEN (or TINYBIRD_BRANCH_TOKEN).",
+            "Set TINYBIRD_ADMIN_TOKEN (or login with `tb login` / .tinyb).",
             file=sys.stderr,
         )
         return 2
     host = _host()
-    if "tinybird.co" not in host.lower() and not os.environ.get("TINYBIRD_API_HOST"):
-        print(
-            f"Host {host!r} does not look like Tinybird; "
-            "set TINYBIRD_API_HOST explicitly if intentional.",
-            file=sys.stderr,
-        )
 
     safe = _sql_literal(args.tenant_id)
-    for table in ("telemetry_events_ch", "home_kpi_hourly"):
+    for table in REQUIRED_DS:
         count_sql = (
             f"SELECT count() AS c FROM {table} "
             f"WHERE tenant_id = '{safe}' FORMAT JSON"
@@ -228,12 +281,6 @@ def main(argv: list[str] | None = None) -> int:
         rows = payload.get("data") if isinstance(payload, dict) else None
         c = rows[0].get("c") if rows else "?"
         print(f"{table} rows for tenant: {c}")
-
-    if args.count_only and not args.out:
-        if args.confirm_replace:
-            print()
-            print(REPLACE_RUNBOOK.format(tenant_id=args.tenant_id))
-        return 0
 
     if args.out:
         tables = ["telemetry_events_ch"]
@@ -257,24 +304,70 @@ def main(argv: list[str] | None = None) -> int:
                 total += len(rows)
         print(f"wrote {total} lines → {args.out}")
 
-    if args.confirm_replace:
-        print()
-        print(REPLACE_RUNBOOK.format(tenant_id=args.tenant_id))
-        print(
-            "\nNOTE: --confirm-replace only prints the runbook; "
-            "no truncate/append was executed.",
-            file=sys.stderr,
-        )
-    elif not args.out and not args.count_only:
-        print(
-            "Nothing to do beyond counts. Pass --out PATH and/or "
-            "--confirm-replace / --count-only.",
-            file=sys.stderr,
-        )
+    targets = list(REQUIRED_DS)
+    if args.include_optional_datasources:
+        targets.extend(OPTIONAL_DS)
+
+    if args.dry_run_delete:
+        print("\n-- dry-run delete --")
+        for ds in targets:
+            result = _delete_ds(
+                ds,
+                args.tenant_id,
+                token=token,
+                host=host,
+                dry_run=True,
+                wait=False,
+            )
+            print(json.dumps(result, default=str))
+        return 0
+
+    if args.execute_delete:
+        if not args.yes_delete_tenant_rows:
+            print(
+                "Refusing --execute-delete without --yes-delete-tenant-rows.",
+                file=sys.stderr,
+            )
+            return 2
+        print("\n-- execute delete --")
+        failed = False
+        for ds in targets:
+            required = ds in REQUIRED_DS
+            result = _delete_ds(
+                ds,
+                args.tenant_id,
+                token=token,
+                host=host,
+                dry_run=False,
+                wait=True,
+            )
+            print(json.dumps(result, default=str))
+            if result.get("status") not in ("done", "submitted", "missing"):
+                if required:
+                    failed = True
+            if result.get("status") == "missing" and required:
+                failed = True
+        # Re-count required tables
+        print("\n-- post-delete counts --")
+        for table in REQUIRED_DS:
+            count_sql = (
+                f"SELECT count() AS c FROM {table} "
+                f"WHERE tenant_id = '{safe}' FORMAT JSON"
+            )
+            payload = _run_sql(count_sql, token=token, host=host)
+            rows = payload.get("data") if isinstance(payload, dict) else None
+            c = rows[0].get("c") if rows else "?"
+            print(f"{table} rows for tenant: {c}")
+            if c not in (0, "0", 0.0):
+                failed = True
+        return 1 if failed else 0
+
+    if args.count_only or args.out:
+        return 0
 
     print(
-        "\nErasure status: INCOMPLETE until filter+replace is verified "
-        "with count() == 0.",
+        "Nothing to do beyond counts. Use --out, --dry-run-delete, "
+        "or --execute-delete --yes-delete-tenant-rows.",
         file=sys.stderr,
     )
     return 0

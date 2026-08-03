@@ -457,22 +457,24 @@ async def test_aggregator_both_down_returns_envelope() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gdpr_ch_purge_raises_on_tinybird() -> None:
-    """Tinybird cannot ALTER DELETE via /v0/sql — the purge must raise
-    rather than silently report an empty-but-successful erasure. The
-    caller (``delete_tenant_data``) catches this and records it on
-    ``RetentionReport.errors`` so the incomplete erasure is visible,
-    not swallowed as ``deleted_clickhouse_rows == 0``.
-    """
+async def test_gdpr_ch_purge_tinybird_uses_datasource_delete() -> None:
+    """Tinybird purge goes through sink Jobs API, not /v0/sql ALTER."""
     from eden.data_platform.retention import DataRetentionManager
 
+    sink = MagicMock()
+    sink.delete_tenant_rows = AsyncMock(return_value=2)
     mgr = DataRetentionManager(dry_run=False)
-    with patch(
-        "eden.data_platform.retention.settings"
-    ) as fake_settings:
+    with (
+        patch("eden.data_platform.retention.settings") as fake_settings,
+        patch(
+            "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+            AsyncMock(return_value=sink),
+        ),
+    ):
         fake_settings.clickhouse_url = "https://api.us-east.tinybird.co"
-        with pytest.raises(RuntimeError, match="Tinybird cannot ALTER DELETE"):
-            await mgr._delete_from_clickhouse("tenant-1")
+        out = await mgr._delete_from_clickhouse("tenant-1")
+    assert out == 2
+    sink.delete_tenant_rows.assert_awaited_once_with("tenant-1")
 
 
 def test_gdpr_ch_purge_uses_tenant_id_column() -> None:
@@ -481,8 +483,11 @@ def test_gdpr_ch_purge_uses_tenant_id_column() -> None:
     from eden.data_platform.clickhouse_sink import ClickHouseSink
 
     src = inspect.getsource(ClickHouseSink.delete_tenant_rows)
-    assert "DELETE WHERE tenant_id =" in src
+    assert "DELETE WHERE tenant_id =" in src or "delete_condition" in src
     assert "DELETE WHERE org_id =" not in src
     assert "qualified_table" in src
     assert "metrics.agent_performance" not in src
     assert "default.telemetry_events_ch" not in src
+    tiny = inspect.getsource(ClickHouseSink._delete_tenant_rows_tinybird)
+    assert "/v0/datasources/" in tiny
+    assert "delete_condition" in tiny

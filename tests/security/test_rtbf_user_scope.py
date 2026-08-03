@@ -138,11 +138,12 @@ async def test_fanout_s3_dry_run_is_also_honest() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fanout_clickhouse_tinybird_unavailable() -> None:
+async def test_fanout_clickhouse_tinybird_uses_delete_tenant_rows() -> None:
     from eden.services.governance_intel import rtbf_fanout
 
     sink = MagicMock()
     sink.config = MagicMock(is_tinybird=True)
+    sink.delete_tenant_rows = AsyncMock(return_value=2)
 
     with patch(
         "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
@@ -152,8 +153,10 @@ async def test_fanout_clickhouse_tinybird_unavailable() -> None:
             "org-1", user_id="user-1", dry_run=False
         )
 
-    assert result["status"] == "unavailable"
-    assert "Tinybird" in result["error"]
+    sink.delete_tenant_rows.assert_awaited_once_with("org-1")
+    assert result["status"] == "ok"
+    assert result["tables_purged"] == 2
+    assert result["scope"] == "tenant"
 
 
 @pytest.mark.asyncio

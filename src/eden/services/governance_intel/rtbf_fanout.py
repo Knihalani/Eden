@@ -208,22 +208,15 @@ async def _fanout_clickhouse(
             "status": "unavailable",
             "error": "ClickHouse sink not configured",
         }
-    # Tinybird cannot ALTER DELETE via /v0/sql — must not report ok.
-    cfg = getattr(sink, "config", None)
-    if cfg is not None and getattr(cfg, "is_tinybird", False):
-        return {
-            "store": store,
-            "status": "unavailable",
-            "error": "Tinybird cannot ALTER DELETE via /v0/sql — erasure incomplete",
-            "user_id": user_id,
-            "org_id": org_id,
-        }
+    # Tinybird: use datasource delete Jobs API via sink.delete_tenant_rows
+    # (same as ``tb datasource delete``). Do not short-circuit as unavailable.
     if dry_run:
         return {
             "store": store,
             "status": "dry_run",
             "detail": (
-                "would ALTER DELETE tenant rows on telemetry_events_ch "
+                "would delete tenant rows on telemetry_events_ch / "
+                "home_kpi_hourly via Tinybird Jobs API or ALTER DELETE "
                 "(no user_id column; scope=tenant)"
             ),
             "user_id": user_id,
@@ -248,7 +241,7 @@ async def _fanout_clickhouse(
             "org_id": org_id,
             "scope": "tenant",
             "detail": (
-                "tenant-scoped CH purge (telemetry has no user_id); "
+                "tenant-scoped CH/Tinybird purge (telemetry has no user_id); "
                 "user_id recorded for audit only"
             ),
         }
