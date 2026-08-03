@@ -796,8 +796,6 @@ async def approve_plan(
     try:
         from eden.services.slack_notify import notify_pr_opened
 
-        _raw_ev = plan.get("evidence")
-        evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
         await notify_pr_opened(
             org_id,
             plan_id=plan_id,
