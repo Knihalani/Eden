@@ -31,7 +31,7 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { SHELL_QUERY, OBSERVE_STALE } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { api } from "@/lib/api/resources";
+import { wave6Api } from "@/lib/api/resources";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { FirstEventWaitAction } from "@/components/shell/first-event-wait";
@@ -222,7 +222,7 @@ export default function HomeClient() {
     ["portal", "costKpi", orgId, 24] as const,
     orgId,
     async () => {
-      const res = await api.costKpi(orgId!, { window_hours: 24 });
+      const res = await wave6Api.costKpi(orgId!, { window_hours: 24 });
       return res.data;
     },
     SHELL_QUERY,
