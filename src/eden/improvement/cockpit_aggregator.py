@@ -477,8 +477,8 @@ class ImprovementCockpitAggregator:
             column = COLUMN_PROPOSED
             if status == "pr_opened":
                 column = COLUMN_VERIFY
-            elif status == "draft":
-                # M13 (§6.2): Fix now vs Improve later.
+            elif status in ("draft", "pending_review"):
+                # M13 (§6.2): Fix now vs Improve later (draft + pending_review).
                 column = _queue_column_for_plan(plan_kind, evidence)
             payload: dict[str, Any] = {
                 "plan_id": pid,

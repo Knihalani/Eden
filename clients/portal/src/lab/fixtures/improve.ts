@@ -15,7 +15,8 @@ export type ImproveStatus =
   | "done"
   | "blocked";
 
-export type ImproveKind = "prompt_update" | "tool_policy" | "config";
+/** M13: code_patch is a first-class kind (not collapsed to config). */
+export type ImproveKind = "prompt_update" | "tool_policy" | "config" | "code_patch";
 
 export type ImprovePlanFixture = {
   id: string;
@@ -82,6 +83,7 @@ export function statusLabel(status: ImproveStatus): string {
 export function kindLabel(kind: ImproveKind): string {
   if (kind === "prompt_update") return "prompt";
   if (kind === "tool_policy") return "tools";
+  if (kind === "code_patch") return "code";
   return "config";
 }
 

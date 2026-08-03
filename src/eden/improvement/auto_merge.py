@@ -102,7 +102,8 @@ async def count_auto_merges_this_week(org_id: str) -> int:
 
         client = await get_postgres_client()
         if client is None:
-            return 0
+            # Fail-closed: without a ledger we must not under-count.
+            return 10**9
         since = datetime.now(UTC) - timedelta(days=7)
         row = await client.fetchrow(
             """
@@ -152,16 +153,21 @@ async def _kg_has_revert_history(
         logger.debug("auto_merge: KG init failed: %s", exc)
         return True, ["kg_unavailable"]
 
-    dirty: list[str] = []
-    for path in paths:
+    import asyncio
+
+    async def _check(path: str) -> str | None:
         try:
             env = await kg.same_file_history(org_id, repo_id or "unknown", path)
             data = (env or {}).get("data") or {}
             if int(data.get("reverted_count") or 0) > 0:
-                dirty.append(path)
+                return path
         except Exception as exc:  # noqa: BLE001
             logger.debug("auto_merge: KG history %s failed: %s", path, exc)
-            dirty.append(path)
+            return path
+        return None
+
+    results = await asyncio.gather(*[_check(p) for p in paths[:16]])
+    dirty = [p for p in results if p]
     return bool(dirty), dirty
 
 
@@ -375,14 +381,23 @@ async def merge_pull_request(
 
 
 def parent_is_canary_auto_merged(parent: dict[str, Any]) -> bool:
-    """True when the merged parent rode the M15 canary ladder."""
+    """True when the merged parent rode the M15 canary ladder.
+
+    Requires an explicit ``canary: true`` stamp — missing key is not
+    treated as canary (avoids accidental auto-revert on non-canary merges).
+    """
     evidence = parent.get("evidence") if isinstance(parent.get("evidence"), dict) else {}
     am = evidence.get(EVIDENCE_KEY) if isinstance(evidence.get(EVIDENCE_KEY), dict) else {}
-    return bool(am.get("merged")) and bool(am.get("canary", True))
+    return bool(am.get("merged")) and am.get("canary") is True
 
 
 async def auto_revert_permitted(org_id: str, agent_id: str | None) -> bool:
-    """Guardian may auto-execute a revert for the canary class only."""
+    """Guardian may auto-execute a revert for the canary class only.
+
+    Gated on auto-merge class (T4 + kill switch + compliance), NOT on
+    ``auto_runtime_heal`` — plan §9 couples canary revert to the merge
+    ladder, not runtime heal opt-in.
+    """
     try:
         from eden.config import get_settings
 
@@ -393,12 +408,12 @@ async def auto_revert_permitted(org_id: str, agent_id: str | None) -> bool:
     if not await _feature_kill_allows(org_id):
         return False
     try:
-        from eden.closed_loop.autonomy_policy import decide, resolve
+        from eden.closed_loop.autonomy_policy import resolve
 
         policy = await resolve(org_id, agent_id)
         if policy.compliance_profile in _BLOCKED_COMPLIANCE:
             return False
-        verdict, _reason, _tier = decide(policy, "rollback")
-        return verdict in ("allow", "require_approval")
+        # Canary auto-revert is part of the T4 merge ladder, not heal.
+        return bool(getattr(policy, "auto_code_patch_merge", False))
     except Exception:  # noqa: BLE001
         return False

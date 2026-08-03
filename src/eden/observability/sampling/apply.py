@@ -146,13 +146,25 @@ async def should_route_event(event: Any) -> bool:
 
     On drop, best-effort persists a metrics-only summary. Always fail-open
     (returns True) if summarization itself raises.
+
+    M14 (§8.3): warm per-org ``sampling_profile_override`` before the sync
+    decide path so production ingest honors org settings (not only the
+    process-wide ``full`` default).
     """
+    org_id = str(getattr(event, "tenant_id", "") or "")
+    if org_id:
+        try:
+            from eden.preview.gates import ensure_org_sampling_warmed
+
+            await ensure_org_sampling_warmed(org_id)
+        except Exception:  # noqa: BLE001 — never block ingest for warm
+            pass
     decision = decide_for_event(event)
     if decision.keep:
         return True
     try:
         summary = TraceSamplingSummary(
-            org_id=str(getattr(event, "tenant_id", "") or ""),
+            org_id=org_id,
             trace_id=str(getattr(event, "trace_id", "") or ""),
             agent_id=getattr(event, "agent_id", None),
             duration_ms=int(getattr(event, "duration_ms", 0) or 0),

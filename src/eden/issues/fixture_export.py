@@ -11,6 +11,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -51,11 +52,12 @@ _VALUE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
-def _security_scanner_patterns() -> list[tuple[str, re.Pattern[str]]]:
-    """Reuse SASTScanner._SECRET_PATTERNS (api_key/password/secret/token/private_key)."""
+@lru_cache(maxsize=1)
+def _security_scanner_patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
+    """Reuse SASTScanner._SECRET_PATTERNS (cached — hot path)."""
     from eden.evaluation.security_scanner import SASTScanner
 
-    return list(SASTScanner._SECRET_PATTERNS)
+    return tuple(SASTScanner._SECRET_PATTERNS)
 
 
 def redact_secret_values(text: str) -> str:

@@ -412,7 +412,8 @@ class ExperimentSummary(BaseModel):
 # ── Improve / Compare / Guardrails / Debugger / Assistant ─────────
 
 ImproveStatus = Literal["needs_you", "in_progress", "verify", "done", "blocked"]
-ImproveKind = Literal["prompt_update", "tool_policy", "config"]
+# M13: include code_patch so portal plans retain the real plan_kind.
+ImproveKind = Literal["prompt_update", "tool_policy", "config", "code_patch"]
 GuardrailStatus = Literal["active", "shadow", "disabled"]
 GuardrailAction = Literal["block", "redact", "flag"]
 DebuggerModeHint = Literal["replay", "compare", "inspect"]

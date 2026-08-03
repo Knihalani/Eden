@@ -622,7 +622,17 @@ class ClosedLoopOrchestrator:
             healer = SelfHealer()
             heal_from_issue = getattr(healer, "heal_from_issue", None)
             if heal_from_issue is None:
-                return "blocked"
+                # HEAL_REQUESTED already applied — must not return bare
+                # "blocked" (that strands fix_pending until janitor).
+                await self._heal_failed(
+                    event,
+                    triage_result,
+                    {
+                        "status": "failed",
+                        "failure_reason": "heal_executor_missing",
+                    },
+                )
+                return "failed_escalated"
             result = await heal_from_issue(
                 event.org_id,
                 event.issue_id,

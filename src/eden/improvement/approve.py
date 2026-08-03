@@ -1103,7 +1103,9 @@ async def _n22_blocked(org_id: str, plan: dict[str, Any]) -> str | None:
         if policy.compliance_profile == "hipaa":
             return "HIPAA observe mode — approve disabled"
     except Exception as exc:
-        logger.debug("approve n22 check failed: %s", exc)
+        # Fail-closed: never approve when policy resolution/decide throws.
+        logger.warning("approve n22 check failed (blocking): %s", exc)
+        return f"n22_check_failed:{str(exc)[:160]}"
     return None
 
 
@@ -1119,7 +1121,8 @@ async def queue_verify_for_plan(
     """
     evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
     am = evidence.get("auto_merge") if isinstance(evidence.get("auto_merge"), dict) else {}
-    canary = bool(am.get("merged")) and bool(am.get("canary", True))
+    # Explicit canary=True required (M15 harden — no default-True).
+    canary = bool(am.get("merged")) and am.get("canary") is True
     return await _queue_verify(
         org_id, plan, branch=branch, auto_merge_canary=canary
     )

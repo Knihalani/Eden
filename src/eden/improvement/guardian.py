@@ -189,14 +189,16 @@ async def handle_regression(
             ):
                 action = "auto_revert"
 
-        # M13 (§6.3): guardian regression → KG ``reverted`` so future
-        # PatchGenerator calls see the revert-rate penalty.
-        try:
-            from eden.patches.knowledge_graph import record_plan_outcome
+        # M13 (§6.3): only real revert / auto-revert actions write KG
+        # ``reverted`` — follow-up drafts must not inflate revert history
+        # (that would falsely block future auto-merges).
+        if action in ("revert", "auto_revert"):
+            try:
+                from eden.patches.knowledge_graph import record_plan_outcome
 
-            await record_plan_outcome(org_id, plan, "reverted")
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("guardian: KG reverted outcome failed: %s", exc)
+                await record_plan_outcome(org_id, plan, "reverted")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("guardian: KG reverted outcome failed: %s", exc)
 
         # Slack regression alert — deep link to the issue.
         try:
@@ -320,15 +322,17 @@ async def _hydrate_head_files(
     from eden.providers.factory import get_repo_provider_for_org
 
     provider = await get_repo_provider_for_org(org_id, agent_id=agent_id)
-    out: list[dict[str, str]] = []
-    for path in paths:
+    import asyncio
+
+    async def _one(path: str) -> dict[str, str]:
         try:
             content = await provider.read_file(path) or ""
         except Exception as exc:  # noqa: BLE001
             logger.debug("guardian: read_file %s failed: %s", path, exc)
             content = ""
-        out.append({"path": path, "content": content})
-    return out
+        return {"path": path, "content": content}
+
+    return list(await asyncio.gather(*[_one(p) for p in paths]))
 
 
 def _parent_evidence(

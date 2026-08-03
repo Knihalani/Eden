@@ -95,3 +95,48 @@ def test_decide_for_event_keeps_errors_even_with_override() -> None:
     )
     for _ in range(20):
         assert decide_for_event(event).keep is True
+
+
+@pytest.mark.asyncio
+async def test_should_route_warms_org_override_on_ingest() -> None:
+    """M14: ingest path warms sampling_profile_override before decide."""
+    from eden.observability.sampling.apply import should_route_event
+
+    assert "org-ingest" not in gates._ORG_SAMPLING_CACHE
+    event = SimpleNamespace(
+        tenant_id="org-ingest",
+        outcome="success",
+        attributes={},
+        duration_ms=10.0,
+        metrics={"cost_usd": 0.01},
+        trace_id="t-warm",
+        agent_id=None,
+    )
+    with patch.object(
+        gates,
+        "_load_org_features",
+        AsyncMock(return_value={"sampling_profile_override": "balanced"}),
+    ):
+        # Fail-open keep is fine; assert the warm side-effect.
+        await should_route_event(event)
+    assert gates.sampling_profile_override_sync("org-ingest") == "balanced"
+    # Second call must not re-hit DB (cache already populated).
+    with patch.object(
+        gates,
+        "_load_org_features",
+        AsyncMock(side_effect=AssertionError("must not reload")),
+    ):
+        await should_route_event(event)
+    assert gates.sampling_profile_override_sync("org-ingest") == "balanced"
+
+
+@pytest.mark.asyncio
+async def test_ensure_org_sampling_warmed_noop_when_cached() -> None:
+    gates._ORG_SAMPLING_CACHE["org-cached"] = None
+    with patch.object(
+        gates,
+        "_load_org_features",
+        AsyncMock(side_effect=AssertionError("must not reload")),
+    ):
+        await gates.ensure_org_sampling_warmed("org-cached")
+    assert gates.sampling_profile_override_sync("org-cached") is None
