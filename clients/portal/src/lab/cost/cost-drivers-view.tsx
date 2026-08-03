@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import {
-  driversForAgent,
   formatSpend,
   type CostDriverFixture,
 } from "@/lab/fixtures/cost";
@@ -14,14 +13,22 @@ import { cn } from "@/lib/utils";
 
 export function CostDriversView({
   agentId,
+  drivers,
   selectedId,
   onSelect,
 }: {
   agentId: string;
+  drivers: CostDriverFixture[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
-  const rows = useMemo(() => driversForAgent(agentId), [agentId]);
+  const rows = useMemo(() => {
+    const filtered =
+      agentId === "all"
+        ? drivers
+        : drivers.filter((d) => d.agentId === agentId);
+    return [...filtered].sort((a, b) => b.estSaveUsd - a.estSaveUsd);
+  }, [drivers, agentId]);
   const selected = rows.find((d) => d.id === selectedId) ?? rows[0] ?? null;
 
   return (

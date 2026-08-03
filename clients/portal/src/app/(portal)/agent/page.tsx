@@ -33,6 +33,7 @@ import { fetchApi } from "@/lib/api/core";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { useLabToast } from "@/lab/lab-toast";
 import { QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 function titleFromPrompt(prompt: string): string {
   const t = prompt.trim();
@@ -358,6 +359,11 @@ function LabAgentInner() {
     async (threadId: string, userText: string, pins: AgentContextPin[]) => {
       if (!orgId) {
         setThinking(false);
+        pushToast({
+          title: "No workspace selected",
+          body: "Select a workspace to chat with the assistant.",
+          tone: "fail",
+        });
         return;
       }
       const assistantId = `a_${Date.now().toString(36)}`;
@@ -549,6 +555,14 @@ function LabAgentInner() {
       if (!activeId || thinking) return;
       const text = userText.trim();
       if (!text) return;
+      if (!orgId) {
+        pushToast({
+          title: "No workspace selected",
+          body: "Select a workspace to chat with the assistant.",
+          tone: "fail",
+        });
+        return;
+      }
 
       const userMsg: AgentMessage = {
         id: `u_${Date.now().toString(36)}`,
@@ -578,7 +592,7 @@ function LabAgentInner() {
       setThinking(true);
       void streamAssistantReply(threadId, text, pins);
     },
-    [activeId, thinking, streamAssistantReply],
+    [activeId, thinking, streamAssistantReply, orgId, pushToast],
   );
 
   const send = useCallback(() => {
@@ -608,6 +622,15 @@ function LabAgentInner() {
 
   // Threads history failing must not block a fresh chat — the boot
   // effect below seeds an empty thread when data is missing.
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Assistant"
+        message="Select a workspace to chat with the assistant."
+      />
+    );
+  }
 
   if (!active) {
     return (

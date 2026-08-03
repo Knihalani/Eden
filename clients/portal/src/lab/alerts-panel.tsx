@@ -30,6 +30,13 @@ type InboxFilter = "actionable" | "firing" | "muted" | "resolved" | "all";
 
 const CLOSE_MS = 220;
 
+/** Catalog miss fallback — prefer a short id over the word "unknown". */
+function shortRef(id: string): string {
+  const trimmed = id.trim();
+  if (!trimmed) return "—";
+  return trimmed.length > 12 ? `${trimmed.slice(0, 8)}…` : trimmed;
+}
+
 function severityTone(severity: AlertSeverity): "fail" | "neutral" {
   if (severity === "critical" || severity === "error" || severity === "warn") {
     return "fail";
@@ -79,7 +86,9 @@ function EventRow({
         <span className="type-meta ml-auto">{event.firedAt}</span>
       </div>
       <p className="type-ui mt-2 text-[var(--text)]">{event.title}</p>
-      <p className="type-meta mt-1">{agent?.name ?? "unknown"}</p>
+      <p className="type-meta mt-1">
+        {agent?.name ?? shortRef(event.agentId)}
+      </p>
       <p className="type-body line-clamp-2">{event.body}</p>
     </button>
   );
@@ -122,7 +131,10 @@ function EventDetail({
             </h2>
             <p className="type-body text-[var(--text-secondary)]">{event.body}</p>
             <p className="type-meta">
-              <AgentLink agentId={agent?.id} name={agent?.name ?? "unknown"} />
+              <AgentLink
+                agentId={agent?.id ?? event.agentId}
+                name={agent?.name ?? shortRef(event.agentId)}
+              />
               <span className="text-[var(--text-faint)]"> · </span>
               {event.firedAt}
               {rule ? (
@@ -197,6 +209,19 @@ function EventDetail({
                   <SeverityBadge severity={issue.severity} />
                 </Link>
               </li>
+            ) : event.relatedIssueId ? (
+              <li>
+                <Link
+                  href={`/issues?id=${event.relatedIssueId}`}
+                  onClick={onCloseModal}
+                  className="block rounded-[var(--radius)] px-4 py-3 shadow-[0_0_0_1px_var(--line)] transition-colors hover:bg-[var(--accent-muted)]"
+                >
+                  <p className="type-label">Issue</p>
+                  <p className="type-ui mt-1 text-[var(--text)]">
+                    {shortRef(event.relatedIssueId)}
+                  </p>
+                </Link>
+              </li>
             ) : null}
             {trace ? (
               <li>
@@ -211,6 +236,19 @@ function EventDetail({
                     <p className="type-meta mt-1">{trace.id}</p>
                   </div>
                   <SeverityBadge severity={trace.severity} />
+                </Link>
+              </li>
+            ) : event.relatedTraceId ? (
+              <li>
+                <Link
+                  href={`/traces?id=${event.relatedTraceId}&tab=signals`}
+                  onClick={onCloseModal}
+                  className="block rounded-[var(--radius)] px-4 py-3 shadow-[0_0_0_1px_var(--line)] transition-colors hover:bg-[var(--accent-muted)]"
+                >
+                  <p className="type-label">Run</p>
+                  <p className="type-ui mt-1 text-[var(--text)]">
+                    {shortRef(event.relatedTraceId)}
+                  </p>
                 </Link>
               </li>
             ) : null}
@@ -239,6 +277,19 @@ function EventDetail({
                 >
                   <p className="type-label">Agent</p>
                   <p className="type-ui mt-1 text-[var(--text)]">{agent.name}</p>
+                </Link>
+              </li>
+            ) : event.agentId ? (
+              <li>
+                <Link
+                  href={`/agents?id=${event.agentId}`}
+                  onClick={onCloseModal}
+                  className="block rounded-[var(--radius)] px-4 py-3 shadow-[0_0_0_1px_var(--line)] transition-colors hover:bg-[var(--accent-muted)]"
+                >
+                  <p className="type-label">Agent</p>
+                  <p className="type-ui mt-1 text-[var(--text)]">
+                    {shortRef(event.agentId)}
+                  </p>
                 </Link>
               </li>
             ) : null}

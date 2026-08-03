@@ -12,8 +12,6 @@ full, or dropped) content field plus the right ``eden.truncated`` /
 
 from __future__ import annotations
 
-from typing import Any
-
 import eden
 from eden_sdk.capture import CAPTURE_MODE_ATTR, ORIGINAL_BYTES_ATTR, TRUNCATED_ATTR
 from eden_sdk.client import EdenClient, TraceEvent, get_default_client

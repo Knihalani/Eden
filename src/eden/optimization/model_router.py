@@ -4,6 +4,7 @@ import ast
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from eden.config import get_settings
 from eden.llm.client import LLMResponse, OpenRouterClient
@@ -46,10 +47,10 @@ def _chat_tiers_share_model() -> bool:
     tier fallbacks burn extra tokens without changing the model — skip
     them. If any tier primary diverges, full routing behaviour resumes.
     """
-    primaries = [
-        (TIER_MODELS.get(t) or [None])[0]
-        for t in (ModelTier.T1, ModelTier.T2, ModelTier.T3)
-    ]
+    primaries: list[str | None] = []
+    for t in (ModelTier.T1, ModelTier.T2, ModelTier.T3):
+        models = TIER_MODELS.get(t)
+        primaries.append(models[0] if models else None)
     return primaries[0] is not None and primaries[0] == primaries[1] == primaries[2]
 
 
@@ -146,14 +147,14 @@ class TaskClassifier:
             )
 
         # ── Fast heuristic path (no LLM call) ─────────────────────────────
-        heuristic_tier = self._heuristic_classify(task)
-        if heuristic_tier is not None:
+        fast_tier = self._heuristic_classify(task)
+        if fast_tier is not None:
             self._heuristic_hits += 1
             return ClassificationResult(
-                tier=heuristic_tier,
-                complexity=0.3 if heuristic_tier == ModelTier.T1 else 0.6,
+                tier=fast_tier,
+                complexity=0.3 if fast_tier == ModelTier.T1 else 0.6,
                 novelty=0.2,
-                reasoning_depth=0.3 if heuristic_tier == ModelTier.T1 else 0.7,
+                reasoning_depth=0.3 if fast_tier == ModelTier.T1 else 0.7,
                 domain_expertise=0.2,
                 confidence=0.85,
                 heuristic_used=True,
@@ -462,7 +463,7 @@ class ModelRouter:
         task: PipelineTask,
         prompt: str,
         system_prompt: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Route an LLM request through the tiered fallback chain (synchronous).
 
@@ -541,7 +542,7 @@ class ModelRouter:
         system_prompt: str | None = None,
         org_id: str | None = None,
         user_id: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Async route with full classification and validation.
 
@@ -574,7 +575,7 @@ class ModelRouter:
                         # S-21: ``m=model`` default-arg binds
                         # ``model`` at lambda-creation time so the
                         # late-binding-for-loop bug never recurs.
-                        lambda m=model: self.llm_client.call(
+                        lambda m=model: self.llm_client.call(  # type: ignore[misc]
                             agent=task.agent,
                             prompt=prompt,
                             slot="reasoning",

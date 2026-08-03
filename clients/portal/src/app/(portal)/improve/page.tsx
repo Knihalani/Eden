@@ -17,7 +17,7 @@ import {
   type ImproveMode,
 } from "@/lab/improve/improve-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
+import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -267,6 +267,9 @@ function LabImproveInner() {
           await queryClient.invalidateQueries({
             queryKey: queryKeys.portal.improvePlans(orgId),
           });
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.improveQueue(orgId),
+          });
           pushToast({ title: "Plan approved", tone: "ok" });
         } catch (err) {
           const permissionsMissing = isGithubPermissionsMissing(err);
@@ -291,6 +294,9 @@ function LabImproveInner() {
           await queryClient.invalidateQueries({
             queryKey: queryKeys.portal.improvePlans(orgId),
           });
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.improveQueue(orgId),
+          });
           pushToast({ title: "Plan rejected", tone: "ok" });
         } catch (err) {
           pushToast({
@@ -311,11 +317,11 @@ function LabImproveInner() {
 
   const scopeCounts = useMemo(() => {
     const map: Record<string, number> = { all: allPlans.length };
-    for (const a of catalogAgents()) {
+    for (const a of agentsQuery.data ?? []) {
       map[a.id] = allPlans.filter((p) => p.agentId === a.id).length;
     }
     return map;
-  }, [allPlans]);
+  }, [allPlans, agentsQuery.data]);
 
   if (!orgId) {
     return (
@@ -326,11 +332,20 @@ function LabImproveInner() {
     );
   }
 
-  if (plansQuery.isLoading) {
+  if (
+    plansQuery.isLoading ||
+    (mode === "queue" && queueQuery.isLoading && queueQuery.data === undefined)
+  ) {
     return (
       <div className="ds-page">
         <PageHeader title="Improve" />
-        <QueryLoadingPanel label="Loading improve plans…" />
+        <QueryLoadingPanel
+          label={
+            mode === "queue" && !plansQuery.isLoading
+              ? "Loading improve queue…"
+              : "Loading improve plans…"
+          }
+        />
       </div>
     );
   }
@@ -342,6 +357,18 @@ function LabImproveInner() {
         <QueryErrorPanel
           error={plansQuery.error}
           onRetry={() => void plansQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  if (mode === "queue" && queueQuery.isError) {
+    return (
+      <div className="ds-page">
+        <PageHeader title="Improve" />
+        <QueryErrorPanel
+          error={queueQuery.error}
+          onRetry={() => void queueQuery.refetch()}
         />
       </div>
     );
@@ -374,7 +401,7 @@ function LabImproveInner() {
                   All agents
                   {scopeCounts.all != null ? ` (${scopeCounts.all})` : ""}
                 </option>
-                {catalogAgents().map((a) => (
+                {(agentsQuery.data ?? []).map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                     {scopeCounts[a.id] != null

@@ -62,6 +62,8 @@ export const U20_EMPTY_COPY = {
     "No fired detector events yet. Create detectors on the Detectors page; Inbox shows firings when thresholds trip.",
   alertsClear:
     "Inbox clear — no firing detector events for your rules.",
+  attentionClear:
+    "No failing or warning runs in the current feed.",
   signals:
     "No detectors yet. Create one to watch errors, latency, cost, or policy across runs.",
 } as const;

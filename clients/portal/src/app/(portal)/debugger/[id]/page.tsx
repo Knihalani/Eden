@@ -132,7 +132,8 @@ function LabDebuggerDetailInner() {
   const sourceTraceQuery = useOrgQuery(
     queryKeys.portal.traceDetail(orgId, session?.sourceTraceId ?? null),
     orgId,
-    () => portalApi.traceDetail(orgId!, session!.sourceTraceId),
+    ({ signal }) =>
+      portalApi.traceDetail(orgId!, session!.sourceTraceId, signal),
     {
       ...SHELL_QUERY,
       staleTime: ASSIST_STALE,
@@ -142,7 +143,7 @@ function LabDebuggerDetailInner() {
   const leftDetailQuery = useOrgQuery(
     queryKeys.portal.traceDetail(orgId, leftTraceId || null),
     orgId,
-    () => portalApi.traceDetail(orgId!, leftTraceId),
+    ({ signal }) => portalApi.traceDetail(orgId!, leftTraceId, signal),
     {
       ...SHELL_QUERY,
       staleTime: ASSIST_STALE,
@@ -152,7 +153,7 @@ function LabDebuggerDetailInner() {
   const rightDetailQuery = useOrgQuery(
     queryKeys.portal.traceDetail(orgId, rightTraceId || null),
     orgId,
-    () => portalApi.traceDetail(orgId!, rightTraceId),
+    ({ signal }) => portalApi.traceDetail(orgId!, rightTraceId, signal),
     {
       ...SHELL_QUERY,
       staleTime: ASSIST_STALE,
@@ -361,6 +362,13 @@ function LabDebuggerDetailInner() {
               onFocusSpan={(spanId) => patchQuery({ spanId })}
               onReplay={onReplay}
               sourceTrace={sourceTrace}
+              sourceTraceLoading={sourceTraceQuery.isLoading}
+              sourceTraceError={
+                sourceTraceQuery.isError
+                  ? (sourceTraceQuery.error as Error)
+                  : null
+              }
+              onRetrySourceTrace={() => void sourceTraceQuery.refetch()}
               liveTravelNote="Hermetic re-run uses recorded debugger checkpoints only (no live LLM). Use the Time travel tab for Cat 20 fork + live replay."
             />
           ) : null}
@@ -373,6 +381,9 @@ function LabDebuggerDetailInner() {
               onRightChange={(id) => patchQuery({ rightTraceId: id })}
               leftTrace={leftTrace}
               rightTrace={rightTrace}
+              detailsLoading={
+                leftDetailQuery.isLoading || rightDetailQuery.isLoading
+              }
             />
           ) : null}
           {mode === "inspect" ? (
@@ -381,6 +392,13 @@ function LabDebuggerDetailInner() {
               focusSpanId={paramSpan}
               onFocusSpan={(spanId) => patchQuery({ spanId })}
               sourceTrace={sourceTrace}
+              sourceTraceLoading={sourceTraceQuery.isLoading}
+              sourceTraceError={
+                sourceTraceQuery.isError
+                  ? (sourceTraceQuery.error as Error)
+                  : null
+              }
+              onRetrySourceTrace={() => void sourceTraceQuery.refetch()}
             />
           ) : null}
           {mode === "time-travel" ? (
@@ -388,6 +406,8 @@ function LabDebuggerDetailInner() {
               session={session}
               orgId={orgId}
               sourceTrace={sourceTrace}
+              focusSpanId={paramSpan}
+              onFocusSpan={(spanId) => patchQuery({ spanId })}
             />
           ) : null}
 
@@ -429,7 +449,10 @@ export default function LabDebuggerDetailPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader title="Debugger" />
+          <PageHeader
+            title="Debugger"
+            meta={<span className="type-meta">Loading…</span>}
+          />
         </div>
       }
     >

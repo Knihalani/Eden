@@ -47,7 +47,7 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
           body: next
             ? `Reversible actions only · max ${policy.max_auto_rollbacks_per_day} rollbacks/day`
             : "Eden will recommend heals instead of executing them.",
-          tone: next ? "ok" : "fail",
+          tone: "ok",
         });
       } catch (err) {
         pushToast({

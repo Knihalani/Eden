@@ -204,6 +204,9 @@ function LabEvalsInner() {
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const [mode, setMode] = useState<EvalsMode>(() =>
+    parseEvalsMode(paramTab, paramMode),
+  );
   const agentsQuery = useOrgQuery(
     queryKeys.portal.agents(orgId),
     orgId,
@@ -214,6 +217,7 @@ function LabEvalsInner() {
     if (agentsQuery.data === undefined) return;
     patchPortalCatalog({ agents: agentsQuery.data });
   }, [agentsQuery.data]);
+  // Datasets feed scope chips + playground linking across modes.
   const datasetsQuery = useOrgQuery(
     queryKeys.portal.evalDatasets(orgId),
     orgId,
@@ -224,13 +228,19 @@ function LabEvalsInner() {
     queryKeys.portal.evalPlaygrounds(orgId),
     orgId,
     () => portalApi.evalPlaygrounds(orgId!),
-    SHELL_QUERY,
+    {
+      ...SHELL_QUERY,
+      enabled: Boolean(orgId) && mode === "playground",
+    },
   );
   const experimentsQuery = useOrgQuery(
     queryKeys.portal.evalExperiments(orgId),
     orgId,
     () => portalApi.evalExperiments(orgId!),
-    SHELL_QUERY,
+    {
+      ...SHELL_QUERY,
+      enabled: Boolean(orgId) && mode === "compare",
+    },
   );
   const liveDatasets = datasetsQuery.data ?? [];
   const livePlaygrounds = playgroundsQuery.data ?? [];
@@ -244,9 +254,6 @@ function LabEvalsInner() {
     [liveExperiments],
   );
 
-  const [mode, setMode] = useState<EvalsMode>(() =>
-    parseEvalsMode(paramTab, paramMode),
-  );
   const [datasetId, setDatasetId] = useState("");
   const [playgroundId, setPlaygroundId] = useState("");
   const [baselineId, setBaselineId] = useState(
@@ -347,6 +354,74 @@ function LabEvalsInner() {
     },
     [extraCases],
   );
+
+  // Load persisted rows when a real (non-optimistic) dataset is selected so
+  // the dock doesn't always show 0 cases for live datasets.
+  const rowsDatasetId =
+    datasetId &&
+    !datasetId.startsWith("ds_local_") &&
+    !datasetId.startsWith("ds_from_")
+      ? datasetId
+      : "";
+  const datasetRowsQuery = useOrgQuery(
+    ["datasets", "rows", orgId, rowsDatasetId] as const,
+    orgId,
+    () => datasetsApi.listRows(orgId!, rowsDatasetId),
+    {
+      ...SHELL_QUERY,
+      enabled: Boolean(orgId && rowsDatasetId),
+    },
+  );
+
+  useEffect(() => {
+    const rows = datasetRowsQuery.data?.rows;
+    if (!rows || !rowsDatasetId) return;
+    const mapped: DatasetCaseFixture[] = rows.map((row) => {
+      const inputFromValues =
+        row.values?.input != null ? String(row.values.input) : "";
+      const expectedFromValues =
+        row.values?.expected_output != null
+          ? String(row.values.expected_output)
+          : undefined;
+      return {
+        id: row.id,
+        datasetId: rowsDatasetId,
+        input: row.input ?? inputFromValues,
+        expected: row.expected_output || expectedFromValues || undefined,
+        tags: [] as string[],
+      };
+    });
+    setExtraCases((prev) => {
+      const serverIds = new Set(mapped.map((c) => c.id));
+      const other = prev.filter((c) => c.datasetId !== rowsDatasetId);
+      const localOnly = prev.filter(
+        (c) =>
+          c.datasetId === rowsDatasetId &&
+          !serverIds.has(c.id) &&
+          (c.id.startsWith("case_local_") ||
+            Boolean(c.sourceTraceId) ||
+            Boolean(c.sourceIssueId)),
+      );
+      return [...other, ...mapped, ...localOnly];
+    });
+    setExtraDatasets((prev) => {
+      const next = cloneDatasetIntoExtras(rowsDatasetId, prev, liveDatasets);
+      const ids = mapped.map((c) => c.id);
+      return next.map((d) =>
+        d.id === rowsDatasetId
+          ? {
+              ...d,
+              caseIds: [
+                ...ids,
+                ...d.caseIds.filter(
+                  (cid) => !ids.includes(cid) && cid.startsWith("case_local_"),
+                ),
+              ],
+            }
+          : d,
+      );
+    });
+  }, [datasetRowsQuery.data, rowsDatasetId, liveDatasets]);
 
   const createDataset = useCallback(() => {
     if (!orgId) {
@@ -895,6 +970,93 @@ function LabEvalsInner() {
       };
       setExtraDatasets((prev) => [ds!, ...prev]);
       setRenamingDatasetId(id);
+
+      if (orgId) {
+        const tempId = id;
+        const agentForMap = sourceAgent;
+        const sourceKind = isTrace ? ("traces" as const) : ("issues" as const);
+        void (async () => {
+          try {
+            const created = await datasetsApi.create(orgId, {
+              name: "Untitled dataset",
+            });
+            const mapped = {
+              ...mapCreatedDataset(created, agentForMap),
+              source: sourceKind,
+            };
+            setExtraDatasets((prev) =>
+              prev.map((d) => (d.id === tempId ? { ...mapped, caseIds: d.caseIds } : d)),
+            );
+            setExtraCases((prev) =>
+              prev.map((c) =>
+                c.datasetId === tempId ? { ...c, datasetId: mapped.id } : c,
+              ),
+            );
+            setDatasetId((cur) => (cur === tempId ? mapped.id : cur));
+            setRenamingDatasetId((cur) => (cur === tempId ? mapped.id : cur));
+            patchQuery({ mode: "datasets", id: mapped.id, from: paramFrom });
+            if (isTrace) {
+              try {
+                const promoted = await datasetsApi.promoteFromTrace(orgId, {
+                  trace_id: paramFrom,
+                  dataset_id: mapped.id,
+                });
+                const rowId = promoted.data?.row_id;
+                if (rowId) {
+                  setExtraCases((prev) => {
+                    if (prev.some((c) => c.id === rowId)) return prev;
+                    return [
+                      {
+                        id: rowId,
+                        datasetId: mapped.id,
+                        input: "",
+                        tags: ["from-trace"],
+                        sourceTraceId: paramFrom,
+                      },
+                      ...prev.filter(
+                        (c) =>
+                          !(
+                            c.datasetId === mapped.id &&
+                            c.sourceTraceId === paramFrom
+                          ),
+                      ),
+                    ];
+                  });
+                  setExtraDatasets((prev) =>
+                    prev.map((d) =>
+                      d.id === mapped.id
+                        ? {
+                            ...d,
+                            caseIds: [
+                              rowId,
+                              ...d.caseIds.filter((cid) => cid !== rowId),
+                            ],
+                          }
+                        : d,
+                    ),
+                  );
+                  setDockCaseId(rowId);
+                }
+              } catch {
+                /* case draft stays session-local — toast below */
+              }
+            }
+            await invalidateEvals("datasets");
+          } catch (err) {
+            pushToast({
+              title: "Create dataset failed",
+              body: errMessage(err),
+              tone: "fail",
+            });
+          }
+        })();
+      } else {
+        pushToast({
+          title: "Draft is session-local",
+          body: "Select a workspace to persist this dataset handoff.",
+          tone: "default",
+        });
+      }
     }
     if (!ds) return;
 
@@ -960,6 +1122,14 @@ function LabEvalsInner() {
             ...prev,
           ];
         });
+        // Issue handoffs have no promote API — case stays session-local.
+        if (isIssue || !orgId) {
+          pushToast({
+            title: "Case draft is session-local",
+            body: "Persisted when you edit/save the case from the dataset dock.",
+            tone: "default",
+          });
+        }
       }
     }
 
@@ -977,7 +1147,16 @@ function LabEvalsInner() {
       compareId: null,
       case: null,
     });
-  }, [paramFrom, paramMode, patchQuery, setAgentId, liveDatasets]);
+  }, [
+    paramFrom,
+    paramMode,
+    patchQuery,
+    setAgentId,
+    liveDatasets,
+    orgId,
+    pushToast,
+    invalidateEvals,
+  ]);
 
   const changeMode = useCallback(
     (next: EvalsMode) => {
@@ -1259,12 +1438,14 @@ function LabEvalsInner() {
 
   const isLoading =
     datasetsQuery.isLoading ||
-    playgroundsQuery.isLoading ||
-    experimentsQuery.isLoading;
+    (mode === "playground" && playgroundsQuery.isLoading) ||
+    (mode === "compare" && experimentsQuery.isLoading);
   // Datasets-only outages must not blank the whole Evals hub — show an
   // empty datasets pane with a retry note instead of a full-page ApiError.
   const datasetsUnavailable = datasetsQuery.isError;
-  const isError = playgroundsQuery.isError || experimentsQuery.isError;
+  const isError =
+    (mode === "playground" && playgroundsQuery.isError) ||
+    (mode === "compare" && experimentsQuery.isError);
 
   if (!orgId) {
     return (
@@ -1289,11 +1470,14 @@ function LabEvalsInner() {
       <div className="ds-page">
         <PageHeader title="Evals" />
         <QueryErrorPanel
-          error={playgroundsQuery.error ?? experimentsQuery.error}
+          error={
+            mode === "playground"
+              ? playgroundsQuery.error
+              : experimentsQuery.error
+          }
           onRetry={() => {
-            void datasetsQuery.refetch();
-            void playgroundsQuery.refetch();
-            void experimentsQuery.refetch();
+            if (mode === "playground") void playgroundsQuery.refetch();
+            else if (mode === "compare") void experimentsQuery.refetch();
           }}
         />
       </div>

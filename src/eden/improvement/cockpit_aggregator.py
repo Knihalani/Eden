@@ -179,9 +179,9 @@ async def active_snooze_refs(
         for row in rows or []:
             ref = str(row["item_ref"])
             refs.add(ref)
-            until = row.get("snoozed_until")
-            if until is not None:
-                _SNOOZES[(org_id, ref)] = _normalize_until(until)
+            raw_until = row.get("snoozed_until")
+            if raw_until is not None:
+                _SNOOZES[(org_id, ref)] = _normalize_until(raw_until)
     except Exception as exc:
         logger.debug("active_snooze_refs lookup failed: %s", exc)
     return refs

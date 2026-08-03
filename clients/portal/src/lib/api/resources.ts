@@ -2978,6 +2978,52 @@ export type TimeTravelReplayData = {
   new_outcome: string;
 };
 
+export type TimeTravelParentStep = {
+  step_index: number;
+  event_id?: string | null;
+  span_id?: string | null;
+  timestamp?: string | null;
+  duration_ms?: number | null;
+  model?: string | null;
+  cacheable: boolean;
+  replayable: boolean;
+  response_hash?: string;
+  tokens_used?: number;
+  cost_usd?: number;
+  prompt_preview?: string | null;
+};
+
+export type TimeTravelStepsData = {
+  parent_trace_id: string;
+  steps: TimeTravelParentStep[];
+  n_steps: number;
+  n_cacheable: number;
+  n_replayable: number;
+  ready_for_live_replay: boolean;
+};
+
+export type TimeTravelDiffData = {
+  fork_id: string;
+  replay_id: string;
+  parent_trace_id: string;
+  original: Array<{
+    step_index: number;
+    event_id?: string;
+    response_hash?: string;
+    timestamp?: string;
+  }>;
+  replay: Array<{
+    step_index: number;
+    served_from_cache?: boolean;
+    re_executed?: boolean;
+    response_hash?: string;
+    tokens_used?: number;
+    cost_usd?: number;
+  }>;
+  diff: Record<string, { from: unknown; to: unknown }> | Array<unknown>;
+  n_diffs?: number;
+};
+
 export type TimeTravelRecordResult = {
   snapshot_id: string;
   trace_id: string;
@@ -3032,8 +3078,12 @@ export const timeTravelApi = {
     >(
       `/orgs/${orgId}/intelligence/time-travel/forks?parent_trace_id=${encodeURIComponent(parentTraceId)}`,
     ),
+  listSteps: (orgId: string, parentTraceId: string) =>
+    fetchApi<TimeTravelEnvelope<TimeTravelStepsData>>(
+      `/orgs/${orgId}/intelligence/time-travel/steps?parent_trace_id=${encodeURIComponent(parentTraceId)}`,
+    ),
   diff: (orgId: string, forkId: string, replayId: string) =>
-    fetchApi<TimeTravelEnvelope<Record<string, unknown>>>(
+    fetchApi<TimeTravelEnvelope<TimeTravelDiffData>>(
       `/orgs/${orgId}/intelligence/time-travel/diff/${encodeURIComponent(forkId)}/${encodeURIComponent(replayId)}`,
     ),
 };

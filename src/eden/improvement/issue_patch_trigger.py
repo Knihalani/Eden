@@ -380,7 +380,7 @@ async def propose_plan_for_issue(
             return {
                 "status": "suppressed",
                 "reason": reason,
-                "plan_id": (existing or {}).get("id"),
+                "plan_id": None,
                 "issue_id": issue_id,
             }
     except Exception as exc:
@@ -747,6 +747,8 @@ async def _regenerate_after_test_failure(
     try:
         from eden.patches.patch_generator import PatchGenerator
 
+        if not repo_id:
+            return data, test_gate_summary, False
         regen = await PatchGenerator().generate(
             org_id=org_id,
             rca_id=rca_id,

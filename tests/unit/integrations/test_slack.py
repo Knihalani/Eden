@@ -312,8 +312,13 @@ class TestDispatcher:
                 AsyncMock(return_value=None),
             ),
         ):
+            # Fix-now kinds proceed past the Improve-later Slack skip.
             result = await slack_notify.notify_needs_approval(
-                "org-1", plan_id="p-1", title="t"
+                "org-1",
+                plan_id="p-1",
+                title="t",
+                kind="code_patch",
+                queue="fix_now",
             )
         assert result["status"] == "no_channel"
 

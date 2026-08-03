@@ -3,6 +3,9 @@ import { dehydrateTraces } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import TracesClient from "./traces-client";
 
+/** Cap SSR shard wait; return whatever settled (partial dehydrate). */
+const TRACES_DEHYDRATE_BUDGET_MS = 1800;
+
 /**
  * SSR wrapper for ``/traces`` — warms agents + traces + sessions so the
  * hub list paints from cache instead of three cold client GETs.
@@ -15,7 +18,7 @@ export default async function TracesPage() {
   let dehydratedState: DehydratedState | null = null;
   if (auth?.orgId) {
     try {
-      dehydratedState = await dehydrateTraces(auth);
+      dehydratedState = await dehydrateTraces(auth, TRACES_DEHYDRATE_BUDGET_MS);
     } catch {
       dehydratedState = null; // prefetch is an optimisation — fall back to client fetch
     }

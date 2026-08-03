@@ -21,13 +21,14 @@ import {
   parseAbStatusFilter,
 } from "@/lab/compare/compare-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
+import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 const compareFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -124,15 +125,7 @@ function LabCompareInner() {
     parseAbStatusFilter(paramStatus),
   );
   const [query, setQuery] = useState("");
-  const [seedNote, setSeedNote] = useState<string | null>(() => {
-    if (paramFrom === "evals") {
-      return "From Evals";
-    }
-    if (paramFrom === "debugger") {
-      return "From Debugger";
-    }
-    return null;
-  });
+  const [seedNote, setSeedNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (paramAgent && paramAgent !== agentId) {
@@ -141,12 +134,14 @@ function LabCompareInner() {
   }, [paramAgent, agentId, setAgentId]);
 
   useEffect(() => {
-    if (paramFrom === "evals") {
-      setSeedNote("From Evals");
-    } else if (paramFrom === "debugger") {
-      setSeedNote("From Debugger");
+    if (paramFrom !== "evals" && paramFrom !== "debugger") return;
+    if (experimentsQuery.isLoading) return;
+    if (seeded) {
+      setSeedNote(paramFrom === "evals" ? "From Evals" : "From Debugger");
+    } else {
+      setSeedNote("No matching experiment to seed from");
     }
-  }, [paramFrom]);
+  }, [paramFrom, seeded, experimentsQuery.isLoading]);
 
   useEffect(() => {
     setLayout(parseAbLayout(paramLayout));
@@ -201,11 +196,11 @@ function LabCompareInner() {
     const map: Record<string, number> = {
       all: experiments.length,
     };
-    for (const a of catalogAgents()) {
+    for (const a of agentsQuery.data ?? []) {
       map[a.id] = experiments.filter((e) => e.agentId === a.id).length;
     }
     return map;
-  }, [experiments]);
+  }, [experiments, agentsQuery.data]);
 
   const selectExperiment = useCallback(
     (id: string) => {
@@ -266,6 +261,15 @@ function LabCompareInner() {
     },
     [patchQuery],
   );
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Live A/B"
+        message="Select a workspace to compare experiments."
+      />
+    );
+  }
 
   if (experimentsQuery.isLoading) {
     return (

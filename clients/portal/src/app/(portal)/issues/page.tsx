@@ -3,6 +3,9 @@ import { dehydrateIssues } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import IssuesClient from "./issues-client";
 
+/** Cap SSR shard wait; return whatever settled (partial dehydrate). */
+const ISSUES_DEHYDRATE_BUDGET_MS = 1500;
+
 /** SSR wrapper for ``/issues`` — warms agents + issues. */
 export default async function IssuesPage() {
   const auth = await resolvePortalPrefetchAuth();
@@ -12,7 +15,7 @@ export default async function IssuesPage() {
   let dehydratedState: DehydratedState | null = null;
   if (auth?.orgId) {
     try {
-      dehydratedState = await dehydrateIssues(auth);
+      dehydratedState = await dehydrateIssues(auth, ISSUES_DEHYDRATE_BUDGET_MS);
     } catch {
       dehydratedState = null; // prefetch is an optimisation — fall back to client fetch
     }

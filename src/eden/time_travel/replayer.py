@@ -46,6 +46,7 @@ from ._common import (
     _not_implemented_envelope,
     _ok_envelope_with_message,
     _parse_edits,
+    _recorded_cache_key,
     _replay_id_for,
     _step_cache_key,
     _step_index_of,
@@ -138,13 +139,22 @@ class TraceReplayer:
         t0 = time.monotonic()
 
         for position, step in enumerate(parent_steps):
-            step_index = _step_index_of(step, fallback=position)
+            # Prefer normalized index stamped by `_get_parent_steps`.
+            step_index = int(
+                step.get("step_index")
+                if isinstance(step.get("step_index"), int)
+                else _step_index_of(step, fallback=position)
+            )
             response_hash = step.get("response_hash") or ""
-            cache_key = _step_cache_key(
-                trace_id=fork["parent_trace_id"],
-                step_index=step_index,
-                response_hash=response_hash,
-            ) if response_hash else None
+            # Prefer the key written at record time so remapped indices
+            # still hit cache_lookups for pre-fork steps.
+            cache_key = _recorded_cache_key(step)
+            if cache_key is None and response_hash:
+                cache_key = _step_cache_key(
+                    trace_id=fork["parent_trace_id"],
+                    step_index=step_index,
+                    response_hash=response_hash,
+                )
 
             if (
                 step_index < fork["fork_at_step"]

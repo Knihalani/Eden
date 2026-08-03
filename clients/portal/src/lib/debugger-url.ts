@@ -3,10 +3,10 @@
  * Canonical per surfaces/debugger.md §4.
  */
 
-export const DEBUGGER_TABS = ["sessions", "replay", "compare", "time-travel"] as const;
+export const DEBUGGER_TABS = ["sessions", "replay", "compare", "inspect", "time-travel"] as const;
 export type DebuggerTab = (typeof DEBUGGER_TABS)[number];
 
-export const DEBUGGER_MODES = ["replay", "compare", "time-travel", "notes"] as const;
+export const DEBUGGER_MODES = ["replay", "compare", "inspect", "time-travel", "notes"] as const;
 export type DebuggerMode = (typeof DEBUGGER_MODES)[number];
 
 export interface DebuggerListParams {

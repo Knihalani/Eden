@@ -13,13 +13,14 @@ import {
   parseGuardrailStatusFilter,
 } from "@/lab/guardrails/guardrails-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
+import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
 const guardrailsFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -117,13 +118,13 @@ function LabGuardrailsInner() {
     const map: Record<string, number> = {
       all: policies.length,
     };
-    for (const a of catalogAgents()) {
+    for (const a of agentsQuery.data ?? []) {
       map[a.id] = policies.filter(
         (p) => !p.agentId || p.agentId === a.id,
       ).length;
     }
     return map;
-  }, [policies]);
+  }, [policies, agentsQuery.data]);
 
   const selectPolicy = useCallback(
     (id: string) => {
@@ -148,6 +149,15 @@ function LabGuardrailsInner() {
     },
     [patchQuery],
   );
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Guardrails"
+        message="Select a workspace to view guardrails."
+      />
+    );
+  }
 
   if (policiesQuery.isLoading) {
     return (

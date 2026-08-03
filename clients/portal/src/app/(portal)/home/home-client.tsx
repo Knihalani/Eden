@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
+import { usePolling } from "@/hooks/use-polling";
 import { SHELL_QUERY, OBSERVE_STALE } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
@@ -214,7 +215,7 @@ export default function HomeClient() {
     {
       ...SHELL_QUERY,
       staleTime: OBSERVE_STALE,
-      enabled: Boolean(orgId) && showFleet,
+      enabled: Boolean(orgId),
     },
   );
 
@@ -225,7 +226,12 @@ export default function HomeClient() {
       const res = await wave6Api.costKpi(orgId!, { window_hours: 24 });
       return res.data;
     },
-    SHELL_QUERY,
+    {
+      ...SHELL_QUERY,
+      // Defer until attention traces settle so cold Home does not race
+      // cost KPI against the critical-path GETs.
+      enabled: Boolean(orgId) && !tracesQuery.isLoading,
+    },
   );
 
   const agentsLoaded = agentsQuery.data !== undefined;
@@ -233,16 +239,29 @@ export default function HomeClient() {
   const traces = tracesQuery.data ?? [];
   const zeroData = traces.length === 0;
 
-  // Soft-poll while waiting for first ingest so Home updates without a full reload.
+  // Delay soft-poll arm so usePolling's immediate tick does not
+  // duplicate the cold traces GET the moment empty data settles.
+  const [emptyPollArmed, setEmptyPollArmed] = useState(false);
   useEffect(() => {
-    if (!orgId || !zeroData) return;
-    const id = window.setInterval(() => {
-      void tracesQuery.refetch();
-    }, FIRST_EVENT_WAIT.pollMs);
-    return () => window.clearInterval(id);
-    // tracesQuery identity is unstable; refetch via orgId + zeroData only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
-  }, [orgId, zeroData]);
+    if (!orgId || !zeroData || tracesQuery.isLoading) {
+      setEmptyPollArmed(false);
+      return;
+    }
+    const id = window.setTimeout(
+      () => setEmptyPollArmed(true),
+      FIRST_EVENT_WAIT.pollMs,
+    );
+    return () => window.clearTimeout(id);
+  }, [orgId, zeroData, tracesQuery.isLoading]);
+
+  usePolling(
+    () => tracesQuery.refetch(),
+    {
+      intervalMs: FIRST_EVENT_WAIT.pollMs,
+      enabled: emptyPollArmed,
+      deps: [orgId, emptyPollArmed],
+    },
+  );
 
   /** Map traceId -> open (or most-recent) issue, built from the live
    * issues query so Run/Issue badges react to ``issues.data`` instead
@@ -274,7 +293,7 @@ export default function HomeClient() {
     [agents, traces],
   );
 
-    const liveTiles = useMemo(() => {
+  const liveTiles = useMemo(() => {
     const payload = costKpiQuery.data as
       | {
           tiles?: Array<Record<string, unknown>>;
@@ -321,8 +340,10 @@ export default function HomeClient() {
   const fleet = showAllFleet ? orderedFleet : orderedFleet.slice(0, 3);
   const recent = snap.recent.slice(0, 4);
 
-  // First paint gates on attention shards only — fleet can stream in later.
-  const isLoading = tracesQuery.isLoading;
+  // First paint gates on attention shards — fleet / cost KPI stream in later.
+  const isLoading =
+    tracesQuery.isLoading ||
+    (issuesQuery.isLoading && issuesQuery.data === undefined);
   const isError = tracesQuery.isError;
 
   if (!orgId) {
@@ -376,10 +397,22 @@ export default function HomeClient() {
         <Kpi
           label="Failures"
           value={String(snap.failures.length)}
-          hint={`${openIssuesCount} open issues`}
+          hint={
+            openIssuesCount > 0
+              ? `${openIssuesCount} open issues`
+              : snap.failures.length
+                ? "in feed"
+                : "none"
+          }
           tone={snap.failures.length ? "error" : "default"}
           hintTone={openIssuesCount > 0 ? "error" : "default"}
-          href={zeroData ? "/traces" : "/issues"}
+          href={
+            zeroData || snap.failures.length
+              ? "/traces"
+              : openIssuesCount > 0
+                ? "/issues"
+                : "/traces"
+          }
         />
         <Kpi
           label="Traces"
@@ -412,7 +445,7 @@ export default function HomeClient() {
                 : snap.live
                   ? `${snap.live} active in 24h`
                   : "none active in 24h"
-              : "Open fleet"
+              : "loading…"
           }
           tone="default"
           hintTone={agentsLoaded && snap.errored ? "error" : "default"}
@@ -442,6 +475,22 @@ export default function HomeClient() {
           className="hidden sm:block"
         />
       </div>
+
+      {issuesQuery.isError && !tracesQuery.isError ? (
+        <div
+          role="status"
+          className="mx-5 mt-3 rounded-[var(--radius)] border border-[var(--warning)]/40 bg-[var(--warning-muted)] px-3 py-2 type-meta text-[var(--text)]"
+        >
+          Couldn&apos;t load issues
+          <button
+            type="button"
+            className="ml-2 underline"
+            onClick={() => void issuesQuery.refetch()}
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <section className="border-b border-[var(--line)]">
         <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3.5 sm:px-6">
@@ -479,8 +528,8 @@ export default function HomeClient() {
               zeroData
                 ? FIRST_EVENT_WAIT.description
                 : dismissedCount > 0
-                  ? `${dismissedCount} dismissed. ${U20_EMPTY_COPY.alertsClear}`
-                  : U20_EMPTY_COPY.alertsClear
+                  ? `${dismissedCount} dismissed. ${U20_EMPTY_COPY.attentionClear}`
+                  : U20_EMPTY_COPY.attentionClear
             }
             action={
               zeroData ? (

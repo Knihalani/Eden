@@ -32,11 +32,11 @@ import type { AgentThread } from "@/lab/fixtures/agent-chat";
 
 /** Soft-auth Inbox poll: tolerate short JWT races, then escalate. */
 const ALERT_AUTH_FAIL_THRESHOLD = 3;
-let alertAuthFailStreak = 0;
+const alertAuthFailStreakByOrg = new Map<string, number>();
 
-/** Test helper — reset consecutive soft-auth failure counter. */
+/** Test helper — reset consecutive soft-auth failure counters. */
 export function __resetAlertAuthFailStreakForTests(): void {
-  alertAuthFailStreak = 0;
+  alertAuthFailStreakByOrg.clear();
 }
 
 function portalPath(orgId: string, suffix: string): string {
@@ -74,9 +74,10 @@ export const portalApi = {
    * ``steps: []`` to avoid an N+1 of per-trace span hydration; call
    * this once a trace is selected to load its real transcript.
    */
-  traceDetail: (orgId: string, traceId: string) =>
+  traceDetail: (orgId: string, traceId: string, signal?: AbortSignal) =>
     fetchApi<TraceFixture>(
       portalPath(orgId, `traces/${encodeURIComponent(traceId)}`),
+      signal ? { signal } : undefined,
     ),
 
   sessions: (orgId: string) =>
@@ -97,7 +98,7 @@ export const portalApi = {
         portalPath(orgId, "alerts/events"),
         { softAuth: true },
       );
-      alertAuthFailStreak = 0;
+      alertAuthFailStreakByOrg.set(orgId, 0);
       return events;
     } catch (e) {
       // Background Inbox poll — JWT race / membership blip must not
@@ -108,9 +109,10 @@ export const portalApi = {
         e instanceof ApiError &&
         (e.status === 401 || e.status === 403)
       ) {
-        alertAuthFailStreak += 1;
+        const streak = (alertAuthFailStreakByOrg.get(orgId) ?? 0) + 1;
+        alertAuthFailStreakByOrg.set(orgId, streak);
         if (
-          alertAuthFailStreak >= ALERT_AUTH_FAIL_THRESHOLD &&
+          streak >= ALERT_AUTH_FAIL_THRESHOLD &&
           typeof window !== "undefined"
         ) {
           try {

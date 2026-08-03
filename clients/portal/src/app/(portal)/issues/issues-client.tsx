@@ -132,6 +132,7 @@ function IssueDetail({
   // ``/issues/:id/fix`` page redirects here with ``tab=fix``; without
   // this the redirect would land on Overview and silently drop intent.
   const searchParams = useSearchParams();
+  const patchQuery = useQueryPatch();
   const paramTab = searchParams.get("tab");
   const initialTab: DetailTab = DETAIL_TABS.includes(paramTab as DetailTab)
     ? (paramTab as DetailTab)
@@ -141,6 +142,15 @@ function IssueDetail({
   useEffect(() => {
     setTab(initialTab);
   }, [issue.id, initialTab]);
+
+  const selectTab = useCallback(
+    (next: DetailTab) => {
+      setTab(next);
+      // Overview is the default — drop ``tab`` so the URL stays clean.
+      patchQuery({ tab: next === "overview" ? null : next });
+    },
+    [patchQuery],
+  );
 
   return (
     <aside
@@ -285,7 +295,7 @@ function IssueDetail({
             role="tab"
             aria-selected={tab === t.id}
             className="ds-tab"
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
           >
             {t.label}
             {"count" in t && t.count != null ? (

@@ -731,7 +731,10 @@ class PostgresClient:
                     await asyncio.wait_for(stale.close(), timeout=1.0)
                 await self.initialize()
 
-        async with self._pool.acquire() as connection:
+        pool = self._pool
+        if pool is None:
+            raise RuntimeError("Postgres pool failed to initialize")
+        async with pool.acquire() as connection:
             yield connection
 
     @asynccontextmanager
@@ -1081,7 +1084,7 @@ class PostgresClient:
     ) -> list[dict]:
         """List jobs with pagination and optional filters."""
         conditions = []
-        params = []
+        params: list[Any] = []
         param_idx = 1
 
         if user_id:

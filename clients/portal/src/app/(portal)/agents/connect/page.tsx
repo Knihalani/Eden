@@ -17,7 +17,10 @@ import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { EmptyState } from "@/lab/lab-ui";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
-import { QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 
 function ConnectInner() {
   const searchParams = useSearchParams();
@@ -60,6 +63,11 @@ function ConnectInner() {
     return catalogAgents();
   }, [agentsQuery.data]);
 
+  const agentLabel = useMemo(() => {
+    if (!agentId) return null;
+    return agents.find((a) => a.id === agentId)?.name ?? agentId;
+  }, [agentId, agents]);
+
   const pickAgent = (id: string) => {
     setAgentId(id);
     const params = new URLSearchParams(searchParams.toString());
@@ -73,8 +81,8 @@ function ConnectInner() {
         title="Connect repository"
         meta={
           <span className="type-meta">
-            {agentId
-              ? `Repo for ${agentId}`
+            {agentLabel
+              ? `Repo for ${agentLabel}`
               : "Pick an agent, then link its GitHub repo"}
           </span>
         }
@@ -101,6 +109,12 @@ function ConnectInner() {
             </p>
             {agentsQuery.isLoading && agents.length === 0 ? (
               <QueryLoadingPanel label="Loading agents…" />
+            ) : agentsQuery.isError && agents.length === 0 ? (
+              <QueryErrorPanel
+                title="Couldn’t load agents"
+                error={agentsQuery.error}
+                onRetry={() => void agentsQuery.refetch()}
+              />
             ) : agents.length === 0 ? (
               <EmptyState
                 compact
@@ -138,12 +152,6 @@ function ConnectInner() {
                 ))}
               </ul>
             )}
-            {agentsQuery.isError ? (
-              <p className="type-meta mt-3 text-[var(--warning)]" role="status">
-                Couldn’t refresh agents from the server. Showing catalog
-                fallback if available.
-              </p>
-            ) : null}
           </div>
         ) : (
           <ConnectRepoPanel agentId={agentId} />

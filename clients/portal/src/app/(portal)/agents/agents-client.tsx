@@ -38,7 +38,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { SHELL_QUERY, LIVE_QUERY } from "@/lib/portal-query";
+import { SHELL_QUERY, LIVE_STALE } from "@/lib/portal-query";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
@@ -390,11 +390,13 @@ function AgentDetailBody({
   const traceDetailQuery = useOrgQuery(
     queryKeys.portal.traceDetail(orgId, selectedRunIdForDetail || null),
     orgId,
-    () => portalApi.traceDetail(orgId!, selectedRunIdForDetail),
+    ({ signal }) =>
+      portalApi.traceDetail(orgId!, selectedRunIdForDetail, signal),
     {
       ...SHELL_QUERY,
       staleTime: 30_000,
-      refetchOnMount: "always",
+      // Refetch when stale only — "always" defeated soft-nav cache.
+      refetchOnMount: true,
       enabled: Boolean(orgId) && Boolean(selectedRunIdForDetail),
     },
   );
@@ -644,17 +646,28 @@ function AgentDetailBody({
           </div>
 
           <ul className="min-h-0 flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {tracesQuery.isError ? (
+              <li className="p-4">
+                <QueryErrorPanel
+                  error={tracesQuery.error}
+                  onRetry={() => void tracesQuery.refetch()}
+                />
+              </li>
+            ) : filtered.length === 0 ? (
               <li>
                 <EmptyState
                   title={
                     runs.length === 0
-                      ? "No runs in this window"
+                      ? !tracesQuery.isLoading && agent.runs24h > 0
+                        ? "Runs outside this list window"
+                        : "No runs in this window"
                       : "No matching runs"
                   }
                   body={
                     runs.length === 0
-                      ? "Traces show up here after this agent sends telemetry."
+                      ? !tracesQuery.isLoading && agent.runs24h > 0
+                        ? "This agent has runs in the last 24h, but none match the current traces feed window."
+                        : "Traces show up here after this agent sends telemetry."
                       : undefined
                   }
                 />
@@ -709,7 +722,13 @@ function LabAgentsInner() {
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    LIVE_QUERY,
+    {
+      ...SHELL_QUERY,
+      // Shorter TTL than observe lists — status moves often — but still
+      // respect staleTime so SSR / soft-nav stay cache-hit.
+      staleTime: LIVE_STALE,
+      refetchOnMount: true,
+    },
   );
   const agents = agentsQuery.data ?? [];
   const [fleetOpen, setFleetOpen, , fleetAnimate] = usePersistentBool(
@@ -858,9 +877,18 @@ function LabAgentsInner() {
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {ordered.length === 0 ? (
               <li className="px-3 py-5">
-                <p className="type-meta text-[var(--text-secondary)]">
-                  No agents yet
-                </p>
+                <EmptyState
+                  title="No agents yet"
+                  body={U20_EMPTY_COPY.agents}
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href="/settings?mode=keys"
+                    className="ds-btn ds-btn-primary ds-btn-sm"
+                  >
+                    API keys
+                  </Link>
+                </div>
               </li>
             ) : (
               fleetGroups.map((group) => (

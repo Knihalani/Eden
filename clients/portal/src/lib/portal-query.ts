@@ -25,11 +25,15 @@ export const SHELL_QUERY = {
   refetchOnMount: false as const,
 };
 
-/** Fleet + connection state that must not lie after soft-nav. */
+/**
+ * Fleet + connection state — short TTL, refetch when stale on remount.
+ * Never use ``refetchOnMount: "always"`` here: that ignored ``staleTime``
+ * and defeated SSR dehydrate + soft-nav cache on every observer mount.
+ */
 export const LIVE_QUERY = {
   staleTime: LIVE_STALE,
   refetchOnWindowFocus: false as const,
-  refetchOnMount: "always" as const,
+  refetchOnMount: true as const,
 };
 
 export const SETTINGS_QUERY = {

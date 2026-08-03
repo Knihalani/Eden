@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/resources";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { catalogTraces } from "@/lib/portal-catalog";
 import { useLabToast } from "@/lab/lab-toast";
 
@@ -233,6 +234,15 @@ function LabDebuggerListInner() {
     [sessions, agentId],
   );
 
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Debugger"
+        message="Select a workspace to view debugger sessions."
+      />
+    );
+  }
+
   if (sessionsQuery.isLoading) {
     return (
       <div className="ds-page">
@@ -284,7 +294,10 @@ export default function LabDebuggerPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader title="Debugger" />
+          <PageHeader
+            title="Debugger"
+            meta={<span className="type-meta">Loading…</span>}
+          />
         </div>
       }
     >
