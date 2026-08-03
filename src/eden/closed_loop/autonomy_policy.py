@@ -77,8 +77,10 @@ class AutonomousMaintenancePolicy:
     org_id: str
     agent_id: str | None = None
     maintenance_mode: MaintenanceMode = "assisted"
-    auto_runtime_heal: bool = True
-    auto_code_patch_pr: bool = True
+    # M10 (§5.2): heal is opt-in. Global autonomous_actions_v0 defaults
+    # False; Settings toggle writes auto_runtime_heal=true per org.
+    auto_runtime_heal: bool = False
+    auto_code_patch_pr: bool = False
     auto_code_patch_merge: bool = False
     auto_prompt_canary: bool = True
     auto_nudge_promote: bool = False
@@ -111,7 +113,7 @@ def _defaults_from_settings(org_id: str, agent_id: str | None) -> AutonomousMain
             org_id=org_id,
             agent_id=agent_id,
             maintenance_mode=mode if mode in ("autonomous", "assisted", "observe") else "assisted",
-            auto_runtime_heal=bool(getattr(s, "autonomous_actions_v0", True)),
+            auto_runtime_heal=bool(getattr(s, "autonomous_actions_v0", False)),
             auto_code_patch_pr=bool(getattr(s, "code_change_enabled", False)),
             auto_code_patch_merge=bool(getattr(s, "auto_pr_enabled", False)),
             daily_maintenance_budget_usd=float(

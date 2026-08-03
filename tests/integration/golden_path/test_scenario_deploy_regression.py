@@ -1,14 +1,15 @@
 """Golden-path scenario 2 — deploy regression heal (plan M1, spec §2.2.2).
 
-An org with ``auto_runtime_heal=true`` (autonomy_policies row), an active
-canary prompt, and StatGate-P0 stumbles. The loop must decide **heal**
-(xfail D1 today — P0 always escalates to a human before the heal branch),
+An org with ``auto_runtime_heal=true`` (autonomy_policies row — Settings
+opt-in; M10 §5.2 keeps the *default* off), an active canary prompt, and
+StatGate-P0 stumbles. The loop must decide **heal_and_escalate**
+(D1 fixed in M10 — P0 + mapped heal + N22 allow → heal AND page),
 execute the rollback (``data.status == "executed"``), emit HEAL_EXECUTED,
-schedule the verify, and resolve the issue with zero human clicks.
+schedule the verify on the heal fast-path, and resolve with zero human
+clicks on the remediation itself.
 
-Everything downstream of the decision already works — only the decision
-itself is the defect, which is why the chain tests drive
-``_request_heal`` directly.
+Chain tests cover decision + execute + verify; the decision path asserts
+``heal_and_escalate`` (not bare ``human``).
 """
 
 from __future__ import annotations
@@ -101,23 +102,15 @@ async def test_policy_row_allows_rollback(loop_db) -> None:
     assert tier == "auto_runtime_heal"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D1: StatGate P0 always returns decision 'human' before the heal "
-        "branch (orchestrator.py:219) — must become heal(+escalate) when a "
-        "reversible heal is mapped and N22 allows it"
-    ),
-)
 @pytest.mark.asyncio
 async def test_p0_decision_is_heal(loop_db) -> None:
-    """P0 + mapped rollback + allow policy must decide heal, not human."""
+    """P0 + mapped rollback + allow policy → heal_and_escalate (M10 D1)."""
     _seed(loop_db)
     orch = ClosedLoopOrchestrator()
     decision = await orch._decide_remediation(
         _triage_completed_event(), dict(TRIAGE_STATGATE_P0)
     )
-    assert decision in ("heal", "heal_and_escalate"), decision
+    assert decision == "heal_and_escalate", decision
 
 
 @pytest.mark.asyncio

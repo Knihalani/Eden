@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -82,6 +83,7 @@ class InvestigationAgent:
         org_id: str,
         *,
         trigger: str,
+        untrusted_evidence: str | None = None,
     ) -> dict[str, Any]:
         if not trigger or not trigger.strip():
             return _not_implemented_envelope(
@@ -132,11 +134,24 @@ class InvestigationAgent:
         # 2. Render the prompt. We include the context dict
         #    + the trigger id so the LLM can ground its
         #    response in the actual row.
-        prompt = (
-            f"Trigger: {trigger}\n"
-            f"Context: {json.dumps(ctx.get('context', {}), default=str)}\n"
-            f"Investigate the root cause and propose 1-3 remediations."
+        # M11 (§7.1): wrap production context — never follow
+        # instructions embedded in traces / stumble details.
+        from eden.prompt_safety import wrap_untrusted_data
+
+        context_blob = wrap_untrusted_data(
+            json.dumps(ctx.get("context", {}), default=str)
         )
+        prompt_parts = [
+            f"Trigger: {trigger}\n",
+            f"Context:\n{context_blob}\n",
+        ]
+        if untrusted_evidence:
+            # Caller (e.g. TriageAgent) already delimiter-wrapped this.
+            prompt_parts.append(f"Evidence:\n{untrusted_evidence}\n")
+        prompt_parts.append(
+            "Investigate the root cause and propose 1-3 remediations."
+        )
+        prompt = "".join(prompt_parts)
 
         # 3. Call the LLM. Falls back to a heuristic envelope
         #    on any failure.
@@ -652,6 +667,8 @@ class SelfHealer:
         before_state: dict[str, Any] | None = None,
         *,
         approved_by_user_id: str,
+        decision_id: str | None = None,
+        decided_at: float | None = None,
     ) -> dict[str, Any]:
         """Execute the approved heal action.
 
@@ -723,9 +740,20 @@ class SelfHealer:
             "approved_by": approved_by_user_id,
             "org_id": org_id,
         }
+        if decision_id:
+            # M10 (§5.4): link the execution back to the orchestrator's
+            # single audited decision row.
+            after_state["decision_id"] = decision_id
 
-        # N21 hardening: policy + daily rollback cap before destructive work.
-        blocked = await _heal_precheck(org_id, action_type or "")
+        # N21 hardening: kill switch + policy + daily rollback cap before
+        # destructive work (policy re-decide skipped for a fresh threaded
+        # decision_id — M10 §5.4).
+        blocked = await _heal_precheck(
+            org_id,
+            action_type or "",
+            decision_id=decision_id,
+            decided_at=decided_at,
+        )
         if blocked:
             after_state["error"] = blocked
             after_state["failure_reason"] = _precheck_failure_slug(blocked)
@@ -810,7 +838,12 @@ class SelfHealer:
         return _ok_envelope(self.name, data)
 
     async def heal_from_issue(
-        self, org_id: str, issue_id: str
+        self,
+        org_id: str,
+        issue_id: str,
+        *,
+        decision_id: str | None = None,
+        decided_at: float | None = None,
     ) -> dict[str, Any]:
         """Autonomous heal driven by an issue's triage result (N21).
 
@@ -873,7 +906,11 @@ class SelfHealer:
             after_state_json=None,
         )
         result = await self.execute_heal(
-            org_id, action_id, approved_by_user_id="orchestrator"
+            org_id,
+            action_id,
+            approved_by_user_id="orchestrator",
+            decision_id=decision_id,
+            decided_at=decided_at,
         )
         result.setdefault("data", {})["issue_id"] = issue_id
         return result
@@ -1257,8 +1294,26 @@ def _precheck_failure_slug(blocked: str) -> str:
     return "policy_deny"
 
 
-async def _heal_precheck(org_id: str, action_type: str) -> str | None:
-    """N21/W24 guardrails — kill switch + policy deny + daily rollback cap."""
+#: M10 (§5.4): a policy decision threaded in from the orchestrator is
+#: honoured (no re-decide, no second audit row) only while fresh.
+_DECISION_FRESH_SECONDS = 300
+
+
+async def _heal_precheck(
+    org_id: str,
+    action_type: str,
+    *,
+    decision_id: str | None = None,
+    decided_at: float | None = None,
+) -> str | None:
+    """N21/W24 guardrails — kill switch + policy deny + daily rollback cap.
+
+    M10 (§5.4) single decision record: when the caller threads a fresh
+    (≤5 min) ``decision_id`` from an already-audited N22 decision, the
+    policy re-decide (and its duplicate audit row) is skipped — one
+    decision, one audit row. The kill switch and the daily rollback cap
+    are ALWAYS checked regardless: they are runtime guards, not policy.
+    """
     action = action_type or "heal"
     # Kill switches fail-closed (unknown / DB error → blocked).
     try:
@@ -1270,21 +1325,32 @@ async def _heal_precheck(org_id: str, action_type: str) -> str | None:
         logger.debug("heal_precheck kill switch failed: %s", exc)
         return "kill switch check failed (fail-closed)"
 
+    decision_fresh = bool(decision_id) and (
+        decided_at is not None
+        and (time.time() - float(decided_at)) <= _DECISION_FRESH_SECONDS
+    )
+    if decision_id and not decision_fresh:
+        logger.info(
+            "heal_precheck: decision %s stale/undated — re-deciding",
+            decision_id,
+        )
+
     try:
         from eden.closed_loop.autonomy_policy import audit, decide, resolve
 
         policy = await resolve(org_id, None)
-        verdict, reason, tier = decide(policy, action)
-        await audit(
-            org_id,
-            agent_id=None,
-            action=action,
-            tier=tier,
-            decision=verdict,
-            reason=reason or "heal_precheck",
-        )
-        if verdict == "deny":
-            return reason or "heal denied by autonomy policy"
+        if not decision_fresh:
+            verdict, reason, tier = decide(policy, action)
+            await audit(
+                org_id,
+                agent_id=None,
+                action=action,
+                tier=tier,
+                decision=verdict,
+                reason=reason or "heal_precheck",
+            )
+            if verdict == "deny":
+                return reason or "heal denied by autonomy policy"
         if action_type == "rollback":
             cap = int(policy.max_auto_rollbacks_per_day or 3)
             from eden.storage.postgres import get_postgres_client

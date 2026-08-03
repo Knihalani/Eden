@@ -2781,6 +2781,8 @@ export type AutonomyPolicy = {
     limit_usd: number;
     within_budget: boolean;
   };
+  /** M10 — reversible heals denied in last 7d while heal opt-in is off. */
+  would_have_healed_count?: number;
 };
 
 export type AutonomyPolicyPatch = {

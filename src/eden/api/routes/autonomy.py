@@ -82,7 +82,35 @@ async def get_autonomy(
         "limit_usd": limit,
         "within_budget": ok,
     }
+    # M10 (§5.2 risk mitigation): counterfactual — how many reversible
+    # heals were denied in the last 7d because auto_runtime_heal is off.
+    data["would_have_healed_count"] = await _would_have_healed_count(org_id)
     return _ok(data)
+
+
+async def _would_have_healed_count(org_id: str) -> int:
+    """Count N22 heal-tier denials in the last 7 days (audit already written)."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return 0
+        row = await client.fetchrow(
+            """
+            SELECT COUNT(*)::int AS n
+            FROM autonomy_audit_log
+            WHERE org_id = $1
+              AND tier_applied = 'auto_runtime_heal'
+              AND decision IN ('deny', 'require_approval')
+              AND created_at > NOW() - INTERVAL '7 days'
+            """,
+            org_id,
+        )
+        return int((row or {}).get("n") or 0)
+    except Exception as exc:
+        logger.debug("would_have_healed_count failed: %s", redact_all(str(exc)))
+        return 0
 
 
 @router.patch("")

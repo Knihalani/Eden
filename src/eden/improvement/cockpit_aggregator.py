@@ -399,11 +399,17 @@ class ImprovementCockpitAggregator:
             action = str(r.get("action") or "action")
             decision = str(r.get("decision") or "deny")
             reason = str(r.get("reason") or f"policy {decision}")
+            tier = str(r.get("tier_applied") or "")
+            # M10 (§5.2): heal denials become opt-in counterfactuals.
+            if tier == "auto_runtime_heal":
+                title = f"Eden would have fixed this: {action}"
+            else:
+                title = f"Policy {decision}: {action}"
             out.append(
                 ImprovementItem(
                     ref=f"autonomy_denial:{eid}",
                     item_type="policy_denial",
-                    title=f"Policy {decision}: {action}",
+                    title=title,
                     column=COLUMN_NEEDS_YOU,
                     severity="medium",
                     agent_id=str(row_agent) if row_agent else None,
@@ -415,7 +421,7 @@ class ImprovementCockpitAggregator:
                         "decision": decision,
                         "tier": r.get("tier_applied"),
                     },
-                    autonomy_tier_required=str(r.get("tier_applied") or "") or None,
+                    autonomy_tier_required=tier or None,
                     blocked_reason=reason[:240],
                     source="autonomy_audit",
                 )

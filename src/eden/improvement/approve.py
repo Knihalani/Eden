@@ -146,6 +146,7 @@ def render_pr_evidence_body(
     M8 sandbox tests incl. the ``synthesized: true`` marker) and shows
     ``—`` for anything absent — the table never implies a check ran
     when it didn't. Kept compact: humans review this at merge time.
+
     """
     evidence = plan.get("evidence")
     if not isinstance(evidence, dict):
@@ -997,18 +998,47 @@ async def _queue_verify(
         if source.startswith("issue:"):
             issue_id = source.split(":", 1)[1]
 
-    verify_ref = branch or plan.get("github_branch") or plan.get("source_ref") or ""
     if not issue_id:
         return None
 
+    # M10 (§5.3): the ``merge:<plan_id>`` ref prefix marks a code-merge
+    # verify (default 1800s delay / 30min quiet window — unchanged) and
+    # lets the verify worker distinguish it from heal fast-path refs.
+    plan_id = str(plan.get("id") or "")
+    verify_ref = (
+        f"merge:{plan_id}"
+        if plan_id
+        else (branch or plan.get("github_branch") or plan.get("source_ref") or "")
+    )
+
+    verify_id: str | None = None
     try:
         from eden.closed_loop.verify import schedule_verify
 
         # schedule_verify returns the real verification row id (or None).
-        return await schedule_verify(org_id, str(issue_id), ref=verify_ref)
+        verify_id = await schedule_verify(org_id, str(issue_id), ref=verify_ref)
     except Exception as exc:
         logger.debug("approve verify queue failed: %s", exc)
         return None
+
+    if verify_id:
+        # M10 (D15): the patch path must move the issue to ``verifying``
+        # — without this VERIFY_PASSED's verifying→resolved transition
+        # no-ops and the issue stays ``fix_pending`` forever.
+        try:
+            from eden.closed_loop.events import EventType
+            from eden.closed_loop.state_machine import apply_transition
+
+            await apply_transition(
+                org_id,
+                str(issue_id),
+                event_type=EventType.VERIFY_SCHEDULED,
+                reason=f"verification scheduled for plan {plan_id or '?'}",
+                detail={"plan_id": plan_id, "verification_id": verify_id},
+            )
+        except Exception as exc:
+            logger.debug("approve verify transition failed: %s", exc)
+    return verify_id
 
 
 async def _n06_ledger(

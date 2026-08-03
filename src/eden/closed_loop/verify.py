@@ -212,6 +212,29 @@ async def fix_pending_janitor(limit: int = 50) -> int:
 
 # ── Scheduling ──────────────────────────────────────────────────────
 
+#: M10 (§5.3): ``ref`` prefixes distinguish the verify source. Heal
+#: verifies run on a fast path (a runtime rollback settles in minutes);
+#: merge verifies keep the code-propagation defaults. Legacy rows whose
+#: ``ref`` is a raw fingerprint/branch keep the default behaviour.
+HEAL_REF_PREFIX = "heal:"
+MERGE_REF_PREFIX = "merge:"
+
+
+def _is_heal_ref(ref: str | None) -> bool:
+    return bool(ref) and str(ref).startswith(HEAL_REF_PREFIX)
+
+
+def _quiet_window_minutes(ref: str | None) -> int:
+    """Quiet window for one verification, derived from its ref prefix.
+
+    Derived at check time (not stored per-row) — the row's ``ref`` is
+    already persisted verbatim, so the prefix is the honest single
+    source of which path scheduled the verify.
+    """
+    if _is_heal_ref(ref):
+        return _cfg("verify_quiet_window_minutes_heal", 10)
+    return _cfg("verify_quiet_window_minutes", 30)
+
 
 async def schedule_verify(
     org_id: str,
@@ -227,8 +250,18 @@ async def schedule_verify(
     client = await _pg()
     if client is None:
         return None
-    delay = delay_seconds if delay_seconds is not None else _cfg("verify_delay_seconds", 1800)
-    fingerprint = ref
+    if delay_seconds is not None:
+        delay = delay_seconds
+    elif _is_heal_ref(ref):
+        # M10 (§5.3): heal fast-path — verify a rollback in minutes.
+        delay = _cfg("verify_delay_seconds_heal", 300)
+    else:
+        delay = _cfg("verify_delay_seconds", 1800)
+    # A prefixed ref (``heal:``/``merge:``) is a source tag, not a
+    # fingerprint — derive the fingerprint from the issue row instead.
+    # Legacy callers passing a raw fingerprint keep the old behaviour.
+    prefixed = str(ref or "").startswith((HEAL_REF_PREFIX, MERGE_REF_PREFIX))
+    fingerprint = "" if prefixed else ref
     if not fingerprint:
         try:
             from eden.issues.repo import IssuesRepo
@@ -237,6 +270,14 @@ async def schedule_verify(
             fingerprint = issue.fingerprint if issue else ""
         except Exception:
             fingerprint = ""
+        if not fingerprint and _is_heal_ref(ref):
+            # ``heal:<fingerprint_or_issue_id>`` — the suffix is the best
+            # remaining fingerprint candidate when the issue lookup fails
+            # (unless it is just the issue id, which is not a fingerprint;
+            # _verify_issue re-derives / fails honestly in that case).
+            suffix = str(ref).split(":", 1)[1]
+            if suffix != issue_id:
+                fingerprint = suffix
     verify_id = str(uuid.uuid4())
     try:
         _verify_clear_cooldown()
@@ -301,7 +342,7 @@ def _recent_only(
 
 
 async def _verify_issue(
-    org_id: str, issue_id: str, fingerprint: str
+    org_id: str, issue_id: str, fingerprint: str, ref: str = ""
 ) -> tuple[bool | None, dict[str, Any]]:
     """Return ``(passed, detail)`` — did the fix hold?
 
@@ -309,11 +350,15 @@ async def _verify_issue(
     (**inconclusive** — the StatGate re-score errored; the caller
     consumes an attempt and retries, failing with
     ``reason="statgate_error"`` once attempts run out) (M3, D6).
+
+    M10 (§5.3): the quiet window depends on the verify source — ``ref``
+    prefixed ``heal:`` gets the fast-path window; everything else (merge
+    refs, legacy raw fingerprints) keeps the default.
     """
     from eden.issues.repo import IssuesRepo
 
     repo = IssuesRepo()
-    window = _cfg("verify_quiet_window_minutes", 30)
+    window = _quiet_window_minutes(ref)
     issue = None
     # M3 (D6): an empty fingerprint must never auto-pass — re-derive it
     # from the issue row, and fail the verification when still empty.
@@ -436,7 +481,9 @@ async def run_due_verifications(limit: int = 50) -> dict[str, int]:
         fingerprint = r.get("fingerprint") or ""
         attempts = int(r.get("attempts") or 0) + 1
 
-        passed, detail = await _verify_issue(org_id, issue_id, fingerprint)
+        passed, detail = await _verify_issue(
+            org_id, issue_id, fingerprint, str(r.get("ref") or "")
+        )
         if passed:
             await _complete(client, r["id"], "passed", detail, attempts)
             await _emit(org_id, issue_id, r.get("ref") or fingerprint, True, detail)

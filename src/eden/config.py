@@ -1178,6 +1178,12 @@ def _build_settings_class():
         verify_delay_seconds: int = 1800
         verify_quiet_window_minutes: int = 30
         verify_max_attempts: int = 3
+        # M10 (§5.3) heal verify fast-path: heal-sourced verifications
+        # (``issue_verifications.ref`` prefixed ``heal:``) use a shorter
+        # delay + quiet window — a runtime rollback settles in minutes,
+        # not the 30/30 a code merge needs. Merge verifies unchanged.
+        verify_delay_seconds_heal: int = 300
+        verify_quiet_window_minutes_heal: int = 10
         # M3 (D3) janitor: issues stuck in ``fix_pending`` longer than
         # this are returned to ``triaged`` (+ audit row + cockpit
         # "stuck" badge) by the verify worker's ``fix_pending_janitor``
