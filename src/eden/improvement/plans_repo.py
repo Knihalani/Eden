@@ -358,6 +358,31 @@ async def find_by_pr(*, repo_full_name: str, pr_number: int) -> dict[str, Any] |
     return _row(row) if row else None
 
 
+async def find_by_branch(*, github_branch: str) -> dict[str, Any] | None:
+    """Locate the plan behind an ``eden/improve-*`` head branch (M9, §4.3).
+
+    Used by the GitHub webhook's check_run/check_suite ingestion, where
+    the payload carries a head branch but not always a PR number. Branch
+    names embed ``plan_id[:12]`` (``approve.approve_plan``), so they are
+    unique per plan; most-recently-updated wins defensively anyway.
+    """
+    if not github_branch:
+        return None
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    row = await client.fetchrow(
+        """
+        SELECT * FROM improvement_plans
+        WHERE github_branch = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """,
+        github_branch,
+    )
+    return _row(row) if row else None
+
+
 async def mark_merged(
     org_id: str,
     plan_id: str,
