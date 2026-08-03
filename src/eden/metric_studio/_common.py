@@ -405,12 +405,12 @@ async def _fetch_run_runs(
     return [dict(r) for r in rows]
 
 
-# ── Per-tenant metric store (organizations.features JSONB) ─────────
+# ── Per-tenant metric store (organizations.settings JSONB) ─────────
 
 
 async def _load_org_features(org_id: str) -> dict[str, Any]:
-    """Read the ``organizations.features`` JSONB column for one
-    org. Returns an empty dict if the org has no features row
+    """Read the ``organizations.settings`` JSONB column for one
+    org. Returns an empty dict if the org has no settings row
     yet (graceful default — the first call to
     :func:`_save_org_features` will create the row).
 
@@ -425,8 +425,10 @@ async def _load_org_features(org_id: str) -> dict[str, Any]:
     if client is None:
         return {}
     try:
+        # Prod has ``settings`` only — ``features`` lives on org_plans,
+        # not organizations (see improvement/settings.py).
         row = await client.fetchrow(
-            "SELECT features FROM organizations WHERE id = $1",
+            "SELECT settings FROM organizations WHERE id = $1",
             org_id,
         )
     except Exception as exc:
@@ -434,7 +436,7 @@ async def _load_org_features(org_id: str) -> dict[str, Any]:
         return {}
     if row is None:
         return {}
-    features = row.get("features")
+    features = row.get("settings")
     if isinstance(features, dict):
         return features
     if isinstance(features, str) and features:
@@ -445,11 +447,9 @@ async def _load_org_features(org_id: str) -> dict[str, Any]:
 
 
 async def _save_org_features(org_id: str, features: dict[str, Any]) -> None:
-    """Atomically replace the ``organizations.features`` JSONB
-    column. We use ``jsonb_set`` so we never clobber keys the
-    metric studio does not own (e.g. ``intelligence_gap_v0``,
-    ``auto_judge_policy``). The caller passes the *full* merged
-    dict (caller is responsible for merging), this helper just
+    """Atomically replace the ``organizations.settings`` JSONB
+    column. We use a full replace of the merged dict the caller
+    passes (caller is responsible for merging), this helper just
     persists.
 
     Best-effort like the other helpers.
@@ -465,7 +465,7 @@ async def _save_org_features(org_id: str, features: dict[str, Any]) -> None:
     try:
         async with client.acquire() as conn:
             await conn.execute(
-                "UPDATE organizations SET features = $1::jsonb WHERE id = $2",
+                "UPDATE organizations SET settings = $1::jsonb WHERE id = $2",
                 _json_dumps(features),
                 org_id,
             )

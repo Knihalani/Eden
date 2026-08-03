@@ -569,13 +569,17 @@ class WebhookDeliveryService:
             # claimed (see ``_attempt_delivery``); if it is older than 5
             # minutes the attempt is dead and the row must re-enter the
             # ``retrying`` pool so the outbox drain can pick it up again.
+            #
+            # Fall back to ``created_at`` when ``last_attempt_at`` is null
+            # (rows claimed before migration 138). The column itself is
+            # required — see 138_webhook_deliveries_last_attempt.
             await pg.execute(
                 "UPDATE webhook_deliveries "
                 "SET status = 'retrying', "
                 "    next_attempt_at = COALESCE(next_attempt_at, NOW()) "
                 "WHERE status = 'in_flight' "
-                "  AND last_attempt_at IS NOT NULL "
-                "  AND last_attempt_at < NOW() - INTERVAL '5 minutes'",
+                "  AND COALESCE(last_attempt_at, created_at) "
+                "      < NOW() - INTERVAL '5 minutes'",
             )
             rows = await pg.fetch(
                 "SELECT d.id AS delivery_id, "

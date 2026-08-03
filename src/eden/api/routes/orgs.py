@@ -285,11 +285,16 @@ async def create_org(
     # Deliberately narrow: same owner, same name, recent, not archived.
     # A user who genuinely wants two identically-named orgs a minute
     # apart is not a real case; a duplicate submit is.
+    #
+    # Do NOT cast ``owner_id`` to uuid. Prod ``organizations.owner_id``
+    # (and ``users.id``) are TEXT — ``owner_id = $1::uuid`` raises
+    # ``operator does not exist: text = uuid`` and every POST /orgs
+    # 500s before insert (request_id f73988de… / onboarding auto-create).
     recent_duplicate = await client.fetchrow(
         """
         SELECT id::text AS id, name, slug, clerk_org_id
         FROM organizations
-        WHERE owner_id = $1::uuid
+        WHERE owner_id = $1
           AND lower(name) = lower($2)
           AND archived_at IS NULL
           AND created_at > NOW() - INTERVAL '60 seconds'
@@ -528,13 +533,15 @@ async def create_org(
         logger.info("F35 signal seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
 
     # Phase 3 GA defaults — Artifacts + Ledger on for new orgs (also Settings default True).
+    # Write ``settings`` (not ``features``): prod has no ``organizations.features``
+    # column — same fix as ``improvement/settings.py`` (_SETTINGS_COLUMN).
     try:
         import json
 
         await client.execute(
             """
             UPDATE organizations
-            SET features = COALESCE(features, '{}'::jsonb) || $2::jsonb
+            SET settings = COALESCE(settings, '{}'::jsonb) || $2::jsonb
             WHERE id = $1
             """,
             org_id,
