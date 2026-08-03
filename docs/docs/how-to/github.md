@@ -19,7 +19,25 @@ On [the Eden Observability App](https://github.com/settings/apps/eden-observabil
 | --- | --- | --- |
 | **Contents** | **Read and write** | Create branches, blobs, and commits for fix PRs |
 | **Pull requests** | **Read and write** | Open / update / close PRs |
+| **Checks** | **Read-only** | *New (§4.3 CI ingestion):* receive `check_run` / `check_suite` conclusions so Eden can stamp customer-CI results onto improvement plans and react to red CI |
 | **Metadata** | Read-only | Always required |
+
+Under **Subscribe to events**, enable: `Pull request`, `Check suite`,
+`Check run`, `Installation`.
+
+This is the App's *complete* minimal scope. Deliberately **no
+`Workflows` permission**: Eden must never be able to edit
+`.github/workflows/` — this pairs with the patch-path allowlist
+(§7.1), which suppresses any generated diff touching workflow or CI
+files. Together they make "an injected patch rewrites customer CI"
+structurally impossible rather than merely reviewed-for.
+
+If `Checks: Read-only` has not been granted (or an installation has
+not re-accepted it), check webhooks simply never arrive — nothing
+breaks; Eden stamps `ci_ingestion: "unavailable"` on plans at PR-open
+when the App registration detectably lacks the permission.
+Per-installation acceptance is not detectable from the App API alone,
+so a stale installation just silently gets no CI evidence.
 
 After saving, open
 `https://github.com/settings/installations` (or the org's

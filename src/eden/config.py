@@ -1210,6 +1210,20 @@ def _build_settings_class():
         # (eden.preview.gates.test_gate_synthesis_enabled_for_org).
         test_gate_synthesis_v1: bool = False
 
+        # ── M9 (§4.3) evidence in PR body + customer CI ingestion ───────
+        # ``pr_evidence_body_v1``: improvement-plan PR bodies carry a
+        # compact evidence table (tier, static/replay/sandbox statuses
+        # incl. the §4.2 ``synthesized`` marker, failure signature,
+        # example traces) so the human merges with proof in view.
+        # ``ci_ingestion_v1``: handle check_run/check_suite conclusion
+        # webhooks for ``eden/improve-*`` branches — stamp ``ci_status``
+        # evidence, Slack-notify on red, one cheap CI-regenerate per
+        # plan. Requires the App's ``checks:read`` permission; degrades
+        # to an evidence stamp ``ci_ingestion: "unavailable"`` when the
+        # App registration lacks it (§7.4).
+        pr_evidence_body_v1: bool = True
+        ci_ingestion_v1: bool = True
+
         @property
         def verify_poll_interval_seconds(self) -> float:
             """Deprecated alias (M3, D7) — this used to be a dead field

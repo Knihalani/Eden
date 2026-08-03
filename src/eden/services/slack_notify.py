@@ -203,6 +203,42 @@ async def notify_pr_opened(
     )
 
 
+async def notify_ci_failure(
+    org_id: str,
+    *,
+    plan_id: str,
+    check_name: str,
+    conclusion: str,
+    title: str,
+    pr_url: str | None = None,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    """M9 (§4.3): customer CI went red on an Eden improvement PR.
+
+    Deduped per (plan, check) via ``ci:{plan_id}:{check}`` so retried
+    check_run deliveries and multi-run suites don't repeat the ping.
+    """
+    url = pr_url or _deep_link(f"/improve?plan={plan_id}")
+    return await _send(
+        org_id,
+        agent_id=agent_id,
+        dedupe_key=f"ci:{plan_id}:{check_name}",
+        text=f":rotating_light: CI failed on Eden PR: {title}",
+        blocks=_blocks(
+            header="Customer CI failed on an Eden PR",
+            body=(
+                f"*{title[:400]}*\n"
+                f"Check: `{check_name}` — conclusion: `{conclusion}`\n"
+                "Eden stamped the failure on the plan and, if the PR is "
+                "still open, queued one regenerate with the CI excerpt."
+            ),
+            link_url=url,
+            link_label="Review the PR / plan",
+            context="Eden Soft Autonomy — CI conclusions ingested via the GitHub App",
+        ),
+    )
+
+
 async def notify_needs_approval(
     org_id: str,
     *,

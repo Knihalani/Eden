@@ -100,6 +100,147 @@ async def _merge_plan_evidence(
     return await plans_repo.get_plan(org_id, plan_id)
 
 
+def _md_cell(value: Any, limit: int = 160) -> str:
+    """One markdown table cell: pipe/newline-safe, truncated, em-dash empty."""
+    text = str(value).strip() if value not in (None, "") else ""
+    if not text:
+        return "—"
+    return text.replace("|", "\\|").replace("\n", " ")[:limit]
+
+
+def _md_status(section: Any) -> str:
+    """``status (reason)`` cell from a ``{status, reason}`` evidence dict."""
+    if not isinstance(section, dict) or not section.get("status"):
+        return "—"
+    reason = str(section.get("reason") or "").strip()
+    status = str(section.get("status"))
+    return _md_cell(f"{status} ({reason})" if reason else status)
+
+
+def _issue_ref(issue_id: str) -> str:
+    """Portal deep link for an issue id; bare code when no base URL."""
+    try:
+        from eden.config import get_settings
+
+        s = get_settings()
+        base = str(
+            getattr(s, "portal_base_url", "") or getattr(s, "app_url", "") or ""
+        ).rstrip("/")
+        if base and "example.com" not in base:
+            return f"[{issue_id}]({base}/issues?issue={issue_id})"
+    except Exception:  # noqa: BLE001 — cosmetic only
+        pass
+    return f"`{issue_id}`"
+
+
+def render_pr_evidence_body(
+    plan: dict[str, Any],
+    *,
+    plan_id: str,
+    summary: str,
+    static_status: str | None = None,
+) -> str:
+    """M9 (§4.3): PR body = plan summary + compact evidence table.
+
+    Renders whatever evidence the plan actually carries (M7 replay tier,
+    M8 sandbox tests incl. the ``synthesized: true`` marker) and shows
+    ``—`` for anything absent — the table never implies a check ran
+    when it didn't. Kept compact: humans review this at merge time.
+    """
+    evidence = plan.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    static_cell = _md_cell(static_status or "")
+    if static_cell == "—":
+        hermetic = evidence.get("hermetic_preverify")
+        if isinstance(hermetic, dict):
+            static_cell = _md_cell(hermetic.get("status"))
+
+    sandbox = evidence.get("sandbox_tests")
+    sandbox_cell = _md_status(sandbox)
+    if isinstance(sandbox, dict) and sandbox.get("synthesized"):
+        sandbox_cell = f"{sandbox_cell} — `synthesized: true`"
+
+    signature = evidence.get("failure_signature")
+    signature_cell = "—"
+    if isinstance(signature, dict) and any(signature.values()):
+        signature_cell = _md_cell(
+            " · ".join(
+                str(signature.get(key))
+                for key in ("stumble_kind", "failing_span_name", "error_substring")
+                if signature.get(key)
+            )
+        )
+
+    trace_ids = [str(t) for t in (evidence.get("example_trace_ids") or [])[:3]]
+    issue_id = str(evidence.get("issue_id") or "").strip()
+
+    rows = [
+        ("Evidence tier", f"**{_md_cell(evidence.get('evidence_tier'))}**"),
+        ("Static checks", static_cell),
+        ("Replay verify", _md_status(evidence.get("replay"))),
+        ("Sandbox tests", sandbox_cell),
+        ("Failure signature", signature_cell),
+        (
+            "Example traces",
+            ", ".join(f"`{t}`" for t in trace_ids) if trace_ids else "—",
+        ),
+        ("Issue", _issue_ref(issue_id) if issue_id else "—"),
+    ]
+    suppress = evidence.get("suppress_reasons") or evidence.get("patch_blocked")
+    if suppress:
+        rows.append(("Suppress reasons", _md_cell(suppress, limit=200)))
+    if str(evidence.get("ci_ingestion") or "") == "unavailable":
+        rows.append(("Customer CI", "unavailable (App lacks `checks:read`)"))
+
+    lines = [
+        summary,
+        "",
+        "### Eden evidence",
+        "",
+        "| Check | Result |",
+        "| --- | --- |",
+        *[f"| {label} | {value} |" for label, value in rows],
+        "",
+        f"_Evidence recorded on plan `{plan_id}`; merging schedules the "
+        "post-merge regression verify._",
+    ]
+    return "\n".join(lines)
+
+
+async def _stamp_ci_ingestion_availability(
+    org_id: str,
+    plan_id: str,
+    plan: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """M9 (§4.3): stamp ``ci_ingestion: "unavailable"`` when detectable.
+
+    Best-effort probe of the App *registration* permissions (the only
+    permission surface github.py exposes — per-installation acceptance
+    is not persisted anywhere, so a stale un-accepted installation is
+    NOT detectable here and simply never delivers check webhooks).
+    """
+    try:
+        from eden.config import get_settings
+
+        if not bool(getattr(get_settings(), "ci_ingestion_v1", True)):
+            return plan
+        from eden.integrations.github import GitHubOAuthClient, is_configured
+
+        if not is_configured():
+            return plan
+        perms = await GitHubOAuthClient().app_permissions()
+        if str(perms.get("checks") or "") not in ("read", "write"):
+            merged = await _merge_plan_evidence(
+                org_id, plan_id, {"ci_ingestion": "unavailable"}
+            )
+            return merged or plan
+    except Exception as exc:  # noqa: BLE001 — probe must never block PR-open
+        logger.debug("approve: ci_ingestion availability probe skipped: %s", exc)
+    return plan
+
+
 async def regenerate_plan_diff_from_static_errors(
     org_id: str,
     plan: dict[str, Any],
@@ -382,6 +523,20 @@ async def approve_plan(
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"
     body = plan.get("summary") or f"Eden improvement plan `{plan_id}`"
+    # M9 (§4.3): the human merges with proof in view — render the plan
+    # evidence table into the PR body (flagged; falls back to summary).
+    try:
+        from eden.config import get_settings
+
+        if bool(getattr(get_settings(), "pr_evidence_body_v1", True)):
+            body = render_pr_evidence_body(
+                plan,
+                plan_id=plan_id,
+                summary=body,
+                static_status=static_status,
+            )
+    except Exception as exc:  # noqa: BLE001 — body render must not block PR
+        logger.debug("approve_plan: evidence body render failed: %s", exc)
     req = PRCreateRequest(
         title=title,
         body=body,
@@ -443,6 +598,11 @@ async def approve_plan(
         github_branch=opened_branch,
         approved_by=approved_by,
     )
+
+    # M9 (§4.3): honest degrade — when the App registration lacks
+    # ``checks:read``, customer CI conclusions can never arrive; stamp
+    # the plan so its record doesn't imply CI was consulted.
+    updated = await _stamp_ci_ingestion_availability(org_id, plan_id, updated)
 
     # Soft Autonomy Phase 8: NO production-telemetry verify at PR-open.
     # Free static preverify already ran above. N01 quiet-window verify
