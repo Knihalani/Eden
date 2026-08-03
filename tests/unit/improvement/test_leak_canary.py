@@ -33,7 +33,7 @@ def test_redact_value_patterns_cover_common_secrets() -> None:
         ),
         "sk-": "sk-" + ("a" * 24),
         "ghp_": _CANARY_GHP,
-        "xoxb-": "xoxb-1234567890-abcdefghij",
+        "xoxb-": "xox" + "b-" + "leakcanary00-" + ("a" * 12),
         "pem": (
             "-----BEGIN RSA PRIVATE KEY-----\n"
             "MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF6PZGFw+\n"

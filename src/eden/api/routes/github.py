@@ -978,7 +978,7 @@ async def _claim_github_delivery(delivery_id: str) -> bool:
         )
         return bool(was_set)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("github delivery idempotency claim failed: %s", exc)
+        logger.debug("github delivery idempotency claim failed: %s", redact_all(str(exc)))
         return True
 
 
@@ -991,7 +991,7 @@ async def _release_github_delivery(delivery_id: str) -> None:
             return
         await redis.delete(f"github:delivery:{delivery_id}")
     except Exception as exc:  # noqa: BLE001
-        logger.debug("github delivery idempotency release failed: %s", exc)
+        logger.debug("github delivery idempotency release failed: %s", redact_all(str(exc)))
 
 
 # ── M9 (§4.3): customer CI ingestion ────────────────────────────────

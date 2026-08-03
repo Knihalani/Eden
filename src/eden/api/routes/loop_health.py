@@ -29,6 +29,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from eden.api.utils.redact import redact_all
 from eden.observability.metrics_endpoint import _check_metrics_auth
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ async def probe_loop_health() -> dict[str, Any]:
 
         redis = await get_redis_client()
     except Exception as exc:
-        logger.debug("loop-health: redis client init failed: %s", exc)
+        logger.debug("loop-health: redis client init failed: %s", redact_all(str(exc)))
         redis = None
 
     bus = "ok"
@@ -92,7 +93,7 @@ async def probe_loop_health() -> dict[str, Any]:
                     info["last-generated-id"], now
                 )
         except Exception as exc:
-            logger.debug("loop-health: xinfo stream failed: %s", exc)
+            logger.debug("loop-health: xinfo stream failed: %s", redact_all(str(exc)))
             bus = "dead"
         if bus != "dead":
             try:
@@ -108,7 +109,7 @@ async def probe_loop_health() -> dict[str, Any]:
                         consumer_lag = int(raw)
                     break
             except Exception as exc:
-                logger.debug("loop-health: xinfo groups failed: %s", exc)
+                logger.debug("loop-health: xinfo groups failed: %s", redact_all(str(exc)))
 
     if bus == "ok" and (
         outbox_depth > 0

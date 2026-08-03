@@ -702,6 +702,135 @@ class TestGuardianAutoRevert:
         )
 
 
+# ── Evidence deep-merge (TOCTOU seat survival) ───────────────────────
+
+
+class TestMergePlanEvidenceDeepMerge:
+    @pytest.mark.asyncio
+    async def test_eligibility_stamp_preserves_slot_claimed(self) -> None:
+        """Shallow jsonb || must not wipe nested slot_claimed after claim."""
+        import json
+
+        from eden.improvement.approve import _merge_plan_evidence
+
+        plan_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        store: dict[str, Any] = {
+            "id": plan_id,
+            "evidence": {
+                "auto_merge": {
+                    "slot_claimed": True,
+                    "slot_claimed_at": "2026-08-03T12:00:00+00:00",
+                },
+                "issue_id": "iss-1",
+            },
+        }
+
+        class _Client:
+            async def execute(self, query: str, *args: Any) -> str:
+                if "jsonb_set" in query:
+                    am_patch = json.loads(args[2])
+                    rest = json.loads(args[3])
+                    ev = dict(store["evidence"])
+                    ev.update(rest)
+                    prev_am = (
+                        dict(ev["auto_merge"])
+                        if isinstance(ev.get("auto_merge"), dict)
+                        else {}
+                    )
+                    prev_am.update(am_patch)
+                    ev["auto_merge"] = prev_am
+                    store["evidence"] = ev
+                else:
+                    patch = json.loads(args[2])
+                    ev = dict(store["evidence"])
+                    # Simulate shallow || wipe of nested auto_merge
+                    for k, v in patch.items():
+                        ev[k] = v
+                    store["evidence"] = ev
+                return "UPDATE 1"
+
+        with (
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=_Client()),
+            ),
+            patch(
+                "eden.improvement.approve.plans_repo.get_plan",
+                AsyncMock(side_effect=lambda *_a, **_k: dict(store)),
+            ),
+        ):
+            updated = await _merge_plan_evidence(
+                "org-1",
+                plan_id,
+                {
+                    "auto_merge": {
+                        "eligible": True,
+                        "blocked_by": None,
+                        "reasons": [],
+                    }
+                },
+            )
+
+        am = (updated or {}).get("evidence", {}).get("auto_merge") or {}
+        assert am.get("slot_claimed") is True
+        assert am.get("slot_claimed_at") == "2026-08-03T12:00:00+00:00"
+        assert am.get("eligible") is True
+
+    @pytest.mark.asyncio
+    async def test_force_canary_revert_survives_later_stamp(self) -> None:
+        import json
+
+        from eden.improvement.approve import _merge_plan_evidence
+
+        plan_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        store: dict[str, Any] = {
+            "id": plan_id,
+            "evidence": {
+                "auto_merge": {
+                    "force_canary_revert": True,
+                    "merged": True,
+                }
+            },
+        }
+
+        class _Client:
+            async def execute(self, query: str, *args: Any) -> str:
+                assert "jsonb_set" in query
+                am_patch = json.loads(args[2])
+                rest = json.loads(args[3])
+                ev = dict(store["evidence"])
+                ev.update(rest)
+                prev_am = (
+                    dict(ev["auto_merge"])
+                    if isinstance(ev.get("auto_merge"), dict)
+                    else {}
+                )
+                prev_am.update(am_patch)
+                ev["auto_merge"] = prev_am
+                store["evidence"] = ev
+                return "UPDATE 1"
+
+        with (
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=_Client()),
+            ),
+            patch(
+                "eden.improvement.approve.plans_repo.get_plan",
+                AsyncMock(side_effect=lambda *_a, **_k: dict(store)),
+            ),
+        ):
+            updated = await _merge_plan_evidence(
+                "org-1",
+                plan_id,
+                {"auto_merge": {"eligible": False, "blocked_by": "weekly_cap"}},
+            )
+
+        am = (updated or {}).get("evidence", {}).get("auto_merge") or {}
+        assert am.get("force_canary_revert") is True
+        assert am.get("eligible") is False
+
+
 # ── Decision evidence shape ──────────────────────────────────────────
 
 
