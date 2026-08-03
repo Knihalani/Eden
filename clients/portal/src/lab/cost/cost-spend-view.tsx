@@ -3,22 +3,24 @@
 import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import {
-  agentsBySpend,
-  avgCostPerRun,
   budgetIsPressure,
-  costlyTraces,
-  fleetRuns24h,
   formatSpend,
   type CostBudgetFixture,
 } from "@/lab/fixtures/cost";
-import { agentById } from "@/lab/fixtures/agents";
-import { formatTokens, formatUsd } from "@/lab/fixtures/traces";
+import { type AgentFixture } from "@/lab/fixtures/agents";
+import {
+  formatTokens,
+  formatUsd,
+  type TraceFixture,
+} from "@/lab/fixtures/traces";
 import { AgentLink, EmptyState } from "@/lab/lab-ui";
 import { BudgetChip } from "@/lab/cost/cost-chrome";
 import { cn } from "@/lib/utils";
 
 export function CostSpendView({
   agentId,
+  agents: agentsProp,
+  traces: tracesProp = [],
   budget,
   spendUsd,
   spendEstimated = false,
@@ -27,6 +29,8 @@ export function CostSpendView({
   onGoDrivers,
 }: {
   agentId: string;
+  agents: AgentFixture[];
+  traces?: TraceFixture[];
   budget: CostBudgetFixture;
   /** Single primary spend figure from the page (catalog/telemetry). */
   spendUsd: number | null;
@@ -36,24 +40,39 @@ export function CostSpendView({
   onGoDrivers: () => void;
 }) {
   const agents = useMemo(() => {
-    const list = agentsBySpend();
-    if (agentId === "all") return list;
-    return list.filter((a) => a.id === agentId);
-  }, [agentId]);
+    const sorted = [...agentsProp].sort((a, b) => {
+      const ac = a.costUsd24h;
+      const bc = b.costUsd24h;
+      if (ac == null && bc == null) return 0;
+      if (ac == null) return 1;
+      if (bc == null) return -1;
+      return bc - ac;
+    });
+    if (agentId === "all") return sorted;
+    return sorted.filter((a) => a.id === agentId);
+  }, [agentsProp, agentId]);
 
-  const traces = useMemo(() => costlyTraces(agentId, 8), [agentId]);
+  const traces = useMemo(() => {
+    const list =
+      agentId === "all"
+        ? tracesProp
+        : tracesProp.filter((t) => t.agentId === agentId);
+    return [...list]
+      .sort((a, b) => (b.costUsd ?? -1) - (a.costUsd ?? -1))
+      .slice(0, 8);
+  }, [tracesProp, agentId]);
+
+  const agentByIdLocal = useMemo(() => {
+    const map = new Map(agentsProp.map((a) => [a.id, a]));
+    return (id: string) => map.get(id);
+  }, [agentsProp]);
 
   const spend = spendUsd;
   const runs =
     agentId === "all"
-      ? fleetRuns24h()
-      : (agentById(agentId)?.runs24h ?? 0);
-  const avg =
-    agentId === "all"
-      ? avgCostPerRun()
-      : runs && spend != null
-        ? spend / runs
-        : null;
+      ? agentsProp.reduce((s, a) => s + a.runs24h, 0)
+      : (agentByIdLocal(agentId)?.runs24h ?? 0);
+  const avg = runs && spend != null ? spend / runs : null;
 
   const showOrgBudget = agentId === "all";
   const pct = Math.min(
@@ -76,7 +95,7 @@ export function CostSpendView({
           hint={
             agentId === "all"
               ? spendSourceLabel
-              : agentById(agentId)?.name
+              : agentByIdLocal(agentId)?.name
           }
           primary
         />
@@ -212,30 +231,22 @@ export function CostSpendView({
             compact
             title="No runs"
             body={
-              agentId !== "all"
-                ? "No costly runs for this agent filter."
-                : "No costly runs in the last 24h."
+              tracesProp.length === 0
+                ? "Traces need to be loaded. Open Traces to inspect costly runs."
+                : agentId !== "all"
+                  ? "No costly runs for this agent filter."
+                  : "No costly runs in the last 24h."
             }
             action={
-              agentId !== "all" ? (
-                <button
-                  type="button"
-                  className="ds-btn ds-btn-ghost ds-btn-sm"
-                  onClick={() => onFilterAgent("all")}
-                >
-                  Clear filter
-                </button>
-              ) : (
-                <Link href={runsHref} className="ds-btn ds-btn-ghost ds-btn-sm">
-                  Traces
-                </Link>
-              )
+              <Link href={runsHref} className="ds-btn ds-btn-ghost ds-btn-sm">
+                Traces
+              </Link>
             }
           />
         ) : (
           <ul className="divide-y divide-[var(--line)]">
             {traces.map((t) => {
-              const agent = agentById(t.agentId);
+              const agent = agentByIdLocal(t.agentId);
               return (
                 <li key={t.id}>
                   <Link

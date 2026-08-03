@@ -3,13 +3,13 @@ import { dehydrateHome } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import HomeClient from "./home-client";
 
-/** Cap SSR shard wait so document load isn't blocked ~3s on cold traces/issues. */
-const HOME_DEHYDRATE_BUDGET_MS = 800;
+/** Cap SSR shard wait; return whatever settled (partial dehydrate). */
+const HOME_DEHYDRATE_BUDGET_MS = 1500;
 
 /**
- * SSR wrapper for ``/home`` — warms ``/auth/me`` + portal traces /
- * issues when they settle within the budget; otherwise falls through
- * to client fetch so HTML can flush quickly.
+ * SSR wrapper for ``/home`` — warms portal traces / issues when they
+ * settle within the budget; otherwise falls through to client fetch so
+ * HTML can flush quickly. ``/auth/me`` is seeded by layout ``dehydrateMe``.
  */
 export default async function HomePage() {
   const auth = await resolvePortalPrefetchAuth();
@@ -19,12 +19,9 @@ export default async function HomePage() {
   let dehydratedState: DehydratedState | null = null;
   if (auth?.orgId) {
     try {
-      dehydratedState = await Promise.race([
-        dehydrateHome(auth),
-        new Promise<null>((resolve) => {
-          setTimeout(() => resolve(null), HOME_DEHYDRATE_BUDGET_MS);
-        }),
-      ]);
+      // Partial dehydrate: shards that finish within the budget are kept;
+      // do not race the whole promise to null (that discarded warm work).
+      dehydratedState = await dehydrateHome(auth, HOME_DEHYDRATE_BUDGET_MS);
     } catch {
       dehydratedState = null; // prefetch is an optimisation — fall back to client fetch
     }

@@ -22,7 +22,6 @@ from eden_sdk.capture import (
 )
 from eden_sdk.config import EdenConfig, get_config
 
-
 # ── truncate_text ───────────────────────────────────────────────────
 
 

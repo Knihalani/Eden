@@ -487,7 +487,7 @@ function LabSettingsInner() {
         throw err;
       }
     },
-    [orgId, invalidateWorkspace, pushToast],
+    [orgId, invalidateWorkspace, invalidateMe, pushToast],
   );
 
   const patchWorkspace = useCallback(

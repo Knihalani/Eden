@@ -4,9 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   budgetStatusFromSpend,
-  defaultDriverId,
   formatSpend,
-  primaryFleetSpend24h,
   type CostBudgetFixture,
 } from "@/lab/fixtures/cost";
 import { PageHeader } from "@/components/ds/primitives";
@@ -18,7 +16,7 @@ import {
   type CostMode,
 } from "@/lab/cost/cost-chrome";
 import dynamic from "next/dynamic";
-import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
+import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKey, queryKeys } from "@/lib/query-keys";
@@ -83,6 +81,13 @@ function LabCostInner() {
     () => budgetApi.get(orgId!),
     SHELL_QUERY,
   );
+  // Soft-load for Costliest runs — not in the Spend/Drivers loading gate.
+  const tracesQuery = useOrgQuery(
+    queryKeys.portal.traces(orgId),
+    orgId,
+    () => portalApi.traces(orgId!),
+    SHELL_QUERY,
+  );
 
   const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
@@ -93,6 +98,8 @@ function LabCostInner() {
   const [driverId, setDriverId] = useState("");
 
   const drivers = driversQuery.data ?? [];
+  const agents = agentsQuery.data ?? [];
+  const traces = tracesQuery.data ?? [];
 
   const budget: CostBudgetFixture = useMemo(() => {
     const rollup = budgetQuery.data?.data?.rollup;
@@ -146,12 +153,17 @@ function LabCostInner() {
       if (next === "spend") {
         patchQuery({ mode: null, id: null });
       } else {
-        const id = defaultDriverId(agentId);
+        const rows =
+          agentId === "all"
+            ? drivers
+            : drivers.filter((d) => d.agentId === agentId);
+        const id =
+          rows.find((d) => d.estSaveUsd > 0)?.id ?? rows[0]?.id ?? "";
         setDriverId(id);
         patchQuery({ mode: "drivers", id: id || null });
       }
     },
-    [patchQuery, agentId],
+    [patchQuery, agentId, drivers],
   );
 
   const filterAgent = useCallback(
@@ -174,14 +186,16 @@ function LabCostInner() {
     const map: Record<string, number> = {
       all: drivers.length,
     };
-    for (const a of catalogAgents()) {
+    for (const a of agents) {
       map[a.id] = drivers.filter((d) => d.agentId === a.id).length;
     }
     return map;
-  }, [drivers]);
+  }, [drivers, agents]);
 
-  const isLoading = driversQuery.isLoading || budgetQuery.isLoading;
-  const isError = driversQuery.isError || budgetQuery.isError;
+  const isLoading =
+    agentsQuery.isLoading || driversQuery.isLoading || budgetQuery.isLoading;
+  const isError =
+    agentsQuery.isError || driversQuery.isError || budgetQuery.isError;
 
   if (!orgId) {
     return (
@@ -206,8 +220,11 @@ function LabCostInner() {
       <div className="ds-page">
         <PageHeader title="Cost" />
         <QueryErrorPanel
-          error={driversQuery.error ?? budgetQuery.error}
+          error={
+            agentsQuery.error ?? driversQuery.error ?? budgetQuery.error
+          }
           onRetry={() => {
+            void agentsQuery.refetch();
             void driversQuery.refetch();
             void budgetQuery.refetch();
           }}
@@ -216,13 +233,17 @@ function LabCostInner() {
     );
   }
 
-  // One primary spend figure — catalog/telemetry only. Gateway budget is a
+  // One primary spend figure — telemetry from agents query. Gateway budget is a
   // separate rollup shown inside Spend mode; never compete in the header.
+  const known = agents
+    .map((a) => a.costUsd24h)
+    .filter((c): c is number => c != null && Number.isFinite(c));
+  const fleetUsd = known.length > 0 ? known.reduce((s, c) => s + c, 0) : null;
   const primary =
     agentId === "all"
-      ? primaryFleetSpend24h()
+      ? { usd: fleetUsd, estimated: false, sourceLabel: "Telemetry · 24h" }
       : {
-          usd: scopeAgent?.costUsd24h ?? null,
+          usd: agents.find((a) => a.id === agentId)?.costUsd24h ?? null,
           estimated: false,
           sourceLabel: "Telemetry · 24h",
         };
@@ -262,7 +283,7 @@ function LabCostInner() {
                   All agents
                   {scopeCounts.all != null ? ` (${scopeCounts.all})` : ""}
                 </option>
-                {catalogAgents().map((a) => (
+                {agents.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                     {scopeCounts[a.id] != null
@@ -280,6 +301,8 @@ function LabCostInner() {
       {mode === "spend" ? (
         <CostSpendView
           agentId={agentId}
+          agents={agents}
+          traces={traces}
           budget={budget}
           spendUsd={primary.usd}
           spendEstimated={primary.estimated}
@@ -290,6 +313,7 @@ function LabCostInner() {
       ) : (
         <CostDriversView
           agentId={agentId}
+          drivers={drivers}
           selectedId={driverId}
           onSelect={selectDriver}
         />

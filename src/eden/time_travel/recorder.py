@@ -97,6 +97,13 @@ class TraceRecorder:
             or seed is not None
             or cache_mode == "always"
         )
+        # Gateways often omit step_index (default 0). Auto-assign the next
+        # chronological index so a whole agent run stays forkable.
+        resolved_index = await self._resolve_step_index(
+            org_id=org_id,
+            trace_id=trace_id,
+            requested=int(step_index),
+        )
         # The response_hash is the existing
         # telemetry_events.response_hash convention. The
         # caller passes it as a string; the recorder
@@ -106,14 +113,14 @@ class TraceRecorder:
             response_hash = str(response_hash)
         cache_key = _step_cache_key(
             trace_id=trace_id,
-            step_index=step_index,
+            step_index=resolved_index,
             response_hash=response_hash,
         ) if cacheable else None
 
         meta = {
             "cacheable": cacheable,
             "cache_key": cache_key,
-            "step_index": step_index,
+            "step_index": resolved_index,
             "trace_id": trace_id,
         }
 
@@ -123,7 +130,7 @@ class TraceRecorder:
         await self._persist_agent_step(
             org_id=org_id,
             trace_id=trace_id,
-            step_index=step_index,
+            step_index=resolved_index,
             request=request,
             response=response,
             response_hash=response_hash,
@@ -133,6 +140,58 @@ class TraceRecorder:
             cache_mode=cache_mode,
         )
         return meta
+
+    async def _resolve_step_index(
+        self,
+        *,
+        org_id: str,
+        trace_id: str,
+        requested: int,
+    ) -> int:
+        """Return a unique chronological step index for this trace.
+
+        Explicit positive indices from the caller are trusted. When the
+        caller passes ``0`` (the historical gateway default), look up
+        existing ``agent.step`` rows and advance past the highest index
+        so multi-step runs do not collapse onto step 0.
+        """
+        if requested > 0:
+            return requested
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return 0
+            row = await client.fetchrow(
+                """
+                SELECT COUNT(*)::int AS n,
+                       COALESCE(
+                         MAX(
+                           COALESCE(
+                             NULLIF(attributes->>'step_index', '')::int,
+                             NULLIF(payload->>'step_index', '')::int,
+                             0
+                           )
+                         ),
+                         -1
+                       ) AS max_idx
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND trace_id = $2
+                  AND event_type = 'agent.step'
+                """,
+                org_id,
+                trace_id,
+            )
+            if row is None or int(row["n"] or 0) == 0:
+                return 0
+            max_idx = int(row["max_idx"] if row["max_idx"] is not None else -1)
+            n = int(row["n"] or 0)
+            return max(max_idx + 1, n)
+        except Exception as exc:  # noqa: BLE001 — never break hot path
+            logger.debug("TraceRecorder.resolve_step_index failed: %s", exc)
+            return requested
 
     async def _persist_agent_step(
         self,

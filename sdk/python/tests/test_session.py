@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from _http_body import decode_ingest_body
 
 import eden
 from eden_sdk import session as session_mod
-from _http_body import decode_ingest_body
 
 
 def test_begin_sets_current_session() -> None:

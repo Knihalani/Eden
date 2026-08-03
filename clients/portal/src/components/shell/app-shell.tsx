@@ -63,19 +63,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <OnboardingBanner />
                   <main className="min-h-0 flex-1 overflow-auto outline-none pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
                     {/*
-                      HydrationBoundary on hub pages must seed the query
-                      cache before PortalCatalogSync subscribes — otherwise
-                      CatalogSync starts duplicate client GETs and SSR
-                      dehydrate work is wasted (home docMs ~3s).
+                      CatalogSync must sit *inside* BootGate and *after*
+                      page children so HydrationBoundary can seed the
+                      cache before CatalogSync's useOrgQuery observers
+                      subscribe. Outside BootGate it raced dehydrate and
+                      started duplicate client GETs on cold Home.
                     */}
-                    <PortalBootGate>{children}</PortalBootGate>
+                    <PortalBootGate>
+                      {children}
+                      <Suspense fallback={<CatalogSyncFallback />}>
+                        <PortalCatalogSync />
+                      </Suspense>
+                    </PortalBootGate>
                   </main>
                 </div>
                 <MobileBottomNav />
               </div>
-              <Suspense fallback={<CatalogSyncFallback />}>
-                <PortalCatalogSync />
-              </Suspense>
               <AlertsModal />
               <OnboardingOverlay />
               <CommandPalette />

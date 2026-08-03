@@ -38,6 +38,7 @@ import {
 import { PageHeader } from "@/components/ds/primitives";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
+import { usePolling } from "@/hooks/use-polling";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
@@ -188,17 +189,6 @@ function LabTracesInner() {
   const sessions = sessionsQuery.data ?? [];
   void agentsQuery.data;
 
-  // Soft-poll while nothing has been ingested yet.
-  useEffect(() => {
-    if (!orgId || traces.length > 0) return;
-    const id = window.setInterval(() => {
-      void tracesQuery.refetch();
-      void sessionsQuery.refetch();
-    }, FIRST_EVENT_WAIT.pollMs);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
-  }, [orgId, traces.length]);
-
   // Subscribe to issues so Open issue / Ask issueId re-render when the
   // catalog sibling finishes — reading catalogIssues() alone does not.
   const issuesQuery = useOrgQuery(
@@ -245,6 +235,50 @@ function LabTracesInner() {
   const [hubView, setHubViewState] = useState<HubView>(() =>
     parseHubView(paramView),
   );
+
+  // Delay soft-poll arm so usePolling's immediate tick does not
+  // duplicate the cold traces/sessions GETs the moment empty data settles.
+  // Arm for empty runs feed, or empty sessions feed while on Sessions view.
+  const [emptyPollArmed, setEmptyPollArmed] = useState(false);
+  useEffect(() => {
+    if (!orgId) {
+      setEmptyPollArmed(false);
+      return;
+    }
+    const tracesEmpty = traces.length === 0 && !tracesQuery.isLoading;
+    const sessionsEmpty =
+      hubView === "sessions" &&
+      sessions.length === 0 &&
+      !sessionsQuery.isLoading;
+    if (!tracesEmpty && !sessionsEmpty) {
+      setEmptyPollArmed(false);
+      return;
+    }
+    const id = window.setTimeout(
+      () => setEmptyPollArmed(true),
+      FIRST_EVENT_WAIT.pollMs,
+    );
+    return () => window.clearTimeout(id);
+  }, [
+    orgId,
+    traces.length,
+    tracesQuery.isLoading,
+    sessions.length,
+    sessionsQuery.isLoading,
+    hubView,
+  ]);
+
+  usePolling(
+    async () => {
+      await Promise.all([tracesQuery.refetch(), sessionsQuery.refetch()]);
+    },
+    {
+      intervalMs: FIRST_EVENT_WAIT.pollMs,
+      enabled: emptyPollArmed,
+      deps: [orgId, emptyPollArmed],
+    },
+  );
+
   const [selectedId, setSelectedId] = useState(
     () => traces.find((t) => t.id === paramId)?.id ?? traces[0]?.id ?? "",
   );
@@ -267,14 +301,12 @@ function LabTracesInner() {
   const traceDetailQuery = useOrgQuery(
     queryKeys.portal.traceDetail(orgId, selectedId || null),
     orgId,
-    () => portalApi.traceDetail(orgId!, selectedId),
+    ({ signal }) => portalApi.traceDetail(orgId!, selectedId, signal),
     {
       ...SHELL_QUERY,
       staleTime: 30_000,
-      // Always revalidate the selected transcript on mount — soft-nav
-      // with refetchOnMount:false kept a prior empty success cached
-      // across deploys that fixed the empty-steps bug.
-      refetchOnMount: "always",
+      // Refetch when stale — "always" defeated soft-nav / list→detail cache.
+      refetchOnMount: true,
       enabled: Boolean(orgId) && Boolean(selectedId),
     },
   );
@@ -1295,6 +1327,13 @@ function LabTracesInner() {
                       >
                         <Link
                           role="menuitem"
+                          href={`/debugger?traceId=${selected.id}&agent=${selected.agentId}&mode=time-travel`}
+                          className="type-ui block px-3 py-2 text-[var(--text)] hover:bg-[var(--accent-muted)]"
+                        >
+                          Time travel
+                        </Link>
+                        <Link
+                          role="menuitem"
                           href={`/evals?mode=datasets&from=${selected.id}&agent=${selected.agentId}`}
                           className="type-ui block px-3 py-2 text-[var(--text)] hover:bg-[var(--accent-muted)]"
                         >
@@ -1471,16 +1510,82 @@ function LabTracesInner() {
                   </div>
                 ) : null}
                 {tab === "signals" ? (
-                  <SignalsPanel
-                    trace={selected}
-                    dismissed={signalsDismissed}
-                    onDismiss={() => setSignalsDismissed(true)}
-                    onRestore={() => setSignalsDismissed(false)}
-                    onJumpStep={focusStep}
-                  />
+                  <div className="min-h-0 h-full overflow-y-auto">
+                    {traceDetailQuery.isError ? (
+                      <div className="p-6">
+                        <QueryErrorPanel
+                          error={traceDetailQuery.error}
+                          onRetry={() => void traceDetailQuery.refetch()}
+                        />
+                      </div>
+                    ) : traceDetailQuery.isLoading &&
+                      selected.steps.length === 0 ? (
+                      <QueryLoadingPanel label="Loading signals…" />
+                    ) : !traceDetailQuery.isLoading &&
+                      !traceDetailQuery.isFetching &&
+                      selected.steps.length === 0 ? (
+                      <EmptyState
+                        title="No spans"
+                        body="This run has no span events yet, or the transcript could not be reconstructed."
+                        compact
+                        action={
+                          <button
+                            type="button"
+                            className="ds-btn ds-btn-ghost ds-btn-sm"
+                            onClick={() => void traceDetailQuery.refetch()}
+                          >
+                            Retry
+                          </button>
+                        }
+                      />
+                    ) : (
+                      <SignalsPanel
+                        trace={selected}
+                        dismissed={signalsDismissed}
+                        onDismiss={() => setSignalsDismissed(true)}
+                        onRestore={() => setSignalsDismissed(false)}
+                        onJumpStep={focusStep}
+                      />
+                    )}
+                  </div>
                 ) : null}
                 {tab === "chat" ? (
-                  <ChatPanel key={selected.id} trace={selected} issue={issue} />
+                  <div className="min-h-0 h-full overflow-y-auto">
+                    {traceDetailQuery.isError ? (
+                      <div className="p-6">
+                        <QueryErrorPanel
+                          error={traceDetailQuery.error}
+                          onRetry={() => void traceDetailQuery.refetch()}
+                        />
+                      </div>
+                    ) : traceDetailQuery.isLoading &&
+                      selected.steps.length === 0 ? (
+                      <QueryLoadingPanel label="Loading chat…" />
+                    ) : !traceDetailQuery.isLoading &&
+                      !traceDetailQuery.isFetching &&
+                      selected.steps.length === 0 ? (
+                      <EmptyState
+                        title="No spans"
+                        body="This run has no span events yet, or the transcript could not be reconstructed."
+                        compact
+                        action={
+                          <button
+                            type="button"
+                            className="ds-btn ds-btn-ghost ds-btn-sm"
+                            onClick={() => void traceDetailQuery.refetch()}
+                          >
+                            Retry
+                          </button>
+                        }
+                      />
+                    ) : (
+                      <ChatPanel
+                        key={selected.id}
+                        trace={selected}
+                        issue={issue}
+                      />
+                    )}
+                  </div>
                 ) : null}
               </div>
             </>

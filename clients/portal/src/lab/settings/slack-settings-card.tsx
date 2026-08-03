@@ -57,7 +57,7 @@ export function SlackSettingsCard() {
     { ...SETTINGS_QUERY, enabled: Boolean(installQuery.data) },
   );
   const agentsQuery = useOrgQuery(
-    queryKeys.portal.agents(orgId),
+    queryKeys.agents.list(orgId, { limit: 100 }),
     orgId,
     async () => (await agentsApi.list(orgId!, { limit: 100 })).agents,
     { ...SETTINGS_QUERY, enabled: Boolean(installQuery.data) },
@@ -171,6 +171,17 @@ export function SlackSettingsCard() {
     for (const r of routesQuery.data ?? []) map.set(r.agent_id ?? "", r);
     return map;
   }, [routesQuery.data]);
+
+  // While the configured probe is in flight, keep a compact shell so the
+  // card doesn't flash "missing" then pop in once Slack env is known.
+  if (configuredQuery.isLoading || configuredQuery.isPending) {
+    return (
+      <section className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
+        <p className="type-label">Slack alerts</p>
+        <p className="type-meta mt-1">Checking Slack…</p>
+      </section>
+    );
+  }
 
   if (!configuredQuery.data?.configured) return null;
 

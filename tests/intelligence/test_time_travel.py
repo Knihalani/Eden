@@ -728,3 +728,151 @@ class TestTimeTravelRoutes:
         assert body["feature"] == "TraceForker"
         assert body["data"]["n_forks"] == 1
         assert body["data"]["forks"][0]["fork_id"] == "frk_abc"
+
+    def test_list_steps_route(self, tt_client: TestClient, mock_postgres_client: MagicMock) -> None:
+        mock_postgres_client.fetch = AsyncMock(
+            return_value=[
+                {
+                    "event_id": "ev_0",
+                    "trace_id": "trc_abc",
+                    "span_id": "s0",
+                    "name": "agent.step",
+                    "payload": {
+                        "step_index": 0,
+                        "request": {"model": "gpt-test", "prompt": "hello"},
+                        "response": {"response_hash": "h0", "tokens_used": 12},
+                    },
+                    "attributes": {"cacheable": True, "response_hash": "h0"},
+                    "duration_ms": 40.0,
+                    "timestamp": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
+                },
+                {
+                    "event_id": "ev_1",
+                    "trace_id": "trc_abc",
+                    "span_id": "s1",
+                    "name": "agent.step",
+                    "payload": {
+                        "step_index": 0,  # colliding historical default
+                        "request": {"model": "gpt-test", "prompt": "world"},
+                        "response": {"response_hash": "h1", "tokens_used": 8},
+                    },
+                    "attributes": {"cacheable": False, "response_hash": "h1"},
+                    "duration_ms": 55.0,
+                    "timestamp": datetime(2026, 6, 11, 10, 0, 1, tzinfo=UTC),
+                },
+            ]
+        )
+        resp = tt_client.get(
+            "/orgs/org_test/intelligence/time-travel/steps",
+            params={"parent_trace_id": "trc_abc"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["feature"] == "TraceRecorder"
+        assert body["data"]["n_steps"] == 2
+        assert body["data"]["n_replayable"] == 2
+        assert body["data"]["ready_for_live_replay"] is True
+        # Colliding step_index=0 values remapped to 0, 1.
+        assert [s["step_index"] for s in body["data"]["steps"]] == [0, 1]
+        assert body["data"]["steps"][0]["replayable"] is True
+        assert body["data"]["steps"][0]["cacheable"] is True
+
+
+# ─── Test class: step-index normalization ─────────────────────
+
+
+class TestStepIndexNormalization:
+    """Whole-run fork boundaries must survive gateway default step_index=0."""
+
+    def test_colliding_zeros_remap_to_positions(self) -> None:
+        from eden.time_travel._common import _normalize_parent_step_indices
+
+        steps = [
+            {"payload": {"step_index": 0}, "attributes": {"step_index": 0}},
+            {"payload": {"step_index": 0}, "attributes": {"step_index": 0}},
+            {"payload": {"step_index": 0}, "attributes": {"step_index": 0}},
+        ]
+        out = _normalize_parent_step_indices(steps)
+        assert [s["step_index"] for s in out] == [0, 1, 2]
+        assert [s["payload"]["step_index"] for s in out] == [0, 1, 2]
+
+    def test_unique_indices_preserved(self) -> None:
+        from eden.time_travel._common import _normalize_parent_step_indices
+
+        steps = [
+            {"payload": {"step_index": 2}},
+            {"payload": {"step_index": 5}},
+            {"payload": {"step_index": 9}},
+        ]
+        out = _normalize_parent_step_indices(steps)
+        assert [s["step_index"] for s in out] == [2, 5, 9]
+
+    async def test_replay_fork_boundary_with_colliding_zeros(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
+        from eden.time_travel import TraceReplayer
+
+        cache_hit = {"tokens_used": 50, "cost_usd": 0.001}
+        mock_postgres_client.fetchrow = AsyncMock(
+            side_effect=[
+                {
+                    "fork_id": "frk_abc",
+                    "parent_trace_id": "trc_abc",
+                    "parent_fork_id": None,
+                    "fork_at_step": 2,
+                    "name": "Test",
+                    "edits_json": "{}",
+                    "n_replays": 0,
+                    "last_replay_outcome": None,
+                    "created_at": datetime(2026, 6, 11, 10, 0, 0, tzinfo=UTC),
+                },
+                cache_hit,
+                cache_hit,
+            ]
+        )
+        # Every recorded step_index is 0 (historical gateway default).
+        parent_rows = [
+            {
+                "event_id": f"ev_{i}",
+                "trace_id": "trc_abc",
+                "span_id": f"s{i}",
+                "name": "agent.step",
+                "payload": {
+                    "step_index": 0,
+                    "request": {"model": "gpt-test", "prompt": f"p{i}"},
+                    "response": {"response_hash": f"h{i}", "tokens_used": 10},
+                },
+                "attributes": {
+                    "cacheable": True,
+                    "cache_key": f"tt:trc_abc:0:h{i}",
+                    "response_hash": f"h{i}",
+                    "step_index": 0,
+                },
+                "response_hash": f"h{i}",
+                "duration_ms": 10.0,
+                "timestamp": datetime(2026, 6, 11, 10, 0, i, tzinfo=UTC),
+            }
+            for i in range(4)
+        ]
+        mock_postgres_client.fetch = AsyncMock(return_value=parent_rows)
+        mock_postgres_client.execute = AsyncMock(return_value=None)
+
+        class _Resp:
+            text = "live"
+            input_tokens = 1
+            output_tokens = 1
+            cost_usd = 0.001
+
+        gw = MagicMock()
+        gw.complete = AsyncMock(return_value=_Resp())
+
+        with patch("eden.api.routes.gateway.get_ai_gateway", return_value=gw):
+            result = await TraceReplayer().replay_from(
+                "org_test", fork_id="frk_abc", edits={}
+            )
+        assert result["status"] == "ok"
+        data = result["data"]
+        # Steps 0,1 cached; 2,3 live after fork_at=2.
+        assert data["served_from_cache"] == [0, 1]
+        assert data["re_executed"] == [2, 3]
+        assert data["n_steps"] == 4

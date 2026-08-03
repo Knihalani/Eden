@@ -583,7 +583,7 @@ async def _get_parent_steps(
             or ""
         )
         out.append(d)
-    return out
+    return _normalize_parent_step_indices(out)
 
 
 def _step_index_of(
@@ -602,6 +602,15 @@ def _step_index_of(
         idx = payload.get("step_index")
         if isinstance(idx, int):
             return idx
+        if isinstance(idx, str) and idx.isdigit():
+            return int(idx)
+    attrs = step.get("attributes")
+    if isinstance(attrs, dict):
+        idx = attrs.get("step_index")
+        if isinstance(idx, int):
+            return idx
+        if isinstance(idx, str) and idx.isdigit():
+            return int(idx)
     if isinstance(payload, str):
         try:
             parsed = json.loads(payload)
@@ -614,9 +623,72 @@ def _step_index_of(
     return fallback
 
 
+def _normalize_parent_step_indices(
+    steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Assign unique chronological ``step_index`` values.
+
+    Gateways historically defaulted ``step_index=0`` on every
+    LLM call, which collapses a whole agent run into one fork
+    boundary. When recorded indices collide (or are all zero
+    across multiple steps), remap to ``0..n-1`` by the already
+    sorted timestamp order so fork / replay / diff stay aligned
+    with the UI timeline.
+    """
+    if not steps:
+        return steps
+    recorded = [_step_index_of(s, fallback=i) for i, s in enumerate(steps)]
+    unique = len(set(recorded)) == len(recorded)
+    use_recorded = unique and not (
+        len(recorded) > 1 and all(idx == 0 for idx in recorded)
+    )
+    out: list[dict[str, Any]] = []
+    for position, step in enumerate(steps):
+        normalized = dict(step)
+        effective = recorded[position] if use_recorded else position
+        normalized["step_index"] = effective
+        payload = normalized.get("payload")
+        if isinstance(payload, dict):
+            payload = dict(payload)
+            payload["step_index"] = effective
+            normalized["payload"] = payload
+        attrs = normalized.get("attributes")
+        if isinstance(attrs, dict):
+            attrs = dict(attrs)
+            attrs["step_index"] = effective
+            normalized["attributes"] = attrs
+        out.append(normalized)
+    return out
+
+
+def _step_has_replayable_prompt(step: dict[str, Any]) -> bool:
+    """True when the recorded step carries prompt/messages for live re-exec."""
+    payload = step.get("payload") if isinstance(step.get("payload"), dict) else {}
+    request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+    prompt = request.get("prompt") or payload.get("prompt") or ""
+    if isinstance(prompt, str) and prompt.strip():
+        return True
+    messages = request.get("messages") or payload.get("messages") or []
+    if isinstance(messages, list) and messages:
+        return True
+    return False
+
+
+def _recorded_cache_key(step: dict[str, Any]) -> str | None:
+    """Prefer the cache key written at record time (survives index remap)."""
+    attrs = step.get("attributes") if isinstance(step.get("attributes"), dict) else {}
+    key = attrs.get("cache_key")
+    if isinstance(key, str) and key.strip():
+        return key
+    return None
+
+
 __all__ = [
     "_apply_edits_to_step",
     "_fork_id_for",
+    "_normalize_parent_step_indices",
+    "_recorded_cache_key",
+    "_step_has_replayable_prompt",
     "_get_fork_branch",
     "_get_parent_steps",
     "_get_replay_steps",

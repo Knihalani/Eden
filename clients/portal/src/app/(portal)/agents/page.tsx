@@ -3,7 +3,10 @@ import { dehydrateAgents } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import AgentsClient from "./agents-client";
 
-/** SSR wrapper for ``/agents`` — warms agents + traces + sessions. */
+/** Cap SSR shard wait; return whatever settled (partial dehydrate). */
+const AGENTS_DEHYDRATE_BUDGET_MS = 1500;
+
+/** SSR wrapper for ``/agents`` — warms agents + traces. */
 export default async function AgentsPage() {
   const auth = await resolvePortalPrefetchAuth();
   // JSX must be constructed outside the try/catch (react-hooks/error-boundaries):
@@ -12,7 +15,7 @@ export default async function AgentsPage() {
   let dehydratedState: DehydratedState | null = null;
   if (auth?.orgId) {
     try {
-      dehydratedState = await dehydrateAgents(auth);
+      dehydratedState = await dehydrateAgents(auth, AGENTS_DEHYDRATE_BUDGET_MS);
     } catch {
       dehydratedState = null; // prefetch is an optimisation — fall back to client fetch
     }

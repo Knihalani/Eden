@@ -273,3 +273,91 @@ async def list_forks(
             "n_forks": len(forks),
         },
     }
+
+
+@router.get("/steps")
+async def list_parent_steps(
+    org_id: str = Depends(require_path_org_access),
+    parent_trace_id: str = Query(..., description="The parent trace id."),
+) -> dict[str, Any]:
+    """List recorded ``agent.step`` rows for a trace (Cat 20 timeline).
+
+    Powers the portal Time travel scrubber so fork_at uses the same
+    indices the replayer walks, and surfaces cacheable / replayable
+    status for each step across a whole agent run.
+    """
+    from eden.storage.postgres import get_postgres_client
+    from eden.time_travel._common import (
+        _get_parent_steps,
+        _step_has_replayable_prompt,
+    )
+
+    if await get_postgres_client() is None:
+        raise HTTPException(status_code=503, detail="Postgres unavailable")
+
+    try:
+        steps = await _get_parent_steps(
+            parent_trace_id=parent_trace_id, org_id=org_id
+        )
+    except AttributeError as exc:
+        raise HTTPException(status_code=503, detail="Postgres unavailable") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Failed to list steps") from exc
+
+    serialized: list[dict[str, Any]] = []
+    n_replayable = 0
+    n_cacheable = 0
+    for step in steps:
+        payload = step.get("payload") if isinstance(step.get("payload"), dict) else {}
+        request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+        attrs = step.get("attributes") if isinstance(step.get("attributes"), dict) else {}
+        response = (
+            payload.get("response") if isinstance(payload.get("response"), dict) else {}
+        )
+        cacheable = bool(attrs.get("cacheable"))
+        replayable = _step_has_replayable_prompt(step)
+        if cacheable:
+            n_cacheable += 1
+        if replayable:
+            n_replayable += 1
+        model = request.get("model") or response.get("model") or ""
+        prompt = request.get("prompt") or payload.get("prompt") or ""
+        prompt_preview = ""
+        if isinstance(prompt, str) and prompt.strip():
+            prompt_preview = prompt.strip()[:240]
+        elif isinstance(request.get("messages"), list) and request["messages"]:
+            first = request["messages"][0]
+            if isinstance(first, dict):
+                content = first.get("content")
+                if isinstance(content, str):
+                    prompt_preview = content.strip()[:240]
+        serialized.append(
+            {
+                "step_index": int(step.get("step_index") or 0),
+                "event_id": step.get("event_id"),
+                "span_id": step.get("span_id"),
+                "timestamp": step.get("timestamp"),
+                "duration_ms": step.get("duration_ms"),
+                "model": model or None,
+                "cacheable": cacheable,
+                "replayable": replayable,
+                "response_hash": step.get("response_hash") or "",
+                "tokens_used": int(response.get("tokens_used") or 0),
+                "cost_usd": float(response.get("cost_usd") or 0.0),
+                "prompt_preview": prompt_preview or None,
+            }
+        )
+
+    return {
+        "status": "ok",
+        "feature": "TraceRecorder",
+        "live": True,
+        "data": {
+            "parent_trace_id": parent_trace_id,
+            "steps": serialized,
+            "n_steps": len(serialized),
+            "n_cacheable": n_cacheable,
+            "n_replayable": n_replayable,
+            "ready_for_live_replay": n_replayable > 0,
+        },
+    }

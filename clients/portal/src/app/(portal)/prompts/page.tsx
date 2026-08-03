@@ -35,6 +35,7 @@ import {
   QueryErrorPanel,
   QueryLoadingPanel,
 } from "@/components/shell/query-error-panel";
+import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 
 const promptsFallback = (
@@ -377,6 +378,15 @@ function PromptsInner() {
   const detailLoading =
     Boolean(promptId) &&
     (detailQuery.isLoading || (detailQuery.isFetching && !detailQuery.data));
+
+  if (!orgId) {
+    return (
+      <NoWorkspaceGuard
+        title="Prompts"
+        message="Select a workspace to view prompts."
+      />
+    );
+  }
 
   if (listQuery.isLoading) {
     return (

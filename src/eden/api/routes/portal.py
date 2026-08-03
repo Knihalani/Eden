@@ -2240,7 +2240,9 @@ def _map_guardrail_kind(raw: str | None) -> str:
 
 def _map_debugger_mode(raw: str | None) -> str:
     s = (raw or "inspect").lower()
-    if s in ("replay", "rerun", "time-travel", "time_travel"):
+    if s in ("time-travel", "time_travel"):
+        return "time-travel"
+    if s in ("replay", "rerun"):
         return "replay"
     if s in ("compare", "diff"):
         return "compare"
@@ -2682,8 +2684,14 @@ async def list_portal_improve_plans(
 
     out: list[ImprovePlanCard] = []
     for p in plans or []:
-        evidence = p.get("evidence") if isinstance(p.get("evidence"), dict) else {}
-        triage = p.get("triage_snapshot") if isinstance(p.get("triage_snapshot"), dict) else {}
+        raw_evidence = p.get("evidence")
+        evidence: dict[str, Any] = (
+            raw_evidence if isinstance(raw_evidence, dict) else {}
+        )
+        raw_triage = p.get("triage_snapshot")
+        triage: dict[str, Any] = (
+            raw_triage if isinstance(raw_triage, dict) else {}
+        )
         issue_ids = evidence.get("issue_ids") or triage.get("issue_ids") or []
         case_ids = evidence.get("case_ids") or triage.get("case_ids") or []
         if not isinstance(issue_ids, list):

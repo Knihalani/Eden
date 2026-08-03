@@ -200,7 +200,7 @@ function SignalDetail({
         ) : null}
         <dl className="grid grid-cols-2 gap-4 border-t border-[var(--line)] pt-4">
           <div>
-            <p className="type-label">Hits (24h)</p>
+            <p className="type-label">Hits</p>
             <p className="type-mono mt-1 !text-[var(--text)]">{signal.hits24h}</p>
           </div>
           <div>
@@ -488,6 +488,9 @@ function ReviewDraftPanel({
               disabled={busy}
               onChange={(e) => updatePendingDraft({ name: e.target.value })}
             />
+            <span className="type-meta text-[var(--text-faint)]">
+              Included in the saved description.
+            </span>
           </label>
           <label className="block space-y-1.5 sm:col-span-2">
             <span className="type-label">Watching</span>
@@ -503,10 +506,9 @@ function ReviewDraftPanel({
             <select
               className="ds-input w-full"
               value={draft.kind}
-              disabled={busy}
-              onChange={(e) =>
-                updatePendingDraft({ kind: e.target.value as SignalKind })
-              }
+              disabled
+              aria-readonly="true"
+              title="Inferred from the description when saved"
             >
               <option value="error">Error</option>
               <option value="latency">Latency</option>
@@ -514,23 +516,26 @@ function ReviewDraftPanel({
               <option value="policy">Policy</option>
               <option value="custom">Custom</option>
             </select>
+            <span className="type-meta text-[var(--text-faint)]">
+              Inferred on save
+            </span>
           </label>
           <label className="block space-y-1.5">
             <span className="type-label">Severity</span>
             <select
               className="ds-input w-full"
               value={draft.severity}
-              disabled={busy}
-              onChange={(e) =>
-                updatePendingDraft({
-                  severity: e.target.value as SignalSeverity,
-                })
-              }
+              disabled
+              aria-readonly="true"
+              title="Inferred from the description when saved"
             >
               <option value="critical">Critical</option>
               <option value="error">Error</option>
               <option value="warn">Warn</option>
             </select>
+            <span className="type-meta text-[var(--text-faint)]">
+              Inferred on save
+            </span>
           </label>
         </div>
       </div>
@@ -648,13 +653,18 @@ function LabSignalsInner() {
   const handleApprove = useCallback(
     async (draft: CompiledSignalDraft, prompt: string) => {
       if (!orgId) throw new Error("Select a workspace first.");
-      const description =
-        draft.description.trim() ||
+      const body =
         draft.watching.trim() ||
+        draft.description.trim() ||
         prompt.trim();
-      if (description.length < 3) {
+      if (body.length < 3) {
         throw new Error("Description is too short.");
       }
+      const name = draft.name.trim();
+      const description =
+        name && !body.toLowerCase().startsWith(name.toLowerCase())
+          ? `${name}: ${body}`
+          : body;
       const created = await signalsApi.create(orgId, {
         description,
         enabled: true,

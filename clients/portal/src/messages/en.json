@@ -1776,10 +1776,10 @@
         "comparing": "Comparing…"
       },
       "timeTravel": {
-        "desc": "Scrub across historical checkpoints to inspect state at each step.",
-        "scrubber": "Timeline scrubber",
-        "stepCount": "{count} checkpoints",
-        "noCheckpoints": "No checkpoints — run a replay first.",
+        "desc": "Fork at any step, edit the prompt, and live-replay — earlier steps serve from cache.",
+        "scrubber": "Run timeline",
+        "stepCount": "{count} recorded steps",
+        "noCheckpoints": "No recorded agent.step events for this trace yet.",
         "noTrace": "No source trace."
       },
       "notes": {

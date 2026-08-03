@@ -121,16 +121,15 @@ def test_backend_nl_alert_routes_are_mounted() -> None:
 
 
 def test_sidebar_signals_nav_is_visible() -> None:
-    """Signals lives under Alerts (overflow), not a dedicated sidebar row."""
+    """Signals is a dedicated Observe leaf (SoT: ``@/lab/nav`` + sidebar-config)."""
     text = SIDEBAR.read_text(encoding="utf-8")
-    alert_lines = [
+    signal_lines = [
         ln for ln in text.splitlines()
-        if 'id: "alerts"' in ln or 'href: "/alerts"' in ln
+        if 'id: "signals"' in ln or 'href: "/signals"' in ln
     ]
-    assert alert_lines, 'expected Alerts nav entry (Signals via overflow)'
-    assert 'href: "/alerts"' in text
-    # Dedicated Signals href was intentionally folded into Alerts.
-    assert 'href: "/alerts?tab=signals"' not in text
+    assert signal_lines, 'expected Signals nav entry'
+    assert 'href: "/signals"' in text
+    assert 'id: "signals"' in text
 
 
 @pytest.mark.asyncio

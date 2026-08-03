@@ -53,7 +53,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
 
   // Subscribe to in-flight agents fetches without issuing a second GET.
   const agentsFetching = useIsFetching({
-    queryKey: orgId ? queryKeys.portal.agents(orgId) : ["portal", "agents", "__none__"],
+    queryKey: queryKeys.portal.agents(orgId),
   });
 
   const alertEventsQuery = useOrgQuery(

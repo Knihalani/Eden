@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import {
   formatCheckpointTime,
   formatDuration,
@@ -23,6 +23,14 @@ import { DebuggerOutcomeChip } from "@/lab/debugger/debugger-chrome";
 import { EmptyState, RunTranscript, SeverityBadge } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { useOrgQuery } from "@/hooks/use-api-query";
+import { queryKeys } from "@/lib/query-keys";
+import { timeTravelApi } from "@/lib/api/resources";
+import { SHELL_QUERY } from "@/lib/portal-query";
+import {
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 
 function liveCompareTraces(): TraceFixture[] {
   const live = catalogTraces();
@@ -40,6 +48,9 @@ export function DebuggerReplayView({
   onReplay,
   sourceTrace,
   liveTravelNote,
+  sourceTraceLoading,
+  sourceTraceError,
+  onRetrySourceTrace,
 }: {
   session: DebuggerSessionFixture;
   focusSpanId?: string | null;
@@ -52,6 +63,9 @@ export function DebuggerReplayView({
   sourceTrace?: TraceFixture | null;
   /** Honest copy when live Cat 20 re-exec is off. */
   liveTravelNote?: string | null;
+  sourceTraceLoading?: boolean;
+  sourceTraceError?: Error | null;
+  onRetrySourceTrace?: () => void;
 }) {
   const checkpoints = sessionCheckpoints(session, sourceTrace);
   const trace = sourceTrace ?? traceById(session.sourceTraceId);
@@ -72,6 +86,19 @@ export function DebuggerReplayView({
 
   const selectedIndex = checkpoints.findIndex((c) => c.id === selectedId);
   const selected = selectedIndex >= 0 ? checkpoints[selectedIndex]! : null;
+
+  if (sourceTraceLoading && !trace) {
+    return <QueryLoadingPanel label="Loading source trace…" />;
+  }
+
+  if (sourceTraceError && !trace) {
+    return (
+      <QueryErrorPanel
+        error={sourceTraceError}
+        onRetry={onRetrySourceTrace}
+      />
+    );
+  }
 
   if (!trace) {
     return (
@@ -223,6 +250,7 @@ export function DebuggerCompareView({
   onRightChange,
   leftTrace,
   rightTrace,
+  detailsLoading,
 }: {
   session: DebuggerSessionFixture;
   leftTraceId: string;
@@ -231,6 +259,7 @@ export function DebuggerCompareView({
   onRightChange: (id: string) => void;
   leftTrace?: TraceFixture | null;
   rightTrace?: TraceFixture | null;
+  detailsLoading?: boolean;
 }) {
   const left = leftTrace ?? traceById(leftTraceId);
   const right = rightTrace ?? traceById(rightTraceId);
@@ -304,7 +333,9 @@ export function DebuggerCompareView({
         ) : null}
       </div>
 
-      {!left || !right ? (
+      {detailsLoading && (!left || !right) ? (
+        <QueryLoadingPanel label="Loading compare traces…" />
+      ) : !left || !right ? (
         <EmptyState
           title="Pick two traces"
           body="Choose a baseline and a candidate."
@@ -425,11 +456,17 @@ export function DebuggerInspectView({
   focusSpanId,
   onFocusSpan,
   sourceTrace,
+  sourceTraceLoading,
+  sourceTraceError,
+  onRetrySourceTrace,
 }: {
   session: DebuggerSessionFixture;
   focusSpanId?: string | null;
   onFocusSpan: (spanId: string | null) => void;
   sourceTrace?: TraceFixture | null;
+  sourceTraceLoading?: boolean;
+  sourceTraceError?: Error | null;
+  onRetrySourceTrace?: () => void;
 }) {
   const checkpoints = sessionCheckpoints(session, sourceTrace);
   const trace = sourceTrace ?? traceById(session.sourceTraceId);
@@ -480,6 +517,22 @@ export function DebuggerInspectView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [index, checkpoints]);
+
+  if (
+    sourceTraceLoading &&
+    (!trace || checkpoints.length === 0)
+  ) {
+    return <QueryLoadingPanel label="Loading source trace…" />;
+  }
+
+  if (sourceTraceError && (!trace || checkpoints.length === 0)) {
+    return (
+      <QueryErrorPanel
+        error={sourceTraceError}
+        onRetry={onRetrySourceTrace}
+      />
+    );
+  }
 
   if (!trace || checkpoints.length === 0 || !snap) {
     return (
@@ -623,112 +676,250 @@ export function DebuggerInspectView({
 }
 
 /* ------------------------------------------------------------------ */
-/* Time travel — Cat 20 fork / live replay / diff                      */
+/* Time travel — Cat 20 fork / live replay / side-by-side timeline     */
 /* ------------------------------------------------------------------ */
+
+type ReplayStepStatus = "cache" | "live" | "miss" | "pending";
+
+function replayStatusForStep(
+  stepIndex: number,
+  replay: TimeTravelReplayData | null,
+): ReplayStepStatus {
+  if (!replay) return "pending";
+  if (replay.served_from_cache?.includes(stepIndex)) return "cache";
+  if (replay.cache_miss_warnings?.includes(stepIndex)) return "miss";
+  if (replay.re_executed?.includes(stepIndex)) return "live";
+  return "pending";
+}
+
+function ReplayStatusChip({ status }: { status: ReplayStepStatus }) {
+  const label =
+    status === "cache"
+      ? "cache"
+      : status === "live"
+        ? "live"
+        : status === "miss"
+          ? "miss"
+          : "—";
+  const tone =
+    status === "cache"
+      ? "text-[var(--success)]"
+      : status === "live"
+        ? "text-[var(--accent)]"
+        : status === "miss"
+          ? "text-[var(--warning)]"
+          : "text-[var(--text-faint)]";
+  return <span className={cn("type-meta uppercase tracking-wide", tone)}>{label}</span>;
+}
 
 export function DebuggerTimeTravelView({
   session,
   orgId,
   sourceTrace,
+  focusSpanId,
+  onFocusSpan,
 }: {
   session: DebuggerSessionFixture;
   orgId: string | null;
   sourceTrace?: TraceFixture | null;
+  focusSpanId?: string | null;
+  onFocusSpan?: (spanId: string | null) => void;
 }) {
-  const checkpoints = sessionCheckpoints(session, sourceTrace);
-  const [forkAt, setForkAt] = useState(0);
+  const fallbackCheckpoints = sessionCheckpoints(session, sourceTrace);
+  const sourceTraceId = session.sourceTraceId || null;
+
+  const stepsQuery = useOrgQuery(
+    queryKeys.timeTravel.steps(orgId, sourceTraceId),
+    orgId,
+    async () => {
+      const res = await timeTravelApi.listSteps(orgId!, sourceTraceId!);
+      return res?.data ?? null;
+    },
+    {
+      ...SHELL_QUERY,
+      staleTime: 15_000,
+      enabled: Boolean(orgId && sourceTraceId),
+    },
+  );
+  const forksQuery = useOrgQuery(
+    queryKeys.timeTravel.forks(orgId, sourceTraceId),
+    orgId,
+    async () => {
+      const res = await timeTravelApi.listForks(orgId!, sourceTraceId!);
+      const data = res?.data;
+      return Array.isArray(data?.forks) ? data.forks : [];
+    },
+    {
+      ...SHELL_QUERY,
+      staleTime: 30_000,
+      enabled: Boolean(orgId && sourceTraceId),
+    },
+  );
+
+  const recordedSteps = stepsQuery.data?.steps ?? [];
+  const usingRecorded = recordedSteps.length > 0;
+
+  const timeline = useMemo(() => {
+    if (usingRecorded) {
+      return recordedSteps.map((s) => ({
+        key: `rec_${s.step_index}`,
+        stepIndex: s.step_index,
+        label:
+          s.prompt_preview?.slice(0, 80) ||
+          (s.model ? `${s.model}` : `Step ${s.step_index}`),
+        spanId: s.span_id ?? null,
+        cacheable: s.cacheable,
+        replayable: s.replayable,
+        model: s.model ?? null,
+        tokens: s.tokens_used ?? 0,
+        costUsd: s.cost_usd ?? null,
+        promptPreview: s.prompt_preview ?? null,
+        responseHash: s.response_hash ?? "",
+      }));
+    }
+    return fallbackCheckpoints.map((cp, i) => ({
+      key: cp.id,
+      stepIndex: i,
+      label: cp.label,
+      spanId: cp.spanId ?? null,
+      cacheable: false,
+      replayable: false,
+      model: null as string | null,
+      tokens: 0,
+      costUsd: null as number | null,
+      promptPreview: cp.summary || null,
+      responseHash: "",
+    }));
+  }, [usingRecorded, recordedSteps, fallbackCheckpoints]);
+
+  const initialIndex = useMemo(() => {
+    if (!timeline.length) return 0;
+    if (focusSpanId) {
+      const bySpan = timeline.findIndex((s) => s.spanId === focusSpanId);
+      if (bySpan >= 0) return bySpan;
+    }
+    const firstFail = fallbackCheckpoints.findIndex((c) => c.status === "error");
+    if (firstFail >= 0 && firstFail < timeline.length) return firstFail;
+    return Math.max(0, timeline.length - 1);
+  }, [timeline, focusSpanId, fallbackCheckpoints]);
+
+  const [index, setIndex] = useState(initialIndex);
+  /** Sticky fork point — scrubbing timeline must not move this or the
+   * Edit vs Replay-result pane collapses to always-edit. */
+  const [forkAtStep, setForkAtStep] = useState(
+    () => timeline[initialIndex]?.stepIndex ?? 0,
+  );
   const [promptEdit, setPromptEdit] = useState("");
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [forkId, setForkId] = useState<string | null>(null);
-  const [replayId, setReplayId] = useState<string | null>(null);
-  const [forks, setForks] = useState<Array<Record<string, unknown>>>([]);
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [diffSummary, setDiffSummary] = useState<string | null>(null);
-
-  const refreshForks = async () => {
-    if (!orgId || !session.sourceTraceId) return;
-    try {
-      const { timeTravelApi } = await import("@/lib/api/resources");
-      const res = await timeTravelApi.listForks(orgId, session.sourceTraceId);
-      const data = (res as { data?: { forks?: Array<Record<string, unknown>> } })
-        ?.data;
-      setForks(Array.isArray(data?.forks) ? data!.forks! : []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to list forks");
-    }
-  };
+  const [replay, setReplay] = useState<TimeTravelReplayData | null>(null);
+  const [diff, setDiff] = useState<TimeTravelDiffData | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const busyRef = useRef(false);
+  busyRef.current = busy;
 
   useEffect(() => {
-    void refreshForks();
-  }, [orgId, session.sourceTraceId]);
+    setIndex(initialIndex);
+    setForkAtStep(timeline[initialIndex]?.stepIndex ?? 0);
+    setReplay(null);
+    setDiff(null);
+    setForkId(null);
+    setPromptEdit("");
+     
+  }, [session.id, initialIndex]);
+
+  const current = timeline[index] ?? null;
+  const forkAt = forkAtStep;
+  const forkAtTimelineIndex = timeline.findIndex(
+    (s) => s.stepIndex === forkAtStep,
+  );
+  const atForkStep =
+    forkAtTimelineIndex >= 0 ? index === forkAtTimelineIndex : true;
+
+  function go(nextIndex: number) {
+    if (!timeline.length) return;
+    const clamped = Math.min(Math.max(nextIndex, 0), timeline.length - 1);
+    setIndex(clamped);
+    onFocusSpan?.(timeline[clamped]?.spanId ?? null);
+  }
 
   const onForkAndReplay = async () => {
-    if (!orgId || !session.sourceTraceId) {
-      setError("Missing org or source trace.");
+    if (!orgId || !sourceTraceId) {
+      setActionError("Missing org or source trace.");
       return;
     }
+    if (!usingRecorded) {
+      setActionError(
+        "This trace has no recorded agent.step events yet. Route LLM calls through Eden’s AI gateway (with the same trace_id) so Time travel can fork the whole run.",
+      );
+      return;
+    }
+    const readyNow = Boolean(stepsQuery.data?.ready_for_live_replay);
+    if (!readyNow) {
+      setActionError(
+        "None of the recorded steps include prompt content — live re-exec will return cannot_replay.",
+      );
+      return;
+    }
+    // Capture scrub position as the fork point before replay resets index.
+    const forkStep = current?.stepIndex ?? forkAtStep;
+    setForkAtStep(forkStep);
+    if (busyRef.current) return;
     setBusy(true);
-    setError(null);
-    setStatus(null);
-    setDiffSummary(null);
+    setActionError(null);
+    setReplay(null);
+    setDiff(null);
     try {
-      const { timeTravelApi } = await import("@/lib/api/resources");
       const edits: Record<string, unknown> = {};
       if (promptEdit.trim()) {
-        edits[`step_${forkAt}.prompt`] = promptEdit.trim();
+        edits[`step_${forkStep}.prompt`] = promptEdit.trim();
       }
       const forkRes = await timeTravelApi.fork(orgId, {
-        parent_trace_id: session.sourceTraceId,
-        fork_at_step: forkAt,
-        name: `Debugger fork @ ${forkAt}`,
+        parent_trace_id: sourceTraceId,
+        fork_at_step: forkStep,
+        name: `Fork @ step ${forkStep}`,
         edits,
       });
-      const newForkId = String(
-        (forkRes as { data?: { fork_id?: string } })?.data?.fork_id || "",
-      );
+      const newForkId = String(forkRes?.data?.fork_id || "");
       if (!newForkId) {
         throw new Error("Fork response missing fork_id");
       }
       setForkId(newForkId);
-      setStatus(`Forked ${newForkId}`);
 
       const replayRes = await timeTravelApi.replay(orgId, {
         fork_id: newForkId,
         edits,
       });
-      const replayData = (replayRes as { data?: TimeTravelReplayShape })?.data;
-      const newReplayId = String(replayData?.replay_id || "");
-      setReplayId(newReplayId || null);
-      const nRe = Number(replayData?.n_re_executed ?? 0);
-      const nCache = Number(replayData?.n_served_from_cache ?? 0);
-      const outcome = String(replayData?.new_outcome || "unknown");
-      setStatus(
-        `Replay ${newReplayId || "—"} · outcome=${outcome} · re_executed=${nRe} · from_cache=${nCache}`,
-      );
-
-      if (newForkId && newReplayId) {
-        try {
-          const diffRes = await timeTravelApi.diff(orgId, newForkId, newReplayId);
-          const d = (diffRes as { data?: { diff?: unknown } })?.data;
-          const diffArr = Array.isArray(d?.diff) ? d!.diff! : [];
-          setDiffSummary(
-            diffArr.length
-              ? `${diffArr.length} field change(s) vs original`
-              : "No field-level diffs (identical hashes or cannot_replay on historical steps).",
-          );
-        } catch (diffErr) {
-          setDiffSummary(
-            diffErr instanceof Error
-              ? `Diff unavailable: ${diffErr.message}`
-              : "Diff unavailable",
-          );
-        }
+      const replayData = replayRes?.data ?? null;
+      if (!replayData?.replay_id) {
+        throw new Error(
+          replayRes?.message || "Replay did not return a replay_id",
+        );
       }
-      await refreshForks();
+      setReplay(replayData);
+
+      try {
+        const diffRes = await timeTravelApi.diff(
+          orgId,
+          newForkId,
+          replayData.replay_id,
+        );
+        setDiff(diffRes?.data ?? null);
+      } catch (diffErr) {
+        setActionError(
+          diffErr instanceof Error
+            ? `Replay succeeded; diff unavailable: ${diffErr.message}`
+            : "Replay succeeded; diff unavailable",
+        );
+      }
+      await forksQuery.refetch();
+      setPlaying(true);
+      // Scrub from start so Replay-result rows are visible; forkAtStep stays.
+      setIndex(0);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Time travel failed";
-      setError(
+      setActionError(
         /503|disabled/i.test(msg)
           ? `${msg} — live replay may be disabled (TIME_TRAVEL_REPLAY_ENABLED).`
           : /no_usable_prompt|cannot_replay/i.test(msg)
@@ -740,113 +931,404 @@ export function DebuggerTimeTravelView({
     }
   };
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        go(index + 1);
+      }
+      if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        go(index - 1);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, timeline]);
+
+  useEffect(() => {
+    if (!playing || !timeline.length) return;
+    const id = window.setInterval(() => {
+      setIndex((prev) => {
+        if (prev >= timeline.length - 1) {
+          setPlaying(false);
+          return prev;
+        }
+        const next = prev + 1;
+        onFocusSpan?.(timeline[next]?.spanId ?? null);
+        return next;
+      });
+    }, 900);
+    return () => window.clearInterval(id);
+  }, [playing, timeline, onFocusSpan]);
+
+  const forks = forksQuery.data ?? [];
+  const error =
+    actionError ??
+    (stepsQuery.isError
+      ? stepsQuery.error instanceof Error
+        ? stepsQuery.error.message
+        : "Failed to load recorded steps"
+      : forksQuery.isError
+        ? forksQuery.error instanceof Error
+          ? forksQuery.error.message
+          : "Failed to list forks"
+        : null);
+
+  const diffEntries = useMemo(() => {
+    if (!diff?.diff) return [];
+    if (Array.isArray(diff.diff)) return [];
+    return Object.entries(diff.diff).slice(0, 24);
+  }, [diff]);
+
+  if (!sourceTraceId) {
+    return (
+      <EmptyState
+        title="No source trace"
+        body="Seed a debugger session from a Trace to time-travel across its run."
+        compact
+      />
+    );
+  }
+
+  if (stepsQuery.isLoading && !timeline.length) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-5">
+        <p className="type-meta">Loading recorded steps…</p>
+      </div>
+    );
+  }
+
+  if (!timeline.length) {
+    return (
+      <EmptyState
+        title="No steps on this run"
+        body="Open a trace with spans, or ensure the agent recorded LLM steps through Eden’s gateway."
+        compact
+      />
+    );
+  }
+
+  const ready = Boolean(stepsQuery.data?.ready_for_live_replay);
+  const nCacheable = stepsQuery.data?.n_cacheable ?? 0;
+  const nReplayable = stepsQuery.data?.n_replayable ?? 0;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3 sm:px-5">
-      <div>
-        <p className="type-label">Cat 20 time travel</p>
-        <p className="type-meta mt-1 text-[var(--text-secondary)]">
-          Fork this trace at a step, optionally edit the prompt, and live-replay
-          through the AI gateway. Steps before the fork may serve from{" "}
-          <code className="type-meta">cache_lookups</code>. Historical rows
-          without recorded prompt content return honest{" "}
-          <code className="type-meta">cannot_replay</code>.
-        </p>
-      </div>
-
-      <label className="flex flex-col gap-1">
-        <span className="type-label">Fork at step</span>
-        <select
-          className="ds-input"
-          value={forkAt}
-          onChange={(e) => setForkAt(Number(e.target.value) || 0)}
-        >
-          {(checkpoints.length ? checkpoints : [{ id: "0", label: "Step 0" }]).map(
-            (cp, i) => (
-              <option key={cp.id} value={i}>
-                {i}: {cp.label}
-              </option>
-            ),
-          )}
-        </select>
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="type-label">Prompt edit (optional)</span>
-        <textarea
-          className="ds-input min-h-[5rem]"
-          placeholder="step_N.prompt override"
-          value={promptEdit}
-          onChange={(e) => setPromptEdit(e.target.value)}
-        />
-      </label>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="ds-btn ds-btn-primary ds-btn-sm"
-          disabled={busy || !orgId}
-          onClick={() => void onForkAndReplay()}
-        >
-          {busy ? "Running…" : "Fork + live replay"}
-        </button>
-        <button
-          type="button"
-          className="ds-btn ds-btn-ghost ds-btn-sm"
-          disabled={busy || !orgId}
-          onClick={() => void refreshForks()}
-        >
-          Refresh forks
-        </button>
-      </div>
-
-      {status ? (
-        <p className="type-meta text-[var(--text-secondary)]">{status}</p>
-      ) : null}
-      {diffSummary ? (
-        <p className="type-meta text-[var(--text-secondary)]">{diffSummary}</p>
-      ) : null}
-      {error ? <p className="type-meta text-[var(--error)]">{error}</p> : null}
-      {forkId ? (
-        <p className="type-meta text-[var(--text-faint)]">
-          fork={forkId}
-          {replayId ? ` · replay=${replayId}` : ""}
-        </p>
-      ) : null}
-
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--line)] pt-3">
-        <p className="type-label">Forks for this trace</p>
-        {forks.length === 0 ? (
-          <p className="type-meta mt-2 text-[var(--text-faint)]">No forks yet.</p>
-        ) : (
-          <ul className="mt-2 space-y-2">
-            {forks.map((f) => (
-              <li
-                key={String(f.fork_id || f.id)}
-                className="type-meta rounded-[var(--radius)] border border-[var(--line)] px-3 py-2"
-              >
-                <span className="text-[var(--text)]">
-                  {String(f.fork_id || f.id)}
-                </span>
-                {" · step "}
-                {String(f.fork_at_step ?? "?")}
-                {f.name ? ` · ${String(f.name)}` : ""}
-                {f.last_replay_outcome
-                  ? ` · last=${String(f.last_replay_outcome)}`
-                  : ""}
+    <div className="grid min-h-0 flex-1 lg:grid-cols-[16.5rem_1fr]">
+      <aside className="flex min-h-0 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
+        <div className="border-b border-[var(--line)] px-3 py-2.5">
+          <p className="type-label">Fork from</p>
+          <p className="type-meta mt-0.5">
+            Step {forkAt} · {index + 1}/{timeline.length}
+            {usingRecorded ? " · recorded" : " · span map"}
+          </p>
+        </div>
+        <ul className="min-h-0 flex-1 overflow-y-auto" aria-label="Time travel steps">
+          {timeline.map((step, i) => {
+            const status = replayStatusForStep(step.stepIndex, replay);
+            return (
+              <li key={step.key}>
+                <button
+                  type="button"
+                  onClick={() => go(i)}
+                  aria-current={i === index ? "step" : undefined}
+                  className={cn(
+                    "w-full border-b border-[var(--line)] px-3 py-2.5 text-left transition-colors",
+                    i === index
+                      ? "bg-[var(--bg-active)] shadow-[inset_2px_0_0_var(--accent)]"
+                      : "hover:bg-[var(--bg-hover)]",
+                    i < index && replay ? "opacity-80" : i > index ? "opacity-55" : "",
+                  )}
+                >
+                  <p className="type-meta flex items-center justify-between gap-2">
+                    <span className="text-[var(--text-faint)]">
+                      {step.stepIndex}
+                      {step.cacheable ? " · cacheable" : ""}
+                      {!step.replayable && usingRecorded ? " · no prompt" : ""}
+                    </span>
+                    {replay ? <ReplayStatusChip status={status} /> : null}
+                  </p>
+                  <p className="type-ui mt-0.5 line-clamp-2 text-[var(--text)]">
+                    {step.label}
+                  </p>
+                </button>
               </li>
-            ))}
-          </ul>
+            );
+          })}
+        </ul>
+      </aside>
+
+      <div className="flex min-h-0 flex-col overflow-y-auto">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
+            aria-label="Previous step"
+            disabled={index <= 0}
+            onClick={() => go(index - 1)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
+            aria-label={playing ? "Pause playback" : "Play through run"}
+            onClick={() => setPlaying((v) => !v)}
+          >
+            {playing ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <p className="type-ui min-w-0 flex-1 truncate text-[var(--text)]">
+            {current?.label}
+          </p>
+          <span className="type-meta text-[var(--text-faint)]">
+            {index + 1}/{timeline.length}
+          </span>
+          {replay ? (
+            <ReplayStatusChip
+              status={replayStatusForStep(forkAt, replay)}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-icon"
+            aria-label="Next step"
+            disabled={index >= timeline.length - 1}
+            onClick={() => go(index + 1)}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        {!usingRecorded ? (
+          <div className="border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-3 sm:px-5">
+            <p className="type-ui text-[var(--text)]">
+              Showing portal span map — live fork needs recorded{" "}
+              <code className="type-meta">agent.step</code> events.
+            </p>
+            <p className="type-meta mt-1 text-[var(--text-secondary)]">
+              Route this agent through Eden’s AI gateway with a stable{" "}
+              <code className="type-meta">trace_id</code> so every LLM call
+              is captured for the whole run.
+            </p>
+          </div>
+        ) : !ready ? (
+          <div className="border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-3 sm:px-5">
+            <p className="type-ui text-[var(--text)]">
+              {recordedSteps.length} step(s) recorded, but none include prompt
+              content — live re-exec will return{" "}
+              <code className="type-meta">cannot_replay</code>.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="grid shrink-0 gap-px border-b border-[var(--line)] bg-[var(--line)] md:grid-cols-2">
+          <div className="bg-[var(--bg)] px-4 py-3 sm:px-5">
+            <p className="type-label text-[var(--text-faint)]">Original</p>
+            <pre className="type-mono mt-2 max-h-36 overflow-auto whitespace-pre-wrap !text-[0.75rem] !text-[var(--text)]">
+              {current?.promptPreview?.trim() || "—"}
+            </pre>
+            <p className="type-meta mt-2 text-[var(--text-faint)]">
+              {current?.model ? `${current.model} · ` : ""}
+              hash {(current?.responseHash || "—").slice(0, 12)}
+            </p>
+          </div>
+          <div className="bg-[var(--bg)] px-4 py-3 sm:px-5">
+            <p className="type-label text-[var(--text-faint)]">
+              {atForkStep ? "Edit + replay from here" : "Replay result"}
+            </p>
+            {atForkStep ? (
+              <textarea
+                className="ds-input mt-2 min-h-[5.5rem] w-full !text-[0.75rem]"
+                placeholder="Optional prompt override for this step (step_N.prompt)"
+                value={promptEdit}
+                onChange={(e) => setPromptEdit(e.target.value)}
+              />
+            ) : (
+              <pre className="type-mono mt-2 max-h-36 overflow-auto whitespace-pre-wrap !text-[0.75rem] !text-[var(--text)]">
+                {(() => {
+                  const r = diff?.replay?.find(
+                    (s) => s.step_index === current?.stepIndex,
+                  );
+                  if (!r) {
+                    return replay
+                      ? "No replay row for this step."
+                      : "Run a live replay to compare.";
+                  }
+                  const bits = [
+                    r.served_from_cache ? "served from cache" : null,
+                    r.re_executed ? "re-executed live" : null,
+                    r.response_hash
+                      ? `hash ${String(r.response_hash).slice(0, 12)}`
+                      : null,
+                    r.tokens_used != null ? `${r.tokens_used} tokens` : null,
+                  ].filter(Boolean);
+                  return bits.join(" · ") || "—";
+                })()}
+              </pre>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-b border-[var(--line)] px-4 py-3 sm:px-5">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat term="Recorded" def={String(timeline.length)} />
+            <Stat term="Replayable" def={usingRecorded ? String(nReplayable) : "—"} />
+            <Stat term="Cacheable" def={usingRecorded ? String(nCacheable) : "—"} />
+            <Stat
+              term="Saved"
+              def={
+                replay
+                  ? `${formatTokens(replay.tokens_saved ?? 0)} · ${formatUsd(replay.cost_saved_usd ?? 0)}`
+                  : "—"
+              }
+            />
+          </dl>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              disabled={busy || !orgId || !usingRecorded || !ready}
+              onClick={() => void onForkAndReplay()}
+              title={
+                !usingRecorded
+                  ? "Needs recorded agent.step events"
+                  : !ready
+                    ? "No replayable steps with prompt content"
+                    : undefined
+              }
+            >
+              {busy ? "Replaying…" : `Replay from step ${current?.stepIndex ?? forkAt}`}
+            </button>
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
+              disabled={busy || stepsQuery.isFetching}
+              onClick={() => {
+                void stepsQuery.refetch();
+                void forksQuery.refetch();
+              }}
+            >
+              Refresh
+            </button>
+            {forkId ? (
+              <span className="type-meta self-center text-[var(--text-faint)]">
+                fork {forkId}
+                {replay?.replay_id ? ` · replay ${replay.replay_id}` : ""}
+              </span>
+            ) : null}
+          </div>
+          {replay ? (
+            <p className="type-meta mt-2 text-[var(--text-secondary)]">
+              outcome={replay.new_outcome} · re_executed=
+              {replay.n_re_executed} · from_cache={replay.n_served_from_cache}
+              {replay.cache_miss_warnings?.length
+                ? ` · cache_miss=[${replay.cache_miss_warnings.join(",")}]`
+                : ""}
+              {` · ${replay.duration_ms}ms`}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="type-meta mt-2 text-[var(--error)]">{error}</p>
+          ) : null}
+        </div>
+
+        {(diffEntries.length > 0 || (diff?.original?.length ?? 0) > 0) && (
+          <div className="shrink-0 border-b border-[var(--line)] px-4 py-3 sm:px-5">
+            <p className="type-label">Side-by-side diff</p>
+            {diffEntries.length === 0 ? (
+              <p className="type-meta mt-2 text-[var(--text-faint)]">
+                No response_hash / token / cost changes vs original.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {diffEntries.map(([key, change]) => (
+                  <li key={key} className="type-meta text-[var(--text-secondary)]">
+                    <span className="text-[var(--text)]">{key}</span>
+                    {": "}
+                    <span className="text-[var(--text-faint)]">
+                      {String((change as { from?: unknown }).from ?? "—")}
+                    </span>
+                    {" → "}
+                    <span className="text-[var(--text)]">
+                      {String((change as { to?: unknown }).to ?? "—")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
+          <p className="type-label">Forks for this trace</p>
+          {forks.length === 0 ? (
+            <p className="type-meta mt-2 text-[var(--text-faint)]">
+              No forks yet — scrub to a step and replay from there.
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {forks.map((f) => (
+                <li
+                  key={String(f.fork_id || f.id)}
+                  className="type-meta rounded-[var(--radius)] border border-[var(--line)] px-3 py-2"
+                >
+                  <span className="text-[var(--text)]">
+                    {String(f.fork_id || f.id)}
+                  </span>
+                  {" · step "}
+                  {String(f.fork_at_step ?? "?")}
+                  {f.name ? ` · ${String(f.name)}` : ""}
+                  {f.last_replay_outcome
+                    ? ` · last=${String(f.last_replay_outcome)}`
+                    : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="type-meta mt-3 text-[var(--text-faint)]">
+            Keys: j/k or ↑/↓ to scrub the run timeline
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-type TimeTravelReplayShape = {
+type TimeTravelReplayData = {
   replay_id?: string;
   n_re_executed?: number;
   n_served_from_cache?: number;
   new_outcome?: string;
+  served_from_cache?: number[];
+  re_executed?: number[];
+  cache_miss_warnings?: number[];
+  tokens_saved?: number;
+  cost_saved_usd?: number;
+  duration_ms?: number;
+  n_steps?: number;
+};
+
+type TimeTravelDiffData = {
+  original?: Array<{ step_index: number; response_hash?: string }>;
+  replay?: Array<{
+    step_index: number;
+    served_from_cache?: boolean;
+    re_executed?: boolean;
+    response_hash?: string;
+    tokens_used?: number;
+    cost_usd?: number;
+  }>;
+  diff?: Record<string, { from?: unknown; to?: unknown }> | Array<unknown>;
 };
 
 function Stat({

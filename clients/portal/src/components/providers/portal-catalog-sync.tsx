@@ -11,11 +11,7 @@ import {
   clearPortalCatalog,
   patchPortalCatalog,
 } from "@/lib/portal-catalog";
-import {
-  LIVE_QUERY,
-  OBSERVE_STALE,
-  SHELL_QUERY,
-} from "@/lib/portal-query";
+import { OBSERVE_STALE, SHELL_QUERY } from "@/lib/portal-query";
 
 const BUDGET_QUERY_KEY = (orgId: string | null) =>
   queryKey("cost", orgId, "budget");
@@ -45,7 +41,6 @@ export function PortalCatalogSync() {
   const onSignals = pathIn(pathname, ["/signals"]);
   const onAlerts = pathIn(pathname, ["/alerts"]);
   const onAgents = pathIn(pathname, ["/agents"]);
-  const onDebugger = pathIn(pathname, ["/debugger"]);
   const onEvals = pathIn(pathname, ["/evals"]);
   const onCompare = pathIn(pathname, ["/compare"]);
   const onImprove = pathIn(pathname, ["/improve"]);
@@ -62,10 +57,11 @@ export function PortalCatalogSync() {
     onIssues ||
     onSignals ||
     onAlerts ||
-    onAgents ||
-    onDebugger;
+    onAgents;
   // Home attention path: traces + issues only (not agents).
-  const needTraces = onHome || onTraces || onAgents || onDebugger || onSessions;
+  // Debugger loads sessions in-page; do not compete with agents/traces warm.
+  // Issues Runs tab resolves occurrenceTraceIds via catalogTraces().
+  const needTraces = onHome || onTraces || onAgents || onSessions || onIssues;
   // Sessions are traces-hub only (agents inspector uses traces, not sessions).
   const needSessions = onTraces || onSessions;
   const needIssues = onHome || onIssues || onTraces;
@@ -85,18 +81,20 @@ export function PortalCatalogSync() {
     patchPortalCatalog({ orgId });
   }, [orgId]);
 
+  // Match hub pages (SHELL_QUERY) so CatalogSync never forces a remount
+  // refetch that undoes SSR HydrationBoundary / soft-nav cache hits.
   const agents = useOrgQuery(
     queryKeys.portal.agents(orgId),
     orgId,
     () => portalApi.agents(orgId!),
-    { ...LIVE_QUERY, enabled: needAgents },
+    { ...SHELL_QUERY, enabled: needAgents },
   );
   const traces = useOrgQuery(
     queryKeys.portal.traces(orgId),
     orgId,
     () => portalApi.traces(orgId!),
     {
-      ...(onHome ? SHELL_QUERY : LIVE_QUERY),
+      ...SHELL_QUERY,
       enabled: needTraces,
     },
   );
@@ -159,22 +157,12 @@ export function PortalCatalogSync() {
     () => portalApi.guardrailPolicies(orgId!),
     { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onGuardrails },
   );
+  // Evals shards are mode-gated in-page — do not warm all three here
+  // (that forced playgrounds+experiments on every /evals visit).
   const datasets = useOrgQuery(
     queryKeys.portal.evalDatasets(orgId),
     orgId,
     () => portalApi.evalDatasets(orgId!),
-    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onEvals },
-  );
-  const playgrounds = useOrgQuery(
-    queryKeys.portal.evalPlaygrounds(orgId),
-    orgId,
-    () => portalApi.evalPlaygrounds(orgId!),
-    { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onEvals },
-  );
-  const experiments = useOrgQuery(
-    queryKeys.portal.evalExperiments(orgId),
-    orgId,
-    () => portalApi.evalExperiments(orgId!),
     { ...SHELL_QUERY, staleTime: OBSERVE_STALE, enabled: onEvals },
   );
 
@@ -199,12 +187,6 @@ export function PortalCatalogSync() {
         ? { guardrailPolicies: guardrailPolicies.data }
         : {}),
       ...(datasets.data !== undefined ? { datasets: datasets.data } : {}),
-      ...(playgrounds.data !== undefined
-        ? { playgrounds: playgrounds.data }
-        : {}),
-      ...(experiments.data !== undefined
-        ? { experiments: experiments.data }
-        : {}),
     });
   }, [
     agents.data,
@@ -218,8 +200,6 @@ export function PortalCatalogSync() {
     compareExperiments.data,
     guardrailPolicies.data,
     datasets.data,
-    playgrounds.data,
-    experiments.data,
   ]);
 
   return null;

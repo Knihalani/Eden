@@ -33,9 +33,10 @@ def test_event_bus_uses_stream_client_helper():
 
     from eden.closed_loop import event_bus
 
-    src = inspect.getsource(event_bus.ClosedLoopConsumer.run)
-    assert "get_redis_stream_client" in src
-    assert "block_ms" in src
+    acquire_src = inspect.getsource(event_bus.ClosedLoopConsumer._acquire_redis)
+    run_src = inspect.getsource(event_bus.ClosedLoopConsumer.run)
+    assert "get_redis_stream_client" in acquire_src
+    assert "block_ms" in run_src
 
 
 def test_trace_finalized_uses_stream_client_and_throttled_autoclaim():

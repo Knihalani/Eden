@@ -44,7 +44,7 @@ def static_check_files(
     Unknown extensions are skipped (do not fail). Returns
     ``{status, errors, warnings, files_checked, files_skipped}``.
     """
-    errors: list[dict[str, str]] = []
+    errors: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
     checked = 0
     skipped = 0

@@ -126,7 +126,7 @@ async def flush_dogfood_sdk() -> None:
             return
         result = flush()
         if hasattr(result, "__await__"):
-            await result  # type: ignore[misc]
+            await result
     except Exception as exc:  # noqa: BLE001
         logger.debug("dogfood SDK flush failed: %s", exc)
 

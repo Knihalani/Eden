@@ -96,14 +96,23 @@ class ReplayDiff:
         #    step_index. The diff iterates the union.
         original_by_idx: dict[int, dict[str, Any]] = {}
         for position, step in enumerate(parent_steps):
-            idx = step.get("payload", {}).get("step_index", position) \
-                if isinstance(step.get("payload"), dict) else position
+            idx = step.get("step_index")
+            if not isinstance(idx, int):
+                payload = step.get("payload")
+                idx = (
+                    payload.get("step_index", position)
+                    if isinstance(payload, dict)
+                    else position
+                )
             original_by_idx[int(idx)] = step
         replay_by_idx: dict[int, dict[str, Any]] = {
             int(s["step_index"]): s for s in replay_steps
         }
 
         # 4. Compute the per-step + per-key diff.
+        # Only compare fields that exist on both timelines —
+        # served_from_cache / re_executed are replay-only and
+        # were previously creating noisy false diffs.
         diffs: dict[str, dict[str, Any]] = {}
         all_indices = sorted(
             set(original_by_idx.keys()) | set(replay_by_idx.keys())
@@ -111,15 +120,11 @@ class ReplayDiff:
         for idx in all_indices:
             orig = original_by_idx.get(idx, {})
             replay = replay_by_idx.get(idx, {})
-            # The diff is "key changed between the two
-            # timelines". We compare the cache-eligible +
-            # re-executed flags + the response_hash so the
-            # customer can see the cache hit / miss.
-            keys = ("response_hash", "tokens_used", "cost_usd",
-                    "served_from_cache", "re_executed")
-            for key in keys:
+            for key in ("response_hash", "tokens_used", "cost_usd"):
                 o_val = orig.get(key)
                 r_val = replay.get(key)
+                if o_val is None and r_val is None:
+                    continue
                 if o_val != r_val:
                     diffs[f"step_{idx}.{key}"] = {
                         "from": o_val,

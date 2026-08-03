@@ -18,10 +18,15 @@ ORG = "00000000-0000-0000-0000-000000000001"
 async def test_improve_snooze_bad_iso_is_422():
     from eden.api.routes import improve as mod
 
-    with patch.object(mod, "_require_agent_v1_async", AsyncMock(return_value=None)):
+    with (
+        patch.object(mod, "_require_agent_v1_async", AsyncMock(return_value=None)),
+        patch.object(mod, "require_org_admin", AsyncMock(return_value=None)),
+    ):
         body = mod.SnoozePlanRequest(snoozed_until="not-a-date")
         with pytest.raises(HTTPException) as ei:
-            await mod.snooze_plan_route(org_id=ORG, plan_id="plan_1", body=body)
+            await mod.snooze_plan_route(
+                org_id=ORG, plan_id="plan_1", body=body, payload={"sub": "u1"}
+            )
         assert ei.value.status_code == 422
 
 
@@ -108,6 +113,28 @@ async def test_time_travel_list_forks_postgres_none_is_503():
         with pytest.raises(HTTPException) as ei:
             await mod.list_forks(org_id=ORG, parent_trace_id="tr_1")
         assert ei.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_time_travel_list_steps_postgres_none_is_503():
+    from eden.api.routes import intelligence_time_travel as mod
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        new=AsyncMock(return_value=None),
+    ):
+        with pytest.raises(HTTPException) as ei:
+            await mod.list_parent_steps(org_id=ORG, parent_trace_id="tr_1")
+        assert ei.value.status_code == 503
+
+
+def test_map_debugger_mode_preserves_time_travel():
+    from eden.api.routes.portal import _map_debugger_mode
+
+    assert _map_debugger_mode("time-travel") == "time-travel"
+    assert _map_debugger_mode("time_travel") == "time-travel"
+    assert _map_debugger_mode("replay") == "replay"
+    assert _map_debugger_mode("inspect") == "inspect"
 
 
 @pytest.mark.asyncio

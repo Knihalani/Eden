@@ -3,7 +3,10 @@ import { dehydrateSignals } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import SignalsClient from "./signals-client";
 
-/** SSR wrapper for ``/signals`` — warms agents + signals + alert rules. */
+/** Cap SSR shard wait; return whatever settled (partial dehydrate). */
+const SIGNALS_DEHYDRATE_BUDGET_MS = 1500;
+
+/** SSR wrapper for ``/signals`` — warms agents + signals. */
 export default async function SignalsPage() {
   const auth = await resolvePortalPrefetchAuth();
   // JSX must be constructed outside the try/catch (react-hooks/error-boundaries):
@@ -12,7 +15,7 @@ export default async function SignalsPage() {
   let dehydratedState: DehydratedState | null = null;
   if (auth?.orgId) {
     try {
-      dehydratedState = await dehydrateSignals(auth);
+      dehydratedState = await dehydrateSignals(auth, SIGNALS_DEHYDRATE_BUDGET_MS);
     } catch {
       dehydratedState = null; // prefetch is an optimisation — fall back to client fetch
     }

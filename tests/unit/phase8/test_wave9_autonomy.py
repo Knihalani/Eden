@@ -88,8 +88,8 @@ async def test_orchestrator_heal_blocked_when_n22_denies() -> None:
     orch = ClosedLoopOrchestrator()
     with patch.object(
         ClosedLoopOrchestrator,
-        "_decide_action",
-        new=AsyncMock(return_value="deny"),
+        "_decide_action_recorded",
+        new=AsyncMock(return_value=("deny", None, 0.0)),
     ), patch(
         "eden.closed_loop.orchestrator.apply_transition",
         new=AsyncMock(),

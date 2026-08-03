@@ -91,10 +91,11 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
     // Soft navigate — hard assign used to flash a full reload.
     // Drop cached org shards so the new workspace cannot paint
     // stale agents/traces under the previous org id.
+    // Do not router.refresh() — that remounts the RSC tree and
+    // flashes (portal)/loading.tsx even though cache was already wiped.
     await queryClient.cancelQueries();
     dropOrgScopedQueries(queryClient);
     router.push("/home");
-    router.refresh();
   }, [queryClient, router, setOpen]);
 
   const onSelect = useCallback(

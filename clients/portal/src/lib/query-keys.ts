@@ -65,6 +65,17 @@ export const queryKeys = {
       ["github", "repos", orgId] as const,
     configured: ["github", "configured"] as const,
   },
+  timeTravel: {
+    all: ["timeTravel"] as const,
+    forks: (
+      orgId: string | null | undefined,
+      parentTraceId: string | null | undefined,
+    ) => ["timeTravel", "forks", orgId, parentTraceId ?? null] as const,
+    steps: (
+      orgId: string | null | undefined,
+      parentTraceId: string | null | undefined,
+    ) => ["timeTravel", "steps", orgId, parentTraceId ?? null] as const,
+  },
   /** Portal read-model projections (`GET /orgs/{id}/portal/*`). */
   portal: {
     all: ["portal"] as const,

@@ -1776,10 +1776,10 @@
         "comparing": "Vergleiche…"
       },
       "timeTravel": {
-        "desc": "Über historische Checkpoints scrubben, um den Zustand bei jedem Schritt zu inspizieren.",
-        "scrubber": "Zeitleisten-Scrubber",
-        "stepCount": "{count} Checkpoints",
-        "noCheckpoints": "Keine Checkpoints — zuerst eine Wiederholung ausführen.",
+        "desc": "An einem Schritt forken, Prompt bearbeiten und live wiederholen — frühere Schritte kommen aus dem Cache.",
+        "scrubber": "Lauf-Zeitleiste",
+        "stepCount": "{count} aufgezeichnete Schritte",
+        "noCheckpoints": "Noch keine agent.step-Ereignisse für diesen Trace.",
         "noTrace": "Kein Quell-Trace."
       },
       "notes": {
