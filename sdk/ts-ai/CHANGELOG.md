@@ -4,6 +4,19 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.1 — 2026-08-03
+
+### Fixed
+- Offline queue spill now stores the full `eventToWire` envelope so
+  replay preserves `eventId` / `traceId` / `eventType` / metrics
+  (legacy nested-payload rows still reconstruct).
+- Transient flush failures re-queue in memory when the offline queue is
+  disabled, instead of silently dropping the batch.
+- Queue overflow uses an index cursor instead of `Array.shift()` (O(n)).
+- `http-capture` joins the active trace via `currentTrace()?.traceId`.
+- `ModelAdvisor` sends `X-Org-Api-Key` + `X-Org-Id` (Bearer kept for
+  older proxies).
+
 ## 0.4.0 — 2026-07-28
 
 Released as a minor bump rather than the originally-drafted `0.3.5`:
