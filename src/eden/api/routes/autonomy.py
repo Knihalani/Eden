@@ -62,6 +62,7 @@ class AutonomyPatch(BaseModel):
     auto_guardrail_promote: bool | None = None
     daily_maintenance_budget_usd: float | None = None
     max_auto_rollbacks_per_day: int | None = None
+    auto_merge_max_per_week: int | None = None  # M15 (§9) canary volume cap
     compliance_profile: str | None = None  # standard | hipaa | soc2_strict
 
 

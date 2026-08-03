@@ -87,6 +87,8 @@ class AutonomousMaintenancePolicy:
     auto_guardrail_promote: bool = False
     daily_maintenance_budget_usd: float = 25.0
     max_auto_rollbacks_per_day: int = 3
+    # M15 (§9): weekly canary auto-merge volume cap (org-overridable).
+    auto_merge_max_per_week: int = 2
     compliance_profile: ComplianceProfile = "standard"
 
     def effective_mode(self) -> MaintenanceMode:
@@ -121,6 +123,9 @@ def _defaults_from_settings(org_id: str, agent_id: str | None) -> AutonomousMain
             ),
             max_auto_rollbacks_per_day=int(
                 getattr(s, "max_auto_rollbacks_per_day", 3)
+            ),
+            auto_merge_max_per_week=int(
+                getattr(s, "auto_merge_max_per_week", 2) or 2
             ),
             compliance_profile=profile
             if profile in ("standard", "hipaa", "soc2_strict")

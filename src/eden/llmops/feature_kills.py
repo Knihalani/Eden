@@ -30,6 +30,8 @@ _DEFAULT_ENABLED: dict[str, bool] = {
     "self_heal": True,
     "heal": True,
     "autonomy": True,
+    # M15 (§9) canary auto-merge kill (also in autonomy action defaults).
+    "auto_merge": True,
 }
 
 # Autonomy runtime heals — lookup errors fail-closed (deny execute).
@@ -42,6 +44,11 @@ _AUTONOMY_ACTION_DEFAULTS: dict[str, bool] = {
     "propose_patch": True,
     "code_change": True,
     "patch": True,
+    # M15 (§9): canary auto-merge + guardian auto-revert for that class.
+    # Default ON in the kill matrix; real opt-in is N22 T4
+    # ``auto_code_patch_merge`` (defaults False). Explicit kill → False.
+    "auto_merge": True,
+    "code_patch_merge": True,
 }
 
 
