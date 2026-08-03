@@ -1202,6 +1202,24 @@ def _build_settings_class():
         slack_notify_fix_now_only: bool = True
         # ── M13 (§6.5) shadow detector promotion ────────────────────────
         shadow_promote_min_firings: int = 20
+
+        # ── M14 (§8) cost & speed ───────────────────────────────────────
+        # §8.1 Neon scale-to-zero: **env-gated for dev/staging only**.
+        # Unset (default) → prod warm-demo tradeoff. Set
+        # ``EDEN_NEON_SCALE_TO_ZERO=1`` on non-prod so idle/cooldown hooks
+        # may force pool ``min_size=0``. Never flip this on in production.
+        neon_scale_to_zero: bool = Field(
+            default=False,
+            validation_alias=AliasChoices(
+                "neon_scale_to_zero",
+                "NEON_SCALE_TO_ZERO",
+                "EDEN_NEON_SCALE_TO_ZERO",
+            ),
+        )
+        # §8.4: per-signal-class timeout inside improvement sweep gather.
+        sweep_signal_timeout_s: float = 45.0
+        # §8.4: propose→Slack p95 budget (harness measurement note).
+        propose_to_slack_p95_budget_s: float = 90.0
         # M3 (D3) janitor: issues stuck in ``fix_pending`` longer than
         # this are returned to ``triaged`` (+ audit row + cockpit
         # "stuck" badge) by the verify worker's ``fix_pending_janitor``

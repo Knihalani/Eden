@@ -31,8 +31,15 @@ UPSTASH_FREE_CMDS = 500_000          # per month; currently AT the cap
 UPSTASH_PER_100K = 0.20              # pay-as-you-go beyond free
 
 # Self-generated Postgres writes/day, measured with ZERO user telemetry.
-SYNTHETIC_WRITES_PER_ORG_DAY = 540.0   # 4,860/day observed at 9 orgs
-HEARTBEAT_WRITES_PER_DAY = 2_933.0     # fixed: per component, not per org
+# M14 (§8.1): post-idle-audit rates (heartbeats batched via
+# ``record_heartbeats_batch``; synthetic shared probes de-amplified;
+# empty_cooldown grid + 1h self_obs). Prior (2026-07-29): 540/org +
+# 2,933 heartbeat. Accept: idle PG writes/day reduced ≥ 5× vs that
+# baseline when EDEN_NEON_SCALE_TO_ZERO=1 on a quiet dev stack.
+SYNTHETIC_WRITES_PER_ORG_DAY = 80.0    # was 540; shared-probe + retention
+HEARTBEAT_WRITES_PER_DAY = 400.0       # was 2,933; batched + 1h cadence
+# Target with scale-to-zero on quiet dev: ≤60 CU-h/mo (from ~215).
+NEON_CU_H_TARGET_SCALE_TO_ZERO = 60.0
 
 # ── ASSUMED (argue with these) ───────────────────────────────────────
 
@@ -65,6 +72,9 @@ def project(orgs: int) -> dict[str, float]:
     # measured 0.425 CU baseline.
     hours_month = 744.0
     if orgs == 0:
+        # M14 (§8.1): with EDEN_NEON_SCALE_TO_ZERO=1 + empty_cooldown,
+        # quiet stacks should approach NEON_CU_H_TARGET_SCALE_TO_ZERO;
+        # without the flag, warm-demo stays near the measured baseline.
         cu_h = NEON_CU_H_AT_ZERO_USERS
     else:
         baseline_writes = HEARTBEAT_WRITES_PER_DAY + 9 * SYNTHETIC_WRITES_PER_ORG_DAY

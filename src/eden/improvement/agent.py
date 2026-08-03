@@ -23,7 +23,9 @@ from eden.improvement.sweep_budget import (
 
 logger = logging.getLogger(__name__)
 
-_SWEEP_TIMEOUT_S = 300
+# M14 (§8.4): overall sweep cap tightened from 300s → 60s (p95 target).
+# Per-signal stages use ``sweep_signal_timeout_s`` inside ``_sweep_body``.
+_SWEEP_TIMEOUT_S = 60
 _SIGMA_THRESHOLD = 2.0
 _LOCKFILE_PATHS = (
     "requirements.txt",
@@ -278,15 +280,63 @@ class ImprovementAgent:
             if "ev_capture" in gen and "sweep.ev_capture" not in ev_meta:
                 ev_meta["sweep.ev_capture"] = gen["ev_capture"]
 
-            candidates.extend(await self._from_traces(org_id, watermark, agent_id))
-            candidates.extend(await self._from_metrics(org_id, agent_id))
-            candidates.extend(await self._from_repo_health(org_id, agent_id))
-            candidates.extend(await self._from_cost_anomalies(org_id, agent_id))
-            candidates.extend(
-                await self._from_prompt_nudge_candidates(
-                    org_id, agent_id, plan_kind_hint=plan_kind_hint
+            # M14 (§8.4): independent signal classes (traces / metrics /
+            # repo / cost / prompt-nudge) via asyncio.gather with a
+            # per-stage timeout so one slow lane cannot burn the 60s
+            # sweep budget. Target sweep p95 < 60s.
+            try:
+                from eden.config import get_settings as get_global_settings
+
+                stage_timeout = float(
+                    getattr(get_global_settings(), "sweep_signal_timeout_s", 45.0)
+                    or 45.0
                 )
+            except Exception:
+                stage_timeout = 45.0
+
+            async def _signal_stage(
+                name: str, coro: Any
+            ) -> list[PlanCandidate]:
+                try:
+                    result = await asyncio.wait_for(coro, timeout=stage_timeout)
+                    return list(result or [])
+                except TimeoutError:
+                    logger.warning(
+                        "improvement.sweep stage=%s timed out after %.0fs org=%s",
+                        name,
+                        stage_timeout,
+                        org_id,
+                    )
+                    return []
+                except Exception as exc:
+                    logger.warning(
+                        "improvement.sweep stage=%s failed org=%s: %s",
+                        name,
+                        org_id,
+                        exc,
+                    )
+                    return []
+
+            stage_results = await asyncio.gather(
+                _signal_stage(
+                    "traces", self._from_traces(org_id, watermark, agent_id)
+                ),
+                _signal_stage("metrics", self._from_metrics(org_id, agent_id)),
+                _signal_stage(
+                    "repo", self._from_repo_health(org_id, agent_id)
+                ),
+                _signal_stage(
+                    "cost", self._from_cost_anomalies(org_id, agent_id)
+                ),
+                _signal_stage(
+                    "prompt_nudge",
+                    self._from_prompt_nudge_candidates(
+                        org_id, agent_id, plan_kind_hint=plan_kind_hint
+                    ),
+                ),
             )
+            for batch in stage_results:
+                candidates.extend(batch)
             # Advisory lane only — never fake empty code_patch.
             candidates = [
                 c
