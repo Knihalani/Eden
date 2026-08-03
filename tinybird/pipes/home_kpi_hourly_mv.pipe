@@ -1,0 +1,23 @@
+DESCRIPTION >
+    Materializes hourly Home KPI aggregates from `telemetry_events_ch`
+    into `home_kpi_hourly` (AggregatingMergeTree). Runs as an insert
+    trigger on every block written to `telemetry_events_ch`, so it only
+    covers rows ingested after this pipe is deployed — existing history
+    is not backfilled. `ClickHouseSink.query_home_kpis` falls back to a
+    live scan of `telemetry_events_ch` while a tenant/hour has no rollup
+    row yet (see `home_kpi_hourly.datasource`).
+
+NODE home_kpi_hourly_mv_q
+SQL >
+    SELECT
+        tenant_id,
+        toStartOfHour(timestamp) AS hour,
+        countState() AS event_count,
+        sumState(toUInt64(outcome = 'error')) AS error_count,
+        avgState(toFloat64(duration_ms)) AS avg_duration_state,
+        quantileState(0.95)(toFloat64(duration_ms)) AS p95_duration_state
+    FROM telemetry_events_ch
+    GROUP BY tenant_id, hour
+
+TYPE MATERIALIZED
+DATASOURCE home_kpi_hourly

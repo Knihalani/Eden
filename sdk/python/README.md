@@ -116,9 +116,11 @@ See `examples/10_sessions.py`.
 
 | Env / config | Default | Purpose |
 |---|---|---|
-| `EDEN_SAMPLING_PROFILE` | `full` | `full` / `balanced` (~15%) / `aggressive` (~5%); errors always kept |
+| `EDEN_SAMPLING_PROFILE` | `full` | `full` / `balanced` (~15%) / `aggressive` (~5%); errors and slow calls always kept. **Recommended: `balanced` in production** once you've reviewed a few days of `full` traffic — `full` is the soft-launch default so nothing is silently dropped before you've looked at it. |
 | `EDEN_SAMPLE_KEEP_ERRORS` | `1` | Keep error events under sampling |
 | `EDEN_OFFLINE_QUEUE` | `0` | Spill failed batches to `~/.eden/offline_queue.sqlite3` |
+| `EDEN_CAPTURE_MODE` | `bounded` | `bounded` (head+tail truncate long strings) / `full` (never truncate) / `metrics_only` (never capture content). Errors and slow calls (>5s) always bypass truncation. |
+| `EDEN_CAPTURE_MAX_STRING_BYTES` | `8192` | Per-string-field cap in bytes for `bounded` mode. |
 
 ## Token extraction & model normalization
 

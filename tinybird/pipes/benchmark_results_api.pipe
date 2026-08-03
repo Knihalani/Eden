@@ -1,4 +1,4 @@
-DESCRIPTION "Benchmark results summary by benchmark. Pass-rate + average score over the requested window."
+DESCRIPTION "Benchmark results summary by benchmark. Pass-rate + average score over the requested window. Phase 1 note (2026-08): no route in the Eden app calls this endpoint; ingest into `benchmark_results` is gated OFF by default via tinybird_ingest_unread_datasources_enabled in clickhouse_sink.py. Left deployed (schema-only) rather than dropped so a future consumer does not need a new datasource."
 
 NODE benchmark_results_q
 SQL >

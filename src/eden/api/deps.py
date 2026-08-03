@@ -1070,7 +1070,7 @@ async def ensure_clerk_org_from_session(
         await client.execute(
             """
             INSERT INTO organizations (id, clerk_org_id, name, slug, owner_id, updated_at)
-            SELECT gen_random_uuid(), $1, $2, $3, $4::uuid, NOW()
+            SELECT gen_random_uuid(), $1, $2, $3, $4, NOW()
             WHERE NOT EXISTS (
                 SELECT 1 FROM organizations
                 WHERE clerk_org_id = $1 OR id::text = $1

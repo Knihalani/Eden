@@ -345,6 +345,15 @@ async def compute_trace_reports(
             }
 
     async def _detection() -> dict[str, Any]:
+        # Phase 5 — gated behind ``quality_pipeline_detection_enabled``
+        # (default OFF). ``_TABLES`` (below) has no "detection" entry,
+        # so ``persist_reports`` has always silently discarded this
+        # step's output — every trace paid ~200ms of CPU for a report
+        # that was never written anywhere. Skip the compute entirely
+        # until a ``trace_detection_reports`` table + persist branch
+        # exist to actually use it.
+        if not _detection_enabled():
+            return {"status": "disabled", "reason": "quality_pipeline_detection_enabled=false"}
         from supplementaries.phase_7_detection.detectors import (
             DetectionReport,
             run_all_detectors,
@@ -422,6 +431,15 @@ async def compute_trace_reports(
             logger.debug("sidecar: drift alert hook failed: %s", exc)
 
     return out
+
+
+def _detection_enabled() -> bool:
+    """Feature flag for the Detection step (default OFF — see ``_detection``)."""
+    try:
+        from eden.config import get_settings
+        return bool(get_settings().quality_pipeline_detection_enabled)
+    except Exception:
+        return False
 
 
 def _get_timeout(step: str) -> float:

@@ -21,6 +21,38 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _default_full_sampling_policy():
+    """Pin the process-wide N16 sampling policy to ``full`` (100% keep).
+
+    ``eden.observability.sampling.policy.get_sampling_policy()`` builds a
+    process-global singleton from ``Settings.sampling_profile`` on first
+    call and caches it. ``Settings.sampling_profile`` defaults to
+    ``balanced`` in production (~15% probabilistic keep — see
+    ``src/eden/config.py`` and
+    ``docs/docs/explanation/sampling-and-retention.md``), so any test that
+    exercises ingest without pinning sampling itself would otherwise
+    randomly drop some of its fixture events — flaky by construction, and
+    it would depend on which test in the run happens to build the
+    singleton first.
+
+    Tests of sampling behaviour itself (``tests/unit/observability/
+    test_n16_sampling_e2e_signals.py``) patch ``eden.config.get_settings``
+    and call ``reset_sampling_policy()`` inside their own test body, which
+    runs *after* this fixture's setup and rebuilds the singleton from
+    their patched settings — so they are unaffected by the default set
+    here.
+    """
+    from eden.observability.sampling import policy as _sampling_policy
+
+    _sampling_policy.reset_sampling_policy()
+    _sampling_policy._policy = _sampling_policy.IntelligenceAwareSamplingPolicy(
+        profile="full", enabled=True
+    )
+    yield
+    _sampling_policy.reset_sampling_policy()
+
+
+@pytest.fixture(autouse=True)
 def _reset_process_globals():
     """Clear cross-test process state before and after every test."""
 

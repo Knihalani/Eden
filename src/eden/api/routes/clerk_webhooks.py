@@ -415,7 +415,7 @@ async def _upsert_org(data: dict[str, Any]) -> None:
             """
             INSERT INTO organizations
                 (id, clerk_org_id, name, slug, owner_id, archived_at, updated_at)
-            SELECT gen_random_uuid(), $1, $2, $3, $4::uuid, NULL, NOW()
+            SELECT gen_random_uuid(), $1, $2, $3, $4, NULL, NOW()
             WHERE NOT EXISTS (
                 SELECT 1 FROM organizations
                 WHERE clerk_org_id = $1 OR id::text = $1
@@ -434,8 +434,8 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
 
     Translation: the Clerk webhook delivers ``org_id`` and
     ``user_id`` as Clerk string ids (``org_2x...`` / ``user_2abc...``).
-    Eden's ``org_members.org_id`` / ``user_id`` columns are UUIDs
-    with FKs to ``organizations(id)`` and ``users(id)``, so we
+    Eden's ``org_members.org_id`` is UUID (FK to ``organizations.id``)
+    and ``user_id`` is TEXT (FK to ``users.id``), so we
     translate via ``organizations.clerk_org_id`` and
     ``users.clerk_id`` before writing. If either lookup misses we
     raise :class:`WebhookNotReadyError` so the route answers 503 and

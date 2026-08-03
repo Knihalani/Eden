@@ -348,13 +348,38 @@ def extract_user_profile(payload: dict[str, Any]) -> dict[str, str]:
     return {"email": email, "name": full, "avatar_url": avatar}
 
 
-async def create_organization(name: str, slug: str) -> dict[str, Any]:
+async def create_organization(
+    name: str, slug: str | None = None
+) -> dict[str, Any]:
     """Create a Clerk org; returns the full org record (with ``id``).
 
-    ``slug`` must match Clerk's slug regex (lowercase, dashes, digits).
-    Callers slug via ``slugify()`` in ``src/eden/api/routes/orgs.py:31``.
+    ``slug`` must match Clerk's slug regex (lowercase, dashes, digits)
+    when provided. Callers slug via ``slugify()`` in
+    ``src/eden/api/routes/orgs.py``.
+
+    Clerk instances with organization slugs disabled reject bodies that
+    include ``slug`` (``403 organization_slugs_disabled``). Retry once
+    without ``slug`` so Eden can still mint a Clerk org — Clerk assigns
+    its own slug; Eden keeps an independent local slug on the
+    ``organizations`` row.
     """
-    return await _post("/organizations", {"name": name, "slug": slug})
+    body: dict[str, Any] = {"name": name}
+    if slug:
+        body["slug"] = slug
+    try:
+        return await _post("/organizations", body)
+    except ClerkAPIError as exc:
+        msg = str(exc).lower()
+        if slug and (
+            "organization_slugs_disabled" in msg or "slugs not enabled" in msg
+        ):
+            logger.info(
+                "Clerk org slugs disabled; retrying create without slug "
+                "(name=%r)",
+                name,
+            )
+            return await _post("/organizations", {"name": name})
+        raise
 
 
 async def list_user_organization_memberships(

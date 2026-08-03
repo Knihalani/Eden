@@ -100,7 +100,8 @@ class ClickHouseSink:
     - Row-level error isolation (bad rows don't kill the batch)
     """
 
-    # Default batch size for ingestion
+    # Max rows per single Events API / HTTP INSERT body; ``_insert_json``
+    # chunks anything larger into sequential sub-batches of this size.
     BATCH_SIZE: int = 10_000
 
     def __init__(self, config: ClickHouseConfig | None = None) -> None:
@@ -130,6 +131,33 @@ class ClickHouseSink:
         if value is None:
             return ""
         return str(value).replace("'", "''")
+
+    def _uuid_column_eq(self, column: str, value: str) -> str:
+        """Build a ``column = '<value>'`` predicate for a UUID-typed column.
+
+        The four Tinybird datasources this queries
+        (``agent_performance``, ``pipeline_stages``, ``usage_trends``,
+        ``benchmark_results``) declare ``tenant_id UUID`` — but callers
+        (tests, and several call sites elsewhere in this codebase, e.g.
+        ``"org_test"`` / ``"tenant-1"``) routinely pass a plain opaque
+        string id rather than a strictly-formed UUID literal.
+        ``tenant_id = toUUID('org_test')`` fails outright on Tinybird
+        with a UUID-parse error for exactly that reason — the cast
+        itself demands a syntactically valid UUID before the row filter
+        ever runs, so a non-UUID-shaped tenant id turned every query
+        into a hard error instead of an (arguably more useful) empty
+        result set.
+
+        The corresponding Tinybird pipes
+        (``tinybird/pipes/agent_performance_api.pipe`` et al.) already
+        use the working pattern — a bare string-literal comparison
+        against the UUID column, e.g. ``tenant_id = {{ String(tenant_id)
+        }}`` — which ClickHouse/Tinybird compares via UUID's own
+        string representation without requiring the literal to parse
+        as one. This mirrors that pattern so the Python query helpers
+        and the deployed pipes agree on how to filter the same column.
+        """
+        return f"{column} = '{self._sql_literal(value)}'"
 
     async def _execute(self, query: str, params: dict | None = None) -> str:
         """Execute a ClickHouse / Tinybird SQL query via HTTP."""
@@ -533,6 +561,25 @@ class ClickHouseSink:
         ("home_kpi_daily", "home_kpi_daily_mv"),
     )
 
+    #: ``telemetry_events_ch`` columns this sink stops populating on every
+    #: insert (Phase 1, 2026-08). Neither column is read back from
+    #: ClickHouse/Tinybird anywhere in this codebase:
+    #: ``telemetry_events_query_api.pipe`` (the only Tinybird pipe over this
+    #: table) selects a fixed column list that omits both, and
+    #: ``query_home_kpis`` (the only Python query over this table) never
+    #: references them either. Postgres remains the real source of truth —
+    #: ``telemetry_collector`` still writes the full JSON there, and other
+    #: code reads ``metrics->>'cost_usd'`` etc. straight from Postgres.
+    #:
+    #: Unlike ``_UNREAD_BLOB_COLUMNS`` below, this does not ``ALTER TABLE
+    #: ... DROP COLUMN`` — the task calling for this explicitly prefers
+    #: stopping the writer over a schema change on Tinybird, where DDL is
+    #: `tb deploy`-owned and irreversible-by-us. The columns stay in both
+    #: schemas (`.datasource` + local DDL); every future insert just omits
+    #: them, so ClickHouse/Tinybird materialise the column's own default
+    #: (empty string) instead of a second, unread copy of the JSON blob.
+    _UNREAD_TELEMETRY_MIRROR_FIELDS: frozenset[str] = frozenset({"metrics", "tags"})
+
     #: Payload blobs that no ClickHouse query reads. Postgres holds these
     #: zstd-compressed as the source of truth.
     _UNREAD_BLOB_COLUMNS: tuple[str, ...] = (
@@ -757,7 +804,17 @@ class ClickHouseSink:
 
         The statements are idempotent — ClickHouse accepts a MODIFY TTL
         even when the current TTL is already identical.
+
+        Skipped entirely on Tinybird: ``tb deploy`` owns TTL via each
+        ``ENGINE_TTL`` in ``tinybird/datasources/*.datasource``, and
+        ``_execute`` refuses ``ALTER`` there anyway (raises
+        ``ClickHouseError``, caught below and logged at DEBUG) — so this
+        used to cost one guaranteed-failing HTTP round trip per table,
+        every ``init_schema()`` call, against the same request quota
+        ``init_schema`` skips DDL for higher up in this file.
         """
+        if self.config.is_tinybird:
+            return
         ttl_statements = [
             (
                 "telemetry_events_ch",
@@ -810,11 +867,40 @@ class ClickHouseSink:
                     exc,
                 )
 
+    @staticmethod
+    def _unread_datasource_ingest_enabled() -> bool:
+        """Feature flag for the four zero-reader Tinybird datasources.
+
+        ``agent_performance``, ``pipeline_stages``, ``usage_trends``, and
+        ``benchmark_results`` have no query call sites anywhere in this
+        codebase and their only writer (``KafkaEventConsumer.
+        consume_clickhouse``) is never invoked by any running process —
+        so, on Tinybird, every event sent to them is unpaid storage churn
+        with nothing ever reading it back. Re-checks ``get_settings()``
+        each call (not the module-level ``settings`` snapshot) so tests
+        that monkeypatch the setting take effect without a restart.
+        """
+        return bool(
+            getattr(
+                get_settings(),
+                "tinybird_ingest_unread_datasources_enabled",
+                False,
+            )
+        )
+
     async def ingest_agent_traces(
         self,
         traces: list[dict[str, Any]],
     ) -> IngestionReport:
-        """Ingest agent trace events into the agent_performance table."""
+        """Ingest agent trace events into the agent_performance table.
+
+        Gated by ``tinybird_ingest_unread_datasources_enabled`` (default
+        OFF) — see the comment on that setting in ``config.py``. No-ops
+        rather than raising so callers that don't check the flag still get
+        a well-formed, empty-ish ``IngestionReport``.
+        """
+        if not self._unread_datasource_ingest_enabled():
+            return IngestionReport(table="agent_performance")
         if not self._initialized:
             await self.init_schema()
 
@@ -859,7 +945,13 @@ class ClickHouseSink:
         self,
         stages: list[dict[str, Any]],
     ) -> IngestionReport:
-        """Ingest pipeline stage events into the pipeline_stages table."""
+        """Ingest pipeline stage events into the pipeline_stages table.
+
+        Gated by ``tinybird_ingest_unread_datasources_enabled`` (default
+        OFF) — see the comment on that setting in ``config.py``.
+        """
+        if not self._unread_datasource_ingest_enabled():
+            return IngestionReport(table="pipeline_stages")
         if not self._initialized:
             await self.init_schema()
 
@@ -898,7 +990,13 @@ class ClickHouseSink:
         self,
         events: list[dict[str, Any]],
     ) -> IngestionReport:
-        """Ingest usage events into the usage_trends table."""
+        """Ingest usage events into the usage_trends table.
+
+        Gated by ``tinybird_ingest_unread_datasources_enabled`` (default
+        OFF) — see the comment on that setting in ``config.py``.
+        """
+        if not self._unread_datasource_ingest_enabled():
+            return IngestionReport(table="usage_trends")
         if not self._initialized:
             await self.init_schema()
 
@@ -947,7 +1045,13 @@ class ClickHouseSink:
         self,
         results: list[dict[str, Any]],
     ) -> IngestionReport:
-        """Ingest benchmark results into the benchmark_results table."""
+        """Ingest benchmark results into the benchmark_results table.
+
+        Gated by ``tinybird_ingest_unread_datasources_enabled`` (default
+        OFF) — see the comment on that setting in ``config.py``.
+        """
+        if not self._unread_datasource_ingest_enabled():
+            return IngestionReport(table="benchmark_results")
         if not self._initialized:
             await self.init_schema()
 
@@ -987,6 +1091,34 @@ class ClickHouseSink:
         """Insert rows via ClickHouse JSONEachRow or Tinybird Events API."""
         if not rows:
             return
+
+        # Every current caller batches well under BATCH_SIZE (telemetry
+        # collector flushes at 250, silver ETL at 500, the fallback drain at
+        # 500), so this never fires today — it exists so a single oversized
+        # call (backfill script, future caller with a bigger batch knob)
+        # can't post one multi-thousand-row NDJSON body past Tinybird
+        # Events API / ClickHouse HTTP limits in one shot. Sequential, not
+        # concurrent, to preserve insert order and avoid a thundering herd
+        # against the same endpoint.
+        if len(rows) > self.BATCH_SIZE:
+            for i in range(0, len(rows), self.BATCH_SIZE):
+                await self._insert_json(table, rows[i : i + self.BATCH_SIZE])
+            return
+
+        # Strip the unread telemetry_events_ch fields here rather than at
+        # the caller — a fresh dict per row, so the *original* rows (with
+        # ``metrics``/``tags`` intact) are what ``insert()`` hands to
+        # ``_fallback_to_postgres`` on failure; the Postgres fallback queue
+        # should keep the full payload even though the columnar mirror
+        # doesn't.
+        if (
+            table.split(".")[-1] == "telemetry_events_ch"
+            and self._UNREAD_TELEMETRY_MIRROR_FIELDS
+        ):
+            rows = [
+                {k: v for k, v in r.items() if k not in self._UNREAD_TELEMETRY_MIRROR_FIELDS}
+                for r in rows
+            ]
 
         session = await self._get_session()
         # orjson via jsonx — NDJSON for JSONEachRow / Tinybird Events
@@ -1143,14 +1275,22 @@ class ClickHouseSink:
         end_time: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
-        """Query agent performance metrics from ClickHouse."""
+        """Query agent performance metrics from ClickHouse.
+
+        Dead code, kept for a future consumer (Phase 6 audit, 2026-08):
+        no route in this app calls this method, and the only Tinybird
+        endpoint over the same data — ``agent_performance_api.pipe`` —
+        has no caller either (see that pipe's ``DESCRIPTION``). Ingest
+        into ``agent_performance`` is gated OFF by default via
+        ``tinybird_ingest_unread_datasources_enabled`` (see
+        :meth:`_unread_datasource_ingest_enabled`), so on Tinybird this
+        would also read back an empty table today.
+        """
         conditions = []
         params: dict[str, Any] = {}
 
         if tenant_id:
-            conditions.append(
-                f"tenant_id = toUUID('{self._sql_literal(tenant_id)}')"
-            )
+            conditions.append(self._uuid_column_eq("tenant_id", tenant_id))
         if agent_name:
             conditions.append(
                 f"agent_name = '{self._sql_literal(agent_name)}'"
@@ -1192,12 +1332,18 @@ class ClickHouseSink:
         end_time: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        """Identify pipeline bottlenecks by stage duration."""
+        """Identify pipeline bottlenecks by stage duration.
+
+        Dead code, kept for a future consumer (Phase 6 audit, 2026-08):
+        no route in this app calls this method, and the mirrored
+        Tinybird endpoint (``pipeline_bottlenecks_api.pipe``) has no
+        caller either. Ingest into ``pipeline_stages`` is gated OFF by
+        default — see :meth:`query_agent_performance`'s docstring for
+        the same note, which applies identically here.
+        """
         conditions = []
         if tenant_id:
-            conditions.append(
-                f"tenant_id = toUUID('{self._sql_literal(tenant_id)}')"
-            )
+            conditions.append(self._uuid_column_eq("tenant_id", tenant_id))
         if start_time:
             conditions.append(
                 f"timestamp >= '{self._sql_literal(start_time)}'"
@@ -1234,12 +1380,20 @@ class ClickHouseSink:
         end_time: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
-        """Query usage trends with configurable granularity."""
+        """Query usage trends with configurable granularity.
+
+        Dead code, kept for a future consumer (Phase 6 audit, 2026-08):
+        no route in this app calls this method, and the mirrored
+        Tinybird endpoint (``usage_trends_api.pipe``) has no caller
+        either. Ingest into ``usage_trends`` is gated OFF by default —
+        see :meth:`query_agent_performance`'s docstring for the same
+        note, which applies identically here. Not to be confused with
+        ``query_home_kpis``, which reads ``telemetry_events_ch``
+        directly and *is* live.
+        """
         conditions = []
         if tenant_id:
-            conditions.append(
-                f"tenant_id = toUUID('{self._sql_literal(tenant_id)}')"
-            )
+            conditions.append(self._uuid_column_eq("tenant_id", tenant_id))
         if start_time:
             conditions.append(f"hour >= '{self._sql_literal(start_time)}'")
         if end_time:
@@ -1273,27 +1427,148 @@ class ClickHouseSink:
         *,
         window_hours: int = 24,
     ) -> dict[str, Any]:
-        """Aggregate Home KPI tiles from telemetry_events_ch / Tinybird.
+        """Aggregate Home KPI tiles from the ``home_kpi_hourly`` rollup,
+        falling back to a live ``telemetry_events_ch`` scan.
 
         Soft contract: callers must catch errors and fall back to Postgres.
-        Uses live telemetry table (works on Tinybird without home_kpi_daily MV).
+
+        On Tinybird, ``home_kpi_hourly`` (an ``AggregatingMergeTree`` fed
+        by ``tinybird/pipes/home_kpi_hourly_mv.pipe``) is far cheaper to
+        scan than re-aggregating raw ``telemetry_events_ch`` rows on every
+        request. But it is a brand-new datasource: a tenant/hour with no
+        materialized row yet (not-yet-deployed, or genuinely zero traffic
+        in that window) must not be reported as zero when the live table
+        actually has data, so this prefers the rollup and falls back to
+        the previous live single-scan query whenever the rollup query
+        raises *or* comes back with zero current-window events.
+        """
+        hours = max(1, int(window_hours))
+        if self.config.is_tinybird:
+            try:
+                rollup = await self._query_home_kpis_rollup(tenant_id, hours)
+            except Exception as exc:
+                logger.debug(
+                    "home_kpi_hourly rollup query failed, falling back to "
+                    "live telemetry_events_ch scan: %s",
+                    exc,
+                )
+                rollup = None
+            if rollup is not None and rollup["event_count"] > 0:
+                return rollup
+        return await self._query_home_kpis_live(tenant_id, hours)
+
+    async def _query_home_kpis_rollup(
+        self, tenant_id: str, hours: int
+    ) -> dict[str, Any] | None:
+        """Read Home KPI tiles from the ``home_kpi_hourly`` rollup.
+
+        Uses the ``-Merge`` combinators (``countMerge`` / ``sumMerge`` /
+        ``avgMerge`` / ``quantileMerge``) required to read back an
+        ``AggregateFunction`` column. Two subqueries (current window,
+        previous window) rather than one ``...MergeIf``-combinator pass:
+        ``home_kpi_hourly`` is bucketed to one row per tenant per hour, so
+        scanning it twice is negligible next to the raw event table this
+        replaces, and it avoids relying on chaining ``-Merge`` with
+        ``-If`` (an unusual combinator order not worth the risk here).
+        Returns ``None`` (never raises past ``query_home_kpis``) only if
+        the parsed result has no row at all; an empty/zero row is still
+        returned so the caller can apply its own "was this really empty"
+        check.
+
+        Window boundaries are floored to ``toStartOfHour`` because ``hour``
+        is itself an hour-floored bucket key: comparing it against a raw
+        ``now() - INTERVAL n HOUR`` instant (which has non-zero minutes)
+        pushed the single hour bucket straddling that instant entirely into
+        the *previous* window (``hour < threshold`` matched, ``hour >=
+        threshold`` on the current side did not), silently undercounting
+        the current window by up to just under an hour of real events —
+        worst-case ~40%+ of a ``window_hours=1`` tile. Flooring both sides
+        to the same hour keeps ``cur``/``prev`` disjoint and errs toward
+        including a little extra history in ``cur`` rather than dropping
+        recent events.
+        """
+        safe_tid = self._sql_literal(tenant_id)
+        table = self.config.qualified_table("home_kpi_hourly")
+        cur_pred = f"hour >= toStartOfHour(now() - INTERVAL {hours} HOUR)"
+        prev_pred = (
+            f"hour < toStartOfHour(now() - INTERVAL {hours} HOUR) "
+            f"AND hour >= toStartOfHour(now() - INTERVAL {hours * 2} HOUR)"
+        )
+        query = f"""
+            SELECT
+                cur.event_count AS event_count,
+                cur.error_count AS error_count,
+                cur.avg_duration_ms AS avg_duration_ms,
+                cur.p95_duration_ms AS p95_duration_ms,
+                prev.prev_event_count AS prev_event_count
+            FROM
+            (
+                SELECT
+                    countMerge(event_count) AS event_count,
+                    sumMerge(error_count) AS error_count,
+                    avgMerge(avg_duration_state) AS avg_duration_ms,
+                    quantileMerge(0.95)(p95_duration_state) AS p95_duration_ms
+                FROM {table}
+                WHERE tenant_id = '{safe_tid}' AND {cur_pred}
+            ) AS cur
+            CROSS JOIN
+            (
+                SELECT countMerge(event_count) AS prev_event_count
+                FROM {table}
+                WHERE tenant_id = '{safe_tid}' AND {prev_pred}
+            ) AS prev
+            FORMAT TabSeparatedWithNames
+        """
+        result = await self._execute(query)
+        rows = self._parse_tsv(result)
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "event_count": int(float(row.get("event_count") or 0)),
+            "error_count": int(float(row.get("error_count") or 0)),
+            "avg_duration_ms": float(row.get("avg_duration_ms") or 0),
+            "p95_duration_ms": float(row.get("p95_duration_ms") or 0),
+            "cost_usd": 0.0,
+            "prev_event_count": int(float(row.get("prev_event_count") or 0)),
+        }
+
+    async def _query_home_kpis_live(
+        self, tenant_id: str, hours: int
+    ) -> dict[str, Any]:
+        """Aggregate Home KPI tiles directly from ``telemetry_events_ch``.
 
         ``cost_usd`` is not a column on ``telemetry_events_ch`` (neither the
         ClickHouse DDL nor the Tinybird datasource). Returning ``0`` keeps
         the Home KPI contract stable; cost tiles come from the ledger / PG.
+
+        Single-scan: current-window and previous-window tiles used to be
+        two separate queries against the same table/tenant, each rescanning
+        overlapping parts of the ``timestamp`` index. ClickHouse/Tinybird
+        SQL supports conditional-aggregate combinators (``countIf`` /
+        ``avgIf`` / ``quantileIf``), so both windows are computed in one
+        pass: the outer ``WHERE`` bounds the scan to ``[now - 2h, now)``
+        (covering current + previous window) and each aggregate carries
+        its own ``...If`` predicate to pick which half of that range it
+        applies to.
         """
-        hours = max(1, int(window_hours))
         safe_tid = self._sql_literal(tenant_id)
         table = self.config.qualified_table("telemetry_events_ch")
+        cur_pred = f"timestamp >= now() - INTERVAL {hours} HOUR"
+        prev_pred = (
+            f"timestamp < now() - INTERVAL {hours} HOUR "
+            f"AND timestamp >= now() - INTERVAL {hours * 2} HOUR"
+        )
         query = f"""
             SELECT
-                count() AS event_count,
-                countIf(outcome = 'error') AS error_count,
-                avg(duration_ms) AS avg_duration_ms,
-                quantile(0.95)(duration_ms) AS p95_duration_ms
+                countIf({cur_pred}) AS event_count,
+                countIf({cur_pred} AND outcome = 'error') AS error_count,
+                avgIf(duration_ms, {cur_pred}) AS avg_duration_ms,
+                quantileIf(0.95)(duration_ms, {cur_pred}) AS p95_duration_ms,
+                countIf({prev_pred}) AS prev_event_count
             FROM {table}
             WHERE tenant_id = '{safe_tid}'
-              AND timestamp >= now() - INTERVAL {hours} HOUR
+              AND timestamp >= now() - INTERVAL {hours * 2} HOUR
             FORMAT TabSeparatedWithNames
         """
         result = await self._execute(query)
@@ -1301,38 +1576,24 @@ class ClickHouseSink:
         if not rows:
             # Some CH/Tinybird paths omit header line — parse as single value row.
             parts = [p for p in (result or "").strip().split("\t") if p != ""]
-            if len(parts) >= 4:
+            if len(parts) >= 5:
                 rows = [
                     {
                         "event_count": parts[0],
                         "error_count": parts[1],
                         "avg_duration_ms": parts[2],
                         "p95_duration_ms": parts[3],
+                        "prev_event_count": parts[4],
                     }
                 ]
         cur = rows[0] if rows else {}
-        prev_query = f"""
-            SELECT count() AS event_count
-            FROM {table}
-            WHERE tenant_id = '{safe_tid}'
-              AND timestamp < now() - INTERVAL {hours} HOUR
-              AND timestamp >= now() - INTERVAL {hours * 2} HOUR
-            FORMAT TabSeparatedWithNames
-        """
-        prev_raw = await self._execute(prev_query)
-        prev_rows = self._parse_tsv(prev_raw)
-        if not prev_rows:
-            parts = [p for p in (prev_raw or "").strip().split("\t") if p != ""]
-            if parts:
-                prev_rows = [{"event_count": parts[0]}]
-        prev = prev_rows[0] if prev_rows else {}
         return {
             "event_count": int(float(cur.get("event_count") or 0)),
             "error_count": int(float(cur.get("error_count") or 0)),
             "avg_duration_ms": float(cur.get("avg_duration_ms") or 0),
             "p95_duration_ms": float(cur.get("p95_duration_ms") or 0),
             "cost_usd": 0.0,
-            "prev_event_count": int(float(prev.get("event_count") or 0)),
+            "prev_event_count": int(float(cur.get("prev_event_count") or 0)),
         }
 
     def _parse_tsv(self, tsv: str) -> list[dict[str, Any]]:

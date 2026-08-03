@@ -22,6 +22,11 @@ DDL, re-run the script, commit both.
 
 `scripts/migration_drift.py` and `scripts/sql_schema_guard.py` both exist but
 neither covers this surface.
+
+Phase 1 (2026-08) reversed one earlier decision: ``CODEC(...)`` is a
+documented, supported ``.datasource`` SCHEMA field (Tinybird's datafile
+reference, "Column compression codecs"), not a ClickHouse-only concept —
+see :func:`test_codecs_are_preserved_into_datasources` below.
 """
 
 from __future__ import annotations
@@ -162,18 +167,39 @@ def test_the_default_date_column_is_not_dropped() -> None:
     )
 
 
-def test_codecs_are_not_emitted_into_datasources() -> None:
-    """Compression is ClickHouse-side; only the type has to agree.
+def test_codecs_are_preserved_into_datasources() -> None:
+    """CODEC is a real, documented ``.datasource`` SCHEMA field — keep it.
 
-    Also a regression guard on the generator itself: its first version used
-    ``CODEC\\([^)]*\\)`` to strip the clause, which cannot match the nested
-    parentheses in ``CODEC(Delta, ZSTD(3))``, so the substitution silently did
-    nothing and the codecs were emitted verbatim.
+    Reversed 2026-08 (Phase 1 of the observability overhaul): an earlier
+    revision of the generator stripped every ``CODEC(...)`` clause on the
+    unverified assumption that Tinybird datasources don't accept it.
+    Tinybird's own datafile reference documents ``CODEC()`` as a supported
+    column field
+    (https://www.tinybird.co/docs/forward/dev-reference/datafiles/datasource-files,
+    "Column compression codecs"), in the same position ClickHouse DDL puts
+    it — so stripping it just meant ``telemetry_events_ch`` lost its
+    ``ZSTD(3)``/``Delta, ZSTD(3)`` compression on the Tinybird side only.
+    ``agent_performance``/``pipeline_stages``/``usage_trends``/
+    ``benchmark_results`` have no codec in the DDL, so they carry none here
+    either — this only asserts telemetry_events_ch, the one table that does.
     """
-    for path in DS_DIR.glob("*.datasource"):
-        assert "CODEC" not in path.read_text(), (
-            f"{path.name} carries a CODEC clause; that belongs in the "
-            "ClickHouse DDL only"
+    ddl = SINK.read_text().split("telemetry_events_ch (", 1)[1].split('"""', 1)[0]
+    text = (DS_DIR / "telemetry_events_ch.datasource").read_text()
+    expected = dict(
+        re.findall(r"^\s*(\w+)\s+\S.*?CODEC\(([^()]*(?:\([^()]*\)[^()]*)*)\)", ddl, re.M)
+    )
+    assert expected, "expected DDL codecs to parse — regex or fixture drifted"
+    for col, codec in expected.items():
+        assert f"{col} " in text and f"CODEC({codec})" in text, (
+            f"telemetry_events_ch.datasource is missing CODEC({codec}) on "
+            f"{col} present in the ClickHouse DDL"
+        )
+    # And the reverse: no column not covered above should carry a codec.
+    uncodec_tables = ("agent_performance", "pipeline_stages", "usage_trends", "benchmark_results")
+    for table in uncodec_tables:
+        assert "CODEC" not in (DS_DIR / f"{table}.datasource").read_text(), (
+            f"{table}.datasource carries a CODEC clause not present in its "
+            "(codec-free) ClickHouse DDL"
         )
 
 

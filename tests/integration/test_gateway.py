@@ -286,6 +286,32 @@ class TestChatCompletionsUnary:
         assert events[0].outcome == "success"
         assert events[0].metrics["input_tokens"] == 12
 
+    def test_cost_usd_stamped_before_telemetry_emit(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        """Phase 6 (Eden Observability overhaul) — gateway resolves
+        cost_usd via CostResolver and stamps it into the metrics dict
+        before telemetry/time-travel emit, rather than leaving it to
+        the collector's best-effort static-seed fallback.
+        """
+        async def _create(**kwargs):
+            return _StubChatResponse(content="hi there")
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        r = api_client.post(
+            "/gateway/v1/chat/completions",
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert mock_collector.ingest_batch.await_count == 1
+        events = mock_collector.ingest_batch.await_args[0][0]
+        assert "cost_usd" in events[0].metrics
+        assert events[0].metrics["cost_usd"] > 0
+
     def test_tool_calls_pass_through(
         self, api_client: TestClient, mock_collector, mock_auth
     ):
@@ -727,6 +753,42 @@ class TestChatCompletionsStreaming:
         events = mock_collector.ingest_batch.await_args[0][0]
         assert events[0].source_format == "openai_gateway"
         assert events[0].outcome == "success"
+
+    def test_streaming_stamps_cost_usd(
+        self, api_client: TestClient, mock_collector, mock_auth
+    ):
+        """Phase 6 — streaming path also stamps cost_usd once usage
+        arrives on the final chunk (``stream_options.include_usage``).
+        """
+        async def _create(**kwargs):
+            async def _gen():
+                yield _StubChunk(role="assistant", content="ok")
+                yield _StubChunk(
+                    content="",
+                    finish_reason="stop",
+                    usage=_StubUsage(prompt=20, completion=10, total=30),
+                )
+            return _gen()
+
+        mock_auth["client"].chat.completions.create = AsyncMock(side_effect=_create)
+
+        with api_client.stream(
+            "POST",
+            "/gateway/v1/chat/completions",
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        ) as r:
+            if r.status_code == 429:
+                return
+            for _ in r.iter_lines():
+                pass
+        assert mock_collector.ingest_batch.await_count == 1
+        events = mock_collector.ingest_batch.await_args[0][0]
+        assert events[0].metrics.get("input_tokens") == 20
+        assert events[0].metrics.get("cost_usd", 0) > 0
 
 
 # ─────────────────────────────────────────────────────────────────────

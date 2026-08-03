@@ -149,6 +149,17 @@ dev = [
     # unsupported past June 2024).
     "pip-audit>=2.7.0,<3.0.0",
 ]
+# Phase 4 (storage) of the observability overhaul: cold-archive writers
+# (eden.data_platform.bronze_sink, eden.data_platform.retention) and the
+# export runner (eden.exports.runner) prefer Parquet+zstd over NDJSON
+# when this is installed, and degrade to NDJSON when it is not — see
+# eden.storage.cold_archive. Optional (not in [project.dependencies])
+# because the fallback path has zero extra runtime cost; install with
+# `pip install -e '.[parquet]'` (or `uv sync --extra parquet`) to get
+# the smaller, directly-queryable columnar archive format.
+parquet = [
+    "pyarrow>=17.0.0,<22.0.0",
+]
 
 
 # Phase 2: the env-gen pipeline (and its `eden` console script entry

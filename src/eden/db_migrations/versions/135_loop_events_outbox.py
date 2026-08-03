@@ -1,7 +1,7 @@
 """135 — loop_events_outbox durable fallback for the closed-loop bus.
 
 Revision ID: 135_loop_events_outbox
-Revises: 134_budget_enforcement_default_true
+Revises: 135_webhook_deliveries_last_attempt
 Create Date: 2026-08-02
 
 Phase 1 of the autonomy overhaul (M2, D4): when Redis is unreachable,
@@ -31,7 +31,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "135_loop_events_outbox"
-down_revision: str | Sequence[str] | None = "134_budget_enforcement_default_true"
+down_revision: str | Sequence[str] | None = "135_webhook_deliveries_last_attempt"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

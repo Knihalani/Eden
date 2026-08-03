@@ -1534,6 +1534,76 @@ async def chat_completions(
     )
 
 
+async def _stamp_gateway_cost_usd(
+    *,
+    org_id: str,
+    provider: str,
+    model: str,
+    metrics: dict[str, Any],
+) -> None:
+    """Fill ``metrics["cost_usd"]`` from :class:`CostResolver` in place.
+
+    Phase 6 (Eden Observability overhaul) — the gateway used to leave
+    ``cost_usd`` out of the metrics dict entirely and rely on
+    ``TelemetryCollector._stamp_cost_usd``'s static-seed fallback,
+    which only fires deep inside the best-effort background telemetry
+    task and has no per-tenant override / live OpenRouter-price
+    awareness. Resolving here — before the telemetry and time-travel
+    emits — means both consumers see the same, more accurate number,
+    and the background stamp becomes a pure no-op backstop for the
+    (rare) case this resolution fails.
+
+    Best-effort: never raises. Skips silently when tokens are absent
+    (e.g. a failed call) or the resolver has no rate for the model.
+    This does **not** write to any billing/usage ledger — it only
+    populates the in-memory metrics dict that telemetry/time-travel
+    already consume, so it cannot cause a second usage_events write.
+    """
+    try:
+        existing = metrics.get("cost_usd")
+        if existing is not None and float(existing) > 0:
+            return
+    except (TypeError, ValueError):
+        pass
+    input_tokens = int(metrics.get("input_tokens") or 0)
+    output_tokens = int(metrics.get("output_tokens") or 0)
+    if input_tokens <= 0 and output_tokens <= 0:
+        return
+    cost = 0.0
+    try:
+        resolver = get_ai_gateway().cost_resolver
+        resolution = await resolver.resolve(
+            org_id=org_id,
+            provider=provider or "openrouter",
+            model_id=model,
+        )
+        cost = float(resolution.estimate(input_tokens, output_tokens))
+    except Exception as exc:  # noqa: BLE001 — cost stamping must never break the gateway
+        logger.debug("gateway: CostResolver resolution failed: %s", redact_all(str(exc)))
+    if cost <= 0:
+        # CostResolver's catalog lookup is an exact-key match; gateway
+        # traffic routes through OpenRouter with vendor-prefixed ids
+        # (``openai/gpt-4o-mini``) that only land in the catalog verbatim
+        # after a live OpenRouter refresh. Fall back to the fuzzy
+        # seed-pricing matcher (same one the telemetry collector uses)
+        # so a request served before that refresh — or in a test/offline
+        # environment — still gets a non-zero estimate from public list
+        # price instead of silently staying at 0.
+        try:
+            from eden.llmops.pricing import estimate_cost_usd
+
+            cost = estimate_cost_usd(
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("gateway: seed cost_usd fallback failed: %s", redact_all(str(exc)))
+            return
+    if cost > 0:
+        metrics["cost_usd"] = cost
+
+
 async def _chat_completions_unary(
     *,
     org_id: str,
@@ -1595,6 +1665,24 @@ async def _chat_completions_unary(
                     extra_payload["response_repair_count"] = repair_count
             duration_ms = (time.monotonic() - start) * 1000
             extra_payload["optimization_tags"] = tags
+            cache_hit_metrics = {
+                "input_tokens": float(
+                    shaped.get("usage", {}).get("prompt_tokens", 0)
+                ),
+                "output_tokens": float(
+                    shaped.get("usage", {}).get("completion_tokens", 0)
+                ),
+                "total_tokens": float(
+                    shaped.get("usage", {}).get("total_tokens", 0)
+                ),
+                "duration_ms": duration_ms,
+            }
+            await _stamp_gateway_cost_usd(
+                org_id=org_id,
+                provider=provider,
+                model=body.model,
+                metrics=cache_hit_metrics,
+            )
             _emit_gateway_telemetry_bg(
                 org_id=org_id,
                 auth_ctx=auth_ctx,
@@ -1602,18 +1690,7 @@ async def _chat_completions_unary(
                 endpoint="chat.completions",
                 request_body=request_body,
                 response_body=shaped,
-                metrics={
-                    "input_tokens": float(
-                        shaped.get("usage", {}).get("prompt_tokens", 0)
-                    ),
-                    "output_tokens": float(
-                        shaped.get("usage", {}).get("completion_tokens", 0)
-                    ),
-                    "total_tokens": float(
-                        shaped.get("usage", {}).get("total_tokens", 0)
-                    ),
-                    "duration_ms": duration_ms,
-                },
+                metrics=cache_hit_metrics,
                 outcome="success",
                 duration_ms=duration_ms,
                 user_label=user_label,
@@ -1683,6 +1760,18 @@ async def _chat_completions_unary(
 
     duration_ms = (time.monotonic() - start) * 1000
     extra_payload["optimization_tags"] = tags
+    unary_metrics = {
+        "input_tokens": float(shaped.get("usage", {}).get("prompt_tokens", 0)),
+        "output_tokens": float(shaped.get("usage", {}).get("completion_tokens", 0)),
+        "total_tokens": float(shaped.get("usage", {}).get("total_tokens", 0)),
+        "duration_ms": duration_ms,
+    }
+    await _stamp_gateway_cost_usd(
+        org_id=org_id,
+        provider=provider,
+        model=body.model,
+        metrics=unary_metrics,
+    )
     _emit_gateway_telemetry_bg(
         org_id=org_id,
         auth_ctx=auth_ctx,
@@ -1690,12 +1779,7 @@ async def _chat_completions_unary(
         endpoint="chat.completions",
         request_body=request_body,
         response_body=shaped,
-        metrics={
-            "input_tokens": float(shaped.get("usage", {}).get("prompt_tokens", 0)),
-            "output_tokens": float(shaped.get("usage", {}).get("completion_tokens", 0)),
-            "total_tokens": float(shaped.get("usage", {}).get("total_tokens", 0)),
-            "duration_ms": duration_ms,
-        },
+        metrics=unary_metrics,
         outcome="success",
         duration_ms=duration_ms,
         user_label=user_label,
@@ -1802,17 +1886,25 @@ async def _chat_completions_stream(
                 with contextlib.suppress(Exception):
                     await stream.close()
             duration_ms = (time.monotonic() - start) * 1000
+            stream_metrics = {
+                "input_tokens": float(total_input),
+                "output_tokens": float(total_output),
+                "duration_ms": duration_ms,
+            }
+            if outcome == "success":
+                await _stamp_gateway_cost_usd(
+                    org_id=org_id,
+                    provider=provider,
+                    model=body.model,
+                    metrics=stream_metrics,
+                )
             _emit_gateway_telemetry_bg(
                 org_id=org_id,
                 auth_ctx=auth_ctx,
                 model=body.model,
                 endpoint="chat.completions",
                 request_body=request_body,
-                metrics={
-                    "input_tokens": float(total_input),
-                    "output_tokens": float(total_output),
-                    "duration_ms": duration_ms,
-                },
+                metrics=stream_metrics,
                 outcome=outcome,
                 error_type=error_type,
                 duration_ms=duration_ms,

@@ -232,6 +232,11 @@ async def _ingest_handler(
             status_code=413,
             detail=(f"Body too large: {len(body)} bytes > " f"{settings.ingestion_max_body_bytes}"),
         )
+    # ``len(body)`` above is already computed for the guard, so recording it
+    # here is a lock + float-add, not an extra pass over the payload.
+    from eden.observability.ingest_hot_path_metrics import record_ingest_bytes
+
+    record_ingest_bytes(len(body))
 
     # Whitelist check
     if path_format not in settings.ingestion_allowed_formats:

@@ -41,14 +41,16 @@ _VALID_PCT_FIELDS = (
 
 
 async def _read_policy_jsonb(org_id: str) -> dict[str, Any]:
-    """Read ``organizations.features->'code_change_policy'`` for this org."""
+    """Read ``organizations.settings->'code_change_policy'`` for this org."""
     try:
         client = await get_postgres_client()
         if client is None:
             return {}
         async with client.acquire() as conn:
+            # Prod has ``settings`` only — ``features`` was never added to
+            # organizations (migration 007 put features on org_plans).
             row = await conn.fetchrow(
-                "SELECT features->'code_change_policy' AS policy "
+                "SELECT settings->'code_change_policy' AS policy "
                 "FROM organizations WHERE id = $1",
                 org_id,
             )
@@ -83,7 +85,7 @@ async def get_org_code_change_policy(org_id: str) -> dict[str, Any]:
 async def _write_policy_jsonb(
     org_id: str, merged_policy: dict[str, Any],
 ) -> bool:
-    """Write the merged policy back to organizations.features.code_change_policy.
+    """Write the merged policy back to organizations.settings.code_change_policy.
 
     Uses JSONB merge-update so other feature flags in the same
     column (e.g. ``autonomous_actions_v0``) are preserved.
@@ -94,8 +96,8 @@ async def _write_policy_jsonb(
             return False
         async with client.acquire() as conn:
             result = await conn.execute(
-                "UPDATE organizations SET features = "
-                "COALESCE(features, '{}'::jsonb) || $1::jsonb "
+                "UPDATE organizations SET settings = "
+                "COALESCE(settings, '{}'::jsonb) || $1::jsonb "
                 "WHERE id = $2",
                 json.dumps({"code_change_policy": merged_policy}),
                 org_id,

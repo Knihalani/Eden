@@ -193,8 +193,10 @@ await recordStumble("tool returned empty", { traceId, kind: "tool_error" });
 
 | Env | Default | Purpose |
 |---|---|---|
-| `EDEN_SAMPLING_PROFILE` | `full` | `full` / `balanced` / `aggressive` (keep-errors default on) |
+| `EDEN_SAMPLING_PROFILE` | `full` | `full` / `balanced` (~15%) / `aggressive` (~5%); keep-errors default on. **Recommended: `balanced` in production** once you've reviewed a few days of `full` traffic. |
 | `EDEN_OFFLINE_QUEUE` | off | Spill failed batches to `~/.eden/offline_queue.jsonl` |
+| `EDEN_CAPTURE_MODE` | `bounded` | `bounded` (head+tail truncate long `setInput`/`setOutput` strings) / `full` / `metrics_only`. Auto-instrumentation is unaffected — it already ships metrics-only. |
+| `EDEN_CAPTURE_MAX_STRING_BYTES` | `8192` | Per-string-field cap in bytes for `bounded` mode. |
 
 OTel bridge uses `BatchSpanProcessor` → `/ingest/otel`.
 

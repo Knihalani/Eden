@@ -61,6 +61,8 @@ def transitions(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 
 
 async def _drive_request_heal(healer_result: Any) -> ClosedLoopOrchestrator:
+    import time
+
     orch = ClosedLoopOrchestrator()
     healer = MagicMock()
     if isinstance(healer_result, Exception):
@@ -68,7 +70,9 @@ async def _drive_request_heal(healer_result: Any) -> ClosedLoopOrchestrator:
     else:
         healer.heal_from_issue = AsyncMock(return_value=healer_result)
     with patch.object(
-        ClosedLoopOrchestrator, "_decide_action", AsyncMock(return_value="allow")
+        ClosedLoopOrchestrator,
+        "_decide_action_recorded",
+        AsyncMock(return_value=("allow", "dec-heal-failed", time.time())),
     ), patch(
         "eden.llmops.feature_kills.is_autonomy_action_enabled",
         AsyncMock(return_value=True),

@@ -1,0 +1,24 @@
+DESCRIPTION >
+    Hourly Home KPI rollup for `telemetry_events_ch`, materialized via
+    `home_kpi_hourly_mv.pipe`. Read via `home_kpi_hourly_api.pipe`
+    (`countMerge`/`sumMerge`/`avgMerge`/`quantileMerge` over the
+    `AggregateFunction` state columns below) instead of re-scanning
+    `telemetry_events_ch` on every Home KPI request. `ClickHouseSink.
+    query_home_kpis` (`src/eden/data_platform/clickhouse_sink.py`)
+    prefers this rollup on Tinybird and falls back to the live
+    single-scan query on `telemetry_events_ch` if the rollup query
+    fails or returns no rows (e.g. before the first materialized hour
+    has landed for a tenant).
+
+SCHEMA >
+    tenant_id String,
+    hour DateTime,
+    event_count AggregateFunction(count),
+    error_count AggregateFunction(sum, UInt64),
+    avg_duration_state AggregateFunction(avg, Float64),
+    p95_duration_state AggregateFunction(quantile(0.95), Float64)
+
+ENGINE "AggregatingMergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(hour)"
+ENGINE_SORTING_KEY "tenant_id, hour"
+ENGINE_TTL "hour + toIntervalDay(90)"

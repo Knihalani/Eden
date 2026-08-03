@@ -1,4 +1,4 @@
-DESCRIPTION "Pipeline stage duration + error counts. Mirrors `ClickHouseSink.query_pipeline_bottlenecks`."
+DESCRIPTION "Pipeline stage duration + error counts. Mirrors `ClickHouseSink.query_pipeline_bottlenecks`. Phase 1 note (2026-08): no route in the Eden app calls this endpoint or query_pipeline_bottlenecks; ingest into `pipeline_stages` is gated OFF by default via tinybird_ingest_unread_datasources_enabled in clickhouse_sink.py. Left deployed (schema-only) rather than dropped so a future consumer does not need a new datasource."
 
 NODE pipeline_bottlenecks_q
 SQL >

@@ -37,6 +37,7 @@ from typing import Any
 
 from eden_sdk._instrumentation_ids import _get_attr, _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
+from eden_sdk.capture import capture_request_response, limits_from_config
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import TraceContext, current_span, current_trace
@@ -247,6 +248,33 @@ def _enqueue_groq_event(
     cfg = get_config()
     if not cfg.enabled:
         return
+    # Pull metrics out of the *original* response before bounded
+    # capture runs — see openai.py's ``_enqueue_openai_event`` for
+    # why: in ``capture_mode="metrics_only"`` response_payload
+    # collapses to None below, and model/usage/tool-calls all live
+    # inside it for this provider.
+    _orig_model = None
+    _orig_usage: dict[str, Any] | None = None
+    _orig_tool_count = 0
+    _orig_tool_names: list[str] = []
+    if isinstance(response_payload, dict):
+        m = response_payload.get("model")
+        _orig_model = m if isinstance(m, str) else None
+        _orig_usage = response_payload.get("usage")
+        _orig_tool_count, _orig_tool_names = _extract_tool_calls(response_payload)
+    if _orig_model is None and isinstance(request_payload, dict):
+        m = request_payload.get("model")
+        _orig_model = m if isinstance(m, str) else None
+    # Bounded capture before response_payload's fields flatten onto
+    # ``payload`` below — see openai.py's ``_enqueue_openai_event``
+    # for why truncation must happen first.
+    request_payload, response_payload, capture_attrs = capture_request_response(
+        request_payload,
+        response_payload,
+        error=error,
+        duration_ms=duration_ms,
+        limits=limits_from_config(cfg),
+    )
     payload: dict[str, Any] = {
         "duration_ms": duration_ms,
         "request_payload": request_payload,
@@ -259,37 +287,44 @@ def _enqueue_groq_event(
         m = payload.get("model")
         if isinstance(m, str):
             payload["model_normalized"] = normalize_model_name(m)
-        # Groq's `CompletionUsage` names (`prompt_tokens` /
-        # `completion_tokens`) match OpenAI's exactly, but we still
-        # flatten into `input_tokens` / `output_tokens` explicitly
-        # (rather than relying on callers to dig into the nested
-        # `usage` object) so downstream billing rollups see the same
-        # flat fields the streaming path and every other native
-        # instrumentor (Cohere, Mistral, Bedrock, Gemini) already emit.
-        usage = response_payload.get("usage")
-        if usage:
-            u = extract_usage(usage)
-            if u["input_tokens"] is not None:
-                payload["input_tokens"] = u["input_tokens"]
-            if u["output_tokens"] is not None:
-                payload["output_tokens"] = u["output_tokens"]
-            if u["cache_read_tokens"] is not None:
-                payload["cache_read_input_tokens"] = u["cache_read_tokens"]
-        tool_call_count, tool_names = _extract_tool_calls(response_payload)
-        if tool_call_count:
-            payload["tool_call_count"] = tool_call_count
-            payload["tool_names"] = tool_names
+    if "model" not in payload and _orig_model is not None:
+        payload["model"] = _orig_model
+        payload["model_normalized"] = normalize_model_name(_orig_model)
+    if "usage" not in payload and _orig_usage is not None:
+        payload["usage"] = _orig_usage
+    # Groq's `CompletionUsage` names (`prompt_tokens` /
+    # `completion_tokens`) match OpenAI's exactly, but we still
+    # flatten into `input_tokens` / `output_tokens` explicitly
+    # (rather than relying on callers to dig into the nested
+    # `usage` object) so downstream billing rollups see the same
+    # flat fields the streaming path and every other native
+    # instrumentor (Cohere, Mistral, Bedrock, Gemini) already emit.
+    # Computed from `_orig_usage`/`_orig_tool_count` (extracted above,
+    # before capture) rather than the possibly-dropped
+    # `response_payload`, so these metrics ship in every capture_mode.
+    if _orig_usage:
+        u = extract_usage(_orig_usage)
+        if u["input_tokens"] is not None:
+            payload["input_tokens"] = u["input_tokens"]
+        if u["output_tokens"] is not None:
+            payload["output_tokens"] = u["output_tokens"]
+        if u["cache_read_tokens"] is not None:
+            payload["cache_read_input_tokens"] = u["cache_read_tokens"]
+    if _orig_tool_count:
+        payload["tool_call_count"] = _orig_tool_count
+        payload["tool_names"] = _orig_tool_names
 
     payload.setdefault("trace_id", _trace_id_or_random())
     payload.setdefault("span_id", secrets.token_hex(8))
     _cur = current_span()
     if _cur is not None:
         payload.setdefault("parent_span_id", _cur.span_id)
+    attrs = payload.get("attributes")
+    if not isinstance(attrs, dict):
+        attrs = {}
+        payload["attributes"] = attrs
+    attrs.update(capture_attrs)
     if error is not None:
-        attrs = payload.get("attributes")
-        if not isinstance(attrs, dict):
-            attrs = {}
-            payload["attributes"] = attrs
         attrs.setdefault("error", error)
         attrs.setdefault("eden.error", error)
     trace_ctx: TraceContext | None = current_trace()

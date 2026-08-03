@@ -22,6 +22,7 @@ from eden.services.plan_tiers import (
     usd_to_credits,
 )
 from eden.storage.postgres import get_postgres_client
+from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,66 @@ class UsageService:
         except Exception as e:
             logger.warning(f"Failed to track usage event: {e}")
             return None
+
+    async def track_events_batch(self, events: list[dict[str, Any]]) -> int:
+        """Record many usage events in one round trip via ``executemany``.
+
+        Phase 3 (ingest hot-path batching): ``_emit_billing_events`` used to
+        call :meth:`track_event` once per billable event in the batch, each
+        opening its own single-row INSERT. This collects the whole batch
+        into one ``executemany`` — the same pattern
+        :mod:`eden.data_platform.bronze_sink` already uses for its
+        higher-volume Bronze-layer buffer (``client.acquire()`` +
+        ``conn.executemany`` because asyncpg's ``executemany`` needs a
+        ``Connection``, not a ``Pool``).
+
+        Each ``events`` entry accepts the same keys as :meth:`track_event`'s
+        keyword arguments (``org_id``, ``event_type``, ``resource``,
+        ``quantity``, ``unit`` are required; the rest default the same way).
+        Unlike :meth:`track_event`, this does not return per-row ids — no
+        caller of the batch path (billing roll-up) uses them, and fetching
+        ids back would cost a ``RETURNING`` per row anyway, defeating the
+        point of batching.
+
+        Returns the number of events accepted for the write attempt (not
+        confirmed committed rows) so the caller can log a count; on failure
+        this logs and returns 0 rather than raising, matching
+        :meth:`track_event`'s fail-open contract (usage tracking must never
+        break ingest).
+        """
+        if not events:
+            return 0
+        rows = [
+            (
+                e["org_id"],
+                e.get("user_id"),
+                e["event_type"],
+                e["resource"],
+                e["quantity"],
+                e["unit"],
+                e.get("model"),
+                e.get("cost_usd"),
+                _jsonx_dumps(e.get("metadata") or {}),
+                e.get("correlation_id"),
+            )
+            for e in events
+        ]
+        query = """
+            INSERT INTO usage_events (
+                org_id, user_id, event_type, resource, quantity, unit,
+                model, cost_usd, metadata, correlation_id, created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        """
+        try:
+            client = await get_postgres_client()
+            # asyncpg executemany requires a Connection, not a Pool.
+            async with client.acquire() as conn:
+                await conn.executemany(query, rows)
+            return len(rows)
+        except Exception as e:
+            logger.warning(f"Failed to track usage events batch ({len(rows)} events): {e}")
+            return 0
 
     # ──────────────────────────────────────────────────────────────────────
     # Aggregation queries
