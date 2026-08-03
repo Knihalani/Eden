@@ -18,6 +18,14 @@ def test_redact_sensitive_keys() -> None:
     assert out["nested"]["ok"] == 1
 
 
+def test_redact_value_level_ghp_in_message() -> None:
+    """M12 (§7.2): ghp_ tokens in non-sensitive keys are pattern-redacted."""
+    token = "ghp_LeakCanaryToken0000000000001"
+    out = _redact({"error": f"denied {token}"})
+    assert token not in out["error"]
+    assert "[REDACTED:ghp_]" in out["error"]
+
+
 @pytest.mark.asyncio
 async def test_export_issue_fixture_not_found() -> None:
     with patch("eden.issues.repo.IssuesRepo") as repo_cls:

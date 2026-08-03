@@ -147,7 +147,11 @@ def render_pr_evidence_body(
     ``—`` for anything absent — the table never implies a check ran
     when it didn't. Kept compact: humans review this at merge time.
 
+    M12 (§7.2): the rendered body is value-level-redacted at this choke
+    point so secret-shaped substrings never reach the public PR.
     """
+    from eden.issues.fixture_export import redact_secret_values
+
     evidence = plan.get("evidence")
     if not isinstance(evidence, dict):
         evidence = {}
@@ -207,7 +211,8 @@ def render_pr_evidence_body(
         f"_Evidence recorded on plan `{plan_id}`; merging schedules the "
         "post-merge regression verify._",
     ]
-    return "\n".join(lines)
+    # M12 (§7.2) choke point: value-level scan on the full PR body.
+    return redact_secret_values("\n".join(lines))
 
 
 async def _stamp_ci_ingestion_availability(
