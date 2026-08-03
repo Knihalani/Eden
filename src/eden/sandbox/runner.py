@@ -199,6 +199,55 @@ def _build_exec_argv(command: Sequence[str]) -> tuple[list[str], str]:
     return argv, "subprocess"
 
 
+#: Test-file suffix → language key for :func:`build_test_command`.
+_TEST_SUFFIX_LANG: tuple[tuple[str, str], ...] = (
+    (".py", "python"),
+    (".ts", "node"),
+    (".tsx", "node"),
+    (".js", "node"),
+    (".jsx", "node"),
+    (".go", "go"),
+)
+
+
+def _test_file_lang(path: str) -> str | None:
+    lowered = path.lower()
+    for suffix, lang in _TEST_SUFFIX_LANG:
+        if lowered.endswith(suffix):
+            return lang
+    return None
+
+
+def build_test_command(test_files: Sequence[str]) -> list[str] | None:
+    """The allowlisted argv that runs exactly ``test_files`` (M8, §4.2).
+
+    All files must share one language; mixed-language or unknown
+    suffixes return ``None`` (caller groups by language first).
+
+    * ``.py`` → ``sys.executable -m pytest -q <files>`` (same
+      interpreter as the host so pytest resolves; allowlisted via the
+      ``python* -m pytest`` prefix rule).
+    * ``.ts/.tsx/.js/.jsx`` → ``npm test -- <files>``
+    * ``.go`` → ``go test <files>``
+    """
+    paths = [str(p).strip() for p in test_files or () if str(p or "").strip()]
+    if not paths:
+        return None
+    langs = {_test_file_lang(p) for p in paths}
+    if len(langs) != 1 or None in langs:
+        return None
+    lang = langs.pop()
+    if lang == "python":
+        import sys
+
+        return [sys.executable, "-m", "pytest", "-q", *paths]
+    if lang == "node":
+        return ["npm", "test", "--", *paths]
+    if lang == "go":
+        return ["go", "test", *paths]
+    return None
+
+
 async def run_in_sandbox(
     command: Sequence[str],
     *,
@@ -207,6 +256,7 @@ async def run_in_sandbox(
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     env: dict[str, str] | None = None,
     cleanup: bool = True,
+    require_isolation: bool = False,
 ) -> SandboxResult:
     """Create a temp workdir, apply patches, run an allowlisted command.
 
@@ -219,6 +269,10 @@ async def run_in_sandbox(
         env: Extra env vars (merged over a scrubbed base). Secrets
             should not be passed — caller responsibility.
         cleanup: Remove the temp workdir after the run.
+        require_isolation: §7.3 — refuse to execute at all when
+            ``unshare --net`` network isolation is unavailable
+            (``error="isolation_unavailable"``, nothing is run).
+            Mandatory for LLM-synthesized tests (M8, §4.2).
 
     Returns:
         :class:`SandboxResult` with stdout/stderr/exit_code.
@@ -250,6 +304,18 @@ async def run_in_sandbox(
             )
 
         argv, isolation = _build_exec_argv(command)
+        if require_isolation and isolation != "unshare-net":
+            # §7.3: synthesis-origin tests are skipped, never run
+            # unisolated. Exit 125 mirrors the other refuse-to-run path.
+            return SandboxResult(
+                exit_code=125,
+                stdout="",
+                stderr="network isolation (unshare --net) unavailable",
+                workdir=str(root),
+                command=list(command),
+                isolation=isolation,
+                error="isolation_unavailable",
+            )
         # Scrubbed env: inherit PATH/HOME/LANG so pytest/npm/go
         # resolve, drop obvious credential-bearing vars.
         base_env = {
@@ -340,6 +406,7 @@ class SandboxRunner:
         files: Sequence[dict[str, Any]] | None = None,
         workdir: str | Path | None = None,
         env: dict[str, str] | None = None,
+        require_isolation: bool = False,
     ) -> SandboxResult:
         return await run_in_sandbox(
             command,
@@ -347,6 +414,7 @@ class SandboxRunner:
             workdir=workdir,
             timeout_sec=self.timeout_sec,
             env=env,
+            require_isolation=require_isolation,
         )
 
 
@@ -356,5 +424,6 @@ __all__ = [
     "SandboxResult",
     "SandboxRunner",
     "apply_patch_files",
+    "build_test_command",
     "run_in_sandbox",
 ]

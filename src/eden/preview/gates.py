@@ -113,6 +113,36 @@ async def replay_verify_enabled_for_org(org_id: str) -> bool:
     return bool(getattr(get_settings(), "replay_verify_enabled", True))
 
 
+async def test_gate_enabled_for_org(org_id: str) -> bool:
+    """M8 (spec §4.2) — sandbox test gate, org-overridable.
+
+    Explicit org ``False`` is a kill-switch even when the global setting
+    (default True) is ON. Missing org key falls back to
+    ``Settings.test_gate_enabled``.
+    """
+    from eden.config import get_settings
+
+    features = await _load_org_features(org_id)
+    if "test_gate_enabled" in features:
+        return bool(features["test_gate_enabled"])
+    return bool(getattr(get_settings(), "test_gate_enabled", True))
+
+
+async def test_gate_synthesis_enabled_for_org(org_id: str) -> bool:
+    """M8 (spec §4.2) — LLM test synthesis, default OFF, org opt-in.
+
+    Explicit org key wins in both directions; missing key falls back to
+    ``Settings.test_gate_synthesis_v1`` (default False — trust +
+    injection risk before dogfood measurement, spec §4.2/§7.3).
+    """
+    from eden.config import get_settings
+
+    features = await _load_org_features(org_id)
+    if "test_gate_synthesis_v1" in features:
+        return bool(features["test_gate_synthesis_v1"])
+    return bool(getattr(get_settings(), "test_gate_synthesis_v1", False))
+
+
 async def improvement_schedule_enabled_for_org(org_id: str) -> bool:
     """Weekly sweep cron — global flag or per-org features row."""
     from eden.config import get_settings

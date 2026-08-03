@@ -187,18 +187,22 @@ def _plan_payload_from_patch(
     hermetic_preverify: dict[str, Any] | None = None,
     example_trace_ids: list[str] | None = None,
     replay: dict[str, Any] | None = None,
+    sandbox_tests: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     issue = ctx["issue"]
     triage = ctx.get("triage") or {}
     files = patch_data.get("files") or []
     sev = normalize_severity(issue.severity)
     pack = failure_pack or {}
-    # M7 (§4.1) evidence tier: "replay" only when replay actually passed;
-    # otherwise this plan carries static evidence only. ("tested" is the
-    # M8 sandbox test gate.)
-    evidence_tier = (
-        "replay" if (replay or {}).get("status") == "passed" else "static"
-    )
+    # Evidence tier ladder (§4.1/§4.2): "tested" only when the M8
+    # sandbox test gate actually passed; else "replay" only when replay
+    # actually passed; else this plan carries static evidence only.
+    if (sandbox_tests or {}).get("status") == "passed":
+        evidence_tier = "tested"
+    elif (replay or {}).get("status") == "passed":
+        evidence_tier = "replay"
+    else:
+        evidence_tier = "static"
     # NOTE (M3, D28): no ``org_id`` key here — the payload is splatted
     # into ``plans_repo.create_plan(org_id, **payload)``, which takes
     # org_id positionally; a duplicate key is a TypeError.
@@ -226,6 +230,10 @@ def _plan_payload_from_patch(
             "hermetic_preverify": hermetic_preverify,
             "evidence_tier": evidence_tier,
             "replay": replay,
+            # M8 (§4.2): targeted sandbox test summary — carries
+            # ``synthesized: true`` when the test was LLM-written
+            # (PR-body annotation lands in M9).
+            "sandbox_tests": sandbox_tests,
             "failure_signature": pack.get("failure_signature"),
         },
         "triage_snapshot": triage,
@@ -568,6 +576,47 @@ async def propose_plan_for_issue(
             "replay": replay_summary,
         }
 
+    # M8 (§4.2) — sandbox test gate: run convention-discovered targeted
+    # tests on the patched files. "failed" earns exactly one regenerate
+    # with the failure excerpt on the PatchGenerator static_feedback
+    # channel; still failing → suppress. Every "skipped" is allowed
+    # through, labeled. "passed" upgrades the evidence tier to "tested".
+    test_gate_summary = await _run_sandbox_test_gate(
+        org_id,
+        repo_id,
+        str(data.get("diff") or ""),
+        linked_files,
+        agent_id=issue_agent_id,
+    )
+    if test_gate_summary.get("status") == "failed":
+        data, test_gate_summary, regen_ok = await _regenerate_after_test_failure(
+            org_id,
+            rca_id=rca_id,
+            trace_id=generator_trace_id,
+            repo_id=repo_id,
+            rca_summary=rca_summary,
+            linked_files=linked_files,
+            agent_id=issue_agent_id,
+            data=data,
+            test_gate_summary=test_gate_summary,
+        )
+        if not regen_ok:
+            await _stamp_patch_blocked(
+                org_id,
+                issue_id,
+                reason="test_gate_failed",
+                message=(
+                    "Sandbox test gate: targeted tests still failing "
+                    "after one regenerate — plan suppressed"
+                ),
+            )
+            return {
+                "status": "suppressed",
+                "reason": "test_gate_failed",
+                "issue_id": issue_id,
+                "sandbox_tests": test_gate_summary,
+            }
+
     payload = _plan_payload_from_patch(
         org_id,
         issue_id,
@@ -578,6 +627,7 @@ async def propose_plan_for_issue(
         hermetic_preverify=hermetic_preverify,
         example_trace_ids=example_trace_ids,
         replay=replay_summary,
+        sandbox_tests=test_gate_summary,
     )
     plan = await plans_repo.create_plan(org_id, **payload)
     if plan is None:
@@ -626,9 +676,112 @@ async def propose_plan_for_issue(
         "example_trace_ids": example_trace_ids,
         "hermetic_preverify": hermetic_preverify.get("status"),
         "replay": replay_summary.get("status"),
+        "sandbox_tests": test_gate_summary.get("status"),
         "evidence_tier": (payload.get("evidence") or {}).get("evidence_tier"),
         "stumble_count": stumble_count,
     }
+
+
+async def _run_sandbox_test_gate(
+    org_id: str,
+    repo_id: str | None,
+    diff: str,
+    linked_files: list[dict[str, str]],
+    *,
+    agent_id: str | None,
+) -> dict[str, Any]:
+    """M8 (§4.2): one guarded test-gate run. Never raises."""
+    try:
+        from eden.improvement.test_gate import run_test_gate
+
+        provider = None
+        try:
+            from eden.providers.factory import get_repo_provider_for_org
+
+            provider = await get_repo_provider_for_org(org_id, agent_id=agent_id)
+        except Exception as exc:
+            logger.debug("issue_patch_trigger: repo provider unavailable: %s", exc)
+        result = await run_test_gate(
+            org_id,
+            str(repo_id or ""),
+            diff,
+            linked_files,
+            provider=provider,
+            base_files=linked_files,
+        )
+        return result.to_json()
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: test gate failed: %s", exc)
+        return {
+            "status": "skipped",
+            "reason": "test_gate_error",
+            "error": str(exc)[:200],
+        }
+
+
+async def _regenerate_after_test_failure(
+    org_id: str,
+    *,
+    rca_id: str,
+    trace_id: str,
+    repo_id: str | None,
+    rca_summary: str,
+    linked_files: list[dict[str, str]],
+    agent_id: str | None,
+    data: dict[str, Any],
+    test_gate_summary: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    """One regenerate with the test failure as static feedback (§4.2).
+
+    Mirrors the static-preverify regenerate pattern: the failure
+    excerpt rides the ``static_feedback`` channel (origin marked
+    ``test_gate``) and the new candidate is re-gated. Returns
+    ``(data, test_gate_summary, ok)`` — ``ok=False`` means suppress.
+    """
+    tests_run = ", ".join(test_gate_summary.get("tests_run") or []) or "(unknown)"
+    excerpt = str(test_gate_summary.get("output_excerpt") or "")[:2000]
+    feedback = (
+        f"[origin: test_gate] Sandbox test gate: targeted tests failed "
+        f"({tests_run}). Fix the diff so these tests pass.\n{excerpt}"
+    )
+    try:
+        from eden.patches.patch_generator import PatchGenerator
+
+        regen = await PatchGenerator().generate(
+            org_id=org_id,
+            rca_id=rca_id,
+            trace_id=trace_id,
+            repo_id=repo_id,
+            rca_summary=rca_summary,
+            test_plan=[],
+            linked_files=linked_files,
+            persist=False,
+            static_feedback=feedback,
+        )
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: test-gate regenerate failed: %s", exc)
+        return data, test_gate_summary, False
+    regen_data = (regen or {}).get("data") or {}
+    if regen_data.get("status") != "proposed" or not regen_data.get("diff"):
+        return data, test_gate_summary, False
+    retry_summary = await _run_sandbox_test_gate(
+        org_id,
+        repo_id,
+        str(regen_data.get("diff") or ""),
+        linked_files,
+        agent_id=agent_id,
+    )
+    retry_summary["regenerated"] = True
+    if retry_summary.get("status") == "failed":
+        return data, retry_summary, False
+    # Fold the first attempt's cost into the accepted candidate.
+    try:
+        regen_data["cost_usd"] = float(regen_data.get("cost_usd") or 0.0) + float(
+            data.get("cost_usd") or 0.0
+        )
+    except Exception:
+        pass
+    return regen_data, retry_summary, True
 
 
 async def _stamp_patch_blocked(
