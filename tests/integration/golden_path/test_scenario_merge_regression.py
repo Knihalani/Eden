@@ -1,12 +1,15 @@
 """Golden-path scenario 3 — post-merge regression (plan M1, spec §2.2.3).
 
 A merged Eden fix PR regresses: same-fingerprint stumbles reappear inside
-the post-merge quiet window → VERIFY_FAILED → the guardian must draft an
-*actionable* plan. Today the guardian's follow-up/revert drafts carry an
-empty diff (D9) so approving them dead-ends with ``empty_diff``.
+the post-merge quiet window → VERIFY_FAILED → the guardian drafts an
+*actionable* plan (M5, D9): a real follow-up diff via the generation
+seam (or an ``advisory`` when generation fails) — never an approvable
+empty ``code_patch``.
 """
 
 from __future__ import annotations
+
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,7 +19,30 @@ from eden.closed_loop.verify import run_due_verifications
 from eden.improvement.approve import approve_plan, queue_verify_for_plan
 from eden.improvement.guardian import handle_regression
 
-from .conftest import ORG
+from .conftest import BUGGY_FILE, ORG, SAMPLE_DIFF
+
+# The guardian's follow-up path runs the real PatchGenerator pipeline
+# (M5); fake the LLM at the same seam scenario 1 uses so the drafted
+# follow-up carries a real, applicable diff.
+_FOLLOW_UP_ENVELOPE = {
+    "data": {
+        "status": "proposed",
+        "diff": SAMPLE_DIFF,
+        "description": "Follow-up: fix checkout regression",
+        "explanation": "restores the checkout fix",
+        "cost_usd": 0.05,
+        "files": [BUGGY_FILE],
+        "patch_id": "patch-golden-3",
+    }
+}
+
+
+@pytest.fixture(autouse=True)
+def fake_generation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "eden.patches.patch_generator.PatchGenerator.generate",
+        AsyncMock(return_value=_FOLLOW_UP_ENVELOPE),
+    )
 
 ISSUE_ID = "44444444-4444-4444-4444-444444444444"
 PLAN_ID = "55555555-5555-5555-5555-555555555555"
@@ -107,14 +133,6 @@ async def test_guardian_drafts_linked_follow_up(loop_db) -> None:
     assert follow_up["plan_kind"] == "code_patch"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D9: guardian follow-up/revert plans are drafted with an empty "
-        "diff (guardian.py:170–226 never computes an inverse diff nor "
-        "calls PatchGenerator) — must carry a real diff or be advisory"
-    ),
-)
 @pytest.mark.asyncio
 async def test_guardian_plan_has_nonempty_diff(loop_db) -> None:
     """An approvable guardian code_patch must never be an empty shell."""
@@ -126,13 +144,6 @@ async def test_guardian_plan_has_nonempty_diff(loop_db) -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D9: approving the guardian's empty-diff follow-up dead-ends with "
-        "error=empty_diff instead of opening a revert/follow-up PR"
-    ),
-)
 @pytest.mark.asyncio
 async def test_approve_guardian_plan_never_returns_empty_diff(
     loop_db, local_providers

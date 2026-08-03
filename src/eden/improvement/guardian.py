@@ -6,12 +6,19 @@ guardian turns that signal into action instead of just an alert:
 1. Locate the merged plan whose PR caused the regression
    (``evidence.issue_id`` / ``source_ref == "issue:<id>"``, status
    ``merged``).
-2. Decide **revert** vs **follow-up fix**:
+2. Decide **revert** vs **follow-up fix** (M5, D9 — plans are
+   actionable, never empty shells):
    * Revert when the regression severity is high (P0/P1) and the org's
-     autonomy policy permits rollbacks — the fastest way back to
-     "Eden only ever helps".
-   * Otherwise draft a follow-up ``code_patch`` plan linked to the
-     original via ``parent_plan_id`` so the portal renders the chain.
+     autonomy policy permits rollbacks: the parent's merged diff is
+     inverted (``invert_unified_diff``), applied + statically checked
+     against current HEAD, and drafted as a real ``code_patch``. Drift
+     or static failure falls back to a follow-up with the conflict
+     noted. The plan is the revert vehicle — auto-execution is M15.
+   * Otherwise draft a follow-up via the real generation path
+     (``PatchGenerator``, ``persist=False``) with the verify failure +
+     parent diff as feedback; failed generation degrades to
+     ``plan_kind="advisory"`` ("needs manual fix"). Both are linked to
+     the original via ``parent_plan_id`` so the portal renders the chain.
 3. Slack-alert the agent's channel via
    :func:`eden.services.slack_notify.notify_regression`.
 
@@ -131,15 +138,31 @@ async def handle_regression(
         want_revert = sev in _REVERT_SEVERITIES and await _decide_revert_allowed(
             org_id, plan_agent
         )
-        action = "revert" if want_revert else "follow_up"
-
-        follow_up = await _draft_follow_up(
-            org_id,
-            plan,
-            issue_id=issue_id,
-            action=action,
-            verify_detail=verify_detail,
-        )
+        action = "follow_up"
+        follow_up: dict[str, Any] | None = None
+        revert_conflict: str | None = None
+        if want_revert:
+            follow_up, revert_conflict = await _draft_revert(
+                org_id,
+                plan,
+                issue_id=issue_id,
+                verify_detail=verify_detail,
+            )
+            if follow_up is not None:
+                action = "revert"
+            else:
+                logger.info(
+                    "guardian: revert draft fell back to follow-up: %s",
+                    revert_conflict,
+                )
+        if follow_up is None:
+            follow_up = await _draft_follow_up(
+                org_id,
+                plan,
+                issue_id=issue_id,
+                verify_detail=verify_detail,
+                revert_conflict=revert_conflict,
+            )
 
         # Slack regression alert — deep link to the issue.
         try:
@@ -167,61 +190,288 @@ async def handle_regression(
         return {"status": "error", "reason": str(exc)[:200]}
 
 
-async def _draft_follow_up(
-    org_id: str,
+def _paths_from_diff(diff: str) -> list[str]:
+    """Unique repo-relative paths a unified diff touches (both sides)."""
+    from eden.patches.diff_materializer import _DEV_NULL, _parse_unified_diff_files
+
+    paths: list[str] = []
+    for fd in _parse_unified_diff_files(diff):
+        for p in (fd.old_path, fd.new_path):
+            if p and p != _DEV_NULL and p not in paths:
+                paths.append(p)
+    return paths
+
+
+async def _hydrate_head_files(
+    org_id: str, agent_id: str | None, paths: list[str]
+) -> list[dict[str, str]]:
+    """Current HEAD content for ``paths`` via the org's repo provider.
+
+    Missing files hydrate as ``""`` (same contract as
+    ``RepoProvider.read_file``) so a revert of a delete — a new-file
+    inverse hunk — still applies.
+    """
+    from eden.providers.factory import get_repo_provider_for_org
+
+    provider = await get_repo_provider_for_org(org_id, agent_id=agent_id)
+    out: list[dict[str, str]] = []
+    for path in paths:
+        try:
+            content = await provider.read_file(path) or ""
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("guardian: read_file %s failed: %s", path, exc)
+            content = ""
+        out.append({"path": path, "content": content})
+    return out
+
+
+def _parent_evidence(
     parent: dict[str, Any],
     *,
     issue_id: str,
     action: str,
     verify_detail: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    """Create the linked follow-up plan row (draft — human approves).
-
-    For ``revert`` the plan carries the parent PR coordinates so the
-    approve flow can call ``RepoProvider.revert`` without re-deriving
-    them. For ``follow_up`` the plan re-points at the issue so the
-    normal patch pipeline re-drafts a fix with the regression evidence
-    attached.
-    """
-    from eden.improvement import plans_repo
-
-    parent_id = str(parent["id"])
-    parent_title = str(parent.get("title") or "improvement plan")
-    if action == "revert":
-        title = f"Revert: {parent_title[:100]}"
-        summary = (
-            "Post-merge verify failed — Eden drafted a revert of "
-            f"PR {parent.get('pr_url') or parent.get('pr_number')}. "
-            "Approve to open the revert PR."
-        )
-    else:
-        title = f"Follow-up fix: {parent_title[:100]}"
-        summary = (
-            "Post-merge verify failed after the original fix landed. "
-            "Eden drafted a follow-up patch with the regression evidence."
-        )
-
-    evidence = {
+) -> dict[str, Any]:
+    return {
         "issue_id": issue_id,
+        "guardian": action,
         "guardian_action": action,
-        "parent_plan_id": parent_id,
+        "parent_plan_id": str(parent["id"]),
         "parent_pr_url": parent.get("pr_url"),
         "parent_pr_number": parent.get("pr_number"),
         "parent_github_branch": parent.get("github_branch"),
         "verify": verify_detail or {},
     }
-    return await plans_repo.create_plan(
+
+
+async def _draft_revert(
+    org_id: str,
+    parent: dict[str, Any],
+    *,
+    issue_id: str,
+    verify_detail: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Draft a revert ``code_patch`` carrying the parent diff inverted.
+
+    The plan *is* the revert vehicle — nothing executes here (auto-
+    revert is M15); a human approves the plan and the normal approve
+    flow opens the PR. Returns ``(plan, None)`` on success or
+    ``(None, reason)`` when the inverse diff no longer applies to HEAD
+    (drift), fails static checks, or cannot be computed — the caller
+    falls back to a follow-up fix with the conflict noted.
+    """
+    from eden.improvement import plans_repo
+    from eden.improvement.evidence_plane import apply_diff_to_files
+    from eden.patches.diff_materializer import (
+        DiffMaterializeError,
+        invert_unified_diff,
+    )
+
+    parent_id = str(parent["id"])
+    parent_diff = str(parent.get("diff_unified") or "").strip()
+    if not parent_diff:
+        return None, "parent_diff_missing"
+
+    try:
+        inverted = invert_unified_diff(parent_diff)
+    except DiffMaterializeError as exc:
+        return None, f"invert_failed:{str(exc)[:200]}"
+    if not inverted.strip():
+        return None, "inverted_diff_empty"
+
+    paths = _paths_from_diff(inverted)
+    agent = str(parent.get("agent_id") or "").strip() or None
+    try:
+        linked = await _hydrate_head_files(org_id, agent, paths)
+    except Exception as exc:  # noqa: BLE001
+        return None, f"head_read_failed:{str(exc)[:200]}"
+
+    check = await apply_diff_to_files(inverted, linked)
+    if check.get("status") != "passed":
+        detail = check.get("detail") or {}
+        reason = str(detail.get("reason") or "apply_failed")
+        if reason == "static_syntax_failed":
+            return None, f"revert_static_failed:{reason}"
+        return None, f"revert_apply_conflict:{reason}"
+
+    evidence = _parent_evidence(
+        parent, issue_id=issue_id, action="revert", verify_detail=verify_detail
+    )
+    evidence["revert_strategy"] = "inverse_diff"
+    evidence["verify_detail"] = verify_detail or {}
+    evidence["static_check"] = (check.get("detail") or {}).get("static_check") or {}
+
+    plan = await plans_repo.create_plan(
         org_id,
         plan_kind="code_patch",
-        title=title,
-        agent_id=(str(parent.get("agent_id") or "").strip() or None),
-        summary=summary,
+        title=f"Revert: {str(parent.get('title') or 'improvement plan')[:100]}",
+        agent_id=agent,
+        summary=(
+            "Post-merge verify failed — Eden drafted a revert of "
+            f"PR {parent.get('pr_url') or parent.get('pr_number')} "
+            "(inverse of the merged diff, statically checked against "
+            "HEAD). Approve to open the revert PR."
+        ),
+        source_ref=f"issue:{issue_id}",
         # Distinct fingerprint so the dedup index doesn't treat the
         # follow-up as the parent's still-open draft.
-        source_ref=f"issue:{issue_id}",
-        source_fingerprint=f"guardian:{parent_id}:{action}",
+        source_fingerprint=f"guardian:{parent_id}:revert",
+        diff_unified=inverted,
+        files_changed=paths,
         evidence=evidence,
         triage_snapshot=parent.get("triage_snapshot"),
+        parent_plan_id=parent_id,
+    )
+    if plan is None:
+        return None, "persist_failed"
+    return plan, None
+
+
+async def _draft_follow_up(
+    org_id: str,
+    parent: dict[str, Any],
+    *,
+    issue_id: str,
+    verify_detail: dict[str, Any] | None,
+    revert_conflict: str | None = None,
+) -> dict[str, Any] | None:
+    """Draft a follow-up fix via the real generation path.
+
+    Calls ``PatchGenerator.generate(persist=False)`` with the verify
+    failure detail + the parent's merged diff as ``static_feedback``
+    context. Suppressed/failed/empty generation degrades to a
+    ``plan_kind="advisory"`` row ("needs manual fix: <reason>") — the
+    guardian never writes an approvable ``code_patch`` with an empty
+    diff (D9).
+    """
+    import json as _json
+
+    from eden.improvement import plans_repo
+
+    parent_id = str(parent["id"])
+    parent_title = str(parent.get("title") or "improvement plan")
+    agent = str(parent.get("agent_id") or "").strip() or None
+    parent_diff = str(parent.get("diff_unified") or "")
+
+    feedback_parts = [
+        "A previously merged fix for this issue regressed post-merge."
+    ]
+    if verify_detail:
+        try:
+            feedback_parts.append(
+                "Post-merge verify failure detail:\n"
+                + _json.dumps(verify_detail, default=str)[:2000]
+            )
+        except Exception:  # noqa: BLE001
+            feedback_parts.append(
+                f"Post-merge verify failure detail:\n{str(verify_detail)[:2000]}"
+            )
+    if parent_diff.strip():
+        feedback_parts.append(
+            "The merged diff that caused the regression (do not simply "
+            "re-apply it):\n" + parent_diff[:4000]
+        )
+    static_feedback = "\n\n".join(feedback_parts)
+
+    paths = _paths_from_diff(parent_diff) if parent_diff.strip() else []
+    linked_files: list[dict[str, str]] = []
+    try:
+        linked_files = await _hydrate_head_files(org_id, agent, paths)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("guardian: linked-file hydration failed: %s", exc)
+
+    data: dict[str, Any] = {}
+    fail_reason: str | None = None
+    try:
+        from eden.patches.patch_generator import PatchGenerator
+
+        result = await PatchGenerator().generate(
+            org_id=org_id,
+            rca_id=f"guardian:{parent_id}",
+            trace_id=f"unknown_trace:{issue_id}",
+            repo_id=agent or "guardian",
+            rca_summary=(
+                f"Regression after merged plan {parent_id} "
+                f"({parent_title[:120]}) — post-merge verify failed."
+            ),
+            test_plan=[],
+            linked_files=linked_files or None,
+            persist=False,
+            static_feedback=static_feedback,
+        )
+        data = result.get("data", {}) if isinstance(result, dict) else {}
+        status = str(data.get("status") or "proposed")
+        critic = data.get("critic_verdict") or {}
+        if status in ("deduplicated", "investigation", "low_quality"):
+            fail_reason = status
+        elif critic.get("passed") is False or critic.get("reason") == "critic_error":
+            fail_reason = "critic_failed"
+        elif not str(data.get("diff") or "").strip():
+            envelope_status = (
+                str(result.get("status") or "") if isinstance(result, dict) else ""
+            )
+            fail_reason = (
+                envelope_status if envelope_status not in ("", "ok") else "empty_diff"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("guardian: follow-up generation failed: %s", exc)
+        fail_reason = f"generation_error:{str(exc)[:160]}"
+
+    evidence = _parent_evidence(
+        parent, issue_id=issue_id, action="follow_up", verify_detail=verify_detail
+    )
+    if revert_conflict:
+        evidence["revert_conflict"] = revert_conflict
+        if parent.get("pr_number") is not None:
+            # M15 owns auto-revert; until then the human fallback is
+            # PRProvider.revert(strategy="revert_pr") on the parent PR.
+            evidence["revert_fallback"] = "pr_provider_revert:revert_pr"
+
+    diff = "" if fail_reason else str(data.get("diff") or "")
+    if not fail_reason and not diff.strip():
+        fail_reason = "empty_diff"
+
+    title = f"Follow-up fix: {parent_title[:100]}"
+    if fail_reason is None:
+        plan_kind = "code_patch"
+        diff_unified: str | None = diff
+        files_changed = list(data.get("files") or paths)
+        summary = (
+            "Post-merge verify failed after the original fix landed. "
+            "Eden drafted a follow-up patch with the regression evidence."
+        )
+        evidence["patch_id"] = data.get("patch_id")
+        llm_cost = float(data.get("cost_usd") or 0)
+    else:
+        plan_kind = "advisory"
+        diff_unified = None
+        files_changed = paths
+        summary = f"needs manual fix: {fail_reason}"
+        evidence["generation_failure"] = fail_reason
+        llm_cost = float(data.get("cost_usd") or 0)
+
+    # Invariant (D9): never an approvable empty code_patch.
+    if plan_kind == "code_patch" and not (diff_unified or "").strip():
+        plan_kind = "advisory"
+        diff_unified = None
+        summary = "needs manual fix: empty_diff"
+        evidence["generation_failure"] = "empty_diff"
+
+    return await plans_repo.create_plan(
+        org_id,
+        plan_kind=plan_kind,
+        title=title,
+        agent_id=agent,
+        summary=summary,
+        source_ref=f"issue:{issue_id}",
+        # Distinct fingerprint so the dedup index doesn't treat the
+        # follow-up as the parent's still-open draft.
+        source_fingerprint=f"guardian:{parent_id}:follow_up",
+        diff_unified=diff_unified,
+        files_changed=files_changed,
+        evidence=evidence,
+        triage_snapshot=parent.get("triage_snapshot"),
+        llm_cost_usd=llm_cost,
         parent_plan_id=parent_id,
     )
 
