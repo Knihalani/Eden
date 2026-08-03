@@ -30,6 +30,15 @@ import type { GuardrailPolicyFixture } from "@/lab/fixtures/guardrails";
 import type { DebuggerSessionFixture } from "@/lab/fixtures/debugger";
 import type { AgentThread } from "@/lab/fixtures/agent-chat";
 
+/** Soft-auth Inbox poll: tolerate short JWT races, then escalate. */
+const ALERT_AUTH_FAIL_THRESHOLD = 3;
+let alertAuthFailStreak = 0;
+
+/** Test helper — reset consecutive soft-auth failure counter. */
+export function __resetAlertAuthFailStreakForTests(): void {
+  alertAuthFailStreak = 0;
+}
+
 function portalPath(orgId: string, suffix: string): string {
   return `/orgs/${orgId}/portal/${suffix.replace(/^\//, "")}`;
 }
@@ -84,16 +93,45 @@ export const portalApi = {
 
   alertEvents: async (orgId: string) => {
     try {
-      return await fetchApi<AlertEvent[]>(portalPath(orgId, "alerts/events"), {
-        softAuth: true,
-      });
+      const events = await fetchApi<AlertEvent[]>(
+        portalPath(orgId, "alerts/events"),
+        { softAuth: true },
+      );
+      alertAuthFailStreak = 0;
+      return events;
     } catch (e) {
       // Background Inbox poll — JWT race / membership blip must not
-      // empty the shell or trip session chrome; treat as no events.
+      // empty the shell or trip session chrome; tolerate a few auth
+      // failures, then surface session-expired instead of an empty
+      // inbox forever.
       if (
         e instanceof ApiError &&
-        (e.status === 401 || e.status === 403 || e.status === 404)
+        (e.status === 401 || e.status === 403)
       ) {
+        alertAuthFailStreak += 1;
+        if (
+          alertAuthFailStreak >= ALERT_AUTH_FAIL_THRESHOLD &&
+          typeof window !== "undefined"
+        ) {
+          try {
+            window.sessionStorage.setItem("eden:auth:error", "session");
+            window.dispatchEvent(
+              new CustomEvent("eden:auth:session-expired", {
+                detail: {
+                  message:
+                    e.message?.trim() ||
+                    "Session expired. Sign in again to continue.",
+                },
+              }),
+            );
+          } catch {
+            /* ignore storage / event failures */
+          }
+          throw e;
+        }
+        return [];
+      }
+      if (e instanceof ApiError && e.status === 404) {
         return [];
       }
       throw e;

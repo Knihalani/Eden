@@ -297,6 +297,35 @@ function LabSettingsInner() {
     }
   }, [paramMode, paramTab, paramId, paramAgent]);
 
+  // ROI / deep-links: /settings#autonomy-settings|autonomy-audit
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash !== "autonomy-settings" && hash !== "autonomy-audit") return;
+
+    setMode("workspace");
+    patchQuery({ mode: null, tab: null, id: null, agent: null });
+
+    let cancelled = false;
+    const scroll = () => {
+      if (cancelled) return;
+      document.getElementById(hash)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    };
+    // Workspace cards mount asynchronously — retry briefly after mode switch.
+    const t0 = window.setTimeout(scroll, 50);
+    const t1 = window.setTimeout(scroll, 250);
+    const t2 = window.setTimeout(scroll, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t0);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [patchQuery]);
+
   // Keep Packs selection inside the current agent filter.
   useEffect(() => {
     if (mode !== "audit" || auditTab !== "packs") return;

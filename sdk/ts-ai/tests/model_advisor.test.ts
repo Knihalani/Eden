@@ -370,6 +370,7 @@ describe("ModelAdvisor configuration", () => {
     const { fetchImpl, calls } = makeFakeFetch({ body: FAKE_COMPARE_RESPONSE });
     const advisor = new ModelAdvisor({
       apiKey: "sk-test",
+      orgId: "org_hdr",
       baseUrl: "https://test.eden.local",
       fetchImpl,
     });
@@ -380,6 +381,8 @@ describe("ModelAdvisor configuration", () => {
     );
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer sk-test");
+    expect(headers["X-Org-Api-Key"]).toBe("sk-test");
+    expect(headers["X-Org-Id"]).toBe("org_hdr");
   });
 
   it("omits Authorization header when apiKey is empty", async () => {
@@ -387,6 +390,7 @@ describe("ModelAdvisor configuration", () => {
     // Explicit empty string — do not fall through to SDK configure().
     const advisor = new ModelAdvisor({
       apiKey: "",
+      orgId: "",
       baseUrl: "https://test.eden.local",
       fetchImpl,
     });
@@ -397,6 +401,8 @@ describe("ModelAdvisor configuration", () => {
     );
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBeUndefined();
+    expect(headers["X-Org-Api-Key"]).toBeUndefined();
+    expect(headers["X-Org-Id"]).toBeUndefined();
   });
 });
 
@@ -434,6 +440,8 @@ describe("ModelAdvisor SDK config fallback", () => {
     );
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer sk-cfg");
+    expect(headers["X-Org-Api-Key"]).toBe("sk-cfg");
+    expect(headers["X-Org-Id"]).toBe("org_cfg");
     expect(advisor.orgId).toBe("org_cfg");
     expect(calls[0]!.url.startsWith("https://cfg.example.com/orgs/")).toBe(
       true,
@@ -469,6 +477,8 @@ describe("ModelAdvisor SDK config fallback", () => {
     );
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer sk-explicit");
+    expect(headers["X-Org-Api-Key"]).toBe("sk-explicit");
+    expect(headers["X-Org-Id"]).toBe("org_explicit");
     expect(advisor.orgId).toBe("org_explicit");
     expect(calls[0]!.url.startsWith("https://explicit.example.com/orgs/")).toBe(
       true,

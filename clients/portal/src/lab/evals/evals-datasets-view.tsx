@@ -332,18 +332,9 @@ function DatasetDock({
     ...local,
     ...fixtureCases.filter((c) => !local.some((l) => l.id === c.id)),
   ];
-  const missing = dataset.caseIds.filter(
-    (id) => !cases.some((c) => c.id === id),
-  );
-  const allCases: DatasetCaseFixture[] = [
-    ...cases,
-    ...missing.map((id, i) => ({
-      id,
-      datasetId: dataset.id,
-      input: `Case ${cases.length + i + 1}`,
-      tags: ["manual"],
-    })),
-  ];
+  // Never synthesize placeholder rows for missing caseIds — empty state
+  // is honest when case content has not loaded.
+  const allCases: DatasetCaseFixture[] = cases;
 
   const fixtureRuns = experimentsForDataset(dataset.id).filter(
     (e) => e.status === "completed",
@@ -478,7 +469,16 @@ function DatasetDock({
           allCases.length === 0 ? (
             <EmptyState
               compact
-              title="No cases"
+              title={
+                dataset.caseIds.length > 0
+                  ? "Cases unavailable"
+                  : "No cases"
+              }
+              body={
+                dataset.caseIds.length > 0
+                  ? "Case ids exist but content has not loaded. Add a case or refresh."
+                  : undefined
+              }
               action={
                 <button
                   type="button"

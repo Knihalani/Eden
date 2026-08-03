@@ -100,15 +100,19 @@ const nextConfig: NextConfig = {
       { source: "/lab/settings", destination: "/settings", permanent: false },
       { source: "/dashboard", destination: "/home", permanent: false },
       { source: "/dashboard/:path*", destination: "/home", permanent: false },
-      // /shell is a lab/dev surface — hide from prod discovery (robots
-      // already disallows it). Non-dev redirects to /home.
+      // /shell is a retired lab/dev surface — soft-land on /unavailable
+      // (also listed in STUB_PORTAL_PATH_PREFIXES for hub rewrite).
       ...(process.env.NODE_ENV === "development"
         ? []
         : [
-            { source: "/shell", destination: "/home", permanent: false as const },
+            {
+              source: "/shell",
+              destination: "/unavailable",
+              permanent: false as const,
+            },
             {
               source: "/shell/:path*",
-              destination: "/home",
+              destination: "/unavailable",
               permanent: false as const,
             },
           ]),

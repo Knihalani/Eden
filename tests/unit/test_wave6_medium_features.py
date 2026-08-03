@@ -215,36 +215,20 @@ class TestGDPRTelemetryDelete:
         from eden.data_platform.retention import DataRetentionManager
 
         mgr = DataRetentionManager()
-        posted: list[bytes] = []
-
-        class FakeResp:
-            status = 200
-
-            async def __aenter__(self) -> "FakeResp":
-                return self
-
-            async def __aexit__(self, *_: object) -> None:
-                pass
-
-        class FakeSession:
-            def post(self, url: str, data: bytes) -> FakeResp:
-                posted.append(data)
-                return FakeResp()
-
-            async def __aenter__(self) -> "FakeSession":
-                return self
-
-            async def __aexit__(self, *_: object) -> None:
-                pass
+        sink = MagicMock()
+        sink.delete_tenant_rows = AsyncMock(return_value=3)
 
         fake_settings = MagicMock()
         fake_settings.clickhouse_url = "http://localhost:8123"
 
         with (
             patch("eden.data_platform.retention.settings", fake_settings),
-            patch("aiohttp.ClientSession", return_value=FakeSession()),
+            patch(
+                "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+                AsyncMock(return_value=sink),
+            ),
         ):
             count = await mgr._delete_from_clickhouse("tenant1")
 
-        assert any(b"telemetry_events_ch" in p for p in posted)
-        assert count >= 1
+        sink.delete_tenant_rows.assert_awaited_once_with("tenant1")
+        assert count == 3

@@ -19,47 +19,54 @@ type FillState =
   | { status: "loading" }
   | { status: "ready"; apiKey: string; orgId: string }
   | { status: "member"; orgId: string; message: string }
+  | { status: "already_minted"; orgId: string }
   | { status: "error"; message: string; orgId?: string };
 
 type MintResult = { apiKey: string; orgId: string };
 
 /** Dedupes Strict Mode remounts + Back→Next remounts in one tab session. */
 const mintInflight = new Map<string, Promise<MintResult>>();
+/** In-memory only — never persist the raw apiKey to sessionStorage. */
+const mintMemory = new Map<string, MintResult>();
 
-function cacheKey(orgId: string): string {
+function mintedFlagKey(orgId: string): string {
+  return `eden.tour.quickstart.minted.${orgId}`;
+}
+
+/** Legacy key that stored the raw secret — scrub on sight. */
+function legacySecretCacheKey(orgId: string): string {
   return `eden.tour.quickstart.${orgId}`;
 }
 
-function readCachedMint(orgId: string): MintResult | null {
-  if (typeof sessionStorage === "undefined") return null;
+function scrubLegacySecret(orgId: string): void {
+  if (typeof sessionStorage === "undefined") return;
   try {
-    const raw = sessionStorage.getItem(cacheKey(orgId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<MintResult>;
-    if (
-      typeof parsed.apiKey === "string" &&
-      parsed.apiKey.length > 0 &&
-      typeof parsed.orgId === "string"
-    ) {
-      return { apiKey: parsed.apiKey, orgId: parsed.orgId };
-    }
+    sessionStorage.removeItem(legacySecretCacheKey(orgId));
   } catch {
     /* ignore */
   }
-  return null;
 }
 
-function writeCachedMint(result: MintResult): void {
+function readMintedFlag(orgId: string): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    return sessionStorage.getItem(mintedFlagKey(orgId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeMintedFlag(orgId: string): void {
   if (typeof sessionStorage === "undefined") return;
   try {
-    sessionStorage.setItem(cacheKey(result.orgId), JSON.stringify(result));
+    sessionStorage.setItem(mintedFlagKey(orgId), "1");
   } catch {
     /* ignore quota */
   }
 }
 
 async function mintQuickstartKey(orgId: string): Promise<MintResult> {
-  const cached = readCachedMint(orgId);
+  const cached = mintMemory.get(orgId);
   if (cached) return cached;
 
   const existing = mintInflight.get(orgId);
@@ -83,7 +90,9 @@ async function mintQuickstartKey(orgId: string): Promise<MintResult> {
       throw new Error("Invalid key create response");
     }
     const result = { apiKey: data.apiKey, orgId: data.orgId };
-    writeCachedMint(result);
+    mintMemory.set(orgId, result);
+    writeMintedFlag(orgId);
+    scrubLegacySecret(orgId);
     return result;
   })();
 
@@ -117,12 +126,21 @@ export function TourGetStartedPanel() {
       return;
     }
 
-    const cached = readCachedMint(orgId);
-    if (cached) {
-      setFill({ status: "ready", apiKey: cached.apiKey, orgId: cached.orgId });
+    scrubLegacySecret(orgId);
+
+    const mem = mintMemory.get(orgId);
+    if (mem) {
+      setFill({ status: "ready", apiKey: mem.apiKey, orgId: mem.orgId });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.portal.keys(orgId),
       });
+      return;
+    }
+
+    // Already minted this tab session but secret is gone (page reload) —
+    // do not remint; point the user at Settings.
+    if (readMintedFlag(orgId)) {
+      setFill({ status: "already_minted", orgId });
       return;
     }
 
@@ -199,7 +217,9 @@ export function TourGetStartedPanel() {
   const creds = {
     apiKey: fill.status === "ready" ? fill.apiKey : null,
     orgId:
-      fill.status === "ready" || fill.status === "member"
+      fill.status === "ready" ||
+      fill.status === "member" ||
+      fill.status === "already_minted"
         ? fill.orgId
         : fill.status === "error"
           ? fill.orgId
@@ -235,6 +255,21 @@ export function TourGetStartedPanel() {
         <div className="border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2.5 text-left">
           <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
             {fill.message}
+          </p>
+          <Link
+            href="/settings?mode=keys"
+            className="mt-2 inline-block font-mono text-[0.6875rem] text-[var(--accent)] hover:text-[var(--accent-hover)]"
+          >
+            Settings → API keys →
+          </Link>
+        </div>
+      ) : null}
+
+      {fill.status === "already_minted" ? (
+        <div className="border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2.5 text-left">
+          <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
+            Quickstart key was already minted this session (shown once). Open
+            Settings to copy or rotate it.
           </p>
           <Link
             href="/settings?mode=keys"
@@ -318,7 +353,7 @@ export function TourGetStartedPanel() {
           <p className="font-mono text-[0.625rem] text-[var(--text-faint)]">
             {fill.status === "ready"
               ? "Includes your key and org id — treat it as a secret."
-              : fill.status === "member"
+              : fill.status === "member" || fill.status === "already_minted"
                 ? "Once an admin creates a key, paste it into the snippet or re-open this tour."
                 : "Sign in and mint a key to have it filled in automatically."}
           </p>

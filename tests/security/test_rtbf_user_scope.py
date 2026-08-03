@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -134,3 +135,46 @@ async def test_fanout_s3_dry_run_is_also_honest() -> None:
 
     assert result["status"] == "dry_run"
     assert "not implemented" in result["detail"]
+
+
+@pytest.mark.asyncio
+async def test_fanout_clickhouse_tinybird_unavailable() -> None:
+    from eden.services.governance_intel import rtbf_fanout
+
+    sink = MagicMock()
+    sink.config = MagicMock(is_tinybird=True)
+
+    with patch(
+        "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+        AsyncMock(return_value=sink),
+    ):
+        result = await rtbf_fanout._fanout_clickhouse(
+            "org-1", user_id="user-1", dry_run=False
+        )
+
+    assert result["status"] == "unavailable"
+    assert "Tinybird" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_fanout_clickhouse_calls_delete_tenant_rows() -> None:
+    from eden.services.governance_intel import rtbf_fanout
+
+    sink = MagicMock()
+    sink.config = MagicMock(is_tinybird=False)
+    sink.delete_tenant_rows = AsyncMock(return_value=3)
+
+    with patch(
+        "eden.data_platform.clickhouse_sink.get_clickhouse_sink",
+        AsyncMock(return_value=sink),
+    ):
+        result = await rtbf_fanout._fanout_clickhouse(
+            "org-1", user_id="user-1", dry_run=False
+        )
+
+    sink.delete_tenant_rows.assert_awaited_once_with("org-1")
+    assert result["status"] == "ok"
+    assert result["scope"] == "tenant"
+    assert result["tables_purged"] == 3
+    assert result["user_id"] == "user-1"
+

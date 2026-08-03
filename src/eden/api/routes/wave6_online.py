@@ -312,8 +312,18 @@ async def cost_kpi(
     # first deploy / ingest stall / post-TTL window.
     ch_tiles = await _home_kpi_from_clickhouse(org_id, window_hours=window_hours)
     if ch_tiles is not None and int(ch_tiles.get("event_count") or 0) > 0:
-        traces = int(ch_tiles.get("event_count") or 0)
-        prev_traces = int(ch_tiles.get("prev_event_count") or 0)
+        # Prefer distinct-trace counts from CH/Tinybird; fall back to
+        # event_count only when trace_count is absent (pre-T1 responses).
+        traces = int(
+            ch_tiles["trace_count"]
+            if "trace_count" in ch_tiles
+            else (ch_tiles.get("event_count") or 0)
+        )
+        prev_traces = int(
+            ch_tiles["prev_trace_count"]
+            if "prev_trace_count" in ch_tiles
+            else (ch_tiles.get("prev_event_count") or 0)
+        )
         data_source = "clickhouse"
         if ledger_cost <= 0 and ch_tiles.get("cost_usd") is not None:
             ledger_cost = float(ch_tiles["cost_usd"] or 0)

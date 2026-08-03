@@ -49,8 +49,9 @@ function checkCompileRateLimit(userId: string): boolean {
   return true;
 }
 
-function cacheKey(prompt: string): string {
-  return prompt.trim().toLowerCase().slice(0, 500);
+/** Tenant-scoped so one org/user cannot reuse another’s compile cache. */
+function cacheKey(userId: string, orgId: string, prompt: string): string {
+  return `${userId}:${orgId}:${prompt.trim().toLowerCase().slice(0, 500)}`;
 }
 
 function parseDraft(raw: string, prompt: string): CompiledSignalDraft | null {
@@ -188,7 +189,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: "prompt is required" }, { status: 400 });
   }
 
-  const key = cacheKey(prompt);
+  const key = cacheKey(session.userId, session.orgId, prompt);
   const cached = _compileCache.get(key);
   if (cached && Date.now() - cached.at < COMPILE_CACHE_TTL_MS) {
     return NextResponse.json(cached.body);

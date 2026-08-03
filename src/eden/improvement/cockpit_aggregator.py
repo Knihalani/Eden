@@ -71,26 +71,120 @@ class ImprovementQueue:
         }
 
 
-# In-process snooze map (org_id, item_ref) → iso expiry. Best-effort;
-# Redis-backed persistence is a follow-up.
+# In-process snooze cache (org_id, item_ref) → expiry. Durable copy lives in
+# ``improvement_item_snoozes`` (migration 138); the dict is a hot-path mirror
+# so list_queue still filters when Postgres is briefly unavailable.
 _SNOOZES: dict[tuple[str, str], datetime] = {}
 
 
-def snooze_item(org_id: str, item_ref: str, until: datetime) -> None:
-    _SNOOZES[(org_id, item_ref)] = until
-
-
-def is_snoozed(org_id: str, item_ref: str, *, now: datetime | None = None) -> bool:
-    until = _SNOOZES.get((org_id, item_ref))
-    if until is None:
-        return False
-    now = now or datetime.now(UTC)
+def _normalize_until(until: datetime) -> datetime:
     if until.tzinfo is None:
-        until = until.replace(tzinfo=UTC)
-    if until <= now:
+        return until.replace(tzinfo=UTC)
+    return until
+
+
+async def snooze_item(org_id: str, item_ref: str, until: datetime) -> None:
+    until = _normalize_until(until)
+    _SNOOZES[(org_id, item_ref)] = until
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return
+        await client.execute(
+            """
+            INSERT INTO improvement_item_snoozes
+                (org_id, item_ref, snoozed_until)
+            VALUES ($1::uuid, $2, $3)
+            ON CONFLICT (org_id, item_ref) DO UPDATE
+                SET snoozed_until = EXCLUDED.snoozed_until,
+                    updated_at = NOW()
+            """,
+            org_id,
+            item_ref,
+            until,
+        )
+    except Exception as exc:
+        logger.warning("snooze_item persist failed: %s", exc)
+
+
+async def is_snoozed(
+    org_id: str, item_ref: str, *, now: datetime | None = None
+) -> bool:
+    now = now or datetime.now(UTC)
+    until = _SNOOZES.get((org_id, item_ref))
+    if until is not None:
+        until = _normalize_until(until)
+        if until > now:
+            return True
         _SNOOZES.pop((org_id, item_ref), None)
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return False
+        row = await client.fetchrow(
+            """
+            SELECT snoozed_until
+            FROM improvement_item_snoozes
+            WHERE org_id = $1::uuid
+              AND item_ref = $2
+              AND snoozed_until > $3
+            """,
+            org_id,
+            item_ref,
+            now,
+        )
+        if row is None:
+            return False
+        until = _normalize_until(row["snoozed_until"])
+        _SNOOZES[(org_id, item_ref)] = until
+        return True
+    except Exception as exc:
+        logger.debug("is_snoozed lookup failed: %s", exc)
         return False
-    return True
+
+
+async def active_snooze_refs(
+    org_id: str, *, now: datetime | None = None
+) -> set[str]:
+    """Return item_refs still snoozed for ``org_id`` (process cache + Postgres)."""
+    now = now or datetime.now(UTC)
+    refs: set[str] = set()
+    for (oid, ref), until in list(_SNOOZES.items()):
+        if oid != org_id:
+            continue
+        until = _normalize_until(until)
+        if until > now:
+            refs.add(ref)
+        else:
+            _SNOOZES.pop((oid, ref), None)
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return refs
+        rows = await client.fetch(
+            """
+            SELECT item_ref, snoozed_until
+            FROM improvement_item_snoozes
+            WHERE org_id = $1::uuid AND snoozed_until > $2
+            """,
+            org_id,
+            now,
+        )
+        for row in rows or []:
+            ref = str(row["item_ref"])
+            refs.add(ref)
+            until = row.get("snoozed_until")
+            if until is not None:
+                _SNOOZES[(org_id, ref)] = _normalize_until(until)
+    except Exception as exc:
+        logger.debug("active_snooze_refs lookup failed: %s", exc)
+    return refs
 
 
 class ImprovementCockpitAggregator:
@@ -106,7 +200,8 @@ class ImprovementCockpitAggregator:
         (
             issues_t,
             actions_t,
-            patches_t,
+            plans_t,
+            proposed_patches_t,
             nudges_t,
             promotions_t,
             artifacts_t,
@@ -119,6 +214,7 @@ class ImprovementCockpitAggregator:
             self._from_issues(org_id, agent_id),
             self._from_closed_loop(org_id),
             self._from_improvement_plans(org_id, agent_id),
+            self._from_proposed_patches(org_id, agent_id),
             self._from_nudges(org_id, agent_id),
             self._from_promotions(org_id),
             self._from_artifacts_pending(org_id, agent_id),
@@ -133,7 +229,8 @@ class ImprovementCockpitAggregator:
         for result in (
             issues_t,
             actions_t,
-            patches_t,
+            plans_t,
+            proposed_patches_t,
             nudges_t,
             promotions_t,
             artifacts_t,
@@ -144,12 +241,13 @@ class ImprovementCockpitAggregator:
             loop_health_t,
         ):
             if isinstance(result, BaseException):
-                logger.debug("cockpit source failed: %s", result)
+                logger.warning("cockpit source failed: %s", result)
                 continue
             items.extend(result)
 
         now = datetime.now(UTC)
-        items = [i for i in items if not is_snoozed(org_id, i.ref, now=now)]
+        snoozed = await active_snooze_refs(org_id, now=now)
+        items = [i for i in items if i.ref not in snoozed]
         fleet_sev = await self._fleet_severity_map(org_id)
         items.sort(
             key=lambda i: (
@@ -552,8 +650,8 @@ class ImprovementCockpitAggregator:
                     severity="medium",
                     agent_id=repo,
                     status=status,
-                    # Legacy Cat 23 — no detail page; portal maps to N23 inbox.
-                    href="/improve/plans",
+                    # Legacy Cat 23 — no detail page; queue home is /improve.
+                    href="/improve",
                     payload={
                         "patch_id": pid,
                         "rca_id": r.get("rca_id"),

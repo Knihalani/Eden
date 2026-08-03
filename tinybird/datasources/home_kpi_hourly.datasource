@@ -16,7 +16,8 @@ SCHEMA >
     event_count AggregateFunction(count),
     error_count AggregateFunction(sum, UInt64),
     avg_duration_state AggregateFunction(avg, Float64),
-    p95_duration_state AggregateFunction(quantile(0.95), Float64)
+    p95_duration_state AggregateFunction(quantile(0.95), Float64),
+    trace_count AggregateFunction(uniqExact, String)
 
 ENGINE "AggregatingMergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(hour)"

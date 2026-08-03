@@ -342,22 +342,10 @@ function LabEvalsInner() {
       const fixture = casesForDataset(dsId).filter(
         (c) => !local.some((l) => l.id === c.id),
       );
-      const ds = allDatasets.find((d) => d.id === dsId);
-      const known = [...local, ...fixture];
-      const missing = (ds?.caseIds ?? []).filter(
-        (id) => !known.some((c) => c.id === id),
-      );
-      return [
-        ...known,
-        ...missing.map((id, i) => ({
-          id,
-          datasetId: dsId,
-          input: `Case ${known.length + i + 1}`,
-          tags: ["manual"] as string[],
-        })),
-      ];
+      // Only real case content — never invent "Case N" placeholders.
+      return [...local, ...fixture];
     },
-    [extraCases, allDatasets],
+    [extraCases],
   );
 
   const createDataset = useCallback(() => {

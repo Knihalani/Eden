@@ -36,8 +36,10 @@ Auth
 ----
 The advisor reuses the SDK's :class:`EdenConfig` (set via
 :func:`eden.configure`) for the org id + API key + base URL. It
-also accepts an explicit ``base_url`` override for customers
-running their own Eden instance.
+sends ``X-Org-Api-Key`` + ``X-Org-Id`` (matching the telemetry
+client), not a Bearer-only Authorization header. It also accepts
+an explicit ``base_url`` override for customers running their own
+Eden instance.
 
 Errors
 ------
@@ -324,8 +326,13 @@ class ModelAdvisor:
             # was permanently pinned to a literal.
             "User-Agent": _USER_AGENT,
         }
+        # Match telemetry / gateway auth: X-Org-Api-Key + X-Org-Id
+        # (not Bearer-only). Backend deps accept either shape; the
+        # org-key pair is the canonical programmatic credential.
+        if self.org_id:
+            h["X-Org-Id"] = self.org_id
         if self.api_key:
-            h["Authorization"] = f"Bearer {self.api_key}"
+            h["X-Org-Api-Key"] = self.api_key
         return h
 
     def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:

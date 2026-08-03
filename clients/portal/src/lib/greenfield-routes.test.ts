@@ -48,6 +48,7 @@ describe("product portal routes", () => {
     expect(buildHubRedirectUrl("/dashboard", "")).toBe("/home");
     expect(buildHubRedirectUrl("/analytics", "")).toBe("/unavailable");
     expect(buildHubRedirectUrl("/marketplace", "")).toBe("/unavailable");
+    expect(buildHubRedirectUrl("/shell", "")).toBe("/unavailable");
     expect(buildHubRedirectUrl("/onboarding", "")).toBe("/home");
   });
 

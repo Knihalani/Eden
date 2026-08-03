@@ -140,8 +140,16 @@ either end.
 `IngestionReport` and skip `init_schema()` / the Events API call unless
 `tinybird_ingest_unread_datasources_enabled` is `True` (env
 `TINYBIRD_INGEST_UNREAD_DATASOURCES_ENABLED=1`). `telemetry_events_ch`
-ingest is untouched — it has real readers (`telemetry_events_query_api.pipe`,
-the Home KPI rollups, `query_home_kpis`).
+ingest is untouched — it has real readers:
+
+- **Primary (live app):** `ClickHouseSink` `/v0/sql` helpers —
+  `query_home_kpis` (Home KPI tiles), plus analytics latency/throughput
+  (`query_latency_by_day` / `query_throughput_heatmap` via
+  `GET /orgs/{org_id}/analytics/…`).
+- **Available pipe (not the primary app reader):**
+  `telemetry_events_query_api.pipe` is a raw-row ENDPOINT (filters +
+  LIMIT, no percentile/heatmap aggregates). It remains deployable for
+  ad-hoc / future wiring; the app prefers `/v0/sql` for aggregates.
 
 **Left in place, not removed:** the four `.datasource` files, the four
 `*_api.pipe` endpoints, and `KafkaEventConsumer.consume_clickhouse` all

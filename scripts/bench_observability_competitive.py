@@ -458,12 +458,41 @@ def bench_ingest_batching(*, n: int = 50, per_call_overhead_s: float = 0.002) ->
 async def _run_home_kpi_shape() -> dict[str, Any]:
     from eden.data_platform.clickhouse_sink import ClickHouseConfig, ClickHouseSink
 
-    tsv = "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n10\t1\t20.0\t40.0\t5\n"
+    tsv = (
+        "event_count\ttrace_count\terror_count\tavg_duration_ms\t"
+        "p95_duration_ms\tprev_event_count\tprev_trace_count\n"
+        "10\t8\t1\t20.0\t40.0\t5\t4\n"
+    )
+    pipe_result = {
+        "event_count": 10,
+        "trace_count": 8,
+        "error_count": 1,
+        "avg_duration_ms": 20.0,
+        "p95_duration_ms": 40.0,
+        "cost_usd": 0.0,
+        "prev_event_count": 5,
+        "prev_trace_count": 4,
+    }
 
     tb_sink = ClickHouseSink(ClickHouseConfig(url="https://api.us-east.tinybird.co", tinybird_token="tok"))
-    with patch.object(tb_sink, "_execute", AsyncMock(return_value=tsv)) as mock_execute:
+    # Prefer-pipe path: published Tinybird endpoint, no /v0/sql round-trip.
+    with (
+        patch.object(tb_sink, "_query_home_kpis_pipe", AsyncMock(return_value=pipe_result)),
+        patch.object(tb_sink, "_execute", AsyncMock()) as mock_execute,
+    ):
         out = await tb_sink.query_home_kpis("bench-org", window_hours=24)
-    tinybird_query = mock_execute.await_args.args[0]
+    tinybird_used_pipe = mock_execute.await_count == 0 and out["trace_count"] == 8
+
+    # SQL rollup fallback shape (pipe miss → countMerge / uniqExactMerge).
+    tb_sink_sql = ClickHouseSink(
+        ClickHouseConfig(url="https://api.us-east.tinybird.co", tinybird_token="tok")
+    )
+    with (
+        patch.object(tb_sink_sql, "_query_home_kpis_pipe", AsyncMock(return_value=None)),
+        patch.object(tb_sink_sql, "_execute", AsyncMock(return_value=tsv)) as mock_sql,
+    ):
+        await tb_sink_sql.query_home_kpis("bench-org", window_hours=24)
+    tinybird_query = mock_sql.await_args.args[0]
 
     local_sink = ClickHouseSink(ClickHouseConfig(url="http://localhost:8123"))
     with patch.object(local_sink, "_execute", AsyncMock(return_value=tsv)) as mock_execute2:
@@ -471,10 +500,19 @@ async def _run_home_kpi_shape() -> dict[str, Any]:
     local_query = mock_execute2.await_args.args[0]
 
     return {
-        "tinybird_uses_rollup": "home_kpi_hourly" in tinybird_query and "countMerge" in tinybird_query,
-        "tinybird_result_ok": out["event_count"] == 10,
+        "tinybird_uses_rollup": (
+            tinybird_used_pipe
+            or (
+                "home_kpi_hourly" in tinybird_query
+                and "countMerge" in tinybird_query
+                and "uniqExactMerge" in tinybird_query
+            )
+        ),
+        "tinybird_result_ok": out["event_count"] == 10 and out["trace_count"] == 8,
         "local_uses_live_scan": (
-            "home_kpi_hourly" not in local_query and "telemetry_events_ch" in local_query
+            "home_kpi_hourly" not in local_query
+            and "telemetry_events_ch" in local_query
+            and "uniqExactIf" in local_query
         ),
     }
 

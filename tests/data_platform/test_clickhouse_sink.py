@@ -302,8 +302,8 @@ class TestUnreadDatasourceIngestGate:
 
 
 class TestHomeKpiRollup:
-    """Home KPI hourly rollup (``home_kpi_hourly``): prefer it on Tinybird,
-    fall back to the live ``telemetry_events_ch`` scan on error/empty.
+    """Home KPI hourly rollup (``home_kpi_hourly``): prefer the Tinybird
+    pipe, then /v0/sql over the rollup, then live ``telemetry_events_ch``.
 
     See ``tests/unit/data_platform/test_w8_4_tinybird_columnar.py`` for the
     SQL-shape assertions on both the rollup and live queries; these tests
@@ -311,10 +311,13 @@ class TestHomeKpiRollup:
     """
 
     @staticmethod
-    def _tsv(event_count: int, prev_event_count: int = 0) -> str:
+    def _tsv(event_count: int, prev_event_count: int = 0, *, trace_count: int | None = None) -> str:
+        traces = event_count if trace_count is None else trace_count
+        prev_traces = prev_event_count
         return (
-            "event_count\terror_count\tavg_duration_ms\tp95_duration_ms\tprev_event_count\n"
-            f"{event_count}\t0\t10.0\t20.0\t{prev_event_count}\n"
+            "event_count\ttrace_count\terror_count\tavg_duration_ms\t"
+            "p95_duration_ms\tprev_event_count\tprev_trace_count\n"
+            f"{event_count}\t{traces}\t0\t10.0\t20.0\t{prev_event_count}\t{prev_traces}\n"
         )
 
     @pytest.mark.asyncio
@@ -322,11 +325,15 @@ class TestHomeKpiRollup:
         sink = ClickHouseSink(
             ClickHouseConfig(url="https://api.us-east.tinybird.co", tinybird_token="tok")
         )
-        with patch.object(
-            sink, "_execute", AsyncMock(return_value=self._tsv(10, 5))
-        ) as mock_execute:
+        with (
+            patch.object(sink, "_query_home_kpis_pipe", AsyncMock(return_value=None)),
+            patch.object(
+                sink, "_execute", AsyncMock(return_value=self._tsv(10, 5, trace_count=8))
+            ) as mock_execute,
+        ):
             out = await sink.query_home_kpis("org_test", window_hours=24)
         assert out["event_count"] == 10
+        assert out["trace_count"] == 8
         assert out["prev_event_count"] == 5
         mock_execute.assert_awaited_once()
 
@@ -346,7 +353,14 @@ class TestHomeKpiRollup:
                 raise ClickHouseError("Unknown datasource 'home_kpi_hourly'")
             return self._tsv(3, 1)
 
-        with patch.object(sink, "_execute", side_effect=side_effect) as mock_execute:
+        with (
+            patch.object(
+                sink,
+                "_query_home_kpis_pipe",
+                AsyncMock(side_effect=ClickHouseError("pipe missing")),
+            ),
+            patch.object(sink, "_execute", side_effect=side_effect) as mock_execute,
+        ):
             out = await sink.query_home_kpis("org_test", window_hours=24)
         assert out["event_count"] == 3
         assert mock_execute.await_count == 2
@@ -365,7 +379,10 @@ class TestHomeKpiRollup:
                 return self._tsv(0, 0)
             return self._tsv(6, 2)
 
-        with patch.object(sink, "_execute", side_effect=side_effect):
+        with (
+            patch.object(sink, "_query_home_kpis_pipe", AsyncMock(return_value=None)),
+            patch.object(sink, "_execute", side_effect=side_effect),
+        ):
             out = await sink.query_home_kpis("org_test", window_hours=24)
         assert out["event_count"] == 6
         assert out["prev_event_count"] == 2
@@ -397,8 +414,15 @@ class TestHomeKpiRollup:
         sink = ClickHouseSink(
             ClickHouseConfig(url="https://api.us-east.tinybird.co", tinybird_token="tok")
         )
-        with patch.object(
-            sink, "_execute", AsyncMock(side_effect=ClickHouseError("connection refused"))
+        with (
+            patch.object(
+                sink,
+                "_query_home_kpis_pipe",
+                AsyncMock(side_effect=ClickHouseError("connection refused")),
+            ),
+            patch.object(
+                sink, "_execute", AsyncMock(side_effect=ClickHouseError("connection refused"))
+            ),
         ):
             with pytest.raises(ClickHouseError):
                 await sink.query_home_kpis("org_test", window_hours=24)

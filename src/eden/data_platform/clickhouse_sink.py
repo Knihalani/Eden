@@ -1435,15 +1435,25 @@ class ClickHouseSink:
         On Tinybird, ``home_kpi_hourly`` (an ``AggregatingMergeTree`` fed
         by ``tinybird/pipes/home_kpi_hourly_mv.pipe``) is far cheaper to
         scan than re-aggregating raw ``telemetry_events_ch`` rows on every
-        request. But it is a brand-new datasource: a tenant/hour with no
-        materialized row yet (not-yet-deployed, or genuinely zero traffic
-        in that window) must not be reported as zero when the live table
-        actually has data, so this prefers the rollup and falls back to
-        the previous live single-scan query whenever the rollup query
-        raises *or* comes back with zero current-window events.
+        request. Prefer the published pipe endpoint
+        (``/v0/pipes/home_kpi_hourly_api.json``), then ad-hoc ``/v0/sql``
+        over the same rollup, then the live single-scan query whenever
+        either rollup path raises *or* comes back with zero current-window
+        events (brand-new datasource / tenant-hour not yet materialized).
         """
         hours = max(1, int(window_hours))
         if self.config.is_tinybird:
+            try:
+                pipe = await self._query_home_kpis_pipe(tenant_id, hours)
+            except Exception as exc:
+                logger.debug(
+                    "home_kpi_hourly_api pipe failed, falling back to "
+                    "/v0/sql rollup: %s",
+                    exc,
+                )
+                pipe = None
+            if pipe is not None and pipe["event_count"] > 0:
+                return pipe
             try:
                 rollup = await self._query_home_kpis_rollup(tenant_id, hours)
             except Exception as exc:
@@ -1457,19 +1467,66 @@ class ClickHouseSink:
                 return rollup
         return await self._query_home_kpis_live(tenant_id, hours)
 
+    async def _query_home_kpis_pipe(
+        self, tenant_id: str, hours: int
+    ) -> dict[str, Any] | None:
+        """Read Home KPI tiles via the Tinybird ``home_kpi_hourly_api`` pipe.
+
+        Same auth/token + base URL as ``_execute`` / Events API — GET
+        ``/v0/pipes/home_kpi_hourly_api.json`` with ``tenant_id`` / ``hours``.
+        The pipe returns two rows (``window='current'`` / ``'previous'``);
+        this folds them into the sink's existing single-dict contract.
+        """
+        token = self.config.tinybird_token or self.config.password
+        if not token:
+            raise ClickHouseError("Tinybird token missing (set TINYBIRD_ADMIN_TOKEN)")
+        session = await self._get_session()
+        url = f"{self.config.url.rstrip('/')}/v0/pipes/home_kpi_hourly_api.json"
+        headers = {"Authorization": f"Bearer {token}"}
+        async with session.get(
+            url,
+            params={"tenant_id": tenant_id, "hours": str(hours)},
+            headers=headers,
+        ) as resp:
+            text = await resp.text()
+            if resp.status != 200:
+                raise ClickHouseError(f"HTTP {resp.status}: {text[:500]}")
+        rows = self._parse_json_result(text) if text.strip() else []
+        if not rows:
+            return None
+        cur: dict[str, Any] = {}
+        prev: dict[str, Any] = {}
+        for row in rows:
+            window = str(row.get("window") or "").lower()
+            if window == "previous":
+                prev = row
+            else:
+                # Treat missing/unknown window as current (pipe always labels).
+                cur = row
+        return {
+            "event_count": int(float(cur.get("event_count") or 0)),
+            "trace_count": int(float(cur.get("trace_count") or 0)),
+            "error_count": int(float(cur.get("error_count") or 0)),
+            "avg_duration_ms": float(cur.get("avg_duration_ms") or 0),
+            "p95_duration_ms": float(cur.get("p95_duration_ms") or 0),
+            "cost_usd": 0.0,
+            "prev_event_count": int(float(prev.get("event_count") or 0)),
+            "prev_trace_count": int(float(prev.get("trace_count") or 0)),
+        }
+
     async def _query_home_kpis_rollup(
         self, tenant_id: str, hours: int
     ) -> dict[str, Any] | None:
         """Read Home KPI tiles from the ``home_kpi_hourly`` rollup.
 
-        Uses the ``-Merge`` combinators (``countMerge`` / ``sumMerge`` /
-        ``avgMerge`` / ``quantileMerge``) required to read back an
-        ``AggregateFunction`` column. Two subqueries (current window,
-        previous window) rather than one ``...MergeIf``-combinator pass:
-        ``home_kpi_hourly`` is bucketed to one row per tenant per hour, so
-        scanning it twice is negligible next to the raw event table this
-        replaces, and it avoids relying on chaining ``-Merge`` with
-        ``-If`` (an unusual combinator order not worth the risk here).
+        Uses the ``-Merge`` combinators (``countMerge`` / ``uniqExactMerge`` /
+        ``sumMerge`` / ``avgMerge`` / ``quantileMerge``) required to read
+        back an ``AggregateFunction`` column. Two subqueries (current
+        window, previous window) rather than one ``...MergeIf``-combinator
+        pass: ``home_kpi_hourly`` is bucketed to one row per tenant per
+        hour, so scanning it twice is negligible next to the raw event
+        table this replaces, and it avoids relying on chaining ``-Merge``
+        with ``-If`` (an unusual combinator order not worth the risk here).
         Returns ``None`` (never raises past ``query_home_kpis``) only if
         the parsed result has no row at all; an empty/zero row is still
         returned so the caller can apply its own "was this really empty"
@@ -1497,14 +1554,17 @@ class ClickHouseSink:
         query = f"""
             SELECT
                 cur.event_count AS event_count,
+                cur.trace_count AS trace_count,
                 cur.error_count AS error_count,
                 cur.avg_duration_ms AS avg_duration_ms,
                 cur.p95_duration_ms AS p95_duration_ms,
-                prev.prev_event_count AS prev_event_count
+                prev.prev_event_count AS prev_event_count,
+                prev.prev_trace_count AS prev_trace_count
             FROM
             (
                 SELECT
                     countMerge(event_count) AS event_count,
+                    uniqExactMerge(trace_count) AS trace_count,
                     sumMerge(error_count) AS error_count,
                     avgMerge(avg_duration_state) AS avg_duration_ms,
                     quantileMerge(0.95)(p95_duration_state) AS p95_duration_ms
@@ -1513,7 +1573,9 @@ class ClickHouseSink:
             ) AS cur
             CROSS JOIN
             (
-                SELECT countMerge(event_count) AS prev_event_count
+                SELECT
+                    countMerge(event_count) AS prev_event_count,
+                    uniqExactMerge(trace_count) AS prev_trace_count
                 FROM {table}
                 WHERE tenant_id = '{safe_tid}' AND {prev_pred}
             ) AS prev
@@ -1526,11 +1588,13 @@ class ClickHouseSink:
         row = rows[0]
         return {
             "event_count": int(float(row.get("event_count") or 0)),
+            "trace_count": int(float(row.get("trace_count") or 0)),
             "error_count": int(float(row.get("error_count") or 0)),
             "avg_duration_ms": float(row.get("avg_duration_ms") or 0),
             "p95_duration_ms": float(row.get("p95_duration_ms") or 0),
             "cost_usd": 0.0,
             "prev_event_count": int(float(row.get("prev_event_count") or 0)),
+            "prev_trace_count": int(float(row.get("prev_trace_count") or 0)),
         }
 
     async def _query_home_kpis_live(
@@ -1542,15 +1606,18 @@ class ClickHouseSink:
         ClickHouse DDL nor the Tinybird datasource). Returning ``0`` keeps
         the Home KPI contract stable; cost tiles come from the ledger / PG.
 
+        ``event_count`` stays a raw event-row count (error-rate denominator);
+        ``trace_count`` is distinct ``trace_id`` for the Home traces tile.
+
         Single-scan: current-window and previous-window tiles used to be
         two separate queries against the same table/tenant, each rescanning
         overlapping parts of the ``timestamp`` index. ClickHouse/Tinybird
         SQL supports conditional-aggregate combinators (``countIf`` /
-        ``avgIf`` / ``quantileIf``), so both windows are computed in one
-        pass: the outer ``WHERE`` bounds the scan to ``[now - 2h, now)``
-        (covering current + previous window) and each aggregate carries
-        its own ``...If`` predicate to pick which half of that range it
-        applies to.
+        ``uniqExactIf`` / ``avgIf`` / ``quantileIf``), so both windows are
+        computed in one pass: the outer ``WHERE`` bounds the scan to
+        ``[now - 2h, now)`` (covering current + previous window) and each
+        aggregate carries its own ``...If`` predicate to pick which half of
+        that range it applies to.
         """
         safe_tid = self._sql_literal(tenant_id)
         table = self.config.qualified_table("telemetry_events_ch")
@@ -1562,10 +1629,12 @@ class ClickHouseSink:
         query = f"""
             SELECT
                 countIf({cur_pred}) AS event_count,
+                uniqExactIf(trace_id, {cur_pred}) AS trace_count,
                 countIf({cur_pred} AND outcome = 'error') AS error_count,
                 avgIf(duration_ms, {cur_pred}) AS avg_duration_ms,
                 quantileIf(0.95)(duration_ms, {cur_pred}) AS p95_duration_ms,
-                countIf({prev_pred}) AS prev_event_count
+                countIf({prev_pred}) AS prev_event_count,
+                uniqExactIf(trace_id, {prev_pred}) AS prev_trace_count
             FROM {table}
             WHERE tenant_id = '{safe_tid}'
               AND timestamp >= now() - INTERVAL {hours * 2} HOUR
@@ -1576,7 +1645,20 @@ class ClickHouseSink:
         if not rows:
             # Some CH/Tinybird paths omit header line — parse as single value row.
             parts = [p for p in (result or "").strip().split("\t") if p != ""]
-            if len(parts) >= 5:
+            if len(parts) >= 7:
+                rows = [
+                    {
+                        "event_count": parts[0],
+                        "trace_count": parts[1],
+                        "error_count": parts[2],
+                        "avg_duration_ms": parts[3],
+                        "p95_duration_ms": parts[4],
+                        "prev_event_count": parts[5],
+                        "prev_trace_count": parts[6],
+                    }
+                ]
+            elif len(parts) >= 5:
+                # Pre-trace_count response shape (older CH / cached SQL).
                 rows = [
                     {
                         "event_count": parts[0],
@@ -1587,13 +1669,27 @@ class ClickHouseSink:
                     }
                 ]
         cur = rows[0] if rows else {}
+        event_count = int(float(cur.get("event_count") or 0))
+        prev_event_count = int(float(cur.get("prev_event_count") or 0))
+        # Prefer distinct trace_id; fall back to event_count only when the
+        # column is absent (legacy response / older rollup without state).
+        if "trace_count" in cur:
+            trace_count = int(float(cur.get("trace_count") or 0))
+        else:
+            trace_count = event_count
+        if "prev_trace_count" in cur:
+            prev_trace_count = int(float(cur.get("prev_trace_count") or 0))
+        else:
+            prev_trace_count = prev_event_count
         return {
-            "event_count": int(float(cur.get("event_count") or 0)),
+            "event_count": event_count,
+            "trace_count": trace_count,
             "error_count": int(float(cur.get("error_count") or 0)),
             "avg_duration_ms": float(cur.get("avg_duration_ms") or 0),
             "p95_duration_ms": float(cur.get("p95_duration_ms") or 0),
             "cost_usd": 0.0,
-            "prev_event_count": int(float(cur.get("prev_event_count") or 0)),
+            "prev_event_count": prev_event_count,
+            "prev_trace_count": prev_trace_count,
         }
 
     def _parse_tsv(self, tsv: str) -> list[dict[str, Any]]:
@@ -1647,6 +1743,141 @@ class ClickHouseSink:
         if isinstance(payload, list):
             return [r for r in payload if isinstance(r, dict)]
         raise ClickHouseError("unexpected JSON query response shape")
+
+    async def query_latency_by_day(
+        self,
+        tenant_id: str,
+        *,
+        days: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Per-day latency percentiles from ``telemetry_events_ch``.
+
+        Used by ``GET /orgs/{id}/analytics/latency``. Soft contract: callers
+        catch errors and fall back to Postgres. ``telemetry_events_query_api``
+        is a raw row pipe (LIMIT, no aggregates) — these rollups go through
+        ``/v0/sql`` (or self-hosted HTTP SQL) instead.
+        """
+        safe_tid = self._sql_literal(tenant_id)
+        table = self.config.qualified_table("telemetry_events_ch")
+        window_days = max(1, int(days))
+        query = f"""
+            SELECT
+                toDate(timestamp) AS day,
+                quantile(0.50)(duration_ms) AS p50_ms,
+                quantile(0.95)(duration_ms) AS p95_ms,
+                quantile(0.99)(duration_ms) AS p99_ms
+            FROM {table}
+            WHERE tenant_id = '{safe_tid}'
+              AND duration_ms IS NOT NULL
+              AND timestamp >= now() - INTERVAL {window_days} DAY
+            GROUP BY day
+            ORDER BY day
+            FORMAT TabSeparatedWithNames
+        """
+        result = await self._execute(query)
+        rows = self._parse_tsv(result)
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            day = row.get("day")
+
+            def _pct(key: str, r: dict[str, Any] = row) -> float | None:
+                raw = r.get(key)
+                if raw is None or raw == "" or raw == "\\N":
+                    return None
+                return float(raw)
+
+            out.append(
+                {
+                    "day": str(day) if day is not None else None,
+                    "p50_ms": _pct("p50_ms"),
+                    "p95_ms": _pct("p95_ms"),
+                    "p99_ms": _pct("p99_ms"),
+                }
+            )
+        return out
+
+    async def query_throughput_heatmap(
+        self,
+        tenant_id: str,
+        *,
+        days: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Request counts per (weekday, hour) from ``telemetry_events_ch``.
+
+        Weekday uses Postgres ``EXTRACT(DOW)`` semantics (Sun=0 … Sat=6)
+        via ClickHouse ``toDayOfWeek(ts, 3)`` so heatmap clients stay
+        aligned when falling back between CH and PG.
+        """
+        safe_tid = self._sql_literal(tenant_id)
+        table = self.config.qualified_table("telemetry_events_ch")
+        window_days = max(1, int(days))
+        query = f"""
+            SELECT
+                toHour(timestamp) AS hour,
+                toDayOfWeek(timestamp, 3) AS weekday,
+                count() AS requests
+            FROM {table}
+            WHERE tenant_id = '{safe_tid}'
+              AND timestamp >= now() - INTERVAL {window_days} DAY
+            GROUP BY hour, weekday
+            ORDER BY weekday, hour
+            FORMAT TabSeparatedWithNames
+        """
+        result = await self._execute(query)
+        rows = self._parse_tsv(result)
+        return [
+            {
+                "hour": int(float(row.get("hour") or 0)),
+                "weekday": int(float(row.get("weekday") or 0)),
+                "requests": int(float(row.get("requests") or 0)),
+            }
+            for row in rows
+        ]
+
+    async def delete_tenant_rows(self, tenant_id: str) -> int:
+        """ALTER DELETE tenant rows from analytics tables (self-hosted only).
+
+        Purges ``agent_performance``, ``telemetry_events_ch``, and
+        ``home_kpi_hourly`` using ``qualified_table`` names
+        (``{database}.table`` locally; bare names are Tinybird-only and
+        cannot be deleted here).
+
+        Tinybird workspaces reject ALTER DELETE via ``/v0/sql``. Raises
+        so callers record incomplete erasure instead of reporting success.
+        Returns the number of tables whose DELETE statement succeeded.
+        """
+        if self.config.is_tinybird:
+            logger.warning(
+                "GDPR ClickHouse purge incomplete: Tinybird host cannot "
+                "ALTER DELETE via /v0/sql (tenant=%s)",
+                tenant_id,
+            )
+            raise RuntimeError(
+                "ClickHouse purge incomplete: Tinybird cannot ALTER DELETE "
+                "via /v0/sql — erasure must not be reported complete"
+            )
+
+        safe_tid = self._sql_literal(tenant_id)
+        tables = (
+            "agent_performance",
+            "telemetry_events_ch",
+            "home_kpi_hourly",
+        )
+        deleted = 0
+        for bare in tables:
+            table = self.config.qualified_table(bare)
+            try:
+                await self._execute(
+                    f"ALTER TABLE {table} DELETE WHERE tenant_id = '{safe_tid}'"
+                )
+                deleted += 1
+            except Exception as exc:
+                logger.warning(
+                    "ClickHouse GDPR delete failed for %s: %s",
+                    table,
+                    exc,
+                )
+        return deleted
 
     async def health_check(self) -> str:
         """Check ClickHouse / Tinybird connectivity."""

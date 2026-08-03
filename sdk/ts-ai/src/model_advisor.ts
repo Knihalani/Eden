@@ -306,7 +306,14 @@ export class ModelAdvisor {
       // advisor and the auto-instrumentation paths.
       "User-Agent": SDK_USER_AGENT,
     };
-    if (this.apiKey) h["Authorization"] = `Bearer ${this.apiKey}`;
+    // Match telemetry ``buildHeaders``: Eden gateway auth is
+    // ``X-Org-Api-Key`` + ``X-Org-Id``. Keep Bearer for older
+    // proxies that still expect it.
+    if (this.apiKey) {
+      h["Authorization"] = `Bearer ${this.apiKey}`;
+      h["X-Org-Api-Key"] = this.apiKey;
+    }
+    if (this.orgId) h["X-Org-Id"] = this.orgId;
     return h;
   }
 

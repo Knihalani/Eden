@@ -15,7 +15,8 @@ SQL >
         countState() AS event_count,
         sumState(toUInt64(outcome = 'error')) AS error_count,
         avgState(toFloat64(duration_ms)) AS avg_duration_state,
-        quantileState(0.95)(toFloat64(duration_ms)) AS p95_duration_state
+        quantileState(0.95)(toFloat64(duration_ms)) AS p95_duration_state,
+        uniqExactState(trace_id) AS trace_count
     FROM telemetry_events_ch
     GROUP BY tenant_id, hour
 

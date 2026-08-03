@@ -347,30 +347,24 @@ class DataRetentionManager:
         return report
 
     async def _delete_from_clickhouse(self, tenant_id: str) -> int:
-        """Delete tenant data from ClickHouse metrics tables.
+        """Delete tenant data from ClickHouse analytics tables.
 
-        The ClickHouse HTTP endpoint does not support parameterised
-        queries the way asyncpg does, so we have to interpolate
-        ``tenant_id`` into the SQL string. To prevent SQL injection
-        through the admin-only ``DELETE /gdpr/tenant`` endpoint
-        (which forwards this parameter straight from the URL
-        path), we escape single quotes using the SQL-standard
-        doubled-quote form (``''``) before substitution.
-
-        If you ever loosen this, you MUST keep the escape — and
-        ideally switch to ClickHouse's prepared-statements HTTP
-        endpoint instead of f-string interpolation.
+        Delegates to ``ClickHouseSink.delete_tenant_rows``, which uses
+        ``qualified_table`` names (``{database}.agent_performance``,
+        ``{database}.telemetry_events_ch``, ``{database}.home_kpi_hourly``)
+        — never the stale ``metrics.*`` / ``default.*`` literals.
 
         Tinybird workspaces reject ALTER DELETE via ``/v0/sql``.
-        When the configured host is Tinybird we raise so the caller
-        records an error on ``RetentionReport`` — returning 0 used to
-        look like a successful empty purge.
+        ``delete_tenant_rows`` raises so the caller records an error on
+        ``RetentionReport`` — returning 0 used to look like a successful
+        empty purge.
         """
-        # ClickHouse integration is optional — if not configured, skip
         clickhouse_url = getattr(settings, "clickhouse_url", "")
         if not clickhouse_url:
             return 0
 
+        # Fast-path Tinybird check before constructing the sink (same
+        # raise contract as ClickHouseSink.delete_tenant_rows).
         if "tinybird.co" in clickhouse_url.lower():
             logger.warning(
                 "GDPR ClickHouse purge incomplete: Tinybird host cannot "
@@ -382,39 +376,13 @@ class DataRetentionManager:
                 "via /v0/sql — erasure must not be reported complete"
             )
 
-        # SQL-standard string-literal escape: double the quote.
-        safe_tenant_id = tenant_id.replace("'", "''")
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                deleted = 0
-                ch_deletes = [
-                    (
-                        "ALTER TABLE metrics.agent_performance "
-                        f"DELETE WHERE tenant_id = '{safe_tenant_id}'"
-                    ),
-                    # Wave 6: telemetry_events_ch mirrors Postgres
-                    # telemetry_events; must be purged on tenant delete.
-                    # Column is tenant_id (not org_id) — matches DDL +
-                    # Tinybird datasource schema.
-                    (
-                        "ALTER TABLE default.telemetry_events_ch "
-                        f"DELETE WHERE tenant_id = '{safe_tenant_id}'"
-                    ),
-                ]
-                for query in ch_deletes:
-                    async with session.post(
-                        clickhouse_url, data=query.encode()
-                    ) as resp:
-                        if resp.status == 200:
-                            deleted += 1
-                        else:
-                            logger.warning(
-                                "ClickHouse GDPR delete HTTP %s: %s",
-                                resp.status,
-                                (await resp.text())[:200],
-                            )
-                return deleted
+            from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+
+            sink = await get_clickhouse_sink()
+            return await sink.delete_tenant_rows(tenant_id)
+        except RuntimeError:
+            raise
         except Exception as exc:
             logger.warning("ClickHouse GDPR delete failed: %s", exc)
             return 0

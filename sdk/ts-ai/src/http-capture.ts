@@ -4,6 +4,7 @@
 
 import { getDefaultClient } from "./client.js";
 import { randomId } from "./ids.js";
+import { currentTrace } from "./trace.js";
 import type { TraceOptions } from "./types.js";
 
 let _installed = false;
@@ -76,7 +77,7 @@ function emitHttpEvent(args: {
     eventId: `eden_http_${randomId()}`,
     tenantId: config.orgId ?? "default",
     projectId: config.projectId,
-    traceId: randomId(),
+    traceId: currentTrace()?.traceId ?? randomId(),
     realm: config.realm,
     eventType: "llm_completion",
     timestamp: new Date().toISOString(),

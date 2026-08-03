@@ -16,6 +16,13 @@ import {
 } from "@/lab/settings/settings-chrome";
 import { cn } from "@/lib/utils";
 
+/** Basic ``local@domain.tld`` shape — stronger than a bare ``includes("@")``. */
+const INVITE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidInviteEmail(value: string): boolean {
+  return INVITE_EMAIL_RE.test(value.trim());
+}
+
 type MemberFilter = "all" | "active" | "invited" | "disabled";
 
 export type InviteOutcome = {
@@ -114,9 +121,9 @@ export function SettingsMembersView({
             <button
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
-              disabled={inviting || !email.trim().includes("@")}
+              disabled={inviting || !isValidInviteEmail(email)}
               title={
-                email.trim().includes("@") ? undefined : "Enter a valid email"
+                isValidInviteEmail(email) ? undefined : "Enter a valid email"
               }
               onClick={async () => {
                 setInviting(true);

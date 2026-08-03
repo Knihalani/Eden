@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -36,6 +36,44 @@ def _reraise_analytics(exc: Exception, *, fallback: str) -> NoReturn:
         uuid_detail="Invalid organization id",
         fk_detail="Organization not found",
     )
+
+
+async def _telemetry_from_clickhouse(
+    org_id: str,
+    *,
+    days: int,
+    kind: str,
+) -> list[dict[str, Any]] | None:
+    """Prefer CH/Tinybird ``telemetry_events_ch`` aggregates; soft-fail to None.
+
+    Same pattern as Home KPI in ``wave6_online``: reachability is not
+    populatedness — an empty CH answer falls through to Postgres.
+    ``telemetry_events_query_api.pipe`` is a raw-row ENDPOINT (filters +
+    LIMIT, no percentile/heatmap aggregates), so latency/throughput use
+    ``/v0/sql`` via ``ClickHouseSink._execute``.
+    """
+    try:
+        from eden.config import get_settings
+        from eden.data_platform.clickhouse_sink import get_clickhouse_sink
+
+        url = getattr(get_settings(), "clickhouse_url", "") or ""
+        if not url.strip():
+            return None
+        sink = await get_clickhouse_sink()
+        if kind == "latency":
+            rows = await sink.query_latency_by_day(org_id, days=days)
+        elif kind == "throughput":
+            rows = await sink.query_throughput_heatmap(org_id, days=days)
+        else:
+            return None
+        return rows if rows else None
+    except Exception as exc:
+        logger.debug(
+            "analytics %s CH read failed; using PG: %s",
+            kind,
+            redact_all(str(exc)),
+        )
+        return None
 
 
 @router.get("", response_model=dict)
@@ -183,7 +221,22 @@ async def latency(
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
-    """Per-day latency percentiles from ``telemetry_events``."""
+    """Per-day latency percentiles from ``telemetry_events_ch`` (PG fallback)."""
+    ch_rows = await _telemetry_from_clickhouse(org_id, days=days, kind="latency")
+    if ch_rows is not None:
+        return {
+            "by_day": [
+                {
+                    "day": r["day"],
+                    "p50_ms": float(r["p50_ms"]) if r.get("p50_ms") is not None else None,
+                    "p95_ms": float(r["p95_ms"]) if r.get("p95_ms") is not None else None,
+                    "p99_ms": float(r["p99_ms"]) if r.get("p99_ms") is not None else None,
+                }
+                for r in ch_rows
+            ],
+            "data_source": "clickhouse",
+        }
+
     start = datetime.now(UTC) - timedelta(days=days)
     client = await _analytics_client()
     try:
@@ -211,7 +264,8 @@ async def latency(
              "p95_ms": float(r["p95_ms"]) if r["p95_ms"] is not None else None,
              "p99_ms": float(r["p99_ms"]) if r["p99_ms"] is not None else None}
             for r in rows
-        ]
+        ],
+        "data_source": "postgres",
     }
 
 
@@ -221,7 +275,21 @@ async def throughput(
     days: int = Query(default=30, ge=1, le=365),
     _user: dict = Depends(get_current_user),
 ):
-    """Request counts per (weekday, hour-of-day) bucket for heatmap viz."""
+    """Request counts per (weekday, hour-of-day); CH preferred, PG fallback."""
+    ch_rows = await _telemetry_from_clickhouse(org_id, days=days, kind="throughput")
+    if ch_rows is not None:
+        return {
+            "by_hour": [
+                {
+                    "hour": int(r["hour"]),
+                    "weekday": int(r["weekday"]),
+                    "requests": int(r["requests"]),
+                }
+                for r in ch_rows
+            ],
+            "data_source": "clickhouse",
+        }
+
     start = datetime.now(UTC) - timedelta(days=days)
     client = await _analytics_client()
     try:
@@ -245,7 +313,8 @@ async def throughput(
             {"hour": int(r["hour"]), "weekday": int(r["weekday"]),
              "requests": int(r["requests"])}
             for r in rows
-        ]
+        ],
+        "data_source": "postgres",
     }
 
 

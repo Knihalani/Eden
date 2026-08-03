@@ -305,7 +305,7 @@ async def snooze(
     body: SnoozeRequest = Body(default=SnoozeRequest()),
 ) -> dict[str, Any]:
     until = datetime.now(UTC) + timedelta(hours=body.hours)
-    snooze_item(org_id, item_ref, until)
+    await snooze_item(org_id, item_ref, until)
     return _ok(
         "improvement_cockpit",
         {"item_ref": item_ref, "snoozed_until": until.isoformat()},
