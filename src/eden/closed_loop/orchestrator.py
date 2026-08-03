@@ -926,6 +926,10 @@ class ClosedLoopOrchestrator:
         # Slack alert — the primary channel when connected. Same sparse
         # severity policy as email (P0/P1 only for issue_created); the
         # dispatcher no-ops when the org has no Slack install/channel.
+        # M14 (§8.4): propose→Slack p95 budget is
+        # ``Settings.propose_to_slack_p95_budget_s`` (default 90s) from
+        # ISSUE_CREATED for pre-triaged issues — measured by harness /
+        # golden-path, not a hard kill here.
         try:
             if not human:
                 from eden.services.slack_notify import notify_issue_detected

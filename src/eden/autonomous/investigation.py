@@ -84,6 +84,7 @@ class InvestigationAgent:
         *,
         trigger: str,
         untrusted_evidence: str | None = None,
+        slot: str = DEFAULT_LLM_SLOT,
     ) -> dict[str, Any]:
         if not trigger or not trigger.strip():
             return _not_implemented_envelope(
@@ -155,10 +156,13 @@ class InvestigationAgent:
 
         # 3. Call the LLM. Falls back to a heuristic envelope
         #    on any failure.
+        # M14 (§8.2): ``slot`` is caller-pinned (TriageAgent passes
+        # ``slot="fast"``) so triage classification cannot silently
+        # upgrade when TaskClassifier heuristics change.
         raw = await _call_llm(
             prompt,
             agent="autonomous_investigation",
-            slot=DEFAULT_LLM_SLOT,
+            slot=slot,
             system_prompt=_INVESTIGATION_SYSTEM_PROMPT,
             max_tokens=600,
         )

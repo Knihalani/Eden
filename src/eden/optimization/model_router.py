@@ -104,6 +104,14 @@ class TaskClassifier:
     # Agents that are always simple / extraction-oriented
     SIMPLE_AGENTS: set[str] = {"format", "extract", "classify", "summarize"}
 
+    # M14 (§8.2): agents whose callers MUST pass ``slot="fast"`` so the
+    # heuristic below short-circuits to T1. Routing assertion tests lock
+    # these — a classifier change must not silently upgrade critic/triage.
+    PINNED_FAST_AGENTS: set[str] = {
+        "patch_critic",
+        "autonomous_investigation",
+    }
+
     # Agents that are always complex / reasoning-heavy
     COMPLEX_AGENTS: set[str] = {
         "planner",

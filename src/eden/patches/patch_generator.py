@@ -56,6 +56,7 @@ rather than getting a half-baked patch.
 
 from __future__ import annotations
 
+import asyncio
 import difflib
 import hashlib
 import json
@@ -793,31 +794,41 @@ class PatchGenerator:
                     },
                 )
 
-        # Load context.
+        # M14 (§8.4): style / PR-pattern / KG context loads in parallel.
         style_profile: dict[str, Any] = {}
         pr_patterns: dict[str, Any] = {}
         kg_penalties: list[dict[str, Any]] = []
 
-        if self._style_learner is not None:
+        async def _load_style() -> dict[str, Any]:
+            if self._style_learner is None:
+                return {}
             try:
                 result = await self._style_learner.get_profile(org_id, repo_id)
-                style_profile = result.get("data", {}).get("profile") or {}
+                return result.get("data", {}).get("profile") or {}
             except Exception as exc:
                 logger.debug("patch_gen: style profile load failed: %s", exc)
-        if self._pr_patterns is not None:
+                return {}
+
+        async def _load_pr_patterns() -> dict[str, Any]:
+            if self._pr_patterns is None:
+                return {}
             try:
                 result = await self._pr_patterns.get_patterns(org_id, repo_id)
                 data = result.get("data") or {}
-                pr_patterns = {
+                return {
                     "title_format": data.get("title_format"),
                     "body_template": data.get("body_template"),
                     "common_branch_prefix": data.get("common_branch_prefix"),
                 }
             except Exception as exc:
                 logger.debug("patch_gen: pr patterns load failed: %s", exc)
-        if self._kg is not None:
+                return {}
+
+        async def _load_kg() -> list[dict[str, Any]]:
+            if self._kg is None:
+                return []
+            penalties: list[dict[str, Any]] = []
             try:
-                # Combine same-file + same-RCA history for penalties.
                 linked = linked_files or []
                 for f in linked[:3]:
                     sfh = await self._kg.same_file_history(
@@ -825,27 +836,31 @@ class PatchGenerator:
                     )
                     data = sfh.get("data") or {}
                     if data.get("found"):
-                        kg_penalties.append({
+                        penalties.append({
                             "code_path": f.get("path"),
                             "revert_rate": data.get("revert_rate", 0.0),
                             "denial_rate": data.get("denial_rate", 0.0),
                         })
-                # If we have an RCA category, look up category history too.
                 if rca_id:
                     rca_cat = rca_id.split("_")[0] if "_" in rca_id else ""
-                    if rca_cat and self._kg is not None:
+                    if rca_cat:
                         cat_hist = await self._kg.same_rca_category_history(
                             org_id, repo_id, rca_cat,
                         )
                         data = cat_hist.get("data") or {}
                         for m in (data.get("matches") or [])[:2]:
-                            kg_penalties.append({
+                            penalties.append({
                                 "code_path": m.get("code_path"),
                                 "revert_rate": m.get("revert_rate", 0.0),
                                 "last_outcome": m.get("last_outcome"),
                             })
             except Exception as exc:
                 logger.debug("patch_gen: KG load failed: %s", exc)
+            return penalties
+
+        style_profile, pr_patterns, kg_penalties = await asyncio.gather(
+            _load_style(), _load_pr_patterns(), _load_kg()
+        )
 
         system_prompt, prompt = _build_patch_prompt(
             repo_id=repo_id,

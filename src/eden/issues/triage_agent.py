@@ -211,6 +211,10 @@ class TriageAgent:
         # Hard 90s ceiling → partial ``source="timeout"`` on breach.
         # M11 (§7.1): stumble/user content enters the investigation
         # prompt only behind EDEN_DATA delimiters.
+        # M14 (§8.2): pin triage classification to T1/SLM via
+        # ``slot="fast"`` — not router-classified. Routing assertion
+        # tests lock this so a TaskClassifier heuristic change cannot
+        # silently upgrade the tier (same pattern as patch critic).
         untrusted_evidence = _trace_content_for_prompt(stumbles)
         try:
             from eden.autonomous import InvestigationAgent
@@ -220,6 +224,7 @@ class TriageAgent:
                     org_id,
                     trigger=f"issue:{issue_id}",
                     untrusted_evidence=untrusted_evidence,
+                    slot="fast",
                 ),
                 timeout=_LLM_TIMEOUT_S,
             )

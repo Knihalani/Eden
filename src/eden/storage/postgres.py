@@ -43,6 +43,19 @@ _request_pg_conn: contextvars.ContextVar[Any] = contextvars.ContextVar(
 )
 
 
+
+def _m14_min_size(min_pool_size, default_min: int) -> int:
+    """M14 (§8.1): honour EDEN_NEON_SCALE_TO_ZERO by forcing min_size=0."""
+    try:
+        from eden.storage.empty_cooldown import neon_scale_to_zero_enabled
+
+        if neon_scale_to_zero_enabled():
+            return 0
+    except Exception:
+        pass
+    return default_min if min_pool_size is None else min_pool_size
+
+
 class RequestConnLease:
     """An RLS-scoped connection that is acquired on first use, not up front.
 
@@ -542,7 +555,9 @@ class PostgresClient:
             # env vars and silently kept the hardcoded 5/20 baseline.
             # ``min_size`` MUST stay 0 in Neon deploys so scale-to-zero
             # can fire — warm sockets alone keep compute active.
-            min_size=min_pool_size if min_pool_size is not None else s.postgres_min_pool_size,
+            # M14 (§8.1): when ``EDEN_NEON_SCALE_TO_ZERO=1``, force
+            # min_size=0 regardless of caller override.
+            min_size=_m14_min_size(min_pool_size, s.postgres_min_pool_size),
             max_size=max_pool_size if max_pool_size is not None else s.postgres_pool_size,
         )
         # Persist the explicit ``ssl`` arg (caller override) but prefer
