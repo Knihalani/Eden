@@ -7,6 +7,7 @@ export const MARKETING_SITEMAP_ROUTES = [
   "/",
   "/pricing",
   "/about",
+  "/why-eden",
   "/contact",
   "/changelog",
   "/privacy",

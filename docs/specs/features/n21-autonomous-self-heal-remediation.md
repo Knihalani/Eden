@@ -6,7 +6,7 @@
 | **Slug** | `autonomous-self-heal-remediation` |
 | **Priority** | P0 |
 | **Effort** | M |
-| **Eden status** | **SHIPPED behind flag** — execute path live (`SelfHealer.heal_from_issue` → `execute_heal`, `src/eden/autonomous/investigation.py`); heals fire only when the org opts in via an `autonomy_policies` row (`auto_runtime_heal=true` — the config default `autonomous_actions_v0=False` denies them) |
+| **Eden status** | **SHIPPED** — execute path live (`SelfHealer.heal_from_issue` → `execute_heal`); heals allowed by default via `autonomous_actions_v0=True` / `auto_runtime_heal=True` (Settings opt-out) |
 | **Role in autonomous maintenance** | Eden **fixes production outages and quality drops at runtime** — rollback bad deploys, bust poisoned caches, reweight routing — without waiting for a human |
 | **Dependencies** | N22, F29, F30, N08, F42, `autonomous/investigation.py`, F41, F46 |
 

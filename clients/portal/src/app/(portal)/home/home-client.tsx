@@ -11,7 +11,6 @@ import {
 import { issueForTrace, type IssueFixture } from "@/lab/fixtures/issues";
 import {
   formatDuration,
-  formatTokens,
   formatUsd,
   type TraceFixture,
 } from "@/lab/fixtures/traces";
@@ -32,11 +31,13 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { SHELL_QUERY, OBSERVE_STALE } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { api } from "@/lib/api/resources";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { FirstEventWaitAction } from "@/components/shell/first-event-wait";
 import { FIRST_EVENT_WAIT, U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { getPageDescription } from "@/lib/page-descriptions";
+import { AutonomyRoiBanner } from "@/lab/autonomy-roi-banner";
 
 function Kpi({
   label,
@@ -217,6 +218,16 @@ export default function HomeClient() {
     },
   );
 
+  const costKpiQuery = useOrgQuery(
+    ["portal", "costKpi", orgId, 24] as const,
+    orgId,
+    async () => {
+      const res = await api.costKpi(orgId!, { window_hours: 24 });
+      return res.data;
+    },
+    SHELL_QUERY,
+  );
+
   const agentsLoaded = agentsQuery.data !== undefined;
   const agents = agentsQuery.data ?? [];
   const traces = tracesQuery.data ?? [];
@@ -262,6 +273,28 @@ export default function HomeClient() {
     () => homeSnapshot(agents, traces),
     [agents, traces],
   );
+
+    const liveTiles = useMemo(() => {
+    const payload = costKpiQuery.data as
+      | {
+          tiles?: Array<Record<string, unknown>>;
+          data_source?: string;
+        }
+      | undefined;
+    const tiles = payload?.tiles ?? [];
+    const byKey = (key: string) =>
+      tiles.find((t) => t.key === key) as
+        | { value?: number; previous?: number; delta_pct?: number | null }
+        | undefined;
+    return {
+      cost: byKey("cost_usd"),
+      traces: byKey("traces"),
+      cacheSavings: byKey("cache_savings_usd"),
+      source: payload?.data_source,
+      ready: costKpiQuery.data !== undefined && !costKpiQuery.isError,
+    };
+  }, [costKpiQuery.data, costKpiQuery.isError]);
+
   const alerts = useDismissedSet("eden.home.dismissedAlerts");
   const { openAlerts } = useAlerts();
 
@@ -336,7 +369,9 @@ export default function HomeClient() {
         }
       />
 
-      {/* First viewport: KPIs (≤3 mobile) → diagnosis → one primary action group */}
+      <AutonomyRoiBanner />
+
+      {/* First viewport: KPIs — live cost/traces when available */}
       <div className="flex flex-wrap border-b border-[var(--line)]">
         <Kpi
           label="Failures"
@@ -347,33 +382,24 @@ export default function HomeClient() {
           href={zeroData ? "/traces" : "/issues"}
         />
         <Kpi
-          label="Runs"
+          label="Traces"
           value={
-            agentsLoaded ? String(snap.fleetRuns) : String(traces.length)
+            liveTiles.ready && liveTiles.traces?.value != null
+              ? String(Math.round(Number(liveTiles.traces.value)))
+              : traces.length
+                ? String(traces.length)
+                : "—"
           }
           hint={
-            agentsLoaded
-              ? snap.successRate == null
-                ? snap.fleetRuns > 0
-                  ? "success unknown"
-                  : "no runs yet"
-                : `${(snap.successRate * 100).toFixed(0)}%`
+            liveTiles.ready
+              ? liveTiles.source === "clickhouse"
+                ? "24h · analytics"
+                : "24h · live"
               : traces.length
-                ? "from feed · open fleet for rollup"
+                ? "from feed"
                 : "no runs yet"
           }
           tone="default"
-          hintTone={
-            !agentsLoaded
-              ? "default"
-              : snap.successRate == null
-                ? "default"
-                : snap.successRate >= 0.95
-                  ? "ok"
-                  : snap.successRate < 0.8
-                    ? "error"
-                    : "default"
-          }
           href="/traces"
         />
         <Kpi
@@ -395,13 +421,22 @@ export default function HomeClient() {
         <Kpi
           label="Spend"
           value={
-            agentsLoaded ? formatUsd(snap.fleetCost) : formatUsd(snap.cost)
+            liveTiles.ready && liveTiles.cost?.value != null
+              ? formatUsd(Number(liveTiles.cost.value))
+              : "—"
           }
           tone="default"
           hint={
-            agentsLoaded
-              ? formatTokens(snap.fleetTokens)
-              : formatTokens(snap.tokens)
+            liveTiles.ready && liveTiles.cost?.delta_pct != null
+              ? `${liveTiles.cost.delta_pct > 0 ? "+" : ""}${liveTiles.cost.delta_pct}% vs prior`
+              : liveTiles.cacheSavings?.value
+                ? `${formatUsd(Number(liveTiles.cacheSavings.value))} cached`
+                : "24h"
+          }
+          hintTone={
+            liveTiles.cost?.delta_pct != null && liveTiles.cost.delta_pct > 20
+              ? "error"
+              : "default"
           }
           href="/cost"
           className="hidden sm:block"

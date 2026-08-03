@@ -60,14 +60,14 @@ def test_checker_detects_a_lying_table(checker) -> None:
         "### 1.4 Live defaults that decide behavior (`config.py`)\n"
         "| Flag / knob | Default | Effect |\n"
         "|---|---|---|\n"
-        "| `autonomous_actions_v0` | True | wrong on purpose |\n"
+        "| `autonomous_actions_v0` | False | wrong on purpose |\n"
         "### 1.5 next section\n"
     )
     flags = checker.parse_spec_flag_table(lying)
-    assert flags == {"autonomous_actions_v0": "True"}
+    assert flags == {"autonomous_actions_v0": "False"}
     settings = checker.default_settings()
-    assert checker._values_match("True", settings.autonomous_actions_v0) is False
-    assert checker._values_match("False", settings.autonomous_actions_v0) is True
+    assert checker._values_match("False", settings.autonomous_actions_v0) is False
+    assert checker._values_match("True", settings.autonomous_actions_v0) is True
 
 
 def test_checker_rejects_malformed_compound_rows(checker) -> None:

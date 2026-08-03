@@ -486,7 +486,12 @@ class ImprovementCockpitAggregator:
                 "source_ref": r.get("source_ref"),
                 "base_ref_sha": evidence.get("base_ref_sha"),
                 "ev_score": evidence.get("ev_score"),
+                "evidence_tier": evidence.get("evidence_tier"),
+                "failure_pack_status": evidence.get("failure_pack_status"),
             }
+            hermetic = evidence.get("hermetic_preverify")
+            if isinstance(hermetic, dict) and hermetic.get("status"):
+                payload["hermetic_status"] = hermetic.get("status")
             # M13 (§6.6): stale badge when draft older than plan_stale_after_days.
             if status == "draft" and _plan_is_stale(r, stale_days):
                 payload["stale"] = True

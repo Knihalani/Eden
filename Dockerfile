@@ -89,6 +89,10 @@ ENV PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 COPY --chown=eden:eden src ./src
 COPY --chown=eden:eden migrations ./migrations
 COPY --chown=eden:eden alembic.ini ./alembic.ini
+# Public Python SDK — dogfood bootstrap imports ``eden_sdk`` when
+# EDEN_API_KEY + EDEN_ORG_ID are set (same path as any customer agent).
+COPY --chown=eden:eden sdk/python/eden_sdk ./sdk/python/eden_sdk
+COPY --chown=eden:eden sdk/python/pyproject.toml ./sdk/python/pyproject.toml
 
 # StatGate + closed-loop gating (EvidenceGate / Cat 17 wiring).
 # Minimal subset only — research packages stay out of the image.
@@ -107,7 +111,8 @@ COPY --chown=eden:eden supplementaries/cat_22_apm/__init__.py supplementaries/ca
 # builder's venv at /opt/venv has it via `uv sync`, but we exec
 # /usr/local/bin/python3 (not the venv's interpreter) so we need this.
 # Include /app so ``supplementaries.phase_*`` resolves.
-ENV PYTHONPATH=/app/src:/app
+# Include /app/sdk/python so ``import eden_sdk`` works for dogfood.
+ENV PYTHONPATH=/app/src:/app:/app/sdk/python
 
 # Which commit is actually serving traffic.
 #

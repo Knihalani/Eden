@@ -442,6 +442,11 @@ class ImprovePlanCard(BaseModel):
     # Soft Autonomy Phase 9: set when the post-PR guardian drafted
     # this plan as a revert/follow-up of an earlier merged plan.
     parentPlanId: str | None = None
+    # Evidence tier chips (static / replay / sandbox / …) for Fix now.
+    evidenceTier: str | None = None
+    hermeticStatus: str | None = None
+    failurePackStatus: str | None = None
+    evScore: float | None = None
 
 
 class AbExperimentCard(BaseModel):

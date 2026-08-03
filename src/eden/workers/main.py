@@ -266,6 +266,13 @@ async def _run_forever() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("cost ledger loop binding failed: %s", exc)
 
+    try:
+        from eden.dogfood import bootstrap_dogfood_sdk
+
+        bootstrap_dogfood_sdk()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("dogfood SDK bootstrap failed: %s", exc)
+
     # 1. Insights detector loop — leader-gated singleton.
     insights_task = asyncio.create_task(
         _supervise("insights_loop", _leader_insights_loop, stop),

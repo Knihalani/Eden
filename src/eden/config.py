@@ -271,12 +271,11 @@ def _build_settings_class():
         # trust, it does not block sign-in. Kill-switch:
         # ``EMAIL_VERIFICATION_ENABLED=0``.
         email_verification_enabled: bool = True
-        # Cat 14 (autonomous) destructive-action flag. The
-        # ``/heal``, ``/heal/{id}/approve``, ``/heal/{id}/deny`` routes
-        # require this + the per-action two-stage opt-in. OFF by
-        # default — enable explicitly; the human-approval gate still
-        # blocks side-effects when the flag is on.
-        autonomous_actions_v0: bool = False
+        # Cat 14 / M10: runtime self-heal (reversible actions) defaults ON.
+        # Orgs opt out via Settings → Autonomy. Code PR / auto-merge stay
+        # gated by code_change_enabled / auto_pr_enabled (still off).
+        # ``/heal`` admin routes still require org admin + this flag.
+        autonomous_actions_v0: bool = True
         experiments_v1: bool = False
 
         # F03 — checkpoint ingest + prefix cache.

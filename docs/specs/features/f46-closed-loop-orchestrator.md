@@ -237,7 +237,7 @@ Corrected against `src/eden/config.py` actuals (2026-08, M4 D20 —
 |---|---|
 | `closed_loop_orchestrator_v1` | `True` — consumer + verify worker on |
 | `auto_issue_detection_v1` | `True` — scanner on |
-| `autonomous_actions_v0` | `False` — heals denied unless the org opts in (N22) |
+| `autonomous_actions_v0` | `True` — reversible heals allowed; org Settings opt-out (N22) |
 | `verify_delay_seconds` / `verify_quiet_window_minutes` | `1800` / `30` |
 
 Per-step kill switches are per-action `feature_kills` rows checked via

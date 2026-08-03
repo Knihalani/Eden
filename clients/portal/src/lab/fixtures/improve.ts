@@ -46,6 +46,11 @@ export type ImprovePlanFixture = {
   /** Soft Autonomy Phase 9: set when the post-PR guardian drafted this
    * plan as a revert/follow-up of an earlier merged plan. */
   parentPlanId?: string | null;
+  /** Evidence chips for Fix now (from plan.evidence). */
+  evidenceTier?: string | null;
+  hermeticStatus?: string | null;
+  failurePackStatus?: string | null;
+  evScore?: number | null;
   /** Primary next action */
   primaryAction: "try_evals" | "recompare" | "open_trace" | "open_issue";
 };

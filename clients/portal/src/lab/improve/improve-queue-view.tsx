@@ -15,6 +15,7 @@ import {
 } from "@/lab/improve/improve-chrome";
 import type { ImproveQueueItem } from "@/lib/api";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
+import { AutonomyRoiBanner } from "@/lab/autonomy-roi-banner";
 import { cn } from "@/lib/utils";
 
 /** M13 dual-queue columns from `GET /orgs/{id}/improve/queue`. */
@@ -172,7 +173,9 @@ export function ImproveQueueView({
       ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <AutonomyRoiBanner />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
           <input
@@ -210,9 +213,14 @@ export function ImproveQueueView({
                   Show all
                 </button>
               ) : scoped.length === 0 ? (
-                <Link href="/issues" className="ds-btn ds-btn-primary ds-btn-sm">
-                  Open Issues
-                </Link>
+                <span className="flex flex-wrap gap-2">
+                  <Link href="/gateway" className="ds-btn ds-btn-primary ds-btn-sm">
+                    Send via Gateway
+                  </Link>
+                  <Link href="/issues" className="ds-btn ds-btn-ghost ds-btn-sm">
+                    Open Issues
+                  </Link>
+                </span>
               ) : undefined
             }
           />
@@ -241,6 +249,7 @@ export function ImproveQueueView({
                           {column === "fix_now" ? "Fix now" : "Improve later"}
                         </span>
                       ) : null}
+                      <EvidenceChips plan={p} />
                       <span className="type-ui min-w-0 flex-1 truncate text-[var(--text)]">
                         {p.title}
                       </span>
@@ -276,6 +285,30 @@ export function ImproveQueueView({
         </div>
       )}
     </div>
+    </div>
+  );
+}
+
+function EvidenceChips({ plan }: { plan: ImprovePlanFixture }) {
+  const chips: string[] = [];
+  if (plan.evidenceTier) chips.push(String(plan.evidenceTier));
+  if (plan.hermeticStatus) chips.push(`static:${plan.hermeticStatus}`);
+  if (plan.failurePackStatus) chips.push(`pack:${plan.failurePackStatus}`);
+  if (plan.evScore != null && Number.isFinite(plan.evScore)) {
+    chips.push(`ev ${plan.evScore.toFixed(1)}`);
+  }
+  if (chips.length === 0) return null;
+  return (
+    <>
+      {chips.map((c) => (
+        <span
+          key={c}
+          className="type-meta rounded border border-[var(--line)] px-1.5 py-0.5 text-[var(--text-faint)]"
+        >
+          {c}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -292,6 +325,7 @@ function QueuePeek({
       <div className="flex flex-wrap items-center gap-2">
         <ImproveStatusChip status={plan.status} />
         <ImproveKindChip kind={plan.kind} />
+        <EvidenceChips plan={plan} />
       </div>
       <h2 className="type-ui mt-3 text-[var(--text)]">{plan.title}</h2>
       <p className="type-meta mt-1">

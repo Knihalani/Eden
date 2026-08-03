@@ -2394,6 +2394,11 @@ export const api = {
       };
     }>(`/orgs/${orgId}/settings/autonomy/audit?limit=${limit}`),
 
+  getAutonomyBudget: (orgId: string) =>
+    fetchApi<{ data: Record<string, unknown> }>(
+      `/orgs/${orgId}/settings/autonomy/budget`,
+    ),
+
   // ── Webhook dead-letter queue (D.13) ───────────────────────────
   listWebhookDlq: (orgId: string, limit = 50) =>
     fetchApi<{
@@ -2781,7 +2786,7 @@ export type AutonomyPolicy = {
     limit_usd: number;
     within_budget: boolean;
   };
-  /** M10 — reversible heals denied in last 7d while heal opt-in is off. */
+  /** M10 — reversible heals denied in last 7d (opt-out or other gates). */
   would_have_healed_count?: number;
 };
 
@@ -4019,10 +4024,15 @@ const wave6Api = {
     if (params?.window_hours) q.set("window_hours", String(params.window_hours));
     if (params?.agent_id) q.set("agent_id", params.agent_id);
     const qs = q.toString();
-    return fetchApi<{ data: { tiles: Record<string, unknown>[] } }>(
-      `/orgs/${orgId}/cost-analytics/kpi${qs ? `?${qs}` : ""}`,
-      { headers: { "X-Org-Id": orgId } },
-    );
+    return fetchApi<{
+      data: {
+        tiles: Array<Record<string, unknown>>;
+        data_source?: string;
+        explorer?: Record<string, unknown>;
+      };
+    }>(`/orgs/${orgId}/cost-analytics/kpi${qs ? `?${qs}` : ""}`, {
+      headers: { "X-Org-Id": orgId },
+    });
   },
   getPromptWorkspace: (orgId: string, name: string) =>
     fetchApi(`/orgs/${orgId}/prompts/${encodeURIComponent(name)}/workspace`, {
