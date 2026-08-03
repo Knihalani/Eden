@@ -397,21 +397,21 @@ async def _critic_review(
     diff: str,
     *,
     rca_summary: str,
-    fail_closed: bool = False,
 ) -> dict[str, Any]:
     """Run the Phase 3b critic loop on a generated diff.
 
     Returns ``{"passed": bool, "reason": str, "raw": str}``.
-    When ``fail_closed`` is True (inbox / ``persist=False`` path),
-    critic outages return ``passed=False`` so bad patches never
-    enter the Improve inbox. Legacy persist path still fail-opens.
+    M4 (D13): fail-closed on EVERY path — a critic outage, malformed
+    output, or exhausted LLM budget returns ``passed=False`` so an
+    unreviewed patch can never continue, regardless of ``persist``.
+    (The legacy ``persist=True`` fail-open carve-out is gone.)
     """
     from eden.improvement.sweep_budget import try_consume_llm_call
 
     if not try_consume_llm_call():
         return {
-            "passed": not fail_closed,
-            "reason": "llm_budget_exhausted" if fail_closed else "critic_skipped",
+            "passed": False,
+            "reason": "llm_budget_exhausted",
             "raw": "",
         }
 
@@ -444,6 +444,15 @@ async def _critic_review(
         )
         raw = (response.content or "").strip()
         first_line = raw.splitlines()[0] if raw else ""
+        if not first_line:
+            # M4 (D13): an empty/blank critic response is not a review —
+            # fail closed rather than defaulting to "passed".
+            return {
+                "passed": False,
+                "reason": "critic_error",
+                "raw": raw,
+                "cost_usd": float(getattr(getattr(response, "usage", None), "cost", 0) or 0),
+            }
         if first_line.upper().startswith("FAIL"):
             return {
                 "passed": False,
@@ -459,9 +468,8 @@ async def _critic_review(
         }
     except Exception as exc:
         logger.debug("patch_gen: critic failed: %s", exc)
-        if fail_closed:
-            return {"passed": False, "reason": "critic_error", "raw": ""}
-        return {"passed": True, "reason": "critic_skipped", "raw": ""}
+        # M4 (D13): outage == not reviewed == fail.
+        return {"passed": False, "reason": "critic_error", "raw": ""}
 
 
 async def _run_static_preverify(
@@ -730,7 +738,9 @@ class PatchGenerator:
         max_cost_per_patch = float(
             DEFAULT_POLICY.get("max_cost_per_patch_usd") or 5.0
         )
-        critic_fail_closed = not persist
+        # M4 (D13): the critic fails closed on every path — the old
+        # ``critic_fail_closed = not persist`` carve-out let the legacy
+        # persist path ship diffs the critic never approved.
 
         # ── Generate → critic → static preverify loop (max 2) ──────
         diff = ""
@@ -836,7 +846,6 @@ class PatchGenerator:
                 self._router,
                 candidate,
                 rca_summary=rca_summary,
-                fail_closed=critic_fail_closed,
             )
             cost_usd += float(critic_verdict.get("cost_usd") or 0.0)
             critic_attempts += 1
@@ -851,7 +860,7 @@ class PatchGenerator:
                         + str(critic_verdict.get("reason", ""))
                     )
                     continue
-                diff = candidate if not critic_fail_closed else ""
+                diff = ""  # M4 (D13): unreviewed diffs never continue.
                 break
 
             # Critic passed — free static preverify (apply + syntax).
@@ -867,17 +876,15 @@ class PatchGenerator:
                         + feedback
                     )
                     continue
-                # Exhausted retries with static still failing.
-                if critic_fail_closed:
-                    diff = ""
-                else:
-                    diff = candidate
+                # Exhausted retries with static still failing — the
+                # candidate is suppressed on every path (M4, D13).
+                diff = ""
                 break
 
             diff = candidate
             break
 
-        if critic_fail_closed and critic_verdict and not critic_verdict.get("passed"):
+        if critic_verdict and not critic_verdict.get("passed"):
             return _ok_envelope(
                 self.name,
                 {
@@ -896,8 +903,7 @@ class PatchGenerator:
             )
 
         if (
-            critic_fail_closed
-            and static_preverify
+            static_preverify
             and static_preverify.get("status") == "failed"
             and not diff
         ):

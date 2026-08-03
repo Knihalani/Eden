@@ -132,6 +132,7 @@ class ImprovementAgent:
         agent_id: str | None = None,
         issue_id: str | None = None,
         trigger: str = "manual",
+        plan_kind_hint: str | None = None,
     ) -> dict[str, Any]:
         if not await _agent_enabled_for_org(org_id):
             return {"status": "disabled", "reason": "improvement_agent_v1=false"}
@@ -144,6 +145,7 @@ class ImprovementAgent:
                     agent_id=agent_id,
                     issue_id=issue_id,
                     trigger=trigger,
+                    plan_kind_hint=plan_kind_hint,
                 ),
                 timeout=_SWEEP_TIMEOUT_S,
             )
@@ -166,13 +168,21 @@ class ImprovementAgent:
         agent_id: str | None = None,
         issue_id: str | None = None,
         trigger: str = "manual",
+        plan_kind_hint: str | None = None,
     ) -> dict[str, Any]:
+        # TODO(M6): thread ``plan_kind_hint`` into the scoped propose path
+        # so nudge_promote / prompt_update producers honour it. Recorded
+        # on the run row today (M4, D8 plumbing) but not yet acted on.
         watermark = since or await runs_repo.get_watermark(org_id)
         run = await runs_repo.create_run(
             org_id,
             last_run_at=watermark,
             agent_id=agent_id,
-            metadata={"trigger": trigger, "issue_id": issue_id},
+            metadata={
+                "trigger": trigger,
+                "issue_id": issue_id,
+                "plan_kind_hint": plan_kind_hint,
+            },
         )
         run_id = str(run.get("id") or "")
         cfg = await imp_settings.get_settings(org_id)
@@ -982,11 +992,19 @@ async def request_sweep(
     *,
     agent_id: str | None = None,
     issue_id: str | None = None,
+    plan_kind_hint: str | None = None,
 ) -> dict[str, Any]:
-    """F46 on-demand entry: scoped sweep after triage code_change."""
+    """F46 on-demand entry: scoped sweep after triage code_change.
+
+    ``plan_kind_hint`` (M4, D8) tags sweeps requested for nudge/prompt
+    playbooks (``nudge_promote`` / ``prompt_update``) so the sweep can
+    steer the scoped issue toward that plan kind. The sweep may ignore
+    it until the plan-kind producers land (M6).
+    """
     return await ImprovementAgent().sweep(
         org_id,
         agent_id=agent_id,
         issue_id=issue_id,
         trigger="improvement.run_requested",
+        plan_kind_hint=plan_kind_hint,
     )

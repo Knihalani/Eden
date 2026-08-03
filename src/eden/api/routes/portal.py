@@ -157,8 +157,10 @@ def _map_issue_status(raw: str | None) -> str:
         return "open"
     if s in ("resolved", "ignored"):
         return "resolved"
-    # triaged / fix_pending / verifying / learning / regressed / acknowledged
-    if s in ("acknowledged", "triaged", "fix_pending", "verifying", "learning", "regressed"):
+    # triaged / fix_pending / verifying / learning / regressed / escalated
+    # / acknowledged — ``escalated`` (M4, D17) is "waiting on a human",
+    # which the portal renders as In progress.
+    if s in ("acknowledged", "triaged", "fix_pending", "verifying", "learning", "regressed", "escalated"):
         return "acknowledged"
     return "open"
 

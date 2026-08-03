@@ -96,7 +96,7 @@ github.py:_sync_improvement_plan_on_pr_close :594
 | `default_maintenance_mode` | `assisted` | Patch → require_approval (drafts anyway); heals need allow |
 | `daily_maintenance_budget_usd` | 25.0 | Downgrade to observe on breach |
 | `max_triage_cost_usd_per_day` | 5.0 | Triage LLM cap |
-| `patch_max_per_day` / `_generates_per_sweep` / `_llm_calls_per_sweep` | 10 / 3 / 8 | Generation ceilings |
+| `patch_max_per_day` / `patch_max_generates_per_sweep` / `patch_max_llm_calls_per_sweep` | 10 / 3 / 8 | Generation ceilings |
 | `verify_delay_seconds` / `verify_quiet_window_minutes` | 1800 / 30 | Post-merge verify |
 | `max_auto_rollbacks_per_day` | 3 | Heal storm cap |
 

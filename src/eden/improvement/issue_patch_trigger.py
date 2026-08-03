@@ -244,25 +244,29 @@ async def _n22_may_propose(org_id: str, agent_id: str | None) -> tuple[bool, str
 
 
 async def _budget_ok(org_id: str) -> tuple[bool, str]:
-    """Budgets from cost ledger (W7/W8) + daily maintenance cap + patch_max_per_day."""
+    """M4 (D12): single budget ledger — ``autonomy_policy.check_budget``
+    (the Redis ``autonomy:spend:`` counter every ``record_spend`` writer
+    feeds) + ``patch_max_per_day``. The parallel ``cost_ledger`` read is
+    gone; a broken budget check FAILS CLOSED (``budget_check_error``) —
+    the caller stamps the blocker on the issue."""
     try:
+        from eden.closed_loop.autonomy_policy import check_budget
         from eden.config import get_settings
-        from eden.llmops.cost_ledger import sum_feature_spend_today
 
-        settings = get_settings()
-        cap = float(getattr(settings, "daily_maintenance_budget_usd", 25.0) or 0)
-        if cap > 0:
-            spent = await sum_feature_spend_today(org_id, features=("patches", "autonomy"))
-            if spent >= cap:
-                return False, f"budget_exhausted:{spent:.2f}>={cap:.2f}"
+        ok, spent, limit = await check_budget(org_id)
+        if not ok:
+            return False, f"budget_exhausted:{spent:.2f}>={limit:.2f}"
 
-        day_cap = int(getattr(settings, "patch_max_per_day", 10) or 10)
+        day_cap = int(getattr(get_settings(), "patch_max_per_day", 10) or 10)
         if day_cap > 0:
             used = await plans_repo.count_code_patches_today(org_id)
             if used >= day_cap:
                 return False, f"patch_max_per_day:{used}>={day_cap}"
     except Exception as exc:
-        logger.debug("issue_patch_trigger: cost_ledger budget: %s", exc)
+        logger.warning(
+            "issue_patch_trigger: budget check failed (fail closed): %s", exc
+        )
+        return False, "budget_check_error"
 
     return True, "ok"
 
@@ -304,6 +308,18 @@ async def propose_plan_for_issue(
 
     budget_ok, budget_reason = await _budget_ok(org_id)
     if not budget_ok:
+        if budget_reason == "budget_check_error":
+            # M4 (D12): a broken budget check fails closed — stamp the
+            # blocker so the portal shows *why* no fix appeared.
+            await _stamp_patch_blocked(
+                org_id,
+                issue_id,
+                reason="budget_check_error",
+                message=(
+                    "Budget check failed — patch generation suppressed "
+                    "(fail closed)"
+                ),
+            )
         return {
             "status": "suppressed",
             "reason": budget_reason,

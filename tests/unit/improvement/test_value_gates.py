@@ -406,13 +406,21 @@ async def test_propose_suppresses_patch_max_per_day() -> None:
 
 @pytest.mark.asyncio
 async def test_budget_ok_enforces_patch_max_per_day() -> None:
+    # M4 (D12): _budget_ok now reads the unified autonomy_policy ledger
+    # (check_budget) instead of the cost-ledger feature sums; the old
+    # "daily_maintenance_budget_usd=0 disables the spend check" shape is
+    # gone, so the spend check is stubbed within-budget here and only
+    # the patch_max_per_day cap is exercised.
     from eden.improvement.issue_patch_trigger import _budget_ok
 
     settings = MagicMock()
-    settings.daily_maintenance_budget_usd = 0
     settings.patch_max_per_day = 3
     with (
         patch("eden.config.get_settings", return_value=settings),
+        patch(
+            "eden.closed_loop.autonomy_policy.check_budget",
+            AsyncMock(return_value=(True, 0.0, 25.0)),
+        ),
         patch(
             "eden.improvement.plans_repo.count_code_patches_today",
             AsyncMock(return_value=3),

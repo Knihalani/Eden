@@ -30,6 +30,10 @@ class IssueStatus:
     REGRESSED = "regressed"
     IGNORED = "ignored"
     LEARNING = "learning"
+    # M4 (D17): waiting on a human — written by ESCALATED_HUMAN so the
+    # cockpit can filter "waiting on human" instead of escalations being
+    # invisible status no-ops.
+    ESCALATED = "escalated"
 
 
 # Allowed forward transitions per event type.
@@ -56,6 +60,16 @@ ISSUE_STATE_TRANSITIONS: dict[str, dict[str, str]] = {
     },
     EventType.VERIFY_PASSED: {IssueStatus.VERIFYING: IssueStatus.RESOLVED},
     EventType.VERIFY_FAILED: {IssueStatus.VERIFYING: IssueStatus.REGRESSED},
+    # M4 (D17): escalation writes a real status. ``regressed`` is NOT a
+    # source state on purpose — a post-verify regression keeps its more
+    # specific status (the golden-path harness asserts it) while the
+    # escalation event/alert still fires.
+    EventType.ESCALATED_HUMAN: {
+        IssueStatus.OPEN: IssueStatus.ESCALATED,
+        IssueStatus.TRIAGED: IssueStatus.ESCALATED,
+        IssueStatus.FIX_PENDING: IssueStatus.ESCALATED,
+        IssueStatus.VERIFYING: IssueStatus.ESCALATED,
+    },
 }
 
 

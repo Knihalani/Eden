@@ -170,6 +170,7 @@
 | 133_email_verification_tokens | email_verification_tokens | yes | forever | soft | low | Signup email verification (hash-only tokens, mirrors password_reset_tokens) | Auth |
 | 134_budget_enforcement_default_true | budgets | yes | forever | soft | low | Free-tier budgets default to enforcement_enabled=TRUE; flips legacy free-tier rows (Wave 4 cost controls) | Cost |
 | 135_loop_events_outbox | loop_events_outbox | yes | 7d drained / forever undrained | soft | low | Durable Redis-down fallback for closed-loop events; drained back onto the stream by idle chore (M2, D4) | Improve |
+| 136_issue_status_escalated | agent_issues | yes | forever | soft | low | Widen issues status CHECK with 'escalated' so human escalation writes a real status (M4, D17) | Improve |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)

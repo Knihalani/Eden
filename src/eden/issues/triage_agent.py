@@ -455,6 +455,20 @@ class TriageAgent:
             return True
 
     async def _debit_budget(self, org_id: str, amount: float) -> None:
+        # M4 (D12): single spend writer — triage spend also lands in the
+        # shared maintenance ledger (Redis ``autonomy:spend:`` + W24 cost
+        # event) so ``evaluate_mode``'s daily-budget downgrade actually
+        # fires. The triage-specific daily cap below keeps its own
+        # counter (``triage_spend:``) so the tighter triage ceiling stays
+        # enforced independently of the org-wide budget.
+        try:
+            from eden.closed_loop.autonomy_policy import record_spend
+
+            await record_spend(
+                org_id, amount, feature="triage", model="triage"
+            )
+        except Exception:  # pragma: no cover - best-effort ledger tag
+            pass
         if await self._resolve_budget_cap(org_id) is None:
             return
         try:

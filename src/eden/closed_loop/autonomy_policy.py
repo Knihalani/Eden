@@ -72,10 +72,6 @@ _ACTION_TIERS: dict[str, tuple[str, int]] = {
     "auto_merge": ("auto_code_patch_merge", 4),
 }
 
-# Tiers that spend from the maintenance LLM budget (triage + patch).
-_BUDGETED_TIERS = {1, 2, 3, 4}
-
-
 @dataclass(slots=True)
 class AutonomousMaintenancePolicy:
     org_id: str
