@@ -255,7 +255,7 @@ async def test_propose_plan_passes_hydrated_content_and_real_trace() -> None:
         ),
         patch(
             "eden.improvement.evidence_plane.run_hermetic_preverify",
-            AsyncMock(return_value={"status": "passed", "detail": {}}),
+            AsyncMock(return_value={"status": "static_passed", "detail": {}}),
         ),
         patch("eden.patches.patch_generator.PatchGenerator.generate", generate),
         patch(
@@ -270,7 +270,9 @@ async def test_propose_plan_passes_hydrated_content_and_real_trace() -> None:
         result = await propose_plan_for_issue("org_test", "iss-1")
 
     assert result["status"] == "proposed"
-    assert result["hermetic_preverify"] == "passed"
+    # M7 (§4.1) honest label: static-only preverify success is
+    # "static_passed", never a bare "passed".
+    assert result["hermetic_preverify"] == "static_passed"
     assert "trc_prod_99" in result["example_trace_ids"]
     kwargs = generate.await_args.kwargs
     assert kwargs["trace_id"] == "trc_prod_99"

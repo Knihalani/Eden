@@ -186,12 +186,19 @@ def _plan_payload_from_patch(
     failure_pack: dict[str, Any] | None = None,
     hermetic_preverify: dict[str, Any] | None = None,
     example_trace_ids: list[str] | None = None,
+    replay: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     issue = ctx["issue"]
     triage = ctx.get("triage") or {}
     files = patch_data.get("files") or []
     sev = normalize_severity(issue.severity)
     pack = failure_pack or {}
+    # M7 (§4.1) evidence tier: "replay" only when replay actually passed;
+    # otherwise this plan carries static evidence only. ("tested" is the
+    # M8 sandbox test gate.)
+    evidence_tier = (
+        "replay" if (replay or {}).get("status") == "passed" else "static"
+    )
     # NOTE (M3, D28): no ``org_id`` key here — the payload is splatted
     # into ``plans_repo.create_plan(org_id, **payload)``, which takes
     # org_id positionally; a duplicate key is a TypeError.
@@ -214,7 +221,12 @@ def _plan_payload_from_patch(
             "example_trace_ids": list(example_trace_ids or pack.get("example_trace_ids") or []),
             "failure_pack_format": pack.get("format"),
             "failure_pack_status": pack.get("status"),
+            # M7 (§4.1): honest label — success is "static_passed"
+            # (readers accept legacy "passed" too).
             "hermetic_preverify": hermetic_preverify,
+            "evidence_tier": evidence_tier,
+            "replay": replay,
+            "failure_signature": pack.get("failure_signature"),
         },
         "triage_snapshot": triage,
         "llm_cost_usd": float(patch_data.get("cost_usd") or 0),
@@ -514,6 +526,48 @@ async def propose_plan_for_issue(
             "hermetic_detail": hermetic_preverify.get("detail") or {},
         }
 
+    # M7 (§4.1) — replay-before-PR: signature-based check of the patched
+    # context on checkpointed example traces. "failed" gates like a
+    # static failure; every "skipped" is allowed through, labeled.
+    replay_summary: dict[str, Any] = {"status": "skipped", "reason": "replay_error"}
+    try:
+        from eden.improvement.replay_verify import run_replay_verify
+
+        replay_result = await run_replay_verify(
+            org_id,
+            issue_id,
+            str(data.get("diff") or ""),
+            linked_files,
+            failure_pack,
+        )
+        replay_summary = replay_result.to_json()
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: replay verify failed: %s", exc)
+        replay_summary = {
+            "status": "skipped",
+            "reason": "replay_error",
+            "error": str(exc)[:200],
+        }
+
+    if replay_summary.get("status") == "failed":
+        # Same stamp path as a static failure: the portal must show why
+        # no fix appeared instead of the plan silently not existing.
+        await _stamp_patch_blocked(
+            org_id,
+            issue_id,
+            reason="replay_failed",
+            message=(
+                "Replay verify: the failure signature is still present "
+                "after applying the patch — plan suppressed"
+            ),
+        )
+        return {
+            "status": "suppressed",
+            "reason": "replay_failed",
+            "issue_id": issue_id,
+            "replay": replay_summary,
+        }
+
     payload = _plan_payload_from_patch(
         org_id,
         issue_id,
@@ -523,6 +577,7 @@ async def propose_plan_for_issue(
         failure_pack=failure_pack,
         hermetic_preverify=hermetic_preverify,
         example_trace_ids=example_trace_ids,
+        replay=replay_summary,
     )
     plan = await plans_repo.create_plan(org_id, **payload)
     if plan is None:
@@ -570,6 +625,8 @@ async def propose_plan_for_issue(
         ),
         "example_trace_ids": example_trace_ids,
         "hermetic_preverify": hermetic_preverify.get("status"),
+        "replay": replay_summary.get("status"),
+        "evidence_tier": (payload.get("evidence") or {}).get("evidence_tier"),
         "stumble_count": stumble_count,
     }
 

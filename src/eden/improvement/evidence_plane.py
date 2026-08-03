@@ -26,16 +26,27 @@ _MAX_PACK_CHARS = 6_000
 
 def static_check_files(
     files: list[dict[str, Any]],
+    *,
+    hunk_ranges: dict[str, list[tuple[int, int]]] | None = None,
 ) -> dict[str, Any]:
-    """Free syntax checks on patched file contents (stdlib only).
+    """Free syntax checks on patched file contents (stdlib + PyYAML).
 
-    ``.py`` → ``ast.parse``; ``.json`` → ``json.loads``. Unknown
-    extensions are skipped (do not fail). Returns
-    ``{status, errors, files_checked, files_skipped}``.
+    ``.py`` → ``ast.parse``; ``.json`` → ``json.loads``; ``.yaml/.yml``
+    → ``yaml.safe_load``; ``.toml`` → ``tomllib``. M7 (spec §4.5):
+    ``.ts/.tsx/.js/.jsx/.go`` get a string/comment-aware bracket +
+    string-termination balance heuristic (``kind="balance_heuristic"``).
+    Heuristic findings count as *failures* only when the patch hunks
+    touch the unbalanced region (``hunk_ranges`` maps path → list of
+    1-based ``(start, end)`` target-line ranges); otherwise — including
+    when no hunk info is available — they are recorded as warnings.
+    Unknown extensions are skipped (do not fail). Returns
+    ``{status, errors, warnings, files_checked, files_skipped}``.
     """
     errors: list[dict[str, str]] = []
+    warnings: list[dict[str, Any]] = []
     checked = 0
     skipped = 0
+    ranges_by_path = hunk_ranges or {}
     for item in files:
         path = str(item.get("path") or "").strip()
         content = item.get("content")
@@ -89,6 +100,35 @@ def static_check_files(
                         "message": str(exc)[:400],
                     }
                 )
+        elif suffix in (".yaml", ".yml"):
+            checked += 1
+            err = _check_yaml(path, content)
+            if err is not None:
+                errors.append(err)
+        elif suffix == ".toml":
+            checked += 1
+            err = _check_toml(path, content)
+            if err is not None:
+                errors.append(err)
+        elif suffix in _BALANCE_SUFFIXES:
+            checked += 1
+            # Backtick strings cover both JS template literals and Go
+            # raw strings, so the scanner treats them alike.
+            issues = _scan_balance(content)
+            for issue in issues:
+                entry = {
+                    "path": path,
+                    "kind": "balance_heuristic",
+                    "message": str(issue.get("message") or "")[:400],
+                    "line_start": issue.get("line_start"),
+                    "line_end": issue.get("line_end"),
+                }
+                if _issue_touches_hunks(issue, ranges_by_path.get(path)):
+                    errors.append(entry)
+                else:
+                    # False-positive guard (spec §4.5): unbalanced
+                    # region the patch never touched → warning only.
+                    warnings.append(entry)
         else:
             skipped += 1
 
@@ -96,9 +136,220 @@ def static_check_files(
     return {
         "status": status,
         "errors": errors,
+        "warnings": warnings,
         "files_checked": checked,
         "files_skipped": skipped,
     }
+
+
+_BALANCE_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".go")
+#: Line slack when intersecting an unbalanced region with patch hunks.
+_HUNK_SLACK_LINES = 2
+
+
+def _check_yaml(path: str, content: str) -> dict[str, Any] | None:
+    try:
+        import yaml
+    except Exception:
+        return None  # PyYAML unavailable → treat as skipped-with-label
+    try:
+        yaml.safe_load(content)
+        return None
+    except yaml.YAMLError as exc:
+        line = None
+        mark = getattr(exc, "problem_mark", None)
+        if mark is not None:
+            line = int(getattr(mark, "line", 0)) + 1
+        loc = f" (line {line})" if line else ""
+        return {
+            "path": path,
+            "kind": "yaml_syntax",
+            "message": f"{exc}"[:400] + loc,
+        }
+    except Exception as exc:
+        return {"path": path, "kind": "yaml_syntax", "message": str(exc)[:400]}
+
+
+def _check_toml(path: str, content: str) -> dict[str, Any] | None:
+    import tomllib
+
+    try:
+        tomllib.loads(content)
+        return None
+    except tomllib.TOMLDecodeError as exc:
+        return {"path": path, "kind": "toml_syntax", "message": str(exc)[:400]}
+    except Exception as exc:
+        return {"path": path, "kind": "toml_syntax", "message": str(exc)[:400]}
+
+
+def _issue_touches_hunks(
+    issue: dict[str, Any],
+    ranges: list[tuple[int, int]] | None,
+) -> bool:
+    """Line-distance heuristic: unbalanced region ∩ hunk target ranges.
+
+    Unknown hunk info (``ranges is None``) → not attributable to the
+    patch → False (caller records a warning, not a failure).
+
+    Issues whose region inherently spans opener→EOF (unclosed bracket,
+    unterminated backtick string / block comment) use *endpoint* touch
+    instead of full-range intersection — otherwise every hunk anywhere
+    in the file would count as touching, defeating the guard. A patch
+    that truncates the file touches the EOF endpoint; a pre-existing
+    imbalance far from the hunks stays a warning.
+    """
+    if not ranges:
+        return False
+    start = int(issue.get("line_start") or 0)
+    end = int(issue.get("line_end") or start)
+    for lo, hi in ranges:
+        lo_s = int(lo) - _HUNK_SLACK_LINES
+        hi_s = int(hi) + _HUNK_SLACK_LINES
+        if issue.get("endpoints_only"):
+            if lo_s <= start <= hi_s or lo_s <= end <= hi_s:
+                return True
+        elif start <= hi_s and lo_s <= end:
+            return True
+    return False
+
+
+def _scan_balance(
+    content: str,
+    *,
+    backtick_strings: bool = True,
+) -> list[dict[str, Any]]:
+    """String/comment-aware bracket + string-termination scanner.
+
+    Catches the dominant LLM truncation class (spec §4.5): unclosed
+    ``([{``, mismatched closers, unterminated strings, and unterminated
+    block comments. ``'``/``"`` strings honor backslash escapes and must
+    end on their line; backtick strings (JS templates, Go raw strings)
+    may span lines. ``//`` line comments and ``/* */`` block comments
+    are ignored. Deliberately heuristic — no toolchain dependency.
+    """
+    issues: list[dict[str, Any]] = []
+    pairs = {")": "(", "]": "[", "}": "{"}
+    openers = set(pairs.values())
+    stack: list[tuple[str, int]] = []  # (char, line)
+    line = 1
+    i = 0
+    n = len(content)
+    in_line_comment = False
+    block_comment_start: int | None = None
+    string_quote: str | None = None
+    string_start_line = 0
+
+    while i < n:
+        ch = content[i]
+        nxt = content[i + 1] if i + 1 < n else ""
+        if ch == "\n":
+            if string_quote in ("'", '"'):
+                issues.append(
+                    {
+                        "message": f"unterminated {string_quote} string",
+                        "line_start": string_start_line,
+                        "line_end": string_start_line,
+                    }
+                )
+                string_quote = None
+            in_line_comment = False
+            line += 1
+            i += 1
+            continue
+        if in_line_comment:
+            i += 1
+            continue
+        if block_comment_start is not None:
+            if ch == "*" and nxt == "/":
+                block_comment_start = None
+                i += 2
+                continue
+            i += 1
+            continue
+        if string_quote is not None:
+            if ch == "\\" and string_quote != "`":
+                i += 2
+                continue
+            if ch == string_quote:
+                string_quote = None
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            in_line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            block_comment_start = line
+            i += 2
+            continue
+        if ch in ("'", '"') or (ch == "`" and backtick_strings):
+            string_quote = ch
+            string_start_line = line
+            i += 1
+            continue
+        if ch in openers:
+            stack.append((ch, line))
+        elif ch in pairs:
+            if not stack:
+                issues.append(
+                    {
+                        "message": f"unmatched closing {ch!r}",
+                        "line_start": line,
+                        "line_end": line,
+                    }
+                )
+            elif stack[-1][0] != pairs[ch]:
+                issues.append(
+                    {
+                        "message": (
+                            f"mismatched closing {ch!r} "
+                            f"(open {stack[-1][0]!r} at line {stack[-1][1]})"
+                        ),
+                        "line_start": stack[-1][1],
+                        "line_end": line,
+                    }
+                )
+                stack.pop()
+            else:
+                stack.pop()
+        i += 1
+
+    if string_quote == "`":
+        issues.append(
+            {
+                "message": "unterminated ` string",
+                "line_start": string_start_line,
+                "line_end": line,
+                "endpoints_only": True,
+            }
+        )
+    elif string_quote is not None:
+        issues.append(
+            {
+                "message": f"unterminated {string_quote} string",
+                "line_start": string_start_line,
+                "line_end": string_start_line,
+            }
+        )
+    if block_comment_start is not None:
+        issues.append(
+            {
+                "message": "unterminated block comment",
+                "line_start": block_comment_start,
+                "line_end": line,
+                "endpoints_only": True,
+            }
+        )
+    for opener, opened_at in stack[:3]:
+        issues.append(
+            {
+                "message": f"unclosed {opener!r} opened at line {opened_at}",
+                "line_start": opened_at,
+                "line_end": line,
+                "endpoints_only": True,
+            }
+        )
+    return issues
 
 
 def format_static_errors_for_prompt(errors: list[dict[str, Any]]) -> str:
@@ -146,7 +397,48 @@ async def build_failure_pack(org_id: str, issue_id: str) -> dict[str, Any]:
         "excerpt": excerpt,
         "fixture": fixture,
         "format": fixture.get("format") or "eden-failure-fixture-v1",
+        # M7 (§4.1): machine-checkable failure signature for replay verify.
+        "failure_signature": _pack_failure_signature(fixture),
     }
+
+
+def _pack_failure_signature(fixture: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract the failure signature from the fixture traces (pure)."""
+    try:
+        from eden.improvement.replay_verify import extract_failure_signature
+
+        for trace in (fixture.get("traces") or [])[:3]:
+            if not isinstance(trace, dict):
+                continue
+            detail = trace.get("detail") or (trace.get("stumble") or {}).get(
+                "detail"
+            )
+            span_attrs = None
+            for span in trace.get("spans") or []:
+                if isinstance(span, dict) and isinstance(
+                    span.get("attributes"), dict
+                ):
+                    attrs = span["attributes"]
+                    if any(
+                        attrs.get(k)
+                        for k in (
+                            "error",
+                            "exception.message",
+                            "otel.status_description",
+                        )
+                    ):
+                        # The span *name* lives on the span object, not
+                        # in its attributes — carry it along.
+                        span_attrs = {**attrs, "span_name": span.get("name")}
+                        break
+            sig = extract_failure_signature(
+                detail if isinstance(detail, dict) else {}, span_attrs
+            )
+            if sig is not None:
+                return sig.to_json()
+    except Exception as exc:
+        logger.debug("evidence_plane: signature extraction failed: %s", exc)
+    return None
 
 
 def _pack_excerpt(fixture: dict[str, Any]) -> str:
@@ -292,6 +584,7 @@ async def apply_diff_to_files(
         }
 
     files_after: list[dict[str, Any]] = []
+    hunk_ranges: dict[str, list[tuple[int, int]]] = {}
     try:
         for fd in parsed:
             path = _strip_prefix(str(fd.new_path or fd.old_path or ""))
@@ -306,6 +599,12 @@ async def apply_diff_to_files(
             if base is None:
                 raise DiffMaterializeError(f"linked content missing for {path}")
             after = _apply_hunks(base, fd.hunks, path=path)
+            # M7 (§4.5): 1-based target-line ranges the patch touches —
+            # the balance heuristic only *fails* inside these.
+            hunk_ranges[path] = [
+                (int(h.new_start), int(h.new_start) + max(int(h.new_count), 1) - 1)
+                for h in fd.hunks
+            ]
             files_after.append(
                 {
                     "path": path,
@@ -343,10 +642,11 @@ async def apply_diff_to_files(
     }
 
     if run_static:
-        static = static_check_files(files_after)
+        static = static_check_files(files_after, hunk_ranges=hunk_ranges)
         detail["static_check"] = {
             "status": static.get("status"),
             "errors": static.get("errors") or [],
+            "warnings": static.get("warnings") or [],
             "files_checked": static.get("files_checked"),
             "files_skipped": static.get("files_skipped"),
         }
@@ -371,6 +671,13 @@ async def run_hermetic_preverify(
     Diff apply and static syntax are hard signals. Hermetic debugger
     rerun is secondary evidence that bound traces are loadable.
     Persists ``issue_verifications`` with ``ref=hermetic_preverify``.
+
+    M7 (§4.1) honest labels: the success status is ``"static_passed"``
+    — nothing here executes the patched code, so it must not claim more
+    than static evidence. Readers accept both ``"passed"`` (legacy
+    rows/evidence) and ``"static_passed"``. The ``issue_verifications``
+    DB status stays ``"passed"`` (CHECK constraint); the honest label
+    lives in the ``detail`` jsonb + plan evidence.
     """
     detail: dict[str, Any] = {
         "kind": "hermetic_preverify",
@@ -399,7 +706,7 @@ async def run_hermetic_preverify(
             if apply_status == "passed"
             else "no_example_traces"
         )
-        status = "passed" if apply_status == "passed" else "skipped"
+        status = "static_passed" if apply_status == "passed" else "skipped"
         result = {"status": status, "detail": detail}
         await _persist_preverify(org_id, issue_id, fingerprint, result)
         return result
@@ -414,7 +721,7 @@ async def run_hermetic_preverify(
     except Exception as exc:
         detail["reason"] = f"debugger_unavailable:{exc}"
         # Diff apply + static still count if they passed.
-        status = "passed" if apply_status == "passed" else "skipped"
+        status = "static_passed" if apply_status == "passed" else "skipped"
         result = {"status": status, "detail": detail}
         await _persist_preverify(org_id, issue_id, fingerprint, result)
         return result
@@ -443,12 +750,12 @@ async def run_hermetic_preverify(
         detail["reason"] = "diff_applied"
         if any_checkpoints:
             detail["reason"] = "diff_applied_and_hermetic_ok"
-        result = {"status": "passed", "detail": detail}
+        result = {"status": "static_passed", "detail": detail}
     elif errors and not any_checkpoints:
         result = {"status": "failed", "detail": detail}
     elif any_checkpoints:
         detail["reason"] = "hermetic_rerun_ok"
-        result = {"status": "passed", "detail": detail}
+        result = {"status": "static_passed", "detail": detail}
     else:
         detail["reason"] = "fixture_only_no_checkpoints"
         result = {"status": "skipped", "detail": detail}
@@ -465,9 +772,12 @@ async def _persist_preverify(
 ) -> None:
     """Insert a completed issue_verifications row for hermetic preverify."""
     status = result.get("status") or "skipped"
-    # Map skipped → cancelled so we stay within the CHECK constraint.
+    # Map skipped → cancelled so we stay within the CHECK constraint
+    # (pending/passed/failed/cancelled). M7: the honest "static_passed"
+    # label maps to DB "passed"; the label itself lives in detail jsonb.
     db_status = {
         "passed": "passed",
+        "static_passed": "passed",
         "failed": "failed",
         "skipped": "cancelled",
     }.get(str(status), "cancelled")
