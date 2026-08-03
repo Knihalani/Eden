@@ -109,13 +109,16 @@ def test_default_chores_registered():
         "outbox_drain",
         "outbox_ttl_cleanup",
         "fix_pending_janitor",  # M3
+        "stale_plans_janitor",  # M13 §6.6
     }
     assert by_name["outbox_drain"].interval_s == 60.0
     assert by_name["outbox_ttl_cleanup"].interval_s == 6 * 3600.0
     assert by_name["fix_pending_janitor"].interval_s == 300.0
+    assert by_name["stale_plans_janitor"].interval_s == 3600.0
 
     from eden.closed_loop import event_bus
 
     assert by_name["outbox_drain"].fn is event_bus.drain_outbox
     assert by_name["outbox_ttl_cleanup"].fn is event_bus.cleanup_drained
     assert by_name["fix_pending_janitor"].fn is verify.fix_pending_janitor
+    assert by_name["stale_plans_janitor"].fn is verify.stale_plans_janitor

@@ -337,16 +337,21 @@ class CodebaseKnowledgeGraph:
         """
         if not paths or not org_id or not repo_id:
             return 0.0
-        max_rate = 0.0
-        for path in paths[:8]:
+        import asyncio
+
+        async def _rate(path: str) -> float:
             if not path:
-                continue
+                return 0.0
             try:
                 hist = await self.same_file_history(org_id, repo_id, path)
                 data = hist.get("data") or {}
-                max_rate = max(max_rate, float(data.get("revert_rate") or 0.0))
+                return float(data.get("revert_rate") or 0.0)
             except Exception as exc:  # pragma: no cover - defensive
                 logger.debug("kg revert_risk_premium failed: %s", exc)
+                return 0.0
+
+        rates = await asyncio.gather(*[_rate(p) for p in paths[:8]])
+        max_rate = max(rates) if rates else 0.0
         return round(max_rate * 2.0, 4)
 
 

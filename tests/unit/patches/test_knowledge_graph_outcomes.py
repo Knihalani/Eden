@@ -148,7 +148,8 @@ async def test_mark_closed_records_kg_rejected_and_rejection_memory() -> None:
 
 
 @pytest.mark.asyncio
-async def test_guardian_regression_records_kg_reverted() -> None:
+async def test_guardian_follow_up_does_not_record_kg_reverted() -> None:
+    """Follow-up-only regressions must not inflate KG revert history."""
     plan = _plan(status="merged", id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     with (
         patch(
@@ -180,6 +181,48 @@ async def test_guardian_regression_records_kg_reverted() -> None:
 
         result = await handle_regression(ORG, "issue-1", severity="MEDIUM")
     assert result["status"] == "drafted"
+    assert result["action"] == "follow_up"
+    rec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_guardian_revert_records_kg_reverted() -> None:
+    plan = _plan(status="merged", id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    revert_plan = {"id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
+    with (
+        patch(
+            "eden.improvement.guardian._find_merged_plan_for_issue",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.guardian._existing_follow_up",
+            AsyncMock(return_value=False),
+        ),
+        patch(
+            "eden.improvement.guardian._decide_revert_allowed",
+            AsyncMock(return_value=True),
+        ),
+        patch(
+            "eden.improvement.guardian._draft_revert",
+            AsyncMock(return_value=(revert_plan, None)),
+        ),
+        patch(
+            "eden.improvement.auto_merge.parent_is_canary_auto_merged",
+            return_value=False,
+        ),
+        patch(
+            "eden.patches.knowledge_graph.record_plan_outcome",
+            AsyncMock(return_value=1),
+        ) as rec,
+        patch(
+            "eden.services.slack_notify.notify_regression",
+            AsyncMock(return_value={}),
+        ),
+    ):
+        from eden.improvement.guardian import handle_regression
+
+        result = await handle_regression(ORG, "issue-1", severity="P0")
+    assert result["action"] == "revert"
     rec.assert_awaited_once_with(ORG, plan, "reverted")
 
 

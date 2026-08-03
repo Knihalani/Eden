@@ -21,12 +21,22 @@ errors after logging.
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
 
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_text(text: str) -> str:
+    """M12 (§7.2): value-level redact Slack free text before send."""
+    try:
+        from eden.issues.fixture_export import redact_secret_values
+
+        return redact_secret_values(text)
+    except Exception:
+        return text
 
 def _portal_base() -> str:
     """Base URL for deep links into the portal."""
@@ -85,10 +95,20 @@ def _blocks(
     link_label: str,
     context: str,
 ) -> list[dict[str, Any]]:
-    """Standard alert layout: header, body, one deep-link button, context."""
+    """Standard alert layout: header, body, one deep-link button, context.
+
+    M12 (§7.2): body/header/context are value-level-redacted so secret
+    substrings never reach Slack.
+    """
     return [
-        {"type": "header", "text": {"type": "plain_text", "text": header[:150]}},
-        {"type": "section", "text": {"type": "mrkdwn", "text": body[:2900]}},
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": _safe_text(header)[:150]},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": _safe_text(body)[:2900]},
+        },
         {
             "type": "actions",
             "elements": [
@@ -101,7 +121,9 @@ def _blocks(
         },
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": context[:2900]}],
+            "elements": [
+                {"type": "mrkdwn", "text": _safe_text(context)[:2900]}
+            ],
         },
     ]
 
@@ -117,6 +139,7 @@ async def _send(
     """Resolve channel + token, rate-limit, post. Never raises."""
     if not await _allow_send(org_id, dedupe_key):
         return {"status": "rate_limited"}
+    text = _safe_text(text)
     try:
         from eden.integrations.slack import store as slack_store
         from eden.integrations.slack.client import SlackClient

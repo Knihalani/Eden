@@ -75,6 +75,27 @@ async def test_from_improvement_plans_splits_queues() -> None:
             "evidence": {"issue_id": "3"},
             "created_at": (datetime.now(UTC) - timedelta(days=20)).isoformat(),
         },
+        {
+            # M13: pending_review also gets Fix-now / Improve-later columns.
+            "id": "p4",
+            "title": "Pending review patch",
+            "status": "pending_review",
+            "plan_kind": "code_patch",
+            "agent_id": "a1",
+            "source_ref": "issue:4",
+            "evidence": {"issue_id": "4", "evidence_tier": "static"},
+            "created_at": datetime.now(UTC).isoformat(),
+        },
+        {
+            "id": "p5",
+            "title": "Pending advisory",
+            "status": "pending_review",
+            "plan_kind": "advisory",
+            "agent_id": "a1",
+            "source_ref": "cost:5",
+            "evidence": {},
+            "created_at": datetime.now(UTC).isoformat(),
+        },
     ]
     with patch(
         "eden.improvement.plans_repo.list_plans",
@@ -88,8 +109,11 @@ async def test_from_improvement_plans_splits_queues() -> None:
     assert by_id["p2"].column == COLUMN_IMPROVE_LATER
     assert by_id["p3"].column == COLUMN_FIX_NOW
     assert by_id["p3"].payload.get("stale") is True
+    assert by_id["p4"].column == COLUMN_FIX_NOW
+    assert by_id["p5"].column == COLUMN_IMPROVE_LATER
     assert is_fix_now_item(by_id["p1"]) is True
     assert is_fix_now_item(by_id["p2"]) is False
+    assert is_fix_now_item(by_id["p4"]) is True
 
 
 @pytest.mark.asyncio

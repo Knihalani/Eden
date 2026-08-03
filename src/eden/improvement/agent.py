@@ -469,7 +469,39 @@ class ImprovementAgent:
             if cand:
                 candidates.append(cand)
 
-        ranked = rank_candidates(candidates)
+        # M13 harden: batch KG revert premiums into EV ranking.
+        kg_premiums: dict[str, float] = {}
+        try:
+            from eden.patches.knowledge_graph import CodebaseKnowledgeGraph
+
+            kg = CodebaseKnowledgeGraph()
+            for cand in candidates:
+                paths = [
+                    str(p)
+                    for p in (cand.files_changed or [])
+                    if isinstance(p, str) and p
+                ]
+                if not paths:
+                    evid = cand.evidence if isinstance(cand.evidence, dict) else {}
+                    paths = [
+                        str(p)
+                        for p in (evid.get("linked_paths") or evid.get("files") or [])
+                        if p
+                    ]
+                if not paths:
+                    continue
+                repo = str(
+                    (cand.evidence or {}).get("repo_id")
+                    or cand.agent_id
+                    or "unknown"
+                )
+                premium = await kg.revert_risk_premium(org_id, repo, paths)
+                if premium:
+                    kg_premiums[cand.source_fingerprint] = premium
+        except Exception as exc:
+            logger.debug("sweep kg premiums skipped: %s", exc)
+
+        ranked = rank_candidates(candidates, kg_premiums=kg_premiums or None)
         top = ranked[: max(0, int(max_generates))]
         created = 0
         skipped = rejected_skip + max(0, len(ranked) - len(top))

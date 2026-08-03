@@ -224,6 +224,18 @@ def sampling_profile_override_sync(org_id: str) -> str | None:
     return _ORG_SAMPLING_CACHE.get(org_id)
 
 
+async def ensure_org_sampling_warmed(org_id: str) -> None:
+    """M14 (§8.3): warm sampling override cache on first ingest for org.
+
+    Mirrors other org-flag warming (``warm_org_flags``): one DB read per
+    org, then sync hot path. No-op when already cached (including explicit
+    ``None`` = no override → keep global ``full``).
+    """
+    if not org_id or org_id in _ORG_SAMPLING_CACHE:
+        return
+    await sampling_profile_for_org(org_id)
+
+
 def preview_disabled_envelope(feature: str) -> dict[str, Any]:
     return {
         "status": "preview_disabled",

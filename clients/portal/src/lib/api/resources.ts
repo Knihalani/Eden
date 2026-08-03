@@ -2889,6 +2889,11 @@ type ImproveFeatureEnvelope<T> = {
 };
 
 export const improvePlansApi = {
+  // M13: live cockpit dual queue (Fix now / Improve later).
+  getQueue: (orgId: string, query?: string) =>
+    fetchApi<ImproveFeatureEnvelope<ImproveQueueData>>(
+      `/orgs/${orgId}/improve/queue${query ? `?${query}` : ""}`,
+    ),
   listPlans: (orgId: string, query?: string) =>
     fetchApi<ImproveFeatureEnvelope<{ plans: ImprovementPlan[]; count: number }>>(
       `/orgs/${orgId}/improve/plans${query ? `?${query}` : ""}`,

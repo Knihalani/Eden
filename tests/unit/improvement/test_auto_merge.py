@@ -635,6 +635,10 @@ class TestGuardianAutoRevert:
         assert not parent_is_canary_auto_merged(
             {"evidence": {"auto_merge": {"merged": False}}}
         )
+        # Missing canary key must NOT default to True.
+        assert not parent_is_canary_auto_merged(
+            {"evidence": {"auto_merge": {"merged": True}}}
+        )
 
 
 # ── Decision evidence shape ──────────────────────────────────────────

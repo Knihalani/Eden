@@ -990,20 +990,37 @@ class PatchGenerator:
             cost_usd += float(getattr(response.usage, "cost", 0.0) or 0.0)
             model_used = getattr(response, "model", model_used)
             if cost_usd >= max_cost_per_patch:
+                # M11 harden: still apply path allowlist before returning
+                # a candidate that could touch workflows/dotfiles.
+                if candidate and _is_valid_diff(candidate):
+                    path_reason = _diff_path_policy_reason(
+                        candidate, linked_files or []
+                    )
+                    if path_reason:
+                        candidate = ""
+                        cost_reason = path_reason
+                    else:
+                        cost_reason = (
+                            f"max_cost_per_patch_usd exceeded "
+                            f"({cost_usd:.4f}>={max_cost_per_patch})"
+                        )
+                else:
+                    candidate = ""
+                    cost_reason = (
+                        f"max_cost_per_patch_usd exceeded "
+                        f"({cost_usd:.4f}>={max_cost_per_patch})"
+                    )
                 return _ok_envelope(
                     self.name,
                     {
                         "rca_id": rca_id,
                         "trace_id": trace_id,
                         "repo_id": repo_id,
-                        "diff": candidate if _is_valid_diff(candidate) else "",
+                        "diff": candidate,
                         "model_used": model_used,
                         "cost_usd": cost_usd,
                         "status": "low_quality",
-                        "reason": (
-                            f"max_cost_per_patch_usd exceeded "
-                            f"({cost_usd:.4f}>={max_cost_per_patch})"
-                        ),
+                        "reason": cost_reason,
                         "static_preverify": static_preverify or {},
                         "attempts": critic_attempts,
                     },
