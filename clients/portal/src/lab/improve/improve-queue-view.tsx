@@ -13,20 +13,35 @@ import {
   ImproveKindChip,
   ImproveStatusChip,
 } from "@/lab/improve/improve-chrome";
+import type { ImproveQueueItem } from "@/lib/api";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { cn } from "@/lib/utils";
 
-type StatusFilter = "all" | ImproveStatus;
+/** M13 dual-queue columns from `GET /orgs/{id}/improve/queue`. */
+type QueueColumnFilter = "fix_now" | "improve_later";
+type StatusFilter = "all" | ImproveStatus | QueueColumnFilter;
+
+function planIdFromQueueItem(item: ImproveQueueItem): string | null {
+  const fromPayload = item.payload?.plan_id;
+  if (typeof fromPayload === "string" && fromPayload) return fromPayload;
+  if (item.ref.startsWith("improvement_plan:")) {
+    return item.ref.slice("improvement_plan:".length) || null;
+  }
+  return null;
+}
 
 export function ImproveQueueView({
   agentId,
   plans,
+  queueItems = [],
   selectedId,
   onSelect,
   onOpenPlan,
 }: {
   agentId: string;
   plans: ImprovePlanFixture[];
+  /** M13: live cockpit items — drives Fix now / Improve later chips. */
+  queueItems?: ImproveQueueItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onOpenPlan: (id: string) => void;
@@ -39,20 +54,71 @@ export function ImproveQueueView({
     return plans.filter((p) => p.agentId === agentId);
   }, [plans, agentId]);
 
-  const counts = useMemo(() => statusCounts(scoped), [scoped]);
+  // M13: plan_id → aggregator column (fix_now / improve_later / …).
+  const columnByPlanId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of queueItems) {
+      const pid = planIdFromQueueItem(item);
+      if (pid) map.set(pid, item.column);
+    }
+    return map;
+  }, [queueItems]);
+
+  const hasLiveQueue = columnByPlanId.size > 0;
+  const counts = useMemo(() => {
+    const base = statusCounts(scoped);
+    if (!hasLiveQueue) return base;
+    let fixNow = 0;
+    let improveLater = 0;
+    for (const p of scoped) {
+      const col = columnByPlanId.get(p.id);
+      if (col === "fix_now") fixNow += 1;
+      else if (col === "improve_later") improveLater += 1;
+    }
+    return { ...base, fix_now: fixNow, improve_later: improveLater };
+  }, [scoped, hasLiveQueue, columnByPlanId]);
+
+  // Prefer Fix-now chip once the live cockpit queue is available.
+  useEffect(() => {
+    if (hasLiveQueue && status === "needs_you") {
+      setStatus("fix_now");
+    }
+  }, [hasLiveQueue, status]);
 
   // Landing on "No matches" with zero explanation when nothing needs
   // review reads as broken — fall back to the full list.
   useEffect(() => {
-    if (status === "needs_you" && counts.needs_you === 0 && scoped.length > 0) {
-      setStatus("all");
+    if (!hasLiveQueue) {
+      if (
+        status === "needs_you" &&
+        counts.needs_you === 0 &&
+        scoped.length > 0
+      ) {
+        setStatus("all");
+      }
+      return;
     }
-  }, [status, counts.needs_you, scoped.length]);
+    if (
+      status === "fix_now" &&
+      (counts as { fix_now?: number }).fix_now === 0 &&
+      scoped.length > 0
+    ) {
+      const later = (counts as { improve_later?: number }).improve_later ?? 0;
+      setStatus(later > 0 ? "improve_later" : "all");
+    }
+  }, [status, counts, scoped.length, hasLiveQueue]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return scoped.filter((p) => {
-      if (status !== "all" && p.status !== status) return false;
+      if (hasLiveQueue && (status === "fix_now" || status === "improve_later")) {
+        if (columnByPlanId.get(p.id) !== status) return false;
+      } else if (status === "needs_you" && hasLiveQueue) {
+        // Legacy chip → Fix now column when live queue is present.
+        if (columnByPlanId.get(p.id) !== "fix_now") return false;
+      } else if (status !== "all" && status !== "fix_now" && status !== "improve_later") {
+        if (p.status !== status) return false;
+      }
       if (!q) return true;
       return (
         p.title.toLowerCase().includes(q) ||
@@ -60,13 +126,50 @@ export function ImproveQueueView({
         p.id.toLowerCase().includes(q)
       );
     });
-  }, [scoped, status, query]);
+  }, [scoped, status, query, hasLiveQueue, columnByPlanId]);
 
   const selected =
     rows.find((p) => p.id === selectedId) ??
     scoped.find((p) => p.id === selectedId) ??
     rows[0] ??
     null;
+
+  const filterOptions = hasLiveQueue
+    ? [
+        { id: "all" as const, label: "All", count: counts.all },
+        {
+          id: "fix_now" as const,
+          label: "Fix now",
+          count: (counts as { fix_now?: number }).fix_now ?? 0,
+        },
+        {
+          id: "improve_later" as const,
+          label: "Improve later",
+          count: (counts as { improve_later?: number }).improve_later ?? 0,
+        },
+        {
+          id: "in_progress" as const,
+          label: "In progress",
+          count: counts.in_progress,
+        },
+        { id: "verify" as const, label: "Verify", count: counts.verify },
+        { id: "done" as const, label: "Done", count: counts.done },
+      ]
+    : [
+        { id: "all" as const, label: "All", count: counts.all },
+        {
+          id: "needs_you" as const,
+          label: "Fix now",
+          count: counts.needs_you,
+        },
+        {
+          id: "in_progress" as const,
+          label: "In progress",
+          count: counts.in_progress,
+        },
+        { id: "verify" as const, label: "Verify", count: counts.verify },
+        { id: "done" as const, label: "Done", count: counts.done },
+      ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -84,17 +187,7 @@ export function ImproveQueueView({
             value={status}
             onChange={setStatus}
             scroll
-            options={[
-              { id: "all", label: "All", count: counts.all },
-              { id: "needs_you", label: "Needs you", count: counts.needs_you },
-              {
-                id: "in_progress",
-                label: "In progress",
-                count: counts.in_progress,
-              },
-              { id: "verify", label: "Verify", count: counts.verify },
-              { id: "done", label: "Done", count: counts.done },
-            ]}
+            options={filterOptions}
           />
         </div>
 
@@ -128,6 +221,7 @@ export function ImproveQueueView({
             {rows.map((p) => {
               const agent = agentForPlan(p);
               const active = p.id === selected?.id;
+              const column = columnByPlanId.get(p.id);
               return (
                 <li key={p.id}>
                   <button
@@ -142,6 +236,11 @@ export function ImproveQueueView({
                     <div className="flex flex-wrap items-center gap-2">
                       <ImproveStatusChip status={p.status} />
                       <ImproveKindChip kind={p.kind} />
+                      {column === "fix_now" || column === "improve_later" ? (
+                        <span className="type-meta text-[var(--text-faint)]">
+                          {column === "fix_now" ? "Fix now" : "Improve later"}
+                        </span>
+                      ) : null}
                       <span className="type-ui min-w-0 flex-1 truncate text-[var(--text)]">
                         {p.title}
                       </span>

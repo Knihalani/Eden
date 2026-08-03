@@ -45,7 +45,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -949,6 +949,9 @@ async def github_webhook(request: Request) -> dict[str, str]:
                 "installation_repositories action=%s ignored (no local repo roster)",
                 action,
             )
+        elif event in ("check_run", "check_suite"):
+            # M9 (§4.3): customer CI ingestion for eden/improve-* PRs.
+            return await _ingest_check_conclusion(event, payload)
     except Exception:
         if delivery_id:
             await _release_github_delivery(delivery_id)
@@ -989,6 +992,209 @@ async def _release_github_delivery(delivery_id: str) -> None:
         await redis.delete(f"github:delivery:{delivery_id}")
     except Exception as exc:  # noqa: BLE001
         logger.debug("github delivery idempotency release failed: %s", exc)
+
+
+# ── M9 (§4.3): customer CI ingestion ────────────────────────────────
+# GitHub conclusions that count as "red" for an Eden improvement PR.
+# ``neutral``/``skipped``/``stale`` stamp evidence but never notify.
+_CI_FAILURE_CONCLUSIONS = frozenset(
+    {"failure", "timed_out", "startup_failure", "action_required"}
+)
+
+
+def _plan_linked_paths(plan: dict[str, Any]) -> list[str]:
+    """files_changed → plain path list (tolerates str or dict rows)."""
+    paths: list[str] = []
+    for entry in plan.get("files_changed") or []:
+        path = entry.get("path") if isinstance(entry, dict) else entry
+        if isinstance(path, str) and path:
+            paths.append(path)
+    return paths[:8]
+
+
+def _check_output_excerpt(section: dict[str, Any]) -> str:
+    """Short human excerpt from a check_run ``output`` block."""
+    output = section.get("output") or {}
+    parts = [
+        str(output.get(key) or "").strip()
+        for key in ("title", "summary")
+        if output.get(key)
+    ]
+    return " — ".join(parts)[:600]
+
+
+async def _ingest_check_conclusion(event: str, payload: dict[str, Any]) -> dict[str, str]:
+    """Ingest a check_run/check_suite conclusion for an Eden PR (§4.3).
+
+    Conclusion events only. Plan resolution: PR number when the payload
+    carries one (``find_by_pr``), else the ``eden/improve-*`` head
+    branch (``find_by_branch``). Ordering per §10.4: stamp the
+    ``ci_status`` evidence FIRST, notify after — re-delivery is safe
+    because the outer X-GitHub-Delivery SETNX dedupe short-circuits
+    retries and the jsonb evidence merge is idempotent anyway. Red CI
+    additionally Slack-notifies (deduped ``ci:{plan}:{check}``) and
+    triggers at most ONE cheap regenerate per plan while it is still
+    ``pr_opened``.
+
+    Installations that never granted ``checks:read`` simply never
+    receive these events — nothing here breaks; the honest
+    ``ci_ingestion: "unavailable"`` stamp happens at PR-open
+    (``approve._stamp_ci_ingestion_availability``).
+    """
+    from eden.config import get_settings
+
+    if not bool(getattr(get_settings(), "ci_ingestion_v1", True)):
+        return {"status": "ignored", "reason": "ci_ingestion_disabled"}
+    if str(payload.get("action") or "") != "completed":
+        return {"status": "ignored", "reason": "not_a_conclusion"}
+    section = payload.get(event) or {}
+    conclusion = str(section.get("conclusion") or "")
+    if not conclusion:
+        return {"status": "ignored", "reason": "not_a_conclusion"}
+
+    check_name = str(section.get("name") or event)
+    suite = section.get("check_suite") if event == "check_run" else section
+    head_branch = str(
+        (suite or {}).get("head_branch") or section.get("head_branch") or ""
+    )
+    repo_full = str((payload.get("repository") or {}).get("full_name") or "")
+
+    from eden.improvement import plans_repo
+
+    plan: dict[str, Any] | None = None
+    for pr_ref in section.get("pull_requests") or []:
+        number = (pr_ref or {}).get("number")
+        if number and repo_full:
+            plan = await plans_repo.find_by_pr(
+                repo_full_name=repo_full, pr_number=int(number)
+            )
+            if plan is not None:
+                break
+    if plan is None:
+        if not head_branch.startswith("eden/improve-"):
+            return {"status": "ignored", "reason": "not_an_eden_branch"}
+        plan = await plans_repo.find_by_branch(github_branch=head_branch)
+    if plan is None:
+        return {"status": "ignored", "reason": "no_matching_plan"}
+
+    org_id = str(plan["org_id"])
+    plan_id = str(plan["id"])
+
+    # Stamp BEFORE notify (§10.4) — the durable record must exist even
+    # when Slack or the regenerate below fail.
+    from eden.improvement.approve import _merge_plan_evidence
+
+    updated = await _merge_plan_evidence(
+        org_id,
+        plan_id,
+        {
+            "ci_status": {
+                "state": str(section.get("status") or "completed"),
+                "conclusion": conclusion,
+                "check_name": check_name,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        },
+    )
+    plan = updated or plan
+
+    if conclusion not in _CI_FAILURE_CONCLUSIONS:
+        return {"status": "ok", "ci": "stamped"}
+
+    try:
+        from eden.services.slack_notify import notify_ci_failure
+
+        await notify_ci_failure(
+            org_id,
+            plan_id=plan_id,
+            check_name=check_name,
+            conclusion=conclusion,
+            title=str(plan.get("title") or "Improvement plan"),
+            pr_url=(str(plan.get("pr_url") or "").strip() or None),
+            agent_id=(str(plan.get("agent_id") or "").strip() or None),
+        )
+    except Exception as exc:  # noqa: BLE001 — notify must not 500 the hook
+        logger.warning(
+            "check ingestion: slack notify failed plan=%s: %s",
+            plan_id,
+            redact_all(str(exc)),
+        )
+
+    await _maybe_ci_regenerate(
+        org_id,
+        plan,
+        check_name=check_name,
+        excerpt=_check_output_excerpt(section),
+    )
+    return {"status": "ok", "ci": "stamped"}
+
+
+async def _maybe_ci_regenerate(
+    org_id: str,
+    plan: dict[str, Any],
+    *,
+    check_name: str,
+    excerpt: str,
+) -> None:
+    """At most one cheap CI-driven regenerate per plan (loop guard).
+
+    Reuses the M8/static feedback channel: the CI failure excerpt rides
+    in as a ``static_errors`` row, so PatchGenerator sees
+    ``- [ci_failure] <check>: <excerpt>``. Only fires while the plan is
+    still ``pr_opened``; the attempt is stamped into evidence BEFORE
+    generation so a crash mid-generate cannot re-trigger on retry.
+    """
+    try:
+        if str(plan.get("status") or "") != "pr_opened":
+            return
+        evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+        if (evidence or {}).get("ci_regenerate"):
+            return
+        from eden.improvement.approve import (
+            _merge_plan_evidence,
+            regenerate_plan_diff_from_static_errors,
+        )
+
+        plan_id = str(plan["id"])
+        await _merge_plan_evidence(
+            org_id,
+            plan_id,
+            {
+                "ci_regenerate": {
+                    "check_name": check_name,
+                    "attempted_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+        from eden.providers.factory import get_repo_provider_for_org
+
+        provider = await get_repo_provider_for_org(
+            org_id, agent_id=(str(plan.get("agent_id") or "").strip() or None)
+        )
+        result = await regenerate_plan_diff_from_static_errors(
+            org_id,
+            plan,
+            repo_provider=provider,
+            static_errors=[
+                {
+                    "path": check_name,
+                    "kind": "ci_failure",
+                    "message": excerpt or "customer CI reported a failure",
+                }
+            ],
+            linked_paths=_plan_linked_paths(plan),
+        )
+        logger.info(
+            "check ingestion: CI regenerate plan=%s status=%s",
+            plan_id,
+            str(result.get("status") or ""),
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort follow-up
+        logger.warning(
+            "check ingestion: CI regenerate failed plan=%s: %s",
+            str(plan.get("id") or ""),
+            redact_all(str(exc)),
+        )
 
 
 # ── Org-scoped routes ───────────────────────────────────────────────

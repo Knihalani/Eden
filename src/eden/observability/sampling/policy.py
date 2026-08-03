@@ -85,7 +85,7 @@ class IntelligenceAwareSamplingPolicy:
     everything (safe rollback).
     """
 
-    profile: SamplingProfile = "full"  # soft-launch default; ops set balanced
+    profile: SamplingProfile = "full"  # soft-launch / Settings default
     enabled: bool = True
     slow_threshold_ms: float = 5_000.0
     keep_rate_override: float | None = None
@@ -203,10 +203,19 @@ def get_sampling_policy() -> IntelligenceAwareSamplingPolicy:
         if override is not None and float(override) < 1.0:
             # Explicit rate overrides profile fallback only when not "full".
             keep_rate_override = float(override)
+        # ``sampling_slow_threshold_ms`` used to be read here as a
+        # dataclass-default-only field: the settings value existed
+        # (``src/eden/config.py``) but nothing ever passed it into the
+        # policy, so operators setting ``EDEN_SAMPLING_SLOW_THRESHOLD_MS``
+        # silently kept the hardcoded 5s default no matter what they set.
+        slow_threshold_ms = float(
+            getattr(s, "sampling_slow_threshold_ms", None) or 5_000.0
+        )
         _policy = IntelligenceAwareSamplingPolicy(
             profile=profile,  # type: ignore[arg-type]
             enabled=enabled,
             keep_rate_override=keep_rate_override,
+            slow_threshold_ms=slow_threshold_ms,
         )
     except Exception:
         _policy = IntelligenceAwareSamplingPolicy()

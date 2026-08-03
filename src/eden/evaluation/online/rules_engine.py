@@ -398,16 +398,22 @@ class OnlineScoringRulesEngine:
             return out
 
         def _decode(primary: Any, zstd_val: Any) -> Any:
-            if primary is not None and primary != "" and primary != {}:
-                return primary
-            if not zstd_val:
-                return primary
-            try:
-                from eden.storage.compression import decompress_jsonb
+            # Phase 4 storage: prefer *_zstd first (matches the canonical
+            # reader in telemetry_collector.get_trace_tree) so this stays
+            # correct once telemetry_plaintext_jsonb_write_enabled=False
+            # stops populating ``primary``. Falls back to the plaintext
+            # JSONB column when zstd is absent (pre-migration rows) or
+            # fails to decompress (defensive; should not happen).
+            if zstd_val:
+                try:
+                    from eden.storage.compression import decompress_jsonb
 
-                return decompress_jsonb(zstd_val)
-            except Exception:
-                return primary
+                    decoded = decompress_jsonb(zstd_val)
+                    if decoded is not None:
+                        return decoded
+                except Exception:
+                    pass
+            return primary
 
         row_d = dict(row)
         inp = _decode(row_d.get("request_body"), row_d.get("request_body_zstd"))

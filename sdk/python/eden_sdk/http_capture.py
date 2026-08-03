@@ -17,6 +17,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from eden_sdk._instrumentation_ids import _trace_id_or_random
+from eden_sdk.capture import capture_request_response, limits_from_config
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 
@@ -104,12 +105,20 @@ def _emit_http_event(
     model = None
     if request_body:
         model = request_body.get("model")
+    is_error = bool(error or (status_code and status_code >= 400))
+    request_body, response_body, capture_attrs = capture_request_response(
+        request_body,
+        response_body,
+        error=error or ("http_error" if is_error else None),
+        duration_ms=duration_ms,
+        limits=limits_from_config(cfg),
+    )
     payload: dict[str, Any] = {
         "event_id": f"eden_http_{uuid.uuid4().hex[:16]}",
         "trace_id": _trace_id_or_random(),
         "event_type": "llm_completion",
         "name": f"http.{method.lower()}",
-        "outcome": "error" if error or (status_code and status_code >= 400) else "success",
+        "outcome": "error" if is_error else "success",
         "duration_ms": duration_ms,
         "model": model,
         "source_format": source_format,
@@ -118,6 +127,7 @@ def _emit_http_event(
             "http.method": method,
             "http.status_code": status_code,
             "http.capture": True,
+            **capture_attrs,
         },
         "request_payload": request_body,
         "response_payload": response_body,

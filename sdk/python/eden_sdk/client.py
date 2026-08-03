@@ -141,30 +141,71 @@ class TraceEvent:
         ).encode("utf-8")
 
 
-def _parse_ingest_counts(resp: Any, sent_count: int) -> tuple[int, int]:
-    """Return ``(accepted, rejected)`` from an ingest response body.
+def _parse_ingest_counts(resp: Any, sent_count: int) -> tuple[int, int, int]:
+    """Return ``(accepted, rejected, sampled_out)`` from an ingest response body.
 
     A 2xx only means the request was understood; the body carries the
-    per-row outcome as ``{accepted, rejected, deduplicated, total}``.
+    per-row outcome as
+    ``{accepted, rejected, deduplicated, sampled_out, total}``.
+    ``sampled_out`` is the SERVER's own N16 gate dropping an event
+    AFTER accepting the request — distinct from the SDK's own
+    ``ClientSampler`` decision made before the event is ever sent.
 
-    Falls back to "all accepted" whenever the body is not that shape, so
-    an older or differently-shaped gateway can never make the SDK
-    under-report what it sent.
+    Falls back to "all accepted, none sampled out" whenever the body is
+    not that shape, so an older or differently-shaped gateway can never
+    make the SDK under-report what it sent.
     """
     try:
         body = resp.json()
     except Exception:
-        return sent_count, 0
+        return sent_count, 0, 0
     if not isinstance(body, dict):
-        return sent_count, 0
+        return sent_count, 0, 0
     if "accepted" not in body and "rejected" not in body:
-        return sent_count, 0
+        return sent_count, 0, 0
     try:
         accepted = int(body.get("accepted", sent_count) or 0)
         rejected = int(body.get("rejected", 0) or 0)
+        sampled_out = int(body.get("sampled_out", 0) or 0)
     except (TypeError, ValueError):
-        return sent_count, 0
-    return accepted, rejected
+        return sent_count, 0, 0
+    return accepted, rejected, sampled_out
+
+
+_warned_about_sdk_server_compounding = False
+
+
+def _warn_once_about_sdk_server_compounding(profile: str) -> None:
+    """Log once (per process) when the SDK itself samples on a non-``full``
+    profile.
+
+    The server applies its own independent ``sampling_profile`` gate
+    (``src/eden/config.py``) — if an operator sets
+    ``EDEN_SAMPLING_PROFILE=balanced`` intending to enable *server-side*
+    N16, but the SDK reads the same env var, the two ~15% gates compound
+    multiplicatively (0.15 * 0.15 = 2.25% effective keep) with nothing in
+    either layer's logs to explain the gap. ``client_probabilistic_sampling``
+    defaults to ``False`` specifically to avoid that outcome (see
+    :class:`eden_sdk.sampling.ClientSampler`), but a deployment that
+    explicitly opts in — or that intentionally wants client-side sampling
+    with no server-side gate — should still see this once so the two knobs
+    are never a silent surprise.
+    """
+    global _warned_about_sdk_server_compounding
+    if profile == "full" or _warned_about_sdk_server_compounding:
+        return
+    _warned_about_sdk_server_compounding = True
+    logger.warning(
+        "eden sdk: sampling_profile=%r is active on the SDK. The server "
+        "(src/eden/config.py's sampling_profile) applies its own "
+        "independent N16 gate -- setting a non-full profile on BOTH "
+        "sides compounds multiplicatively (e.g. balanced x balanced = "
+        "2.25%% kept, not 15%%). By default the SDK only force-keeps "
+        "error/slow/force_trace traces here and leaves the probabilistic "
+        "drop to the server; set EDEN_CLIENT_PROBABILISTIC_SAMPLING=1 "
+        "only if there is no server-side N16 gate to defer to.",
+        profile,
+    )
 
 
 # ── Sender ────────────────────────────────────────────────────────────
@@ -257,6 +298,12 @@ class EdenClient:
         self._lifecycle_lock = threading.Lock()
         self._dropped_total = 0
         self._sampled_out_total = 0
+        # Events the SERVER's own N16 gate dropped after accepting the
+        # request (parsed from the ingest response's ``sampled_out``
+        # field) — distinct from ``_sampled_out_total`` above, which is
+        # this SDK's own ``ClientSampler`` decision made before the
+        # event is ever sent.
+        self._server_sampled_out_total = 0
         self._sent_total = 0
         self._rejected_total = 0
         self._failed_total = 0
@@ -269,7 +316,11 @@ class EdenClient:
         self._sampler = ClientSampler(
             profile=profile,  # type: ignore[arg-type]
             keep_errors=bool(getattr(self.config, "sample_keep_errors", True)),
+            client_probabilistic_sampling=bool(
+                getattr(self.config, "client_probabilistic_sampling", False)
+            ),
         )
+        _warn_once_about_sdk_server_compounding(profile)
         self._SampleSignals = SampleSignals
         self._offline = None
         offline_path = getattr(self.config, "offline_queue_path", None)
@@ -417,6 +468,7 @@ class EdenClient:
         self._chunk_processed_generation = 0
         self._dropped_total = 0
         self._sampled_out_total = 0
+        self._server_sampled_out_total = 0
         self._sent_total = 0
         self._rejected_total = 0
         self._failed_total = 0
@@ -522,11 +574,23 @@ class EdenClient:
             or payload.get("status") == "error"
         )
         duration_ms = float(payload.get("duration_ms") or 0)
+        # Force-keep: a caller-supplied ``force_trace`` / ``eden.force_trace``
+        # attribute (e.g. ``@trace_agent(attributes={"force_trace": True})``)
+        # must bypass client-side sampling regardless of the active profile,
+        # same as the explicit ``skip_sampling`` kwarg used for offline replay.
+        attrs = payload.get("attributes")
+        force = skip_sampling or bool(
+            isinstance(attrs, dict)
+            and (
+                attrs.get("eden.force_trace") in (True, "true", "True")
+                or attrs.get("force_trace") in (True, "true", "True")
+            )
+        )
         if not self._sampler.should_keep(
             self._SampleSignals(
                 has_error=has_error,
                 duration_ms=duration_ms,
-                force=skip_sampling,
+                force=force,
             )
         ):
             self._sampled_out_total += 1
@@ -1233,8 +1297,12 @@ class EdenClient:
                         # for being malformed, so resending loops forever.
                         # They are surfaced instead, which is what the
                         # customer actually needs.
-                        accepted, rejected = _parse_ingest_counts(resp, count)
+                        accepted, rejected, server_sampled_out = _parse_ingest_counts(
+                            resp, count
+                        )
                         self._sent_total += accepted
+                        if server_sampled_out:
+                            self._server_sampled_out_total += server_sampled_out
                         if rejected:
                             self._rejected_total += rejected
                             logger.warning(
@@ -1504,6 +1572,15 @@ class EdenClient:
     @property
     def sampled_out(self) -> int:
         return self._sampled_out_total
+
+    @property
+    def server_sampled_out(self) -> int:
+        """Events the SERVER's own N16 gate dropped after accepting the
+        request. Parsed from the ingest response's ``sampled_out`` field —
+        see :func:`_parse_ingest_counts`. Distinct from :attr:`sampled_out`
+        (this SDK's own :class:`~eden_sdk.sampling.ClientSampler` decision,
+        made before the event is ever sent)."""
+        return self._server_sampled_out_total
 
     @property
     def failed(self) -> int:

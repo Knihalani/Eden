@@ -111,6 +111,16 @@ class EdenConfig:
     capture_chunk_text
         When ``False`` (default), streaming chunk events omit
         ``delta_text`` and ship metrics-only (TTFT/ITL/TPOT).
+    capture_mode
+        Bounded-capture policy for request/response payloads and
+        span ``eden.input``/``eden.output`` — one of ``"bounded"``
+        (default: head+tail truncate long strings, but keep errors
+        and slow calls in full), ``"full"`` (never truncate), or
+        ``"metrics_only"`` (never capture content). See
+        :mod:`eden_sdk.capture`. Set via ``EDEN_CAPTURE_MODE``.
+    capture_max_string_bytes
+        Per-string-field truncation cap in bytes for ``"bounded"``
+        mode. Set via ``EDEN_CAPTURE_MAX_STRING_BYTES``.
     """
 
     org_id: str | None = None
@@ -133,6 +143,13 @@ class EdenConfig:
     extra_headers: dict[str, str] = field(default_factory=dict)
     redact_on_client: bool = False
     capture_chunk_text: bool = False
+    # Bounded-capture policy — see :mod:`eden_sdk.capture`. Kept as
+    # plain strings/ints here (not the ``CaptureLimits`` dataclass)
+    # so ``EdenConfig`` has no import-time dependency on
+    # ``eden_sdk.capture``; instrumentations build a ``CaptureLimits``
+    # from these via ``capture.limits_from_config(cfg)``.
+    capture_mode: str = "bounded"
+    capture_max_string_bytes: int = 8192
     # Per-filter configuration. When unset, the gateway applies
     # the tenant's :class:`org_pii_policies` defaults. When set,
     # the values override the tenant policy on a per-call basis
@@ -154,9 +171,30 @@ class EdenConfig:
     # client is started has no effect on the in-flight
     # AsyncClient.
     transport: Any | None = None
-    # N16-mirroring client sampling (default full = keep all).
+    # N16-mirroring client sampling. Default stays "full" (100% keep)
+    # for soft-launch / new integrations so nothing is silently dropped
+    # before an operator has looked at their traffic. For production
+    # traffic once volume is understood, set
+    # ``EDEN_SAMPLING_PROFILE=balanced`` (~15% non-signal keep; errors,
+    # loops, and slow calls are still always kept via force-keep — see
+    # :mod:`eden_sdk.sampling`) to cut ingestion cost. ``aggressive``
+    # (~5%) trades more fidelity for cost on very high-volume tenants.
+    # This is a client-side mirror of the server's own
+    # ``sampling_profile`` setting (``src/eden/config.py``) — the two
+    # are independent knobs and either can filter a trace.
     sampling_profile: str = "full"
     sample_keep_errors: bool = True
+    # SDK x server compounding guard (default off). See
+    # ``eden_sdk.sampling.ClientSampler``'s docstring for the full
+    # rationale: with this ``False``, a non-``"full"`` ``sampling_profile``
+    # on the SDK only applies the deterministic force-keep rules
+    # (error / slow / force_trace) and leaves the probabilistic drop to
+    # the server — so setting ``EDEN_SAMPLING_PROFILE=balanced`` on just
+    # the server behaves exactly as documented instead of the two ~15%
+    # gates compounding to ~2.25%. Set
+    # ``EDEN_CLIENT_PROBABILISTIC_SAMPLING=1`` to opt back into
+    # client-side probabilistic dropping (e.g. no server-side N16 gate).
+    client_probabilistic_sampling: bool = False
     # Durable offline queue path (None = disabled). Set to a file path
     # or use EDEN_OFFLINE_QUEUE=1 for ~/.eden/offline_queue.sqlite3.
     offline_queue_path: str | None = None
@@ -340,6 +378,12 @@ def _from_env() -> EdenConfig:
         dry_run=dry_run,
         redact_on_client=_env_opt_bool("EDEN_REDACT_ON_CLIENT", default=False),
         capture_chunk_text=_env_opt_bool("EDEN_CAPTURE_CHUNK_TEXT", default=False),
+        capture_mode=(
+            os.getenv("EDEN_CAPTURE_MODE", "bounded").strip().lower() or "bounded"
+        ),
+        capture_max_string_bytes=int(
+            os.getenv("EDEN_CAPTURE_MAX_STRING_BYTES", "8192") or "8192"
+        ),
         exact_cache=_env_opt_bool("EDEN_EXACT_CACHE"),
         coalesce=_env_opt_bool("EDEN_COALESCE"),
         provider_cache_layout=_env_opt_bool("EDEN_PROVIDER_CACHE_LAYOUT"),
@@ -348,6 +392,9 @@ def _from_env() -> EdenConfig:
             os.getenv("EDEN_SAMPLING_PROFILE", "full").strip().lower() or "full"
         ),
         sample_keep_errors=_env_opt_bool("EDEN_SAMPLE_KEEP_ERRORS", default=True),
+        client_probabilistic_sampling=_env_opt_bool(
+            "EDEN_CLIENT_PROBABILISTIC_SAMPLING", default=False
+        ),
         offline_queue_path=(
             str(Path.home() / ".eden" / "offline_queue.sqlite3")
             if os.getenv("EDEN_OFFLINE_QUEUE", "").lower() in {"1", "true", "yes", "on"}

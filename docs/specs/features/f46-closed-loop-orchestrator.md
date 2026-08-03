@@ -156,7 +156,7 @@ CREATE TABLE issue_state_transitions (
 CREATE INDEX idx_transitions_issue ON issue_state_transitions (issue_id, created_at DESC);
 ```
 
-Issue `status` enum extended: `open, triaged, fix_pending, verifying, resolved, regressed, ignored`
+Issue `status` enum extended: `open, triaged, fix_pending, verifying, resolved, regressed, ignored, learning, escalated` (migrations 084 + 136)
 
 ---
 
@@ -229,10 +229,20 @@ eden_loop_completion_total    # resolved with full verify
 
 ## 9. Feature flags
 
-| Flag | Default |
+Corrected against `src/eden/config.py` actuals (2026-08, M4 D20 —
+`scripts/spec_drift_check.py` guards the master table in
+[AUTONOMY-OVERHAUL-PLAN.md §1.4](../AUTONOMY-OVERHAUL-PLAN.md)):
+
+| Flag | Default (`config.py`) |
 |---|---|
-| `closed_loop_orchestrator_v1` | false |
-| Per-step kills: `loop_auto_triage`, `loop_auto_nudge`, etc. |
+| `closed_loop_orchestrator_v1` | `True` — consumer + verify worker on |
+| `auto_issue_detection_v1` | `True` — scanner on |
+| `autonomous_actions_v0` | `False` — heals denied unless the org opts in (N22) |
+| `verify_delay_seconds` / `verify_quiet_window_minutes` | `1800` / `30` |
+
+Per-step kill switches are per-action `feature_kills` rows checked via
+`is_autonomy_action_enabled(org_id, action_type)` — there are no
+`loop_auto_*` settings.
 
 ---
 

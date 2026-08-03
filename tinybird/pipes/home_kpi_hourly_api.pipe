@@ -1,0 +1,49 @@
+DESCRIPTION >
+    Home KPI tiles read from the `home_kpi_hourly` rollup (Merge
+    combinators over its `AggregateFunction` state columns) instead of
+    rescanning `telemetry_events_ch`. Returns two rows — one
+    `window='current'` covering the last `hours` hours, one
+    `window='previous'` covering the `hours` before that — so the
+    caller computes any delta/percent-change itself (matches
+    `ClickHouseSink.query_home_kpis`'s existing `prev_event_count`
+    contract, generalized to every column here). Mirrors, but does not
+    replace, the live single-scan query `ClickHouseSink.query_home_kpis`
+    runs against `telemetry_events_ch` as a fallback for tenants/hours
+    the rollup hasn't materialized yet.
+
+NODE current_window
+SQL >
+    %
+    SELECT
+        'current' AS window,
+        countMerge(event_count) AS event_count,
+        sumMerge(error_count) AS error_count,
+        avgMerge(avg_duration_state) AS avg_duration_ms,
+        quantileMerge(0.95)(p95_duration_state) AS p95_duration_ms
+    FROM home_kpi_hourly
+    WHERE
+        tenant_id = {{ String(tenant_id, required=True) }}
+        AND hour >= toStartOfHour(now() - INTERVAL {{ Int32(hours, 24) }} HOUR)
+
+NODE previous_window
+SQL >
+    %
+    SELECT
+        'previous' AS window,
+        countMerge(event_count) AS event_count,
+        sumMerge(error_count) AS error_count,
+        avgMerge(avg_duration_state) AS avg_duration_ms,
+        quantileMerge(0.95)(p95_duration_state) AS p95_duration_ms
+    FROM home_kpi_hourly
+    WHERE
+        tenant_id = {{ String(tenant_id, required=True) }}
+        AND hour < toStartOfHour(now() - INTERVAL {{ Int32(hours, 24) }} HOUR)
+        AND hour >= toStartOfHour(now() - INTERVAL ({{ Int32(hours, 24) }} * 2) HOUR)
+
+NODE home_kpi_hourly_api_q
+SQL >
+    SELECT * FROM current_window
+    UNION ALL
+    SELECT * FROM previous_window
+
+TYPE ENDPOINT

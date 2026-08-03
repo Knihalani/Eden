@@ -20,12 +20,14 @@ the standard envelope shape.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
 from eden.issues.repo import IssuesRepo
 from eden.issues.statgate_scorer import StatGateIncidentScorer
+from eden.prompt_safety import wrap_untrusted_data
 
 logger = logging.getLogger(__name__)
 
@@ -207,12 +209,22 @@ class TriageAgent:
 
         # ── LLM triage via InvestigationAgent (issue: trigger) ──
         # Hard 90s ceiling → partial ``source="timeout"`` on breach.
+        # M11 (§7.1): stumble/user content enters the investigation
+        # prompt only behind EDEN_DATA delimiters.
+        # M14 (§8.2): pin triage classification to T1/SLM via
+        # ``slot="fast"`` — not router-classified. Routing assertion
+        # tests lock this so a TaskClassifier heuristic change cannot
+        # silently upgrade the tier (same pattern as patch critic).
+        untrusted_evidence = _trace_content_for_prompt(stumbles)
         try:
             from eden.autonomous import InvestigationAgent
 
             inv = await asyncio.wait_for(
                 InvestigationAgent().investigate(
-                    org_id, trigger=f"issue:{issue_id}"
+                    org_id,
+                    trigger=f"issue:{issue_id}",
+                    untrusted_evidence=untrusted_evidence,
+                    slot="fast",
                 ),
                 timeout=_LLM_TIMEOUT_S,
             )
@@ -324,6 +336,8 @@ class TriageAgent:
             "span_ids": span_ids,
             "linked_files": linked_files,
             "react_calls": calls,
+            # M11: pre-wrapped blob for any downstream LLM prompt use.
+            "prompt_evidence": _trace_content_for_prompt(pool),
         }
 
     async def _manual_rate_ok(self, org_id: str) -> bool:
@@ -455,6 +469,20 @@ class TriageAgent:
             return True
 
     async def _debit_budget(self, org_id: str, amount: float) -> None:
+        # M4 (D12): single spend writer — triage spend also lands in the
+        # shared maintenance ledger (Redis ``autonomy:spend:`` + W24 cost
+        # event) so ``evaluate_mode``'s daily-budget downgrade actually
+        # fires. The triage-specific daily cap below keeps its own
+        # counter (``triage_spend:``) so the tighter triage ceiling stays
+        # enforced independently of the org-wide budget.
+        try:
+            from eden.closed_loop.autonomy_policy import record_spend
+
+            await record_spend(
+                org_id, amount, feature="triage", model="triage"
+            )
+        except Exception:  # pragma: no cover - best-effort ledger tag
+            pass
         if await self._resolve_budget_cap(org_id) is None:
             return
         try:
@@ -478,6 +506,42 @@ class TriageAgent:
     def _statgate_root_cause(score: Any, issue: Any) -> str:
         checks = ", ".join(score.p0_checks) or "p0"
         return f"Deterministic P0 escalation ({checks}) for {issue.kind} issue"
+
+
+def _trace_content_for_prompt(stumbles: list[dict[str, Any]]) -> str:
+    """M11 (§7.1): serialize stumble/user content for LLM prompts.
+
+    Titles and detail payloads are production-derived and may contain
+    adversarial instructions — wrap them before they enter a prompt.
+    """
+    parts: list[str] = []
+    for s in stumbles[:5]:
+        if not isinstance(s, dict):
+            continue
+        title = str(s.get("title") or "")
+        detail = s.get("detail")
+        if detail is None:
+            detail_s = ""
+        elif isinstance(detail, str):
+            detail_s = detail
+        else:
+            try:
+                detail_s = json.dumps(detail, default=str)
+            except Exception:
+                detail_s = str(detail)
+        user_msg = ""
+        if isinstance(detail, dict):
+            user_msg = str(
+                detail.get("user_message")
+                or detail.get("message")
+                or detail.get("prompt")
+                or ""
+            )
+        parts.append(
+            f"title={title}\ndetail={detail_s}\nuser_message={user_msg}"
+        )
+    body = "\n---\n".join(parts) if parts else "(no stumbles)"
+    return wrap_untrusted_data(body)
 
 
 def _append_debugger_handoff(

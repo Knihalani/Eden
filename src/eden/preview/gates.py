@@ -181,6 +181,61 @@ async def org_evolver_canary_pct(org_id: str) -> int:
     return int(getattr(get_settings(), "evolver_auto_canary_pct", 5))
 
 
+# M14 (§8.3): valid sampling_profile_override values. Unknown → ignore
+# (keep global default). Never silently invent a droppier profile.
+_SAMPLING_PROFILES = frozenset({"full", "balanced", "aggressive"})
+_ORG_SAMPLING_CACHE: dict[str, str | None] = {}
+
+
+async def sampling_profile_for_org(org_id: str) -> str:
+    """M14 (§8.3): resolve sampling profile with per-org opt-in override.
+
+    Global ``Settings.sampling_profile`` stays ``full``. An org may set
+    ``organizations.settings.sampling_profile_override`` to ``balanced``
+    (or ``aggressive``) for non-error traffic. Fleet-wide promotion from
+    ``full`` → ``balanced`` waits on M13 §6.5 shadow-detector
+    precision/recall measurement — never flip the global default first.
+    """
+    from eden.config import get_settings
+
+    features = await _load_org_features(org_id)
+    raw = features.get("sampling_profile_override")
+    if isinstance(raw, str):
+        profile = raw.strip().lower()
+        if profile in _SAMPLING_PROFILES:
+            _ORG_SAMPLING_CACHE[org_id] = profile
+            return profile
+    global_profile = getattr(get_settings(), "sampling_profile", "full") or "full"
+    if global_profile not in _SAMPLING_PROFILES:
+        global_profile = "full"
+    _ORG_SAMPLING_CACHE[org_id] = None  # no override — use process default
+    return global_profile
+
+
+def sampling_profile_override_sync(org_id: str) -> str | None:
+    """Hot-path: return warmed org override, or None → process default.
+
+    Populated by :func:`sampling_profile_for_org` / :func:`warm_org_flags`.
+    Missing cache entry means "no override known yet" (fail-open to
+    process-wide policy).
+    """
+    if not org_id:
+        return None
+    return _ORG_SAMPLING_CACHE.get(org_id)
+
+
+async def ensure_org_sampling_warmed(org_id: str) -> None:
+    """M14 (§8.3): warm sampling override cache on first ingest for org.
+
+    Mirrors other org-flag warming (``warm_org_flags``): one DB read per
+    org, then sync hot path. No-op when already cached (including explicit
+    ``None`` = no override → keep global ``full``).
+    """
+    if not org_id or org_id in _ORG_SAMPLING_CACHE:
+        return
+    await sampling_profile_for_org(org_id)
+
+
 def preview_disabled_envelope(feature: str) -> dict[str, Any]:
     return {
         "status": "preview_disabled",
@@ -226,3 +281,9 @@ async def warm_org_flags(org_id: str) -> None:
     _ORG_FLAG_CACHE[(org_id, "artifacts_inrun_v1")] = _org_flag(
         features, "artifacts_inrun_v1"
     )
+    # M14 (§8.3): warm sampling override for ingest hot path.
+    raw = features.get("sampling_profile_override")
+    if isinstance(raw, str) and raw.strip().lower() in _SAMPLING_PROFILES:
+        _ORG_SAMPLING_CACHE[org_id] = raw.strip().lower()
+    else:
+        _ORG_SAMPLING_CACHE[org_id] = None

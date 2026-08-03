@@ -253,10 +253,11 @@ spec:
     # if a worker is ever brought back.
     - name: EDEN_RUN_BACKGROUND_WORKERS
       value: "1"
-    # Wave 5 cost: balanced sampling (~15% non-signal keep; errors /
-    # loops / stumbles always kept). Soft-launch used ``full`` (100%).
+    # Soft-launch default: 100% keep. Opt into cost reduction with
+    # ``balanced`` (~15% non-signal keep; errors/slow/high_cost always
+    # kept) or ``aggressive`` (~5%).
     - name: EDEN_SAMPLING_PROFILE
-      value: balanced
+      value: full
     - name: SENTRY_ENVIRONMENT
       value: production
     - name: SENTRY_TRACES_SAMPLE_RATE

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -82,6 +83,8 @@ class InvestigationAgent:
         org_id: str,
         *,
         trigger: str,
+        untrusted_evidence: str | None = None,
+        slot: str = DEFAULT_LLM_SLOT,
     ) -> dict[str, Any]:
         if not trigger or not trigger.strip():
             return _not_implemented_envelope(
@@ -132,18 +135,34 @@ class InvestigationAgent:
         # 2. Render the prompt. We include the context dict
         #    + the trigger id so the LLM can ground its
         #    response in the actual row.
-        prompt = (
-            f"Trigger: {trigger}\n"
-            f"Context: {json.dumps(ctx.get('context', {}), default=str)}\n"
-            f"Investigate the root cause and propose 1-3 remediations."
+        # M11 (§7.1): wrap production context — never follow
+        # instructions embedded in traces / stumble details.
+        from eden.prompt_safety import wrap_untrusted_data
+
+        context_blob = wrap_untrusted_data(
+            json.dumps(ctx.get("context", {}), default=str)
         )
+        prompt_parts = [
+            f"Trigger: {trigger}\n",
+            f"Context:\n{context_blob}\n",
+        ]
+        if untrusted_evidence:
+            # Caller (e.g. TriageAgent) already delimiter-wrapped this.
+            prompt_parts.append(f"Evidence:\n{untrusted_evidence}\n")
+        prompt_parts.append(
+            "Investigate the root cause and propose 1-3 remediations."
+        )
+        prompt = "".join(prompt_parts)
 
         # 3. Call the LLM. Falls back to a heuristic envelope
         #    on any failure.
+        # M14 (§8.2): ``slot`` is caller-pinned (TriageAgent passes
+        # ``slot="fast"``) so triage classification cannot silently
+        # upgrade when TaskClassifier heuristics change.
         raw = await _call_llm(
             prompt,
             agent="autonomous_investigation",
-            slot=DEFAULT_LLM_SLOT,
+            slot=slot,
             system_prompt=_INVESTIGATION_SYSTEM_PROMPT,
             max_tokens=600,
         )
@@ -652,6 +671,8 @@ class SelfHealer:
         before_state: dict[str, Any] | None = None,
         *,
         approved_by_user_id: str,
+        decision_id: str | None = None,
+        decided_at: float | None = None,
     ) -> dict[str, Any]:
         """Execute the approved heal action.
 
@@ -675,10 +696,17 @@ class SelfHealer:
         if before_state is None:
             before_state = await _load_self_heal_action(org_id, action_id)
             if before_state is None:
+                # M3 (D16): carry data.status="failed" + a machine-readable
+                # failure_reason so the orchestrator reacts uniformly
+                # instead of stranding the issue.
                 return _not_found_envelope(
                     self.name,
                     f"action {action_id!r} not found",
-                    data={"action_id": action_id},
+                    data={
+                        "action_id": action_id,
+                        "status": "failed",
+                        "failure_reason": "action_not_found",
+                    },
                 )
             # Allow execute only from "approved". Already-executed
             # is a no-op (idempotent). Anything else (pending_approval,
@@ -702,6 +730,11 @@ class SelfHealer:
                     f"action {action_id!r} status is {current_status!r}; "
                     "must be 'approved' before execute. POST "
                     "/heal/{action_id}/approve first.",
+                    data={
+                        "action_id": action_id,
+                        "status": "failed",
+                        "failure_reason": "action_not_approved",
+                    },
                 )
 
         action_type = before_state.get("action_type")
@@ -711,11 +744,23 @@ class SelfHealer:
             "approved_by": approved_by_user_id,
             "org_id": org_id,
         }
+        if decision_id:
+            # M10 (§5.4): link the execution back to the orchestrator's
+            # single audited decision row.
+            after_state["decision_id"] = decision_id
 
-        # N21 hardening: policy + daily rollback cap before destructive work.
-        blocked = await _heal_precheck(org_id, action_type or "")
+        # N21 hardening: kill switch + policy + daily rollback cap before
+        # destructive work (policy re-decide skipped for a fresh threaded
+        # decision_id — M10 §5.4).
+        blocked = await _heal_precheck(
+            org_id,
+            action_type or "",
+            decision_id=decision_id,
+            decided_at=decided_at,
+        )
         if blocked:
             after_state["error"] = blocked
+            after_state["failure_reason"] = _precheck_failure_slug(blocked)
             await _upsert_self_heal(
                 org_id,
                 action_id,
@@ -737,6 +782,7 @@ class SelfHealer:
                     "action_id": action_id,
                     "action_type": action_type,
                     "status": "failed",
+                    "failure_reason": after_state["failure_reason"],
                     "before_state": before_state.get("before_state"),
                     "after_state": after_state,
                     "message": blocked,
@@ -754,9 +800,11 @@ class SelfHealer:
                 after_state = await _execute_cache_bust(after_state)
             else:
                 after_state["error"] = f"unknown action_type: {action_type!r}"
+                after_state["failure_reason"] = "unknown_action_type"
         except Exception as exc:
             after_state["executed"] = False
             after_state["error"] = str(exc)
+            after_state.setdefault("failure_reason", "executor_exception")
             logger.warning(
                 "self_healer.execute_heal failed for %s: %s",
                 action_id, exc,
@@ -774,23 +822,32 @@ class SelfHealer:
             org_id, action_id, action_type, after_state, actor_id=approved_by_user_id
         )
 
-        return _ok_envelope(
-            self.name,
-            {
-                "action_id": action_id,
-                "action_type": action_type,
-                "status": "executed" if after_state.get("executed") else "failed",
-                "before_state": before_state.get("before_state"),
-                "after_state": after_state,
-                "message": (
-                    f"self-heal action {action_type!r} "
-                    f"{'executed' if after_state.get('executed') else 'failed'}"
-                ),
-            },
-        )
+        executed = bool(after_state.get("executed"))
+        data: dict[str, Any] = {
+            "action_id": action_id,
+            "action_type": action_type,
+            "status": "executed" if executed else "failed",
+            "before_state": before_state.get("before_state"),
+            "after_state": after_state,
+            "message": (
+                f"self-heal action {action_type!r} "
+                f"{'executed' if executed else 'failed'}"
+            ),
+        }
+        if not executed:
+            # M3 (D16): machine-readable reason for the orchestrator.
+            data["failure_reason"] = str(
+                after_state.get("failure_reason") or "not_executed"
+            )
+        return _ok_envelope(self.name, data)
 
     async def heal_from_issue(
-        self, org_id: str, issue_id: str
+        self,
+        org_id: str,
+        issue_id: str,
+        *,
+        decision_id: str | None = None,
+        decided_at: float | None = None,
     ) -> dict[str, Any]:
         """Autonomous heal driven by an issue's triage result (N21).
 
@@ -810,7 +867,11 @@ class SelfHealer:
             return _not_found_envelope(
                 self.name,
                 f"issue {issue_id!r} not found",
-                data={"issue_id": issue_id},
+                data={
+                    "issue_id": issue_id,
+                    "status": "failed",
+                    "failure_reason": "issue_not_found",
+                },
             )
         action_type = _heal_action_from_triage(issue.triage_result or {})
         if action_type is None:
@@ -818,11 +879,21 @@ class SelfHealer:
                 self.name,
                 f"issue {issue_id!r} has no mapped heal action "
                 "(suggested_actions did not include rollback/reweight/cache_bust)",
+                data={
+                    "issue_id": issue_id,
+                    "status": "failed",
+                    "failure_reason": "no_heal_action_mapped",
+                },
             )
 
         queued = await self.heal(org_id, action_type=action_type)
         action_id = (queued.get("data") or {}).get("action_id")
         if not action_id:
+            # M3 (D16): tag the queue failure so the orchestrator can
+            # react uniformly on ``data.status`` + ``failure_reason``.
+            qdata = queued.setdefault("data", {})
+            qdata.setdefault("status", "failed")
+            qdata.setdefault("failure_reason", "heal_queue_failed")
             return queued
 
         # Autonomous path: promote pending_approval → approved without a
@@ -839,7 +910,11 @@ class SelfHealer:
             after_state_json=None,
         )
         result = await self.execute_heal(
-            org_id, action_id, approved_by_user_id="orchestrator"
+            org_id,
+            action_id,
+            approved_by_user_id="orchestrator",
+            decision_id=decision_id,
+            decided_at=decided_at,
         )
         result.setdefault("data", {})["issue_id"] = issue_id
         return result
@@ -849,8 +924,11 @@ def _heal_action_from_triage(triage_result: dict[str, Any]) -> str | None:
     """Extract a valid heal action_type from a triage result."""
     from eden.closed_loop.playbooks import resolve_playbook
 
+    # M4 (D8): the kind router can also resolve Improve-inbox playbooks
+    # (nudge_shadow / prompt_canary) — those must never reach
+    # ``execute_heal`` as an "unknown action_type" strand.
     playbook = resolve_playbook(None, triage_result)
-    if playbook:
+    if playbook and playbook in VALID_HEAL_ACTION_TYPES:
         return playbook
     sh = triage_result.get("suggested_heal")
     if isinstance(sh, str) and sh in VALID_HEAL_ACTION_TYPES:
@@ -906,14 +984,17 @@ async def _execute_rollback(
     client = await get_postgres_client()
     if client is None:
         after_state["error"] = "no postgres client"
+        after_state["failure_reason"] = "no_postgres_client"
         return after_state
     canary = (before_state.get("before_state") or {}).get("canary")
     if not canary:
         after_state["note"] = "no active canary to roll back"
+        after_state["failure_reason"] = "no_active_canary"
         return after_state
     canary_id = canary.get("id")
     if not canary_id:
         after_state["error"] = "before_state.canary.id missing"
+        after_state["failure_reason"] = "canary_id_missing"
         return after_state
     try:
         # Verify the canary is still in a roll-backable state.
@@ -924,12 +1005,14 @@ async def _execute_rollback(
         )
         if current is None:
             after_state["error"] = f"canary {canary_id} no longer exists"
+            after_state["failure_reason"] = "canary_not_found"
             return after_state
         if current["status"] not in ("active", "promoted"):
             after_state["error"] = (
                 f"canary {canary_id} is in terminal state "
                 f"{current['status']!r}; refusing to roll back"
             )
+            after_state["failure_reason"] = "canary_terminal_state"
             return after_state
         await client.execute(
             "UPDATE prompt_canaries SET status = 'rolled_back', "
@@ -941,6 +1024,7 @@ async def _execute_rollback(
         after_state["previous_status"] = current["status"]
     except Exception as exc:
         after_state["error"] = str(exc)
+        after_state["failure_reason"] = "rollback_error"
     return after_state
 
 
@@ -1199,8 +1283,41 @@ async def _capture_before_state(
     return out
 
 
-async def _heal_precheck(org_id: str, action_type: str) -> str | None:
-    """N21/W24 guardrails — kill switch + policy deny + daily rollback cap."""
+def _precheck_failure_slug(blocked: str) -> str:
+    """Map a human-readable ``_heal_precheck`` block reason to a
+    machine-readable ``failure_reason`` slug (M3, D16)."""
+    b = blocked.lower()
+    if "kill switch disabled" in b:
+        return "kill_switch_disabled"
+    if "kill switch check failed" in b:
+        return "kill_switch_check_failed"
+    if "daily rollback cap" in b:
+        return "rollback_cap_reached"
+    if "precheck failed" in b:
+        return "precheck_failed"
+    return "policy_deny"
+
+
+#: M10 (§5.4): a policy decision threaded in from the orchestrator is
+#: honoured (no re-decide, no second audit row) only while fresh.
+_DECISION_FRESH_SECONDS = 300
+
+
+async def _heal_precheck(
+    org_id: str,
+    action_type: str,
+    *,
+    decision_id: str | None = None,
+    decided_at: float | None = None,
+) -> str | None:
+    """N21/W24 guardrails — kill switch + policy deny + daily rollback cap.
+
+    M10 (§5.4) single decision record: when the caller threads a fresh
+    (≤5 min) ``decision_id`` from an already-audited N22 decision, the
+    policy re-decide (and its duplicate audit row) is skipped — one
+    decision, one audit row. The kill switch and the daily rollback cap
+    are ALWAYS checked regardless: they are runtime guards, not policy.
+    """
     action = action_type or "heal"
     # Kill switches fail-closed (unknown / DB error → blocked).
     try:
@@ -1212,21 +1329,32 @@ async def _heal_precheck(org_id: str, action_type: str) -> str | None:
         logger.debug("heal_precheck kill switch failed: %s", exc)
         return "kill switch check failed (fail-closed)"
 
+    decision_fresh = bool(decision_id) and (
+        decided_at is not None
+        and (time.time() - float(decided_at)) <= _DECISION_FRESH_SECONDS
+    )
+    if decision_id and not decision_fresh:
+        logger.info(
+            "heal_precheck: decision %s stale/undated — re-deciding",
+            decision_id,
+        )
+
     try:
         from eden.closed_loop.autonomy_policy import audit, decide, resolve
 
         policy = await resolve(org_id, None)
-        verdict, reason, tier = decide(policy, action)
-        await audit(
-            org_id,
-            agent_id=None,
-            action=action,
-            tier=tier,
-            decision=verdict,
-            reason=reason or "heal_precheck",
-        )
-        if verdict == "deny":
-            return reason or "heal denied by autonomy policy"
+        if not decision_fresh:
+            verdict, reason, tier = decide(policy, action)
+            await audit(
+                org_id,
+                agent_id=None,
+                action=action,
+                tier=tier,
+                decision=verdict,
+                reason=reason or "heal_precheck",
+            )
+            if verdict == "deny":
+                return reason or "heal denied by autonomy policy"
         if action_type == "rollback":
             cap = int(policy.max_auto_rollbacks_per_day or 3)
             from eden.storage.postgres import get_postgres_client

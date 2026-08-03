@@ -173,6 +173,36 @@ def test_401_does_not_crash_sender_or_raise_to_caller() -> None:
         client.shutdown()
 
 
+def test_live_publish_event_gzips_body() -> None:
+    """Phase 5 — live span publish gzips its JSON body like main ingest."""
+    import gzip
+    import json
+
+    from eden_sdk.live import LiveSpanPublisher
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["headers"] = request.headers
+        seen["content"] = request.content
+        return httpx.Response(200, json={"status": "ok"})
+
+    configure(org_id="o", api_key="k", base_url="http://test.invalid", dry_run=False)
+    pub = LiveSpanPublisher()
+    cfg_timeout = eden.get_config().timeout_s
+    pub._http = httpx.Client(transport=httpx.MockTransport(handler), timeout=cfg_timeout)
+    pub._http_timeout = cfg_timeout
+
+    result = pub.publish_event(
+        session_id="s1", event={"type": "span_start", "span_id": "sp1"}
+    )
+
+    assert result == {"status": "ok"}
+    assert seen["headers"]["content-encoding"] == "gzip"
+    decoded = json.loads(gzip.decompress(seen["content"]))
+    assert decoded == {"type": "span_start", "span_id": "sp1"}
+
+
 def test_live_finalize_401_does_not_raise() -> None:
     from eden_sdk.live import LiveSpanPublisher
 

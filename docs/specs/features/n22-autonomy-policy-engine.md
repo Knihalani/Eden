@@ -41,7 +41,7 @@ class AutonomousMaintenancePolicy:
     ]
 
     # Fine-grained bounds (defaults depend on maintenance_mode)
-    auto_runtime_heal: bool = True       # rollback, cache_bust, reweight — N21
+    auto_runtime_heal: bool = False      # rollback, cache_bust, reweight — N21; M10 opt-in
     auto_code_patch_pr: bool = True      # N20 opens PR
     auto_code_patch_merge: bool = False  # N20 auto-merge (sandbox only default)
     auto_prompt_canary: bool = True      # N18 on quality drop

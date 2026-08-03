@@ -185,7 +185,7 @@ async def test_propose_creates_improvement_plan_no_f22() -> None:
         ),
         patch(
             "eden.improvement.evidence_plane.run_hermetic_preverify",
-            AsyncMock(return_value={"status": "passed", "detail": {}}),
+            AsyncMock(return_value={"status": "static_passed", "detail": {}}),
         ),
         patch(
             "eden.patches.patch_generator.PatchGenerator.generate",

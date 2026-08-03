@@ -2741,7 +2741,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 701,
+  "route_count": 703,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -2796,6 +2796,7 @@
     "GET /integrations/slack/callback",
     "GET /integrations/slack/configured",
     "GET /integrations/wandb/status",
+    "GET /internal/loop-health",
     "GET /kb/query",
     "GET /live",
     "GET /metrics",
@@ -3057,6 +3058,7 @@
     "GET /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
     "GET /orgs/{org_id}/settings/autonomy",
     "GET /orgs/{org_id}/settings/autonomy/audit",
+    "GET /orgs/{org_id}/settings/autonomy/budget",
     "GET /orgs/{org_id}/settings/detection",
     "GET /orgs/{org_id}/shares",
     "GET /orgs/{org_id}/sidebar-prefs",

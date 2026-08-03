@@ -100,10 +100,18 @@ async def test_mark_closed_sets_status_and_rejection_reason() -> None:
         "rejection_reason": "pr_closed_without_merge",
         "files_changed": [],
         "evidence": {},
+        "source_fingerprint": "fp:1",
+        "title": "t",
     }
     client = _mock_client(fetchrow_return=updated_row)
-    with patch.object(
-        plans_repo, "get_postgres_client", AsyncMock(return_value=client)
+    with (
+        patch.object(
+            plans_repo, "get_postgres_client", AsyncMock(return_value=client)
+        ),
+        patch(
+            "eden.patches.knowledge_graph.record_plan_outcome",
+            AsyncMock(return_value=0),
+        ),
     ):
         result = await plans_repo.mark_closed(
             "org-1", "plan-1", reason="pr_closed_without_merge"
@@ -112,9 +120,10 @@ async def test_mark_closed_sets_status_and_rejection_reason() -> None:
     assert result is not None
     assert result["status"] == "closed"
     assert result["rejection_reason"] == "pr_closed_without_merge"
-    args = client.execute.await_args.args
-    assert args[3] == "pr_closed_without_merge"
-    assert set(args[4]) == set(plans_repo._OPEN_STATUSES)
+    # First execute is the status UPDATE; later calls may be KG/rejection memory.
+    update_args = client.execute.await_args_list[0].args
+    assert update_args[3] == "pr_closed_without_merge"
+    assert set(update_args[4]) == set(plans_repo._OPEN_STATUSES)
 
 
 @pytest.mark.asyncio

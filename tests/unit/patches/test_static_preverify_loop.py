@@ -31,6 +31,13 @@ _BAD_DIFF = (
 
 _LINKED = [{"path": "agent/checkout.py", "content": "def checkout():\n    return 1\n"}]
 
+# M8 (§4.4) critic v2 — structured JSON verdict.
+_CRITIC_PASS_JSON = (
+    '{"verdict": "PASS", "root_cause_addressed": true, '
+    '"blast_radius": "low", "untested_paths": [], '
+    '"risk_note": "ok", "injection_suspected": false}'
+)
+
 
 @pytest.mark.asyncio
 async def test_run_static_preverify_passes_on_good_diff() -> None:
@@ -53,7 +60,7 @@ async def test_generate_retries_on_static_fail_then_passes() -> None:
     async def _aroute(task, prompt, **kwargs):
         # Critic path uses agent patch_critic.
         if getattr(task, "agent", "") == "patch_critic":
-            return SimpleNamespace(content="PASS: ok", usage=usage, model="m")
+            return SimpleNamespace(content=_CRITIC_PASS_JSON, usage=usage, model="m")
         # First generate returns broken syntax; second is clean.
         if "Static preverify feedback" in prompt:
             return SimpleNamespace(content=_GOOD_DIFF, usage=usage, model="m")
@@ -101,7 +108,7 @@ async def test_generate_fail_closed_when_static_exhausted() -> None:
 
     async def _aroute(task, prompt, **kwargs):
         if getattr(task, "agent", "") == "patch_critic":
-            return SimpleNamespace(content="PASS: ok", usage=usage, model="m")
+            return SimpleNamespace(content=_CRITIC_PASS_JSON, usage=usage, model="m")
         return SimpleNamespace(content=_BAD_DIFF, usage=usage, model="m")
 
     router.aroute = AsyncMock(side_effect=_aroute)

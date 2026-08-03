@@ -30,6 +30,10 @@ class IssueStatus:
     REGRESSED = "regressed"
     IGNORED = "ignored"
     LEARNING = "learning"
+    # M4 (D17): waiting on a human — written by ESCALATED_HUMAN so the
+    # cockpit can filter "waiting on human" instead of escalations being
+    # invisible status no-ops.
+    ESCALATED = "escalated"
 
 
 # Allowed forward transitions per event type.
@@ -38,7 +42,13 @@ ISSUE_STATE_TRANSITIONS: dict[str, dict[str, str]] = {
         IssueStatus.OPEN: IssueStatus.TRIAGED,
         IssueStatus.REGRESSED: IssueStatus.TRIAGED,
     },
+    # M3 (D5): triage failure is a recorded self-loop — the status stays
+    # ``open`` but the attempt lands in ``issue_state_transitions``.
+    EventType.TRIAGE_FAILED: {IssueStatus.OPEN: IssueStatus.OPEN},
     EventType.HEAL_REQUESTED: {IssueStatus.TRIAGED: IssueStatus.FIX_PENDING},
+    # M3 (D3): a failed heal returns the issue to ``triaged`` instead of
+    # stranding it in ``fix_pending``.
+    EventType.HEAL_FAILED: {IssueStatus.FIX_PENDING: IssueStatus.TRIAGED},
     EventType.PATCH_PROPOSED: {IssueStatus.TRIAGED: IssueStatus.FIX_PENDING},
     EventType.HEAL_EXECUTED: {
         IssueStatus.FIX_PENDING: IssueStatus.VERIFYING,
@@ -50,6 +60,23 @@ ISSUE_STATE_TRANSITIONS: dict[str, dict[str, str]] = {
     },
     EventType.VERIFY_PASSED: {IssueStatus.VERIFYING: IssueStatus.RESOLVED},
     EventType.VERIFY_FAILED: {IssueStatus.VERIFYING: IssueStatus.REGRESSED},
+    # M4 (D17): escalation writes a real status. ``regressed`` is NOT a
+    # source state on purpose — a post-verify regression keeps its more
+    # specific status (the golden-path harness asserts it) while the
+    # escalation event/alert still fires.
+    EventType.ESCALATED_HUMAN: {
+        IssueStatus.OPEN: IssueStatus.ESCALATED,
+        IssueStatus.TRIAGED: IssueStatus.ESCALATED,
+        IssueStatus.FIX_PENDING: IssueStatus.ESCALATED,
+        IssueStatus.VERIFYING: IssueStatus.ESCALATED,
+    },
+    # M13 (§6.4): LEARNING state around permanent N01 regression case.
+    EventType.LEARNING_STARTED: {
+        IssueStatus.RESOLVED: IssueStatus.LEARNING,
+    },
+    EventType.LEARNING_COMPLETED: {
+        IssueStatus.LEARNING: IssueStatus.RESOLVED,
+    },
 }
 
 
@@ -78,17 +105,22 @@ async def apply_transition(
     if issue is None:
         return None
     target = next_status(issue.status, event_type)
-    if target is None or target == issue.status:
+    if target is None:
         return None
-
-    resolved = (
-        set_resolved_at
-        if set_resolved_at is not None
-        else target == IssueStatus.RESOLVED
-    )
-    ok = await repo.set_status(org_id, issue_id, target, set_resolved_at=resolved)
-    if not ok:
-        return None
+    if target != issue.status:
+        # Normal forward transition — move the row.
+        resolved = (
+            set_resolved_at
+            if set_resolved_at is not None
+            else target == IssueStatus.RESOLVED
+        )
+        ok = await repo.set_status(
+            org_id, issue_id, target, set_resolved_at=resolved
+        )
+        if not ok:
+            return None
+    # else: declared self-loop (e.g. TRIAGE_FAILED open→open) — no status
+    # write, but the attempt is still recorded below (M3, D5).
 
     await _record_transition(
         org_id,

@@ -77,7 +77,12 @@ const OFFLINE_CHUNKS_FORMAT = "chunks";
 type GzipSync = typeof import("node:zlib").gzipSync;
 let _gzipSync: GzipSync | null = null;
 
-async function gzipJsonBody(body: unknown): Promise<Buffer> {
+/**
+ * Exported so other ingest-shaped call sites (e.g. ``session.ts``'s
+ * agent-session lifecycle notify) can reuse the same cached
+ * ``gzipSync`` instead of each maintaining its own copy.
+ */
+export async function gzipJsonBody(body: unknown): Promise<Buffer> {
   if (_gzipSync === null) {
     const zlib = await import("node:zlib");
     _gzipSync = zlib.gzipSync;
@@ -175,6 +180,10 @@ export interface ResolvedConfig {
   coalesce: boolean;
   providerCacheLayout: boolean;
   responseRepair: boolean;
+  /** Bounded-capture policy for `setInput`/`setOutput`. See `capture.ts`. */
+  captureMode: "bounded" | "full" | "metrics_only";
+  /** Per-string-field truncation cap in bytes for `captureMode: "bounded"`. */
+  captureMaxStringBytes: number;
 }
 
 function readEnv(name: string): string | undefined {
@@ -189,6 +198,23 @@ function envOptBool(name: string): boolean | undefined {
   const raw = readEnv(name);
   if (raw === undefined) return undefined;
   return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
+}
+
+const VALID_CAPTURE_MODES = ["bounded", "full", "metrics_only"] as const;
+
+function envCaptureMode(): "bounded" | "full" | "metrics_only" | undefined {
+  const raw = readEnv("EDEN_CAPTURE_MODE")?.trim().toLowerCase();
+  if (raw === undefined) return undefined;
+  return (VALID_CAPTURE_MODES as readonly string[]).includes(raw)
+    ? (raw as "bounded" | "full" | "metrics_only")
+    : undefined;
+}
+
+function envCaptureMaxStringBytes(): number | undefined {
+  const raw = readEnv("EDEN_CAPTURE_MAX_STRING_BYTES");
+  if (raw === undefined) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
@@ -219,6 +245,9 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     opts.providerCacheLayout ?? envOptBool("EDEN_PROVIDER_CACHE_LAYOUT") ?? true;
   const responseRepair =
     opts.responseRepair ?? envOptBool("EDEN_RESPONSE_REPAIR") ?? true;
+  const captureMode = opts.captureMode ?? envCaptureMode() ?? "bounded";
+  const captureMaxStringBytes =
+    opts.captureMaxStringBytes ?? envCaptureMaxStringBytes() ?? 8192;
 
   if (strict && !orgId) {
     throw new Error(
@@ -281,6 +310,8 @@ export function resolveConfig(opts: EdenSDKOptions = {}): ResolvedConfig {
     coalesce,
     providerCacheLayout,
     responseRepair,
+    captureMode,
+    captureMaxStringBytes,
   };
 }
 
@@ -439,6 +470,34 @@ function _registerProcessExitHooksOnce(): void {
   }
 }
 
+/**
+ * One-time (per process) warning that the SDK is itself sampling on a
+ * non-`"full"` profile. The server applies its own independent
+ * `sampling_profile` gate (`src/eden/config.py`) -- if an operator sets
+ * `EDEN_SAMPLING_PROFILE=balanced` intending to enable *server-side*
+ * N16, but the SDK reads the same env var, the two ~15% gates compound
+ * multiplicatively (2.25% effective keep) with nothing to explain the
+ * gap. `clientProbabilisticSampling` defaults to `false` specifically
+ * to avoid that outcome, but a caller who explicitly opts in (or who
+ * only wants client-side sampling with no server gate) should still
+ * see this printed once so the two knobs are never a silent surprise.
+ */
+let _warnedAboutSdkServerCompounding = false;
+function warnOnceAboutSdkServerCompounding(profile: string): void {
+  if (profile === "full" || _warnedAboutSdkServerCompounding) return;
+  _warnedAboutSdkServerCompounding = true;
+  console.warn(
+    `[eden-ai] samplingProfile="${profile}" is active on the SDK. The ` +
+      "server (src/eden/config.py's sampling_profile) applies its own " +
+      "independent N16 gate -- setting a non-full profile on BOTH sides " +
+      "compounds multiplicatively (e.g. balanced x balanced = 2.25% kept, " +
+      "not 15%). By default the SDK only force-keeps error/slow/force " +
+      "traces here and leaves the probabilistic drop to the server; set " +
+      "clientProbabilisticSampling: true only if there is no server-side " +
+      "N16 gate to defer to.",
+  );
+}
+
 // ── Client ────────────────────────────────────────────────────────
 
 /**
@@ -524,16 +583,34 @@ export class EdenSDK {
   rejectedTotal = 0;
   /** Events the server confirmed it stored. */
   acceptedTotal = 0;
+  /**
+   * Events the SERVER's own N16 sampling gate dropped after accepting
+   * the request — distinct from `sampledOut` (this SDK's own
+   * `ClientSampler` decision, made before the event is even sent).
+   * The gateway's ingest response carries this as `sampled_out`
+   * alongside `accepted`/`rejected`/`total`; without parsing it here,
+   * a customer running with `EDEN_SAMPLING_PROFILE=balanced` set only
+   * on the server saw `acceptedTotal` silently fall short of what
+   * they sent with no SDK-side counter to explain why.
+   */
+  serverSampledOutTotal = 0;
   private offline: OfflineQueue | null = null;
 
   constructor(opts: EdenSDKOptions = {}) {
     this.config = resolveConfig(opts);
+    const samplingProfile =
+      opts.samplingProfile ??
+      ((process.env.EDEN_SAMPLING_PROFILE as SamplingProfile | undefined) ??
+        "full");
     this.sampler = new ClientSampler({
-      profile: opts.samplingProfile ??
-        ((process.env.EDEN_SAMPLING_PROFILE as SamplingProfile | undefined) ??
-          "full"),
+      profile: samplingProfile,
       keepErrors: opts.sampleKeepErrors ?? true,
+      clientProbabilisticSampling:
+        opts.clientProbabilisticSampling ??
+        envOptBool("EDEN_CLIENT_PROBABILISTIC_SAMPLING") ??
+        false,
     });
+    warnOnceAboutSdkServerCompounding(samplingProfile);
     if (opts.offlineQueuePath || process.env.EDEN_OFFLINE_QUEUE === "1") {
       try {
         this.offline = new OfflineQueue(opts.offlineQueuePath);
@@ -657,7 +734,20 @@ export class EdenSDK {
         payload?.error_type,
     );
     const durationMs = event.durationMs ?? 0;
-    if (!sampler.shouldKeep({ hasError, durationMs })) {
+    // Force-keep: a caller-supplied `force_trace` / `eden.force_trace`
+    // attribute (set via `trace(..., { attributes: { force_trace: true } })`
+    // or directly on the wire event) must bypass client-side sampling
+    // regardless of the active profile -- mirrors the Python SDK's
+    // `ClientSampler.should_keep(SampleSignals(force=...))`.
+    const attrs = event.attributes;
+    const force = Boolean(
+      attrs &&
+        (attrs["eden.force_trace"] === true ||
+          attrs["eden.force_trace"] === "true" ||
+          attrs["force_trace"] === true ||
+          attrs["force_trace"] === "true"),
+    );
+    if (!sampler.shouldKeep({ hasError, durationMs, force })) {
       this.sampledOut += 1;
       return;
     }
@@ -1343,12 +1433,22 @@ export class EdenSDK {
     }
     if (typeof parsed !== "object" || parsed === null) return;
     const body = parsed as Record<string, unknown>;
-    if (!("accepted" in body) && !("rejected" in body)) return;
+    if (
+      !("accepted" in body) &&
+      !("rejected" in body) &&
+      !("sampled_out" in body)
+    ) {
+      return;
+    }
 
     const accepted = Number(body.accepted ?? 0);
     const rejected = Number(body.rejected ?? 0);
+    const sampledOut = Number(body.sampled_out ?? 0);
     if (Number.isFinite(accepted) && accepted > 0) {
       this.acceptedTotal += accepted;
+    }
+    if (Number.isFinite(sampledOut) && sampledOut > 0) {
+      this.serverSampledOutTotal += sampledOut;
     }
     if (Number.isFinite(rejected) && rejected > 0) {
       this.rejectedTotal += rejected;

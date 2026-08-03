@@ -21,12 +21,22 @@ errors after logging.
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
 
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_text(text: str) -> str:
+    """M12 (§7.2): value-level redact Slack free text before send."""
+    try:
+        from eden.issues.fixture_export import redact_secret_values
+
+        return redact_secret_values(text)
+    except Exception:
+        return text
 
 def _portal_base() -> str:
     """Base URL for deep links into the portal."""
@@ -85,10 +95,20 @@ def _blocks(
     link_label: str,
     context: str,
 ) -> list[dict[str, Any]]:
-    """Standard alert layout: header, body, one deep-link button, context."""
+    """Standard alert layout: header, body, one deep-link button, context.
+
+    M12 (§7.2): body/header/context are value-level-redacted so secret
+    substrings never reach Slack.
+    """
     return [
-        {"type": "header", "text": {"type": "plain_text", "text": header[:150]}},
-        {"type": "section", "text": {"type": "mrkdwn", "text": body[:2900]}},
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": _safe_text(header)[:150]},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": _safe_text(body)[:2900]},
+        },
         {
             "type": "actions",
             "elements": [
@@ -101,7 +121,9 @@ def _blocks(
         },
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": context[:2900]}],
+            "elements": [
+                {"type": "mrkdwn", "text": _safe_text(context)[:2900]}
+            ],
         },
     ]
 
@@ -117,6 +139,7 @@ async def _send(
     """Resolve channel + token, rate-limit, post. Never raises."""
     if not await _allow_send(org_id, dedupe_key):
         return {"status": "rate_limited"}
+    text = _safe_text(text)
     try:
         from eden.integrations.slack import store as slack_store
         from eden.integrations.slack.client import SlackClient
@@ -203,6 +226,42 @@ async def notify_pr_opened(
     )
 
 
+async def notify_ci_failure(
+    org_id: str,
+    *,
+    plan_id: str,
+    check_name: str,
+    conclusion: str,
+    title: str,
+    pr_url: str | None = None,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    """M9 (§4.3): customer CI went red on an Eden improvement PR.
+
+    Deduped per (plan, check) via ``ci:{plan_id}:{check}`` so retried
+    check_run deliveries and multi-run suites don't repeat the ping.
+    """
+    url = pr_url or _deep_link(f"/improve?plan={plan_id}")
+    return await _send(
+        org_id,
+        agent_id=agent_id,
+        dedupe_key=f"ci:{plan_id}:{check_name}",
+        text=f":rotating_light: CI failed on Eden PR: {title}",
+        blocks=_blocks(
+            header="Customer CI failed on an Eden PR",
+            body=(
+                f"*{title[:400]}*\n"
+                f"Check: `{check_name}` — conclusion: `{conclusion}`\n"
+                "Eden stamped the failure on the plan and, if the PR is "
+                "still open, queued one regenerate with the CI excerpt."
+            ),
+            link_url=url,
+            link_label="Review the PR / plan",
+            context="Eden Soft Autonomy — CI conclusions ingested via the GitHub App",
+        ),
+    )
+
+
 async def notify_needs_approval(
     org_id: str,
     *,
@@ -210,8 +269,34 @@ async def notify_needs_approval(
     title: str,
     kind: str = "config",
     agent_id: str | None = None,
+    queue: str | None = None,
 ) -> dict[str, Any]:
-    """A plan landed in Needs-you. Deep link to the plan view."""
+    """A plan landed in Needs-you. Deep link to the plan view.
+
+    M13 (§6.2): when ``slack_notify_fix_now_only`` (default True),
+    Improve-later kinds (advisory/config/cost) are suppressed — only
+    Fix-now (code_patch / prompt_update) notifies Slack.
+    """
+    kind_l = (kind or "").lower()
+    queue_l = (queue or "").lower()
+    try:
+        from eden.config import get_settings
+
+        fix_now_only = bool(
+            getattr(get_settings(), "slack_notify_fix_now_only", True)
+        )
+    except Exception:
+        fix_now_only = True
+    if fix_now_only:
+        fix_now_kinds = {"code_patch", "prompt_update"}
+        if queue_l == "improve_later" or (
+            queue_l != "fix_now" and kind_l not in fix_now_kinds
+        ):
+            return {
+                "status": "skipped",
+                "reason": "improve_later_no_slack",
+                "kind": kind_l,
+            }
     url = _deep_link(f"/improve?plan={plan_id}")
     return await _send(
         org_id,

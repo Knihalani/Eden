@@ -49,6 +49,8 @@ from ._common import (
     _VALID_GRANULARITIES,
     _check_ch_available,
     _clickhouse_partition_name,
+    _is_tinybird_substrate,
+    _not_applicable_envelope,
     _not_implemented_envelope,
     _ok_envelope,
     _ok_fallback_envelope,
@@ -116,10 +118,23 @@ class ColumnarPartitionManager:
         partition_id = _partition_id_for(org_id=org_id)
         clickhouse_partition = _clickhouse_partition_name(org_id=org_id)
 
+        # Tinybird does not expose system.parts via /v0/sql (managed
+        # substrate — no ClickHouse system-table access for customers), so
+        # ``_ch_count`` below would always raise. Checked up front, rather
+        # than inside the try/except, so this reports the honest reason
+        # ("not_applicable") instead of recording a "query_error" fallback
+        # metric for a condition that is permanent and expected, not an
+        # actual ClickHouse outage.
+        if await _is_tinybird_substrate():
+            rows_estimate = await _postgres_count_rows(
+                org_id=org_id, source_table=source_table
+            )
+            bytes_estimate = rows_estimate * 256
+            data_source = "not_applicable"
         # 2. Probe the substrate. The probe caches a single
         #    failure per process for 30 seconds, so a request
         #    burst doesn't each pay a 1s timeout.
-        if await _check_ch_available():
+        elif await _check_ch_available():
             try:
                 rows_total, bytes_total = await self._ch_count(
                     source_table=source_table,
@@ -171,6 +186,13 @@ class ColumnarPartitionManager:
             "data_source": data_source,
             "ensured_at": datetime.now(UTC).isoformat(),
         }
+        if data_source == "not_applicable":
+            return _not_applicable_envelope(
+                "ColumnarPartitionManager",
+                data,
+                "system.parts is not queryable on Tinybird; using a "
+                "Postgres row-count estimate for rows_estimate/bytes_estimate.",
+            )
         if data_source == "postgres_fallback":
             return _ok_fallback_envelope(
                 "ColumnarPartitionManager",

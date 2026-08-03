@@ -164,11 +164,11 @@ async def test_a_sweep_budget_is_not_replaced_by_the_closed_loop_scope() -> None
 
 
 async def test_patch_generator_critic_skips_when_budget_exhausted() -> None:
+    # M4 (D13): the critic is fail-closed on EVERY path — the
+    # ``fail_closed`` kwarg is gone, exhaustion always means passed=False.
     from eden.patches.patch_generator import _critic_review
 
     with sb.llm_budget_scope(0):
-        verdict = await _critic_review(
-            AsyncMock(), "diff", rca_summary="s", fail_closed=True
-        )
+        verdict = await _critic_review(AsyncMock(), "diff", rca_summary="s")
     assert verdict["reason"] == "llm_budget_exhausted"
     assert verdict["passed"] is False

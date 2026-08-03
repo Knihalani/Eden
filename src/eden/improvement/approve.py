@@ -1,4 +1,8 @@
-"""Approve flow: N22 gate → materialize diff → static preverify → draft PR (N23)."""
+"""Approve flow: N22 gate → materialize diff → static preverify → draft PR (N23).
+
+M15 (§9): when auto-merge eligibility passes, open a non-draft PR and
+merge (canary ladder); otherwise the existing draft-PR path is unchanged.
+"""
 
 from __future__ import annotations
 
@@ -98,6 +102,153 @@ async def _merge_plan_evidence(
     except Exception as exc:
         logger.debug("approve: merge evidence failed: %s", exc)
     return await plans_repo.get_plan(org_id, plan_id)
+
+
+def _md_cell(value: Any, limit: int = 160) -> str:
+    """One markdown table cell: pipe/newline-safe, truncated, em-dash empty."""
+    text = str(value).strip() if value not in (None, "") else ""
+    if not text:
+        return "—"
+    return text.replace("|", "\\|").replace("\n", " ")[:limit]
+
+
+def _md_status(section: Any) -> str:
+    """``status (reason)`` cell from a ``{status, reason}`` evidence dict."""
+    if not isinstance(section, dict) or not section.get("status"):
+        return "—"
+    reason = str(section.get("reason") or "").strip()
+    status = str(section.get("status"))
+    return _md_cell(f"{status} ({reason})" if reason else status)
+
+
+def _issue_ref(issue_id: str) -> str:
+    """Portal deep link for an issue id; bare code when no base URL."""
+    try:
+        from eden.config import get_settings
+
+        s = get_settings()
+        base = str(
+            getattr(s, "portal_base_url", "") or getattr(s, "app_url", "") or ""
+        ).rstrip("/")
+        if base and "example.com" not in base:
+            return f"[{issue_id}]({base}/issues?issue={issue_id})"
+    except Exception:  # noqa: BLE001 — cosmetic only
+        pass
+    return f"`{issue_id}`"
+
+
+def render_pr_evidence_body(
+    plan: dict[str, Any],
+    *,
+    plan_id: str,
+    summary: str,
+    static_status: str | None = None,
+) -> str:
+    """M9 (§4.3): PR body = plan summary + compact evidence table.
+
+    Renders whatever evidence the plan actually carries (M7 replay tier,
+    M8 sandbox tests incl. the ``synthesized: true`` marker) and shows
+    ``—`` for anything absent — the table never implies a check ran
+    when it didn't. Kept compact: humans review this at merge time.
+
+    M12 (§7.2): the rendered body is value-level-redacted at this choke
+    point so secret-shaped substrings never reach the public PR.
+    """
+    from eden.issues.fixture_export import redact_secret_values
+
+    evidence = plan.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    static_cell = _md_cell(static_status or "")
+    if static_cell == "—":
+        hermetic = evidence.get("hermetic_preverify")
+        if isinstance(hermetic, dict):
+            static_cell = _md_cell(hermetic.get("status"))
+
+    sandbox = evidence.get("sandbox_tests")
+    sandbox_cell = _md_status(sandbox)
+    if isinstance(sandbox, dict) and sandbox.get("synthesized"):
+        sandbox_cell = f"{sandbox_cell} — `synthesized: true`"
+
+    signature = evidence.get("failure_signature")
+    signature_cell = "—"
+    if isinstance(signature, dict) and any(signature.values()):
+        signature_cell = _md_cell(
+            " · ".join(
+                str(signature.get(key))
+                for key in ("stumble_kind", "failing_span_name", "error_substring")
+                if signature.get(key)
+            )
+        )
+
+    trace_ids = [str(t) for t in (evidence.get("example_trace_ids") or [])[:3]]
+    issue_id = str(evidence.get("issue_id") or "").strip()
+
+    rows = [
+        ("Evidence tier", f"**{_md_cell(evidence.get('evidence_tier'))}**"),
+        ("Static checks", static_cell),
+        ("Replay verify", _md_status(evidence.get("replay"))),
+        ("Sandbox tests", sandbox_cell),
+        ("Failure signature", signature_cell),
+        (
+            "Example traces",
+            ", ".join(f"`{t}`" for t in trace_ids) if trace_ids else "—",
+        ),
+        ("Issue", _issue_ref(issue_id) if issue_id else "—"),
+    ]
+    suppress = evidence.get("suppress_reasons") or evidence.get("patch_blocked")
+    if suppress:
+        rows.append(("Suppress reasons", _md_cell(suppress, limit=200)))
+    if str(evidence.get("ci_ingestion") or "") == "unavailable":
+        rows.append(("Customer CI", "unavailable (App lacks `checks:read`)"))
+
+    lines = [
+        summary,
+        "",
+        "### Eden evidence",
+        "",
+        "| Check | Result |",
+        "| --- | --- |",
+        *[f"| {label} | {value} |" for label, value in rows],
+        "",
+        f"_Evidence recorded on plan `{plan_id}`; merging schedules the "
+        "post-merge regression verify._",
+    ]
+    # M12 (§7.2) choke point: value-level scan on the full PR body.
+    return redact_secret_values("\n".join(lines))
+
+
+async def _stamp_ci_ingestion_availability(
+    org_id: str,
+    plan_id: str,
+    plan: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """M9 (§4.3): stamp ``ci_ingestion: "unavailable"`` when detectable.
+
+    Best-effort probe of the App *registration* permissions (the only
+    permission surface github.py exposes — per-installation acceptance
+    is not persisted anywhere, so a stale un-accepted installation is
+    NOT detectable here and simply never delivers check webhooks).
+    """
+    try:
+        from eden.config import get_settings
+
+        if not bool(getattr(get_settings(), "ci_ingestion_v1", True)):
+            return plan
+        from eden.integrations.github import GitHubOAuthClient, is_configured
+
+        if not is_configured():
+            return plan
+        perms = await GitHubOAuthClient().app_permissions()
+        if str(perms.get("checks") or "") not in ("read", "write"):
+            merged = await _merge_plan_evidence(
+                org_id, plan_id, {"ci_ingestion": "unavailable"}
+            )
+            return merged or plan
+    except Exception as exc:  # noqa: BLE001 — probe must never block PR-open
+        logger.debug("approve: ci_ingestion availability probe skipped: %s", exc)
+    return plan
 
 
 async def regenerate_plan_diff_from_static_errors(
@@ -243,6 +394,9 @@ async def approve_plan(
     hermetic = evidence.get("hermetic_preverify") if isinstance(evidence, dict) else None
     hermetic_status = None
     if isinstance(hermetic, dict):
+        # M7 (§4.1): new plans carry the honest "static_passed" label;
+        # legacy plans carry "passed". Both are surfaced verbatim — this
+        # is a pass-through, never a gate.
         hermetic_status = hermetic.get("status")
 
     plan_kind = plan.get("plan_kind") or "code_patch"
@@ -379,12 +533,90 @@ async def approve_plan(
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"
     body = plan.get("summary") or f"Eden improvement plan `{plan_id}`"
+    # M9 (§4.3): the human merges with proof in view — render the plan
+    # evidence table into the PR body (flagged; falls back to summary).
+    try:
+        from eden.config import get_settings
+
+        if bool(getattr(get_settings(), "pr_evidence_body_v1", True)):
+            body = render_pr_evidence_body(
+                plan,
+                plan_id=plan_id,
+                summary=body,
+                static_status=static_status,
+            )
+    except Exception as exc:  # noqa: BLE001 — body render must not block PR
+        logger.debug("approve_plan: evidence body render failed: %s", exc)
+
+    # M15 (§9): eligibility gate — when all conditions pass, open
+    # non-draft and merge (canary). Otherwise draft-PR flow unchanged.
+    from eden.improvement.auto_merge import (
+        AutoMergeDecision,
+        claim_auto_merge_slot,
+        evaluate_auto_merge_eligibility,
+        merge_pull_request,
+        release_auto_merge_slot,
+    )
+
+    auto_decision = await evaluate_auto_merge_eligibility(
+        org_id,
+        plan,
+        provider=pr_provider,
+        base=base,
+        repo_id=repo_id,
+    )
+    use_auto_merge = bool(auto_decision.eligible)
+    # M15 harden: atomically claim the weekly seat before opening a
+    # non-draft PR so two concurrent approves cannot both pass the soft
+    # count check and both merge (TOCTOU). Guardian canary reverts
+    # (force_canary_revert) do not consume the weekly merge cap.
+    slot_claimed = False
+    force_revert = bool(
+        ((plan.get("evidence") or {}).get("auto_merge") or {}).get(
+            "force_canary_revert"
+        )
+    )
+    if use_auto_merge and not force_revert:
+        ok, claim_details = await claim_auto_merge_slot(
+            org_id,
+            plan_id,
+            agent_id=plan_agent_id,
+            cap=(auto_decision.details or {}).get("weekly_cap"),
+        )
+        if not ok:
+            use_auto_merge = False
+            auto_decision = AutoMergeDecision(
+                eligible=False,
+                reasons=[
+                    f"auto_merge_blocked:{claim_details.get('reason', 'weekly_cap')}"
+                ],
+                blocked_by="weekly_cap",
+                details={**(auto_decision.details or {}), **claim_details},
+            )
+        else:
+            slot_claimed = True
+            auto_decision.details = {
+                **(auto_decision.details or {}),
+                **claim_details,
+            }
+
+    # Stamp decision reasons onto the plan before opening the PR so the
+    # draft fallback still carries ``auto_merge_blocked:*`` evidence.
+    try:
+        plan_with_am = await _merge_plan_evidence(
+            org_id, plan_id, {"auto_merge": auto_decision.to_evidence()}
+        )
+        if plan_with_am is not None:
+            plan = plan_with_am
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("approve_plan: auto_merge evidence stamp failed: %s", exc)
+
     req = PRCreateRequest(
         title=title,
         body=body,
         branch=branch,
         base=base,
-        draft=True,
+        draft=not use_auto_merge,
         repo_id=repo_id,
         files=files,
     )
@@ -392,6 +624,8 @@ async def approve_plan(
     try:
         info = await pr_provider.create_pr(req)
     except NotImplementedError as exc:
+        if slot_claimed:
+            await release_auto_merge_slot(org_id, plan_id)
         return {
             "status": "error",
             "plan_id": plan_id,
@@ -401,6 +635,8 @@ async def approve_plan(
     except Exception as exc:
         from eden.providers.pr import GitHubPRPermissionError
 
+        if slot_claimed:
+            await release_auto_merge_slot(org_id, plan_id)
         logger.warning("approve_plan: PR create failed: %s", exc)
         error = (
             "github_permissions_missing"
@@ -415,6 +651,8 @@ async def approve_plan(
         }
 
     if _pr_create_failed(info):
+        if slot_claimed:
+            await release_auto_merge_slot(org_id, plan_id)
         logger.warning(
             "approve_plan: create_pr returned failure envelope " "(state=%s number=%s url=%r)",
             getattr(info, "state", None),
@@ -441,9 +679,85 @@ async def approve_plan(
         approved_by=approved_by,
     )
 
-    # Soft Autonomy Phase 8: NO production-telemetry verify at PR-open.
-    # Free static preverify already ran above. N01 quiet-window verify
-    # is scheduled by the GitHub merge webhook via ``queue_verify_for_plan``.
+    # M15 (§9): canary merge — merge immediately, mark merged, schedule
+    # the 10-min ``auto_merge:`` verify window. Merge failure leaves the
+    # open non-draft PR for a human and stamps the block reason.
+    auto_merged = False
+    merge_result: dict[str, Any] | None = None
+    if use_auto_merge and info.number is not None:
+        merge_result = await merge_pull_request(
+            pr_provider,
+            int(info.number),
+            commit_title=title,
+        )
+        if merge_result.get("ok"):
+            auto_merged = True
+            try:
+                updated = await _merge_plan_evidence(
+                    org_id,
+                    plan_id,
+                    {
+                        "auto_merge": {
+                            **auto_decision.to_evidence(),
+                            "merged": True,
+                            "canary": True,
+                            "pr_number": info.number,
+                        }
+                    },
+                ) or updated
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("approve_plan: auto_merge merged stamp failed: %s", exc)
+            try:
+                merged_plan = await plans_repo.mark_merged(org_id, plan_id)
+                if merged_plan is not None:
+                    updated = merged_plan
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("approve_plan: mark_merged failed: %s", exc)
+            # Fast verify window — do not wait for the merge webhook.
+            try:
+                await _queue_verify(
+                    org_id,
+                    updated or plan,
+                    branch=opened_branch,
+                    auto_merge_canary=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("approve_plan: auto_merge verify queue failed: %s", exc)
+        else:
+            block = str(merge_result.get("reason") or "merge_failed")
+            if slot_claimed:
+                try:
+                    await release_auto_merge_slot(org_id, plan_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "approve_plan: release auto_merge slot failed: %s", exc
+                    )
+            try:
+                updated = await _merge_plan_evidence(
+                    org_id,
+                    plan_id,
+                    {
+                        "auto_merge": {
+                            **auto_decision.to_evidence(),
+                            "eligible": False,
+                            "blocked_by": "merge_failed",
+                            "reasons": [f"auto_merge_blocked:{block}"],
+                            "merged": False,
+                        }
+                    },
+                ) or updated
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("approve_plan: merge_failed stamp failed: %s", exc)
+
+    # M9 (§4.3): honest degrade — when the App registration lacks
+    # ``checks:read``, customer CI conclusions can never arrive; stamp
+    # the plan so its record doesn't imply CI was consulted.
+    updated = await _stamp_ci_ingestion_availability(org_id, plan_id, updated)
+
+    # Soft Autonomy Phase 8: NO production-telemetry verify at PR-open
+    # for the draft path. Free static preverify already ran above. N01
+    # quiet-window verify is scheduled by the GitHub merge webhook via
+    # ``queue_verify_for_plan``. (Canary auto-merge schedules above.)
     await _audit_approve(org_id, plan_id, approved_by)
 
     # Soft Autonomy Phase 6: Slack alert for the opened PR. Approve is a
@@ -474,8 +788,36 @@ async def approve_plan(
             "branch": opened_branch,
             "static_preverify_status": static_status,
             "regenerated": regenerated,
+            "auto_merged": auto_merged,
+            "auto_merge": auto_decision.to_evidence(),
         },
     )
+
+    if auto_merged:
+        merge_advice = {
+            "verify_timing": "auto_merge_canary",
+            "message": (
+                "Eden auto-merged this canary PR (M15). A 10-minute "
+                "fast verify window is running; guardian may auto-revert "
+                "on regression."
+            ),
+            "static_preverify_status": static_status,
+            "auto_merged": True,
+        }
+        return {
+            "plan_id": plan_id,
+            "status": "merged",
+            "pr_url": info.url,
+            "pr_number": info.number,
+            "branch": opened_branch,
+            "merge_advice": merge_advice,
+            "hermetic_preverify_status": hermetic_status,
+            "static_preverify_status": static_status,
+            "regenerated": regenerated,
+            "auto_merged": True,
+            "auto_merge": auto_decision.to_evidence(),
+            "plan": updated,
+        }
 
     merge_advice = {
         "verify_timing": "post_merge",
@@ -484,6 +826,8 @@ async def approve_plan(
             "regression verify automatically when the PR lands."
         ),
         "static_preverify_status": static_status,
+        "auto_merged": False,
+        "auto_merge": auto_decision.to_evidence(),
     }
 
     return {
@@ -496,6 +840,8 @@ async def approve_plan(
         "hermetic_preverify_status": hermetic_status,
         "static_preverify_status": static_status,
         "regenerated": regenerated,
+        "auto_merged": False,
+        "auto_merge": auto_decision.to_evidence(),
         "plan": updated,
     }
 
@@ -507,7 +853,12 @@ async def _approve_non_code(
     *,
     approved_by: str | None = None,
 ) -> dict[str, Any]:
-    """Route prompt/nudge/guardrail plans to F41 promotion queue (v1)."""
+    """Route non-code plans: F41 promotion, F68 deploy, or advisory-only.
+
+    ``config_change`` / ``advisory`` plans have no apply automation (M6,
+    spec §11) — approve records the recommendation to the N06 ledger and
+    returns ``advisory_only``.
+    """
     plan_kind = plan.get("plan_kind") or ""
     evidence = plan.get("evidence") or {}
     ref_id = (
@@ -521,6 +872,42 @@ async def _approve_non_code(
         source = plan.get("source_ref") or ""
         if ":" in source:
             ref_id = source.split(":", 1)[1]
+
+    if plan_kind in ("config_change", "advisory"):
+        # M6 (D10, spec §3.7/§11): advisory-only kinds. Config-apply
+        # automation was deliberately pruned — the config surface is too
+        # heterogeneous — so approve acknowledges the recommendation,
+        # records it to the N06 ledger, and applies nothing.
+        updated = await plans_repo.mark_approved(
+            org_id,
+            plan_id,
+            approved_by=approved_by,
+            status="approved",
+            metadata={"route_status": "advisory_only"},
+        )
+        await _n06_ledger(
+            org_id,
+            plan_id,
+            event_subtype="advisory_acknowledged",
+            actor_id=approved_by,
+            payload={
+                "plan_kind": plan_kind,
+                "title": plan.get("title") or "",
+                "summary": plan.get("summary") or "",
+                "recommendation": evidence if isinstance(evidence, dict) else {},
+            },
+        )
+        return {
+            "plan_id": plan_id,
+            "status": "advisory_only",
+            "plan_kind": plan_kind,
+            "message": (
+                "Recommendation acknowledged and recorded to the N06 ledger. "
+                "No automated apply path exists for this plan kind — action "
+                "is manual by design."
+            ),
+            "plan": updated,
+        }
 
     kind_map = {
         "nudge_promote": "nudge",
@@ -766,7 +1153,9 @@ async def _n22_blocked(org_id: str, plan: dict[str, Any]) -> str | None:
         if policy.compliance_profile == "hipaa":
             return "HIPAA observe mode — approve disabled"
     except Exception as exc:
-        logger.debug("approve n22 check failed: %s", exc)
+        # Fail-closed: never approve when policy resolution/decide throws.
+        logger.warning("approve n22 check failed (blocking): %s", exc)
+        return f"n22_check_failed:{str(exc)[:160]}"
     return None
 
 
@@ -780,11 +1169,21 @@ async def queue_verify_for_plan(
     GitHub webhook (Phase 2b, PR-merge time) when a linked improvement
     plan's PR lands.
     """
-    return await _queue_verify(org_id, plan, branch=branch)
+    evidence = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    am = evidence.get("auto_merge") if isinstance(evidence.get("auto_merge"), dict) else {}
+    # Explicit canary=True required (M15 harden — no default-True).
+    canary = bool(am.get("merged")) and am.get("canary") is True
+    return await _queue_verify(
+        org_id, plan, branch=branch, auto_merge_canary=canary
+    )
 
 
 async def _queue_verify(
-    org_id: str, plan: dict[str, Any], *, branch: str | None = None
+    org_id: str,
+    plan: dict[str, Any],
+    *,
+    branch: str | None = None,
+    auto_merge_canary: bool = False,
 ) -> str | None:
     evidence = plan.get("evidence") or {}
     issue_id = evidence.get("issue_id")
@@ -793,18 +1192,50 @@ async def _queue_verify(
         if source.startswith("issue:"):
             issue_id = source.split(":", 1)[1]
 
-    verify_ref = branch or plan.get("github_branch") or plan.get("source_ref") or ""
     if not issue_id:
         return None
 
+    # M10 (§5.3): the ``merge:<plan_id>`` ref prefix marks a code-merge
+    # verify (default 1800s delay / 30min quiet window — unchanged) and
+    # lets the verify worker distinguish it from heal fast-path refs.
+    # M15 (§9): canary auto-merges use ``auto_merge:<plan_id>`` for the
+    # 10-min fast verify window.
+    plan_id = str(plan.get("id") or "")
+    if auto_merge_canary and plan_id:
+        verify_ref = f"auto_merge:{plan_id}"
+    elif plan_id:
+        verify_ref = f"merge:{plan_id}"
+    else:
+        verify_ref = branch or plan.get("github_branch") or plan.get("source_ref") or ""
+
+    verify_id: str | None = None
     try:
         from eden.closed_loop.verify import schedule_verify
 
         # schedule_verify returns the real verification row id (or None).
-        return await schedule_verify(org_id, str(issue_id), ref=verify_ref)
+        verify_id = await schedule_verify(org_id, str(issue_id), ref=verify_ref)
     except Exception as exc:
         logger.debug("approve verify queue failed: %s", exc)
         return None
+
+    if verify_id:
+        # M10 (D15): the patch path must move the issue to ``verifying``
+        # — without this VERIFY_PASSED's verifying→resolved transition
+        # no-ops and the issue stays ``fix_pending`` forever.
+        try:
+            from eden.closed_loop.events import EventType
+            from eden.closed_loop.state_machine import apply_transition
+
+            await apply_transition(
+                org_id,
+                str(issue_id),
+                event_type=EventType.VERIFY_SCHEDULED,
+                reason=f"verification scheduled for plan {plan_id or '?'}",
+                detail={"plan_id": plan_id, "verification_id": verify_id},
+            )
+        except Exception as exc:
+            logger.debug("approve verify transition failed: %s", exc)
+    return verify_id
 
 
 async def _n06_ledger(

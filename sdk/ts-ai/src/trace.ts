@@ -19,6 +19,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { getDefaultClient } from "./client.js";
 import { SOURCE_FORMATS, type TraceOptions } from "./types.js";
+import { captureValue, limitsFromConfig, stampCaptureAttributes } from "./capture.js";
 
 // 24-char base-36 id. Duplicated here (as ``client.ts`` duplicates
 // ``randomUUID``) because importing ``ids.js`` would close a module
@@ -288,6 +289,36 @@ async function _traceCallback<T>(
   });
 }
 
+/**
+ * Map user-supplied `TraceOptions.attributes` keys to their wire
+ * names, mirroring the Python SDK's `_map_attr_key` in `trace.py`.
+ *
+ * Every attribute previously got an unconditional `eden.span.`
+ * prefix, so `{ force_trace: true }` shipped as
+ * `eden.span.force_trace` -- a key the server's N16 keep-rule reader
+ * (`signals_from_attributes`, which looks for the literal
+ * `eden.force_trace`) never sees. Same problem for any other
+ * `eden.*`-namespaced key set by hand: it was double-namespaced to
+ * `eden.span.eden.*` instead of reaching the server under its own
+ * name.
+ */
+function mapTraceAttributes(
+  attrs: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!attrs) return {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "force_trace") {
+      out["eden.force_trace"] = value;
+    } else if (key.startsWith("eden.")) {
+      out[key] = value;
+    } else {
+      out[`eden.span.${key}`] = value;
+    }
+  }
+  return out;
+}
+
 function finishTrace(
   ctx: TraceContext,
   options: TraceOptions,
@@ -312,6 +343,37 @@ function finishTrace(
       errorType = ctx.error;
     }
   }
+  // Bounded capture applies at emission time (not when setInput/
+  // setOutput was called) so the error/slow bypass sees the span's
+  // FINAL outcome and duration regardless of call order — a span
+  // that calls setInput() before it knows it will error still gets
+  // the full-fidelity keep. Mirrors the Python SDK's
+  // `_emit_trace_event`. Auto-instrumentation (wrapOpenAI, ...) does
+  // not route through this — it already ships metrics-only.
+  const captureLimits = limitsFromConfig(config);
+  const hasError = outcome === "error";
+  const inputResult = captureValue(ctx.input, {
+    hasError,
+    durationMs,
+    limits: captureLimits,
+  });
+  const outputResult = captureValue(ctx.output, {
+    hasError,
+    durationMs,
+    limits: captureLimits,
+  });
+  const attributes: Record<string, unknown> = {
+    ...mapTraceAttributes(options.attributes),
+    "eden.span_id": ctx.spanId,
+    "eden.trace_name": ctx.name,
+  };
+  stampCaptureAttributes(attributes, inputResult, outputResult);
+  // Force-keep: a caller-supplied `force_trace`/`eden.force_trace`
+  // attribute must survive client-side sampling regardless of the
+  // active profile. The actual force-keep check happens in
+  // `EdenSDK.emit()`, which reads `event.attributes` for the same
+  // `eden.force_trace` key -- shared by every event source, not
+  // just `trace()`/`traceAgent()`.
   try {
     client.emit({
       eventId: ctx.traceId,
@@ -333,16 +395,13 @@ function finishTrace(
         duration_ms: durationMs,
         error_type: errorType,
         error_message: errorMessage,
-        input: ctx.input,
-        output: ctx.output,
+        input: inputResult.value,
+        output: outputResult.value,
         ...options.metadata,
       },
       metrics: { duration_ms: durationMs },
       tags: ctx.tags,
-      attributes: {
-        "eden.span_id": ctx.spanId,
-        "eden.trace_name": ctx.name,
-      },
+      attributes,
       environmentId: options.environmentId,
       spanId: ctx.spanId,
       parentSpanId: ctx.parentSpanId,

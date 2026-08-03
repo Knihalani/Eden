@@ -1,4 +1,4 @@
-DESCRIPTION "Usage trends at hour or day granularity. Mirrors `ClickHouseSink.query_usage_trends`."
+DESCRIPTION "Usage trends at hour or day granularity. Mirrors `ClickHouseSink.query_usage_trends`. Phase 1 note (2026-08): no route in the Eden app calls this endpoint or query_usage_trends; ingest into `usage_trends` is gated OFF by default via tinybird_ingest_unread_datasources_enabled in clickhouse_sink.py. Left deployed (schema-only) rather than dropped so a future consumer does not need a new datasource."
 
 NODE usage_trends_q
 SQL >

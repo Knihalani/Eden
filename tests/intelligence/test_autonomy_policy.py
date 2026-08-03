@@ -41,11 +41,19 @@ def test_observe_mode_denies_heal_and_patch() -> None:
 
 
 def test_assisted_allows_heal_but_patch_needs_approval() -> None:
-    p = _policy(maintenance_mode="assisted")
+    # M10 (§5.2): auto_runtime_heal defaults False (opt-in). Explicitly
+    # enable for the "allows heal" assertion.
+    p = _policy(maintenance_mode="assisted", auto_runtime_heal=True)
     assert decide(p, "rollback")[0] == "allow"
     assert decide(p, "cache_bust")[0] == "allow"
     # code patch → require_approval in assisted mode
     assert decide(p, "propose_patch")[0] == "require_approval"
+
+
+def test_assisted_heal_denied_when_opt_in_off() -> None:
+    """M10: default / opt-out posture denies runtime heals."""
+    p = _policy(maintenance_mode="assisted", auto_runtime_heal=False)
+    assert decide(p, "rollback")[0] == "deny"
 
 
 def test_assisted_pr_first_flag_off_still_requires_approval_not_deny() -> None:

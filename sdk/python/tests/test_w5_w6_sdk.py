@@ -24,7 +24,17 @@ def test_mastra_install_is_noop_stub() -> None:
 
 
 def test_sampler_keep_errors_override() -> None:
-    s = ClientSampler(profile="aggressive", keep_errors=True, rng_seed=1)
+    # ``client_probabilistic_sampling=True`` opts into the probabilistic
+    # drop this test exercises -- the SDK x server compounding guard
+    # (see ``ClientSampler``'s docstring) makes that ``False`` by
+    # default, so a non-``full`` profile alone no longer probabilistically
+    # drops anything on the client.
+    s = ClientSampler(
+        profile="aggressive",
+        keep_errors=True,
+        rng_seed=1,
+        client_probabilistic_sampling=True,
+    )
     assert s.should_keep(SampleSignals(has_error=True)) is True
     # Forced drop for clean events under aggressive with seed
     kept = sum(

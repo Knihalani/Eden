@@ -28,7 +28,19 @@ eden.configure(
 
 MARKER = f"e2e-local-proof-{int(time.time())}"
 
-with eden.trace("e2e-pipeline", attributes={"marker": MARKER}) as root:
+# The N16 tail-sampling gate defaults to `balanced` (~15% probabilistic
+# keep of non-signal traces — src/eden/observability/sampling/apply.py) and
+# runs server-side inside `TelemetryCollector.ingest_one`, skipping
+# Postgres storage entirely on drop. That gate can't be pinned from this
+# process (it runs against the already-running local API server, a
+# separate process whose env this script doesn't control), so this proof
+# trace opts itself out via `force_trace` instead — the SDK maps it to the
+# `eden.force_trace` attribute the server's FORCE keep-rule reads. Without
+# it, this "proof" trace would be silently dropped ~85% of runs and never
+# reach the query API this script exists to verify against.
+with eden.trace(
+    "e2e-pipeline", attributes={"marker": MARKER, "force_trace": True}
+) as root:
     root.set_input({"question": "What is Eden?", "marker": MARKER})
     with eden.trace("llm-call") as child:
         child.set_input({"model": "e2e-stub-model", "prompt": MARKER})

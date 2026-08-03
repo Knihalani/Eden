@@ -10,7 +10,12 @@ from typing import Any
 
 from eden.improvement import plans_repo, runs_repo
 from eden.improvement import settings as imp_settings
-from eden.improvement.planner import PlanCandidate, persist_candidates, rank_candidates
+from eden.improvement.planner import (
+    PlanCandidate,
+    ev_capture,
+    persist_candidates,
+    rank_candidates,
+)
 from eden.improvement.sweep_budget import (
     begin_sweep_llm_budget,
     clear_sweep_llm_budget,
@@ -18,7 +23,9 @@ from eden.improvement.sweep_budget import (
 
 logger = logging.getLogger(__name__)
 
-_SWEEP_TIMEOUT_S = 300
+# M14 (§8.4): overall sweep cap tightened from 300s → 60s (p95 target).
+# Per-signal stages use ``sweep_signal_timeout_s`` inside ``_sweep_body``.
+_SWEEP_TIMEOUT_S = 60
 _SIGMA_THRESHOLD = 2.0
 _LOCKFILE_PATHS = (
     "requirements.txt",
@@ -26,15 +33,6 @@ _LOCKFILE_PATHS = (
     "package-lock.json",
     "pyproject.toml",
 )
-_KNOWN_CVE_HINTS: dict[str, tuple[str, str]] = {
-    "pillow": ("CVE-2023-50445", "high"),
-    "requests": ("CVE-2024-35195", "medium"),
-    "urllib3": ("CVE-2024-37891", "medium"),
-    "django": ("CVE-2024-38875", "high"),
-    "cryptography": ("CVE-2024-26130", "high"),
-}
-
-
 async def _pg_fetch(query: str, *args: Any) -> list[dict[str, Any]]:
     try:
         from eden.storage.postgres import get_postgres_client
@@ -100,6 +98,18 @@ def _parse_deps_from_lockfile(path: str, content: str) -> list[str]:
     return names
 
 
+async def _issue_agent_id(org_id: str, issue_id: str) -> str | None:
+    """Resolve the agent behind an issue for hint-scoped lanes (M6, D8)."""
+    try:
+        from eden.issues.repo import IssuesRepo
+
+        issue = await IssuesRepo().get_issue(org_id, issue_id)
+        return getattr(issue, "agent_id", None) if issue else None
+    except Exception as exc:
+        logger.debug("issue agent lookup failed: %s", exc)
+        return None
+
+
 def _agent_enabled(org_id: str) -> bool:
     """Sync gate for sweep entry — checks global flag only (async routes use gates)."""
     try:
@@ -132,6 +142,7 @@ class ImprovementAgent:
         agent_id: str | None = None,
         issue_id: str | None = None,
         trigger: str = "manual",
+        plan_kind_hint: str | None = None,
     ) -> dict[str, Any]:
         if not await _agent_enabled_for_org(org_id):
             return {"status": "disabled", "reason": "improvement_agent_v1=false"}
@@ -144,6 +155,7 @@ class ImprovementAgent:
                     agent_id=agent_id,
                     issue_id=issue_id,
                     trigger=trigger,
+                    plan_kind_hint=plan_kind_hint,
                 ),
                 timeout=_SWEEP_TIMEOUT_S,
             )
@@ -166,13 +178,18 @@ class ImprovementAgent:
         agent_id: str | None = None,
         issue_id: str | None = None,
         trigger: str = "manual",
+        plan_kind_hint: str | None = None,
     ) -> dict[str, Any]:
         watermark = since or await runs_repo.get_watermark(org_id)
         run = await runs_repo.create_run(
             org_id,
             last_run_at=watermark,
             agent_id=agent_id,
-            metadata={"trigger": trigger, "issue_id": issue_id},
+            metadata={
+                "trigger": trigger,
+                "issue_id": issue_id,
+                "plan_kind_hint": plan_kind_hint,
+            },
         )
         run_id = str(run.get("id") or "")
         cfg = await imp_settings.get_settings(org_id)
@@ -201,6 +218,30 @@ class ImprovementAgent:
                 cost = float((result.get("plan") or {}).get("llm_cost_usd") or 0)
                 created_n = 1 if result.get("status") == "proposed" else 0
                 skipped_n = 0 if created_n else 1
+                plan_ids = [result["plan_id"]] if result.get("plan_id") else []
+
+                if plan_kind_hint in ("prompt_update", "nudge_promote"):
+                    # M6 (D8): honour the M4 hint — run the prompt/nudge
+                    # lane scoped to the issue's agent so the requested
+                    # plan kind can land even when the code-patch path
+                    # proposes nothing.
+                    hint_agent = agent_id or await _issue_agent_id(org_id, issue_id)
+                    hint_cands = await self._from_prompt_nudge_candidates(
+                        org_id, hint_agent, plan_kind_hint=plan_kind_hint
+                    )
+                    if hint_cands:
+                        hint_created, hint_skipped = await persist_candidates(
+                            org_id,
+                            hint_cands,
+                            run_id=run_id,
+                            max_plans=max_advisory,
+                            max_code_patch=0,
+                            max_advisory=max_advisory,
+                        )
+                        plan_ids.extend(p["id"] for p in hint_created)
+                        created_n += len(hint_created)
+                        skipped_n += hint_skipped
+
                 await runs_repo.finish_run(
                     org_id,
                     run_id,
@@ -216,7 +257,7 @@ class ImprovementAgent:
                     "plans_created": created_n,
                     "plans_skipped_dedup": skipped_n,
                     "llm_cost_usd": cost,
-                    "plan_ids": [result["plan_id"]] if result.get("plan_id") else [],
+                    "plan_ids": plan_ids,
                     "scoped_issue_id": issue_id,
                 }
 
@@ -231,12 +272,71 @@ class ImprovementAgent:
             issue_skipped_n = int(gen.get("skipped") or 0)
             llm_cost += float(gen.get("cost_usd") or 0)
             issue_plan_ids = list(gen.get("plan_ids") or [])
+            ev_meta = {
+                k: gen[k]
+                for k in ("ev_capture", "ev_scores", "sweep.ev_capture")
+                if k in gen
+            }
+            if "ev_capture" in gen and "sweep.ev_capture" not in ev_meta:
+                ev_meta["sweep.ev_capture"] = gen["ev_capture"]
 
-            candidates.extend(await self._from_traces(org_id, watermark, agent_id))
-            candidates.extend(await self._from_metrics(org_id, agent_id))
-            candidates.extend(await self._from_repo_health(org_id, agent_id))
-            candidates.extend(await self._from_cost_anomalies(org_id, agent_id))
-            candidates.extend(await self._from_prompt_nudge_candidates(org_id, agent_id))
+            # M14 (§8.4): independent signal classes (traces / metrics /
+            # repo / cost / prompt-nudge) via asyncio.gather with a
+            # per-stage timeout so one slow lane cannot burn the 60s
+            # sweep budget. Target sweep p95 < 60s.
+            try:
+                from eden.config import get_settings as get_global_settings
+
+                stage_timeout = float(
+                    getattr(get_global_settings(), "sweep_signal_timeout_s", 45.0)
+                    or 45.0
+                )
+            except Exception:
+                stage_timeout = 45.0
+
+            async def _signal_stage(
+                name: str, coro: Any
+            ) -> list[PlanCandidate]:
+                try:
+                    result = await asyncio.wait_for(coro, timeout=stage_timeout)
+                    return list(result or [])
+                except TimeoutError:
+                    logger.warning(
+                        "improvement.sweep stage=%s timed out after %.0fs org=%s",
+                        name,
+                        stage_timeout,
+                        org_id,
+                    )
+                    return []
+                except Exception as exc:
+                    logger.warning(
+                        "improvement.sweep stage=%s failed org=%s: %s",
+                        name,
+                        org_id,
+                        exc,
+                    )
+                    return []
+
+            stage_results = await asyncio.gather(
+                _signal_stage(
+                    "traces", self._from_traces(org_id, watermark, agent_id)
+                ),
+                _signal_stage("metrics", self._from_metrics(org_id, agent_id)),
+                _signal_stage(
+                    "repo", self._from_repo_health(org_id, agent_id)
+                ),
+                _signal_stage(
+                    "cost", self._from_cost_anomalies(org_id, agent_id)
+                ),
+                _signal_stage(
+                    "prompt_nudge",
+                    self._from_prompt_nudge_candidates(
+                        org_id, agent_id, plan_kind_hint=plan_kind_hint
+                    ),
+                ),
+            )
+            for batch in stage_results:
+                candidates.extend(batch)
             # Advisory lane only — never fake empty code_patch.
             candidates = [
                 c
@@ -264,6 +364,7 @@ class ImprovementAgent:
                 plans_created=total_created,
                 plans_skipped_dedup=total_skipped,
                 llm_cost_usd=llm_cost,
+                metadata_patch=ev_meta or None,
             )
             await _emit_sweep_completed(org_id, run_id, total_created)
             return {
@@ -368,7 +469,39 @@ class ImprovementAgent:
             if cand:
                 candidates.append(cand)
 
-        ranked = rank_candidates(candidates)
+        # M13 harden: batch KG revert premiums into EV ranking.
+        kg_premiums: dict[str, float] = {}
+        try:
+            from eden.patches.knowledge_graph import CodebaseKnowledgeGraph
+
+            kg = CodebaseKnowledgeGraph()
+            for cand in candidates:
+                paths = [
+                    str(p)
+                    for p in (cand.files_changed or [])
+                    if isinstance(p, str) and p
+                ]
+                if not paths:
+                    evid = cand.evidence if isinstance(cand.evidence, dict) else {}
+                    paths = [
+                        str(p)
+                        for p in (evid.get("linked_paths") or evid.get("files") or [])
+                        if p
+                    ]
+                if not paths:
+                    continue
+                repo = str(
+                    (cand.evidence or {}).get("repo_id")
+                    or cand.agent_id
+                    or "unknown"
+                )
+                premium = await kg.revert_risk_premium(org_id, repo, paths)
+                if premium:
+                    kg_premiums[cand.source_fingerprint] = premium
+        except Exception as exc:
+            logger.debug("sweep kg premiums skipped: %s", exc)
+
+        ranked = rank_candidates(candidates, kg_premiums=kg_premiums or None)
         top = ranked[: max(0, int(max_generates))]
         created = 0
         skipped = rejected_skip + max(0, len(ranked) - len(top))
@@ -390,6 +523,42 @@ class ImprovementAgent:
                 )
             else:
                 skipped += 1
+
+        # M13 (§6.1): log EV scores + sweep.ev_capture on the run row.
+        capture = ev_capture(ranked, top)
+        score_rows = [
+            {
+                "fingerprint": c.source_fingerprint,
+                "title": c.title[:80],
+                "ev": round(float(c.ev_score if c.ev_score is not None else c.score), 4),
+                "kind": c.plan_kind,
+                "selected": c in top or c.source_fingerprint
+                in {t.source_fingerprint for t in top},
+            }
+            for c in ranked[:20]
+        ]
+        logger.info(
+            "sweep.ev_capture org=%s run=%s capture=%.3f ranked=%d generated=%d",
+            org_id,
+            run_id,
+            capture,
+            len(ranked),
+            len(top),
+        )
+        try:
+            await runs_repo.merge_run_metadata(
+                org_id,
+                run_id,
+                {
+                    "ev_scores": score_rows,
+                    "sweep.ev_capture": capture,
+                    "ev_ranked": len(ranked),
+                    "ev_generated": len(top),
+                },
+            )
+        except Exception as exc:
+            logger.debug("sweep: ev_capture metadata write failed: %s", exc)
+
         return {
             "created": created,
             "skipped": skipped,
@@ -397,6 +566,8 @@ class ImprovementAgent:
             "plan_ids": plan_ids,
             "ranked": len(ranked),
             "generated": len(top),
+            "ev_capture": capture,
+            "ev_scores": score_rows,
         }
 
     async def _from_issues(
@@ -445,7 +616,9 @@ class ImprovementAgent:
                     continue
                 out.append(
                     PlanCandidate(
-                        plan_kind="config_change",
+                        # Advisory (M6, D10): no approve path can apply a
+                        # config change — cost anomalies are recommendations.
+                        plan_kind="advisory",
                         title=f"High-cost trace {trace_id[:12]}",
                         source_ref=f"trace:{trace_id}",
                         source_fingerprint=fp,
@@ -613,7 +786,8 @@ class ImprovementAgent:
                         mean_cost,
                         std_cost,
                         f"Cost spike: {aid}",
-                        "config_change",
+                        # Advisory (M6, D10): no config-apply automation.
+                        "advisory",
                     ),
                     (
                         "latency",
@@ -621,7 +795,7 @@ class ImprovementAgent:
                         mean_p95,
                         std_p95,
                         f"Latency SLO breach: {aid}",
-                        "config_change",
+                        "advisory",
                     ),
                 ):
                     if not _z_exceeds(value, mean, std):
@@ -697,14 +871,21 @@ class ImprovementAgent:
             if agent_id:
                 agents = [agent_id]
 
-            from eden.providers.repo import get_default_repo_provider
+            from eden.providers.factory import get_repo_provider_for_org
 
-            provider = get_default_repo_provider()
             for aid in agents:
                 if not aid:
                     continue
                 fp_scan = f"repo:{aid}:health"
                 if await plans_repo.find_open_by_fingerprint(org_id, fp_scan):
+                    continue
+
+                try:
+                    # Org-scoped resolution (M6, drift #10) — never the
+                    # process-default provider; per-agent repo when linked.
+                    provider = await get_repo_provider_for_org(org_id, agent_id=aid)
+                except Exception as exc:
+                    logger.debug("sweep repo_health: provider for %s: %s", aid, exc)
                     continue
 
                 findings: list[dict[str, Any]] = []
@@ -738,33 +919,22 @@ class ImprovementAgent:
                             }
                         )
 
-                for dep in set(deps):
-                    hint = _KNOWN_CVE_HINTS.get(dep)
-                    if hint:
-                        findings.append(
-                            {
-                                "kind": "cve_advisory",
-                                "package": dep,
-                                "cve": hint[0],
-                                "severity": hint[1],
-                            }
-                        )
-
                 if not findings:
                     continue
 
-                has_cve = any(f.get("kind") == "cve_advisory" for f in findings)
-                # Advisory only — never invent empty code_patch cards.
-                plan_kind = "config_change"
-                sev = "high" if has_cve else "medium"
+                # Advisory only — no approve path can act on repo-health
+                # findings (M6, D10). The hardcoded CVE hints dict was
+                # deleted as stale by construction (spec §11); CVE
+                # scanning belongs to a real advisory feed integration.
+                sev = "medium"
                 out.append(
                     PlanCandidate(
-                        plan_kind=plan_kind,
+                        plan_kind="advisory",
                         title=f"Repo health: {aid}",
                         source_ref=f"sweep:repo:{aid}",
                         source_fingerprint=fp_scan,
                         agent_id=aid,
-                        summary="Shallow lockfile / CVE advisory scan findings",
+                        summary="Shallow lockfile scan findings",
                         evidence={
                             "findings": findings,
                             "packages_scanned": len(set(deps)),
@@ -799,7 +969,9 @@ class ImprovementAgent:
                         sev = "critical" if pct >= 100 else "high"
                         out.append(
                             PlanCandidate(
-                                plan_kind="config_change",
+                                # Advisory (M6, D10): budget breaches are
+                                # recommendations — no auto-apply path.
+                                plan_kind="advisory",
                                 title=f"Budget threshold breached ({pct:.0f}% of cap)",
                                 source_ref=f"sweep:cost:org:{window}",
                                 source_fingerprint=fp,
@@ -881,7 +1053,7 @@ class ImprovementAgent:
                     continue
                 out.append(
                     PlanCandidate(
-                        plan_kind="config_change",
+                        plan_kind="advisory",
                         title=f"Per-agent spend spike: {aid}",
                         source_ref=f"sweep:cost:agent:{aid}",
                         source_fingerprint=fp,
@@ -903,10 +1075,161 @@ class ImprovementAgent:
             logger.debug("sweep cost_anomalies: %s", exc)
         return out
 
-    async def _from_prompt_nudge_candidates(
-        self, org_id: str, agent_id: str | None
+    async def _from_prompt_updates(
+        self, org_id: str, agent_id: str | None, *, hinted: bool = False
     ) -> list[PlanCandidate]:
+        """N18 evolution canary losers + prod-pin drift → prompt_update (M6).
+
+        A concluded ``prompt_canary_experiments`` row names a winner:
+        ``candidate_version`` when promoted, ``control_version`` when the
+        candidate was rolled back (the loser). When the F68 prod pin
+        (``prompt_environments``) drifts from that winner — or no pin
+        exists at all — emit a ``prompt_update`` plan with a concrete
+        from→to version pair. The target version must resolve to a
+        ``prompt_versions`` registry row, because the approve path (F68
+        ``PromptDeployService``) deploys by that id; otherwise no plan.
+
+        ``hinted`` (M4 ``plan_kind_hint`` consumption) boosts confidence
+        so a sweep requested for the prompt playbook ranks these first.
+        """
         out: list[PlanCandidate] = []
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return out
+            clauses = [
+                "tenant_id = $1",
+                "status IN ('promoted', 'rolled_back')",
+                "ended_at >= NOW() - INTERVAL '14 days'",
+            ]
+            args: list[Any] = [org_id]
+            if agent_id:
+                args.append(agent_id)
+                clauses.append(f"agent = ${len(args)}")
+            rows = await client.fetch(
+                f"""
+                SELECT experiment_id, agent, control_version, candidate_version,
+                       status, ended_at
+                FROM prompt_canary_experiments
+                WHERE {' AND '.join(clauses)}
+                ORDER BY ended_at DESC
+                LIMIT 10
+                """,
+                *args,
+            )
+            seen_agents: set[str] = set()
+            for r in list(rows or []):
+                aid = str(r.get("agent") or "")
+                if not aid or aid in seen_agents:
+                    continue
+                seen_agents.add(aid)
+                status = str(r.get("status") or "")
+                control_v = r.get("control_version")
+                candidate_v = r.get("candidate_version")
+                if control_v is None or candidate_v is None:
+                    continue
+                if status == "promoted":
+                    target_v, loser_v = int(candidate_v), int(control_v)
+                else:  # rolled_back — the candidate lost; control won
+                    target_v, loser_v = int(control_v), int(candidate_v)
+
+                pinned = await client.fetchrow(
+                    """
+                    -- F68 deploys write the normalized 'prod'; the column
+                    -- default is the legacy alias 'production' — accept both.
+                    SELECT version FROM prompt_environments
+                    WHERE org_id = $1 AND prompt_name = $2
+                      AND env IN ('prod', 'production')
+                    ORDER BY (env = 'prod') DESC
+                    LIMIT 1
+                    """,
+                    org_id,
+                    aid,
+                )
+                pinned_v = (
+                    int(pinned["version"])
+                    if pinned is not None and pinned.get("version") is not None
+                    else None
+                )
+                from_v = pinned_v if pinned_v is not None else loser_v
+                if from_v == target_v:
+                    continue  # prod already pins the winner — no drift
+
+                version_row = await client.fetchrow(
+                    """
+                    SELECT pv.id FROM prompt_versions pv
+                    JOIN prompts p ON p.id = pv.prompt_id
+                    WHERE pv.org_id = $1 AND p.name = $2 AND pv.version = $3
+                    """,
+                    org_id,
+                    aid,
+                    target_v,
+                )
+                if version_row is None:
+                    continue  # no registry row — F68 cannot deploy it
+
+                fp = f"prompt_update:{aid}:{from_v}->{target_v}"
+                if await plans_repo.find_open_by_fingerprint(org_id, fp):
+                    continue
+                confidence = 0.85 if hinted else 0.7
+                out.append(
+                    PlanCandidate(
+                        plan_kind="prompt_update",
+                        title=f"Deploy winning prompt v{target_v} for {aid}",
+                        source_ref=f"canary:{r.get('experiment_id')}",
+                        source_fingerprint=fp,
+                        agent_id=aid,
+                        summary=(
+                            f"Evolution canary concluded ({status}); prod is on "
+                            f"v{from_v}, winner is v{target_v}"
+                        ),
+                        evidence={
+                            "agent_id": aid,
+                            "prompt_version_from": from_v,
+                            "prompt_version_to": target_v,
+                            "prompt_version_id": str(version_row["id"]),
+                            "env": "prod",
+                            "evidence": {
+                                "source": (
+                                    "prompt_version_drift"
+                                    if pinned_v is not None
+                                    else "evolution_canary_loser"
+                                ),
+                                "experiment_id": str(r.get("experiment_id") or ""),
+                                "canary_status": status,
+                                "loser_version": loser_v,
+                                "ended_at": str(r.get("ended_at") or ""),
+                            },
+                            "severity": "medium",
+                            "confidence": confidence,
+                        },
+                        severity="medium",
+                        confidence=confidence,
+                        estimated_blast_radius="low",
+                    )
+                )
+        except Exception as exc:
+            logger.debug("sweep prompt_updates: %s", exc)
+        return out
+
+    async def _from_prompt_nudge_candidates(
+        self,
+        org_id: str,
+        agent_id: str | None,
+        *,
+        plan_kind_hint: str | None = None,
+    ) -> list[PlanCandidate]:
+        # prompt_update lane first (M6) — when the sweep was requested
+        # with plan_kind_hint="prompt_update" its candidates get a
+        # confidence boost so ranking prioritizes the hinted agent.
+        out: list[PlanCandidate] = []
+        out.extend(
+            await self._from_prompt_updates(
+                org_id, agent_id, hinted=plan_kind_hint == "prompt_update"
+            )
+        )
         try:
             from eden.storage.postgres import get_postgres_client
 
@@ -982,11 +1305,20 @@ async def request_sweep(
     *,
     agent_id: str | None = None,
     issue_id: str | None = None,
+    plan_kind_hint: str | None = None,
 ) -> dict[str, Any]:
-    """F46 on-demand entry: scoped sweep after triage code_change."""
+    """F46 on-demand entry: scoped sweep after triage code_change.
+
+    ``plan_kind_hint`` (M4, D8) tags sweeps requested for nudge/prompt
+    playbooks (``nudge_promote`` / ``prompt_update``) so the sweep can
+    steer the scoped issue toward that plan kind. Since M6 the hint is
+    honoured: the prompt/nudge lane runs scoped to the issue's agent and
+    hinted candidates are prioritized.
+    """
     return await ImprovementAgent().sweep(
         org_id,
         agent_id=agent_id,
         issue_id=issue_id,
         trigger="improvement.run_requested",
+        plan_kind_hint=plan_kind_hint,
     )

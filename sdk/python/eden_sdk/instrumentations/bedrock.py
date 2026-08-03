@@ -17,6 +17,7 @@ from typing import Any
 
 from eden_sdk._instrumentation_ids import _trace_id_or_random
 from eden_sdk._tokens import extract_usage, normalize_model_name
+from eden_sdk.capture import capture_request_response, limits_from_config
 from eden_sdk.client import TraceEvent, get_default_client
 from eden_sdk.config import get_config
 from eden_sdk.trace import current_span
@@ -209,6 +210,17 @@ def _enqueue(
 ) -> None:
     usage = _extract_bedrock_usage(response)
     total_tokens = _extract_bedrock_total_tokens(response)
+    raw_request_payload = {
+        "operation": operation,
+        **{k: request.get(k) for k in ("modelId", "messages") if k in request},
+    }
+    request_payload, response_payload, capture_attrs = capture_request_response(
+        raw_request_payload,
+        response,
+        error=error,
+        duration_ms=duration_ms,
+        limits=limits_from_config(get_config()),
+    )
     payload: dict[str, Any] = {
         "event_id": f"eden_bedrock_{uuid.uuid4().hex[:16]}",
         "trace_id": _trace_id_or_random(),
@@ -218,10 +230,10 @@ def _enqueue(
         "model": model,
         "model_normalized": normalize_model_name(model) if model else None,
         "duration_ms": duration_ms,
-        "request_payload": {"operation": operation, **{k: request.get(k) for k in ("modelId", "messages") if k in request}},
-        "response_payload": response,
+        "request_payload": request_payload,
+        "response_payload": response_payload,
         "source_format": "bedrock",
-        "attributes": {"provider": "bedrock", "operation": operation},
+        "attributes": {"provider": "bedrock", "operation": operation, **capture_attrs},
         "input_tokens": usage["input_tokens"],
         "output_tokens": usage["output_tokens"],
         "cache_read_input_tokens": usage["cache_read_tokens"],

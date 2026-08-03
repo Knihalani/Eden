@@ -104,6 +104,8 @@ export const queryKeys = {
       ["portal", "slackChannels", orgId] as const,
     slackRoutes: (orgId: string | null | undefined) =>
       ["portal", "slackRoutes", orgId] as const,
+    autonomyPolicy: (orgId: string | null | undefined) =>
+      ["portal", "autonomyPolicy", orgId] as const,
     evalDatasets: (orgId: string | null | undefined) =>
       ["portal", "evalDatasets", orgId] as const,
     evalPlaygrounds: (orgId: string | null | undefined) =>
@@ -112,6 +114,9 @@ export const queryKeys = {
       ["portal", "evalExperiments", orgId] as const,
     improvePlans: (orgId: string | null | undefined) =>
       ["portal", "improvePlans", orgId] as const,
+    // M13: live Fix now / Improve later cockpit queue.
+    improveQueue: (orgId: string | null | undefined) =>
+      ["portal", "improveQueue", orgId] as const,
     compareExperiments: (orgId: string | null | undefined) =>
       ["portal", "compareExperiments", orgId] as const,
     guardrailPolicies: (orgId: string | null | undefined) =>

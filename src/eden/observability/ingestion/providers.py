@@ -21,7 +21,7 @@ from eden.observability.ingestion.attribution import Attribution
 from eden.observability.ingestion.decode_skips import SkipTally, is_mapping
 from eden.observability.ingestion.errors import SchemaInvalidError
 from eden.observability.ingestion.json_body import loads_body
-from eden.observability.ingestion.normalizer import normalize_to_telemetry_event
+from eden.observability.ingestion.normalizer import normalize_many
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
@@ -430,17 +430,16 @@ class OpenAIDecoder:
                 "OpenAI body parsed but contained no items",
                 problems=["empty"],
             )
-        events: list[TelemetryEvent] = []
         skips = SkipTally()
+        raws: list[dict[str, Any]] = []
         for item in items:
             if not is_mapping(item):
                 skips.add("item")
                 continue
-            raw = _openai_to_raw(item)
-            event = await normalize_to_telemetry_event(
-                raw, attribution.with_source_format(self.source_format)
-            )
-            events.append(event)
+            raws.append(_openai_to_raw(item))
+        events = await normalize_many(
+            raws, attribution.with_source_format(self.source_format)
+        )
         skips.report(self.source_format, kept=len(events))
         if not events:
             raise SchemaInvalidError(
@@ -720,17 +719,16 @@ class AnthropicDecoder:
                 "Anthropic body parsed but contained no items",
                 problems=["empty"],
             )
-        events: list[TelemetryEvent] = []
         skips = SkipTally()
+        raws: list[dict[str, Any]] = []
         for item in items:
             if not is_mapping(item):
                 skips.add("item")
                 continue
-            raw = _anthropic_to_raw(item)
-            event = await normalize_to_telemetry_event(
-                raw, attribution.with_source_format(self.source_format)
-            )
-            events.append(event)
+            raws.append(_anthropic_to_raw(item))
+        events = await normalize_many(
+            raws, attribution.with_source_format(self.source_format)
+        )
         skips.report(self.source_format, kept=len(events))
         if not events:
             raise SchemaInvalidError(
@@ -907,17 +905,16 @@ class BedrockDecoder:
                 "Bedrock body parsed but contained no items",
                 problems=["empty"],
             )
-        events: list[TelemetryEvent] = []
         skips = SkipTally()
+        raws: list[dict[str, Any]] = []
         for item in items:
             if not is_mapping(item):
                 skips.add("item")
                 continue
-            raw = _bedrock_to_raw(item)
-            event = await normalize_to_telemetry_event(
-                raw, attribution.with_source_format(self.source_format)
-            )
-            events.append(event)
+            raws.append(_bedrock_to_raw(item))
+        events = await normalize_many(
+            raws, attribution.with_source_format(self.source_format)
+        )
         skips.report(self.source_format, kept=len(events))
         if not events:
             raise SchemaInvalidError(
@@ -1164,17 +1161,16 @@ class GeminiDecoder:
                 "Gemini body parsed but contained no items",
                 problems=["empty"],
             )
-        events: list[TelemetryEvent] = []
         skips = SkipTally()
+        raws: list[dict[str, Any]] = []
         for item in items:
             if not is_mapping(item):
                 skips.add("item")
                 continue
-            raw = _gemini_to_raw(item)
-            event = await normalize_to_telemetry_event(
-                raw, attribution.with_source_format(self.source_format)
-            )
-            events.append(event)
+            raws.append(_gemini_to_raw(item))
+        events = await normalize_many(
+            raws, attribution.with_source_format(self.source_format)
+        )
         skips.report(self.source_format, kept=len(events))
         if not events:
             raise SchemaInvalidError(
