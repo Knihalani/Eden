@@ -24,10 +24,10 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod anthropic;
 pub mod client;
 pub mod errors;
 pub mod openai;
-pub mod anthropic;
 
 mod config;
 mod event;

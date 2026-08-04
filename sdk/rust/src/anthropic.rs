@@ -74,12 +74,10 @@ mod tests {
             .into_value()
             .unwrap();
         assert_eq!(event["source_format"], "anthropic");
-        assert!(
-            event["tags"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| v == "model:claude-3-5-sonnet-20240620")
-        );
+        assert!(event["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "model:claude-3-5-sonnet-20240620"));
     }
 }
