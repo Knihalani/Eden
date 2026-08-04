@@ -461,6 +461,14 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/ci-eval/runs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/ci-eval/runs/{run_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/code-evaluators": [
       "200:application/json",
       "422:application/json"
@@ -1422,6 +1430,14 @@
       "422:application/json"
     ],
     "GET /orgs/{org_id}/scim/v2/Users/{scim_user_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/sessions/{session_id}/timeline": [
       "200:application/json",
       "422:application/json"
     ],
@@ -3173,6 +3189,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/sessions/{session_id}/link-issue": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/signal-clusters/{cluster_id}/resolve": [
       "200:application/json",
       "422:application/json"
@@ -3448,7 +3468,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 878,
+  "route_count": 883,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3573,6 +3593,8 @@
     "GET /orgs/{org_id}/budget/ticker",
     "GET /orgs/{org_id}/categorical-classifiers",
     "GET /orgs/{org_id}/change-impact/{change_id}",
+    "GET /orgs/{org_id}/ci-eval/runs",
+    "GET /orgs/{org_id}/ci-eval/runs/{run_id}",
     "GET /orgs/{org_id}/code-evaluators",
     "GET /orgs/{org_id}/compliance/ledger",
     "GET /orgs/{org_id}/cost-analytics/kpi",
@@ -3816,6 +3838,8 @@
     "GET /orgs/{org_id}/scim/v2/ServiceProviderConfig",
     "GET /orgs/{org_id}/scim/v2/Users",
     "GET /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
+    "GET /orgs/{org_id}/sessions",
+    "GET /orgs/{org_id}/sessions/{session_id}/timeline",
     "GET /orgs/{org_id}/settings/autonomy",
     "GET /orgs/{org_id}/settings/autonomy/audit",
     "GET /orgs/{org_id}/settings/autonomy/budget",
@@ -4259,6 +4283,7 @@
     "POST /orgs/{org_id}/scim/v2/Users",
     "POST /orgs/{org_id}/search/to-signal",
     "POST /orgs/{org_id}/search/to-signal/preview",
+    "POST /orgs/{org_id}/sessions/{session_id}/link-issue",
     "POST /orgs/{org_id}/signal-clusters/{cluster_id}/resolve",
     "POST /orgs/{org_id}/signals",
     "POST /orgs/{org_id}/signals/cluster",
@@ -4329,7 +4354,7 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 532,
+  "schema_count": 539,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -4568,6 +4593,8 @@
     "LibraryToggleResponse",
     "LineageQueryResponse",
     "LineageRequest",
+    "LinkIssueRequest",
+    "LinkIssueResponse",
     "LintRequest",
     "LiveEventBody",
     "LoadSimRequest",
@@ -4713,8 +4740,13 @@
     "SeedDefaultsResponse",
     "SeedItemRequest",
     "SeedItemResponse",
+    "SessionListResponse",
     "SessionRollup",
     "SessionStartResponse",
+    "SessionSummaryItem",
+    "SessionTimelineResponse",
+    "SessionTurn",
+    "SessionTurnIssue",
     "SetRouteRequest",
     "ShadowPromoteBody",
     "ShareListResponse",

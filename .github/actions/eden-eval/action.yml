@@ -15,6 +15,10 @@ inputs:
     description: Eden API base URL
     required: false
     default: https://api.eden.com
+  portal-url:
+    description: Eden portal base URL (used for the "view runs" link in the PR comment)
+    required: false
+    default: https://app.eden.com
   change-id:
     description: Unique change identifier (e.g. PR number)
     required: true
@@ -35,6 +39,9 @@ outputs:
   gate:
     description: pass or block
     value: ${{ steps.run.outputs.gate }}
+  ok:
+    description: "true when the regression gate passed"
+    value: ${{ steps.run.outputs.ok }}
   regression-json:
     description: Full regression result JSON
     value: ${{ steps.run.outputs.regression_json }}
@@ -73,7 +80,9 @@ runs:
           "${EDEN_BASE_URL}/orgs/${EDEN_ORG}/ci-eval/run")
         echo "$resp" > /tmp/eden-ci-eval.json
         gate=$(python -c "import json; print(json.load(open('/tmp/eden-ci-eval.json'))['data'].get('gate','pass'))")
+        ok=$(python -c "import json; print(str(json.load(open('/tmp/eden-ci-eval.json'))['data'].get('ok', True)).lower())")
         echo "gate=$gate" >> "$GITHUB_OUTPUT"
+        echo "ok=$ok" >> "$GITHUB_OUTPUT"
         {
           echo "regression_json<<EOF"
           cat /tmp/eden-ci-eval.json
@@ -83,21 +92,67 @@ runs:
     - name: Post PR comment
       if: github.event_name == 'pull_request'
       shell: bash
+      env:
+        PORTAL_URL: ${{ inputs.portal-url }}
+        EDEN_ORG: ${{ inputs.eden-org }}
       run: |
         python - <<'PY' > /tmp/eden-eval-comment.md
-        import json
+        import json, os
         data = json.load(open("/tmp/eden-ci-eval.json"))
         inner = data.get("data") or {}
         gate = inner.get("gate", "?")
-        reg = inner.get("regression") or {}
+        summary = inner.get("summary") or {}
+        table = inner.get("score_table") or []
+        skips = inner.get("skips") or {}
+        errors = inner.get("errors_detail") or []
         emoji = "✅" if gate == "pass" else "❌"
-        print(f"## {emoji} Eden eval regression")
+        print(f"## {emoji} Eden eval — regression gate: `{gate}`")
         print("")
-        print(f"- **Gate:** `{gate}`")
-        print(f"- **Change:** `{inner.get('change_id', '?')}`")
-        if reg:
-            print(f"- **Passed:** {reg.get('passed', '?')}/{reg.get('total', '?')}")
-            print(f"- **OK:** {reg.get('ok', '?')}")
+        print(f"**Change** `{inner.get('change_id', '?')}`", end="")
+        if inner.get("commit_sha"):
+            print(f" · **Commit** `{str(inner['commit_sha'])[:8]}`", end="")
+        print("")
+        print("")
+        print(
+            "passed **{p}** · failed **{f}** · skipped **{s}** · errors **{e}** "
+            "(total {t})".format(
+                p=summary.get("passed", "?"), f=summary.get("failed", "?"),
+                s=summary.get("skipped", "?"), e=summary.get("errors", "?"),
+                t=summary.get("total", "?"),
+            )
+        )
+        print("")
+        if table:
+            print("| metric | baseline | current | delta | verdict |")
+            print("| --- | --- | --- | --- | --- |")
+            for row in table:
+                base = row.get("baseline")
+                delta = row.get("delta")
+                base_s = "—" if base is None else f"{base:.3f}"
+                delta_s = "—" if delta is None else f"{delta:+.3f}"
+                cur = row.get("current")
+                cur_s = "—" if cur is None else f"{cur:.3f}"
+                print(
+                    f"| {row.get('metric','?')} | {base_s} | {cur_s} | "
+                    f"{delta_s} | {row.get('verdict','?')} |"
+                )
+            print("")
+        if skips.get("count"):
+            print(
+                f"**Skipped ({skips['count']}, policy `{skips.get('policy','allow')}`):**"
+            )
+            for c in skips.get("cases", [])[:10]:
+                print(f"- `{c.get('case_id','?')}` — {c.get('reason','?')}")
+            print("")
+        if errors:
+            print(f"**Errors ({len(errors)}):**")
+            for c in errors[:10]:
+                print(f"- `{c.get('case_id','?')}` — {c.get('reason','?')}")
+            print("")
+        portal = (os.environ.get("PORTAL_URL") or "").rstrip("/")
+        org = os.environ.get("EDEN_ORG") or ""
+        if portal:
+            print(f"[View eval runs in the Eden portal →]({portal}/evals)")
         PY
 
     - name: Publish PR comment
@@ -108,8 +163,8 @@ runs:
         path: /tmp/eden-eval-comment.md
 
     - name: Fail on regression
-      if: inputs.fail-on-regression == 'true' && steps.run.outputs.gate == 'block'
+      if: inputs.fail-on-regression == 'true' && (steps.run.outputs.gate == 'block' || steps.run.outputs.ok == 'false')
       shell: bash
       run: |
-        echo "::error::Eden regression gate blocked this change."
+        echo "::error::Eden regression gate blocked this change (ok=${{ steps.run.outputs.ok }})."
         exit 1

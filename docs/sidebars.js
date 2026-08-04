@@ -61,6 +61,7 @@ const howtoSidebar = {
         'how-to/pii',
         'how-to/cost-budgets',
         'how-to/judges',
+        'how-to/evals-in-ci',
         'how-to/failure-fixtures',
         'how-to/webhooks',
       ],
