@@ -10,6 +10,8 @@ import contextlib
 import contextvars
 import json
 import logging
+import os
+import time
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -21,6 +23,7 @@ from asyncpg import Connection, Pool
 from asyncpg.transaction import Transaction
 
 from eden.config import get_settings
+from eden.observability.slow_query import record_slow_query
 from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
@@ -473,6 +476,56 @@ def _dump_jsonb(value):
 # works without re-importing this module.
 
 
+# ── Slow-query instrumentation ───────────────────────────────────────────
+# TODO(config): promote to Settings
+_slow_query_threshold_ms_cached: float | None = None
+
+
+def _slow_query_threshold_ms() -> float:
+    """Threshold (ms) above which a query is recorded. Env-driven, cached."""
+    global _slow_query_threshold_ms_cached
+    if _slow_query_threshold_ms_cached is None:
+        try:
+            _slow_query_threshold_ms_cached = float(
+                os.environ.get("EDEN_SLOW_QUERY_MS", "500"),
+            )
+        except (TypeError, ValueError):
+            _slow_query_threshold_ms_cached = 500.0
+    return _slow_query_threshold_ms_cached
+
+
+def _maybe_record_slow_query(query: str, started: float, source: str) -> None:
+    """Record ``query`` in the slow-query ring buffer if it ran slow.
+
+    ``started`` is a ``time.monotonic()`` timestamp taken before the query.
+    Fast path is one clock read plus one float comparison. Best-effort:
+    observability must never raise into the query path. Only the query
+    text is recorded (whitespace-collapsed, truncated) — never bind args,
+    so parameter values cannot leak into the ring buffer. Events carry the
+    org id of the request-pinned RLS lease when one is bound; queries
+    outside a request context have no org and are dropped by the recorder
+    (its ring buffer is tenant-scoped).
+    """
+    try:
+        duration_ms = (time.monotonic() - started) * 1000.0
+        threshold_ms = _slow_query_threshold_ms()
+        if duration_ms < threshold_ms:
+            return
+        org_id = ""
+        bound = _request_pg_conn.get()
+        if isinstance(bound, RequestConnLease):
+            org_id = bound.org_id
+        record_slow_query(
+            org_id=org_id,
+            fingerprint=" ".join(query.split())[:256],
+            duration_ms=duration_ms,
+            source=f"postgres.{source}",
+            threshold_ms=threshold_ms,
+        )
+    except Exception:  # noqa: BLE001 — never break the query path
+        pass
+
+
 @dataclass
 class ConnectionConfig:
     host: str
@@ -745,8 +798,12 @@ class PostgresClient:
 
     async def execute(self, query: str, *args: Any) -> str:
         """Execute a query and return status."""
-        async with self.acquire() as conn:
-            return cast(str, await conn.execute(query, *args))
+        started = time.monotonic()
+        try:
+            async with self.acquire() as conn:
+                return cast(str, await conn.execute(query, *args))
+        finally:
+            _maybe_record_slow_query(query, started, "execute")
 
     async def executemany(
         self,
@@ -759,23 +816,35 @@ class PostgresClient:
         insert / update. Returns the raw asyncpg status string from
         the final statement (use ``fetch`` for SELECTs).
         """
-        async with self.acquire() as conn:
-            return cast(
-                str,
-                await conn.executemany(query, list(args_iter)),
-            )
+        started = time.monotonic()
+        try:
+            async with self.acquire() as conn:
+                return cast(
+                    str,
+                    await conn.executemany(query, list(args_iter)),
+                )
+        finally:
+            _maybe_record_slow_query(query, started, "executemany")
 
     async def fetch(self, query: str, *args: Any) -> list[dict]:
         """Fetch all rows as dicts."""
-        async with self.acquire() as conn:
-            rows = await conn.fetch(query, *args)
-            return [dict(row) for row in rows]
+        started = time.monotonic()
+        try:
+            async with self.acquire() as conn:
+                rows = await conn.fetch(query, *args)
+                return [dict(row) for row in rows]
+        finally:
+            _maybe_record_slow_query(query, started, "fetch")
 
     async def fetchrow(self, query: str, *args: Any) -> dict | None:
         """Fetch a single row as dict."""
-        async with self.acquire() as conn:
-            row = await conn.fetchrow(query, *args)
-            return dict(row) if row else None
+        started = time.monotonic()
+        try:
+            async with self.acquire() as conn:
+                row = await conn.fetchrow(query, *args)
+                return dict(row) if row else None
+        finally:
+            _maybe_record_slow_query(query, started, "fetchrow")
 
     async def insert_usage_event(
         self,
@@ -961,8 +1030,12 @@ class PostgresClient:
 
     async def fetchval(self, query: str, *args: Any) -> Any:
         """Fetch a single value."""
-        async with self.acquire() as conn:
-            return await conn.fetchval(query, *args)
+        started = time.monotonic()
+        try:
+            async with self.acquire() as conn:
+                return await conn.fetchval(query, *args)
+        finally:
+            _maybe_record_slow_query(query, started, "fetchval")
 
     async def fetchiter(
         self,
@@ -980,6 +1053,9 @@ class PostgresClient:
         the pool; the surrounding ``async with self.acquire()`` enforces
         this.
         """
+        # Not slow-query instrumented: a monotonic diff around a streamed
+        # cursor would mostly measure the caller's per-row work between
+        # yields, not Postgres time, so the recorded duration would lie.
         async with self.acquire() as conn, conn.transaction():
             async for record in conn.cursor(query, *args, prefetch=batch_size):
                 yield dict(record)

@@ -4,10 +4,67 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+#: Indirection so tests can freeze time without patching the global
+#: ``time`` module.
+_monotonic = time.monotonic
+
+# TODO(config): promote to Settings
+_KEEPALIVE_ENV = "EDEN_HEARTBEAT_KEEPALIVE_S"
+_KEEPALIVE_DEFAULT_S = 21600.0
+
+
+def _keepalive_seconds() -> float:
+    """Rewrite an *unchanged* status this often anyway (default 6h).
+
+    The keepalive bounds ``checked_at`` staleness: without it, a
+    component whose status never changes would never write again and
+    liveness dashboards could not distinguish "healthy and quiet" from
+    "process gone".
+    """
+    try:
+        return float(os.environ.get(_KEEPALIVE_ENV, _KEEPALIVE_DEFAULT_S))
+    except (TypeError, ValueError):
+        return _KEEPALIVE_DEFAULT_S
+
+
+#: Last status actually written per ``(component, org_id)``:
+#: ``{(component, org_id): (status, last_write_monotonic)}``.
+#:
+#: Process-local on purpose. The scheduled tick is leader-gated, so one
+#: process does all the batch writes; a restart/failover just clears the
+#: map, which fails toward writing (never toward suppressing a write).
+_last_written: dict[tuple[str, str | None], tuple[str, float]] = {}
+
+
+def _reset_write_gate_for_tests() -> None:
+    _last_written.clear()
+
+
+def _should_write(
+    component: str, org_id: str | None, status: str, now: float
+) -> bool:
+    """Write when the status CHANGED since the last written value, when
+    we have never written this key, or when the keepalive interval has
+    elapsed since the last write."""
+    prev = _last_written.get((component, org_id))
+    if prev is None:
+        return True
+    prev_status, written_at = prev
+    if prev_status != status:
+        return True
+    return (now - written_at) >= _keepalive_seconds()
+
+
+def _note_written(
+    component: str, org_id: str | None, status: str, now: float
+) -> None:
+    _last_written[(component, org_id)] = (status, now)
 
 
 async def record_heartbeat(
@@ -34,6 +91,10 @@ async def record_heartbeat(
             status,
             json.dumps(meta or {}),
         )
+        # Not gated (an explicit single-row call always writes), but the
+        # write still updates the change-gate state so the batch path
+        # never re-writes a status this call just persisted.
+        _note_written(component, org_id, status, _monotonic())
         return True
     except Exception as exc:
         logger.debug("heartbeat persist skipped: %s", exc)
@@ -53,8 +114,22 @@ async def record_heartbeats_batch(
     statements, which by itself is long enough that Postgres never
     reaches Neon's autosuspend window no matter how the loop is phased.
     One statement per tick instead.
+
+    Change-gated: a row is only written when its status differs from the
+    last value actually written for that ``(component, org_id)`` — or on
+    the ``EDEN_HEARTBEAT_KEEPALIVE_S`` keepalive cadence (default 6h) so
+    ``checked_at`` still proves liveness. In steady state (every status
+    unchanged) a tick writes nothing at all instead of 3*N rows.
+    Returns True when the write succeeded *or* nothing needed writing;
+    False only on a failed write, exactly as before. The gate state is
+    updated only after a successful INSERT, so a failed flush retries in
+    full on the next tick.
     """
     if not rows:
+        return True
+    now = _monotonic()
+    due = [row for row in rows if _should_write(row[0], row[1], row[2], now)]
+    if not due:
         return True
     try:
         from eden.storage.postgres import get_postgres_client
@@ -64,7 +139,7 @@ async def record_heartbeats_batch(
             return False
         params: list[Any] = []
         values: list[str] = []
-        for component, org_id, status, meta in rows:
+        for component, org_id, status, meta in due:
             base = len(params)
             values.append(
                 f"(${base + 1}, ${base + 2}, ${base + 3}, ${base + 4}::jsonb, NOW())"
@@ -78,6 +153,8 @@ async def record_heartbeats_batch(
             + ", ".join(values),
             *params,
         )
+        for component, org_id, status, _meta in due:
+            _note_written(component, org_id, status, now)
         return True
     except Exception as exc:
         logger.debug("heartbeat batch persist skipped: %s", exc)
@@ -168,7 +245,12 @@ async def record_worker_heartbeats(
 
     When ``sink`` is provided the rows are appended to it instead of
     being written immediately, so a caller sweeping many orgs can flush
-    them all through :func:`record_heartbeats_batch` as one statement.
+    them all through :func:`record_heartbeats_batch` as one statement —
+    that flush applies the status-change/keepalive write gate, so
+    unchanged rows appended here cost nothing.
+
+    The immediate path applies the same gate before each write: an
+    unchanged status is only rewritten on the keepalive cadence.
     """
     status = workers_result.get("status", "unknown")
     meta = workers_result.get("meta") or {}
@@ -176,12 +258,15 @@ async def record_worker_heartbeats(
         sink.append(("background_workers", org_id, status, meta))
         sink.append(("api", org_id, "healthy", {"ts": time.time()}))
         return
-    await record_heartbeat(
-        "background_workers", org_id=org_id, status=status, meta=meta
-    )
-    await record_heartbeat(
-        "api", org_id=org_id, status="healthy", meta={"ts": time.time()}
-    )
+    now = _monotonic()
+    if _should_write("background_workers", org_id, status, now):
+        await record_heartbeat(
+            "background_workers", org_id=org_id, status=status, meta=meta
+        )
+    if _should_write("api", org_id, "healthy", now):
+        await record_heartbeat(
+            "api", org_id=org_id, status="healthy", meta={"ts": time.time()}
+        )
 
 
 async def probe_and_record_workers(org_id: str | None = None) -> dict[str, Any]:
