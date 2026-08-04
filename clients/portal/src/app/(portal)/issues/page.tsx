@@ -3,6 +3,11 @@ import { dehydrateIssues } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import IssuesClient from "./issues-client";
 
+export const metadata = {
+  title: "Issues · Eden",
+  description: "Clustered failures and regressions across your agents.",
+};
+
 /** Cap SSR shard wait; return whatever settled (partial dehydrate). */
 const ISSUES_DEHYDRATE_BUDGET_MS = 1500;
 

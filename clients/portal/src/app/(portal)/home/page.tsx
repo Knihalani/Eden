@@ -3,6 +3,11 @@ import { dehydrateHome } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import HomeClient from "./home-client";
 
+export const metadata = {
+  title: "Home · Eden",
+  description: "Fleet health, attention items, and recent activity across your AI agents.",
+};
+
 /** Cap SSR shard wait; return whatever settled (partial dehydrate). */
 const HOME_DEHYDRATE_BUDGET_MS = 1500;
 

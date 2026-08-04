@@ -3,6 +3,11 @@ import { dehydrateTraces } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import TracesClient from "./traces-client";
 
+export const metadata = {
+  title: "Traces · Eden",
+  description: "Inspect every agent run — spans, tool calls, and outcomes.",
+};
+
 /** Cap SSR shard wait; return whatever settled (partial dehydrate). */
 const TRACES_DEHYDRATE_BUDGET_MS = 1800;
 

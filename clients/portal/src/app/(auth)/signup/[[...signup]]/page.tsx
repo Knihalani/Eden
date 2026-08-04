@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+export const metadata = { title: "Sign up · Eden" };
+
 export default async function SignupAlias({
   searchParams,
 }: {

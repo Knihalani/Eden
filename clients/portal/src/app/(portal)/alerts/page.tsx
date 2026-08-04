@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ds/primitives";
 
+export const metadata = { title: "Alerts · Eden" };
+
 /**
  * Legacy /alerts URL — soft land on Inbox guidance.
  *

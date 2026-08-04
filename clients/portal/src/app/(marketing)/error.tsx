@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { reportClientError } from "@/lib/client-error-reporter";
 
 export default function MarketingError({
   error,
@@ -12,6 +13,7 @@ export default function MarketingError({
 }) {
   useEffect(() => {
     console.error("[marketing]", error);
+    reportClientError("marketing", error);
   }, [error]);
 
   return (

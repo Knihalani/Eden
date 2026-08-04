@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+export const metadata = { title: "Improve · Eden" };
+
 /**
  * `/improve/plans/<id>` → `/improve?mode=plan&id=<id>`.
  *

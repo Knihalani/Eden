@@ -124,20 +124,6 @@ export function avgCostPerRun(): number | null {
   return spend / runs;
 }
 
-const ORG_BUDGET_LIMIT = 0;
-// Fixture fallback only — live Cost page uses gateway budget rollup.
-const ORG_BUDGET_SPENT = 0;
-
-export const COST_BUDGET: CostBudgetFixture = {
-  id: "bud_org_24h",
-  name: "Org · 24h",
-  scope: "org",
-  limitUsd: ORG_BUDGET_LIMIT,
-  spentUsd: ORG_BUDGET_SPENT,
-  period: "24h",
-  status: budgetStatusFromSpend(ORG_BUDGET_SPENT, ORG_BUDGET_LIMIT),
-};
-
 export const COST_DRIVERS: CostDriverFixture[] = [];
 
 function liveDrivers(): CostDriverFixture[] {

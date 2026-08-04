@@ -1,5 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { isEdenInternal } from "@/lib/rebuild-flags";
 import { PageHeader, StatusChip } from "@/components/ds/primitives";
+
+export const metadata = {
+  title: "Shell · Eden",
+  robots: { index: false, follow: false },
+};
 
 const SURFACES = [
   { href: "/home", label: "Home" },
@@ -28,6 +35,8 @@ const SHORTCUTS = [
   { keys: "Ask → Assistant", action: "Open full assistant with pins" },
 ];
 export default function LabShellPage() {
+  // Internal surface index — customers soft-land on /unavailable.
+  if (!isEdenInternal()) redirect("/unavailable");
   return (
     <div className="ds-page overflow-y-auto">
       <PageHeader title="Shell" />

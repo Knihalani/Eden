@@ -3,6 +3,11 @@ import { dehydrateAgents } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import AgentsClient from "./agents-client";
 
+export const metadata = {
+  title: "Agents · Eden",
+  description: "Your agent fleet — health, versions, and traffic.",
+};
+
 /** Cap SSR shard wait; return whatever settled (partial dehydrate). */
 const AGENTS_DEHYDRATE_BUDGET_MS = 1500;
 
