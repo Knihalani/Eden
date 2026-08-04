@@ -233,6 +233,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/admin/latency-histograms": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/admin/slow-queries": [
       "200:application/json",
       "422:application/json"
@@ -726,6 +730,210 @@
       "422:application/json"
     ],
     "GET /orgs/{org_id}/integrations/status": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/agents/performance": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/agents/relationships": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/apm-depth/metrics/agents": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/apm-depth/steps/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/apm-depth/steps/{trace_id}/{step_index}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/autonomous/recommendations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/closed-loop/actions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/closed-loop/actions/all": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/closed-loop/dashboard": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/cost/forecast": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/dsl/alerts": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/eval/versions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/experiments/auto-evaluate/latest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/experiments/traffic-split": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/governance/approvals": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/governance/compliance/packs": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/governance/compliance/packs/{evidence_pack_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/governance/dashboard": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/governance/security/scans": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/guardrails/log": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/guardrails/metrics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/guardrails/policies": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/guardrails/scan-history": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/memory/timeline/{memory_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/metric-studio/metrics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/metric-studio/metrics/{metric_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/metric-studio/templates": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/outcomes/analytics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/outcomes/departments": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/rca/incidents": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/rca/incidents/{cluster_id}/summarize": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/rca/{trace_id}/explain": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/conversation/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/live-tail": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/live-tail/{event_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/checkpoints": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/decision/alternatives": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/decision/trajectory": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/properties": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/workflow": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/time-travel/diff/{fork_id}/{replay_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/time-travel/forks": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/time-travel/steps": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/tools/taxonomy": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/conversation/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/correction/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/dashboard/cohort": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/feedback/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/goals": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/satisfaction/{trace_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/intelligence/user/segment": [
       "200:application/json",
       "422:application/json"
     ],
@@ -1530,6 +1738,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "PATCH /orgs/{org_id}/intelligence/user/goals/{goal_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "PATCH /orgs/{org_id}/members/{user_id}": [
       "200:application/json",
       "422:application/json"
@@ -2153,11 +2365,463 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/intelligence/agents/benchmark/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/agents/fleet/identity": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/agents/fleet/permissions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/agents/handoffs/analyze": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/apm-depth/enrich": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/apm-depth/enrich-batch": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/apm-depth/steps/stamp": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/heal": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/heal/{action_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/heal/{action_id}/deny": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/heal/{action_id}/execute": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/investigate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/nl/report": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/autonomous/report": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/closed-loop/actions/{action_id}/apply": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/closed-loop/actions/{action_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/closed-loop/actions/{action_id}/deny": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/columnar/compact": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/columnar/partitions/ensure": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/columnar/query": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/columnar/rollups/precompute": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/cost/anomalies": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/cost/efficiency": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/cost/roi": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/dsl/alerts/compile": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/dsl/alerts/fire-due": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/dsl/alerts/{alert_id}/evaluate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/dsl/lint": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/dsl/parse": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/dsl/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/auto-dataset": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/boolean-categorical": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/clhf/generate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/custom-eval/register": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/failure-clusters": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/feedback": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/hil/annotations": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/hil/tasks": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/modalities/declare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/multimodal/evaluate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/pairwise/preferences": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/pairwise/queues": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/eval/versions/tag": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/auto-evaluate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/recommend": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/simulate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/simulate/load": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/simulate/replay": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/simulate/whatif": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/split": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/traffic-split": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/experiments/winner": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/approvals": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/approvals/request": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/approvals/{request_id}/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/compliance/gdpr": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/compliance/generate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/compliance/iso27001": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/compliance/soc2": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/lineage": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/rtbf": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/governance/security/scan": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/content/enforce": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/evaluate": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/firewall": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/hallucination/check": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/injection/scan": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/pii/redact": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/policies": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/guardrails/promote-judge": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/memory/reaver/suggest": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/memory/{trace_id}/attribute": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/memory/{trace_id}/impact": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/metric-studio/from-examples": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/metric-studio/metrics": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/metric-studio/metrics/{metric_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/metric-studio/metrics/{metric_id}/run": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/outcomes": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/capacity": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/cost": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/drift": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/drift/embedding": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/drift/output": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/quality": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/predict/risk": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/rca/incidents/cluster": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/rca/incidents/{cluster_id}/resolve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/rca/{trace_id}/analyze": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/conversation/message": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/diff": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/sessions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/checkpoint/rewind": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/decision/explain": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/decision/path": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/decision/score": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/properties": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/replay": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/subgraph": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/retrieval/gaps": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/retrieval/reorder": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/retrieval/{trace_id}/attribution": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/retrieval/{trace_id}/utilization": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/time-travel/fork": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/time-travel/record": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/time-travel/replay": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/tools/attribution": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/tools/compare": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/tools/recommend": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/conversation/message": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/feedback": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/intelligence/user/feedback/presigned-token": [
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/intelligence/user/goals": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/intelligence/user/identify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/sessions/aggregate": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2170,6 +2834,18 @@
       "422:application/json"
     ],
     "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/identify": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/signals/abandonment": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/signals/edit-distance": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/intelligence/user/signals/regeneration": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2772,7 +3448,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 709,
+  "route_count": 878,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -2840,6 +3516,7 @@
     "GET /orgs/{org_id}/2fa/enforcement-status",
     "GET /orgs/{org_id}/admin/eden-status",
     "GET /orgs/{org_id}/admin/flags",
+    "GET /orgs/{org_id}/admin/latency-histograms",
     "GET /orgs/{org_id}/admin/slow-queries",
     "GET /orgs/{org_id}/admin/synthetics/last",
     "GET /orgs/{org_id}/agent-issues",
@@ -2964,8 +3641,59 @@
     "GET /orgs/{org_id}/insights/trends",
     "GET /orgs/{org_id}/insights/{insight_id}",
     "GET /orgs/{org_id}/integrations/status",
+    "GET /orgs/{org_id}/intelligence/agents/performance",
+    "GET /orgs/{org_id}/intelligence/agents/relationships",
+    "GET /orgs/{org_id}/intelligence/apm-depth/metrics/agents",
+    "GET /orgs/{org_id}/intelligence/apm-depth/steps/{trace_id}",
+    "GET /orgs/{org_id}/intelligence/apm-depth/steps/{trace_id}/{step_index}",
+    "GET /orgs/{org_id}/intelligence/autonomous/recommendations",
+    "GET /orgs/{org_id}/intelligence/closed-loop/actions",
+    "GET /orgs/{org_id}/intelligence/closed-loop/actions/all",
+    "GET /orgs/{org_id}/intelligence/closed-loop/dashboard",
     "GET /orgs/{org_id}/intelligence/code-change",
     "GET /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "GET /orgs/{org_id}/intelligence/cost/forecast",
+    "GET /orgs/{org_id}/intelligence/dsl/alerts",
+    "GET /orgs/{org_id}/intelligence/eval/versions",
+    "GET /orgs/{org_id}/intelligence/experiments/auto-evaluate/latest",
+    "GET /orgs/{org_id}/intelligence/experiments/traffic-split",
+    "GET /orgs/{org_id}/intelligence/governance/approvals",
+    "GET /orgs/{org_id}/intelligence/governance/compliance/packs",
+    "GET /orgs/{org_id}/intelligence/governance/compliance/packs/{evidence_pack_id}",
+    "GET /orgs/{org_id}/intelligence/governance/dashboard",
+    "GET /orgs/{org_id}/intelligence/governance/security/scans",
+    "GET /orgs/{org_id}/intelligence/guardrails/log",
+    "GET /orgs/{org_id}/intelligence/guardrails/metrics",
+    "GET /orgs/{org_id}/intelligence/guardrails/policies",
+    "GET /orgs/{org_id}/intelligence/guardrails/scan-history",
+    "GET /orgs/{org_id}/intelligence/memory/timeline/{memory_id}",
+    "GET /orgs/{org_id}/intelligence/metric-studio/metrics",
+    "GET /orgs/{org_id}/intelligence/metric-studio/metrics/{metric_id}",
+    "GET /orgs/{org_id}/intelligence/metric-studio/templates",
+    "GET /orgs/{org_id}/intelligence/outcomes/analytics",
+    "GET /orgs/{org_id}/intelligence/outcomes/departments",
+    "GET /orgs/{org_id}/intelligence/rca/incidents",
+    "GET /orgs/{org_id}/intelligence/rca/incidents/{cluster_id}/summarize",
+    "GET /orgs/{org_id}/intelligence/rca/{trace_id}/explain",
+    "GET /orgs/{org_id}/intelligence/replay/conversation/{session_id}",
+    "GET /orgs/{org_id}/intelligence/replay/live-tail",
+    "GET /orgs/{org_id}/intelligence/replay/live-tail/{event_id}",
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/checkpoints",
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/decision/alternatives",
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/decision/trajectory",
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/properties",
+    "GET /orgs/{org_id}/intelligence/replay/{trace_id}/workflow",
+    "GET /orgs/{org_id}/intelligence/time-travel/diff/{fork_id}/{replay_id}",
+    "GET /orgs/{org_id}/intelligence/time-travel/forks",
+    "GET /orgs/{org_id}/intelligence/time-travel/steps",
+    "GET /orgs/{org_id}/intelligence/tools/taxonomy",
+    "GET /orgs/{org_id}/intelligence/user/conversation/{session_id}",
+    "GET /orgs/{org_id}/intelligence/user/correction/{trace_id}",
+    "GET /orgs/{org_id}/intelligence/user/dashboard/cohort",
+    "GET /orgs/{org_id}/intelligence/user/feedback/{trace_id}",
+    "GET /orgs/{org_id}/intelligence/user/goals",
+    "GET /orgs/{org_id}/intelligence/user/satisfaction/{trace_id}",
+    "GET /orgs/{org_id}/intelligence/user/segment",
     "GET /orgs/{org_id}/intelligence/user/sessions/{session_id}",
     "GET /orgs/{org_id}/invites",
     "GET /orgs/{org_id}/issues/{issue_id}/kb-suggestions",
@@ -3170,6 +3898,7 @@
     "PATCH /orgs/{org_id}/improve/plans/{plan_id}",
     "PATCH /orgs/{org_id}/intelligence/code-change",
     "PATCH /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "PATCH /orgs/{org_id}/intelligence/user/goals/{goal_id}",
     "PATCH /orgs/{org_id}/members/{user_id}",
     "PATCH /orgs/{org_id}/nl-alert-rules/{rule_id}",
     "PATCH /orgs/{org_id}/online-scoring/rules/{rule_id}",
@@ -3326,13 +4055,129 @@
     "POST /orgs/{org_id}/insights/disparity/batch-compare",
     "POST /orgs/{org_id}/insights/disparity/compare",
     "POST /orgs/{org_id}/insights/traces/ingest",
+    "POST /orgs/{org_id}/intelligence/agents/benchmark/run",
+    "POST /orgs/{org_id}/intelligence/agents/fleet/identity",
+    "POST /orgs/{org_id}/intelligence/agents/fleet/permissions",
+    "POST /orgs/{org_id}/intelligence/agents/handoffs/analyze",
+    "POST /orgs/{org_id}/intelligence/apm-depth/enrich",
+    "POST /orgs/{org_id}/intelligence/apm-depth/enrich-batch",
+    "POST /orgs/{org_id}/intelligence/apm-depth/steps/stamp",
+    "POST /orgs/{org_id}/intelligence/autonomous/heal",
+    "POST /orgs/{org_id}/intelligence/autonomous/heal/{action_id}/approve",
+    "POST /orgs/{org_id}/intelligence/autonomous/heal/{action_id}/deny",
+    "POST /orgs/{org_id}/intelligence/autonomous/heal/{action_id}/execute",
+    "POST /orgs/{org_id}/intelligence/autonomous/investigate",
+    "POST /orgs/{org_id}/intelligence/autonomous/nl/report",
+    "POST /orgs/{org_id}/intelligence/autonomous/report",
+    "POST /orgs/{org_id}/intelligence/closed-loop/actions/{action_id}/apply",
+    "POST /orgs/{org_id}/intelligence/closed-loop/actions/{action_id}/approve",
+    "POST /orgs/{org_id}/intelligence/closed-loop/actions/{action_id}/deny",
     "POST /orgs/{org_id}/intelligence/code-change",
     "POST /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "POST /orgs/{org_id}/intelligence/columnar/compact",
+    "POST /orgs/{org_id}/intelligence/columnar/partitions/ensure",
+    "POST /orgs/{org_id}/intelligence/columnar/query",
+    "POST /orgs/{org_id}/intelligence/columnar/rollups/precompute",
+    "POST /orgs/{org_id}/intelligence/cost/anomalies",
+    "POST /orgs/{org_id}/intelligence/cost/efficiency",
+    "POST /orgs/{org_id}/intelligence/cost/roi",
+    "POST /orgs/{org_id}/intelligence/dsl/alerts/compile",
+    "POST /orgs/{org_id}/intelligence/dsl/alerts/fire-due",
+    "POST /orgs/{org_id}/intelligence/dsl/alerts/{alert_id}/evaluate",
+    "POST /orgs/{org_id}/intelligence/dsl/lint",
+    "POST /orgs/{org_id}/intelligence/dsl/parse",
+    "POST /orgs/{org_id}/intelligence/dsl/resolve",
+    "POST /orgs/{org_id}/intelligence/eval/auto-dataset",
+    "POST /orgs/{org_id}/intelligence/eval/boolean-categorical",
+    "POST /orgs/{org_id}/intelligence/eval/clhf/generate",
+    "POST /orgs/{org_id}/intelligence/eval/custom-eval/register",
+    "POST /orgs/{org_id}/intelligence/eval/failure-clusters",
+    "POST /orgs/{org_id}/intelligence/eval/feedback",
+    "POST /orgs/{org_id}/intelligence/eval/hil/annotations",
+    "POST /orgs/{org_id}/intelligence/eval/hil/tasks",
+    "POST /orgs/{org_id}/intelligence/eval/modalities/declare",
+    "POST /orgs/{org_id}/intelligence/eval/multimodal/evaluate",
+    "POST /orgs/{org_id}/intelligence/eval/pairwise/preferences",
+    "POST /orgs/{org_id}/intelligence/eval/pairwise/queues",
+    "POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail",
+    "POST /orgs/{org_id}/intelligence/eval/versions/tag",
+    "POST /orgs/{org_id}/intelligence/experiments/auto-evaluate",
+    "POST /orgs/{org_id}/intelligence/experiments/recommend",
+    "POST /orgs/{org_id}/intelligence/experiments/simulate",
+    "POST /orgs/{org_id}/intelligence/experiments/simulate/load",
+    "POST /orgs/{org_id}/intelligence/experiments/simulate/replay",
+    "POST /orgs/{org_id}/intelligence/experiments/simulate/whatif",
+    "POST /orgs/{org_id}/intelligence/experiments/split",
+    "POST /orgs/{org_id}/intelligence/experiments/traffic-split",
+    "POST /orgs/{org_id}/intelligence/experiments/winner",
+    "POST /orgs/{org_id}/intelligence/governance/approvals",
+    "POST /orgs/{org_id}/intelligence/governance/approvals/request",
+    "POST /orgs/{org_id}/intelligence/governance/approvals/{request_id}/resolve",
+    "POST /orgs/{org_id}/intelligence/governance/compliance/gdpr",
+    "POST /orgs/{org_id}/intelligence/governance/compliance/generate",
+    "POST /orgs/{org_id}/intelligence/governance/compliance/iso27001",
+    "POST /orgs/{org_id}/intelligence/governance/compliance/soc2",
+    "POST /orgs/{org_id}/intelligence/governance/lineage",
+    "POST /orgs/{org_id}/intelligence/governance/rtbf",
+    "POST /orgs/{org_id}/intelligence/governance/security/scan",
+    "POST /orgs/{org_id}/intelligence/guardrails/content/enforce",
+    "POST /orgs/{org_id}/intelligence/guardrails/evaluate",
+    "POST /orgs/{org_id}/intelligence/guardrails/firewall",
+    "POST /orgs/{org_id}/intelligence/guardrails/hallucination/check",
+    "POST /orgs/{org_id}/intelligence/guardrails/injection/scan",
+    "POST /orgs/{org_id}/intelligence/guardrails/pii/redact",
+    "POST /orgs/{org_id}/intelligence/guardrails/policies",
+    "POST /orgs/{org_id}/intelligence/guardrails/promote-judge",
+    "POST /orgs/{org_id}/intelligence/memory/reaver/suggest",
+    "POST /orgs/{org_id}/intelligence/memory/{trace_id}/attribute",
+    "POST /orgs/{org_id}/intelligence/memory/{trace_id}/impact",
+    "POST /orgs/{org_id}/intelligence/metric-studio/from-examples",
+    "POST /orgs/{org_id}/intelligence/metric-studio/metrics",
+    "POST /orgs/{org_id}/intelligence/metric-studio/metrics/{metric_id}/approve",
+    "POST /orgs/{org_id}/intelligence/metric-studio/metrics/{metric_id}/run",
+    "POST /orgs/{org_id}/intelligence/outcomes",
+    "POST /orgs/{org_id}/intelligence/predict/capacity",
+    "POST /orgs/{org_id}/intelligence/predict/cost",
+    "POST /orgs/{org_id}/intelligence/predict/drift",
+    "POST /orgs/{org_id}/intelligence/predict/drift/embedding",
+    "POST /orgs/{org_id}/intelligence/predict/drift/output",
+    "POST /orgs/{org_id}/intelligence/predict/quality",
+    "POST /orgs/{org_id}/intelligence/predict/risk",
+    "POST /orgs/{org_id}/intelligence/rca/incidents/cluster",
+    "POST /orgs/{org_id}/intelligence/rca/incidents/{cluster_id}/resolve",
+    "POST /orgs/{org_id}/intelligence/rca/{trace_id}/analyze",
+    "POST /orgs/{org_id}/intelligence/replay/conversation/message",
+    "POST /orgs/{org_id}/intelligence/replay/diff",
+    "POST /orgs/{org_id}/intelligence/replay/sessions",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/checkpoint/rewind",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/decision/explain",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/decision/path",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/decision/score",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/properties",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/replay",
+    "POST /orgs/{org_id}/intelligence/replay/{trace_id}/subgraph",
+    "POST /orgs/{org_id}/intelligence/retrieval/gaps",
+    "POST /orgs/{org_id}/intelligence/retrieval/reorder",
+    "POST /orgs/{org_id}/intelligence/retrieval/{trace_id}/attribution",
+    "POST /orgs/{org_id}/intelligence/retrieval/{trace_id}/utilization",
+    "POST /orgs/{org_id}/intelligence/time-travel/fork",
+    "POST /orgs/{org_id}/intelligence/time-travel/record",
+    "POST /orgs/{org_id}/intelligence/time-travel/replay",
+    "POST /orgs/{org_id}/intelligence/tools/attribution",
+    "POST /orgs/{org_id}/intelligence/tools/compare",
+    "POST /orgs/{org_id}/intelligence/tools/recommend",
+    "POST /orgs/{org_id}/intelligence/user/conversation/message",
+    "POST /orgs/{org_id}/intelligence/user/feedback",
     "POST /orgs/{org_id}/intelligence/user/feedback/presigned-token",
+    "POST /orgs/{org_id}/intelligence/user/goals",
     "POST /orgs/{org_id}/intelligence/user/identify",
+    "POST /orgs/{org_id}/intelligence/user/sessions/aggregate",
     "POST /orgs/{org_id}/intelligence/user/sessions/start",
     "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/end",
     "POST /orgs/{org_id}/intelligence/user/sessions/{session_id}/identify",
+    "POST /orgs/{org_id}/intelligence/user/signals/abandonment",
+    "POST /orgs/{org_id}/intelligence/user/signals/edit-distance",
+    "POST /orgs/{org_id}/intelligence/user/signals/regeneration",
     "POST /orgs/{org_id}/invites",
     "POST /orgs/{org_id}/invites/{invitation_id}/accept",
     "POST /orgs/{org_id}/invites/{invitation_id}/decline",
@@ -3484,14 +4329,16 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 433,
+  "schema_count": 532,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
     "AbExperimentCard",
+    "AbandonmentRequest",
     "AcknowledgeRequest",
     "AddAllowedDomainRequest",
     "AddColumnRequest",
+    "AddMessageRequest",
     "AddRowRequest",
     "AdvanceRequest",
     "AgentCard",
@@ -3506,11 +4353,16 @@
     "AlertRuleCard",
     "AnnotateRequest",
     "AnnotationResponse",
+    "AnomalyRequest",
     "ApiKeyCard",
     "AppEvent",
     "AppEventsBatch",
     "AppendEventsRequest",
+    "ApprovalCreateRequest",
+    "ApprovalRequestRequest",
+    "ApprovalResolveRequest",
     "ApproveActionResponse",
+    "ApproveMetricRequest",
     "ApproveRequest",
     "ArtifactEvaluationCreate",
     "ArtifactNLRequest",
@@ -3518,11 +4370,14 @@
     "AssignmentResponse",
     "AssistantThreadCard",
     "AttachTraceRequest",
+    "AttributionRequest",
     "AuditEventCard",
     "AuditLogEntry",
     "AuditLogResponse",
     "AuditPackCard",
     "AuthFailureRequest",
+    "AutoDatasetRequest",
+    "AutoEvalRequest",
     "AutofixRequest",
     "AutomationCreate",
     "AutonomyPatch",
@@ -3530,18 +4385,22 @@
     "BackfillRequest",
     "BargeInRequest",
     "BatchCompareRequest",
+    "BenchmarkRequest",
     "Body_execute_widget_query_orgs__org_id__dashboards_widgets_execute_post",
     "Body_upload_my_avatar_auth_users_me_avatar_post",
     "Body_upload_reference_orgs__org_id__references_post",
     "BookConfigRequest",
+    "BooleanCategoricalRequest",
     "BudgetStatusResponse",
     "BulkRegenerateRequest",
     "CIEvalRequest",
+    "CLHFRequest",
     "CacheInvalidateRequest",
     "CacheInvalidateResponse",
     "CacheSetRequest",
     "CacheStatsResponse",
     "CanaryCreateRequest",
+    "CapacityRequest",
     "ChainVerifyEntry",
     "ChainVerifyResponse",
     "ChannelOut",
@@ -3550,22 +4409,27 @@
     "ChunksIngestResponse",
     "ClassifierCreate",
     "ClearRouteRequest",
-    "ClusterRequest",
     "ClusterResponse",
     "CodeEvaluatorCreate",
     "CollaboratorAdd",
     "ColumnListResponse",
     "ColumnResponse",
+    "CompactRequest",
     "ComparativeDimension",
     "ComparativeRequest",
     "ComparativeResponse",
     "CompareSeedRequest",
+    "CompileAlertRequest",
     "CompileRequest",
     "CompileResponse",
     "CompiledRuleResponse",
+    "ComplianceGenerateRequest",
+    "CompliancePeriodRequest",
     "ComputerUseStepCreate",
     "ConnectRepoRequest",
+    "ContentEnforceRequest",
     "ConversationDetail",
+    "ConversationMessageRequest",
     "ConversationSummary",
     "CorrelationReportResponse",
     "CorrelationWeekBucket",
@@ -3574,6 +4438,7 @@
     "CostEventPayload",
     "CostOverrideIn",
     "CostOverrideOut",
+    "CostRequest",
     "CostResolveIn",
     "CostResolveOut",
     "CreateBrowserSessionRequest",
@@ -3584,10 +4449,13 @@
     "CreatePlaygroundRequest",
     "CreatePromptRequest",
     "CreateQueueRequest",
+    "CreateReplaySessionRequest",
     "CreateSavedSearchRequest",
     "CreateShareRequest",
     "CreateSignalRequest",
     "CreateVersionRequest",
+    "CustomEvalRequest",
+    "CustomPropertiesRequest",
     "DNSAccepted",
     "DNSRequest",
     "DSARAccepted",
@@ -3605,15 +4473,24 @@
     "DestinationOut",
     "DetectionSettingsRequest",
     "DetectorsResponse",
+    "DiffRequest",
     "DiscoverRequest",
     "DiscoverResponse",
     "DisparityDimensionResponse",
     "DisparityReportResponse",
     "DomainRestrictionSettings",
+    "DriftRequest",
     "ETLLaunchRequest",
     "ETLRunResponse",
+    "EditDistanceRequest",
+    "EfficiencyRequest",
     "EnableCatRequest",
     "EnforceTwoFAResponse",
+    "EnrichBatchRequest",
+    "EnrichRequest",
+    "EnsurePartitionRequest",
+    "EvaluateRequest",
+    "ExampleSpec",
     "ExperimentCreate",
     "ExperimentRunCreate",
     "ExperimentSummary",
@@ -3626,8 +4503,14 @@
     "FindingResponse",
     "FindingsListResponse",
     "FineTuneRunCreate",
+    "FirewallRequest",
+    "FleetIdentityRequest",
+    "FleetPermissionsRequest",
+    "ForkRequest",
+    "FromExamplesRequest",
     "FromSpanRequest",
     "GDPRExportResponse",
+    "GapRequest",
     "GatewayModelCreate",
     "GatewayModelOut",
     "GatewayModelResolveIn",
@@ -3636,9 +4519,19 @@
     "GatewayRequest",
     "GenerateResponse",
     "GenerateTopicsRequest",
+    "GoalRequest",
+    "GoalStatusRequest",
     "GuardrailActionLog",
     "GuardrailPolicyCard",
+    "HILAnnotationRequest",
+    "HILTaskRequest",
     "HTTPValidationError",
+    "HallucinationCheckRequest",
+    "HandoffRequest",
+    "HealApproveRequest",
+    "HealDenyRequest",
+    "HealExecuteRequest",
+    "HealRequest",
     "HealthResponse",
     "HealthSnapshotCreate",
     "HeatmapResponse",
@@ -3646,11 +4539,13 @@
     "IdentifyRequest",
     "ImportRowsRequest",
     "ImprovePlanCard",
+    "InjectScanRequest",
     "InsightResponse",
     "InstallOut",
     "InstallationOut",
     "IntegrationStatusItem",
     "IntegrationsStatusResponse",
+    "InvestigateRequest",
     "InviteMemberRequest",
     "InvoiceResponse",
     "IssueCard",
@@ -3672,7 +4567,10 @@
     "LibraryToggleRequest",
     "LibraryToggleResponse",
     "LineageQueryResponse",
+    "LineageRequest",
+    "LintRequest",
     "LiveEventBody",
+    "LoadSimRequest",
     "LoginRequest",
     "ManualRunRequest",
     "MarkFailedRequest",
@@ -3681,11 +4579,14 @@
     "MemberCard",
     "MessageOut",
     "MilestoneRequest",
+    "ModalityRequest",
     "ModelArtifactCreate",
     "ModelInfo",
     "ModelRef",
     "ModelsListResponse",
     "MoveItemRequest",
+    "MultimodalRequest",
+    "NLReportRequest",
     "NLRuleCreate",
     "NLRuleUpdate",
     "Notification",
@@ -3701,10 +4602,14 @@
     "OverviewResponse",
     "PIIPolicyIn",
     "PIIPolicyOut",
+    "PIIRedactRequest",
     "PRRunOut",
     "PageContext",
     "PaginatedAPIEnvelope",
     "PaginatedMeta",
+    "PairwisePreferenceRequest",
+    "PairwiseQueueRequest",
+    "ParseRequest",
     "PatchDatasetRequest",
     "PatchDebugSessionRequest",
     "PatchPlaygroundRequest",
@@ -3716,7 +4621,9 @@
     "PlaygroundCard",
     "PlaygroundRequest",
     "PlaygroundResponse",
+    "PolicyCreateRequest",
     "PolicyPatch",
+    "PrecomputeRollupsRequest",
     "PreviewRequest",
     "PreviewSignalRequest",
     "ProbeListResponse",
@@ -3726,6 +4633,7 @@
     "ProjectResponse",
     "PromoteBody",
     "PromoteExperimentRequest",
+    "PromoteRequest",
     "PromoteTraceRequest",
     "PromptABTestCreate",
     "PromptDeployBody",
@@ -3738,23 +4646,34 @@
     "PushDatasetRequest",
     "QAResponse",
     "QualityReportResponse",
+    "QualityRequest",
     "QuarantineListResponse",
     "QuarantineReviewRequest",
+    "QueryRequest",
     "QueueResponse",
-    "RecommendRequest",
+    "ROIRequest",
+    "RTBFRequest",
     "RecommendResponse",
+    "RecordSnapshotRequest",
+    "RegenerationRequest",
     "RegisterLinkRequest",
+    "RegisterMetricRequest",
     "RegressionCaseRequest",
     "RejectRequest",
+    "ReorderRequest",
     "RepoConnectionOut",
     "RepoOut",
+    "ReportRequest",
     "RerunRequest",
     "ResolveClusterRequest",
-    "ResolveRequest",
+    "ResolveIncidentRequest",
     "RetentionPolicyIn",
     "RetentionPolicyOut",
     "RetentionRunRequest",
     "RetentionRunResponse",
+    "ReweaverRequest",
+    "RewindRequest",
+    "RiskRequest",
     "RoleCreateRequest",
     "RoleResponse",
     "RoleUpdateRequest",
@@ -3767,6 +4686,7 @@
     "RulePatch",
     "RunDetectorsRequest",
     "RunExportRequest",
+    "RunMetricRequest",
     "RunNowResult",
     "RunPlaygroundRequest",
     "RunProbeRequest",
@@ -3784,9 +4704,11 @@
     "SavedSearchResponse",
     "ScanRequest",
     "ScanResponse",
+    "ScenarioRequest",
     "ScheduleIn",
     "ScheduleOut",
     "ScheduleUpdateRequest",
+    "SecurityScanRequest",
     "SeedDefaultsRequest",
     "SeedDefaultsResponse",
     "SeedItemRequest",
@@ -3810,6 +4732,7 @@
     "SpanSearchHit",
     "SpanSearchResponse",
     "SpanSuggestResponse",
+    "SplitRequest",
     "SqlErrorResponse",
     "SqlExecuteRequest",
     "SqlExecuteResponse",
@@ -3820,12 +4743,15 @@
     "StatGateEvaluateRequest",
     "StatGateEvaluateResponse",
     "StatusUpdateRequest",
+    "StepStampRequest",
     "StorageSummaryResponse",
     "StumbleCreateRequest",
+    "SubgraphRequest",
     "SubmitFeedbackRequest",
     "SubmitFeedbackResponse",
     "SubscribeRequest",
     "SuggestRequest",
+    "TagRequest",
     "TelemetryBatchIngest",
     "TelemetryEventIngest",
     "TelemetryIngestResponse",
@@ -3850,6 +4776,8 @@
     "TraceSignalSummary",
     "TraceTreeResponse",
     "TraceUsageCreate",
+    "TrackOutcomeRequest",
+    "TrafficSplitCreateRequest",
     "TrainBody",
     "TrajectoryCheckRequest",
     "TrajectoryCheckResponse",
@@ -3873,7 +4801,9 @@
     "VoiceSessionCreate",
     "WebhookCreateRequest",
     "WebhookUpdateRequest",
+    "WhatIfRequest",
     "WidgetUpsert",
+    "WinnerRequest",
     "WorkspaceCard",
     "_AccountDeleteRequest",
     "_ForgotPasswordRequest",
@@ -3886,6 +4816,7 @@
     "_VerifyEmailRequest",
     "eden__api__portal_contracts__TraceListItem",
     "eden__api__routes__agent_issues__CreateExperimentRequest",
+    "eden__api__routes__agent_issues__ResolveRequest",
     "eden__api__routes__agent_sessions__SessionEndRequest",
     "eden__api__routes__agent_sessions__SessionIdentifyRequest",
     "eden__api__routes__agent_sessions__SessionStartRequest",
@@ -3908,8 +4839,20 @@
     "eden__api__routes__integrations_langsmith__StatusResponse",
     "eden__api__routes__integrations_runloop__StatusResponse",
     "eden__api__routes__integrations_wandb__StatusResponse",
+    "eden__api__routes__intelligence_dsl__ResolveRequest",
+    "eden__api__routes__intelligence_eval__ClusterRequest",
+    "eden__api__routes__intelligence_eval__FeedbackRequest",
+    "eden__api__routes__intelligence_experiments__RecommendRequest",
+    "eden__api__routes__intelligence_experiments__ReplayRequest",
+    "eden__api__routes__intelligence_rca__ClusterRequest",
+    "eden__api__routes__intelligence_replay__ReplayRequest",
+    "eden__api__routes__intelligence_time_travel__ReplayRequest",
+    "eden__api__routes__intelligence_tools__CompareRequest",
+    "eden__api__routes__intelligence_tools__RecommendRequest",
+    "eden__api__routes__intelligence_user__FeedbackRequest",
     "eden__api__routes__model_compare__CompareRequest",
     "eden__api__routes__model_compare__CompareResponse",
+    "eden__api__routes__model_compare__RecommendRequest",
     "eden__api__routes__observability__TraceListItem",
     "eden__api__routes__orgs__EnforceTwoFARequest",
     "eden__api__routes__prompts__CompareRequest",
@@ -3917,6 +4860,7 @@
     "eden__api__routes__qa_generator__GenerateRequest",
     "eden__api__routes__sessions__SessionIdentifyRequest",
     "eden__api__routes__sessions__SessionStartRequest",
+    "eden__api__routes__signals__ClusterRequest",
     "eden__api__routes__slack__AuthorizeResponse",
     "eden__api__routes__slack__ConfiguredResponse"
   ]

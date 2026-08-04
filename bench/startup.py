@@ -115,22 +115,55 @@ def main():
         action="store_true",
         help="Use in-process reload instead of subprocess (faster, noisier)",
     )
+    parser.add_argument(
+        "--budget-ms",
+        type=float,
+        default=None,
+        metavar="MS",
+        help=(
+            "Assertion mode: exit non-zero when the median cold "
+            "`import eden.api.app` exceeds this many milliseconds. "
+            "W15-c holds this under 1000ms by deferring ~100 routers "
+            "to the lifespan; this flag is the regression tripwire. "
+            "Note the benchmark deliberately measures IMPORT cost only "
+            "— deferred routers are mounted in the lifespan and are "
+            "meant to stay out of this number."
+        ),
+    )
     args = parser.parse_args()
 
     results = bench_startup(samples=args.samples, use_subprocess=not args.inprocess)
     if args.json:
         print(json.dumps([r.to_dict() for r in results], indent=2))
-        return
+    else:
+        print(f"{'module':<25} {'median_ms':>10} {'min_ms':>10} {'max_ms':>10} samples")
+        print("-" * 70)
+        for r in results:
+            print(
+                f"{r.name:<25} {r.median_ms:>10.1f} {r.min_ms:>10.1f} {r.max_ms:>10.1f} {r.samples_ms}"
+            )
+        total = sum(r.median_ms for r in results)
+        print("-" * 70)
+        print(f"{'TOTAL':<25} {total:>10.1f}")
 
-    print(f"{'module':<25} {'median_ms':>10} {'min_ms':>10} {'max_ms':>10} samples")
-    print("-" * 70)
-    for r in results:
+    if args.budget_ms is not None:
+        app_result = next(r for r in results if r.name == "app")
+        if app_result.median_ms > args.budget_ms:
+            print(
+                f"BUDGET EXCEEDED: `import eden.api.app` median "
+                f"{app_result.median_ms:.1f}ms > budget {args.budget_ms:.1f}ms "
+                f"(samples: {[round(s, 1) for s in app_result.samples_ms]}). "
+                f"Did a router move back out of the deferred tables in "
+                f"eden/api/app.py, or did an eager module grow a heavy "
+                f"module-level import? Check `python -X importtime -c "
+                f"'import eden.api.app'`.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         print(
-            f"{r.name:<25} {r.median_ms:>10.1f} {r.min_ms:>10.1f} {r.max_ms:>10.1f} {r.samples_ms}"
+            f"budget ok: `import eden.api.app` median "
+            f"{app_result.median_ms:.1f}ms <= {args.budget_ms:.1f}ms"
         )
-    total = sum(r.median_ms for r in results)
-    print("-" * 70)
-    print(f"{'TOTAL':<25} {total:>10.1f}")
 
 
 if __name__ == "__main__":

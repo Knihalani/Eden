@@ -21,7 +21,6 @@ from eden.api.middleware.security_headers import (
     apply_security_headers,
 )
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
-from eden.api.openapi_public import build_public_openapi_spec
 from eden.api.responses import EdenJSONResponse
 
 
@@ -109,112 +108,22 @@ def _init_sentry() -> None:
 
 _init_sentry()
 
-from eden.alerts import routes as nl_alerts_routes
+# W15-c cold-import diet — only the routers that must exist before the
+# lifespan runs (or without it) are imported eagerly: ingest (every SDK
+# POST surface), auth, the OpenAI-compatible gateway hot path, and the
+# Prometheus metrics endpoint. Every other router moved to the deferred
+# tables below (`_DEFERRED_ROUTERS` / `_DEFERRED_INTELLIGENCE_ROUTERS`)
+# and is imported + mounted in the lifespan, before uvicorn accepts
+# traffic — indistinguishable to clients, ~3s cheaper at import.
 from eden.api.routes import (
-    admin_status,
-    agent_issues,
-    agent_pr_suggestions,
-    agent_sessions,
-    agentic_metrics,
-    agents,
-    ai_agent,
-    ai_insights,
-    analytics,
-    analytics_v2,
-    api_keys,
     app_events,
-    audit,
     auth,
-    autonomy,
-    billing,
-    browser_sessions,
-    budgets,
-    change_impact,
-    clerk_webhooks,
-    compliance,
-    compliance_pack,
-    cost,
-    cost_overrides,
-    data_platform,
-    datasets_hub,
-    datasets_spreadsheet,
-    debugger,
-    experiments_offline,
-    export,
-    export_destinations,
-    feature_flags,
-    finops,
-    fleet,
-    improve,
+    gateway,
+    gateway_analytics,
+    gateway_models,
     ingest_agent_sessions,
     ingestion,
-    insights,
-    integrations_langfuse,
-    integrations_langsmith,
-    integrations_runloop,
-    integrations_status,
-    integrations_wandb,
-    internal_health,
-    judges,
-    kb,
-    labeling,
-    learn,
-    llmops,
-    loop_health,
-    media,
-    model_compare,
-    notifications,
     observability,
-    observability_a2a,
-    observability_computer_use,
-    observability_fine_tune,
-    observability_live,
-    observability_mcp,
-    observability_provider_routing,
-    observability_stream,
-    observability_voice,
-    onboarding,
-    optimization,
-    orgs,
-    patterns,
-    pii_policy,
-    playgrounds,
-    portal,
-    presigned_feedback,
-    production_eval,
-    prompt_canary,
-    prompts,
-    prompts_v2,
-    qa_generator,
-    rbac,
-    redteam,
-    references,
-    replay,
-    retention_policy,
-    scim,
-    search_signals,
-    sessions,
-    sharing,
-    sidebar_prefs,
-    signal_classifiers,
-    signal_investigator,
-    signals,
-    sql_query,
-    sso,
-    streaming_tokens,
-    support,
-    tool_call_labels,
-    topics,
-    trace_quality,
-    wave6_online,
-    webhooks,
-    websocket,
-)
-from eden.api.routes import (
-    github as github_routes,
-)
-from eden.api.routes import (
-    slack as slack_routes,
 )
 from eden.config import get_settings
 from eden.kb import health_check as kb_health_check
@@ -253,17 +162,190 @@ _DEFERRED_INTELLIGENCE_ROUTERS: tuple[str, ...] = (
 )
 
 
-def mount_deferred_routers(application: FastAPI | None = None) -> int:
-    """Import and include B26 deferred intelligence routers. Idempotent.
+# W15-c — second, much larger deferred tier (same mechanism as B26).
+# Everything that does not need to exist before the lifespan runs:
+# FastAPI's per-route Dependant/signature analysis for these ~100
+# routers dominated the 3.3s cold ``import eden.api.app``. They are
+# imported + mounted in the lifespan (uvicorn runs it before accepting
+# traffic), so the served surface is identical to the old eager mounts.
+#
+# ORDER MATTERS and this table preserves the original ``include_router``
+# source order exactly. FastAPI routing is first-match-wins; the pairs
+# that depend on it:
+#   - prompts_v2 BEFORE prompts (D.9 owns GET/POST "" and GET /{name};
+#     Phase I keeps PATCH/playground/rollback — shadowed list/create/get)
+#   - billing.webhook_router BEFORE billing.router
+#   - observability.ingest_router (eager, above) BEFORE observability.router
+#   - gateway_models BEFORE gateway_analytics
+# The 410-Gone code-change catch-all and /live //ready //health are
+# decorated at import time and therefore now precede this tier; no route
+# in this table matches those templates (asserted by the route-inventory
+# snapshot test, tests/unit/api/test_api_surface_snapshot.py).
+#
+# Entries are (module path, router attribute). ``eden.api.routes.sso``
+# additionally honours ``settings.sso_enabled`` at mount time, same as
+# the old import-time conditional.
+_DEFERRED_ROUTERS: tuple[tuple[str, str], ...] = (
+    ("eden.api.routes.admin_status", "router"),  # F84 /orgs/{org_id}/admin/eden-status
+    ("eden.api.routes.kb", "router"),
+    ("eden.api.routes.clerk_webhooks", "router"),  # /webhooks/clerk
+    ("eden.api.routes.audit", "router"),  # /orgs/{org_id}/audit-log
+    ("eden.api.routes.orgs", "router"),
+    ("eden.api.routes.references", "router"),
+    ("eden.api.routes.api_keys", "router"),
+    ("eden.api.routes.billing", "webhook_router"),  # /webhooks/stripe (public, signature-only)
+    ("eden.api.routes.billing", "router"),  # /orgs/{org_id}/billing
+    ("eden.api.routes.budgets", "router"),  # /orgs/{org_id}/budget + ticker + actions (D.10)
+    ("eden.api.routes.finops", "router"),  # /orgs/{org_id}/finops/* (SOTA W8)
+    ("eden.api.routes.cost", "router"),  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
+    ("eden.api.routes.analytics", "router"),  # /orgs/{org_id}/analytics
+    ("eden.api.routes.export", "router"),  # /orgs/{org_id}/export
+    ("eden.api.routes.export_destinations", "router"),  # export/{destinations,schedules,run-now}
+    ("eden.api.routes.observability", "router"),  # /orgs/{org_id}/observability/{traces,...}
+    ("eden.api.routes.agents", "router"),  # /orgs/{org_id}/agents (Phase 2 surface)
+    ("eden.api.routes.portal", "router"),  # /orgs/{org_id}/portal/* (FE read-model contracts)
+    ("eden.api.routes.llmops", "router"),  # /orgs/{org_id}/llmops/*
+    ("eden.api.routes.trace_quality", "router"),  # /v1/traces/{trace_id}/* (Cat 22)
+    ("eden.api.routes.observability_mcp", "router"),  # /v1/traces/{id}/mcp + auth_failures (D.12.1)
+    # Soft-retired for free beta (F04): Streamable HTTP MCP stays behind
+    # mcp_http_transport_v1=False inside the router. Do not advertise.
+    ("eden.mcp_server.http_transport", "router"),  # /v1/mcp — gated off by default
+    ("eden.api.routes.observability_a2a", "router"),  # /v1/traces/{id}/a2a + links (D.12.2)
+    ("eden.api.routes.observability_computer_use", "router"),  # (D.12.3)
+    ("eden.api.routes.observability_voice", "router"),  # /v1/voice_sessions (D.12.4)
+    ("eden.api.routes.observability_fine_tune", "router"),  # /v1/fine_tuning_runs (D.12.5)
+    ("eden.api.routes.observability_fine_tune", "webhook_router"),  # (D.12.5, R-12)
+    ("eden.api.routes.observability_provider_routing", "router"),  # (D.12.6)
+    ("eden.api.routes.internal_health", "router"),  # /v1/internal/health/* (Phase 4 B3 §9.6)
+    ("eden.api.routes.loop_health", "router"),  # /internal/loop-health (M2, D4; bearer auth)
+    ("eden.api.routes.optimization", "router"),  # /orgs/{org_id}/optimization/*
+    ("eden.api.routes.scim", "router"),  # /orgs/{org_id}/scim/v2
+    # SSO mounts when sso_enabled (default True since 2026-08-02).
+    # Kill-switch: SSO_ENABLED=0. See docs/ops/disabled-features.md.
+    ("eden.api.routes.sso", "router"),  # /sso — settings-gated in mount_tier2_routers
+    ("eden.api.routes.ai_insights", "router"),  # /orgs/{org_id}/ai-insights
+    ("eden.api.routes.sidebar_prefs", "router"),  # /orgs/{org_id}/sidebar-prefs
+    # W20: Phase-C /ai chat for the portal assistant panel.
+    ("eden.api.routes.ai_agent", "router"),  # /orgs/{org_id}/ai/{chat,conversations,tools}
+    ("eden.api.routes.sharing", "sharing_router"),  # traces/{trace_id}/share (Phase N)
+    ("eden.api.routes.sharing", "public_router"),  # /public/traces/{token} (no auth, token-gated)
+    # Phase A1: session lifecycle + presigned feedback tokens.
+    ("eden.api.routes.sessions", "router"),  # /orgs/{org_id}/intelligence/user/sessions/...
+    ("eden.api.routes.presigned_feedback", "auth_router"),  # feedback/presigned-token
+    ("eden.api.routes.presigned_feedback", "public_router"),  # /api/v1/feedback/tokens/{token_id}
+    ("eden.api.routes.onboarding", "router"),  # /v1/internal/onboarding/{org_id}/* (D.14)
+    ("eden.api.routes.sql_query", "router"),  # /orgs/{org_id}/sql (Phase M read-only SQL)
+    ("eden.api.routes.compliance", "router"),  # /api/v1/me/* + dsar + subprocessors (GDPR/CCPA)
+    ("eden.api.routes.qa_generator", "router"),  # /orgs/{org_id}/synthetic (Phase J)
+    ("eden.api.routes.redteam", "router"),  # /orgs/{org_id}/redteam (Phase L)
+    ("eden.api.routes.labeling", "router"),  # /orgs/{org_id}/labeling (Phase D)
+    ("eden.api.routes.signals", "router"),  # /orgs/{org_id}/signals (Phase Q)
+    ("eden.alerts.routes", "router"),  # F81 NL alerts compile + rules
+    ("eden.api.routes.debugger", "router"),  # /orgs/{org_id}/debugger (Phase P)
+    ("eden.api.routes.browser_sessions", "router"),  # F09 browser recording
+    ("eden.api.routes.datasets_hub", "router"),  # /orgs/{org_id}/datasets (F53)
+    ("eden.api.routes.datasets_spreadsheet", "router"),  # datasets/{dataset_id} (Phase S)
+    ("eden.api.routes.experiments_offline", "router"),  # experiments/offline (F51)
+    ("eden.api.routes.playgrounds", "router"),  # /orgs/{org_id}/playgrounds (W18 U03/F49)
+    # prompts_v2 first: FastAPI first-match wins. D.9 owns GET/POST ""
+    # and GET /{name}; Phase I keeps PATCH, playground, rollback, etc.
+    ("eden.api.routes.prompts_v2", "router"),  # /orgs/{org_id}/prompts (D.9)
+    ("eden.api.routes.prompts", "router"),  # /orgs/{org_id}/prompts (Phase I; shadowed CRUD)
+    ("eden.api.routes.pii_policy", "router"),  # /orgs/{org_id}/pii-policy
+    ("eden.api.routes.cost_overrides", "router"),  # per-tenant contract rates
+    ("eden.api.routes.retention_policy", "router"),  # Phase 7.3b retention overrides
+    ("eden.api.routes.notifications", "router"),  # /notifications (user-scoped feed)
+    ("eden.api.routes.model_compare", "router"),  # models/{compare,recommend,project} (7.6)
+    # Intelligence gap surface — self-gating via per-router dependencies.
+    ("eden.api.routes.agent_issues", "router"),  # F28/F29, gated by agent_issues_v0
+    ("eden.api.routes.fleet", "router"),  # N05/D9, gated by fleet_health_v1
+    ("eden.api.routes.agent_sessions", "router"),  # F23, gated by agent_sessions_v1
+    ("eden.api.routes.change_impact", "router"),  # /orgs/{org_id}/change-impact (N04)
+    ("eden.api.routes.improve", "router"),  # /orgs/{org_id}/improve (N17 + F04 autofix)
+    ("eden.api.routes.learn", "router"),  # nudges/promotions/book/drift (WS2)
+    ("eden.api.routes.production_eval", "router"),  # production-eval/* (N03, gated)
+    ("eden.api.routes.wave6_online", "router"),  # Phase 5 Wave 6
+    ("eden.api.routes.compliance_pack", "router"),  # /orgs/{org_id}/compliance/* (N06, gated)
+    ("eden.api.routes.search_signals", "router"),  # search/to-signal (N10)
+    ("eden.api.routes.signal_investigator", "router"),  # F06 clusters + backfill
+    ("eden.api.routes.signal_classifiers", "router"),  # F34 classifiers
+    ("eden.api.routes.topics", "router"),  # F65 topics
+    ("eden.api.routes.tool_call_labels", "router"),  # tool-calls/{span_id}/label (F21)
+    ("eden.api.routes.observability_live", "router"),  # stream/traces/* (N11 live)
+    ("eden.api.routes.agentic_metrics", "router"),  # F64 agentic metrics pack
+    ("eden.api.routes.autonomy", "router"),  # settings/autonomy (N22, gated)
+    ("eden.api.routes.feature_flags", "router"),  # /feature-flags (public)
+    # RBAC (custom roles + permissions).
+    ("eden.api.routes.rbac", "router"),  # /orgs/{org_id}/roles
+    ("eden.api.routes.rbac", "permissions_router"),  # /orgs/{org_id}/permissions
+    ("eden.api.routes.websocket", "router"),  # /ws/jobs/{job_id}/{trace,logs}
+    ("eden.api.routes.observability_stream", "router"),  # SSE live-tail (Phase 7.2)
+    ("eden.api.routes.insights", "router"),  # /orgs/{org_id}/insights (Phase 6.3)
+    ("eden.api.routes.judges", "router"),  # observability/judges (Phase 7.1b)
+    ("eden.api.routes.replay", "router"),  # /orgs/{org_id}/alerts/... replay/ack
+    ("eden.api.routes.media", "router"),  # /orgs/{org_id}/media/{blob_id} (7.2a)
+    ("eden.api.routes.data_platform", "router"),  # /orgs/{org_id}/data-platform (Phase 5)
+    ("eden.api.routes.analytics_v2", "router"),  # analytics/{cohorts,funnel} (8.2)
+    ("eden.api.routes.prompt_canary", "router"),  # prompts/{agent}/canary (7.2c/d)
+    ("eden.api.routes.patterns", "router"),  # observability/patterns (7.2 C5)
+    ("eden.api.routes.support", "router"),  # /support/tickets
+    # 3rd-party observability integrations.
+    ("eden.api.routes.integrations_langfuse", "router"),  # /integrations/langfuse
+    ("eden.api.routes.integrations_langsmith", "router"),  # /integrations/langsmith
+    ("eden.api.routes.integrations_wandb", "router"),  # /integrations/wandb
+    ("eden.api.routes.integrations_runloop", "router"),  # /integrations/runloop
+    ("eden.api.routes.integrations_status", "router"),  # integrations/status
+    # Onboarding wizard — GitHub App OAuth + wizard state + PR runs.
+    ("eden.api.routes.github", "public_router"),  # /integrations/github/*
+    ("eden.api.routes.github", "org_router"),  # /orgs/{org_id}/{github,onboarding}/...
+    # Soft Autonomy Phase 5 — Slack App OAuth + alert routing.
+    ("eden.api.routes.slack", "public_router"),  # /integrations/slack/*
+    ("eden.api.routes.slack", "org_router"),  # /orgs/{org_id}/slack/*
+    ("eden.api.routes.webhooks", "router"),  # /orgs/{org_id}/webhooks (outbound CRUD)
+    ("eden.api.routes.streaming_tokens", "router"),  # traces/{trace_id}/tokens (D.8)
+    ("eden.api.routes.agent_pr_suggestions", "router"),  # agent/pr-suggestions (Cat 23)
+)
+
+
+def mount_tier2_routers(application: FastAPI | None = None) -> int:
+    """Import and include the W15-c tier-2 deferred routers. Idempotent.
 
     Returns the number of routers newly mounted (0 if already mounted).
     """
     import importlib
 
     target = application if application is not None else app
-    if getattr(target.state, "_b26_deferred_mounted", False):
+    if getattr(target.state, "_tier2_deferred_mounted", False):
         return 0
     mounted = 0
+    for mod_path, attr in _DEFERRED_ROUTERS:
+        if mod_path == "eden.api.routes.sso" and not getattr(settings, "sso_enabled", False):
+            logger.info(
+                "SSO routes not mounted (sso_enabled=False). See docs/ops/disabled-features.md"
+            )
+            continue
+        mod = importlib.import_module(mod_path)
+        target.include_router(getattr(mod, attr))
+        mounted += 1
+    target.state._tier2_deferred_mounted = True
+    # Invalidate any cached OpenAPI so deferred paths appear.
+    target.openapi_schema = None
+    return mounted
+
+
+def mount_deferred_routers(application: FastAPI | None = None) -> int:
+    """Import and include ALL deferred routers (tier-2, then B26). Idempotent.
+
+    Tier-2 mounts first so the B26 intelligence routers keep their
+    position at the very end of the route table, exactly as before.
+    Returns the number of routers newly mounted (0 if already mounted).
+    """
+    import importlib
+
+    target = application if application is not None else app
+    mounted = mount_tier2_routers(target)
+    if getattr(target.state, "_b26_deferred_mounted", False):
+        return mounted
     for name in _DEFERRED_INTELLIGENCE_ROUTERS:
         mod = importlib.import_module(f"eden.api.routes.{name}")
         target.include_router(mod.router)
@@ -1147,27 +1229,13 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
     )
 
 
-# Include route modules
-app.include_router(admin_status.router)  # F84 /orgs/{org_id}/admin/eden-status
-app.include_router(kb.router)
+# Include route modules — eager tier only (W15-c). Everything else is
+# mounted by ``mount_deferred_routers()`` in the lifespan; see the
+# ``_DEFERRED_ROUTERS`` table above. Relative order here matches the
+# original include order (auth < ingestion < ingest_agent_sessions <
+# observability.ingest_router < app_events < metrics < gateway*), so
+# first-match routing within the eager tier is unchanged.
 app.include_router(auth.router)
-app.include_router(clerk_webhooks.router)  # /webhooks/clerk
-app.include_router(audit.router)  # /orgs/{org_id}/audit-log
-app.include_router(orgs.router)
-app.include_router(references.router)
-app.include_router(api_keys.router)
-app.include_router(billing.webhook_router)  # /webhooks/stripe (public, signature-only)
-app.include_router(billing.router)  # /orgs/{org_id}/billing
-app.include_router(
-    budgets.router
-)  # /orgs/{org_id}/budget + /budget/ticker + /budget/actions (D.10 cost guardrails)
-app.include_router(finops.router)  # /orgs/{org_id}/finops/{explorer,export,kill-switches} (SOTA W8)
-app.include_router(cost.router)  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
-app.include_router(analytics.router)  # /orgs/{org_id}/analytics
-app.include_router(export.router)  # /orgs/{org_id}/export
-app.include_router(
-    export_destinations.router
-)  # /orgs/{org_id}/export/{destinations,schedules,run-now}
 app.include_router(ingestion.router)  # /orgs/{org_id}/ingest (multi-format observability ingestion)
 app.include_router(
     ingest_agent_sessions.router
@@ -1175,223 +1243,15 @@ app.include_router(
 app.include_router(
     observability.ingest_router
 )  # /orgs/{org_id}/observability/telemetry/ingest* (API key)
-app.include_router(
-    observability.router
-)  # /orgs/{org_id}/observability/{traces,summary,spans/search,...}
-app.include_router(agents.router)  # /orgs/{org_id}/agents (Phase 2 surface — list + register + get)
-app.include_router(portal.router)  # /orgs/{org_id}/portal/* (greenfield FE read-model contracts)
-app.include_router(
-    llmops.router
-)  # /orgs/{org_id}/llmops/{artifacts,prompts,ab-tests,experiments,gateway,monitoring,cache}
-app.include_router(
-    trace_quality.router
-)  # /v1/traces/{trace_id}/{loops,quality,intervention,...} (Cat 22 trace quality)
-app.include_router(
-    observability_mcp.router
-)  # /v1/traces/{id}/mcp + /v1/mcp/{org}/auth_failures (D.12.1)
-from eden.mcp_server.http_transport import router as mcp_http_router
-
-# Soft-retired for free beta (F04 out of scope): Streamable HTTP MCP stays
-# behind mcp_http_transport_v1=False inside the router. Do not advertise.
-app.include_router(mcp_http_router)  # /v1/mcp — gated off by default
-app.include_router(
-    observability_a2a.router
-)  # /v1/traces/{id}/a2a + /v1/a2a/{org}/links + invocation graph (D.12.2)
-app.include_router(
-    observability_computer_use.router
-)  # /v1/traces/{id}/computer_use + /v1/computer_use/{org}/steps (D.12.3)
-app.include_router(
-    observability_voice.router
-)  # /v1/voice_sessions + /v1/traces/{id}/voice_sessions (D.12.4)
-app.include_router(observability_fine_tune.router)  # /v1/fine_tuning_runs + lineage (D.12.5)
-app.include_router(
-    observability_fine_tune.webhook_router
-)  # /v1/webhooks/openai/fine_tuning (D.12.5, R-12)
-app.include_router(
-    observability_provider_routing.router
-)  # /v1/provider_routing/{org}/{attempts,failure_rate} (D.12.6)
-app.include_router(
-    internal_health.router
-)  # /v1/internal/health/* — ops dashboard (Phase 4 B3 §9.6)
-app.include_router(
-    loop_health.router
-)  # /internal/loop-health — closed-loop bus liveness (M2, D4; bearer auth)
-app.include_router(
-    optimization.router
-)  # /orgs/{org_id}/optimization/{overview,costs,savings,cache,budget,}
 app.include_router(app_events.router)  # /orgs/{org_id}/ingest/app (Phase A1 app/site events)
-app.include_router(scim.router)  # /orgs/{org_id}/scim/v2
-# SSO routes mount when sso_enabled (default True since 2026-08-02).
-# Handlers use live tables org_sso_settings + sso_configurations; SCIM
-# token hash is written to org_scim_config (same table scim.py reads).
-# Kill-switch: SSO_ENABLED=0. See docs/ops/disabled-features.md.
-if getattr(settings, "sso_enabled", False):
-    app.include_router(sso.router)  # /sso
-else:
-    logger.info(
-        "SSO routes not mounted (sso_enabled=False). See "
-        "docs/ops/disabled-features.md"
-    )
-app.include_router(ai_insights.router)  # /orgs/{org_id}/ai-insights
-app.include_router(sidebar_prefs.router)  # /orgs/{org_id}/sidebar-prefs (per-user UI prefs)
-# W20: Phase-C ``/ai`` chat restored for the portal assistant panel
-# (``clients/portal/.../agent/page.tsx``). Sidebar insights stay on
-# ``/ai-insights``; both surfaces share conversation storage helpers.
-app.include_router(ai_agent.router)  # /orgs/{org_id}/ai/{chat,conversations,tools}
-app.include_router(
-    sharing.sharing_router
-)  # /orgs/{org_id}/traces/{trace_id}/share + saved-searches (Phase N)
-app.include_router(sharing.public_router)  # /public/traces/{token} (no auth, token-gated)
-# Phase A1: session lifecycle + presigned feedback tokens
-app.include_router(sessions.router)  # /orgs/{org_id}/intelligence/user/sessions/...
-app.include_router(
-    presigned_feedback.auth_router
-)  # /orgs/{org_id}/intelligence/user/feedback/presigned-token
-app.include_router(
-    presigned_feedback.public_router
-)  # /api/v1/feedback/tokens/{token_id} (no auth, token-gated)
-app.include_router(onboarding.router)  # /v1/internal/onboarding/{org_id}/* (D.14 cold-start UX)
-app.include_router(sql_query.router)  # /orgs/{org_id}/sql (Phase M read-only SQL executor)
-app.include_router(compliance.router)  # /api/v1/me/* + /api/v1/dsar + /subprocessors (GDPR + CCPA)
-app.include_router(
-    qa_generator.router
-)  # /orgs/{org_id}/synthetic (Phase J synthetic Q/A generator)
-app.include_router(redteam.router)  # /orgs/{org_id}/redteam (Phase L red-team probes)
-app.include_router(labeling.router)  # /orgs/{org_id}/labeling (Phase D labeling queue)
-app.include_router(signals.router)  # /orgs/{org_id}/signals (Phase Q plain-English signals)
-app.include_router(nl_alerts_routes.router)  # F81 NL alerts compile + rules
-app.include_router(debugger.router)  # /orgs/{org_id}/debugger (Phase P agent debugger)
-app.include_router(browser_sessions.router)  # F09 browser recording
-app.include_router(datasets_hub.router)  # /orgs/{org_id}/datasets (F53 hub list/create)
-app.include_router(
-    datasets_spreadsheet.router
-)  # /orgs/{org_id}/datasets/{dataset_id} (Phase S spreadsheet)
-app.include_router(experiments_offline.router)  # /orgs/{org_id}/experiments/offline (F51)
-app.include_router(playgrounds.router)  # /orgs/{org_id}/playgrounds (W18 U03/F49)
-# prompts_v2 first: FastAPI first-match wins. D.9 owns GET/POST "" and
-# GET /{name}; Phase I keeps PATCH, playground, rollback, etc.
-app.include_router(prompts_v2.router)  # /orgs/{org_id}/prompts (D.9 list/create/get + versions)
-app.include_router(
-    prompts.router
-)  # /orgs/{org_id}/prompts (Phase I playground/rollback; shadowed list/create/get)
-app.include_router(pii_policy.router)  # /orgs/{org_id}/pii-policy
-app.include_router(
-    cost_overrides.router
-)  # /orgs/{org_id}/cost-overrides (per-tenant contract rates)
-app.include_router(
-    retention_policy.router
-)  # /orgs/{org_id}/retention-policy (Phase 7.3b per-tenant retention overrides)
-app.include_router(
-    notifications.router
-)  # /notifications (user-scoped feed; June 2026 Cat 5 mount fix)
-app.include_router(
-    model_compare.router
-)  # /orgs/{org_id}/models/{compare,recommend,project} (Phase 7.6)
-# Intelligence gap surface — Cat 4/5/6/8/9/10/11/12/13/14/18/19/20/22
-# All self-gate on `intelligence_gap_v0` via the per-router `dependencies=`
-# list; this just makes them reachable when the flag is on.
-app.include_router(
-    agent_issues.router
-)  # /orgs/{org_id}/agent-issues (F28/F29, gated by agent_issues_v0)
-app.include_router(fleet.router)  # /orgs/{org_id}/fleet (N05/D9, gated by fleet_health_v1)
-app.include_router(
-    agent_sessions.router
-)  # /orgs/{org_id}/agent-sessions (F23, gated by agent_sessions_v1)
-app.include_router(change_impact.router)  # /orgs/{org_id}/change-impact (N04)
-app.include_router(improve.router)  # /orgs/{org_id}/improve (N17 cockpit + F04 autofix)
-app.include_router(learn.router)  # /orgs/{org_id}/{nudges,promotions,book,drift,...} (WS2)
-app.include_router(production_eval.router)  # /orgs/{org_id}/production-eval/* (N03, gated)
-app.include_router(wave6_online.router)  # Phase 5 Wave 6: F52-F79, F54-F68, F76, N15
-app.include_router(compliance_pack.router)  # /orgs/{org_id}/compliance/* (N06, gated)
-app.include_router(search_signals.router)  # /orgs/{org_id}/search/to-signal (N10)
-app.include_router(signal_investigator.router)  # F06 clusters + backfill
-app.include_router(signal_classifiers.router)  # F34 classifiers
-app.include_router(topics.router)  # F65 topics
-app.include_router(tool_call_labels.router)  # /orgs/{org_id}/tool-calls/{span_id}/label (F21)
-app.include_router(observability_live.router)  # /orgs/{org_id}/stream/traces/* (N11 live)
-# Soft-retired for free beta: do not mount /orgs/{org_id}/mcp/keys (F04).
-# Re-mount eden.api.routes.mcp_keys.router when Eden MCP is productized again.
-app.include_router(agentic_metrics.router)  # F64 agentic metrics pack
-app.include_router(
-    autonomy.router
-)  # /orgs/{org_id}/settings/autonomy (N22, gated by closed_loop_orchestrator_v1)
-# B26: intelligence_* routers mounted via mount_deferred_routers() in lifespan
+# B26 + W15-c: all other routers mounted via mount_deferred_routers() in lifespan
 app.include_router(metrics_endpoint_router)  # /metrics (Prometheus, bearer-token auth)
-app.include_router(feature_flags.router)  # /feature-flags (public)
-
-# ── Phase 2 audit (2026-06-23) — 18 routers that were defined but
-# never mounted. Co-mounting them in a single block keeps the diff
-# legible. Each module is self-gating (returns 503/404 when its
-# feature flag is off) so this is safe in any environment.
-#
-# RBAC (custom roles + permissions) — fixes the /settings?tab=roles
-# "RBAC migration may not be applied" error in the portal.
-app.include_router(rbac.router)  # /orgs/{org_id}/roles
-app.include_router(rbac.permissions_router)  # /orgs/{org_id}/permissions
-# WebSocket — /ws/jobs/{job_id}/trace + /ws/jobs/{job_id}/logs
-app.include_router(websocket.router)
-# SSE live-tail (Phase 7.2) — /orgs/{org_id}/observability/sse/stream
-# (prefix renamed in Phase 2 to avoid collision with observability.router)
-app.include_router(observability_stream.router)
-# Insights API (Phase 6.3) — /orgs/{org_id}/insights/...
-app.include_router(insights.router)
-# Judges (Phase 7.1b) — /orgs/{org_id}/observability/judges/...
-app.include_router(judges.router)
-# Alert replay/ack — /orgs/{org_id}/alerts/... (path-scoped, auth via resolve_path_org_access)
-app.include_router(replay.router)
-# Media blob storage (Phase 7.2a) — /orgs/{org_id}/media/{blob_id}
-app.include_router(media.router)
-# Data platform (Phase 5) — /orgs/{org_id}/data-platform/...
-app.include_router(data_platform.router)
-# Analytics v2 (Phase 8.2) — /orgs/{org_id}/analytics/{cohorts,funnel}
-app.include_router(analytics_v2.router)
-# Prompt canary management (Phase 7.2c/d) — /orgs/{org_id}/prompts/{agent}/canary
-app.include_router(prompt_canary.router)
-# Patterns (Phase 7.2 C5) — /orgs/{org_id}/observability/patterns/...
-app.include_router(patterns.router)
-# Support tickets — /support/tickets (Discord webhook test removed, Phase 0)
-app.include_router(support.router)
-# 3rd-party observability integrations
-app.include_router(integrations_langfuse.router)  # /integrations/langfuse
-app.include_router(integrations_langsmith.router)  # /integrations/langsmith
-app.include_router(integrations_wandb.router)  # /integrations/wandb
-app.include_router(integrations_runloop.router)  # /integrations/runloop
-app.include_router(integrations_status.router)  # /orgs/{org_id}/integrations/status
-
-# Onboarding wizard (June 2026) — GitHub App OAuth + per-org
-# wizard state + integration PR runs. Two routers:
-#   public: /integrations/github/{configured,authorize,callback,webhook}
-#   org:    /orgs/{org_id}/{github,onboarding}/...
-# Both gracefully degrade when GITHUB_APP_* env vars are unset
-# (the wizard's "Connect GitHub" step renders a "Skip" fallback).
-app.include_router(github_routes.public_router)
-app.include_router(github_routes.org_router)
-
-# Soft Autonomy Phase 5 — Slack App OAuth + per-agent alert routing.
-#   public: /integrations/slack/{configured,authorize,callback}
-#   org:    /orgs/{org_id}/slack/{install,channels,routes,test}
-# Degrades gracefully when SLACK_* env vars are unset (portal hides
-# the Connect Slack button; the dispatcher no-ops).
-app.include_router(slack_routes.public_router)
-app.include_router(slack_routes.org_router)
-
-# Outbound webhooks (customer-facing CRUD + delivery + replay). Prefix
-# /orgs/{org_id}/webhooks — no collision with the inbound clerk_webhooks
-# router mounted above at /webhooks/clerk.
-app.include_router(webhooks.router)  # /orgs/{org_id}/webhooks
-# D.8 streaming tokens (per upgradespec §C.1)
-app.include_router(streaming_tokens.router)  # /orgs/{org_id}/traces/{trace_id}/tokens
-# Cat 23 agent PR suggestions — UI surface for in-portal code-change
-# review. Prefix /orgs/{org_id}/agent/pr-suggestions — unique.
-app.include_router(agent_pr_suggestions.router)  # /orgs/{org_id}/agent/pr-suggestions
 
 # A2 — Per-org AI Gateway model registry. CRUD over the
 # org_gateway_models table; the gateway in A1 calls /resolve to
 # look up the upstream provider, model id, and (decrypted) API
 # key for a given logical model name. The router is always
 # mounted; the routes themselves enforce org membership + admin.
-from eden.api.routes import gateway, gateway_analytics, gateway_models
-
 app.include_router(gateway.router)  # /gateway/v1 (OpenAI-compatible surface)
 app.include_router(gateway_models.router)
 app.include_router(gateway_analytics.router)  # /orgs/{org_id}/gateway/overview
@@ -1432,7 +1292,14 @@ async def intelligence_code_change_gone(org_id: str, path: str = "") -> JSONResp
 
 @app.get("/openapi/v1/public.json", include_in_schema=False)
 async def public_openapi_spec() -> dict:
-    """Customer-facing OpenAPI document (no auth required)."""
+    """Customer-facing OpenAPI document (no auth required).
+
+    ``openapi_public`` is imported here, not at module level — it pulls
+    ``fastapi.openapi.models`` (~84ms) which nothing else on the cold
+    import path needs (W15-c cold-import diet).
+    """
+    from eden.api.openapi_public import build_public_openapi_spec
+
     return build_public_openapi_spec(app.openapi())
 
 

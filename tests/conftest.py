@@ -581,7 +581,15 @@ def reset_rate_limit():
     :mod:`eden.api.utils.rate_limit` so cross-test pollution on the
     login/signup/forgot-password buckets doesn't leak.
     """
-    from eden.api.app import app
+    from eden.api.app import app, mount_tier2_routers
+
+    # W15-c — the bulk of the routers is deferred to the lifespan and
+    # TestClient(app) without a ``with`` block never runs the lifespan.
+    # Mount the tier-2 routers here (idempotent, one-time cost per
+    # session) so every test sees the same route table it saw when the
+    # mounts were eager. The B26 intelligence tier stays unmounted, as
+    # it always has been for the in-process suite.
+    mount_tier2_routers(app)
     try:
         # Force middleware_stack to build (lazy).
         _ = app.middleware_stack
