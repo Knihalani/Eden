@@ -15,16 +15,39 @@ finding"). Run weekly; snapshot into ``docs/ops/autonomy-baseline/``.
     uv run python scripts/autonomy_baseline.py --dry-run   # print queries only
     uv run python scripts/autonomy_baseline.py --require-db  # exit 1 if no DB
 
+Recurring violations gate (weekly; see .github/workflows/autonomy-baseline.yml):
+
+    uv run python scripts/autonomy_baseline.py --strict --json
+    uv run python scripts/autonomy_baseline.py --snapshot docs/ops/autonomy-baseline/
+
+The violation counts (issues in ``triaged`` with an empty triage
+payload; issues in ``fix_pending`` older than 24h; issues stuck in
+``learning`` with no ``regression_eval_cases`` / N01 row) are printed as
+a table (or JSON with ``--json``). ``--strict`` exits 1 when any count
+is > 0 — or cannot be measured, which strict treats as a failure too
+(you cannot prove the loop clean without a database). ``--snapshot DIR``
+appends a dated markdown snapshot to DIR. The database is whatever
+``DATABASE_URL`` points at (via ``eden.storage.postgres``).
+
 Exit code is 0 unless ``--require-db`` is passed and the DB connection
-fails.
+fails, or ``--strict`` is passed and a violation (or no-DB) is found.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+
+# `uv run python scripts/...` can resolve `eden` to the sdk/python shim
+# package instead of the real server package under src/ (the editable
+# .pth does not guarantee ordering) — insert src at the front, same
+# guard as scripts/bench_observability_competitive.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 UNMEASURED = "unmeasured"
 
@@ -145,6 +168,44 @@ QUERIES: dict[str, tuple[str, str]] = {
     ),
 }
 
+# ── Recurring violations gate (weekly, assertable, 0 expected) ───────
+# name -> (description, SQL returning a single row with an ``n`` count).
+# Table/column names verified against the alembic migrations:
+#   agent_issues            084_agent_issues.py (+136 statuses incl. learning)
+#   regression_eval_cases   092_market_ready_consolidated.py (source_issue_id)
+VIOLATIONS: dict[str, tuple[str, str]] = {
+    "triaged_empty_payload": (
+        "issues in `triaged` whose triage payload is empty or an error stub",
+        """
+        SELECT COUNT(*) AS n FROM agent_issues
+        WHERE status = 'triaged'
+          AND (triage_result IS NULL
+               OR triage_result = '{}'::jsonb
+               OR COALESCE(triage_result->>'source', '') IN ('', 'error'))
+        """,
+    ),
+    "fix_pending_over_24h": (
+        "issues sitting in `fix_pending` for more than 24h",
+        """
+        SELECT COUNT(*) AS n FROM agent_issues
+        WHERE status = 'fix_pending'
+          AND updated_at < NOW() - INTERVAL '24 hours'
+        """,
+    ),
+    "learning_without_n01_case": (
+        "issues stuck in `learning` with no regression_eval_cases (N01) row "
+        "(the documented orchestrator._flywheel_on_resolved failure signature)",
+        """
+        SELECT COUNT(*) AS n FROM agent_issues i
+        WHERE i.status = 'learning'
+          AND NOT EXISTS (
+              SELECT 1 FROM regression_eval_cases c
+              WHERE c.org_id = i.org_id AND c.source_issue_id = i.id
+          )
+        """,
+    ),
+}
+
 # §0 metrics with no data source yet — printing them as unmeasured IS the
 # baseline finding.
 UNMEASURABLE: dict[str, str] = {
@@ -206,17 +267,111 @@ def _derive(name: str, rows: list[dict[str, Any]]) -> str | None:
     return None
 
 
-async def run_report(require_db: bool) -> int:
-    client = None
+async def _connect() -> Any | None:
+    """DATABASE_URL-configured client via the repo's async pg helper."""
     try:
         from eden.storage.postgres import get_postgres_client
 
-        client = await get_postgres_client()
+        return await get_postgres_client()
     except Exception as exc:  # noqa: BLE001 — no DB is a finding, not a crash
         print(f"[warn] Postgres unavailable: {exc}", file=sys.stderr)
-        if require_db:
-            return 1
+        return None
 
+
+async def collect_violations(client: Any | None) -> dict[str, dict[str, Any]]:
+    """Run every violation query; count None == unmeasurable (loudly)."""
+    out: dict[str, dict[str, Any]] = {}
+    for name, (desc, sql) in VIOLATIONS.items():
+        entry: dict[str, Any] = {"description": desc, "count": None}
+        if client is None:
+            entry["error"] = "no database connection"
+        else:
+            try:
+                row = (await client.fetch(sql))[0]
+                entry["count"] = int(row["n"])
+            except Exception as exc:  # noqa: BLE001 — isolate per query
+                entry["error"] = str(exc)[:200]
+        out[name] = entry
+    return out
+
+
+def _violations_report(
+    violations: dict[str, dict[str, Any]], *, strict: bool, db_ok: bool
+) -> dict[str, Any]:
+    counts = [v["count"] for v in violations.values()]
+    measured = [c for c in counts if c is not None]
+    unmeasured = [n for n, v in violations.items() if v["count"] is None]
+    total = sum(measured) if len(measured) == len(counts) else None
+    strict_failed = bool(
+        strict and (unmeasured or any(c > 0 for c in measured))
+    )
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "database": "connected" if db_ok else "unavailable",
+        "violations": violations,
+        "total_violations": total,
+        "unmeasured": unmeasured,
+        "strict": strict,
+        "ok": (total == 0) if total is not None else False,
+        "strict_failed": strict_failed,
+    }
+
+
+def _print_violations_table(report: dict[str, Any]) -> None:
+    print("=" * 78)
+    print("VIOLATIONS — recurring autonomy baseline (0 expected everywhere)")
+    print("=" * 78)
+    width = max(len(n) for n in VIOLATIONS) + 2
+    print(f"{'violation':<{width}}{'count':>7}  description")
+    for name, v in report["violations"].items():
+        count = v["count"]
+        shown = str(count) if count is not None else UNMEASURED
+        print(f"{name:<{width}}{shown:>7}  {v['description']}")
+        if v.get("error"):
+            print(f"{'':<{width}}{'':>7}  [error] {v['error']}")
+    total = report["total_violations"]
+    print("-" * 78)
+    print(
+        f"{'total':<{width}}"
+        f"{(str(total) if total is not None else UNMEASURED):>7}"
+        f"  database={report['database']}"
+    )
+
+
+def _write_snapshot(directory: str, report: dict[str, Any]) -> Path:
+    """Append a dated markdown snapshot under ``directory``.
+
+    One file per day (``YYYY-MM-DD-baseline.md``); re-runs on the same
+    day append a new section. Existing files (e.g. the acceptance
+    audit) are never touched.
+    """
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    path = Path(directory) / f"{day}-baseline.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if not path.exists():
+        lines.append(f"# Autonomy baseline — {day}\n")
+        lines.append(
+            "\nGenerated by `scripts/autonomy_baseline.py --snapshot` "
+            "(weekly workflow: `.github/workflows/autonomy-baseline.yml`).\n"
+        )
+    lines.append(f"\n## Run at {report['generated_at']}\n\n")
+    lines.append("| violation | count | description |\n|---|---:|---|\n")
+    for name, v in report["violations"].items():
+        count = v["count"] if v["count"] is not None else UNMEASURED
+        lines.append(f"| `{name}` | {count} | {v['description']} |\n")
+    total = report["total_violations"]
+    lines.append(
+        f"\n- database: {report['database']}\n"
+        f"- total violations: "
+        f"{total if total is not None else UNMEASURED}\n"
+    )
+    with path.open("a", encoding="utf-8") as fh:
+        fh.writelines(lines)
+    return path
+
+
+async def run_report(client: Any | None) -> None:
     print("=" * 78)
     print("AUTONOMY BASELINE — spec §0 metrics + assertable queries")
     print("=" * 78)
@@ -243,6 +398,35 @@ async def run_report(require_db: bool) -> int:
     for name, why in UNMEASURABLE.items():
         print(f"\n## {name}\n#  {why}\n   {UNMEASURED}")
     print()
+
+
+async def _amain(args: argparse.Namespace) -> int:
+    client = await _connect()
+    if client is None and args.require_db:
+        return 1
+
+    if not args.json:
+        await run_report(client)
+
+    violations = await collect_violations(client)
+    report = _violations_report(
+        violations, strict=args.strict, db_ok=client is not None
+    )
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        _print_violations_table(report)
+
+    if args.snapshot:
+        path = _write_snapshot(args.snapshot, report)
+        print(f"[snapshot] appended {path}", file=sys.stderr)
+
+    if report["strict_failed"]:
+        print(
+            "[strict] violations present or unmeasurable — failing",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -252,6 +436,9 @@ def dry_run() -> int:
     print("=" * 78)
     for name, (desc, sql) in QUERIES.items():
         print(f"\n-- {name}: {desc}")
+        print(sql.strip())
+    for name, (desc, sql) in VIOLATIONS.items():
+        print(f"\n-- [violation] {name}: {desc}")
         print(sql.strip())
     for name, why in UNMEASURABLE.items():
         print(f"\n-- {name}: {why}\n-- (no query — {UNMEASURED})")
@@ -271,10 +458,28 @@ def main() -> int:
         help="exit non-zero when the database connection fails "
         "(default: degrade to 'unmeasured' and exit 0)",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="print the violations report as JSON (suppresses the "
+        "human-readable §0 metrics report)",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit 1 when any violation count is > 0 — or cannot be "
+        "measured (no DB / failed query counts as a failure)",
+    )
+    parser.add_argument(
+        "--snapshot",
+        metavar="DIR",
+        help="append a dated markdown snapshot of the violations report "
+        "to DIR (e.g. docs/ops/autonomy-baseline/)",
+    )
     args = parser.parse_args()
     if args.dry_run:
         return dry_run()
-    return asyncio.run(run_report(require_db=args.require_db))
+    return asyncio.run(_amain(args))
 
 
 if __name__ == "__main__":

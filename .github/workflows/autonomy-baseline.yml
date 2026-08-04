@@ -1,0 +1,45 @@
+name: Autonomy baseline (weekly)
+
+# Recurring autonomy-loop violations gate: runs
+# scripts/autonomy_baseline.py --strict --json against the configured
+# DATABASE_URL secret every Monday. Skips (with a visible notice) when
+# the secret is not configured — a missing DB is a setup gap, not a
+# red build. Snapshots live in docs/ops/autonomy-baseline/.
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Gate on DATABASE_URL secret
+        id: gate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice title=autonomy-baseline skipped::DATABASE_URL secret is not configured — violations gate did not run"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: astral-sh/setup-uv@v3
+        if: steps.gate.outputs.present == 'true'
+        with:
+          version: "latest"
+
+      - name: Run violations gate (strict)
+        if: steps.gate.outputs.present == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run python scripts/autonomy_baseline.py --strict --json
