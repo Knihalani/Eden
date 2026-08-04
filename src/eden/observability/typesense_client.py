@@ -336,10 +336,14 @@ class TypesenseClient:
                 # a user-supplied URL) from being coerced into following
                 # a 30x into a private-IP endpoint — aiohttp has no
                 # built-in SSRF guard at redirect time.
+                # NOTE: allow_redirects is a PER-REQUEST arg, not a
+                # ClientSession() constructor arg — passing it here raises
+                # TypeError on modern aiohttp and silently disabled Typesense
+                # (client fell back to the SQLite proxy). It is applied on
+                # each request below to keep the SSRF no-follow guard.
                 self._session = aiohttp.ClientSession(
                     timeout=aiohttp.ClientTimeout(total=self._timeout_s),
                     headers={"X-TYPESENSE-API-KEY": self._api_key},
-                    allow_redirects=False,
                 )
             except Exception as exc:
                 logger.warning(f"Typesense: aiohttp unavailable: {exc}")
@@ -393,6 +397,7 @@ class TypesenseClient:
         try:
             async with session.request(
                 method, url, json=json_body, params=params,
+                allow_redirects=False,
             ) as resp:
                 text = await resp.text()
                 try:
@@ -479,7 +484,7 @@ class TypesenseClient:
             f"/documents/import?action=upsert&return_score=false"
         )
         try:
-            async with session.post(url, data=body,
+            async with session.post(url, data=body, allow_redirects=False,
                                     headers={"Content-Type": "text/plain"}) as resp:
                 text = await resp.text()
                 # Each line is "OK" or '{"success":false,...}'
@@ -577,7 +582,9 @@ class TypesenseClient:
         if not self._is_reachable():
             return False
         try:
-            async with session.get(f"{self.base_url}/health") as resp:
+            async with session.get(
+                f"{self.base_url}/health", allow_redirects=False
+            ) as resp:
                 return resp.status == 200
         except Exception:
             return False
