@@ -1,9 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import createIntlMiddleware from "next-intl/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { routing } from "@/i18n/routing";
-import { KNOWN_PORTAL_PREFIXES, isKnownPortalPath } from "@/lib/portal-routes";
+import { KNOWN_PORTAL_PREFIXES } from "@/lib/portal-routes";
 import { resolveHubTarget } from "@/lib/portal-hub-redirect";
 
 // Protected-first: block everything, allow the routes that must stay
@@ -86,68 +84,16 @@ const isPublicRoute = createRouteMatcher([
   "/__clerk(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
-  // i18n: locale-prefixed root is `/de` + `/de/...` for non-default
-  // locales. The default locale (`en`) stays unprefixed at `/`. See
-  // `src/i18n/routing.ts` for the prefix mode.
-  "/de",
-  "/de/(.*)",
 ]);
 
-// next-intl middleware: reads/writes the `NEXT_LOCALE` cookie,
-// optionally redirects `/` → `/de` when the user's accept-language
-// (or stored cookie) asks for German without the prefix.
-const intlMiddleware = createIntlMiddleware(routing);
-
 /**
- * P25: next-intl is marketing-only. Portal / API / Clerk internals
- * still need this middleware file for Clerk ``auth.protect()``, but
- * they must not pay locale negotiation or cookie rewrite work.
- */
-function shouldRunIntl(pathname: string): boolean {
-  if (
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/trpc") ||
-    pathname.startsWith("/__clerk")
-  ) {
-    return false;
-  }
-  if (isKnownPortalPath(pathname)) {
-    return false;
-  }
-  return true;
-}
-
-/**
- * Combined middleware chain.
- *
- * Why both Clerk AND next-intl live in one file: Next 16 renamed
- * `middleware.ts` → `proxy.ts` and there can only be one. Clerk's
- * `clerkMiddleware()` returns the actual Next.js middleware
- * function, so we wrap it and call `intlMiddleware` first inside
- * (only for marketing / auth surfaces — see ``shouldRunIntl``).
- *
- * Order: when intl runs, it may redirect to add a `/de` prefix.
- * If it redirects, we return that response directly and Clerk never
- * sees the request. Otherwise we run Clerk's auth gate and forward
- * any cookies intl set on the way out.
- *
- * Clerk's `auth.protect()` only fires for non-public routes, so the
- * locale switch on the public marketing page never hits Clerk's
- * auth state — which is what we want.
+ * Middleware (Next 16 renamed `middleware.ts` → `proxy.ts`). Clerk's
+ * `clerkMiddleware()` returns the actual Next.js middleware function;
+ * protected-first auth gating lives inside.
  */
 export default clerkMiddleware(async (auth, request: NextRequest) => {
   const url = new URL(request.url);
   const path = url.pathname;
-
-  const runIntl = shouldRunIntl(path);
-  const intlResponse = runIntl ? intlMiddleware(request) : null;
-
-  // next-intl wants a redirect (e.g. `/` → `/de` because the
-  // accept-language header says so). Return it untouched — Clerk
-  // doesn't need to run for a locale-prefix redirect.
-  if (intlResponse?.headers.get("location")) {
-    return intlResponse;
-  }
 
   // Lab compile-signal spends OPENROUTER_API_KEY in the Next handler —
   // require a Clerk session at the edge (handler also checks auth()).
@@ -189,11 +135,6 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return NextResponse.redirect(dest);
   };
 
-  // Forward pathname so root layout can skip next-intl message
-  // bundles on portal routes (P25) without splitting the matcher.
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-eden-pathname", path);
-
   const hubTarget = resolveHubTarget(path, url.search);
   if (hubTarget) {
     if (hubTarget.mode === "rewrite") {
@@ -203,9 +144,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
       // the rewritten route would be reachable without a session.
       const bounce = await enforcePortalAuth();
       if (bounce) return bounce;
-      return NextResponse.rewrite(new URL(hubTarget.destination, url.origin), {
-        request: { headers: requestHeaders },
-      });
+      return NextResponse.rewrite(new URL(hubTarget.destination, url.origin));
     }
     return NextResponse.redirect(
       new URL(hubTarget.destination, url.origin),
@@ -216,15 +155,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   const bounce = await enforcePortalAuth();
   if (bounce) return bounce;
 
-  const response = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
-  if (intlResponse) {
-    for (const cookie of intlResponse.cookies.getAll()) {
-      response.cookies.set(cookie);
-    }
-  }
-  return response;
+  return NextResponse.next();
 },
 {
   signInUrl: "/sign-in",

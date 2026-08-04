@@ -142,7 +142,19 @@ export function labCitationHref(c: AgentCitation): string {
   }
 }
 
-export const SUGGESTED_PROMPTS: string[] = [];
+/**
+ * Cold-start suggestion chips for the Assistant empty state. Each maps
+ * to a live Eden capability (cost drivers, traces, evals, signals,
+ * Improve plans) so a click produces a useful, citable answer.
+ */
+export const SUGGESTED_PROMPTS: string[] = [
+  "Why did cost spike this week?",
+  "Show my slowest agent runs today",
+  "Which evals regressed in the last deploy?",
+  "Chart token spend by model over the last 7 days",
+  "What signals fired in the last 24 hours?",
+  "Draft an Improve plan for my highest-error agent",
+];
 
 /** Fixture artifacts for spend / cost replies — intent → execute. */
 export function spendArtifacts(agentId?: string | null): AgentArtifact[] {
@@ -154,9 +166,48 @@ export function spendArtifacts(agentId?: string | null): AgentArtifact[] {
   );
 }
 
-/** Starter prompts from pinned objects — empty until Assistant is live. */
-export function suggestionsForPins(_pins: AgentContextPin[]): string[] {
-  return [];
+/**
+ * Starter prompts for the empty chat state. With no pins, the general
+ * SUGGESTED_PROMPTS render; with pinned context (trace / issue / plan /
+ * agent handoffs), pin-specific starters lead and general ones top up.
+ * Always capped at 6 chips.
+ */
+export function suggestionsForPins(pins: AgentContextPin[]): string[] {
+  if (pins.length === 0) return SUGGESTED_PROMPTS;
+  const out: string[] = [];
+  for (const pin of pins) {
+    switch (pin.kind) {
+      case "trace":
+        out.push(
+          `Walk me through ${pin.label} — where did the time and tokens go?`,
+          `Did anything fail or retry in ${pin.label}? Cite the exact spans.`,
+        );
+        break;
+      case "issue":
+        out.push(
+          `Summarize ${pin.label}: blast radius, first bad run, likely root cause`,
+          `Draft an Improve plan that would fix ${pin.label}`,
+        );
+        break;
+      case "plan":
+        out.push(
+          `What does ${pin.label} change, and what impact should I expect?`,
+          `Which eval results support shipping ${pin.label}?`,
+        );
+        break;
+      case "agent":
+        out.push(
+          `How is ${pin.label} doing today — cost, latency, and errors?`,
+          `Show ${pin.label}'s slowest runs in the last 24 hours`,
+        );
+        break;
+    }
+  }
+  for (const p of SUGGESTED_PROMPTS) {
+    if (out.length >= 6) break;
+    if (!out.includes(p)) out.push(p);
+  }
+  return out.slice(0, 6);
 }
 
 export function pinFromParams(input: {

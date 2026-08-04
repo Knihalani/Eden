@@ -3,6 +3,11 @@ import { dehydrateSignals } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
 import SignalsClient from "./signals-client";
 
+export const metadata = {
+  title: "Detectors · Eden",
+  description: "Detection rules that watch traces and raise signals.",
+};
+
 /** Cap SSR shard wait; return whatever settled (partial dehydrate). */
 const SIGNALS_DEHYDRATE_BUDGET_MS = 1500;
 

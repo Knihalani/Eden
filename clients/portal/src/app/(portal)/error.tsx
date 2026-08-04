@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ds/primitives";
+import { reportClientError } from "@/lib/client-error-reporter";
 
 export default function PortalError({
   error,
@@ -13,6 +14,7 @@ export default function PortalError({
 }) {
   useEffect(() => {
     console.error("[portal]", error);
+    reportClientError("portal", error);
   }, [error]);
 
   return (

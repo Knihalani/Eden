@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { hasLocale } from "next-intl";
-import { getLocale } from "next-intl/server";
-import { notFound } from "next/navigation";
 import { DeferredCookieConsent } from "@/components/deferred-cookie-consent";
 import { UnregisterServiceWorkers } from "@/components/unregister-service-workers";
-import { routing } from "@/i18n/routing";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -56,23 +52,16 @@ export const viewport = {
   viewportFit: "cover" as const,
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Locale for <html lang> only. Message bundles are not loaded site-wide:
-  // nothing currently calls useTranslations, and shipping ~60KB JSON +
-  // NextIntlClientProvider on every marketing hit was pure waste.
-  // ClerkProvider mounts under portal + auth layouts only.
-  const locale = await getLocale();
-  if (!hasLocale(routing.locales, locale)) {
-    notFound();
-  }
-
+  // English-only: the next-intl layer was removed (nothing ever called
+  // useTranslations). ClerkProvider mounts under portal + auth layouts only.
   return (
     <html
-      lang={locale}
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-[var(--bg)] text-[var(--text)]">

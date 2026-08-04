@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+export const metadata = { title: "Agents · Eden" };
+
 /**
  * `/agents/<id>` → `/agents?id=<id>`.
  *

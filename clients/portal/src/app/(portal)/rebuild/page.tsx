@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { isEdenInternal } from "@/lib/rebuild-flags";
 import { CURRENT_GATE } from "@/lab/nav";
 import { LAB_SURFACES, ROADMAP_NOTE } from "@/lab/registry";
 import { Panel } from "@/components/ds/primitives";
@@ -9,6 +11,8 @@ export const metadata = {
 };
 
 export default function RebuildPage() {
+  // Internal review board — customers soft-land on /unavailable.
+  if (!isEdenInternal()) redirect("/unavailable");
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
       <p className="type-label">Internal</p>
