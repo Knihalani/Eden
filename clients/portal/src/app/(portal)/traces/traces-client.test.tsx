@@ -114,6 +114,13 @@ vi.mock("@/lib/api/portal", () => ({
   },
 }));
 
+// SavedViewsMenu uses React Query (useQueryClient) and is covered by its own
+// test with a provider. These tests are about `?id=` selection, so stub it to
+// avoid needing a QueryClientProvider in this focused harness.
+vi.mock("@/components/portal/saved-views-menu", () => ({
+  SavedViewsMenu: () => null,
+}));
+
 const { default: TracesClient } = await import("./traces-client");
 
 afterEach(() => {
