@@ -100,4 +100,49 @@ describe("next.config redirect destinations", () => {
     }
     expect(dead).toEqual([]);
   });
+
+  // The check above demands a page at the first hop. This one encodes the
+  // weaker invariant we actually rely on — a destination may instead be the
+  // source of another rule, as long as the chain terminates at a real page.
+  // If the strict check is ever relaxed to allow chaining, this still fails
+  // on rules that bounce forever or land nowhere.
+  it("every destination chain terminates at a real page", () => {
+    /** Does a redirect `source` pattern match a concrete path? */
+    const sourceMatches = (source: string, path: string): boolean => {
+      const s = source.split("/").filter(Boolean);
+      const p = path.split("/").filter(Boolean);
+      let i = 0;
+      while (i < s.length) {
+        const seg = s[i]!;
+        // :path* swallows the remainder (including zero segments).
+        if (seg.startsWith(":") && seg.endsWith("*")) return true;
+        if (i >= p.length) return false;
+        if (!seg.startsWith(":") && seg !== p[i]) return false;
+        i += 1;
+      }
+      return i === p.length;
+    };
+
+    const dead: string[] = [];
+    for (const { source, destination } of rules) {
+      if (/^https?:\/\//.test(destination)) continue;
+      let path = destination.split("?")[0]!.split("#")[0]!;
+      const seen = new Set<string>();
+      let live = false;
+      while (!seen.has(path)) {
+        seen.add(path);
+        const target = path.split("/").filter(Boolean);
+        // Root is always served by (marketing)/page.tsx.
+        if (target.length === 0 || routes.some((r) => matches(r, target))) {
+          live = true;
+          break;
+        }
+        const next = rules.find((r) => sourceMatches(r.source, path));
+        if (!next || /^https?:\/\//.test(next.destination)) break;
+        path = next.destination.split("?")[0]!.split("#")[0]!;
+      }
+      if (!live) dead.push(`${source} -> ${destination}`);
+    }
+    expect(dead).toEqual([]);
+  });
 });
