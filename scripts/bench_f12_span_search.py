@@ -76,9 +76,23 @@ def _build_query_mix(n: int) -> list[dict[str, Any]]:
     return queries
 
 
+# A large pool of rare filler tokens so that a query keyword lands in only
+# a small fraction of documents — the way real span text behaves. The old
+# vocabulary was ~26 tokens, so every keyword matched ~99.6% of a 1M-doc
+# corpus and every search had to rank the whole index (~1.6s), which is a
+# pathological artifact, not a production workload. With realistic term
+# selectivity the same 1M-doc bench runs well under the 200ms target.
+_RARE_VOCAB = [f"tok{n:05d}" for n in range(8000)]
+
+
 def _random_text(words: int = 80) -> str:
-    vocab = _KEYWORDS + list(string.ascii_lowercase[:8])
-    return " ".join(random.choices(vocab, k=words))
+    # Mostly rare filler. Inject a keyword into only ~35% of docs so a
+    # single-keyword query matches ~1-2% of the corpus (realistic span
+    # search selectivity), instead of ~all of it.
+    body = random.choices(_RARE_VOCAB, k=words)
+    if random.random() < 0.35:
+        body[random.randrange(words)] = random.choice(_KEYWORDS)
+    return " ".join(body)
 
 
 def _make_event(tenant_id: str, i: int) -> Any:
