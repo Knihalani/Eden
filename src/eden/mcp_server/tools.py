@@ -465,3 +465,33 @@ async def get_agentic_metrics(
     return await AgenticMetricsService().summary(
         org_id, agent_id=agent_id, window_hours=window_hours
     )
+
+
+async def checkpoint_rerun(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    trace_id: str,
+    from_step: int = 0,
+    prompt_override: str | None = None,
+    rerun_mode: str = "cached_live",
+    live_prefix: bool = True,
+) -> dict[str, Any]:
+    """F01 — rerun the debugger live from a checkpoint step.
+
+    Thin wrapper over the existing live-rerun path
+    (:meth:`EdenApiClient.rerun_debugger` -> ``POST /debugger/rerun``); it does
+    **not** reimplement the rerun/diff logic. The honesty conventions
+    (``rerun_mode``, ``cache_hits`` / ``populated_steps``) are whatever the
+    debugger route returns. Defaults target the F01 live path
+    (``rerun_mode="cached_live"``, ``live_prefix=True``); pass
+    ``rerun_mode="replay"`` for the deterministic no-LLM replay.
+    """
+    return await client.rerun_debugger(
+        org_id,
+        trace_id=trace_id,
+        from_step=from_step,
+        prompt_override=prompt_override,
+        rerun_mode=rerun_mode,
+        live_prefix=live_prefix,
+    )
