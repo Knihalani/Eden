@@ -231,6 +231,7 @@ _DEFERRED_ROUTERS: tuple[tuple[str, str], ...] = (
     ("eden.api.routes.sharing", "public_router"),  # /public/traces/{token} (no auth, token-gated)
     # Phase A1: session lifecycle + presigned feedback tokens.
     ("eden.api.routes.sessions", "router"),  # /orgs/{org_id}/intelligence/user/sessions/...
+    ("eden.api.routes.sessions", "timeline_router"),  # /orgs/{org_id}/sessions (N12 timeline)
     ("eden.api.routes.presigned_feedback", "auth_router"),  # feedback/presigned-token
     ("eden.api.routes.presigned_feedback", "public_router"),  # /api/v1/feedback/tokens/{token_id}
     ("eden.api.routes.onboarding", "router"),  # /v1/internal/onboarding/{org_id}/* (D.14)
