@@ -491,11 +491,25 @@ class TypesenseClient:
             async with session.post(url, data=body, allow_redirects=False,
                                     headers={"Content-Type": "text/plain"}) as resp:
                 text = await resp.text()
-                # Each line is "OK" or '{"success":false,...}'
+                # Typesense's /documents/import returns one JSON object per
+                # line: {"success":true} on success, {"success":false,
+                # "error":...,"document":...} on failure. (It does NOT return
+                # the literal "OK" — the previous check counted every doc as
+                # rejected even when all indexed, firing false drop metrics
+                # and reporting 0 indexed to callers.)
                 ok = 0
                 for line in text.splitlines():
-                    if line.strip() == "OK":
+                    s = line.strip()
+                    if not s:
+                        continue
+                    if s == "OK":  # tolerate older/plaintext responses
                         ok += 1
+                        continue
+                    try:
+                        if json.loads(s).get("success") is True:
+                            ok += 1
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
                 rejected = len(doc_list) - ok
                 if rejected > 0:
                     try:
