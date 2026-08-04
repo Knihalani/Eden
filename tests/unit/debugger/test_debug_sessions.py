@@ -36,3 +36,39 @@ async def test_debug_session_multi_run_compare() -> None:
     loaded = await svc.get("org_1", session.id)
     assert loaded is not None
     assert len(loaded.runs) == 2
+
+
+@pytest.mark.asyncio
+async def test_debug_session_update_notes_and_last_replay() -> None:
+    """PATCH fields persist in memory even when Postgres is unavailable."""
+    svc = DebugSessionService(pg=None)
+
+    async def _no_pg() -> None:
+        return None
+
+    svc._client = _no_pg  # type: ignore[method-assign]
+    session = await svc.create("org_2", title="notes", notes="agent:a1 seed")
+    updated = await svc.update(
+        "org_2",
+        session.id,
+        notes="agent:a1 seed\nuser note",
+        last_replay={
+            "at": "just now",
+            "from_checkpoint_id": "cp_1",
+            "outcome": "ok",
+            "summary": "Hermetic re-run ok",
+        },
+    )
+    assert updated is not None
+    assert "user note" in updated.notes
+    assert updated.last_replay is not None
+    assert updated.last_replay["outcome"] == "ok"
+
+    cleared = await svc.update("org_2", session.id, last_replay=None)
+    assert cleared is not None
+    assert cleared.last_replay is None
+
+    missing = await svc.update(
+        "org_2", "00000000-0000-0000-0000-000000000000", notes="nope"
+    )
+    assert missing is None

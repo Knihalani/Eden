@@ -173,6 +173,26 @@ export const portalApi = {
   compareExperiments: (orgId: string) =>
     fetchApi<AbExperimentFixture[]>(portalPath(orgId, "compare/experiments")),
 
+  seedCompareExperiment: (
+    orgId: string,
+    body: {
+      from: "evals" | "debugger";
+      baselineId?: string;
+      compareId?: string;
+      debuggerSession?: string;
+      agentId?: string;
+      name?: string;
+    },
+  ) =>
+    fetchApi<AbExperimentFixture>(portalPath(orgId, "compare/experiments/seed"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Org-Id": orgId,
+      },
+      body: JSON.stringify(body),
+    }),
+
   guardrailPolicies: (orgId: string) =>
     fetchApi<GuardrailPolicyFixture[]>(portalPath(orgId, "guardrails/policies")),
 

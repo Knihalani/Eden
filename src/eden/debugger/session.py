@@ -11,6 +11,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_UNSET = object()
+
 
 @dataclass
 class DebugSessionRun:
@@ -47,6 +49,7 @@ class DebugSession:
     title: str
     source_trace_id: str | None = None
     notes: str = ""
+    last_replay: dict[str, Any] | None = None
     runs: list[DebugSessionRun] = field(default_factory=list)
     created_at: str = field(
         default_factory=lambda: datetime.now(UTC).isoformat()
@@ -62,6 +65,7 @@ class DebugSession:
             "title": self.title,
             "source_trace_id": self.source_trace_id,
             "notes": self.notes,
+            "last_replay": self.last_replay,
             "run_count": len(self.runs),
             "runs": [r.to_dict() for r in self.runs],
             "created_at": self.created_at,
@@ -112,17 +116,35 @@ class DebugSessionService:
         if client is None:
             rows = [s for s in self._memory.values() if s.org_id == org_id]
             return sorted(rows, key=lambda s: s.updated_at, reverse=True)[:limit]
-        sql_rows = await client.fetch(
-            """
-            SELECT id, org_id, title, source_trace_id, notes, created_at, updated_at
-            FROM debug_sessions
-            WHERE org_id = $1
-            ORDER BY updated_at DESC
-            LIMIT $2
-            """,
-            org_id,
-            limit,
-        )
+        try:
+            sql_rows = await client.fetch(
+                """
+                SELECT id, org_id, title, source_trace_id, notes, last_replay,
+                       created_at, updated_at
+                FROM debug_sessions
+                WHERE org_id = $1
+                ORDER BY updated_at DESC
+                LIMIT $2
+                """,
+                org_id,
+                limit,
+            )
+        except Exception as exc:
+            # Pre-migration 139: column missing — fall back without last_replay.
+            if not _is_undefined_column(exc, "last_replay"):
+                raise
+            sql_rows = await client.fetch(
+                """
+                SELECT id, org_id, title, source_trace_id, notes,
+                       created_at, updated_at
+                FROM debug_sessions
+                WHERE org_id = $1
+                ORDER BY updated_at DESC
+                LIMIT $2
+                """,
+                org_id,
+                limit,
+            )
         out: list[DebugSession] = []
         for row in sql_rows:
             session = _row_to_session(dict(row))
@@ -133,20 +155,58 @@ class DebugSessionService:
     async def get(self, org_id: str, session_id: str) -> DebugSession | None:
         client = await self._client()
         if client is not None:
-            row = await client.fetchrow(
-                """
-                SELECT id, org_id, title, source_trace_id, notes, created_at, updated_at
-                FROM debug_sessions
-                WHERE org_id = $1 AND id = $2::uuid
-                """,
-                org_id,
-                session_id,
-            )
+            try:
+                row = await client.fetchrow(
+                    """
+                    SELECT id, org_id, title, source_trace_id, notes, last_replay,
+                           created_at, updated_at
+                    FROM debug_sessions
+                    WHERE org_id = $1 AND id = $2::uuid
+                    """,
+                    org_id,
+                    session_id,
+                )
+            except Exception as exc:
+                if not _is_undefined_column(exc, "last_replay"):
+                    raise
+                row = await client.fetchrow(
+                    """
+                    SELECT id, org_id, title, source_trace_id, notes,
+                           created_at, updated_at
+                    FROM debug_sessions
+                    WHERE org_id = $1 AND id = $2::uuid
+                    """,
+                    org_id,
+                    session_id,
+                )
             if row:
                 session = _row_to_session(dict(row))
                 session.runs = await self._load_runs(org_id, session.id)
                 return session
         return self._memory.get(f"{org_id}:{session_id}")
+
+    async def update(
+        self,
+        org_id: str,
+        session_id: str,
+        *,
+        title: str | None = None,
+        notes: str | None = None,
+        last_replay: Any = _UNSET,
+    ) -> DebugSession | None:
+        session = await self.get(org_id, session_id)
+        if session is None:
+            return None
+        if title is not None:
+            session.title = title
+        if notes is not None:
+            session.notes = notes
+        if last_replay is not _UNSET:
+            session.last_replay = last_replay
+        session.updated_at = datetime.now(UTC).isoformat()
+        await self._persist_session(session)
+        self._memory[f"{org_id}:{session_id}"] = session
+        return session
 
     async def add_run(
         self,
@@ -235,24 +295,57 @@ class DebugSessionService:
         client = await self._client()
         if client is None:
             return
-        await client.execute(
-            """
-            INSERT INTO debug_sessions (
-                id, org_id, title, source_trace_id, notes, created_at, updated_at
-            ) VALUES ($1::uuid, $2, $3, $4, $5, $6::timestamptz, $7::timestamptz)
-            ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                notes = EXCLUDED.notes,
-                updated_at = EXCLUDED.updated_at
-            """,
-            session.id,
-            session.org_id,
-            session.title,
-            session.source_trace_id,
-            session.notes,
-            session.created_at,
-            session.updated_at,
-        )
+        try:
+            await client.execute(
+                """
+                INSERT INTO debug_sessions (
+                    id, org_id, title, source_trace_id, notes, created_at, updated_at,
+                    last_replay
+                ) VALUES (
+                    $1::uuid, $2, $3, $4, $5, $6::timestamptz, $7::timestamptz,
+                    $8::jsonb
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    notes = EXCLUDED.notes,
+                    last_replay = EXCLUDED.last_replay,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                session.id,
+                session.org_id,
+                session.title,
+                session.source_trace_id,
+                session.notes,
+                session.created_at,
+                session.updated_at,
+                json.dumps(session.last_replay)
+                if session.last_replay is not None
+                else None,
+            )
+        except Exception as exc:
+            # Pre-migration 139: persist notes/title without last_replay.
+            if not _is_undefined_column(exc, "last_replay"):
+                raise
+            await client.execute(
+                """
+                INSERT INTO debug_sessions (
+                    id, org_id, title, source_trace_id, notes, created_at, updated_at
+                ) VALUES (
+                    $1::uuid, $2, $3, $4, $5, $6::timestamptz, $7::timestamptz
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    notes = EXCLUDED.notes,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                session.id,
+                session.org_id,
+                session.title,
+                session.source_trace_id,
+                session.notes,
+                session.created_at,
+                session.updated_at,
+            )
 
     async def _touch_session(self, session: DebugSession) -> None:
         client = await self._client()
@@ -292,15 +385,34 @@ class DebugSessionService:
         )
 
 
+def _is_undefined_column(exc: BaseException, column: str) -> bool:
+    name = type(exc).__name__
+    msg = str(exc).lower()
+    return column.lower() in msg and (
+        "undefinedcolumn" in name.lower()
+        or "undefined column" in msg
+        or "does not exist" in msg
+    )
+
+
 def _row_to_session(row: dict[str, Any]) -> DebugSession:
     created = row.get("created_at")
     updated = row.get("updated_at")
+    last_replay = row.get("last_replay")
+    if isinstance(last_replay, str):
+        try:
+            last_replay = json.loads(last_replay)
+        except Exception:
+            last_replay = None
+    if last_replay is not None and not isinstance(last_replay, dict):
+        last_replay = None
     return DebugSession(
         id=str(row["id"]),
         org_id=row["org_id"],
         title=str(row.get("title") or "Debug session"),
         source_trace_id=row.get("source_trace_id"),
         notes=str(row.get("notes") or ""),
+        last_replay=last_replay,
         created_at=created.isoformat() if hasattr(created, "isoformat") else str(created or ""),
         updated_at=updated.isoformat() if hasattr(updated, "isoformat") else str(updated or ""),
     )

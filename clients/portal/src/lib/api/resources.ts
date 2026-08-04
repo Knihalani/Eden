@@ -3473,6 +3473,12 @@ export type DebugSessionRecord = {
   title: string;
   source_trace_id?: string | null;
   notes?: string;
+  last_replay?: {
+    at: string;
+    from_checkpoint_id: string;
+    outcome: "ok" | "error";
+    summary: string;
+  } | null;
   run_count?: number;
   runs?: Array<Record<string, unknown>>;
   created_at?: string;
@@ -3499,6 +3505,28 @@ const debugSessionsApi = {
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  patch: (
+    orgId: string,
+    sessionId: string,
+    body: {
+      title?: string;
+      notes?: string;
+      last_replay?: {
+        at: string;
+        from_checkpoint_id: string;
+        outcome: "ok" | "error";
+        summary: string;
+      } | null;
+    },
+  ) =>
+    fetchApi<{ session: DebugSessionRecord }>(
+      `/orgs/${orgId}/debugger/sessions/${sessionId}`,
+      {
+        method: "PATCH",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
   compare: (orgId: string, sessionId: string, runA: string, runB: string) =>
     fetchApi<Record<string, unknown>>(
       `/orgs/${orgId}/debugger/sessions/${sessionId}/compare?run_a=${encodeURIComponent(runA)}&run_b=${encodeURIComponent(runB)}`,

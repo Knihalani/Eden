@@ -26,6 +26,21 @@ import { catalogTraces } from "@/lib/portal-catalog";
 import { useLabToast } from "@/lab/lab-toast";
 
 /** Map debugger API session → portal list fixture shape. */
+function mapLastReplay(
+  raw: unknown,
+): DebuggerSessionFixture["lastReplay"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const outcome = r.outcome;
+  if (outcome !== "ok" && outcome !== "error") return undefined;
+  return {
+    at: String(r.at ?? ""),
+    fromCheckpointId: String(r.fromCheckpointId ?? r.from_checkpoint_id ?? ""),
+    outcome,
+    summary: String(r.summary ?? ""),
+  };
+}
+
 function sessionToFixture(
   session: DebugSessionRecord,
   fallbacks?: { agentId?: string; sourceTraceId?: string; modeHint?: DebuggerSessionFixture["modeHint"] },
@@ -51,6 +66,7 @@ function sessionToFixture(
     updatedAt: String(session.updated_at ?? session.created_at ?? "just now"),
     modeHint: fallbacks?.modeHint ?? (compareId ? "compare" : "replay"),
     notes,
+    lastReplay: mapLastReplay(session.last_replay),
   };
 }
 

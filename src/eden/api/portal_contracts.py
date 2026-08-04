@@ -459,6 +459,10 @@ class AbExperimentCard(BaseModel):
     recommendation: str = "need_more_data"
     arms: list[dict[str, Any]] = Field(default_factory=list)
     sampleIds: list[str] = Field(default_factory=list)
+    sourceEvalBaselineId: str | None = None
+    sourceEvalCompareId: str | None = None
+    sourceDebuggerSessionId: str | None = None
+    createdAt: str = ""
 
 
 class GuardrailPolicyCard(BaseModel):
@@ -485,6 +489,7 @@ class DebuggerSessionCard(BaseModel):
     modeHint: DebuggerModeHint = "inspect"
     notes: str = ""
     updatedAt: str = ""
+    lastReplay: dict[str, Any] | None = None
 
 
 class AssistantMessagePart(BaseModel):
