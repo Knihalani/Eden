@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
@@ -80,6 +80,11 @@ class CreateDebugSessionRequest(BaseModel):
     title: str = "Debug session"
     source_trace_id: str | None = None
     notes: str = ""
+
+class PatchDebugSessionRequest(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    last_replay: dict[str, Any] | None = None
 
 class AddDebugRunRequest(BaseModel):
     source_trace_id: str
@@ -269,6 +274,33 @@ async def get_debug_session(
     session = await DebugSessionService(pg).get(org_id, session_id)
     if session is None:
         return {"status": "not_found", "session_id": session_id}
+    return {"session": session.to_dict()}
+
+@router.patch(
+    "/sessions/{session_id}",
+    summary="Update debugger session title, notes, or last_replay",
+    dependencies=[Depends(require_feature_flag("debug_sessions_v1"))],
+)
+async def patch_debug_session(
+    org_id: str = Depends(require_path_org_access),
+    session_id: str = Path(...),
+    body: PatchDebugSessionRequest = Body(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    pg = await get_postgres_client()
+    kwargs: dict[str, Any] = {
+        "title": body.title,
+        "notes": body.notes,
+    }
+    if "last_replay" in body.model_fields_set:
+        kwargs["last_replay"] = body.last_replay
+    session = await DebugSessionService(pg).update(
+        org_id,
+        session_id,
+        **kwargs,
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
     return {"session": session.to_dict()}
 
 @router.get(

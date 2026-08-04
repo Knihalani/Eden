@@ -1,7 +1,15 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   normalizeAbExperiments,
   seedFromDebuggerSession,
@@ -91,13 +99,27 @@ function LabCompareInner() {
 
   const { agentId, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
+  const queryClient = useQueryClient();
+  const seedAttempted = useRef(false);
 
   const seeded = useMemo(() => {
     if (paramFrom === "evals") {
-      return seedFromEvalsPair(paramBaselineId, paramCompareId);
+      if (!paramBaselineId || !paramCompareId) return undefined;
+      const fromList = experiments.find(
+        (e) =>
+          e.sourceEvalBaselineId === paramBaselineId &&
+          e.sourceEvalCompareId === paramCompareId,
+      );
+      return fromList ?? seedFromEvalsPair(paramBaselineId, paramCompareId);
     }
     if (paramFrom === "debugger") {
-      return seedFromDebuggerSession(paramDebuggerSession);
+      if (!paramDebuggerSession) return undefined;
+      const fromList = experiments.find(
+        (e) => e.sourceDebuggerSessionId === paramDebuggerSession,
+      );
+      return (
+        fromList ?? seedFromDebuggerSession(paramDebuggerSession)
+      );
     }
     return undefined;
   }, [
@@ -105,6 +127,7 @@ function LabCompareInner() {
     paramBaselineId,
     paramCompareId,
     paramDebuggerSession,
+    experiments,
   ]);
 
   const [experimentId, setExperimentId] = useState("");
@@ -138,10 +161,77 @@ function LabCompareInner() {
     if (experimentsQuery.isLoading) return;
     if (seeded) {
       setSeedNote(paramFrom === "evals" ? "From Evals" : "From Debugger");
-    } else {
-      setSeedNote("No matching experiment to seed from");
+      return;
     }
-  }, [paramFrom, seeded, experimentsQuery.isLoading]);
+
+    const canSeedEvals =
+      paramFrom === "evals" && Boolean(paramBaselineId) && Boolean(paramCompareId);
+    const canSeedDebugger =
+      paramFrom === "debugger" && Boolean(paramDebuggerSession);
+    if (!canSeedEvals && !canSeedDebugger) {
+      setSeedNote("No matching experiment to seed from");
+      return;
+    }
+    if (!orgId || seedAttempted.current) return;
+    seedAttempted.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const card = await portalApi.seedCompareExperiment(
+          orgId,
+          paramFrom === "evals"
+            ? {
+                from: "evals",
+                baselineId: paramBaselineId ?? undefined,
+                compareId: paramCompareId ?? undefined,
+                agentId: paramAgent ?? undefined,
+              }
+            : {
+                from: "debugger",
+                debuggerSession: paramDebuggerSession ?? undefined,
+                agentId: paramAgent ?? undefined,
+              },
+        );
+        if (cancelled) {
+          seedAttempted.current = false;
+          return;
+        }
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.compareExperiments(orgId),
+        });
+        setSeedNote(paramFrom === "evals" ? "From Evals" : "From Debugger");
+        patchQuery({
+          id: card.id,
+          from: null,
+          baselineId: null,
+          compareId: null,
+          debuggerSession: null,
+        });
+      } catch {
+        if (cancelled) {
+          seedAttempted.current = false;
+          return;
+        }
+        setSeedNote("No matching experiment to seed from");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    paramFrom,
+    paramBaselineId,
+    paramCompareId,
+    paramDebuggerSession,
+    paramAgent,
+    seeded,
+    experimentsQuery.isLoading,
+    orgId,
+    queryClient,
+    patchQuery,
+  ]);
 
   useEffect(() => {
     setLayout(parseAbLayout(paramLayout));

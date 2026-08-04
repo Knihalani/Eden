@@ -61,10 +61,11 @@ export function PortalCatalogSync() {
   // Home attention path: traces + issues only (not agents).
   // Debugger loads sessions in-page; do not compete with agents/traces warm.
   // Issues Runs tab resolves occurrenceTraceIds via catalogTraces().
-  const needTraces = onHome || onTraces || onAgents || onSessions || onIssues;
+  // Signals Related chips resolve relatedIssueIds / exampleTraceIds via catalog.
+  const needTraces = onHome || onTraces || onAgents || onSessions || onIssues || onSignals;
   // Sessions are traces-hub only (agents inspector uses traces, not sessions).
   const needSessions = onTraces || onSessions;
-  const needIssues = onHome || onIssues || onTraces;
+  const needIssues = onHome || onIssues || onTraces || onSignals;
   const needSignals = onSignals;
   // Alert rules: alerts modal / alerts route only (signals page does not read them).
   const needAlertRules = onAlerts;

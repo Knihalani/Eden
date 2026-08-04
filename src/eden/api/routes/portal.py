@@ -11,10 +11,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from pydantic import BaseModel, ConfigDict, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
 from eden.api.portal_contracts import (
@@ -1804,6 +1806,195 @@ async def _related_issue_ids_by_session(
     return out
 
 
+async def _portal_signal_def_ids(
+    org_id: str,
+    nl_rows: list[tuple[str, str]],
+) -> dict[str, list[str]]:
+    """Map portal ``nl_signals.id`` → ``signal_definitions.id`` list.
+
+    Custom NL signals dual-write with ``template_id = 'nl:' || nl_id``.
+    Library seeds share description with ``signal_definitions`` rows.
+    Soft-fails to ``{}`` when the table/columns are missing.
+    """
+    ids = sorted({nl_id for nl_id, _ in nl_rows if nl_id})
+    descs = sorted({desc for _, desc in nl_rows if desc})
+    if not ids and not descs:
+        return {}
+    client = await _pg()
+    if client is None:
+        return {}
+    template_keys = [f"nl:{i}" for i in ids]
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id::text AS def_id, template_id, description
+            FROM signal_definitions
+            WHERE org_id = $1
+              AND (
+                template_id = ANY($2::text[])
+                OR description = ANY($3::text[])
+              )
+            """,
+            org_id,
+            template_keys,
+            descs,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "portal signals: signal_definitions lookup failed: %s",
+            redact_all(str(exc)),
+        )
+        return {}
+
+    by_template_nl: dict[str, list[str]] = {}
+    by_desc: dict[str, list[str]] = {}
+    for r in rows:
+        def_id = str(r.get("def_id") or "")
+        if not def_id:
+            continue
+        tmpl = str(r.get("template_id") or "")
+        if tmpl.startswith("nl:"):
+            nl_id = tmpl[3:]
+            bucket = by_template_nl.setdefault(nl_id, [])
+            if def_id not in bucket:
+                bucket.append(def_id)
+        desc = str(r.get("description") or "")
+        if desc:
+            bucket = by_desc.setdefault(desc, [])
+            if def_id not in bucket:
+                bucket.append(def_id)
+
+    out: dict[str, list[str]] = {}
+    for nl_id, desc in nl_rows:
+        if not nl_id:
+            continue
+        merged: list[str] = list(by_template_nl.get(nl_id) or [])
+        for def_id in by_desc.get(desc) or []:
+            if def_id not in merged:
+                merged.append(def_id)
+        if merged:
+            out[nl_id] = merged
+    return out
+
+
+async def _example_trace_ids_by_portal_signal(
+    org_id: str,
+    portal_to_defs: dict[str, list[str]],
+    *,
+    per_signal: int = 3,
+) -> dict[str, list[str]]:
+    """Map portal signal id → up to ``per_signal`` recent matched trace ids."""
+    def_to_portal: dict[str, list[str]] = {}
+    all_defs: list[str] = []
+    for portal_id, defs in portal_to_defs.items():
+        for def_id in defs:
+            if not def_id:
+                continue
+            all_defs.append(def_id)
+            def_to_portal.setdefault(def_id, []).append(portal_id)
+    defs_sorted = sorted(set(all_defs))
+    if not defs_sorted:
+        return {}
+    client = await _pg()
+    if client is None:
+        return {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT signal_id::text AS def_id, trace_id
+            FROM signal_events
+            WHERE org_id = $1
+              AND signal_id::text = ANY($2::text[])
+              AND matched = TRUE
+              AND trace_id IS NOT NULL
+            ORDER BY detected_at DESC
+            LIMIT 500
+            """,
+            org_id,
+            defs_sorted,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "portal signals: example traces lookup failed: %s",
+            redact_all(str(exc)),
+        )
+        return {}
+
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        def_id = str(r.get("def_id") or "")
+        tid = str(r.get("trace_id") or "")
+        if not def_id or not tid:
+            continue
+        for portal_id in def_to_portal.get(def_id) or []:
+            bucket = out.setdefault(portal_id, [])
+            if tid not in bucket and len(bucket) < per_signal:
+                bucket.append(tid)
+    return out
+
+
+async def _related_issue_ids_by_portal_signal(
+    org_id: str,
+    portal_to_defs: dict[str, list[str]],
+    *,
+    per_signal: int = 3,
+) -> dict[str, list[str]]:
+    """Map portal signal id → open issue ids via signal_investigator stumbles."""
+    def_to_portal: dict[str, list[str]] = {}
+    all_defs: list[str] = []
+    for portal_id, defs in portal_to_defs.items():
+        for def_id in defs:
+            if not def_id:
+                continue
+            all_defs.append(def_id)
+            def_to_portal.setdefault(def_id, []).append(portal_id)
+    defs_sorted = sorted(set(all_defs))
+    if not defs_sorted:
+        return {}
+    client = await _pg()
+    if client is None:
+        return {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT DISTINCT s.detail->>'signal_id' AS def_id,
+                            i.id::text AS issue_id
+            FROM agent_stumbles s
+            INNER JOIN agent_issues i
+              ON i.org_id = s.org_id
+             AND i.fingerprint = s.fingerprint
+            WHERE s.org_id = $1
+              AND (
+                s.detected_by = 'signal_investigator'
+                OR s.detail->>'source' = 'signal_investigator'
+              )
+              AND s.detail->>'signal_id' = ANY($2::text[])
+              AND COALESCE(i.status, 'open') NOT IN ('resolved', 'ignored')
+            LIMIT 500
+            """,
+            org_id,
+            defs_sorted,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "portal signals: related issues lookup failed: %s",
+            redact_all(str(exc)),
+        )
+        return {}
+
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        def_id = str(r.get("def_id") or "")
+        iid = str(r.get("issue_id") or "")
+        if not def_id or not iid:
+            continue
+        for portal_id in def_to_portal.get(def_id) or []:
+            bucket = out.setdefault(portal_id, [])
+            if iid not in bucket and len(bucket) < per_signal:
+                bucket.append(iid)
+    return out
+
+
 # ── GET /signals ──────────────────────────────────────────────────
 
 
@@ -1841,6 +2032,16 @@ async def list_portal_signals(
             headers={"Retry-After": "5"},
         ) from exc
 
+    nl_pairs = [
+        (str(r["id"]), str(r.get("description") or ""))
+        for r in rows
+    ]
+    portal_to_defs = await _portal_signal_def_ids(org_id, nl_pairs)
+    related_issues, example_traces = await asyncio.gather(
+        _related_issue_ids_by_portal_signal(org_id, portal_to_defs),
+        _example_trace_ids_by_portal_signal(org_id, portal_to_defs),
+    )
+
     out: list[SignalCard] = []
     for r in rows:
         rule = r.get("rule")
@@ -1861,9 +2062,10 @@ async def list_portal_signals(
         notify = bool(rule.get("notify", False))
         raw_channel = rule.get("channel") or rule.get("notify_channel")
         channel = _normalize_notify_channel(raw_channel) if raw_channel not in (None, "") else None
+        sid = str(r["id"])
         out.append(
             SignalCard(
-                id=str(r["id"]),
+                id=sid,
                 name=str(r.get("description") or "")[:80],
                 description=str(r.get("description") or ""),
                 kind=_signal_kind_from_rule(rule),  # type: ignore[arg-type]
@@ -1877,8 +2079,8 @@ async def list_portal_signals(
                 or None,
                 hits24h=int(r.get("match_count") or 0),
                 lastHit=_iso(r.get("updated_at")) or None,
-                relatedIssueIds=[],
-                exampleTraceIds=[],
+                relatedIssueIds=related_issues.get(sid, [])[:3],
+                exampleTraceIds=example_traces.get(sid, [])[:3],
             )
         )
     return out
@@ -2788,14 +2990,15 @@ async def list_portal_ab_experiments(
         except Exception as exc:  # noqa: BLE001
             logger.warning("portal ab-tests: tracker unavailable: %s", redact_all(str(exc)))
 
-    # Both sources missing: if Postgres is also down, this is an outage
-    # (not "no experiments"). Healthy PG + unloaded backends → empty.
+    # Both live sources missing: if Postgres is also down, this is an
+    # outage (not "no experiments"). Healthy PG still continues so we
+    # can surface durable ``portal_compare_seeds`` rows.
     if not tests and not registry_ok and not tracker_ok:
         if await _pg() is None:
             raise _pg_unavailable("Compare experiments")
-        return []
 
     out: list[AbExperimentCard] = []
+    seen_ids: set[str] = set()
     for t in tests:
         data = t.to_dict() if hasattr(t, "to_dict") else (t if isinstance(t, dict) else {})
         if not data:
@@ -2860,9 +3063,15 @@ async def list_portal_ab_experiments(
             rec = "ship"
         elif status in ("stopped",):
             rec = "dont_ship"
+        exp_id = str(
+            data.get("test_id") or data.get("experiment_id") or data.get("id") or ""
+        )
+        if not exp_id or exp_id in seen_ids:
+            continue
+        seen_ids.add(exp_id)
         out.append(
             AbExperimentCard(
-                id=str(data.get("test_id") or data.get("experiment_id") or data.get("id") or ""),
+                id=exp_id,
                 name=str(
                     data.get("prompt_name") or data.get("experiment_name") or data.get("name") or ""
                 ),
@@ -2873,7 +3082,449 @@ async def list_portal_ab_experiments(
                 sampleIds=[str(s) for s in (data.get("sample_ids") or [])],
             )
         )
+
+    # Durable portal seeds (evals/debugger deep-links) — soft-fail if
+    # migration 140 has not landed yet.
+    seed_cards = await _list_portal_compare_seeds(org_id)
+    if seed_cards:
+        # Prepend seeds so deep-link matches surface first.
+        merged: list[AbExperimentCard] = []
+        for card in seed_cards:
+            if card.id in seen_ids:
+                continue
+            seen_ids.add(card.id)
+            merged.append(card)
+        out = merged + out
     return out
+
+
+def _default_compare_arms(
+    *,
+    control_version: str,
+    treatment_version: str,
+    control_avg: float = 0.0,
+    treatment_avg: float = 0.0,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "key": "control",
+            "label": "Control",
+            "versionKey": control_version,
+            "weight": 0.5,
+            "nTraces": 0,
+            "stumbleRate": 0.0,
+            "avgScore": control_avg,
+            "costUsdPerTrace": 0.0,
+            "latencyP95Ms": 0.0,
+        },
+        {
+            "key": "treatment",
+            "label": "Treatment",
+            "versionKey": treatment_version,
+            "weight": 0.5,
+            "nTraces": 0,
+            "stumbleRate": 0.0,
+            "avgScore": treatment_avg,
+            "costUsdPerTrace": 0.0,
+            "latencyP95Ms": 0.0,
+        },
+    ]
+
+
+def _jsonish_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:  # noqa: BLE001
+            return []
+    return []
+
+
+def _portal_compare_seed_card(row: Any) -> AbExperimentCard:
+    data = dict(row) if not isinstance(row, dict) else row
+    arms_raw = _jsonish_list(data.get("arms"))
+    arms: list[dict[str, Any]] = [a for a in arms_raw if isinstance(a, dict)]
+    sample_ids = [str(s) for s in _jsonish_list(data.get("sample_ids"))]
+    return AbExperimentCard(
+        id=str(data.get("id") or ""),
+        name=str(data.get("name") or ""),
+        status=str(data.get("status") or "active"),
+        agentId=str(data["agent_id"]) if data.get("agent_id") else None,
+        recommendation=str(data.get("recommendation") or "need_more_data"),
+        arms=arms,
+        sampleIds=sample_ids,
+        sourceEvalBaselineId=(
+            str(data["source_eval_baseline_id"])
+            if data.get("source_eval_baseline_id")
+            else None
+        ),
+        sourceEvalCompareId=(
+            str(data["source_eval_compare_id"])
+            if data.get("source_eval_compare_id")
+            else None
+        ),
+        sourceDebuggerSessionId=(
+            str(data["source_debugger_session_id"])
+            if data.get("source_debugger_session_id")
+            else None
+        ),
+        createdAt=_iso(data.get("created_at")),
+    )
+
+
+async def _list_portal_compare_seeds(org_id: str) -> list[AbExperimentCard]:
+    client = await _pg()
+    if client is None:
+        return []
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id, org_id, name, agent_id, status, recommendation,
+                   arms, sample_ids,
+                   source_eval_baseline_id, source_eval_compare_id,
+                   source_debugger_session_id, created_at, updated_at
+            FROM portal_compare_seeds
+            WHERE org_id = $1
+            ORDER BY updated_at DESC
+            """,
+            org_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).lower()
+        if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
+            logger.warning(
+                "portal compare seeds: table missing: %s",
+                redact_all(str(exc)),
+            )
+            return []
+        logger.warning(
+            "portal compare seeds: list failed: %s",
+            redact_all(str(exc)),
+        )
+        return []
+    return [_portal_compare_seed_card(r) for r in rows or []]
+
+
+class CompareSeedRequest(BaseModel):
+    """POST /compare/experiments/seed — create durable Compare deep-link seed."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_source: Literal["evals", "debugger"] = Field(alias="from")
+    baseline_id: str | None = Field(default=None, alias="baselineId")
+    compare_id: str | None = Field(default=None, alias="compareId")
+    debugger_session: str | None = Field(default=None, alias="debuggerSession")
+    agent_id: str | None = Field(default=None, alias="agentId")
+    name: str | None = None
+
+
+async def _insert_portal_compare_seed(
+    client: Any,
+    *,
+    org_id: str,
+    seed_id: str,
+    name: str,
+    agent_id: str | None,
+    arms: list[dict[str, Any]],
+    source_eval_baseline_id: str | None = None,
+    source_eval_compare_id: str | None = None,
+    source_debugger_session_id: str | None = None,
+) -> AbExperimentCard:
+    """Insert a seed row; on unique conflict, return the existing row."""
+    try:
+        row = await client.fetchrow(
+            """
+            INSERT INTO portal_compare_seeds (
+                id, org_id, name, agent_id, status, recommendation,
+                arms, sample_ids,
+                source_eval_baseline_id, source_eval_compare_id,
+                source_debugger_session_id
+            ) VALUES (
+                $1, $2, $3, $4, 'active', 'need_more_data',
+                $5::jsonb, '[]'::jsonb,
+                $6, $7, $8
+            )
+            RETURNING id, org_id, name, agent_id, status, recommendation,
+                      arms, sample_ids,
+                      source_eval_baseline_id, source_eval_compare_id,
+                      source_debugger_session_id, created_at, updated_at
+            """,
+            seed_id,
+            org_id,
+            name,
+            agent_id,
+            json.dumps(arms),
+            source_eval_baseline_id,
+            source_eval_compare_id,
+            source_debugger_session_id,
+        )
+        return _portal_compare_seed_card(row)
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).lower()
+        if "unique" not in msg and "duplicate" not in msg:
+            raise
+        # Race: another request inserted the same pair/session.
+        if source_eval_baseline_id and source_eval_compare_id:
+            existing = await client.fetchrow(
+                """
+                SELECT id, org_id, name, agent_id, status, recommendation,
+                       arms, sample_ids,
+                       source_eval_baseline_id, source_eval_compare_id,
+                       source_debugger_session_id, created_at, updated_at
+                FROM portal_compare_seeds
+                WHERE org_id = $1
+                  AND source_eval_baseline_id = $2
+                  AND source_eval_compare_id = $3
+                """,
+                org_id,
+                source_eval_baseline_id,
+                source_eval_compare_id,
+            )
+        elif source_debugger_session_id:
+            existing = await client.fetchrow(
+                """
+                SELECT id, org_id, name, agent_id, status, recommendation,
+                       arms, sample_ids,
+                       source_eval_baseline_id, source_eval_compare_id,
+                       source_debugger_session_id, created_at, updated_at
+                FROM portal_compare_seeds
+                WHERE org_id = $1
+                  AND source_debugger_session_id = $2
+                """,
+                org_id,
+                source_debugger_session_id,
+            )
+        else:
+            raise
+        if existing is None:
+            raise
+        return _portal_compare_seed_card(existing)
+
+
+@router.post("/compare/experiments/seed", response_model=AbExperimentCard)
+async def seed_portal_compare_experiment(
+    org_id: str = Depends(require_path_org_access),
+    body: CompareSeedRequest = Body(...),
+    _user: dict = Depends(get_current_user),
+) -> AbExperimentCard:
+    """Create (or return) a durable Compare seed from Evals / Debugger."""
+    client = await _require_pg("Compare experiment seed")
+
+    def _missing_seeds_table(exc: Exception) -> HTTPException | None:
+        msg = str(exc).lower()
+        if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
+            return HTTPException(
+                status_code=503,
+                detail="Compare seeds temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            )
+        return None
+
+    if body.from_source == "evals":
+        baseline_id = (body.baseline_id or "").strip()
+        compare_id = (body.compare_id or "").strip()
+        if not baseline_id or not compare_id:
+            raise HTTPException(
+                status_code=400,
+                detail="baselineId and compareId are required when from=evals",
+            )
+        try:
+            existing = await client.fetchrow(
+                """
+                SELECT id, org_id, name, agent_id, status, recommendation,
+                       arms, sample_ids,
+                       source_eval_baseline_id, source_eval_compare_id,
+                       source_debugger_session_id, created_at, updated_at
+                FROM portal_compare_seeds
+                WHERE org_id = $1
+                  AND source_eval_baseline_id = $2
+                  AND source_eval_compare_id = $3
+                """,
+                org_id,
+                baseline_id,
+                compare_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            missing = _missing_seeds_table(exc)
+            if missing:
+                raise missing from exc
+            raise
+        if existing:
+            return _portal_compare_seed_card(existing)
+
+        control_avg = 0.0
+        treatment_avg = 0.0
+        try:
+            from eden.experiments.offline_runner import OfflineExperimentRunner
+
+            rows = await OfflineExperimentRunner().list_experiments(org_id, limit=200)
+            by_id = {
+                str(r.get("id") or ""): r
+                for r in (rows or [])
+                if isinstance(r, dict) and r.get("id")
+            }
+            for exp_id, slot in ((baseline_id, "control"), (compare_id, "treatment")):
+                detail = by_id.get(exp_id)
+                if not detail:
+                    continue
+                scores = (
+                    detail.get("avg_scores")
+                    or detail.get("avgScores")
+                    or detail.get("scores")
+                    or {}
+                )
+                avg = 0.0
+                if isinstance(scores, dict) and scores:
+                    nums = [
+                        float(v) for v in scores.values() if isinstance(v, (int, float))
+                    ]
+                    if nums:
+                        avg = sum(nums) / len(nums)
+                elif isinstance(detail.get("avg_score"), (int, float)):
+                    avg = float(detail["avg_score"])
+                if slot == "control":
+                    control_avg = avg
+                else:
+                    treatment_avg = avg
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "portal compare seed: optional eval scores skipped: %s",
+                redact_all(str(exc)),
+            )
+
+        name = (body.name or "").strip() or (
+            f"Evals A/B · {baseline_id[:8]} vs {compare_id[:8]}"
+        )
+        arms = _default_compare_arms(
+            control_version=baseline_id,
+            treatment_version=compare_id,
+            control_avg=control_avg,
+            treatment_avg=treatment_avg,
+        )
+        try:
+            return await _insert_portal_compare_seed(
+                client,
+                org_id=org_id,
+                seed_id=f"ab_seed_{uuid.uuid4().hex[:12]}",
+                name=name,
+                agent_id=(body.agent_id or None),
+                arms=arms,
+                source_eval_baseline_id=baseline_id,
+                source_eval_compare_id=compare_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc).lower()
+            if "does not exist" in msg or "undefinedtable" in msg:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Compare seeds temporarily unavailable; please retry",
+                    headers={"Retry-After": "5"},
+                ) from exc
+            logger.warning(
+                "portal compare seed: evals insert failed: %s",
+                redact_all(str(exc)),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Compare experiment seed temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            ) from exc
+
+    # from=debugger
+    session_id = (body.debugger_session or "").strip()
+    if not session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="debuggerSession is required when from=debugger",
+        )
+    existing = None
+    try:
+        existing = await client.fetchrow(
+            """
+            SELECT id, org_id, name, agent_id, status, recommendation,
+                   arms, sample_ids,
+                   source_eval_baseline_id, source_eval_compare_id,
+                   source_debugger_session_id, created_at, updated_at
+            FROM portal_compare_seeds
+            WHERE org_id = $1
+              AND source_debugger_session_id = $2
+            """,
+            org_id,
+            session_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        missing = _missing_seeds_table(exc)
+        if missing:
+            raise missing from exc
+        raise
+    if existing:
+        return _portal_compare_seed_card(existing)
+
+    title = ""
+    agent_id = (body.agent_id or "").strip() or None
+    control_version = ""
+    treatment_version = ""
+    try:
+        from eden.debugger.session import DebugSessionService
+
+        session = await DebugSessionService().get(org_id, session_id)
+        if session is not None:
+            title = str(getattr(session, "title", "") or "")
+            control_version = str(getattr(session, "source_trace_id", "") or "")
+            runs = getattr(session, "runs", None) or []
+            if runs:
+                last = runs[-1]
+                treatment_version = str(
+                    getattr(last, "result_trace_id", None)
+                    or (last.get("result_trace_id") if isinstance(last, dict) else "")
+                    or ""
+                )
+            notes = str(getattr(session, "notes", "") or "")
+            if not agent_id and notes.startswith("agent:"):
+                agent_id = notes.split(":", 1)[1].split()[0].strip() or None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "portal compare seed: debugger session load skipped: %s",
+            redact_all(str(exc)),
+        )
+
+    name = (body.name or "").strip() or title or f"Debugger · {session_id[:8]}"
+    arms = _default_compare_arms(
+        control_version=control_version or session_id,
+        treatment_version=treatment_version or control_version or session_id,
+    )
+    try:
+        return await _insert_portal_compare_seed(
+            client,
+            org_id=org_id,
+            seed_id=f"ab_seed_{uuid.uuid4().hex[:12]}",
+            name=name,
+            agent_id=agent_id,
+            arms=arms,
+            source_debugger_session_id=session_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).lower()
+        if "does not exist" in msg or "undefinedtable" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Compare seeds temporarily unavailable; please retry",
+                headers={"Retry-After": "5"},
+            ) from exc
+        logger.warning(
+            "portal compare seed: debugger insert failed: %s",
+            redact_all(str(exc)),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Compare experiment seed temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
 
 
 # ── GET /guardrails/policies ──────────────────────────────────────
@@ -3022,6 +3673,7 @@ async def list_portal_debugger_sessions(
         # Optional agent hint stashed in notes as ``agent:<id>``.
         if notes.startswith("agent:"):
             agent_id = notes.split(":", 1)[1].split()[0].strip()
+        last_replay = data.get("last_replay")
         out.append(
             DebuggerSessionCard(
                 id=str(data.get("id") or ""),
@@ -3034,6 +3686,7 @@ async def list_portal_debugger_sessions(
                 modeHint=mode,  # type: ignore[arg-type]
                 notes=notes,
                 updatedAt=_iso(data.get("updated_at") or data.get("created_at")),
+                lastReplay=last_replay if isinstance(last_replay, dict) else None,
             )
         )
     return out

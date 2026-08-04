@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { StickyNote } from "lucide-react";
@@ -26,7 +26,7 @@ import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
-import { debuggerApi } from "@/lib/api/resources";
+import { debuggerApi, debugSessionsApi } from "@/lib/api/resources";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { EmptyState } from "@/lab/lab-ui";
@@ -78,6 +78,33 @@ function liveTraceList() {
   return catalogTraces();
 }
 
+/** Normalize portal/API lastReplay (snake or camel) into fixture shape. */
+function mapLastReplay(
+  raw: unknown,
+): DebuggerSessionFixture["lastReplay"] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const outcome = r.outcome;
+  if (outcome !== "ok" && outcome !== "error") return undefined;
+  return {
+    at: String(r.at ?? ""),
+    fromCheckpointId: String(r.fromCheckpointId ?? r.from_checkpoint_id ?? ""),
+    outcome,
+    summary: String(r.summary ?? ""),
+  };
+}
+
+function withMappedLastReplay(
+  session: DebuggerSessionFixture,
+): DebuggerSessionFixture {
+  const raw =
+    (session as { lastReplay?: unknown }).lastReplay ??
+    (session as { last_replay?: unknown }).last_replay;
+  const lastReplay = mapLastReplay(raw);
+  if (lastReplay === undefined && raw == null) return session;
+  return { ...session, lastReplay };
+}
+
 function LabDebuggerDetailInner() {
   const params = useParams<{ id: string }>();
   const sessionId = decodeURIComponent(params.id ?? "");
@@ -104,13 +131,14 @@ function LabDebuggerDetailInner() {
     Partial<DebuggerSessionFixture>
   >({});
   const [notesOpen, setNotesOpen] = useState(false);
+  const notesPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const baseSession = useMemo(() => {
-    return (
+    const found =
       sessions.find((s) => s.id === sessionId) ??
       sessionById(sessionId) ??
-      null
-    );
+      null;
+    return found ? withMappedLastReplay(found) : null;
   }, [sessions, sessionId]);
 
   const session = useMemo(() => {
@@ -181,7 +209,17 @@ function LabDebuggerDetailInner() {
   useEffect(() => {
     setSessionPatch({});
     setNotesOpen(false);
+    if (notesPersistTimer.current) {
+      clearTimeout(notesPersistTimer.current);
+      notesPersistTimer.current = null;
+    }
   }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (notesPersistTimer.current) clearTimeout(notesPersistTimer.current);
+    };
+  }, []);
 
   const setMode = useCallback(
     (next: DebuggerMode) => {
@@ -199,8 +237,31 @@ function LabDebuggerDetailInner() {
         }
         return next;
       });
+
+      const id = baseSession?.id;
+      if (!orgId || !id || id.startsWith("dbg_")) return;
+
+      if ("notes" in patch) {
+        if (notesPersistTimer.current) clearTimeout(notesPersistTimer.current);
+        notesPersistTimer.current = setTimeout(() => {
+          void debugSessionsApi.patch(orgId, id, { notes: patch.notes });
+        }, 400);
+      }
+      if ("lastReplay" in patch) {
+        const lr = patch.lastReplay;
+        void debugSessionsApi.patch(orgId, id, {
+          last_replay: lr
+            ? {
+                at: lr.at,
+                from_checkpoint_id: lr.fromCheckpointId,
+                outcome: lr.outcome,
+                summary: lr.summary,
+              }
+            : null,
+        });
+      }
     },
-    [baseSession],
+    [baseSession, orgId],
   );
 
   const onReplay = useCallback(
@@ -224,7 +285,7 @@ function LabDebuggerDetailInner() {
           trace_id: traceId,
           from_step: Math.max(0, fromStep),
           live_prefix: false,
-          session_id: session?.id?.startsWith("dbg_") ? session.id : undefined,
+          session_id: session?.id,
         });
         const diffLen = Array.isArray(result.diff) ? result.diff.length : 0;
         const cpCount = Array.isArray(result.checkpoints)
