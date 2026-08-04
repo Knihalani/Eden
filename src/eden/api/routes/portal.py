@@ -3132,17 +3132,19 @@ def _default_compare_arms(
 
 
 def _jsonish_list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
+    """Normalize a JSONB column value to a list.
+
+    Pure shape-normalization: a non-list / unparseable value *is* "no
+    items", so the empty list here is honest data, not a swallowed
+    failure (no returns inside except — see the silent-empty ratchet).
+    """
+    parsed: Any = value
     if isinstance(value, str):
         try:
             parsed = json.loads(value)
-            return parsed if isinstance(parsed, list) else []
         except Exception:  # noqa: BLE001
-            return []
-    return []
+            parsed = None
+    return parsed if isinstance(parsed, list) else []
 
 
 def _portal_compare_seed_card(row: Any) -> AbExperimentCard:
@@ -3180,7 +3182,9 @@ def _portal_compare_seed_card(row: Any) -> AbExperimentCard:
 async def _list_portal_compare_seeds(org_id: str) -> list[AbExperimentCard]:
     client = await _pg()
     if client is None:
-        return []
+        # Broken infra must never render as "no compare seeds yet".
+        raise _pg_unavailable("compare experiments")
+    rows: list[Any]
     try:
         rows = await client.fetch(
             """
@@ -3197,16 +3201,20 @@ async def _list_portal_compare_seeds(org_id: str) -> list[AbExperimentCard]:
     except Exception as exc:  # noqa: BLE001
         msg = str(exc).lower()
         if "does not exist" in msg or "undefinedtable" in msg or "undefined column" in msg:
+            # Migration 140 not landed yet: genuinely zero seeds, and the
+            # surrounding compare list must keep working — soft-empty is
+            # the honest answer here (schema absence, not query failure).
             logger.warning(
                 "portal compare seeds: table missing: %s",
                 redact_all(str(exc)),
             )
-            return []
-        logger.warning(
-            "portal compare seeds: list failed: %s",
-            redact_all(str(exc)),
-        )
-        return []
+            rows = []
+        else:
+            logger.warning(
+                "portal compare seeds: list failed: %s",
+                redact_all(str(exc)),
+            )
+            raise _pg_unavailable("compare experiments") from exc
     return [_portal_compare_seed_card(r) for r in rows or []]
 
 
