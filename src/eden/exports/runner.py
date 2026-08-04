@@ -164,9 +164,9 @@ def _push_to_destination(
         except ImportError as exc:
             raise ExportDependencyMissingError(
                 "google-cloud-storage is not installed, so this export "
-                "cannot be delivered to GCS. It is not declared in "
-                "pyproject.toml, so this fires for every GCS destination. "
-                "Add the dependency or remove the GCS destination."
+                "cannot be delivered to GCS. Install the optional extra "
+                "(`pip install 'eden[gcs]'` or `uv sync --extra gcs`) "
+                "or remove the GCS destination."
             ) from exc
 
     raise ValueError(f"unsupported destination_type: {destination_type!r}")

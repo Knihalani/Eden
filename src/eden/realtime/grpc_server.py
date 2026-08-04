@@ -155,9 +155,12 @@ def _build_servicer():
                 ev = TraceEvent(
                     event_id=request.event_id,
                     event_type=request.event_type,
+                    timestamp=datetime.now(UTC).isoformat(),
+                    sequence=0,  # Assigned by the store
+                    tenant_id="",  # Populated by the store if available
+                    user_id="",
                     entity_id=request.entity_id,
                     payload=payload,
-                    timestamp=datetime.now(UTC),
                 )
                 await store.append(request.entity_id, ev)
                 return _to_proto_ack(ok=True, event_id=request.event_id)
@@ -181,9 +184,12 @@ def _build_servicer():
                         TraceEvent(
                             event_id=ev.event_id,
                             event_type=ev.event_type,
+                            timestamp=datetime.now(UTC).isoformat(),
+                            sequence=0,  # Assigned by the store
+                            tenant_id="",  # Populated by the store if available
+                            user_id="",
                             entity_id=ev.entity_id,
                             payload=payload,
-                            timestamp=datetime.now(UTC),
                         ),
                     )
                     await upstream.put(ev)

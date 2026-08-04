@@ -378,17 +378,19 @@ class TestB23FleetHookAsync:
         )
 
 
-# ─── B-24: synthetic:true disclaimer in benchmark response ──────
+# ─── B-24: benchmark runner never fabricates a score ─────────────
 
 
 class TestB24SyntheticDisclaimer:
-    """``AgentBenchmarkRunner.run`` returns ``synthetic: True``
-    both at the top level AND inside the ``metrics`` dict
-    (the latter persists to ``agent_benchmark_runs``).
+    """Data-integrity audit 2026-08 supersedes the original
+    B-24 ``synthetic: True`` disclaimer: the runner no longer
+    produces a synthetic score at all. ``run`` must report
+    ``status="insufficient_data"`` with ``score: None`` in the
+    response AND in the persisted ``metrics_json``.
     """
 
     @pytest.mark.asyncio
-    async def test_synthetic_true_in_response_and_metrics(self) -> None:
+    async def test_insufficient_data_in_response_and_metrics(self) -> None:
         from eden.agents.agent_intel.performance import (
             AgentBenchmarkRunner,
         )
@@ -413,24 +415,26 @@ class TestB24SyntheticDisclaimer:
                 dataset_id="synthetic_default",
             )
         d = result["data"]
-        assert d.get("synthetic") is True, (
-            "B-24 regression: top-level response missing synthetic: True"
+        assert d["status"] == "insufficient_data", (
+            "audit regression: benchmark run must not claim completion "
+            "without a real execution backend"
         )
-        assert d["metrics"].get("synthetic") is True, (
-            "B-24 regression: metrics missing synthetic: True "
-            "(would be persisted without the flag)"
+        assert d["metrics"]["score"] is None, (
+            "audit regression: score must be None, never fabricated"
         )
-        # The persisted metrics_json must carry the flag too.
+        assert d["reason"], "audit regression: missing reason field"
+        # The persisted metrics_json must carry the null score too.
         # ``json.dumps`` adds a space after each colon by default,
         # so accept either format.
         written = persist.await_args.kwargs["metrics_json"]
         assert (
-            "\"synthetic\":true" in written
-            or "\"synthetic\": true" in written
+            "\"score\":null" in written
+            or "\"score\": null" in written
         ), (
-            "B-24 regression: persisted metrics_json missing "
-            "synthetic flag"
+            "audit regression: persisted metrics_json must carry "
+            "score: null"
         )
+        assert persist.await_args.kwargs["status"] == "insufficient_data"
 
 
 # ─── B-25: shared httpx.AsyncClient + Semaphore ─────────────────

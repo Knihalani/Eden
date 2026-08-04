@@ -188,6 +188,7 @@ class CIPipeline:
         benchmark_engine: BenchmarkEngine | None = None,
         dataset_registry: DatasetRegistry | None = None,
         work_dir: Path | None = None,
+        allow_simulated_benchmarks: bool = False,
     ):
         """Initialize CI pipeline.
 
@@ -195,6 +196,13 @@ class CIPipeline:
             benchmark_engine: BenchmarkEngine for running regression tests.
             dataset_registry: Registry of golden datasets.
             work_dir: Working directory for temporary files.
+            allow_simulated_benchmarks: Opt-in to the heuristic
+                benchmark simulation. No real case-execution backend
+                exists (the env-gen stack was retired), so by default
+                the benchmark_regression stage is SKIPPED with reason
+                ``execution_unavailable`` instead of fabricating
+                pass/fail results. When True, the simulation runs but
+                every result is labeled ``simulated: True``.
         """
         # BenchmarkEngine was part of the retired env-gen stack; tolerate
         # absence by defaulting to None and letting the benchmark stage
@@ -203,6 +211,7 @@ class CIPipeline:
         self._dataset_registry = dataset_registry or load_canonical_datasets()
         self._work_dir = work_dir or Path("./.eden/ci")
         self._work_dir.mkdir(parents=True, exist_ok=True)
+        self._allow_simulated_benchmarks = allow_simulated_benchmarks
 
     async def run(
         self,
@@ -570,6 +579,24 @@ class CIPipeline:
         baseline_commit: str | None,
     ) -> StageResult:
         """Run benchmark regression against golden datasets."""
+        # Data-integrity audit 2026-08: there is no real
+        # case-execution backend (the env-gen stack was retired), so
+        # by default this stage refuses to fabricate pass/fail
+        # results and reports execution_unavailable instead.
+        if not self._allow_simulated_benchmarks:
+            return StageResult(
+                stage=StageName.BENCHMARK_REGRESSION,
+                status=StageStatus.SKIPPED,
+                details={
+                    "reason": "execution_unavailable",
+                    "detail": (
+                        "no real case-execution backend is available; "
+                        "refusing to fabricate benchmark results. Pass "
+                        "allow_simulated_benchmarks=True to CIPipeline to "
+                        "opt into the labeled heuristic simulation."
+                    ),
+                },
+            )
         try:
             dataset = self._dataset_registry.get("gd_eden_canonical_v1")
             if not dataset:
@@ -591,8 +618,9 @@ class CIPipeline:
                 failed_cases = 0
 
                 for case in cases:
-                    # In production, this would actually run the environment
-                    # For CI pipeline, we simulate with a quality heuristic
+                    # Opt-in simulation (allow_simulated_benchmarks=True):
+                    # a difficulty heuristic, NOT real execution. Every
+                    # result below is labeled simulated: True.
                     case_passed = self._simulate_case_evaluation(case)
                     if case_passed:
                         passed_cases += 1
@@ -635,6 +663,7 @@ class CIPipeline:
                     "regression_detected": regression_detected,
                     "overall_success_rate": round(overall_rate, 3),
                     "category_results": category_results,
+                    "simulated": True,
                 },
             )
 
@@ -646,10 +675,12 @@ class CIPipeline:
             )
 
     def _simulate_case_evaluation(self, case) -> bool:
-        """Simulate case evaluation for CI pipeline.
+        """Simulate case evaluation (opt-in only).
 
-        In production, this would execute the actual environment.
-        For CI, we use a heuristic based on case properties.
+        Only reachable when the pipeline was constructed with
+        ``allow_simulated_benchmarks=True``. This is a difficulty
+        heuristic, not real execution; results carrying it are
+        labeled ``simulated: True`` in the stage details.
         """
         # Simple heuristic: expert-level cases are harder to pass
         difficulty_weights = {

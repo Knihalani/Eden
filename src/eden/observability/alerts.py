@@ -7,17 +7,11 @@ The §9.5.1 alert rules are:
   - KB retrieval p95 > 250ms sustained for 5min
   - Pipeline timeout rate > 5% sustained for 5min
 
-The engine reads from the same in-memory metrics the rest of the
-observability layer writes to (LatencyHistogram, PipelineMetrics,
-get_provider_error_counts, record_kb_cache_lookup), and pushes
-fired alerts to a Redis stream (``eden_alerts``) for the on-call
-rotation to consume.
-
 In production this would be a real time-series store + a streaming
 windowing layer (ksqlDB / Flink). The in-memory version is the
-minimum-viable implementation; the surface area (rules,
-``AlertsEngine.evaluate()``, alert payload shape) is what the
-§10.3 monitoring layer will replace when we move to Datadog.
+minimum-viable implementation; the surface area (rules, alert
+payload shape) is what the §10.3 monitoring layer will replace
+when we move to Datadog.
 """
 
 from __future__ import annotations
@@ -130,83 +124,3 @@ def _percentile_from_histogram(rows: list[dict], pct: float) -> float | None:
         if count >= threshold_count:
             return float(b_str)
     return None
-
-
-def evaluate_alerts() -> list[Alert]:
-    """Run every default rule against the current metrics. Returns the
-    list of fired alerts."""
-    fired: list[Alert] = []
-
-    # Rule 1: API p95 latency — read the latency histogram
-    try:
-        from eden.api.middleware.latency import get_metrics_snapshot
-        snap = get_metrics_snapshot()
-        p95 = _percentile_from_histogram(snap.get("rows", []), 95.0)
-        if p95 is not None:
-            for rule in DEFAULT_RULES:
-                if rule.rule_id == "api_p95_latency":
-                    a = rule.evaluate(p95)
-                    if a:
-                        a.labels["p95_ms"] = f"{p95:.1f}"
-                        fired.append(a)
-                    break
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("evaluate_alerts: api_p95 check failed: %s", exc)
-
-    # Rule 2: LLM provider error rate
-    try:
-        from eden.llm.client import get_provider_error_counts
-        counts = get_provider_error_counts()
-        for provider, stats in counts.items():
-            rate = stats.get("error_rate", 0.0)
-            for rule in DEFAULT_RULES:
-                if rule.rule_id == "llm_provider_error_rate":
-                    a = rule.evaluate(rate)
-                    if a:
-                        a.labels["provider"] = provider
-                        fired.append(a)
-                    break
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("evaluate_alerts: llm check failed: %s", exc)
-
-    # Rule 3: KB retrieval p95 — we don't have a tiered snapshot
-    # here, so we estimate from the latency middleware. The §11.2
-    # fix means the cache code emits ``kb_cache_lookup`` events;
-    # the alerts engine queries ClickHouse in production. For the
-    # in-memory version, we fall through silently if no events.
-    # (Production: see §10.3 monitoring/alerting pipeline.)
-
-    # Rule 4: Pipeline timeout rate
-    # Note (June 2026): the pipeline-timeout-rate check that used to
-    # live here was retired with the env-gen pipeline. Per-agent
-    # failure-mode alerting now lives in
-    # ``eden.insights.detector_loop`` and the timeout trend is
-    # surfaced by ``eden.predictive`` before it crosses the SLO.
-
-    return fired
-
-
-async def push_alerts_to_redis(alerts: list[Alert], redis_client=None) -> int:
-    """Append fired alerts to the ``eden_alerts`` Redis stream. Returns
-    the number of alerts pushed. Best-effort: failures are logged but
-    never raised."""
-    if not alerts:
-        return 0
-    try:
-        if redis_client is None:
-            from eden.observability.telemetry_collector import _get_redis  # type: ignore
-            redis_client = await _get_redis()
-        import json
-        # XADD eden_alerts * payload <json>
-        # Stream capped at 10k entries (matches STREAM_MAXLEN).
-        for a in alerts:
-            await redis_client.xadd(
-                "eden_alerts",
-                {"payload": json.dumps(a.to_dict())},
-                maxlen=10000,
-                approximate=True,
-            )
-        return len(alerts)
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("push_alerts_to_redis: %s", exc)
-        return 0

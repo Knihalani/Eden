@@ -390,15 +390,68 @@ class DataRetentionManager:
             return 0
 
     async def cleanup_debug_dumps(self, before_date: datetime) -> int:
-        """Delete debug dump files older than the given date."""
-        if self.dry_run:
-            logger.info(f"[DRY RUN] Would delete debug dumps before {before_date.isoformat()}")
+        """Delete debug dump objects older than the given date.
+
+        Debug dumps live under the ``debug/`` prefix of the bronze S3
+        bucket — the same location the ``eden-debug-cleanup`` lifecycle
+        rule and ``StorageLifecycleManager.expire_temporary_data`` cover
+        (see :mod:`eden.data_platform.storage_lifecycle`). This purge
+        honours the policy's cutoff instead of the lifecycle rule's
+        fixed 7 days.
+
+        Returns the number of S3 objects deleted (or, in dry-run, the
+        number that would be deleted). Raises on S3 errors so
+        :meth:`run_retention_policy` records the failure in the report.
+        """
+        bucket = getattr(settings, "bronze_s3_bucket", "")
+        if not bucket:
+            logger.warning("Debug dump cleanup skipped: bronze_s3_bucket not configured")
             return 0
 
-        # In production, this would scan S3 or local filesystem
-        # For now, log the intent
-        logger.info(f"Debug dump cleanup requested before {before_date.isoformat()}")
-        return 0
+        import boto3
+
+        s3 = boto3.client("s3")
+        loop = asyncio.get_event_loop()
+        paginator = s3.get_paginator("list_objects_v2")
+        pages = await loop.run_in_executor(
+            None,
+            lambda: list(paginator.paginate(Bucket=bucket, Prefix="debug/")),
+        )
+        to_delete: list[dict[str, str]] = [
+            {"Key": obj["Key"]}
+            for page in pages
+            for obj in page.get("Contents", [])
+            if obj["LastModified"].replace(tzinfo=UTC) < before_date
+        ]
+
+        if not to_delete:
+            logger.info(f"No debug dumps older than {before_date.isoformat()} in s3://{bucket}/debug/")
+            return 0
+
+        if self.dry_run:
+            logger.info(
+                f"[DRY RUN] Would delete {len(to_delete)} debug dumps "
+                f"before {before_date.isoformat()} from s3://{bucket}/debug/"
+            )
+            return len(to_delete)
+
+        deleted = 0
+        # delete_objects accepts at most 1000 keys per request.
+        for i in range(0, len(to_delete), 1000):
+            chunk = to_delete[i : i + 1000]
+            await loop.run_in_executor(
+                None,
+                lambda objs=chunk: s3.delete_objects(
+                    Bucket=bucket,
+                    Delete={"Objects": objs},
+                ),
+            )
+            deleted += len(chunk)
+        logger.info(
+            f"Deleted {deleted} debug dumps from s3://{bucket}/debug/ "
+            f"before {before_date.isoformat()}"
+        )
+        return deleted
 
     async def run_retention_policy(self, policy: RetentionPolicy) -> RetentionReport:
         """Run a single retention policy end-to-end."""

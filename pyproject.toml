@@ -144,6 +144,14 @@ dev = [
 parquet = [
     "pyarrow>=17.0.0,<22.0.0",
 ]
+# GCS export destination (eden.exports.runner). Optional (not in
+# [project.dependencies]) because only deployments that configure a
+# GCS export destination need it; install with
+# `pip install -e '.[gcs]'` (or `uv sync --extra gcs`) to enable
+# delivery of scheduled exports to Google Cloud Storage buckets.
+gcs = [
+    "google-cloud-storage>=2,<4",
+]
 
 
 # Phase 2: the env-gen pipeline (and its `eden` console script entry

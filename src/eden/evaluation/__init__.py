@@ -1,23 +1,13 @@
-"""Eden CI/CD Evaluation & Canary Deployment System.
+"""Eden CI/CD Evaluation System.
 
-Phase 5.6: Continuous evaluation, golden datasets, canary deployments,
-security scanning, auto-dataset promotion, and review gates.
+Phase 5.6: Continuous evaluation, golden datasets, security scanning,
+auto-dataset promotion, and review gates.
 """
 
 from .auto_dataset import (
     AutoDatasetPromoter,
     TraceQualityScore,
     TraceQualityScorer,
-)
-from .canary import (
-    CanaryDeployment,
-    CanaryResult,
-    CanaryStatus,
-    DeploymentConfig,
-    DeploymentStrategy,
-    MetricThreshold,
-    RollbackController,
-    RolloutStage,
 )
 from .ci_pipeline import (
     CIPipeline,
@@ -67,15 +57,6 @@ __all__ = [
     "StageStatus",
     "StageResult",
     "PipelineReport",
-    # Canary deployment
-    "CanaryDeployment",
-    "CanaryResult",
-    "DeploymentConfig",
-    "MetricThreshold",
-    "RollbackController",
-    "DeploymentStrategy",
-    "CanaryStatus",
-    "RolloutStage",
     # Review gates
     "RiskClassifier",
     "RiskLevel",

@@ -30,12 +30,14 @@ Five services:
   ``agent_relationships`` already; the analyzer is a view,
   not a sink).
 
-* :class:`AgentBenchmarkRunner` — runs a tiny deterministic
-  synthetic benchmark for the requested ``agent_id`` and
-  ``dataset_id``. Persists one row to
-  ``agent_benchmark_runs`` per ``(org, agent, dataset)``
-  tuple. v0 ships a synthetic_default suite of
-  ``BENCHMARK_TASK_COUNT`` tasks; the real AgentBench /
+* :class:`AgentBenchmarkRunner` — validates a benchmark
+  request for the requested ``agent_id`` and ``dataset_id``
+  and persists one row to ``agent_benchmark_runs`` per
+  ``(org, agent, dataset)`` tuple. No execution backend
+  exists yet (the multi-agent executor is not on the hot
+  path), so runs honestly report
+  ``status="insufficient_data"`` with ``score: None`` —
+  never a fabricated score. The real AgentBench /
   SWE-bench / τ-bench / GAIA suites ship in a later phase.
 
 * :class:`AgentFleetService` — LangSmith-Fleet-style
@@ -63,10 +65,7 @@ import json
 import logging
 from typing import Any
 
-from eden.util.stable_hash import stable_hash
-
 from ._common import (
-    BENCHMARK_TASK_COUNT,
     BOTTLENECK_MIN_CALLS,
     DISPLAY_NAME_MAX_LEN,
     DRIFT_DELTA_PCT,
@@ -508,21 +507,22 @@ async def _fetch_handoff_volume_buckets(
 
 
 class AgentBenchmarkRunner:
-    """Run a small, deterministic benchmark for an agent.
+    """Validate + record a benchmark request for an agent.
 
-    v0 ships a synthetic_default suite of
-    :data:`BENCHMARK_TASK_COUNT` tasks. Each task is a
-    fixed (input, expected_output) pair; the v0 runner
-    doesn't actually invoke the agent (that requires the
-    multi-agent executor to be on the hot path; deferred to
-    v2). The score is a deterministic function of the
-    ``agent_id`` + ``dataset_id`` strings so the same input
-    produces the same output (idempotent, testable).
+    No execution backend exists yet: actually running a
+    benchmark requires the multi-agent executor on the hot
+    path (deferred to v2), and no other source of real
+    benchmark results is available. Rather than fabricating
+    a score, the runner returns
+    ``status="insufficient_data"`` with ``score: None`` and
+    an explicit ``reason``.
 
     Persists one ``agent_benchmark_runs`` row per
-    ``(org, agent, dataset)`` tuple with ``status="completed"``
-    and a JSON ``metrics`` payload. Re-runnable via
-    DELETE+INSERT.
+    ``(org, agent, dataset)`` tuple with
+    ``status="insufficient_data"`` and a JSON ``metrics``
+    payload (``score: null``) so dashboards can show that a
+    run was requested but could not be executed. Idempotent
+    via ``INSERT ... ON CONFLICT DO UPDATE``.
 
     The :attr:`name` is ``"agent_benchmark"``.
     """
@@ -556,38 +556,34 @@ class AgentBenchmarkRunner:
                 f"valid: {sorted(VALID_BENCHMARKS)}",
             )
 
-        # Deterministic score: stable_hash(agent_id + dataset_id) →
-        # 0.50..0.99. Pure-Python, no RNG, no LLM. This is
-        # the v1 placeholder; the real benchmark suites
-        # (AgentBench, SWE-bench, τ-bench, GAIA) ship in
-        # a later phase. Documented in the appendix and
-        # the v0.5 Open Questions.
-        h = stable_hash((agent_id, dataset_id))
-        score = 0.50 + (h % 50) / 100.0  # 0.50 .. 0.99
-
-        # Audit 2026-07-03 B-24 — ``synthetic: True`` flag at both
-        # the top level AND inside ``metrics``. The metrics payload
-        # is persisted to ``agent_benchmark_runs.metrics_json`` and
-        # later surfaced on the operator dashboard; consumers use
-        # the in-metrics flag (NOT the response-only one) to decide
-        # whether the row counts toward downstream ROI / regression
-        # calculations. Without the in-metrics flag, real ops
-        # decisions will end up trained on a synthetic fixture.
+        # Data-integrity audit 2026-08 — the v1 placeholder
+        # fabricated a score via stable_hash(agent_id +
+        # dataset_id). Eden is an observability product;
+        # invented metrics are unacceptable. Until a real
+        # execution backend exists (multi-agent executor,
+        # v2), report honestly that no benchmark data is
+        # available for this agent. ``score`` is explicitly
+        # ``None`` so downstream ROI / regression consumers
+        # can never mistake the row for a real result.
+        reason = (
+            "no benchmark execution backend is available; "
+            "real benchmark suites (AgentBench, SWE-bench, "
+            "tau-bench, GAIA) ship in a later phase"
+        )
         metrics = {
             "benchmark": benchmark_name,
-            "task_count": BENCHMARK_TASK_COUNT,
-            "tasks_passed": int(score * BENCHMARK_TASK_COUNT),
-            "tasks_failed": BENCHMARK_TASK_COUNT
-            - int(score * BENCHMARK_TASK_COUNT),
-            "score": round(score, 4),
+            "task_count": 0,
+            "tasks_passed": None,
+            "tasks_failed": None,
+            "score": None,
+            "reason": reason,
             "ran_at": _now_iso(),
-            "synthetic": True,
         }
         metrics_json = json.dumps(metrics, sort_keys=True)
 
         await _delete_then_insert_benchmark_run(
             org_id, agent_id, dataset_id,
-            status="completed", metrics_json=metrics_json,
+            status="insufficient_data", metrics_json=metrics_json,
         )
 
         return _ok_envelope(
@@ -596,8 +592,8 @@ class AgentBenchmarkRunner:
                 "org_id": org_id,
                 "agent_id": agent_id,
                 "dataset_id": dataset_id,
-                "status": "completed",
-                "synthetic": True,
+                "status": "insufficient_data",
+                "reason": reason,
                 "metrics": metrics,
             },
         )
