@@ -263,20 +263,37 @@ class TriageAgent:
                 {"issue_id": issue_id, "triage_result": triage_result},
                 status="timeout",
             )
+            llm_error = False
         except Exception as exc:
             logger.warning("triage_agent: investigate failed: %s", exc)
             inv = {}
+            llm_error = True
 
         data = (inv or {}).get("data", {}) if isinstance(inv, dict) else {}
         findings = data.get("findings") or []
         remediations = data.get("proposed_remediations") or []
         llm_used = bool(data.get("llm_used"))
 
+        # Honesty (chaos row d): an LLM failure that fell through to the
+        # heuristic path must NOT be labeled ``source="heuristic"`` with the
+        # 0.5 confidence floor — that is indistinguishable from a genuine
+        # heuristic pass. Label it ``llm_error`` at 0.0 confidence so
+        # downstream trust logic (and operators) can see it never reasoned.
+        if llm_error:
+            source = "llm_error"
+            confidence = 0.0
+        elif llm_used:
+            source = "llm"
+            confidence = _max_confidence(findings)
+        else:
+            source = "heuristic"
+            confidence = _max_confidence(findings)
+
         triage_result = {
             "root_cause": _first_summary(findings)
             or "no detailed root cause identified",
-            "confidence": _max_confidence(findings),
-            "source": "llm" if llm_used else "heuristic",
+            "confidence": confidence,
+            "source": source,
             "auto_escalate": False,
             "p0_checks": [],
             "suggested_actions": _map_remediations(remediations),

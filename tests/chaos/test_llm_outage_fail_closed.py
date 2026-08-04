@@ -120,8 +120,11 @@ async def test_triage_llm_outage_yields_no_auto_actions(monkeypatch):
     # No LLM was used, so the outage must not be billed as one...
     assert tr["source"] != "llm"
     debit.assert_not_awaited()
-    # ...and confidence never exceeds the empty-findings floor.
-    assert tr["confidence"] <= 0.5
+    # ...and the outage is labeled honestly as an LLM error (NOT masquerading
+    # as a genuine heuristic pass at the 0.5 confidence floor) with zero
+    # confidence, so downstream trust logic can see it never reasoned.
+    assert tr["source"] == "llm_error"
+    assert tr["confidence"] == 0.0
 
     # The degraded result IS persisted (visible to humans in the
     # cockpit) and the repo was never asked to advance the status.
