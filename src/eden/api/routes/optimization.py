@@ -92,11 +92,18 @@ class BudgetStatusResponse(BaseModel):
 
 
 class TokenSavingsResponse(BaseModel):
-    """Token optimization savings."""
+    """Token optimization savings.
+
+    ``compression_ratio`` and ``coalesced_requests`` are ``None``
+    when the underlying stat is not tracked. Data-integrity audit
+    2026-08: neither prompt compression nor per-org coalescing
+    counters exist yet (the gateway coalescer keeps no totals), so
+    these must never be filled with placeholder numbers.
+    """
     tokens_saved: int
     estimated_cost_saved_cents: float
-    compression_ratio: float
-    coalesced_requests: int
+    compression_ratio: float | None = None  # None = not tracked
+    coalesced_requests: int | None = None  # None = not tracked
 
 
 class OptimizationOverviewResponse(BaseModel):
@@ -334,13 +341,14 @@ async def _build_optimization_overview(org_id: str, days: int):
     # Rough estimate: T1 costs ~$0.0015/1K tokens, T3 costs ~$0.09/1K tokens
     # Savings per token = ($0.09 - $0.0015) / 1000 = $0.0000885/token = 0.00885 cents/token
     estimated_savings = tokens_saved * 0.00885
-    compression_ratio = 1.0  # Placeholder — would need actual before/after token counts
 
     savings = TokenSavingsResponse(
         tokens_saved=tokens_saved,
         estimated_cost_saved_cents=round(estimated_savings, 4),
-        compression_ratio=compression_ratio,
-        coalesced_requests=0,  # Would need coalescer singleton
+        # Not tracked: no before/after token counts and no
+        # coalescer totals exist. None, never a placeholder.
+        compression_ratio=None,
+        coalesced_requests=None,
     )
 
     return OptimizationOverviewResponse(
@@ -399,8 +407,8 @@ def _empty_optimization_overview(org_id: str, days: int) -> OptimizationOverview
         savings=TokenSavingsResponse(
             tokens_saved=0,
             estimated_cost_saved_cents=0.0,
-            compression_ratio=1.0,
-            coalesced_requests=0,
+            compression_ratio=None,
+            coalesced_requests=None,
         ),
     )
 
@@ -660,8 +668,9 @@ async def get_token_savings(
 ):
     """Get estimated token and cost savings from optimization.
 
-    Shows tokens saved by routing to cheaper tiers, estimated cost savings,
-    and coalesced request counts.
+    Shows tokens saved by routing to cheaper tiers and estimated
+    cost savings. ``compression_ratio`` and ``coalesced_requests``
+    are ``None`` — those stats are not tracked yet.
     """
 
     router_stats = _get_model_router().get_stats()
@@ -671,8 +680,10 @@ async def get_token_savings(
     return TokenSavingsResponse(
         tokens_saved=tokens_saved,
         estimated_cost_saved_cents=round(estimated_savings, 4),
-        compression_ratio=1.0,
-        coalesced_requests=0,
+        # Not tracked: no before/after token counts and no
+        # coalescer totals exist. None, never a placeholder.
+        compression_ratio=None,
+        coalesced_requests=None,
     )
 
 

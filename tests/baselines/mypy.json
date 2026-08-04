@@ -88,7 +88,6 @@
   "src/eden/decision/_common.py": 9,
   "src/eden/evaluation/agentic_metrics/service.py": 1,
   "src/eden/evaluation/auto_dataset.py": 2,
-  "src/eden/evaluation/canary.py": 3,
   "src/eden/evaluation/ci_pipeline.py": 4,
   "src/eden/evaluation/descriptors/parse.py": 1,
   "src/eden/evaluation/labeling.py": 4,

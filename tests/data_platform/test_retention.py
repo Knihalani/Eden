@@ -55,9 +55,14 @@ class TestDataRetentionManager:
 
     @pytest.mark.asyncio
     async def test_cleanup_debug_dumps(self):
+        from unittest.mock import patch
+
         manager = DataRetentionManager(dry_run=True)
         before = datetime.now(UTC) - timedelta(days=8)
-        count = await manager.cleanup_debug_dumps(before)
+        # No bucket configured: nothing to scan, count stays honest at 0.
+        with patch("eden.data_platform.retention.settings") as mock_settings:
+            mock_settings.bronze_s3_bucket = ""
+            count = await manager.cleanup_debug_dumps(before)
         assert count == 0
 
     @pytest.mark.asyncio
@@ -234,6 +239,96 @@ async def test_write_s3_archive_failure_returns_zero_not_raises():
         mock_settings.bronze_s3_bucket = "cold-bucket"
         written = await mgr._write_s3_archive(rows, "silver_events")
     assert written == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_debug_dumps_deletes_only_old_objects():
+    """Real cleanup: debug/ objects older than the cutoff are deleted."""
+    from unittest.mock import MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    before = datetime.now(UTC) - timedelta(days=7)
+    old_obj = {
+        "Key": "debug/old-dump.json",
+        "LastModified": datetime.now(UTC) - timedelta(days=30),
+    }
+    fresh_obj = {
+        "Key": "debug/fresh-dump.json",
+        "LastModified": datetime.now(UTC),
+    }
+    fake_s3 = MagicMock()
+    fake_s3.get_paginator.return_value.paginate.return_value = [
+        {"Contents": [old_obj, fresh_obj]}
+    ]
+    with (
+        patch("eden.data_platform.retention.settings") as mock_settings,
+        patch("boto3.client", return_value=fake_s3),
+    ):
+        mock_settings.bronze_s3_bucket = "cold-bucket"
+        deleted = await mgr.cleanup_debug_dumps(before)
+
+    assert deleted == 1
+    fake_s3.get_paginator.return_value.paginate.assert_called_once_with(
+        Bucket="cold-bucket", Prefix="debug/"
+    )
+    fake_s3.delete_objects.assert_called_once_with(
+        Bucket="cold-bucket",
+        Delete={"Objects": [{"Key": "debug/old-dump.json"}]},
+    )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_debug_dumps_dry_run_counts_without_deleting():
+    from unittest.mock import MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=True)
+    before = datetime.now(UTC) - timedelta(days=7)
+    old_obj = {
+        "Key": "debug/old-dump.json",
+        "LastModified": datetime.now(UTC) - timedelta(days=30),
+    }
+    fake_s3 = MagicMock()
+    fake_s3.get_paginator.return_value.paginate.return_value = [
+        {"Contents": [old_obj]}
+    ]
+    with (
+        patch("eden.data_platform.retention.settings") as mock_settings,
+        patch("boto3.client", return_value=fake_s3),
+    ):
+        mock_settings.bronze_s3_bucket = "cold-bucket"
+        deleted = await mgr.cleanup_debug_dumps(before)
+
+    assert deleted == 1
+    fake_s3.delete_objects.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_debug_dumps_no_bucket_returns_zero():
+    from unittest.mock import patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    with patch("eden.data_platform.retention.settings") as mock_settings:
+        mock_settings.bronze_s3_bucket = ""
+        deleted = await mgr.cleanup_debug_dumps(datetime.now(UTC))
+    assert deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_debug_dumps_failure_lands_in_report_errors():
+    """S3 errors propagate so run_retention_policy records them."""
+    from unittest.mock import patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "debug_dumps")
+    with (
+        patch("eden.data_platform.retention.settings") as mock_settings,
+        patch("boto3.client", side_effect=RuntimeError("S3 down")),
+    ):
+        mock_settings.bronze_s3_bucket = "cold-bucket"
+        report = await mgr.run_retention_policy(policy)
+
+    assert any("Debug dump cleanup failed" in e for e in report.errors)
+    assert report.deleted_rows == 0
 
 
 @pytest.mark.asyncio

@@ -7,8 +7,9 @@ branches, write the payload to /tmp/eden-exports, and return
 audit row quoting the byte count — for bytes that never left the box
 and disappeared on the next container restart.
 
-google-cloud-storage is in neither pyproject.toml nor uv.lock, so the
-GCS branch took that path on every single run. The exported catalogs
+google-cloud-storage is only declared as the optional ``gcs`` extra
+(``pip install 'eden[gcs]'``), so the GCS branch took that path on
+every run where the extra was not installed. The exported catalogs
 carry PII (audit log lines, judge rationales), which made this an
 unencrypted PII write to container-local disk underneath an audit trail
 that asserted successful delivery.
@@ -25,8 +26,8 @@ import os
 import pytest
 
 from eden.exports.runner import (
-    ExportDependencyMissingError,
     _LOCAL_FALLBACK_DIR,
+    ExportDependencyMissingError,
     _push_to_destination,
 )
 
@@ -87,6 +88,17 @@ class TestCloudDestinationsFailLoudly:
                 config={"bucket": "b", "credentials": {}},
             )
         assert expected in str(excinfo.value)
+
+    def test_gcs_error_message_names_the_install_extra(self, no_cloud_sdks):
+        """Operators should be told the exact remedy: the `gcs` extra."""
+        with pytest.raises(ExportDependencyMissingError) as excinfo:
+            _push_to_destination(
+                destination_type="gcs",
+                destination_name="x.jsonl",
+                payload=PAYLOAD,
+                config={"bucket": "b", "credentials": {}},
+            )
+        assert "eden[gcs]" in str(excinfo.value)
 
 
 class TestDownloadStillWritesLocally:

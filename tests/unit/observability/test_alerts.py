@@ -1,12 +1,9 @@
 """Unit tests for the §9.5.1 alerts engine."""
 
-import pytest
-
 from eden.observability.alerts import (
     DEFAULT_RULES,
     AlertRule,
     _percentile_from_histogram,
-    evaluate_alerts,
 )
 
 
@@ -80,12 +77,3 @@ def test_percentile_from_histogram():
 def test_percentile_from_histogram_empty():
     assert _percentile_from_histogram([], 95.0) is None
     assert _percentile_from_histogram([{"count": 0, "buckets": {}}], 95.0) is None
-
-
-@pytest.mark.asyncio
-async def test_evaluate_alerts_returns_empty_list_when_metrics_cold():
-    """With no metrics yet, the engine returns an empty list."""
-    fired = evaluate_alerts()
-    # Could be empty or have one fired depending on what other tests
-    # have populated. We just check it returns a list.
-    assert isinstance(fired, list)

@@ -12,8 +12,9 @@ The five real services shipped in the v1 implementation:
   graph builder
 * :class:`HandoffAnalyzer` — bottleneck / error-hotspot /
   drift classifier on the relationship graph
-* :class:`AgentBenchmarkRunner` — deterministic synthetic
-  benchmark runner
+* :class:`AgentBenchmarkRunner` — benchmark request
+  recorder (no execution backend yet; reports
+  ``insufficient_data``, never a fabricated score)
 * :class:`AgentFleetService` — LangSmith-Fleet-style agent
   identity + permissions (with the closed-loop
   re-registration drift hook)

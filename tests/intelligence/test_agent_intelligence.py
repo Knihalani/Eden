@@ -461,7 +461,7 @@ class TestHandoffAnalyzer:
 
 class TestAgentBenchmarkRunner:
     @pytest.mark.asyncio
-    async def test_runs_synthetic_default(
+    async def test_reports_insufficient_data_not_fabricated_score(
         self, mock_postgres_client: MagicMock
     ) -> None:
         from eden.agents.agent_intel.performance import AgentBenchmarkRunner
@@ -475,16 +475,20 @@ class TestAgentBenchmarkRunner:
                     "org_test", "agent_a", dataset_id="synthetic_default"
                 )
         assert result["status"] == "ok"
-        m = result["data"]["metrics"]
-        assert 0.50 <= m["score"] <= 0.99
+        d = result["data"]
+        assert d["status"] == "insufficient_data"
+        assert d["reason"]
+        m = d["metrics"]
+        assert m["score"] is None
+        assert m["tasks_passed"] is None
+        assert m["tasks_failed"] is None
+        assert m["task_count"] == 0
         assert m["benchmark"] == "synthetic_default"
-        assert m["task_count"] == 10
-        assert m["tasks_passed"] + m["tasks_failed"] == 10
-        assert result["data"]["status"] == "completed"
+        assert m["reason"]
         persist.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_deterministic_for_same_input(
+    async def test_persists_insufficient_data_status(
         self, mock_postgres_client: MagicMock
     ) -> None:
         from eden.agents.agent_intel.performance import AgentBenchmarkRunner
@@ -493,14 +497,13 @@ class TestAgentBenchmarkRunner:
             with patch(
                 "eden.agents.agent_intel.performance._delete_then_insert_benchmark_run",
                 new=AsyncMock(),
-            ):
-                r1 = await AgentBenchmarkRunner().run(
+            ) as persist:
+                await AgentBenchmarkRunner().run(
                     "org_test", "agent_a", dataset_id="synthetic_default"
                 )
-                r2 = await AgentBenchmarkRunner().run(
-                    "org_test", "agent_a", dataset_id="synthetic_default"
-                )
-        assert r1["data"]["metrics"]["score"] == r2["data"]["metrics"]["score"]
+        kwargs = persist.await_args.kwargs
+        assert kwargs["status"] == "insufficient_data"
+        assert '"score": null' in kwargs["metrics_json"]
 
     @pytest.mark.asyncio
     async def test_unknown_benchmark_rejected(
@@ -919,6 +922,10 @@ def test_benchmark_run_route_returns_envelope(agents_client: TestClient) -> None
     data = resp.json()
     assert data["feature"] == "agent_benchmark"
     assert data["status"] == "ok"
+    # No execution backend exists: the route must report
+    # insufficient data, never a fabricated score.
+    assert data["data"]["status"] == "insufficient_data"
+    assert data["data"]["metrics"]["score"] is None
 
 
 def test_fleet_identity_route_returns_envelope(agents_client: TestClient) -> None:
