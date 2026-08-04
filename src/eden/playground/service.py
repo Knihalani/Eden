@@ -2,21 +2,35 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from eden.playground.diff import char_diff, grade_outputs
 from eden.playground.llm_handler import make_playground_handler
+from eden.playground.scorers import aggregate_score, run_scorers
+from eden.playground.span_seed import extract_span_seed, fetch_span_step
 from eden.prompts.registry import (
     Playground,
     PromptTemplate,
 )
 
 logger = logging.getLogger(__name__)
+
+# Progress callback for run streaming: awaited with each event dict.
+RunEventCallback = Callable[[dict[str, Any]], Awaitable[None]]
+
+# Optional injected span fetcher (unit tests / alternate stores).
+SpanFetcher = Callable[..., Awaitable[dict[str, Any] | None]]
+
+_MAX_ROWS = 50
+_DEFAULT_CONCURRENCY = 5
 
 
 @dataclass
@@ -44,9 +58,16 @@ class PlaygroundRecord:
 class PlaygroundService:
     """Org-scoped playgrounds with write-through Postgres (memory fallback)."""
 
-    def __init__(self, pg: Any | None = None, *, memory_only: bool = False) -> None:
+    def __init__(
+        self,
+        pg: Any | None = None,
+        *,
+        memory_only: bool = False,
+        span_fetcher: SpanFetcher | None = None,
+    ) -> None:
         self._pg = pg
         self._memory_only = memory_only
+        self._span_fetcher = span_fetcher
         self._memory: dict[str, PlaygroundRecord] = {}
         self._runs: dict[str, list[dict[str, Any]]] = {}
 
@@ -165,6 +186,27 @@ class PlaygroundService:
         )
         return _row_to_pg(dict(row)) if row else None
 
+    async def _load_span_seed(
+        self, org_id: str, *, trace_id: str, span_id: str | None
+    ) -> dict[str, Any] | None:
+        """Load + extract the stored request for a span (None when absent)."""
+        step: dict[str, Any] | None = None
+        if self._span_fetcher is not None:
+            step = await self._span_fetcher(
+                org_id=org_id, trace_id=trace_id, span_id=span_id
+            )
+        elif not self._memory_only:
+            try:
+                step = await fetch_span_step(
+                    org_id=org_id, trace_id=trace_id, span_id=span_id
+                )
+            except Exception as exc:
+                logger.warning("from_span: span fetch failed: %s", exc)
+                step = None
+        if not step:
+            return None
+        return extract_span_seed(step)
+
     async def from_span(
         self,
         org_id: str,
@@ -176,27 +218,44 @@ class PlaygroundService:
         tools: list[dict[str, Any]] | None = None,
         created_by: str | None = None,
     ) -> PlaygroundRecord:
-        user_text = ""
-        system_text = ""
-        for m in messages or []:
-            role = str(m.get("role") or "")
-            content = str(m.get("content") or "")
-            if role == "system" and not system_text:
-                system_text = content
-            elif role in ("user", "human") and not user_text or not user_text and content:
-                user_text = content
-        if not user_text:
-            user_text = f"Replay span {span_id or 'root'} from trace {trace_id}"
+        """Seed a playground from a span's stored request.
+
+        Hydrates messages/model/params/tools server-side from
+        ``telemetry_events`` (span-level row first, then the trace's
+        first ``agent.step`` / ``llm_call``). Client-supplied
+        ``messages`` / ``model`` / ``tools`` are only a fallback when
+        nothing usable is stored; when neither side has usable prompt
+        content a ``ValueError`` is raised.
+        """
+        seed = await self._load_span_seed(
+            org_id, trace_id=trace_id, span_id=span_id
+        )
+        if seed is not None:
+            seed_messages = list(seed.get("messages") or [])
+            seed_model = seed.get("model")
+            seed_tools = list(seed.get("tools") or []) or list(tools or [])
+            seed_params = dict(seed.get("params") or {})
+        else:
+            seed_messages = list(messages or [])
+            seed_model = None
+            seed_tools = list(tools or [])
+            seed_params = {}
+        system_text, user_text = _split_messages(seed_messages)
+        if not user_text and not system_text:
+            raise ValueError("no usable prompt content for span")
         cfg = _default_config()
         cfg["source"] = {"trace_id": trace_id, "span_id": span_id}
+        if seed_params:
+            cfg["params"] = seed_params
+        task_model = str(seed_model or model or "t1")
         cfg["tasks"] = [
             {
                 "id": "task_a",
                 "label": "From span",
                 "system": system_text,
                 "user": user_text or "{{user}}",
-                "model": model or "t1",
-                "tools": tools or [],
+                "model": task_model,
+                "tools": seed_tools,
             },
             {
                 "id": "task_b",
@@ -204,7 +263,7 @@ class PlaygroundService:
                 "system": system_text,
                 "user": user_text or "{{user}}",
                 "model": "t2",
-                "tools": tools or [],
+                "tools": seed_tools,
             },
         ]
         name = f"From span {span_id or trace_id[:8]}"
@@ -217,7 +276,18 @@ class PlaygroundService:
         *,
         params: dict[str, Any] | None = None,
         dataset_rows: list[dict[str, Any]] | None = None,
+        on_event: RunEventCallback | None = None,
     ) -> dict[str, Any]:
+        """Run the task × row matrix with bounded concurrency.
+
+        Cells run concurrently under an ``asyncio.Semaphore`` sized by
+        the config field ``concurrency`` (clamped 1..10, default 5).
+        Optional ``on_event`` is awaited with progress dicts:
+        ``{"type": "start", ...}`` → one ``{"type": "cell", ...}`` per
+        task × row → ``{"type": "done", "run_id", "totals"}``. A cell
+        failure is recorded on that cell only; cancellation persists the
+        partial run with status ``"cancelled"`` and re-raises.
+        """
         rec = await self.get(org_id, playground_id)
         if rec is None:
             raise ValueError("playground not found")
@@ -225,20 +295,54 @@ class PlaygroundService:
         tasks = list(rec.config.get("tasks") or [])
         if not tasks:
             tasks = [_default_task()]
-        rows = dataset_rows or [{"id": "adhoc", "input": params.get("user", "")}]
-        scorers = list(rec.config.get("scorers") or [])
+        rows = list(
+            dataset_rows or [{"id": "adhoc", "input": params.get("user", "")}]
+        )[:_MAX_ROWS]
+        global_scorers = list(rec.config.get("scorers") or [])
+        concurrency = _clamp_concurrency(rec.config.get("concurrency"))
         runner = Playground(make_playground_handler(org_id))
-        matrix: list[dict[str, Any]] = []
-        total_cost = 0.0
-        for row in rows[:50]:
+        run_id = str(uuid.uuid4())
+        started = time.perf_counter()
+
+        async def _emit(event: dict[str, Any]) -> None:
+            if on_event is None:
+                return
+            try:
+                await on_event(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("playground run event callback failed: %s", exc)
+
+        row_ctx: list[tuple[int, str, dict[str, Any], str | None]] = []
+        for row_index, row in enumerate(rows):
             row_id = str(row.get("id") or uuid.uuid4())
+            expected_raw = row.get("expected_output", params.get("expected"))
+            expected = None if expected_raw is None else str(expected_raw)
             row_params = {
                 **params,
                 "user": str(row.get("input") or params.get("user") or ""),
-                "expected": str(row.get("expected_output") or ""),
+                "expected": expected or "",
             }
-            task_results: list[dict[str, Any]] = []
-            for task in tasks:
+            row_ctx.append((row_index, row_id, row_params, expected))
+
+        cells: dict[tuple[int, int], dict[str, Any]] = {}
+        totals = {
+            "cost_usd": 0.0,
+            "cells": len(tasks) * len(row_ctx),
+            "errors": 0,
+        }
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _run_cell(
+            task_index: int,
+            task: dict[str, Any],
+            row_index: int,
+            row_params: dict[str, Any],
+            expected: str | None,
+        ) -> None:
+            task_id = str(task.get("id") or f"task_{task_index}")
+            async with sem:
                 template = PromptTemplate(
                     name=str(task.get("label") or task.get("id") or "task"),
                     system=str(task.get("system") or ""),
@@ -250,84 +354,107 @@ class PlaygroundService:
                     optional_params=["expected"],
                     model=str(task.get("model") or "t1"),
                 )
-                # Ensure required params satisfied for freeform templates.
-                if "user" not in row_params:
-                    row_params["user"] = ""
                 try:
-                    result = await runner.run(template, row_params)
+                    result = await runner.run(template, dict(row_params))
+                except asyncio.CancelledError:
+                    raise
                 except Exception as exc:
-                    result_dict = {
+                    # Provider/cell failure — record it, let siblings run.
+                    cells[(task_index, row_index)] = {
                         "task_id": task.get("id"),
                         "error": str(exc),
                         "response": "",
                         "cost_usd": 0.0,
                     }
-                    task_results.append(result_dict)
-                    continue
+                    totals["errors"] += 1
+                    await _emit(
+                        {
+                            "type": "cell",
+                            "task_id": task_id,
+                            "row_index": row_index,
+                            "status": "error",
+                            "error": str(exc),
+                        }
+                    )
+                    return
                 cost = float(result.cost_usd or 0.0)
-                total_cost += cost
-                scores: dict[str, Any] = {}
-                for scorer in scorers:
-                    name = str(scorer.get("name") or "exact")
-                    expected = row_params.get("expected", "")
-                    if name == "exact_match":
-                        scores[name] = 1.0 if result.response == expected else 0.0
-                    else:
-                        scores[name] = 0.5
-                task_results.append(
+                totals["cost_usd"] += cost
+                specs = list(task.get("scorers") or global_scorers)
+                scores = run_scorers(
+                    specs, output=result.response, expected=expected
+                )
+                cells[(task_index, row_index)] = {
+                    "task_id": task.get("id"),
+                    "label": task.get("label"),
+                    "model": result.model,
+                    "response": result.response,
+                    "latency_ms": result.latency_ms,
+                    "cost_usd": cost,
+                    "scores": scores,
+                }
+                await _emit(
                     {
-                        "task_id": task.get("id"),
-                        "label": task.get("label"),
-                        "model": result.model,
-                        "response": result.response,
+                        "type": "cell",
+                        "task_id": task_id,
+                        "row_index": row_index,
+                        "status": "ok",
+                        "output": result.response,
+                        "score": aggregate_score(scores),
+                        "scores": scores,
                         "latency_ms": result.latency_ms,
                         "cost_usd": cost,
-                        "scores": scores,
                     }
                 )
-            grade = "tie"
-            delta = 0.0
-            diff: dict[str, Any] | None = None
-            if len(task_results) >= 2:
-                a = task_results[0]
-                b = task_results[1]
-                grade, delta = grade_outputs(
-                    str(a.get("response") or ""),
-                    str(b.get("response") or ""),
-                    control_score=float(
-                        (a.get("scores") or {}).get("exact_match", 0.5) or 0.5
-                    ),
-                    treatment_score=float(
-                        (b.get("scores") or {}).get("exact_match", 0.5) or 0.5
-                    ),
-                    control_cost=float(a.get("cost_usd") or 0),
-                    treatment_cost=float(b.get("cost_usd") or 0),
-                )
-                diff = char_diff(
-                    str(a.get("response") or ""), str(b.get("response") or "")
-                )
-            matrix.append(
-                {
-                    "row_id": row_id,
-                    "input": row_params.get("user"),
-                    "tasks": task_results,
-                    "grade": grade,
-                    "score_delta": delta,
-                    "diff": diff,
-                }
+
+        await _emit(
+            {
+                "type": "start",
+                "run_id": run_id,
+                "playground_id": playground_id,
+                "cells": totals["cells"],
+            }
+        )
+        futures = [
+            asyncio.ensure_future(
+                _run_cell(task_index, task, row_index, row_params, expected)
             )
-        run_id = str(uuid.uuid4())
-        payload = {
-            "run_id": run_id,
-            "playground_id": playground_id,
-            "status": "completed",
-            "matrix": matrix,
-            "cost_usd": round(total_cost, 6),
-            "task_count": len(tasks),
-            "row_count": len(matrix),
-            "created_at": datetime.now(UTC).isoformat(),
-        }
-        await self._persist_run(org_id, playground_id, run_id, payload, total_cost)
+            for row_index, _row_id, row_params, expected in row_ctx
+            for task_index, task in enumerate(tasks)
+        ]
+        try:
+            await asyncio.gather(*futures)
+        except asyncio.CancelledError:
+            for fut in futures:
+                fut.cancel()
+            payload = _build_run_payload(
+                run_id, playground_id, "cancelled", row_ctx, tasks, cells, totals
+            )
+            try:
+                await self._persist_run(
+                    org_id, playground_id, run_id, payload, totals["cost_usd"]
+                )
+            except Exception as exc:
+                logger.warning("cancelled run persist failed: %s", exc)
+            _record_run_metrics(started, totals["cost_usd"])
+            raise
+        payload = _build_run_payload(
+            run_id, playground_id, "completed", row_ctx, tasks, cells, totals
+        )
+        await self._persist_run(
+            org_id, playground_id, run_id, payload, totals["cost_usd"]
+        )
+        _record_run_metrics(started, totals["cost_usd"])
+        await _emit(
+            {
+                "type": "done",
+                "run_id": run_id,
+                "totals": {
+                    "cost_usd": round(totals["cost_usd"], 6),
+                    "cells": totals["cells"],
+                    "errors": totals["errors"],
+                },
+            }
+        )
         return payload
 
     async def promote_experiment(
@@ -382,13 +509,127 @@ class PlaygroundService:
                 run_id,
                 playground_id,
                 org_id,
-                "completed",
+                str(payload.get("status") or "completed"),
                 json.dumps(payload),
                 cost_usd,
             )
         except Exception as exc:
             logger.warning("playground_run persist failed: %s", exc)
             self._runs.setdefault(playground_id, []).append(payload)
+
+
+def _clamp_concurrency(raw: Any) -> int:
+    """Clamp the config ``concurrency`` field to 1..10 (default 5)."""
+    try:
+        value = int(raw) if raw is not None else _DEFAULT_CONCURRENCY
+    except (TypeError, ValueError):
+        value = _DEFAULT_CONCURRENCY
+    return max(1, min(value, 10))
+
+
+def _split_messages(messages: list[dict[str, Any]]) -> tuple[str, str]:
+    """Return ``(system_text, user_text)`` from a chat messages array."""
+    system_text = ""
+    user_text = ""
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        role = str(m.get("role") or "")
+        content = m.get("content")
+        if isinstance(content, list):
+            content = "\n".join(
+                str(block.get("text") or "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        content = str(content or "")
+        if role == "system" and not system_text:
+            system_text = content
+        elif role in ("user", "human") and not user_text and content:
+            user_text = content
+    return system_text, user_text
+
+
+def _grade_score(cell: dict[str, Any]) -> float:
+    """Aggregate cell score for comparison grading (neutral 0.5 fallback).
+
+    The neutral fallback is grading-only plumbing for
+    :func:`grade_outputs`; recorded scores themselves are never
+    fabricated (see :mod:`eden.playground.scorers`).
+    """
+    agg = aggregate_score(cell.get("scores") or [])
+    return 0.5 if agg is None else float(agg)
+
+
+def _build_run_payload(
+    run_id: str,
+    playground_id: str,
+    status: str,
+    row_ctx: list[tuple[int, str, dict[str, Any], str | None]],
+    tasks: list[dict[str, Any]],
+    cells: dict[tuple[int, int], dict[str, Any]],
+    totals: dict[str, Any],
+) -> dict[str, Any]:
+    """Assemble the run payload matrix from completed cells (row order)."""
+    matrix: list[dict[str, Any]] = []
+    for row_index, row_id, row_params, _expected in row_ctx:
+        task_results = [
+            cells[(task_index, row_index)]
+            for task_index in range(len(tasks))
+            if (task_index, row_index) in cells
+        ]
+        grade = "tie"
+        delta = 0.0
+        diff: dict[str, Any] | None = None
+        if len(task_results) >= 2:
+            a = task_results[0]
+            b = task_results[1]
+            grade, delta = grade_outputs(
+                str(a.get("response") or ""),
+                str(b.get("response") or ""),
+                control_score=_grade_score(a),
+                treatment_score=_grade_score(b),
+                control_cost=float(a.get("cost_usd") or 0),
+                treatment_cost=float(b.get("cost_usd") or 0),
+            )
+            diff = char_diff(
+                str(a.get("response") or ""), str(b.get("response") or "")
+            )
+        matrix.append(
+            {
+                "row_id": row_id,
+                "input": row_params.get("user"),
+                "tasks": task_results,
+                "grade": grade,
+                "score_delta": delta,
+                "diff": diff,
+            }
+        )
+    return {
+        "run_id": run_id,
+        "playground_id": playground_id,
+        "status": status,
+        "matrix": matrix,
+        "cost_usd": round(float(totals.get("cost_usd") or 0.0), 6),
+        "task_count": len(tasks),
+        "row_count": len(matrix),
+        "error_count": int(totals.get("errors") or 0),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _record_run_metrics(started: float, cost_usd: float) -> None:
+    """Record run duration + spend into the shared metrics registry."""
+    try:
+        from eden.observability.playground_metrics import (
+            record_playground_cost_usd,
+            record_playground_run_seconds,
+        )
+
+        record_playground_run_seconds(time.perf_counter() - started)
+        record_playground_cost_usd(cost_usd)
+    except Exception as exc:
+        logger.debug("playground metrics record failed: %s", exc)
 
 
 def _default_task() -> dict[str, Any]:

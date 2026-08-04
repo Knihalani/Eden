@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -119,6 +120,10 @@ async def playground_from_span(
             tools=body.tools,
             created_by=created_by or None,
         )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=_value_error_status(exc), detail=str(exc)
+        ) from exc
     except Exception as exc:
         logger.warning("playground_from_span failed: %s", redact_all(str(exc)))
         raise_mapped_db_error(
@@ -208,36 +213,68 @@ async def run_playground_stream(
     playground_id: str = Path(...),
     user: dict = Depends(get_current_user),
 ) -> Any:
-    """SSE wrapper — emits start → result → done (practical stream surface)."""
+    """SSE run stream — start → cell (per task × row) → done | error.
+
+    Events (``event:`` name == ``type`` field of the JSON data):
+
+    * ``start`` — ``{type, run_id, playground_id, cells}``
+    * ``cell`` — ``{type, task_id, row_index, status: "ok"|"error",
+      output?, score?, scores?, latency_ms?, cost_usd?, error?}``
+    * ``done`` — ``{type, run_id, totals: {cost_usd, cells, errors}}``
+    * ``error`` — ``{type, detail}`` (run-level failure)
+    """
     svc = PlaygroundService()
+    queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    async def _on_event(event: dict[str, Any]) -> None:
+        queue.put_nowait(event)
+
+    async def _pump() -> None:
+        try:
+            await svc.run(
+                org_id,
+                playground_id,
+                params=body.params,
+                dataset_rows=body.dataset_rows,
+                on_event=_on_event,
+            )
+        except asyncio.CancelledError:
+            raise
+        except ValueError as exc:
+            queue.put_nowait({"type": "error", "detail": str(exc)})
+        except Exception as exc:
+            logger.warning(
+                "run_playground_stream failed: %s", redact_all(str(exc))
+            )
+            queue.put_nowait({"type": "error", "detail": "playground run failed"})
+        finally:
+            queue.put_nowait(None)
+
+    run_task = asyncio.create_task(_pump())
+
+    async def _events():
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield event
+        finally:
+            # Client disconnect cancels the in-flight run (partial
+            # results are persisted with status "cancelled").
+            run_task.cancel()
 
     async def _sse_events():
-        yield {"event": "start", "data": '{"status":"running"}'}
-        try:
-            result = await svc.run(
-                org_id,
-                playground_id,
-                params=body.params,
-                dataset_rows=body.dataset_rows,
-            )
-            yield {"event": "result", "data": json.dumps(result)}
-            yield {"event": "done", "data": '{"status":"completed"}'}
-        except ValueError as exc:
-            yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
+        async for event in _events():
+            yield {
+                "event": str(event.get("type") or "message"),
+                "data": json.dumps(event),
+            }
 
     async def _plain():
-        yield "event: start\ndata: {\"status\":\"running\"}\n\n"
-        try:
-            result = await svc.run(
-                org_id,
-                playground_id,
-                params=body.params,
-                dataset_rows=body.dataset_rows,
-            )
-            yield f"event: result\ndata: {json.dumps(result)}\n\n"
-            yield "event: done\ndata: {\"status\":\"completed\"}\n\n"
-        except ValueError as exc:
-            yield f"event: error\ndata: {json.dumps({'detail': str(exc)})}\n\n"
+        async for event in _events():
+            name = str(event.get("type") or "message")
+            yield f"event: {name}\ndata: {json.dumps(event)}\n\n"
 
     if _SSEResponse is not None:
         return _SSEResponse(_sse_events())

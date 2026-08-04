@@ -454,6 +454,42 @@ async def metrics() -> Response:
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read ingest hot-path stats: %s", exc)
 
+    # F49 — playground run duration histogram + spend counter (stable names).
+    try:
+        from eden.observability.playground_metrics import (
+            RUN_SECONDS_BUCKETS,
+            get_playground_metrics,
+        )
+
+        pm = get_playground_metrics()
+        pm_stats = pm["stats"]
+        pm_buckets = pm["run_seconds_buckets"]
+        pm_count = int(pm_stats.get("eden_playground_run_seconds_count", 0))
+        hist = [
+            "# HELP eden_playground_run_seconds Playground run duration in seconds.",
+            "# TYPE eden_playground_run_seconds histogram",
+        ]
+        for bound in RUN_SECONDS_BUCKETS:
+            hist.append(
+                f'eden_playground_run_seconds_bucket{{le="{bound}"}} '
+                f"{int(pm_buckets.get(bound, 0))}"
+            )
+        hist.append(f'eden_playground_run_seconds_bucket{{le="+Inf"}} {pm_count}')
+        hist.append(
+            "eden_playground_run_seconds_sum "
+            f"{float(pm_stats.get('eden_playground_run_seconds_sum', 0.0))}"
+        )
+        hist.append(f"eden_playground_run_seconds_count {pm_count}")
+        lines.append("\n".join(hist) + "\n")
+        lines.append(
+            "# HELP eden_playground_cost_usd_total Playground LLM spend in USD.\n"
+            "# TYPE eden_playground_cost_usd_total counter\n"
+            "eden_playground_cost_usd_total "
+            f"{float(pm_stats.get('eden_playground_cost_usd_total', 0.0))}\n"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read playground stats: %s", exc)
+
     # Events Eden discarded, by stage and reason. Seeded at zero so "no drops"
     # is an assertion rather than an absent series.
     try:
