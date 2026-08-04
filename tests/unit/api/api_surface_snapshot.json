@@ -1510,6 +1510,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "PATCH /orgs/{org_id}/debugger/sessions/{session_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "PATCH /orgs/{org_id}/domain-restriction": [
       "200:application/json",
       "422:application/json"
@@ -2373,6 +2377,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/portal/compare/experiments/seed": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/production-datasets/refresh": [
       "200:application/json",
       "422:application/json"
@@ -2764,7 +2772,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 707,
+  "route_count": 709,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3155,6 +3163,7 @@
     "PATCH /orgs/{org_id}/agents/{agent_id}/ledger/config",
     "PATCH /orgs/{org_id}/datasets/{dataset_id}",
     "PATCH /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
+    "PATCH /orgs/{org_id}/debugger/sessions/{session_id}",
     "PATCH /orgs/{org_id}/domain-restriction",
     "PATCH /orgs/{org_id}/fleet/agents/{agent_id}",
     "PATCH /orgs/{org_id}/gateway/models/{model_id}",
@@ -3375,6 +3384,7 @@
     "POST /orgs/{org_id}/playgrounds/{playground_id}/promote-experiment",
     "POST /orgs/{org_id}/playgrounds/{playground_id}/run",
     "POST /orgs/{org_id}/playgrounds/{playground_id}/run/stream",
+    "POST /orgs/{org_id}/portal/compare/experiments/seed",
     "POST /orgs/{org_id}/production-datasets/refresh",
     "POST /orgs/{org_id}/production-eval/score/{trace_id}",
     "POST /orgs/{org_id}/promotions/{candidate_id}/approve",
@@ -3474,7 +3484,7 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 431,
+  "schema_count": 433,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -3549,6 +3559,7 @@
     "ComparativeDimension",
     "ComparativeRequest",
     "ComparativeResponse",
+    "CompareSeedRequest",
     "CompileRequest",
     "CompileResponse",
     "CompiledRuleResponse",
@@ -3695,6 +3706,7 @@
     "PaginatedAPIEnvelope",
     "PaginatedMeta",
     "PatchDatasetRequest",
+    "PatchDebugSessionRequest",
     "PatchPlaygroundRequest",
     "PatternOut",
     "PendingActionsResponse",
