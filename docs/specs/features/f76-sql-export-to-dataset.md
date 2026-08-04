@@ -5,7 +5,7 @@
 | **Feature ID** | F76 |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | PARTIAL — query page exists; export product missing |
+| **Eden status** | PARTIAL — query page + `POST /orgs/{org_id}/sql/export/dataset` and `/sql/export/queue` (`api/routes/wave6_online.py:527,534`); portal export UI still missing |
 | **Competitive source** | Laminar SQL Editor; Braintrust BTQL |
 | **UI spec** | — |
 | **Dependencies** | F53, F50, `/observability/query` |

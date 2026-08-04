@@ -5,7 +5,7 @@
 | **Feature ID** | F56 |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | MISSING turnkey — N01 regression memory partial |
+| **Eden status** | PARTIAL (v0) — `.github/actions/eden-eval/action.yml` + `.github/workflows/eden-eval.yml` + `POST /orgs/{org_id}/ci-eval/run` (`api/routes/wave6_online.py:505`); turnkey GitHub App + PR score gate still open, N01 regression memory partial |
 | **Competitive source** | Langfuse CI/CD action; HoneyHive CI; Braintrust compare-experiments |
 | **UI spec** | — |
 | **Dependencies** | F51, N01, GitHub App |

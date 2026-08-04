@@ -15,7 +15,7 @@
 | MCP tool response (read) | <800ms | `eden-mcp` smoke + W28 tool catalog; exclude upstream LLM | **SOFT** — install/smoke OK; no staging latency histogram |
 | Issue created after trace | <60s | Async workers + stumble/signal path | **SOFT** — unit contracts; staging dogfood open |
 | Search (Typesense) F12 | <200ms | Local SQLite proxy N=50k p95 ~253ms; **staging 10M BLOCKED** | **UNPROVEN** — W3 P0-F12-10M |
-| StatGate (N08) | <80ms | Autonomy StatGate-first (W24); hot-path microbench is **NudgeEngine only** (`tests/perf/test_hot_path_microbench.py`), not StatGate latency | **UNPROVEN** |
+| StatGate (N08) | <80ms | Microbench, 2000 iterations over a 200-incident synthetic pool (mixed kinds/severities, 0–8 stumbles, ~20% with metric samples driving the numeric gate; pure compute, no I/O): p50=0.0090ms p95=0.0757ms p99=0.0801ms vs SLA p95<80ms p99<150ms (`tests/perf/test_statgate_microbench.py`) | **MET** (local) |
 | Ingest hot-path overhead | ≤5ms p99 | Evolution scorecard + `tests/perf/test_hot_path_microbench.py` | **MET** (local) |
 | Live stream publish (N11) | <500ms | Unit/local buffer proof (W27); staging p95 open | **SOFT** |
 

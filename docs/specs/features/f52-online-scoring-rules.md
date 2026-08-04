@@ -5,7 +5,7 @@
 | **Feature ID** | F52 |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | PARTIAL — N03 continuous sampling exists; no operator rule UI |
+| **Eden status** | PARTIAL — N03 continuous sampling + `/orgs/{org_id}/online-scoring/rules` CRUD/rewind/apply (`api/routes/wave6_online.py:82-115`); no operator rule UI |
 | **Competitive source** | LangSmith online evaluators; Braintrust Automations + rewind; HoneyHive |
 | **UI spec** | [U14](../ui/u14-online-rules-builder.md) |
 | **Dependencies** | N03, scorers, U08, F54/F55/F62 |
