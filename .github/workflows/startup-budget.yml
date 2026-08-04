@@ -1,0 +1,54 @@
+name: startup-budget
+
+# W15-c cold-import budget. `import eden.api.app` must stay under the
+# budget: the app defers ~100 routers (plus the B26 intelligence tier)
+# to the lifespan, and the cheapest way to regress that is to add one
+# eager `include_router` / heavy module-level import back to app.py.
+# The perf-bench workflow measures weekly; this one trips on the PR
+# that introduces the regression.
+#
+# Scope note: this workflow owns ONLY the startup budget step. Other
+# CI (backend-ci, e2e-cron, sdk-*-ci, secret-scan) is owned elsewhere.
+
+on:
+  pull_request:
+    paths:
+      - "src/eden/**"
+      - "bench/startup.py"
+      - "pyproject.toml"
+      - ".github/workflows/startup-budget.yml"
+  workflow_dispatch: {}
+
+jobs:
+  startup-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Enforce cold-import budget
+        env:
+          PYTHONPATH: "src:."
+        # Median of 5 cold `import eden.api.app` subprocesses must stay
+        # under 1000ms (measured ~900ms on 2026-08-04 after W15-c; was
+        # ~3350ms before). If this fails, check `python -X importtime
+        # -c "import eden.api.app"` — a router probably moved back out
+        # of the deferred tables in src/eden/api/app.py.
+        run: |
+          python bench/startup.py --samples 5 --budget-ms 1000

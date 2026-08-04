@@ -27,8 +27,17 @@ SNAPSHOT = _REPO / "tests" / "unit" / "api" / "api_surface_snapshot.json"
 
 
 def build_surface() -> dict:
-    """Return the structural facts a serialization change would perturb."""
-    from eden.api.app import app
+    """Return the structural facts a serialization change would perturb.
+
+    W15-c: most routers are deferred to the lifespan (B26 intelligence
+    tier + the tier-2 table in ``eden.api.app``). Mount them all first so
+    the snapshot records the surface clients actually see once uvicorn
+    has run the lifespan — and so a route accidentally dropped from a
+    deferred table shows up here as a removal.
+    """
+    from eden.api.app import app, mount_deferred_routers
+
+    mount_deferred_routers(app)
 
     routes = sorted(
         {
