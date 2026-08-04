@@ -137,7 +137,7 @@ Dataset → annotate → playground → experiment (Braintrust-class).
 |---|---|---|---|---|---|
 | F53 | Versioned dataset hub | PARTIAL | P0 | [f53](features/f53-versioned-dataset-hub.md) | [U10](ui/u10-datasets-spreadsheet.md) |
 | F50 | Annotation queues | PARTIAL | P0 | [f50](features/f50-annotation-queues.md) | [U06](ui/u06-annotation-queue.md) |
-| F49 | Production prompt playground | MISSING | P0 | [f49](features/f49-prompt-playground.md) | [U03](ui/u03-playground.md) |
+| F49 | Production prompt playground | SHIPPED v0 | P0 | [f49](features/f49-prompt-playground.md) | [U03](ui/u03-playground.md) |
 | F51 | Offline experiment runner + compare | PARTIAL | P0 | [f51](features/f51-offline-experiment-runner.md) | [U07](ui/u07-experiments-compare.md) |
 | F44 | Auto-curated production eval slices | PARTIAL | P1 | [f44](features/f44-auto-production-eval-slices.md) | [U10](ui/u10-datasets-spreadsheet.md) |
 | F33 | Issue-linked production experiments | PARTIAL | P1 | [f33](features/f33-issue-linked-experiments.md) | [U07](ui/u07-experiments-compare.md) |
@@ -427,7 +427,7 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | F46 | 9 | SHIPPED v0 | Closed-loop orchestrator |
 | F47 | 2 | SHIPPED v0 | Slack Block Kit outbound |
 | F48 | 1 | SHIPPED v0 | Portal API contract fix |
-| F49 | 5 | MISSING | Prompt playground |
+| F49 | 5 | SHIPPED v0 | Prompt playground |
 | F50 | 5 | PARTIAL | Annotation queues |
 | F51 | 5 | PARTIAL | Offline experiment runner |
 | F52 | 6 | PARTIAL | Online scoring rules |
