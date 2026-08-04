@@ -4,53 +4,20 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
 import { PageHeader } from "@/components/ds/primitives";
+import { STUB_TRY_INSTEAD, stubPrefix } from "@/lib/stub-try-instead";
 
 /**
  * Soft-land for removed / stub product URLs.
  * Middleware rewrites stubs here while keeping the requested path in the
  * address bar — so usePathname() is the dead URL the user asked for.
+ * The dead-route → live-surface map lives in src/lib/stub-try-instead.ts.
  */
-const STUB_TRY_INSTEAD: Record<string, { href: string; label: string }> = {
-  "/artifacts": { href: "/improve?mode=queue", label: "Improve · Queue" },
-  "/billing": { href: "/settings?mode=workspace", label: "Settings" },
-  "/finops": { href: "/cost?mode=spend", label: "Cost" },
-  "/observability": { href: "/traces", label: "Traces" },
-  "/debugger-sessions": { href: "/debugger", label: "Debugger" },
-  "/audit": { href: "/settings?mode=audit", label: "Settings · Audit" },
-  "/audit-trail": { href: "/settings?mode=audit", label: "Settings · Audit" },
-  "/analytics": { href: "/gateway", label: "Gateway" },
-  "/labeling": { href: "/evals?mode=datasets", label: "Evals · Datasets" },
-  "/studio": { href: "/evals?mode=playground", label: "Evals · Playground" },
-  "/synthetic": { href: "/evals?mode=compare", label: "Evals · Results" },
-  "/datasets": { href: "/evals?mode=datasets", label: "Evals · Datasets" },
-  "/playgrounds": { href: "/evals?mode=playground", label: "Evals · Playground" },
-  "/experiments": { href: "/evals?mode=compare", label: "Evals · Results" },
-  "/ledger": { href: "/improve?mode=queue", label: "Improve · Queue" },
-  "/promotions": { href: "/improve?mode=queue", label: "Improve · Queue" },
-  "/optimization": { href: "/cost?mode=spend", label: "Cost" },
-  "/runs": { href: "/traces", label: "Traces" },
-  "/fleet": { href: "/agents", label: "Agents" },
-  "/incidents": { href: "/issues", label: "Issues" },
-  "/profile": { href: "/settings", label: "Settings" },
-  "/insights": { href: "/home", label: "Home" },
-};
-
 const DEFAULT_LINKS = [
   { href: "/home", label: "Home" },
   { href: "/traces", label: "Traces" },
   { href: "/settings?mode=keys", label: "API keys" },
   { href: "/improve", label: "Improve" },
 ] as const;
-
-function stubPrefix(pathname: string): string | null {
-  const p = pathname.split("?")[0].split("#")[0];
-  if (p === "/unavailable" || p.startsWith("/unavailable/")) return null;
-  const keys = Object.keys(STUB_TRY_INSTEAD).sort((a, b) => b.length - a.length);
-  for (const key of keys) {
-    if (p === key || p.startsWith(`${key}/`)) return key;
-  }
-  return null;
-}
 
 function UnavailableInner() {
   const pathname = usePathname() || "/unavailable";
