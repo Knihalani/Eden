@@ -2764,6 +2764,51 @@ export const agentIssuesApi = {
     issueId: string,
     status: AgentIssueResolveStatus,
   ) => agentIssuesApi.resolve(orgId, issueId, status),
+  /**
+   * Manual issue report from the transcript (BE ``POST /orgs/{org}/stumbles``,
+   * F28). Goes through the same dedup + promotion path as detector stumbles.
+   */
+  reportStumble: (orgId: string, body: StumbleCreateBody) =>
+    fetchApi<{
+      status: string;
+      data: { stumble_id: string | null; deduped?: string };
+    }>(`/orgs/${orgId}/stumbles`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "custom", ...body }),
+      noDedup: true,
+    }),
+  /**
+   * Build regression eval cases from an issue's traces (BE
+   * ``POST /orgs/{org}/agent-issues/{id}/regression-cases``).
+   */
+  createRegressionCases: (
+    orgId: string,
+    issueId: string,
+    body: { max_traces?: number; auto?: boolean } = {},
+  ) =>
+    fetchApi<{
+      status: string;
+      data: { cases: Array<Record<string, unknown>>; count: number };
+    }>(`/orgs/${orgId}/agent-issues/${issueId}/regression-cases`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+};
+
+/** Matches BE ``StumbleCreateRequest`` (agent_issues routes). */
+export type StumbleCreateBody = {
+  trace_id: string;
+  title: string;
+  /** BE ``StumbleKind`` — portal manual reports default to ``custom``. */
+  kind?: string;
+  detail?: Record<string, unknown>;
+  severity?: string | null;
+  session_id?: string | null;
+  agent_id?: string | null;
+  span_id?: string | null;
 };
 
 /** N22 autonomy policy envelope (Settings → Autonomous). */
@@ -2940,6 +2985,33 @@ export const improvePlansApi = {
     ),
 };
 (api as unknown as Record<string, unknown>).improvePlansApi = improvePlansApi;
+
+// ── N03 Production eval (quality trend) ─────────────────────────────
+// Backend: src/eden/api/routes/production_eval.py — gated by the
+// ``production_eval_sampling_v1`` feature flag (403/404 when off).
+
+export type QualityTrendPoint = {
+  hour: string | null;
+  avg_score: number;
+  n: number;
+  fail_rate: number;
+};
+
+export type QualityTrendEnvelope = {
+  status: string;
+  feature: string;
+  live?: boolean;
+  data: { agent_id: string; trend: QualityTrendPoint[] };
+};
+
+export const productionEvalApi = {
+  qualityTrend: (orgId: string, agentId: string, hours = 168) =>
+    fetchApi<QualityTrendEnvelope>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/quality/trend?hours=${hours}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
+(api as unknown as Record<string, unknown>).productionEvalApi = productionEvalApi;
 
 // ── Intelligence: Time-Travel (Cat 20) ──────────────────────────────
 // Backend: src/eden/api/routes/intelligence_time_travel.py

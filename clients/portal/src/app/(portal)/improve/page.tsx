@@ -50,6 +50,13 @@ const ImprovePlanView = dynamic(
     })),
   { loading: () => improveFallback },
 );
+const PlanDetailEnrichment = dynamic(
+  () =>
+    import("@/components/improve/plan-detail-enrichment").then((m) => ({
+      default: m.PlanDetailEnrichment,
+    })),
+  { loading: () => null },
+);
 
 function LabImproveInner() {
   const searchParams = useSearchParams();
@@ -433,12 +440,21 @@ function LabImproveInner() {
           onOpenPlan={openPlan}
         />
       ) : (
-        <ImprovePlanView
-          plan={selectedPlan}
-          hasPlans={allPlans.length > 0}
-          onStatus={setStatus}
-          onBack={() => changeMode("queue")}
-        />
+        <>
+          <ImprovePlanView
+            plan={selectedPlan}
+            hasPlans={allPlans.length > 0}
+            onStatus={setStatus}
+            onBack={() => changeMode("queue")}
+          />
+          {selectedPlan ? (
+            <PlanDetailEnrichment
+              orgId={orgId}
+              plan={selectedPlan}
+              isDraft={!livePlans.some((p) => p.id === selectedPlan.id)}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );
