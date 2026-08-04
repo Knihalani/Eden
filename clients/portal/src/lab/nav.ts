@@ -10,6 +10,7 @@ export type NavIcon =
   | "issues"
   | "signals"
   | "evals"
+  | "playgrounds"
   | "improve"
   | "cost"
   | "gateway"
@@ -50,6 +51,12 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Evaluate",
     items: [
       { id: "evals", label: "Evals", href: "/evals", icon: "evals" },
+      {
+        id: "playgrounds",
+        label: "Playgrounds",
+        href: "/playgrounds",
+        icon: "playgrounds",
+      },
       { id: "prompts", label: "Prompts", href: "/prompts", icon: "prompts" },
       { id: "compare", label: "Live A/B", href: "/compare", icon: "compare" },
     ],

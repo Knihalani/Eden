@@ -1,7 +1,7 @@
 /**
  * Prefs/editor sidebar config — keep leaf ids/hrefs aligned with `@/lab/nav`.
  * Live shell SoT remains `@/lab/nav`; this file drives pin-hide prefs only.
- * Labels resolve via next-intl (labelKey) with English fallbacks below.
+ * Labels resolve from the English fallbacks below (labelKey is a stable id).
  */
 
 import type { ComponentType } from "react";
@@ -20,6 +20,7 @@ import {
   Bug,
   GitCompare,
   FileText,
+  Play,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -29,7 +30,7 @@ export type SidebarIcon = LucideIcon | ComponentType<{ className?: string }>;
 export interface SidebarItem {
   id: string;
   href: string;
-  /** next-intl key under `nav.leaves.*` */
+  /** Stable label id (historically `nav.leaves.*`). */
   labelKey: string;
   icon: SidebarIcon;
   descriptionKey?: string;
@@ -39,7 +40,7 @@ export interface SidebarItem {
 
 export interface SidebarGroup {
   id: "observe" | "evaluate" | "improve" | "assist" | "workspace";
-  /** next-intl key under `nav.groups.*` */
+  /** Stable label id (historically `nav.groups.*`). */
   labelKey: string;
   items: SidebarItem[];
 }
@@ -52,6 +53,7 @@ export const CORE_NAV_LEAF_IDS = [
   "issues",
   "signals",
   "evals",
+  "playgrounds",
   "prompts",
   "compare",
   "improve",
@@ -108,6 +110,11 @@ export const MOBILE_BOTTOM_NAV = [
 export const MOBILE_MORE_NAV = [
   { id: "agents" as const, href: "/agents", labelKey: "nav.leaves.agents" },
   { id: "signals" as const, href: "/signals", labelKey: "nav.leaves.signals" },
+  {
+    id: "playgrounds" as const,
+    href: "/playgrounds",
+    labelKey: "nav.leaves.playgrounds",
+  },
   { id: "prompts" as const, href: "/prompts", labelKey: "nav.leaves.prompts" },
   { id: "compare" as const, href: "/compare", labelKey: "nav.leaves.compare" },
   {
@@ -181,6 +188,13 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/evals",
         labelKey: "nav.leaves.evals",
         icon: FlaskConical,
+        category: "core",
+      },
+      {
+        id: "playgrounds",
+        href: "/playgrounds",
+        labelKey: "nav.leaves.playgrounds",
+        icon: Play,
         category: "core",
       },
       {
@@ -294,6 +308,7 @@ export const SIDEBAR_ITEM_LABELS: Record<string, string> = {
   issues: "Issues",
   signals: "Detectors",
   evals: "Evals",
+  playgrounds: "Playgrounds",
   prompts: "Prompts",
   compare: "Live A/B",
   improve: "Improve",
