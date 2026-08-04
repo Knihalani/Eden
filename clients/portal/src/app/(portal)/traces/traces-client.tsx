@@ -42,6 +42,8 @@ import { usePolling } from "@/hooks/use-polling";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
+import { playgroundApi } from "@/lib/api/resources";
+import { useLabToast } from "@/lab/lab-toast";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { FirstEventWaitAction } from "@/components/shell/first-event-wait";
@@ -325,6 +327,19 @@ function LabTracesInner() {
   const [signalsDismissed, setSignalsDismissed] = useState(false);
   const [focusStepId, setFocusStepId] = useState<string | null>(paramSpan);
   const [copied, setCopied] = useState(false);
+  // U03: span replay — POST /playgrounds/from-span, then hard-nav into
+  // the new playground (no useRouter in this file by convention).
+  const [playgroundPending, setPlaygroundPending] = useState(false);
+  // Toast chrome is optional here — existing tests mount this page
+  // without LabToastProvider (hook order stays stable: useContext runs
+  // inside useLabToast before it throws).
+  let pushToast: ReturnType<typeof useLabToast>["pushToast"] | null = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    pushToast = useLabToast().pushToast;
+  } catch {
+    pushToast = null;
+  }
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
@@ -905,6 +920,29 @@ function LabTracesInner() {
     ? sessionTurns.findIndex((t) => t.trace.id === selected.id)
     : -1;
 
+  async function openInPlayground() {
+    if (!orgId || !selected || playgroundPending) return;
+    // Prefer the focused span when it's an LLM call; else first LLM step.
+    const llmStep =
+      selected.steps.find((s) => s.id === focusStepId && s.kind === "llm") ??
+      selected.steps.find((s) => s.kind === "llm");
+    setPlaygroundPending(true);
+    try {
+      const res = await playgroundApi.fromSpan(orgId, {
+        trace_id: selected.id,
+        span_id: llmStep?.spanId ?? llmStep?.id,
+      });
+      window.location.href = `/playgrounds/${res.playground.id}`;
+    } catch (e) {
+      setPlaygroundPending(false);
+      pushToast?.({
+        title: "Could not open playground",
+        body: e instanceof Error ? e.message : "Replay from span failed.",
+        tone: "fail",
+      });
+    }
+  }
+
   async function copyId() {
     if (!selected) return;
     try {
@@ -1306,6 +1344,17 @@ function LabTracesInner() {
                       >
                         Improve
                       </Link>
+                    ) : null}
+                    {selected.steps.some((s) => s.kind === "llm") ? (
+                      <button
+                        type="button"
+                        className="ds-btn ds-btn-ghost ds-btn-sm"
+                        disabled={playgroundPending}
+                        onClick={() => void openInPlayground()}
+                        title="Replay this run's LLM span in a playground"
+                      >
+                        {playgroundPending ? "Opening…" : "Playground"}
+                      </button>
                     ) : null}
                     <Link
                       href={`/debugger?traceId=${selected.id}&agent=${selected.agentId}`}

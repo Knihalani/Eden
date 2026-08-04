@@ -125,6 +125,14 @@ export const queryKeys = {
       ["portal", "evalDatasets", orgId] as const,
     evalPlaygrounds: (orgId: string | null | undefined) =>
       ["portal", "evalPlaygrounds", orgId] as const,
+    // U03 playgrounds surface — distinct from evalPlaygrounds (that key
+    // caches the portal read-model shape used by the Evals hub).
+    playgrounds: (orgId: string | null | undefined) =>
+      ["portal", "playgrounds", orgId] as const,
+    playgroundDetail: (
+      orgId: string | null | undefined,
+      playgroundId: string | null | undefined,
+    ) => ["portal", "playgroundDetail", orgId, playgroundId] as const,
     evalExperiments: (orgId: string | null | undefined) =>
       ["portal", "evalExperiments", orgId] as const,
     improvePlans: (orgId: string | null | undefined) =>
