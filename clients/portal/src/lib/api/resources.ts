@@ -4283,6 +4283,232 @@ const wave6Api = {
     }),
 };
 
+// ── Sessions timeline (N12) ──────────────────────────────────────────
+// Real backend: GET /orgs/{org}/sessions, GET .../sessions/{id}/timeline,
+// POST .../sessions/{id}/link-issue (src/eden/api/routes/sessions.py).
+export interface SessionTurnIssue {
+  issue_id: string;
+  status: string;
+  severity: string;
+  title: string;
+}
+export interface SessionTurn {
+  index: number;
+  trace_id: string;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_ms: number | null;
+  cost_usd: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  outcome: string | null;
+  error_type: string | null;
+  had_stumble: boolean;
+  stumble_kinds: string[];
+  issues: SessionTurnIssue[];
+  summary: string | null;
+}
+export interface SessionSummaryItem {
+  session_id: string;
+  agent_id: string | null;
+  user_id: string | null;
+  trace_ids: string[];
+  turn_count: number;
+  total_cost_usd: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_latency_ms: number | null;
+  session_start: string | null;
+  session_end: string | null;
+  had_stumble: boolean;
+  stumble_count: number;
+  stumble_turn_indices: number[];
+  issue_count: number;
+  linked_issue_id: string | null;
+  outcome: string;
+  updated_at: string | null;
+}
+export interface SessionListResponse {
+  sessions: SessionSummaryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+export interface SessionTimelineResponse {
+  org_id: string;
+  session_id: string;
+  summary: SessionSummaryItem;
+  turn_count: number;
+  turns: SessionTurn[];
+}
+export interface SessionListFilters {
+  agent_id?: string;
+  /** ISO-8601; activity at/after. */
+  since?: string;
+  had_stumble?: boolean;
+  min_cost?: number;
+  limit?: number;
+  offset?: number;
+}
+const sessionsApi = {
+  list: (orgId: string, filters: SessionListFilters = {}) => {
+    const q = new URLSearchParams();
+    if (filters.agent_id) q.set("agent_id", filters.agent_id);
+    if (filters.since) q.set("since", filters.since);
+    if (typeof filters.had_stumble === "boolean")
+      q.set("had_stumble", String(filters.had_stumble));
+    if (typeof filters.min_cost === "number")
+      q.set("min_cost", String(filters.min_cost));
+    if (typeof filters.limit === "number") q.set("limit", String(filters.limit));
+    if (typeof filters.offset === "number")
+      q.set("offset", String(filters.offset));
+    const qs = q.toString();
+    return fetchApi<SessionListResponse>(
+      `/orgs/${orgId}/sessions${qs ? `?${qs}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    );
+  },
+  timeline: (orgId: string, sessionId: string) =>
+    fetchApi<SessionTimelineResponse>(
+      `/orgs/${orgId}/sessions/${encodeURIComponent(sessionId)}/timeline`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  linkIssue: (orgId: string, sessionId: string, issueId: string) =>
+    fetchApi<{ status: string; session_id: string; linked_issue_id: string }>(
+      `/orgs/${orgId}/sessions/${encodeURIComponent(sessionId)}/link-issue`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ issue_id: issueId }),
+      },
+    ),
+};
+
+// ── Automations operator (F61) ───────────────────────────────────────
+// Backend today exposes only GET/POST /orgs/{org}/automations
+// (wave6_online.py). No edit / enable-disable / run-history HTTP routes
+// exist yet — `enabled` is returned by list but not settable via create.
+export interface Automation {
+  id: string;
+  org_id?: string;
+  name: string;
+  trigger_type: string;
+  trigger_config: Record<string, unknown>;
+  action_type: string;
+  action_config: Record<string, unknown>;
+  enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+export interface AutomationCreateBody {
+  name: string;
+  trigger_type?: string;
+  trigger_config?: Record<string, unknown>;
+  action_type?: string;
+  action_config?: Record<string, unknown>;
+}
+/** wave6 endpoints wrap payloads in a `{ status, ..., data }` envelope. */
+export interface Wave6Envelope<T> {
+  status: string;
+  feature: string;
+  live: boolean;
+  trace_id: string;
+  timestamp: string;
+  data: T;
+}
+const automationsApi = {
+  list: (orgId: string, limit = 100) =>
+    fetchApi<Wave6Envelope<{ automations: Automation[] }>>(
+      `/orgs/${orgId}/automations?limit=${limit}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (orgId: string, body: AutomationCreateBody) =>
+    fetchApi<Wave6Envelope<{ automation: Automation }>>(
+      `/orgs/${orgId}/automations`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+};
+
+// ── Saved searches / table views (F58) ───────────────────────────────
+// Real backend CRUD lives at /orgs/{org}/saved-searches (sharing.py).
+// Table views are stored as query_type "text" with the URL query-string
+// in `query` and a structured mirror in `params`.
+export type SavedSearchScope = "personal" | "shared" | "recent";
+export type SavedSearchQueryType = "sql" | "eql" | "text";
+export interface SavedSearch {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  query_type: SavedSearchQueryType;
+  query: string;
+  params: Record<string, unknown>;
+  is_shared: boolean;
+  is_pinned: boolean;
+  tags: string[];
+  last_used_at: string | null;
+  use_count: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface CreateSavedSearchBody {
+  name: string;
+  query_type: SavedSearchQueryType;
+  query: string;
+  params?: Record<string, unknown>;
+  is_shared?: boolean;
+  is_pinned?: boolean;
+  tags?: string[];
+}
+export interface UpdateSavedSearchBody {
+  name?: string;
+  query?: string;
+  query_type?: SavedSearchQueryType;
+  params?: Record<string, unknown>;
+  is_shared?: boolean;
+  is_pinned?: boolean;
+  tags?: string[];
+}
+const savedSearchesApi = {
+  list: (orgId: string, scope: SavedSearchScope = "personal", limit = 50) =>
+    fetchApi<{ searches: SavedSearch[] }>(
+      `/orgs/${orgId}/saved-searches?scope=${scope}&limit=${limit}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (orgId: string, body: CreateSavedSearchBody) =>
+    fetchApi<SavedSearch>(`/orgs/${orgId}/saved-searches`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  update: (orgId: string, searchId: string, body: UpdateSavedSearchBody) =>
+    fetchApi<SavedSearch>(
+      `/orgs/${orgId}/saved-searches/${encodeURIComponent(searchId)}`,
+      {
+        method: "PATCH",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  remove: (orgId: string, searchId: string) =>
+    fetchApi<{ deleted: boolean }>(
+      `/orgs/${orgId}/saved-searches/${encodeURIComponent(searchId)}`,
+      { method: "DELETE", headers: { "X-Org-Id": orgId } },
+    ),
+  recordUse: (orgId: string, searchId: string) =>
+    fetchApi<{ ok: boolean }>(
+      `/orgs/${orgId}/saved-searches/${encodeURIComponent(searchId)}/use`,
+      { method: "POST", headers: { "X-Org-Id": orgId }, noDedup: true },
+    ),
+};
+
+(api as unknown as Record<string, unknown>).sessionsApi = sessionsApi;
+(api as unknown as Record<string, unknown>).automationsApi = automationsApi;
+(api as unknown as Record<string, unknown>).savedSearchesApi = savedSearchesApi;
 (api as unknown as Record<string, unknown>).labelingApi = labelingApi;
 (api as unknown as Record<string, unknown>).signalsApi = signalsApi;
 (api as unknown as Record<string, unknown>).alertsApi = alertsApi;
@@ -4294,6 +4520,9 @@ const wave6Api = {
 (api as unknown as Record<string, unknown>).datasetsApi = datasetsApi;
 
 export {
+  sessionsApi,
+  automationsApi,
+  savedSearchesApi,
   labelingApi,
   signalsApi,
   alertsApi,

@@ -36,6 +36,7 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import { useLabToast } from "@/lab/lab-toast";
+import { AutomationsView, SignalsModeToggle } from "./automations-panel";
 
 type KindFilter = "all" | SignalKind;
 type StateFilter = "all" | "on" | "off";
@@ -546,6 +547,8 @@ function ReviewDraftPanel({
 function LabSignalsInner() {
   const searchParams = useSearchParams();
   const paramId = searchParams.get("id");
+  const mode =
+    searchParams.get("mode") === "automations" ? "automations" : "detectors";
   const { agentId, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
@@ -701,6 +704,13 @@ function LabSignalsInner() {
     [orgId, invalidateSignals, pushToast],
   );
 
+  // F61: Automations share this surface via `?mode=automations` (no new
+  // nav leaf). Branch after all hooks above have run so hook order is
+  // stable; AutomationsView owns its own data + guards.
+  if (mode === "automations") {
+    return <AutomationsView />;
+  }
+
   if (!orgId) {
     return (
       <NoWorkspaceGuard
@@ -742,17 +752,20 @@ function LabSignalsInner() {
           </span>
         }
         actions={
-          <button
-            type="button"
-            className="ds-btn ds-btn-primary ds-btn-sm"
-            onClick={() => {
-              setCreatePrompt("");
-              setCreating(true);
-            }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create detector
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <SignalsModeToggle mode="detectors" />
+            <button
+              type="button"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              onClick={() => {
+                setCreatePrompt("");
+                setCreating(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create detector
+            </button>
+          </div>
         }
       />
 
