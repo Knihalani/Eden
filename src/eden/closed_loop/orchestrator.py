@@ -1084,6 +1084,16 @@ class ClosedLoopOrchestrator:
                 exc,
             )
 
+        # N01 replay enrichment: stamp the failure signature + checkpoint
+        # availability on the created case(s) so the regression runner
+        # can replay the stored input against current behavior
+        # (regression_replay_v1). Best-effort — never blocks the
+        # learning transition.
+        if case_ok and cases:
+            await self._enrich_cases_for_replay(
+                event.org_id, event.issue_id, cases
+            )
+
         if learning == "learning" and case_ok:
             await apply_transition(
                 event.org_id,
@@ -1134,6 +1144,80 @@ class ClosedLoopOrchestrator:
             )
         except Exception as exc:
             logger.debug("orchestrator: flywheel on resolved failed: %s", exc)
+
+    async def _enrich_cases_for_replay(
+        self, org_id: str, issue_id: str, cases: list[dict[str, Any]]
+    ) -> None:
+        """N01 replay enrichment — make cases replayable, honestly.
+
+        For each freshly created regression case, merge into
+        ``expected_data``:
+
+        * ``failure_signature`` — the machine-checkable "what was
+          wrong", extracted through the same M7 machinery the failure
+          pack uses (``build_failure_pack`` → ``extract_failure_signature``),
+          so §4.1 replay-verify and N01 replay share one definition.
+        * ``replay.checkpoint_available`` / ``replay.checkpoint_trace_id``
+          — whether a debugger checkpoint exists for the case's source
+          trace (the replay entry point).
+
+        Best-effort by contract: any failure is logged and swallowed —
+        an unenriched case simply keeps today's post-hoc verification.
+        """
+        try:
+            import json
+
+            from eden.improvement.evidence_plane import build_failure_pack
+            from eden.improvement.replay_verify import (
+                FailureSignature,
+                checkpoint_available,
+            )
+            from eden.storage.postgres import get_postgres_client
+
+            pack = await build_failure_pack(org_id, issue_id)
+            sig = FailureSignature.from_json(
+                (pack or {}).get("failure_signature") or {}
+            )
+            client = await get_postgres_client()
+            for case in cases:
+                if not isinstance(case, dict):
+                    continue
+                case_id = str(case.get("id") or "")
+                trace_id = str(case.get("source_trace_id") or "")
+                if not case_id:
+                    continue
+                has_cp = await checkpoint_available(org_id, trace_id)
+                enrichment: dict[str, Any] = {
+                    "replay": {
+                        "checkpoint_available": has_cp,
+                        "checkpoint_trace_id": trace_id or None,
+                    }
+                }
+                if sig is not None:
+                    enrichment["failure_signature"] = sig.to_json()
+                if client is not None:
+                    await client.execute(
+                        """
+                        UPDATE regression_eval_cases
+                        SET expected_data =
+                            COALESCE(expected_data, '{}'::jsonb) || $3::jsonb
+                        WHERE id = $1::uuid AND org_id = $2
+                        """,
+                        case_id,
+                        org_id,
+                        json.dumps(enrichment),
+                    )
+                # Keep the returned dict coherent for downstream detail.
+                expected = case.get("expected")
+                if isinstance(expected, dict):
+                    expected.update(enrichment)
+        except Exception as exc:
+            logger.debug(
+                "orchestrator: N01 replay enrichment failed org=%s issue=%s: %s",
+                org_id,
+                issue_id,
+                exc,
+            )
 
 
 def _is_p0(triage_result: dict[str, Any]) -> bool:

@@ -354,3 +354,73 @@ async def test_replay_skips_trace_without_original_signature(monkeypatch) -> Non
     assert result.status == "skipped"
     assert result.reason == "signature_absent_in_original"
     assert result.details["per_trace"][0]["skip"] == "signature_absent_in_original"
+
+
+# ── N01 regression replay helpers (regression_replay_v1) ────────
+
+
+@pytest.mark.asyncio
+async def test_replay_case_signature_passes_when_absent(monkeypatch) -> None:
+    store = _FakeStore({"trc-1": [_failing_checkpoint()]})
+    calls = _patch_seams(
+        monkeypatch, store=store, gateway_text="Checkout complete."
+    )
+    result = await rv.replay_case_signature(ORG, "trc-1", SIG)
+    assert result.status == "passed"
+    assert result.reason == "replay_signature_absent"
+    assert result.traces_checked == 1
+    # The stored input was replayed verbatim — not a synthesized prompt.
+    assert calls and "checkout my cart" in calls[0]["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_replay_case_signature_fails_when_present(monkeypatch) -> None:
+    store = _FakeStore({"trc-1": [_failing_checkpoint()]})
+    _patch_seams(
+        monkeypatch,
+        store=store,
+        gateway_text="Error: division by zero in checkout step 12",
+    )
+    result = await rv.replay_case_signature(ORG, "trc-1", SIG)
+    assert result.status == "failed"
+    assert result.reason == "replay_signature_present"
+
+
+@pytest.mark.asyncio
+async def test_replay_case_signature_no_checkpoints(monkeypatch) -> None:
+    _patch_seams(monkeypatch, store=_FakeStore({}))
+    result = await rv.replay_case_signature(ORG, "trc-1", SIG)
+    assert result.status == "skipped"
+    assert result.reason == "no_checkpoints"
+
+
+@pytest.mark.asyncio
+async def test_replay_case_signature_gateway_error_never_passes(
+    monkeypatch,
+) -> None:
+    store = _FakeStore({"trc-1": [_failing_checkpoint()]})
+
+    async def _fake_store():
+        return store
+
+    async def _boom(org_id, model, prompt):
+        raise RuntimeError("gateway down")
+
+    monkeypatch.setattr(rv, "_get_checkpoint_store", _fake_store)
+    monkeypatch.setattr(rv, "_gateway_complete", _boom)
+    result = await rv.replay_case_signature(ORG, "trc-1", SIG)
+    assert result.status == "skipped"
+    assert result.reason == "replay_error"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_available_true_and_false(monkeypatch) -> None:
+    store = _FakeStore({"trc-1": [_failing_checkpoint()]})
+
+    async def _fake_store():
+        return store
+
+    monkeypatch.setattr(rv, "_get_checkpoint_store", _fake_store)
+    assert await rv.checkpoint_available(ORG, "trc-1") is True
+    assert await rv.checkpoint_available(ORG, "trc-none") is False
+    assert await rv.checkpoint_available(ORG, "") is False

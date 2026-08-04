@@ -741,12 +741,125 @@ async def run_replay_verify(
     return result
 
 
+# ── N01 regression replay (regression_replay_v1) ────────────────
+
+
+async def checkpoint_available(org_id: str, trace_id: str) -> bool:
+    """Does at least one debugger checkpoint exist for the trace?
+
+    Used at N01 case-creation time (closed-loop flywheel) to record
+    replay eligibility on the case. Never raises; unavailable store or
+    query failure honestly reads as "no checkpoint".
+    """
+    if not trace_id:
+        return False
+    store = await _get_checkpoint_store()
+    if store is None:
+        return False
+    try:
+        return bool(await store.list_for_trace(trace_id, org_id=org_id))
+    except Exception as exc:
+        logger.debug("checkpoint_available: lookup failed: %s", exc)
+        return False
+
+
+async def replay_case_signature(
+    org_id: str,
+    trace_id: str,
+    sig: FailureSignature,
+) -> ReplayResult:
+    """Re-run one stored failing step for an N01 regression case.
+
+    Unlike :func:`run_replay_verify` (§4.1 patch verification), no
+    patched context is injected: the failing checkpoint's *recorded*
+    input messages are re-executed verbatim through the current gateway
+    and the verdict is whether the failure signature reappears in the
+    fresh response. ``ReRunEngine.rerun`` is deliberately NOT used as
+    the proof path — it returns recorded responses, so it can never
+    observe that current behavior changed (see module docstring).
+
+    "Hermetic" here means: the *input* is frozen from the checkpoint
+    (recorded chat history including recorded tool results); tools are
+    not re-executed and nothing is written back — only the single LLM
+    step runs live, with PII filter / audit / cost accounting applied
+    by the gateway.
+
+    Never raises. Statuses: ``passed`` (signature absent in replay),
+    ``failed`` (still present), ``skipped`` with reason
+    ``no_checkpoints`` / ``signature_absent_in_original`` /
+    ``no_replayable_input`` / ``cost_cap`` / ``replay_error``.
+    """
+    from eden.improvement.sweep_budget import try_consume_llm_call
+
+    try:
+        store = await _get_checkpoint_store()
+        if store is None:
+            return _skipped("no_checkpoints")
+        checkpoints = await store.list_for_trace(trace_id, org_id=org_id)
+    except Exception as exc:
+        return _skipped("replay_error", error=str(exc)[:200])
+    if not checkpoints:
+        return _skipped("no_checkpoints")
+
+    # The signature must be present in the ORIGINAL recorded output —
+    # otherwise its absence from a replay proves nothing.
+    failing = None
+    for cp in checkpoints:
+        if signature_present(_checkpoint_output_text(cp), sig):
+            failing = cp
+            break
+    if failing is None:
+        return _skipped("signature_absent_in_original")
+
+    prompt = _messages_text(failing.input_messages)
+    if not prompt:
+        return _skipped("no_replayable_input")
+
+    if not try_consume_llm_call():
+        return _skipped("cost_cap")
+
+    model = ""
+    if isinstance(failing.response, dict):
+        model = str(failing.response.get("model") or "")
+    try:
+        out = await _gateway_complete(org_id, model, prompt)
+    except Exception as exc:
+        return _skipped("replay_error", error=str(exc)[:200])
+
+    cost = float(out.get("cost_usd") or 0.0)
+    in_replay = signature_present(out.get("text") or "", sig)
+    details = {
+        "trace_id": trace_id,
+        "from_step": failing.step_number,
+        "signature": sig.to_json(),
+        "signature_in_original": True,
+        "signature_in_replay": in_replay,
+    }
+    if in_replay:
+        return ReplayResult(
+            status="failed",
+            reason="replay_signature_present",
+            cost_usd=cost,
+            traces_checked=1,
+            details=details,
+        )
+    return ReplayResult(
+        status="passed",
+        reason="replay_signature_absent",
+        cost_usd=cost,
+        traces_checked=1,
+        details=details,
+    )
+
+
 __all__ = [
     "FailureSignature",
     "ReplayResult",
+    "checkpoint_available",
     "extract_failure_signature",
     "is_replayable",
     "normalize_error_text",
+    "replay_case_signature",
     "run_replay_verify",
     "signature_present",
 ]
