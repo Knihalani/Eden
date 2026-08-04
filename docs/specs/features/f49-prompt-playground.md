@@ -5,7 +5,7 @@
 | **Feature ID** | F49 |
 | **Priority** | P0 |
 | **Effort** | L |
-| **Eden status** | MISSING — `/prompts` list-only; no `/playgrounds` |
+| **Eden status** | SHIPPED v0 — `/orgs/{org_id}/playgrounds` API (`api/routes/playgrounds.py`: CRUD, from-span, run, run/stream, promote-experiment), `src/eden/playground/` engine, portal `/playgrounds` page (`clients/portal/src/app/(portal)/playgrounds/`) |
 | **Competitive source** | Braintrust Playgrounds; Arize Prompt Playground; LangSmith; Laminar playgrounds; Weave |
 | **UI spec** | [U03](../ui/u03-playground.md) |
 | **Dependencies** | F53 datasets, F51 experiments, provider API keys, U01 open-from-span |

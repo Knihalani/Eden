@@ -5,7 +5,7 @@
 | **Feature ID** | F62 |
 | **Priority** | P1 |
 | **Effort** | XL |
-| **Eden status** | MISSING F/N — mentioned in plans only |
+| **Eden status** | SHIPPED (satisfied-by-architecture) — judges already run on the SLM-priced pinned internal model (`llm/models.py` `INTERNAL_CHAT_MODEL`, "fast" slot via ModelRouter) through unified multi-axis calls (`llmops/judges/unified.py`) with deterministic ~1.2% production sampling (`llmops/judges/_sampling.py` `PRODUCTION_SAMPLE_RATE = 0.012`); no separate Luna-style judge model to build |
 | **Competitive source** | Galileo Luna-2; Eden judge-v2-plan.md |
 | **UI spec** | — |
 | **Dependencies** | F52, F51, N03, F63 |

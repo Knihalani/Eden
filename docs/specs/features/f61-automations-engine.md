@@ -5,7 +5,7 @@
 | **Feature ID** | F61 |
 | **Priority** | P1 |
 | **Effort** | M |
-| **Eden status** | MISSING as unified engine — pieces in F44/F52/F29 |
+| **Eden status** | PARTIAL — `GET/POST /orgs/{org_id}/automations` (`api/routes/wave6_online.py:209,217`); no unified engine yet, pieces in F44/F52/F29 |
 | **Competitive source** | HoneyHive Automations; Braintrust |
 | **UI spec** | [U14](../ui/u14-online-rules-builder.md) |
 | **Dependencies** | F52, F44, F29, F50, F81 |

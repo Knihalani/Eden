@@ -121,7 +121,7 @@ Artifacts, Book, promotion gate, drift, NL alert triage.
 | F41 | Evidence-gated promotion | PARTIAL | P0 | [f41](features/f41-evidence-gated-promotion.md) | [U02](ui/u02-artifacts.md) |
 | F40 | The Book (agent memory) | PARTIAL | P1 | [f40](features/f40-the-book-agent-memory.md) | [U05](ui/u05-book-and-drift.md) |
 | F42 | Behavioral drift pinpoint | PARTIAL | P1 | [f42](features/f42-behavioral-drift-pinpoint.md) | [U05](ui/u05-book-and-drift.md) |
-| F81 | NL alerts + real/benign triage | MISSING | P0 | [f81](features/f81-nl-alerts-real-benign-triage.md) | [U04](ui/u04-alerts-inbox.md) |
+| F81 | NL alerts + real/benign triage | SHIPPED v0 | P0 | [f81](features/f81-nl-alerts-real-benign-triage.md) | [U04](ui/u04-alerts-inbox.md) |
 
 **Depends on:** Wave 2 issues (artifact authoring), Wave 3 observe (drill-down), F47 for channels.
 
@@ -158,13 +158,13 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | F79 | Span-level scoring API | PARTIAL | P1 | [f79](features/f79-span-level-scoring.md) | [U01](ui/u01-traces-hub.md) |
 | F54 | Code evaluators (sandboxed) | MISSING | P1 | [f54](features/f54-code-evaluators.md) | Scorers settings |
 | F55 | Categorical classifiers | MISSING | P1 | [f55](features/f55-categorical-classifiers.md) | U01 columns |
-| F61 | Automations engine | MISSING | P1 | [f61](features/f61-automations-engine.md) | [U14](ui/u14-online-rules-builder.md) |
+| F61 | Automations engine | PARTIAL (/automations endpoints live) | P1 | [f61](features/f61-automations-engine.md) | [U14](ui/u14-online-rules-builder.md) |
 | F57 | Custom monitoring dashboards | PARTIAL | P1 | [f57](features/f57-custom-monitoring-dashboards.md) | [U09](ui/u09-home-dashboard.md) |
-| F60 | Cost & usage analytics | PARTIAL | P1 | [f60](features/f60-cost-usage-analytics.md) | U09 + optimization |
+| F60 | Cost & usage analytics | SHIPPED v0 | P1 | [f60](features/f60-cost-usage-analytics.md) | U09 + optimization |
 | F66 | Collaborative prompt workspace | PARTIAL | P1 | [f66](features/f66-collaborative-prompt-workspace.md) | [U17](ui/u17-prompt-environments.md) |
 | F68 | AI Gateway prompt deploy | PARTIAL | P1 | [f68](features/f68-gateway-prompt-deploy.md) | [U17](ui/u17-prompt-environments.md) |
-| F56 | CI eval GitHub Action | MISSING | P1 | [f56](features/f56-ci-eval-github-action.md) | — |
-| F76 | SQL/EQL → dataset / queue export | MISSING | P1 | [f76](features/f76-sql-export-to-dataset.md) | Query page |
+| F56 | CI eval GitHub Action | PARTIAL (v0 action + /ci-eval/run) | P1 | [f56](features/f56-ci-eval-github-action.md) | — |
+| F76 | SQL/EQL → dataset / queue export | PARTIAL (export endpoints live) | P1 | [f76](features/f76-sql-export-to-dataset.md) | Query page |
 | F75 | Late metadata on finished traces | MISSING | P1 | [f75](features/f75-late-trace-metadata.md) | U01 |
 | F73 | Ingest PII redaction | PARTIAL | P1 | [f73](features/f73-ingest-pii-redaction.md) | Settings PII |
 
@@ -181,7 +181,7 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | F01 | Cached-prefix live debugger | PARTIAL | P0 | [f01](features/f01-cached-prefix-live-debugger.md) | [U13](ui/u13-debugger-sessions.md) |
 | F74 | Debugger session continuity | PARTIAL | P1 | [f74](features/f74-debugger-session-continuity.md) | [U13](ui/u13-debugger-sessions.md) |
 | F09 | Browser session recording (RRWeb) | PARTIAL | P1 | [f09](features/f09-browser-session-recording-rrweb.md) | U01 timeline |
-| F22 | Issue fix GitHub chat | PARTIAL | P0 | [f22](features/f22-issue-fix-github-chat.md) | Issues detail |
+| F22 | Issue fix GitHub chat | DELETED (SOTA W26 — do not rebuild) | P0 | [f22](features/f22-issue-fix-github-chat.md) | Issues detail |
 
 **Depends on:** Wave 1 F03/F04; Wave 2 issues.
 
@@ -195,7 +195,7 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 |---|---|---|---|---|---|
 | F06 | Per-trace signal investigator | MISSING | P0 | [f06](features/f06-per-trace-signal-investigator.md) | U01 signals panel |
 | F65 | Insights / Topics clustering | PARTIAL | P1 | [f65](features/f65-topics-insights-clustering.md) | [U11](ui/u11-topics-insights.md) |
-| F21 | Tool call label learning | MISSING | P2 | [f21](features/f21-tool-call-label-learning.md) | U01 / U06 |
+| F21 | Tool call label learning | SHIPPED v0 | P2 | [f21](features/f21-tool-call-label-learning.md) | U01 / U06 |
 | F34 | Trained signal classifiers | MISSING | P2 | [f34](features/f34-trained-signal-classifiers.md) | Signals |
 | F71 | Interactive Slack bot | PARTIAL | P1 | [f71](features/f71-interactive-slack-bot.md) | Slack (extends F47/F81) |
 
@@ -210,7 +210,7 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | ID | Title | Status | P | Spec |
 |---|---|---|---|---|
 | F46 | Closed-loop orchestrator | SHIPPED v0 | P0 | [f46](features/f46-closed-loop-orchestrator.md) |
-| F62 | SLM-as-judge / Luna-cost path | MISSING | P1 | [f62](features/f62-slm-as-judge.md) |
+| F62 | SLM-as-judge / Luna-cost path | SHIPPED (satisfied-by-architecture) | P1 | [f62](features/f62-slm-as-judge.md) |
 
 **N-specs (not F, but required gate):** N22 → N21 / N20; N19 KB flywheel; N04 impact preview — see FEATURE-GAP-MASTER.
 
@@ -224,16 +224,16 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 
 | ID | Title | Status | P | Spec | UI |
 |---|---|---|---|---|---|
-| F59 | Custom render templates | MISSING | P2 | [f59](features/f59-custom-render-templates.md) | [U15](ui/u15-render-templates.md) |
-| F63 | Judge autotune / CLHF | MISSING | P2 | [f63](features/f63-judge-autotune.md) | — |
+| F59 | Custom render templates | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | [U15](ui/u15-render-templates.md) |
+| F63 | Judge autotune / CLHF | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | — |
 | F64 | Agentic metrics pack | PARTIAL | P2 | [f64](features/f64-agentic-metrics-pack.md) | — |
-| F67 | LLM jury / composite metrics | MISSING | P2 | [f67](features/f67-llm-jury-composite.md) | — |
-| F69 | Remote eval sandboxes | MISSING | P2 | [f69](features/f69-remote-eval-sandboxes.md) | U03 / U07 |
+| F67 | LLM jury / composite metrics | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | — |
+| F69 | Remote eval sandboxes | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | U03 / U07 |
 | F70 | In-product AI copilot | PARTIAL | P2 | [f70](features/f70-in-product-ai-copilot.md) | [U16](ui/u16-in-ui-copilot.md) |
-| F72 | Virtual / customer data planes | MISSING | P2 | [f72](features/f72-virtual-data-planes.md) | — |
-| F77 | Fine-tune export pipeline | MISSING | P2 | [f77](features/f77-finetune-export.md) | — |
-| F78 | Multimodal playground inputs | MISSING | P2 | [f78](features/f78-multimodal-playground.md) | [U03](ui/u03-playground.md) |
-| F80 | OSS local workshop | MISSING | P2 | [f80](features/f80-oss-local-workshop.md) | — |
+| F72 | Virtual / customer data planes | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | — |
+| F77 | Fine-tune export pipeline | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | — |
+| F78 | Multimodal playground inputs | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | [U03](ui/u03-playground.md) |
+| F80 | OSS local workshop | CUT (bloat-cut 2026-07-15; spec removed, no archive kept) | P2 | — | — |
 
 **Exit:** Each listed F-spec acceptance criteria checked; enterprise blockers cleared for target customers.
 
@@ -362,7 +362,7 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | F83 | Platform-wide optimization pass | MISSING | P0 | [f83](features/f83-platform-wide-optimization.md) |
 | F84 | Eden dogfood debugging & self-observability | PARTIAL | P0 | [f84](features/f84-dogfood-debugging-self-observability.md) |
 | F85 | Critical-path E2E & debug hardening | MISSING | P0 | [f85](features/f85-critical-path-e2e-debug-hardening.md) |
-| F62 | SLM-as-judge (cost path — finish if open) | MISSING | P1 | [f62](features/f62-slm-as-judge.md) |
+| F62 | SLM-as-judge (cost path — finish if open) | SHIPPED (satisfied-by-architecture) | P1 | [f62](features/f62-slm-as-judge.md) |
 | N09 | Content-addressed storage (full ship) | — | P1 | [n09](features/n09-content-addressed-trace-storage.md) |
 | N16 | Intelligence-aware tail sampling (full ship) | — | P0 | [n16](features/n16-intelligence-aware-tail-sampling.md) |
 
@@ -410,8 +410,8 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | F09 | 7 | PARTIAL | Browser session recording (RRWeb) |
 | F12 | 1 | SHIPPED v0 | Typesense span search |
 | F20 | 2 | SHIPPED v0 | Zero-config auto issue detection |
-| F21 | 8 | MISSING | Tool call label learning |
-| F22 | 7 | PARTIAL | Issue fix GitHub chat |
+| F21 | 8 | SHIPPED v0 | Tool call label learning |
+| F22 | 7 | DELETED | Issue fix GitHub chat |
 | F23 | 3 | MISSING | Session-first SDK |
 | F28 | 2 | SHIPPED v0 | Agent stumbles |
 | F29 | 2 | SHIPPED v0 | Agent issues |
@@ -434,32 +434,32 @@ Continuous scoring, home/cost surfaces, prompt deploy.
 | F53 | 5 | PARTIAL | Versioned dataset hub |
 | F54 | 6 | MISSING | Code evaluators |
 | F55 | 6 | MISSING | Categorical classifiers |
-| F56 | 6 | MISSING | CI eval GitHub Action |
+| F56 | 6 | PARTIAL | CI eval GitHub Action |
 | F57 | 6 | PARTIAL | Custom monitoring dashboards |
 | F58 | 3 / 11 | MISSING | Saved table views |
-| F59 | 10 | MISSING | Custom render templates |
-| F60 | 6 | PARTIAL | Cost & usage analytics |
-| F61 | 6 | MISSING | Automations engine |
-| F62 | 9 / 14 | MISSING | SLM-as-judge |
-| F63 | 10 | MISSING | Judge autotune |
+| F59 | 10 | CUT | Custom render templates |
+| F60 | 6 | SHIPPED v0 | Cost & usage analytics |
+| F61 | 6 | PARTIAL | Automations engine |
+| F62 | 9 / 14 | SHIPPED (satisfied-by-architecture) | SLM-as-judge |
+| F63 | 10 | CUT | Judge autotune |
 | F64 | 10 | PARTIAL | Agentic metrics pack |
 | F65 | 8 | PARTIAL | Topics / insights clustering |
 | F66 | 6 | PARTIAL | Collaborative prompt workspace |
-| F67 | 10 | MISSING | LLM jury / composite |
+| F67 | 10 | CUT | LLM jury / composite |
 | F68 | 6 | PARTIAL | Gateway prompt deploy |
-| F69 | 10 | MISSING | Remote eval sandboxes |
+| F69 | 10 | CUT | Remote eval sandboxes |
 | F70 | 10 | PARTIAL | In-product AI copilot |
 | F71 | 8 | PARTIAL | Interactive Slack bot |
-| F72 | 10 | MISSING | Virtual data planes |
+| F72 | 10 | CUT | Virtual data planes |
 | F73 | 6 | PARTIAL | Ingest PII redaction |
 | F74 | 7 | PARTIAL | Debugger session continuity |
 | F75 | 6 | MISSING | Late trace metadata |
-| F76 | 6 | MISSING | SQL/EQL → dataset export |
-| F77 | 10 | MISSING | Fine-tune export |
-| F78 | 10 | MISSING | Multimodal playground |
+| F76 | 6 | PARTIAL | SQL/EQL → dataset export |
+| F77 | 10 | CUT | Fine-tune export |
+| F78 | 10 | CUT | Multimodal playground |
 | F79 | 6 | PARTIAL | Span-level scoring |
-| F80 | 10 | MISSING | OSS local workshop |
-| F81 | 4 | MISSING | NL alerts + real/benign triage |
+| F80 | 10 | CUT | OSS local workshop |
+| F81 | 4 | SHIPPED v0 | NL alerts + real/benign triage |
 | F82 | 14 | MISSING | Portal performance budgets |
 | F83 | 14 | MISSING | Platform-wide optimization pass |
 | F84 | 14 | PARTIAL | Dogfood debugging & self-observability |
@@ -490,7 +490,7 @@ Wave 6:  F52 F79 F54 F55 F61 F57 F60 F66 F68 F56 F76 F75 F73
 Wave 7:  F01 F74 F09 F22
 Wave 8:  F06 F65 F21 F34 F71
 Wave 9:  F46 F62
-Wave 10: F59 F63 F64 F67 F69 F70 F72 F77 F78 F80
+Wave 10: F64 F70                  # rest of wave CUT 2026-07-15 (F59 F63 F67 F69 F72 F77 F78 F80; specs removed)
 Wave 11: U18 U00 U12 F58          # PORTAL OVERHAUL
 Wave 12: U19 U01-U10 U13 U14 U17  # PORTAL IMPROVEMENT
 Wave 13: U20 U15 U16 U11          # PORTAL POLISH

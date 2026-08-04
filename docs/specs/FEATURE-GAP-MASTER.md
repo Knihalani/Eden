@@ -1,6 +1,6 @@
 # Eden Feature Gap Master Document
 
-> **Date:** July 15, 2026 (bloat-cut pass — N23 added, P2 specs archived)  
+> **Date:** July 15, 2026 (bloat-cut pass — N23 added, eight P2 specs cut; files removed, no archive kept)  
 > **Inventory:** **57 F-features** + **22 N-features** + **18 UI specs** = **97 specs**  
 > **Prior inventory:** 24 F + 21 N = 45 (July 9 autonomous maintenance pass)  
 > **⭐ Execution roadmap (single):** [`EDEN-MASTER-ROADMAP.md`](EDEN-MASTER-ROADMAP.md) — F01–F85 not-fully-shipped + Waves 11–13 portal programs + Wave 14 optim/debug (no time estimates)  
@@ -132,28 +132,28 @@ See [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md) — incident playbo
 | F56 | CI eval GitHub Action | P1 | [f56](features/f56-ci-eval-github-action.md) |
 | F57 | Custom monitoring dashboards | P1 | [f57](features/f57-custom-monitoring-dashboards.md) |
 | **F58** | Saved table views | **P0** | [f58](features/f58-saved-table-views.md) |
-| ~~F59~~ | ~~Custom render templates~~ | ~~P2~~ | **CUT** — archived [f59](../archive/f59-custom-render-templates.md) |
+| ~~F59~~ | ~~Custom render templates~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F60 | Cost & usage analytics surface | P1 | [f60](features/f60-cost-usage-analytics.md) |
 | F61 | Automations engine | P1 | [f61](features/f61-automations-engine.md) |
 | F62 | SLM-as-judge / Luna-cost path | P1 | [f62](features/f62-slm-as-judge.md) |
-| ~~F63~~ | ~~Judge autotune / CLHF~~ | ~~P2~~ | **CUT** — archived [f63](../archive/f63-judge-autotune.md) |
+| ~~F63~~ | ~~Judge autotune / CLHF~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F64 | Agentic metrics pack | P2 | [f64](features/f64-agentic-metrics-pack.md) |
 | F65 | Topics / insights clustering | P1 | [f65](features/f65-topics-insights-clustering.md) |
 | F66 | Collaborative prompt workspace | P1 | [f66](features/f66-collaborative-prompt-workspace.md) |
-| ~~F67~~ | ~~LLM jury / composite metrics~~ | ~~P2~~ | **CUT** — archived [f67](../archive/f67-llm-jury-composite.md) |
+| ~~F67~~ | ~~LLM jury / composite metrics~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F68 | Gateway prompt deploy | P1 | [f68](features/f68-gateway-prompt-deploy.md) |
-| ~~F69~~ | ~~Remote eval sandboxes~~ | ~~P2~~ | **CUT** — archived [f69](../archive/f69-remote-eval-sandboxes.md) |
+| ~~F69~~ | ~~Remote eval sandboxes~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F70 | In-product AI copilot | P2 | [f70](features/f70-in-product-ai-copilot.md) |
 | F71 | Interactive Slack bot | P1 | [f71](features/f71-interactive-slack-bot.md) |
-| ~~F72~~ | ~~Virtual / customer data planes~~ | ~~P2~~ | **CUT** — archived [f72](../archive/f72-virtual-data-planes.md) |
+| ~~F72~~ | ~~Virtual / customer data planes~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F73 | Ingest PII redaction | P1 | [f73](features/f73-ingest-pii-redaction.md) |
 | F74 | Debugger session continuity | P1 | [f74](features/f74-debugger-session-continuity.md) |
 | F75 | Late metadata on finished traces | P1 | [f75](features/f75-late-trace-metadata.md) |
 | F76 | SQL/EQL → dataset/queue export | P1 | [f76](features/f76-sql-export-to-dataset.md) |
-| ~~F77~~ | ~~Fine-tune export pipeline~~ | ~~P2~~ | **CUT** — archived [f77](../archive/f77-finetune-export.md) |
-| ~~F78~~ | ~~Multimodal playground inputs~~ | ~~P2~~ | **CUT** — archived [f78](../archive/f78-multimodal-playground.md) |
+| ~~F77~~ | ~~Fine-tune export pipeline~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
+| ~~F78~~ | ~~Multimodal playground inputs~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F79 | Span-level scoring API | P1 | [f79](features/f79-span-level-scoring.md) |
-| ~~F80~~ | ~~OSS local workshop~~ | ~~P2~~ | **CUT** — archived [f80](../archive/f80-oss-local-workshop.md) |
+| ~~F80~~ | ~~OSS local workshop~~ | ~~P2~~ | **CUT** — spec removed in bloat-cut pass (no archive kept) |
 | F81 | NL alerts + real/benign triage (Bento 4.5) | **P0** | [f81](features/f81-nl-alerts-real-benign-triage.md) |
 | **F82** | Portal performance budgets | **P0** | [f82](features/f82-portal-performance-budgets.md) |
 | **F83** | Platform-wide optimization pass | **P0** | [f83](features/f83-platform-wide-optimization.md) |
@@ -219,4 +219,4 @@ Every feature spec includes mandatory § Performance & cost optimization (see `_
 
 ---
 
-*97 specs (57F + 22N + 18UI), bloat-cut pass — July 15, 2026. Eight P2 F-specs archived; see [`archive/`](archive/).*
+*97 specs (57F + 22N + 18UI), bloat-cut pass — July 15, 2026. Eight P2 F-specs CUT — their spec files were removed outright (no archive kept).*
