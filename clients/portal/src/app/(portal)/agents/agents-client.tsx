@@ -41,6 +41,7 @@ import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY, LIVE_STALE } from "@/lib/portal-query";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { AgentHealthStrip } from "@/components/agents/agent-health-strip";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { formatRelativeTime } from "@/lib/format";
@@ -60,7 +61,42 @@ const ConnectRepoButton = dynamic(
   },
 );
 
+// Detail tabs are code-split — Quality pulls the recharts island (via its
+// own inner dynamic import) and Experiments pulls the offline experiments
+// client, neither of which should ride along on /agents first paint.
+const AgentQualityTab = dynamic(
+  () =>
+    import("@/components/agents/agent-quality-tab").then((m) => ({
+      default: m.AgentQualityTab,
+    })),
+  { ssr: false, loading: () => <QueryLoadingPanel label="Loading quality…" /> },
+);
+
+const AgentExperimentsTab = dynamic(
+  () =>
+    import("@/components/agents/agent-experiments-tab").then((m) => ({
+      default: m.AgentExperimentsTab,
+    })),
+  {
+    ssr: false,
+    loading: () => <QueryLoadingPanel label="Loading experiments…" />,
+  },
+);
+
 type RunFilter = "all" | "error" | "warn" | "ok";
+
+type DetailTab = "runs" | "quality" | "experiments";
+
+function parseDetailTab(raw: string | null): DetailTab {
+  if (raw === "quality" || raw === "experiments") return raw;
+  return "runs";
+}
+
+const DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
+  { id: "runs", label: "Runs" },
+  { id: "quality", label: "Quality" },
+  { id: "experiments", label: "Experiments" },
+];
 
 function RunInspector({
   trace,
@@ -83,6 +119,7 @@ function RunInspector({
   stepsError?: Error | null;
   onRetrySteps?: () => void;
 }) {
+  const { currentOrg } = useOrg();
   const hasSignals = trace.severity !== "none" || Boolean(trace.signals?.title);
   const [signalDismissed, setSignalDismissed] = useState(false);
 
@@ -224,6 +261,8 @@ function RunInspector({
             key={trace.id}
             steps={trace.steps}
             defaultOpenIds={errorStepIds(trace.steps)}
+            orgId={currentOrg?.id ?? null}
+            traceId={trace.id}
           />
         )}
       </div>
@@ -268,6 +307,15 @@ function AgentDetailBody({
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const searchParams = useSearchParams();
+  const patchQuery = useQueryPatch();
+  const detailTab = parseDetailTab(searchParams.get("tab"));
+  const setDetailTab = useCallback(
+    (next: DetailTab) => {
+      patchQuery({ tab: next === "runs" ? null : next });
+    },
+    [patchQuery],
+  );
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(agent.name);
   const [renameBusy, setRenameBusy] = useState(false);
@@ -550,6 +598,13 @@ function AgentDetailBody({
         </div>
       </header>
 
+      <AgentHealthStrip
+        lastSeen={agent.lastSeen}
+        errorRate={agent.errorRate}
+        openIssues={agent.openIssues}
+        runs24h={agent.runs24h}
+      />
+
       <div className="lab-metric-strip shrink-0 [&_>_*]:!px-4 [&_>_*]:!py-3">
         <MetricCell label="Runs (24h)" value={String(agent.runs24h)} />
         <MetricCell
@@ -612,6 +667,34 @@ function AgentDetailBody({
         />
       </div>
 
+      <div
+        role="tablist"
+        aria-label="Agent detail sections"
+        className="flex shrink-0 gap-1 border-b border-[var(--line)] px-4 py-1.5 sm:px-5"
+      >
+        {DETAIL_TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={detailTab === id}
+            className="ds-tab"
+            onClick={() => setDetailTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {detailTab === "quality" ? (
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <AgentQualityTab orgId={orgId} agentId={agent.id} />
+        </div>
+      ) : detailTab === "experiments" ? (
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <AgentExperimentsTab orgId={orgId} agentId={agent.id} />
+        </div>
+      ) : (
       <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[minmax(16rem,24rem)_minmax(0,1fr)]">
         <section className="flex min-h-0 min-w-0 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
           <div className="lab-list-chrome">
@@ -708,6 +791,7 @@ function AgentDetailBody({
           )}
         </section>
       </div>
+      )}
     </div>
   );
 }
