@@ -501,6 +501,14 @@ class CIEvalRequest(BaseModel):
     changed_files: list[str] = Field(default_factory=list)
     agent_id: str | None = None
     baseline_experiment_id: str | None = None
+    # Optional CI context (additive). Absorbed into the run's metadata JSONB
+    # and used for the optional commit-status writeback.
+    ref: str | None = None
+    commit_sha: str | None = None
+    pr_number: int | None = None
+    repo_full_name: str | None = None
+    # Opt-in per request; still gated behind ci_eval_commit_status_v1.
+    post_commit_status: bool = False
 
 @router.post("/ci-eval/run")
 async def ci_eval_run(org_id: str = Depends(require_path_org_access), body: CIEvalRequest = Body(...)) -> dict[str, Any]:
@@ -509,8 +517,55 @@ async def ci_eval_run(org_id: str = Depends(require_path_org_access), body: CIEv
         changed_files=body.changed_files,
         change_id=body.change_id,
         agent_id=body.agent_id,
+        baseline_experiment_id=body.baseline_experiment_id,
+        ref=body.ref,
+        commit_sha=body.commit_sha,
+        pr_number=body.pr_number,
     )
+    # Optional commit-status writeback (F56). Behind config flag + per-request
+    # opt-in + repo/sha present; fail-open so an eval never fails on this.
+    from eden.config import get_settings
+
+    flag_on = bool(getattr(get_settings(), "ci_eval_commit_status_v1", False))
+    if not flag_on:
+        result["commit_status"] = {"posted": False, "reason": "flag_disabled"}
+    elif body.post_commit_status and body.repo_full_name and body.commit_sha:
+        from eden.evaluation.ci_eval_commit_status import post_commit_status
+        from eden.evaluation.ci_webhook import render_summary_md
+
+        result["commit_status"] = await post_commit_status(
+            org_id,
+            repo_full_name=body.repo_full_name,
+            commit_sha=body.commit_sha,
+            ok=result["ok"],
+            summary_md=render_summary_md(result),
+        )
+    else:
+        result["commit_status"] = {"posted": False, "reason": "not_requested"}
     return _ok("f56", result)
+
+@router.get("/ci-eval/runs")
+async def ci_eval_runs_list(
+    org_id: str = Depends(require_path_org_access),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    from eden.evaluation.ci_eval_history import CIEvalHistoryStore
+
+    page = await CIEvalHistoryStore().list_runs(org_id, limit=limit, offset=offset)
+    return _ok("f56", page)
+
+@router.get("/ci-eval/runs/{run_id}")
+async def ci_eval_run_detail(
+    org_id: str = Depends(require_path_org_access),
+    run_id: str = Path(...),
+) -> dict[str, Any]:
+    from eden.evaluation.ci_eval_history import CIEvalHistoryStore
+
+    run = await CIEvalHistoryStore().get_run(org_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="ci-eval run not found")
+    return _ok("f56", {"run": run})
 
 # ── F76 SQL export ──────────────────────────────────────────────────
 

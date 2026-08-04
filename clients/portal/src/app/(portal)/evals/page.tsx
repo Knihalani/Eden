@@ -48,6 +48,7 @@ import { catalogAgents, patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
+import { DOCS_URL } from "@/lib/constants";
 import { portalApi } from "@/lib/api/portal";
 import {
   datasetsApi,
@@ -1497,6 +1498,11 @@ function LabEvalsInner() {
     </span>
   );
 
+  // Empty state on the non-compare surfaces (compare owns its own empty view).
+  const surfaceEmpty =
+    (mode === "datasets" && !datasetsUnavailable && allDatasets.length === 0) ||
+    (mode === "playground" && allPlaygrounds.length === 0);
+
   // See the local-state comment above `extraDatasets` — none of these
   // surfaces persist to the backend, so surface a standing honesty banner.
   return (
@@ -1551,6 +1557,29 @@ function LabEvalsInner() {
           >
             Retry
           </button>
+        </div>
+      ) : null}
+
+      {surfaceEmpty ? (
+        <div className="shrink-0 px-5 py-3 sm:px-7">
+          <a
+            href={`${DOCS_URL}/how-to/evals-in-ci`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--line)] bg-[var(--bg-inset)] px-4 py-3 no-underline transition-colors hover:bg-[var(--bg-hover)]"
+          >
+            <span>
+              <span className="block text-[var(--text)] font-medium">
+                Gate your PRs with evals
+              </span>
+              <span className="type-meta text-[var(--text-muted)]">
+                Run this suite on every pull request and block regressions in CI.
+              </span>
+            </span>
+            <span className="ds-btn ds-btn-ghost ds-btn-sm shrink-0">
+              Read the guide →
+            </span>
+          </a>
         </div>
       ) : null}
 

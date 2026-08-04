@@ -84,4 +84,5 @@ jobs:
           eden-base-url: ${{ steps.base.outputs.url }}
           change-id: ${{ github.event.pull_request.number || github.run_id }}
           changed-files: ${{ steps.files.outputs.list }}
+          portal-url: ${{ secrets.EDEN_PORTAL_URL || 'https://app.eden.com' }}
           fail-on-regression: "true"
