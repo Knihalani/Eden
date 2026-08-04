@@ -216,6 +216,81 @@ async def slow_queries(
     }
 
 
+def _percentile_from_buckets(
+    buckets_ms: list[int | float],
+    row_buckets: dict[str, float],
+    count: float,
+    q: float,
+) -> float | None:
+    """Derive the q-th percentile (0 < q < 1) from cumulative histogram buckets.
+
+    The latency middleware records Prometheus-style cumulative bucket
+    counts (``{"5": n, ..., "10000": n, "+Inf": n}``); percentiles are
+    NOT precomputed, so we linearly interpolate within the first bucket
+    whose cumulative count reaches ``q * count`` (same estimator as
+    ``histogram_quantile``). Observations landing in the ``+Inf`` bucket
+    clamp to the highest finite bound — an honest upper-bound estimate,
+    not a fabricated value.
+    """
+    if count <= 0:
+        return None
+    target = q * count
+    prev_bound = 0.0
+    prev_cum = 0.0
+    for b in buckets_ms:
+        cum = row_buckets.get(str(b), 0.0)
+        if cum >= target:
+            if cum == prev_cum:
+                return float(b)
+            return round(
+                prev_bound + (float(b) - prev_bound) * (target - prev_cum) / (cum - prev_cum),
+                2,
+            )
+        prev_bound, prev_cum = float(b), cum
+    # Falls in the +Inf bucket: no finite upper bound exists.
+    return float(buckets_ms[-1])
+
+
+@router.get("/latency-histograms")
+async def latency_histograms(
+    org_id: str = Depends(require_path_org_access),
+    org: dict = Depends(require_org_admin),
+) -> dict[str, Any]:
+    """Per-(method, route) API latency percentiles for org admins (§11.1).
+
+    Reads the in-memory latency histogram recorded by
+    ``LatencyMiddleware`` and derives p50/p95/p99 from the cumulative
+    buckets. Process-global (route templates only — no tenant data).
+    """
+    _assert_path_org(org_id, org)
+    from eden.api.middleware.latency import get_metrics_snapshot
+
+    snap = get_metrics_snapshot()
+    buckets_ms = snap.get("buckets_ms", [])
+    routes = [
+        {
+            "method": row["method"],
+            "route": row["route"],
+            "count": int(row["count"]),
+            "p50_ms": _percentile_from_buckets(buckets_ms, row["buckets"], row["count"], 0.50),
+            "p95_ms": _percentile_from_buckets(buckets_ms, row["buckets"], row["count"], 0.95),
+            "p99_ms": _percentile_from_buckets(buckets_ms, row["buckets"], row["count"], 0.99),
+        }
+        for row in snap.get("rows", [])
+    ]
+    routes.sort(key=lambda r: (r["route"], r["method"]))
+    return {
+        "org_id": org_id,
+        "buckets_ms": buckets_ms,
+        "routes": routes,
+        "note": (
+            "Process-global API latency since worker start; percentiles are "
+            "derived from histogram buckets (linear interpolation, +Inf "
+            "clamped to the highest finite bound)."
+        ),
+    }
+
+
 @router.post("/synthetics/run")
 async def run_synthetics(
     org_id: str = Depends(require_path_org_access),

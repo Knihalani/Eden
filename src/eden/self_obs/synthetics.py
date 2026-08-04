@@ -11,6 +11,66 @@ from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
+#: Indirection so tests can freeze time without patching the global
+#: ``time`` module.
+_monotonic = time.monotonic
+
+#: How long one org's "had real telemetry in the last 24h?" verdict is
+#: reused before re-asking Postgres. The signal moves slowly (a 24h
+#: window) and the scheduler sweeps each org at most once per a few
+#: 600s ticks, so an hour of staleness is invisible while cutting the
+#: check itself to <=1 query/org/hour.
+_ACTIVITY_CACHE_TTL_S = 3600.0
+
+#: ``{org_id: (expires_monotonic, had_recent_events)}``
+_org_activity_cache: dict[str, tuple[float, bool]] = {}
+
+
+def _reset_activity_cache_for_tests() -> None:
+    _org_activity_cache.clear()
+
+
+async def _org_had_recent_events(org_id: str) -> bool:
+    """True when ``org_id`` ingested real telemetry in the last 24h.
+
+    The check is a ``LIMIT 1`` existence probe of ``telemetry_events``
+    — index-backed via ``(tenant_id, timestamp DESC)`` (migration 009)
+    — cached per org for :data:`_ACTIVITY_CACHE_TTL_S`.
+
+    Fails OPEN: any error (or no Postgres client) reports "active"
+    *without* caching, so the golden probes run exactly as before
+    whenever the signal is unavailable, and the next call re-asks.
+    """
+    now = _monotonic()
+    cached = _org_activity_cache.get(org_id)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return True
+        row = await client.fetchval(
+            """
+            SELECT 1 FROM telemetry_events
+            WHERE tenant_id = $1
+              AND timestamp > NOW() - interval '24 hours'
+            LIMIT 1
+            """,
+            org_id,
+        )
+        active = row is not None
+    except Exception as exc:
+        logger.debug(
+            "synthetics: activity check failed for %s (failing open): %s",
+            org_id,
+            exc,
+        )
+        return True
+    _org_activity_cache[org_id] = (now + _ACTIVITY_CACHE_TTL_S, active)
+    return active
+
 
 async def _persist_run(org_id: str, probe: str, status: str, detail: dict[str, Any]) -> None:
     try:
@@ -278,6 +338,31 @@ async def run_golden_probes(
     results: dict[str, Any] = {}
     t0 = time.perf_counter()
     failed = 0
+    # Scheduled path only (``shared_results`` is passed exclusively by
+    # ``eden.self_obs.scheduler``): an org with no real telemetry in the
+    # last 24h gets no org-scoped probes — its issue/trace counts cannot
+    # have changed, so re-probing every sweep was pure idle-load residue
+    # (Postgres reads + eden_synthetic_runs writes for orgs nobody is
+    # using). Shared-probe results still flow through so platform-level
+    # failures (portal down, gateway down) keep alerting for every org.
+    # On-demand callers (admin route, MCP tool) never pass
+    # ``shared_results`` and always get the full probe set.
+    # _org_had_recent_events fails OPEN, so an unavailable/broken
+    # activity signal degrades to the previous always-probe behaviour.
+    if shared_results is not None and not await _org_had_recent_events(org_id):
+        for name in names:
+            if name in shared_results:
+                detail = shared_results[name]
+                if detail.get("status", "fail") not in ("ok", "healthy"):
+                    failed += 1
+                results[name] = detail
+        return {
+            "org_id": org_id,
+            "probes": results,
+            "failed": failed,
+            "skipped_idle": True,
+            "elapsed_ms": round((time.perf_counter() - t0) * 1000, 2),
+        }
     issue_count_cache: int | None = None
     for name in names:
         if shared_results is not None and name in shared_results:

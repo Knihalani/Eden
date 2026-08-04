@@ -49,11 +49,11 @@
 
 | Bucket | MET | SOFT | UNPROVEN |
 |---|---|---|---|
-| Latency SLAs | 1 | 5 | 2 (F12 10M; N08 StatGate) |
+| Latency SLAs | 2 | 5 | 1 (F12 10M) |
 | Cost controls | 5 | 1 | 0 |
 | Async/cache | 3 | 1 | 0 |
 
-**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path gates met locally; StatGate (N08) latency, human-facing p95s, and F12 staging remain unproven.
+**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; human-facing p95s and F12 staging remain unproven.
 
 ---
 

@@ -210,10 +210,76 @@ router = APIRouter(prefix="/gateway/v1", tags=["gateway"])
 
 _async_client: AsyncOpenAI | None = None
 _gateway: AIGateway | None = None
+# Lazy shared SemanticCache for the gateway singleton. Built once per
+# process by :func:`_get_semantic_cache`; ``None`` until first use (or
+# forever, when disabled / construction fails).
+_semantic_cache: Any | None = None
 
 
 def _settings():
     return get_settings()
+
+
+def _get_semantic_cache() -> Any | None:
+    """Return the process-shared SemanticCache for the AIGateway, or None.
+
+    The two-tier cache (``eden.llmops.semantic_cache.SemanticCache``)
+    was fully built but never wired into the live gateway — the
+    singleton below was constructed with no ``semantic_cache``. There
+    is no Settings flag for it (``settings.semantic_cache_v1`` gates
+    the *optimization* prompt cache, a different subsystem), so this
+    is gated by an env var, default ON:
+
+    * ``EDEN_GATEWAY_SEMANTIC_CACHE`` — set to 0/false/no/off to
+      disable. # TODO(config): promote to Settings
+    * ``EDEN_GATEWAY_SEMANTIC_CACHE_EMBEDDER=sentence-transformers``
+      opts the L2 tier into real embedding similarity, only honoured
+      when the ``sentence_transformers`` dependency is importable.
+      # TODO(config): promote to Settings
+
+    Default behaviour is exact-match L1 plus SemanticCache's
+    conservative keyword-overlap L2 fallback (0.95 threshold). The
+    embedders' ``embed()`` calls are synchronous, so the heavyweight
+    OpenAI HTTP embedder is deliberately not auto-enabled here — it
+    would block the event loop on the request path.
+
+    Fail open: any failure returns ``None`` (gateway runs uncached);
+    the request path is never broken by cache construction.
+    """
+    global _semantic_cache
+    if _semantic_cache is not None:
+        return _semantic_cache
+    import os
+
+    if os.environ.get(
+        "EDEN_GATEWAY_SEMANTIC_CACHE", "1"
+    ).strip().lower() in _FALSY:
+        return None
+    try:
+        from eden.llmops.semantic_cache import SemanticCache
+
+        embedder = None
+        embedder_kind = os.environ.get(
+            "EDEN_GATEWAY_SEMANTIC_CACHE_EMBEDDER", ""
+        ).strip().lower()
+        if embedder_kind in (
+            "st", "sentence-transformers", "sentence_transformers",
+        ):
+            try:
+                import sentence_transformers  # noqa: F401 — availability probe
+
+                from eden.llmops.semantic_cache import (
+                    SentenceTransformerEmbedder,
+                )
+
+                embedder = SentenceTransformerEmbedder()
+            except Exception:  # noqa: BLE001 — dep missing: L1 + keyword L2 only
+                embedder = None
+        _semantic_cache = SemanticCache(embedder=embedder)
+    except Exception as exc:  # noqa: BLE001 — fail open to no-cache
+        logger.debug("gateway: semantic cache unavailable: %s", exc)
+        return None
+    return _semantic_cache
 
 
 def get_async_openai_client() -> AsyncOpenAI:
@@ -258,7 +324,12 @@ def get_ai_gateway() -> AIGateway:
     """
     global _gateway
     if _gateway is None:
-        _gateway = AIGateway()
+        # Wire the shared two-tier SemanticCache into the live
+        # gateway (was constructed cache-less, so the fully-built
+        # cache never ran in production). ``_get_semantic_cache``
+        # honours EDEN_GATEWAY_SEMANTIC_CACHE and fails open to
+        # ``None`` (uncached) — never breaks the request path.
+        _gateway = AIGateway(semantic_cache=_get_semantic_cache())
         # Schedule a background refresh; safe to fire-and-forget
         # because both refresh helpers deduplicate concurrent calls
         # via the catalog's in-flight task. We swallow any exception

@@ -360,6 +360,27 @@ class BudgetExceededError(Exception):
     pass
 
 
+def _inc_cache_hit_metric(tier: str) -> None:
+    """Increment ``eden_gateway_cache_hit_total{tier=...}``.
+
+    ``tier`` is ``"exact"`` or ``"semantic"``. Uses the in-process
+    :mod:`eden.observability.simple_metrics` registry (same family
+    naming convention as ``eden_checkpoint_ingest_total``) so the
+    ``/metrics`` endpoint exposes it. Best-effort: a metrics failure
+    must never break the completion hot path.
+    """
+    try:
+        from eden.observability.simple_metrics import Counter
+
+        Counter(
+            "eden_gateway_cache_hit_total",
+            "AIGateway completion cache hits by tier (exact | semantic)",
+            labelnames=("tier",),
+        ).labels(tier=tier).inc()
+    except Exception:  # noqa: BLE001 — metrics are best-effort
+        pass
+
+
 class AIGateway:
     """AI Gateway with auth, routing, caching, cost tracking, and failover."""
 
@@ -615,6 +636,7 @@ class AIGateway:
         if self.exact_cache:
             cached = await self._check_exact_cache(request)
             if cached:
+                _inc_cache_hit_metric("exact")
                 await self._record_cache_lookup_hit(
                     request,
                     cache_key=f"exact:{request.prompt_hash}",
@@ -628,6 +650,7 @@ class AIGateway:
         if self.semantic_cache:
             cached = await self._check_semantic_cache(request)
             if cached:
+                _inc_cache_hit_metric("semantic")
                 await self._record_cache_lookup_hit(
                     request,
                     cache_key=f"semantic:{request.prompt_hash}",
@@ -811,7 +834,17 @@ class AIGateway:
         if not self.semantic_cache:
             return None
         try:
-            result = await self.semantic_cache.get(request.prompt, similarity_threshold=0.95)
+            # ``SemanticCache.get`` requires the model_version
+            # positionally (entries are keyed per model). The old
+            # call omitted it, so every lookup raised TypeError and
+            # was swallowed by the except below — the cache could
+            # never hit. Fixed when the cache was wired into the
+            # live gateway singleton (2026-08).
+            result = await self.semantic_cache.get(
+                request.prompt,
+                request.model_version,
+                similarity_threshold=0.95,
+            )
             if result:
                 return ModelResponse(
                     text=result,
@@ -843,9 +876,14 @@ class AIGateway:
                 })
                 await self.exact_cache.set(key, payload, ttl=3600)
             if self.semantic_cache:
+                # Store under the *requested* model version so the
+                # lookup key in ``_check_semantic_cache`` matches
+                # (``response.model`` may be a provider-resolved
+                # alias and would never be found again).
                 await self.semantic_cache.set(
                     request.prompt,
                     response.text,
+                    request.model_version,
                     ttl_seconds=3600,
                 )
         except Exception:
