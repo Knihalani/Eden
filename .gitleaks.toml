@@ -1,0 +1,19 @@
+# Gitleaks configuration (used by .github/workflows/secret-scan.yml).
+#
+# Keep the allowlist NARROW. Only clearly-fake fixture material used by the
+# redaction/leak-canary test suites may be excluded, and only via the
+# explicit markers below — never whole directories.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deliberately fake secrets used to test Eden's own redaction"
+regexes = [
+  # Canary fixtures must embed one of these markers in the fake value.
+  '''EDEN_FAKE_SECRET''',
+  '''CANARY_NOT_A_REAL''',
+]
+paths = [
+  '''\.env\.example$''',
+]
