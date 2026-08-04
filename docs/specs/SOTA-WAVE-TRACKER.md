@@ -81,7 +81,7 @@
 | P0-GW-FILTERS | P0 | Learn filters not mutating live `/gateway/v1` | **FIXED W2** | W2 |
 | P0-GW-BLOCK | P0 | `GuardrailBlocked` swallowed (fail-open) | **FIXED W2** | W2 |
 | P0-F85-AUTH | P0 | Golden paths auth-green needs Clerk seed | **PARTIAL** (CI fallback + local keys; Actions secrets unverified) | W3 |
-| P0-F12-10M | P0 | Staging Typesense 10M p95 proof | **BLOCKED** (infra) — contract CI 10k GREEN | W3 |
+| P0-F12-10M | P0 | Staging Typesense 10M p95 proof | **1.1M PROVEN** on real Typesense (SearchService p95 184ms with `search_cutoff_ms=150`; see `bench/results/f12-span-search-1m-typesense-20260804.json`). 10M-on-staging still infra-blocked. | W3 |
 
 ---
 

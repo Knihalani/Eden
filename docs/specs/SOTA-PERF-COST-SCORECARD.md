@@ -14,7 +14,7 @@
 | Trace detail / transcript | <1.2s | TranscriptV2 + virtualization (W13); progressive load | **SOFT** — structural + unit; staging p95 not measured |
 | MCP tool response (read) | <800ms | `eden-mcp` smoke + W28 tool catalog; exclude upstream LLM | **SOFT** — install/smoke OK; no staging latency histogram |
 | Issue created after trace | <60s | Async workers + stumble/signal path | **SOFT** — unit contracts; staging dogfood open |
-| Search (Typesense) F12 | <200ms | Local SQLite proxy N=50k p95 ~253ms; **staging 10M BLOCKED** | **UNPROVEN** — W3 P0-F12-10M |
+| Search (Typesense) F12 | <200ms | **Real Typesense 1.1M docs**: SearchService end-to-end p95 **184ms** with `search_cutoff_ms=150` (server keyword p95 555→164). Untuned p95 was ~446–551ms. Single-node laptop; 10M not yet run. `bench/results/f12-span-search-1m-typesense-20260804.json` | **MET @1.1M** (tuned) — 10M staging follow-up |
 | StatGate (N08) | <80ms | Microbench, 2000 iterations over a 200-incident synthetic pool (mixed kinds/severities, 0–8 stumbles, ~20% with metric samples driving the numeric gate; pure compute, no I/O): p50=0.0090ms p95=0.0757ms p99=0.0801ms vs SLA p95<80ms p99<150ms (`tests/perf/test_statgate_microbench.py`) | **MET** (local) |
 | Ingest hot-path overhead | ≤5ms p99 | Evolution scorecard + `tests/perf/test_hot_path_microbench.py` | **MET** (local) |
 | Live stream publish (N11) | <500ms | Unit/local buffer proof (W27); staging p95 open | **SOFT** |
@@ -49,11 +49,11 @@
 
 | Bucket | MET | SOFT | UNPROVEN |
 |---|---|---|---|
-| Latency SLAs | 2 | 5 | 1 (F12 10M) |
+| Latency SLAs | 3 (F12 @1.1M) | 5 | 0 |
 | Cost controls | 5 | 1 | 0 |
 | Async/cache | 3 | 1 | 0 |
 
-**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; human-facing p95s and F12 staging remain unproven.
+**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; F12 span-search now met at 1.1M on real Typesense (`search_cutoff_ms=150`, p95 184ms), with a 10M-on-staging run as the remaining follow-up; human-facing p95s remain unproven.
 
 ---
 

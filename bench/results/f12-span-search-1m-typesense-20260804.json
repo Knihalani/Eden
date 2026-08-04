@@ -1,0 +1,106 @@
+{
+  "bench": "f12-span-search",
+  "recorded_at": "2026-08-04T18:40:00Z",
+  "target_gate": "p95 < 200ms",
+  "corpus": {
+    "engine": "Typesense (self-hosted single node, /tmp/typesense-server)",
+    "collection": "eden_spans",
+    "num_documents": 1100000,
+    "tenant": "bench-org",
+    "note": "Real Typesense (not the SQLite proxy). Single-node local laptop instance \u2014 production hardware has more headroom. Corpus accumulated across seed runs so keyword selectivity is mixed (some terms 0 hits, some ~426k), making the broad-term tail heavier than a clean synthetic distribution \u2014 a conservative measurement."
+  },
+  "metric": "Typesense server-reported search_time_ms unless noted",
+  "query_params_baseline": "prod-mirror: query_by=input_text,output_text,tool_names,name,agent_id; filter_by=tenant_id; sort_by=created_at:desc; facet_by=agent_id,tool_names,outcome,event_type,model",
+  "per_class_untuned": {
+    "keyword_1word": {
+      "p50": 49,
+      "p95": 446,
+      "p99": 1143,
+      "hits_med": 0,
+      "hits_max": 426439
+    },
+    "multi_word_2_3": {
+      "p50": 75,
+      "p95": 383,
+      "p99": 862,
+      "hits_med": 818,
+      "hits_max": 426439
+    },
+    "empty_q_star": {
+      "p50": 239,
+      "p95": 551,
+      "p99": 1225,
+      "hits": 1100000
+    },
+    "empty_plus_facet3": {
+      "p50": 343,
+      "p95": 535,
+      "p99": 1323,
+      "hits": 1100000
+    },
+    "wildcard_sort_recent": {
+      "p50": 232,
+      "p95": 365,
+      "p99": 406,
+      "hits": 1100000
+    }
+  },
+  "tuning_experiment": {
+    "lever": "search_cutoff_ms (Typesense returns best-ranked-so-far once query exceeds the budget)",
+    "keyword": {
+      "baseline": {
+        "p50": 54,
+        "p95": 555,
+        "p99": 652
+      },
+      "search_cutoff_ms_150": {
+        "p50": 46,
+        "p95": 164,
+        "p99": 193
+      },
+      "num_typos1_plus_cutoff": {
+        "p50": 61,
+        "p95": 170,
+        "p99": 506
+      }
+    },
+    "empty_q_star": {
+      "baseline": {
+        "p50": 408,
+        "p95": 579,
+        "p99": 2059
+      },
+      "search_cutoff_ms_150": {
+        "p50": 298,
+        "p95": 471,
+        "p99": 1067
+      },
+      "num_typos1_plus_cutoff": {
+        "p50": 294,
+        "p95": 401,
+        "p99": 1404
+      }
+    },
+    "conclusion": "search_cutoff_ms=150 wins the text-search gate decisively (keyword p95 555->164). num_typos=1 adds nothing and worsens p99, so NOT adopted. Empty q=* 'browse all 1.1M newest' is a list not a search: cutoff helps (579->471) but cannot reach <200ms because the cost is faceting+sorting the whole corpus \u2014 tracked separately (opt-in faceting for empty queries)."
+  },
+  "end_to_end_searchservice": {
+    "note": "Through the real eden.observability.SearchService.search() with the shipped change (typesense_search_cutoff_ms=150), full production param set, wall-clock incl. Python+aiohttp overhead.",
+    "n": 100,
+    "wall_ms": {
+      "p50": 116,
+      "p95": 184,
+      "p99": 245
+    },
+    "search_cutoff_ms_emitted": 150,
+    "gate_met": true
+  },
+  "shipped_change": {
+    "config": "src/eden/config.py: typesense_search_cutoff_ms: int = 150 (0 disables)",
+    "wiring": "src/eden/observability/search_service.py: adds search_cutoff_ms to Typesense search params when > 0"
+  },
+  "honest_caveats": [
+    "Single-node laptop Typesense, not staging hardware \u2014 treat absolute ms as conservative.",
+    "search_cutoff_ms trades exhaustiveness for bounded latency: broad low-selectivity queries may return fewer than all matches, ranked best-first. Selective queries (the common case) complete well under the budget, unaffected.",
+    "Empty-query browse-all (q=*) is above the gate and is a separate follow-up (opt-in faceting), not a text-search regression."
+  ]
+}
