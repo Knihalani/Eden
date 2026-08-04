@@ -715,7 +715,7 @@ async def cost_per_trace(
                COALESCE(t.duration_ms, 0) AS latency_ms
         FROM usage_events u
         LEFT JOIN telemetry_events t
-          ON t.correlation_id = u.correlation_id
+          ON t.trace_id = u.correlation_id
          AND t.tenant_id = u.org_id
         WHERE u.org_id = $1
           AND u.event_type = 'llm_call'

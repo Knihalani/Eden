@@ -87,7 +87,11 @@ SPAN_SCHEMA: dict[str, Any] = {
         {"name": "prompt_tokens", "type": "int32", "optional": True},
         {"name": "completion_tokens", "type": "int32", "optional": True},
         {"name": "cost_usd", "type": "float", "optional": True},
-        {"name": "created_at", "type": "int64", "optional": True},
+        # NOT optional: it is the default_sorting_field below, and Typesense
+        # (v27+) rejects an optional default sort field ("Default sorting
+        # field `created_at` cannot be an optional field") — which silently
+        # blocked collection creation. build_span_doc always sets it.
+        {"name": "created_at", "type": "int64"},
     ],
     "default_sorting_field": "created_at",
 }
