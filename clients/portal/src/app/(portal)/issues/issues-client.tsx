@@ -23,6 +23,7 @@ import {
   formatUsd,
 } from "@/lab/fixtures/traces";
 import { PageHeader, StatusChip } from "@/components/ds/primitives";
+import { SavedViewsMenu } from "@/components/portal/saved-views-menu";
 import {
   agentScopeCounts,
   useAgentScope,
@@ -628,6 +629,7 @@ function LabIssuesInner() {
             {agent ? agent.name : "All agents"} · {byColumn.open.length} open
           </span>
         }
+        actions={<SavedViewsMenu />}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1">

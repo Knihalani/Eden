@@ -73,6 +73,7 @@ import {
   type HubView,
 } from "@/lab/traces-session-lens";
 import { cn } from "@/lib/utils";
+import { SavedViewsMenu } from "@/components/portal/saved-views-menu";
 import {
   FIRST_EVENT_WAIT,
   U20_FILTER_EMPTY_COPY,
@@ -1003,6 +1004,7 @@ function LabTracesInner() {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <SavedViewsMenu />
             <HubViewToggle value={hubView} onChange={setHubView} />
             {!listOpen ? (
               <ListRevealButton
