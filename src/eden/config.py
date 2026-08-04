@@ -933,6 +933,15 @@ def _build_settings_class():
         # trace to verify) count toward the promotion gate. Errors
         # (telemetry unavailable) ALWAYS fail the gate — fail closed.
         regression_gate_skip_policy: str = "allow"  # "allow" | "block"
+        # N01 replay verification (v1): when ON, regression cases that
+        # carry a stored failure signature + checkpoint reference are
+        # re-run from the checkpoint — one live gateway step on the
+        # recorded input, judged by signature absence. Costs are capped
+        # by the existing ``replay_max_llm_steps`` /
+        # ``replay_max_cost_usd`` (shared with M7 replay-verify).
+        # Default OFF: post-hoc trace checks remain the only
+        # verification until explicitly enabled.
+        regression_replay_v1: bool = False
         detector_keep_rate_loop: float = 1.0
         detector_keep_rate_error: float = 1.0
 
@@ -1343,6 +1352,16 @@ def _build_settings_class():
         # App registration lacks it (§7.4).
         pr_evidence_body_v1: bool = True
         ci_ingestion_v1: bool = True
+
+        # ── F56 CI-eval commit-status writeback ─────────────────────────
+        # ``ci_eval_commit_status_v1``: when ``POST /ci-eval/run`` carries a
+        # ``repo_full_name`` + ``commit_sha`` and the org has the Eden GitHub
+        # App installed, post a Check Run with the regression verdict so the
+        # PR gates on it. Off by default: it makes an outbound GitHub write
+        # (requires ``checks:write``) and must be opted into per deployment.
+        # Absent repo/sha or App install it silently no-ops (never fails the
+        # eval), and the API response's ``commit_status`` records the reason.
+        ci_eval_commit_status_v1: bool = False
 
         # ── M14 (§8) cost & speed ───────────────────────────────────────
         # §8.1 Neon scale-to-zero: **env-gated for dev/staging only**.

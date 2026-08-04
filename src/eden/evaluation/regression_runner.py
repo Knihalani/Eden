@@ -115,8 +115,13 @@ class RegressionRunner:
         counts = {"passed": 0, "failed": 0, "skipped": 0, "error": 0}
         failures: list[dict[str, Any]] = []
         case_results: list[dict[str, Any]] = []
+        # Suite-wide replay budget (regression_replay_v1): shared across
+        # cases so a 100-case suite cannot blow through the caps.
+        replay_budget = {"llm_steps": 0, "cost_usd": 0.0}
         for case in cases:
-            status, reason = await self._evaluate_case(case)
+            status, reason = await self._evaluate_case(
+                case, replay_budget=replay_budget
+            )
             counts[status] += 1
             entry = {
                 "case_id": case.id,
@@ -174,15 +179,48 @@ class RegressionRunner:
             )
         return result
 
-    async def _evaluate_case(self, case: RegressionCase) -> tuple[str, str]:
+    async def _evaluate_case(
+        self,
+        case: RegressionCase,
+        *,
+        replay_budget: dict[str, Any] | None = None,
+    ) -> tuple[str, str]:
         """Evaluate one case.
 
         Returns ``(status, reason)`` with status in
         ``{"passed", "failed", "skipped", "error"}``. Infrastructure
         failure is an *error*, never a silent pass (fail closed).
+
+        When ``regression_replay_v1`` is ON and the case carries a
+        stored failure signature + checkpoint reference, the stored
+        input is replayed against *current* behavior first
+        (reason ``replay_signature_absent`` / ``replay_signature_present``
+        — proof-quality labels for the portal). Post-hoc trace checks
+        remain the fallback when replay is impossible; replay
+        infrastructure failure or a cost-cap abort is an *error*, never
+        a pass.
         """
         expected = case.expected_data or {}
         no_stumble = expected.get("no_stumble_kinds") or []
+        has_constraints = bool(no_stumble)
+
+        if self._replay_enabled():
+            ref = self._replay_ref(expected)
+            if ref is not None:
+                sig, cp_trace_id, available = ref
+                if available:
+                    verdict = await self._run_replay(
+                        case.org_id, cp_trace_id, sig, budget=replay_budget
+                    )
+                    if verdict is not None:
+                        return verdict
+                # Replay impossible (no checkpoint / signature absent in
+                # the original recording) — fall back to post-hoc trace
+                # checks; when the case has no trace constraints either,
+                # skip honestly.
+                if not has_constraints:
+                    return "skipped", "no_checkpoint"
+
         if not no_stumble:
             return "skipped", "no_constraints"
         trace_id = case.source_trace_id or (case.input_data or {}).get("trace_id")
@@ -203,6 +241,103 @@ class RegressionRunner:
             if not sg:
                 return "failed", "statgate failed on trace"
         return "passed", "ok"
+
+    # ── replay verification (regression_replay_v1) ──────────────
+
+    @staticmethod
+    def _replay_enabled() -> bool:
+        """Default OFF; any settings failure reads as OFF (today's path)."""
+        try:
+            from eden.config import get_settings
+
+            return bool(getattr(get_settings(), "regression_replay_v1", False))
+        except Exception:
+            return False
+
+    @staticmethod
+    def _replay_ref(
+        expected: dict[str, Any],
+    ) -> tuple[Any, str, bool] | None:
+        """``(signature, checkpoint_trace_id, available)`` or ``None``.
+
+        ``None`` means the case carries no stored failure signature —
+        it predates replay enrichment and follows today's post-hoc path
+        untouched.
+        """
+        try:
+            from eden.improvement.replay_verify import FailureSignature
+
+            sig = FailureSignature.from_json(
+                expected.get("failure_signature") or {}
+            )
+        except Exception:
+            return None
+        if sig is None:
+            return None
+        replay = expected.get("replay") or {}
+        trace_id = str(replay.get("checkpoint_trace_id") or "").strip()
+        available = bool(replay.get("checkpoint_available")) and bool(trace_id)
+        return sig, trace_id, available
+
+    @staticmethod
+    def _replay_caps() -> tuple[int, float]:
+        """Existing M7 replay cost caps (shared, not duplicated)."""
+        try:
+            from eden.config import get_settings
+
+            s = get_settings()
+            return (
+                int(getattr(s, "replay_max_llm_steps", 3) or 3),
+                float(getattr(s, "replay_max_cost_usd", 0.05) or 0.05),
+            )
+        except Exception:
+            return 3, 0.05
+
+    async def _run_replay(
+        self,
+        org_id: str,
+        trace_id: str,
+        sig: Any,
+        *,
+        budget: dict[str, Any] | None,
+    ) -> tuple[str, str] | None:
+        """Replay the stored failing step against current behavior.
+
+        Returns a final ``(status, reason)`` verdict, or ``None`` when
+        replay is impossible for this case (no checkpoints / signature
+        absent in the original) and post-hoc fallback should apply.
+        Infrastructure failure and cost-cap aborts are errors — replay
+        can never silently pass (fail closed).
+        """
+        max_steps, max_cost = self._replay_caps()
+        if budget is not None and (
+            budget.get("llm_steps", 0) >= max_steps
+            or budget.get("cost_usd", 0.0) >= max_cost
+        ):
+            return "error", "cost_cap"
+        try:
+            from eden.improvement.replay_verify import replay_case_signature
+
+            result = await replay_case_signature(org_id, trace_id, sig)
+        except Exception as exc:
+            logger.warning("regression replay failed: %s", exc)
+            return "error", "replay_failed"
+        if budget is not None:
+            budget["llm_steps"] = budget.get("llm_steps", 0) + int(
+                result.traces_checked or 0
+            )
+            budget["cost_usd"] = budget.get("cost_usd", 0.0) + float(
+                result.cost_usd or 0.0
+            )
+        if result.status == "passed":
+            return "passed", "replay_signature_absent"
+        if result.status == "failed":
+            return "failed", "replay_signature_present"
+        if result.reason == "cost_cap":
+            return "error", "cost_cap"
+        if result.reason in ("no_checkpoints", "signature_absent_in_original"):
+            return None  # honest fallback to post-hoc verification
+        return "error", "replay_failed"
 
     async def _stumble_kinds_for_trace(self, trace_id: str) -> set[str]:
         client = await self._client()
