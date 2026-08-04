@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -20,6 +21,12 @@ import {
   type TranscriptStep,
 } from "@/lab/fixtures/traces";
 import { AGENT_LIST, agentForTrace } from "@/lab/fixtures/agents";
+import {
+  groupParallelSteps,
+  parseLazyPayloadMarker,
+  type LazyPayloadMarker,
+} from "@/lib/observability/build-transcript-rows";
+import { agentIssuesApi } from "@/lib/api/resources";
 import { useCatalogAgents } from "@/hooks/use-catalog-agents";
 import { StatusChip } from "@/components/ds/primitives";
 import { useSidebar } from "@/components/shell/sidebar-context";
@@ -333,15 +340,237 @@ function humanizeIoPreview(raw: string | undefined | null): string | null {
   return text;
 }
 
-function StepDetail({ step }: { step: TranscriptStep }) {
+/** Context the step action bar needs to hit real APIs. All optional — a
+ * missing piece disables the matching action with an honest tooltip. */
+export type StepActionContext = {
+  orgId?: string | null;
+  traceId?: string | null;
+  /** Enables "Add to regression" (BE builds cases from an issue). */
+  issueId?: string | null;
+};
+
+/** Resolve an F82 lazily-truncated payload to its full text. */
+export type LoadStepPayload = (step: TranscriptStep) => Promise<string>;
+
+type AsyncActionState =
+  | { status: "idle" | "pending" | "done" }
+  | { status: "error"; message: string };
+
+function StepActionBar({
+  step,
+  context,
+}: {
+  step: TranscriptStep;
+  context: StepActionContext;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [issue, setIssue] = useState<AsyncActionState>({ status: "idle" });
+  const [regression, setRegression] = useState<AsyncActionState>({
+    status: "idle",
+  });
+
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(step, null, 2));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable — leave label unchanged */
+    }
+  }, [step]);
+
+  const { orgId, traceId, issueId } = context;
+
+  const createIssue = useCallback(async () => {
+    if (!orgId || !traceId) return;
+    setIssue({ status: "pending" });
+    try {
+      await agentIssuesApi.reportStumble(orgId, {
+        trace_id: traceId,
+        title: `Transcript report: ${step.title}`,
+        span_id: step.spanId ?? step.id,
+        detail: {
+          source: "portal_transcript",
+          step_id: step.id,
+          step_kind: step.kind,
+          ...(step.errorMessage ? { error: step.errorMessage } : {}),
+        },
+      });
+      setIssue({ status: "done" });
+    } catch (err) {
+      setIssue({
+        status: "error",
+        message: err instanceof Error ? err.message : "Report failed",
+      });
+    }
+  }, [orgId, traceId, step]);
+
+  const addToRegression = useCallback(async () => {
+    if (!orgId || !issueId) return;
+    setRegression({ status: "pending" });
+    try {
+      await agentIssuesApi.createRegressionCases(orgId, issueId);
+      setRegression({ status: "done" });
+    } catch (err) {
+      setRegression({
+        status: "error",
+        message: err instanceof Error ? err.message : "Build failed",
+      });
+    }
+  }, [orgId, issueId]);
+
+  const issueDisabled = !orgId || !traceId || issue.status !== "idle";
+  const regressionDisabled = !orgId || !issueId || regression.status !== "idle";
+
+  return (
+    <div
+      data-testid="step-action-bar"
+      className="flex flex-wrap items-center gap-1"
+    >
+      <button
+        type="button"
+        className="ds-btn ds-btn-ghost ds-btn-sm"
+        onClick={() => void createIssue()}
+        disabled={issueDisabled}
+        title={
+          !orgId || !traceId
+            ? "Needs org + trace context to report"
+            : "Report this step as a stumble (creates/dedupes an issue)"
+        }
+      >
+        {issue.status === "pending"
+          ? "Reporting…"
+          : issue.status === "done"
+            ? "Issue reported"
+            : "Create issue"}
+      </button>
+      <button
+        type="button"
+        className="ds-btn ds-btn-ghost ds-btn-sm"
+        onClick={() => void addToRegression()}
+        disabled={regressionDisabled}
+        title={
+          !orgId || !issueId
+            ? "Regression cases build from an issue — open this trace from an issue to enable"
+            : "Build regression eval cases from the linked issue"
+        }
+      >
+        {regression.status === "pending"
+          ? "Building…"
+          : regression.status === "done"
+            ? "Added to regression"
+            : "Add to regression"}
+      </button>
+      <button
+        type="button"
+        className="ds-btn ds-btn-ghost ds-btn-sm"
+        onClick={() => void copy()}
+        title="Copy this step as JSON"
+      >
+        {copied ? "Copied" : "Copy step JSON"}
+      </button>
+      {issue.status === "error" ? (
+        <span className="type-mono !text-[var(--error)]">{issue.message}</span>
+      ) : null}
+      {regression.status === "error" ? (
+        <span className="type-mono !text-[var(--error)]">
+          {regression.message}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * F82 lazy tool payload: the API shipped a `{_lazy, preview, bytes}` marker
+ * instead of the full body. Expanding the step fetches the payload once
+ * (cached by the owning RunTranscript); without a loader we show the
+ * preview and say so instead of pretending it is complete.
+ */
+function LazyPayloadDetail({
+  label,
+  marker,
+  step,
+  tone,
+  loadPayload,
+}: {
+  label: string;
+  marker: LazyPayloadMarker;
+  step: TranscriptStep;
+  tone?: "error" | "default";
+  loadPayload?: LoadStepPayload;
+}) {
+  const [state, setState] = useState<
+    | { status: "loading" | "preview" }
+    | { status: "loaded"; text: string }
+    | { status: "error"; message: string }
+  >({ status: loadPayload ? "loading" : "preview" });
+
+  useEffect(() => {
+    if (!loadPayload) return;
+    let cancelled = false;
+    loadPayload(step)
+      .then((text) => {
+        if (!cancelled) setState({ status: "loaded", text });
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setState({
+            status: "error",
+            message:
+              err instanceof Error ? err.message : "Failed to load payload",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPayload, step]);
+
+  const kb = (marker.bytes / 1024).toFixed(1);
+
+  if (state.status === "loaded") {
+    return (
+      <DetailBlock label={label} tone={tone}>
+        {humanizeIoPreview(state.text) ?? state.text}
+      </DetailBlock>
+    );
+  }
+
+  return (
+    <DetailBlock label={label} tone={tone}>
+      {marker.preview}
+      <p className="type-label mt-2 !text-[var(--text-faint)]">
+        {state.status === "loading"
+          ? `Loading full payload (${kb} KB)…`
+          : state.status === "error"
+            ? `Full payload unavailable: ${state.message}`
+            : `Preview only — full payload (${kb} KB) not fetched`}
+      </p>
+    </DetailBlock>
+  );
+}
+
+function StepDetail({
+  step,
+  actionContext,
+  loadPayload,
+}: {
+  step: TranscriptStep;
+  actionContext?: StepActionContext;
+  loadPayload?: LoadStepPayload;
+}) {
   const bad = isBadStep(step);
   const attrs = Object.entries(step.attributes ?? {});
   const meta = Object.entries(step.metadata ?? {});
-  const inputText = humanizeIoPreview(step.inputPreview);
-  const outputText = humanizeIoPreview(step.outputPreview);
+  const inputLazy = parseLazyPayloadMarker(step.inputPreview);
+  const outputLazy = parseLazyPayloadMarker(step.outputPreview);
+  const inputText = inputLazy ? null : humanizeIoPreview(step.inputPreview);
+  const outputText = outputLazy ? null : humanizeIoPreview(step.outputPreview);
 
   return (
     <div className="space-y-4 border-t border-[var(--line)] bg-[var(--bg-well)] px-4 py-4">
+      <StepActionBar step={step} context={actionContext ?? {}} />
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
         {[
           { label: "Kind", value: KIND_LABEL[step.kind] },
@@ -391,7 +620,14 @@ function StepDetail({ step }: { step: TranscriptStep }) {
         </DetailBlock>
       ) : null}
 
-      {inputText ? (
+      {inputLazy ? (
+        <LazyPayloadDetail
+          label="Input"
+          marker={inputLazy}
+          step={step}
+          loadPayload={loadPayload}
+        />
+      ) : inputText ? (
         <DetailBlock label="Input">{inputText}</DetailBlock>
       ) : (
         <DetailBlock label="Input">
@@ -399,7 +635,15 @@ function StepDetail({ step }: { step: TranscriptStep }) {
         </DetailBlock>
       )}
 
-      {outputText ? (
+      {outputLazy ? (
+        <LazyPayloadDetail
+          label="Output"
+          marker={outputLazy}
+          step={step}
+          tone={bad ? "error" : "default"}
+          loadPayload={loadPayload}
+        />
+      ) : outputText ? (
         <DetailBlock label="Output" tone={bad ? "error" : "default"}>
           {outputText}
         </DetailBlock>
@@ -454,14 +698,21 @@ const TranscriptRow = memo(function TranscriptRow({
   step,
   index,
   open,
+  active,
   compact,
   onToggle,
+  actionContext,
+  loadPayload,
 }: {
   step: TranscriptStep;
   index: number;
   open: boolean;
+  /** Keyboard cursor (j/k) rests on this step. */
+  active?: boolean;
   compact?: boolean;
   onToggle: (id: string) => void;
+  actionContext?: StepActionContext;
+  loadPayload?: LoadStepPayload;
 }) {
   const bad = isBadStep(step);
   const handleClick = useCallback(() => onToggle(step.id), [onToggle, step.id]);
@@ -475,8 +726,10 @@ const TranscriptRow = memo(function TranscriptRow({
           "flex w-full min-w-0 cursor-pointer items-center gap-2.5 text-left transition-colors hover:bg-[var(--bg-hover)]",
           compact ? "px-3 py-2" : "px-4 py-2.5",
           open && "bg-[var(--bg-hover)]",
+          active && "shadow-[inset_0_0_0_1px_var(--accent)]",
         )}
         aria-expanded={open}
+        data-active={active ? "true" : undefined}
       >
         <span className="type-mono w-5 shrink-0 tabular-nums !text-[var(--text-faint)]">
           {index + 1}
@@ -510,8 +763,114 @@ const TranscriptRow = memo(function TranscriptRow({
           )}
         </span>
       </button>
-      {open ? <StepDetail step={step} /> : null}
+      {open ? (
+        <StepDetail
+          step={step}
+          actionContext={actionContext}
+          loadPayload={loadPayload}
+        />
+      ) : null}
     </>
+  );
+});
+
+/**
+ * Fan-out group: same-parent tool steps whose time ranges overlap render as
+ * side-by-side lanes (h/l walks them). Open lanes expand full-width below
+ * the lane strip so payloads stay readable.
+ */
+const ParallelGroupRow = memo(function ParallelGroupRow({
+  lanes,
+  index,
+  openIds,
+  activeId,
+  compact,
+  onToggle,
+  actionContext,
+  loadPayload,
+}: {
+  lanes: TranscriptStep[];
+  index: number;
+  openIds: Set<string>;
+  activeId: string | null;
+  compact?: boolean;
+  onToggle: (id: string) => void;
+  actionContext?: StepActionContext;
+  loadPayload?: LoadStepPayload;
+}) {
+  return (
+    <div data-parallel-group>
+      <div
+        className={cn(
+          "flex items-center gap-2 border-b border-dashed border-[var(--line)]",
+          compact ? "px-3 py-1" : "px-4 py-1.5",
+        )}
+      >
+        <span className="type-mono w-5 shrink-0 tabular-nums !text-[var(--text-faint)]">
+          {index + 1}
+        </span>
+        <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
+          ‖ {lanes.length} parallel
+        </span>
+        <span className="type-label !text-[var(--text-faint)]">
+          overlapping tool calls
+        </span>
+      </div>
+      <div className="flex min-w-0 divide-x divide-[var(--line)]">
+        {lanes.map((step, laneIndex) => {
+          const bad = isBadStep(step);
+          const open = openIds.has(step.id);
+          const active = activeId === step.id;
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => onToggle(step.id)}
+              className={cn(
+                "flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-1 text-left transition-colors hover:bg-[var(--bg-hover)]",
+                compact ? "px-3 py-2" : "px-4 py-2.5",
+                open && "bg-[var(--bg-hover)]",
+                bad && "bg-[var(--error-muted)]",
+                active && "shadow-[inset_0_0_0_1px_var(--accent)]",
+              )}
+              aria-expanded={open}
+              data-step-id={step.id}
+              data-lane-index={laneIndex}
+              data-active={active ? "true" : undefined}
+            >
+              <span className="flex w-full min-w-0 items-center gap-1.5">
+                <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
+                  {KIND_LABEL[step.kind]}
+                </span>
+                <span
+                  className={cn(
+                    "type-ui min-w-0 flex-1 truncate !font-normal",
+                    bad ? "text-[var(--error)]" : "text-[var(--text)]",
+                  )}
+                >
+                  {step.title}
+                </span>
+              </span>
+              <span className="type-value whitespace-nowrap !text-[0.6875rem]">
+                {step.costUsd != null ? `${formatUsd(step.costUsd, 4)} · ` : ""}
+                {formatDuration(step.durationMs)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {lanes
+        .filter((step) => openIds.has(step.id))
+        .map((step) => (
+          <div key={step.id} data-lane-detail={step.id}>
+            <StepDetail
+              step={step}
+              actionContext={actionContext}
+              loadPayload={loadPayload}
+            />
+          </div>
+        ))}
+    </div>
   );
 });
 
@@ -528,6 +887,12 @@ export function RunTranscript({
   hideToolbar = false,
   openIds: openIdsProp,
   onOpenIdsChange,
+  orgId,
+  traceId,
+  issueId,
+  syncStepToUrl = true,
+  onActiveStepChange,
+  loadStepPayload,
 }: {
   steps: TranscriptStep[];
   defaultOpenIds?: string[];
@@ -537,6 +902,20 @@ export function RunTranscript({
   hideToolbar?: boolean;
   openIds?: Set<string>;
   onOpenIdsChange?: (next: Set<string>) => void;
+  /** Enables the step action bar's API actions (issue report / regression). */
+  orgId?: string | null;
+  traceId?: string | null;
+  issueId?: string | null;
+  /**
+   * Mirror the keyboard cursor to a `?step=<id>` URL param (read on mount →
+   * scroll + open that step). Turn off when the host page owns span deep
+   * links (traces `?span=`, debugger `?spanId=`) or mounts several
+   * transcripts at once.
+   */
+  syncStepToUrl?: boolean;
+  onActiveStepChange?: (id: string) => void;
+  /** F82: fetch the full payload behind a lazy marker. Cached per step. */
+  loadStepPayload?: LoadStepPayload;
 }) {
   const [uncontrolledOpenIds, setUncontrolledOpenIds] = useState<Set<string>>(
     () => new Set(defaultOpenIds ?? errorStepIds(steps)),
@@ -559,24 +938,112 @@ export function RunTranscript({
     onOpenIdsChangeRef.current?.(next);
   }, []);
 
+  // Row derivation goes through the observability data layer: overlapping
+  // same-parent tool steps collapse into one parallel row with lanes.
+  const viewRows = useMemo(() => groupParallelSteps(steps), [steps]);
+  const viewRowsRef = useRef(viewRows);
+  viewRowsRef.current = viewRows;
+
+  /** step id → its view row index + lane index (0 for plain rows). */
+  const stepLocation = useMemo(() => {
+    const map = new Map<string, { row: number; lane: number }>();
+    viewRows.forEach((row, rowIndex) => {
+      if (row.type === "step") {
+        map.set(row.step.id, { row: rowIndex, lane: 0 });
+      } else {
+        row.lanes.forEach((step, lane) =>
+          map.set(step.id, { row: rowIndex, lane }),
+        );
+      }
+    });
+    return map;
+  }, [viewRows]);
+  const stepLocationRef = useRef(stepLocation);
+  stepLocationRef.current = stepLocation;
+
+  // Keyboard cursor. Deep link: `?step=<id>` (when this instance owns it)
+  // seeds the cursor before first paint; the mount effect below opens and
+  // scrolls to it.
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    if (focusStepId) return focusStepId;
+    if (syncStepToUrl && typeof window !== "undefined") {
+      const fromUrl = new URLSearchParams(window.location.search).get("step");
+      if (fromUrl) {
+        const match = steps.find(
+          (s) => s.id === fromUrl || s.spanId === fromUrl,
+        );
+        if (match) return match.id;
+      }
+    }
+    return null;
+  });
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const syncUrlRef = useRef(syncStepToUrl);
+  syncUrlRef.current = syncStepToUrl;
+  const onActiveStepChangeRef = useRef(onActiveStepChange);
+  onActiveStepChangeRef.current = onActiveStepChange;
+
+  const focusSeenRef = useRef(false);
+  const applyActive = useCallback((id: string) => {
+    setActiveId(id);
+    activeIdRef.current = id;
+    onActiveStepChangeRef.current?.(id);
+    if (syncUrlRef.current && typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("step", id);
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }, []);
+
   const toggle = useCallback(
     (id: string) => {
       const next = new Set(openIdsRef.current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       setOpenIds(next);
+      // Mouse and keyboard share one cursor — clicking a row moves it.
+      applyActive(id);
     },
-    [setOpenIds],
+    [setOpenIds, applyActive],
+  );
+
+  // F82 lazy payloads: resolve each step at most once, even across
+  // collapse/expand cycles — the promise itself is the cache entry.
+  const payloadCacheRef = useRef(new Map<string, Promise<string>>());
+  const loadStepPayloadRef = useRef(loadStepPayload);
+  loadStepPayloadRef.current = loadStepPayload;
+  const hasPayloadLoader = Boolean(loadStepPayload);
+  const loadPayload = useMemo<LoadStepPayload | undefined>(() => {
+    if (!hasPayloadLoader) return undefined;
+    return (step: TranscriptStep) => {
+      const cached = payloadCacheRef.current.get(step.id);
+      if (cached) return cached;
+      const promise = Promise.resolve().then(() =>
+        loadStepPayloadRef.current
+          ? loadStepPayloadRef.current(step)
+          : Promise.reject(new Error("payload loader detached")),
+      );
+      payloadCacheRef.current.set(step.id, promise);
+      promise.catch(() => payloadCacheRef.current.delete(step.id));
+      return promise;
+    };
+    // Only presence/absence matters — the ref tracks the latest loader.
+  }, [hasPayloadLoader]);
+
+  const actionContext = useMemo<StepActionContext>(
+    () => ({ orgId, traceId, issueId }),
+    [orgId, traceId, issueId],
   );
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({
-    count: steps.length,
+    count: viewRows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () =>
       compact ? TRANSCRIPT_ROW_ESTIMATE_COMPACT : TRANSCRIPT_ROW_ESTIMATE,
     overscan: 6,
-    getItemKey: (index) => steps[index]?.id ?? index,
+    getItemKey: (index) => viewRows[index]?.id ?? index,
     measureElement: measureVirtualRow,
   });
   const virtualizerRef = useRef(virtualizer);
@@ -584,6 +1051,14 @@ export function RunTranscript({
 
   useEffect(() => {
     if (!focusStepId) return;
+    // A host echoing our own cursor back (onActiveStepChange → focus prop)
+    // must not open/scroll — only external focus (tree click, deep link,
+    // first mount) does.
+    const external =
+      !focusSeenRef.current || focusStepId !== activeIdRef.current;
+    focusSeenRef.current = true;
+    setActiveId(focusStepId);
+    if (!external) return;
     const current = openIdsRef.current;
     if (!current.has(focusStepId)) {
       const next = new Set(current);
@@ -593,20 +1068,144 @@ export function RunTranscript({
     // Virtualised: the focused row may not be mounted yet, so ask the
     // virtualiser to bring the index into view rather than querying the
     // DOM for an element that isn't there.
-    const index = steps.findIndex((s) => s.id === focusStepId);
+    const location = stepLocationRef.current.get(focusStepId);
     const t = window.setTimeout(() => {
-      if (index >= 0) {
-        virtualizerRef.current.scrollToIndex(index, { align: "center" });
+      if (location) {
+        virtualizerRef.current.scrollToIndex(location.row, {
+          align: "center",
+        });
       }
     }, 40);
     return () => window.clearTimeout(t);
     // Only react to focus changes.
   }, [focusStepId]);
 
+  // `?step=` deep link (mount only): open the seeded step and bring it
+  // into view. `focusStepId` deep links are the host page's job above.
+  const urlSeedRef = useRef(false);
+  useEffect(() => {
+    if (urlSeedRef.current) return;
+    urlSeedRef.current = true;
+    const seeded = activeIdRef.current;
+    if (!seeded || seeded === focusStepId) return;
+    const current = openIdsRef.current;
+    if (!current.has(seeded)) {
+      setOpenIds(new Set([...current, seeded]));
+    }
+    const location = stepLocationRef.current.get(seeded);
+    const t = window.setTimeout(() => {
+      if (location) {
+        virtualizerRef.current.scrollToIndex(location.row, {
+          align: "center",
+        });
+      }
+    }, 40);
+    return () => window.clearTimeout(t);
+    // Mount-only seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // j/k rows · h/l lanes · Enter/Space toggles. Scoped to this container
+  // (focusable) so several transcripts on one page never fight, and the
+  // `transcript-v2` marker lets list-level j/k defer to us.
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      const rows = viewRowsRef.current;
+      if (rows.length === 0) return;
+      const locate = () => {
+        const id = activeIdRef.current;
+        return id ? (stepLocationRef.current.get(id) ?? null) : null;
+      };
+      const idAt = (rowIndex: number, lane: number): string | null => {
+        const row = rows[rowIndex];
+        if (!row) return null;
+        if (row.type === "step") return row.step.id;
+        const clamped = Math.max(0, Math.min(row.lanes.length - 1, lane));
+        return row.lanes[clamped]?.id ?? null;
+      };
+      const moveRow = (delta: number) => {
+        const current = locate();
+        const nextRow = current
+          ? Math.max(0, Math.min(rows.length - 1, current.row + delta))
+          : delta > 0
+            ? 0
+            : rows.length - 1;
+        const id = idAt(nextRow, current?.lane ?? 0);
+        if (id && id !== activeIdRef.current) {
+          applyActive(id);
+          virtualizerRef.current.scrollToIndex(nextRow, { align: "auto" });
+        }
+      };
+      const moveLane = (delta: number) => {
+        const current = locate();
+        if (!current) return;
+        const id = idAt(current.row, current.lane + delta);
+        if (id && id !== activeIdRef.current) applyActive(id);
+      };
+
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          e.preventDefault();
+          moveRow(1);
+          break;
+        case "k":
+        case "ArrowUp":
+          e.preventDefault();
+          moveRow(-1);
+          break;
+        case "h":
+        case "ArrowLeft":
+          e.preventDefault();
+          moveLane(-1);
+          break;
+        case "l":
+        case "ArrowRight":
+          e.preventDefault();
+          moveLane(1);
+          break;
+        case "Enter":
+        case " ": {
+          // Row buttons handle their own Enter/Space via native click.
+          if (e.target !== e.currentTarget) break;
+          const id = activeIdRef.current;
+          if (id) {
+            e.preventDefault();
+            toggle(id);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    [applyActive, toggle],
+  );
+
   const virtualItems = virtualizer.getVirtualItems();
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    <div
+      className="flex h-full min-h-0 min-w-0 flex-col"
+      data-testid="transcript-v2"
+      tabIndex={0}
+      role="group"
+      aria-label="Run transcript"
+      onKeyDown={handleKeyDown}
+    >
       {!hideToolbar ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2">
           <p className="type-label">{steps.length} spans</p>
@@ -638,8 +1237,42 @@ export function RunTranscript({
           style={{ height: `${virtualizer.getTotalSize()}px` }}
         >
           {virtualItems.map((item) => {
-            const step = steps[item.index];
-            if (!step) return null;
+            const row = viewRows[item.index];
+            if (!row) return null;
+
+            if (row.type === "parallel") {
+              const anyBad = row.lanes.some(isBadStep);
+              const focused = row.lanes.some((s) => s.id === focusStepId);
+              return (
+                <li
+                  key={item.key}
+                  ref={virtualizer.measureElement}
+                  data-index={item.index}
+                  data-row-id={row.id}
+                  aria-posinset={item.index + 1}
+                  aria-setsize={viewRows.length}
+                  className={cn(
+                    "absolute top-0 left-0 w-full min-w-0 border-b border-[var(--line)]",
+                    anyBad && "bg-[var(--error-muted)]",
+                    focused && "shadow-[inset_2px_0_0_var(--accent)]",
+                  )}
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  <ParallelGroupRow
+                    lanes={row.lanes}
+                    index={item.index}
+                    openIds={openIds}
+                    activeId={activeId}
+                    compact={compact}
+                    onToggle={toggle}
+                    actionContext={actionContext}
+                    loadPayload={loadPayload}
+                  />
+                </li>
+              );
+            }
+
+            const step = row.step;
             const bad = isBadStep(step);
             const open = openIds.has(step.id);
             const focused = focusStepId === step.id;
@@ -651,7 +1284,7 @@ export function RunTranscript({
                 data-index={item.index}
                 data-step-id={step.id}
                 aria-posinset={item.index + 1}
-                aria-setsize={steps.length}
+                aria-setsize={viewRows.length}
                 className={cn(
                   "absolute top-0 left-0 w-full min-w-0 border-b border-[var(--line)]",
                   bad && "bg-[var(--error-muted)]",
@@ -663,8 +1296,11 @@ export function RunTranscript({
                   step={step}
                   index={item.index}
                   open={open}
+                  active={activeId === step.id}
                   compact={compact}
                   onToggle={toggle}
+                  actionContext={actionContext}
+                  loadPayload={loadPayload}
                 />
               </li>
             );

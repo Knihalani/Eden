@@ -114,4 +114,30 @@ describe("RunTranscript virtualisation", () => {
       container.querySelector("[data-step-id]")?.getAttribute("aria-setsize"),
     ).toBe("5000");
   });
+
+  it("keeps a 200-step trace virtualised with full scroll geometry", () => {
+    // Timestamped but strictly sequential — the parallel grouper must
+    // pass every step through as its own row.
+    const t0 = Date.parse("2026-08-04T10:00:00.000Z");
+    const steps: TranscriptStep[] = Array.from({ length: 200 }, (_, i) => ({
+      id: `s${i}`,
+      spanId: `s${i}`,
+      kind: "tool",
+      title: `Span ${i}`,
+      durationMs: 12,
+      startedAt: new Date(t0 + i * 20).toISOString(),
+    })) as TranscriptStep[];
+
+    const { container } = render(<RunTranscript steps={steps} />);
+    const mounted = container.querySelectorAll("[data-step-id]").length;
+
+    expect(mounted).toBeGreaterThan(0);
+    expect(mounted).toBeLessThan(60);
+    // 200 collapsed rows × ~44px ≥ four digits of scroll height.
+    const list = container.querySelector("ol");
+    expect(list?.getAttribute("style")).toMatch(/height: \d{4,}px/);
+    expect(
+      container.querySelector("[data-step-id]")?.getAttribute("aria-setsize"),
+    ).toBe("200");
+  });
 });

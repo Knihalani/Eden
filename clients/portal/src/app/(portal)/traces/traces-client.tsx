@@ -1516,6 +1516,13 @@ function LabTracesInner() {
                         hideToolbar
                         openIds={openIds}
                         onOpenIdsChange={setOpenIds}
+                        orgId={orgId}
+                        traceId={selected.id}
+                        // This page already deep-links spans via ?span= —
+                        // route the keyboard cursor through that instead of
+                        // a second ?step= param.
+                        syncStepToUrl={false}
+                        onActiveStepChange={focusStepInPlace}
                       />
                     )}
                   </div>
