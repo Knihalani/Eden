@@ -32,7 +32,7 @@ jobs:
         with:
           components: rustfmt
       - working-directory: sdk/rust
-        run: cargo fmt --all -- --check || true   # allow first-pass green
+        run: cargo fmt --all -- --check
 
   clippy:
     name: cargo clippy
@@ -46,7 +46,7 @@ jobs:
         with:
           workspaces: sdk/rust -> target
       - working-directory: sdk/rust
-        run: cargo clippy --all-targets -- -D warnings || true
+        run: cargo clippy --all-targets -- -D warnings
 
   test:
     name: cargo test
@@ -58,4 +58,4 @@ jobs:
         with:
           workspaces: sdk/rust -> target
       - working-directory: sdk/rust
-        run: cargo test --all || true   # allow green if no tests yet
+        run: cargo test --all
