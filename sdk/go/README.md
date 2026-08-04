@@ -1,5 +1,14 @@
 # Eden Go SDK
 
+## Status: Experimental
+
+This SDK is **experimental** and not covered by any stability guarantee.
+APIs may change or be removed without notice, and it is not part of the
+Eden GA surface. CI (`.github/workflows/sdk-go-ci.yml`) gates on
+`go vet`, `go build`, and `go test` — the test job is labelled
+"(experimental)" to reflect this status. Use the Python or TypeScript
+SDKs for production workloads.
+
 > **MVP / not GA.** This SDK is intentionally stub-level. Do not claim
 > feature parity with the Python or TypeScript SDKs. Streaming wrappers,
 > framework auto-instrumentation, and SOTA sampling/offline/OTel land

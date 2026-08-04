@@ -25,7 +25,8 @@ async fn trace_posts_to_openai_ingest_with_expected_headers() {
             .body_contains(r#""event_type":"agent_call""#)
             .body_contains(r#""name":"my_agent""#)
             .body_contains(r#""source_format":"eden_sdk""#);
-        then.status(200).body(r#"{"accepted":1,"rejected":0,"total":1}"#);
+        then.status(200)
+            .body(r#"{"accepted":1,"rejected":0,"total":1}"#);
     });
 
     let client = mock_client(&server);
@@ -47,7 +48,8 @@ async fn openai_wrapper_targets_openai_path_with_payload() {
             .body_contains(r#""model":"gpt-4o-mini""#)
             .body_contains(r#""total_tokens":2"#)
             .body_contains(r#"model:gpt-4o-mini"#);
-        then.status(200).body(r#"{"accepted":1,"rejected":0,"total":1}"#);
+        then.status(200)
+            .body(r#"{"accepted":1,"rejected":0,"total":1}"#);
     });
 
     let client = mock_client(&server);
@@ -66,7 +68,9 @@ async fn openai_wrapper_targets_openai_path_with_payload() {
             "total_tokens": 2
         }
     });
-    openai::wrap(&client, "gpt-4o-mini", &response).await.unwrap();
+    openai::wrap(&client, "gpt-4o-mini", &response)
+        .await
+        .unwrap();
     mock.assert();
 }
 
@@ -79,7 +83,8 @@ async fn anthropic_wrapper_targets_anthropic_path() {
             .body_contains(r#""source_format":"anthropic""#)
             .body_contains(r#""model":"claude-3-5-sonnet-20240620""#)
             .body_contains(r#"model:claude-3-5-sonnet-20240620"#);
-        then.status(200).body(r#"{"accepted":1,"rejected":0,"total":1}"#);
+        then.status(200)
+            .body(r#"{"accepted":1,"rejected":0,"total":1}"#);
     });
 
     let client = mock_client(&server);
@@ -122,12 +127,16 @@ async fn send_batch_posts_raw_json_array() {
         when.method(POST)
             .path("/orgs/org_test/ingest/openai")
             .body(r#"[{"a":1},{"b":2}]"#);
-        then.status(200).body(r#"{"accepted":2,"rejected":0,"total":2}"#);
+        then.status(200)
+            .body(r#"{"accepted":2,"rejected":0,"total":2}"#);
     });
 
     let client = mock_client(&server);
     let events = vec![serde_json::json!({"a": 1}), serde_json::json!({"b": 2})];
-    client.send_batch(IngestTarget::Openai, &events).await.unwrap();
+    client
+        .send_batch(IngestTarget::Openai, &events)
+        .await
+        .unwrap();
     mock.assert();
 }
 
@@ -163,7 +172,8 @@ async fn trace_fn_emits_agent_call_event() {
             .path("/orgs/org_test/ingest/openai")
             .body_contains(r#""event_type":"agent_call""#)
             .body_contains(r#""name":"my_agent""#);
-        then.status(200).body(r#"{"accepted":1,"rejected":0,"total":1}"#);
+        then.status(200)
+            .body(r#"{"accepted":1,"rejected":0,"total":1}"#);
     });
 
     let client = mock_client(&server);
@@ -192,7 +202,8 @@ async fn trace_fallible_records_outcome() {
             .body_contains(r#""event_type":"agent_call""#)
             .body_contains(r#""outcome":"failure""#)
             .body_contains(r#""error":"boom""#);
-        then.status(200).body(r#"{"accepted":1,"rejected":0,"total":1}"#);
+        then.status(200)
+            .body(r#"{"accepted":1,"rejected":0,"total":1}"#);
     });
 
     let client = mock_client(&server);

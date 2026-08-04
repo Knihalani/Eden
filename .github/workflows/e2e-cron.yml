@@ -1,15 +1,124 @@
 name: e2e-cron (daily)
 
+# Nightly e2e. Two real suites:
+#
+#   1. golden-paths — the hand-rolled Playwright scripts under
+#      clients/portal/e2e/golden/ (same invocation as the
+#      golden-paths job in portal-ci.yml, including the Clerk
+#      auth seeding). portal-ci only runs on portal-path PRs;
+#      this cron re-runs the suite nightly against main so
+#      backend/API drift is caught even when the portal did
+#      not change.
+#   2. trace-quality — tests/e2e/test_trace_quality_e2e.py,
+#      which exercises the sidecar worker compute path and the
+#      trajectory-step hooks directly (no browser).
+#
+# History: this workflow used to run `pytest tests/e2e/ -m e2e`.
+# No `e2e` marker was ever registered (see [tool.pytest.ini_options]
+# markers in pyproject.toml) and no test carried it, so `-m e2e`
+# deselected everything — the nightly was a silent no-op. Do not
+# reintroduce a marker filter without registering the marker AND
+# marking the tests.
+
 on:
   schedule:
-    # Daily 6am UTC. Same suite as the PR e2e job but with a
-    # shorter timeout and the `-m "not slow"` filter so we catch
-    # regressions overnight without blocking a worker.
+    # Daily 6am UTC — catch regressions overnight without
+    # blocking a PR worker.
     - cron: "0 6 * * *"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
-  e2e:
+  # Same steps as portal-ci.yml's golden-paths job, except the
+  # production build happens inline (no PR build artifact exists
+  # on a cron run). Keep the two in sync when editing either.
+  golden-paths:
+    name: Golden paths (F85, nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: clients/portal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install chromium
+      - name: Require Clerk keys from secrets
+        run: |
+          if [ -z "$CLERK_SECRET_KEY" ] || [ -z "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::CLERK_SECRET_KEY and NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY must be set as GitHub Actions secrets (no committed fallbacks)."
+            exit 1
+          fi
+          echo "CLERK_SECRET_KEY=$CLERK_SECRET_KEY" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" >> "$GITHUB_ENV"
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      - name: Build portal (production)
+        run: bun run build
+        env:
+          # Production-parity client base: browser hits same-origin
+          # /api/proxy (see portal-ci.yml build job).
+          NEXT_PUBLIC_API_URL: "/api/proxy"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      - name: Start portal
+        env:
+          # Upstream for /api/proxy (backend may be down — proxy returns 502; shell still renders).
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+          PORT: "3000"
+        run: |
+          # 0.0.0.0: accept both localhost and 127.0.0.1 (helpers/audit default to 127.0.0.1).
+          bun run start -- -p 3000 -H 0.0.0.0 &
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then break; fi
+            sleep 2
+          done
+          echo "Portal is up"
+      - name: Seed Clerk auth state (headless)
+        # Hard-fail when seed-auth exits non-zero or does not write storageState.
+        # Do not soft-pass golden paths without usable auth.
+        env:
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
+          CLERK_SECRET_KEY: ${{ env.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Keep host identical to helpers.mjs / audit-a11y defaults (127.0.0.1).
+          BASE_URL: "http://127.0.0.1:3000"
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+          PORT: "3000"
+        run: |
+          set -euo pipefail
+          node e2e/golden/seed-auth.mjs
+          if [[ ! -f e2e/.auth-state.json ]]; then
+            echo "[e2e-cron] FATAL: seed-auth did not write e2e/.auth-state.json"
+            echo "  Required env: CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"
+            exit 1
+          fi
+      - name: Run golden paths (deep assertions)
+        env:
+          API_INTERNAL_URL: "http://127.0.0.1:8000"
+          BASE_URL: "http://127.0.0.1:3000"
+          NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000"
+          GOLDEN_CI: "1"
+          # Intentionally unset — GOLDEN_ALLOW_FAIL=1 would soft-exit 0 on path failures.
+        run: node e2e/golden/golden-paths.spec.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golden-screenshots-nightly-${{ github.run_id }}
+          path: clients/portal/e2e/golden/screenshots
+          retention-days: 7
+
+  trace-quality:
+    name: Trace-quality e2e (pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -32,7 +141,7 @@ jobs:
       POSTGRES_USER: eden_test
       POSTGRES_PASSWORD: eden_test
       JWT_SECRET: test-jwt-secret-do-not-use-in-production-ever
-      ENCRYPTION_KEY: $(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+      ENCRYPTION_KEY: test-encryption-key-32chars-minimum!!
     steps:
       - uses: actions/checkout@v7
 
@@ -41,10 +150,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install backend
+      - name: Install backend (with dev extras — pytest lives there)
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e '.[dev]'
 
       - name: Apply migrations (Alembic)
         run: |
@@ -52,23 +161,7 @@ jobs:
           python -m alembic upgrade head
         env:
           DATABASE_URL: postgresql://eden_test:eden_test@localhost:5432/eden_test
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: eden_test
-          POSTGRES_USER: eden_test
-          POSTGRES_PASSWORD: eden_test
-          JWT_SECRET: test-jwt-secret-do-not-use-in-production-ever
-          ENCRYPTION_KEY: test-encryption-key-32chars-minimum!!
 
-      - name: Install Playwright browsers (cached)
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('clients/portal/bun.lock') }}
-
-      - name: Run e2e suite
+      - name: Run trace-quality e2e
         run: |
-          python -m pytest tests/e2e/ -m e2e -x --timeout=300
-        env:
-          BASE_URL: http://localhost:3000
-          API_BASE_URL: http://localhost:8000
+          python -m pytest tests/e2e/ -x
