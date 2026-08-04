@@ -169,5 +169,27 @@ async def _record_transition(
             actor[:64],
             json.dumps(detail, default=str),
         )
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("state_machine: record_transition failed: %s", exc)
+    except Exception as exc:
+        # The status row already moved; losing the audit row must not be
+        # silent (chaos row c). Log loudly with full transition identity and
+        # bump a counter so monitoring can see audit-row loss.
+        logger.error(
+            "state_machine: audit-row loss — issue_state_transitions insert "
+            "failed for org=%s issue=%s %s->%s event=%s: %s",
+            org_id,
+            issue_id,
+            from_status,
+            to_status,
+            event_type,
+            exc,
+        )
+        try:
+            from eden.observability.simple_metrics import Counter
+
+            Counter(
+                "eden_loop_audit_row_loss_total",
+                "issue_state_transitions audit-row insert failures",
+                labelnames=("event_type",),
+            ).labels(event_type=event_type[:48]).inc()
+        except Exception:  # noqa: BLE001 - metrics must never mask the log
+            pass

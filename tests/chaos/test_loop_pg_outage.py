@@ -78,18 +78,10 @@ async def test_total_outage_outbox_insert_fails_loud_not_silent(caplog):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "state_machine._record_transition swallows a Postgres failure at "
-        "DEBUG (src/eden/closed_loop/state_machine.py:172-173) while "
-        "apply_transition still returns the new status — the status row "
-        "moves but the issue_state_transitions audit row is silently "
-        "lost. Desired: at least a WARNING (or a failure signal to the "
-        "caller). src/eden is read-only for this suite; flagged for the "
-        "owning agent."
-    ),
-)
+# Fixed: state_machine._record_transition now logs the audit-row loss at
+# ERROR with full transition identity + bumps eden_loop_audit_row_loss_total,
+# instead of swallowing the Postgres failure at DEBUG. The status row still
+# moves (that write already succeeded) but the loss is no longer silent.
 async def test_pg_down_during_transition_audit_row_is_not_silent(
     monkeypatch, caplog
 ):
