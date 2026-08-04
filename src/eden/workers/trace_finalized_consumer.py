@@ -338,6 +338,9 @@ class TraceFinalizedConsumer:
             trace_id,
             agent_id=data.get("agent_id") or None,
         )
+        # N12 — session timeline rollup, after the detectors so the
+        # stumbles this trace produced are counted on its turn.
+        await self._run_session_rollup(org_id, trace_id, data)
 
     async def _run_layer_a(
         self,
@@ -486,6 +489,33 @@ class TraceFinalizedConsumer:
         except Exception as exc:
             # Deliberately swallowed, including transients — see docstring.
             logger.debug("trace_finalized: annotator skipped: %s", exc)
+
+    async def _run_session_rollup(
+        self, org_id: str, trace_id: str, data: dict[str, str]
+    ) -> None:
+        """N12 — upsert the trace's session summary row.
+
+        Same failure contract as ``_run_layer_a``: transient storage
+        errors bubble so the handle-retry ladder re-runs the pipeline
+        (the rollup is a recompute-upsert, so a retry after a partial
+        write converges rather than double-counts); anything else is
+        logged and dropped — a rollup bug must not dead-letter the
+        detection pipeline.
+        """
+        try:
+            from eden.sessions.rollup import SessionRollupIndexer
+
+            await SessionRollupIndexer().index_trace(
+                org_id,
+                trace_id,
+                session_id=data.get("session_id") or None,
+                agent_id=data.get("agent_id") or None,
+                user_id=data.get("user_id") or None,
+            )
+        except Exception as exc:
+            if _is_transient(exc):
+                raise
+            logger.debug("trace_finalized: session rollup skipped: %s", exc)
 
     async def _maybe_prod_eval(
         self, org_id: str, trace_id: str, *, agent_id: str | None
