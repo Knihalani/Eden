@@ -220,6 +220,8 @@ export function DebuggerReplayView({
         <div className="min-h-0 flex-1 overflow-hidden">
           <RunTranscript
             steps={fromHereSteps}
+            traceId={trace.id}
+            syncStepToUrl={false}
             focusStepId={fromHereSteps[0]?.id ?? null}
             defaultOpenIds={
               fromHereSteps[0]
@@ -439,6 +441,8 @@ function ComparePane({
         <RunTranscript
           steps={trace.steps}
           compact
+          traceId={trace.id}
+          syncStepToUrl={false}
           focusStepId={focusStepId}
           defaultOpenIds={openIds}
         />
@@ -666,6 +670,8 @@ export function DebuggerInspectView({
         <div className="min-h-[12rem] flex-1 overflow-hidden">
           <RunTranscript
             steps={trace.steps.slice(0, index + 1)}
+            traceId={trace.id}
+            syncStepToUrl={false}
             focusStepId={snap.step.id}
             defaultOpenIds={[snap.step.id]}
           />

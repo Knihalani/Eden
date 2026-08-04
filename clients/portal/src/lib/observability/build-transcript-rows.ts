@@ -1,4 +1,8 @@
 import type { TranscriptMessage, TranscriptRow } from "@/lib/observability/types";
+import {
+  buildFallbackTimelineSteps,
+  type TimelineStep,
+} from "@/lib/observability/timeline-sync";
 
 type SpanNode = Record<string, unknown>;
 
@@ -289,4 +293,151 @@ export function buildSpanTree(
   options: BuildTranscriptOptions = {},
 ): TranscriptRow[] {
   return rollupTreeMetrics(rootSpans.map((node) => spanToRow(node, options)));
+}
+
+// ── Transcript view rows (RunTranscript row builder) ────────────────────────
+
+/**
+ * Minimal timing shape RunTranscript steps satisfy (`TranscriptStep` in
+ * `@/lab/fixtures/traces`). Kept structural so this data layer does not
+ * import from the lab layer.
+ */
+export interface TimedTranscriptStep {
+  id: string;
+  parentId?: string;
+  kind?: string;
+  startedAt?: string;
+  durationMs: number;
+}
+
+export type TranscriptViewRow<S extends TimedTranscriptStep> =
+  | { type: "step"; id: string; step: S }
+  | { type: "parallel"; id: string; lanes: S[] };
+
+/** Steps only group when their start time actually parses — no guessing. */
+function parseStartMs(step: TimedTranscriptStep): number | null {
+  if (!step.startedAt) return null;
+  const t = Date.parse(step.startedAt);
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Group consecutive same-parent tool steps whose time ranges overlap into a
+ * single parallel row (fan-out lanes). Everything else passes through in
+ * order, so traces without concurrency render exactly as before. Steps with
+ * missing/unparseable timestamps are never grouped.
+ */
+export function groupParallelSteps<S extends TimedTranscriptStep>(
+  steps: S[],
+): TranscriptViewRow<S>[] {
+  const rows: TranscriptViewRow<S>[] = [];
+  let group: S[] = [];
+  let groupEndMs = -Infinity;
+  let groupParent: string | undefined;
+
+  const flush = () => {
+    if (group.length >= 2) {
+      rows.push({ type: "parallel", id: `par:${group[0].id}`, lanes: group });
+    } else {
+      for (const s of group) rows.push({ type: "step", id: s.id, step: s });
+    }
+    group = [];
+    groupEndMs = -Infinity;
+    groupParent = undefined;
+  };
+
+  for (const step of steps) {
+    const startMs = parseStartMs(step);
+    const groupable = step.kind === "tool" && startMs != null;
+    if (!groupable) {
+      flush();
+      rows.push({ type: "step", id: step.id, step });
+      continue;
+    }
+    const endMs = startMs + Math.max(0, step.durationMs);
+    const overlaps =
+      group.length > 0 && step.parentId === groupParent && startMs < groupEndMs;
+    if (!overlaps) flush();
+    if (group.length === 0) groupParent = step.parentId;
+    group.push(step);
+    groupEndMs = Math.max(groupEndMs, endMs);
+  }
+  flush();
+  return rows;
+}
+
+/**
+ * Timeline geometry for a run's steps — reuses the Wave 4 timeline-sync
+ * builder so a future Gantt view and the transcript agree on t0/offsets.
+ */
+export function transcriptTimeline(
+  steps: TimedTranscriptStep[],
+): TimelineStep[] {
+  return buildFallbackTimelineSteps(
+    steps
+      .filter((s) => parseStartMs(s) != null)
+      .map((s) => ({
+        span_id: s.id,
+        name: s.id,
+        timestamp: s.startedAt as string,
+        duration_ms: s.durationMs,
+      })),
+  );
+}
+
+// ── Lazy tool payload markers (F82) ─────────────────────────────────────────
+
+export interface LazyPayloadMarker {
+  preview: string;
+  bytes: number;
+}
+
+function markerFrom(value: unknown): LazyPayloadMarker | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const obj = value as Record<string, unknown>;
+  if (obj._lazy !== true) return null;
+  return {
+    preview: typeof obj.preview === "string" ? obj.preview : "",
+    bytes: typeof obj.bytes === "number" ? obj.bytes : 0,
+  };
+}
+
+/**
+ * Detect an F82 `{_lazy, preview, bytes}` truncation marker inside a raw
+ * preview string (the marker itself, or one nesting level down — e.g. a
+ * tool call's `arguments`). Returns null for ordinary payloads.
+ */
+export function parseLazyPayloadMarker(
+  raw: string | null | undefined,
+): LazyPayloadMarker | null {
+  if (!raw) return null;
+  const text = raw.trim();
+  if (!text.startsWith("{") && !text.startsWith("[")) return null;
+  if (!text.includes('"_lazy"')) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const direct = markerFrom(parsed);
+    if (direct) return direct;
+    const scan = (value: unknown): LazyPayloadMarker | null => {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const hit = markerFrom(item) ?? scanRecord(item);
+          if (hit) return hit;
+        }
+        return null;
+      }
+      return scanRecord(value);
+    };
+    const scanRecord = (value: unknown): LazyPayloadMarker | null => {
+      if (!value || typeof value !== "object") return null;
+      for (const v of Object.values(value as Record<string, unknown>)) {
+        const hit = markerFrom(v);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    return scan(parsed);
+  } catch {
+    return null;
+  }
 }
