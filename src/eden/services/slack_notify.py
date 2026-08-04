@@ -341,6 +341,38 @@ async def notify_regression(
     )
 
 
+async def notify_loop_dead(
+    org_id: str,
+    *,
+    reasons: list[str],
+    outbox_depth: int,
+    publish_failure_age_s: float | None,
+) -> dict[str, Any]:
+    """M2 loop-dead: event publishing is failing or the outbox is backing up."""
+    age = (
+        f"{int(publish_failure_age_s)}s"
+        if publish_failure_age_s is not None
+        else "n/a"
+    )
+    return await _send(
+        org_id,
+        agent_id=None,
+        dedupe_key="loop_dead",
+        text=":rotating_light: Eden closed loop is dead: " + "; ".join(reasons),
+        blocks=_blocks(
+            header="Closed loop dead",
+            body=(
+                "*The improvement loop is not moving.*\n"
+                + "\n".join(f"• {r}" for r in reasons)
+                + f"\nOutbox depth: `{outbox_depth}` — publish failing for: `{age}`"
+            ),
+            link_url=_deep_link("/loop-health"),
+            link_label="Open loop health",
+            context="Eden loop-dead watchdog — verify worker idle chore",
+        ),
+    )
+
+
 async def send_test_message(
     org_id: str,
     *,

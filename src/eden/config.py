@@ -929,6 +929,10 @@ def _build_settings_class():
         traceloop_auto_apply: bool = False  # per-action kill-switch default
         stat_gate_min_n: int = 30
         stat_gate_min_effect: float = 0.2
+        # N01 regression gate: how skipped cases (no constraints / no
+        # trace to verify) count toward the promotion gate. Errors
+        # (telemetry unavailable) ALWAYS fail the gate — fail closed.
+        regression_gate_skip_policy: str = "allow"  # "allow" | "block"
         detector_keep_rate_loop: float = 1.0
         detector_keep_rate_error: float = 1.0
 
@@ -1128,6 +1132,19 @@ def _build_settings_class():
         # defaults for this one interval (180/60/180). One grid-aligned
         # value, used everywhere.
         verify_loop_interval_seconds: float = 600.0
+
+        # M2 loop-dead alerting. Rides the verify worker's idle chores
+        # (spec §11: no new pollers). Fires when event publishing has
+        # been failing for longer than the age threshold, or the
+        # durable outbox (migration 135) backs up past the depth
+        # threshold. Debounced to one alert per cooldown window.
+        loop_dead_publish_failure_max_age_seconds: int = 120
+        loop_dead_outbox_depth_threshold: int = 10_000
+        loop_dead_alert_cooldown_minutes: int = 30
+        # Destination org for loop-dead alert events + Slack (the
+        # alerts pipeline and Slack integration are org-scoped; there
+        # is no system org). Blank → log-only.
+        loop_dead_alert_org_id: str = ""
 
         # Anomaly detector: ran every 900s, which is not a multiple of the
         # 600s grid, so it re-fragmented the quiet window every cycle, and

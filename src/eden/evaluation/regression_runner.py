@@ -16,6 +16,14 @@ logger = logging.getLogger(__name__)
 _CANARY_REGRESSION_TRAFFIC_THRESHOLD = 5
 
 
+class TelemetryUnavailableError(RuntimeError):
+    """Telemetry backend could not be queried — verification is impossible.
+
+    Raised instead of silently returning "no stumbles" so an outage can
+    never masquerade as a passing regression suite (fail closed).
+    """
+
+
 @dataclass
 class RegressionRunResult:
     id: str
@@ -24,7 +32,12 @@ class RegressionRunResult:
     change_id: str | None
     passed: int
     failed: int
+    skipped: int = 0
+    errors: int = 0
     failures: list[dict[str, Any]] = field(default_factory=list)
+    # Per-case outcome: {case_id, fingerprint, status, reason} for every
+    # case, including skipped/error ones (visibility, N01 fail-closed).
+    cases: list[dict[str, Any]] = field(default_factory=list)
     status: str = "completed"
     created_at: str = field(
         default_factory=lambda: datetime.now(UTC).isoformat()
@@ -38,14 +51,37 @@ class RegressionRunResult:
             "change_id": self.change_id,
             "passed": self.passed,
             "failed": self.failed,
+            "skipped": self.skipped,
+            "errors": self.errors,
             "failures": list(self.failures),
+            "cases": list(self.cases),
             "status": self.status,
             "created_at": self.created_at,
         }
 
     @property
     def ok(self) -> bool:
-        return self.failed == 0
+        """Gate verdict: zero failures AND zero errors (fail closed).
+
+        Skipped cases pass the gate under the default
+        ``regression_gate_skip_policy="allow"``; under ``"block"`` they
+        fail it too.
+        """
+        if self.failed > 0 or self.errors > 0:
+            return False
+        if self.skipped > 0 and _skip_policy() == "block":
+            return False
+        return True
+
+
+def _skip_policy() -> str:
+    try:
+        from eden.config import get_settings
+
+        policy = get_settings().regression_gate_skip_policy
+    except Exception:
+        return "allow"
+    return policy if policy in ("allow", "block") else "allow"
 
 
 class RegressionRunner:
@@ -76,30 +112,32 @@ class RegressionRunner:
         change_id: str | None = None,
     ) -> RegressionRunResult:
         cases = await self._builder.list_cases(org_id, agent_id=agent_id, limit=100)
-        passed = 0
-        failed = 0
+        counts = {"passed": 0, "failed": 0, "skipped": 0, "error": 0}
         failures: list[dict[str, Any]] = []
+        case_results: list[dict[str, Any]] = []
         for case in cases:
-            ok, reason = await self._evaluate_case(case)
-            if ok:
-                passed += 1
-            else:
-                failed += 1
-                failures.append(
-                    {
-                        "case_id": case.id,
-                        "fingerprint": case.fingerprint,
-                        "reason": reason,
-                    }
-                )
+            status, reason = await self._evaluate_case(case)
+            counts[status] += 1
+            entry = {
+                "case_id": case.id,
+                "fingerprint": case.fingerprint,
+                "status": status,
+                "reason": reason,
+            }
+            case_results.append(entry)
+            if status in ("failed", "error"):
+                failures.append(entry)
         result = RegressionRunResult(
             id=str(uuid.uuid4()),
             org_id=org_id,
             agent_id=agent_id,
             change_id=change_id,
-            passed=passed,
-            failed=failed,
+            passed=counts["passed"],
+            failed=counts["failed"],
+            skipped=counts["skipped"],
+            errors=counts["error"],
             failures=failures,
+            cases=case_results,
         )
         await self._persist(result)
         return result
@@ -120,35 +158,56 @@ class RegressionRunner:
                     "code": "regression_gate_failed",
                     "message": (
                         f"Regression gate blocked canary at {traffic_pct}%: "
-                        f"{result.failed} failure(s)"
+                        f"{result.failed} failure(s), {result.errors} error(s), "
+                        f"{result.skipped} skipped "
+                        f"(skip_policy={_skip_policy()})"
                     ),
+                    "breakdown": {
+                        "passed": result.passed,
+                        "failed": result.failed,
+                        "skipped": result.skipped,
+                        "errors": result.errors,
+                        "skip_policy": _skip_policy(),
+                    },
                     "run": result.to_dict(),
                 },
             )
         return result
 
-    async def _evaluate_case(self, case: RegressionCase) -> tuple[bool, str]:
+    async def _evaluate_case(self, case: RegressionCase) -> tuple[str, str]:
+        """Evaluate one case.
+
+        Returns ``(status, reason)`` with status in
+        ``{"passed", "failed", "skipped", "error"}``. Infrastructure
+        failure is an *error*, never a silent pass (fail closed).
+        """
         expected = case.expected_data or {}
         no_stumble = expected.get("no_stumble_kinds") or []
         if not no_stumble:
-            return True, "no constraints"
+            return "skipped", "no_constraints"
         trace_id = case.source_trace_id or (case.input_data or {}).get("trace_id")
         if not trace_id:
-            return True, "no trace to verify"
-        kinds = await self._stumble_kinds_for_trace(str(trace_id))
+            return "skipped", "no_trace"
+        try:
+            kinds = await self._stumble_kinds_for_trace(str(trace_id))
+        except TelemetryUnavailableError:
+            return "error", "telemetry_unavailable"
         blocked = [k for k in no_stumble if k in kinds]
         if blocked:
-            return False, f"stumble kinds present: {blocked}"
+            return "failed", f"stumble kinds present: {blocked}"
         if expected.get("statgate_pass") is True:
-            sg = await self._statgate_pass(str(trace_id))
+            try:
+                sg = await self._statgate_pass(str(trace_id))
+            except TelemetryUnavailableError:
+                return "error", "telemetry_unavailable"
             if not sg:
-                return False, "statgate failed on trace"
-        return True, "ok"
+                return "failed", "statgate failed on trace"
+        return "passed", "ok"
 
     async def _stumble_kinds_for_trace(self, trace_id: str) -> set[str]:
         client = await self._client()
         if client is None:
-            return set()
+            raise TelemetryUnavailableError("telemetry client unavailable")
         try:
             rows = await client.fetch(
                 """
@@ -160,13 +219,15 @@ class RegressionRunner:
                 trace_id,
             )
             return {str(r["kind"]) for r in rows if r.get("kind")}
-        except Exception:
-            return set()
+        except Exception as exc:
+            raise TelemetryUnavailableError(
+                f"stumble query failed: {exc}"
+            ) from exc
 
     async def _statgate_pass(self, trace_id: str) -> bool:
         client = await self._client()
         if client is None:
-            return True
+            raise TelemetryUnavailableError("telemetry client unavailable")
         try:
             row = await client.fetchrow(
                 """
@@ -178,8 +239,10 @@ class RegressionRunner:
             if row is None:
                 return True
             return (row.get("outcome") or "success") == "success"
-        except Exception:
-            return True
+        except Exception as exc:
+            raise TelemetryUnavailableError(
+                f"statgate query failed: {exc}"
+            ) from exc
 
     async def _persist(self, result: RegressionRunResult) -> None:
         client = await self._client()
@@ -202,4 +265,8 @@ class RegressionRunner:
         )
 
 
-__all__ = ["RegressionRunner", "RegressionRunResult"]
+__all__ = [
+    "RegressionRunner",
+    "RegressionRunResult",
+    "TelemetryUnavailableError",
+]

@@ -110,11 +110,13 @@ def test_default_chores_registered():
         "outbox_ttl_cleanup",
         "fix_pending_janitor",  # M3
         "stale_plans_janitor",  # M13 §6.6
+        "loop_dead_alert",  # M2 loop-dead watchdog
     }
     assert by_name["outbox_drain"].interval_s == 60.0
     assert by_name["outbox_ttl_cleanup"].interval_s == 6 * 3600.0
     assert by_name["fix_pending_janitor"].interval_s == 300.0
     assert by_name["stale_plans_janitor"].interval_s == 3600.0
+    assert by_name["loop_dead_alert"].interval_s == 60.0
 
     from eden.closed_loop import event_bus
 

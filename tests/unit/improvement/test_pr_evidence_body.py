@@ -131,3 +131,74 @@ class TestGracefulAbsence:
         plan = {"evidence": {"ci_ingestion": "unavailable"}}
         body = render_pr_evidence_body(plan, plan_id="plan-1", summary="s")
         assert "checks:read" in body
+
+
+class TestTierHonesty:
+    """A plan carrying ONLY static-check evidence can never be labeled
+    "tested" — end to end from the tier ladder to the rendered PR body."""
+
+    @staticmethod
+    def _static_only_payload(
+        *,
+        replay: dict | None = None,
+        sandbox_tests: dict | None = None,
+    ) -> dict:
+        from types import SimpleNamespace
+
+        from eden.improvement.issue_patch_trigger import (
+            _plan_payload_from_patch,
+        )
+
+        ctx = {
+            "issue": SimpleNamespace(
+                severity="P1", title="Fix foo", stumble_count=3
+            ),
+            "triage": {"confidence": 0.9},
+            "agent_id": "planner",
+        }
+        return _plan_payload_from_patch(
+            "org-1",
+            "issue-1",
+            ctx,
+            {"description": "Fix foo", "diff": "--- a\n+++ b", "files": []},
+            hermetic_preverify={"status": "static_passed"},
+            replay=replay,
+            sandbox_tests=sandbox_tests,
+        )
+
+    def test_static_only_plan_is_tier_static(self) -> None:
+        payload = self._static_only_payload()
+        assert payload["evidence"]["evidence_tier"] == "static"
+
+    def test_skipped_sandbox_and_failed_replay_stay_static(self) -> None:
+        payload = self._static_only_payload(
+            replay={"status": "failed", "reason": "signature_reproduced"},
+            sandbox_tests={"status": "skipped", "reason": "no_tests_found"},
+        )
+        assert payload["evidence"]["evidence_tier"] == "static"
+
+    def test_static_only_body_never_says_tested(self) -> None:
+        payload = self._static_only_payload(
+            sandbox_tests={"status": "skipped", "reason": "no_tests_found"},
+        )
+        body = render_pr_evidence_body(
+            {"evidence": payload["evidence"]},
+            plan_id="plan-1",
+            summary="Fix foo",
+            static_status="static_passed",
+        )
+        assert "| Evidence tier | **static** |" in body
+        assert "**tested**" not in body
+
+    def test_only_passed_sandbox_earns_tested(self) -> None:
+        for status in ("failed", "skipped", "error", None):
+            payload = self._static_only_payload(
+                sandbox_tests=(
+                    {"status": status} if status is not None else None
+                ),
+            )
+            assert payload["evidence"]["evidence_tier"] != "tested"
+        passed = self._static_only_payload(
+            sandbox_tests={"status": "passed"},
+        )
+        assert passed["evidence"]["evidence_tier"] == "tested"
