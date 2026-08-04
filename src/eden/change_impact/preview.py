@@ -308,7 +308,17 @@ class ImpactPreviewOrchestrator:
             return result.to_dict()
         except Exception as exc:
             logger.debug("regression eval failed: %s", exc)
-            return {"passed": 0, "failed": 0, "failures": []}
+            # Fail closed: an eval that could not run is an error, not a
+            # clean slate.
+            return {
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "errors": 1,
+                "failures": [
+                    {"status": "error", "reason": "regression_runner_exception"}
+                ],
+            }
 
     def _recommend(
         self, report: ImpactReport
@@ -323,6 +333,11 @@ class ImpactPreviewOrchestrator:
         if report.regression_eval.get("failed", 0) > 0:
             reasons.append(
                 f"{report.regression_eval['failed']} regression failures"
+            )
+        if report.regression_eval.get("errors", 0) > 0:
+            reasons.append(
+                f"{report.regression_eval['errors']} regression eval "
+                "errors (telemetry unavailable)"
             )
         if report.trajectory_divergence_rate > 0.1:
             reasons.append(

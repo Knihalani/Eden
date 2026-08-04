@@ -79,6 +79,8 @@ def _reset_state_for_tests() -> None:
     _verify_clear_cooldown()
     _IDLE_CHORES.clear()
     _CHORE_LAST_RUN.clear()
+    global _LOOP_DEAD_LAST_ALERT_MONO
+    _LOOP_DEAD_LAST_ALERT_MONO = None
 
 
 # ── Idle chores ─────────────────────────────────────────────────────
@@ -135,6 +137,97 @@ def _register_default_chores() -> None:
     )
     register_idle_chore("fix_pending_janitor", 300.0, fix_pending_janitor)
     register_idle_chore("stale_plans_janitor", 3600.0, stale_plans_janitor)
+    register_idle_chore("loop_dead_alert", 60.0, loop_dead_alert_check)
+
+
+# ── M2 loop-dead alerting ───────────────────────────────────────────
+#
+# ``/internal/loop-health`` is passive — someone has to look at it. This
+# chore actively pages when the loop stops moving: event publishing has
+# been failing for longer than the threshold, or the durable outbox
+# (migration 135) is backing up. Debounced module-globally so a dead
+# loop pages once per cooldown window, not once per tick.
+
+_LOOP_DEAD_LAST_ALERT_MONO: float | None = None
+
+
+async def loop_dead_alert_check() -> bool:
+    """Alert (alerts pipeline + Slack) when the closed loop looks dead.
+
+    Returns True when an alert was emitted this pass.
+    """
+    global _LOOP_DEAD_LAST_ALERT_MONO
+    from eden.closed_loop import event_bus
+
+    max_age_s = _cfg("loop_dead_publish_failure_max_age_seconds", 120)
+    max_depth = _cfg("loop_dead_outbox_depth_threshold", 10_000)
+    cooldown_min = _cfg("loop_dead_alert_cooldown_minutes", 30)
+
+    reasons: list[str] = []
+    failure_age_s: float | None = None
+    failure_ts = event_bus.last_publish_failure_ts
+    if failure_ts is not None:
+        failure_age_s = time.time() - failure_ts
+        if failure_age_s >= max_age_s:
+            reasons.append(
+                f"event publish failing for {int(failure_age_s)}s "
+                f"(threshold {max_age_s}s)"
+            )
+    depth = await event_bus.outbox_depth()
+    if depth > max_depth:
+        reasons.append(f"outbox depth {depth} > {max_depth}")
+    if not reasons:
+        return False
+
+    now_mono = time.monotonic()
+    if (
+        _LOOP_DEAD_LAST_ALERT_MONO is not None
+        and now_mono - _LOOP_DEAD_LAST_ALERT_MONO < cooldown_min * 60
+    ):
+        return False
+    _LOOP_DEAD_LAST_ALERT_MONO = now_mono
+
+    logger.error("loop-dead watchdog: %s", "; ".join(reasons))
+    org_id = ""
+    try:
+        from eden.config import get_settings
+
+        org_id = str(get_settings().loop_dead_alert_org_id or "")
+    except Exception:
+        org_id = ""
+    if not org_id:
+        # Alerts pipeline + Slack are org-scoped; without a configured
+        # ops org the error log above is the whole alert.
+        return True
+    try:
+        from eden.alerts import repo as alerts_repo
+
+        await alerts_repo.create_alert_event(
+            org_id=org_id,
+            rule_id=None,
+            title="Closed loop dead: " + "; ".join(reasons),
+            severity="critical",
+            payload={
+                "source": "loop_dead_watchdog",
+                "reasons": reasons,
+                "outbox_depth": depth,
+                "publish_failure_age_s": failure_age_s,
+            },
+        )
+    except Exception as exc:
+        logger.warning("loop-dead watchdog: alert event failed: %s", exc)
+    try:
+        from eden.services import slack_notify
+
+        await slack_notify.notify_loop_dead(
+            org_id,
+            reasons=reasons,
+            outbox_depth=depth,
+            publish_failure_age_s=failure_age_s,
+        )
+    except Exception as exc:
+        logger.warning("loop-dead watchdog: slack notify failed: %s", exc)
+    return True
 
 
 async def fix_pending_janitor(limit: int = 50) -> int:
