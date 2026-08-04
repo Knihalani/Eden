@@ -134,6 +134,34 @@ TOOL_CATALOG: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "checkpoint_rerun",
+        "description": (
+            "Rerun the debugger live from a checkpoint step (F01 live-rerun path). "
+            "rerun_mode='cached_live' uses the prefix cache; 'replay' replays without LLM calls. "
+            "Returns the debugger route's honesty stats (cache_hits / populated_steps)."
+        ),
+        "scope": "mcp:debug",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "trace_id": {"type": "string"},
+                "from_step": {"type": "integer"},
+                "prompt_override": {"type": "string"},
+                "rerun_mode": {
+                    "type": "string",
+                    "enum": ["cached_live", "replay"],
+                    "description": "cached_live uses prefix cache; replay replays without LLM calls.",
+                },
+                "live_prefix": {
+                    "type": "boolean",
+                    "description": "When true, prefer live prefix cache rows from debugger_llm_cache.",
+                },
+            },
+            "required": ["org_id", "trace_id"],
+        },
+    },
+    {
         "name": "search_issues",
         "description": "List agent issues (optional status/severity).",
         "scope": "mcp:read",
@@ -449,6 +477,7 @@ _HANDLERS: dict[str, ToolHandler] = {
     "get_transcript": tool_fns.get_transcript,
     "list_checkpoints": tool_fns.list_checkpoints,
     "rerun_debugger": tool_fns.rerun_debugger,
+    "checkpoint_rerun": tool_fns.checkpoint_rerun,
     "search_issues": tool_fns.search_issues,
     "get_issue": tool_fns.get_issue,
     "get_trace_stumbles": tool_fns.get_trace_stumbles,

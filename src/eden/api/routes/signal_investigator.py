@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
@@ -229,4 +229,95 @@ async def signal_backfill_estimate(
         "backfill_estimate": count,
         "window_days": window_days,
         "estimated_cost_usd": estimate_backfill_cost(count),
+    }
+
+
+# ── F06: per-trace signal investigator ON path ──────────────────────
+
+
+class InvestigateRequest(BaseModel):
+    """Optional inline events + scoping for a one-trace investigation.
+
+    ``events`` lets a caller pass the trace event list directly (e.g. the
+    debugger UI already has it); when omitted the investigator fetches the
+    trace from the RCA read model. ``signal_id`` restricts the run to one
+    signal definition instead of every enabled one.
+    """
+
+    events: list[dict[str, Any]] | None = None
+    agent_id: str | None = None
+    signal_id: str | None = None
+
+
+@router.post("/traces/{trace_id}/investigate")
+async def investigate_trace_endpoint(
+    org_id: str = Depends(require_path_org_access),
+    trace_id: str = Path(...),
+    body: InvestigateRequest = Body(default_factory=InvestigateRequest),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """F06 — run the per-trace signal investigator for a single trace.
+
+    Flag-gated by ``signal_investigator_llm_v1`` (default **off**). When the
+    flag is off we return an honest ``disabled`` envelope rather than silently
+    returning an empty result. When on we evaluate the org's enabled signal
+    definitions for this trace (StatGate + heuristics — the per-signal LLM
+    path was retired, see :mod:`eden.signals.investigator`) and budget-cap the
+    run via the shared daily maintenance budget.
+    """
+    _ = user
+    from eden.closed_loop.autonomy_policy import check_budget, record_spend
+    from eden.config import get_settings
+    from eden.signals import investigator as signal_investigator
+
+    if not bool(getattr(get_settings(), "signal_investigator_llm_v1", False)):
+        return {
+            "status": "disabled",
+            "feature": "signal_investigator_llm_v1",
+            "org_id": org_id,
+            "trace_id": trace_id,
+            "findings": [],
+            "note": (
+                "signal investigator is disabled; enable "
+                "signal_investigator_llm_v1 to run"
+            ),
+        }
+
+    ok, spent, limit = await check_budget(org_id)
+    if not ok:
+        # Honest failure — never a silent empty ``findings`` list.
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "status": "budget_exhausted",
+                "feature": "signal_investigator_llm_v1",
+                "trace_id": trace_id,
+                "spent_usd": round(spent, 6),
+                "limit_usd": round(limit, 6),
+                "note": "daily investigator budget exhausted; no investigation run",
+            },
+        )
+
+    findings = await signal_investigator.investigate_trace(
+        org_id,
+        trace_id,
+        events=body.events,
+        agent_id=body.agent_id,
+        signal_id=body.signal_id,
+    )
+    total_cost = sum(float(f.get("cost_usd", 0.0) or 0.0) for f in findings)
+    if total_cost > 0:
+        await record_spend(org_id, total_cost, feature="signal_investigator")
+
+    matched = [f for f in findings if f.get("matched")]
+    return {
+        "status": "ok",
+        "feature": "signal_investigator_llm_v1",
+        "org_id": org_id,
+        "trace_id": trace_id,
+        "findings": findings,
+        "matched_count": len(matched),
+        "evaluated_count": len(findings),
+        "cost_usd": round(total_cost, 6),
+        "budget": {"spent_usd": round(spent, 6), "limit_usd": round(limit, 6)},
     }
