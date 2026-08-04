@@ -84,12 +84,10 @@ mod tests {
             .into_value()
             .unwrap();
         assert_eq!(event["source_format"], "openai");
-        assert!(
-            event["tags"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| v == "model:gpt-4o-mini")
-        );
+        assert!(event["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "model:gpt-4o-mini"));
     }
 }

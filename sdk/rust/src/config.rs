@@ -124,15 +124,11 @@ impl Config {
     pub fn from_env() -> Result<Self> {
         let org_id = env::var("EDEN_DEFAULT_ORG")
             .or_else(|_| env::var("EDEN_ORG_ID"))
-            .map_err(|_| {
-                Error::Config(
-                    "EDEN_DEFAULT_ORG (or EDEN_ORG_ID) is not set".into(),
-                )
-            })?;
+            .map_err(|_| Error::Config("EDEN_DEFAULT_ORG (or EDEN_ORG_ID) is not set".into()))?;
         let api_key = env::var("EDEN_API_KEY")
             .map_err(|_| Error::Config("EDEN_API_KEY is not set".into()))?;
-        let base_url = env::var("EDEN_BASE_URL")
-            .unwrap_or_else(|_| "http://localhost:8000".to_string());
+        let base_url =
+            env::var("EDEN_BASE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
         Self::new(base_url, org_id, api_key)
     }
 

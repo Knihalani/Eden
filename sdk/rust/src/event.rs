@@ -188,7 +188,10 @@ impl EventBuilder {
     /// shape the Python and TS SDKs emit.
     pub fn into_value(self) -> Result<Value> {
         let mut obj = Map::new();
-        obj.insert("event_id".into(), Value::String(format!("evt_{}", Uuid::new_v4())));
+        obj.insert(
+            "event_id".into(),
+            Value::String(format!("evt_{}", Uuid::new_v4())),
+        );
         obj.insert("event_type".into(), Value::String(self.event_type));
         obj.insert("name".into(), Value::String(self.name));
         obj.insert("realm".into(), serde_json::to_value(self.realm)?);
@@ -229,10 +232,7 @@ impl EventBuilder {
         if !self.payload.is_empty() {
             obj.insert("payload".into(), Value::Object(self.payload));
         }
-        obj.insert(
-            "source_format".into(),
-            Value::String(self.source_format),
-        );
+        obj.insert("source_format".into(), Value::String(self.source_format));
         Ok(Value::Object(obj))
     }
 }

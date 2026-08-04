@@ -5,8 +5,8 @@
 //! `X-Org-Api-Key` headers. The client is `Send + Sync` and cheap to
 //! clone — it holds an `Arc<reqwest::Client>` under the hood.
 
-use crate::config::IngestTarget;
 use crate::config::Config;
+use crate::config::IngestTarget;
 use crate::errors::{Error, Result};
 use crate::event::EventBuilder;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};

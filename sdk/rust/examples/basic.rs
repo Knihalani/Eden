@@ -67,6 +67,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Read the config back so the example produces some output even
     // if the user is just sanity-checking the wiring.
-    println!("ingest base: {}", client.config().ingest_url(eden::IngestTarget::Openai));
+    println!(
+        "ingest base: {}",
+        client.config().ingest_url(eden::IngestTarget::Openai)
+    );
     Ok(())
 }
