@@ -288,6 +288,12 @@ def _build_settings_class():
         # explicitly before running the backfill job.
         debugger_checkpoint_ingest_v1: bool = True
         debugger_checkpoint_backfill_v1: bool = False
+        # ``debugger_live_rerun_v1``: default False. When enabled, the
+        # debugger ``/rerun`` endpoint honours ``live=true`` by actually
+        # calling the model on the mutated tail step (F01 live gateway),
+        # distinct from the hermetic recorded-replay path. Off => rerun stays
+        # hermetic and ``model_invoked`` is reported False.
+        debugger_live_rerun_v1: bool = False
 
         # Cat 23 Code-Change two-stage opt-in (see eden/code_change/approvals).
         # ``code_change_enabled`` is the master switch — the patch propose

@@ -71,6 +71,22 @@ class RerunRequest(BaseModel):
         default=False,
         description="When true, use cached-prefix + live tail mode (F01).",
     )
+    live: bool = Field(
+        default=False,
+        description=(
+            "When true AND debugger_live_rerun_v1 is enabled, actually call "
+            "the model on the mutated tail step (F01 live gateway) instead of "
+            "the hermetic recorded replay. Requires prompt_override and/or "
+            "tool_result_override to be meaningful."
+        ),
+    )
+    tool_result_override: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional mutated tool-result applied to the first tail step "
+            "before a live re-run (F01 debugger 'what if the tool returned X')."
+        ),
+    )
     session_id: str | None = Field(
         default=None,
         description="Optional F74 debug session to attach this run to.",
@@ -112,6 +128,46 @@ class DiscoverResponse(BaseModel):
     entrypoints: list[dict[str, Any]]
 
 # ─- Helpers ───────────────────────────────────────────────────────
+
+def _make_live_llm_fn(org_id: str):  # type: ignore[no-untyped-def]
+    """Build an async llm_fn for the F01 live-rerun path.
+
+    Adapts the checkpoint's chat ``messages`` into the sanctioned playground
+    handler (ModelRouter + cost caps + kill switches, with a deterministic
+    offline fallback when no API key is configured). Returns a response dict
+    the engine can diff against the recorded response.
+    """
+
+    async def _live_llm_fn(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        from eden.playground.llm_handler import playground_llm_handler
+
+        system = ""
+        parts: list[str] = []
+        for msg in messages:
+            content = msg.get("content")
+            if not isinstance(content, str):
+                content = str(content or "")
+            if msg.get("role") == "system":
+                system = content
+            else:
+                parts.append(f"{msg.get('role', 'user')}: {content}")
+        prompt_dict = {
+            "system": system,
+            "user": "\n".join(parts),
+            "model": "t1",
+            "org_id": org_id,
+        }
+        res = await playground_llm_handler(prompt_dict, org_id=org_id)
+        return {
+            "content": res.response,
+            "model": res.model,
+            "cost_usd": res.cost_usd,
+            "latency_ms": res.latency_ms,
+            "source": "live_gateway",
+        }
+
+    return _live_llm_fn
+
 
 def _checkpoint_to_response(c: Checkpoint) -> CheckpointResponse:
     return CheckpointResponse(
@@ -168,16 +224,36 @@ async def rerun(
 ) -> dict[str, Any]:
     pg = await get_postgres_client()
     store = CheckpointStore(pg)
-    rerun_mode = "cached_live" if body.live_prefix else "hermetic"
-    if body.live_prefix:
+    if body.live:
+        rerun_mode = "live_gateway"
+    elif body.live_prefix:
+        rerun_mode = "cached_live"
+    else:
+        rerun_mode = "hermetic"
+    if body.live:
+        from eden.config import get_settings
+
+        if not get_settings().debugger_live_rerun_v1:
+            # Honest, not silent: never pretend a model ran when the live
+            # gateway is disabled.
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "live rerun disabled: enable debugger_live_rerun_v1 to "
+                    "actually call the model"
+                ),
+            )
         from eden.debugger.cache import PrefixCacheService
 
         cache_svc = PrefixCacheService(pg)
-        engine = LivePrefixEngine(store, cache_svc=cache_svc)
-        result = await engine.rerun_live_prefix(
+        engine = LivePrefixEngine(
+            store, cache_svc=cache_svc, llm_fn=_make_live_llm_fn(org_id),
+        )
+        result = await engine.rerun_live(
             body.trace_id,
             live_from_step=body.from_step,
             prompt_override=body.prompt_override,
+            tool_result_override=body.tool_result_override,
             org_id=org_id,
         )
         out: dict[str, Any] = {
@@ -193,6 +269,33 @@ async def rerun(
             "diff": result.diff,
             "mode": result.mode,
             "live_tail_steps": result.live_tail_steps,
+            "model_invoked": result.model_invoked,
+        }
+    elif body.live_prefix:
+        from eden.debugger.cache import PrefixCacheService
+
+        cache_svc = PrefixCacheService(pg)
+        engine = LivePrefixEngine(store, cache_svc=cache_svc)
+        result = await engine.rerun_live_prefix(
+            body.trace_id,
+            live_from_step=body.from_step,
+            prompt_override=body.prompt_override,
+            org_id=org_id,
+        )
+        out = {
+            "source_trace_id": result.source_trace_id,
+            "from_step": result.live_from_step,
+            "to_step": result.live_from_step + result.live_tail_steps - 1
+            if result.live_tail_steps
+            else result.live_from_step - 1,
+            "prompt_override": body.prompt_override,
+            "checkpoints": [
+                _checkpoint_to_response(c).model_dump() for c in result.prefix_checkpoints
+            ],
+            "diff": result.diff,
+            "mode": result.mode,
+            "live_tail_steps": result.live_tail_steps,
+            "model_invoked": result.model_invoked,
         }
     else:
         engine = ReRunEngine(store)

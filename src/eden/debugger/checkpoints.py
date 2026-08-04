@@ -56,12 +56,20 @@ Phase P.5).
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# F01 live-rerun: an injected async callable that actually calls the model.
+# Takes the (mutated) input messages for a step and returns a response dict.
+# Injected by the route behind ``debugger_live_rerun_v1`` so the engine stays
+# decoupled from the gateway and remains unit-testable with a fake.
+LiveRerunFn = Callable[[list[dict[str, Any]]], Awaitable[dict[str, Any]]]
 
 
 # ─- Dataclasses ────────────────────────────────────────────────
@@ -141,6 +149,10 @@ class LivePrefixResult:
     live_tail_steps: int
     mode: str = "cached_prefix"
     diff: list[dict[str, Any]] = field(default_factory=list)
+    # Honesty flag: True only when a real model call was made for the tail
+    # (the ``live_gateway`` path). The hermetic ``cached_prefix`` path leaves
+    # this False so callers never mistake a recorded replay for a live re-run.
+    model_invoked: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -150,6 +162,7 @@ class LivePrefixResult:
             "live_tail_steps": self.live_tail_steps,
             "mode": self.mode,
             "diff": self.diff,
+            "model_invoked": self.model_invoked,
         }
 
 
@@ -369,9 +382,11 @@ class LivePrefixEngine:
         self,
         store: CheckpointStore,
         cache_svc: Any | None = None,
+        llm_fn: LiveRerunFn | None = None,
     ) -> None:
         self._store = store
         self._cache_svc = cache_svc
+        self._llm_fn = llm_fn
         self._rerun = ReRunEngine(store)
 
     async def rerun_live_prefix(
@@ -410,6 +425,88 @@ class LivePrefixEngine:
             live_from_step=live_from_step,
             prefix_checkpoints=prefix,
             live_tail_steps=len(tail),
+            diff=diff,
+        )
+
+    async def rerun_live(
+        self,
+        trace_id: str,
+        *,
+        live_from_step: int = 0,
+        prompt_override: str | None = None,
+        tool_result_override: dict[str, Any] | None = None,
+        org_id: str = "default",
+    ) -> LivePrefixResult:
+        """Actually re-run the tail boundary step against the model (F01).
+
+        Distinct from :meth:`rerun_live_prefix` (which is hermetic and only
+        *counts* the tail): this path applies the operator's mutation
+        (``prompt_override`` and/or ``tool_result_override``) to the first
+        tail step, invokes the injected ``llm_fn`` for a real completion, and
+        returns a structured outcome diff (via ``playground.diff.char_diff``)
+        of the original recorded response vs the freshly generated one.
+
+        Requires an ``llm_fn`` to have been wired at construction time. If
+        none is present this raises — it will never silently fall back to the
+        recorded response and pretend a model was called.
+        """
+        if self._llm_fn is None:
+            raise RuntimeError(
+                "live rerun requested but no llm_fn is wired; "
+                "enable debugger_live_rerun_v1 and construct "
+                "LivePrefixEngine(store, llm_fn=...)",
+            )
+        # Live re-run needs the full recorded state (input messages, tool
+        # results). Load from the store, not the sparse prefix cache.
+        all_checkpoints = await self._store.list_for_trace(trace_id, org_id=org_id)
+        prefix = [c for c in all_checkpoints if c.step_number < live_from_step]
+        tail = [c for c in all_checkpoints if c.step_number >= live_from_step]
+        if not tail:
+            return LivePrefixResult(
+                source_trace_id=trace_id,
+                live_from_step=live_from_step,
+                prefix_checkpoints=prefix,
+                live_tail_steps=0,
+                mode="live_gateway",
+                model_invoked=False,
+                diff=[],
+            )
+
+        boundary = tail[0]
+        mutated = boundary
+        if prompt_override:
+            mutated = _apply_prompt_override(mutated, prompt_override)
+        if tool_result_override is not None:
+            mutated = _apply_tool_result_override(mutated, tool_result_override)
+
+        # Real model call on the mutated input.
+        new_response = await self._llm_fn(
+            [dict(m) for m in mutated.input_messages],
+        )
+
+        orig_text = _response_text(boundary.response)
+        new_text = _response_text(new_response)
+        from eden.playground.diff import char_diff
+
+        diff = [
+            {
+                "step_number": boundary.step_number,
+                "original_response": boundary.response,
+                "replayed_response": new_response,
+                "input_messages_changed": mutated.input_messages
+                != boundary.input_messages,
+                "tool_results_changed": tool_result_override is not None,
+                "outcome_diff": char_diff(orig_text, new_text),
+                "mode": "live_gateway",
+            },
+        ]
+        return LivePrefixResult(
+            source_trace_id=trace_id,
+            live_from_step=live_from_step,
+            prefix_checkpoints=prefix,
+            live_tail_steps=len(tail),
+            mode="live_gateway",
+            model_invoked=True,
             diff=diff,
         )
 
@@ -581,15 +678,74 @@ def _apply_prompt_override(
     )
 
 
+def _response_text(resp: Any) -> str:
+    """Best-effort extraction of the textual content from a response dict.
+
+    Used to diff an original recorded response against a freshly generated
+    one. Falls back to a stable JSON dump so unequal structured responses
+    still produce a meaningful char diff.
+    """
+    if isinstance(resp, str):
+        return resp
+    if isinstance(resp, dict):
+        for key in ("content", "text", "response", "output", "message"):
+            val = resp.get(key)
+            if isinstance(val, str) and val:
+                return val
+        return json.dumps(resp, sort_keys=True, default=str)
+    return str(resp or "")
+
+
+def _apply_tool_result_override(
+    checkpoint: Checkpoint, override: dict[str, Any],
+) -> Checkpoint:
+    """Substitute a mutated tool-result into a checkpoint (F01 debugger).
+
+    Replaces the step's ``tool_results`` with ``[override]`` and reflects the
+    new content into the last ``role == "tool"`` input message (appending one
+    if none exists) so the re-run model actually *sees* the mutation.
+    """
+    new_text = _response_text(override)
+    new_messages: list[dict[str, Any]] = []
+    replaced = False
+    for msg in reversed(checkpoint.input_messages):
+        if msg.get("role") == "tool" and not replaced:
+            updated = dict(msg)
+            updated["content"] = new_text
+            new_messages.append(updated)
+            replaced = True
+        else:
+            new_messages.append(dict(msg))
+    new_messages.reverse()
+    if not replaced:
+        new_messages.append({"role": "tool", "content": new_text})
+    return Checkpoint(
+        id=checkpoint.id,
+        trace_id=checkpoint.trace_id,
+        step_number=checkpoint.step_number,
+        input_messages=new_messages,
+        tool_calls=list(checkpoint.tool_calls),
+        tool_results=[dict(override)],
+        response=dict(checkpoint.response),
+        prompt_override=checkpoint.prompt_override,
+        started_at=checkpoint.started_at,
+        ended_at=checkpoint.ended_at,
+        duration_ms=checkpoint.duration_ms,
+        source="replay",
+    )
+
+
 __all__ = [
     "Checkpoint",
     "ReRunResult",
     "LivePrefixResult",
+    "LiveRerunFn",
     "CheckpointStore",
     "ReRunEngine",
     "LivePrefixEngine",
     "RolloutEntrypoint",
     "discover_entrypoint",
     "_apply_prompt_override",
+    "_apply_tool_result_override",
     "_payload_to_checkpoint",
 ]
