@@ -588,6 +588,18 @@ function AgentDetailBody({
                   <span className="text-[var(--error)]">{agent.topError}</span>
                 </>
               ) : null}
+              {agent.mergedIdentities && agent.mergedIdentities.length > 0 ? (
+                <>
+                  {" · "}
+                  <span
+                    className="text-[var(--muted-foreground)]"
+                    title={`Reconciled telemetry labels: ${agent.mergedIdentities.join(", ")}`}
+                  >
+                    merged {agent.mergedIdentities.length} telemetry{" "}
+                    {agent.mergedIdentities.length === 1 ? "label" : "labels"}
+                  </span>
+                </>
+              ) : null}
             </p>
           </div>
 

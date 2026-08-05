@@ -6,8 +6,6 @@ column, which would silently stop finding any rows once
 """
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,21 +14,6 @@ from eden.observability.patterns_clusterer import PatternsClusterer
 from eden.storage.compression import compress_jsonb
 
 TENANT = "org-1"
-
-
-def _fake_embeddings_module(embedder) -> types.ModuleType:
-    """``eden.kb.embeddings`` does not exist in this codebase (the
-    ``get_default_embedder`` import in patterns_clusterer.py is a
-    pre-existing dead import, unrelated to Phase 4 storage — it is
-    caught by the surrounding try/except and always short-circuits
-    clustering to 0). ``unittest.mock.patch`` requires the target
-    module to already be importable, so tests inject a fake module
-    into ``sys.modules`` instead of patching a dotted path that would
-    raise ``ModuleNotFoundError`` on ``__enter__``.
-    """
-    mod = types.ModuleType("eden.kb.embeddings")
-    mod.get_default_embedder = lambda: embedder
-    return mod
 
 
 def _fake_settings():
@@ -69,10 +52,9 @@ async def test_run_for_tenant_extracts_topic_from_zstd_when_plaintext_null():
 
     captured: dict[str, list[str]] = {}
 
-    class FakeEmbedder:
-        def embed_batch(self, topics):
-            captured["topics"] = list(topics)
-            raise _StopAfterCaptureError("stop before real clustering")
+    def _capture_and_stop(topics):
+        captured["topics"] = list(topics)
+        raise _StopAfterCaptureError("stop before real clustering")
 
     clusterer = PatternsClusterer()
     with (
@@ -84,9 +66,8 @@ async def test_run_for_tenant_extracts_topic_from_zstd_when_plaintext_null():
             "eden.observability.patterns_clusterer.get_settings",
             return_value=_fake_settings(),
         ),
-        patch.dict(
-            sys.modules,
-            {"eden.kb.embeddings": _fake_embeddings_module(FakeEmbedder())},
+        patch.object(
+            clusterer, "_embed_topics", AsyncMock(side_effect=_capture_and_stop)
         ),
     ):
         created = await clusterer._run_for_tenant(TENANT)
@@ -115,10 +96,9 @@ async def test_run_for_tenant_prefers_zstd_over_stale_plaintext():
     fake_client.fetch = AsyncMock(return_value=rows)
     captured: dict[str, list[str]] = {}
 
-    class FakeEmbedder:
-        def embed_batch(self, topics):
-            captured["topics"] = list(topics)
-            raise _StopAfterCaptureError()
+    def _capture_and_stop(topics):
+        captured["topics"] = list(topics)
+        raise _StopAfterCaptureError()
 
     clusterer = PatternsClusterer()
     with (
@@ -130,9 +110,8 @@ async def test_run_for_tenant_prefers_zstd_over_stale_plaintext():
             "eden.observability.patterns_clusterer.get_settings",
             return_value=_fake_settings(),
         ),
-        patch.dict(
-            sys.modules,
-            {"eden.kb.embeddings": _fake_embeddings_module(FakeEmbedder())},
+        patch.object(
+            clusterer, "_embed_topics", AsyncMock(side_effect=_capture_and_stop)
         ),
     ):
         await clusterer._run_for_tenant(TENANT)

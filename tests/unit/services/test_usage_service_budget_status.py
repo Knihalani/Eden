@@ -149,11 +149,15 @@ class TestCostUsdSourcedFromBudgetsTable:
         assert cost["limit_source"] == "org_resource_limits"
 
     @pytest.mark.asyncio
-    async def test_enforcement_disabled_never_reports_hard_exceeded(self) -> None:
-        """``budgets.enforcement_enabled = False`` must suppress
-        ``hard_exceeded`` (mirrors the DL-15 preflight gate in
-        ``autonomous/agent.py``) while still reporting the configured
-        numbers and a soft-exceeded warning."""
+    async def test_enforcement_disabled_falls_back_to_org_resource_limits(self) -> None:
+        """``budgets.enforcement_enabled = False`` must be treated as if
+        the row doesn't exist — full fallback to
+        ``org_resource_limits``/plan-tier, not merely a downgraded
+        status. Merely downgrading ``status`` while still reporting the
+        (disabled) budgets numbers would leave
+        ``QuotaEnforcementMiddleware._evaluate_hard_limits`` blocking on
+        them anyway, since it recomputes ``used >= hard`` directly from
+        the returned numbers, independently of ``status``."""
         client = _FakeClient(ORG_RESOURCE_LIMITS_PAID, usage_events_cost=10.0)
         budget_cfg = {
             "source": "db",
@@ -165,9 +169,10 @@ class TestCostUsdSourcedFromBudgetsTable:
             status = await UsageService().get_budget_status("org-1")
 
         cost = status["cost_usd"]
-        assert cost["hard_limit"] == 5.0
-        assert cost["status"] == "soft_exceeded"
-        assert cost["limit_source"] == "budgets"
+        assert cost["hard_limit"] == 2_000.0
+        assert cost["soft_limit"] == 1_600.0
+        assert cost["status"] == "ok"
+        assert cost["limit_source"] == "org_resource_limits"
 
     @pytest.mark.asyncio
     async def test_zero_hard_limit_row_is_treated_as_unconfigured(self) -> None:

@@ -351,10 +351,13 @@ class UsageService:
         ``budgets`` row (``source == "defaults"``) fall back to
         ``org_resource_limits``/plan-tier defaults so paid orgs that
         haven't visited the Budgets UI aren't clamped to the free-tier
-        default. ``budgets.enforcement_enabled`` gates whether a hard
-        breach can actually block (mirrors the DL-15 preflight gate in
-        ``autonomous/agent.py``) — when disabled, usage still reports but
-        never surfaces as ``hard_exceeded``.
+        default. ``budgets.enforcement_enabled`` gates whether the
+        ``budgets`` row is used as the live cap at all (mirrors the DL-15
+        preflight gate in ``autonomous/agent.py``): when disabled, the row
+        is treated as if it doesn't exist and usage falls all the way back
+        to ``org_resource_limits``/plan-tier — not merely a downgraded
+        status — because the middleware's hard-limit check recomputes
+        ``used >= hard`` directly from the numbers returned here.
         """
         client = await get_postgres_client()
 
@@ -424,9 +427,9 @@ class UsageService:
         # ``org_resource_limits`` and silently ignored whatever the
         # customer configured, so editing a budget in the portal had zero
         # effect on enforcement. Prefer the ``budgets`` row when one
-        # exists (``source == "db"`` with a positive hard cap) —
-        # matching exactly what the Budgets UI reads via
-        # ``budget_service.get_budget`` — otherwise fall back to
+        # exists (``source == "db"``, enforcement enabled, with a
+        # positive hard cap) — matching exactly what the Budgets UI reads
+        # via ``budget_service.get_budget`` — otherwise fall back to
         # ``org_resource_limits`` / the plan-tier default exactly as
         # before, since ``budgets`` rows are only created once a customer
         # (or the free-tier defaulting path) explicitly upserts one via
@@ -434,18 +437,23 @@ class UsageService:
         cost_limit_source = "org_resource_limits"
         cost_soft_limit_usd = float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd)
         cost_hard_limit_usd = float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd)
-        # ``enforcement_enabled`` gates whether a hard breach may actually
-        # *block* (mirrors the DL-15 preflight gate in
-        # ``autonomous/agent.py``) — it does not hide the configured
-        # numbers, so the reported soft/hard/percentage always match what
-        # the Budgets UI shows once a row exists.
-        cost_enforcement_enabled = True
+        # ``enforcement_enabled`` gates whether the ``budgets`` row is used
+        # as the live enforcement cap *at all*. A disabled row must be
+        # treated as if it doesn't exist — falling all the way back to
+        # ``org_resource_limits``/the plan-tier default — because the
+        # middleware's hard-limit evaluator (``_evaluate_hard_limits``)
+        # recomputes ``over_cap = used >= hard > 0`` directly from the
+        # ``hard_limit``/``used`` numbers returned here, independently of
+        # ``status``. Merely downgrading ``status`` while still reporting
+        # the customer's (disabled) numbers would leave the middleware
+        # blocking on them anyway, defeating the point of disabling
+        # enforcement.
         try:
             budget_cfg = await budget_service.get_budget(org_id)
         except Exception as exc:  # noqa: BLE001 — enforcement must never break on this
             logger.debug("usage_service: budget_service.get_budget failed: %s", exc)
             budget_cfg = None
-        if budget_cfg and budget_cfg.get("source") == "db":
+        if budget_cfg and budget_cfg.get("source") == "db" and budget_cfg.get("enforcement_enabled", True):
             try:
                 configured_hard = float(budget_cfg.get("cost_hard_limit_usd") or 0.0)
             except (TypeError, ValueError):
@@ -457,14 +465,8 @@ class UsageService:
                     cost_soft_limit_usd = 0.0
                 cost_hard_limit_usd = configured_hard
                 cost_limit_source = "budgets"
-                cost_enforcement_enabled = bool(budget_cfg.get("enforcement_enabled", True))
 
         cost_status = _status(total_cost_usd, cost_soft_limit_usd, cost_hard_limit_usd)
-        if cost_status == "hard_exceeded" and not cost_enforcement_enabled:
-            # Customer turned enforcement off for this budget row — still
-            # surface a soft-exceeded warning (never silently "ok") but
-            # never a hard block.
-            cost_status = "soft_exceeded"
 
         # Fetch seats and references usage from org_plans
         seats_used = int(limits.get("seats_used", 0)) if limits else 0

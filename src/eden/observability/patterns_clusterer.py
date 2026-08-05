@@ -144,7 +144,18 @@ class PatternsClusterer:
             return 0
 
         # 3) Embed
-        vectors = await self._embed_topics(topics)
+        try:
+            vectors = await self._embed_topics(topics)
+        except Exception as exc:
+            # _embed_topics already catches and logs its own embedder
+            # failures internally (falling back to hashed_term_vector), so
+            # reaching here means something unexpected happened. Don't let
+            # one tenant's failure take down the whole clustering sweep.
+            logger.error(
+                f"PatternsClusterer: embedding step failed unexpectedly for {tenant_id}: {exc}",
+                exc_info=True,
+            )
+            return 0
         if not vectors or len(vectors) != len(topics):
             return 0
 

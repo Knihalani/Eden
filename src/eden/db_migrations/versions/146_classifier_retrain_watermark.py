@@ -42,7 +42,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "146_classifier_retrain_watermark"
-down_revision: str | Sequence[str] | None = "142_session_summaries"
+down_revision: str | Sequence[str] | None = "145_sso_certificate_column"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
