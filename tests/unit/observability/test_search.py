@@ -44,6 +44,7 @@ from eden.observability.search_service import (
     SearchService,
     SpanHit,
     _excerpt,
+    _facets_cache,
     _parse_facet_counts,
 )
 from eden.observability.telemetry_collector import TelemetryEvent
@@ -465,6 +466,38 @@ class TestSearchServiceSearch:
         assert "agent_id" in resp.facet_counts
         assert "outcome" in resp.facet_counts
 
+    # ── OPT-4: faceting must be opt-in, not always-on ─────────────
+
+    @pytest.mark.asyncio
+    async def test_default_search_does_not_request_facets(self, fake_client):
+        """Plain search() calls must not pay for Typesense facet
+        computation unless the caller explicitly asks for it via
+        ``facet_by`` — regression lock for OPT-4."""
+        service = SearchService(client=fake_client)
+        await service.search(tenant_id="o", query="python")
+        params = fake_client.search_calls[0]["params"]
+        assert "facet_by" not in params
+        assert "max_facet_values" not in params
+
+    @pytest.mark.asyncio
+    async def test_empty_query_search_does_not_request_facets(self, fake_client):
+        """The match-all (``q=""``) path is the highest-volume caller
+        (page loads with no text query) — it must not default to
+        computing all 5 facet fields either."""
+        service = SearchService(client=fake_client)
+        await service.search(tenant_id="o", query="")
+        params = fake_client.search_calls[0]["params"]
+        assert "facet_by" not in params
+        assert "max_facet_values" not in params
+
+    @pytest.mark.asyncio
+    async def test_explicit_facet_by_is_still_honored(self, fake_client):
+        service = SearchService(client=fake_client)
+        await service.search(tenant_id="o", query="x", facet_by=("outcome",))
+        params = fake_client.search_calls[0]["params"]
+        assert params["facet_by"] == "outcome"
+        assert params["max_facet_values"] == 25
+
 
 class TestSearchServiceSuggest:
     @pytest.mark.asyncio
@@ -483,6 +516,74 @@ class TestSearchServiceSuggest:
         service = SearchService(client=fake_client)
         hits = await service.suggest(tenant_id="o", query="")
         assert hits == []
+
+
+class TestSearchServiceFacets:
+    """OPT-4: facets() is the dedicated, cached, filter-panel-only path.
+
+    Since ``search()`` no longer computes facets by default, ``facets()``
+    must still request them (falling back to ``DEFAULT_FACET_FIELDS``)
+    so the existing filter-panel contract keeps working, and must cache
+    results so rapid repeat opens don't recompute on every call.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_facets_cache(self):
+        from eden.observability.search_service import _facets_cache
+        _facets_cache.clear()
+        yield
+        _facets_cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_facets_requests_default_fields_when_unspecified(self, fake_client):
+        service = SearchService(client=fake_client)
+        await service.facets(tenant_id="o", query="x")
+        params = fake_client.search_calls[0]["params"]
+        assert params["facet_by"] == ",".join(SearchService.DEFAULT_FACET_FIELDS)
+        assert params["max_facet_values"] == 25
+
+    @pytest.mark.asyncio
+    async def test_facets_honors_explicit_field_subset(self, fake_client):
+        service = SearchService(client=fake_client)
+        await service.facets(tenant_id="o", query="x", facet_by=("outcome",))
+        params = fake_client.search_calls[0]["params"]
+        assert params["facet_by"] == "outcome"
+
+    @pytest.mark.asyncio
+    async def test_facets_returns_parsed_counts(self, fake_client):
+        fake_client._search_response = (200, {
+            "hits": [],
+            "found": 0,
+            "facet_counts": [
+                {"field_name": "agent_id", "counts": [{"value": "alice", "count": 3}]},
+            ],
+        })
+        service = SearchService(client=fake_client)
+        counts = await service.facets(tenant_id="o", query="x")
+        assert counts["agent_id"][0]["value"] == "alice"
+
+    @pytest.mark.asyncio
+    async def test_repeat_calls_are_served_from_cache(self, fake_client):
+        """A second facets() call with the same (tenant, query, filters,
+        fields) must not re-hit Typesense within the TTL."""
+        service = SearchService(client=fake_client)
+        await service.facets(tenant_id="o", query="x")
+        await service.facets(tenant_id="o", query="x")
+        assert len(fake_client.search_calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_different_filters_bypass_cache(self, fake_client):
+        service = SearchService(client=fake_client)
+        await service.facets(tenant_id="o", query="x")
+        await service.facets(tenant_id="o", query="x", outcome="failure")
+        assert len(fake_client.search_calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_different_tenant_bypass_cache(self, fake_client):
+        service = SearchService(client=fake_client)
+        await service.facets(tenant_id="org-a", query="x")
+        await service.facets(tenant_id="org-b", query="x")
+        assert len(fake_client.search_calls) == 2
 
 
 # ── SpanHit / SearchResponse round-trip ───────────────────────────
