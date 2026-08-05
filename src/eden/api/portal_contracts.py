@@ -70,6 +70,11 @@ class AgentCard(BaseModel):
     openIssues: int = 0
     lastSeen: str = ""
     topError: str | None = None
+    # BUG-6: raw telemetry-side agent_id labels (framework instrumentation
+    # ids such as ``pydantic-ai:OpenAIChatModel()``) that were reconciled
+    # into this card via ``agent_identity_aliases`` instead of rendering as
+    # a separate "ghost" card. Empty for cards with no resolved aliases.
+    mergedIdentities: list[str] = Field(default_factory=list)
 
 
 # ── Traces (TraceFixture + TranscriptStep) ────────────────────────

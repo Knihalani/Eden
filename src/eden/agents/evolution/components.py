@@ -715,6 +715,52 @@ class IssuePromptEvolver(EvolutionComponent):
                 ),
             }
 
+        # Resolve the agent's actual registered prompt in prompts_v2.
+        # BUG-8: there is no agent_id -> prompt_name mapping anywhere
+        # in the codebase (the prompts_v2 ``prompts`` table has no
+        # agent-linkage column — see
+        # db_migrations/versions/055_prompt_versioning.py). We can
+        # therefore only safely evolve agents whose id/slug is *also*
+        # the exact prompts_v2 prompt name (the case where the
+        # agent's real prompt was registered under that name). If no
+        # prompt is registered under that name we fail loudly and
+        # skip instead of silently minting a brand-new, unrelated
+        # orphan prompt via ``create_version``'s implicit
+        # ``create_prompt`` fallthrough.
+        try:
+            prompt_record = await svc.get_prompt(org_id, agent)
+        except Exception as exc:
+            logger.warning("IssuePromptEvolver get_prompt failed: %s", exc)
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "prompts_v2_lookup_failed",
+                "error": str(exc),
+            }
+        if prompt_record is None:
+            logger.warning(
+                "IssuePromptEvolver: no prompts_v2 prompt registered "
+                "for agent=%s org_id=%s issue_id=%s; refusing to "
+                "create an orphan prompt (BUG-8). Register a prompt "
+                "named %r for this agent before it can be evolved "
+                "via issue resolution.",
+                agent,
+                org_id,
+                issue_id,
+                agent,
+            )
+            return {
+                "created": 0,
+                "skipped": True,
+                "reason": "no_prompt_mapping",
+                "agent": agent,
+                "error": (
+                    f"No prompts_v2 prompt registered for agent "
+                    f"{agent!r} in org {org_id!r}; refusing to mint "
+                    "an orphan prompt"
+                ),
+            }
+
         try:
             versions = await svc.list_versions(org_id, agent, limit=1)
         except Exception as exc:
@@ -782,6 +828,7 @@ class IssuePromptEvolver(EvolutionComponent):
                 },
                 change_note=f"issue_prompt_evolver:{issue_id}",
                 created_by="issue_prompt_evolver",
+                require_existing=True,
             )
         except Exception as exc:
             logger.warning("IssuePromptEvolver create_version failed: %s", exc)

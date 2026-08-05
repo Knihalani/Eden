@@ -134,13 +134,19 @@ async def rca_chain(
     failure category/confidence, then overlays the deep-linkable span chain
     derived from the trace's telemetry events so a UI can jump straight to
     the implicated spans.
+
+    Fetches the trace's events once (full column set — the engine's rule
+    table needs ``payload``/``attributes``, so we can't use the ``thin``
+    variant here) and passes them into ``categorize`` so it doesn't re-run
+    the same query a second time within this request.
     """
     events = await _fetch_trace_events(org_id, trace_id)
     if not events:
         return _not_found_envelope(_rca.name, trace_id=trace_id)
 
-    # Reuse the engine for classification (category / confidence / signals).
-    categorized = await _rca.categorize(org_id, trace_id)
+    # Reuse the engine for classification (category / confidence / signals),
+    # passing the events we already fetched to avoid a redundant re-fetch.
+    categorized = await _rca.categorize(org_id, trace_id, events=events)
     cat_data = categorized.get("data") or {}
 
     chain = _build_causal_chain(events)

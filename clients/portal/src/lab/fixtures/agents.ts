@@ -29,6 +29,13 @@ export type AgentFixture = {
   openIssues: number;
   lastSeen: string;
   topError?: string;
+  /**
+   * BUG-6: raw telemetry-side agent_id labels (e.g.
+   * "pydantic-ai:OpenAIChatModel()") that were reconciled into this card
+   * via agent_identity_aliases instead of rendering as a separate ghost
+   * card. Empty/absent for cards with no resolved aliases.
+   */
+  mergedIdentities?: string[];
 };
 
 /** Empty seed — live rows come from portal catalog / React Query. */

@@ -17,9 +17,9 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { cn } from "@/lib/utils";
 
-export type SignalsMode = "detectors" | "automations";
+export type SignalsMode = "detectors" | "automations" | "nl-alerts";
 
-/** Detectors ⇄ Automations tabs (F61) — no new nav leaf; `?mode=`. */
+/** Detectors ⇄ Automations ⇄ Alert rules tabs (F61/FEAT-18) — no new nav leaf; `?mode=`. */
 export function SignalsModeToggle({ mode }: { mode: SignalsMode }) {
   const patchQuery = useQueryPatch();
   return (
@@ -28,6 +28,7 @@ export function SignalsModeToggle({ mode }: { mode: SignalsMode }) {
         [
           ["detectors", "Detectors"],
           ["automations", "Automations"],
+          ["nl-alerts", "Alert rules"],
         ] as const
       ).map(([id, label]) => (
         <button

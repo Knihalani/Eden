@@ -91,27 +91,28 @@ HIPAA, and GDPR.
 
 ## GDPR right-to-be-forgotten
 
-When a user invokes RTBF:
+Erasure support is **real but partial**, and every request reports
+per-store completeness honestly rather than claiming full success —
+see [Security model → GDPR right-to-be-forgotten](/explanation/security-model#gdpr-right-to-be-forgotten)
+for the current list of covered stores and known gaps (Typesense
+backfill pending, no per-user object-storage erasure yet).
+
+A user erases their own account from **Settings** in the portal, or
+via:
 
 ```bash
-curl -X POST https://api.edenobservability.com/orgs/org_abc/gdpr/erase \
-  -H "Authorization: Bearer sk_eden_admin_..." \
-  -H "Content-Type: application/json" \
-  -d '{ "user_id": "u_abc" }'
+curl -X DELETE https://api.edenobservability.com/auth/users/me \
+  -H "Authorization: Bearer <user_session_token>" \
+  -d '{ "confirm": "DELETE" }'
 ```
 
-Eden anonymises the user's data across:
-
-- `telemetry_events.attributes->>'user_id'`
-- `judge_scores.attributes->>'user_id'`
-- `usage_events.user_id`
-- `notifications.user_id`
-- `audit_log.user_id` (becomes `anon_<sha256[:16]>`)
-- Any agent attributes that reference the user
-
-The user's id is replaced with `anon_<sha256[:16]>` deterministically,
-so traces that span multiple events still join correctly — but no
-PII leaks.
+This anonymises the user across `telemetry_events`, `judge_scores`,
+`user_feedback`, `user_sessions`, `conversation_messages`, and
+`conversations`, replacing the user's id with
+`anon_<sha256[:16]>` deterministically so traces that span multiple
+events still join correctly — plus fans out best-effort to
+secondary stores (Redis, Qdrant, ClickHouse, Typesense; coverage
+varies per store, see the link above).
 
 ## Per-event opt-out
 

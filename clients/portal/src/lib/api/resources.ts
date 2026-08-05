@@ -81,6 +81,48 @@ export type InsightsOverviewResponse = {
   };
 };
 
+/** Matches BE ``alerts/repo.py`` ``nl_alert_rules`` row shape. */
+export interface NlAlertRule {
+  id: string;
+  name: string;
+  nl_text: string;
+  compiled_eql: string;
+  triage_enabled: boolean;
+  channels: Record<string, unknown> | null;
+  enabled: boolean;
+  severity?: string;
+  last_fired_at: string | null;
+  created_at: string;
+}
+
+export interface NlAlertRuleCreateBody {
+  name: string;
+  nl_text: string;
+  compiled_eql: string;
+  triage_enabled?: boolean;
+  channels?: Record<string, unknown> | null;
+  enabled?: boolean;
+  severity?: string;
+  interval_seconds?: number;
+}
+
+export interface NlAlertRuleUpdateBody {
+  name?: string;
+  nl_text?: string;
+  compiled_eql?: string;
+  triage_enabled?: boolean;
+  channels?: Record<string, unknown> | null;
+  enabled?: boolean;
+}
+
+/** Matches BE ``CompileResponse`` from ``POST /orgs/{org}/alerts/compile``. */
+export interface CompileNlAlertResult {
+  eql: string;
+  warnings: string[];
+  rule: Record<string, unknown>;
+  suggested_name: string;
+}
+
 export const api = {
   // Generic HTTP verbs — escape hatch for new routes whose typed
   // helpers haven't been added yet. Prefer the typed per-resource
@@ -1720,6 +1762,14 @@ export const api = {
   },
 
   // N10 — full-text span search (backend: GET .../observability/spans/search).
+  //
+  // OPT-4: facet counts are opt-in (`include_facets`), not bundled into
+  // every search response — computing them costs extra Typesense work
+  // (5 fields x up to 25 values) that most callers (plain searches,
+  // empty-query page loads) never use. Pass `include_facets: true` only
+  // when the filter-panel/sidebar UI is actually open; the backend
+  // caches the facet computation for a short TTL
+  // (`SearchService.facets`) so rapid repeat opens stay cheap.
   searchSpans: (
     orgId: string,
     params?: {
@@ -1732,6 +1782,7 @@ export const api = {
       to_ts?: number;
       per_page?: number;
       page?: number;
+      include_facets?: boolean;
     },
   ): Promise<{
     hits: Array<{
@@ -1759,6 +1810,7 @@ export const api = {
     if (params?.to_ts !== undefined) q.set("to_ts", String(params.to_ts));
     if (params?.per_page !== undefined) q.set("per_page", String(params.per_page));
     if (params?.page !== undefined) q.set("page", String(params.page));
+    if (params?.include_facets) q.set("include_facets", "true");
     const qs = q.toString();
     return fetchApi(`/orgs/${orgId}/observability/spans/search${qs ? `?${qs}` : ""}`);
   },
@@ -2106,31 +2158,42 @@ export const api = {
     orgId: string,
     data: { nl_text: string; context?: Record<string, unknown>; eql_override?: string },
   ) =>
-    fetchApi<{
-      eql: string;
-      warnings: string[];
-      rule: Record<string, unknown>;
-      suggested_name: string;
-    }>(`/orgs/${orgId}/alerts/compile`, {
+    fetchApi<CompileNlAlertResult>(`/orgs/${orgId}/alerts/compile`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
 
   listNlAlertRules: (orgId: string) =>
-    fetchApi<{
-      rules: Array<{
-        id: string;
-        name: string;
-        nl_text: string;
-        compiled_eql: string;
-        triage_enabled: boolean;
-        channels: Record<string, unknown>;
-        enabled: boolean;
-        last_fired_at: string | null;
-        created_at: string;
-      }>;
-      total: number;
-    }>(`/orgs/${orgId}/nl-alert-rules`),
+    fetchApi<{ rules: NlAlertRule[]; total: number }>(
+      `/orgs/${orgId}/nl-alert-rules`,
+    ),
+
+  getNlAlertRule: (orgId: string, ruleId: string) =>
+    fetchApi<NlAlertRule>(
+      `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+    ),
+
+  createNlAlertRule: (orgId: string, body: NlAlertRuleCreateBody) =>
+    fetchApi<NlAlertRule>(`/orgs/${orgId}/nl-alert-rules`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateNlAlertRule: (
+    orgId: string,
+    ruleId: string,
+    body: NlAlertRuleUpdateBody,
+  ) =>
+    fetchApi<NlAlertRule>(
+      `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+
+  deleteNlAlertRule: (orgId: string, ruleId: string) =>
+    fetchApi<{ status: string; rule_id: string }>(
+      `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+      { method: "DELETE" },
+    ),
 
   listAlertEvents: (
     orgId: string,
@@ -2744,12 +2807,12 @@ export type AgentIssueResolveStatus =
   | "ignored";
 
 export const agentIssuesApi = {
-  resolve: (
+  resolve: async (
     orgId: string,
     issueId: string,
     status: AgentIssueResolveStatus = "resolved",
-  ) =>
-    fetchApi<{
+  ) => {
+    const res = await fetchApi<{
       status: string;
       data: { issue_id: string; status: string; updated: boolean };
     }>(`/orgs/${orgId}/agent-issues/${issueId}/resolve`, {
@@ -2757,7 +2820,17 @@ export const agentIssuesApi = {
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
       noDedup: true,
-    }),
+    });
+    // BUG-4 defense-in-depth: the backend now surfaces a real HTTP error
+    // when the underlying status write fails, but guard here too in case
+    // a future 200-with-updated:false path slips back in — the portal's
+    // optimistic-update revert (issues-client.tsx) only fires on a
+    // thrown/rejected request.
+    if (res.data?.updated === false) {
+      throw new Error(`Failed to update issue ${issueId} to status ${status}`);
+    }
+    return res;
+  },
   /** Alias for ``resolve`` — portal triage setStatus wiring. */
   setStatus: (
     orgId: string,
@@ -3454,6 +3527,109 @@ const signalsApi = {
         headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
         body: JSON.stringify({ value }),
       },
+    ),
+};
+
+// ── NL Alert Rules (FEAT-18 — F81 NL alert rule authoring) ───────────
+// Backend: src/eden/alerts/routes.py. `compile` is a stateless preview
+// (no persistence); `list`/`get` require org membership; `create`/
+// `update`/`delete` require org admin/owner and 403 otherwise (see
+// `_require_org_admin` there) — surface a permission-denied message on
+// 403 rather than assuming the frontend role check already caught it.
+
+/** Matches BE `_rule_row` (alerts/repo.py) — the persisted NL rule shape. */
+export interface NLAlertRule {
+  id: string;
+  org_id: string;
+  name: string;
+  nl_text: string;
+  compiled_eql: string;
+  triage_enabled: boolean;
+  channels: Record<string, unknown>;
+  enabled: boolean;
+  created_by: string | null;
+  /** ISO timestamp, or "" if the rule has never fired. */
+  last_fired_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Matches BE `CompileRequest`. */
+export interface CompileNlAlertBody {
+  nl_text: string;
+  context?: Record<string, unknown> | null;
+  eql_override?: string | null;
+}
+
+/** Matches BE `CompileResponse`. */
+export interface CompileNlAlertResponse {
+  eql: string;
+  warnings: string[];
+  rule: Record<string, unknown>;
+  suggested_name: string;
+}
+
+/** Matches BE `NLRuleCreate`. */
+export interface NLRuleCreateBody {
+  name: string;
+  nl_text: string;
+  compiled_eql: string;
+  triage_enabled?: boolean;
+  channels?: Record<string, unknown> | null;
+  enabled?: boolean;
+  severity?: string;
+  interval_seconds?: number;
+}
+
+/** Matches BE `NLRuleUpdate` — note severity/interval_seconds aren't updatable. */
+export interface NLRuleUpdateBody {
+  name?: string;
+  nl_text?: string;
+  compiled_eql?: string;
+  triage_enabled?: boolean;
+  channels?: Record<string, unknown> | null;
+  enabled?: boolean;
+}
+
+export const nlAlertRulesApi = {
+  compile: (orgId: string, body: CompileNlAlertBody) =>
+    fetchApi<CompileNlAlertResponse>(`/orgs/${orgId}/alerts/compile`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  list: (orgId: string) =>
+    fetchApi<{ rules: NLAlertRule[]; total: number }>(
+      `/orgs/${orgId}/nl-alert-rules`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  get: (orgId: string, ruleId: string) =>
+    fetchApi<NLAlertRule>(
+      `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (orgId: string, body: NLRuleCreateBody) =>
+    fetchApi<NLAlertRule>(`/orgs/${orgId}/nl-alert-rules`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  update: (orgId: string, ruleId: string, body: NLRuleUpdateBody) =>
+    fetchApi<NLAlertRule>(
+      `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+      {
+        method: "PATCH",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+  delete: (orgId: string, ruleId: string) =>
+    fetchApi<{ status: string; rule_id: string }>(
+      `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+      { method: "DELETE", headers: { "X-Org-Id": orgId }, noDedup: true },
     ),
 };
 

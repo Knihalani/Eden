@@ -30,9 +30,9 @@ export const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/improve":
     "Review queue and improvement plans — approve, reject, and open evidence-linked fixes.",
   "/artifacts":
-    "Soft-lands on Improve queue — versioned runtime fixes with evidence-gated promotion.",
+    "Versioned runtime prompt fixes with evidence-gated promotion — shadow, promoted, and archived.",
   "/ledger":
-    "Soft-lands on Improve queue — institutional memory and promotion history.",
+    "Institutional memory injected into agent prompts — per-agent entries drawn from resolved issues and drift history.",
   "/prompts":
     "Version and manage prompt templates — iterate via Evaluate playground.",
   "/optimization":

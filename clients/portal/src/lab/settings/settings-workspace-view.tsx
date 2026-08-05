@@ -21,6 +21,7 @@ import type { SettingsMode } from "@/lab/settings/settings-chrome";
 import { AutonomySettingsCard } from "@/lab/settings/autonomy-settings-card";
 import { AutonomyAuditCard } from "@/lab/settings/autonomy-audit-card";
 import { SlackSettingsCard } from "@/lab/settings/slack-settings-card";
+import { AccountDangerZoneCard } from "@/lab/settings/account-danger-zone-card";
 import { useLabToast } from "@/lab/lab-toast";
 
 export function SettingsWorkspaceView({
@@ -315,6 +316,8 @@ export function SettingsWorkspaceView({
           </div>
         </div>
       </section>
+
+      <AccountDangerZoneCard />
     </div>
   );
 }

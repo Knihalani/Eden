@@ -269,12 +269,7 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
-                try:
-                    from eden.signals.clusterer import cluster_after_match
-
-                    await cluster_after_match(org_id, signal_id)
-                except Exception:
-                    pass
+                await _trigger_clustering(org_id, signal_id)
         elif inv_prompt:
             # LLM investigator path removed — heuristics only (UnifiedJudge
             # + Layer A cover semantic detection without per-signal LLM).
@@ -289,12 +284,7 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
-                try:
-                    from eden.signals.clusterer import cluster_after_match
-
-                    await cluster_after_match(org_id, signal_id)
-                except Exception:
-                    pass
+                await _trigger_clustering(org_id, signal_id)
         else:
             matched, payload, confidence = _heuristic_match(description, events)
             written.append(
@@ -306,12 +296,7 @@ async def investigate_trace(
                 await _maybe_write_stumble(
                     org_id, trace_id, row, payload, agent_id=agent_id
                 )
-                try:
-                    from eden.signals.clusterer import cluster_after_match
-
-                    await cluster_after_match(org_id, signal_id)
-                except Exception:
-                    pass
+                await _trigger_clustering(org_id, signal_id)
 
     return written
 
@@ -397,6 +382,38 @@ async def _maybe_write_stumble(
         )
     except Exception as exc:  # pragma: no cover - best-effort
         logger.debug("signal_investigator: stumble write failed: %s", exc)
+
+
+async def _trigger_clustering(org_id: str, signal_id: str) -> None:
+    """Best-effort clustering trigger after a matched signal event.
+
+    Previously each of the 3 call sites wrapped this in a bare
+    ``except Exception: pass`` with zero logging, so a clustering
+    regression was completely invisible (OPT-2). Failures are now logged
+    at error level and counted.
+    """
+    try:
+        from eden.signals.clusterer import cluster_after_match
+
+        await cluster_after_match(org_id, signal_id)
+    except Exception as exc:
+        logger.error(
+            "signal_investigator: cluster_after_match failed org_id=%s "
+            "signal_id=%s: %s",
+            org_id,
+            signal_id,
+            exc,
+            exc_info=True,
+        )
+        try:
+            from eden.observability.simple_metrics import Counter
+
+            Counter(
+                "eden_signal_investigator_cluster_trigger_failed_total",
+                "cluster_after_match raised when triggered from signal_investigator",
+            ).inc()
+        except Exception:  # noqa: BLE001 - metrics must never mask the log
+            pass
 
 
 def _row_get(row: Any, key: str, default: Any = None) -> Any:

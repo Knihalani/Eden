@@ -336,26 +336,39 @@ async def _gateway_complete(
     model: str,
     prompt: str,
 ) -> dict[str, Any]:
-    """One live gateway completion — PII filter / audit / cost apply.
+    """One live internal LLM completion — cost-attributed replay step.
 
     Mirrors ``TraceReplayer._re_execute_step`` but keeps the response
     *text* so the signature can actually be evaluated.
-    """
-    from eden.api.routes.gateway import get_ai_gateway
-    from eden.llmops.ai_gateway import ModelRequest
 
-    gw = get_ai_gateway()
-    req = ModelRequest(
-        model_family=model.split("/")[-1].split(":")[0] if model else "default",
-        model_version=model,
-        prompt=prompt,
-        tenant_id=org_id,
-        estimated_tokens=len(prompt.split()),
+    Routes through :func:`eden.llm.internal_router.route_async` — the
+    same sanctioned internal-LLM entry point used by ``pr_suggester``
+    and the autonomous agents — rather than ``AIGateway.complete()``.
+    Nothing in the repo ever calls ``AIGateway.register_providers_from_env``,
+    so no provider is ever registered on the shared ``AIGateway``
+    instance and ``.complete()`` unconditionally raised
+    ``ProviderUnavailableError`` here, silently disabling this
+    verification step on every call (caught by callers as
+    ``gateway_error`` / ``replay_error``). ``model`` (the model that
+    produced the original checkpoint) is accepted for call-site
+    compatibility but isn't pinned — ``ModelRouter`` owns tier/model
+    selection for internal traffic and doesn't accept a caller
+    override.
+    """
+    from eden.llm.internal_router import route_async
+
+    resp = await route_async(
+        "replay_verify",
+        prompt,
+        slot="fast",
+        org_id=org_id or None,
+        feature="replay_verify",
+        output_type="text",
+        requires_quality_check=False,
     )
-    resp = await gw.complete(req)
     return {
-        "text": resp.text,
-        "cost_usd": float(resp.cost_usd or 0.0),
+        "text": resp.content or "",
+        "cost_usd": float(resp.usage.cost or 0.0),
     }
 
 

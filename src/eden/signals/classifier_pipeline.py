@@ -220,9 +220,24 @@ class ClassifierTrainingPipeline:
         }
 
     async def retrain_due_orgs(self) -> dict[str, Any]:
-        """Cron entry: retrain classifiers with fresh signal events."""
+        """Cron entry: retrain classifiers with fresh signal events.
+
+        Runs every 15 minutes (``cron_tick._run_classifier_retrain``) — the
+        highest tick frequency in this class of bugs — so a bare
+        ``LIMIT 50`` with no ``ORDER BY`` (the old query) could let the
+        same 50 (org, signal) pairs win every single tick forever while
+        every other pair silently starved (OPT-7). ``fetch_stale_candidates``
+        / ``advance_watermark`` (``eden.storage.watermark``) fix that by
+        ordering the composite ``(org_id, signal_id)`` key
+        oldest-processed-first against ``classifier_retrain_watermark``
+        (146) and advancing each pair's watermark once it's been
+        attempted — on success *and* failure — so the candidate set
+        actually cycles instead of a fixed subset starving everything
+        past it.
+        """
         try:
             from eden.storage.postgres import get_postgres_client
+            from eden.storage.watermark import advance_watermark, fetch_stale_candidates
 
             pg = await get_postgres_client()
         except Exception:
@@ -231,22 +246,47 @@ class ClassifierTrainingPipeline:
             return {"retrained": 0}
 
         try:
-            rows = await pg.fetch(
-                """
-                SELECT DISTINCT org_id::text, signal_id::text
-                FROM signal_events
-                WHERE detected_at > NOW() - INTERVAL '7 days'
-                LIMIT 50
-                """
+            rows = await fetch_stale_candidates(
+                pg,
+                candidate_table=(
+                    "(SELECT DISTINCT org_id, signal_id FROM signal_events "
+                    "WHERE detected_at > NOW() - INTERVAL '7 days')"
+                ),
+                watermark_table="classifier_retrain_watermark",
+                candidate_id_column=("org_id", "signal_id"),
+                watermark_id_column=("org_id", "signal_id"),
+                id_alias=("org_id", "signal_id"),
+                limit=50,
             )
         except Exception:
             return {"retrained": 0}
 
         retrained = 0
         for row in rows:
-            result = await self.train(str(row["org_id"]), str(row["signal_id"]))
-            if result.trained:
-                retrained += 1
+            org_id = str(row["org_id"])
+            signal_id = str(row["signal_id"])
+            try:
+                result = await self.train(org_id, signal_id)
+                if result.trained:
+                    retrained += 1
+            finally:
+                # Advance on success *and* failure — a poison pair that
+                # always raises must still advance, or it permanently
+                # occupies the front of the watermark ordering and blocks
+                # every pair behind it forever.
+                try:
+                    await advance_watermark(
+                        pg,
+                        watermark_table="classifier_retrain_watermark",
+                        entity_id=(org_id, signal_id),
+                        watermark_id_column=("org_id", "signal_id"),
+                    )
+                except Exception:
+                    logger.exception(
+                        "[classifier_retrain] watermark advance failed org=%s signal=%s",
+                        org_id,
+                        signal_id,
+                    )
         return {"retrained": retrained, "candidates": len(rows)}
 
     async def _load_training_rows(

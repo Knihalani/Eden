@@ -37,6 +37,13 @@ _PORTAL = _REPO / "src" / "eden" / "api" / "routes" / "portal.py"
 #: (handler, kind) pairs that currently return [] on a failure path.
 KNOWN_SILENT_EMPTY: set[tuple[str, str]] = {
     ("_fetch_invites", "except"),
+    # BUG-6: best-effort alias-discovery side-channel for the /agents
+    # dashboard reconciliation (agent_identity_aliases). A failure here
+    # must not 503 the whole dashboard — it just means the ghost-card
+    # merge stays unresolved until the next successful call. The
+    # user-facing handler itself (list_portal_agents) is already
+    # 503-converted and unaffected.
+    ("_load_alias_pairs", "except"),
 }
 
 _CONVERTED = (

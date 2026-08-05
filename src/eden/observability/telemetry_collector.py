@@ -86,6 +86,14 @@ class TelemetryEvent:
     prompt_cache_savings_usd: float | None = None
     model_version: str | None = None
     service_tier: str | None = None
+    # OTel/A2A interop (migrations 058, 067) — DB columns already exist;
+    # these dataclass fields let the ingestion/collector code path
+    # populate and round-trip them.
+    operation_name: str | None = None
+    provider_name: str | None = None
+    error_type: str | None = None
+    parent_agent_span_id: str | None = None
+    child_agent_trace_id: str | None = None
     # Canonical model id for list/filter UI (also mirrored in attributes).
     model: str | None = None
     model_name: str | None = None
@@ -137,6 +145,11 @@ class TelemetryEvent:
             "prompt_cache_savings_usd": self.prompt_cache_savings_usd,
             "model_version": self.model_version,
             "service_tier": self.service_tier,
+            "operation_name": self.operation_name,
+            "provider_name": self.provider_name,
+            "error_type": self.error_type,
+            "parent_agent_span_id": self.parent_agent_span_id,
+            "child_agent_trace_id": self.child_agent_trace_id,
             "request_message_hashes": self.request_message_hashes,
             "response_message_hashes": self.response_message_hashes,
         }
@@ -180,6 +193,11 @@ class TelemetryEvent:
             prompt_cache_savings_usd=data.get("prompt_cache_savings_usd"),
             model_version=data.get("model_version"),
             service_tier=data.get("service_tier"),
+            operation_name=data.get("operation_name"),
+            provider_name=data.get("provider_name"),
+            error_type=data.get("error_type"),
+            parent_agent_span_id=data.get("parent_agent_span_id"),
+            child_agent_trace_id=data.get("child_agent_trace_id"),
             request_message_hashes=data.get("request_message_hashes") or [],
             response_message_hashes=data.get("response_message_hashes") or [],
         )
@@ -301,6 +319,8 @@ TELEMETRY_INSERT_SQL = """
                     reasoning_zstd, tool_calls_full_zstd, tool_results_zstd,
                     payload_zstd, metrics_zstd, attributes_zstd,
                     request_message_hashes, response_message_hashes,
+                    operation_name, provider_name, error_type,
+                    parent_agent_span_id, child_agent_trace_id,
                     created_at
                 )
                 VALUES (
@@ -308,7 +328,8 @@ TELEMETRY_INSERT_SQL = """
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
                     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
                     $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-                    $41, $42, $43, $44, $45, $46, $47, $48, NOW()
+                    $41, $42, $43, $44, $45, $46, $47, $48, $49, $50,
+                    $51, $52, $53, NOW()
                 )
                 ON CONFLICT (event_id, timestamp) DO NOTHING
                 """
@@ -1444,6 +1465,11 @@ class TelemetryCollector:
             attributes_zstd,
             event.request_message_hashes or None,
             event.response_message_hashes or None,
+            event.operation_name,
+            event.provider_name,
+            event.error_type,
+            event.parent_agent_span_id,
+            event.child_agent_trace_id,
         )
 
     async def _prepare_postgres_row(self, event: TelemetryEvent) -> tuple[Any, ...]:

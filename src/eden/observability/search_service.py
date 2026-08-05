@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,6 +180,69 @@ def _parse_facet_counts(facet_block: list[dict[str, Any]] | None) -> dict[str, l
                 if isinstance(c, dict)
             ]
     return out
+
+
+# ── Facets cache (OPT-4) ──────────────────────────────────────────
+# ``SearchService.facets()`` is the dedicated, filter-panel-only
+# entry point for facet counts now that ``search()`` no longer
+# computes them by default. A short in-process TTL cache absorbs
+# repeated filter-panel opens for the same org/query/fields within a
+# few seconds. Eviction policy (stale-first, then oldest-first once
+# over the cap) mirrors ``eden.observability.bounded_expiry_cache
+# .BoundedExpiryCache`` rather than pulling in a new dependency.
+_FACETS_CACHE_TTL_S = 30.0
+_FACETS_CACHE_MAX_ENTRIES = 512
+
+
+class _FacetsCache:
+    """Tiny in-process TTL cache: ``key -> (deadline, facet_counts)``."""
+
+    __slots__ = ("_data", "_max_entries", "_ttl_s")
+
+    def __init__(
+        self,
+        max_entries: int = _FACETS_CACHE_MAX_ENTRIES,
+        ttl_s: float = _FACETS_CACHE_TTL_S,
+    ) -> None:
+        self._data: OrderedDict[str, tuple[float, dict[str, list[dict[str, Any]]]]] = (
+            OrderedDict()
+        )
+        self._max_entries = max(1, int(max_entries))
+        self._ttl_s = ttl_s
+
+    def get(self, key: str, *, now: float) -> dict[str, list[dict[str, Any]]] | None:
+        entry = self._data.get(key)
+        if entry is None:
+            return None
+        deadline, value = entry
+        if now >= deadline:
+            self._data.pop(key, None)
+            return None
+        # Refresh recency so hot keys survive oldest-first eviction.
+        self._data.move_to_end(key)
+        return value
+
+    def set(
+        self,
+        key: str,
+        value: dict[str, list[dict[str, Any]]],
+        *,
+        now: float,
+    ) -> None:
+        self._data.pop(key, None)
+        self._data[key] = (now + self._ttl_s, value)
+        if len(self._data) <= self._max_entries:
+            return
+        for stale_key in [k for k, (deadline, _) in self._data.items() if deadline <= now]:
+            self._data.pop(stale_key, None)
+        while len(self._data) > self._max_entries:
+            self._data.popitem(last=False)
+
+    def clear(self) -> None:
+        self._data.clear()
+
+
+_facets_cache = _FacetsCache()
 
 
 class SearchService:
@@ -438,7 +502,13 @@ class SearchService:
         if to_ts is not None:
             filters.append(f"created_at:<={int(to_ts)}")
 
-        facets = ",".join(facet_by) if facet_by else ",".join(self.DEFAULT_FACET_FIELDS)
+        # Faceting is opt-in: computing facet counts costs extra work on
+        # every request (5 fields, max_facet_values=25), and most callers
+        # (plain searches, autocomplete, empty-query match-all loads)
+        # never look at ``resp.facet_counts``. Callers that need facets
+        # for a filter-panel UI should pass ``facet_by`` explicitly, or
+        # better, call :meth:`facets` directly (which is cached).
+        facets = ",".join(facet_by) if facet_by else ""
         params: dict[str, Any] = {
             "q": query or "*",
             "query_by": "input_text,output_text,tool_names,name,agent_id",
@@ -446,12 +516,13 @@ class SearchService:
             "sort_by": "created_at:desc",
             "per_page": max(1, min(per_page, 100)),
             "page": max(1, page),
-            "facet_by": facets,
-            "max_facet_values": 25,
             "highlight_full_fields": "input_text,output_text",
             "highlight_affix_num_tokens": 4,
             "snippet_threshold": 30,
         }
+        if facets:
+            params["facet_by"] = facets
+            params["max_facet_values"] = 25
 
         # Bound tail latency on broad, low-selectivity queries. Typesense
         # returns the best results ranked so far once a query exceeds this
@@ -549,8 +620,6 @@ class SearchService:
         """
         if not query:
             return []
-        # Bypass the default facet set explicitly — ``facet_by=None``
-        # would otherwise fall back to DEFAULT_FACET_FIELDS.
         resp = await self.search(
             tenant_id=tenant_id,
             query=query,
@@ -567,20 +636,54 @@ class SearchService:
         *,
         tenant_id: str,
         query: str = "",
+        agent_id: str | None = None,
+        tool: str | None = None,
+        outcome: str | None = None,
+        event_type: str | None = None,
+        from_ts: int | None = None,
+        to_ts: int | None = None,
         facet_by: tuple[str, ...] | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Return facet counts for a query without the hit list.
 
         Used by the search page's sidebar to render the filter
-        checkboxes (e.g. "agent_id: alice (12), bob (3)").
+        checkboxes (e.g. "agent_id: alice (12), bob (3)"). This is
+        the entry point the filter-panel UI should call — only when
+        the panel is actually open — since ``search()`` no longer
+        computes facets by default (see OPT-4). Accepts the same
+        filter params as :meth:`search` so facet counts stay
+        consistent with whatever filters are already applied to the
+        current view. Results are cached in-process for
+        ``_FACETS_CACHE_TTL_S`` seconds per (tenant, query, filters,
+        fields) so rapid repeat opens of the panel (or several users
+        viewing the same filtered view) don't each pay the
+        facet-computation cost.
         """
+        fields = facet_by or self.DEFAULT_FACET_FIELDS
+        cache_key = (
+            f"{tenant_id}\x1f{query}\x1f{agent_id or ''}\x1f{tool or ''}\x1f"
+            f"{outcome or ''}\x1f{event_type or ''}\x1f{from_ts or ''}\x1f"
+            f"{to_ts or ''}\x1f{','.join(fields)}"
+        )
+        now = time.monotonic()
+        cached = _facets_cache.get(cache_key, now=now)
+        if cached is not None:
+            return cached
+
         resp = await self.search(
             tenant_id=tenant_id,
             query=query,
+            agent_id=agent_id,
+            tool=tool,
+            outcome=outcome,
+            event_type=event_type,
+            from_ts=from_ts,
+            to_ts=to_ts,
             per_page=1,
             page=1,
-            facet_by=facet_by,
+            facet_by=fields,
         )
+        _facets_cache.set(cache_key, resp.facet_counts, now=now)
         return resp.facet_counts
 
 

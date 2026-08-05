@@ -8,6 +8,7 @@ it in the standard ``_ok_envelope`` shape).
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -113,6 +114,19 @@ class ResolveRequest(BaseModel):
 
 _RESOLVE_STATUSES = frozenset({"open", "acknowledged", "resolved", "ignored"})
 
+# BUG-4: the app-level statuses accepted above don't map 1:1 onto the
+# ``agent_issues.status`` Postgres CHECK constraint (see
+# db_migrations/versions/136_issue_status_escalated.py for the legal DB
+# values: open, triaged, fix_pending, verifying, resolved, regressed,
+# ignored, learning, escalated). "acknowledged" -- the portal's "seen it,
+# working on it" concept -- has no direct DB equivalent; the closest real
+# workflow state is "triaged". Writing "acknowledged" verbatim used to
+# raise a CheckViolation that ``IssuesRepo.set_status`` silently
+# swallowed, so the Acknowledge button appeared to work but never
+# persisted anything. ``portal.py::_map_issue_status`` already maps
+# "triaged" back to "acknowledged" on read, so this round-trips cleanly.
+_DB_STATUS_OVERRIDES = {"acknowledged": "triaged"}
+
 
 class TriageRequest(BaseModel):
     force: bool = False
@@ -170,10 +184,35 @@ async def resolve_issue(
     body: ResolveRequest = Body(default=ResolveRequest()),
 ) -> dict[str, Any]:
     await _require_postgres()
-    target = body.status if body.status in _RESOLVE_STATUSES else "resolved"
-    ok = await _repo.set_status(
-        org_id, issue_id, target, set_resolved_at=(target == "resolved")
-    )
+    if body.status not in _RESOLVE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"invalid status {body.status!r}; must be one of "
+                f"{sorted(_RESOLVE_STATUSES)}"
+            ),
+        )
+    target = body.status
+    db_status = _DB_STATUS_OVERRIDES.get(target, target)
+    try:
+        ok = await _repo.set_status(
+            org_id, issue_id, db_status, set_resolved_at=(target == "resolved")
+        )
+    except Exception as exc:
+        # BUG-4: a genuine DB error (e.g. a CheckViolation on the status
+        # CHECK constraint) must surface as a real error response, not a
+        # false-positive 200 -- the portal's optimistic-update code only
+        # reverts + toasts on a thrown/rejected request.
+        logger.warning(
+            "resolve_issue: set_status failed for issue %s -> %s: %s",
+            issue_id,
+            db_status,
+            redact_all(str(exc)),
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=safe_detail(exc, fallback="Failed to update issue status"),
+        ) from exc
     regression_cases: list[dict[str, Any]] = []
     regression_run: dict[str, Any] | None = None
     evolution: dict[str, Any] | None = None
@@ -221,6 +260,28 @@ async def resolve_issue(
                 )
         except Exception as exc:
             logger.debug("flywheel on resolve failed: %s", redact_all(str(exc)))
+    if ok and target in ("resolved", "ignored"):
+        try:
+            from eden.services.soft_issue_review import record_shadow_feedback
+
+            issue = await _repo.get_issue(org_id, issue_id)
+            stumble_ids = issue.example_stumble_ids if issue else []
+            if stumble_ids:
+                stumble = await _repo.get_stumble(org_id, stumble_ids[0])
+                if stumble and stumble.get("detected_by") == "signal_investigator":
+                    detail = stumble.get("detail") or {}
+                    if isinstance(detail, str):
+                        detail = json.loads(detail)
+                    signal_id = detail.get("signal_id")
+                    if signal_id:
+                        await record_shadow_feedback(
+                            org_id,
+                            signal_id,
+                            confirm=(target == "resolved") or None,
+                            dismiss=(target == "ignored") or None,
+                        )
+        except Exception as exc:
+            logger.debug("shadow feedback on resolve failed: %s", redact_all(str(exc)))
     return _ok(
         "agent_issues",
         {

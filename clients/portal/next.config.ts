@@ -272,18 +272,9 @@ const nextConfig: NextConfig = {
       },
 
       // Phase 5 Improve — legacy paths → live mode= queue/plan (page ignores old tab=)
-      { source: "/artifacts", destination: "/improve?mode=queue", permanent: false },
-      {
-        source: "/artifacts/:path*",
-        destination: "/improve?mode=queue",
-        permanent: false,
-      },
-      { source: "/ledger", destination: "/improve?mode=queue", permanent: false },
-      {
-        source: "/ledger/:path*",
-        destination: "/improve?mode=queue",
-        permanent: false,
-      },
+      // /artifacts and /ledger are now real routes (FEAT-6/FEAT-7) — no
+      // redirect. (/agents/:id/ledger below is a separate, unrelated rule
+      // that keeps an agent cross-link from 404ing — do not fold it in here.)
       {
         source: "/promotions",
         destination: "/improve?mode=queue",

@@ -6,10 +6,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronLeft, X } from "lucide-react";
 import {
   agentForIssue,
@@ -47,6 +49,7 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
+import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
 
 type SeverityFilter = "all" | "error" | "warn";
 type DetailTab = "overview" | "runs" | "fix";
@@ -59,6 +62,21 @@ const COLUMNS: { id: IssueStatus; label: string }[] = [
   { id: "acknowledged", label: "In progress" },
   { id: "resolved", label: "Resolved" },
 ];
+
+/**
+ * OPT-9: the issue list is one shared `overflow-y-auto` region with
+ * status sections stacked inside it (not side-by-side kanban columns),
+ * so it virtualises the same way the traces feed does — flatten
+ * section headers + rows into a single index space and use the
+ * range extractor to keep the active section header sticky.
+ */
+type IssueBoardRow =
+  | { kind: "header"; key: string; column: IssueStatus; label: string; count: number }
+  | { kind: "issue"; key: string; issue: IssueFixture };
+
+/** `.lab-run-row`-shaped card at current density; corrected by `measureElement`. */
+const ISSUE_ROW_ESTIMATE = 86;
+const ISSUE_HEADER_ESTIMATE = 41;
 
 function statusTone(status: IssueStatus): "fail" | "neutral" | "ok" {
   if (status === "open") return "fail";
@@ -119,11 +137,13 @@ function IssueRow({
 function IssueDetail({
   issue,
   onStatus,
+  onDismiss,
   onClose,
   hrefFor,
 }: {
   issue: IssueFixture;
   onStatus: (status: IssueStatus) => void;
+  onDismiss: () => void;
   onClose: () => void;
   hrefFor: (base: string, extra?: Record<string, string | undefined>) => string;
 }) {
@@ -216,7 +236,14 @@ function IssueDetail({
                 className="ds-btn ds-btn-ghost ds-btn-sm"
                 onClick={() => onStatus("resolved")}
               >
-                Resolve
+                Confirm
+              </button>
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-sm"
+                onClick={onDismiss}
+              >
+                Dismiss
               </button>
             </>
           ) : null}
@@ -227,7 +254,14 @@ function IssueDetail({
                 className="ds-btn ds-btn-primary ds-btn-sm"
                 onClick={() => onStatus("resolved")}
               >
-                Resolve
+                Confirm
+              </button>
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-sm"
+                onClick={onDismiss}
+              >
+                Dismiss
               </button>
               <button
                 type="button"
@@ -523,6 +557,33 @@ function LabIssuesInner() {
     [orgId, queryClient, pushToast],
   );
 
+  /**
+   * FEAT-10: soft-dismiss (status=ignored). Feeds the shadow-detector
+   * confirm/dismiss loop (P0-A) on the backend when the issue's example
+   * stumble came from the signal investigator. Not part of ``IssueStatus``
+   * (the open/acknowledged/resolved kanban) so it skips the optimistic
+   * ``statusOverride`` and just invalidates on success — the issue drops
+   * out of the default list once refetched.
+   */
+  const dismissIssue = useCallback(
+    async (issueId: string) => {
+      if (!orgId) return;
+      try {
+        await agentIssuesApi.resolve(orgId, issueId, "ignored");
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.issues(orgId),
+        });
+      } catch (err) {
+        pushToast({
+          title: "Could not dismiss issue",
+          body: err instanceof Error ? err.message : String(err),
+          tone: "fail",
+        });
+      }
+    },
+    [orgId, queryClient, pushToast],
+  );
+
   const scopedIssues = useMemo(() => {
     if (agentId === "all") return issues;
     return issues.filter((issue) => issue.agentId === agentId);
@@ -561,6 +622,68 @@ function LabIssuesInner() {
     }
     return map;
   }, [filtered]);
+
+  const boardRows = useMemo<IssueBoardRow[]>(() => {
+    const out: IssueBoardRow[] = [];
+    for (const col of COLUMNS) {
+      const items = byColumn[col.id];
+      if (items.length === 0) continue;
+      out.push({
+        kind: "header",
+        key: `header:${col.id}`,
+        column: col.id,
+        label: col.label,
+        count: items.length,
+      });
+      for (const issue of items) {
+        out.push({ kind: "issue", key: issue.id, issue });
+      }
+    }
+    return out;
+  }, [byColumn]);
+
+  // Section headers keep their sticky behaviour: the range extractor
+  // pins whichever header precedes the visible window so it stays
+  // mounted, and that one row renders `position: sticky` instead of
+  // absolute (every other row is out of flow, so the sticky one is
+  // free to travel the whole scrollport). Mirrors traces-client.tsx.
+  const boardStickyIndexes = useMemo(() => {
+    const out: number[] = [];
+    boardRows.forEach((row, i) => {
+      if (row.kind === "header") out.push(i);
+    });
+    return out;
+  }, [boardRows]);
+  const activeStickyBoardIndexRef = useRef(-1);
+
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const boardRangeExtractor = useCallback(
+    (range: { startIndex: number; endIndex: number; overscan: number; count: number }) => {
+      let sticky = -1;
+      for (const i of boardStickyIndexes) {
+        if (i <= range.startIndex) sticky = i;
+        else break;
+      }
+      activeStickyBoardIndexRef.current = sticky;
+      const next = new Set(defaultRangeExtractor(range));
+      if (sticky >= 0) next.add(sticky);
+      return [...next].sort((a, b) => a - b);
+    },
+    [boardStickyIndexes],
+  );
+
+  const boardVirtualizer = useVirtualizer({
+    count: boardRows.length,
+    getScrollElement: () => boardScrollRef.current,
+    estimateSize: (index) =>
+      boardRows[index]?.kind === "header"
+        ? ISSUE_HEADER_ESTIMATE
+        : ISSUE_ROW_ESTIMATE,
+    overscan: 8,
+    getItemKey: (index) => boardRows[index]?.key ?? index,
+    rangeExtractor: boardRangeExtractor,
+    measureElement: measureVirtualRow,
+  });
 
   const selectIssue = useCallback(
     (id: string) => {
@@ -673,7 +796,11 @@ function LabIssuesInner() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            ref={boardScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto"
+            {...{ [VIRTUAL_SCROLL_ATTR]: "issues-board" }}
+          >
             {filtered.length === 0 ? (
               <EmptyState
                 title={
@@ -690,31 +817,55 @@ function LabIssuesInner() {
                 }
               />
             ) : (
-              <div className="pb-2">
-                {COLUMNS.map((col) => {
-                  const items = byColumn[col.id];
-                  if (items.length === 0) return null;
+              <ul
+                role="list"
+                aria-label="Issues"
+                className="relative pb-2"
+                style={{ height: `${boardVirtualizer.getTotalSize()}px` }}
+              >
+                {boardVirtualizer.getVirtualItems().map((item) => {
+                  const row = boardRows[item.index];
+                  if (!row) return null;
+                  const isStuck =
+                    row.kind === "header" &&
+                    activeStickyBoardIndexRef.current === item.index;
                   return (
-                    <section key={col.id} aria-label={`${col.label} issues`}>
-                      <header className="sticky top-0 z-[1] flex items-baseline justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-2 sm:px-5">
-                        <h3 className="type-label text-[var(--text)]">{col.label}</h3>
-                        <span className="type-value tabular-nums">{items.length}</span>
-                      </header>
-                      <ul>
-                        {items.map((issue) => (
-                          <li key={issue.id}>
-                            <IssueRow
-                              issue={issue}
-                              active={issue.id === selected?.id}
-                              onSelect={() => selectIssue(issue.id)}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
+                    <li
+                      key={item.key}
+                      ref={boardVirtualizer.measureElement}
+                      data-index={item.index}
+                      role={row.kind === "header" ? "presentation" : undefined}
+                      className={cn(
+                        "w-full min-w-0",
+                        isStuck
+                          ? "sticky top-0 z-[2]"
+                          : "absolute top-0 left-0",
+                      )}
+                      style={
+                        isStuck
+                          ? undefined
+                          : { transform: `translateY(${item.start}px)` }
+                      }
+                    >
+                      {row.kind === "header" ? (
+                        <header
+                          aria-label={`${row.label} issues`}
+                          className="flex items-baseline justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg-inset)] px-4 py-2 sm:px-5"
+                        >
+                          <h3 className="type-label text-[var(--text)]">{row.label}</h3>
+                          <span className="type-value tabular-nums">{row.count}</span>
+                        </header>
+                      ) : (
+                        <IssueRow
+                          issue={row.issue}
+                          active={row.issue.id === selected?.id}
+                          onSelect={() => selectIssue(row.issue.id)}
+                        />
+                      )}
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
           </div>
         </div>
@@ -726,6 +877,9 @@ function LabIssuesInner() {
             onClose={clearSelection}
             onStatus={(status) => {
               void setIssueStatus(selected.id, status);
+            }}
+            onDismiss={() => {
+              void dismissIssue(selected.id);
             }}
           />
         ) : null}

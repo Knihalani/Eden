@@ -302,6 +302,126 @@ export const promptsV2Api = {
     ),
 };
 
+/** F39 Artifacts (runtime nudges) — `/orgs/{orgId}/artifacts`. */
+export type ArtifactMode = "shadow" | "promoted" | "archived";
+
+export type ArtifactRow = {
+  id: string;
+  agent_id: string;
+  name: string;
+  mode: ArtifactMode | string;
+  action_type: string;
+  trigger?: Record<string, unknown>;
+  content: string;
+  source_issue_id?: string | null;
+  evidence?: Record<string, unknown>;
+  cost?: { tokens?: number; usd?: number } & Record<string, unknown>;
+};
+
+export const artifactsApi = {
+  list: (orgId: string, filters?: { agentId?: string; mode?: ArtifactMode }) => {
+    const q = new URLSearchParams();
+    if (filters?.agentId) q.set("agent_id", filters.agentId);
+    if (filters?.mode) q.set("mode", filters.mode);
+    const qs = q.toString();
+    return fetchApi<{ status: string; data: { artifacts: ArtifactRow[] } }>(
+      `/orgs/${orgId}/artifacts${qs ? `?${qs}` : ""}`,
+    ).then((r) => r.data?.artifacts ?? []);
+  },
+
+  create: (
+    orgId: string,
+    body: {
+      agent_id: string;
+      name: string;
+      trigger?: Record<string, unknown>;
+      action_type?: string;
+      content: string;
+      mode?: string;
+      source_issue_id?: string | null;
+    },
+  ) =>
+    fetchApi<{ status: string; data: { nudge_id: string; mode: string } }>(
+      `/orgs/${orgId}/artifacts`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  promote: (orgId: string, artifactId: string) =>
+    fetchApi<{ status: string; data?: unknown }>(
+      `/orgs/${orgId}/artifacts/${encodeURIComponent(artifactId)}/promote`,
+      { method: "POST" },
+    ),
+
+  archive: (orgId: string, artifactId: string) =>
+    fetchApi<{ status: string; data?: unknown }>(
+      `/orgs/${orgId}/artifacts/${encodeURIComponent(artifactId)}/archive`,
+      { method: "POST" },
+    ),
+};
+
+/** Ledger (`src/eden/kb/ledger/`) — `/orgs/{orgId}/ledger`. */
+export type LedgerSummaryRow = {
+  agent_id: string;
+  version: number;
+  inject_enabled: boolean;
+  updated_at?: string | null;
+};
+
+export type LedgerEntryRow = {
+  id: string;
+  chapter: string;
+  text: string;
+  citations?: string[];
+  weight?: number;
+  version?: number;
+  created_at?: string | null;
+};
+
+export type LedgerConfig = {
+  enabled: boolean;
+  max_tokens: number;
+  retrieval_enabled?: boolean;
+};
+
+export type LedgerDetail = {
+  ledger_id: string;
+  version: number;
+  inject_enabled: boolean;
+  config: LedgerConfig;
+  entries: LedgerEntryRow[];
+};
+
+export const ledgerApi = {
+  list: (orgId: string) =>
+    fetchApi<{ status: string; data: { ledgers: LedgerSummaryRow[] } }>(
+      `/orgs/${orgId}/ledger`,
+    ).then((r) => r.data?.ledgers ?? []),
+
+  get: (orgId: string, agentId: string) =>
+    fetchApi<{
+      status: string;
+      data: { ledger: LedgerDetail | null; config: LedgerConfig };
+    }>(`/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger`).then(
+      (r) => r.data,
+    ),
+
+  regenerate: (orgId: string, agentId: string) =>
+    fetchApi<{ status: string; data?: unknown }>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/regenerate`,
+      { method: "POST" },
+    ),
+
+  setConfig: (
+    orgId: string,
+    agentId: string,
+    body: { enabled: boolean; max_tokens: number },
+  ) =>
+    fetchApi<{ status: string; data?: unknown }>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/config`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+};
+
 /** Assistant live chat (SSE). */
 export const assistantApi = {
   listConversations: (orgId: string) =>

@@ -819,13 +819,25 @@ async def search_spans_route(
     to_ts: int | None = Query(None, description="Upper bound on created_at (epoch seconds)"),
     per_page: int = Query(20, ge=1, le=100),
     page: int = Query(1, ge=1),
+    include_facets: bool = Query(
+        False,
+        description=(
+            "Also compute facet counts for the sidebar filter panel "
+            "(agent_id/tool_names/outcome/event_type/model). Costs extra "
+            "compute per Typesense request, so it's opt-in — pass this "
+            "only when the filter panel is actually open, not on every "
+            "keystroke/page-load search (OPT-4)."
+        ),
+    ),
     user: dict = Depends(get_current_user),
 ) -> SpanSearchResponse:
     """Full-text search across every span for this org (Laminar parity).
 
-    Returns hits, total count, and facet counts for the sidebar
-    filter UI. ``q`` may be empty (returns all spans matching the
-    filters, useful for "show me all failures in the last hour").
+    Returns hits and total count. Facet counts for the sidebar
+    filter UI are only computed when ``include_facets=true`` is
+    passed (see :meth:`SearchService.facets`, which caches results
+    for a short TTL). ``q`` may be empty (returns all spans matching
+    the filters, useful for "show me all failures in the last hour").
     """
     from eden.observability.search_service import get_search_service
 
@@ -842,10 +854,22 @@ async def search_spans_route(
         per_page=per_page,
         page=page,
     )
+    facet_counts = resp.facet_counts
+    if include_facets:
+        facet_counts = await service.facets(
+            tenant_id=org_id,
+            query=q,
+            agent_id=agent,
+            tool=tool,
+            outcome=outcome,
+            event_type=event_type,
+            from_ts=from_ts,
+            to_ts=to_ts,
+        )
     return SpanSearchResponse(
         hits=[SpanSearchHit(**h.to_dict()) for h in resp.hits],
         total=resp.total,
-        facet_counts=resp.facet_counts,
+        facet_counts=facet_counts,
         took_ms=resp.took_ms,
         query=resp.query,
         fallback=resp.fallback,

@@ -95,6 +95,8 @@ export const queryKeys = {
       ["portal", "signals", orgId] as const,
     alertRules: (orgId: string | null | undefined) =>
       ["portal", "alertRules", orgId] as const,
+    nlAlertRules: (orgId: string | null | undefined) =>
+      ["portal", "nlAlertRules", orgId] as const,
     alertEvents: (orgId: string | null | undefined) =>
       ["portal", "alertEvents", orgId] as const,
     costDrivers: (orgId: string | null | undefined) =>
@@ -157,6 +159,17 @@ export const queryKeys = {
       ["promptsV2", "detail", orgId, name] as const,
     pins: (orgId: string | null | undefined, name: string | null | undefined) =>
       ["promptsV2", "pins", orgId, name] as const,
+  },
+  artifacts: {
+    all: ["artifacts"] as const,
+    list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["artifacts", "list", orgId, filters ?? {}] as const,
+  },
+  ledger: {
+    all: ["ledger"] as const,
+    list: (orgId: string | null | undefined) => ["ledger", "list", orgId] as const,
+    detail: (orgId: string | null | undefined, agentId: string | null | undefined) =>
+      ["ledger", "detail", orgId, agentId] as const,
   },
 } as const;
 

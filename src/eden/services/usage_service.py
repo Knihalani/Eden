@@ -17,6 +17,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from eden.services import budget_service
 from eden.services.plan_tiers import (
     get_plan_tier,
     usd_to_credits,
@@ -336,6 +337,24 @@ class UsageService:
 
         Queries real-time aggregates from usage_events and compares them
         against the org's active resource limits.
+
+        The ``cost_usd`` dimension is the one FinOps-facing exception:
+        its soft/hard limit is sourced from the customer-configured
+        ``budgets`` table (:func:`budget_service.get_budget`) — the same
+        row the portal Budgets UI reads and writes via
+        ``GET/POST /orgs/{org_id}/budget`` — rather than the internal
+        ``org_resource_limits`` table used for every other dimension.
+        Before this fix, a customer could lower their cost cap in the
+        Budgets UI and it would have zero enforcement effect because
+        ``QuotaEnforcementMiddleware`` (via this method) only ever read
+        ``org_resource_limits.cost_hard_limit_usd``. Orgs with no
+        ``budgets`` row (``source == "defaults"``) fall back to
+        ``org_resource_limits``/plan-tier defaults so paid orgs that
+        haven't visited the Budgets UI aren't clamped to the free-tier
+        default. ``budgets.enforcement_enabled`` gates whether a hard
+        breach can actually block (mirrors the DL-15 preflight gate in
+        ``autonomous/agent.py``) — when disabled, usage still reports but
+        never surfaces as ``hard_exceeded``.
         """
         client = await get_postgres_client()
 
@@ -397,6 +416,56 @@ class UsageService:
                 return "soft_exceeded"
             return "ok"
 
+        # FEAT-21 — the customer-editable cost cap lives in ``budgets``
+        # (``cost_hard_limit_usd`` / ``cost_soft_limit_usd``, edited via
+        # ``POST /orgs/{org_id}/budget`` and shown in the portal Budgets
+        # UI), not ``org_resource_limits``. Before this, QuotaEnforcement
+        # blocked live traffic against the plan-tier default in
+        # ``org_resource_limits`` and silently ignored whatever the
+        # customer configured, so editing a budget in the portal had zero
+        # effect on enforcement. Prefer the ``budgets`` row when one
+        # exists (``source == "db"`` with a positive hard cap) —
+        # matching exactly what the Budgets UI reads via
+        # ``budget_service.get_budget`` — otherwise fall back to
+        # ``org_resource_limits`` / the plan-tier default exactly as
+        # before, since ``budgets`` rows are only created once a customer
+        # (or the free-tier defaulting path) explicitly upserts one via
+        # ``budget_service.upsert_budget``.
+        cost_limit_source = "org_resource_limits"
+        cost_soft_limit_usd = float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd)
+        cost_hard_limit_usd = float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd)
+        # ``enforcement_enabled`` gates whether a hard breach may actually
+        # *block* (mirrors the DL-15 preflight gate in
+        # ``autonomous/agent.py``) — it does not hide the configured
+        # numbers, so the reported soft/hard/percentage always match what
+        # the Budgets UI shows once a row exists.
+        cost_enforcement_enabled = True
+        try:
+            budget_cfg = await budget_service.get_budget(org_id)
+        except Exception as exc:  # noqa: BLE001 — enforcement must never break on this
+            logger.debug("usage_service: budget_service.get_budget failed: %s", exc)
+            budget_cfg = None
+        if budget_cfg and budget_cfg.get("source") == "db":
+            try:
+                configured_hard = float(budget_cfg.get("cost_hard_limit_usd") or 0.0)
+            except (TypeError, ValueError):
+                configured_hard = 0.0
+            if configured_hard > 0:
+                try:
+                    cost_soft_limit_usd = float(budget_cfg.get("cost_soft_limit_usd") or 0.0)
+                except (TypeError, ValueError):
+                    cost_soft_limit_usd = 0.0
+                cost_hard_limit_usd = configured_hard
+                cost_limit_source = "budgets"
+                cost_enforcement_enabled = bool(budget_cfg.get("enforcement_enabled", True))
+
+        cost_status = _status(total_cost_usd, cost_soft_limit_usd, cost_hard_limit_usd)
+        if cost_status == "hard_exceeded" and not cost_enforcement_enabled:
+            # Customer turned enforcement off for this budget row — still
+            # surface a soft-exceeded warning (never silently "ok") but
+            # never a hard block.
+            cost_status = "soft_exceeded"
+
         # Fetch seats and references usage from org_plans
         seats_used = int(limits.get("seats_used", 0)) if limits else 0
         references_used = int(limits.get("references_used", 0)) if limits else 0
@@ -447,15 +516,18 @@ class UsageService:
             },
             "cost_usd": {
                 # USD mirror of credits — kept for FinOps / legacy headers.
+                # FEAT-21: soft/hard limit sourced from ``budgets``
+                # (customer-configured, via ``POST /orgs/{org_id}/budget``)
+                # when a row exists with a positive hard cap; else falls
+                # back to ``org_resource_limits`` / the plan-tier default.
+                # ``status`` never reports "hard_exceeded" when the
+                # budget's ``enforcement_enabled`` is False.
                 "used": round(total_cost_usd, 4),
-                "soft_limit": round(float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd), 4),
-                "hard_limit": round(float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd), 4),
-                "percentage": _pct(total_cost_usd, float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd)),
-                "status": _status(
-                    total_cost_usd,
-                    float(limits.get("cost_soft_limit_usd") or tier.cost_soft_limit_usd),
-                    float(limits.get("cost_hard_limit_usd") or tier.cost_hard_limit_usd),
-                ),
+                "soft_limit": round(cost_soft_limit_usd, 4),
+                "hard_limit": round(cost_hard_limit_usd, 4),
+                "percentage": _pct(total_cost_usd, cost_hard_limit_usd),
+                "status": cost_status,
+                "limit_source": cost_limit_source,
             },
             "credits": {
                 # PRIMARY free-tier enforcement lever (100 credits = $1).
