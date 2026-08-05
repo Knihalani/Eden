@@ -135,3 +135,112 @@ async def test_watermark_drains_fifo_and_previously_excluded_orgs_surface():
     # NULLS FIRST beats every already-processed org regardless of how
     # long ago it was processed.
     assert seen_batches[3][0] == "org-9"
+
+
+async def test_fetch_stale_candidates_composite_key_builds_positional_join():
+    """Composite (multi-column) key shape used by OPT-7/OPT-8.
+
+    ``candidate_id_column``/``watermark_id_column``/``id_alias`` passed as
+    equal-length sequences must join positionally (each pair AND-joined)
+    and select each aliased column, still binding ``limit`` as the sole
+    ``$1`` placeholder.
+    """
+    pg = MagicMock()
+    pg.fetch = AsyncMock(return_value=[{"org_id": "org-1", "signal_id": "sig-1"}])
+
+    out = await fetch_stale_candidates(
+        pg,
+        candidate_table="(SELECT DISTINCT org_id, signal_id FROM signal_events)",
+        watermark_table="classifier_retrain_watermark",
+        candidate_id_column=("org_id", "signal_id"),
+        watermark_id_column=("org_id", "signal_id"),
+        id_alias=("org_id", "signal_id"),
+        limit=50,
+    )
+
+    assert out == [{"org_id": "org-1", "signal_id": "sig-1"}]
+    query, limit_arg = pg.fetch.await_args.args
+    assert limit_arg == 50
+    assert "c.org_id::text AS org_id" in query
+    assert "c.signal_id::text AS signal_id" in query
+    assert "w.org_id = c.org_id AND w.signal_id = c.signal_id" in query
+    assert "LEFT JOIN classifier_retrain_watermark" in query
+    assert "LIMIT $1" in query
+
+
+async def test_fetch_stale_candidates_mismatched_composite_lengths_raise():
+    pg = MagicMock()
+
+    try:
+        await fetch_stale_candidates(
+            pg,
+            candidate_table="agent_issues",
+            watermark_table="drift_baseline_watermark",
+            candidate_id_column=("org_id", "agent_id"),
+            watermark_id_column=("org_id",),
+            id_alias=("org_id", "agent_id"),
+        )
+    except ValueError as exc:
+        assert "same number of columns" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for mismatched column counts")
+
+
+async def test_advance_watermark_composite_key_binds_positional_ids_no_cast():
+    """OPT-8's ``(org_id, agent_id)`` pair: VARCHAR columns, ``id_cast=None``.
+
+    Unlike the default single-column ``id_cast="uuid"`` shape, a composite
+    key with ``id_cast=None`` must bind both ids positionally with no
+    ``::uuid`` cast on either placeholder, and upsert on the composite
+    conflict target.
+    """
+    pg = MagicMock()
+    pg.execute = AsyncMock(return_value="INSERT 0 1")
+
+    await advance_watermark(
+        pg,
+        watermark_table="drift_baseline_watermark",
+        entity_id=("org-1", "agent-1"),
+        watermark_id_column=("org_id", "agent_id"),
+        id_cast=None,
+    )
+
+    query, org_arg, agent_arg = pg.execute.await_args.args
+    assert (org_arg, agent_arg) == ("org-1", "agent-1")
+    assert "INSERT INTO drift_baseline_watermark (org_id, agent_id" in query
+    assert "VALUES ($1, $2, NOW())" in query
+    assert "ON CONFLICT (org_id, agent_id) DO UPDATE" in query
+
+
+async def test_advance_watermark_composite_key_default_uuid_cast_per_column():
+    """OPT-7's ``(org_id, signal_id)`` pair: default ``id_cast="uuid"``
+    broadcasts to every column when a single string is given (not just
+    the single-column shape)."""
+    pg = MagicMock()
+    pg.execute = AsyncMock(return_value="INSERT 0 1")
+
+    await advance_watermark(
+        pg,
+        watermark_table="classifier_retrain_watermark",
+        entity_id=("org-1", "sig-1"),
+        watermark_id_column=("org_id", "signal_id"),
+    )
+
+    query, *_ = pg.execute.await_args.args
+    assert "VALUES ($1::uuid, $2::uuid, NOW())" in query
+
+
+async def test_advance_watermark_entity_id_length_mismatch_raises():
+    pg = MagicMock()
+
+    try:
+        await advance_watermark(
+            pg,
+            watermark_table="drift_baseline_watermark",
+            entity_id=("org-1",),
+            watermark_id_column=("org_id", "agent_id"),
+        )
+    except ValueError as exc:
+        assert "one value per watermark_id_column" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for mismatched entity_id length")
