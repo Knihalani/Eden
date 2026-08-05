@@ -76,7 +76,11 @@ class RootCauseAnalyzer:
     # ── Public API ────────────────────────────────────────────────
 
     async def categorize(
-        self, org_id: str, trace_id: str
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        events: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Classify ``trace_id`` and persist the result.
 
@@ -85,8 +89,18 @@ class RootCauseAnalyzer:
         ``category``, ``confidence``, ``signals`` (top-3),
         ``trace_id``, and ``model: "rule_based_v1"``. On a missing
         trace the envelope is ``status="not_found"``.
+
+        ``events`` lets a caller that has already fetched the
+        trace's events (e.g. the ``/chain`` route, which needs
+        them to build the causal chain anyway) pass them in so we
+        don't re-run the same Postgres query a second time within
+        one request. When omitted we fetch them ourselves (the
+        original behaviour). Callers that pass ``events`` in MUST
+        have fetched them with the full (non-``thin``) column set
+        — the rule table reads ``payload``/``attributes``.
         """
-        events = await _fetch_trace_events(org_id, trace_id)
+        if events is None:
+            events = await _fetch_trace_events(org_id, trace_id)
         if not events:
             return _not_found_envelope(self.name, trace_id=trace_id)
 
@@ -150,7 +164,11 @@ class RootCauseAnalyzer:
         )
 
     async def explain(
-        self, org_id: str, trace_id: str
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        events: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Return the 1-sentence cause + top-3 contributing
         factors + similar incidents from the last 30 days.
@@ -161,8 +179,12 @@ class RootCauseAnalyzer:
         incidents). We do NOT re-persist the categorize row
         (would clobber the latest classify), but we DO read the
         rca_analyses table for similar incidents.
+
+        ``events``, if given, is forwarded to :func:`categorize`
+        so a caller that already fetched the trace's events
+        avoids a redundant fetch (see :func:`categorize`).
         """
-        cat = await self.categorize(org_id, trace_id)
+        cat = await self.categorize(org_id, trace_id, events=events)
         if cat.get("status") == "not_found":
             return cat
         data = cat.get("data") or {}

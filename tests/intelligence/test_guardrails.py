@@ -725,6 +725,47 @@ class TestInterventionEngine:
             m["type"] == "pii_redaction" for m in r["data"]["matched_policies"]
         )
 
+    async def test_pii_policy_redacts_with_trace_id(self) -> None:
+        """FEAT-4 regression: edited_text is redacted, not just the right
+        function called, on the exact call shape (PII text + trace_id)
+        the removed Cat 15 guardrail-swap monkey-patch
+        (``install_cat15_trajectory_replaces_intervention`` in
+        ``eden.observability.trace_quality.wiring``) used to intercept
+        and return unredacted. Once the correct enforcement path
+        (``InterventionEngine.evaluate_and_act``) is restored/used,
+        supplying a ``trace_id`` must not change the redaction outcome.
+        """
+        from eden.guardrails import InterventionEngine
+
+        with patch(
+            "eden.guardrails.intervention._fetch_policies",
+            AsyncMock(
+                return_value=[
+                    {
+                        "id": "p1",
+                        "name": "redact-pii",
+                        "type": "pii_redaction",
+                        "spec": {},
+                        "action": "redact",
+                    }
+                ]
+            ),
+        ):
+            r = await InterventionEngine().evaluate_and_act(
+                "org_t",
+                text="My SSN is 123-45-6789",
+                trace_id="trace-feat4-regression",
+            )
+        assert r["data"]["verdict"] == "redact"
+        assert "123-45-6789" not in r["data"]["edited_text"], (
+            "edited_text must be redacted (not the raw unredacted input) "
+            "for calls that carry a trace_id"
+        )
+        assert r["data"]["edited_text"] != "My SSN is 123-45-6789"
+        assert any(
+            m["type"] == "pii_redaction" for m in r["data"]["matched_policies"]
+        )
+
     async def test_injection_policy_blocks(self) -> None:
         from eden.guardrails import InterventionEngine
 

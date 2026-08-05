@@ -26,9 +26,11 @@ Use ``stable_hash`` for a raw integer, ``stable_bucket`` to land in
 from __future__ import annotations
 
 import hashlib
+import math
+import re
 from typing import Any
 
-__all__ = ["stable_bucket", "stable_hash", "stable_seed"]
+__all__ = ["hashed_term_vector", "stable_bucket", "stable_hash", "stable_seed"]
 
 #: 8 bytes — a 64-bit space, matching the existing ``_hash_bucket`` convention
 #: and far beyond the collision pressure of any bucketing Eden does.
@@ -80,3 +82,31 @@ def stable_seed(value: Any, *, bits: int = 32) -> int:
     recommendations always assumed and never had.
     """
     return stable_hash(value) % (1 << bits)
+
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def hashed_term_vector(text: str, *, dims: int = 64) -> list[float]:
+    """Deterministic, L2-normalized bag-of-words hashing vector.
+
+    Splits ``text`` into lowercase word tokens and hashes each token into
+    one of ``dims`` buckets (via :func:`stable_bucket`), incrementing that
+    bucket's count. Cosine similarity between two such vectors tracks real
+    token overlap between the source texts -- unlike hashing the *whole*
+    string to a single seed, which produces near-uncorrelated noise per
+    document (this was the root cause of a signal-clustering bug where
+    88.7% of unrelated rows collapsed into one mega-cluster: OPT-2).
+
+    Used as the embed fallback in ``eden.signals.clusterer._embed`` when no
+    real semantic embedder is installed.
+    """
+    if dims <= 0:
+        return []
+    vec = [0.0] * dims
+    for tok in _TOKEN_RE.findall((text or "").lower()):
+        vec[stable_bucket(tok, dims)] += 1.0
+    norm = math.sqrt(sum(v * v for v in vec))
+    if norm > 0:
+        vec = [v / norm for v in vec]
+    return vec

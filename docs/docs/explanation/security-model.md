@@ -148,8 +148,11 @@ Eden ships pre-built evidence packs for:
 
 - **SOC 2** — 50+ controls (CC1–CC9), evidence auto-collected
 - **HIPAA** — 18 safeguards (administrative, physical, technical)
-- **GDPR** — 10 controls (incl. Article 17 right-to-erasure,
-  Article 22 right-to-explanation)
+- **GDPR** — 10 controls mapped (incl. Article 17 right-to-erasure,
+  Article 22 right-to-explanation). Erasure support is real but
+  **partial** — see [GDPR right-to-be-forgotten](#gdpr-right-to-be-forgotten)
+  below for exactly what is covered today. Eden does not claim GDPR
+  certification.
 - **ISO 27001** — 14 control families (A.5–A.18)
 
 Each pack maps the controls to specific audit log entries, PII
@@ -158,22 +161,54 @@ renders the evidence inline; export as a PDF for your auditor.
 
 ## GDPR right-to-be-forgotten
 
+Eden's erasure support is **partial and honestly self-reported**, not
+a certified "GDPR-compliant" guarantee. Two paths trigger the same
+underlying `RightToBeForgottenService` pass:
+
+- **Self-service** — `DELETE /auth/users/me` (synchronous) or
+  `DELETE /api/v1/me` (queued as a background job), reachable from
+  **Settings** in the portal as an account danger-zone action. Any
+  signed-in user can erase their own account.
+- **Admin-triggered** — `POST /orgs/{org_id}/intelligence/governance/rtbf`,
+  gated **off by default** behind the `rtbf_fanout_v1` feature flag.
+
 ```bash
-curl -X POST https://api.edenobservability.com/orgs/org_abc/gdpr/erase \
-  -H "Authorization: Bearer sk_eden_admin_..." \
-  -d '{ "user_id": "u_abc" }'
+curl -X DELETE https://api.edenobservability.com/auth/users/me \
+  -H "Authorization: Bearer <user_session_token>" \
+  -d '{ "confirm": "DELETE" }'
 ```
 
-Anonymises across:
+Each request:
 
-- `telemetry_events.attributes->>'user_id'`
-- `judge_scores.attributes->>'user_id'`
-- `usage_events.user_id`
-- `notifications.user_id`
-- `audit_log.user_id` → `anon_<sha256[:16]>`
+1. Anonymises six Postgres tables — `telemetry_events`, `judge_scores`,
+   `user_feedback`, `user_sessions`, `conversation_messages`,
+   `conversations` — with the user id replaced deterministically
+   (`anon_<sha256[:16]>`) so traces that span events still join
+   correctly. Self-service deletion additionally scrubs the `users`
+   row (email/name anonymised, `password_hash` cleared,
+   `token_version` rotated to kill live sessions) and removes org
+   memberships.
+2. Fans out to secondary stores, reporting **per-store status
+   honestly** instead of assuming success:
+   - `redis` — real key deletion by user-scoped pattern.
+   - `qdrant` — real point deletion where the client supports it.
+   - `clickhouse` — **tenant-scoped only** today (no `user_id` column
+     on the analytics table), not a true per-user erasure.
+   - `typesense` — **not yet covered**: reports `status: "unsupported"`
+     until an operator runs the one-time backfill
+     (`eden.scripts.typesense_backfill_user_id`, not yet executed
+     against production as of this writing) and sets
+     `typesense_span_user_id_backfilled`. Until then, indexed
+     prompt/completion text from spans indexed before the `user_id`
+     field existed remains searchable.
+   - object storage (S3) — **not implemented**: no per-user object
+     index exists, so scoped erasure isn't possible yet.
 
-The user id is replaced deterministically so traces that span
-events still join correctly. No PII leaks.
+A request's `fanout_incomplete` flag (in the response and audit log)
+is set whenever any store above didn't confirm a real deletion — an
+erasure is never reported as complete when part of it didn't run. Do
+not describe Eden as fully "GDPR-compliant" in customer-facing
+material; describe the specific, currently-covered scope above.
 
 ## Self-healing safety
 

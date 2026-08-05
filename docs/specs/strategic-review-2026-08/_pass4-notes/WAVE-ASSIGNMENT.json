@@ -1,0 +1,1138 @@
+[
+  {
+    "id": "BUG-1",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-1",
+    "wave": 1
+  },
+  {
+    "id": "OPT-1",
+    "wave": 1
+  },
+  {
+    "id": "BUG-2",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-2",
+    "wave": 1
+  },
+  {
+    "id": "BUG-3",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-3",
+    "wave": 1
+  },
+  {
+    "id": "OPT-3",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-5",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-6",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-7",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-8",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-10",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-11",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-12",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-13",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-14",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-15",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-16",
+    "wave": 1
+  },
+  {
+    "id": "FEAT-17",
+    "wave": 1
+  },
+  {
+    "id": "OPT-2",
+    "wave": 2
+  },
+  {
+    "id": "BUG-4",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-4",
+    "wave": 2
+  },
+  {
+    "id": "OPT-4",
+    "wave": 2
+  },
+  {
+    "id": "BUG-5",
+    "wave": 2
+  },
+  {
+    "id": "OPT-5",
+    "wave": 2
+  },
+  {
+    "id": "BUG-6",
+    "wave": 2
+  },
+  {
+    "id": "OPT-6",
+    "wave": 2
+  },
+  {
+    "id": "OPT-7",
+    "wave": 2
+  },
+  {
+    "id": "BUG-8",
+    "wave": 2
+  },
+  {
+    "id": "OPT-8",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-9",
+    "wave": 2
+  },
+  {
+    "id": "OPT-9",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-18",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-19",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-20",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-21",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-22",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-25",
+    "wave": 2
+  },
+  {
+    "id": "FEAT-26",
+    "wave": 2
+  },
+  {
+    "id": "BUG-7",
+    "wave": 3
+  },
+  {
+    "id": "BUG-9",
+    "wave": 3
+  },
+  {
+    "id": "OPT-10",
+    "wave": 3
+  },
+  {
+    "id": "OPT-11",
+    "wave": 3
+  },
+  {
+    "id": "OPT-12",
+    "wave": 3
+  },
+  {
+    "id": "OPT-14",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-23",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-28",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-29",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-30",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-32",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-33",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-34",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-35",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-36",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-39",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-40",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-41",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-42",
+    "wave": 3
+  },
+  {
+    "id": "FEAT-44",
+    "wave": 3
+  },
+  {
+    "id": "OPT-13",
+    "wave": 4
+  },
+  {
+    "id": "OPT-15",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-24",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-27",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-31",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-37",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-38",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-45",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-46",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-48",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-49",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-50",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-51",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-52",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-54",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-59",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-60",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-66",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-67",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-68",
+    "wave": 4
+  },
+  {
+    "id": "FEAT-43",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-47",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-53",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-58",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-62",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-65",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-69",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-70",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-71",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-72",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-73",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-74",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-75",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-76",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-77",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-79",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-82",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-83",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-84",
+    "wave": 5
+  },
+  {
+    "id": "FEAT-85",
+    "wave": 5
+  },
+  {
+    "id": "BUG-10",
+    "wave": 6
+  },
+  {
+    "id": "BUG-11",
+    "wave": 6
+  },
+  {
+    "id": "BUG-12",
+    "wave": 6
+  },
+  {
+    "id": "BUG-15",
+    "wave": 6
+  },
+  {
+    "id": "BUG-16",
+    "wave": 6
+  },
+  {
+    "id": "OPT-16",
+    "wave": 6
+  },
+  {
+    "id": "BUG-17",
+    "wave": 6
+  },
+  {
+    "id": "OPT-17",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-55",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-61",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-78",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-80",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-81",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-86",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-87",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-88",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-89",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-90",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-91",
+    "wave": 6
+  },
+  {
+    "id": "FEAT-92",
+    "wave": 6
+  },
+  {
+    "id": "BUG-13",
+    "wave": 7
+  },
+  {
+    "id": "BUG-18",
+    "wave": 7
+  },
+  {
+    "id": "OPT-18",
+    "wave": 7
+  },
+  {
+    "id": "BUG-19",
+    "wave": 7
+  },
+  {
+    "id": "OPT-19",
+    "wave": 7
+  },
+  {
+    "id": "BUG-20",
+    "wave": 7
+  },
+  {
+    "id": "OPT-20",
+    "wave": 7
+  },
+  {
+    "id": "BUG-21",
+    "wave": 7
+  },
+  {
+    "id": "OPT-23",
+    "wave": 7
+  },
+  {
+    "id": "OPT-24",
+    "wave": 7
+  },
+  {
+    "id": "OPT-25",
+    "wave": 7
+  },
+  {
+    "id": "OPT-26",
+    "wave": 7
+  },
+  {
+    "id": "OPT-27",
+    "wave": 7
+  },
+  {
+    "id": "OPT-28",
+    "wave": 7
+  },
+  {
+    "id": "OPT-29",
+    "wave": 7
+  },
+  {
+    "id": "OPT-32",
+    "wave": 7
+  },
+  {
+    "id": "OPT-34",
+    "wave": 7
+  },
+  {
+    "id": "OPT-35",
+    "wave": 7
+  },
+  {
+    "id": "FEAT-56",
+    "wave": 7
+  },
+  {
+    "id": "FEAT-63",
+    "wave": 7
+  },
+  {
+    "id": "BUG-14",
+    "wave": 8
+  },
+  {
+    "id": "OPT-21",
+    "wave": 8
+  },
+  {
+    "id": "BUG-22",
+    "wave": 8
+  },
+  {
+    "id": "OPT-30",
+    "wave": 8
+  },
+  {
+    "id": "OPT-37",
+    "wave": 8
+  },
+  {
+    "id": "OPT-38",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-57",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-64",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-93",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-94",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-95",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-96",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-97",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-98",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-99",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-101",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-104",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-106",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-107",
+    "wave": 8
+  },
+  {
+    "id": "FEAT-108",
+    "wave": 8
+  },
+  {
+    "id": "OPT-22",
+    "wave": 9
+  },
+  {
+    "id": "OPT-31",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-100",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-105",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-109",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-110",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-112",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-117",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-120",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-121",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-122",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-125",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-126",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-127",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-128",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-129",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-130",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-131",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-132",
+    "wave": 9
+  },
+  {
+    "id": "FEAT-134",
+    "wave": 9
+  },
+  {
+    "id": "OPT-33",
+    "wave": 10
+  },
+  {
+    "id": "OPT-39",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-102",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-111",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-113",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-123",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-138",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-139",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-140",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-141",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-144",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-145",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-146",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-147",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-148",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-149",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-151",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-153",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-154",
+    "wave": 10
+  },
+  {
+    "id": "FEAT-155",
+    "wave": 10
+  },
+  {
+    "id": "BUG-23",
+    "wave": 11
+  },
+  {
+    "id": "BUG-24",
+    "wave": 11
+  },
+  {
+    "id": "BUG-25",
+    "wave": 11
+  },
+  {
+    "id": "BUG-30",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-103",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-114",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-118",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-137",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-142",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-152",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-156",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-157",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-158",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-159",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-160",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-161",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-162",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-163",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-164",
+    "wave": 11
+  },
+  {
+    "id": "FEAT-165",
+    "wave": 11
+  },
+  {
+    "id": "BUG-26",
+    "wave": 12
+  },
+  {
+    "id": "BUG-29",
+    "wave": 12
+  },
+  {
+    "id": "BUG-31",
+    "wave": 12
+  },
+  {
+    "id": "BUG-34",
+    "wave": 12
+  },
+  {
+    "id": "BUG-35",
+    "wave": 12
+  },
+  {
+    "id": "BUG-36-50",
+    "wave": 12
+  },
+  {
+    "id": "OPT-40",
+    "wave": 12
+  },
+  {
+    "id": "OPT-41",
+    "wave": 12
+  },
+  {
+    "id": "OPT-42",
+    "wave": 12
+  },
+  {
+    "id": "OPT-43",
+    "wave": 12
+  },
+  {
+    "id": "OPT-44",
+    "wave": 12
+  },
+  {
+    "id": "OPT-45",
+    "wave": 12
+  },
+  {
+    "id": "OPT-46",
+    "wave": 12
+  },
+  {
+    "id": "OPT-47",
+    "wave": 12
+  },
+  {
+    "id": "FEAT-115",
+    "wave": 12
+  },
+  {
+    "id": "FEAT-119",
+    "wave": 12
+  },
+  {
+    "id": "FEAT-124",
+    "wave": 12
+  },
+  {
+    "id": "FEAT-135",
+    "wave": 12
+  },
+  {
+    "id": "FEAT-143",
+    "wave": 12
+  },
+  {
+    "id": "FEAT-150",
+    "wave": 12
+  },
+  {
+    "id": "BUG-27",
+    "wave": 13
+  },
+  {
+    "id": "BUG-32",
+    "wave": 13
+  },
+  {
+    "id": "BUG-33",
+    "wave": 13
+  },
+  {
+    "id": "OPT-36",
+    "wave": 13
+  },
+  {
+    "id": "OPT-48",
+    "wave": 13
+  },
+  {
+    "id": "OPT-49",
+    "wave": 13
+  },
+  {
+    "id": "OPT-50",
+    "wave": 13
+  },
+  {
+    "id": "BUG-51-54",
+    "wave": 13
+  },
+  {
+    "id": "OPT-51",
+    "wave": 13
+  },
+  {
+    "id": "OPT-52",
+    "wave": 13
+  },
+  {
+    "id": "OPT-53",
+    "wave": 13
+  },
+  {
+    "id": "OPT-54",
+    "wave": 13
+  },
+  {
+    "id": "BUG-55-58",
+    "wave": 13
+  },
+  {
+    "id": "OPT-55",
+    "wave": 13
+  },
+  {
+    "id": "OPT-57",
+    "wave": 13
+  },
+  {
+    "id": "OPT-61",
+    "wave": 13
+  },
+  {
+    "id": "FEAT-116",
+    "wave": 13
+  },
+  {
+    "id": "FEAT-166",
+    "wave": 13
+  },
+  {
+    "id": "FEAT-167",
+    "wave": 13
+  },
+  {
+    "id": "FEAT-168",
+    "wave": 13
+  },
+  {
+    "id": "BUG-28",
+    "wave": 14
+  },
+  {
+    "id": "OPT-56",
+    "wave": 14
+  },
+  {
+    "id": "OPT-58",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-133",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-136",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-169",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-170",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-171",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-172",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-173",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-177",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-178",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-179",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-181",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-182",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-183",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-184",
+    "wave": 14
+  },
+  {
+    "id": "FEAT-185",
+    "wave": 14
+  },
+  {
+    "id": "OPT-59",
+    "wave": 15
+  },
+  {
+    "id": "FEAT-174",
+    "wave": 15
+  },
+  {
+    "id": "FEAT-180",
+    "wave": 15
+  },
+  {
+    "id": "OPT-60",
+    "wave": 16
+  },
+  {
+    "id": "FEAT-175",
+    "wave": 16
+  },
+  {
+    "id": "FEAT-176",
+    "wave": 16
+  }
+]

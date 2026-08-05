@@ -50,6 +50,9 @@ async def test_evolve_from_issue_uses_prompts_v2(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("eden.issues.repo.IssuesRepo", lambda: _FakeRepo())
 
     svc = MagicMock()
+    svc.get_prompt = AsyncMock(
+        return_value={"id": "p-support-bot", "name": "support-bot"}
+    )
     svc.list_versions = AsyncMock(
         return_value=[{"version": 2, "template": "base"}]
     )
@@ -72,15 +75,56 @@ async def test_evolve_from_issue_uses_prompts_v2(monkeypatch: pytest.MonkeyPatch
     assert result["prompt_version_id"] == "pv-3"
     assert result["canary_enrolled"] is True
 
+    # The real, already-registered prompt is looked up (and versioned)
+    # under the agent's name — never an orphan.
+    svc.get_prompt.assert_awaited_once_with("org", "support-bot")
     svc.list_versions.assert_awaited_once_with("org", "support-bot", limit=1)
     svc.create_version.assert_awaited()
-    kwargs = svc.create_version.await_args.kwargs
+    args = svc.create_version.await_args
+    assert args.args == ("org", "support-bot")
+    kwargs = args.kwargs
     assert "too many tool calls" in kwargs["template"]
     assert kwargs["model"] == "eden-evolver"
     assert kwargs["params"]["source_issue_id"] == "iss-1"
     assert kwargs["params"]["ab_test_active"] is True
+    # require_existing=True: create_version must never be allowed to
+    # implicitly mint a brand-new orphan prompt from this path.
+    assert kwargs["require_existing"] is True
     assert canary_mock.await_args.kwargs.get("org_id") == "org"
     assert canary_mock.await_args.kwargs.get("control_version") == 2
+
+
+@pytest.mark.asyncio
+async def test_evolve_from_issue_skips_when_no_prompt_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BUG-8: if the agent has no registered prompts_v2 prompt, the
+    evolver must fail loudly and skip rather than silently minting a
+    new, unrelated (orphan) prompt named after the agent id.
+    """
+    monkeypatch.setattr("eden.issues.repo.IssuesRepo", lambda: _FakeRepo())
+
+    svc = MagicMock()
+    svc.get_prompt = AsyncMock(return_value=None)
+    svc.list_versions = AsyncMock(return_value=[])
+    svc.create_version = AsyncMock(
+        return_value={"id": "pv-orphan", "version": 1, "template": "x"}
+    )
+    monkeypatch.setattr(
+        "eden.services.prompt_versioning.PromptService",
+        lambda: svc,
+    )
+
+    result = await IssuePromptEvolver().evolve_from_issue("org", "iss-1")
+
+    assert result["created"] == 0
+    assert result["skipped"] is True
+    assert result["reason"] == "no_prompt_mapping"
+    assert result["agent"] == "support-bot"
+
+    # Nothing was ever created — no orphan prompt/version minted.
+    svc.list_versions.assert_not_awaited()
+    svc.create_version.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -89,6 +133,9 @@ async def test_evolve_from_issue_fails_closed_when_create_rejects(
 ) -> None:
     monkeypatch.setattr("eden.issues.repo.IssuesRepo", lambda: _FakeRepo())
     svc = MagicMock()
+    svc.get_prompt = AsyncMock(
+        return_value={"id": "p-support-bot", "name": "support-bot"}
+    )
     svc.list_versions = AsyncMock(return_value=[])
     svc.create_version = AsyncMock(return_value=None)
     monkeypatch.setattr(
@@ -107,6 +154,9 @@ async def test_evolve_from_issue_reports_canary_failure(
 ) -> None:
     monkeypatch.setattr("eden.issues.repo.IssuesRepo", lambda: _FakeRepo())
     svc = MagicMock()
+    svc.get_prompt = AsyncMock(
+        return_value={"id": "p-support-bot", "name": "support-bot"}
+    )
     svc.list_versions = AsyncMock(return_value=[])
     svc.create_version = AsyncMock(
         return_value={"id": "pv-1", "version": 1, "template": "x"}

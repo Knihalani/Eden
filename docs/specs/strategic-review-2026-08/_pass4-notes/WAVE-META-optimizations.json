@@ -1,0 +1,733 @@
+[
+  {
+    "id": "OPT-1",
+    "title": "Add missing composite indexes for signal_events's two real read paths",
+    "rank": 1,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "api/routes/signal_investigator.py",
+      "signals/clusterer.py",
+      "migrations/143_signal_events_indexes.py",
+      "signal_events (table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-2",
+    "title": "Fix dead eden.kb.embeddings import that silently disables real clustering (produces an 88.7%-false-positive mega-cluster) and the O(n²) grouping cost it masks",
+    "rank": 2,
+    "severity": "Critical",
+    "effort": "Large",
+    "files": [
+      "signals/clusterer.py",
+      "observability/patterns_clusterer.py",
+      "investigator.py",
+      "eden/kb/ledger/embeddings.py",
+      "signal_clusters (table)",
+      "api/routes/signal_investigator.py",
+      "trace_finalized_consumer.py"
+    ],
+    "depends_on": [
+      "OPT-1"
+    ]
+  },
+  {
+    "id": "OPT-3",
+    "title": "Fix auto_curator's unwatermarked org-selection query",
+    "rank": 3,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "cron_tick.py",
+      "organizations (table)",
+      "auto_curator_watermark (new table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-4",
+    "title": "Make Typesense faceting opt-in instead of always-on in search()",
+    "rank": 4,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "search_service.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-5",
+    "title": "Fix rca_chain's double-fetch of an unbounded, wide telemetry_events query",
+    "rank": 5,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "api/routes/intelligence_rca.py",
+      "insights/rca/analyzer.py",
+      "insights/rca/_common.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-6",
+    "title": "Implement real retention enforcement for quarantine_events",
+    "rank": 6,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "retention.py",
+      "quarantine_events (table)",
+      "silver_etl.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-7",
+    "title": "Fix classifier_retrain's unwatermarked org/signal-pair selection query (highest tick frequency of the watermark bugs)",
+    "rank": 7,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "classifier_pipeline.py",
+      "classifier_retrain_watermark (new table)"
+    ],
+    "depends_on": [
+      "OPT-3"
+    ]
+  },
+  {
+    "id": "OPT-8",
+    "title": "Fix drift_baselines's unwatermarked org/agent-pair selection query",
+    "rank": 8,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "drift_baseline_worker.py",
+      "drift_baseline_watermark (new table)"
+    ],
+    "depends_on": [
+      "OPT-3"
+    ]
+  },
+  {
+    "id": "OPT-9",
+    "title": "Virtualize the issues kanban board",
+    "rank": 9,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/issues-client.tsx",
+      "clients/portal/src/lab/virtual-list.ts"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-10",
+    "title": "Virtualize the session-turn timeline list (no server-side cap at all)",
+    "rank": 10,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/lab/traces-session-lens.tsx"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-11",
+    "title": "Add limit/offset pagination to the session-timeline endpoint (backend query fix + frontend infinite query)",
+    "rank": 11,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "sessions.py",
+      "timeline.py",
+      "clients/portal/src (sessionsApi.timeline)",
+      "clients/portal/src (SessionTurnsSection)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-12",
+    "title": "Correct the roadmap/scorecard narrative for F34 (signal investigator), RCA, and guardrails — none have a live LLM call",
+    "rank": 12,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "SOTA-PERF-COST-SCORECARD.md"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-13",
+    "title": "Evidence-integrity flag: F12 Typesense span-search benchmark is unreproducible from any code in the repo",
+    "rank": 13,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "bench/results/f12-span-search-1m-typesense-20260804.json",
+      "scripts/bench_f12_span_search.py",
+      "SOTA-PERF-COST-SCORECARD.md"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-14",
+    "title": "Add agent-scoped, paginated traces query for the agent-detail page",
+    "rank": 14,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "clients/portal/src/agents-client.tsx",
+      "portal.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-15",
+    "title": "Wire route-level offset/cursor pagination for the issues list",
+    "rank": 15,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "portal.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-16",
+    "title": "Add missing composite index for tool_call_labels",
+    "rank": 16,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "learning/tool_call_labels.py",
+      "tool_call_labels (table)",
+      "migrations/143_signal_events_indexes.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-17",
+    "title": "Thread org_id/feature through autonomous/_common.py's _call_llm → route_async (fixes 6 silently-zeroed cost-ledger call-site groups)",
+    "rank": 17,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "autonomous/_common.py",
+      "nl_interface/query.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-18",
+    "title": "Thread org_id/feature through optimization/model_router.py's ModelRouter.route/.aroute",
+    "rank": 18,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "optimization/model_router.py",
+      "patch_generator.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-19",
+    "title": "Stop writing the synthetic flat _TRIAGE_COST_ESTIMATE_USD ($0.02) CostEvent once real metered cost flows through",
+    "rank": 19,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "issues/triage_agent.py",
+      "autonomy_policy.py"
+    ],
+    "depends_on": [
+      "OPT-17"
+    ]
+  },
+  {
+    "id": "OPT-20",
+    "title": "Batch/parallelize investigate_trace's serial, unbatched per-signal write loop",
+    "rank": 20,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "investigator.py"
+    ],
+    "depends_on": [
+      "OPT-2"
+    ]
+  },
+  {
+    "id": "OPT-21",
+    "title": "Parallelize the stumble-write round-trip chain",
+    "rank": 21,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "investigator.py",
+      "stumble_writer.py",
+      "repo.py",
+      "issue_promoter.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-22",
+    "title": "Cap or precompute shared state for uncapped StatGate rule scans",
+    "rank": 22,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "investigator.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-23",
+    "title": "Strip unused body/reasoning fields from the trace-tree API response on the cheap path",
+    "rank": 23,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "telemetry_collector.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-24",
+    "title": "Parallelize soft_issue_review's sequential 20-org loop",
+    "rank": 24,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "soft_issue_review.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-25",
+    "title": "Batch/parallelize drift_baselines's sequential 7-dimension nested loop",
+    "rank": 25,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "drift_baseline_worker.py"
+    ],
+    "depends_on": [
+      "OPT-3"
+    ]
+  },
+  {
+    "id": "OPT-26",
+    "title": "Fix shadow-detector creation/promotion throughput mismatch (unbounded backlog growth)",
+    "rank": 26,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "promote_shadow_detectors (shadow-detector promotion job)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-27",
+    "title": "Fix duplicate-fleet-on-deploy risk (eden-worker's runOnSourceChange: cd-promote)",
+    "rank": 27,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "northflank.yml"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-28",
+    "title": "Add a coverage metric to catch the LIMIT-without-ORDER-BY bug class",
+    "rank": 28,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "workers/leader.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-29",
+    "title": "Remove audit_logs phantom retention-policy entry; file a higher-priority follow-up for agent_audit_ledger",
+    "rank": 29,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "retention.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-30",
+    "title": "Add a new retention policy + dispatch branch for trace_replay_sessions",
+    "rank": 30,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "retention.py",
+      "trace_replay_sessions (table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-31",
+    "title": "Add a new retention policy + dispatch branch for replay_sessions (migration 029) — worse growth model than item 30",
+    "rank": 31,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "retention.py",
+      "replay_sessions (table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-32",
+    "title": "Extend get_storage_summary() to track the gap tables and add byte-size/$-GB tracking",
+    "rank": 32,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "storage_lifecycle.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-33",
+    "title": "Deduplicate redundant compress_trace recomputation in _heuristic_match",
+    "rank": 33,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "investigator.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-34",
+    "title": "Add pagination to list_signal_clusters",
+    "rank": 34,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "api/routes/signal_investigator.py",
+      "signal_clusters (table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-35",
+    "title": "Fix UsageStats.cache_reads/cache_writes field names to match OpenRouter's real usage schema",
+    "rank": 35,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "llm/client.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-36",
+    "title": "Instrument and verify actual prompt-cache hit rate against live production traffic",
+    "rank": 36,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "llm/client.py"
+    ],
+    "depends_on": [
+      "OPT-35",
+      "OPT-45"
+    ]
+  },
+  {
+    "id": "OPT-37",
+    "title": "Add age-based expiry for stale non-firing shadow detectors",
+    "rank": 37,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "promote_shadow_detectors (shadow-detector module)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-38",
+    "title": "Add a CI lint rule to catch LIMIT without ORDER BY going forward",
+    "rank": 38,
+    "severity": "Medium",
+    "effort": "Medium",
+    "files": [
+      "scripts/lint_unordered_limit.py",
+      "CI config (pre-commit/required CI step alongside ruff/mypy)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-39",
+    "title": "Remove training_datasets phantom retention-policy entry; file a follow-up for real dataset tables",
+    "rank": 39,
+    "severity": "Medium",
+    "effort": "Small",
+    "files": [
+      "retention.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-40",
+    "title": "Deduplicate resolve_issue's double fetch of the same issue row",
+    "rank": 40,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "api/routes/agent_issues.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-41",
+    "title": "Add LIMIT to _fetch_cluster_members",
+    "rank": 41,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "insights/rca/_common.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-42",
+    "title": "Add index for signal_definitions's actual filter/sort shape (optional, low priority)",
+    "rank": 42,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "signal_definitions (table)",
+      "investigator.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-43",
+    "title": "Dedupe two separate get_settings() calls in search()",
+    "rank": 43,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "search_service.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-44",
+    "title": "(Hardening, no live bug) Add an internal clamp to IssuesRepo.list_issues/list_stumbles's limit parameter",
+    "rank": 44,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "repo.py (IssuesRepo)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-45",
+    "title": "Capture the new top-level cache_discount field from OpenRouter's response",
+    "rank": 45,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "llm/client.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-46",
+    "title": "Rename/annotate the signal_investigator_llm_v1 feature flag to prevent accidental reintroduction of real LLM spend",
+    "rank": 46,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "api/routes/signal_investigator.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-47",
+    "title": "Update the stale Anthropic/Claude prompt-cache economics comment in autonomous/agent.py",
+    "rank": 47,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "autonomous/agent.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-48",
+    "title": "(Deprioritized/CUT) _scout_novel_patterns digest/existing_block dedup in soft_issue_review.py",
+    "rank": 48,
+    "severity": "Low",
+    "effort": "Medium",
+    "files": [
+      "soft_issue_review.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-49",
+    "title": "Memoize IssueRow and replace inline closure with a stable callback",
+    "rank": 49,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/issues-client.tsx"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-50",
+    "title": "Virtualize the signals list and memoize SignalRow",
+    "rank": 50,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/signals-client.tsx"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-51",
+    "title": "Virtualize the automations panel list and memoize AutomationRow",
+    "rank": 51,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/automations-panel.tsx",
+      "AutomationsEngine (list_automations)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-52",
+    "title": "Fix retention_cron's unwatermarked cold-archive candidate-selection query",
+    "rank": 52,
+    "severity": "Low",
+    "effort": "Medium",
+    "files": [
+      "retention_cron.py",
+      "retention_archive_watermark (new table)"
+    ],
+    "depends_on": [
+      "OPT-3"
+    ]
+  },
+  {
+    "id": "OPT-53",
+    "title": "Add ORDER BY to shadow_outcome_join's candidate query",
+    "rank": 53,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "nudges/shadow_outcomes.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-54",
+    "title": "Replace signal_backfill's OFFSET-based cursor with true keyset pagination",
+    "rank": 54,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "signals/backfill.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-55",
+    "title": "Set explicit backoffLimit on the (currently inert) eden-cron Northflank job",
+    "rank": 55,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "northflank.yml"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-56",
+    "title": "Fix stale/incorrect docstrings in cron_tick.py and retention_cron.py",
+    "rank": 56,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "cron_tick.py",
+      "retention_cron.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-57",
+    "title": "Remove the error_logs phantom retention-policy entry",
+    "rank": 57,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "retention.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-58",
+    "title": "Remove the derived_metrics phantom retention-policy entry",
+    "rank": 58,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "retention.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-59",
+    "title": "Implement real retention enforcement for user_feedback",
+    "rank": 59,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "retention.py",
+      "user_feedback (table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-60",
+    "title": "Add a new retention policy + dispatch branch for checkpoint_blobs (defense-in-depth)",
+    "rank": 60,
+    "severity": "Low",
+    "effort": "Small",
+    "files": [
+      "retention.py",
+      "checkpoint_blobs (table)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "OPT-61",
+    "title": "File a follow-up ticket to make RCA/signal-investigator routes tier-aware",
+    "rank": 61,
+    "severity": "Low",
+    "effort": "Medium",
+    "files": [
+      "api/routes/intelligence_rca.py",
+      "api/routes/signal_investigator.py"
+    ],
+    "depends_on": []
+  }
+]

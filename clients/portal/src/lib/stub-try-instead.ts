@@ -6,7 +6,6 @@
  * Every destination must point at a live surface.
  */
 export const STUB_TRY_INSTEAD: Record<string, { href: string; label: string }> = {
-  "/artifacts": { href: "/improve?mode=queue", label: "Improve · Queue" },
   "/billing": { href: "/settings?mode=workspace", label: "Settings" },
   "/finops": { href: "/cost?mode=spend", label: "Cost" },
   "/observability": { href: "/traces", label: "Traces" },
@@ -19,7 +18,6 @@ export const STUB_TRY_INSTEAD: Record<string, { href: string; label: string }> =
   "/synthetic": { href: "/evals?mode=compare", label: "Evals · Results" },
   "/datasets": { href: "/evals?mode=datasets", label: "Evals · Datasets" },
   "/experiments": { href: "/evals?mode=compare", label: "Evals · Results" },
-  "/ledger": { href: "/improve?mode=queue", label: "Improve · Queue" },
   "/promotions": { href: "/improve?mode=queue", label: "Improve · Queue" },
   "/optimization": { href: "/cost?mode=spend", label: "Cost" },
   "/runs": { href: "/traces", label: "Traces" },

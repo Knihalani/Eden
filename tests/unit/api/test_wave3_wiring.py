@@ -6,13 +6,19 @@ Covers:
   2. F39 wiring: get_ai_gateway() calls install_learn_filters on construction.
   3. Health degrade: /health returns degraded when quality worker should be
      running (background leader) but is_worker_running() is False.
-  4. Hot-path flag: install_cat15_trajectory_replaces_intervention respects
-     trace_quality_hot_path_enabled=False.
+  4. FEAT-3 regression: install_all() must not monkey-patch
+     InterventionEngine.evaluate_and_act — the guardrail-swap wiring
+     (install_cat15_trajectory_replaces_intervention) has been removed.
+  5. FEAT-4 regression: with the correct enforcement path restored (#4),
+     InterventionEngine.evaluate_and_act must actually redact PII out of
+     edited_text (not just leave the right function in place) whenever a
+     trace_id is supplied — the exact call shape the removed monkey-patch
+     used to intercept.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
@@ -190,65 +196,99 @@ def test_health_stays_healthy_when_worker_running():
 
 
 # ---------------------------------------------------------------------------
-# 4. Hot-path flag gates install_cat15_trajectory_replaces_intervention
+# 4. FEAT-3 regression — install_all() must not monkey-patch
+#    InterventionEngine.evaluate_and_act (the real content-safety
+#    guardrail path). A prior wiring,
+#    ``install_cat15_trajectory_replaces_intervention``, rebound it to
+#    the Cat 15 trajectory hot path (cost/loop/latency checks) whenever
+#    a ``trace_id`` was present — silently skipping all policy
+#    evaluation and returning ``edited_text`` unredacted. It has been
+#    removed; the trajectory hot path has its own dedicated call sites
+#    (the ``/v1/guardrails/trajectory/check`` route and the
+#    ``TrajectoryInterventionGatewayFilter`` gateway filter).
 # ---------------------------------------------------------------------------
 
-def test_hot_path_flag_false_skips_wiring():
-    """trace_quality_hot_path_enabled=False prevents the monkey-patch."""
+def test_wiring_module_no_longer_exposes_trajectory_replaces_intervention():
+    """The guardrail-swap monkey-patch function must not exist at all."""
     import eden.observability.trace_quality.wiring as w
 
-    original_fn = MagicMock()
-    fake_intv = MagicMock()
-    fake_intv.InterventionEngine.evaluate_and_act = original_fn
-
-    fake_hooks = MagicMock()
-    fake_settings = MagicMock()
-    fake_settings.trace_quality_hot_path_enabled = False
-
-    with patch("eden.config.get_settings", return_value=fake_settings):
-        with patch.dict("sys.modules", {
-            "eden.guardrails.intervention": fake_intv,
-            "eden.observability.trace_quality.hooks": fake_hooks,
-        }):
-            w.install_cat15_trajectory_replaces_intervention()
-
-    assert fake_intv.InterventionEngine.evaluate_and_act is original_fn, (
-        "Monkey-patch must not be applied when hot_path_enabled=False"
+    assert not hasattr(w, "install_cat15_trajectory_replaces_intervention"), (
+        "install_cat15_trajectory_replaces_intervention must be removed — "
+        "it silently replaced the real content-safety guardrail check"
     )
+    assert "install_cat15_trajectory_replaces_intervention" not in w.__all__
 
 
-def test_hot_path_flag_true_applies_wiring():
-    """trace_quality_hot_path_enabled=True (default) applies the monkey-patch."""
+def test_install_all_does_not_patch_evaluate_and_act():
+    """install_all() must leave InterventionEngine.evaluate_and_act untouched."""
     import eden.guardrails.intervention as intv
     import eden.observability.trace_quality.wiring as w
 
-    # Patch the already-imported module attribute — ``from eden.guardrails
-    # import intervention`` resolves via the package attr, so sys.modules
-    # swaps alone do not redirect the import.
     original_fn = intv.InterventionEngine.evaluate_and_act
-    fake_settings = MagicMock()
-    fake_settings.trace_quality_hot_path_enabled = True
-
-    async def _fake_step(**_kwargs):
-        return {
-            "recommended_action": "allow",
-            "applied": False,
-            "reason": "test",
-            "action_class": "none",
-        }
-
     try:
-        with (
-            patch("eden.config.get_settings", return_value=fake_settings),
-            patch(
-                "eden.observability.trace_quality.hooks.evaluate_trajectory_step",
-                side_effect=_fake_step,
+        with patch(
+            "eden.observability.platform_activation.mark_wiring_installed"
+        ):
+            w.install_all()
+
+        assert intv.InterventionEngine.evaluate_and_act is original_fn, (
+            "install_all() must not monkey-patch "
+            "InterventionEngine.evaluate_and_act — it is the real, "
+            "fail-closed content-safety guardrail path and must run "
+            "unmodified whenever a trace_id is present"
+        )
+    finally:
+        intv.InterventionEngine.evaluate_and_act = original_fn
+
+
+# ---------------------------------------------------------------------------
+# 5. FEAT-4 regression — once the correct enforcement path is restored
+#    (install_all() no longer substitutes evaluate_and_act, per #4 above),
+#    the real path must actually redact PII out of ``edited_text``. This
+#    is the concrete, customer-visible symptom of the old bypass: it isn't
+#    enough that the right function gets called post-install_all() — the
+#    function must produce a redacted result for the exact call shape
+#    (PII text + trace_id) the removed monkey-patch used to intercept.
+# ---------------------------------------------------------------------------
+
+async def test_install_all_then_evaluate_and_act_redacts_pii_with_trace_id():
+    """After install_all(), evaluate_and_act(trace_id=...) still redacts PII."""
+    import eden.guardrails.intervention as intv
+    import eden.observability.trace_quality.wiring as w
+
+    original_fn = intv.InterventionEngine.evaluate_and_act
+    try:
+        with patch(
+            "eden.observability.platform_activation.mark_wiring_installed"
+        ):
+            w.install_all()
+
+        with patch(
+            "eden.guardrails.intervention._fetch_policies",
+            AsyncMock(
+                return_value=[
+                    {
+                        "id": "p1",
+                        "name": "redact-pii",
+                        "type": "pii_redaction",
+                        "spec": {},
+                        "action": "redact",
+                    }
+                ]
             ),
         ):
-            w.install_cat15_trajectory_replaces_intervention()
+            r = await intv.InterventionEngine().evaluate_and_act(
+                "org_t",
+                text="My SSN is 123-45-6789",
+                trace_id="trace-feat4",
+            )
 
-        assert intv.InterventionEngine.evaluate_and_act is not original_fn, (
-            "Monkey-patch must be applied when hot_path_enabled=True"
+        assert r["data"]["verdict"] == "redact"
+        assert "123-45-6789" not in r["data"]["edited_text"], (
+            "edited_text must be redacted, not the raw unredacted input, "
+            "for calls that carry a trace_id — the exact shape the removed "
+            "guardrail-swap monkey-patch used to bypass"
         )
+        assert r["data"]["edited_text"] != "My SSN is 123-45-6789"
     finally:
         intv.InterventionEngine.evaluate_and_act = original_fn

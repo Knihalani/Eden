@@ -453,6 +453,47 @@ class DataRetentionManager:
         )
         return deleted
 
+    async def cleanup_quarantine_events(self, before_date: datetime) -> int:
+        """Delete ``quarantine_events`` rows older than the given date.
+
+        This is a backstop delete, independent of ``resolution`` status.
+        :meth:`eden.data_platform.silver_etl.reprocess_quarantine` already
+        deletes a row immediately after it is *successfully* reprocessed,
+        but rows that are unparseable or never reprocessed (``resolution``
+        left as ``pending``, ``discarded``, or ``false_positive``) would
+        otherwise accumulate forever with no retention enforcement. This
+        method deletes purely on age, regardless of ``resolution``.
+
+        Returns the number of rows deleted (or, in dry-run, the number
+        that would be deleted).
+        """
+        client = await self._get_postgres()
+
+        if self.dry_run:
+            count = await client.fetchval(
+                "SELECT COUNT(*) FROM quarantine_events WHERE quarantined_at < $1",
+                before_date,
+            )
+            logger.info(
+                f"[DRY RUN] Would delete {count or 0} quarantine_events rows "
+                f"before {before_date.isoformat()}"
+            )
+            return int(count or 0)
+
+        result = await client.execute(
+            "DELETE FROM quarantine_events WHERE quarantined_at < $1",
+            before_date,
+        )
+        # asyncpg returns status string like "DELETE 42"
+        try:
+            deleted = int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            deleted = 0
+        logger.info(
+            f"Deleted {deleted} quarantine_events rows before {before_date.isoformat()}"
+        )
+        return deleted
+
     async def run_retention_policy(self, policy: RetentionPolicy) -> RetentionReport:
         """Run a single retention policy end-to-end."""
         report = RetentionReport()
@@ -487,6 +528,12 @@ class DataRetentionManager:
                 report.deleted_rows = await self.cleanup_debug_dumps(dump_before)
             except Exception as exc:
                 report.errors.append(f"Debug dump cleanup failed: {exc}")
+        elif policy.data_type == "quarantine_events":
+            try:
+                quarantine_before = now - timedelta(days=max(policy.delete_after_days, 1))
+                report.deleted_rows = await self.cleanup_quarantine_events(quarantine_before)
+            except Exception as exc:
+                report.errors.append(f"Quarantine cleanup failed: {exc}")
 
         # Deletion — purge rows already in cold archive past retention.
         delete_before = now - timedelta(days=policy.delete_after_days)

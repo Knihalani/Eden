@@ -276,109 +276,54 @@ def install_cat22_sampling_policy() -> None:
         logger.debug("wiring: cat22 patch failed: %s", exc)
 
 
-def install_cat15_trajectory_replaces_intervention() -> None:
-    """Replace ``InterventionEngine.evaluate_and_act`` with the hot path.
-
-    The hot path lives in
-    ``eden.observability.trace_quality.hooks.evaluate_trajectory_step``
-    and respects the per-tenant kill switch. The original
-    ``evaluate_and_act`` is kept behind a feature flag
-    (``Settings.trace_quality_enabled``).
-
-    Gated by ``Settings.trace_quality_hot_path_enabled``. When the flag
-    is ``False`` the monkey-patch is skipped and the original
-    ``evaluate_and_act`` continues to run unmodified.
-    """
-    try:
-        from eden.config import get_settings as _get_settings
-        _s = _get_settings()
-        if not getattr(_s, "trace_quality_hot_path_enabled", True):
-            logger.info(
-                "wiring: Cat 15 hot path disabled by "
-                "trace_quality_hot_path_enabled=False; skipping"
-            )
-            return
-    except Exception as exc:
-        logger.debug("wiring: cat15 settings read failed: %s", exc)
-
-    try:
-        from eden.guardrails import intervention as intv
-        from eden.observability.trace_quality.hooks import (
-            evaluate_trajectory_step,
-        )
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("wiring: cat15 import failed: %s", exc)
-        return
-
-    original = intv.InterventionEngine.evaluate_and_act
-
-    async def _wrapped(
-        self: Any,
-        org_id: str,
-        *,
-        text: str,
-        context: str | None = None,
-        trace_id: str | None = None,
-        direction: str = "input",
-    ) -> dict[str, Any]:
-        # ponytail: if the trace_id is missing, fall through to
-        # the v0 path (the hot path is per-trace; legacy callers
-        # without a trace still get a sensible verdict).
-        if not trace_id:
-            return await original(
-                self, org_id,
-                text=text,
-                context=context,
-                trace_id=trace_id,
-                direction=direction,
-            )
-        event = {
-            "text": text,
-            "context": context or "",
-            "loop_verdict": "",
-            "loop_severity": "low",
-        }
-        result = await evaluate_trajectory_step(
-            org_id=org_id,
-            trace_id=trace_id,
-            step_index=0,
-            event=event,
-        )
-        return {
-            "status": "ok",
-            "feature": "trajectory_guardrail",
-            "live": True,
-            "data": {
-                "verdict": result["recommended_action"],
-                "edited_text": text,
-                "matched_policies": [],
-                "action_breakdown": {"trace_quality": 1},
-                "applied": result["applied"],
-                "reason": result["reason"],
-                "action_class": result["action_class"],
-            },
-        }
-
-    try:
-        intv.InterventionEngine.evaluate_and_act = _wrapped
-        logger.info("wiring: Cat 15 TrajectoryGuardrail hot path installed")
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("wiring: cat15 patch failed: %s", exc)
-
-
 def install_all() -> None:
-    """Install every Cat 15/17/22 wiring. Idempotent."""
+    """Install every Cat 15/17/22 wiring. Idempotent.
+
+    Note: ``InterventionEngine.evaluate_and_act`` (the real,
+    fail-closed content-safety guardrail check — prompt
+    injection, PII redaction, hallucination, content policy)
+    is deliberately left unpatched here. The Cat 15 trajectory
+    hot path (cost/loop/latency checks) is a *separate*
+    enforcement surface with its own dedicated call sites —
+    the ``POST /v1/guardrails/trajectory/check`` route
+    (``eden.api.routes.trace_quality``) and the
+    ``TrajectoryInterventionGatewayFilter`` gateway filter
+    (``eden.llmops.filters.trajectory``) — so there is no need
+    (and it was actively harmful) to substitute it in place of
+    the real guardrail check on the ``evaluate_and_act`` path.
+    A prior wiring (``install_cat15_trajectory_replaces_intervention``)
+    did exactly that substitution by rebinding
+    ``InterventionEngine.evaluate_and_act`` to the trajectory
+    hot path whenever a ``trace_id`` was present, silently
+    skipping all policy evaluation and returning
+    ``edited_text`` unredacted. It has been removed; see
+    FEAT-3/FEAT-4 in ``docs/specs/strategic-review-2026-08``.
+    """
+    installed: list[str] = []
     success = True
     try:
         install_cat15_policy_extension()
-        install_cat15_trajectory_replaces_intervention()
+        installed.append("cat15_policy_extension")
         install_cat17_stat_gate_gating()
+        installed.append("cat17_stat_gate_gating")
         install_cat17_closed_loop_collection()
+        installed.append("cat17_closed_loop_collection")
         install_cat22_sampling_policy()
+        installed.append("cat22_sampling_policy")
         logger.info("wiring: all Cat 15/17/22 wirings installed")
     except Exception as exc:  # pragma: no cover - defensive
         success = False
         logger.warning("wiring: install_all partial failure: %s", exc)
+    # Observability: a single structured line naming exactly what got
+    # installed this boot. Cheap, and it's what would have made the
+    # FEAT-3 guardrail-swap bug (a wiring silently rebinding
+    # ``InterventionEngine.evaluate_and_act`` with no log/metric
+    # anywhere) discoverable well before a strategic review caught it.
+    logger.info(
+        "wiring: install_all installed=%s success=%s",
+        installed,
+        success,
+    )
     try:
         from eden.observability.platform_activation import mark_wiring_installed
 
@@ -437,7 +382,6 @@ async def _fetch_action_evidence(
 __all__ = [
     "install_all",
     "install_cat15_policy_extension",
-    "install_cat15_trajectory_replaces_intervention",
     "install_cat17_stat_gate_gating",
     "install_cat17_closed_loop_collection",
     "install_cat22_sampling_policy",

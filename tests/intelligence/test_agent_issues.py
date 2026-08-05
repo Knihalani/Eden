@@ -352,6 +352,364 @@ def _client(pg: _FakePG) -> TestClient:
     return TestClient(app)
 
 
+def test_resolve_rejects_invalid_status() -> None:
+    """BUG-3: an unknown status must 400, not silently coerce to resolved."""
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        from eden.issues.stumble_writer import StumbleWriter
+
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-1"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "bogus-typo"},
+        )
+        assert r.status_code == 400
+        # The issue must not have been mutated.
+        row = next(iter(pg.issues.values()))
+        assert row["status"] == "open"
+
+
+def test_resolve_confirmed_feeds_shadow_detector() -> None:
+    """FEAT-8 (P0-A): resolving an issue whose example stumble came from
+    the signal investigator must record operator confirm feedback on the
+    originating shadow detector (nl_signals row)."""
+    from eden.issues.models import StumbleCreate
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            sc = StumbleCreate(
+                org_id="org_test",
+                trace_id="trace-shadow-1",
+                kind="tool_error",
+                title="shadow-detected stumble",
+                detail={"signal_id": "sig-abc", "source": "signal_investigator"},
+                detected_by="signal_investigator",
+                agent_id="agent-a",
+                user_id="u1",
+            )
+            res = await StumbleWriter().create(sc)
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    feedback_mock = AsyncMock(return_value=True)
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.services.soft_issue_review.record_shadow_feedback", feedback_mock
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "resolved"},
+        )
+        assert r.status_code == 200
+
+    feedback_mock.assert_awaited_once_with(
+        "org_test", "sig-abc", confirm=True, dismiss=None
+    )
+
+
+def test_resolve_ignored_dismisses_shadow_detector() -> None:
+    """FEAT-8 (P0-A): resolving with status=ignored records a dismiss."""
+    from eden.issues.models import StumbleCreate
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            sc = StumbleCreate(
+                org_id="org_test",
+                trace_id="trace-shadow-2",
+                kind="tool_error",
+                title="shadow-detected stumble",
+                detail={"signal_id": "sig-xyz", "source": "signal_investigator"},
+                detected_by="signal_investigator",
+                agent_id="agent-a",
+                user_id="u1",
+            )
+            res = await StumbleWriter().create(sc)
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    feedback_mock = AsyncMock(return_value=True)
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.services.soft_issue_review.record_shadow_feedback", feedback_mock
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "ignored"},
+        )
+        assert r.status_code == 200
+
+    feedback_mock.assert_awaited_once_with(
+        "org_test", "sig-xyz", confirm=None, dismiss=True
+    )
+
+
+def test_resolve_non_signal_investigator_stumble_skips_shadow_feedback() -> None:
+    """FEAT-9 (P0-B): a stumble not sourced from the signal investigator
+    (e.g. ``detected_by="auto_scanner"``) must not trigger shadow-detector
+    feedback on resolve."""
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-auto-1"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    feedback_mock = AsyncMock(return_value=True)
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.services.soft_issue_review.record_shadow_feedback", feedback_mock
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "resolved"},
+        )
+        assert r.status_code == 200
+
+    feedback_mock.assert_not_awaited()
+
+
+def test_resolve_missing_stumble_skips_shadow_feedback_no_error() -> None:
+    """FEAT-9 (P0-B): if the issue's example stumble no longer exists
+    (e.g. ``get_stumble`` returns ``None``), resolve must still succeed
+    and must not call ``record_shadow_feedback``."""
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-missing-1"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    # Point the issue's example stumble at an id that doesn't exist.
+    for row in pg.issues.values():
+        if row["id"] == issue_id:
+            row["example_stumble_ids"] = ["does-not-exist"]
+
+    feedback_mock = AsyncMock(return_value=True)
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.services.soft_issue_review.record_shadow_feedback", feedback_mock
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "resolved"},
+        )
+        assert r.status_code == 200
+
+    feedback_mock.assert_not_awaited()
+
+
+def test_resolve_no_example_stumbles_skips_shadow_feedback_no_error() -> None:
+    """FEAT-9 (P0-B): an issue with no ``example_stumble_ids`` at all must
+    resolve cleanly and must not call ``record_shadow_feedback``."""
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-empty-1"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    for row in pg.issues.values():
+        if row["id"] == issue_id:
+            row["example_stumble_ids"] = []
+
+    feedback_mock = AsyncMock(return_value=True)
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.services.soft_issue_review.record_shadow_feedback", feedback_mock
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "resolved"},
+        )
+        assert r.status_code == 200
+
+    feedback_mock.assert_not_awaited()
+
+
+def test_resolve_malformed_detail_json_does_not_error() -> None:
+    """FEAT-9 (P0-B): a signal-investigator stumble whose ``detail`` column
+    holds malformed JSON must not raise; resolve should succeed and
+    ``record_shadow_feedback`` must not be called."""
+    from eden.issues.models import StumbleCreate
+    from eden.issues.stumble_writer import StumbleWriter
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            sc = StumbleCreate(
+                org_id="org_test",
+                trace_id="trace-shadow-malformed",
+                kind="tool_error",
+                title="shadow-detected stumble",
+                detail={"signal_id": "sig-bad", "source": "signal_investigator"},
+                detected_by="signal_investigator",
+                agent_id="agent-a",
+                user_id="u1",
+            )
+            res = await StumbleWriter().create(sc)
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    # Corrupt the persisted detail so json.loads() raises.
+    for row in pg.stumbles.values():
+        row["detail"] = "{not valid json"
+
+    feedback_mock = AsyncMock(return_value=True)
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+        "eden.services.soft_issue_review.record_shadow_feedback", feedback_mock
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "resolved"},
+        )
+        assert r.status_code == 200
+
+    feedback_mock.assert_not_awaited()
+
+
+def test_resolve_acknowledged_persists_as_triaged() -> None:
+    """BUG-4: 'acknowledged' has no legal value in the ``agent_issues``
+    status CHECK constraint (see
+    db_migrations/versions/136_issue_status_escalated.py); the route must
+    map it onto 'triaged' rather than writing the raw value, which used
+    to raise a CheckViolation that ``IssuesRepo.set_status`` silently
+    swallowed (the Acknowledge button no-op'd)."""
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        from eden.issues.stumble_writer import StumbleWriter
+
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-ack"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "acknowledged"},
+        )
+        assert r.status_code == 200
+        body = r.json()["data"]
+        assert body["updated"] is True
+        # Response still echoes the app-level status the caller asked for...
+        assert body["status"] == "acknowledged"
+        # ...but the row that was actually written is the DB-legal mapped
+        # value, not the raw (CHECK-constraint-illegal) "acknowledged".
+        row = next(iter(pg.issues.values()))
+        assert row["status"] == "triaged"
+
+
+def test_resolve_surfaces_genuine_set_status_error() -> None:
+    """BUG-4: a real failure inside ``set_status`` (e.g. a CheckViolation)
+    must come back as a non-200 error, not a false-positive 200 —
+    the portal's optimistic-update revert + error toast only fires when
+    the request actually throws/rejects."""
+    import eden.api.routes.agent_issues as mod
+
+    pg = _FakePG()
+
+    async def _seed() -> str:
+        from eden.issues.stumble_writer import StumbleWriter
+
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-err"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch.object(
+        mod._repo, "set_status", AsyncMock(side_effect=RuntimeError("check violation"))
+    ):
+        client = _client(pg)
+        r = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "acknowledged"},
+        )
+        assert r.status_code == 500
+        # The row must not have been mutated.
+        row = next(iter(pg.issues.values()))
+        assert row["status"] == "open"
+
+
 def test_list_and_get_issue_routes() -> None:
     pg = _FakePG()
 

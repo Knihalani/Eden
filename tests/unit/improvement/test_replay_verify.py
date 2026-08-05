@@ -424,3 +424,74 @@ async def test_checkpoint_available_true_and_false(monkeypatch) -> None:
     assert await rv.checkpoint_available(ORG, "trc-1") is True
     assert await rv.checkpoint_available(ORG, "trc-none") is False
     assert await rv.checkpoint_available(ORG, "") is False
+
+
+# ── _gateway_complete: real internal-LLM routing (not the dormant
+# AIGateway) — every other test in this file stubs
+# ``_gateway_complete`` itself, so none of them exercise its actual
+# body. These confirm the fix at FEAT-26: the helper must route
+# through ``eden.llm.internal_router.route_async`` (the sanctioned
+# internal-LLM entry point) instead of ``AIGateway.complete()``,
+# which unconditionally raised ``ProviderUnavailableError`` because
+# no provider is ever registered on the shared gateway instance.
+# ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_gateway_complete_routes_through_internal_llm_client(
+    monkeypatch,
+) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    fake_resp = MagicMock()
+    fake_resp.content = "replayed output text"
+    fake_resp.usage = MagicMock(cost=0.0042)
+
+    route = AsyncMock(return_value=fake_resp)
+    monkeypatch.setattr("eden.llm.internal_router.route_async", route)
+
+    out = await rv._gateway_complete(ORG, "test-model", "replay this prompt")
+
+    route.assert_awaited_once()
+    assert out == {"text": "replayed output text", "cost_usd": 0.0042}
+    call_args, call_kwargs = route.call_args
+    assert call_args[1] == "replay this prompt"
+    assert call_kwargs["org_id"] == ORG
+    assert call_kwargs["feature"] == "replay_verify"
+
+
+@pytest.mark.asyncio
+async def test_gateway_complete_does_not_use_dormant_ai_gateway(
+    monkeypatch,
+) -> None:
+    """Regression guard for FEAT-26: the helper must never reach
+    ``AIGateway.complete()`` — that path unconditionally raises
+    ``ProviderUnavailableError`` because no provider is ever
+    registered (``register_providers_from_env`` has no callers).
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from eden.llmops.ai_gateway import ProviderUnavailableError
+
+    def _boom_get_ai_gateway():
+        raise AssertionError(
+            "AIGateway must not be reached from _gateway_complete"
+        )
+
+    fake_resp = MagicMock()
+    fake_resp.content = "ok"
+    fake_resp.usage = MagicMock(cost=0.0)
+
+    monkeypatch.setattr(
+        "eden.api.routes.gateway.get_ai_gateway", _boom_get_ai_gateway
+    )
+    monkeypatch.setattr(
+        "eden.llm.internal_router.route_async",
+        AsyncMock(return_value=fake_resp),
+    )
+
+    # Would raise ProviderUnavailableError (or the AssertionError above)
+    # if this still routed through AIGateway.
+    out = await rv._gateway_complete(ORG, "test-model", "prompt")
+    assert out["text"] == "ok"
+    assert ProviderUnavailableError  # imported to document the old failure mode

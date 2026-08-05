@@ -327,8 +327,14 @@ class IssuesRepo:
                 status,
             )
         except Exception as exc:
+            # BUG-4: a real DB error (e.g. a CheckViolation from writing a
+            # status the ``agent_issues_status_check`` CHECK constraint
+            # rejects) must propagate so callers can distinguish it from
+            # "no row matched" (rowcount 0, a legitimate `False` below).
+            # Collapsing both to `False` made bad writes look like silent
+            # no-ops to the API layer.
             logger.warning("issues.repo: set_status failed: %s", exc)
-            return False
+            raise
         return _rowcount(res) > 0
 
     async def set_triage_result(

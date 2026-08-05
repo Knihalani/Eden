@@ -462,6 +462,25 @@ async def _emit_gateway_telemetry(
         )
         collector = await get_telemetry_collector()
         await collector.ingest_batch([event])
+        # FEAT-20 (2026-08) — mirror the resolved cost into
+        # ``budget_consumption`` (Path A) so live gateway traffic keeps
+        # the Budgets UI / evaluate_budget_alerts() in sync with
+        # ``usage_events`` (Path B), which already receives a write on
+        # every call via the collector above. ``_stamp_gateway_cost_usd``
+        # has already populated ``metrics["cost_usd"]`` in the caller
+        # before this (backgrounded) emit runs. record_usage() is
+        # itself best-effort and never raises, but we still guard the
+        # call so a future change to that contract can't take the rest
+        # of telemetry emission down with it.
+        if outcome == "success":
+            cost_usd = float((metrics or {}).get("cost_usd", 0.0) or 0.0)
+            if cost_usd > 0:
+                try:
+                    from eden.services.budget_service import record_usage
+
+                    await record_usage(org_id, cost_usd)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("gateway: budget record_usage failed: %s", exc)
         # Cat 20 — best-effort TraceRecorder hook on successful
         # completions. Feature-flagged; never breaks the response.
         if outcome == "success":
@@ -841,11 +860,14 @@ def _get_or_build_upstream_client(base_url: str, api_key: str):
         max_retries=0,
     )
     _upstream_client_cache[cache_key] = client
-    # Wave 4 note: budget ``record_usage`` on the success path is
-    # intentionally deferred — cost already flows through the usage /
-    # quota snapshot pipeline; wiring a second write here is invasive.
-    # Free-tier ``enforcement_enabled=True`` (defaults + migration 134)
-    # is the cost-control gate for new orgs.
+    # FEAT-20 (2026-08): the Wave 4 deferral of a budget
+    # ``record_usage`` write on the success path has been resolved —
+    # ``_emit_gateway_telemetry`` now calls ``budget_service.record_usage``
+    # directly once ``_stamp_gateway_cost_usd`` has resolved ``cost_usd``,
+    # so ``budget_consumption`` (Path A) no longer drifts from
+    # ``usage_events`` (Path B). Free-tier ``enforcement_enabled=True``
+    # (defaults + migration 134) remains the cost-control gate for new
+    # orgs.
     # F62: enforce the cap. Evict FIFO until we're back
     # under the limit. Fresh inserts always succeed.
     while len(_upstream_client_cache) > _MAX_UPSTREAM_CLIENT_CACHE:

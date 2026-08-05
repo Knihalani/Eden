@@ -73,6 +73,7 @@ import {
   type HubView,
 } from "@/lab/traces-session-lens";
 import { cn } from "@/lib/utils";
+import { dynamicWithRetry } from "@/lib/dynamic-with-retry";
 import { SavedViewsMenu } from "@/components/portal/saved-views-menu";
 import {
   FIRST_EVENT_WAIT,
@@ -85,14 +86,22 @@ const panelFallback = (
   </div>
 );
 
-/** Transcript is heavy (nested span chrome) — mount only for active tab. */
-const RunTranscript = dynamic(
+/**
+ * Transcript is heavy (nested span chrome) — mount only for active tab.
+ *
+ * These three are the highest-traffic panels on this page, so they use
+ * `dynamicWithRetry` instead of bare `next/dynamic`: on a rejected chunk
+ * import (e.g. a stale chunk after a deploy) each panel gets its own error
+ * boundary + a "Retry" button that re-fetches the chunk, rather than
+ * tearing down the whole traces page via `app/(portal)/error.tsx`.
+ */
+const RunTranscript = dynamicWithRetry(
   () =>
     import("@/lab/lab-ui").then((m) => ({ default: m.RunTranscript })),
   { loading: () => panelFallback },
 );
 
-const SessionReader = dynamic(
+const SessionReader = dynamicWithRetry(
   () =>
     import("@/lab/traces-session-lens").then((m) => ({
       default: m.SessionReader,
@@ -100,7 +109,7 @@ const SessionReader = dynamic(
   { loading: () => panelFallback },
 );
 
-const TreePanel = dynamic(
+const TreePanel = dynamicWithRetry(
   () =>
     import("./traces-detail-panels").then((m) => ({ default: m.TreePanel })),
   { loading: () => panelFallback },

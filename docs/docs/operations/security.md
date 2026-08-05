@@ -38,8 +38,12 @@
 
 * **SOC 2 Type II**: in progress. Control matrix at
   [`docs/soc2-control-mapping.md`](soc2-control-mapping.md).
-* **GDPR**: `POST /orgs/{id}/gdpr-request` route + audit event
-  + metric (§9.2.2). DPA available on request.
+* **GDPR**: self-service erasure (`DELETE /auth/users/me`) plus an
+  admin-triggered path, both backed by the same erasure service.
+  Coverage is real but partial and self-reported per request — see
+  [Security model → GDPR right-to-be-forgotten](/explanation/security-model#gdpr-right-to-be-forgotten)
+  for what's covered today. Audit event + metric emitted per request
+  (§9.2.2). DPA available on request.
 * **CCPA**: covered by the same controls as GDPR.
 
 ## How to report an issue

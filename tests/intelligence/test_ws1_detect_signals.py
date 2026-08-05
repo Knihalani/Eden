@@ -9,7 +9,7 @@ import pytest
 
 from eden.issues.auto_scanner import AutoIssueScanner
 from eden.learning.tool_call_labels import ToolCallLabelCreate, ToolCallLabelService
-from eden.signals.classifier_pipeline import ClassifierTrainingPipeline
+from eden.signals.classifier_pipeline import ClassifierTrainingPipeline, TrainResult
 from eden.signals.investigator import _heuristic_match, compress_trace, investigate_trace
 from eden.search.deep_to_signal import save_search_as_signal
 
@@ -187,3 +187,94 @@ async def test_classifier_retrain_due_orgs_no_db() -> None:
     ):
         out = await pipe.retrain_due_orgs()
     assert out["retrained"] == 0
+
+
+class _FakeRetrainPg:
+    """Stands in for asyncpg, implementing the real
+    ``fetch_stale_candidates``/``advance_watermark`` composite-key
+    left-join / ORDER BY ... NULLS FIRST / LIMIT semantics for
+    ``(org_id, signal_id)`` pairs, the same way
+    ``tests/unit/storage/test_watermark.py``'s ``_FakePg`` does for the
+    single-key case. ``.fetch``/``.execute`` ignore the query text on
+    purpose — this proves the *selection algorithm* the real SQL
+    encodes, not that some string got sent to asyncpg.
+    """
+
+    def __init__(self, pairs: list[tuple[str, str]]) -> None:
+        self.pairs = pairs
+        self.watermark: dict[tuple[str, str], float] = {}
+        self._clock = 0.0
+
+    async def fetch(self, _query: str, limit: int):
+        def sort_key(pair: tuple[str, str]) -> tuple[int, float]:
+            ts = self.watermark.get(pair)
+            return (0, 0.0) if ts is None else (1, ts)
+
+        ordered = sorted(self.pairs, key=sort_key)
+        return [
+            {"org_id": org_id, "signal_id": signal_id} for org_id, signal_id in ordered[:limit]
+        ]
+
+    async def execute(self, _query: str, *entity_ids: str):
+        self._clock += 1.0
+        self.watermark[tuple(entity_ids)] = self._clock
+        return "INSERT 0 1"
+
+
+@pytest.mark.asyncio
+async def test_classifier_retrain_cycles_through_all_pairs_via_watermark() -> None:
+    """The bug OPT-7 fixes: the old ``SELECT DISTINCT ... LIMIT 50`` with no
+    ``ORDER BY`` could return the *same* 50 (org, signal) pairs on every
+    15-minute tick forever. With the watermark wired in, each processed
+    batch sorts to the back so a later tick surfaces pairs a naive
+    ``LIMIT 50`` would have starved permanently.
+    """
+    pairs = [(f"org-{i}", f"sig-{i}") for i in range(120)]
+    pg = _FakeRetrainPg(pairs)
+    pipe = ClassifierTrainingPipeline()
+
+    processed: list[tuple[str, str]] = []
+
+    async def _fake_train(org_id: str, signal_id: str) -> TrainResult:
+        processed.append((org_id, signal_id))
+        return TrainResult(
+            classifier_id="c1",
+            signal_id=signal_id,
+            sample_count=1,
+            metrics={},
+            trained=True,
+        )
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        new=AsyncMock(return_value=pg),
+    ):
+        with patch.object(
+            ClassifierTrainingPipeline, "train", new=AsyncMock(side_effect=_fake_train)
+        ):
+            batches: list[list[tuple[str, str]]] = []
+            for _ in range(3):  # 120 pairs / batch of 50 -> 3 ticks
+                before = len(processed)
+                out = await pipe.retrain_due_orgs()
+                assert out["candidates"] == 50
+                batches.append(processed[before:])
+
+    # First two ticks are disjoint: all 100 pairs from the first two
+    # batches get covered before any repeat. A bare `LIMIT 50` would
+    # instead return batch[0] unchanged on every single tick.
+    first_two = batches[0] + batches[1]
+    assert len(set(first_two)) == 100
+    assert sorted(first_two) == sorted(pairs[:100])
+
+    # Pairs a naive `LIMIT 50` would have excluded forever (everything
+    # past org-49) do show up in the second tick.
+    naive_limit_50 = set(batches[0])
+    assert set(batches[1]) - naive_limit_50, (
+        "pairs excluded by a plain LIMIT 50 never surfaced in a later tick"
+    )
+
+    # The third tick is due to wrap: the never-yet-processed pairs
+    # (org-100..org-119) lead it — NULLS FIRST beats every
+    # already-processed pair regardless of how long ago it ran.
+    still_unprocessed = set(pairs[100:120])
+    assert set(batches[2][:20]) == still_unprocessed

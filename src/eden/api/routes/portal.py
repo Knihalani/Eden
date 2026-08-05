@@ -1088,11 +1088,164 @@ async def list_portal_agents(
             logger.warning("portal agents: open issues skipped: %s", redact_all(str(exc)))
         return out
 
-    rows, metrics_by_id, issues_by_id = await asyncio.gather(
+    # BUG-6: discover (raw_label, registered_id) pairings — any trace where
+    # _PREFERRED_AGENT_ID_SQL picked a winner over other raw agent_id values
+    # is direct evidence those raw values are the same logical agent. This
+    # is the write path for agent_identity_aliases.
+    async def _load_alias_pairs() -> list[tuple[str, str]]:
+        try:
+            rows = await client.fetch(
+                f"""
+                WITH recent AS (
+                    SELECT agent_id, trace_id, timestamp
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND agent_id IS NOT NULL
+                      AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
+                    ORDER BY timestamp DESC
+                    LIMIT 4000
+                ),
+                trace_pref AS (
+                    SELECT trace_id,
+                           {_PREFERRED_AGENT_ID_SQL} AS agent_id
+                    FROM recent
+                    GROUP BY trace_id
+                )
+                SELECT DISTINCT r.agent_id AS synthetic_label,
+                       tp.agent_id AS agent_id
+                FROM recent r
+                INNER JOIN trace_pref tp ON tp.trace_id = r.trace_id
+                WHERE tp.agent_id IS NOT NULL
+                  AND r.agent_id IS NOT NULL
+                  AND r.agent_id <> tp.agent_id
+                LIMIT 200
+                """,
+                org_id,
+                window_secs,
+            )
+            return [(str(r["synthetic_label"]), str(r["agent_id"])) for r in rows]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("portal agents: alias discovery skipped: %s", exc)
+            return []
+
+    async def _load_persisted_aliases() -> dict[str, str]:
+        try:
+            rows = await client.fetch(
+                """
+                SELECT synthetic_label, agent_id
+                FROM agent_identity_aliases
+                WHERE org_id = $1
+                """,
+                org_id,
+            )
+            return {str(r["synthetic_label"]): str(r["agent_id"]) for r in rows}
+        except Exception as exc:  # noqa: BLE001
+            # Table may not exist yet on an unmigrated DB — never break the
+            # dashboard over a missing reconciliation aid.
+            logger.debug("portal agents: persisted aliases skipped: %s", exc)
+            return {}
+
+    async def _persist_alias_pairs(pairs: list[tuple[str, str]]) -> None:
+        if not pairs:
+            return
+        try:
+            labels = [p[0] for p in pairs]
+            ids = [p[1] for p in pairs]
+            await client.execute(
+                """
+                INSERT INTO agent_identity_aliases
+                    (org_id, synthetic_label, agent_id, first_seen, last_seen)
+                SELECT $1, x.synthetic_label, x.agent_id, NOW(), NOW()
+                FROM UNNEST($2::text[], $3::text[]) AS x(synthetic_label, agent_id)
+                ON CONFLICT (org_id, synthetic_label)
+                DO UPDATE SET agent_id = EXCLUDED.agent_id, last_seen = NOW()
+                """,
+                org_id,
+                labels,
+                ids,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Best-effort: a failed alias write must never break the read
+            # path, it just means the ghost split persists until retried.
+            logger.debug("portal agents: alias upsert skipped: %s", exc)
+
+    def _merge_agent_metrics(
+        base: dict[str, Any] | None, extra: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Fold a telemetry-side synthetic label's metrics into its
+        canonical agent_id's metrics (BUG-6). Approximate but conservative:
+        runs/tokens/cost sum, success_rate is run-weighted, p50/p95 take the
+        max (we do not have raw samples to recompute percentiles)."""
+        if not base:
+            return dict(extra)
+        if not extra:
+            return dict(base)
+        out = dict(base)
+        b_runs = int(base.get("runs") or 0)
+        e_runs = int(extra.get("runs") or 0)
+        out["runs"] = b_runs + e_runs
+        out["tokens"] = int(base.get("tokens") or 0) + int(extra.get("tokens") or 0)
+        b_cost, e_cost = base.get("cost_usd"), extra.get("cost_usd")
+        out["cost_usd"] = (
+            (b_cost or 0.0) + (e_cost or 0.0) if b_cost is not None or e_cost is not None else None
+        )
+        b_sr, e_sr = base.get("success_rate"), extra.get("success_rate")
+        if b_sr is None and e_sr is None:
+            out["success_rate"] = None
+        else:
+            total = max(b_runs + e_runs, 1)
+            out["success_rate"] = (
+                (float(b_sr or 0.0) * b_runs) + (float(e_sr or 0.0) * e_runs)
+            ) / total
+        out["p50"] = max(float(base.get("p50") or 0.0), float(extra.get("p50") or 0.0))
+        out["p95"] = max(float(base.get("p95") or 0.0), float(extra.get("p95") or 0.0))
+        seens = [s for s in (base.get("last_seen"), extra.get("last_seen")) if s is not None]
+        out["last_seen"] = max(seens) if seens else None
+        return out
+
+    rows, metrics_by_id, issues_by_id, alias_pairs, persisted_aliases = await asyncio.gather(
         _load_registry(),
         _load_metrics(),
         _load_open_issues(),
+        _load_alias_pairs(),
+        _load_persisted_aliases(),
     )
+
+    # Persist only pairs we did not already know about — once an alias is
+    # stable, later /agents calls stay read-only for this table.
+    new_pairs = [
+        (raw, canonical)
+        for raw, canonical in alias_pairs
+        if persisted_aliases.get(raw) != canonical
+    ]
+    if new_pairs:
+        await _persist_alias_pairs(new_pairs)
+
+    alias_map: dict[str, str] = dict(persisted_aliases)
+    for raw, canonical in alias_pairs:
+        alias_map[raw] = canonical
+
+    def _resolve_alias(label: str) -> str:
+        current = label
+        hops = 0
+        while current in alias_map and alias_map[current] != current and hops < 6:
+            current = alias_map[current]
+            hops += 1
+        return current
+
+    # BUG-6: fold synthetic-label metrics into their canonical agent_id
+    # *before* the merge loops below run, so a raw framework
+    # instrumentation label never survives as a standalone ghost card.
+    _merged_metrics: dict[str, dict[str, Any]] = {}
+    _merged_labels: dict[str, list[str]] = {}
+    for raw_id, m in metrics_by_id.items():
+        canonical = _resolve_alias(raw_id)
+        _merged_metrics[canonical] = _merge_agent_metrics(_merged_metrics.get(canonical), m)
+        if canonical != raw_id:
+            _merged_labels.setdefault(canonical, []).append(raw_id)
+    for canonical, labels in _merged_labels.items():
+        _merged_metrics[canonical]["_merged_labels"] = labels
+    metrics_by_id = _merged_metrics
 
     out: list[AgentCard] = []
     seen: set[str] = set()
@@ -1146,6 +1299,7 @@ async def list_portal_agents(
             openIssues=open_issues,
             lastSeen=last,
             topError=None,
+            mergedIdentities=list(metrics.get("_merged_labels") or []),
         )
 
     for row in rows:
@@ -1163,6 +1317,9 @@ async def list_portal_agents(
         )
 
     # SDK-only agents: telemetry has agent_id but no registry row yet.
+    # metrics_by_id has already had known/discovered synthetic labels
+    # (BUG-6) folded into their canonical agent_id above, so this loop
+    # only creates a ghost card for genuinely-unrecognized agent_ids.
     for agent_id, metrics in metrics_by_id.items():
         if not agent_id or agent_id in seen:
             continue

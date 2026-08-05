@@ -19,9 +19,7 @@ export const STUB_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/insights",
   "/fleet",
   "/incidents",
-  "/ledger",
   "/promotions",
-  "/artifacts",
   "/optimization",
   "/runs",
   "/datasets",
@@ -77,6 +75,8 @@ export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/settings",
   "/prompts",
   "/guardrails",
+  "/artifacts",
+  "/ledger",
   "/unavailable",
   "/onboarding", // redirects to /home (no forced tour)
 ] as const;

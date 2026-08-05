@@ -101,7 +101,51 @@ _CATEGORY_RECOMMENDATIONS: dict[str, str] = {
 # ── Trace read paths ─────────────────────────────────────────────────
 
 
-async def _fetch_trace_events(org_id: str, trace_id: str) -> list[dict[str, Any]]:
+#: Row cap applied to :func:`_fetch_trace_events`. The query was
+#: previously unbounded — a trace with a pathological number of
+#: events (e.g. a runaway agent loop) could return an arbitrarily
+#: large result set on every call. 2000 rows is comfortably above
+#: any real trace we've seen in practice; a trace beyond this size
+#: is already a signal worth investigating on its own, and the
+#: rule-based classifier only needs enough events to find the
+#: first matching signal, not the full history.
+TRACE_EVENTS_LIMIT: int = 2000
+
+#: Columns fetched by the default (``thin=False``) variant of
+#: :func:`_fetch_trace_events` — includes the heaviest/widest
+#: columns (payload bodies, full tool call/result blobs).
+_TRACE_EVENTS_COLUMNS_FULL: str = (
+    "event_id, trace_id, span_id, event_type, payload, "
+    "attributes, tags, source_format, timestamp, name, "
+    "duration_ms, outcome, error, parent_span_id, "
+    "agent_id, reasoning, tool_calls_full, tool_results, "
+    "request_body, response_body, tenant_id"
+)
+
+#: Columns fetched by the ``thin=True`` variant — everything the
+#: causal-chain builder (:func:`eden.api.routes.intelligence_rca._build_causal_chain`)
+#: needs to render a span tree, with the heavy/wide columns
+#: (``payload``, ``attributes``, ``tags``, ``tool_calls_full``,
+#: ``tool_results``, ``request_body``, ``response_body``) dropped.
+#: NOTE: the rule-based classifier (:func:`_classify_events`) reads
+#: ``payload`` (rule 2 — empty retrieval) and ``attributes`` (rule
+#: 4 — PII / prompt-injection sniff), so callers that need to run
+#: classification on the fetched events MUST use the full variant
+#: — ``thin=True`` is only safe for read-only chain/list rendering.
+_TRACE_EVENTS_COLUMNS_THIN: str = (
+    "event_id, trace_id, span_id, event_type, source_format, "
+    "timestamp, name, duration_ms, outcome, error, parent_span_id, "
+    "agent_id, reasoning, tenant_id"
+)
+
+
+async def _fetch_trace_events(
+    org_id: str,
+    trace_id: str,
+    *,
+    thin: bool = False,
+    limit: int = TRACE_EVENTS_LIMIT,
+) -> list[dict[str, Any]]:
     """Read the flat event list for one ``(org, trace)`` from Postgres.
 
     Mirrors :func:`eden.decision._common._fetch_trace_events` —
@@ -109,6 +153,12 @@ async def _fetch_trace_events(org_id: str, trace_id: str) -> list[dict[str, Any]
     in execution order. Returns an empty list if Postgres isn't
     available or the trace has no events. Callers should treat
     empty as ``not_found`` and return the ``_not_found_envelope``.
+
+    ``thin=True`` drops the heaviest/widest columns (see
+    :data:`_TRACE_EVENTS_COLUMNS_THIN`) — use it only for callers
+    that don't run :func:`_classify_events` on the result (e.g. a
+    chain/list view that just needs span structure). ``limit``
+    bounds the row count (default :data:`TRACE_EVENTS_LIMIT`).
     """
     try:
         from eden.storage.postgres import get_postgres_client
@@ -119,20 +169,19 @@ async def _fetch_trace_events(org_id: str, trace_id: str) -> list[dict[str, Any]
     client = await get_postgres_client()
     if client is None:
         return []
+    columns = _TRACE_EVENTS_COLUMNS_THIN if thin else _TRACE_EVENTS_COLUMNS_FULL
     try:
         rows = await client.fetch(
-            """
-            SELECT event_id, trace_id, span_id, event_type, payload,
-                   attributes, tags, source_format, timestamp, name,
-                   duration_ms, outcome, error, parent_span_id,
-                   agent_id, reasoning, tool_calls_full, tool_results,
-                   request_body, response_body, tenant_id
+            f"""
+            SELECT {columns}
             FROM telemetry_events
             WHERE tenant_id = $1 AND trace_id = $2
             ORDER BY timestamp ASC
+            LIMIT $3
             """,
             org_id,
             trace_id,
+            limit,
         )
     except Exception as exc:
         logger.debug("rca._common: fetch events failed: %s", exc)

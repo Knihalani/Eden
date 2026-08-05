@@ -154,3 +154,176 @@ class TestTheEmitDoesNotBlockTheResponse:
             "Postgres connection"
         )
         assert "asyncio.create_task" not in body
+
+
+class TestFeat20BudgetConsumptionIsRecordedFromLiveTraffic:
+    """FEAT-20: live ``/gateway/v1`` traffic must write to
+    ``budget_consumption`` ("Path A" — read by
+    ``budget_service.get_consumption``, the portal Budgets UI/ticker,
+    ``evaluate_budget_alerts()``, and internal agent self-throttles), not
+    only to ``usage_events`` ("Path B" — read by
+    ``QuotaEnforcementMiddleware``).
+
+    Before this fix, ``budget_service.record_usage`` had exactly three
+    callers repo-wide, none on the live gateway request path, so an org
+    whose traffic was 100% ordinary chat-completions calls saw the
+    Budgets UI stuck at $0 / 0% forever while enforcement (fed by
+    ``usage_events``) correctly saw real spend.
+
+    ``_emit_gateway_telemetry`` now calls
+    ``budget_service.record_usage(org_id, cost_usd)`` once
+    ``_stamp_gateway_cost_usd`` has populated ``metrics["cost_usd"]`` and
+    the telemetry collector write has succeeded — this is the single
+    choke point every gateway endpoint's background emit funnels
+    through, so one assertion here covers all of them.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_successful_call_with_cost_records_budget_usage(
+        self,
+    ) -> None:
+        from unittest.mock import patch
+
+        from eden.api.routes import gateway as gw
+        from eden.services import budget_service
+
+        collector = AsyncMock()
+        collector.ingest_batch = AsyncMock(return_value={"accepted": 1})
+        record_usage_mock = AsyncMock(return_value=True)
+
+        async def _get_collector() -> Any:
+            return collector
+
+        orig = gw.get_telemetry_collector
+        gw.get_telemetry_collector = _get_collector  # type: ignore[assignment]
+        try:
+            with patch.object(budget_service, "record_usage", record_usage_mock):
+                await gw._emit_gateway_telemetry(
+                    org_id="org-1",
+                    auth_ctx={},
+                    model="gpt-4o-mini",
+                    endpoint="chat.completions",
+                    request_body={"messages": [{"role": "user", "content": "hi"}]},
+                    response_body={"choices": []},
+                    metrics={
+                        "input_tokens": 10.0,
+                        "output_tokens": 5.0,
+                        "cost_usd": 0.0123,
+                    },
+                    outcome="success",
+                )
+        finally:
+            gw.get_telemetry_collector = orig  # type: ignore[assignment]
+
+        record_usage_mock.assert_awaited_once_with("org-1", 0.0123)
+
+    @pytest.mark.asyncio
+    async def test_a_failed_call_does_not_record_budget_usage(self) -> None:
+        """A failed upstream call has no realized cost — must not write."""
+        from unittest.mock import patch
+
+        from eden.api.routes import gateway as gw
+        from eden.services import budget_service
+
+        collector = AsyncMock()
+        collector.ingest_batch = AsyncMock(return_value={"accepted": 1})
+        record_usage_mock = AsyncMock(return_value=True)
+
+        async def _get_collector() -> Any:
+            return collector
+
+        orig = gw.get_telemetry_collector
+        gw.get_telemetry_collector = _get_collector  # type: ignore[assignment]
+        try:
+            with patch.object(budget_service, "record_usage", record_usage_mock):
+                await gw._emit_gateway_telemetry(
+                    org_id="org-1",
+                    auth_ctx={},
+                    model="gpt-4o-mini",
+                    endpoint="chat.completions",
+                    request_body={"messages": [{"role": "user", "content": "hi"}]},
+                    outcome="failure",
+                    error_type="APIError",
+                )
+        finally:
+            gw.get_telemetry_collector = orig  # type: ignore[assignment]
+
+        record_usage_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_raising_record_usage_does_not_break_the_emit(
+        self,
+    ) -> None:
+        """record_usage() is documented as never-raising, but the emit
+        must stay best-effort even if that contract is ever violated —
+        the telemetry write and TraceRecorder hook must still run."""
+        from unittest.mock import patch
+
+        from eden.api.routes import gateway as gw
+        from eden.services import budget_service
+
+        collector = AsyncMock()
+        collector.ingest_batch = AsyncMock(return_value={"accepted": 1})
+        record_usage_mock = AsyncMock(side_effect=RuntimeError("db down"))
+
+        async def _get_collector() -> Any:
+            return collector
+
+        orig = gw.get_telemetry_collector
+        gw.get_telemetry_collector = _get_collector  # type: ignore[assignment]
+        try:
+            with patch.object(budget_service, "record_usage", record_usage_mock):
+                # Must not raise.
+                await gw._emit_gateway_telemetry(
+                    org_id="org-1",
+                    auth_ctx={},
+                    model="gpt-4o-mini",
+                    endpoint="chat.completions",
+                    request_body={"messages": [{"role": "user", "content": "hi"}]},
+                    response_body={"choices": []},
+                    metrics={
+                        "input_tokens": 10.0,
+                        "output_tokens": 5.0,
+                        "cost_usd": 0.0123,
+                    },
+                    outcome="success",
+                )
+        finally:
+            gw.get_telemetry_collector = orig  # type: ignore[assignment]
+
+        record_usage_mock.assert_awaited_once_with("org-1", 0.0123)
+        assert collector.ingest_batch.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_zero_cost_does_not_record_budget_usage(self) -> None:
+        """No resolvable cost (e.g. resolver miss) — nothing to record."""
+        from unittest.mock import patch
+
+        from eden.api.routes import gateway as gw
+        from eden.services import budget_service
+
+        collector = AsyncMock()
+        collector.ingest_batch = AsyncMock(return_value={"accepted": 1})
+        record_usage_mock = AsyncMock(return_value=True)
+
+        async def _get_collector() -> Any:
+            return collector
+
+        orig = gw.get_telemetry_collector
+        gw.get_telemetry_collector = _get_collector  # type: ignore[assignment]
+        try:
+            with patch.object(budget_service, "record_usage", record_usage_mock):
+                await gw._emit_gateway_telemetry(
+                    org_id="org-1",
+                    auth_ctx={},
+                    model="gpt-4o-mini",
+                    endpoint="chat.completions",
+                    request_body={"messages": [{"role": "user", "content": "hi"}]},
+                    response_body={"choices": []},
+                    metrics={"input_tokens": 10.0, "output_tokens": 5.0},
+                    outcome="success",
+                )
+        finally:
+            gw.get_telemetry_collector = orig  # type: ignore[assignment]
+
+        record_usage_mock.assert_not_awaited()

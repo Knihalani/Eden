@@ -37,6 +37,7 @@ import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import { useLabToast } from "@/lab/lab-toast";
 import { AutomationsView, SignalsModeToggle } from "./automations-panel";
+import { NlAlertRulesView } from "./nl-alert-rules-panel";
 
 type KindFilter = "all" | SignalKind;
 type StateFilter = "all" | "on" | "off";
@@ -547,8 +548,9 @@ function ReviewDraftPanel({
 function LabSignalsInner() {
   const searchParams = useSearchParams();
   const paramId = searchParams.get("id");
+  const modeParam = searchParams.get("mode");
   const mode =
-    searchParams.get("mode") === "automations" ? "automations" : "detectors";
+    modeParam === "automations" || modeParam === "nl-alerts" ? modeParam : "detectors";
   const { agentId, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
@@ -709,6 +711,9 @@ function LabSignalsInner() {
   // stable; AutomationsView owns its own data + guards.
   if (mode === "automations") {
     return <AutomationsView />;
+  }
+  if (mode === "nl-alerts") {
+    return <NlAlertRulesView />;
   }
 
   if (!orgId) {

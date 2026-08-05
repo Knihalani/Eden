@@ -1,0 +1,1206 @@
+[
+  {
+    "id": "FEAT-1",
+    "title": "Implement the SSO login/callback IdP token exchange (currently a scripted 503, not a partial feature)",
+    "rank": 1,
+    "severity": "Critical",
+    "effort": "Large",
+    "files": [
+      "sso.py (sso_callback, initiate_sso_login)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-2",
+    "title": "Fix the Typesense RTBF fanout to actually target user-owned documents (add `user_id` to schema)",
+    "rank": 2,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "rtbf_fanout.py",
+      "typesense_client.py (SPAN_SCHEMA, build_span_doc)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-3",
+    "title": "Neutralize or remove the `install_cat15_trajectory_replaces_intervention` hot-path monkey-patch",
+    "rank": 3,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "install_cat15_trajectory_replaces_intervention (guardrails monkey-patch module)",
+      "InterventionEngine.evaluate_and_act"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-4",
+    "title": "Redact `edited_text` correctly once the correct enforcement path is restored",
+    "rank": 4,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "install_cat15_trajectory_replaces_intervention (guardrails monkey-patch module)",
+      "InterventionEngine.evaluate_and_act (edited_text redaction)"
+    ],
+    "depends_on": [
+      "FEAT-3"
+    ]
+  },
+  {
+    "id": "FEAT-5",
+    "title": "Consolidate the three non-communicating GDPR erasure routes into one, wired to `RightToBeForgottenService`",
+    "rank": 5,
+    "severity": "Critical",
+    "effort": "Large",
+    "files": [
+      "compliance.py (DELETE /api/v1/me)",
+      "compliance_jobs.py",
+      "auth.py (DELETE /users/me)",
+      "governance_intel/gdpr.py (RightToBeForgottenService.process_request, POST /governance/rtbf)",
+      "portal account settings UI (deleteAccount client function)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-6",
+    "title": "Un-stub the `/artifacts` portal route",
+    "rank": 6,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "clients/portal/src/app/(portal)/artifacts route",
+      "nudges API / ArtifactAuthor",
+      "ArtifactDemotionWorker"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-7",
+    "title": "Un-stub the `/ledger` portal route",
+    "rank": 7,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "clients/portal/src/app/(portal)/ledger route",
+      "src/eden/kb/ledger/",
+      "BookGatewayFilter"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-8",
+    "title": "Fix Loop 1 (shadow-detector confirm/dismiss loop) \u2014 step P0-A of the revival plan",
+    "rank": 8,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "soft_issue_review.py",
+      "nl_signals table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-9",
+    "title": "Fix Loop 1 (shadow-detector confirm/dismiss loop) \u2014 step P0-B of the revival plan",
+    "rank": 9,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "soft_issue_review.py",
+      "nl_signals table"
+    ],
+    "depends_on": [
+      "FEAT-8"
+    ]
+  },
+  {
+    "id": "FEAT-10",
+    "title": "Build a confirm/dismiss front door for shadow-detector issues \u2014 no UI affordance exists anywhere in the portal",
+    "rank": 10,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "soft_issue_review.py (record_shadow_feedback)",
+      "clients/portal/src/app/(portal)/issues",
+      "clients/portal/src/app/(portal)/traces"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-11",
+    "title": "Implement composite issue ranking in `IssuesRepo.list_issues` (currently recency-only)",
+    "rank": 11,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "IssuesRepo.list_issues (issues repo module)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-12",
+    "title": "Replace the fake heuristic-stub scoring in `offline_runner.py` (F51 experiments + playground promote-to-experiment) with real model calls and real scoring",
+    "rank": 12,
+    "severity": "Critical",
+    "effort": "Large",
+    "files": [
+      "src/eden/experiments/offline_runner.py (OfflineExperimentRunner._run_row)",
+      "api/app.py (/orgs/{org_id}/experiments/offline)",
+      "playground/scorers.py (run_scorers)",
+      "playground/service.py (PlaygroundService.promote_experiment)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-13",
+    "title": "Wire `scorers.py` into an actual CI/merge-gate check (build a real \"prompt regression gate\")",
+    "rank": 13,
+    "severity": "Critical",
+    "effort": "Large",
+    "files": [
+      ".github/workflows/eden-eval.yml",
+      "api/routes/wave6_online.py",
+      "eden.evaluation.ci_webhook.CIWebhookHandler",
+      "scorers.py",
+      "eden.playground (regression_runner.py, new merge-gate integration)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-14",
+    "title": "Wire `alert_stream.py`'s rule engine to a live event source",
+    "rank": 14,
+    "severity": "Critical",
+    "effort": "Large",
+    "files": [
+      "realtime/alert_stream.py (AlertStreamProcessor.process_event, process_batch)",
+      "realtime/kafka_consumer.py (eden-alert topic)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-15",
+    "title": "Emit `sandbox.security_alert` events from a real producer",
+    "rank": 15,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "realtime/alert_stream.py (rule_sandbox_escape rule)",
+      "sandbox/runner.py",
+      "evaluation/security_scanner.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-16",
+    "title": "Implement Slack/webhook dispatch in the Automations engine's `_execute_action`",
+    "rank": 16,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "automations/engine.py (_execute_action)",
+      "automations-panel.tsx"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-17",
+    "title": "Fix the `eql_alert_rules` severity-filter inversion (marking a rule \"critical\" silently disables it)",
+    "rank": 17,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "dsl/alerts.py (_FIREABLE_SEVERITIES)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-18",
+    "title": "Ship a self-serve authoring UI for the NL-alert pipeline",
+    "rank": 18,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "alerts/routes.py",
+      "clients/portal/src/lib/api/resources.ts (nl-alert-rules wrappers)",
+      "alerts-panel.tsx"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-19",
+    "title": "Stop claiming working P0/security alerting and Automations-tab delivery in customer-facing material",
+    "rank": 19,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "customer-facing sales collateral / docs / in-product copy"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-20",
+    "title": "Wire live gateway traffic into the `budget_consumption` write path to fix the Path A/Path B spend-tracking drift",
+    "rank": 20,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "routes/gateway.py (_emit_gateway_telemetry, _stamp_gateway_cost_usd, _call_upstream)",
+      "budget_service.py (record_usage, get_consumption)",
+      "budget_consumption table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-21",
+    "title": "Fix the limit-config split \u2014 point enforcement at the customer-configured budget, not `org_resource_limits`",
+    "rank": 21,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "budgets table (cost_hard_limit_usd, 052_budgets.py)",
+      "org_resource_limits table (002_phase_4_2_data_layer.py, 015_regions_and_rls.py)",
+      "QuotaEnforcementMiddleware",
+      "UsageService"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-22",
+    "title": "Add missing OTel/A2A fields to the `TelemetryEvent` dataclass",
+    "rank": 22,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "src/eden/observability/telemetry_collector.py (TelemetryEvent dataclass, to_dict, from_dict)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-23",
+    "title": "Wire ingestion assembly to derive `operation_name` and pull agent-linkage fields out of the `attributes` blob into real columns",
+    "rank": 23,
+    "severity": "Critical",
+    "effort": "Medium",
+    "files": [
+      "ingestion.py (_OPERATION_NAME_MAP)",
+      "src/eden/sdk/a2a.py (_A2ACallCtx.attributes, wrap_a2a_invocation)",
+      "otel_exporter.py"
+    ],
+    "depends_on": [
+      "FEAT-22"
+    ]
+  },
+  {
+    "id": "FEAT-24",
+    "title": "Extend `TELEMETRY_INSERT_SQL` and `_build_postgres_row` to actually write the 5 new columns",
+    "rank": 24,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "telemetry_collector.py (TELEMETRY_INSERT_SQL, _build_postgres_row, _route_postgres, _route_postgres_many)"
+    ],
+    "depends_on": [
+      "FEAT-22",
+      "FEAT-23"
+    ]
+  },
+  {
+    "id": "FEAT-25",
+    "title": "Do not describe current erasure as \"GDPR-compliant\" externally until the fixes land",
+    "rank": 25,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "external compliance/marketing material"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-26",
+    "title": "Fix `improvement/replay_verify.py:355` \u2014 always-raising `AIGateway.complete()` call site inside the flagship improvement loop's verification step",
+    "rank": 26,
+    "severity": "Critical",
+    "effort": "Small",
+    "files": [
+      "improvement/replay_verify.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-27",
+    "title": "Fix Loop 1 (shadow-detector confirm/dismiss loop): step P0-D per source's exact plan",
+    "rank": 27,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "soft_issue_review.py",
+      "nl_signals table"
+    ],
+    "depends_on": [
+      "FEAT-8",
+      "FEAT-9",
+      "FEAT-29"
+    ]
+  },
+  {
+    "id": "FEAT-28",
+    "title": "Fix the confirmed UUID type-mismatch bug in `EvidenceGate`/`promotion_candidates`",
+    "rank": 28,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "EvidenceGate / PromotionLoop module",
+      "promotion_candidates table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-29",
+    "title": "Fix Loop 1: step P0-C per source's exact plan",
+    "rank": 29,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "soft_issue_review.py",
+      "nl_signals table"
+    ],
+    "depends_on": [
+      "FEAT-8",
+      "FEAT-9"
+    ]
+  },
+  {
+    "id": "FEAT-30",
+    "title": "Close Loop 2's UI rendering gaps for the autonomous patch/merge/revert pipeline",
+    "rank": 30,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "src/eden/improvement/ (autonomy_policy.py)",
+      "portal patch/merge/revert UI components"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-31",
+    "title": "Remove the hardcoded kind-gate blocking non-`nudge` promotion kinds",
+    "rank": 31,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "EvidenceGate / PromotionLoop module (kind-gate check)"
+    ],
+    "depends_on": [
+      "FEAT-28"
+    ]
+  },
+  {
+    "id": "FEAT-32",
+    "title": "Fix the guardrails portal policy-list page envelope-unwrap bug",
+    "rank": 32,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "guardrails portal policy-list page component"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-33",
+    "title": "Add monitoring/alerting to detect when the trajectory-replaces-intervention patch fires",
+    "rank": 33,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "install_cat15_trajectory_replaces_intervention (guardrails monkey-patch module, metric/log/alert hooks)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-34",
+    "title": "Reconcile the two differently-named `EvalToGuardrailLink` classes",
+    "rank": 34,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "EvalToGuardrailLink (documented class)",
+      "EvalToGuardrailLink (undocumented production class)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-35",
+    "title": "Upgrade guardrail detectors beyond v0 regex/trigram heuristics",
+    "rank": 35,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "guardrail detector modules (regex/trigram detectors)",
+      "InterventionEngine.evaluate_and_act"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-36",
+    "title": "Clarify and document what \"fail-closed\" guarantees actually cover given the bypass existed",
+    "rank": 36,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "guardrails documentation (fail-closed guarantee docs)"
+    ],
+    "depends_on": [
+      "FEAT-3"
+    ]
+  },
+  {
+    "id": "FEAT-37",
+    "title": "Establish a single source of truth for \"which guardrail enforcement path is active\"",
+    "rank": 37,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "InterventionEngine.evaluate_and_act",
+      "install_cat15_trajectory_replaces_intervention (guardrails monkey-patch module)",
+      "EvalToGuardrailLink (both implementations)"
+    ],
+    "depends_on": [
+      "FEAT-3",
+      "FEAT-34"
+    ]
+  },
+  {
+    "id": "FEAT-38",
+    "title": "Verify no customer-facing guardrail dashboards report enforcement metrics from the bypassed path as if from the real path",
+    "rank": 38,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "guardrails portal dashboards/metrics components"
+    ],
+    "depends_on": [
+      "FEAT-3",
+      "FEAT-33"
+    ]
+  },
+  {
+    "id": "FEAT-39",
+    "title": "Add EMAIL channel to `rule_sandbox_escape`'s channel list",
+    "rank": 39,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "alert_stream.py (rule_sandbox_escape channel list)",
+      "alert_email.py (send_issue_alert_email, _dispatch_email)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-40",
+    "title": "Fix `anomaly_alerts.py`'s severity-blind channel dispatch",
+    "rank": 40,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "data_platform/anomaly_detector_loop.py (AnomalyDetectorLoop.tick_once)",
+      "anomaly_alerts.py (AnomalyDetector.dispatch_alerts)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-41",
+    "title": "Stop claiming self-serve alert configuration exists",
+    "rank": 41,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "customer-facing marketing/product material"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-42",
+    "title": "Build a real PagerDuty Events API v2 sender, and stop claiming working PagerDuty alerting until it ships",
+    "rank": 42,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "alert_stream.py (_dispatch_pagerduty)",
+      "anomaly_alerts.py (pagerduty no-op)",
+      "webhook_delivery.py (HMAC signing/retry ladder infra)"
+    ],
+    "depends_on": [
+      "FEAT-14",
+      "FEAT-15"
+    ]
+  },
+  {
+    "id": "FEAT-43",
+    "title": "Make `nl_alert_rules.channels` actually route to the configured channel",
+    "rank": 43,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "alerts/repo.py",
+      "portal.py",
+      "alert_email.py (send_nl_incident_email)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-44",
+    "title": "Unify the three/four disconnected alert-routing systems into one data model",
+    "rank": 44,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "automations/engine.py",
+      "playbook_router.py",
+      "realtime/alert_stream.py",
+      "NL-alert/AlertAsCode pipeline (dsl/alerts.py)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-45",
+    "title": "Build the missing budget-setting UI form in the portal",
+    "rank": 45,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/lib/api/budget.ts",
+      "clients/portal/src/lib/api/resources.ts (upsertBudget)",
+      "cost-spend-view.tsx",
+      "cost/page.tsx"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-46",
+    "title": "Mount the already-built `NotificationsProvider` so in-app budget alerts are visible",
+    "rank": 46,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/hooks/use-notifications.tsx (NotificationsProvider)",
+      "portal app layout",
+      "budget_service.py (evaluate_budget_alerts, _notify_budget_alert)",
+      "alert_email.py (send_budget_hard_limit_email)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-47",
+    "title": "Add team/agent-scoped budgets via `scope_type`/`scope_id` schema migration",
+    "rank": 47,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "budgets table",
+      "budget_consumption table",
+      "budget_actions table",
+      "052_budgets.py migration",
+      "budget_service.py (get_consumption, record_usage)"
+    ],
+    "depends_on": [
+      "FEAT-45",
+      "FEAT-46"
+    ]
+  },
+  {
+    "id": "FEAT-48",
+    "title": "Make `enforce_sso` actually block password login, or remove the toggle",
+    "rank": 48,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "sso.py (POST /sso/providers/{id}/enforce, list_sso_providers)",
+      "auth.py (password-login path)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-49",
+    "title": "Resolve the dual-SSO-story ambiguity (Clerk-based vs. `sso.py` OIDC/SAML)",
+    "rank": 49,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "docs/docs/how-to/sso.md",
+      "clients/portal/src/lib/api/resources.ts (SSO admin functions)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-50",
+    "title": "Wire the \"Audit \u2192 packs\" screen to `ComplianceEvidenceGenerator`/`CompliancePackGenerator` instead of a raw ledger query",
+    "rank": 50,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "settings/page.tsx",
+      "api/routes/portal.py (GET /orgs/{orgId}/portal/audit/packs)",
+      "services/governance_intel/compliance.py (ComplianceEvidenceGenerator)",
+      "governance/compliance_pack.py (CompliancePackGenerator)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-51",
+    "title": "Ship a portal admin UI for SSO/RBAC/SCIM/PII-policy configuration",
+    "rank": 51,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "clients/portal/src/lab/settings/settings-chrome.tsx",
+      "clients/portal/src/lib/api/resources.ts (SSO/RBAC/SCIM/PII functions)",
+      "new routes: settings/roles, settings/sso, settings/scim, settings/pii",
+      "rbac.py"
+    ],
+    "depends_on": [
+      "FEAT-1"
+    ]
+  },
+  {
+    "id": "FEAT-52",
+    "title": "Repoint `cohorts.py` at `session_summaries` instead of `jobs`",
+    "rank": 52,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "cohorts.py",
+      "session_summaries table",
+      "jobs table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-53",
+    "title": "Repoint `funnels.py` at `session_summaries` instead of `audit_log`",
+    "rank": 53,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "funnels.py",
+      "session_summaries table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-54",
+    "title": "Fix the nonexistent `audit_log` table reference (also breaks `export_audit_log`)",
+    "rank": 54,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "audit_log table (migration)",
+      "funnels.py",
+      "export_audit_log function"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-55",
+    "title": "Wire the portal session list/header to read from `session_summaries`, not `agent_sessions`",
+    "rank": 55,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "portal session list component (F23)",
+      "portal session header component",
+      "agent_sessions table",
+      "session_summaries table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-56",
+    "title": "Provide exact migration SQL to consolidate/backfill session tables",
+    "rank": 56,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "user_sessions table",
+      "session_summaries table",
+      "agent_sessions table",
+      "db_migrations (new migration file)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-57",
+    "title": "Consolidate or reconcile the three disconnected session tables",
+    "rank": 57,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "user_sessions table",
+      "session_summaries table",
+      "agent_sessions table"
+    ],
+    "depends_on": [
+      "FEAT-56"
+    ]
+  },
+  {
+    "id": "FEAT-58",
+    "title": "Fix `export_audit_log` independent of the `funnels.py` fix",
+    "rank": 58,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "export_audit_log function",
+      "audit_log table / correct audit data source"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-59",
+    "title": "Fix broken `org_id`/`tenant_id` column mismatch in `_fetch_telemetry_rollup_for_agent`'s sub-queries",
+    "rank": 59,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "src/eden/agents/agent_intel/_common.py (_fetch_telemetry_rollup_for_agent, _telemetry_rows, _judge_rows, _cost_rows)",
+      "telemetry_events table",
+      "judge_scores table",
+      "010_judge_scores.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-60",
+    "title": "Add matching fields to `TelemetryEventIngest` Pydantic ingest model",
+    "rank": 60,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "src/eden/api/routes/observability.py (TelemetryEventIngest)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-61",
+    "title": "Add `agent_id` and `operation_name` to `get_trace_tree`'s per-span node dict",
+    "rank": 61,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "telemetry_collector.py (TelemetryCollector.get_trace_tree)",
+      "portal.py"
+    ],
+    "depends_on": [
+      "FEAT-22",
+      "FEAT-23",
+      "FEAT-24"
+    ]
+  },
+  {
+    "id": "FEAT-62",
+    "title": "Fix `error_type` permanently-null bug and its downstream effect on session-level error detection",
+    "rank": 62,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "telemetry_collector.py (get_trace_tree node dict)",
+      "sessions/rollup.py (_turn_errored)"
+    ],
+    "depends_on": [
+      "FEAT-22",
+      "FEAT-23",
+      "FEAT-24"
+    ]
+  },
+  {
+    "id": "FEAT-63",
+    "title": "Swimlane the trace transcript UI by agent identity",
+    "rank": 63,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "TranscriptStep contract (portal_contracts.py)",
+      "_tree_node_to_step",
+      "traces-client.tsx",
+      "traces-detail-panels.tsx"
+    ],
+    "depends_on": [
+      "FEAT-61"
+    ]
+  },
+  {
+    "id": "FEAT-64",
+    "title": "Surface the `a2a` sub-document as a labeled \"handoff\" transcript marker instead of silently stripping it",
+    "rank": 64,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "portal.py",
+      "sdk/a2a.py (_A2ACallCtx.attributes)",
+      "_tree_node_to_step"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-65",
+    "title": "Build within-trace causal-chain navigation for agent delegation failures",
+    "rank": 65,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "parent_agent_span_id / a2a.parent_agent_id fields",
+      "trace detail UI/API (new causal-chain navigation path)"
+    ],
+    "depends_on": [
+      "FEAT-22",
+      "FEAT-23",
+      "FEAT-24"
+    ]
+  },
+  {
+    "id": "FEAT-66",
+    "title": "Build a portal UI panel for the org-wide delegation graph (`FleetService.delegation_graph`) and update the guard test blocking `fleetApi`/`a2aApi` reintroduction",
+    "rank": 66,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "fleet/service.py (FleetService.delegation_graph, refresh_delegation_edges)",
+      "fleet.py (GET /orgs/{org_id}/fleet/delegation)",
+      "agents-client.tsx",
+      "dead-code-removal.test.ts",
+      "stub-try-instead.ts"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-67",
+    "title": "Fix `time_travel/replayer.py:453` \u2014 always-raising `AIGateway.complete()` call site",
+    "rank": 67,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "time_travel/replayer.py",
+      "eden.llm.client.OpenRouterClient"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-68",
+    "title": "Populate `INTERNAL_CHAT_FALLBACKS` for eden's own internal LLM traffic",
+    "rank": 68,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "eden.llm.client.OpenRouterClient (INTERNAL_CHAT_FALLBACKS)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-69",
+    "title": "Make Python's missing-`org_id` failure loud instead of silently swallowed",
+    "rank": 69,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "config.py (org_id ValueError, ~L216)",
+      "client.py (~L1238)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-70",
+    "title": "Reconcile TS and Python instrumentation UX so both meet the \"one-liner\" bar",
+    "rank": 70,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "eden.instrument() (Python SDK)",
+      "TypeScript SDK wrap*() factories",
+      "SDK docs/onboarding material"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-71",
+    "title": "Build real one-liner auto-instrumentation for the TypeScript SDK",
+    "rank": 71,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "TypeScript SDK instrumentation module (wrap*() Proxy factories, new prototype/loader-hook auto-instrumentation)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-72",
+    "title": "Stop dropping the `synthetic`/`method` honesty flags in the frontend, and add a visible badge",
+    "rank": 72,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "clients/portal/src/lib/api/resources.ts",
+      "evals-compare-view.tsx",
+      "evals/page.tsx (ExperimentFixture mapping)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-73",
+    "title": "Correct the misleading \"Promote to Experiment\" button label and success-toast copy",
+    "rank": 73,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "prompt playground UI (promote-to-experiment button + toast component)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-74",
+    "title": "Migrate `RegressionCaseBuilder` off its free-text `dataset_id` onto F53's UUID-keyed `dataset_items`",
+    "rank": 74,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "regression_builder.py (RegressionCaseBuilder._persist, _find_by_fingerprint)",
+      "db_migrations/versions/092_market_ready_consolidated.py (regression_eval_cases.dataset_id)",
+      "dataset_items table",
+      "DatasetHub (get_dataset, create_dataset)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-75",
+    "title": "Make `dataset_engine.py`'s generated datasets durable via `DatasetHub` instead of an in-memory dict",
+    "rank": 75,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "dataset_engine.py (DatasetGenerationEngine, _store_entry)",
+      "hub.py (DatasetHub.create_dataset, promote_trace)",
+      "api/routes/insights.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-76",
+    "title": "Fail-closed the lease-claim exception handler",
+    "rank": 76,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "labeling.py (claim_lease call site, ~L462-468)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-77",
+    "title": "Check UPDATE rowcount before confirming item claimed",
+    "rank": 77,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "labeling.py (~L487-497)",
+      "labeling_items table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-78",
+    "title": "Add lease-expiry recovery for orphaned `in_progress` items",
+    "rank": 78,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "labeling.py (pop(), ~L487-497)",
+      "labeling_leases.py",
+      "labeling_items table"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-79",
+    "title": "Consolidate the two duplicate IAA engines (delete dead code, repoint, rename)",
+    "rank": 79,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "src/eden/evaluation/iaa.py (delete)",
+      "api/routes/labeling.py (queue_iaa, GET /labeling/iia, /queues/{id}/iaa -> /labeling/agreement, /queues/{id}/agreement)",
+      "labeling.py (LabelingService.compute_iaa, cohens_kappa, agreement_rate)",
+      "test_w18_playgrounds.py"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-80",
+    "title": "Build `/labeling/queues/[queueId]` kanban board page",
+    "rank": 80,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "clients/portal/src/app/(portal)/labeling/queues/[queueId] page (new)",
+      "IAA summary strip component"
+    ],
+    "depends_on": [
+      "FEAT-79"
+    ]
+  },
+  {
+    "id": "FEAT-81",
+    "title": "Build IAA dashboard page",
+    "rank": 81,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "clients/portal/src/app/(portal)/labeling IAA dashboard page (new)",
+      "labeling.py (LabelingService.compute_iaa)"
+    ],
+    "depends_on": [
+      "FEAT-79"
+    ]
+  },
+  {
+    "id": "FEAT-82",
+    "title": "Build `/labeling` queue-list page with disagreement-first default sort",
+    "rank": 82,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "clients/portal/src/app/(portal)/labeling page (new)",
+      "labelingApi.listItems"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-83",
+    "title": "Build `/labeling/annotate` keyboard-driven work surface (core page)",
+    "rank": 83,
+    "severity": "High",
+    "effort": "Large",
+    "files": [
+      "clients/portal/src/app/(portal)/labeling/annotate page (new)",
+      "labeling.py (pop, annotate endpoints)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-84",
+    "title": "Populate `IssueCard` DTO's `relatedSignalId` instead of hardcoding `None`",
+    "rank": 84,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "IssueCard DTO (issue extraction module)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-85",
+    "title": "Wire the new Dismiss action to also emit the signal Loop 1's P0 fixes expect to consume",
+    "rank": 85,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "portal issue Dismiss action component",
+      "soft_issue_review.py",
+      "nl_signals table"
+    ],
+    "depends_on": [
+      "FEAT-10",
+      "FEAT-27",
+      "FEAT-29"
+    ]
+  },
+  {
+    "id": "FEAT-86",
+    "title": "Fix `IssuePromoter._update` to actually escalate severity from `user_count`/`stumble_count`/`repetition_count`",
+    "rank": 86,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "IssuePromoter._update (issue extraction module)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-87",
+    "title": "Update product copy/marketing to accurately reflect what `/artifacts` and `/ledger` currently do (interim, pre-fix)",
+    "rank": 87,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "customer-facing product copy / marketing material (Artifacts, Ledger)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-88",
+    "title": "Ship a minimal red-team UI (list probes, run scan, view findings) and stop citing red-team probing as portal-reachable until it does",
+    "rank": 88,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "src/eden/redteam/probes.py",
+      "api/routes/redteam.py",
+      "clients/portal/src/lib/portal-routes.ts",
+      "guardrails-url.ts",
+      "resources.ts (redteamApi)",
+      "new portal route under Guardrails hub"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-89",
+    "title": "Ship a portal route/tab for drift detection (PSI-based output/embedding drift) \u2014 currently zero portal surface",
+    "rank": 89,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "predictive/drift.py",
+      "new /drift route or tab inside clients/portal/src/app/(portal)/signals (AutomationsView component)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-90",
+    "title": "Ship a portal UI for Topics/pattern clustering (F65) \u2014 a fully-built backend capability with zero portal surface",
+    "rank": 90,
+    "severity": "High",
+    "effort": "Medium",
+    "files": [
+      "topics/service.py",
+      "src/eden/observability/patterns_clusterer.py",
+      "new /topics route or tab inside clients/portal/src/app/(portal)/signals"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-91",
+    "title": "Render fork lineage as a tree, not a flat list",
+    "rank": 91,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "debugger-modes.tsx (forksQuery)",
+      "resources.ts (record, fork endpoints, parent_fork_id)"
+    ],
+    "depends_on": []
+  },
+  {
+    "id": "FEAT-92",
+    "title": "Wire the GitHub write client into the issue fix-PR flow",
+    "rank": 92,
+    "severity": "High",
+    "effort": "Small",
+    "files": [
+      "lab/fixtures/issues.ts (IssueFixture)",
+      "integrations/github/oauth.py (GitHubOAuthClient.create_check_run, create_pr_comment)",
+      "change_impact/preview.py",
+      "IssuePromptEvolver.evolve_from_issue"
+    ],
+    "depends_on": []
+  }
+]

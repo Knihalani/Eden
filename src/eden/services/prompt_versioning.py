@@ -231,14 +231,35 @@ class PromptService:
         variables: list[str] | None = None,
         change_note: str | None = None,
         created_by: str = "system",
+        require_existing: bool = False,
     ) -> dict[str, Any] | None:
         """Create a new version. Auto-increments ``version``.
 
         Also fires :func:`run_auto_eval` when the prompt
         has ``auto_eval_on_save=true``.
+
+        Args:
+            require_existing: when ``True``, refuse to implicitly
+                register a brand-new ``prompts`` row for
+                ``prompt_name`` if one doesn't already exist for
+                ``org_id`` — return ``None`` instead of silently
+                minting one. Automated callers that derive
+                ``prompt_name`` from an external identifier (e.g.
+                an agent id, as in the issue-driven prompt evolver)
+                should pass this so an unresolved/unregistered name
+                fails loudly rather than creating an orphan prompt.
         """
         prompt = await self.get_prompt(org_id, prompt_name)
         if prompt is None:
+            if require_existing:
+                logger.warning(
+                    "prompt_service: create_version refused to "
+                    "implicitly create a new prompt for org_id=%s "
+                    "prompt_name=%s (require_existing=True)",
+                    org_id,
+                    prompt_name,
+                )
+                return None
             prompt = await self.create_prompt(
                 org_id, name=prompt_name, created_by=created_by,
             )

@@ -1,10 +1,11 @@
 """Datadog-style Patterns clusterer (Phase 7.2 C5).
 
 Reads the last ``lookback_days`` of telemetry events for a tenant,
-embeds the request messages with the existing ``OpenAIEmbedder`` or
-``SentenceTransformerEmbedder``, clusters the embeddings with
-HDBSCAN, labels each cluster via the LLM, and persists the result
-to the ``trace_patterns`` table.
+embeds the request messages (a real semantic embedder when one is
+installed, else a hashed lexical-overlap fallback — see
+``_embed_topics``), clusters the embeddings with HDBSCAN, labels each
+cluster via the LLM, and persists the result to the ``trace_patterns``
+table.
 
 Coverage gap detection: every cluster is checked against
 ``golden_datasets`` — clusters with no matching eval are flagged
@@ -143,13 +144,7 @@ class PatternsClusterer:
             return 0
 
         # 3) Embed
-        try:
-            from eden.kb.embeddings import get_default_embedder
-            embedder = get_default_embedder()
-            vectors = await asyncio.to_thread(embedder.embed_batch, topics)
-        except Exception as exc:
-            logger.debug(f"Pattern embedding failed for {tenant_id}: {exc}")
-            return 0
+        vectors = await self._embed_topics(topics)
         if not vectors or len(vectors) != len(topics):
             return 0
 
@@ -225,6 +220,70 @@ class PatternsClusterer:
         await self._emit_coverage_gaps(client, tenant_id, list(cluster_topics.keys()))
 
         return created
+
+    async def _embed_topics(self, topics: list[str]) -> list[list[float]]:
+        """Embed cluster topics.
+
+        Prefers a real semantic embedder (``eden.kb.ledger.embeddings`` —
+        BGE-small via ``sentence-transformers``, the same infra the KB
+        ledger's retrieval path already uses) when one is actually
+        installed. ``sentence-transformers`` is not a declared dependency
+        of this repo today, so this almost always falls through to
+        :func:`eden.util.stable_hash.hashed_term_vector` — a deterministic
+        hashed bag-of-words vector that is a real (if lexical, not
+        semantic) content-similarity measure, unlike returning no vectors
+        at all (the previous behavior: the dead ``eden.kb.embeddings``
+        import meant this step always raised ``ModuleNotFoundError`` and
+        every tenant pass silently produced zero patterns).
+        """
+        if not topics:
+            return []
+        try:
+            import importlib.util
+
+            if importlib.util.find_spec("sentence_transformers") is None:
+                raise ModuleNotFoundError(
+                    "sentence-transformers not installed; "
+                    "eden.kb.ledger.embeddings.embed_text would silently "
+                    "degrade to a non-semantic hash embedding internally"
+                )
+
+            from eden.kb.ledger.embeddings import embed_text, unpack_embedding
+
+            def _run() -> list[list[float]]:
+                return [unpack_embedding(embed_text(t)) for t in topics]
+
+            vectors = await asyncio.to_thread(_run)
+            if (
+                not vectors
+                or len(vectors) != len(topics)
+                or not vectors[0]
+                or any(len(v) != len(vectors[0]) for v in vectors)
+            ):
+                raise ValueError(
+                    "eden.kb.ledger.embeddings returned empty/inconsistent vectors"
+                )
+            return vectors
+        except Exception as exc:
+            logger.error(
+                "PatternsClusterer: no real semantic embedder available (%s); "
+                "falling back to hashed lexical-overlap vectors",
+                exc,
+                exc_info=True,
+            )
+            try:
+                from eden.observability.simple_metrics import Counter
+
+                Counter(
+                    "eden_patterns_clusterer_embed_fallback_total",
+                    "PatternsClusterer embedding step fell back to lexical vectors",
+                ).inc()
+            except Exception:  # noqa: BLE001 - metrics must never mask the log
+                pass
+
+            from eden.util.stable_hash import hashed_term_vector
+
+            return [hashed_term_vector(t) for t in topics]
 
     async def _label_cluster(self, samples: list[str]) -> str:
         """Use the LLM to produce a 2-5 word topic label for the cluster.
