@@ -11,7 +11,7 @@ describe("dynamicWithRetry", () => {
     const importFn = vi.fn(() =>
       Promise.resolve({ default: Panel }),
     );
-    const Comp = dynamicWithRetry(importFn, {
+    const Comp = dynamicWithRetry<{ label: string }>(importFn, {
       loading: () => <div>Loading…</div>,
     });
 
@@ -25,7 +25,7 @@ describe("dynamicWithRetry", () => {
     const importFn = vi.fn(() =>
       Promise.reject(new Error("Chunk load failed")),
     );
-    const Comp = dynamicWithRetry(importFn);
+    const Comp = dynamicWithRetry<{ label: string }>(importFn);
 
     render(<Comp label="broken" />);
 
@@ -42,7 +42,7 @@ describe("dynamicWithRetry", () => {
       .mockRejectedValueOnce(new Error("Chunk load failed"))
       .mockResolvedValueOnce({ default: Panel });
 
-    const Comp = dynamicWithRetry(importFn);
+    const Comp = dynamicWithRetry<{ label: string }>(importFn);
 
     render(<Comp label="second-try" />);
 
@@ -61,7 +61,7 @@ describe("dynamicWithRetry", () => {
     const importFn = vi.fn(
       () => new Promise<{ default: typeof Panel }>(() => {}),
     );
-    const Comp = dynamicWithRetry(importFn, { timeoutMs: 10 });
+    const Comp = dynamicWithRetry<{ label: string }>(importFn, { timeoutMs: 10 });
 
     render(<Comp label="slow" />);
 
