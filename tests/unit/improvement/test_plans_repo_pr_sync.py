@@ -84,11 +84,16 @@ async def test_mark_merged_updates_status_and_returns_plan() -> None:
 
     assert result is not None
     assert result["status"] == "merged"
-    client.execute.assert_awaited_once()
-    sql = client.execute.await_args.args[0]
+    # mark_merged issues the status UPDATE and then (FEAT-30 gap 3 /
+    # migration 151) a best-effort `improvement_plan_events` audit-trail
+    # INSERT via emit_event — two legitimate writes, not one.
+    assert client.execute.await_count == 2
+    sql = client.execute.await_args_list[0].args[0]
     assert "status = 'merged'" in sql
-    open_statuses = client.execute.await_args.args[3]
+    open_statuses = client.execute.await_args_list[0].args[3]
     assert set(open_statuses) == set(plans_repo._OPEN_STATUSES)
+    event_sql = client.execute.await_args_list[1].args[0]
+    assert "improvement_plan_events" in event_sql
 
 
 @pytest.mark.asyncio

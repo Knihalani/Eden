@@ -17,6 +17,7 @@ import {
 import { formatDuration, formatUsd } from "@/lab/fixtures/traces";
 import { EmptyState, FilterChips } from "@/lab/lab-ui";
 import { CompareGradeChip, Delta } from "@/lab/evals/evals-chrome";
+import { StatusChip } from "@/components/ds/primitives";
 import { cn } from "@/lib/utils";
 
 export type CompareLayout = "summary" | "list" | "grid";
@@ -194,6 +195,9 @@ export function EvalsCompareView({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CompareGradeChip grade={summary.overallGrade} />
+              {(compare?.synthetic || baseline?.synthetic) && (
+                <StatusChip tone="neutral">Synthetic scoring (heuristic)</StatusChip>
+              )}
               <p className="type-ui truncate text-[var(--text)]">
                 {verdictCopy(
                   summary.overallGrade,

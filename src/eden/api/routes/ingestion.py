@@ -331,6 +331,29 @@ async def _ingest_handler(
             if not getattr(event, "agent_id", None):
                 event.agent_id = header_agent
 
+    # FEAT-23 — derive operation_name and pull agent-linkage fields out
+    # of the attributes JSONB blob into their own TelemetryEvent
+    # columns. ``parent_agent_span_id`` / ``child_agent_trace_id`` are
+    # set by ``wrap_a2a_invocation`` (eden.sdk.a2a) but only merged
+    # into the caller's span ``attributes`` dict; without this pass
+    # they never reach the real columns migrations 058/067 added, and
+    # the read-side SQL in observability.py that SELECTs them always
+    # sees NULL.
+    from eden.observability.operation_names import derive_operation_name
+
+    for event in events:
+        attrs = getattr(event, "attributes", None) or {}
+        if not getattr(event, "parent_agent_span_id", None):
+            parent_span = attrs.get("parent_agent_span_id")
+            if parent_span:
+                event.parent_agent_span_id = parent_span
+        if not getattr(event, "child_agent_trace_id", None):
+            child_trace = attrs.get("child_agent_trace_id")
+            if child_trace:
+                event.child_agent_trace_id = child_trace
+        if not getattr(event, "operation_name", None):
+            event.operation_name = derive_operation_name(event)
+
     # Write
     from eden.observability.errors import IngestionUnavailableError
 

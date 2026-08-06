@@ -5,19 +5,24 @@ Phase 6.3: Every trace is a potential dataset entry.
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, TypeVar
 from uuid import uuid4
 
+from eden.datasets.hub import DatasetHub, DatasetRecord
 from eden.insights.unified_trace_model import Outcome, Realm, UnifiedTrace
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 class DatasetType(Enum):
@@ -153,9 +158,10 @@ class DatasetGenerationEngine:
             description="Comparative traces with high disparity scores",
             realm=Realm.COMPARATIVE,
             tags_include=["auto_generated"],
-            custom_filter=lambda t: any(t.metrics.get(k, 0) > 0.6 for k in [
-                "action_divergence", "outcome_divergence", "coverage_gap"
-            ]),
+            custom_filter=lambda t: any(
+                t.metrics.get(k, 0) > 0.6
+                for k in ["action_divergence", "outcome_divergence", "coverage_gap"]
+            ),
             dataset_type=DatasetType.DISPARITY_COLLECTION,
             dataset_name="disparity_cases",
             auto_promote=AutoPromote.ALWAYS,
@@ -194,19 +200,63 @@ class DatasetGenerationEngine:
             name="performance_outliers",
             description="High-latency or token-heavy traces",
             realm=None,
-            custom_filter=lambda t: t.duration_ms > 30000 or t.metrics.get("total_tokens", 0) > 8000,
+            custom_filter=lambda t: (
+                t.duration_ms > 30000 or t.metrics.get("total_tokens", 0) > 8000
+            ),
             dataset_type=DatasetType.PERFORMANCE_BENCHMARK,
             dataset_name="performance_outliers",
             auto_promote=AutoPromote.NEVER,  # Require manual review
         ),
     ]
 
-    def __init__(self, rules: list[DatasetRule] | None = None):
+    def __init__(self, rules: list[DatasetRule] | None = None, hub: DatasetHub | None = None):
         self.rules = rules or list(self.DEFAULT_RULES)
-        # In-memory stores — production would use PostgreSQL + S3
-        self._datasets: dict[str, Dataset] = {}
-        self._entries: dict[str, list[DatasetEntry]] = defaultdict(list)
-        self._rule_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"matches": 0, "promoted": 0})
+        # FEAT-75: durability fix. Generated datasets/entries used to live
+        # only in ``self._datasets`` / ``self._entries`` in-memory dicts,
+        # so every promoted trace vanished on process restart despite being
+        # API-reachable. ``DatasetHub`` (backed by the ``datasets`` /
+        # ``dataset_items`` Postgres tables) is now the single source of
+        # truth: writes go straight to it (``_persist_entry``) and reads
+        # (``get_dataset``, ``list_datasets``, ``get_entries``, ...) query
+        # it directly rather than a local cache. No rehydration step is
+        # needed on startup — a fresh engine instance backed by the same
+        # ``DatasetHub``/database already sees everything, since the engine
+        # itself carries no durable state.
+        self._hub = hub or DatasetHub()
+        # Everything below is a process-local *derived* cache, not a store
+        # of record — it only exists to serve the handful of pre-existing,
+        # tenant-less call sites (``get_stats``, and ``Dataset.dataset_type``
+        # which DatasetHub's schema has no column for) with reasonable
+        # answers. Losing it on restart costs nothing but a little
+        # bookkeeping accuracy, never dataset content.
+        self._rule_stats: dict[str, dict[str, int]] = defaultdict(
+            lambda: {"matches": 0, "promoted": 0}
+        )
+        self._known_dataset_types: dict[str, DatasetType] = {}
+        self._known_entry_counts: dict[str, int] = defaultdict(int)
+
+    @staticmethod
+    def _run(coro: Coroutine[Any, Any, _T]) -> _T:
+        """Bridge a DatasetHub async call into this engine's sync interface.
+
+        The engine's public methods (``process_trace``, ``get_dataset``, ...)
+        stay synchronous on purpose so ``InsightsService`` /
+        ``api/routes/insights.py`` — which call them without ``await`` —
+        don't need to change. DatasetHub's persistence methods are async
+        (they talk to Postgres via an async client), so we run them to
+        completion here:
+          - No event loop running in this thread → just run it directly.
+          - Called from inside a running loop (e.g. a FastAPI async handler
+            invoking a service method without ``await``) → run the coroutine
+            on a dedicated worker thread with its own loop so we don't try
+            to nest event loops.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
 
     def add_rule(self, rule: DatasetRule) -> None:
         self.rules.append(rule)
@@ -233,8 +283,7 @@ class DatasetGenerationEngine:
             elif rule.auto_promote == AutoPromote.CONFIDENCE_THRESHOLD:
                 # Use trace insights for confidence
                 max_confidence = max(
-                    (i.get("confidence", 0.5) for i in trace.insights),
-                    default=0.5
+                    (i.get("confidence", 0.5) for i in trace.insights), default=0.5
                 )
                 should_promote = max_confidence >= rule.confidence_threshold
             elif rule.auto_promote == AutoPromote.NEVER:
@@ -242,12 +291,14 @@ class DatasetGenerationEngine:
 
             if not should_promote:
                 if rule.auto_promote != AutoPromote.NEVER:
-                    logger.debug(f"Rule '{rule.name}' matched but did not auto-promote trace {trace.trace_id}")
+                    logger.debug(
+                        f"Rule '{rule.name}' matched but did not auto-promote trace {trace.trace_id}"
+                    )
                 continue
 
             entry = self._create_entry(trace, rule)
             if entry:
-                self._store_entry(entry, rule)
+                self._store_entry(trace, entry, rule)
                 created.append(entry)
                 self._rule_stats[rule.name]["promoted"] += 1
 
@@ -343,7 +394,9 @@ class DatasetGenerationEngine:
                 expected["terminated"] = last_step.payload.get("terminated", False)
         else:
             # For failures, extract error information
-            expected["error_category"] = trace.insights[0].get("category", "unknown") if trace.insights else "unknown"
+            expected["error_category"] = (
+                trace.insights[0].get("category", "unknown") if trace.insights else "unknown"
+            )
             expected["expected_outcome"] = "success"
             expected["actual_outcome"] = trace.outcome.value
 
@@ -361,39 +414,127 @@ class DatasetGenerationEngine:
 
         return expected
 
-    def _store_entry(self, entry: DatasetEntry, rule: DatasetRule) -> None:
-        """Store entry in the appropriate dataset."""
-        dataset_id = entry.dataset_id
+    def _store_entry(self, trace: UnifiedTrace, entry: DatasetEntry, rule: DatasetRule) -> None:
+        """Persist entry (and its dataset, if new) via DatasetHub.
 
-        # Create dataset if it doesn't exist
-        if dataset_id not in self._datasets:
-            self._datasets[dataset_id] = Dataset(
-                dataset_id=dataset_id,
+        ``entry.dataset_id`` was set to a placeholder in ``_create_entry``;
+        it gets overwritten below with DatasetHub's real (UUID) id once the
+        row actually exists, so callers grouping by ``entry.dataset_id``
+        (e.g. ``process_batch``) key on the durable id.
+        """
+        record = self._run(self._persist_entry(trace.tenant_id, entry, rule))
+        entry.dataset_id = record.id
+        self._known_dataset_types[record.id] = rule.dataset_type
+        self._known_entry_counts[record.id] += 1
+
+    async def _persist_entry(
+        self, org_id: str, entry: DatasetEntry, rule: DatasetRule
+    ) -> DatasetRecord:
+        """Find-or-create the dataset for ``rule``, then append the item.
+
+        ``datasets`` has a ``UNIQUE (org_id, name)`` constraint, so we mirror
+        ``DatasetHub.promote_trace``'s own find-by-name-before-create pattern
+        rather than blindly calling ``create_dataset`` every time.
+        """
+        existing = await self._hub.list_datasets(org_id)
+        match = next((d for d in existing if d.name == rule.dataset_name), None)
+        if match is None:
+            match = await self._hub.create_dataset(
+                org_id,
                 name=rule.dataset_name,
-                dataset_type=rule.dataset_type,
-                version=self._generate_version(),
-                tenant_id=entry.metadata.get("tenant_id", "unknown"),
-                tags=[rule.dataset_type.value],
+                description=rule.description,
+                source_type="auto_generated",
+                source_ref=rule.name,
             )
+        await self._hub.add_dataset_item(
+            match.id,
+            input_data=json.dumps(entry.input_data, default=str),
+            expected_output=json.dumps(entry.expected_data, default=str),
+            payload=entry.to_dict(),
+            origin_trace_id=entry.source_trace_id,
+        )
+        # Re-fetch so row_count reflects the item we just added.
+        refreshed = await self._hub.get_dataset(org_id, match.id)
+        return refreshed or match
 
-        self._entries[dataset_id].append(entry)
-        self._datasets[dataset_id].entry_count = len(self._entries[dataset_id])
-        self._datasets[dataset_id].updated_at = datetime.now(UTC)
+    def _to_dataset(self, record: DatasetRecord) -> Dataset:
+        """Translate a DatasetHub ``DatasetRecord`` into this module's
+        ``Dataset`` shape (what ``InsightsService`` / the API routes expect).
 
-    def _generate_version(self) -> str:
-        """Generate a version string."""
-        now = datetime.now(UTC)
-        return f"{now.strftime('%Y.%m.%d-%H%M%S')}"
+        DatasetHub's schema has no ``dataset_type`` column, so it's
+        recovered from ``source_ref`` (the rule name we stored it under) by
+        matching against ``self.rules``, falling back to this process's
+        write-time cache, then a safe default — best-effort, same spirit as
+        the other process-local caches on this class.
+        """
+        rule = next((r for r in self.rules if r.name == record.source_ref), None)
+        dataset_type = (
+            rule.dataset_type
+            if rule is not None
+            else self._known_dataset_types.get(record.id, DatasetType.REGRESSION_SUITE)
+        )
+        return Dataset(
+            dataset_id=record.id,
+            name=record.name,
+            dataset_type=dataset_type,
+            version=str(record.version),
+            tenant_id=record.org_id,
+            created_at=self._parse_ts(record.created_at),
+            updated_at=self._parse_ts(record.updated_at),
+            entry_count=record.row_count,
+            tags=[dataset_type.value],
+        )
+
+    @staticmethod
+    def _parse_ts(value: str) -> datetime:
+        if value:
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                pass
+        return datetime.now(UTC)
+
+    @staticmethod
+    def _entry_from_row(row: dict[str, Any]) -> DatasetEntry:
+        """Reconstruct a ``DatasetEntry`` from a persisted ``dataset_items``
+        row. The full entry (including lineage/metadata) was stored in
+        ``payload`` at write time via ``entry.to_dict()``."""
+        payload = row.get("payload") or {}
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        extracted_at_raw = payload.get("extracted_at")
+        extracted_at = None
+        if extracted_at_raw:
+            try:
+                extracted_at = datetime.fromisoformat(extracted_at_raw)
+            except ValueError:
+                extracted_at = None
+        return DatasetEntry(
+            entry_id=payload.get("entry_id") or str(row.get("id", "")),
+            source_trace_id=payload.get("source_trace_id") or row.get("origin_trace_id") or "",
+            source_realm=payload.get("source_realm", ""),
+            extracted_at=extracted_at or datetime.now(UTC),
+            extract_rule=payload.get("extract_rule", ""),
+            dataset_id=payload.get("dataset_id") or str(row.get("dataset_id", "")),
+            input_data=payload.get("input", {}),
+            expected_data=payload.get("expected", {}),
+            metadata=payload.get("metadata", {}),
+            lineage=payload.get("lineage", []),
+        )
 
     def get_dataset(self, dataset_id: str) -> Dataset | None:
-        return self._datasets.get(dataset_id)
+        record = self._run(self._hub.get_dataset_by_id(dataset_id))
+        return self._to_dataset(record) if record else None
 
     def list_datasets(self, tenant_id: str) -> list[Dataset]:
-        return [d for d in self._datasets.values() if d.tenant_id == tenant_id]
+        records = self._run(self._hub.list_datasets(tenant_id))
+        return [self._to_dataset(r) for r in records]
 
-    def get_entries(self, dataset_id: str, limit: int = 1000, offset: int = 0) -> list[DatasetEntry]:
-        entries = self._entries.get(dataset_id, [])
-        return entries[offset:offset + limit]
+    def get_entries(
+        self, dataset_id: str, limit: int = 1000, offset: int = 0
+    ) -> list[DatasetEntry]:
+        rows = self._run(self._hub.list_dataset_items(dataset_id, limit=limit, offset=offset))
+        return [self._entry_from_row(r) for r in rows]
 
     def export_dataset(
         self,
@@ -402,11 +543,11 @@ class DatasetGenerationEngine:
         split_ratio: tuple[float, float] | None = None,
     ) -> dict[str, Any]:
         """Export a dataset to a portable format."""
-        dataset = self._datasets.get(dataset_id)
+        dataset = self.get_dataset(dataset_id)
         if not dataset:
             raise ValueError(f"Dataset not found: {dataset_id}")
 
-        entries = self._entries.get(dataset_id, [])
+        entries = self.get_entries(dataset_id, limit=1_000_000)
         data = [e.to_dict() for e in entries]
 
         result = {
@@ -427,6 +568,7 @@ class DatasetGenerationEngine:
             if data:
                 import csv
                 import io
+
                 output = io.StringIO()
                 # Flatten nested dicts for CSV
                 flat_data = []
@@ -449,11 +591,13 @@ class DatasetGenerationEngine:
             # OpenAI eval format
             openai_data = []
             for entry in data:
-                openai_data.append({
-                    "input": entry.get("input", {}),
-                    "ideal": entry.get("expected", {}),
-                    "metadata": entry.get("metadata", {}),
-                })
+                openai_data.append(
+                    {
+                        "input": entry.get("input", {}),
+                        "ideal": entry.get("expected", {}),
+                        "metadata": entry.get("metadata", {}),
+                    }
+                )
             result["data"] = json.dumps(openai_data, indent=2, default=str)
 
         if split_ratio and data:
@@ -466,17 +610,21 @@ class DatasetGenerationEngine:
         return result
 
     def get_stats(self) -> dict[str, Any]:
-        """Return engine statistics."""
+        """Return engine statistics.
+
+        This endpoint has no tenant/org argument (matching its pre-existing
+        signature), while DatasetHub is org-scoped — a true global count
+        would mean enumerating every org. ``total_datasets``/`total_entries``/
+        ``datasets_by_type`` are therefore process-local tallies of what
+        *this* engine instance has written since it started (same caveat the
+        original in-memory implementation effectively had once a process
+        restarted, just now scoped to "this process" instead of "ever").
+        Dataset/entry *content* itself is never at risk — that always lives
+        in DatasetHub and is read fresh via ``get_dataset``/``get_entries``.
+        """
         return {
-            "total_datasets": len(self._datasets),
-            "total_entries": sum(len(e) for e in self._entries.values()),
-            "rules": {
-                name: dict(stats)
-                for name, stats in self._rule_stats.items()
-            },
-            "datasets_by_type": dict(
-                Counter(d.dataset_type.value for d in self._datasets.values())
-            ),
+            "total_datasets": len(self._known_dataset_types),
+            "total_entries": sum(self._known_entry_counts.values()),
+            "rules": {name: dict(stats) for name, stats in self._rule_stats.items()},
+            "datasets_by_type": dict(Counter(t.value for t in self._known_dataset_types.values())),
         }
-
-

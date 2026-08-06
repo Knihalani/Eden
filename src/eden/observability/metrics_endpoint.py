@@ -218,6 +218,35 @@ async def metrics() -> Response:
     except Exception as exc:  # noqa: BLE001
         logger.debug("metrics: failed to read provider error counts: %s", exc)
 
+    # FEAT-33: guardrail-bypass detections. Fires when a response from
+    # ``InterventionEngine.evaluate_and_act`` (or a startup identity
+    # check of it) carries the ``trajectory_guardrail`` marker — the
+    # signature of the removed ``install_cat15_trajectory_replaces_intervention``
+    # monkey-patch, which silently swapped the real content-safety
+    # check for an unrelated cost/loop/latency check. Should be zero
+    # in steady state; any nonzero value is a live incident.
+    try:
+        from eden.guardrails.intervention import get_guardrail_bypass_counts
+
+        bypass_counts = get_guardrail_bypass_counts()
+        lines.append(
+            _render_family(
+                "eden_guardrail_bypass_detected_total",
+                help_text=(
+                    "Cumulative count of evaluate_and_act responses tagged "
+                    "feature=trajectory_guardrail (content-safety check bypassed), "
+                    "by detection source:org_id key."
+                ),
+                metric_type="counter",
+                samples=[
+                    ("", {"source_org": key}, float(v))
+                    for key, v in sorted(bypass_counts.items())
+                ],
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("metrics: failed to read guardrail bypass counts: %s", exc)
+
     # SLO targets (so Grafana panels can reference the published target)
     lines.append(
         _render_family(

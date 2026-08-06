@@ -20,8 +20,11 @@ The 10 services in the Cat 15 surface:
 * :class:`InterventionEngine` — apply the policies and choose
   ``allow`` / ``deny`` / ``edit`` action
   (in :mod:`eden.guardrails.intervention`).
-* :class:`EvalToGuardrailLink` — promote an offline judge into a
-  production guardrail (in :mod:`eden.guardrails.intervention`).
+* :class:`LegacyEvalToGuardrailLink` — promote an offline judge
+  into a production guardrail (in :mod:`eden.guardrails.intervention`;
+  FEAT-34 legacy half — see
+  :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+  for the canonical enforcing half).
 * :class:`LLMFirewall` — Lunary-style pre-LLM-call firewall
   (in :mod:`eden.guardrails.detectors`).
 * :class:`InterventionLog` — query the log of decisions
@@ -71,7 +74,7 @@ VALID_POLICY_TYPES: frozenset[str] = frozenset(
         "pii_redaction",      # Lunary-style redaction
         "hallucination",      # Cat 3 judge-driven output check
         "content_policy",     # OrgAdmin keyword / regex blocklist
-        "judge_link",         # EvalToGuardrailLink promoted judge
+        "judge_link",         # LegacyEvalToGuardrailLink promoted judge
     }
 )
 

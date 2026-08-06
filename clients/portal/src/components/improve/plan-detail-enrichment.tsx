@@ -17,6 +17,7 @@ import { SHELL_QUERY } from "@/lib/portal-query";
 import type { ImprovePlanFixture } from "@/lab/fixtures/improve";
 import { PlanEvidencePanel } from "./plan-evidence-panel";
 import { PlanStatusHistory } from "./plan-status-history";
+import { PlanEventLog } from "./plan-event-log";
 import { PlanImpactPreview } from "./plan-impact-preview";
 
 export function PlanDetailEnrichment({
@@ -43,6 +44,7 @@ export function PlanDetailEnrichment({
     <div className="space-y-3 border-t border-[var(--line)] px-4 py-4 sm:px-6">
       <PlanEvidencePanel plan={plan} raw={raw} />
       <PlanStatusHistory plan={plan} raw={raw} />
+      <PlanEventLog orgId={orgId} planId={plan.id} isDraft={isDraft} />
       <PlanImpactPreview
         orgId={orgId}
         plan={plan}

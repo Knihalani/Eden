@@ -14,7 +14,7 @@
 | Trace detail / transcript | <1.2s | TranscriptV2 + virtualization (W13); progressive load | **SOFT** — structural + unit; staging p95 not measured |
 | MCP tool response (read) | <800ms | `eden-mcp` smoke + W28 tool catalog; exclude upstream LLM | **SOFT** — install/smoke OK; no staging latency histogram |
 | Issue created after trace | <60s | Async workers + stumble/signal path | **SOFT** — unit contracts; staging dogfood open |
-| Search (Typesense) F12 | <200ms | **Real Typesense 1.1M docs**: SearchService end-to-end p95 **184ms** with `search_cutoff_ms=150` (server keyword p95 555→164). Untuned p95 was ~446–551ms. Single-node laptop; 10M not yet run. `bench/results/f12-span-search-1m-typesense-20260804.json` | **MET @1.1M** (tuned) — 10M staging follow-up |
+| Search (Typesense) F12 | <200ms | **Real Typesense 1.1M docs**: SearchService end-to-end p95 **184ms** with `search_cutoff_ms=150` (server keyword p95 555→164). Untuned p95 was ~446–551ms. Single-node laptop; 10M not yet run. `bench/results/f12-span-search-1m-typesense-20260804.json`. Harness (`scripts/bench_f12_span_search.py`) now has a `facet_by=None` vs `facet_by=DEFAULT_FACET_FIELDS` A/B toggle (`--facet-ab`, on by default) that measures the faceting-cost claim instead of asserting it, and computes `gate_met` programmatically from the run's own measured p95 vs `--gate-ms` (never hand-edited) — written to the results JSON, `null` when running the SQLite fallback proxy since that mode can't attest to the Typesense gate either way. Scale ladder (10k→100k→1M→10M) still needs `docker compose up typesense postgres`; **not runnable in this sandbox** — Docker CLI present but daemon unreachable (`docker info` fails to connect to the socket) and no standalone `typesense-server` binary is installed, so no additional rung (including 10k/100k) could be executed here. | **MET @1.1M** (tuned) — 10M staging follow-up; scale-ladder re-runs blocked on infra availability, not on missing harness features |
 | StatGate (N08) | <80ms | Microbench, 2000 iterations over a 200-incident synthetic pool (mixed kinds/severities, 0–8 stumbles, ~20% with metric samples driving the numeric gate; pure compute, no I/O): p50=0.0090ms p95=0.0757ms p99=0.0801ms vs SLA p95<80ms p99<150ms (`tests/perf/test_statgate_microbench.py`) | **MET** (local) |
 | Ingest hot-path overhead | ≤5ms p99 | Evolution scorecard + `tests/perf/test_hot_path_microbench.py` | **MET** (local) |
 | Live stream publish (N11) | <500ms | Unit/local buffer proof (W27); staging p95 open | **SOFT** |
@@ -25,12 +25,31 @@
 
 | Principle | Implementation | Verdict |
 |---|---|---|
-| Deterministic before LLM | StatGate (N08), F34 classifiers before F06 investigator | **MET** |
+| Deterministic before LLM | StatGate (N08), F34 classifiers gate the F06 investigator call site | **MET** |
 | Org spend budgets / kill switches | Cost ledger (W7), FinOps explorer+kills (W8), N22 autonomy bounds (W24), evolution spend (W25) | **MET** |
 | Feature-tagged CostEvent | autonomy / evolution / promote / signal_classifier | **MET** |
 | ChatSidebar metered | Session spend meter + estimate_chat_cost (W23) | **MET** |
 | Sampling on client/SDK | N16 client sampling + offline queue (W6) | **MET** |
 | Playground LLM cost honesty | Real ModelRouter handler (`playground/llm_handler.py`); `playground` in `KNOWN_FEATURES` (`cost_ledger.py`); staging spend attribution unproven | **SOFT** |
+
+> **Correction (OPT-12, 2026-08-05):** The "F06 investigator" gated above,
+> RCA, and guardrails are **not LLM-cost-optimization targets** — none of
+> them makes a live LLM call today, so there is nothing to optimize:
+> - **Signal investigator (F06/F34):** `run_investigator_llm_batch`
+>   (`signals/investigator.py`) always returns `{}`; `_one_completion`
+>   raises `RuntimeError("signal investigator LLM path removed")`.
+>   `INVESTIGATOR_COST_USD = 0.03` in `classifier_worker.py` is documented
+>   in-code as "NOT a real price" — a notional yardstick for a local
+>   shadow-mode savings counter, never written to a real `CostEvent`.
+> - **RCA:** `RootCauseAnalyzer` (`insights/rca/analyzer.py`) is a
+>   rule-based ~6-rule table; every response carries
+>   `model: "rule_based_v1"`. The documented LLM-as-judge upgrade path is
+>   deferred and was never built.
+> - **Guardrails:** `guardrails/detectors.py` imports only `re` for
+>   detection; no symbol in `guardrails/*.py` reaches an LLM client.
+>
+> **Current real LLM spend on all three: $0.** Do not allocate future
+> engineering cycles to "optimizing" LLM cost on paths that don't exist.
 
 ---
 
@@ -53,7 +72,7 @@
 | Cost controls | 5 | 1 | 0 |
 | Async/cache | 3 | 1 | 0 |
 
-**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; F12 span-search now met at 1.1M on real Typesense (`search_cutoff_ms=150`, p95 184ms), with a 10M-on-staging run as the remaining follow-up; human-facing p95s remain unproven.
+**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; F12 span-search now met at 1.1M on real Typesense (`search_cutoff_ms=150`, p95 184ms), with a 10M-on-staging run as the remaining follow-up; human-facing p95s remain unproven. F12's facet-cost claim and `gate_met` field are now harness-computed (`--facet-ab`, programmatic gate check) rather than asserted/hand-edited; the 10k/100k/10M scale-ladder rungs remain genuinely blocked on infra (no reachable Docker daemon or Typesense binary in the current sandbox), not fabricated.
 
 ---
 

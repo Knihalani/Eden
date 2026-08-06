@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import {
   agentForPlan,
   type ImprovePlanFixture,
@@ -10,6 +11,7 @@ import {
   ImproveKindChip,
   ImproveStatusChip,
 } from "@/lab/improve/improve-chrome";
+import { RejectPlanDialog } from "@/components/improve/reject-plan-dialog";
 
 export function ImprovePlanView({
   plan,
@@ -23,9 +25,12 @@ export function ImprovePlanView({
   onStatus: (
     id: string,
     status: ImprovePlanFixture["status"],
+    reason?: string,
   ) => void | Promise<void>;
   onBack: () => void;
 }) {
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectBusy, setRejectBusy] = useState(false);
   if (!plan) {
     if (!hasPlans) {
       return (
@@ -110,7 +115,7 @@ export function ImprovePlanView({
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
               title="Reject permanently via API"
-              onClick={() => void onStatus(plan.id, "blocked")}
+              onClick={() => setRejecting(true)}
             >
               Reject
             </button>
@@ -251,6 +256,23 @@ export function ImprovePlanView({
           </section>
         </div>
       </div>
+
+      {rejecting ? (
+        <RejectPlanDialog
+          planTitle={plan.title}
+          busy={rejectBusy}
+          onCancel={() => setRejecting(false)}
+          onConfirm={async (reason) => {
+            setRejectBusy(true);
+            try {
+              await onStatus(plan.id, "blocked", reason);
+              setRejecting(false);
+            } finally {
+              setRejectBusy(false);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import pytest
 from eden.services.soft_issue_review import (
     SoftIssueReviewer,
     evaluate_shadow_precision,
+    record_shadow_feedback,
 )
 
 
@@ -128,3 +129,104 @@ async def test_promote_shadow_detectors_enables_and_deletes() -> None:
     delete_sql = pg.execute.await_args_list[1].args[0]
     assert "enabled = TRUE" in enable_sql
     assert "DELETE FROM nl_signals" in delete_sql
+
+
+# ── FEAT-29 P0-C: dismiss made consequential without the weekly job ──────
+
+
+@pytest.mark.asyncio
+async def test_record_shadow_feedback_dismiss_auto_deletes_at_threshold() -> None:
+    """A dismiss that pushes a shadow detector past the same delete
+    threshold the weekly sweep uses (min_firings=20, precision<0.3) must
+    remove it immediately, not wait for promote_shadow_detectors()."""
+    updated_row = {
+        "id": "sig-1",
+        "org_id": "org-1",
+        "description": "[auto:a] bad",
+        "cluster_id": "auto:bad",
+        "match_count": 20,
+        "enabled": False,
+        "rule": {
+            "operator_confirms": 4,
+            "operator_dismisses": 16,
+            "firings": 20,
+        },
+    }
+    pg = MagicMock()
+    pg.fetchrow = AsyncMock(return_value=updated_row)
+    pg.execute = AsyncMock()
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=pg),
+    ):
+        ok = await record_shadow_feedback("org-1", "sig-1", dismiss=True)
+
+    assert ok is True
+    pg.execute.assert_awaited_once()
+    delete_sql = pg.execute.await_args.args[0]
+    assert "DELETE FROM nl_signals" in delete_sql
+    assert pg.execute.await_args.args[1] == "sig-1"
+    assert pg.execute.await_args.args[2] == "org-1"
+
+
+@pytest.mark.asyncio
+async def test_record_shadow_feedback_dismiss_below_threshold_no_delete() -> None:
+    """Below min_firings, dismiss just bumps the counter — no auto-delete."""
+    updated_row = {
+        "id": "sig-2",
+        "org_id": "org-1",
+        "description": "[auto:a] undecided",
+        "cluster_id": "auto:undecided",
+        "match_count": 3,
+        "enabled": False,
+        "rule": {
+            "operator_confirms": 0,
+            "operator_dismisses": 3,
+            "firings": 3,
+        },
+    }
+    pg = MagicMock()
+    pg.fetchrow = AsyncMock(return_value=updated_row)
+    pg.execute = AsyncMock()
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=pg),
+    ):
+        ok = await record_shadow_feedback("org-1", "sig-2", dismiss=True)
+
+    assert ok is True
+    pg.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_record_shadow_feedback_dismiss_already_promoted_no_delete() -> None:
+    """A detector that was already promoted (enabled=True) is out of scope
+    for the inline auto-disable — matches the weekly sweep's own
+    `enabled = FALSE` scan filter, left to normal operator management."""
+    updated_row = {
+        "id": "sig-3",
+        "org_id": "org-1",
+        "description": "[auto:a] promoted-then-dismissed",
+        "cluster_id": "auto:promoted",
+        "match_count": 30,
+        "enabled": True,
+        "rule": {
+            "operator_confirms": 2,
+            "operator_dismisses": 28,
+            "firings": 30,
+        },
+    }
+    pg = MagicMock()
+    pg.fetchrow = AsyncMock(return_value=updated_row)
+    pg.execute = AsyncMock()
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=pg),
+    ):
+        ok = await record_shadow_feedback("org-1", "sig-3", dismiss=True)
+
+    assert ok is True
+    pg.execute.assert_not_awaited()

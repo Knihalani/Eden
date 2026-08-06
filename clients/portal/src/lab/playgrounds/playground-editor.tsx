@@ -528,7 +528,7 @@ export function PlaygroundEditor({
       });
       pushToast({
         title: "Experiment created",
-        body: "Immutable snapshot promoted — open Evals to compare.",
+        body: "Immutable snapshot promoted — Evals will score it with the heuristic stub, not a real graded eval.",
         href: "/evals?mode=compare",
         tone: "ok",
       });
@@ -637,6 +637,7 @@ export function PlaygroundEditor({
               className="ds-btn ds-btn-primary ds-btn-sm"
               disabled={promoting}
               onClick={() => void promote()}
+              title="Creates an experiment scored by the heuristic stub — not a real graded eval."
             >
               {promoting ? "Promoting…" : "+ Experiment"}
             </button>

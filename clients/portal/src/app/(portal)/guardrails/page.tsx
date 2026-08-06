@@ -181,7 +181,7 @@ function LabGuardrailsInner() {
   }
 
   const activeCount = scoped.filter((p) => p.status === "active").length;
-  const hits24h = scoped.reduce((s, p) => s + p.matchCount24h, 0);
+  const hits24h = scoped.reduce((s, p) => s + (p.matchCount24h ?? 0), 0);
   const meta = (
     <span className="type-meta">
       {scoped.length} polic{scoped.length === 1 ? "y" : "ies"}

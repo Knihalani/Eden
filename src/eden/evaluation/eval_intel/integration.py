@@ -65,7 +65,43 @@ logger = logging.getLogger(__name__)
 
 
 class EvalToGuardrailLink:
-    """Galileo eval-to-guardrail lifecycle.
+    """Galileo eval-to-guardrail lifecycle — the canonical implementation.
+
+    This is the implementation actually reachable from production
+    routes: ``POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail``
+    (:meth:`promote_to_guardrail`), ``POST .../eval/promote-to-shadow-guardrail``
+    (:meth:`promote_to_shadow`), and ``POST .../eval/demote-guardrail``
+    (:meth:`demote`) — see ``eden.api.routes.intelligence_eval`` and
+    ``eden.api.routes.wave6_online``.
+
+    A second, older class,
+    :class:`eden.guardrails.intervention.LegacyEvalToGuardrailLink`
+    (FEAT-34: renamed from ``EvalToGuardrailLink`` to remove the
+    identical-name ambiguity with this class), still
+    exists (reachable from the legacy ``POST
+    /orgs/{org_id}/intelligence/guardrails/promote-judge`` route and
+    from :class:`eden.llmops.promotion_hooks.GuardrailHook`'s
+    closed-loop callbacks) but is **not** the enforcement path: its
+    ``.promote()`` only writes a ``guardrail_policies`` row of type
+    ``"judge_link"`` — a type ``InterventionEngine.evaluate_and_act``
+    hard-excludes from ``_enforced_types`` — and never touches the
+    live AI-gateway guardrail filter, so by itself it has no runtime
+    effect. Do not add new integrations against that class; it is
+    kept only because ``GuardrailHook`` and the legacy route depend
+    on its exact type/import surface. See that class's docstring for
+    detail.
+
+    **How enforcement actually happens here:** :meth:`promote_to_guardrail`
+    does two things the legacy class does not: (1) gates the
+    promotion on the judge's sample count and false-positive rate
+    (:data:`eden.evaluation.eval_intel._common.MIN_SAMPLES_FOR_PROMOTION` /
+    :data:`MAX_FPR_FOR_PROMOTION`), and (2) hot-reloads the *live*
+    :mod:`eden.llmops.filters.guardrail` gateway filter via
+    ``get_guardrail_filter().load_policies(...)`` — the filter every
+    request on the AI Gateway actually consults. The
+    ``guardrail_policies``/``eval_to_guardrail_links`` rows are the
+    audit trail; the gateway filter's in-memory policy list is what
+    is enforced. :meth:`demote` must (and does) undo both.
 
     Public method :meth:`promote_to_guardrail` returns the
     live envelope on success, or a live "bad_request" envelope
@@ -259,6 +295,80 @@ class EvalToGuardrailLink:
             data["evidence_gate_candidate_id"] = candidate_id
             result["data"] = data
         return result
+
+    async def demote(
+        self,
+        org_id: str,
+        *,
+        judge_name: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Disable a promoted judge guardrail (FEAT-34).
+
+        Ports :meth:`eden.guardrails.intervention.LegacyEvalToGuardrailLink.demote`'s
+        disable logic (same ``eval_to_guardrail_links`` /
+        ``guardrail_policies`` tables — reused directly rather than
+        duplicated) and additionally removes the policy from the
+        *live* gateway filter that :meth:`promote_to_guardrail` /
+        :meth:`promote_to_shadow` hot-reload on promotion. That
+        second step is the one the legacy class's ``.promote()``
+        never needed (it never added anything to the live filter in
+        the first place) but this class does — without it, a
+        "disabled" guardrail would keep firing on live traffic.
+        """
+        if not isinstance(judge_name, str) or not judge_name:
+            return _bad_request_envelope(
+                self.name, "judge_name must be a non-empty string"
+            )
+        judge_name = judge_name.strip()[:64]
+
+        # Reuse the DB disable helper from the legacy module — same
+        # tables, same schema, no reason to duplicate the SQL.
+        from eden.guardrails.intervention import _disable_eval_guardrail_link
+
+        result = await _disable_eval_guardrail_link(
+            org_id, judge_name=judge_name, reason=reason,
+        )
+        if not result.get("disabled"):
+            return _ok_envelope(
+                self.name,
+                {
+                    "org_id": org_id,
+                    "judge_name": judge_name,
+                    "status": "not_found",
+                    "reason": reason,
+                },
+            )
+
+        try:
+            from eden.llmops.filters.guardrail import get_guardrail_filter
+            from eden.llmops.learn_wiring import install_learn_filters
+
+            install_learn_filters()
+            filt = get_guardrail_filter()
+            remaining = [
+                p
+                for p in filt._policies.get(org_id, [])
+                if str(p.get("judge_name") or "") != judge_name
+            ]
+            filt.load_policies(org_id, remaining)
+        except Exception as hook_exc:
+            logger.debug(
+                "eval_to_guardrail: demote gateway filter reload failed: %s",
+                hook_exc,
+            )
+
+        return _ok_envelope(
+            self.name,
+            {
+                "org_id": org_id,
+                "judge_name": judge_name,
+                "status": "disabled",
+                "policy_ids": result.get("policy_ids") or [],
+                "link_ids": result.get("link_ids") or [],
+                "reason": reason,
+            },
+        )
 
 
 # ── 2. CustomPythonEval ─────────────────────────────────────────────

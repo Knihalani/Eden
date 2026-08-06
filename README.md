@@ -2,7 +2,7 @@
 
 **Eden is the observability + improvement platform for AI agents and LLM apps.** Delivered as two pillars:
 
-1. **Observability** — drop-in SDKs (Python, TypeScript) and an **OpenAI-compatible HTTP gateway** that proxies every request to whichever upstream model you configure (OpenAI, Anthropic, Bedrock, self-hosted).
+1. **Observability** — SDKs for Python and TypeScript (Python: one import patches your installed LLM libraries in place, zero other code changes; TypeScript: wrap each client instance in one line, e.g. `wrapOpenAI(client)`, or capture everything at the fetch layer with `instrument()`) and an **OpenAI-compatible HTTP gateway** that proxies every request to whichever upstream model you configure (OpenAI, Anthropic, Bedrock, self-hosted).
 2. **Web platform** — org management, trace/eval visualisations, data export, and a persistent AI assistant sidebar in every view.
 
 The two pillars close the loop: capture, analyse, improve.

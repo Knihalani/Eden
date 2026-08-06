@@ -2,7 +2,7 @@
 
 Mounts:
   - GET /orgs/{org_id}/analytics/cohorts?weeks=8
-  - GET /orgs/{org_id}/analytics/funnel?steps=signup,job_created,job_completed&window_days=30
+  - GET /orgs/{org_id}/analytics/funnel?steps=session_started,engaged,completed&window_days=30
 """
 from __future__ import annotations
 

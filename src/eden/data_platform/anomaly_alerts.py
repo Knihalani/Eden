@@ -5,6 +5,7 @@ ClickHouse analytics for anomalies. Sends alerts via multiple channels:
 - In-app notifications (PostgreSQL)
 - WebSocket push (real-time)
 - Email / webhook (async)
+- PagerDuty (FEAT-42, Events API v2 via eden.services.pagerduty_delivery)
 
 Usage:
     from eden.data_platform.anomaly_alerts import AnomalyDetector
@@ -430,8 +431,10 @@ class AnomalyDetector:
     ) -> dict[str, int]:
         """Dispatch alerts to configured channels.
 
-        Channels: in_app, websocket, email, webhook
-        (legacy ``slack`` is ignored; email uses SendKit).
+        Channels: in_app, websocket, email, webhook, pagerduty
+        (legacy ``slack`` is ignored; email uses SendKit; pagerduty uses
+        the Events API v2 sender in ``eden.services.pagerduty_delivery``,
+        FEAT-42).
         """
         channels = channels or ["in_app"]
         dispatched = dict.fromkeys(channels, 0)
@@ -454,7 +457,10 @@ class AnomalyDetector:
                     elif channel == "email":
                         await self._dispatch_email(alert)
                         dispatched[channel] += 1
-                    elif channel in ("slack", "pagerduty"):
+                    elif channel == "pagerduty":
+                        if await self._dispatch_pagerduty(alert):
+                            dispatched[channel] += 1
+                    elif channel == "slack":
                         logger.info("%s alert skipped:not_configured", channel)
                 except Exception as exc:
                     logger.warning(f"Failed to dispatch alert to {channel}: {exc}")
@@ -603,6 +609,31 @@ class AnomalyDetector:
                 )
         except Exception as exc:
             logger.warning(f"Webhook dispatch failed: {exc}")
+
+    async def _dispatch_pagerduty(self, alert: AnomalyAlert) -> bool:
+        """Send alert to PagerDuty via the Events API v2 sender (FEAT-42).
+
+        Was previously a bare ``logger.info("pagerduty alert
+        skipped:not_configured", ...)`` no-op alongside ``slack``. Returns
+        whether the *first* delivery attempt succeeded; a ``False`` return
+        may still be queued for background retry — see
+        ``eden.services.pagerduty_delivery``.
+        """
+        try:
+            from eden.services.pagerduty_delivery import send_pagerduty_event
+
+            org_id = alert.context.get("org_id")
+            return await send_pagerduty_event(
+                org_id=str(org_id) if org_id else None,
+                summary=alert.message,
+                source=alert.table or alert.alert_type,
+                severity=alert.severity,
+                dedup_key=f"{alert.alert_type}:{alert.table or alert.metric}",
+                custom_details=alert.to_dict(),
+            )
+        except Exception as exc:
+            logger.warning(f"PagerDuty dispatch failed: {exc}")
+            return False
 
     # ── API helper ─────────────────────────────────────────────────────────
 

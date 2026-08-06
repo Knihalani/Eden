@@ -18,7 +18,15 @@ export interface AutoInstrumentResult {
   mistral: boolean;
 }
 
-function _safeRequire(name: string): unknown {
+/**
+ * Best-effort `require()` that works whether the SDK is consumed as
+ * CJS or ESM (falls back to a synthesized `createRequire` when a bare
+ * `require` isn't in scope). Exported so `prototype-instrument.ts` can
+ * reuse the exact same module-resolution strategy this file already
+ * uses for framework *detection* to instead load the actual module
+ * namespace object it needs to patch.
+ */
+export function _safeRequire(name: string): unknown {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, no-eval
     const fn = (eval("require")) as NodeJS.Require;

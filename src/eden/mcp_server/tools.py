@@ -495,3 +495,40 @@ async def checkpoint_rerun(
         rerun_mode=rerun_mode,
         live_prefix=live_prefix,
     )
+
+
+async def confirm_shadow_detector(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    signal_id: str,
+    confirm_or_dismiss: str,
+) -> dict[str, Any]:
+    """P0-D (FEAT-27): confirm or dismiss a shadow detector (Loop 1) straight
+    from an MCP client (Cursor/Claude), not just the issues UI.
+
+    Thin wrapper over
+    :func:`eden.services.soft_issue_review.record_shadow_feedback` (§6.5) —
+    it does not reimplement the confirm/dismiss bookkeeping or the P0-C
+    inline auto-disable-on-dismiss logic, it just calls straight into it.
+    """
+    if confirm_or_dismiss not in ("confirm", "dismiss"):
+        return {
+            "status": "error",
+            "error": "confirm_or_dismiss must be 'confirm' or 'dismiss'",
+        }
+    from eden.services.soft_issue_review import record_shadow_feedback
+
+    updated = await record_shadow_feedback(
+        org_id,
+        signal_id,
+        confirm=True if confirm_or_dismiss == "confirm" else None,
+        dismiss=True if confirm_or_dismiss == "dismiss" else None,
+    )
+    return {
+        "status": "ok" if updated else "error",
+        "org_id": org_id,
+        "signal_id": signal_id,
+        "confirm_or_dismiss": confirm_or_dismiss,
+        "updated": updated,
+    }

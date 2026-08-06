@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ds/primitives";
 import { useQueryPatch } from "@/lab/agent-scope";
 import {
@@ -19,6 +19,7 @@ import {
   parseSettingsMode,
   resolveSettingsModeParam,
   SettingsModeNav,
+  SETTINGS_ROUTE_MODES,
   type AuditTab,
   type SettingsMode,
 } from "@/lab/settings/settings-chrome";
@@ -91,6 +92,21 @@ function LabSettingsInner() {
   );
   const paramId = searchParams.get("id");
   const paramAgent = searchParams.get("agent");
+
+  const router = useRouter();
+  // SSO / RBAC / SCIM / PII policy live on dedicated ``/settings/{mode}``
+  // routes, not as an in-page tab here. Redirect old bookmarks / legacy
+  // `?tab=scim` / `?tab=pii` links (and any `?mode=roles|sso|pii|scim`)
+  // straight to the real screen instead of silently falling back to the
+  // workspace overview.
+  useEffect(() => {
+    if (
+      paramMode &&
+      (SETTINGS_ROUTE_MODES as readonly string[]).includes(paramMode)
+    ) {
+      router.replace(`/settings/${paramMode}`);
+    }
+  }, [paramMode, router]);
 
   const patchQuery = useQueryPatch();
 

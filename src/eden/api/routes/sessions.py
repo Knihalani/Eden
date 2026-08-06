@@ -209,6 +209,8 @@ class SessionTimelineResponse(BaseModel):
     summary: SessionSummaryItem
     turn_count: int
     turns: list[SessionTurn]
+    limit: int
+    offset: int
 
 
 class LinkIssueRequest(BaseModel):
@@ -268,12 +270,16 @@ async def sessions_list(
 async def sessions_timeline(
     org_id: str = Depends(require_path_org_access),
     session_id: str = Path(..., min_length=1, max_length=128),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> SessionTimelineResponse:
-    """Ordered turn cards for one session (trace per turn)."""
+    """Ordered turn cards for one session (trace per turn), paginated."""
     from eden.sessions import SessionNotFoundError, get_session_timeline
 
     try:
-        result = await get_session_timeline(org_id, session_id)
+        result = await get_session_timeline(
+            org_id, session_id, limit=limit, offset=offset
+        )
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail="session not found") from None
     except (ConnectionError, TimeoutError, OSError) as exc:

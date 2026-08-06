@@ -789,10 +789,10 @@ class GuardrailHook:
 
     The v0 ship: each event records the recommended action to
     ``closed_loop_actions``. The reverse direction
-    (this hook → :class:`EvalToGuardrailLink.promote`) is
+    (this hook → :class:`LegacyEvalToGuardrailLink.promote`) is
     also wired: :meth:`on_judge_threshold_breach` is the
     entry point of the eval-to-guardrail lifecycle and
-    delegates to :class:`EvalToGuardrailLink` to create
+    delegates to :class:`LegacyEvalToGuardrailLink` to create
     the policy + link row.
     """
 
@@ -810,7 +810,7 @@ class GuardrailHook:
         guardrail lifecycle).
 
         The v0 ship records the recommended action AND (best-
-        effort) calls :class:`EvalToGuardrailLink.promote` to
+        effort) calls :class:`LegacyEvalToGuardrailLink.promote` to
         create the link + policy. The link creation is
         idempotent: re-running on the same judge creates the
         same ``(judge_name, threshold)`` policy.
@@ -826,14 +826,14 @@ class GuardrailHook:
             },
             severity="high",
         )
-        # Best-effort: also call EvalToGuardrailLink.promote
+        # Best-effort: also call LegacyEvalToGuardrailLink.promote
         # so the Cat 15 policy + link row get created. The
         # link service is fail-safe (returns a not_implemented
         # envelope on any error without raising).
         try:
-            from eden.guardrails import EvalToGuardrailLink
+            from eden.guardrails import LegacyEvalToGuardrailLink
 
-            link = EvalToGuardrailLink()
+            link = LegacyEvalToGuardrailLink()
             # The promote method needs a policy to attach the
             # link to; we create a minimal one inline if the
             # caller hasn't already done so.
@@ -847,7 +847,7 @@ class GuardrailHook:
             _ = policy_resp
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
-                "guardrail_hook: EvalToGuardrailLink.promote failed: %s",
+                "guardrail_hook: LegacyEvalToGuardrailLink.promote failed: %s",
                 exc,
             )
         logger.debug(
@@ -873,9 +873,9 @@ class GuardrailHook:
             severity="medium",
         )
         try:
-            from eden.guardrails import EvalToGuardrailLink
+            from eden.guardrails import LegacyEvalToGuardrailLink
 
-            link = EvalToGuardrailLink()
+            link = LegacyEvalToGuardrailLink()
             await link.demote(
                 org_id,
                 judge_name=judge_name,
@@ -883,7 +883,7 @@ class GuardrailHook:
             )
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
-                "guardrail_hook: EvalToGuardrailLink.demote failed: %s",
+                "guardrail_hook: LegacyEvalToGuardrailLink.demote failed: %s",
                 exc,
             )
         logger.debug(

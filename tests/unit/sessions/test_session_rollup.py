@@ -319,6 +319,59 @@ class TestFiveTurnSession:
             sum(t["cost_usd"] for t in timeline["turns"])
         )
 
+    async def test_pagination_limits_offsets_and_scopes_subqueries(
+        self, pg_conn, org
+    ) -> None:
+        # OPT-11: LIMIT/OFFSET must page the chronologically-ordered
+        # ``_TURNS_SQL_PAGE`` query, never a slice of ``trace_ids``
+        # (unordered) — and the stumble/issue sub-queries must only
+        # scan the current page's trace ids, not the whole session.
+        session_id = f"sess-{uuid.uuid4().hex[:10]}"
+        costs = [0.01, 0.02, 0.03, 0.04, 0.05]
+        trace_ids = []
+        for turn, cost in enumerate(costs, start=1):
+            trace_ids.append(
+                await _seed_turn(pg_conn, org, session_id, turn, cost_usd=cost)
+            )
+        # Stumble on turn 3 (page 1) and turn 5 (page 2) — each page
+        # should only see its own turn's stumble.
+        await _insert_stumble(
+            pg_conn, org_id=org, trace_id=trace_ids[2], session_id=session_id
+        )
+        await _insert_stumble(
+            pg_conn, org_id=org, trace_id=trace_ids[4], session_id=session_id
+        )
+
+        indexer = SessionRollupIndexer(client=pg_conn)
+        for tid in trace_ids:
+            await indexer.index_trace(org, tid)
+
+        page1 = await get_session_timeline(
+            org, session_id, limit=3, offset=0, client=pg_conn
+        )
+        assert page1["limit"] == 3 and page1["offset"] == 0
+        assert page1["turn_count"] == 5  # header total, not page size
+        assert [t["index"] for t in page1["turns"]] == [1, 2, 3]
+        assert [t["trace_id"] for t in page1["turns"]] == trace_ids[:3]
+        assert [t["had_stumble"] for t in page1["turns"]] == [False, False, True]
+
+        page2 = await get_session_timeline(
+            org, session_id, limit=3, offset=3, client=pg_conn
+        )
+        assert page2["limit"] == 3 and page2["offset"] == 3
+        # enumerate(turn_rows, start=offset+1): indices continue from
+        # page 1 instead of restarting at 1.
+        assert [t["index"] for t in page2["turns"]] == [4, 5]
+        assert [t["trace_id"] for t in page2["turns"]] == trace_ids[3:]
+        assert [t["had_stumble"] for t in page2["turns"]] == [False, True]
+
+        # Together the two pages reconstruct the full chronological
+        # timeline — pagination never drops, duplicates, or reorders
+        # turns relative to the unpaginated read.
+        assert [
+            t["trace_id"] for t in page1["turns"] + page2["turns"]
+        ] == trace_ids
+
     async def test_failed_last_turn_marks_session_fail(self, pg_conn, org) -> None:
         session_id = f"sess-{uuid.uuid4().hex[:10]}"
         await _seed_turn(pg_conn, org, session_id, 1, cost_usd=0.01)
@@ -340,6 +393,41 @@ class TestFiveTurnSession:
             session_id,
         )
         assert outcome == "fail"
+
+    async def test_error_type_alone_marks_session_fail(self, pg_conn, org) -> None:
+        """FEAT-62 — ``error_type`` is its own error signal, independent
+        of ``outcome``. A turn whose ``outcome`` is NOT one of
+        ``_ERROR_OUTCOMES`` (e.g. ``"success"``) but whose ``error_type``
+        is truthy must still flip the session to ``fail`` — the
+        ``bool(row["error_type"]) or outcome in _ERROR_OUTCOMES`` branch
+        in ``_turn_errored`` isolated from the ``outcome`` branch.
+        """
+        session_id = f"sess-{uuid.uuid4().hex[:10]}"
+        await _seed_turn(pg_conn, org, session_id, 1, cost_usd=0.01)
+        await _insert_event(
+            pg_conn,
+            org_id=org,
+            trace_id=f"trace-{session_id}-2",
+            session_id=session_id,
+            ts=BASE_TS + timedelta(minutes=10),
+            # Deliberately NOT an error outcome — isolates the
+            # error_type-only branch of `_turn_errored`.
+            outcome="success",
+            error_type="RateLimitError",
+        )
+        indexer = SessionRollupIndexer(client=pg_conn)
+        await indexer.index_trace(org, f"trace-{session_id}-2")
+        row = await pg_conn.fetchrow(
+            "SELECT outcome FROM session_summaries "
+            "WHERE org_id=$1 AND session_id=$2",
+            org,
+            session_id,
+        )
+        assert row is not None
+        assert row["outcome"] == "fail", (
+            "a turn with a truthy error_type but a non-error outcome "
+            "must still mark the session as failed"
+        )
 
 
 class TestListFilters:

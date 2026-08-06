@@ -1272,18 +1272,21 @@ function LabEvalsInner() {
           });
           const expId = String(experiment.id ?? "");
           if (!expId) throw new Error("No experiment id returned");
-          await offlineExperimentsApi.run(orgId, expId);
+          const { result } = await offlineExperimentsApi.run(orgId, expId);
           const mapped: ExperimentFixture = {
             id: expId,
             name: String(experiment.name ?? `${ds.name} · run ${runN}`),
             datasetId: dsId,
             status: "completed",
             createdAt: "just now",
-            avgScores: {},
+            avgScores: result.grades ?? {},
             latencyMs: null,
             costUsd: null,
             errorRate: null,
             suggestedBaselineId: olderId || undefined,
+            // F51: backend scoring is always a heuristic stub — surface it, don't drop it.
+            synthetic: result.synthetic ?? true,
+            method: result.method ?? "heuristic_stub",
           };
           setExtraExperiments((prev) => [
             mapped,
@@ -1390,6 +1393,10 @@ function LabEvalsInner() {
             costUsd: null,
             errorRate: null,
             suggestedBaselineId: olderId || undefined,
+            // promote-experiment doesn't score yet, but this platform never grades
+            // with anything but the F51 heuristic stub — flag it up front.
+            synthetic: true,
+            method: "heuristic_stub",
           };
           setExtraExperiments((prev) => [
             mapped,

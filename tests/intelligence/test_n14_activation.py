@@ -192,7 +192,7 @@ async def test_guardrail_demote_hook_calls_eval_link() -> None:
         "eden.llmops.promotion_hooks._record_action",
         AsyncMock(return_value="aid-1"),
     ), patch(
-        "eden.guardrails.EvalToGuardrailLink.demote",
+        "eden.guardrails.LegacyEvalToGuardrailLink.demote",
         demote,
     ):
         await GuardrailHook().on_judge_below_floor("org_t", judge_name="j1")

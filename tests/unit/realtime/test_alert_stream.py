@@ -53,9 +53,9 @@ class TestSandboxEscapeRule:
         assert alert.severity == AlertSeverity.CRITICAL
         assert alert.entity_id == "job-123"
         assert alert.tenant_id == "org-1"
-        # P0 rule routes to pagerduty/webhook in addition to in-app/websocket.
+        # P0 rule routes to pagerduty/webhook/email in addition to in-app/websocket.
         channel_values = {c.value for c in alert.channels}
-        assert {"in_app", "websocket", "pagerduty", "webhook"} <= channel_values
+        assert {"in_app", "websocket", "pagerduty", "webhook", "email"} <= channel_values
         # Message surfaces the payload detail, not just the generic rule description.
         assert "path traversal" in alert.message
         assert alert.context["event_type"] == "sandbox.security_alert"

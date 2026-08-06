@@ -29,6 +29,7 @@ export const LAB_SURFACES: LabSurface[] = [
   { id: "improve", label: "Improve", href: "/improve", status: "ready" },
   { id: "prompts", label: "Prompts", href: "/prompts", status: "ready" },
   { id: "guardrails", label: "Guardrails", href: "/guardrails", status: "ready" },
+  { id: "labeling", label: "Labeling", href: "/labeling", status: "ready" },
   { id: "cost", label: "Cost", href: "/cost", status: "ready" },
   { id: "gateway", label: "Gateway", href: "/gateway", status: "ready" },
   { id: "agent", label: "Assistant", href: "/agent", status: "ready" },

@@ -20,10 +20,22 @@ INTERNAL_CHAT_MODEL: str = (
     os.getenv("EDEN_INTERNAL_CHAT_MODEL") or "deepseek/deepseek-v4-flash-0731"
 )
 
-#: Fallback chain after the primary. Empty by design: a single internal
-#: model keeps cost + behaviour predictable. Add ids here only behind a
-#: deliberate rollback/DR decision.
-INTERNAL_CHAT_FALLBACKS: list[str] = []
+#: Fallback chain after the primary. FEAT-68 (2026-08 strategic review):
+#: 100% of eden's own internal LLM traffic (evals, nudge generation, issue
+#: extraction, etc.) went through OpenRouterClient with this list empty,
+#: meaning a single upstream/provider outage on the primary model took
+#: down every internal-LLM-dependent feature simultaneously with no
+#: fallback. Deliberate DR decision: keep this short (one hop) so cost +
+#: behaviour stay close to predictable, but not empty. The fallback is a
+#: different upstream provider than the primary's DeepInfra route so a
+#: DeepInfra-specific outage doesn't take out the fallback too.
+#: Override via ``EDEN_INTERNAL_CHAT_FALLBACKS`` (comma-separated) for
+#: rollback without a redeploy.
+INTERNAL_CHAT_FALLBACKS: list[str] = [
+    m.strip()
+    for m in (os.getenv("EDEN_INTERNAL_CHAT_FALLBACKS") or "openai/gpt-4o-mini").split(",")
+    if m.strip()
+]
 
 
 def internal_chat_chain() -> list[str]:

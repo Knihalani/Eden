@@ -47,13 +47,13 @@ class EvidenceGate:
         ref_id: str,
         status: str = "shadow",
     ) -> str | None:
+        cid = uuid4()
         try:
             from eden.storage.postgres import get_postgres_client
 
             client = await get_postgres_client()
             if client is None:
                 return None
-            cid = uuid4()
             await client.execute(
                 """
                 INSERT INTO promotion_candidates
@@ -68,7 +68,23 @@ class EvidenceGate:
             )
             return str(cid)
         except Exception as exc:
-            logger.warning("evidence_gate: enqueue failed: %s", exc)
+            # Genuinely transient/environmental failures (connection drop,
+            # constraint violation on a bad org_id/status, etc.) are
+            # swallowed on purpose — callers treat a `None` return as
+            # "gate unavailable, hold/block promotion" rather than crash.
+            # promotion_candidates.ref_id is TEXT (migration 149) so this
+            # should no longer fire for the composite "agent:version" /
+            # skill-id / judge-name refs that used to hit an asyncpg UUID
+            # decode error here on every call — if it does fire, log loud
+            # enough to notice.
+            logger.error(
+                "evidence_gate: enqueue failed (org_id=%s kind=%s ref_id=%r): %s",
+                org_id,
+                kind,
+                ref_id,
+                exc,
+                exc_info=True,
+            )
             return None
 
     async def get_candidate(self, org_id: str, candidate_id: str) -> dict[str, Any] | None:
@@ -114,12 +130,73 @@ class EvidenceGate:
     async def _metrics_from_outcomes(
         self, candidate: dict[str, Any], *, applied: bool
     ) -> list[float]:
-        """Aggregate stumble indicators from nudge_outcomes (1=stumble, 0=success)."""
+        """Dispatch to a per-kind outcome source (1=failure/stumble, 0=success).
+
+        FEAT-31: each PromotionKind gets its own real evidence source rather
+        than being lumped into a blanket "not nudge -> no evidence" bucket.
+        Kinds that genuinely have no outcome instrumentation yet still
+        return [] here, but from their own explicit branch with a comment
+        on what's missing -- not as a side effect of a generic kind check.
+        """
         kind = str(candidate.get("kind") or "")
         ref_id = str(candidate.get("ref_id") or "")
         org_id = str(candidate.get("org_id") or "")
-        if kind != "nudge" or not ref_id:
+        if not ref_id:
             return []
+        if kind == "nudge":
+            return await self._nudge_outcome_metrics(org_id, ref_id, applied=applied)
+        if kind == "prompt_version":
+            return await self._prompt_version_outcome_metrics(
+                org_id, ref_id, applied=applied
+            )
+        if kind == "guardrail":
+            # No ground-truth correctness signal exists for guardrail
+            # decisions today. `guardrail_evaluations` and `intervention_log`
+            # (see src/eden/guardrails/intervention.py) only record the
+            # verdict a policy produced (allow/block/warn/redact), never
+            # whether that verdict was *correct* -- there's no
+            # false-positive flag, human-review/override table, or
+            # reversed-decision tracking anywhere in the schema. Wiring
+            # this up for real needs a `guardrail_outcomes`-style table
+            # (mirroring `nudge_outcomes.outcome_success`) fed by a
+            # reviewer/override action, not a fabricated proxy metric.
+            return []
+        if kind == "model_routing":
+            # `model_routing` is declared as a PromotionKind (with its own
+            # _MIN_SAMPLES entry) but nothing in the codebase ever calls
+            # enqueue(kind="model_routing", ...), so there's no established
+            # ref_id convention either. ModelRouter (eden/optimization/
+            # model_router.py) tracks tier/fallback/quality-validation
+            # counters purely in-memory on the instance -- none of it is
+            # persisted. There's nothing to query yet; this needs a
+            # routing_decisions-style outcome table (and a producer) first.
+            return []
+        if kind == "kb_skill":
+            # kb_skill candidates (ref_id = skills.id) are enqueued by
+            # KBFlywheelCoordinator (src/eden/kb/flywheel/coordinator.py),
+            # but the `skills` table only carries a static confidence_score/
+            # quality_metrics set once at draft time plus a human
+            # archivist_reviewed flag -- nothing records whether an applied
+            # skill actually helped or hurt downstream. A
+            # skill_applications/skill_outcomes table (an outcome_success
+            # boolean keyed by skill_id) is needed before this kind can be
+            # evidence-gated on real data.
+            return []
+        # kind == "pr_merge" (or anything else): pr_merge is declared as a
+        # PromotionKind and given its own _MIN_SAMPLES threshold, but
+        # nothing in the codebase ever enqueues a pr_merge candidate and
+        # there is no merge/revert outcome table to query (grepped the
+        # whole tree for "pr_merge" -- only hit is this file's own kind
+        # list). TODO(FEAT-31 follow-up): wire this up once a producer and
+        # a merge-outcome source (e.g. "was this PR reverted/hotfixed")
+        # exist; until then it stays an honest no-evidence [] rather than
+        # a fabricated signal.
+        return []
+
+    async def _nudge_outcome_metrics(
+        self, org_id: str, ref_id: str, *, applied: bool
+    ) -> list[float]:
+        """Aggregate stumble indicators from nudge_outcomes (1=stumble, 0=success)."""
         try:
             from eden.storage.postgres import get_postgres_client
 
@@ -144,7 +221,67 @@ class EvidenceGate:
             )
             return [0.0 if r["outcome_success"] else 1.0 for r in rows or []]
         except Exception as exc:
-            logger.debug("evidence_gate: outcomes metrics failed: %s", exc)
+            logger.debug("evidence_gate: nudge outcomes metrics failed: %s", exc)
+            return []
+
+    async def _prompt_version_outcome_metrics(
+        self, org_id: str, ref_id: str, *, applied: bool
+    ) -> list[float]:
+        """Aggregate agent.run outcomes from telemetry_events for a canary.
+
+        ``ref_id`` is the composite ``"{agent}:{candidate_version}"`` used
+        throughout the prompt-canary promotion path (see
+        ``eden.llmops.promotion.PromotionLoop._evaluate_one`` and
+        ``eden.api.routes.prompt_canary``). This mirrors that same
+        control/candidate split rather than inventing a new one:
+        ``applied=True`` is the candidate version (treatment), and
+        ``applied=False`` is everything else currently serving that
+        tenant's traffic (control). ``org_id`` maps directly onto
+        ``telemetry_events.tenant_id``.
+        """
+        if ":" not in ref_id:
+            return []
+        _agent, _, candidate_version = ref_id.rpartition(":")
+        if not candidate_version:
+            return []
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            client = await get_postgres_client()
+            if client is None:
+                return []
+            if applied:
+                rows = await client.fetch(
+                    """
+                    SELECT outcome
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND event_type = 'agent.run'
+                      AND attributes->>'prompt_version' = $2
+                    ORDER BY timestamp DESC
+                    LIMIT 200
+                    """,
+                    org_id,
+                    candidate_version,
+                )
+            else:
+                rows = await client.fetch(
+                    """
+                    SELECT outcome
+                    FROM telemetry_events
+                    WHERE tenant_id = $1
+                      AND event_type = 'agent.run'
+                      AND (attributes->>'prompt_version' IS NULL
+                           OR attributes->>'prompt_version' != $2)
+                    ORDER BY timestamp DESC
+                    LIMIT 200
+                    """,
+                    org_id,
+                    candidate_version,
+                )
+            return [0.0 if r["outcome"] == "success" else 1.0 for r in rows or []]
+        except Exception as exc:
+            logger.debug("evidence_gate: prompt_version outcomes metrics failed: %s", exc)
             return []
 
     async def evaluate(self, org_id: str, candidate_id: str) -> EvidenceReport:

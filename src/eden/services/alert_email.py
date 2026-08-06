@@ -140,6 +140,79 @@ async def send_issue_alert_email(
             logger.debug("alert_email: send failed: %s", exc)
 
 
+_NL_INCIDENT_MESSAGING_CHANNELS = ("email", "slack", "pagerduty")
+
+
+def _nl_incident_channel_flags(channels: dict[str, Any] | None) -> tuple[bool, bool, bool]:
+    """Resolve (send_email, send_slack, send_pagerduty) from a
+    ``nl_alert_rules.channels`` dict (see ``eden.alerts.repo``).
+
+    Each key is an independent on/off toggle (a rule can page both
+    Slack and email), matching the portal's create-rule form which
+    saves ``{"email": <bool>, "slack": <bool>}``. Backward compatible:
+    when the rule has no messaging channel explicitly configured
+    (``channels`` is ``None``/empty, or only carries non-messaging
+    keys such as the storage default ``{"in_app": true}``), the
+    pre-FEAT-43 behaviour of a single email send is preserved.
+    """
+    channels = channels or {}
+    explicitly_configured = any(k in channels for k in _NL_INCIDENT_MESSAGING_CHANNELS)
+    send_email = bool(channels.get("email")) if explicitly_configured else True
+    send_slack = bool(channels.get("slack"))
+    send_pagerduty = bool(channels.get("pagerduty"))
+    return send_email, send_slack, send_pagerduty
+
+
+async def _send_nl_incident_slack(
+    *,
+    org_id: str,
+    alert_event_id: str,
+    rule_name: str,
+    reason: str | None,
+    confidence: float | None,
+) -> None:
+    try:
+        from eden.services.slack_notify import notify_nl_incident
+
+        await notify_nl_incident(
+            org_id,
+            alert_event_id=alert_event_id,
+            rule_name=rule_name,
+            reason=reason,
+            confidence=confidence,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("alert_email: nl incident slack dispatch failed: %s", exc)
+
+
+async def _send_nl_incident_pagerduty(
+    *,
+    org_id: str,
+    alert_event_id: str,
+    rule_name: str,
+    reason: str | None,
+    confidence: float | None,
+) -> None:
+    try:
+        from eden.services.pagerduty_delivery import send_pagerduty_event
+
+        await send_pagerduty_event(
+            org_id=org_id,
+            summary=f"NL alert real incident: {rule_name}"[:1024],
+            source="eden-nl-alerts",
+            severity="critical" if (confidence or 0) >= 0.9 else "error",
+            dedup_key=f"nl_incident:{alert_event_id}",
+            custom_details={
+                "rule_name": rule_name,
+                "reason": reason or "n/a",
+                "confidence": confidence,
+                "alert_event_id": alert_event_id,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("alert_email: nl incident pagerduty dispatch failed: %s", exc)
+
+
 async def send_nl_incident_email(
     *,
     org_id: str,
@@ -147,8 +220,42 @@ async def send_nl_incident_email(
     rule_name: str,
     reason: str | None = None,
     confidence: float | None = None,
+    channels: dict[str, Any] | None = None,
 ) -> None:
-    """Email for NL alert real_incident verdicts (sparse)."""
+    """Route an NL alert real_incident verdict to its configured
+    channels (FEAT-43).
+
+    ``channels`` is the rule's stored ``nl_alert_rules.channels``
+    dict — see :func:`_nl_incident_channel_flags` for the toggle
+    semantics. Despite the function's (legacy) name, this is now the
+    single dispatch entrypoint for NL-alert paging: it may also send
+    to Slack and/or PagerDuty, in addition to or instead of email,
+    depending on ``channels``. Each channel send is independently
+    best-effort — a Slack/PagerDuty failure never blocks email, and
+    vice versa.
+    """
+    send_email, send_slack, send_pagerduty = _nl_incident_channel_flags(channels)
+
+    if send_slack:
+        await _send_nl_incident_slack(
+            org_id=org_id,
+            alert_event_id=alert_event_id,
+            rule_name=rule_name,
+            reason=reason,
+            confidence=confidence,
+        )
+    if send_pagerduty:
+        await _send_nl_incident_pagerduty(
+            org_id=org_id,
+            alert_event_id=alert_event_id,
+            rule_name=rule_name,
+            reason=reason,
+            confidence=confidence,
+        )
+
+    if not send_email:
+        return
+
     dedupe = f"nl:{alert_event_id}"
     if not await _allow_send(org_id, dedupe):
         return

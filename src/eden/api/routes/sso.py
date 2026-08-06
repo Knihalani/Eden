@@ -13,14 +13,26 @@ Live schema (verified against production information_schema):
 API ``provider_id`` maps to ``org_sso_settings.id``.
 """
 
+import base64
+import copy
 import hashlib
+import hmac
+import json
 import logging
 import secrets
-from datetime import datetime
+import time
+import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import httpx
+import jwt
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding as rsa_padding
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 
 from eden.api.deps import (
@@ -29,6 +41,8 @@ from eden.api.deps import (
     get_postgres_client,
     require_org_admin,
 )
+from eden.api.routes.auth import _set_session_cookie
+from eden.api.utils.auth import create_access_token
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.storage.redis import get_redis_client
@@ -36,6 +50,24 @@ from eden.storage.redis import get_redis_client
 logger = logging.getLogger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/sso", tags=["sso"])
+
+# FEAT-1 — hand-rolled SAML 2.0 assertion validation. XML namespace
+# prefixes are registered globally so ``ET.tostring`` reproduces the
+# same canonical form (and thus the same digest) that the signer
+# computed the signature over. See ``_validate_saml_assertion`` for
+# the documented scope/gaps of this hand-rolled verifier.
+_SAML_ASSERTION_NS = "urn:oasis:names:tc:SAML:2.0:assertion"
+_SAML_DSIG_NS = "http://www.w3.org/2000/09/xmldsig#"
+_SAML_NS = {"saml": _SAML_ASSERTION_NS, "ds": _SAML_DSIG_NS}
+ET.register_namespace("saml", _SAML_ASSERTION_NS)
+ET.register_namespace("ds", _SAML_DSIG_NS)
+
+# FEAT-1 — OIDC discovery-document / JWKS caches. Keyed by URL, values
+# are ``(document, fetched_at_monotonic)`` tuples. Cleared in tests via
+# ``sso_routes._OIDC_DISCOVERY_CACHE.clear()`` / ``_OIDC_JWKS_CACHE.clear()``.
+_OIDC_DISCOVERY_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
+_OIDC_JWKS_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
+_OIDC_CACHE_TTL_SECONDS = 3600
 
 # Audit 2026-07-02 S-3 — SSO state nonce CSRF protection. State is
 # persisted in Redis under this prefix with a TTL of 10 minutes.
@@ -649,35 +681,417 @@ async def initiate_sso_login(
     raise HTTPException(status_code=400, detail=f"Unsupported provider type: {provider_type}")
 
 
+def _parse_saml_time(value: str) -> datetime:
+    """Parse a SAML ``NotBefore``/``NotOnOrAfter`` timestamp
+    (``YYYY-MM-DDTHH:MM:SSZ``) into a tz-aware ``datetime``."""
+    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+
+
+def _verify_saml_signature(assertion: ET.Element, cert_pem: str) -> None:
+    """Verify the enveloped ``<ds:Signature>`` on ``assertion``
+    against the org's registered certificate.
+
+    Recomputes the digest over the assertion body (signature
+    stripped) and compares it against ``<ds:DigestValue>`` — this
+    catches a post-signing tamper. Then verifies the RSA signature
+    over the canonicalized ``<ds:SignedInfo>`` using the certificate's
+    public key — this catches a signature minted with the wrong
+    (unregistered) private key.
+    """
+    sig_el = assertion.find("ds:Signature", _SAML_NS)
+    if sig_el is None:
+        raise ValueError("SAML assertion is not signed")
+
+    signed_info_el = sig_el.find("ds:SignedInfo", _SAML_NS)
+    signature_value_el = sig_el.find("ds:SignatureValue", _SAML_NS)
+    if signed_info_el is None or signature_value_el is None or not (signature_value_el.text or "").strip():
+        raise ValueError("SAML assertion signature is malformed")
+
+    digest_value_el = signed_info_el.find("ds:Reference/ds:DigestValue", _SAML_NS)
+    if digest_value_el is None or not (digest_value_el.text or "").strip():
+        raise ValueError("SAML assertion signature is malformed")
+
+    unsigned_copy = copy.deepcopy(assertion)
+    stripped_sig = unsigned_copy.find("ds:Signature", _SAML_NS)
+    if stripped_sig is not None:
+        unsigned_copy.remove(stripped_sig)
+    canonical_assertion = ET.canonicalize(ET.tostring(unsigned_copy, encoding="unicode"))
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(canonical_assertion.encode("utf-8"))
+    expected_digest = base64.b64encode(digest.finalize()).decode("ascii")
+    if not hmac.compare_digest(expected_digest, digest_value_el.text.strip()):
+        raise ValueError("SAML assertion digest mismatch — assertion was tampered with")
+
+    try:
+        cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+    except ValueError as exc:
+        raise ValueError(f"Registered SAML certificate is invalid: {exc}") from exc
+    public_key = cert.public_key()
+
+    canonical_signed_info = ET.canonicalize(ET.tostring(signed_info_el, encoding="unicode"))
+    try:
+        signature = base64.b64decode(signature_value_el.text.strip())
+    except Exception as exc:  # noqa: BLE001 — malformed base64 in attacker input
+        raise ValueError("SAML assertion signature is not valid base64") from exc
+
+    try:
+        public_key.verify(
+            signature,
+            canonical_signed_info.encode("utf-8"),
+            rsa_padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    except InvalidSignature as exc:
+        raise ValueError("SAML assertion signature verification failed") from exc
+
+
+def _validate_saml_assertion(assertion: ET.Element, cert_pem: str) -> dict[str, Any]:
+    """Hand-rolled SAML 2.0 ``<Assertion>`` validator.
+
+    Documented scope/gaps (FEAT-1): no ``AudienceRestriction`` /
+    ``InResponseTo`` check, RSA-only signatures, and only a single
+    enveloped signature over the ``<Assertion>`` element itself (no
+    support for a signature over a wrapping ``<Response>``). Good
+    enough to prove the crypto is real; not a full SAML stack.
+    """
+    _verify_saml_signature(assertion, cert_pem)
+
+    conditions = assertion.find("saml:Conditions", _SAML_NS)
+    if conditions is not None:
+        now = datetime.now(UTC)
+        not_before = conditions.get("NotBefore")
+        not_on_or_after = conditions.get("NotOnOrAfter")
+        if not_before and _parse_saml_time(not_before) > now:
+            raise ValueError("SAML assertion is not yet valid (NotBefore in the future)")
+        if not_on_or_after and _parse_saml_time(not_on_or_after) <= now:
+            raise ValueError("SAML assertion has expired (NotOnOrAfter in the past)")
+
+    name_id_el = assertion.find("saml:Subject/saml:NameID", _SAML_NS)
+    if name_id_el is None or not (name_id_el.text or "").strip():
+        raise ValueError("SAML assertion is missing a Subject/NameID")
+    email = name_id_el.text.strip()
+
+    name: str | None = None
+    for attr in assertion.findall("saml:AttributeStatement/saml:Attribute", _SAML_NS):
+        if attr.get("Name") == "name":
+            value_el = attr.find("saml:AttributeValue", _SAML_NS)
+            if value_el is not None and (value_el.text or "").strip():
+                name = value_el.text.strip()
+
+    return {"email": email, "name": name}
+
+
+async def _handle_saml_callback(
+    saml_response: str | None, provider: dict[str, Any]
+) -> tuple[str, str | None]:
+    """Decode + validate an IdP-initiated SAML response, returning
+    ``(email, name)`` on success. Raises ``HTTPException`` on any
+    failure — 503 when the deployment isn't configured for SAML
+    (no registered certificate), 401/400 for anything the IdP or an
+    attacker sent us."""
+    if not saml_response:
+        raise HTTPException(status_code=400, detail="Missing SAML response")
+
+    cert_pem = provider.get("certificate")
+    if not cert_pem:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "saml_not_configured",
+                "message": (
+                    "SAML login is not enabled for this provider: no signing "
+                    "certificate is registered — contact your Eden "
+                    "administrator or see docs/how-to/sso-setup.md."
+                ),
+            },
+        )
+
+    try:
+        xml_bytes = base64.b64decode(saml_response)
+        assertion = ET.fromstring(xml_bytes)
+    except Exception as exc:  # noqa: BLE001 — attacker-controlled input
+        raise HTTPException(status_code=400, detail="Malformed SAML response") from exc
+
+    try:
+        claims = _validate_saml_assertion(assertion, cert_pem)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=f"SAML assertion rejected: {exc}") from exc
+
+    return claims["email"], claims.get("name")
+
+
+async def _fetch_oidc_discovery(issuer_origin: str) -> dict[str, Any]:
+    """Fetch (and cache) the OIDC discovery document at
+    ``{issuer_origin}/.well-known/openid-configuration``."""
+    now = time.monotonic()
+    cached = _OIDC_DISCOVERY_CACHE.get(issuer_origin)
+    if cached and now - cached[1] < _OIDC_CACHE_TTL_SECONDS:
+        return cached[0]
+
+    discovery_url = f"{issuer_origin}/.well-known/openid-configuration"
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        resp = await http_client.get(discovery_url)
+    if resp.status_code >= 400:
+        raise ValueError(f"OIDC discovery endpoint returned {resp.status_code}")
+    doc = resp.json()
+    _OIDC_DISCOVERY_CACHE[issuer_origin] = (doc, now)
+    return doc
+
+
+async def _fetch_oidc_jwks(jwks_uri: str) -> dict[str, Any]:
+    """Fetch (and cache) the JWKS document at ``jwks_uri``."""
+    now = time.monotonic()
+    cached = _OIDC_JWKS_CACHE.get(jwks_uri)
+    if cached and now - cached[1] < _OIDC_CACHE_TTL_SECONDS:
+        return cached[0]
+
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        resp = await http_client.get(jwks_uri)
+    if resp.status_code >= 400:
+        raise ValueError(f"OIDC JWKS endpoint returned {resp.status_code}")
+    doc = resp.json()
+    _OIDC_JWKS_CACHE[jwks_uri] = (doc, now)
+    return doc
+
+
+def _oidc_verify_id_token(id_token: str, jwks: dict[str, Any], client_id: str, issuer: str) -> dict[str, Any]:
+    """Verify an OIDC ``id_token``'s RS256 signature against the IdP's
+    JWKS (matched by ``kid``) and its ``aud``/``iss`` claims. Returns
+    the decoded claims on success; raises ``ValueError`` otherwise."""
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except Exception as exc:  # noqa: BLE001 — attacker-controlled input
+        raise ValueError("invalid ID token") from exc
+
+    kid = header.get("kid")
+    matching_jwk = None
+    for jwk in jwks.get("keys", []):
+        if kid is None or jwk.get("kid") == kid:
+            matching_jwk = jwk
+            break
+    if matching_jwk is None:
+        raise ValueError("invalid ID token: no matching JWKS key")
+
+    try:
+        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(matching_jwk))
+        claims = jwt.decode(
+            id_token,
+            key=public_key,
+            algorithms=["RS256"],
+            audience=client_id,
+            issuer=issuer,
+        )
+    except jwt.PyJWTError as exc:
+        raise ValueError("invalid ID token") from exc
+
+    return claims
+
+
+async def _handle_oidc_callback(code: str | None, provider: dict[str, Any]) -> tuple[str, str | None]:
+    """Exchange an OIDC authorization ``code`` for an ID token
+    (discovery + JWKS + real signature verification) and return
+    ``(email, name)`` on success."""
+    import urllib.parse
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
+
+    auth_endpoint = provider.get("authorization_endpoint") or ""
+    parsed = urllib.parse.urlparse(auth_endpoint)
+    if not parsed.scheme or not parsed.hostname:
+        raise HTTPException(
+            status_code=503,
+            detail="OIDC authorization_endpoint is not configured for this provider",
+        )
+    issuer_origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    try:
+        discovery = await _fetch_oidc_discovery(issuer_origin)
+    except Exception as exc:  # noqa: BLE001 — IdP-side/network failure
+        raise HTTPException(status_code=503, detail=f"OIDC discovery failed: {exc}") from exc
+
+    token_endpoint = discovery.get("token_endpoint") or provider.get("token_endpoint")
+    if not token_endpoint:
+        raise HTTPException(status_code=503, detail="OIDC token endpoint is not configured")
+
+    redirect_uri = f"{settings.app_url}/auth/sso/callback"
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        token_resp = await http_client.post(
+            token_endpoint,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": provider.get("client_id"),
+                "client_secret": provider.get("client_secret") or "",
+            },
+        )
+
+    body = token_resp.json() if token_resp.text else {}
+    if token_resp.status_code >= 400:
+        error = body.get("error") or body.get("error_description") or "request rejected"
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "status": "idp_rejected",
+                "message": f"IdP rejected the authorization code: {error}",
+            },
+        )
+
+    id_token = body.get("id_token")
+    if not id_token:
+        raise HTTPException(status_code=401, detail="IdP token response did not include an ID token")
+
+    jwks_uri = discovery.get("jwks_uri")
+    if not jwks_uri:
+        raise HTTPException(status_code=503, detail="OIDC JWKS endpoint is not configured")
+    try:
+        jwks = await _fetch_oidc_jwks(jwks_uri)
+    except Exception as exc:  # noqa: BLE001 — IdP-side/network failure
+        raise HTTPException(status_code=503, detail=f"OIDC JWKS fetch failed: {exc}") from exc
+
+    try:
+        claims = _oidc_verify_id_token(
+            id_token, jwks, provider.get("client_id"), discovery.get("issuer") or issuer_origin
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid ID token: {exc}") from exc
+
+    email = claims.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="ID token did not include an email claim")
+
+    name = claims.get("name") or email
+    return email, name
+
+
+async def _get_or_create_sso_user(pg: Any, email: str, name: str | None) -> tuple[str, int]:
+    """JIT-provision (or fetch) the user for ``email`` and bump their
+    ``token_version`` — same anti-fixation defence as ``/auth/login``.
+    Returns ``(user_id, token_version)``."""
+    existing = await pg.fetchrow("SELECT id FROM users WHERE email = $1", email)
+    if existing:
+        user_id = str(existing["id"])
+    else:
+        user_id = str(uuid4())
+        await pg.execute(
+            """
+            INSERT INTO users (id, email, name, password_hash, email_verified)
+            VALUES ($1, $2, $3, NULL, TRUE)
+            """,
+            user_id,
+            email,
+            name or email,
+        )
+
+    version_row = await pg.fetchrow(
+        """
+        UPDATE users
+           SET token_version = COALESCE(token_version, 0) + 1
+         WHERE id = $1
+         RETURNING token_version
+        """,
+        user_id,
+    )
+    token_version = (version_row or {}).get("token_version") or 1
+    return user_id, token_version
+
+
+async def _ensure_sso_org_membership(pg: Any, org_id: str, user_id: str) -> None:
+    """JIT-add the SSO user to ``org_id`` as a ``member`` if they
+    aren't already a member of the org."""
+    existing = await pg.fetchrow(
+        "SELECT id, role FROM org_members WHERE org_id = $1 AND user_id = $2",
+        org_id,
+        user_id,
+    )
+    if existing:
+        return
+    await pg.execute(
+        """
+        INSERT INTO org_members (org_id, user_id, role)
+        VALUES ($1, $2, 'member')
+        """,
+        org_id,
+        user_id,
+    )
+
+
 @router.post("/callback/{provider_id}", response_model=dict)
 async def sso_callback(
     provider_id: str,
+    response: Response,
     code: str | None = None,
     saml_response: str | None = None,
     state: str | None = None,
     org_id: str = Query(..., alias="org_id"),
 ):
-    """SSO callback.
+    """SSO callback — validates the IdP assertion/token and mints a
+    session.
 
-    IdP token exchange (SAML assertion validation / OIDC code
-    exchange) is not wired up in this deployment — doing so needs
-    per-tenant IdP secrets we don't have a safe place to broker yet.
-    Rather than ship a half-implemented exchange that silently
-    mismints sessions, this deployment declines the callback with a
-    structured, unambiguous 503 so callers (and the portal) can
-    detect "SSO not enabled" instead of treating it as a bug.
+    FEAT-1: real SAML assertion / OIDC id_token verification (see
+    ``_validate_saml_assertion`` / ``_handle_oidc_callback`` for the
+    documented scope). Provisions the user + org membership JIT on
+    first login, mirroring ``/auth/login``'s anti-fixation
+    token_version bump and session-cookie issuance.
     """
-    _ = code, saml_response
     await _consume_sso_state(state or "", provider_id, org_id)
-    raise HTTPException(
-        status_code=503,
-        detail={
-            "status": "sso_not_enabled",
-            "message": (
-                "SSO login is not enabled in this deployment. "
-                "IdP token exchange has not been configured — contact "
-                "your Eden administrator or see docs/how-to/sso-setup.md."
-            ),
-            "docs": "docs/how-to/sso-setup.md",
-        },
+
+    pg = await get_postgres_client()
+    provider = await pg.fetchrow(
+        """
+        SELECT
+            s.id,
+            c.provider AS provider_type,
+            c.client_id,
+            c.client_secret,
+            c.authorization_endpoint,
+            c.token_endpoint,
+            c.userinfo_endpoint,
+            c.certificate
+        FROM org_sso_settings s
+        JOIN sso_configurations c ON c.id = s.sso_config_id
+        WHERE s.id = $1 AND s.org_id = $2 AND s.enabled = TRUE
+        """,
+        provider_id,
+        org_id,
     )
+    if not provider:
+        raise HTTPException(status_code=404, detail="SSO provider not found or disabled")
+
+    provider_type = provider["provider_type"]
+
+    if provider_type == "saml2":
+        email, name = await _handle_saml_callback(saml_response, provider)
+    elif provider_type == "oidc":
+        email, name = await _handle_oidc_callback(code, provider)
+    else:
+        # Generic OIDC (FEAT-1) and hand-rolled SAML (FEAT-1) are the
+        # only providers with a real IdP token exchange wired up so
+        # far. ``okta``/``google``/anything else decline honestly
+        # rather than mismint a session from an unverified code.
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "sso_not_enabled",
+                "message": (
+                    f"SSO login is not enabled for provider type "
+                    f"'{provider_type}' in this deployment. IdP token "
+                    "exchange has not been configured for this provider — "
+                    "contact your Eden administrator or see "
+                    "docs/how-to/sso-setup.md."
+                ),
+                "docs": "docs/how-to/sso-setup.md",
+            },
+        )
+
+    user_id, token_version = await _get_or_create_sso_user(pg, email, name)
+    await _ensure_sso_org_membership(pg, org_id, user_id)
+
+    access_token = create_access_token(
+        data={"sub": user_id, "email": email},
+        token_version=token_version,
+    )
+    _set_session_cookie(response, access_token)
+
+    return {"email": email, "org_id": org_id, "user_id": user_id}

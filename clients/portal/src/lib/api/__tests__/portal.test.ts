@@ -54,3 +54,62 @@ describe("promptsV2Api.get (F41-6)", () => {
     expect(result).toBeNull();
   });
 });
+
+/**
+ * Regression test for FEAT-32: ``portalApi.guardrailPolicies`` used to be
+ * typed ``fetchApi<GuardrailPolicyFixture[]>``, but
+ * ``GuardrailPolicy.list`` (``eden/guardrails/policy.py``) wraps rows in
+ * the standard ok-envelope ``{status, feature, live, timestamp, data:
+ * {policies, count}}``. Any real, non-empty response was an envelope
+ * object rather than the array the page assumed, and the bug only hid
+ * because the zero-policy fixture fallback happened to also be an empty
+ * array.
+ */
+describe("portalApi.guardrailPolicies (FEAT-32)", () => {
+  it("unwraps data.policies and maps each row's `type` onto `kind`", async () => {
+    const { portalApi } = await import("../portal");
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        status: "ok",
+        feature: "guardrail_policy",
+        live: true,
+        timestamp: "2026-01-01T00:00:00Z",
+        data: {
+          policies: [
+            {
+              id: "gp_1",
+              org_id: "org_1",
+              name: "block-ssn",
+              type: "pii_redaction",
+              spec: { patterns: ["ssn"] },
+              action: "redact",
+              direction: "both",
+              status: "active",
+              created_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+          count: 1,
+        },
+      }),
+    );
+
+    const result = await portalApi.guardrailPolicies("org_1");
+    expect(result).toEqual([
+      {
+        id: "gp_1",
+        name: "block-ssn",
+        kind: "pii_redaction",
+        status: "active",
+        action: "redact",
+      },
+    ]);
+  });
+
+  it("resolves to an empty array (never throws) when data is missing", async () => {
+    const { portalApi } = await import("../portal");
+    fetchMock.mockResolvedValue(jsonResponse(200, { status: "ok" }));
+
+    const result = await portalApi.guardrailPolicies("org_1");
+    expect(result).toEqual([]);
+  });
+});

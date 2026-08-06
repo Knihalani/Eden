@@ -20,6 +20,7 @@ import {
   Shield,
   Settings,
   PanelLeftClose,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -51,6 +52,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   compare: GitCompare,
   prompts: FileText,
   guardrails: Shield,
+  labeling: Tag,
   settings: Settings,
 };
 

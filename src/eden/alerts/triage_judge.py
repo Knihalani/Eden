@@ -103,6 +103,42 @@ class AlertTriageJudge:
             return None
         return str(row["id"]) if row else None
 
+    async def _resolve_rule_channels(
+        self, org_id: str, alert_event_id: str
+    ) -> dict[str, Any] | None:
+        """Best-effort lookup of the firing rule's ``channels`` config
+        (FEAT-43), used when a caller doesn't already have it in hand.
+
+        ``alert_events.rule_id`` is a nullable FK into
+        ``nl_alert_rules`` — most current firing paths (e.g. the
+        eql_alert_rules/AlertAsCode watchdog) don't populate it, in
+        which case this is a no-op and paging keeps today's
+        email-only default. Any caller that *does* create the event
+        with a real ``rule_id`` gets its Slack/email/PagerDuty
+        channels honored automatically, with no extra wiring.
+        """
+        try:
+            client = await get_postgres_client()
+            row = await client.fetchrow(
+                "SELECT rule_id FROM alert_events WHERE id = $1 AND org_id = $2",
+                alert_event_id,
+                org_id,
+            )
+            rule_id = row["rule_id"] if row else None
+            if not rule_id:
+                return None
+            from eden.alerts.repo import get_nl_rule
+
+            rule = await get_nl_rule(org_id, str(rule_id))
+            return rule.get("channels") if rule else None
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "AlertTriageJudge: rule channel resolution failed event=%s: %s",
+                alert_event_id,
+                exc,
+            )
+            return None
+
     async def apply_verdict(
         self,
         alert_event_id: str,
@@ -135,6 +171,7 @@ class AlertTriageJudge:
         nl_text: str,
         payload: dict[str, Any] | None = None,
         notify: bool = True,
+        channels: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         verdict = await self.judge(
             org_id,
@@ -167,12 +204,25 @@ class AlertTriageJudge:
             try:
                 from eden.services.alert_email import send_nl_incident_email
 
+                # FEAT-43: honor the rule's configured channels
+                # (email/slack/pagerduty — see eden.alerts.repo and
+                # eden.services.alert_email._nl_incident_channel_flags).
+                # Callers may pass ``channels`` explicitly; otherwise
+                # fall back to a best-effort lookup via the event's
+                # linked rule_id (a no-op, preserving the pre-FEAT-43
+                # email-only default, when nothing is linked).
+                resolved_channels = channels
+                if resolved_channels is None:
+                    resolved_channels = await self._resolve_rule_channels(
+                        org_id, alert_event_id
+                    )
                 await send_nl_incident_email(
                     org_id=org_id,
                     alert_event_id=alert_event_id,
                     rule_name=rule_name,
                     reason=str(verdict.get("reason") or ""),
                     confidence=confidence,
+                    channels=resolved_channels,
                 )
             except Exception:  # noqa: BLE001
                 pass

@@ -96,6 +96,10 @@ class PromoteRequest(BaseModel):
     judge_name: str
     threshold: float
 
+class DemoteRequest(BaseModel):
+    judge_name: str
+    reason: str = ""
+
 class ModalityRequest(BaseModel):
     modality: str
     config: dict[str, Any]
@@ -218,6 +222,17 @@ async def promote_to_guardrail(
 ) -> dict[str, Any]:
     return await _promote.promote_to_guardrail(
         org_id, judge_name=body.judge_name, threshold=body.threshold
+    )
+
+@router.post("/demote-guardrail")
+async def demote_guardrail(
+    org_id: str = Depends(require_path_org_access),
+    body: DemoteRequest = Body(...),
+) -> dict[str, Any]:
+    """Walk back a guardrail escalation made via ``/promote-to-guardrail``
+    or ``/promote-to-shadow-guardrail`` (FEAT-34)."""
+    return await _promote.demote(
+        org_id, judge_name=body.judge_name, reason=body.reason
     )
 
 @router.post("/modalities/declare")

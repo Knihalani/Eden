@@ -13,7 +13,6 @@ export const STUB_TRY_INSTEAD: Record<string, { href: string; label: string }> =
   "/audit": { href: "/settings?mode=audit", label: "Settings · Audit" },
   "/audit-trail": { href: "/settings?mode=audit", label: "Settings · Audit" },
   "/analytics": { href: "/gateway", label: "Gateway" },
-  "/labeling": { href: "/evals?mode=datasets", label: "Evals · Datasets" },
   "/studio": { href: "/playgrounds", label: "Playgrounds" },
   "/synthetic": { href: "/evals?mode=compare", label: "Evals · Results" },
   "/datasets": { href: "/evals?mode=datasets", label: "Evals · Datasets" },

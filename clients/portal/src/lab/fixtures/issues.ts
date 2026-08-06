@@ -2,7 +2,18 @@ import { TRACE_LIST, type TraceFixture } from "@/lab/fixtures/traces";
 import { agentById, type AgentFixture } from "@/lab/fixtures/agents";
 import { catalogIssues, catalogTraces } from "@/lib/portal-catalog";
 
-export type IssueStatus = "open" | "acknowledged" | "resolved";
+/**
+ * BUG-9: ``"ignored"`` is a valid resolve-status on the backend (see
+ * ``_RESOLVE_STATUSES`` in agent_issues.py and ``AgentIssueResolveStatus``
+ * in lib/api/resources.ts) reachable from the UI via the issue detail's
+ * "Dismiss" action. The portal read-model (``_map_issue_status`` in
+ * portal.py) always collapses ``"ignored"`` into ``"resolved"`` before an
+ * ``IssueFixture`` reaches the client, so this value never actually shows
+ * up as ``issue.status`` here — it exists on the type only so the
+ * status-mutation call sites (``onStatus``/``setStatus``) can pass it
+ * through without a cast.
+ */
+export type IssueStatus = "open" | "acknowledged" | "resolved" | "ignored";
 export type IssueSeverity = "error" | "warn";
 
 export type IssueFixture = {

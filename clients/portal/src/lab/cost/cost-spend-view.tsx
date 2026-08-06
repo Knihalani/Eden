@@ -27,6 +27,8 @@ export function CostSpendView({
   spendSourceLabel = "Telemetry · 24h",
   onFilterAgent,
   onGoDrivers,
+  canEditBudget = false,
+  onEditBudget,
 }: {
   agentId: string;
   agents: AgentFixture[];
@@ -38,6 +40,9 @@ export function CostSpendView({
   spendSourceLabel?: string;
   onFilterAgent: (id: string) => void;
   onGoDrivers: () => void;
+  /** Org-owner check (``billing:edit``) — gates the "Edit budget" entry point. */
+  canEditBudget?: boolean;
+  onEditBudget?: () => void;
 }) {
   const agents = useMemo(() => {
     const sorted = [...agentsProp].sort((a, b) => {
@@ -138,7 +143,18 @@ export function CostSpendView({
                 gateway budget (separate from telemetry spend above)
               </span>
             </p>
-            <BudgetChip status={budget.status} />
+            <div className="flex items-center gap-2">
+              <BudgetChip status={budget.status} />
+              {canEditBudget ? (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={onEditBudget}
+                >
+                  Edit budget
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--bg-inset)]">
             <div
@@ -149,6 +165,17 @@ export function CostSpendView({
               style={{ width: `${pct}%` }}
             />
           </div>
+        </div>
+      ) : showOrgBudget && canEditBudget ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
+          <p className="type-meta">No gateway budget set for this org.</p>
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-sm"
+            onClick={onEditBudget}
+          >
+            Set budget
+          </button>
         </div>
       ) : null}
 

@@ -131,8 +131,13 @@ async def _get_client():
         return None
 
 
-async def get_budget(org_id: str) -> dict[str, Any]:
-    """Return the per-org budget config.
+async def get_budget(
+    org_id: str,
+    *,
+    scope_type: str = "org",
+    scope_id: str | None = None,
+) -> dict[str, Any]:
+    """Return the per-org (optionally team/agent-scoped) budget config.
 
     Falls back to :data:`FREE_TIER_DEFAULTS` when no row
     exists (the common case for new orgs). Best-effort:
@@ -141,6 +146,11 @@ async def get_budget(org_id: str) -> dict[str, Any]:
     Missing-row defaults always include
     ``enforcement_enabled=True`` (Wave 4) — never return a synthetic
     ``False`` that would disable hard caps for orgs without a row.
+
+    ``scope_type``/``scope_id`` (FEAT-47) narrow the lookup to a
+    non-org scope (e.g. ``scope_type="team", scope_id="team_123"``).
+    The defaults (``scope_type="org", scope_id=None``) preserve the
+    pre-FEAT-47 org-level-only behavior for every existing caller.
     """
     client = await _get_client()
     if client is None:
@@ -153,14 +163,18 @@ async def get_budget(org_id: str) -> dict[str, Any]:
                    action_on_exceed, threshold_alert_pct,
                    alert_thresholds
               FROM budgets
-             WHERE org_id = $1
+             WHERE org_id = $1 AND scope_type = $2
+               AND scope_id IS NOT DISTINCT FROM $3
              ORDER BY updated_at DESC
              LIMIT 1
             """,
             org_id,
+            scope_type,
+            scope_id,
         )
     except Exception as exc:
-        # alert_thresholds may be missing pre-migration 107
+        # alert_thresholds may be missing pre-migration 107, or
+        # scope_type/scope_id may be missing pre-migration 152.
         logger.debug("budget_service: get_budget failed: %s", exc)
         try:
             row = await client.fetchrow(
@@ -216,16 +230,25 @@ async def get_consumption(
     org_id: str,
     *,
     window: str = "monthly",
+    scope_type: str = "org",
+    scope_id: str | None = None,
 ) -> dict[str, Any]:
     """Return the current window's cost rollup for the org.
 
     Falls back to zeros when no row exists. Best-effort.
+
+    ``scope_type``/``scope_id`` (FEAT-47) narrow the rollup to a
+    non-org scope (e.g. a team or agent budget). The defaults
+    (``scope_type="org", scope_id=None``) keep the org-level rollup
+    every existing caller relies on.
     """
     client = await _get_client()
     if client is None:
         return {
             "org_id": org_id,
             "window": window,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
             "cost_usd": 0.0,
             "requests_count": 0,
             "source": "defaults",
@@ -237,17 +260,22 @@ async def get_consumption(
             SELECT cost_usd, requests_count, window_start, window_end
               FROM budget_consumption
              WHERE org_id = $1 AND "window" = $2 AND window_start = $3
+               AND scope_type = $4 AND scope_id IS NOT DISTINCT FROM $5
              LIMIT 1
             """,
             org_id,
             window,
             start,
+            scope_type,
+            scope_id,
         )
     except Exception as exc:
         logger.debug("budget_service: get_consumption failed: %s", exc)
         return {
             "org_id": org_id,
             "window": window,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
             "cost_usd": 0.0,
             "requests_count": 0,
             "source": "defaults",
@@ -256,6 +284,8 @@ async def get_consumption(
         return {
             "org_id": org_id,
             "window": window,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
             "window_start": start.isoformat(),
             "cost_usd": 0.0,
             "requests_count": 0,
@@ -264,6 +294,8 @@ async def get_consumption(
     return {
         "org_id": org_id,
         "window": window,
+        "scope_type": scope_type,
+        "scope_id": scope_id,
         "window_start": row["window_start"].isoformat(),
         "window_end": row["window_end"].isoformat(),
         "cost_usd": float(row["cost_usd"]),
@@ -277,6 +309,8 @@ async def record_usage(
     cost_usd: float,
     *,
     window: str | None = None,
+    scope_type: str = "org",
+    scope_id: str | None = None,
 ) -> bool:
     """Increment the active window's cost + request counter.
 
@@ -289,6 +323,13 @@ async def record_usage(
     (via :func:`get_budget`) so consumption lands in the same
     window enforcement reads.
 
+    ``scope_type``/``scope_id`` (FEAT-47) record usage against a
+    non-org scope (e.g. a team or agent budget) in addition to (not
+    instead of) the org-level rollup — callers that want both must
+    call this twice, once per scope. The defaults
+    (``scope_type="org", scope_id=None``) preserve the pre-FEAT-47
+    org-level-only behavior for every existing caller.
+
     Returns ``True`` when the row was written, ``False``
     otherwise.
     """
@@ -299,7 +340,7 @@ async def record_usage(
         return False
     if window is None:
         try:
-            budget = await get_budget(org_id)
+            budget = await get_budget(org_id, scope_type=scope_type, scope_id=scope_id)
             window = str(budget.get("window") or "monthly")
         except Exception:
             window = "monthly"
@@ -322,16 +363,17 @@ async def record_usage(
             INSERT INTO budget_consumption (
                 id, org_id, "window", window_start, window_end,
                 cost_usd, requests_count, last_request_at,
-                created_at, updated_at
+                created_at, updated_at, scope_type, scope_id
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, 1, NOW(), NOW(), NOW()
+                $1, $2, $3, $4, $5, $6, 1, NOW(), NOW(), NOW(), $7, $8
             )
             -- No WHERE on the ON CONFLICT: the unique index
-            -- ``idx_budget_consumption_active (org_id, window,
-            -- window_start)`` is a FULL unique index, not a
-            -- partial one. Postgres requires the WHERE clause
-            -- in ON CONFLICT to match a partial index's
-            -- predicate (or omit it for a full index).
+            -- ``idx_budget_consumption_active_scope (org_id, window,
+            -- window_start, scope_type, COALESCE(scope_id, ''))`` is
+            -- a FULL unique index, not a partial one. Postgres
+            -- requires the WHERE clause in ON CONFLICT to match a
+            -- partial index's predicate (or omit it for a full
+            -- index).
             -- The previous ``WHERE window_end > NOW()`` had no
             -- matching partial index → Postgres raised
             -- ``there is no unique or exclusion constraint
@@ -342,7 +384,8 @@ async def record_usage(
             -- ``window_start`` is part of the unique key, so
             -- a new-month row never conflicts with the prior
             -- month's row anyway.
-            ON CONFLICT (org_id, "window", window_start) DO UPDATE SET
+            ON CONFLICT (org_id, "window", window_start, scope_type, COALESCE(scope_id, ''))
+            DO UPDATE SET
                 cost_usd = budget_consumption.cost_usd + EXCLUDED.cost_usd,
                 requests_count = budget_consumption.requests_count + 1,
                 last_request_at = NOW(),
@@ -354,6 +397,8 @@ async def record_usage(
             start,
             end,
             cost_usd,
+            scope_type,
+            scope_id,
         )
         return True
     except Exception as exc:
@@ -365,25 +410,50 @@ async def list_actions(
     org_id: str,
     *,
     limit: int = 50,
+    scope_type: str | None = None,
+    scope_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Return recent threshold/exceeded audit-log entries."""
+    """Return recent threshold/exceeded audit-log entries.
+
+    ``scope_type`` (FEAT-47) filters to a single scope's actions when
+    given; left as ``None`` (the default) it returns actions across
+    every scope for the org, preserving the pre-FEAT-47 behavior.
+    """
     client = await _get_client()
     if client is None:
         return []
     try:
-        rows = await client.fetch(
-            """
-            SELECT id, org_id, budget_id, action_type, severity,
-                   cost_at_action, threshold_pct, action_taken,
-                   request_id, hook_event_id, created_at
-              FROM budget_actions
-             WHERE org_id = $1
-             ORDER BY created_at DESC
-             LIMIT $2
-            """,
-            org_id,
-            int(limit),
-        )
+        if scope_type is None:
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, budget_id, action_type, severity,
+                       cost_at_action, threshold_pct, action_taken,
+                       request_id, hook_event_id, created_at
+                  FROM budget_actions
+                 WHERE org_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT $2
+                """,
+                org_id,
+                int(limit),
+            )
+        else:
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, budget_id, action_type, severity,
+                       cost_at_action, threshold_pct, action_taken,
+                       request_id, hook_event_id, created_at
+                  FROM budget_actions
+                 WHERE org_id = $1 AND scope_type = $2
+                   AND scope_id IS NOT DISTINCT FROM $3
+                 ORDER BY created_at DESC
+                 LIMIT $4
+                """,
+                org_id,
+                scope_type,
+                scope_id,
+                int(limit),
+            )
     except Exception as exc:
         logger.debug("budget_service: list_actions failed: %s", exc)
         return []
@@ -407,6 +477,8 @@ async def record_action(
     action_taken: str,
     request_id: str | None = None,
     hook_event_id: str | None = None,
+    scope_type: str = "org",
+    scope_id: str | None = None,
 ) -> bool:
     """Append a row to ``budget_actions`` (the audit log).
 
@@ -414,6 +486,10 @@ async def record_action(
     :class:`BudgetHook.on_threshold_breached` /
     :class:`BudgetHook.on_exceeded` callbacks. Returns
     ``True`` when the row was written.
+
+    ``scope_type``/``scope_id`` (FEAT-47) tag the action with the
+    budget scope that fired it. Defaults to org scope, matching the
+    pre-FEAT-47 behavior.
     """
     client = await _get_client()
     if client is None:
@@ -424,9 +500,10 @@ async def record_action(
             INSERT INTO budget_actions (
                 id, org_id, budget_id, action_type, severity,
                 cost_at_action, threshold_pct, action_taken,
-                request_id, hook_event_id, created_at
+                request_id, hook_event_id, created_at,
+                scope_type, scope_id
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11, $12
             )
             """,
             uuid.uuid4(),
@@ -439,6 +516,8 @@ async def record_action(
             action_taken,
             request_id,
             hook_event_id,
+            scope_type,
+            scope_id,
         )
         return True
     except Exception as exc:
@@ -573,11 +652,20 @@ async def upsert_budget(
     action_on_exceed: str = "throttle",
     threshold_alert_pct: int = 80,
     alert_thresholds: list[int] | None = None,
+    scope_type: str = "org",
+    scope_id: str | None = None,
 ) -> dict[str, Any]:
-    """Admin endpoint: upsert the per-org budget config.
+    """Admin endpoint: upsert the per-org (optionally scoped) budget config.
 
     Org-owner gated. Returns the persisted row. Creates
-    a new row if no budget exists for the org.
+    a new row if no budget exists for the org (+ scope).
+
+    ``scope_type``/``scope_id`` (FEAT-47) let an org have both an
+    org-level budget and one or more team/agent-scoped budgets for
+    the same window — the unique index on ``budgets`` includes both
+    columns (migration 152), so upserting a team-scoped budget never
+    collides with the org-level one. Defaults to org scope, matching
+    the pre-FEAT-47 behavior.
     """
     client = await _get_client()
     budget_id = _new_budget_id()
@@ -589,6 +677,8 @@ async def upsert_budget(
             "id": budget_id,
             "org_id": org_id,
             "window": window,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
             "cost_soft_limit_usd": cost_soft_limit_usd,
             "cost_hard_limit_usd": cost_hard_limit_usd,
             "enforcement_enabled": enforcement_enabled,
@@ -606,12 +696,13 @@ async def upsert_budget(
                 id, org_id, window, cost_soft_limit_usd,
                 cost_hard_limit_usd, enforcement_enabled,
                 action_on_exceed, threshold_alert_pct,
-                alert_thresholds,
+                alert_thresholds, scope_type, scope_id,
                 created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, NOW(), NOW()
+                $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, NOW(), NOW()
             )
-            ON CONFLICT (org_id, window) WHERE enforcement_enabled = TRUE
+            ON CONFLICT (org_id, "window", scope_type, COALESCE(scope_id, ''))
+            WHERE enforcement_enabled = TRUE
             DO UPDATE SET
                 cost_soft_limit_usd = EXCLUDED.cost_soft_limit_usd,
                 cost_hard_limit_usd = EXCLUDED.cost_hard_limit_usd,
@@ -630,10 +721,13 @@ async def upsert_budget(
             action_on_exceed,
             int(threshold_alert_pct),
             json.dumps(thresholds),
+            scope_type,
+            scope_id,
         )
     except Exception as exc:
         logger.debug("budget_service: upsert_budget failed: %s", exc)
-        # Pre-migration 107: retry without alert_thresholds
+        # Pre-migration 107: retry without alert_thresholds. Also
+        # covers pre-migration 152 (no scope_type/scope_id columns).
         try:
             await client.execute(
                 """
@@ -665,7 +759,7 @@ async def upsert_budget(
             )
         except Exception as exc2:
             logger.debug("budget_service: upsert_budget fallback failed: %s", exc2)
-    return await get_budget(org_id)
+    return await get_budget(org_id, scope_type=scope_type, scope_id=scope_id)
 
 
 __all__ = [

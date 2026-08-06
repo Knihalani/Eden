@@ -42,7 +42,9 @@ dependencies = [
     # Vector search
     "qdrant-client>=1.9.0,<2.0.0",
     # API
-    "fastapi>=0.115.0,<1.0.0",
+    "fastapi>=0.115.0,<0.137.0",  # pin below 0.137: PR #15745 made include_router() lazy
+    # (app.routes holds opaque _IncludedRouter wrappers w/o .path), breaking route-count
+    # snapshots and router-inclusion checks across the test suite.
     "uvicorn[standard]>=0.30.0,<1.0.0",
     "pydantic>=2.13.4,<3.0.0",
     "email-validator>=2.0.0,<3.0.0",

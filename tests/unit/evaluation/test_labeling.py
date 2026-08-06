@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Optional
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -329,8 +329,14 @@ class FakePg:
             # UPDATE statements: handle by SQL structure.
             if "status = 'in_progress'" in sql:
                 item_id = args[0]
-                if item_id in self._items:
-                    self._items[item_id]["status"] = "in_progress"
+                item = self._items.get(item_id)
+                # Mirror the real WHERE id = $1 AND status = 'pending'
+                # guard: a concurrent claim that already flipped the
+                # item's status makes this a no-op (0 rows).
+                if item is not None and item["status"] == "pending":
+                    item["status"] = "in_progress"
+                    return "UPDATE 1"
+                return "UPDATE 0"
             elif "status = 'completed'" in sql:
                 item_id = args[0]
                 org_id = args[1] if len(args) > 1 else None
@@ -656,6 +662,54 @@ class TestLabelingService:
         key = next(iter(pg._assignments))
         assert key[0] == items[0].id
         assert key[1] == "u-1"
+
+    @pytest.mark.asyncio
+    async def test_pop_declines_item_on_unexpected_lease_error(self) -> None:
+        """FEAT-76: an unexpected error from claim_lease() must fail
+        closed (decline the item), not fall through and silently
+        treat the item as claimed."""
+        pg = self._pg()
+        svc = LabelingService(pg)
+        await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        with patch(
+            "eden.evaluation.labeling_leases.claim_lease",
+            side_effect=RuntimeError("boom"),
+        ):
+            items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        assert items == []
+        # No assignment or status flip should have happened for the
+        # declined item.
+        assert len(pg._assignments) == 0
+        assert all(i["status"] == "pending" for i in pg._items.values())
+
+    @pytest.mark.asyncio
+    async def test_pop_skips_item_claimed_by_concurrent_writer(self) -> None:
+        """FEAT-77: if the UPDATE ... WHERE status = 'pending' guard
+        matches 0 rows (a concurrent pop() already claimed the item),
+        pop() must not return that item to the caller."""
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        # Simulate a concurrent writer that already flipped the item
+        # to in_progress between the SELECT and the UPDATE.
+        pg._items[item_id]["status"] = "in_progress"
+        items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        assert items == []
+        assert len(pg._assignments) == 0
+
+    @pytest.mark.asyncio
+    async def test_pop_claims_item_when_update_affects_a_row(self) -> None:
+        """Sanity check: the normal (non-racing) path still works —
+        pop() claims and returns the item when the UPDATE matches."""
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        assert len(items) == 1
+        assert items[0].id == item_id
+        assert items[0].status == "in_progress"
+        assert pg._items[item_id]["status"] == "in_progress"
+        assert len(pg._assignments) == 1
 
 
 # ── IAA report dataclass ─────────────────────────────────────────

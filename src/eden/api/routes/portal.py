@@ -856,6 +856,13 @@ _SAFE_COST_SUM_SQL = (
 
 # ── GET /agents ───────────────────────────────────────────────────
 
+# BUG-7: synthetic AgentCard id for telemetry/issues that never got an
+# agent_id stamped on any event. Never a real registry/telemetry
+# agent_id (registered ids and SDK-stamped ids are non-empty opaque
+# strings from the customer's own instrumentation), so this can't
+# collide with a genuine agent.
+UNATTRIBUTED_AGENT_ID = "unattributed"
+
 
 @router.get("/agents", response_model=list[AgentCard])
 async def list_portal_agents(
@@ -1088,6 +1095,70 @@ async def list_portal_agents(
             logger.warning("portal agents: open issues skipped: %s", redact_all(str(exc)))
         return out
 
+    # BUG-7: both queries above filter ``agent_id IS NOT NULL`` and
+    # silently drop any trace/issue whose events never got an agent_id
+    # stamped (root cause one layer down for issues: auto_scanner's
+    # ``_infer_agent_id`` returns None when no event on the trace carries
+    # a truthy agent_id). Surface the excluded volume as an explicit
+    # aggregate instead of letting it vanish from every agent's counts.
+    async def _load_unattributed_metrics() -> dict[str, Any]:
+        try:
+            rows = await client.fetch(
+                f"""
+                SELECT COUNT(DISTINCT trace_id)::int AS runs,
+                       {safe_cost_sum_nullable_sql(alias="")} AS cost_usd
+                FROM telemetry_events
+                WHERE tenant_id = $1
+                  AND agent_id IS NULL
+                  AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
+                """,
+                org_id,
+                window_secs,
+            )
+            row = rows[0] if rows else None
+            return {
+                "runs": int(row["runs"] or 0) if row else 0,
+                "cost_usd": (
+                    float(row["cost_usd"])
+                    if row and row.get("cost_usd") is not None
+                    else None
+                ),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "portal agents: unattributed telemetry skipped: %s",
+                redact_all(str(exc)),
+            )
+            return {"runs": 0, "cost_usd": None}
+
+    async def _load_unattributed_issues() -> dict[str, int]:
+        try:
+            rows = await client.fetch(
+                """
+                SELECT COUNT(*)::int AS open_issues,
+                       COUNT(*) FILTER (
+                           WHERE lower(coalesce(severity, '')) IN
+                                 ('critical', 'p0', 'fatal')
+                       )::int AS open_p0
+                FROM agent_issues
+                WHERE org_id = $1
+                  AND agent_id IS NULL
+                  AND status NOT IN ('resolved', 'ignored')
+                """,
+                org_id,
+            )
+            row = rows[0] if rows else None
+            return {
+                "open_issues": int(row["open_issues"] or 0) if row else 0,
+                "open_p0": int(row["open_p0"] or 0) if row else 0,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "portal agents: unattributed issues skipped: %s",
+                redact_all(str(exc)),
+            )
+            return {"open_issues": 0, "open_p0": 0}
+
     # BUG-6: discover (raw_label, registered_id) pairings — any trace where
     # _PREFERRED_AGENT_ID_SQL picked a winner over other raw agent_id values
     # is direct evidence those raw values are the same logical agent. This
@@ -1203,12 +1274,22 @@ async def list_portal_agents(
         out["last_seen"] = max(seens) if seens else None
         return out
 
-    rows, metrics_by_id, issues_by_id, alias_pairs, persisted_aliases = await asyncio.gather(
+    (
+        rows,
+        metrics_by_id,
+        issues_by_id,
+        alias_pairs,
+        persisted_aliases,
+        unattributed_metrics,
+        unattributed_issues,
+    ) = await asyncio.gather(
         _load_registry(),
         _load_metrics(),
         _load_open_issues(),
         _load_alias_pairs(),
         _load_persisted_aliases(),
+        _load_unattributed_metrics(),
+        _load_unattributed_issues(),
     )
 
     # Persist only pairs we did not already know about — once an alias is
@@ -1333,6 +1414,37 @@ async def list_portal_agents(
             )
         )
 
+    # BUG-7: never omit unattributed traffic — surface it as its own
+    # explicit card instead of leaving it invisible in every other
+    # agent's totals. Only render when there is something to show; an
+    # all-zero card would just be clutter on a healthy tenant.
+    unattributed_runs = int(unattributed_metrics.get("runs") or 0)
+    unattributed_open_issues = int(unattributed_issues.get("open_issues") or 0)
+    if unattributed_runs > 0 or unattributed_open_issues > 0:
+        raw_cost = unattributed_metrics.get("cost_usd")
+        out.append(
+            AgentCard(
+                id=UNATTRIBUTED_AGENT_ID,
+                name="Unattributed",
+                purpose=(
+                    "Traces and issues with no agent_id stamped on any "
+                    "event — excluded from every other card above."
+                ),
+                status="error" if int(unattributed_issues.get("open_p0") or 0) > 0 else "idle",
+                runs24h=unattributed_runs,
+                successRate=None,
+                errorRate=None,
+                p50Ms=0,
+                p95Ms=0,
+                costUsd24h=(round(float(raw_cost), 4) if raw_cost is not None else None),
+                tokens24h=0,
+                openIssues=unattributed_open_issues,
+                lastSeen="",
+                topError=None,
+                mergedIdentities=[],
+            )
+        )
+
     return out
 
 
@@ -1344,6 +1456,15 @@ async def list_portal_traces(
     org_id: str = Depends(require_path_org_access),
     window: str = Query("24h"),
     limit: int = Query(50, ge=1, le=200),
+    agent_id: str | None = Query(
+        None,
+        description=(
+            "OPT-14: scope to one agent's traces server-side instead of "
+            "fetching the org-wide most-recent list and filtering "
+            "client-side (which silently empties for an agent whose "
+            "activity is older than the org's most-recent traces)."
+        ),
+    ),
     _user: dict = Depends(get_current_user),
 ) -> list[TraceListItem]:
     """Trace list mapped to portal ``TraceListItem`` (empty OK)."""
@@ -1370,7 +1491,7 @@ async def list_portal_traces(
         rows = await client.fetch(
             f"""
             WITH recent AS (
-                SELECT trace_id, timestamp
+                SELECT trace_id, agent_id, timestamp
                 FROM telemetry_events
                 WHERE tenant_id = $1
                   AND timestamp > NOW() - ($2::int * INTERVAL '1 second')
@@ -1379,11 +1500,24 @@ async def list_portal_traces(
                 -- trace_ids (complete spans for the listed cards).
                 LIMIT 3000
             ),
-            ids AS (
-                SELECT trace_id
+            -- OPT-14: resolve each trace's preferred agent_id (same
+            -- collapsing rule as the /agents cards) *before* the
+            -- optional agent_id filter below, so a filter matches the
+            -- id actually shown on the card rather than a raw
+            -- framework-instrumentation label that gets collapsed onto
+            -- it downstream.
+            trace_agent AS (
+                SELECT trace_id,
+                       {_PREFERRED_AGENT_ID_SQL} AS agent_id,
+                       MAX(timestamp) AS last_ts
                 FROM recent
                 GROUP BY trace_id
-                ORDER BY MAX(timestamp) DESC
+            ),
+            ids AS (
+                SELECT trace_id
+                FROM trace_agent
+                WHERE $4::text IS NULL OR agent_id = $4
+                ORDER BY last_ts DESC
                 LIMIT $3
             )
             SELECT e.trace_id,
@@ -1424,6 +1558,7 @@ async def list_portal_traces(
             org_id,
             window_secs,
             limit,
+            agent_id,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal traces: query failed: %s", redact_all(str(exc)))
@@ -1756,6 +1891,7 @@ async def list_portal_sessions(
 async def list_portal_issues(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     _user: dict = Depends(get_current_user),
 ) -> list[IssueCard]:
     """Issue cards with status mapped to open|acknowledged|resolved."""
@@ -1763,7 +1899,7 @@ async def list_portal_issues(
     try:
         from eden.issues.repo import IssuesRepo
 
-        issues = await IssuesRepo().list_issues(org_id, limit=limit, offset=0)
+        issues = await IssuesRepo().list_issues(org_id, limit=limit, offset=offset)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal issues: repo unavailable: %s", redact_all(str(exc)))
         raise HTTPException(
@@ -1774,9 +1910,18 @@ async def list_portal_issues(
 
     # ``example_stumble_ids`` are stumble UUIDs — portal FE matches
     # ``occurrenceTraceIds`` against run ids. Resolve to real trace_ids.
-    stumble_to_trace, _stumble_to_session = await _resolve_stumble_refs(
-        org_id,
-        [sid for i in issues for sid in (getattr(i, "example_stumble_ids", None) or [])],
+    stumble_to_trace, _stumble_to_session, stumble_to_signal_def = (
+        await _resolve_stumble_refs(
+            org_id,
+            [
+                sid
+                for i in issues
+                for sid in (getattr(i, "example_stumble_ids", None) or [])
+            ],
+        )
+    )
+    def_to_nl_signal = await _nl_signal_ids_for_defs(
+        org_id, list(stumble_to_signal_def.values())
     )
 
     out: list[IssueCard] = []
@@ -1792,6 +1937,13 @@ async def list_portal_issues(
             if tid and tid not in seen:
                 seen.add(tid)
                 occurrence.append(tid)
+        related_signal_id: str | None = None
+        for sid in example_ids:
+            def_id = stumble_to_signal_def.get(sid)
+            nl_id = def_to_nl_signal.get(def_id) if def_id else None
+            if nl_id:
+                related_signal_id = nl_id
+                break
         # Soft Autonomy Phase 1: triage writes ``root_cause`` +
         # ``suggested_actions`` — the portal contract reads
         # ``summary``/``body``/``suggested_fix``/``impact``. Derive the
@@ -1824,7 +1976,7 @@ async def list_portal_issues(
                 firstSeen=_iso(getattr(i, "first_seen", None)),
                 lastSeen=_iso(getattr(i, "last_seen", None)),
                 signalCount=int(getattr(i, "stumble_count", 0) or 0),
-                relatedSignalId=None,
+                relatedSignalId=related_signal_id,
                 errorSample=_clip_text(
                     triage.get("error_sample") or triage.get("error") or "", 400
                 ),
@@ -1884,18 +2036,24 @@ def _triage_impact_text(issue: Any, triage: dict[str, Any]) -> str:
 async def _resolve_stumble_refs(
     org_id: str,
     stumble_ids: list[Any],
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Map stumble UUID → ``(trace_id, session_id)``."""
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Map stumble UUID → ``(trace_id, session_id, signal_definition_id)``.
+
+    ``signal_definition_id`` is populated only for stumbles detected by the
+    signal investigator (``detected_by = 'signal_investigator'`` or
+    ``detail->>'source' = 'signal_investigator'``), mirroring the join used
+    by ``_related_issue_ids_by_portal_signal``.
+    """
     ids = sorted({str(x) for x in stumble_ids if x})
     if not ids:
-        return {}, {}
+        return {}, {}, {}
     client = await _pg()
     if client is None:
-        return {}, {}
+        return {}, {}, {}
     try:
         rows = await client.fetch(
             """
-            SELECT id::text AS id, trace_id, session_id
+            SELECT id::text AS id, trace_id, session_id, detail, detected_by
             FROM agent_stumbles
             WHERE org_id::text = $1 AND id::text = ANY($2::text[])
             """,
@@ -1904,16 +2062,81 @@ async def _resolve_stumble_refs(
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("portal issues: stumble resolve failed: %s", redact_all(str(exc)))
-        return {}, {}
+        return {}, {}, {}
     to_trace: dict[str, str] = {}
     to_session: dict[str, str] = {}
+    to_signal_def: dict[str, str] = {}
     for r in rows:
         sid = str(r["id"])
         if r.get("trace_id"):
             to_trace[sid] = str(r["trace_id"])
         if r.get("session_id"):
             to_session[sid] = str(r["session_id"])
-    return to_trace, to_session
+        detail = r.get("detail")
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except Exception:
+                detail = {}
+        if not isinstance(detail, dict):
+            detail = {}
+        detected_by = r.get("detected_by")
+        is_signal_investigator = (
+            detected_by == "signal_investigator"
+            or detail.get("source") == "signal_investigator"
+        )
+        signal_def_id = detail.get("signal_id")
+        if is_signal_investigator and signal_def_id:
+            to_signal_def[sid] = str(signal_def_id)
+    return to_trace, to_session, to_signal_def
+
+
+async def _nl_signal_ids_for_defs(
+    org_id: str,
+    def_ids: list[str],
+) -> dict[str, str]:
+    """Map ``signal_definitions.id`` → the portal-facing ``nl_signals.id``.
+
+    Custom NL signals dual-write into ``signal_definitions`` with
+    ``template_id = 'nl:' || nl_signals.id``; library-seeded signals are
+    matched by shared ``description`` instead (see
+    ``_portal_signal_def_ids``).
+    """
+    ids = sorted({d for d in def_ids if d})
+    if not ids:
+        return {}
+    client = await _pg()
+    if client is None:
+        return {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT sd.id::text AS def_id, ns.id::text AS nl_id
+            FROM signal_definitions sd
+            INNER JOIN nl_signals ns
+              ON ns.org_id = sd.org_id
+             AND (
+               sd.template_id = 'nl:' || ns.id::text
+               OR sd.description = ns.description
+             )
+            WHERE sd.org_id = $1
+              AND sd.id::text = ANY($2::text[])
+            """,
+            org_id,
+            ids,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "portal issues: nl_signals lookup failed: %s", redact_all(str(exc))
+        )
+        return {}
+    out: dict[str, str] = {}
+    for r in rows:
+        def_id = str(r.get("def_id") or "")
+        nl_id = str(r.get("nl_id") or "")
+        if def_id and nl_id and def_id not in out:
+            out[def_id] = nl_id
+    return out
 
 
 async def _related_issue_ids_by_session(
@@ -2852,45 +3075,56 @@ async def list_portal_audit_packs(
     limit: int = Query(50, ge=1, le=200),
     _user: dict = Depends(get_current_user),
 ) -> list[AuditPackCard]:
-    """Compliance / ledger packs when available."""
-    try:
-        from eden.governance.compliance_pack import AgentAuditLedgerWriter
+    """Framework-mapped compliance evidence packs (FEAT-50).
 
-        events = await AgentAuditLedgerWriter().query(org_id, limit=limit)
+    Was previously the raw hash-chained ``agent_audit_ledger`` — that
+    ledger is an internal tamper-evidence trail, not a compliance
+    report a SOC2/HIPAA/GDPR/ISO27001 auditor can use. This now calls
+    ``ComplianceEvidenceGenerator.list_packs``, the read-only
+    historical-packs listing already used by the compliance dashboard
+    tile / auditor drill-down (see
+    ``src/eden/services/governance_intel/compliance.py``).
+
+    Deliberately NOT ``CompliancePackGenerator.generate_agent_pack`` —
+    that method *writes* a new ledger entry and requires
+    ``agent_id``/``period_start``/``period_end`` on every call, which
+    would fire a side effect on every page load of a GET listing and
+    has no agent to scope to here.
+    """
+    try:
+        from eden.services.governance_intel import ComplianceEvidenceGenerator
+
+        result = await ComplianceEvidenceGenerator().list_packs(org_id, limit=limit)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("portal audit packs: ledger unavailable: %s", redact_all(str(exc)))
+        logger.warning("portal audit packs: evidence store unavailable: %s", redact_all(str(exc)))
         raise HTTPException(
             status_code=503,
             detail="Audit packs temporarily unavailable; please retry",
             headers={"Retry-After": "5"},
         ) from exc
 
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        detail = (
+            str(result.get("error") or "Audit packs temporarily unavailable")
+            if isinstance(result, dict)
+            else "Audit packs temporarily unavailable"
+        )
+        raise HTTPException(status_code=503, detail=detail, headers={"Retry-After": "5"})
+
+    packs = (result.get("data") or {}).get("packs") or []
     out: list[AuditPackCard] = []
-    for e in events or []:
-        et = str(e.get("event_type") or "")
-        subtype = str(e.get("event_subtype") or "")
-        # Prefer compliance / verify / export flavoured rows.
-        kind = _map_audit_pack_kind(et, subtype)
-        if et and et not in ("compliance", "audit", "ledger") and kind == "ledger":
-            # Still include general ledger rows as kind=ledger.
-            pass
-        payload = e.get("payload") if isinstance(e.get("payload"), dict) else {}
-        rows_n = 0
-        try:
-            rows_n = int(payload.get("rows") or payload.get("event_count") or 1)
-        except (TypeError, ValueError):
-            rows_n = 1
-        verified = bool(payload.get("verified", kind == "ledger"))
+    for p in packs:
+        if not isinstance(p, dict):
+            continue
         out.append(
             AuditPackCard(
-                id=str(e.get("id") or ""),
-                at=_iso(e.get("created_at")),
-                agentId=str(e.get("agent_id") or ""),
-                kind=kind,  # type: ignore[arg-type]
-                actor=str(e.get("actor_id") or e.get("actor_type") or ""),
-                entryHash=str(e.get("entry_hash") or ""),
-                verified=verified,
-                rows=rows_n,
+                id=str(p.get("evidence_pack_id") or ""),
+                at=_iso(p.get("generated_at")),
+                kind="export",
+                verified=True,
+                framework=str(p.get("framework") or ""),
+                periodStart=_iso(p.get("period_start")),
+                periodEnd=_iso(p.get("period_end")),
             )
         )
     return out

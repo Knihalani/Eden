@@ -48,9 +48,9 @@ class RegressionCase:
 class RegressionCaseBuilder:
     """Materialize regression eval cases from resolved issues."""
 
-    def __init__(self, pg: Any | None = None) -> None:
+    def __init__(self, pg: Any | None = None, *, memory_only: bool = False) -> None:
         self._pg = pg
-        self._memory_only = pg is None
+        self._memory_only = memory_only
         self._memory: list[RegressionCase] = []
 
     async def _client(self) -> Any | None:
@@ -79,17 +79,20 @@ class RegressionCaseBuilder:
             return memory_hits
         rows = await client.fetch(
             """
-            SELECT id, org_id, dataset_id, source_issue_id, source_trace_id,
-                   fingerprint, auto_generated, input_data, expected_data,
-                   metadata, created_at
-            FROM regression_eval_cases
-            WHERE org_id = $1 AND source_issue_id = $2::uuid
-            ORDER BY created_at DESC
+            SELECT di.id, di.org_id, d.name AS dataset_name,
+                   di.origin_issue_id AS source_issue_id,
+                   di.origin_trace_id AS source_trace_id,
+                   di.fingerprint, di.auto_generated, di.input,
+                   di.expected_output, di.payload, di.created_at
+            FROM dataset_items di
+            JOIN datasets d ON d.id = di.dataset_id
+            WHERE di.org_id = $1 AND di.origin_issue_id = $2
+            ORDER BY di.created_at DESC
             """,
             org_id,
             issue_id,
         )
-        db_cases = [_row_to_case(dict(r)) for r in rows]
+        db_cases = [_dataset_item_row_to_case(dict(r)) for r in rows]
         if memory_hits:
             seen = {c.id for c in db_cases}
             for c in memory_hits:
@@ -167,20 +170,23 @@ class RegressionCaseBuilder:
         try:
             rows = await client.fetch(
                 """
-                SELECT id, org_id, dataset_id, source_issue_id, source_trace_id,
-                       fingerprint, auto_generated, input_data, expected_data,
-                       metadata, created_at
-                FROM regression_eval_cases
-                WHERE org_id = $1
-                  AND ($2::text IS NULL OR dataset_id = $2)
-                ORDER BY created_at DESC
+                SELECT di.id, di.org_id, d.name AS dataset_name,
+                       di.origin_issue_id AS source_issue_id,
+                       di.origin_trace_id AS source_trace_id,
+                       di.fingerprint, di.auto_generated, di.input,
+                       di.expected_output, di.payload, di.created_at
+                FROM dataset_items di
+                JOIN datasets d ON d.id = di.dataset_id
+                WHERE di.org_id = $1
+                  AND ($2::text IS NULL OR d.name = $2)
+                ORDER BY di.created_at DESC
                 LIMIT $3
                 """,
                 org_id,
                 _dataset_name(agent_id) if agent_id else None,
                 limit,
             )
-            return [_row_to_case(dict(r)) for r in rows]
+            return [_dataset_item_row_to_case(dict(r)) for r in rows]
         except Exception as exc:
             logger.debug("list_cases failed: %s", exc)
             return []
@@ -196,17 +202,20 @@ class RegressionCaseBuilder:
             return None
         row = await client.fetchrow(
             """
-            SELECT id, org_id, dataset_id, source_issue_id, source_trace_id,
-                   fingerprint, auto_generated, input_data, expected_data,
-                   metadata, created_at
-            FROM regression_eval_cases
-            WHERE org_id = $1 AND fingerprint = $2
+            SELECT di.id, di.org_id, d.name AS dataset_name,
+                   di.origin_issue_id AS source_issue_id,
+                   di.origin_trace_id AS source_trace_id,
+                   di.fingerprint, di.auto_generated, di.input,
+                   di.expected_output, di.payload, di.created_at
+            FROM dataset_items di
+            JOIN datasets d ON d.id = di.dataset_id
+            WHERE di.org_id = $1 AND di.fingerprint = $2
             LIMIT 1
             """,
             org_id,
             fingerprint,
         )
-        return _row_to_case(dict(row)) if row else None
+        return _dataset_item_row_to_case(dict(row)) if row else None
 
     async def _trace_ids_for_issue(
         self, org_id: str, issue: Any, max_traces: int
@@ -269,25 +278,114 @@ class RegressionCaseBuilder:
         client = await self._client()
         if client is None:
             return
-        await client.execute(
-            """
-            INSERT INTO regression_eval_cases (
-                id, org_id, dataset_id, source_issue_id, source_trace_id,
-                fingerprint, auto_generated, input_data, expected_data, metadata
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb)
-            ON CONFLICT DO NOTHING
-            """,
-            case.id,
-            case.org_id,
-            case.dataset_id,
-            case.source_issue_id,
-            case.source_trace_id,
-            case.fingerprint,
-            case.auto_generated,
-            json.dumps(case.input_data),
-            json.dumps(case.expected_data),
-            json.dumps(case.metadata),
-        )
+
+        # Legacy table (092): a free-text ``dataset_id`` VARCHAR that can
+        # never join to the UUID-keyed ``datasets``/``dataset_items``
+        # system (F53). Kept as a best-effort compatibility write only
+        # because ``ClosedLoopOrchestrator._enrich_cases_for_replay``
+        # still ``UPDATE``s it by id — nothing reads it as the source of
+        # truth any more; see ``_find_by_fingerprint``/``list_cases``/
+        # ``list_for_issue`` below, which are now on ``dataset_items``.
+        try:
+            await client.execute(
+                """
+                INSERT INTO regression_eval_cases (
+                    id, org_id, dataset_id, source_issue_id, source_trace_id,
+                    fingerprint, auto_generated, input_data, expected_data, metadata
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb)
+                ON CONFLICT DO NOTHING
+                """,
+                case.id,
+                case.org_id,
+                case.dataset_id,
+                case.source_issue_id,
+                case.source_trace_id,
+                case.fingerprint,
+                case.auto_generated,
+                json.dumps(case.input_data),
+                json.dumps(case.expected_data),
+                json.dumps(case.metadata),
+            )
+        except Exception as exc:
+            logger.debug("regression_builder legacy persist failed: %s", exc)
+
+        # Canonical (FEAT-74): resolve the free-text dataset name (e.g.
+        # "checkout/regressions") to a real UUID ``datasets`` row via the
+        # F53 hub, then write the case into ``dataset_items`` under it —
+        # this is what makes regression cases finally joinable to the
+        # rest of the dataset system.
+        dataset_id = await self._resolve_dataset_id(client, case.org_id, case.dataset_id)
+        if dataset_id is None:
+            logger.debug(
+                "regression_builder: could not resolve dataset for org=%s name=%s; "
+                "case %s only persisted to legacy table",
+                case.org_id,
+                case.dataset_id,
+                case.id,
+            )
+            return
+        try:
+            await client.execute(
+                """
+                INSERT INTO dataset_items (
+                    id, dataset_id, input, expected_output, payload,
+                    origin_trace_id, origin_issue_id, org_id, fingerprint,
+                    auto_generated
+                ) VALUES (
+                    $1::uuid, $2::uuid, $3, $4, $5::jsonb, $6, $7, $8, $9, $10
+                )
+                ON CONFLICT DO NOTHING
+                """,
+                case.id,
+                dataset_id,
+                json.dumps(case.input_data),
+                json.dumps(case.expected_data),
+                json.dumps(case.metadata),
+                case.source_trace_id,
+                case.source_issue_id,
+                case.org_id,
+                case.fingerprint,
+                case.auto_generated,
+            )
+        except Exception as exc:
+            logger.debug("regression_builder dataset_items persist failed: %s", exc)
+
+    async def _resolve_dataset_id(
+        self, client: Any, org_id: str, name: str
+    ) -> str | None:
+        """Resolve — or lazily create — the UUID ``datasets`` row for ``name``.
+
+        ``name`` is the free-text identifier (e.g. ``"checkout/regressions"``)
+        that used to be written straight into
+        ``regression_eval_cases.dataset_id``. Looking it up (or creating
+        it) through ``DatasetHub`` gives regression cases a real UUID
+        ``dataset_id`` while ``datasets.name`` keeps the original string
+        around for display/lookup, mirroring how ``DatasetHub.promote_trace``
+        resolves a dataset by name.
+        """
+        try:
+            from eden.datasets.hub import DatasetHub
+
+            hub = DatasetHub(pg=client)
+            existing = await hub.list_datasets(org_id, limit=500)
+            match = next((d for d in existing if d.name == name), None)
+            if match:
+                return match.id
+            created = await hub.create_dataset(
+                org_id,
+                name=name,
+                description="Auto-created for N01 regression cases",
+                source_type="regression",
+            )
+            return created.id
+        except Exception as exc:
+            logger.debug(
+                "regression_builder dataset resolve failed org=%s name=%s: %s",
+                org_id,
+                name,
+                exc,
+            )
+            return None
 
 
 async def on_issue_resolved(
@@ -311,11 +409,31 @@ def _dataset_name(agent_id: str | None) -> str:
     return f"{safe}/regressions"
 
 
-def _row_to_case(row: dict[str, Any]) -> RegressionCase:
-    for key in ("input_data", "expected_data", "metadata"):
-        val = row.get(key)
-        if isinstance(val, str):
-            row[key] = json.loads(val)
+def _loads_json_object(val: Any) -> dict[str, Any]:
+    """Best-effort decode of a JSON object stored as text or jsonb."""
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str) and val:
+        try:
+            loaded = json.loads(val)
+        except (TypeError, ValueError):
+            return {}
+        if isinstance(loaded, dict):
+            return loaded
+    return {}
+
+
+def _dataset_item_row_to_case(row: dict[str, Any]) -> RegressionCase:
+    """Map a ``dataset_items`` (joined to ``datasets``) row to a case.
+
+    ``dataset_items.input``/``expected_output`` are ``TEXT`` columns
+    holding JSON-serialized dicts (see ``RegressionCaseBuilder._persist``);
+    ``payload`` is the case ``metadata`` JSONB. ``dataset_name`` is
+    ``datasets.name`` — the free-text identifier regression cases used
+    to store directly as ``dataset_id`` — kept as ``RegressionCase.dataset_id``
+    for API/display compatibility even though storage now keys off the
+    UUID ``dataset_items.dataset_id``.
+    """
     created = row.get("created_at")
     created_iso = (
         created.isoformat()
@@ -325,16 +443,14 @@ def _row_to_case(row: dict[str, Any]) -> RegressionCase:
     return RegressionCase(
         id=str(row["id"]),
         org_id=row["org_id"],
-        dataset_id=row.get("dataset_id") or "agent-regressions",
-        source_issue_id=str(row["source_issue_id"])
-        if row.get("source_issue_id")
-        else None,
-        source_trace_id=row.get("source_trace_id"),
+        dataset_id=row.get("dataset_name") or "agent-regressions",
+        source_issue_id=row.get("source_issue_id") or None,
+        source_trace_id=row.get("source_trace_id") or None,
         fingerprint=row.get("fingerprint"),
         auto_generated=bool(row.get("auto_generated")),
-        input_data=dict(row.get("input_data") or {}),
-        expected_data=dict(row.get("expected_data") or {}),
-        metadata=dict(row.get("metadata") or {}),
+        input_data=_loads_json_object(row.get("input")),
+        expected_data=_loads_json_object(row.get("expected_output")),
+        metadata=_loads_json_object(row.get("payload")),
         created_at=created_iso,
     )
 

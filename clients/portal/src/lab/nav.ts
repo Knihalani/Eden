@@ -19,6 +19,7 @@ export type NavIcon =
   | "compare"
   | "prompts"
   | "guardrails"
+  | "labeling"
   | "settings";
 
 export type NavItem = {
@@ -59,6 +60,12 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       { id: "prompts", label: "Prompts", href: "/prompts", icon: "prompts" },
       { id: "compare", label: "Live A/B", href: "/compare", icon: "compare" },
+      {
+        id: "labeling",
+        label: "Labeling",
+        href: "/labeling",
+        icon: "labeling",
+      },
     ],
   },
   {

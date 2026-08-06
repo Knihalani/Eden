@@ -81,6 +81,16 @@ class TelemetryEventIngest(BaseModel):
     attributes: dict[str, str] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     outcome: str | None = None
+    # FEAT-60 (2026-08 strategic review): these 5 fields already round-trip
+    # through TelemetryEvent/TELEMETRY_INSERT_SQL (FEAT-22/23/24) and are
+    # already read back out in the SQL below — but this ingest model never
+    # declared them, so Pydantic silently stripped them from any inbound
+    # SDK/exporter payload before it ever reached the dataclass.
+    operation_name: str | None = None
+    provider_name: str | None = None
+    error_type: str | None = None
+    parent_agent_span_id: str | None = None
+    child_agent_trace_id: str | None = None
 
 
 class TelemetryBatchIngest(BaseModel):
@@ -216,6 +226,11 @@ def _to_telemetry_event(data: TelemetryEventIngest, tenant_id: str) -> Telemetry
         attributes=data.attributes,
         tags=data.tags,
         outcome=data.outcome,
+        operation_name=data.operation_name,
+        provider_name=data.provider_name,
+        error_type=data.error_type,
+        parent_agent_span_id=data.parent_agent_span_id,
+        child_agent_trace_id=data.child_agent_trace_id,
     )
 
 

@@ -18,12 +18,12 @@ from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
 from eden.guardrails import (
     ContentPolicyEnforcer,
-    EvalToGuardrailLink,
     GuardrailMetrics,
     GuardrailPolicy,
     HallucinationBlocker,
     InterventionEngine,
     InterventionLog,
+    LegacyEvalToGuardrailLink,
     LLMFirewall,
     PIIFirewall,
     PromptInjectionDetector,
@@ -49,7 +49,7 @@ _pii = PIIFirewall()
 _hallu = HallucinationBlocker()
 _content = ContentPolicyEnforcer()
 _engine = InterventionEngine()
-_promote = EvalToGuardrailLink()
+_promote = LegacyEvalToGuardrailLink()
 _firewall = LLMFirewall()
 _log = InterventionLog()
 _metrics = GuardrailMetrics()
@@ -145,10 +145,17 @@ async def evaluate(
         # this call site: a grounding ``context`` implies an output
         # (hallucination) check; its absence implies an input check.
         direction = "output" if body.context else "input"
-    return await _engine.evaluate_and_act(
+    result = await _engine.evaluate_and_act(
         org_id, text=body.text, context=body.context,
         trace_id=trace_id, direction=direction,
     )
+    # FEAT-33 defense-in-depth: alert if the response carries the
+    # trajectory-hot-path marker instead of the real content-safety
+    # verdict (see ``eden.guardrails.intervention.record_guardrail_bypass_if_detected``).
+    from eden.guardrails.intervention import record_guardrail_bypass_if_detected
+
+    record_guardrail_bypass_if_detected(result, org_id=org_id)
+    return result
 
 
 @router.post("/injection/scan")

@@ -180,7 +180,13 @@ class AlertStreamProcessor:
             description="Critical alert for sandbox escape attempts",
             event_types=["sandbox.security_alert"],
             severity_threshold=AlertSeverity.CRITICAL,
-            channels=[AlertChannel.IN_APP, AlertChannel.WEBSOCKET, AlertChannel.PAGERDUTY, AlertChannel.WEBHOOK],
+            channels=[
+                AlertChannel.IN_APP,
+                AlertChannel.WEBSOCKET,
+                AlertChannel.EMAIL,
+                AlertChannel.PAGERDUTY,
+                AlertChannel.WEBHOOK,
+            ],
         ),
     ]
 
@@ -425,8 +431,30 @@ class AlertStreamProcessor:
             logger.warning(f"Webhook alert dispatch failed: {exc}")
 
     async def _dispatch_pagerduty(self, alert: GeneratedAlert) -> None:
-        """Send alert to PagerDuty — gated when PagerDuty is not configured."""
-        logger.info("PagerDuty alert skipped:not_configured: %s", alert.title)
+        """Send alert to PagerDuty via the Events API v2 sender (FEAT-42).
+
+        Logged skip (not an exception) when the org — and the
+        platform-level fallback — have no routing key configured; see
+        ``eden.integrations.pagerduty.store.get_routing_key``.
+        """
+        try:
+            from eden.services.pagerduty_delivery import send_pagerduty_event
+
+            await send_pagerduty_event(
+                org_id=str(alert.tenant_id) if alert.tenant_id else None,
+                summary=alert.title,
+                source=alert.entity_id or "eden",
+                severity=alert.severity.value,
+                dedup_key=f"{alert.rule_id}:{alert.entity_id}",
+                custom_details={
+                    "message": alert.message,
+                    "rule_id": alert.rule_id,
+                    "entity_id": alert.entity_id,
+                    **alert.context,
+                },
+            )
+        except Exception as exc:
+            logger.warning(f"PagerDuty alert dispatch failed: {exc}")
 
     def add_rule(self, rule: AlertRule) -> None:
         """Add a custom alert rule."""

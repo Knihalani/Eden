@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from eden.evaluation.iaa import cohen_kappa, iaa_from_annotation_pairs
+from eden.evaluation.labeling import agreement_rate, cohens_kappa
 from eden.evaluation.labeling_leases import (
     build_pairwise_payload,
     claim_lease,
@@ -184,8 +184,11 @@ def test_char_diff_and_grades() -> None:
     assert grade_outputs("a", "b", control_score=0.9, treatment_score=0.2)[0] == "regression"
 
 
-def test_cohen_kappa_perfect_and_iaa() -> None:
-    assert cohen_kappa(["a", "b", "a"], ["a", "b", "a"]) == 1.0
-    out = iaa_from_annotation_pairs([("good", "good"), ("bad", "good")])
-    assert out["n"] == 2
-    assert 0.0 <= out["kappa"] <= 1.0
+def test_cohens_kappa_perfect_and_agreement_rate() -> None:
+    assert cohens_kappa(["a", "b", "a"], ["a", "b", "a"]) == 1.0
+    labels_a = ["good", "bad"]
+    labels_b = ["good", "good"]
+    assert agreement_rate(labels_a, labels_b) == 0.5
+    kappa = cohens_kappa(labels_a, labels_b)
+    assert kappa is not None
+    assert 0.0 <= kappa <= 1.0

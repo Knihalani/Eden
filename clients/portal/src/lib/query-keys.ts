@@ -76,13 +76,21 @@ export const queryKeys = {
       parentTraceId: string | null | undefined,
     ) => ["timeTravel", "steps", orgId, parentTraceId ?? null] as const,
   },
+  /** Per-trace RCA causal chain (FEAT-65) — `GET .../intelligence/rca/{traceId}/chain`. */
+  rcaChain: {
+    all: ["rcaChain"] as const,
+    detail: (
+      orgId: string | null | undefined,
+      traceId: string | null | undefined,
+    ) => ["rcaChain", "detail", orgId, traceId ?? null] as const,
+  },
   /** Portal read-model projections (`GET /orgs/{id}/portal/*`). */
   portal: {
     all: ["portal"] as const,
     agents: (orgId: string | null | undefined) =>
       ["portal", "agents", orgId] as const,
-    traces: (orgId: string | null | undefined) =>
-      ["portal", "traces", orgId] as const,
+    traces: (orgId: string | null | undefined, agentId?: string | null) =>
+      ["portal", "traces", orgId, agentId ?? null] as const,
     traceDetail: (
       orgId: string | null | undefined,
       traceId: string | null | undefined,
@@ -105,6 +113,16 @@ export const queryKeys = {
       ["portal", "workspace", orgId] as const,
     keys: (orgId: string | null | undefined) =>
       ["portal", "keys", orgId] as const,
+    ssoProviders: (orgId: string | null | undefined) =>
+      ["portal", "sso-providers", orgId] as const,
+    roles: (orgId: string | null | undefined) =>
+      ["portal", "roles", orgId] as const,
+    roleAssignments: (orgId: string | null | undefined, roleId: string | null | undefined) =>
+      ["portal", "role-assignments", orgId, roleId] as const,
+    permissionsCatalogue: (orgId: string | null | undefined) =>
+      ["portal", "permissions-catalogue", orgId] as const,
+    piiPolicy: (orgId: string | null | undefined) =>
+      ["portal", "pii-policy", orgId] as const,
     members: (orgId: string | null | undefined) =>
       ["portal", "members", orgId] as const,
     auditEvents: (orgId: string | null | undefined) =>
@@ -170,6 +188,24 @@ export const queryKeys = {
     list: (orgId: string | null | undefined) => ["ledger", "list", orgId] as const,
     detail: (orgId: string | null | undefined, agentId: string | null | undefined) =>
       ["ledger", "detail", orgId, agentId] as const,
+  },
+  /** Org-wide fleet health (`GET /orgs/{id}/fleet/*`), gated by `fleet_health_v1`. */
+  fleet: {
+    all: ["fleet"] as const,
+    delegation: (orgId: string | null | undefined) =>
+      ["fleet", "delegation", orgId] as const,
+  },
+  /** Labeling queues (`GET /orgs/{id}/labeling/*`) — FEAT-82/FEAT-83. */
+  labeling: {
+    all: ["labeling"] as const,
+    queues: (orgId: string | null | undefined) =>
+      ["labeling", "queues", orgId] as const,
+    items: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
+      ["labeling", "items", orgId, filters ?? {}] as const,
+    agreement: (orgId: string | null | undefined) =>
+      ["labeling", "agreement", orgId] as const,
+    pop: (orgId: string | null | undefined, userId: string | null | undefined) =>
+      ["labeling", "pop", orgId, userId] as const,
   },
 } as const;
 

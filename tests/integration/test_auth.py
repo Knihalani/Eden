@@ -6,7 +6,7 @@ Covers: signup, login, logout, /me, 2FA setup/verify/disable,
         used by the onboarding wizard.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -168,6 +168,30 @@ class TestAuthLogin:
 
         assert response.status_code == 401
         assert "Invalid" in response.json()["detail"]
+
+    def test_login_blocked_when_org_enforces_sso(
+        self, mock_postgres_client: MagicMock, api_client: TestClient
+    ):
+        """FEAT-48: an org with an enabled, SSO-enforced provider blocks
+        password login for its members, even with a correct password."""
+        api_client.cookies.clear()
+        mock_postgres_client._fetchrow_overrides.append(
+            (
+                "org_sso_settings",
+                {"provider_id": "provider-abc", "org_id": "org-enforced-1"},
+            )
+        )
+        response = api_client.post("/auth/login", json={
+            "email": "test@example.com",
+            "password": "correct-password",
+        })
+
+        assert response.status_code == 403
+        detail = response.json()["detail"]
+        assert detail["error"] == "sso_required"
+        assert detail["provider_id"] == "provider-abc"
+        assert detail["org_id"] == "org-enforced-1"
+        assert "authorization" not in api_client.cookies
 
     def test_login_rate_limit(self, api_client: TestClient):
         """Repeated failed logins trigger per-IP rate limit."""

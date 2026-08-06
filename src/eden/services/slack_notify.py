@@ -409,9 +409,45 @@ async def send_test_message(
         return {"status": "error", "reason": str(exc)[:200]}
 
 
+async def notify_nl_incident(
+    org_id: str,
+    *,
+    alert_event_id: str,
+    rule_name: str,
+    reason: str | None = None,
+    confidence: float | None = None,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    """NL alert rule ruled a ``real_incident`` — routed to Slack when
+    the rule's ``channels`` config enables it (FEAT-43). Mirrors
+    ``eden.services.alert_email.send_nl_incident_email``'s content;
+    the two are independent per-channel toggles, not a fallback pair.
+    """
+    conf = f"{confidence:.2f}" if confidence is not None else "n/a"
+    url = _deep_link(f"/signals?event={alert_event_id}")
+    return await _send(
+        org_id,
+        agent_id=agent_id,
+        dedupe_key=f"nl_incident:{alert_event_id}",
+        text=f":rotating_light: NL alert ruled a real incident: {rule_name}",
+        blocks=_blocks(
+            header=":rotating_light: NL alert — real incident",
+            body=(
+                f"*Rule:* {rule_name}\n"
+                f"*Confidence:* {conf}\n"
+                f"*Reason:* {reason or 'n/a'}"
+            ),
+            link_url=url,
+            link_label="Open in Eden",
+            context="Eden NL alert triage — rate-limited alert",
+        ),
+    )
+
+
 __all__ = [
     "notify_issue_detected",
     "notify_needs_approval",
+    "notify_nl_incident",
     "notify_pr_opened",
     "notify_regression",
     "send_test_message",

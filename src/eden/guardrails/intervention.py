@@ -7,11 +7,15 @@ Four services:
   (``verdict: "block"``, ``live: false``). Only enforced
   detector policies flip the envelope to ``live: true``.
 
-* :class:`EvalToGuardrailLink` — promote a Cat 3 judge into a
-  production guardrail (Galileo's eval-to-guardrail
+* :class:`LegacyEvalToGuardrailLink` — promote a Cat 3 judge
+  into a production guardrail (Galileo's eval-to-guardrail
   lifecycle). Writes a row to ``eval_to_guardrail_links`` and
   creates a sibling ``judge_link`` policy in
-  ``guardrail_policies``.
+  ``guardrail_policies``. FEAT-34: this is the **legacy**
+  half of the eval-to-guardrail concept — see the class
+  docstring and
+  :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+  (the canonical, enforcing half) for the reconciled picture.
 
 * :class:`InterventionLog` — read the log of decisions
   (queries the existing ``intervention_log`` table).
@@ -28,7 +32,7 @@ Closed-loop wiring:
   threshold is breached on a sample of the org's judge
   scores).
 
-* :class:`EvalToGuardrailLink.promote` is also called by
+* :class:`LegacyEvalToGuardrailLink.promote` is also called by
   :func:`GuardrailHook.on_judge_threshold_breach` — a true
   bidirectional link.
 """
@@ -783,16 +787,157 @@ class InterventionEngine:
         )
 
 
-# ─── EvalToGuardrailLink ────────────────────────────────────────
+# Captured at import time, before any wiring (``install_all`` in
+# ``eden.observability.trace_quality.wiring``) has a chance to run.
+# ``is_evaluate_and_act_patched`` compares the *current* bound
+# attribute against this reference to detect a full-function
+# monkey-patch — the kind ``install_cat15_trajectory_replaces_intervention``
+# performed (FEAT-3/FEAT-4; the wiring has since been removed, see
+# ``wiring.install_all``'s docstring). A response-content check
+# (:func:`record_guardrail_bypass_if_detected`) cannot catch this
+# case on its own, because the patch replaces the function outright —
+# only comparing function identity from outside the (possibly
+# replaced) function can.
+_ORIGINAL_EVALUATE_AND_ACT = InterventionEngine.evaluate_and_act
 
 
-class EvalToGuardrailLink:
-    """Promote a Cat 3 judge into a production guardrail.
+def is_evaluate_and_act_patched() -> bool:
+    """True when ``InterventionEngine.evaluate_and_act`` no longer points at this module's original implementation."""
+    return InterventionEngine.evaluate_and_act is not _ORIGINAL_EVALUATE_AND_ACT
+
+
+# ─── Guardrail-bypass monitoring (FEAT-33) ─────────────────────────
+#
+# Defense-in-depth. Eden previously shipped a default-on hot-path
+# monkey-patch, ``install_cat15_trajectory_replaces_intervention``
+# (``eden.observability.trace_quality.wiring``), that silently
+# rebound ``InterventionEngine.evaluate_and_act`` — the real,
+# fail-closed content-safety guardrail (prompt injection, PII
+# redaction, hallucination, content policy) — to the unrelated Cat 15
+# trajectory hot path (cost/loop/latency checks) whenever a
+# ``trace_id`` was present, and tagged its responses
+# ``"feature": "trajectory_guardrail"``. That wiring has been removed
+# (FEAT-3/FEAT-4), but nothing previously alerted when it *was* firing
+# in production — the bug was only caught by a strategic code review.
+# The two functions below are cheap, always-on monitoring so a
+# reintroduction of the same substitution (by this wiring or any
+# future one) is visible in logs/metrics immediately instead of only
+# via code review:
+#
+# * :func:`record_guardrail_bypass_if_detected` — call with the
+#   envelope every production caller of ``evaluate_and_act`` gets
+#   back. Increments a counter and logs CRITICAL when the envelope
+#   carries the trajectory-hot-path marker. Because the check runs in
+#   the *caller* after the (possibly patched) function returns, it
+#   still fires even if ``evaluate_and_act`` has been fully replaced.
+# * :func:`is_evaluate_and_act_patched` (above) — an identity check
+#   wiring code can run right after installing every wiring, to catch
+#   a substitution even on organizations that never call ``/evaluate``
+#   frequently enough to surface it via response inspection alone.
+
+_guardrail_bypass_counts: dict[str, int] = {}
+
+
+def record_guardrail_bypass_if_detected(
+    result: dict[str, Any] | None, *, org_id: str = "", source: str = "response"
+) -> bool:
+    """Increment + log when a guardrail response carries the trajectory-hot-path marker.
+
+    Returns ``True`` (after firing a CRITICAL log line and
+    incrementing ``eden_guardrail_bypass_detected_total``) when
+    ``result["feature"] == "trajectory_guardrail"`` — the signature
+    of the removed ``install_cat15_trajectory_replaces_intervention``
+    monkey-patch (or any future wiring that reintroduces the same
+    substitution). Safe to call on every response: a single dict
+    lookup on the overwhelming majority of calls where the real
+    content-safety check ran.
+
+    ``source`` distinguishes a live response-content detection
+    (``"response"``, the default) from a startup identity check
+    (``"install_all"`` — see ``wiring.install_all``) in the log line
+    and the per-key counter.
+    """
+    feature = result.get("feature") if isinstance(result, dict) else None
+    if feature != "trajectory_guardrail":
+        return False
+    key = f"{source}:{org_id or 'unknown'}"
+    _guardrail_bypass_counts[key] = _guardrail_bypass_counts.get(key, 0) + 1
+    logger.critical(
+        "guardrails: evaluate_and_act bypass detected (source=%s org=%s) — "
+        "response tagged feature=trajectory_guardrail. The real "
+        "content-safety check (prompt injection / PII / hallucination / "
+        "content policy) did NOT run; a cost/loop/latency check ran in "
+        "its place. This is the signature of the removed "
+        "install_cat15_trajectory_replaces_intervention monkey-patch.",
+        source,
+        org_id or "unknown",
+    )
+    return True
+
+
+def get_guardrail_bypass_counts() -> dict[str, int]:
+    """Cumulative bypass-detection counts, keyed ``"<source>:<org_id>"``. For ``/metrics``."""
+    return dict(_guardrail_bypass_counts)
+
+
+# ─── LegacyEvalToGuardrailLink ──────────────────────────────────
+
+
+class LegacyEvalToGuardrailLink:
+    """Legacy eval-to-guardrail link (FEAT-34: superseded, kept for compatibility).
+
+    FEAT-34 reconciliation note: this class and
+    :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+    used to share the identical name ``EvalToGuardrailLink``,
+    which made it look like an accidental duplicate. They are
+    not duplicates — they represent the "record intent" half
+    (this class) and the "actually enforce" half (the other
+    class) of the same lifecycle concept, kept as two classes
+    because their callers cannot be safely merged in one change
+    (see below). This class was renamed to
+    ``LegacyEvalToGuardrailLink`` so the two are distinguishable
+    by name alone; the other class keeps the ``EvalToGuardrailLink``
+    name as the canonical one.
+
+    .. deprecated::
+        This is **not** the production enforcement path. The
+        canonical implementation is
+        :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+        — it is the one reachable from
+        ``POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail``,
+        ``.../eval/promote-to-shadow-guardrail``, and
+        ``.../eval/demote-guardrail``, and it is the one that
+        actually enforces anything, because it hot-reloads the
+        live :mod:`eden.llmops.filters.guardrail` gateway filter on
+        every promote/demote. New integrations should use that
+        class, not this one.
+
+        This class is retained only because two things still
+        depend on its exact type/import surface and cannot be
+        safely deleted in the same change: the legacy
+        ``POST /orgs/{org_id}/intelligence/guardrails/promote-judge``
+        route (``eden.api.routes.intelligence_guardrails``) and
+        :class:`eden.llmops.promotion_hooks.GuardrailHook`'s
+        ``on_judge_threshold_breach`` / ``on_judge_below_floor``
+        closed-loop callbacks.
 
     Writes a row to ``eval_to_guardrail_links`` and creates a
-    sibling ``judge_link`` policy in ``guardrail_policies``
-    (so the :class:`InterventionEngine` will consult it). The
-    policy's ``spec`` is::
+    sibling ``judge_link`` policy in ``guardrail_policies``. That
+    policy is **not enforced**: ``judge_link`` is hard-excluded
+    from :class:`InterventionEngine`'s ``_enforced_types``
+    (``evaluate_and_act`` returns ``reason:
+    "judge_link_not_enforced"`` when it is the only policy type
+    present), and unlike the canonical class's ``promote_to_guardrail``,
+    ``.promote()`` here never hot-reloads the live gateway filter
+    either. Calling ``.promote()`` on this class alone therefore has
+    **no live enforcement effect** — it only records intent
+    (``guardrail_policies``/``eval_to_guardrail_links`` rows) that a
+    human or the canonical class's promote path would need to act
+    on for the guardrail to actually run. ``.demote()`` is
+    symmetric and does work end-to-end for what this class itself
+    wrote (it also reloads the gateway filter, so it is safe to
+    call even though ``.promote()`` never added anything there), but
+    there is no REST route that reaches it. The policy's ``spec`` is::
 
         {
             "judge_name": "...",

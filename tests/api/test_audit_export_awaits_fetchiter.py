@@ -75,3 +75,25 @@ def test_export_audit_log_uses_dollar_placeholder() -> None:
         "audit-log export contains a `%s` placeholder; use `$1` to "
         "match the rest of the codebase (asyncpg convention)."
     )
+
+
+def test_export_audit_log_queries_a_real_table() -> None:
+    """FEAT-54 — ``audit_log`` is not a real table (only ``org_audit_log``
+    exists, per ``001_initial_schema.py``). Guard against the export
+    endpoint regressing back to the nonexistent table.
+    """
+    section = _export_section(_body())
+    assert "FROM audit_log " not in section, (
+        "audit-log export must not query the nonexistent `audit_log` "
+        "table; use `org_audit_log` (see 001_initial_schema.py)."
+    )
+    assert "org_audit_log" in section, (
+        "Expected the audit-log export to query `org_audit_log`, the "
+        "real table backing the organization audit trail."
+    )
+    # `org_audit_log` has no `prev_hash`/`entry_hash` columns — those
+    # hash-chain columns live on the unrelated `agent_audit_ledger`
+    # table (092_market_ready_consolidated.py), and no migration
+    # defines a `verify_audit_chain()` SQL function either.
+    assert "prev_hash" not in section
+    assert "entry_hash" not in section

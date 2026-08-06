@@ -12,6 +12,7 @@ export type BudgetPayload = {
       enforcement_enabled: boolean;
       action_on_exceed: string;
       threshold_alert_pct: number;
+      alert_thresholds?: number[];
       source: string;
     };
     consumption: {

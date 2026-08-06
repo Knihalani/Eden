@@ -1550,6 +1550,93 @@ class TestEvalToGuardrailLink:
         assert "guardrail_policy_id" in result["data"]
         assert result["data"]["guardrail_policy_id"] == "my-policy"
 
+    # ── FEAT-34: demote path (canonical class must be able to walk
+    #    back a promotion end-to-end; the legacy
+    #    ``eden.guardrails.intervention.EvalToGuardrailLink`` has a
+    #    demote() but no route reaches it) ──
+
+    @pytest.mark.asyncio
+    async def test_demote_rejects_empty_judge(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
+        from eden.evaluation.eval_intel.integration import EvalToGuardrailLink
+
+        result = await EvalToGuardrailLink().demote("org_test", judge_name="")
+        assert result["status"] == "bad_request"
+
+    @pytest.mark.asyncio
+    async def test_demote_disables_link_and_reloads_gateway_filter(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
+        from eden.evaluation.eval_intel.integration import EvalToGuardrailLink
+
+        disable_result = {
+            "judge_name": "hallucination",
+            "policy_ids": ["policy-1"],
+            "link_ids": ["link-1"],
+            "disabled": True,
+            "reason": "no_longer_reliable",
+        }
+        fake_filter = MagicMock()
+        fake_filter._policies = {
+            "org_test": [
+                {"judge_name": "hallucination", "keyword": "hallucination"},
+                {"judge_name": "other_judge", "keyword": "other_judge"},
+            ]
+        }
+        with patch(
+            "eden.guardrails.intervention._disable_eval_guardrail_link",
+            new=AsyncMock(return_value=disable_result),
+        ) as disable_mock, patch(
+            "eden.llmops.learn_wiring.install_learn_filters",
+            new=MagicMock(),
+        ), patch(
+            "eden.llmops.filters.guardrail.get_guardrail_filter",
+            new=MagicMock(return_value=fake_filter),
+        ):
+            result = await EvalToGuardrailLink().demote(
+                "org_test", judge_name="hallucination", reason="no_longer_reliable",
+            )
+        disable_mock.assert_called_once_with(
+            "org_test", judge_name="hallucination", reason="no_longer_reliable",
+        )
+        assert result["status"] == "ok"
+        assert result["data"]["status"] == "disabled"
+        assert result["data"]["policy_ids"] == ["policy-1"]
+        # The live gateway filter must have the demoted judge's
+        # policy removed — this is the step the legacy class's
+        # ``.promote()`` never added in the first place, but this
+        # class's ``.promote_to_guardrail()`` does, so ``.demote()``
+        # must undo it.
+        fake_filter.load_policies.assert_called_once()
+        _, kwargs = fake_filter.load_policies.call_args
+        remaining = fake_filter.load_policies.call_args.args[1]
+        assert all(p.get("judge_name") != "hallucination" for p in remaining)
+
+    @pytest.mark.asyncio
+    async def test_demote_not_found_when_no_active_link(
+        self, mock_postgres_client: MagicMock
+    ) -> None:
+        from eden.evaluation.eval_intel.integration import EvalToGuardrailLink
+
+        with patch(
+            "eden.guardrails.intervention._disable_eval_guardrail_link",
+            new=AsyncMock(
+                return_value={
+                    "judge_name": "nope",
+                    "policy_ids": [],
+                    "link_ids": [],
+                    "disabled": False,
+                    "reason": "",
+                }
+            ),
+        ):
+            result = await EvalToGuardrailLink().demote(
+                "org_test", judge_name="nope",
+            )
+        assert result["status"] == "ok"
+        assert result["data"]["status"] == "not_found"
+
 
 # ─── 9. SixModalitiesRegistry ────────────────────────────────────────
 
