@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
+from eden.api.utils.redact import redact_all
 from eden.services.app_intel import DEFAULT_TTL_HOURS, SessionIdentityService
 
 logger = logging.getLogger(__name__)
@@ -223,7 +224,7 @@ class LinkIssueResponse(BaseModel):
 def _sessions_unavailable(exc: Exception) -> HTTPException:
     # Postgres down → 503, never a fake empty list (same contract as
     # observability.list_traces).
-    logger.warning("sessions timeline: storage unavailable: %s", exc)
+    logger.warning("sessions timeline: storage unavailable: %s", redact_all(str(exc)))
     return HTTPException(
         status_code=503,
         detail="Sessions temporarily unavailable",

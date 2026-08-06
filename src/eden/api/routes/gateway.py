@@ -277,7 +277,7 @@ def _get_semantic_cache() -> Any | None:
                 embedder = None
         _semantic_cache = SemanticCache(embedder=embedder)
     except Exception as exc:  # noqa: BLE001 — fail open to no-cache
-        logger.debug("gateway: semantic cache unavailable: %s", exc)
+        logger.debug("gateway: semantic cache unavailable: %s", redact_all(str(exc)))
         return None
     return _semantic_cache
 
@@ -480,7 +480,7 @@ async def _emit_gateway_telemetry(
 
                     await record_usage(org_id, cost_usd)
                 except Exception as exc:  # noqa: BLE001
-                    logger.debug("gateway: budget record_usage failed: %s", exc)
+                    logger.debug("gateway: budget record_usage failed: %s", redact_all(str(exc)))
         # Cat 20 — best-effort TraceRecorder hook on successful
         # completions. Feature-flagged; never breaks the response.
         if outcome == "success":

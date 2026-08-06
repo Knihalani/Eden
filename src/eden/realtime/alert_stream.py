@@ -259,7 +259,7 @@ class AlertStreamProcessor:
                 severity = AlertSeverity(payload_severity)
 
         # Build title and message
-        if "failure" in event_type or "error" in event_type:
+        if "failure" in event_type or "error" in event_type or "security_alert" in event_type:
             title = f"{rule.name}: {entity_id}"
             message = event.get("payload", {}).get("message", f"{rule.description} detected")
         elif "cost" in event_type:

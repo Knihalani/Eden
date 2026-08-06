@@ -32,6 +32,8 @@ from typing import Any
 
 __all__ = ["hashed_term_vector", "stable_bucket", "stable_hash", "stable_seed"]
 
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
 #: 8 bytes — a 64-bit space, matching the existing ``_hash_bucket`` convention
 #: and far beyond the collision pressure of any bucketing Eden does.
 _DIGEST_SIZE = 8
@@ -84,27 +86,36 @@ def stable_seed(value: Any, *, bits: int = 32) -> int:
     return stable_hash(value) % (1 << bits)
 
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
-
-
 def hashed_term_vector(text: str, *, dims: int = 64) -> list[float]:
-    """Deterministic, L2-normalized bag-of-words hashing vector.
+    """Deterministic, L2-normalized *hashed bag-of-words* vector.
 
-    Splits ``text`` into lowercase word tokens and hashes each token into
-    one of ``dims`` buckets (via :func:`stable_bucket`), incrementing that
-    bucket's count. Cosine similarity between two such vectors tracks real
-    token overlap between the source texts -- unlike hashing the *whole*
-    string to a single seed, which produces near-uncorrelated noise per
-    document (this was the root cause of a signal-clustering bug where
-    88.7% of unrelated rows collapsed into one mega-cluster: OPT-2).
+    This is the "feature hashing" trick: each token is bucketed into one of
+    ``dims`` slots via :func:`stable_bucket` and accumulated by term
+    frequency. It is a legitimate fallback content-similarity measure when no
+    semantic embedding model is available — two texts that share vocabulary
+    land in overlapping buckets and get genuinely higher cosine similarity
+    (a Jaccard/TF-overlap style signal), unlike hashing the *whole string*
+    into a single scalar and deriving a vector from it, which produces
+    near-uncorrelated-looking vectors for related text and, worse, can
+    produce spuriously *high* similarity between unrelated text if the
+    per-dimension derivation is not independent per input (see the
+    ``signal_clusterer`` mega-cluster bug this replaced: OPT-2).
+
+    Not a substitute for a real embedding model — it only captures lexical
+    overlap, not semantics/paraphrase — but it is non-degenerate: distinct
+    vocabularies reliably yield low cosine similarity and shared vocabularies
+    reliably yield high cosine similarity.
 
     Used as the embed fallback in ``eden.signals.clusterer._embed`` when no
     real semantic embedder is installed.
     """
-    if dims <= 0:
-        return []
     vec = [0.0] * dims
-    for tok in _TOKEN_RE.findall((text or "").lower()):
+    if not text or dims <= 0:
+        return vec
+    tokens = _TOKEN_RE.findall(text.lower())
+    if not tokens:
+        return vec
+    for tok in tokens:
         vec[stable_bucket(tok, dims)] += 1.0
     norm = math.sqrt(sum(v * v for v in vec))
     if norm > 0:

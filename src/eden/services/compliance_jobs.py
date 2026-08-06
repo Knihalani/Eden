@@ -236,15 +236,77 @@ async def run_user_export_job(job_id: str, user_id: str) -> None:
         await _mark_job(job_id, status="failed", error_message=str(exc)[:500])
 
 
-async def run_user_delete_job(job_id: str, user_id: str) -> None:
-    try:
-        await _mark_job(job_id, status="running")
-        client = await _pg()
-        await client.execute(
+async def erase_user_account(
+    user_id: str,
+    *,
+    requested_by: str | None = None,
+    client: Any = None,
+) -> dict[str, Any]:
+    """Single, consolidated GDPR/CCPA account-erasure path (FEAT-5).
+
+    Previously ``DELETE /api/v1/me`` (-> ``run_user_delete_job``),
+    ``DELETE /users/me`` (inline SQL in ``routes/auth.py``), and
+    ``POST /governance/rtbf`` (``RightToBeForgottenService``) were
+    three non-communicating implementations. This is now the one
+    both self-service routes converge on: fan out to
+    ``RightToBeForgottenService`` for every org the user belongs to
+    *before* anonymising the shared ``users`` row, so that a hard
+    per-org RTBF failure blocks the whole erasure (fail-closed)
+    rather than reporting success while org-scoped data survives.
+
+    A known, non-fatal cross-store fanout gap (a store the RTBF
+    service can't fully reach yet, e.g. an un-backfilled search
+    index) does NOT block anonymization — today's infra genuinely
+    can't guarantee 100% fanout yet, and blocking self-service
+    deletion on that would make it unusable. Such orgs are reported
+    back in ``incomplete_orgs`` instead.
+    """
+    pg = client if client is not None else await _pg()
+
+    org_rows = await pg.fetch(
+        "SELECT org_id FROM org_members WHERE user_id = $1",
+        user_id,
+    )
+    org_ids = [r["org_id"] for r in org_rows or []]
+
+    from eden.services.governance_intel import gdpr
+
+    rtbf_results: dict[str, Any] = {}
+    failures: list[dict[str, str]] = []
+    incomplete_orgs: list[str] = []
+
+    for org_id in org_ids:
+        service = gdpr.RightToBeForgottenService()
+        try:
+            envelope = await service.process_request(
+                org_id, user_id=user_id, requested_by=requested_by
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "erase_user_account rtbf failed org_id=%s user_id=%s: %s",
+                org_id,
+                user_id,
+                exc,
+            )
+            failures.append({"org_id": org_id, "error": str(exc)[:500]})
+            continue
+
+        rtbf_results[org_id] = envelope
+        if envelope.get("status") != "ok":
+            message = (envelope.get("data") or {}).get("message") or "rtbf failed"
+            failures.append({"org_id": org_id, "error": str(message)[:500]})
+            continue
+
+        if not (envelope.get("data") or {}).get("complete", True):
+            incomplete_orgs.append(org_id)
+
+    account_anonymized = False
+    if not failures:
+        await pg.execute(
             "DELETE FROM org_members WHERE user_id = $1",
             user_id,
         )
-        await client.execute(
+        await pg.execute(
             """
             UPDATE users SET
                 deleted_at = NOW(),
@@ -256,7 +318,32 @@ async def run_user_delete_job(job_id: str, user_id: str) -> None:
             """,
             user_id,
         )
-        await _mark_job(job_id, status="completed")
+        account_anonymized = True
+
+    return {
+        "user_id": user_id,
+        "org_ids": org_ids,
+        "rtbf_results": rtbf_results,
+        "failures": failures,
+        "incomplete_orgs": incomplete_orgs,
+        "account_anonymized": account_anonymized,
+    }
+
+
+async def run_user_delete_job(job_id: str, user_id: str) -> None:
+    try:
+        await _mark_job(job_id, status="running")
+        summary = await erase_user_account(user_id, requested_by=user_id)
+        if summary.get("account_anonymized"):
+            await _mark_job(job_id, status="completed")
+        else:
+            failures = summary.get("failures") or []
+            error_message = "; ".join(
+                f"{f.get('org_id')}: {f.get('error')}" for f in failures
+            ) or "erasure incomplete"
+            await _mark_job(
+                job_id, status="failed", error_message=error_message[:500]
+            )
     except Exception as exc:  # noqa: BLE001
         logger.exception("compliance.delete_me failed job_id=%s", job_id)
         await _mark_job(job_id, status="failed", error_message=str(exc)[:500])
