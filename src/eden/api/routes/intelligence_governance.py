@@ -378,10 +378,14 @@ async def process_rtbf(
     remaining reason:
 
     The cross-store fanout (``rtbf_fanout.py``) cannot erase per-user
-    data from every secondary store. Redis (SCAN+DEL) works; Typesense,
-    Qdrant and ClickHouse depend on delete-by-user support in their
-    clients, and S3 has no per-user object index at all (reports
-    ``unsupported``, which counts as incomplete by design).
+    data from every secondary store. Redis attempts SCAN+DEL against a
+    user-scoped key pattern, but no cache writer in the codebase
+    currently writes keys in that shape, so in practice the scan
+    matches nothing and no real cache data is erased (tracked
+    separately for a real fix); Typesense, Qdrant and ClickHouse
+    depend on delete-by-user support in their clients, and S3 has no
+    per-user object index at all (reports ``unsupported``, which
+    counts as incomplete by design).
 
     The PRIMARY Postgres path was FIXED 2026-08-02:
     ``governance_intel/gdpr.py`` now names live-schema columns on all
