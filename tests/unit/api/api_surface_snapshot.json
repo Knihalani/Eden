@@ -865,6 +865,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/intelligence/rca/{trace_id}/chain": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/intelligence/rca/{trace_id}/explain": [
       "200:application/json",
       "422:application/json"
@@ -3280,6 +3284,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/traces/{trace_id}/investigate": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/traces/{trace_id}/metadata": [
       "200:application/json",
       "422:application/json"
@@ -3468,7 +3476,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 883,
+  "route_count": 885,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3696,6 +3704,7 @@
     "GET /orgs/{org_id}/intelligence/outcomes/departments",
     "GET /orgs/{org_id}/intelligence/rca/incidents",
     "GET /orgs/{org_id}/intelligence/rca/incidents/{cluster_id}/summarize",
+    "GET /orgs/{org_id}/intelligence/rca/{trace_id}/chain",
     "GET /orgs/{org_id}/intelligence/rca/{trace_id}/explain",
     "GET /orgs/{org_id}/intelligence/replay/conversation/{session_id}",
     "GET /orgs/{org_id}/intelligence/replay/live-tail",
@@ -4305,6 +4314,7 @@
     "POST /orgs/{org_id}/tool-calls/{span_id}/label",
     "POST /orgs/{org_id}/topics/generate",
     "POST /orgs/{org_id}/topics/{topic_id}/act",
+    "POST /orgs/{org_id}/traces/{trace_id}/investigate",
     "POST /orgs/{org_id}/traces/{trace_id}/metadata",
     "POST /orgs/{org_id}/traces/{trace_id}/share",
     "POST /orgs/{org_id}/transfer-ownership",
@@ -4354,7 +4364,7 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 539,
+  "schema_count": 540,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -4570,7 +4580,6 @@
     "InstallationOut",
     "IntegrationStatusItem",
     "IntegrationsStatusResponse",
-    "InvestigateRequest",
     "InviteMemberRequest",
     "InvoiceResponse",
     "IssueCard",
@@ -4871,6 +4880,7 @@
     "eden__api__routes__integrations_langsmith__StatusResponse",
     "eden__api__routes__integrations_runloop__StatusResponse",
     "eden__api__routes__integrations_wandb__StatusResponse",
+    "eden__api__routes__intelligence_autonomous__InvestigateRequest",
     "eden__api__routes__intelligence_dsl__ResolveRequest",
     "eden__api__routes__intelligence_eval__ClusterRequest",
     "eden__api__routes__intelligence_eval__FeedbackRequest",
@@ -4892,6 +4902,7 @@
     "eden__api__routes__qa_generator__GenerateRequest",
     "eden__api__routes__sessions__SessionIdentifyRequest",
     "eden__api__routes__sessions__SessionStartRequest",
+    "eden__api__routes__signal_investigator__InvestigateRequest",
     "eden__api__routes__signals__ClusterRequest",
     "eden__api__routes__slack__AuthorizeResponse",
     "eden__api__routes__slack__ConfiguredResponse"

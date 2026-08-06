@@ -37,6 +37,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from eden.realtime import kafka_consumer
+
 logger = logging.getLogger(__name__)
 
 # Default wall-clock budget matches TestPlanRunner.SANDBOX_WALL_CLOCK_SEC.
@@ -164,6 +166,47 @@ def apply_patch_files(
         target.write_text(str(content), encoding="utf-8")
         written.append(rel.replace("\\", "/"))
     return written
+
+
+def _is_traversal_error(exc: ValueError) -> bool:
+    """Return True when ``exc`` (raised by :func:`_safe_resolve` via
+    :func:`apply_patch_files`) represents an actual path-escape attempt,
+    as opposed to an ordinary malformed-patch caller error (missing
+    ``content``, missing ``path``, non-dict entry, ...). Only real
+    escape attempts warrant a P0 security alert.
+    """
+    message = str(exc)
+    return "traversal rejected" in message or "absolute path rejected" in message
+
+
+async def _emit_sandbox_escape_alert(
+    exc: ValueError,
+    *,
+    workdir: Path,
+    command: Sequence[str],
+    entity_id: str | None,
+    tenant_id: str | None,
+) -> None:
+    """Publish a P0 ``sandbox.security_alert`` event for a real
+    path-escape attempt (FEAT-15), so ``AlertStreamProcessor``'s
+    ``rule_sandbox_escape`` rule can fire. Best-effort: a publish
+    failure here must never affect the caller's :class:`SandboxResult`.
+    """
+    try:
+        await kafka_consumer.publish_alert_event(
+            "sandbox.security_alert",
+            entity_id=entity_id,
+            tenant_id=tenant_id,
+            payload={
+                "severity": "critical",
+                "message": f"Sandbox path-escape attempt rejected: {exc}",
+                "reason": "path_traversal",
+                "workdir": str(workdir),
+                "command": list(command),
+            },
+        )
+    except Exception:
+        logger.warning("failed to publish sandbox.security_alert event", exc_info=True)
 
 
 def _unshare_net_available() -> bool:
@@ -318,6 +361,8 @@ async def run_in_sandbox(
     env: dict[str, str] | None = None,
     cleanup: bool = True,
     require_isolation: bool = False,
+    tenant_id: str | None = None,
+    entity_id: str | None = None,
 ) -> SandboxResult:
     """Create a temp workdir, apply patches, run an allowlisted command.
 
@@ -334,6 +379,10 @@ async def run_in_sandbox(
             ``unshare --net`` network isolation is unavailable
             (``error="isolation_unavailable"``, nothing is run).
             Mandatory for LLM-synthesized tests (M8, §4.2).
+        tenant_id: Optional tenant id, attached to the P0 security alert
+            published for a real path-escape attempt (FEAT-15).
+        entity_id: Optional entity id (e.g. job id), attached to the P0
+            security alert published for a real path-escape attempt.
 
     Returns:
         :class:`SandboxResult` with stdout/stderr/exit_code.
@@ -354,6 +403,14 @@ async def run_in_sandbox(
         try:
             written = apply_patch_files(root, files)
         except ValueError as exc:
+            if _is_traversal_error(exc):
+                await _emit_sandbox_escape_alert(
+                    exc,
+                    workdir=root,
+                    command=command,
+                    entity_id=entity_id,
+                    tenant_id=tenant_id,
+                )
             return SandboxResult(
                 exit_code=125,
                 stdout="",
@@ -474,6 +531,8 @@ class SandboxRunner:
         workdir: str | Path | None = None,
         env: dict[str, str] | None = None,
         require_isolation: bool = False,
+        tenant_id: str | None = None,
+        entity_id: str | None = None,
     ) -> SandboxResult:
         return await run_in_sandbox(
             command,
@@ -482,6 +541,8 @@ class SandboxRunner:
             timeout_sec=self.timeout_sec,
             env=env,
             require_isolation=require_isolation,
+            tenant_id=tenant_id,
+            entity_id=entity_id,
         )
 
 

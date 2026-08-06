@@ -46,7 +46,12 @@ def test_debugger_portal_paths_match_backend() -> None:
 
 def test_signals_portal_paths_match_backend() -> None:
     src = portal_api_source()
-    block = src.split("const signalsApi")[1].split("const debuggerApi")[0]
+    # Bound the block to signalsApi's own object literal. `alertsApi` and the
+    # FEAT-18 `nlAlertRulesApi` (which legitimately has a `compile:` call
+    # against `/orgs/{org_id}/alerts/compile`) both sit between `signalsApi`
+    # and `debuggerApi` in resources.ts, so splitting on `debuggerApi` sweeps
+    # them in too.
+    block = src.split("const signalsApi")[1].split("export const nlAlertRulesApi")[0]
     assert "/signals" in block
     assert "description: string" in block
     assert "compile:" not in block

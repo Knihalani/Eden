@@ -273,6 +273,7 @@ class IssuesRepo:
         *,
         status: str | None = None,
         severity: str | None = None,
+        sort: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Issue]:
@@ -291,10 +292,25 @@ class IssuesRepo:
         limit_pos = len(args)
         args.append(int(offset))
         offset_pos = len(args)
+        if sort == "rank":
+            # FEAT-11: composite priority — severity weight x log-dampened
+            # user/stumble volume x triage confidence, so old-but-severe
+            # and widespread issues don't sink under brand-new low-impact
+            # blips. Falls back to last_seen DESC as a stable tie-break.
+            order_by = (
+                "(CASE severity WHEN 'p0' THEN 4 WHEN 'p1' THEN 3 "
+                "WHEN 'p2' THEN 2 ELSE 1 END) "
+                "* ln(GREATEST(user_count, 1) + 1) "
+                "* ln(GREATEST(stumble_count, 1) + 1) "
+                "* COALESCE((triage_result->>'confidence')::double precision, 0.5) "
+                "DESC, last_seen DESC"
+            )
+        else:
+            order_by = "last_seen DESC"
         sql = (
             f"SELECT {_ISSUE_LIST_COLUMNS} FROM agent_issues WHERE "
             + " AND ".join(clauses)
-            + f" ORDER BY last_seen DESC LIMIT ${limit_pos} OFFSET ${offset_pos}"
+            + f" ORDER BY {order_by} LIMIT ${limit_pos} OFFSET ${offset_pos}"
         )
         started = time.perf_counter()
         try:

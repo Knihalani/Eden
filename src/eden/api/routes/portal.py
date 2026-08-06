@@ -1125,7 +1125,7 @@ async def list_portal_agents(
             )
             return [(str(r["synthetic_label"]), str(r["agent_id"])) for r in rows]
         except Exception as exc:  # noqa: BLE001
-            logger.debug("portal agents: alias discovery skipped: %s", exc)
+            logger.debug("portal agents: alias discovery skipped: %s", redact_all(str(exc)))
             return []
 
     async def _load_persisted_aliases() -> dict[str, str]:
@@ -1142,7 +1142,7 @@ async def list_portal_agents(
         except Exception as exc:  # noqa: BLE001
             # Table may not exist yet on an unmigrated DB — never break the
             # dashboard over a missing reconciliation aid.
-            logger.debug("portal agents: persisted aliases skipped: %s", exc)
+            logger.debug("portal agents: persisted aliases skipped: %s", redact_all(str(exc)))
             return {}
 
     async def _persist_alias_pairs(pairs: list[tuple[str, str]]) -> None:
@@ -1167,7 +1167,7 @@ async def list_portal_agents(
         except Exception as exc:  # noqa: BLE001
             # Best-effort: a failed alias write must never break the read
             # path, it just means the ghost split persists until retried.
-            logger.debug("portal agents: alias upsert skipped: %s", exc)
+            logger.debug("portal agents: alias upsert skipped: %s", redact_all(str(exc)))
 
     def _merge_agent_metrics(
         base: dict[str, Any] | None, extra: dict[str, Any]

@@ -527,3 +527,31 @@ async def close_kafka_producer() -> None:
     if _kafka_producer:
         await _kafka_producer.close()
         _kafka_producer = None
+
+
+async def publish_alert_event(
+    event_type: str,
+    *,
+    entity_id: str | None = None,
+    tenant_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    """Publish a real-time alert event to the ``eden-alert`` Kafka topic.
+
+    Best-effort producer used by callers (e.g. the sandbox runner's
+    security-escape alert emission, FEAT-15) that need
+    ``AlertStreamProcessor.process_event`` to observe the event without
+    coupling to the full alert pipeline. Raises on producer failure —
+    callers that must not let a publish failure affect their own result
+    (e.g. sandbox execution) are responsible for catching.
+    """
+    event = {
+        "event_type": event_type,
+        "entity_id": entity_id or "unknown",
+        "tenant_id": tenant_id or "",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "payload": payload or {},
+    }
+    producer = await get_kafka_producer()
+    await producer.send(EDEN_TOPICS["alert"], event, key=entity_id)
+    return True

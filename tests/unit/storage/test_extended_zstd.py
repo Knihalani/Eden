@@ -304,9 +304,13 @@ class TestTelemetryCollectorWiring:
             )
 
     def test_write_path_placeholder_count_updated(self, write_source):
-        """The INSERT must have $48 (last column before created_at NOW())."""
+        """The INSERT must have $53 (last column before created_at NOW())."""
         # ast-parsed would be ideal but we're matching text.
-        # Last positional placeholder before NOW(): zstd cols + message hashes.
-        assert "$48, NOW()" in write_source, (
-            "INSERT must end with $48, NOW() after zstd cols + message hashes"
+        # Last positional placeholder before NOW(): zstd cols + message hashes
+        # + the 5 OTel/A2A fields added in FEAT-22 (operation_name,
+        # provider_name, error_type, parent_agent_span_id,
+        # child_agent_trace_id) -> was $48, now $48 + 5 = $53.
+        assert "$53, NOW()" in write_source, (
+            "INSERT must end with $53, NOW() after zstd cols + message hashes "
+            "+ FEAT-22's 5 new OTel/A2A columns"
         )

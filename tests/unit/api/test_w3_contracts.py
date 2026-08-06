@@ -18,7 +18,14 @@ def test_wave6_api_paths_subset_of_backend() -> None:
     from eden.api.routes import wave6_online
 
     src = portal_api_source()
-    block = src.split("const wave6Api")[1].split("(api as unknown")[0]
+    # The wave6-related client calls span `wave6Api`, `sessionsApi`, and
+    # `automationsApi` (all of which are mounted on wave6_online.router) —
+    # the required-name checks below cover all three. `savedSearchesApi`
+    # (a `sharing_router` concern, unrelated to wave6) sits immediately
+    # after those in resources.ts, so bound the block there rather than at
+    # the generic `(api as unknown` assignment marker, which now matches
+    # savedSearchesApi's assignment first and sweeps its paths in too.
+    block = src.split("const wave6Api")[1].split("const savedSearchesApi")[0]
     # Collect `/orgs/${orgId}/...` path literals from the client block.
     client_paths = set(
         re.findall(r"`/orgs/\$\{orgId\}(/[^`$]+)`", block),
