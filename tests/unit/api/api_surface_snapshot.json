@@ -661,6 +661,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/improve/plans/{plan_id}/events": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/improve/queue": [
       "200:application/json",
       "422:application/json"
@@ -965,12 +969,12 @@
       "200:application/json",
       "422:application/json"
     ],
-    "GET /orgs/{org_id}/labeling/export": [
-      "200:text/plain",
+    "GET /orgs/{org_id}/labeling/agreement": [
+      "200:application/json",
       "422:application/json"
     ],
-    "GET /orgs/{org_id}/labeling/iia": [
-      "200:application/json",
+    "GET /orgs/{org_id}/labeling/export": [
+      "200:text/plain",
       "422:application/json"
     ],
     "GET /orgs/{org_id}/labeling/items": [
@@ -989,11 +993,11 @@
       "200:application/json",
       "422:application/json"
     ],
-    "GET /orgs/{org_id}/labeling/queues/{queue_id}/board": [
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/agreement": [
       "200:application/json",
       "422:application/json"
     ],
-    "GET /orgs/{org_id}/labeling/queues/{queue_id}/iaa": [
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/board": [
       "200:application/json",
       "422:application/json"
     ],
@@ -2521,6 +2525,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/intelligence/eval/demote-guardrail": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/intelligence/eval/failure-clusters": [
       "200:application/json",
       "422:application/json"
@@ -3476,7 +3484,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 885,
+  "route_count": 887,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3651,6 +3659,7 @@
     "GET /orgs/{org_id}/github/repos",
     "GET /orgs/{org_id}/improve/plans",
     "GET /orgs/{org_id}/improve/plans/{plan_id}",
+    "GET /orgs/{org_id}/improve/plans/{plan_id}/events",
     "GET /orgs/{org_id}/improve/queue",
     "GET /orgs/{org_id}/improve/runs",
     "GET /orgs/{org_id}/improve/runs/{run_id}",
@@ -3729,14 +3738,14 @@
     "GET /orgs/{org_id}/invites",
     "GET /orgs/{org_id}/issues/{issue_id}/kb-suggestions",
     "GET /orgs/{org_id}/kb/flywheel/status",
+    "GET /orgs/{org_id}/labeling/agreement",
     "GET /orgs/{org_id}/labeling/export",
-    "GET /orgs/{org_id}/labeling/iia",
     "GET /orgs/{org_id}/labeling/items",
     "GET /orgs/{org_id}/labeling/queue/{user_id}",
     "GET /orgs/{org_id}/labeling/queues",
     "GET /orgs/{org_id}/labeling/queues/{queue_id}",
+    "GET /orgs/{org_id}/labeling/queues/{queue_id}/agreement",
     "GET /orgs/{org_id}/labeling/queues/{queue_id}/board",
-    "GET /orgs/{org_id}/labeling/queues/{queue_id}/iaa",
     "GET /orgs/{org_id}/ledger",
     "GET /orgs/{org_id}/llmops/ab-tests",
     "GET /orgs/{org_id}/llmops/artifacts",
@@ -4124,6 +4133,7 @@
     "POST /orgs/{org_id}/intelligence/eval/boolean-categorical",
     "POST /orgs/{org_id}/intelligence/eval/clhf/generate",
     "POST /orgs/{org_id}/intelligence/eval/custom-eval/register",
+    "POST /orgs/{org_id}/intelligence/eval/demote-guardrail",
     "POST /orgs/{org_id}/intelligence/eval/failure-clusters",
     "POST /orgs/{org_id}/intelligence/eval/feedback",
     "POST /orgs/{org_id}/intelligence/eval/hil/annotations",
@@ -4364,7 +4374,7 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 540,
+  "schema_count": 541,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -4504,6 +4514,7 @@
     "DatasetTracesRequest",
     "DebuggerSessionCard",
     "DeleteAccepted",
+    "DemoteRequest",
     "DestinationIn",
     "DestinationOut",
     "DetectionSettingsRequest",

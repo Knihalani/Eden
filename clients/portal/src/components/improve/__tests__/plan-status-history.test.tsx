@@ -63,9 +63,9 @@ describe("PlanStatusHistory", () => {
     expect(
       screen.getByText("Current status: pr_opened"),
     ).toBeInTheDocument();
-    // Honest labeling: derived, not a real event log.
+    // Honest labeling: derived summary, points at the real event log.
     expect(
-      screen.getByText(/does not expose a per-plan event log/),
+      screen.getByText(/see the event log below/),
     ).toBeInTheDocument();
   });
 });

@@ -11,7 +11,10 @@ eagerly import the detectors + intervention modules):
 * :class:`HallucinationBlocker` (in :mod:`eden.guardrails.detectors`)
 * :class:`LLMFirewall` (in :mod:`eden.guardrails.detectors`)
 * :class:`InterventionEngine` (in :mod:`eden.guardrails.intervention`)
-* :class:`EvalToGuardrailLink` (in :mod:`eden.guardrails.intervention`)
+* :class:`LegacyEvalToGuardrailLink` (in :mod:`eden.guardrails.intervention`;
+  FEAT-34: the "record intent" half of the eval-to-guardrail
+  lifecycle — see :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+  for the canonical, enforcing half)
 * :class:`InterventionLog` (in :mod:`eden.guardrails.intervention`)
 * :class:`GuardrailMetrics` (in :mod:`eden.guardrails.intervention`)
 
@@ -45,7 +48,7 @@ __all__ = [
     "HallucinationBlocker",
     "LLMFirewall",
     "InterventionEngine",
-    "EvalToGuardrailLink",
+    "LegacyEvalToGuardrailLink",
     "InterventionLog",
     "GuardrailMetrics",
     "ACTION_RANK",
@@ -65,7 +68,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "HallucinationBlocker": (".detectors", "HallucinationBlocker"),
     "LLMFirewall": (".detectors", "LLMFirewall"),
     "InterventionEngine": (".intervention", "InterventionEngine"),
-    "EvalToGuardrailLink": (".intervention", "EvalToGuardrailLink"),
+    "LegacyEvalToGuardrailLink": (".intervention", "LegacyEvalToGuardrailLink"),
     "InterventionLog": (".intervention", "InterventionLog"),
     "GuardrailMetrics": (".intervention", "GuardrailMetrics"),
 }

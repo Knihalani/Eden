@@ -331,6 +331,29 @@ def install_all() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("wiring: platform_activation mark failed: %s", exc)
 
+    # FEAT-33 defense-in-depth: verify none of the wirings above (or
+    # anything else that ran before this point) rebound
+    # ``InterventionEngine.evaluate_and_act`` away from its original
+    # implementation — the exact failure mode the removed
+    # ``install_cat15_trajectory_replaces_intervention`` wiring used
+    # to cause. Alerts via the same counter/log path a live response
+    # carrying the ``trajectory_guardrail`` marker would use, so both
+    # detection surfaces show up in one place.
+    try:
+        from eden.guardrails.intervention import (
+            is_evaluate_and_act_patched,
+            record_guardrail_bypass_if_detected,
+        )
+
+        if is_evaluate_and_act_patched():
+            record_guardrail_bypass_if_detected(
+                {"feature": "trajectory_guardrail"},
+                org_id="install_all",
+                source="install_all",
+            )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("wiring: evaluate_and_act patch check failed: %s", exc)
+
 
 # ── Helpers ───────────────────────────────────────────────────────
 

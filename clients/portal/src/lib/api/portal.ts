@@ -26,7 +26,10 @@ import type {
 } from "@/lab/fixtures/evals";
 import type { ImprovePlanFixture } from "@/lab/fixtures/improve";
 import type { AbExperimentFixture } from "@/lab/fixtures/compare";
-import type { GuardrailPolicyFixture } from "@/lab/fixtures/guardrails";
+import type {
+  GuardrailKind,
+  GuardrailPolicyFixture,
+} from "@/lab/fixtures/guardrails";
 import type { DebuggerSessionFixture } from "@/lab/fixtures/debugger";
 import type { AgentThread } from "@/lab/fixtures/agent-chat";
 
@@ -42,6 +45,24 @@ export function __resetAlertAuthFailStreakForTests(): void {
 function portalPath(orgId: string, suffix: string): string {
   return `/orgs/${orgId}/portal/${suffix.replace(/^\//, "")}`;
 }
+
+/**
+ * Raw `guardrail_policies` row as returned by `GuardrailPolicy.list`'s
+ * `_row_to_policy` normaliser (`eden/guardrails/policy.py`) — the shape
+ * inside the list envelope's `data.policies`, before it's mapped onto
+ * the portal's `GuardrailPolicyFixture`.
+ */
+type GuardrailPolicyRow = {
+  id: string;
+  org_id: string;
+  name: string;
+  type: string;
+  spec: Record<string, unknown>;
+  action: string;
+  direction: string;
+  status: string;
+  created_at: string;
+};
 
 export const portalApi = {
   agents: (orgId: string) =>
@@ -65,8 +86,17 @@ export const portalApi = {
       body: JSON.stringify({ name }),
     }),
 
-  traces: (orgId: string) =>
-    fetchApi<TraceFixture[]>(portalPath(orgId, "traces")),
+  /**
+   * OPT-14: ``agentId`` scopes the query server-side instead of
+   * fetching the org-wide most-recent list and filtering client-side
+   * (which silently empties for an agent whose activity is older than
+   * the org's most-recent traces).
+   */
+  traces: (orgId: string, agentId?: string) =>
+    fetchApi<TraceFixture[]>(
+      portalPath(orgId, "traces") +
+        (agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ""),
+    ),
 
   /**
    * Single-trace detail — same shape as ``traces()`` rows but with
@@ -83,8 +113,15 @@ export const portalApi = {
   sessions: (orgId: string) =>
     fetchApi<SessionFixture[]>(portalPath(orgId, "sessions")),
 
-  issues: (orgId: string) =>
-    fetchApi<IssueFixture[]>(portalPath(orgId, "issues")),
+  issues: (orgId: string, filters?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (typeof filters?.limit === "number") q.set("limit", String(filters.limit));
+    if (typeof filters?.offset === "number") q.set("offset", String(filters.offset));
+    const qs = q.toString();
+    return fetchApi<IssueFixture[]>(
+      portalPath(orgId, "issues") + (qs ? `?${qs}` : ""),
+    );
+  },
 
   signals: (orgId: string) =>
     fetchApi<SignalFixture[]>(portalPath(orgId, "signals")),
@@ -193,8 +230,33 @@ export const portalApi = {
       body: JSON.stringify(body),
     }),
 
+  /**
+   * `GuardrailPolicy.list` (`eden/guardrails/policy.py`) wraps its rows in
+   * the standard ok-envelope — `{status, feature, live, timestamp,
+   * data: {policies, count}}` (see `_ok_envelope`) — rather than returning
+   * a bare array. Unwrap `data.policies` and map each raw
+   * `guardrail_policies` row (`id, name, type, spec, action, direction,
+   * status, created_at` — see `_row_to_policy`) onto the portal's
+   * `GuardrailPolicyFixture` shape. The backend never computes severity,
+   * match-volume, last-hit, rule-summary, or issue/trace links, so those
+   * fields are left `undefined` and render blank rather than fabricated
+   * (FEAT-32).
+   */
   guardrailPolicies: (orgId: string) =>
-    fetchApi<GuardrailPolicyFixture[]>(portalPath(orgId, "guardrails/policies")),
+    fetchApi<{
+      status: string;
+      data: { policies: GuardrailPolicyRow[]; count: number } | null;
+    }>(portalPath(orgId, "guardrails/policies")).then((r) =>
+      (r.data?.policies ?? []).map(
+        (row): GuardrailPolicyFixture => ({
+          id: row.id,
+          name: row.name,
+          kind: row.type as GuardrailKind,
+          status: row.status as GuardrailPolicyFixture["status"],
+          action: row.action as GuardrailPolicyFixture["action"],
+        }),
+      ),
+    ),
 
   debuggerSessions: (orgId: string) =>
     fetchApi<DebuggerSessionFixture[]>(portalPath(orgId, "debugger/sessions")),

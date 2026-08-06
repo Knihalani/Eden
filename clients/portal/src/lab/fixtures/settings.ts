@@ -96,6 +96,10 @@ export type AuditPackFixture = {
   entryHash: string;
   verified: boolean;
   rows: number;
+  /** FEAT-50: framework-mapped evidence pack fields (SOC2/HIPAA/GDPR/ISO27001). */
+  framework: string;
+  periodStart: string;
+  periodEnd: string;
 };
 
 export const WORKSPACE: WorkspaceFixture = {

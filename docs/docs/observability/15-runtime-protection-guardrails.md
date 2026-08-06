@@ -155,7 +155,7 @@ content, judge_link), a `spec` (type-specific config), and an
 
 | Feature | Class | File | Notes |
 |---|---|---|---|
-| Promote judge | `EvalToGuardrailLink.promote` | same | Wraps Cat 3's `EvalToGuardrailLink.promote_to_guardrail`. |
+| Promote judge | `LegacyEvalToGuardrailLink.promote` | same | **Correction (FEAT-34):** this is a legacy, independent implementation (renamed from `EvalToGuardrailLink` to `LegacyEvalToGuardrailLink` to remove the identical-name collision with the canonical class below) — it does *not* wrap Cat 3's `EvalToGuardrailLink.promote_to_guardrail`, and the `judge_link` policy it writes is never enforced by `InterventionEngine.evaluate_and_act` (`judge_link` is hard-excluded from `_enforced_types`). The production-enforced implementation is `eden.evaluation.eval_intel.integration.EvalToGuardrailLink`. See [37 — Runtime Protection Guardrails](./37-runtime-guardrails.md#evaltoguardraillink--which-class-is-canonical-feat-34) for the current, accurate account. |
 
 ### Group E: Observability (2)
 
@@ -277,8 +277,18 @@ POST /orgs/{org_id}/intelligence/guardrails/promote-judge
   }
 ```
 
-This wraps Cat 3's `EvalToGuardrailLink.promote_to_guardrail` —
-see Cat 3 for the full algorithm.
+**Correction (FEAT-34):** this section describes the *legacy*
+`eden.guardrails.intervention.LegacyEvalToGuardrailLink` (renamed
+from `EvalToGuardrailLink`) — it does not
+actually wrap Cat 3's `EvalToGuardrailLink.promote_to_guardrail`;
+the two are separate implementations, and the `judge_link` policy
+this one writes is never enforced by
+`InterventionEngine.evaluate_and_act`. The class that is actually
+production-wired (writes real enforced policy types, hot-reloads
+the AI Gateway's live guardrail filter) is
+`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`. See
+[37 — Runtime Protection Guardrails](./37-runtime-guardrails.md#evaltoguardraillink--which-class-is-canonical-feat-34)
+for the accurate, current account.
 
 ### LLM firewall
 
@@ -563,8 +573,12 @@ Dashboards (in the existing Grafana setup):
 3. **Group B** (detection engines) — ship in priority order:
    PII first (most common), injection second, content third,
    hallucination last.
-4. **Group D** (eval-to-guardrail) — depends on Cat 3
-   `EvalToGuardrailLink.promote_to_guardrail`.
+4. **Group D** (eval-to-guardrail) — originally scoped to depend
+   on Cat 3's `EvalToGuardrailLink.promote_to_guardrail`; shipped
+   instead as an independent implementation
+   (`eden.guardrails.intervention.LegacyEvalToGuardrailLink`) that
+   never ended up wired to enforcement — see the FEAT-34 correction
+   above.
 5. **Group E** (observability) — small, isolated, ship last.
 6. **LLM firewall** — hook the SDK to call it before every
    LLM invocation. This is a breaking change to the SDK and
@@ -572,9 +586,21 @@ Dashboards (in the existing Grafana setup):
 
 ## Open questions
 
-* **Fail-open vs fail-closed** — when the LLM call to a
+* **Fail-open vs fail-closed** — ~~when the LLM call to a
   hallucination judge fails, do we allow or deny? Default:
-  fail-open (allow). (Owner: Cat 15 lead)
+  fail-open (allow). (Owner: Cat 15 lead)~~ **Resolved (FEAT-36):**
+  this remains an intentional fail-open default for per-policy
+  judge/LLM-call failures — see the "Fail-closed guarantees"
+  section in [37 — Runtime Protection Guardrails](./37-runtime-guardrails.md#fail-closed-guarantees-feat-36)
+  for the precise, current scope. Separately, FEAT-33 closed a
+  different and more serious gap: a monkey-patch
+  (`install_cat15_trajectory_replaces_intervention`) that could
+  silently replace the *entire* enforcement path with a no-op has
+  been removed (FEAT-3/FEAT-4) and is now actively monitored so a
+  regression triggers an alert rather than silent data loss. Do
+  not conflate the two: per-policy judge-failure fail-open is a
+  deliberate, still-open design choice; full enforcement-path
+  bypass is a closed bug with monitoring in place.
 * **Override mechanism** — should an admin be able to override
   a deny? How is the override logged? (Owner: Cat 15 lead)
 * **PII categories** — do we use the existing 9 categories

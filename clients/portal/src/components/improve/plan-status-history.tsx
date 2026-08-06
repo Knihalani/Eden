@@ -3,10 +3,12 @@
 /**
  * Improve plan detail — status history.
  *
- * The improve API has no plan event-history endpoint (checked
- * src/eden/api/routes/improve.py — plans carry only lifecycle
- * timestamps), so this renders a derived timeline from the plan record:
- * created → updated → approved / rejected / snoozed → PR opened.
+ * Renders a summary timeline derived from the plan record's lifecycle
+ * fields: created → updated → approved / rejected / snoozed → PR opened.
+ * See ``PlanEventLog`` (``plan-event-log.tsx``) for the real append-only
+ * event trail (``GET .../plans/{id}/events``, migration 151) — this
+ * derived view stays useful as a fallback for plans that predate that
+ * table and for local (unsaved) drafts.
  */
 
 import type { ImprovementPlan } from "@/lib/api/resources";
@@ -100,8 +102,8 @@ export function PlanStatusHistory({
     >
       <h3 className="type-ui">Status history</h3>
       <p className="type-meta mt-0.5">
-        Derived from plan fields — the API does not expose a per-plan event
-        log yet.
+        Derived from plan fields — see the event log below for the
+        append-only trail.
       </p>
       <ol className="mt-2 space-y-1.5">
         {events.map((e) => (

@@ -465,7 +465,41 @@ class LabelingService:
                 if not await claim_lease(org_id, item.id, annotator_id):
                     continue
             except Exception:
-                pass
+                # claim_lease() already swallows its own Redis
+                # failures internally, so landing here means a
+                # genuinely unexpected error. Fail closed: decline
+                # this item rather than silently treating it as
+                # claimed.
+                logger.warning(
+                    "labeling.pop: unexpected error claiming lease "
+                    "for item %s (org=%s, annotator=%s); declining",
+                    item.id, org_id, annotator_id, exc_info=True,
+                )
+                continue
+            # Flip to in_progress first — this is the authoritative
+            # claim. The WHERE status = 'pending' guard means a
+            # concurrent claim that already won turns this into a
+            # no-op (0 rows affected); only trust the claim, record
+            # the assignment, and return the item to the caller if
+            # this UPDATE actually changed a row.
+            result = await self._pg.execute(
+                """
+                UPDATE labeling_items
+                SET status = 'in_progress'
+                WHERE id = $1 AND status = 'pending'
+                """,
+                item.id,
+            )
+            try:
+                rowcount = int(str(result).split()[-1])
+            except (ValueError, IndexError):
+                rowcount = 0
+            if rowcount < 1:
+                # Someone else (or another concurrent pop() call)
+                # already claimed this item; skip it rather than
+                # handing out an item the caller doesn't actually
+                # own.
+                continue
             # Don't re-assign if already assigned.
             existing = await self._pg.fetchrow(
                 """
@@ -483,15 +517,6 @@ class LabelingService:
                     """,
                     item.id, annotator_id,
                 )
-            # Flip to in_progress.
-            await self._pg.execute(
-                """
-                UPDATE labeling_items
-                SET status = 'in_progress'
-                WHERE id = $1 AND status = 'pending'
-                """,
-                item.id,
-            )
             item.status = "in_progress"
             items.append(item)
         return items

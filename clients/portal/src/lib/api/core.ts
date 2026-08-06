@@ -492,7 +492,18 @@ export async function fetchApi<T>(
       return (await response.blob()) as unknown as T;
     }
 
-    return response.json();
+    // 204 No Content (and any other empty-body success, e.g. some
+    // DELETE routes) has nothing for `response.json()` to parse —
+    // calling it anyway throws a SyntaxError even though the request
+    // succeeded. Return `undefined` for callers that don't need a body.
+    if (response.status === 204) {
+      return undefined as unknown as T;
+    }
+    const rawText = await response.text();
+    if (!rawText) {
+      return undefined as unknown as T;
+    }
+    return JSON.parse(rawText) as T;
   })();
 
   if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {

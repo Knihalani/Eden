@@ -132,6 +132,24 @@ async def get_plan(
         raise HTTPException(status_code=404, detail="plan not found")
     return _ok("improvement_plans", {"plan": plan})
 
+@router.get("/plans/{plan_id}/events")
+async def get_plan_events(
+    org_id: str = Depends(require_path_org_access),
+    plan_id: str = Path(...),
+) -> dict[str, Any]:
+    """FEAT-30 gap 3 — append-only event trail (``improvement_plan_events``).
+
+    Oldest-first; best-effort table (see ``plans_repo.emit_event``), so an
+    empty list can mean either a plan predating this table or a plan with
+    no recorded transitions yet — both render the same "no events yet".
+    """
+    await _require_agent_v1_async(org_id)
+    plan = await plans_repo.get_plan(org_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="plan not found")
+    events = await plans_repo.list_events(org_id, plan_id)
+    return _ok("improvement_plans", {"events": events})
+
 @router.patch("/plans/{plan_id}")
 async def patch_plan(
     org_id: str = Depends(require_path_org_access),

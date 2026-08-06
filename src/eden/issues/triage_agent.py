@@ -216,6 +216,7 @@ class TriageAgent:
         # tests lock this so a TaskClassifier heuristic change cannot
         # silently upgrade the tier (same pattern as patch critic).
         untrusted_evidence = _trace_content_for_prompt(stumbles)
+        llm_error = False
         try:
             from eden.autonomous import InvestigationAgent
 
@@ -263,7 +264,6 @@ class TriageAgent:
                 {"issue_id": issue_id, "triage_result": triage_result},
                 status="timeout",
             )
-            llm_error = False
         except Exception as exc:
             logger.warning("triage_agent: investigate failed: %s", exc)
             inv = {}

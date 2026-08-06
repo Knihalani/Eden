@@ -4,6 +4,12 @@
  * - F41-4: ``aiInsightsChat`` was deleted (hand-rolled fetch bypass).
  * - Portal prune: zero-consumer ``*Api`` namespaces removed from
  *   ``resources.ts``; domain facade barrels deleted.
+ * - FEAT-66: ``fleetApi`` is deliberately reinstated with a single
+ *   ``delegationGraph`` method backing the new agent-detail
+ *   "Delegation" tab (``GET /orgs/{org_id}/fleet/delegation``). It stays
+ *   out of ``deletedNamespaces`` below and gets its own presence check
+ *   instead — every *other* previously zero-consumer namespace must
+ *   still stay deleted.
  */
 import { describe, expect, it } from "vitest";
 
@@ -29,7 +35,6 @@ describe("zero-consumer Api namespaces stay deleted", () => {
     "evalApi",
     "experimentsApi",
     "fineTuneApi",
-    "fleetApi",
     "governanceApi",
     "guardrailsApi",
     "improveApi",
@@ -68,5 +73,14 @@ describe("wave6Api stays exported (restored online-quality surface)", () => {
   it("is exported from resources.ts", async () => {
     const resources = await import("../resources");
     expect(resources).toHaveProperty("wave6Api");
+  });
+});
+
+describe("fleetApi stays exported (FEAT-66 delegation graph panel)", () => {
+  it("is exported from resources.ts with a delegationGraph method", async () => {
+    const resources = await import("../resources");
+    expect(resources).toHaveProperty("fleetApi");
+    const fleetApi = (resources as { fleetApi?: Record<string, unknown> }).fleetApi;
+    expect(typeof fleetApi?.delegationGraph).toBe("function");
   });
 });

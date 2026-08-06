@@ -178,9 +178,7 @@ class DatasetHub:
         if existing is None:
             return None
         new_name = name if name is not None else existing.name
-        new_description = (
-            description if description is not None else existing.description
-        )
+        new_description = description if description is not None else existing.description
         now = datetime.now(UTC).isoformat()
         client = await self._client()
         if client is None:
@@ -282,12 +280,108 @@ class DatasetHub:
         )
         return {"dataset_id": dataset_id, "row_id": row_id, "trace_id": trace_id}
 
+    async def add_dataset_item(
+        self,
+        dataset_id: str,
+        *,
+        input_data: str,
+        expected_output: str = "",
+        payload: dict[str, Any] | None = None,
+        origin_trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Insert a pre-extracted item into an existing dataset.
+
+        Companion to :meth:`promote_trace`: that method derives its row by
+        re-reading a stored trace (``_trace_payload``), which doesn't fit
+        callers that already hold fully-extracted input/expected/metadata
+        in-process (e.g. ``DatasetGenerationEngine``'s rule-based
+        extraction, FEAT-75). This just persists what it's given.
+        """
+        row_id = str(uuid.uuid4())
+        client = await self._client()
+        if client is None:
+            return {"dataset_id": dataset_id, "row_id": row_id}
+        await client.execute(
+            """
+            INSERT INTO dataset_items
+                (id, dataset_id, input, expected_output, payload, origin_trace_id)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5::jsonb, $6)
+            """,
+            row_id,
+            dataset_id,
+            input_data,
+            expected_output,
+            json.dumps(payload or {}, default=str),
+            origin_trace_id,
+        )
+        await client.execute(
+            "UPDATE datasets SET updated_at = NOW(), version = version + 1 WHERE id = $1::uuid",
+            dataset_id,
+        )
+        return {"dataset_id": dataset_id, "row_id": row_id}
+
+    async def list_dataset_items(
+        self,
+        dataset_id: str,
+        *,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Read back items for a dataset.
+
+        Unscoped by ``org_id`` (dataset_items has no org column of its own —
+        ownership flows through ``dataset_id``), matching the lack of tenant
+        scoping in the in-memory ``dict`` lookup this replaces.
+        """
+        client = await self._client()
+        if client is None:
+            return []
+        rows = await client.fetch(
+            """
+            SELECT id, dataset_id, input, expected_output, payload, origin_trace_id, created_at
+            FROM dataset_items
+            WHERE dataset_id = $1::uuid
+            ORDER BY created_at ASC
+            LIMIT $2 OFFSET $3
+            """,
+            dataset_id,
+            limit,
+            offset,
+        )
+        return [dict(r) for r in rows]
+
+    async def get_dataset_by_id(self, dataset_id: str) -> DatasetRecord | None:
+        """Look up a dataset without an ``org_id`` filter.
+
+        Callers that don't carry tenant context at read time (e.g.
+        ``DatasetGenerationEngine.get_dataset``, whose signature — inherited
+        from the in-memory ``dict`` it used to wrap — takes only a
+        ``dataset_id``) can use this. It intentionally skips the ``org_id``
+        predicate: same (lack of) tenant isolation as the code path it
+        replaces, not a new gap.
+        """
+        client = await self._client()
+        if client is None:
+            return next((d for d in self._memory.values() if d.id == dataset_id), None)
+        row = await client.fetchrow(
+            """
+            SELECT d.id, d.org_id, d.name, d.description, d.source_type,
+                   d.source_ref, d.version, d.created_at, d.updated_at,
+                   (SELECT COUNT(*)::int FROM dataset_items di WHERE di.dataset_id = d.id) AS row_count,
+                   0 AS column_count
+            FROM datasets d
+            WHERE d.id = $1::uuid
+            """,
+            dataset_id,
+        )
+        return _row_to_dataset(dict(row)) if row else None
+
     async def create_snapshot(self, org_id: str, dataset_id: str) -> DatasetSnapshot:
         client = await self._client()
         snap_id = str(uuid.uuid4())
         if client is None:
             ds = self._memory.get(dataset_id)
-            version = (ds.version if ds else 1)
+            version = ds.version if ds else 1
             return DatasetSnapshot(
                 id=snap_id,
                 dataset_id=dataset_id,

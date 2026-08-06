@@ -76,7 +76,9 @@ export function GuardrailsDetailView({
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
         <section className="space-y-2 rounded-[var(--radius-lg)] bg-[var(--accent-muted)] px-4 py-4">
           <h3 className="type-label">Rule</h3>
-          <p className="type-ui text-[var(--text)]">{policy.ruleSummary}</p>
+          <p className="type-ui text-[var(--text)]">
+            {policy.ruleSummary ?? "—"}
+          </p>
         </section>
 
         <section className="space-y-3">
@@ -84,9 +86,16 @@ export function GuardrailsDetailView({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
             <Stat label="Action" value={policy.action} />
             <Stat label="Status" value={policy.status} />
-            <Stat label="Severity" value={policy.severity} />
-            <Stat label="Hits / 24h" value={String(policy.matchCount24h)} />
-            <Stat label="Last hit" value={policy.lastHit} />
+            <Stat label="Severity" value={policy.severity ?? "—"} />
+            <Stat
+              label="Hits / 24h"
+              value={
+                policy.matchCount24h !== undefined
+                  ? String(policy.matchCount24h)
+                  : "—"
+              }
+            />
+            <Stat label="Last hit" value={policy.lastHit ?? "—"} />
             <Stat label="Scope" value={agentLabel(policy.agentId)} />
           </dl>
         </section>

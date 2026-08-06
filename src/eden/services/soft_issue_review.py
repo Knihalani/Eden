@@ -575,7 +575,15 @@ async def record_shadow_feedback(
     confirm: bool | None = None,
     dismiss: bool | None = None,
 ) -> bool:
-    """M13 (§6.5): bump operator confirm/dismiss on a shadow detector."""
+    """M13 (§6.5): bump operator confirm/dismiss on a shadow detector.
+
+    P0-C (FEAT-29): dismiss is made *consequential immediately* — after
+    bumping the counter we re-evaluate the same promote/delete thresholds
+    the weekly ``promote_shadow_detectors`` sweep uses (§6.5) and, if the
+    detector now crosses the delete threshold, remove it inline instead of
+    waiting for the next weekly run to notice. The weekly sweep is kept as
+    a safety net (e.g. for signals whose counters moved via other paths).
+    """
     if confirm is None and dismiss is None:
         return False
     try:
@@ -586,7 +594,7 @@ async def record_shadow_feedback(
             return False
         bump_c = 1 if confirm else 0
         bump_d = 1 if dismiss else 0
-        await pg.execute(
+        row = await pg.fetchrow(
             """
             UPDATE nl_signals SET
                 rule = jsonb_set(
@@ -606,16 +614,70 @@ async def record_shadow_feedback(
                 ),
                 updated_at = NOW()
             WHERE id = $1 AND org_id = $2
+            RETURNING id, org_id, description, rule, match_count, cluster_id,
+                      enabled
             """,
             signal_id,
             org_id,
             bump_c,
             bump_d,
         )
+        if dismiss and row is not None:
+            await _maybe_auto_disable_on_dismiss(pg, dict(row))
         return True
     except Exception as exc:
         logger.debug("record_shadow_feedback failed: %s", exc)
         return False
+
+
+async def _maybe_auto_disable_on_dismiss(pg: Any, row: dict[str, Any]) -> None:
+    """Inline counterpart to the weekly ``promote_shadow_detectors`` delete
+    path: reuse the exact same thresholds (min firings / delete precision)
+    so a shadow detector doesn't have to survive up to a week of noisy
+    dismissals before it's taken down.
+    """
+    try:
+        # Only ever-shadow (never-promoted) auto-created detectors are
+        # eligible — matches the weekly sweep's own scan filter
+        # (`enabled = FALSE AND cluster_id LIKE 'auto:%'`).
+        cluster_id = row.get("cluster_id") or ""
+        if row.get("enabled") or not str(cluster_id).startswith("auto:"):
+            return
+        settings = get_settings()
+        min_firings = int(
+            getattr(settings, "shadow_promote_min_firings", 20) or 20
+        )
+        promote_p = float(
+            getattr(settings, "shadow_promote_precision", 0.8) or 0.8
+        )
+        delete_p = float(
+            getattr(settings, "shadow_delete_precision", 0.3) or 0.3
+        )
+        decision = evaluate_shadow_precision(
+            row,
+            min_firings=min_firings,
+            promote_precision=promote_p,
+            delete_precision=delete_p,
+        )
+        if decision["action"] != "delete":
+            return
+        sig_id = str(row["id"])
+        org_id = str(row["org_id"])
+        await pg.execute(
+            "DELETE FROM nl_signals WHERE id = $1 AND org_id = $2",
+            sig_id,
+            org_id,
+        )
+        logger.info(
+            "shadow detector auto-disabled on dismiss id=%s org=%s "
+            "precision=%.2f firings=%s",
+            sig_id,
+            org_id,
+            decision["precision"] or 0.0,
+            decision["firings"],
+        )
+    except Exception as exc:
+        logger.debug("_maybe_auto_disable_on_dismiss failed: %s", exc)
 
 
 async def _notify_shadow_promoted(

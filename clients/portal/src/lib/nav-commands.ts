@@ -26,6 +26,7 @@ import {
   Bot,
   Activity,
   Shield,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -72,6 +73,7 @@ const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   compare: GitCompare,
   prompts: FileText,
   guardrails: Shield,
+  labeling: Tag,
   settings: Settings2,
 };
 

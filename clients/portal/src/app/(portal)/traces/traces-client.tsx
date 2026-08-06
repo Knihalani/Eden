@@ -129,7 +129,15 @@ const ChatPanel = dynamic(
   { loading: () => panelFallback },
 );
 
-type DetailTab = "trace" | "tree" | "signals" | "chat";
+const RcaCausalChainPanel = dynamic(
+  () =>
+    import("@/lab/rca-causal-chain-panel").then((m) => ({
+      default: m.RcaCausalChainPanel,
+    })),
+  { loading: () => panelFallback },
+);
+
+type DetailTab = "trace" | "tree" | "signals" | "chat" | "rca";
 type SeverityFilter = "all" | "error" | "warn" | "ok";
 
 function parseTab(value: string | null): DetailTab {
@@ -137,7 +145,8 @@ function parseTab(value: string | null): DetailTab {
     value === "chat" ||
     value === "signals" ||
     value === "trace" ||
-    value === "tree"
+    value === "tree" ||
+    value === "rca"
   ) {
     return value;
   }
@@ -770,7 +779,8 @@ function LabTracesInner() {
               t === "trace" ||
               t === "tree" ||
               t === "signals" ||
-              t === "chat"
+              t === "chat" ||
+              t === "rca"
             ) {
               setDetailTab(t);
             }
@@ -1427,6 +1437,7 @@ function LabTracesInner() {
                       signalCount > 0 ? `Signals · ${signalCount}` : "Signals",
                     ],
                     ["tree", "Tree"],
+                    ["rca", "Root cause"],
                     ["chat", "Ask"],
                   ] as const
                 ).map(([id, label], i) => (
@@ -1615,6 +1626,13 @@ function LabTracesInner() {
                       />
                     )}
                   </div>
+                ) : null}
+                {tab === "rca" ? (
+                  <RcaCausalChainPanel
+                    orgId={orgId}
+                    traceId={selected.id}
+                    onSelectTrace={(nextTraceId) => selectTrace(nextTraceId)}
+                  />
                 ) : null}
                 {tab === "chat" ? (
                   <div className="min-h-0 h-full overflow-y-auto">

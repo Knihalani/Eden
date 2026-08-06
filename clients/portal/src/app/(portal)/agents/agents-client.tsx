@@ -72,6 +72,14 @@ const AgentQualityTab = dynamic(
   { ssr: false, loading: () => <QueryLoadingPanel label="Loading quality…" /> },
 );
 
+const AgentDelegationTab = dynamic(
+  () =>
+    import("@/components/agents/agent-delegation-tab").then((m) => ({
+      default: m.AgentDelegationTab,
+    })),
+  { ssr: false, loading: () => <QueryLoadingPanel label="Loading delegation graph…" /> },
+);
+
 const AgentExperimentsTab = dynamic(
   () =>
     import("@/components/agents/agent-experiments-tab").then((m) => ({
@@ -85,10 +93,18 @@ const AgentExperimentsTab = dynamic(
 
 type RunFilter = "all" | "error" | "warn" | "ok";
 
-type DetailTab = "runs" | "quality" | "experiments";
+// BUG-7: matches ``UNATTRIBUTED_AGENT_ID`` in
+// ``src/eden/api/routes/portal.py`` — the synthetic card the backend
+// emits for telemetry/issues that never got an agent_id stamped. It is
+// not a selectable agent (there is no real registry entry, rename
+// target, or agent-scoped trace query for it), so the fleet list and
+// detail pane special-case it into its own summary row instead.
+const UNATTRIBUTED_AGENT_ID = "unattributed";
+
+type DetailTab = "runs" | "quality" | "experiments" | "delegation";
 
 function parseDetailTab(raw: string | null): DetailTab {
-  if (raw === "quality" || raw === "experiments") return raw;
+  if (raw === "quality" || raw === "experiments" || raw === "delegation") return raw;
   return "runs";
 }
 
@@ -96,6 +112,7 @@ const DETAIL_TABS: Array<{ id: DetailTab; label: string }> = [
   { id: "runs", label: "Runs" },
   { id: "quality", label: "Quality" },
   { id: "experiments", label: "Experiments" },
+  { id: "delegation", label: "Delegation" },
 ];
 
 function RunInspector({
@@ -356,18 +373,19 @@ function AgentDetailBody({
     }
   }, [agent.id, agent.name, draftName, orgId, pushToast, queryClient]);
 
-  // Prefer React Query traces for this page — catalog alone was empty
-  // when /agents did not prefetch traces (runs24h showed N, list showed 0).
+  // OPT-14: scope the traces query to this agent server-side instead of
+  // fetching the org-wide most-recent-50/24h list and filtering
+  // client-side — that used to render an empty run list for an agent
+  // whose activity was older than the org's most-recent traces, even
+  // though the agent genuinely had runs.
   const tracesQuery = useOrgQuery(
-    queryKeys.portal.traces(orgId),
+    queryKeys.portal.traces(orgId, agent.id),
     orgId,
-    () => portalApi.traces(orgId!),
+    () => portalApi.traces(orgId!, agent.id),
     SHELL_QUERY,
   );
   const runs = useMemo(() => {
-    const fromApi = (tracesQuery.data ?? []).filter(
-      (t) => t.agentId === agent.id,
-    );
+    const fromApi = tracesQuery.data ?? [];
     const source =
       fromApi.length > 0 ? fromApi : tracesForAgent(agent.id);
     return sortTracesNewestFirst(source);
@@ -706,6 +724,10 @@ function AgentDetailBody({
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <AgentExperimentsTab orgId={orgId} agentId={agent.id} />
         </div>
+      ) : detailTab === "delegation" ? (
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <AgentDelegationTab orgId={orgId} agentId={agent.id} />
+        </div>
       ) : (
       <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[minmax(16rem,24rem)_minmax(0,1fr)]">
         <section className="flex min-h-0 min-w-0 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
@@ -827,6 +849,15 @@ function LabAgentsInner() {
     },
   );
   const agents = agentsQuery.data ?? [];
+  // BUG-7: the "Unattributed" card is a synthetic aggregate, not a real
+  // agent — pull it out so it never competes for fleet-group placement,
+  // selection, or rename/detail interactions meant for real agents.
+  const unattributed =
+    agents.find((a) => a.id === UNATTRIBUTED_AGENT_ID) ?? null;
+  const realAgents = useMemo(
+    () => agents.filter((a) => a.id !== UNATTRIBUTED_AGENT_ID),
+    [agents],
+  );
   const [fleetOpen, setFleetOpen, , fleetAnimate] = usePersistentBool(
     "eden.agents.fleetOpen",
     true,
@@ -834,7 +865,7 @@ function LabAgentsInner() {
   /** Tailwind `lg` — below this, fleet list and detail are exclusive full-bleed panes. */
   const isLgUp = useMinWidth(1024);
   const [selectedId, setSelectedId] = useState(
-    () => agents.find((a) => a.id === paramId)?.id ?? agents[0]?.id ?? "",
+    () => realAgents.find((a) => a.id === paramId)?.id ?? realAgents[0]?.id ?? "",
   );
 
   // Deep-link on phone → full-bleed detail (mq must be known false).
@@ -844,10 +875,10 @@ function LabAgentsInner() {
   }, [isLgUp, paramId, setFleetOpen]);
 
   useEffect(() => {
-    const next = agents.find((a) => a.id === paramId)?.id ?? agents[0]?.id;
+    const next = realAgents.find((a) => a.id === paramId)?.id ?? realAgents[0]?.id;
     if (next && next !== selectedId) setSelectedId(next);
     else if (!next && selectedId) setSelectedId("");
-  }, [paramId, agents]);
+  }, [paramId, realAgents]);
 
   const selectAgent = useCallback(
     (id: string) => {
@@ -859,11 +890,11 @@ function LabAgentsInner() {
   );
 
   const selected =
-    agents.find((a) => a.id === selectedId) ?? agents[0] ?? null;
+    realAgents.find((a) => a.id === selectedId) ?? realAgents[0] ?? null;
 
   const ordered = useMemo(() => {
     const rank = { error: 0, live: 1, idle: 2 } as const;
-    return [...agents].sort((a, b) => {
+    return [...realAgents].sort((a, b) => {
       const byStatus = rank[a.status] - rank[b.status];
       if (byStatus !== 0) return byStatus;
       if (b.runs24h !== a.runs24h) return b.runs24h - a.runs24h;
@@ -872,7 +903,7 @@ function LabAgentsInner() {
       if (aSeen !== bSeen) return bSeen.localeCompare(aSeen);
       return a.name.localeCompare(b.name);
     });
-  }, [agents]);
+  }, [realAgents]);
 
   const fleetGroups = useMemo(() => {
     const groups: {
@@ -891,11 +922,11 @@ function LabAgentsInner() {
     return groups.filter((g) => g.items.length > 0);
   }, [ordered]);
 
-  const fleetIssues = agents.reduce((s, a) => s + a.openIssues, 0);
-  const fleetRuns = agents.reduce((s, a) => s + a.runs24h, 0);
-  const live = agents.filter((a) => a.status === "live").length;
-  const errored = agents.filter((a) => a.status === "error").length;
-  const knownSpend = agents
+  const fleetIssues = realAgents.reduce((s, a) => s + a.openIssues, 0);
+  const fleetRuns = realAgents.reduce((s, a) => s + a.runs24h, 0);
+  const live = realAgents.filter((a) => a.status === "live").length;
+  const errored = realAgents.filter((a) => a.status === "error").length;
+  const knownSpend = realAgents
     .map((a) => a.costUsd24h)
     .filter((c): c is number => c != null && Number.isFinite(c));
   const fleetSpend =
@@ -937,7 +968,7 @@ function LabAgentsInner() {
         title="Agents"
         meta={
           <span className="type-meta hidden sm:inline">
-            {agents.length} agents · {live} active · {errored} error ·{" "}
+            {realAgents.length} agents · {live} active · {errored} error ·{" "}
             {fleetIssues} issues · {fleetRuns} runs · {formatUsd(fleetSpend)}
           </span>
         }
@@ -970,6 +1001,32 @@ function LabAgentsInner() {
               <PanelLeftClose className="h-4 w-4" />
             </button>
           </div>
+          {unattributed ? (
+            // BUG-7: telemetry/issues whose events never got an
+            // agent_id stamped are otherwise invisible in every card
+            // above — surface the excluded volume instead of silently
+            // dropping it. Not a real agent, so it's not a fleet-group
+            // member or a clickable selection target.
+            <div
+              className="shrink-0 border-b border-[var(--line)] bg-[var(--bg-inset)] px-3 py-2.5"
+              title="Traces and issues with no agent_id stamped on any event — excluded from every agent's numbers above."
+            >
+              <p className="type-ui truncate text-[var(--warning,var(--accent))]">
+                Unattributed
+              </p>
+              <p className="type-meta mt-1 truncate">
+                {unattributed.runs24h} runs
+                {unattributed.openIssues > 0 ? (
+                  <span className="text-[var(--error)]">
+                    {" "}
+                    · {unattributed.openIssues} issues
+                  </span>
+                ) : null}
+                {" · "}
+                {formatUsd(unattributed.costUsd24h)}
+              </p>
+            </div>
+          ) : null}
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {ordered.length === 0 ? (
               <li className="px-3 py-5">

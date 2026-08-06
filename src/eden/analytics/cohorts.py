@@ -1,7 +1,7 @@
 """Cohort analysis primitives.
 
 A *cohort* is a group of users that share a common starting
-event (typically their first job creation). The cohort table
+event (typically their first session). The cohort table
 shows, for each subsequent week/month, how many of those users
 are still active. This module is the §8.2 backend; the portal
 visualises the result.
@@ -70,10 +70,10 @@ async def _cohorts_postgres(org_id: str, *, weeks: int) -> list[Cohort]:
     rows = await client.fetch(
         """
         SELECT
-            date_trunc('week', created_at)::date AS cohort_start,
+            date_trunc('week', session_start)::date AS cohort_start,
             count(DISTINCT user_id)::int AS size
-        FROM jobs
-        WHERE org_id = $1 AND created_at >= $2
+        FROM session_summaries
+        WHERE org_id = $1 AND session_start >= $2
         GROUP BY cohort_start
         ORDER BY cohort_start
         """,
@@ -119,12 +119,12 @@ async def cohort_retention(org_id: str, *, weeks: int = 8) -> list[CohortRow]:
     sql_rows = await client.fetch(
         """
         SELECT
-            date_trunc('week', created_at)::date AS activity_week,
+            date_trunc('week', session_start)::date AS activity_week,
             user_id
-        FROM jobs
+        FROM session_summaries
         WHERE org_id = $1
-          AND created_at >= $2
-          AND created_at < $3
+          AND session_start >= $2
+          AND session_start < $3
         GROUP BY activity_week, user_id
         """,
         org_id,

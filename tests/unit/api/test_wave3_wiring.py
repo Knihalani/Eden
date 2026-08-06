@@ -292,3 +292,82 @@ async def test_install_all_then_evaluate_and_act_redacts_pii_with_trace_id():
         assert r["data"]["edited_text"] != "My SSN is 123-45-6789"
     finally:
         intv.InterventionEngine.evaluate_and_act = original_fn
+
+
+# ---------------------------------------------------------------------------
+# 6. FEAT-33 — guardrail-bypass monitoring. Defense-in-depth: alert if a
+#    response ever carries the ``trajectory_guardrail`` marker (the
+#    signature of the removed guardrail-swap monkey-patch), and alert if
+#    ``InterventionEngine.evaluate_and_act`` is ever found monkey-patched
+#    away from its original implementation.
+# ---------------------------------------------------------------------------
+
+def test_record_guardrail_bypass_if_detected_fires_on_marker():
+    import eden.guardrails.intervention as intv
+
+    intv._guardrail_bypass_counts.clear()
+    try:
+        fired = intv.record_guardrail_bypass_if_detected(
+            {"status": "ok", "feature": "trajectory_guardrail", "live": True},
+            org_id="org_bypass",
+        )
+        assert fired is True
+        counts = intv.get_guardrail_bypass_counts()
+        assert counts.get("response:org_bypass") == 1
+    finally:
+        intv._guardrail_bypass_counts.clear()
+
+
+def test_record_guardrail_bypass_if_detected_silent_on_real_response():
+    import eden.guardrails.intervention as intv
+
+    intv._guardrail_bypass_counts.clear()
+    try:
+        fired = intv.record_guardrail_bypass_if_detected(
+            {"status": "ok", "feature": "intervention_engine", "live": True},
+            org_id="org_ok",
+        )
+        assert fired is False
+        assert intv.get_guardrail_bypass_counts() == {}
+    finally:
+        intv._guardrail_bypass_counts.clear()
+
+
+def test_is_evaluate_and_act_patched_detects_monkey_patch():
+    import eden.guardrails.intervention as intv
+
+    original = intv.InterventionEngine.evaluate_and_act
+    assert intv.is_evaluate_and_act_patched() is False
+    try:
+        async def _fake(self, org_id, **kw):
+            return {"status": "ok", "feature": "trajectory_guardrail", "live": True}
+
+        intv.InterventionEngine.evaluate_and_act = _fake
+        assert intv.is_evaluate_and_act_patched() is True
+    finally:
+        intv.InterventionEngine.evaluate_and_act = original
+        assert intv.is_evaluate_and_act_patched() is False
+
+
+def test_install_all_flags_bypass_when_evaluate_and_act_is_patched():
+    """install_all()'s startup identity check must alert when some other
+    code has already rebound evaluate_and_act before it runs."""
+    import eden.guardrails.intervention as intv
+    import eden.observability.trace_quality.wiring as w
+
+    original = intv.InterventionEngine.evaluate_and_act
+    intv._guardrail_bypass_counts.clear()
+    try:
+        async def _fake(self, org_id, **kw):
+            return {"status": "ok", "feature": "trajectory_guardrail", "live": True}
+
+        intv.InterventionEngine.evaluate_and_act = _fake
+        with patch(
+            "eden.observability.platform_activation.mark_wiring_installed"
+        ):
+            w.install_all()
+        counts = intv.get_guardrail_bypass_counts()
+        assert counts.get("install_all:install_all") == 1
+    finally:
+        intv.InterventionEngine.evaluate_and_act = original
+        intv._guardrail_bypass_counts.clear()

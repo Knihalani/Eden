@@ -32,6 +32,7 @@ import uuid as _uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.alerting.types import AlertSeverity
 from eden.storage.empty_cooldown import make_empty_cooldown
 
 from ._common import (
@@ -57,13 +58,26 @@ _eql_in_cooldown, _eql_mark_empty, _eql_clear_cooldown = make_empty_cooldown(
 # actually fires on. ``critical`` is accepted for forward-
 # compatibility (the customer can register the alert; the
 # watchdog filters to info|warning|high at fire time).
+# FEAT-44: derived from the canonical AlertSeverity (StrEnum) rather than
+# a hand-duplicated string literal set. AlertSeverity also has "debug",
+# which the DSL has never accepted, so DEBUG is excluded here — same
+# runtime values as before this migration (AlertSeverity is a StrEnum,
+# so e.g. AlertSeverity.WARNING == "warning").
 _VALID_SEVERITIES: frozenset[str] = frozenset(
-    {"info", "warning", "high", "critical"}
+    {
+        AlertSeverity.INFO,
+        AlertSeverity.WARNING,
+        AlertSeverity.HIGH,
+        AlertSeverity.CRITICAL,
+    }
 )
 
 # Severities the cron watchdog actually fires notifications for.
+# Watchdog filters critical at fire time in v1.3 (accepted at compile
+# for forward-compat, see _evaluate_rule) — deliberate, not part of
+# the FEAT-44 shared-type migration above.
 _FIREABLE_SEVERITIES: frozenset[str] = frozenset(
-    {"info", "warning", "high"}
+    {AlertSeverity.INFO, AlertSeverity.WARNING, AlertSeverity.HIGH}
 )
 
 # Minimum alert interval — the failure-modes table calls this

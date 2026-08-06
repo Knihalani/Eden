@@ -151,6 +151,8 @@ class TestSessionTimeline:
                         ],
                     },
                 ],
+                "limit": 50,
+                "offset": 0,
             }
         )
         with patch.object(sessions_mod, "get_session_timeline", mock):
@@ -161,7 +163,33 @@ class TestSessionTimeline:
         assert body["turns"][1]["stumble_kinds"] == ["loop"]
         assert body["turns"][1]["issues"][0]["status"] == "open"
         assert body["summary"]["total_cost_usd"] == pytest.approx(0.05)
-        mock.assert_awaited_once_with("org_1", "sess-1")
+        assert body["limit"] == 50 and body["offset"] == 0
+        mock.assert_awaited_once_with("org_1", "sess-1", limit=50, offset=0)
+
+    def test_pagination_params_forwarded(self, client: TestClient) -> None:
+        mock = AsyncMock(
+            return_value={
+                "org_id": "org_1",
+                "session_id": "sess-1",
+                "summary": _SUMMARY,
+                "turn_count": 2,
+                "turns": [_TURN],
+                "limit": 1,
+                "offset": 1,
+            }
+        )
+        with patch.object(sessions_mod, "get_session_timeline", mock):
+            resp = client.get(
+                "/orgs/org_1/sessions/sess-1/timeline?limit=1&offset=1"
+            )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["limit"] == 1 and body["offset"] == 1
+        mock.assert_awaited_once_with("org_1", "sess-1", limit=1, offset=1)
+
+    def test_bad_limit_rejected(self, client: TestClient) -> None:
+        resp = client.get("/orgs/org_1/sessions/sess-1/timeline?limit=0")
+        assert resp.status_code == 422
 
     def test_unknown_session_is_404(self, client: TestClient) -> None:
         with patch.object(

@@ -22,11 +22,11 @@ export function parseGuardrailKindFilter(
   v: string | null,
 ): GuardrailKind | "all" {
   if (
-    v === "pii" ||
-    v === "toxicity" ||
-    v === "tool_allowlist" ||
-    v === "rate_limit" ||
-    v === "custom"
+    v === "prompt_injection" ||
+    v === "pii_redaction" ||
+    v === "hallucination" ||
+    v === "content_policy" ||
+    v === "judge_link"
   ) {
     return v;
   }
@@ -82,8 +82,9 @@ export function GuardrailActionChip({ action }: { action: GuardrailAction }) {
 export function GuardrailSeverityChip({
   severity,
 }: {
-  severity: GuardrailSeverity;
+  severity?: GuardrailSeverity;
 }) {
+  if (!severity) return <StatusChip tone="neutral">—</StatusChip>;
   const tone =
     severity === "critical" || severity === "high" ? "fail" : "neutral";
   return <StatusChip tone={tone}>{severity}</StatusChip>;

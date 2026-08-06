@@ -49,13 +49,28 @@ class UpsertBudgetRequest(BaseModel):
     )
     threshold_alert_pct: int = Field(default=80, ge=0, le=100)
     alert_thresholds: list[int] = Field(default_factory=lambda: [50, 80, 100])
+    # FEAT-47: optional team/agent scope. Defaults to the org-level
+    # budget, matching the pre-FEAT-47 behavior.
+    scope_type: str = Field(default="org", pattern="^[a-z_]{1,16}$")
+    scope_id: str | None = Field(default=None, max_length=128)
 
 
 @router.get("")
-async def get_budget(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
-    """Read the per-org budget config + current window consumption."""
-    budget = await budget_service.get_budget(org_id)
-    consumption = await budget_service.get_consumption(org_id, window=budget["window"])
+async def get_budget(
+    org_id: str = Depends(require_path_org_access),
+    scope_type: str = Query(default="org"),
+    scope_id: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Read the per-org budget config + current window consumption.
+
+    ``scope_type``/``scope_id`` (FEAT-47) read a team/agent-scoped
+    budget instead of the org-level one; both default to the
+    org-level scope.
+    """
+    budget = await budget_service.get_budget(org_id, scope_type=scope_type, scope_id=scope_id)
+    consumption = await budget_service.get_consumption(
+        org_id, window=budget["window"], scope_type=scope_type, scope_id=scope_id
+    )
     cost_used = consumption["cost_usd"]
     cost_soft = budget["cost_soft_limit_usd"]
     cost_hard = budget["cost_hard_limit_usd"]
@@ -90,7 +105,10 @@ async def upsert_budget(
     body: UpsertBudgetRequest = Body(...),
     _user: dict = Depends(require_org_owner),
 ) -> dict[str, Any]:
-    """Upsert the per-org budget config. Org-owner gated."""
+    """Upsert the per-org (optionally team/agent-scoped) budget config.
+
+    Org-owner gated.
+    """
     persisted = await budget_service.upsert_budget(
         org_id,
         cost_soft_limit_usd=body.cost_soft_limit_usd,
@@ -100,6 +118,8 @@ async def upsert_budget(
         action_on_exceed=body.action_on_exceed,
         threshold_alert_pct=body.threshold_alert_pct,
         alert_thresholds=body.alert_thresholds or [50, 80, 100],
+        scope_type=body.scope_type,
+        scope_id=body.scope_id,
     )
     return {
         "status": "ok",
@@ -110,14 +130,24 @@ async def upsert_budget(
 
 
 @router.get("/ticker")
-async def ticker(org_id: str = Depends(require_path_org_access)) -> dict[str, Any]:
+async def ticker(
+    org_id: str = Depends(require_path_org_access),
+    scope_type: str = Query(default="org"),
+    scope_id: str | None = Query(default=None),
+) -> dict[str, Any]:
     """Real-time budget ticker (consumption + recent actions).
 
     The portal polls this every 5s for the live ticker card.
+    ``scope_type``/``scope_id`` (FEAT-47) narrow the ticker to a
+    team/agent-scoped budget; both default to the org-level scope.
     """
-    budget = await budget_service.get_budget(org_id)
-    consumption = await budget_service.get_consumption(org_id, window=budget["window"])
-    actions = await budget_service.list_actions(org_id, limit=10)
+    budget = await budget_service.get_budget(org_id, scope_type=scope_type, scope_id=scope_id)
+    consumption = await budget_service.get_consumption(
+        org_id, window=budget["window"], scope_type=scope_type, scope_id=scope_id
+    )
+    actions = await budget_service.list_actions(
+        org_id, limit=10, scope_type=scope_type, scope_id=scope_id
+    )
     return {
         "status": "ok",
         "feature": "budget_ticker",
@@ -134,9 +164,18 @@ async def ticker(org_id: str = Depends(require_path_org_access)) -> dict[str, An
 async def list_actions(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=500),
+    scope_type: str | None = Query(default=None),
+    scope_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    """Paginated audit log of threshold/exceeded events."""
-    actions = await budget_service.list_actions(org_id, limit=limit)
+    """Paginated audit log of threshold/exceeded events.
+
+    ``scope_type`` (FEAT-47) filters to a single scope's actions;
+    left unset (the default) it returns actions across every scope
+    for the org, matching the pre-FEAT-47 behavior.
+    """
+    actions = await budget_service.list_actions(
+        org_id, limit=limit, scope_type=scope_type, scope_id=scope_id
+    )
     return {
         "status": "ok",
         "feature": "budget_actions",

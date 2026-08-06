@@ -8,6 +8,7 @@ import { SidebarProvider } from "./sidebar-context";
 import { AlertsProvider } from "@/lab/alerts-context";
 import { LabToastProvider } from "@/lab/lab-toast";
 import { SignalJobsProvider } from "@/lab/signal-jobs-context";
+import { NotificationsProvider } from "@/hooks/use-notifications";
 import {
   PortalBootGate,
   PortalStatusBanners,
@@ -54,36 +55,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <ConfirmProvider>
         <LabToastProvider>
-          <AlertsProvider>
-            <SignalJobsProvider>
-              <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
-                <SidebarNav />
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
-                  <PortalStatusBanners />
-                  <OnboardingBanner />
-                  <main className="min-h-0 flex-1 overflow-auto outline-none pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
-                    {/*
-                      CatalogSync must sit *inside* BootGate and *after*
-                      page children so HydrationBoundary can seed the
-                      cache before CatalogSync's useOrgQuery observers
-                      subscribe. Outside BootGate it raced dehydrate and
-                      started duplicate client GETs on cold Home.
-                    */}
-                    <PortalBootGate>
-                      {children}
-                      <Suspense fallback={<CatalogSyncFallback />}>
-                        <PortalCatalogSync />
-                      </Suspense>
-                    </PortalBootGate>
-                  </main>
+          <NotificationsProvider>
+            <AlertsProvider>
+              <SignalJobsProvider>
+                <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
+                  <SidebarNav />
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
+                    <PortalStatusBanners />
+                    <OnboardingBanner />
+                    <main className="min-h-0 flex-1 overflow-auto outline-none pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+                      {/*
+                        CatalogSync must sit *inside* BootGate and *after*
+                        page children so HydrationBoundary can seed the
+                        cache before CatalogSync's useOrgQuery observers
+                        subscribe. Outside BootGate it raced dehydrate and
+                        started duplicate client GETs on cold Home.
+                      */}
+                      <PortalBootGate>
+                        {children}
+                        <Suspense fallback={<CatalogSyncFallback />}>
+                          <PortalCatalogSync />
+                        </Suspense>
+                      </PortalBootGate>
+                    </main>
+                  </div>
+                  <MobileBottomNav />
                 </div>
-                <MobileBottomNav />
-              </div>
-              <AlertsModal />
-              <OnboardingOverlay />
-              <CommandPalette />
-            </SignalJobsProvider>
-          </AlertsProvider>
+                <AlertsModal />
+                <OnboardingOverlay />
+                <CommandPalette />
+              </SignalJobsProvider>
+            </AlertsProvider>
+          </NotificationsProvider>
         </LabToastProvider>
       </ConfirmProvider>
     </SidebarProvider>

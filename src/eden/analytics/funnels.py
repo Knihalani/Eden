@@ -28,6 +28,20 @@ class FunnelResult:
     overall_conversion: float  # last step / first step
 
 
+# Canonical funnel-step vocabulary for the ``session_summaries``-backed
+# Postgres fallback (FEAT-53). See the ``funnel`` docstring/comment below
+# for the mapping rationale. Values are trusted, hard-coded SQL boolean
+# expressions (never built from caller input), so string-interpolating
+# them into the query is safe.
+_SESSION_STEP_PREDICATES: dict[str, str] = {
+    "session_started": "TRUE",
+    "engaged": "turn_count > 1",
+    "stumbled": "had_stumble",
+    "completed": "outcome = 'success'",
+    "failed": "outcome = 'fail'",
+}
+
+
 async def _funnel_clickhouse(org_id: str, steps: list[str], *, window_days: int) -> FunnelResult | None:
     try:
         from eden.data_platform.analytics_engine import get_engine
@@ -82,25 +96,52 @@ async def funnel(org_id: str, steps: list[str], *, window_days: int = 30) -> Fun
     ch = await _funnel_clickhouse(org_id, steps, window_days=window_days)
     if ch is not None:
         return ch
-    # Postgres fallback — collapsed the per-step sequential
-    # fetchrow round-trips into a single grouped query (one
-    # round-trip instead of ``len(steps)``). Audit 2026-07-07.
-    from eden.storage.postgres import get_postgres_client
-    client = await get_postgres_client()
-    rows = await client.fetch(
-        """
-        SELECT action, count(DISTINCT user_id)::int AS n
-        FROM audit_log
-        WHERE org_id = $1
-          AND action = ANY($2::text[])
-          AND created_at >= NOW() - ($3::int || ' days')::interval
-        GROUP BY action
-        """,
-        org_id,
-        list(steps),
-        window_days,
-    )
-    counts = {r["action"]: int(r["n"]) for r in rows}
+    # Postgres fallback — FEAT-53: repointed at ``session_summaries``
+    # (142_session_summaries.py) instead of ``org_audit_log``. Audit logs
+    # never modeled funnel/session progress; ``session_summaries`` is the
+    # real N12 rollup (eden.sessions.rollup.SessionRollupIndexer) with one
+    # row per (org_id, session_id), so a funnel step here means "sessions
+    # that reached this stage", not "distinct users who fired an action".
+    #
+    # Mapping chosen (judgement call — session_summaries has no free-form
+    # event log, just fixed aggregate columns, so steps are a fixed
+    # canonical vocabulary rather than arbitrary caller-supplied action
+    # names):
+    #   session_started -> every summarized session (a row only exists
+    #                       once the rollup has aggregated >=1 turn).
+    #   engaged         -> session ran more than one turn, i.e. the
+    #                       conversation continued past the opener
+    #                       (turn_count > 1).
+    #   stumbled        -> session recorded >=1 agent_stumbles hit
+    #                       (had_stumble).
+    #   completed       -> session settled with outcome = 'success'.
+    #   failed          -> session settled with outcome = 'fail'.
+    # Callers passing unrecognized/legacy step names (e.g. old audit-log
+    # action strings) get a count of 0 for that step — same
+    # degrade-gracefully behavior the old action-matching query had for
+    # actions nobody logged.
+    known_steps = [s for s in steps if s in _SESSION_STEP_PREDICATES]
+    counts: dict[str, int] = dict.fromkeys(steps, 0)
+    if known_steps:
+        from eden.storage.postgres import get_postgres_client
+        client = await get_postgres_client()
+        select_clauses = ", ".join(
+            f"count(*) FILTER (WHERE {_SESSION_STEP_PREDICATES[s]}) AS step_{i}"
+            for i, s in enumerate(known_steps)
+        )
+        row = await client.fetchrow(
+            f"""
+            SELECT {select_clauses}
+            FROM session_summaries
+            WHERE org_id = $1
+              AND session_start >= NOW() - ($2::int || ' days')::interval
+            """,
+            org_id,
+            window_days,
+        )
+        if row is not None:
+            for i, s in enumerate(known_steps):
+                counts[s] = int(row[f"step_{i}"] or 0)
     funnel_steps: list[FunnelStep] = []
     previous: int | None = None
     for s in steps:

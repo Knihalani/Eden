@@ -353,7 +353,16 @@ class AuditEventCard(BaseModel):
 
 
 class AuditPackCard(BaseModel):
-    """Compliance / ledger pack — matches lab ``AuditPackFixture``."""
+    """Compliance / ledger pack — matches lab ``AuditPackFixture``.
+
+    FEAT-50: backed by ``ComplianceEvidenceGenerator.list_packs`` (real
+    framework-mapped evidence packs) rather than the raw hash-chained
+    ``AgentAuditLedgerWriter`` ledger. ``framework``/``periodStart``/
+    ``periodEnd`` carry the new evidence-pack fields; the legacy
+    ledger-only fields (``agentId``/``actor``/``entryHash``/``rows``)
+    are defaulted out for backward compatibility with the lab fixture
+    shape rather than removed.
+    """
 
     id: str
     at: str = ""
@@ -363,6 +372,9 @@ class AuditPackCard(BaseModel):
     entryHash: str = ""
     verified: bool = False
     rows: int = 0
+    framework: str = ""
+    periodStart: str = ""
+    periodEnd: str = ""
 
 
 # ── Evals (Dataset / Playground / Experiment) ─────────────────────

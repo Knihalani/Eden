@@ -6,7 +6,7 @@ Six audit items, mix of safety + per-tenant correctness:
   ``act_<sha256[:16]>`` (content-derived), matching the
   HookBus path's wire format. Pre-fix: pure ``uuid4`` was
   un-grep-able across the two paths.
-* **B-9** — ``EvalToGuardrailLink.promote`` defaults
+* **B-9** — ``LegacyEvalToGuardrailLink.promote`` defaults
   ``fire_hook=False`` (auto-promote is opt-in). Pre-fix: True
   → recursive ``on_judge_threshold_breach`` → ``promote()``.
 * **B-10** — ``validate_org_api_key`` debounces
@@ -215,7 +215,7 @@ class TestB8Uuid5ColumnSafety:
 
 
 class TestB9FireHookDefault:
-    """``EvalToGuardrailLink.promote`` defaults ``fire_hook=False``.
+    """``LegacyEvalToGuardrailLink.promote`` defaults ``fire_hook=False``.
 
     The recursive guard (``fire_hook=False`` inside
     ``GuardrailHook.on_judge_threshold_breach``) was already
@@ -226,7 +226,7 @@ class TestB9FireHookDefault:
         """Static check: the ``fire_hook`` parameter defaults to False."""
         from eden.guardrails import intervention
 
-        sig = inspect.signature(intervention.EvalToGuardrailLink.promote)
+        sig = inspect.signature(intervention.LegacyEvalToGuardrailLink.promote)
         assert sig.parameters["fire_hook"].default is False, (
             "B-9 regression: fire_hook default is not False"
         )

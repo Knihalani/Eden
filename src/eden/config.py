@@ -1547,6 +1547,11 @@ def _build_settings_class():
         support_webhook_url: str = ""
         eden_support_webhook_url: str = ""
 
+        # PagerDuty Events API v2 (FEAT-42). Single-tenant/platform-level
+        # routing key fallback used when an org has no row in
+        # org_pagerduty_configs — see eden.integrations.pagerduty.store.
+        pagerduty_routing_key: str = ""
+
         # Bronze-layer sink tuning. northflank.yml sets
         # BRONZE_BATCH_SIZE / BRONZE_FLUSH_INTERVAL_SECONDS on the
         # service, and until now neither reached the code.

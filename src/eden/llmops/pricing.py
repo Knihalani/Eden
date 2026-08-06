@@ -1000,6 +1000,20 @@ def _build_default_seed_rows() -> dict[str, PricingRow]:
         latency_p95_ms=1000,
     )
     add("openai/gpt-5", cost_in=0.0013, cost_out=0.0105, quality=0.95, latency_p95_ms=850)
+    # Same OpenAI id used directly by internal_chat_chain()'s fallback
+    # list (see eden.llm.models.INTERNAL_CHAT_FALLBACKS) and therefore
+    # by ModelRouter's T1/T2/T3 tiers - not routed through OpenRouter,
+    # but keyed with the "openai/" prefix like the other placeholders
+    # in this block. Pricing matches the native "gpt-4o-mini" row
+    # above (per api.openai.com: $0.15/1M in, $0.60/1M out).
+    add(
+        "openai/gpt-4o-mini",
+        cost_in=0.00015,
+        cost_out=0.0006,
+        quality=0.85,
+        latency_p95_ms=350,
+        cost_cache_read=0.000075,
+    )
     add(
         "google/gemini-3-pro",
         cost_in=0.0013,

@@ -11,6 +11,26 @@ Eden supports SAML 2.0 SSO and SCIM 2.0 provisioning via Clerk. The
 configuration lives in the Clerk dashboard — Eden inherits the
 identity provider you connect there.
 
+> **Note (2026-08):** This is the mechanism that's actually wired
+> into login — whenever `clerk_secret_key` is configured (true in
+> production), Eden's own password-login endpoint is disabled
+> outright and Clerk owns authentication end to end. Eden's backend
+> separately ships a native OIDC/SAML SSO + SCIM admin API
+> (`POST /sso/providers`, `/sso/login/{id}`, `/sso/callback/{id}`,
+> etc. — see `src/eden/api/routes/sso.py`) intended for self-hosted
+> deployments that don't use Clerk. As of this writing that native
+> API has **no portal UI** — the portal only calls it to check
+> whether an SSO provider is configured, not to create/enable/enforce
+> one — and its login/callback routes aren't linked from any
+> "Sign in with SSO" button anywhere in the product. Configuring a
+> provider through that API is real (it's a working backend, and
+> enabling "enforce" on it does block Eden's native password-login
+> endpoint for that org's members), but it will not give end users a
+> way to actually complete an SSO sign-in until the portal frontend
+> is wired up to call those routes. Don't configure it expecting a
+> login button to appear — build the frontend integration first, or
+> use Clerk instead.
+
 ## Supported identity providers
 
 | Provider | SSO | SCIM |
@@ -44,6 +64,14 @@ your Eden login page redirects to it. No additional Eden-side
 config is needed.
 
 ### 3. Enforce SSO
+
+> **Note:** There is currently no **Settings → Authentication →
+> Enforce SSO** page in the Eden portal itself — enforcement for
+> Clerk-managed orgs is configured on Clerk's side (org restrictions
+> in the Clerk dashboard), not through an Eden UI. The steps below
+> describe the intended UX; treat "Portal → Settings" here as
+> shorthand for Clerk's own org settings until an Eden-side page
+> ships.
 
 To disable password login (SSO-only):
 
@@ -96,6 +124,12 @@ log in.
 
 ## Role mapping
 
+> **Note:** Step 3 below references a **Portal → Settings →
+> Authentication → Role mapping** page that doesn't exist in the
+> Eden portal yet. Until it ships, the JSON mapping has no Eden-side
+> UI to enter it into — treat this section as documenting intended
+> behavior rather than a page you can go configure today.
+
 By default, every SCIM-provisioned user gets the `member` role.
 Map IdP groups to Eden roles via Clerk:
 
@@ -140,6 +174,9 @@ them. They land in the org with the default role (`member`).
 To disable JIT (strict mode):
 
 Portal → **Settings** → **Authentication** → **Disable JIT provisioning**.
+
+> **Note:** This toggle also doesn't exist in the Eden portal today.
+> Strict mode isn't currently reachable from Eden's own UI.
 
 In strict mode, SCIM is the only way to add users — anyone who
 shows up without a SCIM entry is rejected.

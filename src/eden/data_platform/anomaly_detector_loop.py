@@ -35,6 +35,26 @@ _anomaly_in_cooldown, _anomaly_mark_empty, _anomaly_clear_cooldown = (
 )
 
 
+def _channels_for_severity(severity: str) -> list[str]:
+    """Map an :class:`~eden.data_platform.anomaly_alerts.AnomalyAlert`
+    severity string to the dispatch channels it warrants.
+
+    FEAT-40: ``tick_once`` used to hardcode ``channels=["in_app"]`` for
+    every alert regardless of severity, so a critical anomaly (e.g.
+    ``check_pii_breach``'s "critical" alerts) surfaced nowhere but the
+    in-app notification feed even though ``AnomalyDetector.dispatch_alerts``
+    already implements ``email``/``webhook``/``pagerduty`` routing. Critical
+    alerts now also go to email, webhook, and PagerDuty (the latter two are
+    no-ops until configured — see FEAT-42); routine/info-level noise stays
+    in-app-only to avoid alert fatigue.
+    """
+    if severity == "critical":
+        return ["in_app", "websocket", "email", "webhook", "pagerduty"]
+    if severity == "warning":
+        return ["in_app", "websocket"]
+    return ["in_app"]
+
+
 class AnomalyDetectorLoop:
     """Background task: data-platform anomaly checks → in-app alerts."""
 
@@ -119,7 +139,18 @@ class AnomalyDetectorLoop:
         report = await detector.check_all()
         if report.alerts:
             _anomaly_clear_cooldown()
-            await detector.dispatch_alerts(report.alerts, channels=["in_app"])
+            # FEAT-40: route by severity instead of hardcoding in_app for
+            # everything. A critical anomaly (e.g. check_pii_breach) run on
+            # this ~1200s-cadence loop must not be limited to the in-app
+            # feed only — group alerts by severity and fan each group out
+            # to the channel set that severity warrants.
+            by_severity: dict[str, list] = {}
+            for alert in report.alerts:
+                by_severity.setdefault(alert.severity, []).append(alert)
+            for severity, alerts in by_severity.items():
+                await detector.dispatch_alerts(
+                    alerts, channels=_channels_for_severity(severity)
+                )
         else:
             _anomaly_mark_empty()
         return report.alerts_triggered

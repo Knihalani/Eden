@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronLeft, X } from "lucide-react";
 import {
@@ -40,7 +40,6 @@ import {
 } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
-import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { agentIssuesApi } from "@/lib/api/resources";
@@ -77,10 +76,14 @@ type IssueBoardRow =
 /** `.lab-run-row`-shaped card at current density; corrected by `measureElement`. */
 const ISSUE_ROW_ESTIMATE = 86;
 const ISSUE_HEADER_ESTIMATE = 41;
+/** OPT-15: issues page size — matches the API's `limit` default. */
+const ISSUES_PAGE_SIZE = 50;
 
 function statusTone(status: IssueStatus): "fail" | "neutral" | "ok" {
   if (status === "open") return "fail";
   if (status === "acknowledged") return "neutral";
+  // "resolved" and "ignored" (the latter never reaches the client —
+  // see IssueStatus) both read as done.
   return "ok";
 }
 
@@ -90,7 +93,9 @@ function IssueStatusChip({ status }: { status: IssueStatus }) {
       ? "in progress"
       : status === "resolved"
         ? "resolved"
-        : "open";
+        : status === "ignored"
+          ? "dismissed"
+          : "open";
   return <StatusChip tone={statusTone(status)}>{label}</StatusChip>;
 }
 
@@ -500,13 +505,25 @@ function LabIssuesInner() {
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
-  const issuesQuery = useOrgQuery(
-    queryKeys.portal.issues(orgId),
-    orgId,
-    () => portalApi.issues(orgId!),
-    SHELL_QUERY,
+  // OPT-15: offset-paginated — the API caps a single page at 200 (we
+  // request 50/page) so orgs with >1 page of issues no longer see a
+  // silent, signal-free truncation at the oldest 50.
+  const issuesQuery = useInfiniteQuery({
+    queryKey: queryKeys.portal.issues(orgId),
+    queryFn: ({ pageParam }) =>
+      portalApi.issues(orgId!, { limit: ISSUES_PAGE_SIZE, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: IssueFixture[], allPages: IssueFixture[][]) => {
+      if (lastPage.length < ISSUES_PAGE_SIZE) return undefined;
+      return allPages.reduce((sum, page) => sum + page.length, 0);
+    },
+    enabled: Boolean(orgId),
+    ...SHELL_QUERY,
+  });
+  const issuesData = useMemo(
+    () => issuesQuery.data?.pages.flatMap((page) => page) ?? [],
+    [issuesQuery.data],
   );
-  const issuesData = issuesQuery.data ?? [];
 
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [query, setQuery] = useState("");
@@ -616,6 +633,9 @@ function LabIssuesInner() {
       open: [],
       acknowledged: [],
       resolved: [],
+      // Never populated: the read-model maps "ignored" -> "resolved"
+      // before an IssueFixture reaches the client (see IssueStatus).
+      ignored: [],
     };
     for (const issue of filtered) {
       map[issue.status].push(issue);
@@ -867,6 +887,18 @@ function LabIssuesInner() {
                 })}
               </ul>
             )}
+            {issuesQuery.hasNextPage ? (
+              <div className="flex justify-center border-t border-[var(--line)] px-4 py-3">
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={() => void issuesQuery.fetchNextPage()}
+                  disabled={issuesQuery.isFetchingNextPage}
+                >
+                  {issuesQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
 

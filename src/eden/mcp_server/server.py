@@ -233,6 +233,27 @@ TOOL_CATALOG: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "confirm_shadow_detector",
+        "description": (
+            "Confirm or dismiss a shadow detector (Loop 1 signal feedback), "
+            "the same operator feedback the issues UI records. A dismiss that "
+            "crosses the delete threshold auto-disables the detector inline."
+        ),
+        "scope": "mcp:fix",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "signal_id": {"type": "string"},
+                "confirm_or_dismiss": {
+                    "type": "string",
+                    "enum": ["confirm", "dismiss"],
+                },
+            },
+            "required": ["org_id", "signal_id", "confirm_or_dismiss"],
+        },
+    },
+    {
         "name": "get_improvement_queue",
         "description": "N17 unified improvement cockpit queue.",
         "scope": "mcp:read",
@@ -483,6 +504,7 @@ _HANDLERS: dict[str, ToolHandler] = {
     "get_trace_stumbles": tool_fns.get_trace_stumbles,
     "triage_issue": tool_fns.triage_issue,
     "run_autofix": tool_fns.run_autofix,
+    "confirm_shadow_detector": tool_fns.confirm_shadow_detector,
     "get_improvement_queue": tool_fns.get_improvement_queue,
     "list_improvement_plans": tool_fns.list_improvement_plans,
     "get_improvement_plan": tool_fns.get_improvement_plan,

@@ -26,27 +26,10 @@ from typing import Any
 import aiohttp
 
 from eden.config import get_settings
+from eden.observability.operation_names import derive_operation_name
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
-
-
-# Map Eden's event_type onto OTel ``gen_ai.operation.name`` values
-# (the OTel GenAI spec keeps a closed list of well-known operations).
-_OPERATION_NAME_MAP: dict[str, str] = {
-    "openai.chat_completion": "chat",
-    "openai.responses": "responses",
-    "anthropic.message": "chat",
-    "anthropic.messages": "chat",
-    "bedrock.invoke_model": "invoke_model",
-    "gemini.generate_content": "generate_content",
-    "helicone.llm_call": "chat",
-    "langfuse.generation": "chat",
-    "otel.chat": "chat",
-    "otel.text_completion": "text_completion",
-    "otel.embeddings": "embeddings",
-    "otel.generate_content": "generate_content",
-}
 
 
 class OTelDualExporter:
@@ -235,7 +218,12 @@ class OTelDualExporter:
                 attributes.append({"key": key, "value": {"stringValue": str(value)}})
 
         # ── core GenAI attributes ──
-        operation = _OPERATION_NAME_MAP.get(event.event_type, "chat")
+        # FEAT-23: prefer the operation_name already resolved at
+        # ingestion time (covers tool.call / invoke_agent, which the
+        # bare event_type lookup below would mislabel as "chat");
+        # fall back to deriving it here for events that bypassed the
+        # ingestion route (e.g. in-process SDK emit).
+        operation = event.operation_name or derive_operation_name(event)
         add("gen_ai.operation.name", operation)
         add("gen_ai.request.model", event.name or event.attributes.get("model"))
         add("gen_ai.response.model", event.model_version or event.name)

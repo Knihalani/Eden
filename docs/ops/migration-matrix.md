@@ -174,6 +174,21 @@
 | 136_issue_status_escalated | agent_issues | yes | forever | soft | low | Widen issues status CHECK with 'escalated' so human escalation writes a real status (M4, D17) | Improve |
 | 137_guardian_followup_advisory | improvement_plans | yes | forever | soft | low | Widen plan_kind CHECK with 'advisory' + unique draft-follow-up-per-parent partial index race-proofing the guardian (M5, D9) | Improve |
 | 138_improvement_item_snoozes | improvement_item_snoozes | yes | forever | soft | low | Durable (org_id, item_ref) snooze expiry for N17 cockpit queue cards (mirrors plan snooze persistence) | Improve |
+| 139_debug_sessions_last_replay | debug_sessions | yes | forever | soft | low | Persists last hermetic replay outcome + debugger notes on debug_sessions so the portal can show lastReplay after reload instead of only in-memory patches | Debug |
+| 140_portal_compare_seeds | portal_compare_seeds | yes | forever | soft | low | New portal_compare_seeds table + org index seeding the portal compare view | Portal |
+| 141_ci_eval_run_metadata | regression_eval_runs | yes | forever | soft | low | Adds metadata column to regression_eval_runs for CI run context | Eval |
+| 142_session_summaries | session_summaries | yes | forever | soft | medium | New session_summaries table | Sessions |
+| 143_signal_events_indexes | signal_events | yes | forever | soft | low | Adds query-performance indexes to signal_events | Signals |
+| 144_auto_curator_watermark | auto_curator_watermark | yes | forever | soft | low | New auto_curator_watermark table tracking the auto-curator loop's progress cursor | Curation |
+| 145_sso_certificate_column | sso_configurations | yes | forever | soft | medium | Adds certificate column to sso_configurations for SAML signature verification | SSO |
+| 146_classifier_retrain_watermark | classifier_retrain_watermark | yes | forever | soft | low | New classifier_retrain_watermark table tracking classifier retrain loop progress | ML |
+| 147_drift_baseline_watermark | drift_baseline_watermark | yes | forever | soft | low | New drift_baseline_watermark table tracking drift-baseline loop progress | ML |
+| 148_agent_identity_aliases | agent_identity_aliases | yes | forever | soft | low | New agent_identity_aliases table | Identity |
+| 149_promotion_candidates_ref_id_text | promotion_candidates | yes | forever | soft | high | Widen ref_id UUID -> TEXT so composite "agent:version" / skill-id / judge-name refs (5 of 6 promotion kinds) no longer fail the asyncpg UUID codec on every EvidenceGate.enqueue INSERT (FEAT-28) | Improve |
+| 150_pagerduty_integration | pagerduty | yes | forever | soft | medium | New PagerDuty integration config + alert delivery tables (FEAT-16) | Alerting |
+| 151_improvement_plan_events | improvement_plan_events | yes | forever | soft | low | New improvement_plan_events table + plan index for the plan event-log timeline | Improve |
+| 152_budget_scope | budgets, budget_consumption, budget_actions | yes | forever | soft | medium | Adds scope_type (default 'org') + scope_id to all three budget tables for org/team/agent-scoped budgets; existing rows backfill to scope_type='org' so org-level behavior is unchanged. Widens the budgets/budget_consumption unique indexes to `(..., scope_type, COALESCE(scope_id, ''))` so a scoped budget can coexist with the org-level one (FEAT-47) | Cost |
+| 153_regression_case_dataset_link | dataset_items | yes | forever | soft | low | Adds org_id/fingerprint/auto_generated + a partial unique `(org_id, fingerprint)` index to dataset_items so N01 regression cases can be written there instead of the schema-incompatible `regression_eval_cases.dataset_id`, preserving the fingerprint dedup guarantee (FEAT-74) | Eval |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)

@@ -28,6 +28,24 @@ function readNum(ev: Evidence, key: string): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+function readBool(ev: Evidence, key: string): boolean | null {
+  const v = ev[key];
+  return typeof v === "boolean" ? v : null;
+}
+
+function readStrArray(ev: Evidence, key: string): string[] {
+  const v = ev[key];
+  return Array.isArray(v)
+    ? v.filter((x): x is string => typeof x === "string")
+    : [];
+}
+
+function formatDetailValue(v: unknown): string {
+  if (Array.isArray(v)) return v.length ? v.join(", ") : "—";
+  if (v === null || v === undefined) return "—";
+  return String(v);
+}
+
 /** "static_passed" (honest label) with legacy "passed" accepted. */
 function staticCheckTone(status: string): "ok" | "fail" | "neutral" {
   if (/passed|ok|success/i.test(status)) return "ok";
@@ -75,12 +93,28 @@ export function PlanEvidencePanel({
 
   // CI: approve/auto-merge writes evidence.auto_merge; some producers use
   // ci / ci_status. All optional — render only what's present.
-  const autoMerge = ev.auto_merge as Evidence | null | undefined;
+  const autoMerge =
+    ev.auto_merge && typeof ev.auto_merge === "object"
+      ? (ev.auto_merge as Evidence)
+      : null;
   const ciStatus =
     readStr(ev, "ci_status") ??
-    (autoMerge && typeof autoMerge === "object"
+    (autoMerge
       ? (readStr(autoMerge, "ci_status") ?? readStr(autoMerge, "status"))
       : null);
+
+  // M15 auto-merge eligibility gate (AutoMergeDecision.to_evidence()) —
+  // reasons / blocked_by are computed per-gate server-side but were never
+  // rendered; surface them verbatim so a reviewer can see *why* a plan
+  // did or didn't ride the auto-merge ladder.
+  const autoMergeEligible = autoMerge ? readBool(autoMerge, "eligible") : null;
+  const autoMergeBlockedBy = autoMerge ? readStr(autoMerge, "blocked_by") : null;
+  const autoMergeReasons = autoMerge ? readStrArray(autoMerge, "reasons") : [];
+  const autoMergeDetails =
+    autoMerge && autoMerge.details && typeof autoMerge.details === "object"
+      ? (autoMerge.details as Evidence)
+      : null;
+  const hasAutoMergeDecision = autoMergeEligible != null;
 
   const traceIds = planTraceIds(plan, raw);
   const hasChips =
@@ -98,7 +132,7 @@ export function PlanEvidencePanel({
       className="border border-[var(--line)] bg-[var(--bg)] px-4 py-3 sm:px-5"
     >
       <h3 className="type-ui">Evidence</h3>
-      {!hasChips && traceIds.length === 0 ? (
+      {!hasChips && traceIds.length === 0 && !hasAutoMergeDecision ? (
         <p className="type-meta mt-2">
           No evidence attached — this plan was created without a failure
           pack or verification run.
@@ -156,6 +190,47 @@ export function PlanEvidencePanel({
                   );
                 })}
               </ul>
+            </div>
+          ) : null}
+          {hasAutoMergeDecision ? (
+            <div className="mt-3 border-t border-[var(--line)] pt-3">
+              <p className="type-label">Auto-merge decision</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <StatusChip tone={autoMergeEligible ? "ok" : "fail"}>
+                  {autoMergeEligible ? "eligible" : "not eligible"}
+                </StatusChip>
+                {autoMergeBlockedBy ? (
+                  <StatusChip tone="fail">
+                    blocked by: {autoMergeBlockedBy}
+                  </StatusChip>
+                ) : null}
+              </div>
+              {autoMergeReasons.length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {autoMergeReasons.map((r, i) => (
+                    <li
+                      key={`${r}_${i}`}
+                      className="type-mono !text-[0.7rem] text-[var(--text-secondary)]"
+                    >
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {autoMergeDetails && Object.keys(autoMergeDetails).length > 0 ? (
+                <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {Object.entries(autoMergeDetails).map(([k, v]) =>
+                    v === null || v === undefined ? null : (
+                      <div key={k} className="flex items-baseline gap-1">
+                        <dt className="type-meta">{k}:</dt>
+                        <dd className="type-meta text-[var(--text)]">
+                          {formatDetailValue(v)}
+                        </dd>
+                      </div>
+                    ),
+                  )}
+                </dl>
+              ) : null}
             </div>
           ) : null}
         </>

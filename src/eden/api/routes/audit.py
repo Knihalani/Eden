@@ -204,17 +204,29 @@ async def export_audit_log(
     client = await get_postgres_client()
     # Use ``fetchiter`` (async iterator) so we don't materialise the
     # full audit log in memory for a multi-year export.
+    #
+    # ``audit_log`` never existed as a table — the real org-level audit
+    # trail lives in ``org_audit_log`` (001_initial_schema.py), which has
+    # no user-email or hash-chain columns of its own (those hash-chain
+    # columns belong to the unrelated ``agent_audit_ledger`` table,
+    # 092_market_ready_consolidated.py, and no ``verify_audit_chain()`` SQL
+    # function is defined anywhere in the migrations — see the try/except
+    # fallback in ``verify_audit_chain`` above). ``user_email`` is derived
+    # the same way ``get_audit_log`` does it: joining ``users``.
     rows = client.fetchiter(
-        "SELECT id, user_id, user_email, action, target_type, target_id, "
-        "metadata, ip_address, user_agent, created_at, prev_hash, entry_hash "
-        "FROM audit_log WHERE org_id = $1 "
-        "ORDER BY created_at",
+        "SELECT oal.id, oal.user_id, u.email AS user_email, oal.action, "
+        "oal.target_type, oal.target_id, oal.metadata, oal.ip_address, "
+        "oal.user_agent, oal.created_at "
+        "FROM org_audit_log oal "
+        "JOIN users u ON u.id = oal.user_id "
+        "WHERE oal.org_id = $1 "
+        "ORDER BY oal.created_at",
         org_id,
     )
 
     csv_fields = [
         "id", "user_id", "user_email", "action", "target_type", "target_id",
-        "metadata", "ip_address", "user_agent", "created_at", "prev_hash", "entry_hash",
+        "metadata", "ip_address", "user_agent", "created_at",
     ]
 
     def _serialize(r: dict) -> str:

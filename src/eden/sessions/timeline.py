@@ -37,6 +37,15 @@ _SUMMARY_COLUMNS = (
     "linked_issue_id::text AS linked_issue_id, outcome, updated_at"
 )
 
+# Timeline reads are paginated (unlike the rollup's full-session
+# aggregate that ``_TURNS_SQL`` was written for) — ``trace_ids`` on
+# ``session_summaries`` is not guaranteed chronologically ordered, so a
+# naive ``trace_ids[offset:offset+limit]`` slice would silently return
+# the wrong turns. LIMIT/OFFSET are pushed into the query itself,
+# after ``_TURNS_SQL``'s own ``ORDER BY min(timestamp)``, so the page
+# boundary is always correct regardless of ``trace_ids`` ordering.
+_TURNS_SQL_PAGE = _TURNS_SQL + "\nLIMIT $3 OFFSET $4\n"
+
 _TURN_ISSUES_SQL = """
 SELECT DISTINCT s.trace_id,
        i.id::text AS issue_id,
@@ -171,12 +180,20 @@ async def get_session_timeline(
     org_id: str,
     session_id: str,
     *,
+    limit: int = 50,
+    offset: int = 0,
     client: Any | None = None,
 ) -> dict[str, Any]:
-    """Session header + ordered turn cards.
+    """Session header + one page of ordered turn cards.
 
     Raises :class:`SessionNotFoundError` when the session has no summary
-    row (never indexed, or a session-less trace).
+    row (never indexed, or a session-less trace). ``limit``/``offset``
+    page the turn rows themselves (via ``_TURNS_SQL_PAGE``'s own
+    ``ORDER BY min(timestamp) ... LIMIT ... OFFSET``) rather than
+    slicing ``summary["trace_ids"]``, which is not reliably
+    chronologically ordered. The stumble/issue sub-queries are scoped
+    to only the trace ids on the current page, so they no longer scan
+    the whole session on every fetch.
     """
     client = client or await _default_client()
     row = await client.fetchrow(
@@ -192,22 +209,31 @@ async def get_session_timeline(
     trace_ids = summary["trace_ids"]
     turns: list[dict[str, Any]] = []
     if trace_ids:
-        turn_rows = await client.fetch(_TURNS_SQL, org_id, trace_ids)
-        stumbles = {
-            r["trace_id"]: list(r["kinds"] or [])
-            for r in await client.fetch(_TURN_STUMBLES_SQL, org_id, trace_ids)
-        }
+        turn_rows = await client.fetch(
+            _TURNS_SQL_PAGE, org_id, trace_ids, limit, offset
+        )
+        page_trace_ids = [r["trace_id"] for r in turn_rows]
+        stumbles: dict[str, list[str]] = {}
         issues: dict[str, list[dict[str, Any]]] = {}
-        for r in await client.fetch(_TURN_ISSUES_SQL, org_id, trace_ids):
-            issues.setdefault(r["trace_id"], []).append(
-                {
-                    "issue_id": r["issue_id"],
-                    "status": r["status"],
-                    "severity": r["severity"],
-                    "title": r["title"],
-                }
-            )
-        for index, r in enumerate(turn_rows, start=1):
+        if page_trace_ids:
+            stumbles = {
+                r["trace_id"]: list(r["kinds"] or [])
+                for r in await client.fetch(
+                    _TURN_STUMBLES_SQL, org_id, page_trace_ids
+                )
+            }
+            for r in await client.fetch(
+                _TURN_ISSUES_SQL, org_id, page_trace_ids
+            ):
+                issues.setdefault(r["trace_id"], []).append(
+                    {
+                        "issue_id": r["issue_id"],
+                        "status": r["status"],
+                        "severity": r["severity"],
+                        "title": r["title"],
+                    }
+                )
+        for index, r in enumerate(turn_rows, start=offset + 1):
             tid = r["trace_id"]
             turns.append(
                 {
@@ -241,6 +267,8 @@ async def get_session_timeline(
         "summary": summary,
         "turn_count": summary["turn_count"],
         "turns": turns,
+        "limit": limit,
+        "offset": offset,
     }
 
 

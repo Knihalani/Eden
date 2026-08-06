@@ -14,6 +14,7 @@ from eden.api.deps import (
     require_org_admin,
     require_path_org_access,
 )
+from eden.api.utils.redact import redact_all
 from eden.insights.incidents.clusterer import IncidentClusterer, IncidentStore
 from eden.insights.rca._common import (
     _fetch_trace_events,
@@ -22,6 +23,7 @@ from eden.insights.rca._common import (
     _resolve_incident_cluster,
 )
 from eden.insights.rca.analyzer import RootCauseAnalyzer
+from eden.services.observability import get_a2a_service
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,15 @@ router = APIRouter(
 _rca = RootCauseAnalyzer()
 _clusterer = IncidentClusterer()
 _store = IncidentStore()
+_a2a = get_a2a_service()
+
+#: Bound on how many delegation hops ``_fetch_delegation_ancestors`` will
+#: walk. A misbehaving/duplicated ``a2a_links`` row could otherwise create
+#: an unbounded (or cyclic) walk; ``_fetch_delegation_ancestors`` also
+#: guards against revisiting a trace_id, but the depth cap is a cheap
+#: belt-and-suspenders bound on cost (each hop is a DB round-trip + an
+#: events fetch).
+_MAX_DELEGATION_DEPTH = 5
 
 
 class ClusterRequest(BaseModel):
@@ -77,6 +88,158 @@ def _event_error_type(ev: dict[str, Any]) -> str | None:
     return None
 
 
+def _event_delegation_info(ev: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract A2A delegation hints carried on one event's ``attributes``.
+
+    The A2A auto-instrumentation SDK (``eden.sdk.a2a.wrap_a2a_invocation`` /
+    ``build_a2a_attributes``) merges ``parent_agent_span_id`` +
+    ``child_agent_trace_id`` + an ``a2a.*`` sub-document into the active
+    span's ``attributes`` JSON at ingest time (see migration 058 +
+    ``TelemetryEvent.parent_agent_span_id``/``child_agent_trace_id`` for the
+    dedicated ``telemetry_events`` columns those same values are also
+    persisted to). ``_fetch_trace_events``'s column set does not select
+    those dedicated columns, so ``attributes`` is the only per-event place
+    this data is available to route code — this mirrors the field-access
+    pattern used elsewhere in this module (e.g. the PII/prompt-injection
+    sniff reads ``ev.get("attributes")`` the same way).
+
+    Returns ``None`` when the event carries no delegation metadata (the
+    overwhelming majority of spans, which aren't A2A call boundaries).
+    """
+    attrs = ev.get("attributes")
+    if not isinstance(attrs, dict):
+        return None
+    parent_agent_span_id = attrs.get("parent_agent_span_id")
+    child_agent_trace_id = attrs.get("child_agent_trace_id")
+    a2a = attrs.get("a2a")
+    a2a = a2a if isinstance(a2a, dict) else {}
+    if not (parent_agent_span_id or child_agent_trace_id or a2a):
+        return None
+    return {
+        "parent_agent_span_id": (
+            str(parent_agent_span_id) if parent_agent_span_id is not None else None
+        ),
+        "child_agent_trace_id": (
+            str(child_agent_trace_id) if child_agent_trace_id is not None else None
+        ),
+        "parent_agent_id": a2a.get("parent_agent_id"),
+        "child_agent_id": a2a.get("child_agent_id"),
+        "invocation_type": a2a.get("invocation_type"),
+    }
+
+
+async def _fetch_delegation_ancestors(
+    org_id: str,
+    trace_id: str,
+    *,
+    max_depth: int = _MAX_DELEGATION_DEPTH,
+) -> list[dict[str, Any]]:
+    """Walk the ``a2a_links`` parent chain upward from ``trace_id``.
+
+    This is deliberately distinct from the within-trace ``parent_span_id``
+    tree ``_build_causal_chain`` walks: each hop here is a real *cross-trace*
+    delegation edge recorded by the A2A SDK (a row in ``a2a_links``, written
+    by ``eden.sdk.a2a.wrap_a2a_invocation`` via
+    ``A2ALinkService.register_link``) — i.e. "this trace's root agent was
+    invoked by span X in some OTHER agent's trace".
+
+    For each ancestor hop we also re-fetch that ancestor trace's own events
+    (thin — we only need span structure, not payload bodies) so we can tell
+    whether the *parent agent's* delegating span itself shows a failure as a
+    consequence of the child's failure, i.e. whether the blast radius
+    propagated upward through the delegation chain rather than staying
+    contained to the child trace.
+
+    Best-effort: any DB/service failure yields ``[]`` (matches the rest of
+    this module's "never 500 the RCA view over a telemetry gap" posture).
+    Bounded by ``max_depth`` hops and guarded against cycles — a
+    duplicated/misrouted link row could otherwise loop forever.
+    """
+    ancestors: list[dict[str, Any]] = []
+    seen_trace_ids: set[str] = {trace_id}
+    current_trace_id = trace_id
+
+    for _ in range(max_depth):
+        try:
+            links = await _a2a.get_links_for_trace(current_trace_id, org_id=org_id)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("rca_chain: get_links_for_trace failed: %s", redact_all(str(exc)))
+            break
+
+        parent_links = links.get("parent") or []
+        if not parent_links:
+            break
+        # A trace can in principle have >1 inbound delegation row (retries,
+        # re-parenting); earliest-created (``ORDER BY created_at ASC`` in
+        # ``get_links_for_trace``) wins so the chain is deterministic.
+        link = parent_links[0]
+        parent_trace_id = link.get("parent_trace_id")
+        parent_span_id = link.get("parent_span_id")
+        if not parent_trace_id or parent_trace_id in seen_trace_ids:
+            break
+        seen_trace_ids.add(parent_trace_id)
+
+        try:
+            parent_events = await _fetch_trace_events(
+                org_id, parent_trace_id, thin=True
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("rca_chain: ancestor events fetch failed: %s", redact_all(str(exc)))
+            parent_events = []
+
+        delegating_span_failed = False
+        delegating_span_error_type: str | None = None
+        for pev in parent_events:
+            if str(pev.get("span_id")) == str(parent_span_id):
+                delegating_span_failed = _event_failed(pev)
+                delegating_span_error_type = _event_error_type(pev)
+                break
+
+        ancestors.append(
+            {
+                "trace_id": str(parent_trace_id),
+                "span_id": str(parent_span_id) if parent_span_id else None,
+                "parent_agent_id": link.get("parent_agent_id"),
+                "child_agent_id": link.get("child_agent_id"),
+                "invocation_type": link.get("invocation_type"),
+                "response_status": link.get("response_status"),
+                "error_kind": link.get("error_kind"),
+                # Did the PARENT agent's own delegating span also fail —
+                # i.e. did this child's failure propagate upward?
+                "delegating_span_failed": delegating_span_failed,
+                "delegating_span_error_type": delegating_span_error_type,
+            }
+        )
+        current_trace_id = str(parent_trace_id)
+
+    return ancestors
+
+
+def _cross_agent_root_cause(
+    trace_id: str,
+    local_root_cause_span_id: str | None,
+    delegation_chain: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Pick the outermost ancestor whose delegating span also failed.
+
+    ``delegation_chain`` is ordered immediate-parent-first. Walk it outward
+    (toward the root agent) while each hop's delegating span still shows a
+    failure — the last such hop is the furthest point the blast radius
+    reaches, i.e. the practical "start of the incident" from a debugging
+    engineer's point of view. Stops (and falls back to the local trace's own
+    ``root_cause_span_id``) at the first ancestor whose delegating span did
+    *not* fail, or immediately if there's no delegation chain at all.
+    """
+    origin_trace_id = trace_id
+    origin_span_id = local_root_cause_span_id
+    for hop in delegation_chain:
+        if not hop.get("delegating_span_failed"):
+            break
+        origin_trace_id = hop["trace_id"]
+        origin_span_id = hop["span_id"]
+    return {"trace_id": origin_trace_id, "span_id": origin_span_id}
+
+
 def _build_causal_chain(events: list[dict[str, Any]]) -> dict[str, Any]:
     """Turn an ordered trace-event list into a deep-linkable causal chain.
 
@@ -111,6 +274,7 @@ def _build_causal_chain(events: list[dict[str, Any]]) -> dict[str, Any]:
                 "outcome": ev.get("outcome"),
                 "error_type": _event_error_type(ev),
                 "implicated": failed,
+                "delegation": _event_delegation_info(ev),
             }
         )
         if failed and span_id and span_id not in implicated:
@@ -135,6 +299,15 @@ async def rca_chain(
     derived from the trace's telemetry events so a UI can jump straight to
     the implicated spans.
 
+    Also walks *cross-agent* delegation links (``a2a_links``, populated by
+    ``eden.sdk.a2a.wrap_a2a_invocation``) upward from this trace so a
+    failing child-agent span's causal chain doesn't stop at the edge of its
+    own trace: ``delegation_chain`` is the ordered (immediate-parent-first)
+    list of ancestor agent hops, and ``cross_agent_root_cause`` names the
+    furthest-back ancestor whose own delegating span also failed — i.e. the
+    practical start of the incident when a failure cascades through a
+    delegation chain rather than staying contained to one agent's trace.
+
     Fetches the trace's events once (full column set — the engine's rule
     table needs ``payload``/``attributes``, so we can't use the ``thin``
     variant here) and passes them into ``categorize`` so it doesn't re-run
@@ -150,6 +323,10 @@ async def rca_chain(
     cat_data = categorized.get("data") or {}
 
     chain = _build_causal_chain(events)
+    delegation_chain = await _fetch_delegation_ancestors(org_id, trace_id)
+    cross_agent_root_cause = _cross_agent_root_cause(
+        trace_id, chain.get("root_cause_span_id"), delegation_chain
+    )
     return _ok_envelope(
         _rca.name,
         {
@@ -158,6 +335,8 @@ async def rca_chain(
             "confidence": cat_data.get("confidence"),
             "signals": cat_data.get("signals", []),
             **chain,
+            "delegation_chain": delegation_chain,
+            "cross_agent_root_cause": cross_agent_root_cause,
         },
     )
 

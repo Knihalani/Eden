@@ -5,12 +5,18 @@
 import { agentById } from "@/lab/fixtures/agents";
 import { catalogGuardrailPolicies } from "@/lib/portal-catalog";
 
+/**
+ * Mirrors the backend's `VALID_POLICY_TYPES` (`eden/guardrails/policy.py`) —
+ * the only `type` values `GuardrailPolicy.create` will accept, so this is
+ * also the only set of `kind`s that can ever come back from
+ * `GuardrailPolicy.list`. See FEAT-32.
+ */
 export type GuardrailKind =
-  | "pii"
-  | "toxicity"
-  | "tool_allowlist"
-  | "rate_limit"
-  | "custom";
+  | "prompt_injection"
+  | "pii_redaction"
+  | "hallucination"
+  | "content_policy"
+  | "judge_link";
 
 export type GuardrailStatus = "active" | "shadow" | "disabled";
 
@@ -27,10 +33,16 @@ export type GuardrailPolicyFixture = {
   status: GuardrailStatus;
   /** Omit / undefined = fleet-wide */
   agentId?: string;
-  severity: GuardrailSeverity;
-  matchCount24h: number;
-  lastHit: string;
-  ruleSummary: string;
+  /**
+   * The backend's `GuardrailPolicy.list` never computes these — no
+   * column or derivation for match volume, severity scoring, last-hit
+   * time, or a human rule summary exists yet. Optional so a live API
+   * row renders blank instead of fabricating a number. See FEAT-32.
+   */
+  severity?: GuardrailSeverity;
+  matchCount24h?: number;
+  lastHit?: string;
+  ruleSummary?: string;
   action: GuardrailAction;
   /** Related surfaces when a hit escalated */
   issueId?: string;
@@ -104,11 +116,11 @@ export function agentLabel(agentId?: string): string {
 }
 
 export function kindLabel(kind: GuardrailKind): string {
-  if (kind === "pii") return "PII";
-  if (kind === "toxicity") return "Toxicity";
-  if (kind === "tool_allowlist") return "Tools";
-  if (kind === "rate_limit") return "Rate";
-  return "Custom";
+  if (kind === "prompt_injection") return "Prompt injection";
+  if (kind === "pii_redaction") return "PII redaction";
+  if (kind === "hallucination") return "Hallucination";
+  if (kind === "content_policy") return "Content policy";
+  return "Judge link";
 }
 
 export function statusLabel(status: GuardrailStatus): string {
@@ -128,8 +140,8 @@ export function severityLabel(severity: GuardrailSeverity): string {
 }
 
 export function matchesLine(p: GuardrailPolicyFixture): string {
-  if (p.matchCount24h <= 0) return "0 hits / 24h";
-  return `${p.matchCount24h} hits / 24h · last ${p.lastHit}`;
+  if (!p.matchCount24h || p.matchCount24h <= 0) return "0 hits / 24h";
+  return `${p.matchCount24h} hits / 24h · last ${p.lastHit ?? "—"}`;
 }
 
 export function labGuardrailsHref(params: {

@@ -64,6 +64,9 @@ export type ExperimentFixture = {
   costUsd: number | null;
   errorRate: number | null;
   suggestedBaselineId?: string;
+  /** F51 honesty flags: eval scoring is a heuristic stub, not a real graded eval. */
+  synthetic?: boolean;
+  method?: string;
 };
 
 export type CompareGrade = "improve" | "regress" | "tradeoff" | "tie";

@@ -55,18 +55,18 @@ export function GuardrailsListView({
     return (
       p.name.toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q) ||
-      p.ruleSummary.toLowerCase().includes(q) ||
+      (p.ruleSummary ?? "").toLowerCase().includes(q) ||
       agentLabel(p.agentId).toLowerCase().includes(q)
     );
   });
 
   const kindOptions: { id: GuardrailKind | "all"; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "pii", label: "PII" },
-    { id: "toxicity", label: "Toxicity" },
-    { id: "tool_allowlist", label: "Tools" },
-    { id: "rate_limit", label: "Rate" },
-    { id: "custom", label: "Custom" },
+    { id: "prompt_injection", label: "Prompt injection" },
+    { id: "pii_redaction", label: "PII redaction" },
+    { id: "hallucination", label: "Hallucination" },
+    { id: "content_policy", label: "Content policy" },
+    { id: "judge_link", label: "Judge link" },
   ];
 
   const statusOptions: { id: GuardrailStatus | "all"; label: string }[] = [

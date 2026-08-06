@@ -212,3 +212,99 @@ async def test_keep_when_control_also_below_min_calls(loop, monkeypatch):
         started_at=None,
     )
     assert decision == "keep"
+
+
+class _TextRefIdPgClient:
+    """Fake postgres client modeling the FIXED schema (migration 149:
+    ``promotion_candidates.ref_id`` is TEXT, not UUID). Any string bind
+    parameter — including the composite ``"agent:version"`` ref
+    ``_evidence_gate_promote`` writes — is accepted, mirroring how a real
+    TEXT column behaves.
+    """
+
+    async def execute(self, query: str, *args) -> None:
+        return None
+
+    async def fetchrow(self, *args, **kwargs):
+        return None
+
+
+class _UuidRefIdPgClient:
+    """Fake postgres client modeling the ORIGINAL buggy schema
+    (``promotion_candidates.ref_id UUID NOT NULL``). Reproduces asyncpg's
+    real behavior: binding a non-hex string (e.g. ``"checkout-agent:7"``)
+    against a UUID-typed parameter raises. This is what made
+    ``EvidenceGate.enqueue`` always return ``None`` — and therefore
+    ``PromotionLoop._evidence_gate_promote`` always return ``False`` —
+    for every ``kind="prompt_version"`` candidate before FEAT-28.
+    """
+
+    async def execute(self, query: str, *args) -> None:
+        if "insert into promotion_candidates" in query.strip().lower():
+            ref_id = args[3]
+            from uuid import UUID as _UUID
+
+            _UUID(str(ref_id))  # raises ValueError for composite refs
+
+    async def fetchrow(self, *args, **kwargs):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_evidence_gate_promote_composite_ref_id_fixed_schema(loop, monkeypatch):
+    """FEAT-28 regression (fixed side): ``_evidence_gate_promote`` enqueues
+    the composite ``"{agent}:{candidate_version}"`` ref used for
+    ``kind="prompt_version"`` candidates. Against the fixed TEXT schema
+    this must enqueue successfully and return the gate's verdict — not
+    unconditionally ``False``.
+    """
+    from uuid import UUID
+
+    from eden.promotion.evidence_gate import EvidenceGate, EvidenceReport
+
+    async def _get_client():
+        return _TextRefIdPgClient()
+
+    monkeypatch.setattr(
+        "eden.storage.postgres.get_postgres_client", _get_client
+    )
+    monkeypatch.setattr(
+        EvidenceGate,
+        "evaluate_bayesian",
+        AsyncMock(
+            return_value=EvidenceReport(candidate_id=UUID(int=0), passed=True)
+        ),
+    )
+
+    result = await loop._evidence_gate_promote(
+        org_id="org-1",
+        experiment_id="exp-1",
+        agent="checkout-agent",
+        candidate_version=7,
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_evidence_gate_promote_composite_ref_id_original_bug(loop, monkeypatch):
+    """FEAT-28 regression (buggy side, documents the original failure):
+    against the original ``ref_id UUID NOT NULL`` schema, the composite
+    ``"agent:version"`` ref makes asyncpg's UUID codec raise on every
+    call, which ``EvidenceGate.enqueue``'s except-clause swallows into
+    ``None`` — so ``_evidence_gate_promote`` always returns ``False``,
+    100%-reproducibly, regardless of how good the candidate is.
+    """
+    async def _get_client():
+        return _UuidRefIdPgClient()
+
+    monkeypatch.setattr(
+        "eden.storage.postgres.get_postgres_client", _get_client
+    )
+
+    result = await loop._evidence_gate_promote(
+        org_id="org-1",
+        experiment_id="exp-1",
+        agent="checkout-agent",
+        candidate_version=7,
+    )
+    assert result is False

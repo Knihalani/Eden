@@ -149,3 +149,51 @@ def test_evidence_gate_enqueue(fake_pg):
     cid = asyncio.run(gate.enqueue(org_id, kind="nudge", ref_id=str(uuid4())))
     assert cid is not None
     assert cid in fake_pg.candidates
+
+
+def test_prompt_version_outcome_metrics_uses_telemetry_events(monkeypatch):
+    """FEAT-31: prompt_version now derives real evidence from telemetry_events,
+    mirroring PromotionLoop._evaluate_one's control/candidate split, instead
+    of falling through to the generic "not nudge" empty-list bucket."""
+    gate = EvidenceGate()
+    org_id = str(uuid4())
+    ref_id = "checkout-agent:7"
+
+    class _TelemetryClient:
+        async def fetch(self, query: str, *args):
+            q = query.strip().lower()
+            tenant_id, candidate_version = args
+            assert tenant_id == org_id
+            assert candidate_version == "7"
+            if "attributes->>'prompt_version' = $2" in q:
+                # treatment: only the candidate version
+                return [_FakeRow(outcome="success")] * 3 + [_FakeRow(outcome="failure")]
+            # control: everything that isn't the candidate version
+            return [_FakeRow(outcome="success")] * 2 + [_FakeRow(outcome="failure")] * 2
+
+    async def _get():
+        return _TelemetryClient()
+
+    monkeypatch.setattr("eden.storage.postgres.get_postgres_client", _get)
+
+    treatment = asyncio.run(
+        gate._prompt_version_outcome_metrics(org_id, ref_id, applied=True)
+    )
+    control = asyncio.run(
+        gate._prompt_version_outcome_metrics(org_id, ref_id, applied=False)
+    )
+    assert treatment == [0.0, 0.0, 0.0, 1.0]
+    assert control == [0.0, 0.0, 1.0, 1.0]
+
+
+def test_metrics_from_outcomes_honest_empty_for_unwired_kinds(fake_pg):
+    """guardrail/model_routing/kb_skill/pr_merge each hit their own explicit
+    branch in _metrics_from_outcomes and return [] because no real outcome
+    source exists yet for them -- not because of a blanket "not nudge"
+    check. This test pins that per-kind (not generic) behavior."""
+    gate = EvidenceGate()
+    org_id = str(uuid4())
+    for kind in ("guardrail", "model_routing", "kb_skill", "pr_merge"):
+        candidate = {"kind": kind, "ref_id": str(uuid4()), "org_id": org_id}
+        result = asyncio.run(gate._metrics_from_outcomes(candidate, applied=True))
+        assert result == []

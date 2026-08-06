@@ -971,12 +971,16 @@ export const api = {
     }>>(`/sso/providers?org_id=${orgId}`),
 
   createSSOProvider: (orgId: string, data: {
+    // "okta" | "google" | "oidc" | "saml2" — see
+    // ``eden.api.routes.sso.SSOProviderConfig``.
     provider_type: string;
     name: string;
     entity_id?: string;
     sso_url?: string;
+    certificate?: string;
     client_id?: string;
     client_secret?: string;
+    scopes?: string[];
   }) =>
     fetchApi<{ id: string; message: string }>(`/sso/providers?org_id=${orgId}`, {
       method: "POST",
@@ -1579,10 +1583,11 @@ export const api = {
   listRoles: (
     orgId: string,
   ): Promise<Array<{
-    role_id: string;
+    id: string;
+    org_id: string;
     name: string;
-    description: string;
-    is_system: boolean;
+    base_role: string;
+    description: string | null;
     permissions: string[];
     created_at: string;
   }>> => fetchApi(`/orgs/${orgId}/roles`),
@@ -1591,22 +1596,32 @@ export const api = {
     orgId: string,
     roleId: string,
   ): Promise<{
-    role_id: string;
+    id: string;
+    org_id: string;
     name: string;
-    description: string;
-    is_system: boolean;
+    base_role: string;
+    description: string | null;
     permissions: string[];
     created_at: string;
   }> => fetchApi(`/orgs/${orgId}/roles/${roleId}`),
 
   createRole: (
     orgId: string,
-    body: { name: string; description?: string; permissions: string[] },
+    // ``base_role`` anchors the custom role to one of the built-in
+    // roles (owner/admin/member/viewer) — see
+    // ``eden.api.routes.rbac.RoleCreateRequest``.
+    body: {
+      name: string;
+      base_role: "owner" | "admin" | "member" | "viewer";
+      description?: string;
+      permissions?: string[];
+    },
   ): Promise<{
-    role_id: string;
+    id: string;
+    org_id: string;
     name: string;
-    description: string;
-    is_system: boolean;
+    base_role: string;
+    description: string | null;
     permissions: string[];
     created_at: string;
   }> => fetchApi(`/orgs/${orgId}/roles`, {
@@ -1617,51 +1632,80 @@ export const api = {
   updateRole: (
     orgId: string,
     roleId: string,
-    body: Partial<{ name: string; description: string; permissions: string[] }>,
+    // Backend only accepts ``description`` / ``permissions`` on update —
+    // name and base_role are immutable after creation.
+    body: Partial<{ description: string | null; permissions: string[] }>,
   ): Promise<{
-    role_id: string;
+    id: string;
+    org_id: string;
     name: string;
-    description: string;
-    is_system: boolean;
+    base_role: string;
+    description: string | null;
     permissions: string[];
     created_at: string;
   }> => fetchApi(`/orgs/${orgId}/roles/${roleId}`, {
-    method: "PATCH",
+    method: "PUT",
     body: JSON.stringify(body),
   }),
 
-  deleteRole: (
-    orgId: string,
-    roleId: string,
-  ): Promise<{ deleted: boolean; role_id: string }> =>
+  deleteRole: (orgId: string, roleId: string): Promise<void> =>
     fetchApi(`/orgs/${orgId}/roles/${roleId}`, { method: "DELETE" }),
 
-  assignRole: (
+  // ── RBAC: role assignments (assign/unassign a custom role to a user,
+  // optionally scoped to a resource) ───────────────────────────
+  listRoleAssignments: (
     orgId: string,
-    body: { user_id: string; role_id: string },
-  ): Promise<{ user_id: string; role_id: string }> =>
-    fetchApi(`/orgs/${orgId}/roles/assign`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    roleId: string,
+  ): Promise<Array<{
+    id: string;
+    role_id: string;
+    user_id: string;
+    resource_type: string | null;
+    resource_id: string | null;
+    granted_by: string | null;
+    created_at: string;
+  }>> => fetchApi(`/orgs/${orgId}/roles/${roleId}/assignments`),
 
-  unassignRole: (
+  createRoleAssignment: (
     orgId: string,
-    body: { user_id: string; role_id: string },
-  ): Promise<{ user_id: string; role_id: string }> =>
-    fetchApi(`/orgs/${orgId}/roles/unassign`, {
-      method: "POST",
-      body: JSON.stringify(body),
+    roleId: string,
+    body: { user_id: string; resource_type?: string | null; resource_id?: string | null },
+  ): Promise<{
+    id: string;
+    role_id: string;
+    user_id: string;
+    resource_type: string | null;
+    resource_id: string | null;
+    granted_by: string | null;
+    created_at: string;
+  }> => fetchApi(`/orgs/${orgId}/roles/${roleId}/assignments`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
+
+  deleteRoleAssignment: (
+    orgId: string,
+    roleId: string,
+    assignmentId: string,
+  ): Promise<void> =>
+    fetchApi(`/orgs/${orgId}/roles/${roleId}/assignments/${assignmentId}`, {
+      method: "DELETE",
     }),
 
   // ── RBAC: permissions catalogue ─────────────────────────────
+  // Shape mirrors ``eden.api.routes.rbac.get_permissions_catalogue``.
   listPermissions: (
     orgId: string,
-  ): Promise<Array<{
-    permission: string;
-    category: string;
-    description: string;
-  }>> => fetchApi(`/orgs/${orgId}/permissions`),
+  ): Promise<{
+    org_id: string;
+    count: number;
+    permissions: Array<{
+      key: string;
+      resource: string;
+      action: string;
+      granted_by_default: string[];
+    }>;
+  }> => fetchApi(`/orgs/${orgId}/permissions`),
 
   // ── Billing: payment method (Phase 7.0) ──────────────────────
   getPaymentMethod: (
@@ -2314,6 +2358,10 @@ export const api = {
       window: string;
       action_on_exceed: string;
       threshold_alert_pct: number;
+      /** 50/80/100 (etc.) crossing points that fire in-app + email
+       *  notifications (``budget_service.evaluate_budget_alerts``).
+       *  Defaults server-side to ``[50, 80, 100]`` when omitted. */
+      alert_thresholds?: number[];
     },
   ) =>
     fetchApi<{ data: unknown }>(`/orgs/${orgId}/budget`, {
@@ -3011,6 +3059,16 @@ type ImproveFeatureEnvelope<T> = {
   data: T;
 };
 
+/** Matches BE ``improvement_plan_events`` row (migration 151, FEAT-30). */
+export type ImprovementPlanEvent = {
+  id: string;
+  event_type: string;
+  actor?: string | null;
+  detail?: string | null;
+  payload?: Record<string, unknown>;
+  created_at: string;
+};
+
 export const improvePlansApi = {
   // M13: live cockpit dual queue (Fix now / Improve later).
   getQueue: (orgId: string, query?: string) =>
@@ -3024,6 +3082,11 @@ export const improvePlansApi = {
   getPlan: (orgId: string, planId: string) =>
     fetchApi<ImproveFeatureEnvelope<{ plan: ImprovementPlan }>>(
       `/orgs/${orgId}/improve/plans/${planId}`,
+    ),
+  // FEAT-30 gap 3: append-only event trail (migration 151).
+  getEvents: (orgId: string, planId: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ events: ImprovementPlanEvent[] }>>(
+      `/orgs/${orgId}/improve/plans/${planId}/events`,
     ),
   patchPlan: (
     orgId: string,
@@ -3059,6 +3122,107 @@ export const improvePlansApi = {
 };
 (api as unknown as Record<string, unknown>).improvePlansApi = improvePlansApi;
 
+// ── FEAT-30 gap 4: F39 nudges + F41 promotions/evidence-gate ────────
+// Backend: src/eden/api/routes/learn.py (`_ok()` envelope). The nudge
+// shadow → promoted → archived lifecycle and the evidence-gate's
+// pass/fail promotion outcomes previously had zero portal surface.
+
+type NudgeFeatureEnvelope<T> = {
+  status: string;
+  feature: string;
+  live: boolean;
+  trace_id: string;
+  timestamp: string;
+  data: T;
+};
+
+export type NudgeMode = "shadow" | "promoted" | "archived";
+
+/** Matches BE `list_nudges` row projection — not the full `Nudge` model. */
+export type NudgeSummary = {
+  id: string;
+  agent_id: string;
+  name: string;
+  mode: NudgeMode;
+  action_type: string;
+};
+
+export type PromotionCandidateStatus =
+  | "shadow"
+  | "pending_review"
+  | "promoted"
+  | "rejected"
+  | "demoted";
+
+/** Matches BE `promotion_candidates` row (migration 092). */
+export type PromotionCandidate = {
+  id: string;
+  org_id: string;
+  kind: string;
+  ref_id: string;
+  status: PromotionCandidateStatus;
+  evidence?: Record<string, unknown>;
+  shadow_started_at?: string | null;
+  promoted_at?: string | null;
+  demoted_at?: string | null;
+  created_at: string;
+};
+
+/** Matches BE `EvidenceReport` dataclass (`evidence_gate.py`). */
+export type EvidenceReport = {
+  candidate_id: string;
+  passed: boolean;
+  metrics?: Record<string, unknown>;
+  min_sample_size?: number;
+  recommendation?: string;
+  gate_verdict?: string;
+  explanation?: string;
+};
+
+export const nudgesApi = {
+  list: (orgId: string, agentId?: string) =>
+    fetchApi<NudgeFeatureEnvelope<{ nudges: NudgeSummary[] }>>(
+      `/orgs/${orgId}/nudges${agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ""}`,
+    ),
+  promote: (orgId: string, nudgeId: string) =>
+    fetchApi<
+      NudgeFeatureEnvelope<{
+        report: EvidenceReport;
+        nudge_id: string;
+        promoted: boolean;
+      }>
+    >(`/orgs/${orgId}/nudges/${nudgeId}/promote`, { method: "POST" }),
+  archive: (orgId: string, nudgeId: string) =>
+    fetchApi<NudgeFeatureEnvelope<{ nudge_id: string; archived: boolean }>>(
+      `/orgs/${orgId}/nudges/${nudgeId}/archive`,
+      { method: "POST" },
+    ),
+};
+
+export const promotionsApi = {
+  list: (orgId: string, status?: string) =>
+    fetchApi<NudgeFeatureEnvelope<{ promotions: PromotionCandidate[] }>>(
+      `/orgs/${orgId}/promotions${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    ),
+  get: (orgId: string, candidateId: string) =>
+    fetchApi<
+      NudgeFeatureEnvelope<{
+        candidate: PromotionCandidate;
+        report: EvidenceReport;
+      }>
+    >(`/orgs/${orgId}/promotions/${candidateId}`),
+  approve: (orgId: string, candidateId: string) =>
+    fetchApi<NudgeFeatureEnvelope<{ report: EvidenceReport }>>(
+      `/orgs/${orgId}/promotions/${candidateId}/approve`,
+      { method: "POST" },
+    ),
+  reject: (orgId: string, candidateId: string, reason?: string) =>
+    fetchApi<NudgeFeatureEnvelope<{ rejected: boolean; reason: string }>>(
+      `/orgs/${orgId}/promotions/${candidateId}/reject${reason ? `?reason=${encodeURIComponent(reason)}` : ""}`,
+      { method: "POST" },
+    ),
+};
+
 // ── N03 Production eval (quality trend) ─────────────────────────────
 // Backend: src/eden/api/routes/production_eval.py — gated by the
 // ``production_eval_sampling_v1`` feature flag (403/404 when off).
@@ -3085,6 +3249,43 @@ export const productionEvalApi = {
     ),
 };
 (api as unknown as Record<string, unknown>).productionEvalApi = productionEvalApi;
+
+// ── FEAT-66: org-wide agent delegation graph ────────────────────────
+// Backend: FleetService.delegation_graph() (src/eden/fleet/service.py)
+// via GET /orgs/{org_id}/fleet/delegation — gated by the
+// ``fleet_health_v1`` feature flag (defaults on; 403/404 if disabled
+// for the workspace). Self-refreshing: the route rebuilds
+// ``agent_delegation_edges`` from a 7-day ``a2a_links`` aggregation on
+// every call, so no separate refresh action is needed client-side.
+export type DelegationGraphNode = {
+  id: string;
+  label: string;
+  delegation_trust: number;
+};
+
+export type DelegationGraphEdge = {
+  source: string;
+  target: string;
+  call_count_7d: number;
+  error_rate_7d: number;
+  delegation_trust: number;
+  blast_radius: number;
+};
+
+export type DelegationGraphEnvelope = {
+  status: string;
+  feature: string;
+  live?: boolean;
+  data: { nodes: DelegationGraphNode[]; edges: DelegationGraphEdge[] };
+};
+
+export const fleetApi = {
+  delegationGraph: (orgId: string) =>
+    fetchApi<DelegationGraphEnvelope>(`/orgs/${orgId}/fleet/delegation`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+};
+(api as unknown as Record<string, unknown>).fleetApi = fleetApi;
 
 // ── Intelligence: Time-Travel (Cat 20) ──────────────────────────────
 // Backend: src/eden/api/routes/intelligence_time_travel.py
@@ -3233,6 +3434,80 @@ export const timeTravelApi = {
     ),
 };
 (api as unknown as Record<string, unknown>).timeTravelApi = timeTravelApi;
+
+// ── Intelligence: RCA causal-chain navigation (Cat 2 / FEAT-65) ──────
+//
+// Per-trace root-cause chain: ``GET /orgs/{orgId}/intelligence/rca/{traceId}/chain``
+// (``eden.api.routes.intelligence_rca.rca_chain``). Walks BOTH the
+// within-trace ``parent_span_id`` tree (``causal_chain``) and the
+// cross-agent ``a2a_links`` delegation chain (``delegation_chain``) so a
+// failing child-agent span can be traced back through the delegation
+// chain to the parent agent's own (possibly also-failing) call.
+
+/** Envelope shape shared by every ``intelligence_gap_v0`` RCA route. */
+export type RcaEnvelope<T> = {
+  status: "ok" | "not_found" | string;
+  feature: string;
+  live: boolean;
+  data: T;
+};
+
+export type RcaDelegationInfo = {
+  parent_agent_span_id: string | null;
+  child_agent_trace_id: string | null;
+  parent_agent_id: string | null;
+  child_agent_id: string | null;
+  invocation_type: string | null;
+};
+
+export type RcaChainNode = {
+  step: number;
+  span_id: string | null;
+  parent_span_id: string | null;
+  event_type: string | null;
+  name: string | null;
+  outcome: string | null;
+  error_type: string | null;
+  implicated: boolean;
+  delegation: RcaDelegationInfo | null;
+};
+
+/** One hop up the cross-agent delegation chain (immediate-parent-first). */
+export type RcaDelegationHop = {
+  trace_id: string;
+  span_id: string | null;
+  parent_agent_id: string | null;
+  child_agent_id: string | null;
+  invocation_type: string | null;
+  response_status: string | null;
+  error_kind: string | null;
+  /** Did the parent agent's own delegating span also fail? */
+  delegating_span_failed: boolean;
+  delegating_span_error_type: string | null;
+};
+
+export type RcaChainData = {
+  trace_id: string;
+  category: string | null;
+  confidence: number | null;
+  signals: string[];
+  causal_chain: RcaChainNode[];
+  implicated_span_ids: string[];
+  root_cause_span_id: string | null;
+  span_count: number;
+  delegation_chain: RcaDelegationHop[];
+  cross_agent_root_cause: { trace_id: string; span_id: string | null };
+  /** Present on the ``not_found`` envelope. */
+  reason?: string;
+};
+
+export const rcaChainApi = {
+  chain: (orgId: string, traceId: string, signal?: AbortSignal) =>
+    fetchApi<RcaEnvelope<RcaChainData>>(
+      `/orgs/${orgId}/intelligence/rca/${encodeURIComponent(traceId)}/chain`,
+      signal ? { signal } : undefined,
+    ),
+};
 
 // ─── Onboarding wizard (June 2026) ────────────────────────────────
 
@@ -4516,6 +4791,12 @@ export interface SessionTimelineResponse {
   summary: SessionSummaryItem;
   turn_count: number;
   turns: SessionTurn[];
+  limit: number;
+  offset: number;
+}
+export interface SessionTimelineFilters {
+  limit?: number;
+  offset?: number;
 }
 export interface SessionListFilters {
   agent_id?: string;
@@ -4544,11 +4825,21 @@ const sessionsApi = {
       { headers: { "X-Org-Id": orgId } },
     );
   },
-  timeline: (orgId: string, sessionId: string) =>
-    fetchApi<SessionTimelineResponse>(
-      `/orgs/${orgId}/sessions/${encodeURIComponent(sessionId)}/timeline`,
+  timeline: (
+    orgId: string,
+    sessionId: string,
+    filters: SessionTimelineFilters = {},
+  ) => {
+    const q = new URLSearchParams();
+    if (typeof filters.limit === "number") q.set("limit", String(filters.limit));
+    if (typeof filters.offset === "number")
+      q.set("offset", String(filters.offset));
+    const qs = q.toString();
+    return fetchApi<SessionTimelineResponse>(
+      `/orgs/${orgId}/sessions/${encodeURIComponent(sessionId)}/timeline${qs ? `?${qs}` : ""}`,
       { headers: { "X-Org-Id": orgId } },
-    ),
+    );
+  },
   linkIssue: (orgId: string, sessionId: string, issueId: string) =>
     fetchApi<{ status: string; session_id: string; linked_issue_id: string }>(
       `/orgs/${orgId}/sessions/${encodeURIComponent(sessionId)}/link-issue`,

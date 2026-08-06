@@ -48,6 +48,80 @@ def _row(row: Any) -> dict[str, Any]:
     return d
 
 
+async def emit_event(
+    org_id: str,
+    plan_id: str,
+    event_type: str,
+    *,
+    actor: str | None = None,
+    detail: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """Append-only lifecycle event (FEAT-30 gap 3).
+
+    Best-effort, mirrors the ``automation_runs`` pattern (migration 102):
+    a system/agent transition should never fail because its audit trail
+    couldn't be written. Never raises.
+    """
+    client = await get_postgres_client()
+    if client is None:
+        return
+    try:
+        await client.execute(
+            """
+            INSERT INTO improvement_plan_events (
+                id, org_id, plan_id, event_type, actor, detail, payload
+            ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::jsonb)
+            """,
+            str(uuid.uuid4()),
+            org_id,
+            plan_id,
+            event_type,
+            actor,
+            detail,
+            json.dumps(payload or {}),
+        )
+    except Exception:
+        pass
+
+
+async def list_events(
+    org_id: str, plan_id: str, *, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Full append-only event trail for a plan, oldest first."""
+    client = await get_postgres_client()
+    if client is None:
+        return []
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id, event_type, actor, detail, payload, created_at
+            FROM improvement_plan_events
+            WHERE org_id = $1 AND plan_id = $2::uuid
+            ORDER BY created_at ASC
+            LIMIT $3
+            """,
+            org_id,
+            plan_id,
+            limit,
+        )
+    except Exception:
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows or []:
+        d = dict(r)
+        d["id"] = str(d["id"])
+        d["created_at"] = _ts(d.get("created_at"))
+        payload = d.get("payload")
+        if isinstance(payload, str):
+            try:
+                d["payload"] = json.loads(payload)
+            except Exception:
+                d["payload"] = {}
+        out.append(d)
+    return out
+
+
 async def create_plan(
     org_id: str,
     *,
@@ -113,6 +187,12 @@ async def create_plan(
         )
     except Exception:
         return None
+    await emit_event(
+        org_id,
+        plan_id,
+        "created",
+        payload={"plan_kind": plan_kind, "status": status, "source_ref": source_ref},
+    )
     return await get_plan(org_id, plan_id)
 
 
@@ -320,6 +400,9 @@ async def mark_approved(
         approved_by,
         evidence_patch,
     )
+    await emit_event(
+        org_id, plan_id, "approved", actor=approved_by, payload={"status": status}
+    )
     return await get_plan(org_id, plan_id)
 
 
@@ -353,6 +436,13 @@ async def mark_pr_opened(
         pr_number,
         github_branch,
         approved_by,
+    )
+    await emit_event(
+        org_id,
+        plan_id,
+        "pr_opened",
+        actor=approved_by,
+        payload={"pr_url": pr_url, "pr_number": pr_number, "github_branch": github_branch},
     )
     return await get_plan(org_id, plan_id)
 
@@ -446,6 +536,7 @@ async def mark_merged(
             await record_plan_outcome(org_id, plan, "merged")
         except Exception:
             pass
+        await emit_event(org_id, plan_id, "merged")
     return plan
 
 
@@ -495,6 +586,7 @@ async def mark_closed(
                 )
             except Exception:
                 pass
+        await emit_event(org_id, plan_id, "closed", detail=reason)
     return plan
 
 
@@ -523,6 +615,9 @@ async def reject_plan(
         rejected_by,
         rejection_reason,
     )
+    await emit_event(
+        org_id, plan_id, "rejected", actor=rejected_by, detail=rejection_reason
+    )
     return await get_plan(org_id, plan_id)
 
 
@@ -546,6 +641,12 @@ async def snooze_plan(
         org_id,
         plan_id,
         snoozed_until,
+    )
+    await emit_event(
+        org_id,
+        plan_id,
+        "snoozed",
+        payload={"snoozed_until": _ts(snoozed_until)},
     )
     return await get_plan(org_id, plan_id)
 

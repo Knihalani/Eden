@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { StatusChip } from "@/components/ds/primitives";
 import {
   keyStatusLabel,
@@ -12,7 +13,15 @@ import {
   type MemberStatus,
 } from "@/lab/fixtures/settings";
 
-export type SettingsMode = "workspace" | "keys" | "members" | "audit";
+export type SettingsMode =
+  | "workspace"
+  | "keys"
+  | "members"
+  | "audit"
+  | "roles"
+  | "sso"
+  | "pii"
+  | "scim";
 export type AuditTab = "events" | "packs";
 
 /** Map legacy ``?tab=`` bookmarks / command palette hrefs to modes. */
@@ -25,9 +34,14 @@ const LEGACY_TAB_TO_MODE: Record<string, SettingsMode> = {
   references: "workspace",
   mcp: "workspace",
   security: "workspace",
-  scim: "workspace",
+  // These now have dedicated ``/settings/{mode}`` screens rather than
+  // aliasing into the workspace overview — ``page.tsx`` redirects any
+  // ``?mode=`` value below to its real route.
+  scim: "scim",
   gateway: "workspace",
-  pii: "workspace",
+  pii: "pii",
+  roles: "roles",
+  sso: "sso",
   retention: "workspace",
   exports: "workspace",
   status: "workspace",
@@ -55,14 +69,50 @@ export function resolveSettingsModeParam(
 
 export function parseSettingsMode(mode: string | null): SettingsMode {
   if (mode === "api-keys") return "keys";
-  if (mode === "keys" || mode === "members" || mode === "audit") return mode;
+  if (
+    mode === "keys" ||
+    mode === "members" ||
+    mode === "audit" ||
+    mode === "roles" ||
+    mode === "sso" ||
+    mode === "pii" ||
+    mode === "scim"
+  ) {
+    return mode;
+  }
   return "workspace";
 }
+
+/** Modes that resolve to a dedicated ``/settings/{mode}`` route rather
+ *  than an in-page tab rendered by ``/settings/page.tsx``. */
+export const SETTINGS_ROUTE_MODES: readonly SettingsMode[] = [
+  "roles",
+  "sso",
+  "pii",
+  "scim",
+];
 
 export function parseAuditTab(tab: string | null): AuditTab {
   if (tab === "packs") return "packs";
   return "events";
 }
+
+const SETTINGS_TABS: ReadonlyArray<{
+  id: SettingsMode;
+  label: string;
+  /** Present for tabs that are real ``/settings/{id}`` routes instead of
+   *  an in-page mode switch on ``/settings``. */
+  href?: string;
+}> = [
+  { id: "workspace", label: "Overview" },
+  { id: "keys", label: "API keys" },
+  { id: "members", label: "Members" },
+  { id: "roles", label: "Roles", href: "/settings/roles" },
+  { id: "sso", label: "SSO", href: "/settings/sso" },
+  { id: "pii", label: "PII policy", href: "/settings/pii" },
+  { id: "scim", label: "SCIM", href: "/settings/scim" },
+  { id: "audit", label: "Audit" },
+];
 
 export function SettingsModeNav({
   value,
@@ -73,26 +123,31 @@ export function SettingsModeNav({
 }) {
   return (
     <div role="tablist" aria-label="Settings mode" className="flex gap-1">
-      {(
-        [
-          ["workspace", "Overview"],
-          ["keys", "API keys"],
-          ["members", "Members"],
-          ["audit", "Audit"],
-        ] as const
-      ).map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          aria-selected={value === id}
-          className="ds-tab"
-          data-tour-id={id === "keys" ? "api-keys" : undefined}
-          onClick={() => onChange(id)}
-        >
-          {label}
-        </button>
-      ))}
+      {SETTINGS_TABS.map(({ id, label, href }) =>
+        href ? (
+          <Link
+            key={id}
+            href={href}
+            role="tab"
+            aria-selected={value === id}
+            className="ds-tab"
+          >
+            {label}
+          </Link>
+        ) : (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={value === id}
+            className="ds-tab"
+            data-tour-id={id === "keys" ? "api-keys" : undefined}
+            onClick={() => onChange(id)}
+          >
+            {label}
+          </button>
+        )
+      )}
     </div>
   );
 }

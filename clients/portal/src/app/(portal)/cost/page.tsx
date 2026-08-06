@@ -19,12 +19,19 @@ import dynamic from "next/dynamic";
 import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
+import { usePermissions } from "@/hooks/use-permissions";
 import { queryKey, queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { budgetApi } from "@/lib/api/budget";
+import { api } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import {
+  EditBudgetDialog,
+  type BudgetFormValues,
+} from "@/lab/cost/edit-budget-dialog";
+import { useLabToast } from "@/lab/lab-toast";
 
 const costFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -91,11 +98,16 @@ function LabCostInner() {
 
   const { agentId, agent: scopeAgent, setAgentId } = useAgentScope();
   const patchQuery = useQueryPatch();
+  const { hasPermission } = usePermissions();
+  const { pushToast } = useLabToast();
 
   const [mode, setMode] = useState<CostMode>(() =>
     parseCostMode(paramMode, paramTab),
   );
   const [driverId, setDriverId] = useState("");
+  const [budgetDialogOpen, setBudgetDialogOpen] = useState(false);
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
 
   const drivers = driversQuery.data ?? [];
   const agents = agentsQuery.data ?? [];
@@ -119,6 +131,49 @@ function LabCostInner() {
       status: budgetStatusFromSpend(spentUsd, limitUsd),
     };
   }, [budgetQuery.data]);
+
+  const budgetFormInitial: BudgetFormValues = useMemo(() => {
+    const b = budgetQuery.data?.data?.budget;
+    return {
+      cost_soft_limit_usd: b?.cost_soft_limit_usd ?? 0,
+      cost_hard_limit_usd: b?.cost_hard_limit_usd ?? 0,
+      enforcement_enabled: b?.enforcement_enabled ?? true,
+      window: (b?.window as BudgetFormValues["window"]) ?? "monthly",
+      action_on_exceed:
+        (b?.action_on_exceed as BudgetFormValues["action_on_exceed"]) ??
+        "throttle",
+      alert_thresholds: b?.alert_thresholds ?? [50, 80, 100],
+    };
+  }, [budgetQuery.data]);
+
+  const canEditBudget = hasPermission("billing:edit");
+
+  const saveBudget = useCallback(
+    async (values: BudgetFormValues) => {
+      if (!orgId) return;
+      setBudgetSaving(true);
+      setBudgetSaveError(null);
+      try {
+        await api.upsertBudget(orgId, {
+          cost_soft_limit_usd: values.cost_soft_limit_usd,
+          cost_hard_limit_usd: values.cost_hard_limit_usd,
+          enforcement_enabled: values.enforcement_enabled,
+          window: values.window,
+          action_on_exceed: values.action_on_exceed,
+          threshold_alert_pct: Math.max(...values.alert_thresholds, 100),
+          alert_thresholds: values.alert_thresholds,
+        });
+        await budgetQuery.refetch();
+        setBudgetDialogOpen(false);
+        pushToast({ title: "Budget saved", tone: "ok" });
+      } catch (err) {
+        setBudgetSaveError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBudgetSaving(false);
+      }
+    },
+    [orgId, budgetQuery, pushToast],
+  );
 
   useEffect(() => {
     if (paramAgent && paramAgent !== agentId) {
@@ -309,6 +364,11 @@ function LabCostInner() {
           spendSourceLabel={primary.sourceLabel}
           onFilterAgent={filterAgent}
           onGoDrivers={() => changeMode("drivers")}
+          canEditBudget={canEditBudget}
+          onEditBudget={() => {
+            setBudgetSaveError(null);
+            setBudgetDialogOpen(true);
+          }}
         />
       ) : (
         <CostDriversView
@@ -318,6 +378,16 @@ function LabCostInner() {
           onSelect={selectDriver}
         />
       )}
+
+      {budgetDialogOpen ? (
+        <EditBudgetDialog
+          initial={budgetFormInitial}
+          busy={budgetSaving}
+          error={budgetSaveError}
+          onCancel={() => setBudgetDialogOpen(false)}
+          onSave={saveBudget}
+        />
+      ) : null}
     </div>
   );
 }

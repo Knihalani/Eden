@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { catalogAgents } from "@/lib/portal-catalog";
 import {
-  agentName,
   eventActionFamily,
   packsForAgent,
   type AuditEventFixture,
@@ -182,16 +181,12 @@ export function SettingsAuditView({
                             <VerifyChip verified={p.verified} />
                           ) : null}
                           <span className="type-ui min-w-0 flex-1 truncate text-[var(--text)]">
-                            {agentName(p.agentId)}
+                            {p.framework || "Evidence pack"}
                           </span>
                           <span className="type-meta">{p.at}</span>
                         </div>
                         <p className="type-meta">
-                          {p.rows} rows
-                          <span className="mx-1.5 text-[var(--text-faint)]">
-                            ·
-                          </span>
-                          {p.entryHash}
+                          {p.periodStart} – {p.periodEnd}
                         </p>
                       </button>
                     </li>
@@ -280,24 +275,14 @@ function PackDetail({ pack }: { pack: AuditPackFixture }) {
         ) : null}
       </div>
       <h2 className="type-ui mt-3 text-[var(--text)]">
-        {agentName(pack.agentId)}
+        {pack.framework || "Evidence pack"}
       </h2>
-      <p className="type-meta mt-1">
-        {pack.at}
-        <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-        {pack.actor}
-      </p>
+      <p className="type-meta mt-1">{pack.at}</p>
       <dl className="mt-4 space-y-3">
         <div>
-          <dt className="type-label">Hash</dt>
-          <dd className="type-mono mt-1 !text-[0.75rem] text-[var(--text-secondary)]">
-            {pack.entryHash}
-          </dd>
-        </div>
-        <div>
-          <dt className="type-label">Rows</dt>
+          <dt className="type-label">Period</dt>
           <dd className="type-body mt-1 text-[var(--text-secondary)]">
-            {pack.rows}
+            {pack.periodStart} – {pack.periodEnd}
           </dd>
         </div>
       </dl>
@@ -310,18 +295,6 @@ function PackDetail({ pack }: { pack: AuditPackFixture }) {
         <p className="type-meta w-full text-[var(--text-faint)]">
           Pack export and re-verify aren’t available yet.
         </p>
-        <Link
-          href={`/agents?id=${pack.agentId}`}
-          className="ds-btn ds-btn-primary ds-btn-sm"
-        >
-          Open agent
-        </Link>
-        <Link
-          href={`/traces?agent=${pack.agentId}`}
-          className="ds-btn ds-btn-ghost ds-btn-sm"
-        >
-          Traces
-        </Link>
       </div>
     </div>
   );

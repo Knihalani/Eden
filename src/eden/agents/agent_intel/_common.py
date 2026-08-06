@@ -292,7 +292,7 @@ async def _fetch_telemetry_rollup_for_agent(
                     percentile_cont(0.95) WITHIN GROUP
                         (ORDER BY duration_ms)::float8 AS p95
                   FROM telemetry_events
-                 WHERE org_id = $1
+                 WHERE tenant_id = $1
                    AND agent_id = $2
                    AND created_at > NOW() - $3::interval
                 """,
@@ -301,7 +301,13 @@ async def _fetch_telemetry_rollup_for_agent(
                 interval_sql,
             )
         except Exception as exc:
-            logger.debug("agent_intel: telemetry rollup failed: %s", exc)
+            logger.error(
+                "agent_intel: telemetry rollup failed (org_id=%s agent_id=%s): %s",
+                org_id,
+                agent_id,
+                exc,
+                exc_info=True,
+            )
             return []
 
     async def _cost_rows() -> list:
@@ -328,7 +334,7 @@ async def _fetch_telemetry_rollup_for_agent(
                 """
                 SELECT AVG(score)::float8 AS judge_avg
                   FROM judge_scores
-                 WHERE org_id = $1
+                 WHERE tenant_id = $1
                    AND agent_id = $2
                    AND created_at > NOW() - $3::interval
                 """,
@@ -337,7 +343,13 @@ async def _fetch_telemetry_rollup_for_agent(
                 interval_sql,
             )
         except Exception as exc:
-            logger.debug("agent_intel: judge rollup failed: %s", exc)
+            logger.error(
+                "agent_intel: judge rollup failed (org_id=%s agent_id=%s): %s",
+                org_id,
+                agent_id,
+                exc,
+                exc_info=True,
+            )
             return []
 
     rows, cost_rows, judge_rows = await asyncio.gather(

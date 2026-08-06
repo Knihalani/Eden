@@ -96,7 +96,14 @@ export function wrapAnthropic<T extends object>(
   return proxy;
 }
 
-function _instrumentedCreate(
+/**
+ * Exported (despite the leading underscore, kept for naming parity
+ * with the private helper it started as) so `prototype-instrument.ts`
+ * can drive the exact same instrumentation logic when patching
+ * `Anthropic.Messages.prototype.create` at the class level, instead
+ * of duplicating the streaming/non-streaming capture logic.
+ */
+export function _instrumentedCreate(
   originalCreate: (...args: any[]) => any,
   self: unknown,
   args: any[],

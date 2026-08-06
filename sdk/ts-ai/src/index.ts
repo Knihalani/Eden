@@ -48,6 +48,15 @@ export { wrapCohere, extractCohereUsage } from "./instrumentations/cohere.js";
 export { wrapMistral } from "./instrumentations/mistral.js";
 export { instrument, type InstrumentOptions, type InstrumentResult } from "./instrument.js";
 export {
+  patchAllPrototypes,
+  patchAllPrototypesAsync,
+  patchOpenAIPrototype,
+  patchOpenAIPrototypeESM,
+  patchAnthropicPrototype,
+  patchAnthropicPrototypeESM,
+  type PrototypePatchResult,
+} from "./prototype-instrument.js";
+export {
   installHttpCapture,
   uninstallHttpCapture,
   isHttpCaptureInstalled,

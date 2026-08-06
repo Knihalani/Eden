@@ -485,6 +485,41 @@ async def login(request: LoginRequest, response: Response, req: Request):
             detail="Invalid email or password",
         )
 
+    # FEAT-48 — an org admin can flip ``org_sso_settings.enforce_sso``
+    # (via POST /sso/providers/{id}/enforce in sso.py) to block password
+    # login for org members. That toggle previously wrote to the DB but
+    # was never read back here, so it silently did nothing. Block if the
+    # user belongs to *any* org with an enabled, SSO-enforced provider —
+    # checked before the lockout/bcrypt branches below so a correct vs.
+    # incorrect password guess can't be distinguished by which branch
+    # raises. This only matters when legacy password auth is live at all
+    # (see ``_legacy_password_auth_disabled`` above); Clerk-mode
+    # deployments already gate the whole endpoint.
+    sso_enforced = await client.fetchrow(
+        """
+        SELECT s.id AS provider_id, s.org_id
+          FROM org_members om
+          JOIN org_sso_settings s ON s.org_id = om.org_id
+         WHERE om.user_id = $1 AND s.enabled = TRUE AND s.enforce_sso = TRUE
+         LIMIT 1
+        """,
+        row["id"],
+    )
+    if sso_enforced:
+        verify_password(request.password, row["password_hash"])  # timing-equalise
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "sso_required",
+                "message": (
+                    "Password login is disabled for this organization. "
+                    "Sign in with SSO."
+                ),
+                "org_id": str(sso_enforced["org_id"]),
+                "provider_id": str(sso_enforced["provider_id"]),
+            },
+        )
+
     # Account lockout check — runs BEFORE bcrypt so a locked account
     # never reveals whether the password would have been valid.
     # The 423 response is identical in shape to 401, and we always

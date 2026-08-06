@@ -24,12 +24,51 @@ Usage::
 
 Never connects to production. SQLite DB is in-memory; Typesense target
 must be explicitly set via env vars.
+
+Facet A/B (``--facet-ab`` / ``--no-facet-ab``, default on, Typesense mode
+only):
+  Runs the SAME query mix twice against SearchService — once with
+  ``facet_by=None`` (the production default; faceting is opt-in) and once
+  with ``facet_by=SearchService.DEFAULT_FACET_FIELDS`` (the 5-field facet
+  set: agent_id, tool_names, outcome, event_type, model) — and reports
+  p50/p95/p99 for both so the faceting cost delta is a *measured* number,
+  not an assertion. Not modeled in SQLite-fallback mode (the ILIKE proxy
+  has no facet computation to toggle).
+
+gate_met automation:
+  ``gate_met`` in the emitted results JSON is computed programmatically as
+  ``baseline (no-facet) p95 <= --gate-ms`` (default 200.0, the F12 GA
+  target) from the samples this run actually measured — it is never a
+  hand-set literal. When running against the SQLite fallback proxy instead
+  of real Typesense, ``gate_met`` is deliberately written as ``null`` with
+  an explanatory note: the fallback proxy is a worst-case floor for the
+  PG-ILIKE path, not a Typesense measurement, so it cannot honestly attest
+  to the Typesense GA gate either way.
+
+Results are written to a JSON file under ``bench/results/`` (path printed
+at the end of the run, override with ``--out``).
+
+KNOWN OPEN ITEM (evidence-integrity, tracked in
+docs/specs/SOTA-PERF-COST-SCORECARD.md under F12): the full scale ladder
+(10k -> 100k -> 1M -> 10M) calls for ``docker compose up typesense
+postgres`` (see ``docker/docker-compose.yml``) and running this harness at
+each rung. As of the last check in this environment, the Docker CLI is
+present but the Docker daemon is not reachable
+(``docker info`` fails to connect to the daemon socket), so no rung of the
+ladder — including 10k/100k — could be executed here beyond what was
+already recorded in ``bench/results/f12-span-search-1m-typesense-20260804.json``
+(1.1M, real Typesense, run in an environment where the daemon *was*
+available). The 10M-on-staging rung remains a genuine, explicitly-flagged
+follow-up requiring staging infra this sandbox does not have. Do not
+backfill numbers for rungs that were not actually executed — re-run this
+script with real Typesense reachable and let it write its own JSON.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import random
 import sqlite3
@@ -38,6 +77,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 # ── Synthetic data vocabulary ──────────────────────────────────────
@@ -193,6 +233,8 @@ async def _typesense_search_one(
     service: Any,
     tenant_id: str,
     q: dict[str, Any],
+    *,
+    facet_by: tuple[str, ...] | None = None,
 ) -> float:
     t0 = time.perf_counter()
     await service.search(
@@ -200,6 +242,7 @@ async def _typesense_search_one(
         query=q.get("q", ""),
         agent_id=q.get("agent_id"),
         per_page=20,
+        facet_by=facet_by,
     )
     return (time.perf_counter() - t0) * 1000
 
@@ -237,6 +280,25 @@ def main() -> None:
     parser.add_argument(
         "--tenant", default="bench-org",
         help="Tenant ID for isolation filter (default bench-org)",
+    )
+    parser.add_argument(
+        "--facet-ab", dest="facet_ab", action="store_true", default=True,
+        help="Run the query mix twice (facet_by=None vs facet_by=DEFAULT_FACET_FIELDS) "
+             "to measure faceting's latency cost. Typesense mode only. Default: on.",
+    )
+    parser.add_argument(
+        "--no-facet-ab", dest="facet_ab", action="store_false",
+        help="Skip the facet on/off A/B pass.",
+    )
+    parser.add_argument(
+        "--gate-ms", type=float, default=200.0,
+        help="F12 GA gate threshold in ms for p95 (default 200.0). "
+             "gate_met in the output JSON is computed as baseline p95 <= this value.",
+    )
+    parser.add_argument(
+        "--out", default=None,
+        help="Path to write the results JSON. Default: auto-generated under "
+             "bench/results/ from mode + n + today's date.",
     )
     args = parser.parse_args()
 
@@ -282,6 +344,9 @@ def main() -> None:
     # ── 3. Run bench ──────────────────────────────────────────────
     queries = _build_query_mix(args.requests)
     samples: list[float] = []
+    samples_faceted: list[float] = []
+    facet_ab_ran = False
+    facet_fields: tuple[str, ...] | None = None
     mode: str
 
     if typesense_available:
@@ -289,6 +354,7 @@ def main() -> None:
         print(f"[BENCH] Mode: {mode}")
 
         async def _run_ts() -> None:
+            nonlocal facet_ab_ran, facet_fields
             from eden.observability.typesense_client import TypesenseClient
             from eden.observability.search_service import SearchService
             client = TypesenseClient(
@@ -309,11 +375,34 @@ def main() -> None:
             print("[WARM] 50 warm-up queries …")
             await _warm_typesense(service, tenant)
 
-            # Measure
-            print(f"[BENCH] Running {args.requests} queries …")
+            # Measure — baseline, faceting off (production default: opt-in).
+            print(f"[BENCH] Running {args.requests} queries (facet_by=None) …")
             for q in queries:
-                ms = await _typesense_search_one(service, tenant, q)
+                ms = await _typesense_search_one(service, tenant, q, facet_by=None)
                 samples.append(ms)
+
+            # Facet A/B — same query mix, faceting on, to isolate its cost.
+            if args.facet_ab:
+                facet_fields = SearchService.DEFAULT_FACET_FIELDS
+                print(
+                    f"[BENCH] Running {args.requests} queries "
+                    f"(facet_by={','.join(facet_fields)}) …"
+                )
+                # Re-warm with facets on so this pass isn't penalized by
+                # cold caches the first pass already paid for.
+                for _ in range(2):
+                    for qw in ["python", "error", "tool", "bash", "timeout"]:
+                        await service.search(
+                            tenant_id=tenant, query=qw, per_page=1,
+                            facet_by=facet_fields,
+                        )
+                for q in queries:
+                    ms = await _typesense_search_one(
+                        service, tenant, q, facet_by=facet_fields,
+                    )
+                    samples_faceted.append(ms)
+                facet_ab_ran = True
+
             await client.close()
 
         asyncio.run(_run_ts())
@@ -349,6 +438,29 @@ def main() -> None:
     p99 = _pct(samples, 99)
     p_max = round(max(samples), 2)
 
+    # gate_met is computed HERE from the samples this run actually measured
+    # (baseline, facet_by=None) — never hand-set after the fact. A SQLite
+    # fallback run cannot attest to the Typesense GA gate either way, so it
+    # is reported as ``None`` (null in JSON) rather than a fabricated
+    # pass/fail.
+    gate_met: bool | None
+    gate_note: str
+    if typesense_available:
+        gate_met = p95 <= args.gate_ms
+        gate_note = (
+            f"Computed as baseline p95 ({p95:.2f}ms) <= gate ({args.gate_ms:.0f}ms) "
+            f"against real Typesense at {ts_host}:{ts_port}, n={args.n:,} docs."
+        )
+        status_label = ("PASS" if gate_met else "FAIL") + f" (p95={p95:.1f}ms, gate={args.gate_ms:.0f}ms)"
+    else:
+        gate_met = None
+        gate_note = (
+            "SQLite fallback proxy (no real Typesense reachable) — a worst-case "
+            "floor for the PG-ILIKE path, not a Typesense measurement. gate_met "
+            "is intentionally null."
+        )
+        status_label = "N/A — SQLite fallback, not a Typesense measurement"
+
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
 ║  F12 Span Search — Bench Results                        ║
@@ -362,10 +474,36 @@ def main() -> None:
 ║  p99       : {p99:<38.2f} ms ║
 ║  max       : {p_max:<38.2f} ms ║
 ╠══════════════════════════════════════════════════════════╣
-║  Gate (GA) : p95 < 200 ms on 10M-doc Typesense         ║
-║  Status    : {"BLOCKED — staging Typesense not available":<42} ║
+║  Gate (GA) : p95 < {args.gate_ms:<39.0f} ms ║
+║  Status    : {status_label:<42} ║
 ╚══════════════════════════════════════════════════════════╝
 """)
+
+    # ── Facet A/B report ────────────────────────────────────────────
+    facet_p50 = facet_p95 = facet_p99 = None
+    facet_delta_p95 = None
+    if facet_ab_ran:
+        facet_p50 = _pct(samples_faceted, 50)
+        facet_p95 = _pct(samples_faceted, 95)
+        facet_p99 = _pct(samples_faceted, 99)
+        facet_delta_p95 = round(facet_p95 - p95, 2)
+        assert facet_fields is not None
+        print(
+            "\n"
+            "=== Facet A/B: faceting cost isolation "
+            f"(fields: {','.join(facet_fields)}) ===\n"
+            f"              p50       p95       p99\n"
+            f"  facet OFF : {p50:>7.2f}   {p95:>7.2f}   {p99:>7.2f}   ms\n"
+            f"  facet ON  : {facet_p50:>7.2f}   {facet_p95:>7.2f}   {facet_p99:>7.2f}   ms\n"
+            f"  Δ p95 (ON - OFF): {facet_delta_p95:+.2f} ms\n"
+        )
+    elif typesense_available:
+        print("[FACET-AB] Skipped (--no-facet-ab).\n")
+    else:
+        print(
+            "[FACET-AB] Not applicable in SQLite fallback mode — the ILIKE "
+            "proxy has no facet computation to toggle.\n"
+        )
 
     if not typesense_available:
         print(
@@ -384,6 +522,63 @@ def main() -> None:
             "    TYPESENSE_API_KEY=<key> \\\n"
             "      python3.12 scripts/bench_f12_span_search.py --n=10000000 --requests=500\n"
         )
+
+    # ── 5. Write results JSON (gate_met/facet numbers are programmatic,
+    #      never hand-edited after this point) ────────────────────────
+    recorded_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    results: dict[str, Any] = {
+        "bench": "f12-span-search",
+        "recorded_at": recorded_at,
+        "target_gate": f"p95 < {args.gate_ms:.0f}ms",
+        "mode": mode,
+        "typesense_reachable": typesense_available,
+        "corpus": {"num_documents": args.n, "tenant": tenant},
+        "requests": args.requests,
+        "baseline_no_facet": {"p50": p50, "p95": p95, "p99": p99, "max": p_max},
+        "gate_met": gate_met,
+        "gate_note": gate_note,
+    }
+    if facet_ab_ran:
+        assert facet_fields is not None
+        results["facet_ab"] = {
+            "facet_fields": list(facet_fields),
+            "facet_off": {"p50": p50, "p95": p95, "p99": p99},
+            "facet_on": {"p50": facet_p50, "p95": facet_p95, "p99": facet_p99},
+            "delta_p95_ms": facet_delta_p95,
+        }
+    else:
+        results["facet_ab"] = None
+        results["facet_ab_note"] = (
+            "Skipped (--no-facet-ab)." if typesense_available else
+            "Not applicable — SQLite fallback mode has no facet computation to toggle."
+        )
+
+    honest_caveats: list[str] = []
+    if not typesense_available:
+        honest_caveats.append(
+            "SQLite LIKE-query proxy, NOT Typesense. Worst-case floor for the "
+            "PG-ILIKE fallback path only; gate_met is null because this run "
+            "cannot attest to the Typesense GA gate."
+        )
+    if args.n < 10_000_000:
+        honest_caveats.append(
+            f"Corpus is {args.n:,} docs, below the 10M GA-gate target corpus size "
+            "used by the full scale ladder (10k -> 100k -> 1M -> 10M). This "
+            "result covers only this rung."
+        )
+    results["honest_caveats"] = honest_caveats
+
+    if args.out:
+        out_path = Path(args.out)
+    else:
+        mode_label = "typesense" if typesense_available else "sqlite-fallback"
+        out_path = Path("bench/results") / (
+            f"f12-span-search-{args.n}-{mode_label}-"
+            f"{datetime.now(timezone.utc).strftime('%Y%m%d')}.json"
+        )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(results, indent=2) + "\n")
+    print(f"[OUT] Wrote results JSON to {out_path}")
 
 
 if __name__ == "__main__":

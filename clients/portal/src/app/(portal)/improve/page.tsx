@@ -29,6 +29,7 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
+import { NudgesPromotionsPanel } from "@/components/improve/nudges-promotions-panel";
 
 const improveFallback = (
   <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
@@ -265,7 +266,11 @@ function LabImproveInner() {
   );
 
   const setStatus = useCallback(
-    async (id: string, status: ImprovePlanFixture["status"]) => {
+    async (
+      id: string,
+      status: ImprovePlanFixture["status"],
+      reason?: string,
+    ) => {
       if (!orgId) return;
 
       if (status === "done") {
@@ -297,7 +302,7 @@ function LabImproveInner() {
 
       if (status === "blocked") {
         try {
-          await improvePlansApi.rejectPlan(orgId, id);
+          await improvePlansApi.rejectPlan(orgId, id, reason);
           await queryClient.invalidateQueries({
             queryKey: queryKeys.portal.improvePlans(orgId),
           });
@@ -431,14 +436,17 @@ function LabImproveInner() {
       ) : null}
 
       {mode === "queue" ? (
-        <ImproveQueueView
-          agentId={agentId}
-          plans={allPlans}
-          queueItems={queueItems}
-          selectedId={planId}
-          onSelect={setPlanId}
-          onOpenPlan={openPlan}
-        />
+        <>
+          <ImproveQueueView
+            agentId={agentId}
+            plans={allPlans}
+            queueItems={queueItems}
+            selectedId={planId}
+            onSelect={setPlanId}
+            onOpenPlan={openPlan}
+          />
+          <NudgesPromotionsPanel orgId={orgId} agentId={agentId} />
+        </>
       ) : (
         <>
           <ImprovePlanView

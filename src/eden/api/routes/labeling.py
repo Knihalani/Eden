@@ -8,7 +8,7 @@ Six routes:
   * ``GET  /orgs/{org}/labeling/queue/{user}`` — pop the next batch
   * ``POST /orgs/{org}/labeling/annotate`` — submit a label
   * ``POST /orgs/{org}/labeling/skip`` — mark an item skipped
-  * ``GET  /orgs/{org}/labeling/iia`` — inter-annotator agreement
+  * ``GET  /orgs/{org}/labeling/agreement`` — inter-annotator agreement
   * ``GET  /orgs/{org}/labeling/export`` — JSONL of approved labels
 """
 
@@ -346,11 +346,11 @@ async def skip(
     return {"skipped": True}
 
 @router.get(
-    "/iia",
+    "/agreement",
     response_model=IIAResponse,
     summary="Compute inter-annotator agreement (Cohen's kappa + Krippendorff's alpha)",
 )
-async def compute_iia(
+async def compute_agreement(
     org_id: str = Depends(require_path_org_access),
     item_ids: list[str] | None = Query(default=None),
 ) -> IIAResponse:
@@ -443,32 +443,40 @@ async def queue_board(
     board = await LabelingQueueService().kanban_board(org_id, queue_id, limit=limit)
     return {"queue_id": queue_id, "board": board}
 
-@router.get("/queues/{queue_id}/iaa")
-async def queue_iaa(
+@router.get("/queues/{queue_id}/agreement")
+async def queue_agreement(
     org_id: str = Depends(require_path_org_access),
     queue_id: str = Path(...),
 ) -> dict[str, Any]:
-    """Cohen's κ from dual labels in item payload when present."""
-    from eden.evaluation.iaa import iaa_from_annotation_pairs
+    """Inter-annotator agreement for a queue's items.
+
+    Uses the real IAA engine (:meth:`LabelingService.compute_iaa`,
+    backed by the ``annotations`` table) rather than reading
+    ``label_a``/``annotator_1``/``label_b``/``annotator_2`` keys from
+    the kanban item's JSON payload — nothing ever writes those keys,
+    so that path always reported zeros.
+    """
     from eden.evaluation.labeling_queues import LabelingQueueService
 
     board = await LabelingQueueService().kanban_board(org_id, queue_id)
-    pairs: list[tuple[str, str]] = []
-    for col_items in board.values():
-        for item in col_items:
-            payload = item.get("payload") or {}
-            if isinstance(payload, str):
-                import json
-
-                try:
-                    payload = json.loads(payload)
-                except Exception:
-                    payload = {}
-            a = payload.get("label_a") or payload.get("annotator_1")
-            b = payload.get("label_b") or payload.get("annotator_2")
-            if a and b:
-                pairs.append((str(a), str(b)))
-    return {"queue_id": queue_id, "iaa": iaa_from_annotation_pairs(pairs)}
+    item_ids = [
+        str(item["id"])
+        for col_items in board.values()
+        for item in col_items
+        if item.get("id")
+    ]
+    pg = await get_postgres_client()
+    svc = LabelingService(pg, user_skills=_user_skills)
+    report = await svc.compute_iaa(org_id=org_id, item_ids=item_ids)
+    d = report.to_dict()
+    return {
+        "queue_id": queue_id,
+        "iaa": {
+            "kappa": d["kappa"],
+            "n": d["annotation_count"],
+            "agreement_rate": d["overall_agreement"],
+        },
+    }
 
 @router.post("/queues/{queue_id}/move")
 async def move_queue_item(
