@@ -190,7 +190,11 @@ Each request:
    memberships.
 2. Fans out to secondary stores, reporting **per-store status
    honestly** instead of assuming success:
-   - `redis` — real key deletion by user-scoped pattern.
+   - `redis` — **best-effort, currently ineffective**: scans for keys
+     matching a user-scoped pattern and deletes any matches, but no
+     cache writer in the codebase currently writes keys in that shape,
+     so in practice the scan matches zero keys and no real cache data
+     is erased today. Tracked for a real fix separately.
    - `qdrant` — real point deletion where the client supports it.
    - `clickhouse` — **tenant-scoped only** today (no `user_id` column
      on the analytics table), not a true per-user erasure.
