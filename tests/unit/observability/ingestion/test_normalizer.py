@@ -47,6 +47,11 @@ def test_normalize_timestamp_naive_datetime_assumes_utc():
     assert out.endswith("+00:00")
 
 
+def test_normalize_timestamp_offsetless_iso_string_assumes_utc():
+    out = _normalize_timestamp("2026-08-04T10:00:00")
+    assert out == "2026-08-04T10:00:00+00:00"
+
+
 def test_normalize_timestamp_none_uses_now():
     out = _normalize_timestamp(None)
     # ISO 8601 with timezone offset.

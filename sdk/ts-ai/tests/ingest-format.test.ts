@@ -103,6 +103,8 @@ describe("ingest remap smoke (no 415)", () => {
     const te = report.checks.find((c) => c.name === "testEvent");
     expect(te?.ok).toBe(false);
     expect(te?.message).toContain("2xx");
+    expect(te?.detail?.failedDelta).toBe(1);
+    expect(te?.detail?.sentDelta).toBe(0);
   });
 
   it("doctor testEvent ok on HTTP 2xx", async () => {
@@ -116,5 +118,7 @@ describe("ingest remap smoke (no 415)", () => {
     const te = report.checks.find((c) => c.name === "testEvent");
     expect(te?.ok).toBe(true);
     expect(te?.message).toContain("HTTP 2xx");
+    expect(te?.detail?.sentDelta).toBe(1);
+    expect(te?.detail?.failedDelta).toBe(0);
   });
 });

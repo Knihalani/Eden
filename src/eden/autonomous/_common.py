@@ -185,6 +185,8 @@ async def _call_llm(
     slot: str = DEFAULT_LLM_SLOT,
     system_prompt: str | None = None,
     max_tokens: int = 600,
+    org_id: str | None = None,
+    feature: str = "unknown",
 ) -> str | None:
     """Best-effort LLM call. Returns the response ``content``
     string on success, or ``None`` on any failure (LLM down,
@@ -208,6 +210,8 @@ async def _call_llm(
             max_tokens=max_tokens,
             output_type="json",
             requires_quality_check=False,
+            org_id=org_id,
+            feature=feature,
         )
         content = getattr(resp, "content", None) or ""
         if isinstance(content, str):

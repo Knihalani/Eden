@@ -27,8 +27,8 @@ async def test_probe_gateway_health():
 @pytest.mark.asyncio
 async def test_probe_traces_list_queries_telemetry_events(monkeypatch):
     """probe_traces_list must hit telemetry_events (not missing telemetry_traces)."""
-    from eden.self_obs import synthetics as syn
     import eden.storage.postgres as pg_mod
+    from eden.self_obs import synthetics as syn
 
     captured: dict[str, object] = {}
 
@@ -55,8 +55,8 @@ async def test_probe_traces_list_queries_telemetry_events(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_probe_traces_list_no_postgres(monkeypatch):
-    from eden.self_obs import synthetics as syn
     import eden.storage.postgres as pg_mod
+    from eden.self_obs import synthetics as syn
 
     async def _none():
         return None
@@ -82,8 +82,8 @@ async def test_run_golden_probes_reuses_shared_results_without_recalling_probe(
     the scheduled path never write ``sign_in_home`` / ``gateway_health``
     rows for any org (the O(0)-writes regression this guards against).
     """
-    from eden.self_obs import synthetics as syn
     import eden.storage.postgres as pg_mod
+    from eden.self_obs import synthetics as syn
 
     class _Client:
         async def fetchval(self, query: str, *args: object) -> int:
@@ -133,8 +133,8 @@ async def test_run_golden_probes_shares_issue_count_between_list_and_detect(
     monkeypatch,
 ):
     """issues_list + detect_to_issue must share one agent_issues COUNT."""
-    from eden.self_obs import synthetics as syn
     import eden.storage.postgres as pg_mod
+    from eden.self_obs import synthetics as syn
 
     fetches: list[str] = []
 

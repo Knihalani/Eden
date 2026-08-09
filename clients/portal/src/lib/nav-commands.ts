@@ -27,6 +27,7 @@ import {
   Activity,
   Shield,
   Tag,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -63,6 +64,7 @@ const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   traces: GitBranch,
   issues: AlertTriangle,
   signals: Activity,
+  topics: Layers,
   evals: FlaskConical,
   playgrounds: Play,
   improve: Sparkles,
@@ -89,9 +91,9 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/signals?create=1",
-    label: "Create detector",
-    description: "Open Detectors to define a new threshold or signal rule.",
+    href: "/signals?mode=nl-alerts&create=1",
+    label: "Create alert rule",
+    description: "Open Alert rules to describe a monitored condition in plain English.",
     group: "Actions",
     icon: Plus,
     kind: "action",
@@ -105,7 +107,7 @@ export const PALETTE_ACTIONS: NavCommand[] = [
     kind: "action",
   },
   {
-    href: "/evals?mode=playground",
+    href: "/playgrounds",
     label: "Open playground",
     description: "Author and test prompts against production traces.",
     group: "Actions",

@@ -24,7 +24,11 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-from eden.insights.drift_baseline_worker import DriftBaselineWorker, _org_agent_key
+from eden.insights.drift_baseline_worker import (
+    _DRIFT_BASELINE_CONCURRENCY,
+    DriftBaselineWorker,
+    _org_agent_key,
+)
 from eden.insights.drift_reports import DRIFT_DIMENSIONS, DriftReportBuilder
 
 
@@ -206,3 +210,30 @@ async def test_poison_pair_does_not_block_remaining_pairs_in_same_batch():
     # poison pair failing first.
     assert upsert.await_count == len(DRIFT_DIMENSIONS)
     assert result["updated"] == len(DRIFT_DIMENSIONS)
+
+
+async def test_dimension_pass_uses_bounded_gather_with_concurrency_cap():
+    """OPT-25: per-pair dimension histograms overlap under bounded_gather."""
+    pairs = [("org-a", "agent-a")]
+    pg = _FakePg(pairs)
+    worker = DriftBaselineWorker()
+    worker._histogram = AsyncMock(return_value=[1.0] * 10)
+    gather_limits: list[int] = []
+
+    async def _fake_gather(*aws, limit=None, return_exceptions=False):
+        gather_limits.append(limit)
+        return [await aw for aw in aws]
+
+    with (
+        _patched_client(pg),
+        patch.object(DriftReportBuilder, "upsert_baseline", AsyncMock()) as upsert,
+        patch(
+            "eden.async_tasks.bounded_gather",
+            side_effect=_fake_gather,
+        ),
+    ):
+        await worker.run_once(limit=10)
+
+    # Outer pair batch + inner dimension batch both use the same cap.
+    assert gather_limits == [_DRIFT_BASELINE_CONCURRENCY, _DRIFT_BASELINE_CONCURRENCY]
+    assert upsert.await_count == len(DRIFT_DIMENSIONS)

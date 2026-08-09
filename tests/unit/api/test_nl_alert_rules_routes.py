@@ -114,6 +114,7 @@ async def test_create_nl_alert_rule_saves_and_compiles(monkeypatch):
     assert kwargs["name"] == "High error rate"
     assert kwargs["compiled_eql"] == "SELECT * FROM traces WHERE error_rate > 0.05"
     assert kwargs["channels"] == {"email": True, "slack": False}
+    assert kwargs["severity"] == "warning"
 
     compile_mock.assert_awaited_once()
     _, compile_kwargs = compile_mock.call_args

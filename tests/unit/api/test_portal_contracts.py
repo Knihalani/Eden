@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.routing import APIRoute
 
 
@@ -221,6 +222,25 @@ def test_humanize_io_preview_chat_completion() -> None:
     assert _humanize_io_preview(resp) == "LLM observability watches agent runs."
 
 
+def test_tree_node_to_step_maps_agent_id() -> None:
+    from eden.api.routes.portal import _tree_node_to_step
+
+    node = {
+        "span_id": "span_agent",
+        "parent_span_id": None,
+        "name": "tool.search",
+        "event_type": "tool_call",
+        "duration_ms": 10,
+        "metrics": {},
+        "attributes": {},
+        "payload": {},
+        "outcome": "success",
+        "agent_id": "researcher",
+    }
+    step = _tree_node_to_step(node)
+    assert step.agentId == "researcher"
+
+
 def test_tree_node_to_step_maps_llm_span() -> None:
     from datetime import UTC, datetime
 
@@ -317,6 +337,62 @@ def test_trace_signal_summary_includes_error_detail() -> None:
     assert "ZeroDivisionError" in summary.body
 
 
+def test_tree_node_to_step_maps_a2a_handoff() -> None:
+    """FEAT-64/100: nested ``a2a`` sub-document surfaces as labeled handoff."""
+    from eden.api.routes.portal import _tree_node_to_step
+
+    node = {
+        "span_id": "span_handoff",
+        "parent_span_id": "span_parent",
+        "name": "invoke_agent",
+        "event_type": "invoke_agent",
+        "duration_ms": 120,
+        "metrics": {},
+        "attributes": {
+            "parent_agent_span_id": "span_parent",
+            "child_agent_trace_id": "trace-child-1",
+            "a2a": {
+                "invocation_type": "a2a.send_message",
+                "parent_agent_id": "planner",
+                "child_agent_id": "researcher",
+                "response_status": "ok",
+            },
+        },
+        "payload": {},
+        "outcome": "success",
+    }
+    step = _tree_node_to_step(node)
+
+    assert step.kind == "handoff"
+    assert step.title == "planner → researcher (a2a.send_message)"
+    assert step.agentId == "researcher"
+    assert step.outputPreview == "status: ok"
+    assert step.attributes is not None
+    assert step.attributes["a2a.invocation_type"] == "a2a.send_message"
+    assert step.attributes["a2a.parent_agent_id"] == "planner"
+    assert step.attributes["a2a.child_agent_id"] == "researcher"
+    assert step.attributes["a2a.response_status"] == "ok"
+    assert step.attributes["parent_agent_span_id"] == "span_parent"
+    assert step.attributes["child_agent_trace_id"] == "trace-child-1"
+
+
+def test_step_kind_maps_invoke_agent_without_a2a() -> None:
+    from eden.api.routes.portal import _step_kind
+
+    assert _step_kind("invoke_agent", "delegate") == "agent"
+    assert _step_kind("agent_run", "agent.run") == "agent"
+    assert _step_kind("task", "run") == "task"
+
+
+def test_transcript_kind_includes_agent_and_handoff() -> None:
+    from eden.api.portal_contracts import TranscriptKind, TranscriptStep
+
+    assert "agent" in TranscriptKind.__args__
+    assert "handoff" in TranscriptKind.__args__
+    step = TranscriptStep(id="s1", kind="handoff", title="planner → researcher")
+    assert step.kind == "handoff"
+
+
 def test_flatten_tree_preserves_depth_first_order() -> None:
     from eden.api.routes.portal import _flatten_tree
 
@@ -344,3 +420,179 @@ def test_flatten_tree_preserves_depth_first_order() -> None:
 
     assert [s.id for s in steps] == ["root", "child"]
     assert steps[1].parentId == "root"
+
+
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        ("error", ("error", "error")),
+        ("failed", ("error", "error")),
+        ("crash", ("error", "error")),
+        ("timeout", ("error", "error")),
+        ("warn", ("ok", "warn")),
+        ("success", ("ok", "none")),
+        (None, ("ok", "none")),
+    ],
+)
+def test_map_trace_outcome_uses_error_outcomes_set(outcome, expected) -> None:
+    """BUG-2: timeout/crash must map to error like other failure outcomes."""
+    from eden.api.routes.portal import _map_trace_outcome
+
+    assert _map_trace_outcome(outcome) == expected
+
+
+# ── BUG-9 / FEAT-11 — issue status + sort contracts ──────────────
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("open", "open"),
+        ("ignored", "ignored"),
+        ("resolved", "resolved"),
+        ("triaged", "acknowledged"),
+        ("escalated", "acknowledged"),
+        (None, "open"),
+    ],
+)
+def test_map_issue_status_preserves_ignored(raw, expected) -> None:
+    """BUG-9: dismissed (ignored) issues must not collapse into resolved."""
+    from eden.api.routes.portal import _map_issue_status
+
+    assert _map_issue_status(raw) == expected
+
+
+def test_issue_card_ignored_status_validates() -> None:
+    from eden.api.portal_contracts import IssueCard
+
+    card = IssueCard(
+        id="iss_ignored",
+        title="False positive",
+        status="ignored",
+    )
+    assert card.status == "ignored"
+
+
+@pytest.mark.asyncio
+async def test_list_portal_issues_passes_sort_rank() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from eden.api.routes import portal as portal_mod
+
+    list_mock = AsyncMock(return_value=[])
+    with (
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=None),
+        ),
+        patch("eden.api.routes.portal._require_pg", AsyncMock()),
+        patch("eden.issues.repo.IssuesRepo.list_issues", list_mock),
+        patch(
+            "eden.api.routes.portal._resolve_stumble_refs",
+            AsyncMock(return_value=({}, {}, {})),
+        ),
+        patch(
+            "eden.api.routes.portal._nl_signal_ids_for_defs",
+            AsyncMock(return_value={}),
+        ),
+    ):
+        await portal_mod.list_portal_issues(
+            org_id="org_1", limit=50, offset=0, sort="rank", _user={"sub": "u1"}
+        )
+
+    list_mock.assert_awaited_once_with("org_1", limit=50, offset=0, sort="rank")
+
+
+@pytest.mark.asyncio
+async def test_list_portal_issues_rejects_invalid_sort() -> None:
+    from eden.api.routes import portal as portal_mod
+
+    with pytest.raises(Exception) as ei:
+        await portal_mod.list_portal_issues(
+            org_id="org_1",
+            limit=50,
+            offset=0,
+            sort="bogus",
+            _user={"sub": "u1"},
+        )
+    assert getattr(ei.value, "status_code", None) == 400
+
+
+@pytest.mark.asyncio
+async def test_agent_issues_list_defaults_sort_rank() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from eden.api.routes import agent_issues as mod
+
+    list_mock = AsyncMock(return_value=[])
+    with (
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=object()),
+        ),
+        patch.object(mod._repo, "list_issues", list_mock),
+    ):
+        await mod.list_issues(
+            org_id="org_1",
+            status=None,
+            severity=None,
+            agent_id=None,
+            sort="rank",
+            limit=50,
+            offset=0,
+        )
+
+    list_mock.assert_awaited_once_with(
+        "org_1",
+        status=None,
+        severity=None,
+        agent_id=None,
+        sort="rank",
+        limit=50,
+        offset=0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_issues_list_passes_sort_rank() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from eden.api.routes import agent_issues as mod
+
+    list_mock = AsyncMock(return_value=[])
+    with (
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=object()),
+        ),
+        patch.object(mod._repo, "list_issues", list_mock),
+    ):
+        result = await mod.list_issues(
+            org_id="org_1",
+            status=None,
+            severity=None,
+            agent_id=None,
+            sort="rank",
+            limit=50,
+            offset=0,
+        )
+
+    list_mock.assert_awaited_once_with(
+        "org_1",
+        status=None,
+        severity=None,
+        agent_id=None,
+        sort="rank",
+        limit=50,
+        offset=0,
+    )
+    assert result["data"]["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_agent_issues_list_rejects_invalid_sort() -> None:
+    from eden.api.routes import agent_issues as mod
+
+    with pytest.raises(Exception) as ei:
+        await mod.list_issues(org_id="org_1", sort="bogus", limit=50, offset=0)
+    assert getattr(ei.value, "status_code", None) == 400

@@ -16,7 +16,6 @@ from eden.improvement.auto_merge import (
 )
 from eden.providers import PullRequestInfo
 
-
 _SMALL_DIFF = """--- a/foo.py
 +++ b/foo.py
 @@ -1 +1 @@
@@ -26,12 +25,12 @@ _SMALL_DIFF = """--- a/foo.py
 
 
 def _policy(**kwargs: Any) -> AutonomousMaintenancePolicy:
-    base = dict(
-        org_id="org-1",
-        auto_code_patch_merge=True,
-        compliance_profile="standard",
-        auto_merge_max_per_week=2,
-    )
+    base = {
+        "org_id": "org-1",
+        "auto_code_patch_merge": True,
+        "compliance_profile": "standard",
+        "auto_merge_max_per_week": 2,
+    }
     base.update(kwargs)
     return AutonomousMaintenancePolicy(**base)  # type: ignore[arg-type]
 

@@ -15,8 +15,10 @@ const resolveMock = vi.fn(
 );
 const issuesListMock = vi.fn();
 
+const searchParamsMock = vi.fn(() => new URLSearchParams({ id: "iss_1" }));
+
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams({ id: "iss_1" }),
+  useSearchParams: () => searchParamsMock(),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
   usePathname: () => "/issues",
 }));
@@ -87,6 +89,14 @@ const OPEN_ISSUE: IssueFixture = {
   impact: "Checkout flow stalls for affected users.",
   suggestedFix: "Increase the inventory tool timeout.",
   tags: ["checkout"],
+  rankScore: 42.5,
+};
+
+const HIGH_RANK_ISSUE: IssueFixture = {
+  ...OPEN_ISSUE,
+  id: "iss_2",
+  title: "Lower priority issue",
+  rankScore: 2.1,
 };
 
 describe("Issues board dismiss action (BUG-9)", () => {
@@ -94,6 +104,7 @@ describe("Issues board dismiss action (BUG-9)", () => {
     resolveMock.mockClear();
     issuesListMock.mockReset();
     issuesListMock.mockResolvedValue([OPEN_ISSUE]);
+    searchParamsMock.mockReturnValue(new URLSearchParams({ id: "iss_1" }));
   });
 
   it("shows a Dismiss action for an open issue and resolves it with status=ignored", async () => {
@@ -106,5 +117,22 @@ describe("Issues board dismiss action (BUG-9)", () => {
     await waitFor(() =>
       expect(resolveMock).toHaveBeenCalledWith("org_1", "iss_1", "ignored"),
     );
+  });
+
+  it("shows rank tier badges and Top priority filter when sort=rank", async () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams());
+    issuesListMock.mockResolvedValue([OPEN_ISSUE, HIGH_RANK_ISSUE]);
+    vi.resetModules();
+    const { default: LabIssuesPage } = await import("./issues-client");
+    render(withClient(<LabIssuesPage />));
+
+    await screen.findByText("Sort");
+    const topFilter = await screen.findByRole("tab", { name: /Top priority/i });
+    fireEvent.click(topFilter);
+
+    await waitFor(() => {
+      expect(screen.getByText("Tool call timeout spike")).toBeTruthy();
+      expect(screen.queryByText("Lower priority issue")).toBeNull();
+    });
   });
 });

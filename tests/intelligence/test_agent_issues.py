@@ -377,6 +377,7 @@ def test_resolve_rejects_invalid_status() -> None:
             json={"status": "bogus-typo"},
         )
         assert r.status_code == 400
+        assert "Allowed values" in r.json()["detail"]
         # The issue must not have been mutated.
         row = next(iter(pg.issues.values()))
         assert row["status"] == "open"
@@ -671,6 +672,51 @@ def test_resolve_acknowledged_persists_as_triaged() -> None:
         # value, not the raw (CHECK-constraint-illegal) "acknowledged".
         row = next(iter(pg.issues.values()))
         assert row["status"] == "triaged"
+
+
+def test_resolve_sets_resolved_at_only_for_resolved() -> None:
+    """BUG-3/4: ``set_resolved_at`` must be True only when status is resolved."""
+    import eden.api.routes.agent_issues as mod
+
+    pg = _FakePG()
+    set_status = AsyncMock(return_value=True)
+
+    async def _seed() -> str:
+        from eden.issues.stumble_writer import StumbleWriter
+
+        with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
+            "eden.llmops.promotion_hooks.get_issue_hook"
+        ) as hook_factory:
+            hook_factory.return_value.on_issue_created = AsyncMock(return_value="a")
+            res = await StumbleWriter().create(_sc("trace-resolved-at"))
+        return res["issue"].id
+
+    import asyncio
+
+    issue_id = asyncio.run(_seed())
+
+    with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch.object(
+        mod._repo, "set_status", set_status
+    ):
+        client = _client(pg)
+        r_ack = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "acknowledged"},
+        )
+        assert r_ack.status_code == 200
+        set_status.assert_awaited_with(
+            "org_test", issue_id, "triaged", set_resolved_at=False
+        )
+
+        set_status.reset_mock()
+        r_res = client.post(
+            f"/orgs/org_test/agent-issues/{issue_id}/resolve",
+            json={"status": "resolved"},
+        )
+        assert r_res.status_code == 200
+        set_status.assert_awaited_with(
+            "org_test", issue_id, "resolved", set_resolved_at=True
+        )
 
 
 def test_resolve_surfaces_genuine_set_status_error() -> None:

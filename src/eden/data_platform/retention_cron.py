@@ -1,15 +1,18 @@
 """Daily retention cron entry point.
 
-Phase B1 of the Eden app/storage plan (2026-06-19). Runs all 7
-retention policies from ``DataRetentionManager.DEFAULT_POLICIES``
-plus the S3 lifecycle rule application and the temp-data sweep.
+Phase B1 of the Eden app/storage plan (2026-06-19). Iterates every
+policy in ``DataRetentionManager.DEFAULT_POLICIES`` (currently 8 after
+OPT-29 replaced phantom ``audit_logs`` with ``agent_audit_ledger``) plus the S3
+lifecycle rule application and the temp-data sweep.
 
 Phase B3 (2026-06-19) addition: also runs the
 :class:`ArchiveService` to move Postgres ``telemetry_events`` rows
 older than 90 days to Impossible Cloud cold storage.
 
 Wire into:
-- Northflank: a daily scheduled job (cron: ``0 2 * * *``)
+- Production: fired at **03:00 UTC** via ``_run_daily`` inside
+  ``eden.workers.cron_tick.run_maintenance_due`` (the Northflank
+  ``eden-cron`` job is ``*/5 * * * *``; only the 03:00 tick runs this).
 - Local dev: ``python -m eden.data_platform.retention_cron``
 - Tests: ``await retention_cron.run()`` from a pytest fixture
 
@@ -35,6 +38,12 @@ from eden.services.data_platform import ArchiveService, PartitionManager
 from eden.services.data_platform.archive import DEFAULT_COLD_AGE_DAYS
 
 logger = logging.getLogger(__name__)
+
+#: Daily cold-archive batch — watermarked oldest-processed-first, not a fixed
+#: prefix of ``telemetry_events.tenant_id`` (OPT-52). See migration
+#: ``161_retention_archive_watermark`` and ``eden.storage.watermark``.
+_RETENTION_ARCHIVE_BATCH_SIZE = 1000
+_RETENTION_ARCHIVE_WATERMARK_TABLE = "retention_archive_watermark"
 
 
 async def run(dry_run: bool = False) -> dict:
@@ -75,25 +84,52 @@ async def run(dry_run: bool = False) -> dict:
     org_warm_days = await _load_org_warm_days()
     orgs = await _list_orgs_with_old_traces(archive, org_warm_days)
     cold_results: dict[str, dict] = {}
+    pg = None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        pg = await get_postgres_client()
+    except Exception:
+        pass
+    from eden.storage.watermark import advance_watermark
+
     for org_id in orgs:
         warm_days = org_warm_days.get(org_id, DEFAULT_COLD_AGE_DAYS)
         before_date = datetime.now(UTC) - timedelta(days=warm_days)
         try:
-            cold_results[org_id] = await archive.archive_old_rows(
-                org_id, before_date=before_date, dry_run=dry_run,
-            )
-        except Exception as exc:
-            logger.error(f"[cold_archive] {org_id} failed: {exc}")
-            cold_results[org_id] = {"errors": [str(exc)]}
-        # Purge hot rows already in the archive index, scoped to this org and
-        # its warm window (avoids cross-org deletes with mismatched cutoffs).
-        try:
-            purged = await retention_for_purge.purge_archived_telemetry(
-                before_date, org_id=org_id
-            )
-            cold_results.setdefault(org_id, {})["purged_rows"] = purged
-        except Exception as exc:
-            logger.error(f"[cold_archive_purge] {org_id} failed: {exc}")
+            try:
+                cold_results[org_id] = await archive.archive_old_rows(
+                    org_id, before_date=before_date, dry_run=dry_run,
+                )
+            except Exception as exc:
+                logger.error(f"[cold_archive] {org_id} failed: {exc}")
+                cold_results[org_id] = {"errors": [str(exc)]}
+            # Purge hot rows already in the archive index, scoped to this org and
+            # its warm window (avoids cross-org deletes with mismatched cutoffs).
+            try:
+                purged = await retention_for_purge.purge_archived_telemetry(
+                    before_date, org_id=org_id
+                )
+                cold_results.setdefault(org_id, {})["purged_rows"] = purged
+            except Exception as exc:
+                logger.error(f"[cold_archive_purge] {org_id} failed: {exc}")
+        finally:
+            # Advance on success *and* failure — a poison org that always
+            # raises must still advance, or it permanently occupies the
+            # front of the watermark ordering and blocks every org behind it.
+            if pg is not None:
+                try:
+                    await advance_watermark(
+                        pg,
+                        watermark_table=_RETENTION_ARCHIVE_WATERMARK_TABLE,
+                        entity_id=org_id,
+                        watermark_id_column="tenant_id",
+                    )
+                except Exception:
+                    logger.exception(
+                        "[retention_cron] cold_archive watermark advance failed org=%s",
+                        org_id,
+                    )
     results["cold_archive"] = cold_results
 
     # 5. Phase B4 — orphan-message GC. Catches any trace_messages
@@ -158,27 +194,41 @@ async def _list_orgs_with_old_traces(
 ) -> list[str]:
     """List orgs that have at least one trace eligible for cold archive.
 
-    Uses the longest configured warm window when scanning candidates.
+    Watermarked oldest-processed-first selection (OPT-52) — the prior bare
+    ``SELECT DISTINCT tenant_id ... LIMIT 1000`` with no ``ORDER BY`` returned
+    the same stable-but-arbitrary subset every daily run forever, silently
+    starving everything past row 1000. See ``eden.storage.watermark`` and
+    migration ``161_retention_archive_watermark``.
+
+    Scan generously: use the smallest of (DEFAULT_COLD_AGE_DAYS, any per-org
+    override). This ensures orgs on the default policy are never missed when
+    some override is longer than the default.
     """
     try:
         from eden.storage.postgres import get_postgres_client
+        from eden.storage.watermark import fetch_stale_candidates
     except Exception:
         return []
 
     client = await get_postgres_client()
     if client is None:
         return []
-    # Scan generously: use the smallest of (DEFAULT_COLD_AGE_DAYS, any per-org
-    # override). This ensures orgs on the default policy are never missed when
-    # some override is longer than the default.
+    if org_warm_days is None:
+        org_warm_days = {}
     all_warm = list(org_warm_days.values()) + [DEFAULT_COLD_AGE_DAYS]
     min_scan_days = min(all_warm)
-    rows = await client.fetch(
-        f"""
-        SELECT DISTINCT tenant_id FROM telemetry_events
-        WHERE timestamp < NOW() - INTERVAL '{int(min_scan_days)} days'
-        LIMIT 1000
-        """
+    rows = await fetch_stale_candidates(
+        client,
+        candidate_table=(
+            f"(SELECT DISTINCT tenant_id AS id "
+            f"FROM telemetry_events "
+            f"WHERE timestamp < NOW() - INTERVAL '{int(min_scan_days)} days')"
+        ),
+        watermark_table=_RETENTION_ARCHIVE_WATERMARK_TABLE,
+        candidate_id_column="id",
+        watermark_id_column="tenant_id",
+        id_alias="tenant_id",
+        limit=_RETENTION_ARCHIVE_BATCH_SIZE,
     )
     return [r["tenant_id"] for r in rows]
 

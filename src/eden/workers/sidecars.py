@@ -304,6 +304,14 @@ async def start_quality_and_closed_loop_sidecars(label: str) -> bool:
         logger.warning("%s: closed_loop consumer skipped: %s", label, exc)
 
     try:
+        from eden.workers.alert_kafka_consumer import start_consumer as start_alert
+
+        await start_alert()
+        logger.info("%s: alert_kafka consumer started", label)
+    except Exception as exc:
+        logger.warning("%s: alert_kafka consumer skipped: %s", label, exc)
+
+    try:
         from eden.closed_loop.verify import start_verify_worker
 
         await start_verify_worker()
@@ -339,6 +347,13 @@ async def stop_quality_and_closed_loop_sidecars(label: str) -> None:
         await stop_consumer()
     except Exception as exc:
         logger.warning("%s: closed_loop consumer stop failed: %s", label, exc)
+
+    try:
+        from eden.workers.alert_kafka_consumer import stop_consumer as stop_alert
+
+        await stop_alert()
+    except Exception as exc:
+        logger.warning("%s: alert_kafka consumer stop failed: %s", label, exc)
 
     try:
         from eden.workers.trace_finalized_consumer import stop_consumer

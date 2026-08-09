@@ -105,7 +105,7 @@ function _extractToolCalls(message: unknown): Array<{ id?: string; name?: string
 }
 
 /** `chat.complete()` — non-streaming. */
-function _instrumentedComplete(
+export function _instrumentedComplete(
   originalComplete: (...args: any[]) => any,
   self: unknown,
   args: any[],
@@ -164,7 +164,7 @@ function _instrumentedComplete(
 }
 
 /** `chat.stream()` — returns `EventStream<CompletionEvent>`; each event's `.data` is the `CompletionChunk`. */
-function _instrumentedStream(
+export function _instrumentedStream(
   originalStream: (...args: any[]) => any,
   self: unknown,
   args: any[],

@@ -31,6 +31,13 @@ class _FakePg:
             return self._definitions
         return []
 
+    async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any] | None:
+        if "FROM agent_registrations" in sql:
+            return {"agent_id": args[1]} if args[1] == "agent-a" else None
+        if "FROM agent_identity_aliases" in sql:
+            return None
+        return None
+
     async def execute(self, sql: str, *args: Any) -> str:
         self.inserts.append((sql, args))
         return "INSERT 0 1"
@@ -112,6 +119,10 @@ def test_investigate_returns_structured_findings(
     pg = _FakePg([_loop_definition()])
     with (
         patch(
+            "eden.issues.agent_identity.resolve_agent_id",
+            AsyncMock(return_value=None),
+        ),
+        patch(
             "eden.signals.investigator.get_postgres_client",
             AsyncMock(return_value=pg),
         ),
@@ -148,8 +159,9 @@ def test_investigate_returns_structured_findings(
     assert finding["signal_id"] == "sig-loop"
     assert finding["trace_id"] == "trace-1"
     assert "confidence" in finding
-    # A signal_events row was written (not a silent no-op).
+    # A batched signal_events insert was written (not a silent no-op).
     assert pg.inserts
+    assert any("UNNEST" in sql for sql, _ in pg.inserts)
 
 
 def test_investigate_budget_exhausted_is_honest_error(

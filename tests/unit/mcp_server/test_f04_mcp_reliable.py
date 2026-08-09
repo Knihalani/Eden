@@ -51,6 +51,7 @@ class _CapturingClient:
         prompt_override: str | None = None,
         rerun_mode: str | None = None,
         live_prefix: bool | None = None,
+        live: bool | None = None,
     ) -> dict[str, Any]:
         call = {
             "org_id": org_id,
@@ -59,6 +60,7 @@ class _CapturingClient:
             "prompt_override": prompt_override,
             "rerun_mode": rerun_mode,
             "live_prefix": live_prefix,
+            "live": live,
         }
         self.rerun_calls.append(call)
         return {
@@ -323,5 +325,8 @@ def test_rerun_debugger_description_documents_f01_limitation() -> None:
 
     entry = next(t for t in TOOL_CATALOG if t["name"] == "rerun_debugger")
     desc = entry["description"]
-    assert "new_trace_id" in desc
+    # The F01 live gateway now ships: the description must document the
+    # `live` boolean + its feature-flag gate (nothing is silently billed).
     assert "F01" in desc
+    assert "live" in desc
+    assert "debugger_live_rerun_v1" in desc

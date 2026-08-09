@@ -236,6 +236,16 @@ trigger a run if the API service is ever unable to carry the fleet.
 
 ---
 
+## Out of scope (intentionally not built)
+
+**On-call schedules, rotations, ack/snooze UI, SLA escalation timers** — Eden
+integrates with external on-call tools instead; see
+[on-call-scope-decision.md](../specs/strategic-review-2026-08/features/on-call-scope-decision.md)
+(FEAT-105). `AlertRule.auto_escalate` / `escalation_delay_seconds` in
+`alert_stream.py` are inert by design, not disabled stubs.
+
+---
+
 ## Deliberately NOT disabled
 
 **Background workers on `eden-api`.** Turning them off would take Neon

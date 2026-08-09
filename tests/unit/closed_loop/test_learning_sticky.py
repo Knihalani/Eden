@@ -11,7 +11,6 @@ import pytest
 from eden.closed_loop.events import EventType, LoopEvent
 from eden.closed_loop.orchestrator import ClosedLoopOrchestrator
 
-
 ORG = "org-learn"
 ISSUE = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 

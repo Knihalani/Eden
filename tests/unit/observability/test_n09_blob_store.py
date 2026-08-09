@@ -12,7 +12,6 @@ from eden.observability.compression.blob_store import (
     reset_blob_store,
 )
 
-
 SYSTEM_PROMPT = (
     "You are a careful coding agent. " * 40
 )  # >512 bytes after normalize

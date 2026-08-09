@@ -49,14 +49,14 @@ def _to_events(pairs: list[tuple[list[dict], dict]]) -> list[list[Any]]:
 # ─────────────────────────────────────────────────────────────
 
 
-def test_D_01_sycophancy_marker_detected():
+def test_d_01_sycophancy_marker_detected():
     from supplementaries.phase_7_detection.detectors import detect_sycophancy_markers
     pairs = _load("D_01_sycophancy-marker")
     for evts in _to_events(pairs):
         assert detect_sycophancy_markers(evts) > 0.4
 
 
-def test_D_02_reward_hogging_detected():
+def test_d_02_reward_hogging_detected():
     from supplementaries.phase_7_detection.detectors import detect_reward_hogging
     pairs = _load("D_02_reward-hogging")
     for evts in _to_events(pairs):
@@ -64,14 +64,14 @@ def test_D_02_reward_hogging_detected():
         assert max(scores.values()) > 0.5
 
 
-def test_D_03_calibration_failure_detected():
+def test_d_03_calibration_failure_detected():
     from supplementaries.phase_7_detection.detectors import detect_calibration_failure
     pairs = _load("D_03_calibration-failure")
     for evts in _to_events(pairs):
         assert detect_calibration_failure(evts) > 0.0
 
 
-def test_D_04_multi_turn_escalation_detected():
+def test_d_04_multi_turn_escalation_detected():
     """User-message escalation → multi_turn_escalation > 0."""
     from supplementaries.phase_7_detection.detectors import (
         _extract_user_messages,
@@ -85,14 +85,14 @@ def test_D_04_multi_turn_escalation_detected():
         assert detect_multi_turn_escalation(msgs, vocab_growth_threshold=0.3) > 0.0
 
 
-def test_D_05_many_shot_preamble_detected():
+def test_d_05_many_shot_preamble_detected():
     from supplementaries.phase_7_detection.detectors import detect_many_shot_preamble
     pairs = _load("D_05_many-shot-preamble")
     for evts in _to_events(pairs):
         assert detect_many_shot_preamble(evts) > 0.5
 
 
-def test_D_06_verifier_loop_detected():
+def test_d_06_verifier_loop_detected():
     """The 4-step 'verify the verify the verify' chain must trip verifier_loop."""
     from supplementaries.phase_7_detection.detectors import detect_verifier_loop
     pairs = _load("D_06_verifier-loop")
@@ -101,7 +101,7 @@ def test_D_06_verifier_loop_detected():
         assert detect_verifier_loop(evts, threshold=2) > 0.4
 
 
-def test_D_07_memory_bloat_detected():
+def test_d_07_memory_bloat_detected():
     from supplementaries.phase_7_detection.detectors import detect_memory_bloat_events
     pairs = _load("D_07_memory-bloat-20kb")
     for evts in _to_events(pairs):
@@ -109,14 +109,14 @@ def test_D_07_memory_bloat_detected():
         assert detect_memory_bloat_events(evts, threshold_bytes=8 * 1024) > 0.5
 
 
-def test_D_08_memory_conflict_detected():
+def test_d_08_memory_conflict_detected():
     from supplementaries.phase_7_detection.detectors import detect_memory_conflict
     pairs = _load("D_08_memory-conflict-vegetarian")
     for evts in _to_events(pairs):
         assert detect_memory_conflict(evts) > 0.0
 
 
-def test_D_09_agent_depth_runaway_detected():
+def test_d_09_agent_depth_runaway_detected():
     from supplementaries.phase_7_detection.detectors import detect_agent_depth_runaway
     pairs = _load("D_09_agent-depth-runaway")
     for evts in _to_events(pairs):
@@ -132,7 +132,7 @@ def test_D_09_agent_depth_runaway_detected():
         assert caught, f"depth runaway not caught: max_depth={depth_by_trace}"
 
 
-def test_D_10_blackboard_stale_detected():
+def test_d_10_blackboard_stale_detected():
     from supplementaries.phase_7_detection.detectors import detect_blackboard_stale
     pairs = _load("D_10_blackboard-stale-90s")
     for evts in _to_events(pairs):
@@ -140,7 +140,7 @@ def test_D_10_blackboard_stale_detected():
         assert detect_blackboard_stale(evts, stale_threshold_ms=60_000.0) >= 0.5
 
 
-def test_D_11_swarm_centralized_detected():
+def test_d_11_swarm_centralized_detected():
     from supplementaries.phase_7_detection.detectors import detect_swarm_topology_centralization
     pairs = _load("D_11_swarm-centralized")
     for evts in _to_events(pairs):
@@ -165,7 +165,7 @@ def test_D_11_swarm_centralized_detected():
         assert verdict == "centralized", f"expected centralized, got {verdict} (counts={dict(targets)})"
 
 
-def test_D_12_swarm_dispersed_no_centralized():
+def test_d_12_swarm_dispersed_no_centralized():
     from supplementaries.phase_7_detection.detectors import detect_swarm_topology_centralization
     pairs = _load("D_12_swarm-dispersed")
     for evts in _to_events(pairs):
@@ -195,7 +195,7 @@ def test_D_12_swarm_dispersed_no_centralized():
 # ─────────────────────────────────────────────────────────────
 
 
-def test_B_02_loop_3_distinct_detected():
+def test_b_02_loop_3_distinct_detected():
     """3 separate loops in one trace → hash ring trips on each."""
     from supplementaries.phase_3_loops.hash_ring import scan_hash_ring
     pairs = _load("B_02_loop-3-distinct")
@@ -207,7 +207,7 @@ def test_B_02_loop_3_distinct_detected():
         assert summary.trip_count >= 3, f"only {summary.trip_count} trips for 3-distinct"
 
 
-def test_B_03_loop_long_delay_detected():
+def test_b_03_loop_long_delay_detected():
     """Long-delay loop (5 calls w/ 60s gaps) trips hash ring."""
     from supplementaries.phase_3_loops.hash_ring import scan_hash_ring
     pairs = _load("B_03_loop-long-delay")
@@ -221,7 +221,7 @@ def test_B_03_loop_long_delay_detected():
 # ─────────────────────────────────────────────────────────────
 
 
-def test_C_01_clean_quality_baseline_low_score():
+def test_c_01_clean_quality_baseline_low_score():
     from supplementaries.phase_5_quality.pipeline import HallucinationPipeline
     pipeline = HallucinationPipeline()
     src = "Q3 2026: ARR $14.2M, NRR 122%, customers 218 → 311."
@@ -232,7 +232,7 @@ def test_C_01_clean_quality_baseline_low_score():
     )
 
 
-def test_C_02_multi_fabricated_statics_detected():
+def test_c_02_multi_fabricated_statics_detected():
     from supplementaries.phase_5_quality.pipeline import HallucinationPipeline
     pipeline = HallucinationPipeline()
     src = "Q3 2026: ARR $14.2M (38% growth). Customers 218 → 311. Gross margin 71%."
@@ -244,7 +244,7 @@ def test_C_02_multi_fabricated_statics_detected():
     )
 
 
-def test_C_03_tool_result_fabrication_runs():
+def test_c_03_tool_result_fabrication_runs():
     from supplementaries.phase_5_quality.pipeline import HallucinationPipeline
     pipeline = HallucinationPipeline()
     doc = "Order 4471 status: cancelled. Refund state: queued."
@@ -254,7 +254,7 @@ def test_C_03_tool_result_fabrication_runs():
     assert report.hallucination_score >= 0.0
 
 
-def test_C_05_unicode_emoji_runs():
+def test_c_05_unicode_emoji_runs():
     from supplementaries.phase_5_quality.pipeline import HallucinationPipeline
     pipeline = HallucinationPipeline()
     src = "Tokyo office hosted a partner summit (取引先)."
@@ -263,7 +263,7 @@ def test_C_05_unicode_emoji_runs():
     assert report.hallucination_score >= 0.0
 
 
-def test_C_06_paraphrase_hallucination_detected():
+def test_c_06_paraphrase_hallucination_detected():
     from supplementaries.phase_5_quality.pipeline import HallucinationPipeline
     pipeline = HallucinationPipeline()
     src = "Net retention 122% in Q3 2026."
@@ -278,7 +278,7 @@ def test_C_06_paraphrase_hallucination_detected():
 # ─────────────────────────────────────────────────────────────
 
 
-def test_E_01_a2a_input_required_stuck_detected():
+def test_e_01_a2a_input_required_stuck_detected():
     from supplementaries.phase_7_detection.detectors import detect_a2a_task_stuck
     pairs = _load("E_01_a2a-input-required-stuck")
     for evts in _to_events(pairs):
@@ -286,7 +286,7 @@ def test_E_01_a2a_input_required_stuck_detected():
         assert detect_a2a_task_stuck(evts, stuck_minutes=30.0) >= 0.5
 
 
-def test_E_02_a2a_auth_required_stuck_detected():
+def test_e_02_a2a_auth_required_stuck_detected():
     from supplementaries.phase_7_detection.detectors import detect_a2a_task_stuck
     pairs = _load("E_02_a2a-auth-required-stuck")
     for evts in _to_events(pairs):
@@ -294,7 +294,7 @@ def test_E_02_a2a_auth_required_stuck_detected():
         assert detect_a2a_task_stuck(evts, stuck_minutes=30.0) >= 0.5
 
 
-def test_E_03_a2a_all_9_states_no_stuck():
+def test_e_03_a2a_all_9_states_no_stuck():
     from supplementaries.phase_7_detection.detectors import detect_a2a_task_stuck
     pairs = _load("E_03_a2a-all-9-states")
     for evts in _to_events(pairs):
@@ -307,7 +307,7 @@ def test_E_03_a2a_all_9_states_no_stuck():
 # ─────────────────────────────────────────────────────────────
 
 
-def test_F_01_cat22_error_keep_decision():
+def test_f_01_cat22_error_keep_decision():
     from supplementaries.cat_22_apm.tail_sampling import SamplingPolicy
     pairs = _load("F_01_cat22-error-keep")
     policy = SamplingPolicy(slow_threshold_ms=5_000.0, keep_rate=0.0)
@@ -320,7 +320,7 @@ def test_F_01_cat22_error_keep_decision():
         assert decision.keep, f"expected keep on error, got {decision}"
 
 
-def test_F_02_cat22_slow_keep_decision():
+def test_f_02_cat22_slow_keep_decision():
     from supplementaries.cat_22_apm.tail_sampling import SamplingPolicy
     pairs = _load("F_02_cat22-slow-keep")
     policy = SamplingPolicy(slow_threshold_ms=5_000.0, keep_rate=0.0)
@@ -338,7 +338,7 @@ def test_F_02_cat22_slow_keep_decision():
 # ─────────────────────────────────────────────────────────────
 
 
-def test_A_01_high_srr_low_tas_relative():
+def test_a_01_high_srr_low_tas_relative():
     """High-SRR should score lower than the clean baseline on the same composite."""
     from supplementaries.phase_2_efficiency.composite import compute_tas
     high = _load("A_01_high-srr-every-step-redundant")
@@ -350,7 +350,7 @@ def test_A_01_high_srr_low_tas_relative():
     )
 
 
-def test_A_08_clean_etec_baseline_tas_in_range():
+def test_a_08_clean_etec_baseline_tas_in_range():
     """Clean baseline TAS should be ≥ 75 (best single-trace possible)."""
     from supplementaries.phase_2_efficiency.composite import compute_tas
     clean = _load("A_08_clean-etec-baseline")
@@ -364,7 +364,7 @@ def test_A_08_clean_etec_baseline_tas_in_range():
 # ─────────────────────────────────────────────────────────────
 
 
-def test_G_05_negative_control_clean_pipeline_runs():
+def test_g_05_negative_control_clean_pipeline_runs():
     """Single-event clean baseline runs through all detectors without crash."""
     from supplementaries.phase_7_detection.detectors import run_all_detectors
     pairs = _load("G_05_negative-control-clean")
@@ -374,7 +374,7 @@ def test_G_05_negative_control_clean_pipeline_runs():
         assert isinstance(report.sycophancy_rate, float)
 
 
-def test_G_01_deep_hierarchy_normal_no_runaway():
+def test_g_01_deep_hierarchy_normal_no_runaway():
     """Depth-3 trace must NOT trigger runaway (threshold = 5)."""
     pairs = _load("G_01_deep-hierarchy-normal")
     max_depth = 0

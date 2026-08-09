@@ -206,4 +206,45 @@ describe("runDoctor", () => {
     expect(report.ok).toBe(false);
     expect(report.checks.some((c) => c.name === "orgId" && !c.ok)).toBe(true);
   });
+
+  it("surfaces dropSampling counters (zero by default)", async () => {
+    const report = await runDoctor({ emitTestEvent: false });
+    const ds = report.checks.find((c) => c.name === "dropSampling");
+    expect(ds).toBeDefined();
+    expect(ds?.ok).toBe(true);
+    expect(ds?.detail).toEqual({ droppedTotal: 0, sampledOut: 0 });
+    expect(ds?.message).toContain("droppedTotal=0");
+    expect(ds?.message).toContain("sampledOut=0");
+  });
+
+  it("flags dropSampling when events are evicted from the queue", async () => {
+    resetDefaultClient();
+    configure({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+      maxQueueSize: 5,
+      maxBatchSize: 10_000,
+      flushIntervalMs: 60_000,
+    });
+    const client = getDefaultClient();
+    for (let i = 0; i < 12; i++) {
+      client.emit({
+        eventId: `doc_drop_${i}`,
+        tenantId: "org_test",
+        projectId: "default",
+        traceId: `t${i}`,
+        realm: "production",
+        eventType: "llm_completion",
+        timestamp: new Date().toISOString(),
+        sourceFormat: "openai",
+        payload: { status: "success" },
+      });
+    }
+    const report = await runDoctor({ emitTestEvent: false });
+    const ds = report.checks.find((c) => c.name === "dropSampling");
+    expect(ds?.ok).toBe(false);
+    expect(ds?.detail?.droppedTotal).toBe(7);
+    expect(ds?.message).toContain("evicted from the queue");
+  });
 });

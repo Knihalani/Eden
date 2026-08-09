@@ -20,7 +20,6 @@ import pytest
 from eden.debugger.cache import PrefixCacheService, llm_input_hash
 from eden.observability.ingestion.checkpoint_hook import maybe_persist_checkpoint
 
-
 # ── Fake storage ─────────────────────────────────────────────────
 
 
@@ -80,20 +79,20 @@ def _llm_event(trace_id: str = "tr1", step: int | None = None, seq: int = 0) -> 
 
 @pytest.mark.asyncio
 async def test_n_llm_events_produce_n_cache_rows() -> None:
-    N = 5
+    n = 5
     pg = FakePg()
 
-    for i in range(N):
+    for i in range(n):
         ok = await maybe_persist_checkpoint(_llm_event(step=i, seq=i), pg=pg)
         assert ok is True
 
     # One checkpoint audit row per event
-    assert len(pg.checkpoint_rows) == N
+    assert len(pg.checkpoint_rows) == n
     # One cache row per event
-    assert len(pg.cache_rows) == N
+    assert len(pg.cache_rows) == n
     # Step numbers are distinct
     steps = {r["step_number"] for r in pg.cache_rows}
-    assert steps == set(range(N))
+    assert steps == set(range(n))
 
 
 @pytest.mark.asyncio
@@ -180,7 +179,7 @@ async def test_redis_incr_used_when_step_omitted() -> None:
         async def expire(self, key: str, seconds: int) -> None:
             pass
 
-        def pipeline(self, transaction: bool = False) -> "_Pipe":
+        def pipeline(self, transaction: bool = False) -> _Pipe:
             return _Pipe(self)
 
     class _Pipe:
@@ -188,11 +187,11 @@ async def test_redis_incr_used_when_step_omitted() -> None:
             self._redis = redis
             self._ops: list[tuple[str, tuple]] = []
 
-        def incr(self, key: str) -> "_Pipe":
+        def incr(self, key: str) -> _Pipe:
             self._ops.append(("incr", (key,)))
             return self
 
-        def expire(self, key: str, ttl: int) -> "_Pipe":
+        def expire(self, key: str, ttl: int) -> _Pipe:
             self._ops.append(("expire", (key, ttl)))
             return self
 

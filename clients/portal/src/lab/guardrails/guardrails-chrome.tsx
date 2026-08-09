@@ -3,6 +3,8 @@
 import { StatusChip } from "@/components/ds/primitives";
 import {
   actionLabel,
+  GUARDRAIL_KINDS,
+  GUARDRAIL_STATUSES,
   kindLabel,
   statusLabel,
   type GuardrailAction,
@@ -18,49 +20,44 @@ export function parseGuardrailTab(v: string | null): GuardrailTab {
   return "policies";
 }
 
+/** Legacy portal kind labels from pre-FEAT-125 filters — map to canonical kinds. */
+const LEGACY_GUARDRAIL_KIND_ALIASES: Record<string, GuardrailKind> = {
+  pii: "pii_redaction",
+  toxicity: "content_policy",
+  tool_allowlist: "content_policy",
+  rate_limit: "content_policy",
+  custom: "content_policy",
+};
+
 export function parseGuardrailKindFilter(
   v: string | null,
 ): GuardrailKind | "all" {
-  if (
-    v === "prompt_injection" ||
-    v === "pii_redaction" ||
-    v === "hallucination" ||
-    v === "content_policy" ||
-    v === "judge_link"
-  ) {
-    return v;
+  if (v && (GUARDRAIL_KINDS as readonly string[]).includes(v)) {
+    return v as GuardrailKind;
   }
-  return "all";
+  const legacy = v ? LEGACY_GUARDRAIL_KIND_ALIASES[v] : undefined;
+  return legacy ?? "all";
 }
+
+/** Portal status aliases normalized the same way as `_map_guardrail_status`. */
+const GUARDRAIL_STATUS_ALIASES: Record<string, GuardrailStatus> = {
+  enabled: "active",
+  on: "active",
+  dry_run: "shadow",
+  "dry-run": "shadow",
+  monitor: "shadow",
+  inactive: "disabled",
+  off: "disabled",
+};
 
 export function parseGuardrailStatusFilter(
   v: string | null,
 ): GuardrailStatus | "all" {
-  if (v === "active" || v === "shadow" || v === "disabled") return v;
-  return "all";
-}
-
-/** Policies-only nav — Test dry-run is not a live surface. */
-export function GuardrailsTabNav({
-  value,
-  onChange,
-}: {
-  value: GuardrailTab;
-  onChange: (next: GuardrailTab) => void;
-}) {
-  return (
-    <div role="tablist" aria-label="Guardrails sections" className="flex gap-1">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={value === "policies"}
-        className="ds-tab"
-        onClick={() => onChange("policies")}
-      >
-        Policies
-      </button>
-    </div>
-  );
+  if (v && (GUARDRAIL_STATUSES as readonly string[]).includes(v)) {
+    return v as GuardrailStatus;
+  }
+  const alias = v ? GUARDRAIL_STATUS_ALIASES[v] : undefined;
+  return alias ?? "all";
 }
 
 export function GuardrailKindChip({ kind }: { kind: GuardrailKind }) {

@@ -81,6 +81,17 @@ _RTBF_TABLES: tuple[str, ...] = (
     "conversations",
 )
 
+#: Postgres tables checked post-erasure for residual *identifiers*
+#: (original ``user_id`` or telemetry attribute keys). Tables scoped
+#: only through trace/conversation ids are anonymised in-place and
+#: intentionally retain rows — they are not re-counted here.
+_RTBF_POSTGRES_REVERIFY_TABLES: tuple[str, ...] = (
+    "telemetry_events",
+    "user_feedback",
+    "user_sessions",
+    "conversations",
+)
+
 #: ``attributes`` JSONB keys under which ingesters record the
 #: end-user identity on a telemetry event. Eden's own SDK does
 #: not stamp a user id; the keys below come from the Langfuse /
@@ -289,6 +300,49 @@ class RightToBeForgottenService:
             if r.get("status") in ("failed", "unavailable", "unsupported")
         ]
 
+        # ── Post-delete technical re-verification (FEAT-160) ───
+        reverify_results: list[dict[str, Any]] = []
+        if not dry_run and not failures:
+            try:
+                reverify_results.extend(
+                    await self._reverify_postgres(
+                        client, org_id, user_id, ctx
+                    )
+                )
+            except Exception as exc:
+                logger.warning("rtbf postgres re-verify crashed: %s", exc)
+                reverify_results.append({
+                    "store": "postgres",
+                    "status": "failed",
+                    "error": str(exc)[:300],
+                })
+            try:
+                from eden.services.governance_intel.rtbf_fanout import (
+                    reverify_rtbf_stores,
+                )
+
+                reverify_results.extend(
+                    await reverify_rtbf_stores(
+                        org_id,
+                        user_id=user_id,
+                        fanout_results=fanout_results,
+                    )
+                )
+            except Exception as exc:
+                logger.warning("rtbf store re-verify crashed: %s", exc)
+                reverify_results.append({
+                    "store": "*",
+                    "status": "failed",
+                    "error": str(exc)[:300],
+                })
+
+        reverify_residual = [
+            r for r in reverify_results if r.get("status") == "residual"
+        ]
+        reverify_failed = [
+            r for r in reverify_results if r.get("status") == "failed"
+        ]
+
         # Audit log
         if not dry_run and client is not None:
             try:
@@ -310,6 +364,8 @@ class RightToBeForgottenService:
                         "failures": failures,
                         "fanout": fanout_results,
                         "fanout_incomplete": len(fanout_incomplete) > 0,
+                        "reverify": reverify_results,
+                        "reverify_residual": len(reverify_residual) > 0,
                     }),
                 ))
             except Exception as exc:
@@ -331,6 +387,12 @@ class RightToBeForgottenService:
             "fanout": fanout_results,
             "fanout_complete": len(fanout_incomplete) == 0,
             "fanout_incomplete": fanout_incomplete,
+            "reverify": reverify_results,
+            "reverify_complete": (
+                len(reverify_residual) == 0 and len(reverify_failed) == 0
+            ),
+            "reverify_residual": reverify_residual,
+            "reverify_failed": reverify_failed,
             "processed_at": _now_iso(),
         }
         if failures:
@@ -342,8 +404,54 @@ class RightToBeForgottenService:
                 + ", ".join(f["table"] for f in failures),
                 data,
             )
+        if reverify_residual or reverify_failed:
+            data["complete"] = False
+            residual_stores = [
+                str(r.get("store", "?")) for r in reverify_residual
+            ]
+            failed_stores = [
+                str(r.get("store", "?")) for r in reverify_failed
+            ]
+            parts: list[str] = []
+            if residual_stores:
+                parts.append(
+                    f"residual data in {', '.join(residual_stores)}"
+                )
+            if failed_stores:
+                parts.append(
+                    f"re-verify failed for {', '.join(failed_stores)}"
+                )
+            return _error_envelope(
+                self.name,
+                "erasure re-verification failed — " + "; ".join(parts),
+                data,
+            )
         data["complete"] = len(fanout_incomplete) == 0
         return _ok_envelope(self.name, data)
+
+    async def _reverify_postgres(
+        self,
+        client: Any,
+        org_id: str,
+        user_id: str,
+        ctx: _RtbfScope,
+    ) -> list[dict[str, Any]]:
+        """Re-query Postgres for residual user identifiers post-anonymise."""
+        results: list[dict[str, Any]] = []
+        for table in _RTBF_POSTGRES_REVERIFY_TABLES:
+            remaining = await self._count_rows(
+                client, table, org_id, user_id, ctx
+            )
+            entry: dict[str, Any] = {
+                "store": f"postgres:{table}",
+                "remaining": remaining,
+            }
+            if remaining > 0:
+                entry["status"] = "residual"
+            else:
+                entry["status"] = "ok"
+            results.append(entry)
+        return results
 
     # ── Scope derivation ─────────────────────────────────────────
 

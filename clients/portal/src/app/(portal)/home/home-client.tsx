@@ -271,7 +271,12 @@ export default function HomeClient() {
     for (const issue of issuesQuery.data ?? []) {
       for (const traceId of issue.occurrenceTraceIds) {
         const existing = map.get(traceId);
-        if (!existing || (existing.status === "resolved" && issue.status !== "resolved")) {
+        if (
+          !existing ||
+          ((existing.status === "resolved" || existing.status === "ignored") &&
+            issue.status !== "resolved" &&
+            issue.status !== "ignored")
+        ) {
           map.set(traceId, issue);
         }
       }
@@ -281,7 +286,9 @@ export default function HomeClient() {
 
   const openIssuesCount = useMemo(
     () =>
-      (issuesQuery.data ?? []).filter((i) => i.status !== "resolved").length,
+      (issuesQuery.data ?? []).filter(
+      (i) => i.status !== "resolved" && i.status !== "ignored",
+    ).length,
     [issuesQuery.data],
   );
 

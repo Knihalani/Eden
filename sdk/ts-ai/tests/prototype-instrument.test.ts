@@ -36,6 +36,7 @@ import { createRequire } from "node:module";
 // app's `import OpenAI from "openai"` would resolve to.
 import OpenAIESM from "openai";
 import AnthropicESM from "@anthropic-ai/sdk";
+import GroqESM from "groq-sdk";
 import { parseFetchBody } from "./_parseBody.js";
 import { wireToEvent } from "../src/wire.js";
 import { resetDefaultClient, getDefaultClient } from "../src/client.js";
@@ -44,6 +45,10 @@ import { instrument } from "../src/instrument.js";
 import {
   patchOpenAIPrototype,
   patchAnthropicPrototype,
+  patchGroqPrototype,
+  patchVercelAIPrototype,
+  patchLangChainPrototype,
+  patchGeminiPrototype,
   patchAllPrototypes,
   _unpatchAllForTests,
 } from "../src/prototype-instrument.js";
@@ -56,6 +61,13 @@ const OpenAICJSMod = require("openai") as { default?: unknown };
 const OpenAICJS = (OpenAICJSMod.default ?? OpenAICJSMod) as any;
 const AnthropicCJSMod = require("@anthropic-ai/sdk") as { default?: unknown };
 const AnthropicCJS = (AnthropicCJSMod.default ?? AnthropicCJSMod) as any;
+const GroqCJSMod = require("groq-sdk") as { default?: unknown };
+const GroqCJS = (GroqCJSMod.default ?? GroqCJSMod) as any;
+const GenerativeModelCJS = (require("@google/generative-ai") as { GenerativeModel: any })
+  .GenerativeModel;
+const BaseChatModelCJS = (
+  require("@langchain/core/language_models/chat_models") as { BaseChatModel: any }
+).BaseChatModel;
 
 interface CapturedRequest {
   url: string;
@@ -68,6 +80,10 @@ let originalOpenAICJSCreate: unknown;
 let originalOpenAIESMCreate: unknown;
 let originalAnthropicCJSCreate: unknown;
 let originalAnthropicESMCreate: unknown;
+let originalGroqCJSCreate: unknown;
+let originalGroqESMCreate: unknown;
+let originalGeminiCJSGenerateContent: unknown;
+let originalLangChainCJSInvoke: unknown;
 
 function _fakeOpenAICreate() {
   return async function (this: unknown, args: any) {
@@ -89,6 +105,35 @@ function _fakeOpenAICreate() {
       ],
       usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 },
     };
+  };
+}
+
+function _fakeGroqCreate() {
+  return async function (this: unknown, args: any) {
+    return {
+      id: "cmpl-groq-1",
+      model: args?.model,
+      choices: [
+        { index: 0, finish_reason: "stop", message: { role: "assistant", content: "groq-hi" } },
+      ],
+      usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
+    };
+  };
+}
+
+
+function _fakeGeminiGenerateContent() {
+  return async function (this: unknown, _args: any) {
+    return {
+      response: { text: () => "gemini-hi" },
+      usageMetadata: { promptTokenCount: 6, candidatesTokenCount: 3 },
+    };
+  };
+}
+
+function _fakeLangChainInvoke() {
+  return async function (this: unknown, _args: any) {
+    return { content: "lc-hi", response_metadata: { model_name: "gpt-4o-mini" } };
   };
 }
 
@@ -134,6 +179,17 @@ beforeEach(() => {
   AnthropicCJS.Messages.prototype.create = _fakeAnthropicCreate();
   originalAnthropicESMCreate = (AnthropicESM as any).Messages.prototype.create;
   (AnthropicESM as any).Messages.prototype.create = _fakeAnthropicCreate();
+
+  originalGroqCJSCreate = GroqCJS.Chat.Completions.prototype.create;
+  GroqCJS.Chat.Completions.prototype.create = _fakeGroqCreate();
+  originalGroqESMCreate = (GroqESM as any).Chat.Completions.prototype.create;
+  (GroqESM as any).Chat.Completions.prototype.create = _fakeGroqCreate();
+
+  originalGeminiCJSGenerateContent = GenerativeModelCJS.prototype.generateContent;
+  GenerativeModelCJS.prototype.generateContent = _fakeGeminiGenerateContent();
+
+  originalLangChainCJSInvoke = BaseChatModelCJS.prototype.invoke;
+  BaseChatModelCJS.prototype.invoke = _fakeLangChainInvoke();
 });
 
 afterEach(async () => {
@@ -145,6 +201,10 @@ afterEach(async () => {
   (OpenAIESM as any).Chat.Completions.prototype.create = originalOpenAIESMCreate;
   AnthropicCJS.Messages.prototype.create = originalAnthropicCJSCreate;
   (AnthropicESM as any).Messages.prototype.create = originalAnthropicESMCreate;
+  GroqCJS.Chat.Completions.prototype.create = originalGroqCJSCreate;
+  (GroqESM as any).Chat.Completions.prototype.create = originalGroqESMCreate;
+  GenerativeModelCJS.prototype.generateContent = originalGeminiCJSGenerateContent;
+  BaseChatModelCJS.prototype.invoke = originalLangChainCJSInvoke;
   globalThis.fetch = originalFetch;
   await getDefaultClient().dispose();
   resetDefaultClient();
@@ -357,11 +417,91 @@ describe("instrument() prototype-level auto-instrumentation (FEAT-71)", () => {
     const result = instrument({ autoPatch: false });
     expect(result.patched.openai).toBe(false);
     expect(result.patched.anthropic).toBe(false);
+    expect(result.patched.groq).toBe(false);
+    expect(result.patched.vercelAi).toBe(false);
+    expect(result.patched.langchain).toBe(false);
+    expect(result.patched.gemini).toBe(false);
+    expect(result.patched.mistral).toBe(false);
     const asyncPatched = await result.patchedAsync;
     expect(asyncPatched.openai).toBe(false);
     expect(asyncPatched.anthropic).toBe(false);
     // wrap* factories are still there -- additive, not a replacement.
     expect(result.wrapOpenAI).toBeFunction();
     expect(result.wrapAnthropic).toBeFunction();
+  });
+
+  it("[CJS] auto-traces a freshly-constructed, non-wrapped Groq instance", async () => {
+    const result = instrument();
+    expect(result.patched.groq).toBe(true);
+
+    const client = new GroqCJS({ apiKey: "test-key" });
+    const response = await client.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(response.choices[0].message.content).toBe("groq-hi");
+
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect(completion).toBeDefined();
+    expect(completion?.sourceFormat).toBe("groq");
+    expect(completion?.payload.provider).toBe("groq");
+  });
+
+  it("Vercel AI (`ai`) stays wrap-only: ESM namespace exports are not patchable", () => {
+    expect(patchVercelAIPrototype()).toBe(false);
+    const result = instrument();
+    expect(result.patched.vercelAi).toBe(false);
+    expect(result.wrapVercelAI).toBeFunction();
+  });
+
+  it("[CJS] auto-traces LangChain BaseChatModel.invoke via prototype patch", async () => {
+    const result = instrument();
+    expect(result.patched.langchain).toBe(true);
+
+    class TestChatModel extends BaseChatModelCJS {
+      _llmType() {
+        return "test";
+      }
+    }
+    const model = new TestChatModel({});
+    const response = await model.invoke([{ role: "user", content: "hi" }]);
+    expect(response.content).toBe("lc-hi");
+
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect(completion).toBeDefined();
+    expect(completion?.sourceFormat).toBe("langchain");
+    expect(completion?.payload.provider).toBe("langchain");
+  });
+
+  it("[CJS] auto-traces Gemini GenerativeModel.generateContent via prototype patch", async () => {
+    const result = instrument();
+    expect(result.patched.gemini).toBe(true);
+
+    const model = new GenerativeModelCJS("test-key", { model: "gemini-1.5-flash" });
+    const response = await model.generateContent("hi");
+    expect(response.response.text()).toBe("gemini-hi");
+
+    await getDefaultClient().flush();
+    const events = _flattenEvents();
+    const completion = events.find((e) => e.eventType === "llm_completion");
+    expect(completion).toBeDefined();
+    expect(completion?.sourceFormat).toBe("gemini");
+  });
+
+  it("patchAllPrototypes reports all extended framework keys", () => {
+    const patched = patchAllPrototypes();
+    expect(patched).toHaveProperty("groq");
+    expect(patched).toHaveProperty("vercelAi");
+    expect(patched).toHaveProperty("langchain");
+    expect(patched).toHaveProperty("gemini");
+    expect(patched).toHaveProperty("mistral");
+    expect(() => patchGroqPrototype()).not.toThrow();
+    expect(() => patchVercelAIPrototype()).not.toThrow();
+    expect(() => patchLangChainPrototype()).not.toThrow();
+    expect(() => patchGeminiPrototype()).not.toThrow();
   });
 });

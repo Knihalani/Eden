@@ -31,7 +31,6 @@ import pytest
 from eden.observability.errors import IngestionUnavailableError
 from eden.observability.telemetry_collector import TelemetryCollector, TelemetryEvent
 
-
 #: One timestamp for the whole module, captured at import.
 #:
 #: It has to be *recent* — ``ingest`` runs the late-span policy, which rejects

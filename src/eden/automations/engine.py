@@ -86,6 +86,160 @@ class AutomationsEngine:
         )
         return {"id": aid, "name": name, "trigger_type": trigger_type, "action_type": action_type}
 
+    async def get_automation(
+        self, org_id: str, automation_id: str
+    ) -> dict[str, Any] | None:
+        client = await self._client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            """
+            SELECT id, org_id, name, trigger_type, trigger_config,
+                   action_type, action_config, enabled, created_at, updated_at
+            FROM automations
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            org_id,
+            automation_id,
+        )
+        return dict(row) if row else None
+
+    async def update_automation(
+        self,
+        org_id: str,
+        automation_id: str,
+        *,
+        name: str | None = None,
+        trigger_type: str | None = None,
+        trigger_config: dict[str, Any] | None = None,
+        action_type: str | None = None,
+        action_config: dict[str, Any] | None = None,
+        enabled: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Partial update; only fields explicitly passed (non-``None``) change."""
+        existing = await self.get_automation(org_id, automation_id)
+        if existing is None:
+            return None
+        client = await self._client()
+        if client is None:
+            return None
+        new_name = name if name is not None else existing["name"]
+        new_trigger_type = (
+            trigger_type if trigger_type is not None else existing["trigger_type"]
+        )
+        new_trigger_config = (
+            trigger_config
+            if trigger_config is not None
+            else dict(existing.get("trigger_config") or {})
+        )
+        new_action_type = (
+            action_type if action_type is not None else existing["action_type"]
+        )
+        new_action_config = (
+            action_config
+            if action_config is not None
+            else dict(existing.get("action_config") or {})
+        )
+        new_enabled = enabled if enabled is not None else existing["enabled"]
+        await client.execute(
+            """
+            UPDATE automations SET
+                name = $3, trigger_type = $4, trigger_config = $5::jsonb,
+                action_type = $6, action_config = $7::jsonb, enabled = $8,
+                updated_at = NOW()
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            org_id,
+            automation_id,
+            new_name,
+            new_trigger_type,
+            json.dumps(new_trigger_config),
+            new_action_type,
+            json.dumps(new_action_config),
+            new_enabled,
+        )
+        return await self.get_automation(org_id, automation_id)
+
+    async def toggle_automation(
+        self, org_id: str, automation_id: str, *, enabled: bool
+    ) -> dict[str, Any] | None:
+        return await self.update_automation(org_id, automation_id, enabled=enabled)
+
+    async def delete_automation(self, org_id: str, automation_id: str) -> bool:
+        client = await self._client()
+        if client is None:
+            return False
+        existing = await self.get_automation(org_id, automation_id)
+        if existing is None:
+            return False
+        await client.execute(
+            "DELETE FROM automations WHERE org_id = $1 AND id = $2::uuid",
+            org_id,
+            automation_id,
+        )
+        return True
+
+    async def list_runs(
+        self,
+        org_id: str,
+        *,
+        automation_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """List ``automation_runs`` for an org, optionally scoped to one
+        automation. Paginated with a total count for the caller's
+        next/prev controls (mirrors ``ci_eval_history`` pagination shape)."""
+        client = await self._client()
+        if client is None:
+            return {"runs": [], "total": 0, "limit": limit, "offset": offset}
+        capped_limit = max(1, min(int(limit), 200))
+        capped_offset = max(0, int(offset))
+        if automation_id:
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, automation_id, status, payload, created_at
+                FROM automation_runs
+                WHERE org_id = $1 AND automation_id = $2::uuid
+                ORDER BY created_at DESC
+                LIMIT $3 OFFSET $4
+                """,
+                org_id,
+                automation_id,
+                capped_limit,
+                capped_offset,
+            )
+            total_row = await client.fetchrow(
+                "SELECT count(*) AS n FROM automation_runs "
+                "WHERE org_id = $1 AND automation_id = $2::uuid",
+                org_id,
+                automation_id,
+            )
+        else:
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, automation_id, status, payload, created_at
+                FROM automation_runs
+                WHERE org_id = $1
+                ORDER BY created_at DESC
+                LIMIT $2 OFFSET $3
+                """,
+                org_id,
+                capped_limit,
+                capped_offset,
+            )
+            total_row = await client.fetchrow(
+                "SELECT count(*) AS n FROM automation_runs WHERE org_id = $1",
+                org_id,
+            )
+        total = int(total_row["n"]) if total_row else len(rows)
+        return {
+            "runs": [dict(r) for r in rows],
+            "total": total,
+            "limit": capped_limit,
+            "offset": capped_offset,
+        }
+
     async def on_score(
         self,
         org_id: str,
@@ -161,13 +315,9 @@ class AutomationsEngine:
                 "trace_id": trace_id,
             }
         if action_type == "alert":
-            return {
-                "action": "alert",
-                "status": "completed",
-                "trace_id": trace_id,
-                "score": score,
-                "message": config.get("message") or "score threshold breached",
-            }
+            return await self._dispatch_alert(
+                org_id, config, trace_id=trace_id, score=score
+            )
         if action_type == "webhook":
             return await self._dispatch_webhook(
                 org_id, config, trace_id=trace_id, score=score
@@ -206,7 +356,11 @@ class AutomationsEngine:
         except ValueError as exc:
             return {"status": "error", "error": f"webhook url rejected: {exc}"}
         except Exception as exc:  # pragma: no cover - import/helper failure
-            logger.debug("automations: SSRF guard unavailable: %s", exc)
+            logger.warning("automations: SSRF guard unavailable: %s", exc)
+            return {
+                "status": "error",
+                "error": "webhook url rejected: SSRF guard unavailable",
+            }
 
         try:
             import httpx
@@ -229,6 +383,79 @@ class AutomationsEngine:
                 await asyncio.sleep(_DISPATCH_RETRY_BACKOFF_S)
         logger.warning("automations: dispatch to %s failed: %s", url, last_error)
         return {"status": "error", "error": last_error}
+
+    async def _dispatch_alert(
+        self,
+        org_id: str,
+        config: dict[str, Any],
+        *,
+        trace_id: str,
+        score: float,
+    ) -> dict[str, Any]:
+        """Email alert action — routes through FEAT-44 ``dispatch_unified_alert``."""
+        message = str(config.get("message") or "score threshold breached")
+        severity = str(config.get("severity") or "P1").upper()
+        title = str(config.get("title") or "Automation alert")
+        detail = (
+            f"Automation triggered on trace {trace_id} "
+            f"(score={score:.3f}): {message}"
+        )
+        try:
+            from eden.alerts.unified import (
+                AlertDestination,
+                UnifiedAlertRouteRequest,
+                UnifiedDestinationKind,
+                dispatch_unified_alert,
+            )
+
+            result = await dispatch_unified_alert(
+                UnifiedAlertRouteRequest(
+                    org_id=org_id,
+                    severity=severity,
+                    title=title,
+                    message=detail,
+                    event_kind="automation_triggered",
+                    issue_id=trace_id,
+                    entity_id=trace_id,
+                    destinations=[
+                        AlertDestination(kind=UnifiedDestinationKind.EMAIL)
+                    ],
+                    extra={
+                        "trace_id": trace_id,
+                        "score": score,
+                        "message": message,
+                    },
+                )
+            )
+            email = result.by_kind(UnifiedDestinationKind.EMAIL)
+            if email and email.status == "sent":
+                return {
+                    "action": "alert",
+                    "status": "sent",
+                    "trace_id": trace_id,
+                    "score": score,
+                    "message": message,
+                    "severity": severity,
+                    "recipient_count": email.detail.get("recipient_count", 0),
+                }
+            return {
+                "action": "alert",
+                "status": "error",
+                "error": (email.error if email else "email dispatch failed"),
+                "trace_id": trace_id,
+                "score": score,
+                "message": message,
+            }
+        except Exception as exc:  # noqa: BLE001 - never crash the engine
+            logger.warning("automations: alert action failed org=%s: %s", org_id, exc)
+            return {
+                "action": "alert",
+                "status": "error",
+                "error": str(exc)[:300],
+                "trace_id": trace_id,
+                "score": score,
+                "message": message,
+            }
 
     async def _dispatch_webhook(
         self,

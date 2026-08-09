@@ -3,7 +3,7 @@
 Lightweight, fire-and-forget observability for LLM applications.
 
 - `@trace_agent` decorator and `with eden.trace(...)` context manager
-- One-call auto-instrumentation for **OpenAI, Anthropic, Groq, Cohere, Mistral, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra** (no-op for TS-only frameworks)
+- One-call auto-instrumentation for **13 frameworks** (OpenAI, Anthropic, Groq, Cohere, Mistral, LangChain, LlamaIndex, CrewAI, AutoGen, Mastra, Pydantic AI, Bedrock, Gemini) via `eden.instrument()` — a true one-liner on Python. TypeScript users: see `@eden-ai/sdk` (`instrument()` + `wrap*`).
 - Async, batched HTTP sender with a **5 ms p99 overhead budget** on the producer hot path
 - Zero required dependencies beyond `httpx`
 
@@ -111,6 +111,23 @@ with eden.begin(agent_id="bot", user_id="u1") as session:
 ```
 
 See `examples/10_sessions.py`.
+
+### Agent identity (`agent_id`)
+
+Set a stable `agent_id` on every trace — not only inside `eden.begin(...)`. Eden uses it for per-agent analytics breakdowns, issue extraction, and segmentation; those features only key off it when the field is populated.
+
+```python
+import eden
+
+# Process-wide default (also via EDEN_AGENT_ID)
+eden.configure(org_id="org_123", api_key="sk_...", agent_id="support-bot")
+
+@eden.trace_agent(name="support-bot")
+async def answer(q: str) -> str:
+    ...
+```
+
+When omitted on an individual event, the configured `agent_id` is stamped on the payload and sent as `X-Eden-Agent-Id`.
 
 ### Sampling + offline queue
 

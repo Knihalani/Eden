@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   Suspense,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -49,8 +50,15 @@ import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
+import {
+  rankTierForIssue,
+  rankTierLabel,
+  type IssueRankTier,
+} from "@/lib/issue-rank";
 
 type SeverityFilter = "all" | "error" | "warn";
+type IssueSortMode = "rank" | "recency";
+type RankTierFilter = "all" | IssueRankTier;
 type DetailTab = "overview" | "runs" | "fix";
 
 /** Deep-linkable via ``?tab=``; anything else falls back to overview. */
@@ -60,6 +68,7 @@ const COLUMNS: { id: IssueStatus; label: string }[] = [
   { id: "open", label: "Open" },
   { id: "acknowledged", label: "In progress" },
   { id: "resolved", label: "Resolved" },
+  { id: "ignored", label: "Dismissed" },
 ];
 
 /**
@@ -82,8 +91,7 @@ const ISSUES_PAGE_SIZE = 50;
 function statusTone(status: IssueStatus): "fail" | "neutral" | "ok" {
   if (status === "open") return "fail";
   if (status === "acknowledged") return "neutral";
-  // "resolved" and "ignored" (the latter never reaches the client —
-  // see IssueStatus) both read as done.
+  // "resolved" and "ignored" both read as done.
   return "ok";
 }
 
@@ -99,20 +107,38 @@ function IssueStatusChip({ status }: { status: IssueStatus }) {
   return <StatusChip tone={statusTone(status)}>{label}</StatusChip>;
 }
 
-function IssueRow({
+function RankTierBadge({ tier }: { tier: IssueRankTier }) {
+  const tone =
+    tier === "top"
+      ? "fail"
+      : tier === "high"
+        ? "neutral"
+        : tier === "medium"
+          ? "ok"
+          : "neutral";
+  return <StatusChip tone={tone}>{rankTierLabel(tier)}</StatusChip>;
+}
+
+const IssueRow = memo(function IssueRow({
   issue,
   active,
   onSelect,
+  rankTier,
 }: {
   issue: IssueFixture;
   active: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
+  rankTier?: IssueRankTier | null;
 }) {
   const agent = agentForIssue(issue);
+  const handleClick = useCallback(
+    () => onSelect(issue.id),
+    [onSelect, issue.id],
+  );
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={handleClick}
       data-issue-id={issue.id}
       data-active={active ? "true" : "false"}
       className={cn(
@@ -126,6 +152,7 @@ function IssueRow({
         <div className="flex flex-wrap items-center gap-2">
           <SeverityBadge severity={issue.severity} />
           <IssueStatusChip status={issue.status} />
+          {rankTier ? <RankTierBadge tier={rankTier} /> : null}
           <span className="type-value tabular-nums !text-[0.625rem] text-[var(--text-muted)]">
             {issue.occurrenceTraceIds.length}×
           </span>
@@ -137,7 +164,7 @@ function IssueRow({
       </div>
     </button>
   );
-}
+});
 
 function IssueDetail({
   issue,
@@ -277,7 +304,7 @@ function IssueDetail({
               </button>
             </>
           ) : null}
-          {issue.status === "resolved" ? (
+          {issue.status === "resolved" || issue.status === "ignored" ? (
             <button
               type="button"
               className="ds-btn ds-btn-ghost ds-btn-sm"
@@ -505,13 +532,31 @@ function LabIssuesInner() {
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
+  const [sortMode, setSortMode] = useState<IssueSortMode>("rank");
+  const [rankTierFilter, setRankTierFilter] = useState<RankTierFilter>("all");
+  const [query, setQuery] = useState("");
+  /** Optimistic triage overlay — cleared after invalidate or on failure. */
+  const [statusOverride, setStatusOverride] = useState<Record<string, IssueStatus>>(
+    {},
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(paramId);
+
+  useEffect(() => {
+    setSelectedId(paramId);
+  }, [paramId]);
+
   // OPT-15: offset-paginated — the API caps a single page at 200 (we
   // request 50/page) so orgs with >1 page of issues no longer see a
   // silent, signal-free truncation at the oldest 50.
   const issuesQuery = useInfiniteQuery({
-    queryKey: queryKeys.portal.issues(orgId),
+    queryKey: [...queryKeys.portal.issues(orgId), sortMode] as const,
     queryFn: ({ pageParam }) =>
-      portalApi.issues(orgId!, { limit: ISSUES_PAGE_SIZE, offset: pageParam }),
+      portalApi.issues(orgId!, {
+        limit: ISSUES_PAGE_SIZE,
+        offset: pageParam,
+        sort: sortMode,
+      }),
     initialPageParam: 0,
     getNextPageParam: (lastPage: IssueFixture[], allPages: IssueFixture[][]) => {
       if (lastPage.length < ISSUES_PAGE_SIZE) return undefined;
@@ -524,18 +569,6 @@ function LabIssuesInner() {
     () => issuesQuery.data?.pages.flatMap((page) => page) ?? [],
     [issuesQuery.data],
   );
-
-  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
-  const [query, setQuery] = useState("");
-  /** Optimistic triage overlay — cleared after invalidate or on failure. */
-  const [statusOverride, setStatusOverride] = useState<Record<string, IssueStatus>>(
-    {},
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(paramId);
-
-  useEffect(() => {
-    setSelectedId(paramId);
-  }, [paramId]);
 
   const issues = useMemo(() => {
     return issuesData.map((issue) => ({
@@ -574,31 +607,10 @@ function LabIssuesInner() {
     [orgId, queryClient, pushToast],
   );
 
-  /**
-   * FEAT-10: soft-dismiss (status=ignored). Feeds the shadow-detector
-   * confirm/dismiss loop (P0-A) on the backend when the issue's example
-   * stumble came from the signal investigator. Not part of ``IssueStatus``
-   * (the open/acknowledged/resolved kanban) so it skips the optimistic
-   * ``statusOverride`` and just invalidates on success — the issue drops
-   * out of the default list once refetched.
-   */
+  /** FEAT-10 / BUG-9: soft-dismiss (status=ignored) — moves to Dismissed column. */
   const dismissIssue = useCallback(
-    async (issueId: string) => {
-      if (!orgId) return;
-      try {
-        await agentIssuesApi.resolve(orgId, issueId, "ignored");
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.portal.issues(orgId),
-        });
-      } catch (err) {
-        pushToast({
-          title: "Could not dismiss issue",
-          body: err instanceof Error ? err.message : String(err),
-          tone: "fail",
-        });
-      }
-    },
-    [orgId, queryClient, pushToast],
+    (issueId: string) => setIssueStatus(issueId, "ignored"),
+    [setIssueStatus],
   );
 
   const scopedIssues = useMemo(() => {
@@ -608,11 +620,39 @@ function LabIssuesInner() {
 
   const agentCounts = useMemo(() => agentScopeCounts(issues), [issues]);
 
+  const rankTierByIssueId = useMemo(() => {
+    const map = new Map<string, IssueRankTier>();
+    for (const issue of scopedIssues) {
+      const tier = rankTierForIssue(issue, scopedIssues);
+      if (tier) map.set(issue.id, tier);
+    }
+    return map;
+  }, [scopedIssues]);
+
+  const rankTierCounts = useMemo(() => {
+    const counts: Record<RankTierFilter, number> = {
+      all: scopedIssues.length,
+      top: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+    for (const issue of scopedIssues) {
+      const tier = rankTierByIssueId.get(issue.id);
+      if (tier) counts[tier] += 1;
+    }
+    return counts;
+  }, [scopedIssues, rankTierByIssueId]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return scopedIssues.filter((issue) => {
       if (severityFilter !== "all" && issue.severity !== severityFilter) {
         return false;
+      }
+      if (rankTierFilter !== "all") {
+        const tier = rankTierByIssueId.get(issue.id);
+        if (tier !== rankTierFilter) return false;
       }
       if (!q) return true;
       const issueAgent = agentForIssue(issue);
@@ -626,15 +666,13 @@ function LabIssuesInner() {
         (issueAgent?.name.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [scopedIssues, severityFilter, query]);
+  }, [scopedIssues, severityFilter, rankTierFilter, rankTierByIssueId, query]);
 
   const byColumn = useMemo(() => {
     const map: Record<IssueStatus, IssueFixture[]> = {
       open: [],
       acknowledged: [],
       resolved: [],
-      // Never populated: the read-model maps "ignored" -> "resolved"
-      // before an IssueFixture reaches the client (see IssueStatus).
       ignored: [],
     };
     for (const issue of filtered) {
@@ -814,6 +852,42 @@ function LabIssuesInner() {
                 ]}
               />
             </div>
+            <div className="space-y-2">
+              <p className="type-label">Sort</p>
+              <FilterChips
+                value={sortMode}
+                onChange={setSortMode}
+                options={[
+                  { id: "rank", label: "Priority" },
+                  { id: "recency", label: "Recent" },
+                ]}
+              />
+            </div>
+            {sortMode === "rank" ? (
+              <div className="space-y-2">
+                <p className="type-label">Rank tier</p>
+                <FilterChips
+                  value={rankTierFilter}
+                  onChange={setRankTierFilter}
+                  scroll
+                  options={[
+                    { id: "all", label: "All", count: rankTierCounts.all },
+                    {
+                      id: "top",
+                      label: "Top priority",
+                      count: rankTierCounts.top,
+                    },
+                    { id: "high", label: "High", count: rankTierCounts.high },
+                    {
+                      id: "medium",
+                      label: "Medium",
+                      count: rankTierCounts.medium,
+                    },
+                    { id: "low", label: "Low", count: rankTierCounts.low },
+                  ]}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div
@@ -879,7 +953,8 @@ function LabIssuesInner() {
                         <IssueRow
                           issue={row.issue}
                           active={row.issue.id === selected?.id}
-                          onSelect={() => selectIssue(row.issue.id)}
+                          onSelect={selectIssue}
+                          rankTier={rankTierByIssueId.get(row.issue.id) ?? null}
                         />
                       )}
                     </li>

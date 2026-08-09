@@ -4,7 +4,11 @@ import { Search } from "lucide-react";
 import Link from "next/link";
 import {
   agentLabel,
+  GUARDRAIL_KINDS,
+  GUARDRAIL_STATUSES,
   matchesLine,
+  kindLabel,
+  statusLabel,
   type GuardrailKind,
   type GuardrailPolicyFixture,
   type GuardrailStatus,
@@ -62,18 +66,18 @@ export function GuardrailsListView({
 
   const kindOptions: { id: GuardrailKind | "all"; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "prompt_injection", label: "Prompt injection" },
-    { id: "pii_redaction", label: "PII redaction" },
-    { id: "hallucination", label: "Hallucination" },
-    { id: "content_policy", label: "Content policy" },
-    { id: "judge_link", label: "Judge link" },
+    ...GUARDRAIL_KINDS.map((kind) => ({
+      id: kind,
+      label: kindLabel(kind),
+    })),
   ];
 
   const statusOptions: { id: GuardrailStatus | "all"; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "active", label: "Active" },
-    { id: "shadow", label: "Shadow" },
-    { id: "disabled", label: "Off" },
+    ...GUARDRAIL_STATUSES.map((status) => ({
+      id: status,
+      label: statusLabel(status),
+    })),
   ];
 
   return (

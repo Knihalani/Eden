@@ -52,8 +52,10 @@ class TestLambdaBindingSemantics:
         # name. If invoked AFTER the loop, they all see the
         # last value.
         lambdas = []
+        # This test DELIBERATELY demonstrates the late-binding closure trap;
+        # the loop variable capture is the subject under test.
         for x in ["a", "b", "c"]:
-            lambdas.append(lambda: x)
+            lambdas.append(lambda: x)  # noqa: B023
         # Call after the loop — all lambdas see x=='c'.
         results = [f() for f in lambdas]
         assert results == ["c", "c", "c"], (
@@ -174,20 +176,22 @@ class TestS21ModelRouterFallbackChain:
 
     @pytest.mark.asyncio
     async def test_lambda_uses_default_arg_binding_pattern(self) -> None:
-        """Static check: the production code at
-        ``model_router.py:533`` uses ``lambda m=model: ...``,
-        NOT bare ``lambda: ...``. Regress this and the
-        S-21 fix is gone.
+        """Static check: the production async path binds ``model`` via a
+        default arg (``lambda m=model`` or ``def _call_routed(m: str = model)``),
+        NOT bare ``lambda: ...``. Regress this and the S-21 fix is gone.
         """
         from pathlib import Path
 
         src = Path(
             "src/eden/optimization/model_router.py"
         ).read_text()
-        # The post-fix pattern must be present at least once.
-        assert "lambda m=model:" in src, (
-            "S-21 regression: 'lambda m=model:' pattern not found — "
-            "late-binding lambda bug is back"
+        has_default_binding = (
+            "lambda m=model:" in src
+            or "def _call_routed(m: str = model)" in src
+        )
+        assert has_default_binding, (
+            "S-21 regression: default-arg model binding not found — "
+            "late-binding for-loop bug is back"
         )
         # The pre-fix pattern must NOT appear in the async path.
         # We look for ``run_in_executor`` followed by ``lambda:``

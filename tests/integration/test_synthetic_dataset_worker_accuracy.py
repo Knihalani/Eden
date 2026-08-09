@@ -25,7 +25,6 @@ import pytest
 
 from eden.observability.quality_pipeline.worker import compute_trace_reports
 
-
 _SYNTH_ROOT = Path("tests/fixtures/traces/synthetic/traces")
 
 

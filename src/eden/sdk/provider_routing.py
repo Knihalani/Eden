@@ -20,6 +20,12 @@ Plus the pure helpers:
   into their span's ``attributes``. Used by the gateway
   auto-extractor when it sees a known routing library
   (LiteLLM / Portkey / OpenRouter) in the call stack.
+* :func:`decode_litellm_payload` / :func:`decode_portkey_payload`
+  / :func:`decode_openrouter_payload` — pure ingestion decoders
+  that map external router trace formats into the canonical
+  ``record_attempt`` field set (FEAT-138).
+* :func:`ingest_attempt` — async helper. Decodes a router-native
+  payload and persists via :class:`ProviderRoutingService`.
 
 Ponytail: best-effort — the SDK never raises. The customer
 wraps their LLM call in :func:`retry_with_fallback` and the
@@ -54,7 +60,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +180,138 @@ async def retry_with_fallback(
             # Otherwise continue to the next provider.
 
 
+def decode_litellm_payload(
+    payload: dict[str, Any],
+    *,
+    headers: dict[str, Any] | None = None,
+    attributes: dict[str, Any] | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+) -> dict[str, Any]:
+    """Pure helper. Decode a LiteLLM callback payload."""
+    from eden.services.observability.provider_routing_decoders import (
+        decode_litellm_payload as _decode,
+    )
+
+    return dict(
+        _decode(
+            payload,
+            headers=headers,
+            attributes=attributes,
+            trace_id=trace_id,
+            span_id=span_id,
+        ),
+    )
+
+
+def decode_portkey_payload(
+    payload: dict[str, Any],
+    *,
+    headers: dict[str, Any] | None = None,
+    attributes: dict[str, Any] | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+) -> dict[str, Any]:
+    """Pure helper. Decode Portkey headers / span attributes."""
+    from eden.services.observability.provider_routing_decoders import (
+        decode_portkey_payload as _decode,
+    )
+
+    return dict(
+        _decode(
+            payload,
+            headers=headers,
+            attributes=attributes,
+            trace_id=trace_id,
+            span_id=span_id,
+        ),
+    )
+
+
+def decode_openrouter_payload(
+    payload: dict[str, Any],
+    *,
+    headers: dict[str, Any] | None = None,
+    attributes: dict[str, Any] | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+) -> dict[str, Any]:
+    """Pure helper. Decode OpenRouter response metadata."""
+    from eden.services.observability.provider_routing_decoders import (
+        decode_openrouter_payload as _decode,
+    )
+
+    return dict(
+        _decode(
+            payload,
+            headers=headers,
+            attributes=attributes,
+            trace_id=trace_id,
+            span_id=span_id,
+        ),
+    )
+
+
+def decode_provider_routing_payload(
+    router: Literal["litellm", "portkey", "openrouter", "auto"],
+    payload: dict[str, Any],
+    *,
+    headers: dict[str, Any] | None = None,
+    attributes: dict[str, Any] | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+) -> dict[str, Any]:
+    """Pure helper. Dispatch to a router-specific decoder."""
+    from eden.services.observability.provider_routing_decoders import (
+        decode_provider_routing_payload as _decode,
+    )
+
+    return dict(
+        _decode(
+            router,
+            payload,
+            headers=headers,
+            attributes=attributes,
+            trace_id=trace_id,
+            span_id=span_id,
+        ),
+    )
+
+
+async def ingest_attempt(
+    org_id: str,
+    *,
+    router: Literal["litellm", "portkey", "openrouter", "auto"],
+    payload: dict[str, Any],
+    headers: dict[str, Any] | None = None,
+    attributes: dict[str, Any] | None = None,
+    trace_id: str | None = None,
+    span_id: str | None = None,
+) -> str | None:
+    """Decode a router-native payload and persist. Best-effort."""
+    decoded = decode_provider_routing_payload(
+        router,
+        payload,
+        headers=headers,
+        attributes=attributes,
+        trace_id=trace_id,
+        span_id=span_id,
+    )
+    if decoded.get("ignored"):
+        return None
+    return await record_attempt(
+        org_id,
+        trace_id=decoded["trace_id"],
+        span_id=decoded["span_id"],
+        attempted_provider=decoded["attempted_provider"],
+        attempted_model=decoded["attempted_model"],
+        sequence_index=int(decoded["sequence_index"]),
+        decision=decoded["decision"],
+        failure_reason=decoded.get("failure_reason"),
+        latency_ms=decoded.get("latency_ms"),
+    )
+
+
 def build_provider_routing_attributes(
     *,
     attempted_provider: str,
@@ -202,6 +340,11 @@ def build_provider_routing_attributes(
 
 __all__ = [
     "build_provider_routing_attributes",
+    "decode_litellm_payload",
+    "decode_openrouter_payload",
+    "decode_portkey_payload",
+    "decode_provider_routing_payload",
+    "ingest_attempt",
     "record_attempt",
     "retry_with_fallback",
 ]

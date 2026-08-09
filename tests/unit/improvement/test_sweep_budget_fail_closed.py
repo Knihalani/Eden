@@ -169,6 +169,8 @@ async def test_patch_generator_critic_skips_when_budget_exhausted() -> None:
     from eden.patches.patch_generator import _critic_review
 
     with sb.llm_budget_scope(0):
-        verdict = await _critic_review(AsyncMock(), "diff", rca_summary="s")
+        verdict = await _critic_review(
+            AsyncMock(), "diff", org_id="org", rca_summary="s"
+        )
     assert verdict["reason"] == "llm_budget_exhausted"
     assert verdict["passed"] is False

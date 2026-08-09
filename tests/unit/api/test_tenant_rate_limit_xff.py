@@ -25,7 +25,6 @@ import pytest
 from eden.api.middleware.tenant_rate_limit import TenantRateLimitMiddleware
 from eden.api.utils import client_ip as client_ip_mod
 
-
 # ────────────────────────────────────────────────────────────────────────
 # Test helpers
 # ────────────────────────────────────────────────────────────────────────

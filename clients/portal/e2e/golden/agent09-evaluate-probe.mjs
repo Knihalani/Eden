@@ -40,7 +40,7 @@ if (DRY) {
   console.log(`SKIP: agent09 evaluate probe soft-skip (${reason})`);
   console.log("Debt: live compare/diff @375/@1280 needs e2e/.auth-state.json + portal.");
   console.log(
-    "Routes when live: /evals, /evals?tab=playgrounds, /evals?tab=experiments, /evals?tab=studio, /playgrounds",
+    "Routes when live: /evals, /evals?tab=experiments, /evals?tab=studio, /playgrounds",
   );
   console.log("Markers: data-wave-e4-compare|diff|baseline|cta + optional data-wave-e6-*");
   console.log("RESULT: SKIP (exit 0)");
@@ -265,7 +265,6 @@ async function runViewport(browser, width, height, tag) {
   const results = [];
 
   results.push(await probe(page, `${tag}-evals`, "/evals"));
-  results.push(await probe(page, `${tag}-evals-pg`, "/evals?tab=playgrounds"));
   results.push(await probe(page, `${tag}-evals-experiments`, "/evals?tab=experiments"));
   results.push(await probe(page, `${tag}-evals-studio`, "/evals?tab=studio"));
   results.push(await probe(page, `${tag}-playgrounds`, "/playgrounds"));

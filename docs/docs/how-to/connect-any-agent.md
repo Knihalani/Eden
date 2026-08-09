@@ -67,13 +67,15 @@ CrewAI, AutoGen, and **Pydantic AI** (SDK 0.3+).
 
 ### TypeScript
 
-The TypeScript SDK wraps **client instances**, not modules globally.
-Detect installed frameworks, then wrap:
+`instrument()` (default `autoPatch: true`) patches OpenAI and Anthropic
+prototypes — instances built afterward are traced without a `wrap*` call.
+Other frameworks still need explicit wrappers:
 
 ```ts
 import {
   configure,
   detectInstalledFrameworks,
+  instrument,
   wrapOpenAI,
   traceAgent,
 } from "@eden-ai/sdk";
@@ -83,16 +85,22 @@ configure({
   orgId: process.env.EDEN_ORG_ID!,
 });
 
+const { wrapLangChain, patched } = instrument();
 const installed = detectInstalledFrameworks();
 let client: ReturnType<typeof wrapOpenAI> | undefined;
 if (installed.openai) {
   const { default: OpenAI } = await import("openai");
-  client = wrapOpenAI(new OpenAI());
+  client = patched.openai ? new OpenAI() : wrapOpenAI(new OpenAI());
+}
+if (installed.langchain) {
+  const { ChatOpenAI } = await import("@langchain/openai");
+  wrapLangChain(new ChatOpenAI({ modelName: "gpt-4o-mini" }));
 }
 ```
 
-Native TypeScript frameworks: OpenAI, Anthropic, Vercel AI, LangChain,
-and **Mastra** (`wrapMastra`, SDK 0.3+).
+Native TypeScript frameworks: OpenAI, Anthropic (prototype patch via
+`instrument()`), plus Vercel AI, LangChain, and **Mastra** (`wrapMastra`,
+SDK 0.3+) and the other `wrap*` helpers.
 
 ## Tier 2 — Universal HTTP / OTel capture
 

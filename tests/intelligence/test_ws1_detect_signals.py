@@ -9,9 +9,9 @@ import pytest
 
 from eden.issues.auto_scanner import AutoIssueScanner
 from eden.learning.tool_call_labels import ToolCallLabelCreate, ToolCallLabelService
+from eden.search.deep_to_signal import save_search_as_signal
 from eden.signals.classifier_pipeline import ClassifierTrainingPipeline, TrainResult
 from eden.signals.investigator import _heuristic_match, compress_trace, investigate_trace
-from eden.search.deep_to_signal import save_search_as_signal
 
 
 class _CapturingWriter:
@@ -108,10 +108,25 @@ def test_heuristic_match_frustration() -> None:
     events = [
         {"event_type": "message", "attributes": {"text": "user is frustrated try again"}}
     ]
-    matched, payload, conf = _heuristic_match("user frustration signal", events)
+    summary = compress_trace(events).lower()
+    matched, payload, conf = _heuristic_match(
+        "user frustration signal", events, summary=summary
+    )
     assert matched is True
     assert payload.get("frustrated") is True
     assert conf >= 0.5
+
+
+def test_heuristic_match_uses_precomputed_summary() -> None:
+    """OPT-33: matcher must honor caller-supplied compressed summary."""
+    events = [{"event_type": "message", "output_text": "ignored"}]
+    matched, payload, _ = _heuristic_match(
+        "user frustration signal",
+        events,
+        summary="user is frustrated try again",
+    )
+    assert matched is True
+    assert payload.get("frustrated") is True
 
 
 @pytest.mark.asyncio
@@ -138,6 +153,7 @@ async def test_tool_call_label_service_create() -> None:
     svc = ToolCallLabelService()
     mock_pg = MagicMock()
     mock_pg.execute = AsyncMock()
+    mock_pg.fetchrow = AsyncMock(return_value=None)
     with patch(
         "eden.storage.postgres.get_postgres_client",
         new=AsyncMock(return_value=mock_pg),

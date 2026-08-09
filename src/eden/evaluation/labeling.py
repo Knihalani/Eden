@@ -388,6 +388,44 @@ class LabelingService:
             })
         return items, int(total or 0)
 
+    # ── Orphan lease recovery (FEAT-78) ─────────────────────
+
+    async def sweep_orphaned_in_progress(self, org_id: str) -> int:
+        """Revert ``in_progress`` items with no active lease back to ``pending``.
+
+        Cron-friendly: safe to call periodically. ``pop()`` also invokes this
+        inline so orphaned items become reclaimable before tier selection runs.
+        """
+        from eden.evaluation.labeling_leases import has_active_lease
+
+        rows = await self._pg.fetch(
+            """
+            SELECT id FROM labeling_items
+            WHERE org_id = $1 AND status = 'in_progress'
+            """,
+            org_id,
+        )
+        reverted = 0
+        for row in rows:
+            item_id = str(row["id"])
+            if await has_active_lease(org_id, item_id):
+                continue
+            result = await self._pg.execute(
+                """
+                UPDATE labeling_items
+                SET status = 'pending', assigned_to = NULL, updated_at = NOW()
+                WHERE id = $1 AND status = 'in_progress'
+                """,
+                item_id,
+            )
+            try:
+                rowcount = int(str(result).split()[-1])
+            except (ValueError, IndexError):
+                rowcount = 0
+            if rowcount >= 1:
+                reverted += 1
+        return reverted
+
     # ── Pop (annotator pulls the next item) ──────────────────
 
     async def pop(
@@ -396,10 +434,16 @@ class LabelingService:
         org_id: str,
         annotator_id: str,
         limit: int = 5,
+        strategy: str = "fifo",
     ) -> list[LabelingItem]:
         """Pull the next ``limit`` items for ``annotator_id``.
 
-        Strategy:
+        ``strategy``:
+          * ``fifo`` — preserve candidate order (created_at tiers).
+          * ``active_learning`` — re-rank candidates via disagreement /
+            uncertainty heuristics before leasing.
+
+        Priority tiers (before strategy re-rank):
           1. Items assigned to this annotator first.
           2. Unassigned items next, with ``required_skills``
              matching the annotator's skills.
@@ -410,15 +454,20 @@ class LabelingService:
         for each pulled item, with ``source='auto'`` (queue
         service picked the annotator).
         """
+        await self.sweep_orphaned_in_progress(org_id)
         # Fetch candidates in priority order. The first
         # three SELECTs are pre-priority; the LIMIT is
         # applied per branch.
         rows: list[dict[str, Any]] = []
-        # 1. Explicitly assigned to this annotator.
+        # 1. Explicitly assigned to this annotator — pending *or*
+        # already in_progress (FEAT-78 reclaim: session dropped after
+        # claim, Redis/memory lease TTL elapsed; same annotator may
+        # reclaim rather than leaving the item stranded forever).
         rows.extend(await self._pg.fetch(
             f"""
             SELECT {_LABELING_ITEM_COLUMNS} FROM labeling_items
-            WHERE org_id = $1 AND status = 'pending'
+            WHERE org_id = $1
+              AND status IN ('pending', 'in_progress')
               AND assigned_to = $2
             ORDER BY created_at ASC
             LIMIT $3
@@ -455,6 +504,43 @@ class LabelingService:
                 org_id, limit - len(rows),
             )
             rows.extend(any_rows)
+        if strategy == "active_learning" and rows:
+            from eden.evaluation.active_learning import (
+                RankableLabelingItem,
+                agreement_from_iaa_per_item,
+                extract_model_confidence,
+                select_next_items,
+            )
+
+            item_ids = [str(r["id"]) for r in rows]
+            count_rows = await self._pg.fetch(
+                """
+                SELECT item_id, count(*)::int AS annotations_count
+                FROM annotations
+                WHERE item_id = ANY($1::uuid[])
+                GROUP BY item_id
+                """,
+                item_ids,
+            )
+            counts = {str(r["item_id"]): int(r["annotations_count"]) for r in count_rows}
+            iaa = await self.compute_iaa(org_id=org_id, item_ids=item_ids)
+            rankable = [
+                RankableLabelingItem(
+                    item_id=str(r["id"]),
+                    annotation_count=counts.get(str(r["id"]), 0),
+                    agreement=agreement_from_iaa_per_item(iaa.per_item, str(r["id"])),
+                    model_confidence=extract_model_confidence(r.get("payload")),
+                )
+                for r in rows
+            ]
+            ranked_ids = [
+                x.item_id
+                for x in select_next_items(
+                    rankable, limit=len(rows), strategy="active_learning",
+                )
+            ]
+            id_to_row = {str(r["id"]): r for r in rows}
+            rows = [id_to_row[i] for i in ranked_ids if i in id_to_row]
         # Record assignments.
         items: list[LabelingItem] = []
         for row in rows[:limit]:
@@ -475,6 +561,14 @@ class LabelingService:
                     "for item %s (org=%s, annotator=%s); declining",
                     item.id, org_id, annotator_id, exc_info=True,
                 )
+                continue
+            if item.status == "in_progress":
+                # FEAT-78 reclaim: already in_progress for this
+                # annotator and claim_lease refreshed an expired
+                # (or same-holder) lease. No pending→in_progress
+                # flip — that WHERE would no-op and strand us.
+                item.status = "in_progress"
+                items.append(item)
                 continue
             # Flip to in_progress first — this is the authoritative
             # claim. The WHERE status = 'pending' guard means a
@@ -656,6 +750,66 @@ class LabelingService:
             item_id, org_id,
         )
 
+    async def skip_bulk(
+        self,
+        *,
+        org_id: str,
+        item_ids: list[str],
+        annotator_id: str,
+        reason: str | None = None,
+    ) -> int:
+        """Mark multiple items as skipped. Returns the number processed."""
+        for item_id in item_ids:
+            await self.skip(
+                org_id=org_id,
+                item_id=item_id,
+                annotator_id=annotator_id,
+                reason=reason,
+            )
+        return len(item_ids)
+
+    # ── Escalate (needs another reviewer) ───────────────────
+
+    async def escalate(
+        self,
+        *,
+        org_id: str,
+        item_id: str,
+    ) -> LabelingItem:
+        """Bump ``annotations_required`` and re-queue for another reviewer (FEAT-119)."""
+        row = await self._pg.fetchrow(
+            """
+            SELECT id, annotations_required
+            FROM labeling_items
+            WHERE id = $1 AND org_id = $2
+            """,
+            item_id,
+            org_id,
+        )
+        if row is None:
+            raise ValueError("item not found")
+        new_required = int(row["annotations_required"]) + 1
+        await self._pg.execute(
+            """
+            UPDATE labeling_items
+            SET annotations_required = $3,
+                status = 'pending',
+                assigned_to = NULL,
+                updated_at = NOW()
+            WHERE id = $1 AND org_id = $2
+            """,
+            item_id,
+            org_id,
+            new_required,
+        )
+        full = await self._pg.fetchrow(
+            f"SELECT {_LABELING_ITEM_COLUMNS} FROM labeling_items WHERE id = $1",
+            item_id,
+        )
+        if full is None:
+            raise RuntimeError("item vanished after escalate")
+        return _row_to_item(full)
+
     # ── IAA ─────────────────────────────────────────────────
 
     async def compute_iaa(
@@ -668,30 +822,33 @@ class LabelingService:
 
         If ``item_ids`` is None, computes across every
         item in the org with 2+ annotations. Otherwise
-        restricts to the given items.
+        restricts to the given items (including those with
+        only one annotation so ``per_item`` can surface counts).
         """
+        min_annotations = 1 if item_ids is not None else 2
+        having_clause = f"HAVING COUNT(*) >= {min_annotations}"
         if item_ids is None:
             # Pull every item with 2+ annotations.
             rows = await self._pg.fetch(
-                """
-                SELECT i.id, i.payload, COUNT(*) AS n
+                f"""
+                SELECT i.id, i.payload, i.annotations_required, COUNT(*) AS n
                 FROM labeling_items i
                 JOIN annotations a ON a.item_id = i.id
                 WHERE i.org_id = $1
-                GROUP BY i.id, i.payload
-                HAVING COUNT(*) >= 2
+                GROUP BY i.id, i.payload, i.annotations_required
+                {having_clause}
                 """,
                 org_id,
             )
         else:
             rows = await self._pg.fetch(
-                """
-                SELECT i.id, i.payload, COUNT(*) AS n
+                f"""
+                SELECT i.id, i.payload, i.annotations_required, COUNT(*) AS n
                 FROM labeling_items i
                 JOIN annotations a ON a.item_id = i.id
                 WHERE i.org_id = $1 AND i.id = ANY($2::uuid[])
-                GROUP BY i.id, i.payload
-                HAVING COUNT(*) >= 2
+                GROUP BY i.id, i.payload, i.annotations_required
+                {having_clause}
                 """,
                 org_id, item_ids,
             )
@@ -713,6 +870,9 @@ class LabelingService:
         )
         # Group by item.
         by_item: dict[str, list[tuple[str, Any]]] = {}
+        required_by_item: dict[str, int] = {}
+        for r in rows:
+            required_by_item[str(r["id"])] = int(r.get("annotations_required") or 1)
         for ar in ann_rows:
             item_id = str(ar["item_id"])
             annotator = str(ar["annotator_id"])
@@ -730,7 +890,15 @@ class LabelingService:
         # per-item averages).
         pair_labels: dict[tuple[str, str], tuple[list[Any], list[Any]]] = {}
         for item_id, anns in by_item.items():
-            if len(anns) < 2:
+            n_anns = len(anns)
+            if n_anns < 2:
+                if n_anns == 1:
+                    per_item[item_id] = {
+                        "annotations_count": float(n_anns),
+                        "annotations_required": float(
+                            required_by_item.get(item_id, 1)
+                        ),
+                    }
                 continue
             labels_for_alpha: list[Any] = [lab for _, lab in anns]
             all_pairs_for_alpha.append(labels_for_alpha)
@@ -758,6 +926,10 @@ class LabelingService:
                 per_item[item_id] = {
                     "kappa": k if k is not None else 0.0,
                     "agreement": r,
+                    "annotations_count": float(n_anns),
+                    "annotations_required": float(
+                        required_by_item.get(item_id, 1)
+                    ),
                 }
             else:
                 # N>2 — use simple agreement.
@@ -768,6 +940,10 @@ class LabelingService:
                         pairs.append(values[i] == values[j])
                 per_item[item_id] = {
                     "agreement": sum(pairs) / len(pairs) if pairs else 0.0,
+                    "annotations_count": float(n_anns),
+                    "annotations_required": float(
+                        required_by_item.get(item_id, 1)
+                    ),
                 }
         # Second pass: compute Cohen's kappa over the FULL
         # pair's labels.

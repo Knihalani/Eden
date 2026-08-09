@@ -60,7 +60,7 @@ Cat 15 answers both questions. The implementation is
 | `HallucinationBlocker` | `detectors.py` | Galileo-style output check. |
 | `LLMFirewall` | `detectors.py` | Lunary-style pre-LLM-call firewall. |
 | `InterventionEngine` | `intervention.py` | The headline guardrail route. |
-| `LegacyEvalToGuardrailLink` | `intervention.py` | Promote an offline judge into a production guardrail. **Legacy (FEAT-34)** — see "EvalToGuardrailLink — which class is canonical" below; the canonical, enforcing implementation lives in `eden.evaluation.eval_intel.integration`. |
+| `EvalToGuardrailLink` | `eval_intel/integration.py` | Promote an offline judge into a production guardrail (canonical — see FEAT-34 below). |
 | `InterventionLog` | `intervention.py` | Read-side: query past decisions. |
 | `GuardrailMetrics` | `intervention.py` | Dashboard counters (trigger rate / block rate). |
 
@@ -138,8 +138,10 @@ catching real issues offline (e.g. ``hallucination_score <
 guardrail in one call:
 
 ```python
-link = LegacyEvalToGuardrailLink(pg_client)
-new_policy_id = await link.promote(
+from eden.evaluation.eval_intel.integration import EvalToGuardrailLink
+
+link = EvalToGuardrailLink()
+new_policy_id = await link.promote_to_guardrail(
     org_id="org-42",
     judge_name="hallucination_check_v2",
     threshold=0.7,
@@ -204,7 +206,7 @@ new wiring.
 | Per-direction rules | ✅ input / output / both | Routing |
 | Built-in PII patterns | ✅ email + SSN + apikey | From Cat 10 + extended by Phase K |
 | Built-in injection patterns | ✅ 5-phrase blocklist | Common jailbreak patterns |
-| Eval-to-guardrail promotion | ✅ `eval_intel.integration.EvalToGuardrailLink.promote_to_guardrail` (canonical; `LegacyEvalToGuardrailLink.promote` also exists, non-enforcing — see FEAT-34 below) | One-call promotion from Cat 3 judge |
+| Eval-to-guardrail promotion | ✅ `eval_intel.integration.EvalToGuardrailLink.promote_to_guardrail` (canonical — see FEAT-34 below) | One-call promotion from Cat 3 judge |
 | Drift detection on promoted judge | ✅ on_judge_threshold_breach | Stale-model detection |
 | Alternate-response failover | 🟡 existing | Cat 10 has the policy; LLMFirewall applies it |
 | Custom JavaScript rules | ❌ deferred | Not in scope for v1 |
@@ -388,58 +390,28 @@ record-keeping shim kept alive for its existing callers.
 
 ### Portal dashboard audit (FEAT-38)
 
-Now that FEAT-3 (bypass removed) and FEAT-33 (monitoring) are in
-place, the portal's customer-facing guardrail dashboards
-(`clients/portal/src/lab/guardrails/guardrails-chrome.tsx`,
-`guardrails-detail-view.tsx`, `guardrails-list-view.tsx`, and the
-`guardrails.ts` fixtures) were audited for the specific risk this
-doc is about: could any displayed "enforcement activity" metric
-have come from the old bypassed trajectory-hot-path substitution
-rather than real content-safety enforcement?
+**Durable audit artifact:** `docs/specs/strategic-review-2026-08/features/guardrail-metrics-audit.md`
 
-**Conclusion: no live conflation found — and the reason is stronger
-than "the two data sources don't overlap."** Tracing the actual data
-flow (not assuming it) from `clients/portal/src/app/(portal)/guardrails/page.tsx`:
-the page dynamically renders the real customer-facing components in
-`clients/portal/src/lab/guardrails/` (`guardrails-list-view.tsx`,
-`guardrails-detail-view.tsx`, `guardrails-chrome.tsx` — despite the
-`lab` path segment, this is production code, wired via `dynamic()`
-imports off the real route, not a sandbox), and those components are
-fed by exactly one backend call:
-`portalApi.guardrailPolicies(orgId)` → `GET
-/orgs/{org}/guardrails/policies` → `GuardrailPolicy.list`
-(`eden.guardrails.policy`) — a pure CRUD read of the
-`guardrail_policies` table (`id, name, type, spec, action,
-direction, status, created_at`).
+**Conclusion: no live conflation found.** The removed trajectory bypass
+never wrote to `intervention_log`; all enforcement counts read that
+table (InterventionEngine path only). The portal does not call
+`GuardrailMetrics.dashboard()` or `InterventionLog.query()` today.
 
-That endpoint has **no enforcement-activity fields at all** — no
-trigger count, block count, match volume, or last-hit timestamp.
-`clients/portal/src/lib/api/portal.ts`'s own comment on
-`guardrailPolicies` confirms this explicitly: "the backend never
-computes severity, match-volume, last-hit, rule-summary, or
-issue/trace links." Grepping the whole `clients/portal/src/`
-tree for `guardrails/metrics`, `guardrails/log`, `GuardrailMetrics`,
-and `InterventionLog` returns zero matches — the portal does not
-call `GuardrailMetrics.dashboard()` or `InterventionLog.query()`
-(the two services that *do* read `intervention_log`, the table
-`evaluate_and_act` writes to) anywhere today. The `counts` prop
-threaded through `guardrails-list-view.tsx` is a client-side tally
-of how many *policies* match the current kind/status filter, not an
-enforcement count.
+Customer-facing enforcement activity on `/guardrails` is limited to
+`matchCount24h` on each policy card, sourced by
+`GET /orgs/{org}/portal/guardrails/policies` from
+`intervention_log` (`policy_id IS NOT NULL`, 24h window). The portal
+client maps this field in `portalApi.guardrailPolicies` (FEAT-38 fix).
+There is no full metrics dashboard chart.
 
-**Net conclusion:** there is currently no enforcement-activity metric
-of any kind surfaced on the customer-facing guardrails dashboard —
-real or bypassed — so there is no live conflation to fix, and no
-possible path for a trajectory-hot-path substitution artifact to
-have reached it, in the current bug state or the historical one.
+The `counts` prop on `guardrails-list-view.tsx` is a client-side tally
+of how many *policies* match the current filter — not an enforcement
+count.
+
 If/when a future feature wires `GuardrailMetrics`/`InterventionLog`
-into this dashboard, it should read `intervention_log` directly (as
-those services already do) and must not accept any payload carrying
-the `"feature": "trajectory_guardrail"` marker as a content-safety
-enforcement event — that is precisely the signature
-`record_guardrail_bypass_if_detected()` (FEAT-33, above) treats as
-an incident, not a real event, and any new dashboard code should do
-the same before rendering it.
+into the dashboard, it must read `intervention_log` directly and reject
+any payload carrying `"feature": "trajectory_guardrail"` (same rule as
+`record_guardrail_bypass_if_detected()`, FEAT-33).
 
 ### EvalToGuardrailLink — which class is canonical (FEAT-34)
 

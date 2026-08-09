@@ -9,7 +9,7 @@ from starlette.requests import Request
 
 
 def test_create_api_key_body_defaults_when_empty_or_partial() -> None:
-    from eden.api.routes.api_keys import CreateApiKeyBody, _DEFAULT_CREATE_SCOPES
+    from eden.api.routes.api_keys import _DEFAULT_CREATE_SCOPES, CreateApiKeyBody
 
     empty = CreateApiKeyBody.model_validate({})
     assert empty.name == "SDK"
@@ -32,8 +32,8 @@ def test_create_api_key_body_defaults_when_empty_or_partial() -> None:
 @pytest.mark.asyncio
 async def test_parse_create_api_key_body_accepts_empty_raw() -> None:
     from eden.api.routes.api_keys import (
-        CreateApiKeyBody,
         _DEFAULT_CREATE_SCOPES,
+        CreateApiKeyBody,
         _parse_create_api_key_body,
     )
 

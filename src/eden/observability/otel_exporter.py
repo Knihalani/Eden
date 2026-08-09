@@ -195,7 +195,8 @@ class OTelDualExporter:
         - ``gen_ai.usage.{input,output}_tokens`` from metrics
         - ``gen_ai.response.finish_reasons`` from finish_reason
         - ``gen_ai.response.model`` from model_version
-        - ``gen_ai.conversation.id`` from trace_id
+        - ``gen_ai.conversation.id`` only when a real conversation id is
+          present in ``event.attributes`` — never fabricated from trace_id
         - Any ``acme.eden.*`` namespaced attributes pass through verbatim
         """
         attributes: list[dict[str, Any]] = []
@@ -249,7 +250,12 @@ class OTelDualExporter:
             add("gen_ai.usage.cache_hit", True)
 
         # ── conversation / trace ──
-        add("gen_ai.conversation.id", event.trace_id)
+        # FEAT-169: only emit a real conversation id (e.g. from OTel
+        # ingestion, which stamps this into attributes when the source
+        # sent one — see ingestion/otel.py:429). trace_id is not a
+        # conversation id and must never be fabricated into one here.
+        if conversation_id := event.attributes.get("gen_ai.conversation.id"):
+            add("gen_ai.conversation.id", conversation_id)
 
         # ── realm / source ──
         add("eden.realm", event.realm)

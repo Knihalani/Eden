@@ -224,3 +224,71 @@ class TestRunUserDeleteJob:
         statuses = [m["status"] for m in marks]
         assert statuses == ["running", "failed"]
         assert "sql failed" in marks[-1]["error_message"]
+
+
+class TestSummarizeStoreErasureStatuses:
+    def test_flattens_postgres_and_fanout_entries(self) -> None:
+        summary = {
+            "account_anonymized": True,
+            "rtbf_results": {
+                "org-a": {
+                    "status": "ok",
+                    "data": {
+                        "tables": [
+                            {
+                                "table": "telemetry_events",
+                                "status": "ok",
+                                "rows_anonymised": 4,
+                            },
+                        ],
+                        "fanout": [
+                            {
+                                "store": "qdrant",
+                                "status": "failed",
+                                "error": "no per-user index",
+                            },
+                            {
+                                "store": "typesense",
+                                "status": "unsupported",
+                                "error": "no user_id field",
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+        statuses = compliance_jobs.summarize_store_erasure_statuses(summary)
+        by_store = {s["store"]: s for s in statuses}
+        assert by_store["postgres"]["status"] == "ok"
+        assert "4 rows" in by_store["postgres"]["detail"]
+        assert by_store["qdrant"]["status"] == "failed"
+        assert by_store["typesense"]["status"] == "unsupported"
+
+    def test_merges_worst_status_across_orgs(self) -> None:
+        summary = {
+            "account_anonymized": True,
+            "rtbf_results": {
+                "org-a": {
+                    "data": {
+                        "fanout": [
+                            {"store": "redis", "status": "ok", "deleted": 0},
+                        ],
+                    },
+                },
+                "org-b": {
+                    "data": {
+                        "fanout": [
+                            {
+                                "store": "redis",
+                                "status": "unsupported",
+                                "error": "no user keys",
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+        statuses = compliance_jobs.summarize_store_erasure_statuses(summary)
+        redis = next(s for s in statuses if s["store"] == "redis")
+        assert redis["status"] == "unsupported"
+        assert redis["org_id"] == "org-a"

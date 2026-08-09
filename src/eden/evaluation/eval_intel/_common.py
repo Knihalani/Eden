@@ -1188,7 +1188,10 @@ def _fire_eval_to_guardrail_promotion(
 
         fire_and_forget(
             hook.on_judge_threshold_breach(
-                org_id, judge_name=judge_name, threshold=float(threshold),
+                org_id,
+                judge_name=judge_name,
+                threshold=float(threshold),
+                ensure_promoted=False,
             ),
             name="eval-intel-judge-threshold-breach-hook",
         )

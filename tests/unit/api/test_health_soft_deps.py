@@ -18,7 +18,7 @@ from eden.api.startup_checks import (
 
 
 def test_required_for_ready_is_postgres_only():
-    assert REQUIRED_FOR_READY == frozenset({"postgres"})
+    assert frozenset({"postgres"}) == REQUIRED_FOR_READY
 
 
 def test_ready_stays_green_when_qdrant_down():

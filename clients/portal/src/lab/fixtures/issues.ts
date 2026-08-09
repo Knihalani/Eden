@@ -5,13 +5,8 @@ import { catalogIssues, catalogTraces } from "@/lib/portal-catalog";
 /**
  * BUG-9: ``"ignored"`` is a valid resolve-status on the backend (see
  * ``_RESOLVE_STATUSES`` in agent_issues.py and ``AgentIssueResolveStatus``
- * in lib/api/resources.ts) reachable from the UI via the issue detail's
- * "Dismiss" action. The portal read-model (``_map_issue_status`` in
- * portal.py) always collapses ``"ignored"`` into ``"resolved"`` before an
- * ``IssueFixture`` reaches the client, so this value never actually shows
- * up as ``issue.status`` here — it exists on the type only so the
- * status-mutation call sites (``onStatus``/``setStatus``) can pass it
- * through without a cast.
+ * in lib/api/resources.ts). The portal read-model preserves it as
+ * ``"ignored"`` (rendered "Dismissed" in the issues board).
  */
 export type IssueStatus = "open" | "acknowledged" | "resolved" | "ignored";
 export type IssueSeverity = "error" | "warn";
@@ -45,6 +40,8 @@ export type IssueFixture = {
   patchBlockedReason?: string;
   patchBlockedMessage?: string;
   tags: string[];
+  /** Composite rank score from portal API (sort=rank). */
+  rankScore?: number | null;
 };
 
 /** Grouped failure patterns — what Home “needs attention” escalates into. */
@@ -64,13 +61,15 @@ export function issueById(id: string): IssueFixture | undefined {
   return liveIssues().find((i) => i.id === id);
 }
 
-/** Map a run to its grouped issue (prefer open/in-progress over resolved). */
+/** Map a run to its grouped issue (prefer active over completed/dismissed). */
 export function issueForTrace(traceId: string): IssueFixture | undefined {
   const matches = liveIssues().filter((i) =>
     i.occurrenceTraceIds.includes(traceId),
   );
   return (
-    matches.find((i) => i.status !== "resolved") ?? matches[0] ?? undefined
+    matches.find((i) => i.status !== "resolved" && i.status !== "ignored") ??
+    matches[0] ??
+    undefined
   );
 }
 
@@ -88,8 +87,18 @@ export function issuesSnapshot(issues: IssueFixture[] = liveIssues()) {
   const open = issues.filter((i) => i.status === "open");
   const acknowledged = issues.filter((i) => i.status === "acknowledged");
   const resolved = issues.filter((i) => i.status === "resolved");
-  const errors = issues.filter((i) => i.severity === "error" && i.status !== "resolved");
-  const warnings = issues.filter((i) => i.severity === "warn" && i.status !== "resolved");
+  const errors = issues.filter(
+    (i) =>
+      i.severity === "error" &&
+      i.status !== "resolved" &&
+      i.status !== "ignored",
+  );
+  const warnings = issues.filter(
+    (i) =>
+      i.severity === "warn" &&
+      i.status !== "resolved" &&
+      i.status !== "ignored",
+  );
 
   return {
     all: issues,

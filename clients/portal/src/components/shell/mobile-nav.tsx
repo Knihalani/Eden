@@ -22,6 +22,7 @@ import {
   Settings,
   MoreHorizontal,
   Tag,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -39,6 +40,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   traces: GitBranch,
   issues: AlertTriangle,
   signals: Activity,
+  topics: Layers,
   evals: FlaskConical,
   playgrounds: Play,
   improve: Sparkles,
@@ -60,7 +62,7 @@ const BOTTOM_ITEMS: NavItem[] = PRIMARY_NAV.filter((i) => BOTTOM_IDS.has(i.id));
 
 const MORE_ITEMS: NavItem[] = PRIMARY_NAV.filter((i) => !BOTTOM_IDS.has(i.id));
 
-/** Selector for tabbable elements inside the More sheet (matches CreateSignalDialog). */
+/** Selector for tabbable elements inside the More sheet. */
 const FOCUSABLE =
   'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 

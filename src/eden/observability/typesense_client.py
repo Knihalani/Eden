@@ -37,6 +37,7 @@ Schema (one collection ``eden_spans``):
       "completion_tokens": 500,                      # sort
       "cost_usd":          0.0123,                   # sort
       "created_at":        1747536000,               # filter + sort (epoch s)
+      "user_id":           "u-1",                    # filter (facet, RTBF)
     }
 
 Per-org isolation: every filter expression forces
@@ -68,6 +69,7 @@ SPAN_SCHEMA: dict[str, Any] = {
     "name": "eden_spans",
     "fields": [
         {"name": "tenant_id", "type": "string", "facet": True},
+        {"name": "user_id", "type": "string", "facet": True, "optional": True},
         {"name": "project_id", "type": "string", "facet": True},
         {"name": "trace_id", "type": "string", "facet": True},
         {"name": "realm", "type": "string", "facet": True},
@@ -96,9 +98,50 @@ SPAN_SCHEMA: dict[str, Any] = {
     "default_sorting_field": "created_at",
 }
 
+#: Known user-identity keys on span ``attributes``, checked in order.
+#: Mirrors ``eden.services.governance_intel.gdpr._TELEMETRY_USER_KEYS``
+#: and ``eden.scripts.typesense_backfill_user_id._SPAN_USER_KEYS``.
+_SPAN_USER_KEYS: tuple[str, ...] = (
+    "user_id",
+    "langfuse.user_id",
+    "helicone.user_id",
+    "enduser.id",
+)
+
 # Max payload size Typesense accepts per document. We truncate the
 # input/output text fields to stay well below this on the safe side.
 _MAX_TEXT_CHARS = 8_000
+
+_USER_ID_FIELD_DEF: dict[str, Any] = {
+    "name": "user_id",
+    "type": "string",
+    "facet": True,
+    "optional": True,
+}
+
+
+def _extract_user_id(attrs: dict[str, Any] | None) -> str:
+    """Return the first known user-identity value in ``attrs``.
+
+    Checks ``_SPAN_USER_KEYS`` in order. Returns ``""`` when no known
+    key is present or every value is blank.
+    """
+    if not attrs:
+        return ""
+    for key in _SPAN_USER_KEYS:
+        value = attrs.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _collection_has_field(body: dict[str, Any], field_name: str) -> bool:
+    fields = body.get("fields")
+    if not isinstance(fields, list):
+        return False
+    return any(
+        isinstance(f, dict) and f.get("name") == field_name for f in fields
+    )
 
 
 def _extract_text(payload: dict[str, Any] | None) -> str:
@@ -259,6 +302,7 @@ def build_span_doc(event: Any) -> dict[str, Any]:
     return {
         "id": f"{event.tenant_id}:{event.event_id}",
         "tenant_id": event.tenant_id,
+        "user_id": _extract_user_id(attrs),
         "project_id": event.project_id,
         "trace_id": event.trace_id,
         "realm": event.realm,
@@ -421,10 +465,15 @@ class TypesenseClient:
     # ── Schema ─────────────────────────────────────────────────────
 
     async def ensure_collection(self) -> bool:
-        """Create the spans collection if absent. Idempotent."""
+        """Create the spans collection if absent. Idempotent.
+
+        When the collection already exists, also ensures the ``user_id``
+        field is present (RTBF fanout depends on it for filter deletes).
+        """
         status, body = await self._request("GET", f"/collections/{self._collection}")
         if status == 200:
             self._schema_ready = True
+            await self._migrate_user_id_field(body if isinstance(body, dict) else None)
             return True
         if status == 404:
             status, body = await self._request(
@@ -438,6 +487,43 @@ class TypesenseClient:
             return False
         logger.warning(f"Typesense: unexpected status {status} on GET collection")
         return False
+
+    async def _migrate_user_id_field(
+        self, collection_body: dict[str, Any] | None = None,
+    ) -> bool:
+        """Add ``user_id`` to an existing collection when missing."""
+        if collection_body is None:
+            status, collection_body = await self._request(
+                "GET", f"/collections/{self._collection}",
+            )
+            if status != 200 or not isinstance(collection_body, dict):
+                return False
+        if _collection_has_field(collection_body, "user_id"):
+            return True
+        status, body = await self._request(
+            "PATCH",
+            f"/collections/{self._collection}",
+            json_body={"fields": [_USER_ID_FIELD_DEF]},
+        )
+        if status in (200, 201):
+            logger.info(
+                "Typesense: added user_id field to collection %s",
+                self._collection,
+            )
+            return True
+        logger.warning(
+            "Typesense: failed to add user_id field: %s %s", status, body,
+        )
+        return False
+
+    async def has_user_id_field(self) -> bool:
+        """Return True when the collection schema includes ``user_id``."""
+        status, body = await self._request(
+            "GET", f"/collections/{self._collection}",
+        )
+        if status != 200 or not isinstance(body, dict):
+            return False
+        return _collection_has_field(body, "user_id")
 
     # ── Write ──────────────────────────────────────────────────────
 
@@ -587,8 +673,92 @@ class TypesenseClient:
 
     async def delete_by_user(self, tenant_id: str, user_id: str) -> int:
         """RTBF: delete spans attributed to ``user_id`` within a tenant."""
+        if not self._schema_ready:
+            await self.ensure_collection()
         flt = f"tenant_id:={tenant_id} && user_id:={user_id}"
         return await self.delete_by_filter(flt)
+
+    async def count_by_filter(self, filter_by: str) -> int | None:
+        """Count docs matching a Typesense ``filter_by`` expression.
+
+        Returns ``None`` when the search call fails (distinct from zero
+        matches) so RTBF re-verification can fail closed.
+        """
+        status, body = await self._request(
+            "GET",
+            f"/collections/{self._collection}/documents/search",
+            params={
+                "q": "*",
+                "query_by": "tenant_id",
+                "filter_by": filter_by,
+                "per_page": 0,
+            },
+        )
+        if status == 200 and isinstance(body, dict):
+            return int(body.get("found", 0))
+        return None
+
+    async def count_by_user(self, tenant_id: str, user_id: str) -> int | None:
+        """RTBF re-verify: count spans still attributed to ``user_id``."""
+        if not self._schema_ready:
+            await self.ensure_collection()
+        flt = f"tenant_id:={tenant_id} && user_id:={user_id}"
+        return await self.count_by_filter(flt)
+
+    async def backfill_user_ids(self, pairs: list[tuple[str, str]]) -> int:
+        """Patch ``user_id`` onto existing docs (one-time RTBF backfill).
+
+        Uses Typesense's bulk ``import?action=update`` so only the
+        ``user_id`` field is touched on each document.
+        """
+        if not pairs:
+            return 0
+        if not self._schema_ready:
+            await self.ensure_collection()
+        if not await self.has_user_id_field():
+            logger.warning(
+                "Typesense backfill_user_ids: collection lacks user_id field",
+            )
+            return 0
+        if not self._is_reachable():
+            return 0
+        doc_list = [{"id": doc_id, "user_id": uid} for doc_id, uid in pairs]
+        body = "\n".join(json.dumps(d, default=str) for d in doc_list)
+        session = await self._get_session()
+        if session is None:
+            return 0
+        url = (
+            f"{self.base_url}/collections/{self._collection}"
+            f"/documents/import?action=update&return_score=false"
+        )
+        try:
+            async with session.post(
+                url, data=body, allow_redirects=False,
+                headers={"Content-Type": "text/plain"},
+            ) as resp:
+                text = await resp.text()
+                ok = 0
+                for line in text.splitlines():
+                    s = line.strip()
+                    if not s:
+                        continue
+                    if s == "OK":
+                        ok += 1
+                        continue
+                    try:
+                        if json.loads(s).get("success") is True:
+                            ok += 1
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+                if resp.status >= 500:
+                    self._record_failure()
+                else:
+                    self._record_success()
+                return ok
+        except Exception as exc:
+            logger.debug("Typesense backfill_user_ids failed: %s", exc)
+            self._record_failure()
+            return 0
 
     # ── Health ─────────────────────────────────────────────────────
 

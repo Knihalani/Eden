@@ -38,7 +38,7 @@ def _read(rel: str) -> str:
 class TestUploadAvatarThroughFetchApi:
     """``uploadAvatar`` must use ``fetchApi`` not raw ``fetch``."""
 
-    def test_calls_fetchApi(self) -> None:
+    def test_calls_fetch_api(self) -> None:
         source = _read("src/lib/api.ts")
         # In the uploadAvatar block, fetchApi is the call.
         assert (
@@ -76,7 +76,7 @@ class TestExportOrgDataThroughFetchApi:
     ``stream: true`` to bypass JSON parsing of the binary body).
     """
 
-    def test_calls_fetchApi_for_export(self) -> None:
+    def test_calls_fetch_api_for_export(self) -> None:
         source = _read("src/lib/api.ts")
         assert "fetchApi<Blob>(`/orgs/${orgId}/export`" in source, (
             "PT-9 regression: exportOrgData must route through fetchApi"

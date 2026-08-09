@@ -313,16 +313,16 @@ class TestTraceReplayer:
         mock_postgres_client.fetch = AsyncMock(return_value=parent_rows)
         mock_postgres_client.execute = AsyncMock(return_value=None)
 
+        class _Usage:
+            total_tokens = 5
+            cost = 0.002
+
         class _Resp:
-            text = "live replay output"
-            input_tokens = 2
-            output_tokens = 3
-            cost_usd = 0.002
+            content = "live replay output"
+            usage = _Usage()
 
-        gw = MagicMock()
-        gw.complete = AsyncMock(return_value=_Resp())
-
-        with patch("eden.api.routes.gateway.get_ai_gateway", return_value=gw):
+        route_mock = AsyncMock(return_value=_Resp())
+        with patch("eden.llm.internal_router.route_async", route_mock):
             result = await TraceReplayer().replay_from(
                 "org_test", fork_id="frk_abc", edits={}
             )
@@ -337,7 +337,7 @@ class TestTraceReplayer:
         # No cache-miss warnings (the cache_lookups
         # side-effect returned a row every time).
         assert result["data"]["cache_miss_warnings"] == []
-        gw.complete.assert_awaited()
+        route_mock.assert_awaited()
 
     async def test_replay_with_cache_miss_warning(self, mock_postgres_client: MagicMock) -> None:
         from eden.time_travel import TraceReplayer
@@ -857,16 +857,16 @@ class TestStepIndexNormalization:
         mock_postgres_client.fetch = AsyncMock(return_value=parent_rows)
         mock_postgres_client.execute = AsyncMock(return_value=None)
 
+        class _Usage:
+            total_tokens = 2
+            cost = 0.001
+
         class _Resp:
-            text = "live"
-            input_tokens = 1
-            output_tokens = 1
-            cost_usd = 0.001
+            content = "live"
+            usage = _Usage()
 
-        gw = MagicMock()
-        gw.complete = AsyncMock(return_value=_Resp())
-
-        with patch("eden.api.routes.gateway.get_ai_gateway", return_value=gw):
+        route_mock = AsyncMock(return_value=_Resp())
+        with patch("eden.llm.internal_router.route_async", route_mock):
             result = await TraceReplayer().replay_from(
                 "org_test", fork_id="frk_abc", edits={}
             )

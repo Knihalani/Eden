@@ -121,14 +121,17 @@ async def train_and_persist(
     if metrics.get("status") != "ok":
         return metrics
 
-    try:
-        from eden.config import get_settings
-
-        if not bool(getattr(get_settings(), "tool_call_inference_v1", False)):
-            return {**metrics, "persisted": False, "reason": "tool_call_inference_v1_off"}
-    except Exception:
-        pass
-
+    # FEAT-177: persistence used to be gated behind `tool_call_inference_v1`,
+    # which defaults to False and has no org-level override anywhere in the
+    # repo — so a trained calibrator's weights/metrics could never actually
+    # reach `tool_call_calibrators` (making `list_calibrators()` and the
+    # portal's "calibrator metrics" acceptance criterion permanently dead).
+    # Persistence itself is a safe, idempotent upsert with no customer-facing
+    # side effects, so it now always runs once training succeeds.
+    # `tool_call_inference_v1` still gates the one behavior that actually
+    # needs a deliberate rollout: using a persisted calibrator to flag live
+    # tool misuse in `infer_tool_misuse()` below (which can trigger F28
+    # stumble creation).
     try:
         from eden.storage.postgres import get_postgres_client
 

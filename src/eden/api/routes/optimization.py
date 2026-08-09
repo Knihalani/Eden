@@ -585,47 +585,19 @@ async def track_cost_event(
 # ============================================================================
 # Routes — Budget
 # ============================================================================
-
-@router.get("/budget", response_model=BudgetStatusResponse)
-async def get_budget_status(
-    org_id: str = Depends(require_path_org_access),
-    user: dict = Depends(get_current_user),
-        _check_billing_view: dict = Depends(require_org_permission_dep('billing:view')),
-):
-    """Get real-time budget status with soft/hard limit information."""
-
-    tracker = _get_cost_tracker()
-
-    try:
-        status = await tracker.check_budget(org_id)
-    except BudgetExceededError:
-        status = BudgetStatus.HARD_LIMIT
-
-    limits = await tracker._get_tenant_limits(org_id)
-    soft_limit = limits.get("soft_limit_cents", float("inf"))
-    hard_limit = limits.get("hard_limit_cents", float("inf"))
-
-    from eden.storage.redis import get_redis_client
-    redis = await get_redis_client()
-    current_spend = 0.0
-    if redis:
-        now = datetime.now(UTC)
-        month_key = now.strftime("%Y-%m")
-        raw = await redis.hget(f"eden:cost:{org_id}:month:{month_key}", "total_cents")
-        current_spend = float(raw or 0.0)
-
-    utilization = round((current_spend / hard_limit) * 100, 2) if hard_limit != float("inf") and hard_limit > 0 else 0.0
-
-    return BudgetStatusResponse(
-        org_id=org_id,
-        plan_name=limits.get("plan_name", "free"),
-        status=status,
-        current_month_spend_cents=round(current_spend, 4),
-        soft_limit_cents=soft_limit if soft_limit != float("inf") else -1,
-        hard_limit_cents=hard_limit if hard_limit != float("inf") else -1,
-        utilization_pct=utilization,
-    )
-
+#
+# FEAT-171 (2026-08-06): the former ``GET /budget`` endpoint here read a
+# Redis hash (``eden:cost:{org_id}:month:{...}``) written only by
+# ``CostTracker.track()``, which is unreachable from live ``/gateway/v1``
+# traffic (FEAT-20, still open) — so it always returned a stale/zero spend
+# for gateway-proxy-only orgs. It had zero frontend call sites and was
+# removed as dead surface area rather than wired to the live path, per the
+# wave plan's stated fallback. The live, customer-facing budget status path
+# is ``UsageService.get_budget_status`` (see ``routes/budgets.py`` and
+# ``middleware/quota_enforcement.py``); use that instead of resurrecting
+# this endpoint. ``POST /budget/check`` below is unaffected — it calls
+# ``CostTracker.check_budget()``, which itself reads ``budget_service``
+# (Postgres), not Redis.
 
 @router.post("/budget/check")
 async def check_budget_before_call(
@@ -738,5 +710,7 @@ async def cost_per_trace(
     }
 
 
-# NOTE: ``/orgs/{org}/cost/comparison`` lives in ``routes/cost.py``
-# so the path matches the portal expectation. Mounted in ``app.py``.
+# FEAT-171: ``GET /orgs/{org}/cost/comparison`` (former routes/cost.py)
+# and ``GET /optimization/budget`` were removed — both read a dead Redis
+# CostTracker hash never fed by live gateway traffic. Live budget status
+# lives under ``routes/budgets.py`` / ``UsageService.get_budget_status``.

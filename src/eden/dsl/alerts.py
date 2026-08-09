@@ -6,12 +6,9 @@ per the appendix — the customer writes the EQL, the compiler
 parses + expands + lints, and the result is a ``eql_alert_rules``
 row the cron watchdog reads on every tick.
 
-The v1.3 ship supports three severities (info, warning, high)
-— the appendix lists four (info, warning, high, critical) but
-the cron watchdog ships with three in v1.3; the 4th is a v1.4
-addition once we have customer data to justify the extra
-notification path. The compiler accepts all 4 anyway; the
-watchdog filters at fire time.
+The v1.3 ship supports four severities (info, warning, high,
+critical). The compiler and cron watchdog both accept and fire
+on all four.
 
 Closed-loop wiring: when the compiler finds at least one
 lint warning, :func:`DSLHook.on_alert_lint_warning` fires
@@ -22,6 +19,11 @@ Runtime: :meth:`AlertAsCode.evaluate` runs one rule on
 demand; :meth:`AlertAsCode.fire_due` is the cron watchdog
 that evaluates every due rule and persists firings to
 ``eql_alert_firings``.
+
+FEAT-44: severity derives from ``eden.alerting.types.AlertSeverity``;
+notification delivery still flows through ``AlertTriageJudge`` →
+``send_nl_incident_email`` (adapter debt — see
+``eden.alerts.unified.destinations_from_nl_rule_channels``).
 """
 
 from __future__ import annotations
@@ -54,10 +56,8 @@ _eql_in_cooldown, _eql_mark_empty, _eql_clear_cooldown = make_empty_cooldown(
 )
 
 
-# The v1.3 ship supports the 3 severities the cron watchdog
-# actually fires on. ``critical`` is accepted for forward-
-# compatibility (the customer can register the alert; the
-# watchdog filters to info|warning|high at fire time).
+# The v1.3 ship supports the four severities the cron watchdog
+# actually fires on (info, warning, high, critical).
 # FEAT-44: derived from the canonical AlertSeverity (StrEnum) rather than
 # a hand-duplicated string literal set. AlertSeverity also has "debug",
 # which the DSL has never accepted, so DEBUG is excluded here — same
@@ -73,11 +73,13 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(
 )
 
 # Severities the cron watchdog actually fires notifications for.
-# Watchdog filters critical at fire time in v1.3 (accepted at compile
-# for forward-compat, see _evaluate_rule) — deliberate, not part of
-# the FEAT-44 shared-type migration above.
 _FIREABLE_SEVERITIES: frozenset[str] = frozenset(
-    {AlertSeverity.INFO, AlertSeverity.WARNING, AlertSeverity.HIGH}
+    {
+        AlertSeverity.INFO,
+        AlertSeverity.WARNING,
+        AlertSeverity.HIGH,
+        AlertSeverity.CRITICAL,
+    }
 )
 
 # Minimum alert interval — the failure-modes table calls this
@@ -413,8 +415,6 @@ async def _evaluate_rule(
     interval = int(rule.get("interval_seconds") or 3600)
     sql = rule.get("clickhouse_sql") or rule.get("eql_query") or ""
 
-    # Watchdog filters critical at fire time in v1.3 (accepted
-    # at compile for forward-compat). On-demand force still runs.
     if not force and severity not in _FIREABLE_SEVERITIES:
         await _advance_next_fire(org_id, alert_id, interval)
         return {
@@ -491,6 +491,67 @@ async def _evaluate_rule(
     }
 
 
+def _eql_alert_fingerprint(org_id: str, alert_id: str) -> str:
+    """Stable dedupe key for EQL firings → ``AlertTriageJudge`` duplicate lookup."""
+    return f"eql_alert:{org_id}:{alert_id}"
+
+
+async def _resolve_open_issue_id(org_id: str, fingerprint: str) -> str | None:
+    """Best-effort open-issue lookup for duplicate suppression (FEAT-101)."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            """
+            SELECT id FROM agent_issues
+            WHERE org_id = $1
+              AND fingerprint = $2
+              AND status IN ('open', 'triaged', 'fix_pending', 'verifying')
+            ORDER BY last_seen DESC
+            LIMIT 1
+            """,
+            org_id,
+            fingerprint,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("AlertAsCode issue lookup failed alert_fp=%s: %s", fingerprint, exc)
+        return None
+    return str(row["id"]) if row else None
+
+
+async def _nl_text_for_eql_alert(org_id: str, rule_name: str) -> str | None:
+    """Bridge EQL alert-as-code names to ``nl_alert_rules.nl_text`` (FEAT-103)."""
+    name = (rule_name or "").strip()
+    if not name:
+        return None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            """
+            SELECT nl_text FROM nl_alert_rules
+            WHERE org_id = $1 AND name = $2
+            ORDER BY name ASC
+            LIMIT 1
+            """,
+            org_id,
+            name,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("nl_text lookup failed for alert %s: %s", rule_name, exc)
+        return None
+    if row is None:
+        return None
+    text = str(row.get("nl_text") or "").strip()
+    return text or None
+
+
 async def _trigger_triage(
     *,
     org_id: str,
@@ -502,6 +563,7 @@ async def _trigger_triage(
     n_rows: int,
     sample_rows: list[dict[str, Any]],
     data_source: str,
+    nl_text: str | None = None,
 ) -> None:
     """Wire a fresh ``eql_alert_firings`` row into the NL-alert pipeline.
 
@@ -524,6 +586,26 @@ async def _trigger_triage(
         from eden.alerts import repo
         from eden.alerts.triage_judge import AlertTriageJudge
 
+        fingerprint = _eql_alert_fingerprint(org_id, alert_id)
+        issue_id = await _resolve_open_issue_id(org_id, fingerprint)
+        resolved_nl = (nl_text or "").strip()
+        if not resolved_nl:
+            resolved_nl = (await _nl_text_for_eql_alert(org_id, name) or "").strip()
+        if not resolved_nl:
+            resolved_nl = eql_query
+        payload: dict[str, Any] = {
+            "alert_id": alert_id,
+            "firing_id": firing_id,
+            "eql_query": eql_query,
+            "nl_text": resolved_nl,
+            "n_rows": n_rows,
+            "data_source": data_source,
+            "sample_rows": sample_rows,
+            "fingerprint": fingerprint,
+        }
+        if issue_id:
+            payload["issue_id"] = issue_id
+
         event = await repo.create_alert_event(
             org_id=org_id,
             # alert_events.rule_id is a FK into nl_alert_rules, a
@@ -533,20 +615,13 @@ async def _trigger_triage(
             rule_id=None,
             title=f"Alert '{name}' fired ({n_rows} row(s))",
             severity=severity,
-            payload={
-                "alert_id": alert_id,
-                "firing_id": firing_id,
-                "eql_query": eql_query,
-                "n_rows": n_rows,
-                "data_source": data_source,
-                "sample_rows": sample_rows,
-            },
+            payload=payload,
         )
         await AlertTriageJudge().run_for_event(
             org_id,
             event["id"],
             rule_name=name,
-            nl_text=eql_query,
+            nl_text=resolved_nl,
             payload=event.get("payload"),
         )
     except Exception as exc:  # noqa: BLE001 - triage must never break firing

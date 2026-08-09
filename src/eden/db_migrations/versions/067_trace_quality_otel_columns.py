@@ -137,7 +137,6 @@ def downgrade() -> None:
     op.execute(
         "ALTER TABLE telemetry_events DROP COLUMN IF EXISTS is_llm_generated"
     )
-    op.execute("ALTER TABLE telemetry_events DROP COLUMN IF EXISTS finish_reason")
     op.execute("ALTER TABLE telemetry_events DROP COLUMN IF EXISTS ttft_ms")
     op.execute(
         "ALTER TABLE telemetry_events DROP COLUMN IF EXISTS usage_total_tokens"

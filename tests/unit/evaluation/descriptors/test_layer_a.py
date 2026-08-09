@@ -77,7 +77,7 @@ def test_benchmark_summary_metrics() -> None:
         got = report.descriptor_ids
         expected = set(case["expected"])
         forbidden = set(case["forbidden"])
-        for d in expected & got:
+        for _ in expected & got:
             tp += 1
         for d in expected - got:
             fn += 1

@@ -8,6 +8,7 @@ enforcement.
 
 Routes:
 * ``POST /v1/provider_routing/{org_id}/attempts``
+* ``POST /v1/provider_routing/{org_id}/attempts/ingest``
 * ``GET  /v1/traces/{trace_id}/provider_routing``
 * ``GET  /v1/provider_routing/{org_id}/attempts``
 * ``GET  /v1/provider_routing/{org_id}/failure_rate``
@@ -17,14 +18,17 @@ Routes:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from eden.api.deps import require_org_member, resolve_eden_org_id
 from eden.api.utils.redact import redact_all
 from eden.services.observability import get_provider_routing_service
+from eden.services.observability.provider_routing_decoders import (
+    decode_provider_routing_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +66,15 @@ class ProviderRoutingAttemptCreate(BaseModel):
     latency_ms: int | None = None
 
 
+class ProviderRoutingAttemptIngest(BaseModel):
+    router: Literal["litellm", "portkey", "openrouter", "auto"] = "auto"
+    payload: dict[str, Any] = Field(default_factory=dict)
+    headers: dict[str, str] | None = None
+    attributes: dict[str, Any] | None = None
+    trace_id: str | None = None
+    span_id: str | None = None
+
+
 @router.post("/provider_routing/{org_id}/attempts")
 async def post_provider_routing_attempt(
     body: ProviderRoutingAttemptCreate,
@@ -89,6 +102,65 @@ async def post_provider_routing_attempt(
     except ValueError as exc:
         return {"status": "error", "message": redact_all(str(exc))}
     return _ok({"id": attempt_id})
+
+
+@router.post("/provider_routing/{org_id}/attempts/ingest")
+async def post_provider_routing_attempt_ingest(
+    body: ProviderRoutingAttemptIngest,
+    org_id: str = Path(...),
+    member: dict = Depends(require_org_member),
+) -> dict[str, Any]:
+    """Ingest a router-native payload (LiteLLM / Portkey / OpenRouter).
+
+    The decoder layer maps the external trace format into the
+    canonical ``record_attempt`` schema. When ``router`` is
+    ``auto``, detection is best-effort from headers / payload shape.
+    """
+    scoped = await _assert_path_org(org_id, member)
+    decoded = decode_provider_routing_payload(
+        body.router,
+        body.payload,
+        headers=body.headers,
+        attributes=body.attributes,
+        trace_id=body.trace_id,
+        span_id=body.span_id,
+    )
+    if decoded["ignored"]:
+        return _ok({"ignored": True, "router": decoded.get("router")})
+    svc = get_provider_routing_service()
+    try:
+        attempt_id = await svc.record_attempt(
+            scoped,
+            trace_id=decoded["trace_id"],
+            span_id=decoded["span_id"],
+            attempted_provider=decoded["attempted_provider"],
+            attempted_model=decoded["attempted_model"],
+            sequence_index=decoded["sequence_index"],
+            decision=decoded["decision"],
+            failure_reason=decoded["failure_reason"],
+            latency_ms=decoded["latency_ms"],
+        )
+    except ValueError as exc:
+        return {"status": "error", "message": redact_all(str(exc))}
+    return _ok(
+        {
+            "id": attempt_id,
+            "router": decoded.get("router"),
+            "decoded": {
+                key: dict(decoded)[key]
+                for key in (
+                    "trace_id",
+                    "span_id",
+                    "attempted_provider",
+                    "attempted_model",
+                    "sequence_index",
+                    "decision",
+                    "failure_reason",
+                    "latency_ms",
+                )
+            },
+        },
+    )
 
 
 @router.get("/traces/{trace_id}/provider_routing")

@@ -56,7 +56,8 @@
     "react-dom": "19.2.7",
     "recharts": "^3.9.1",
     "rrweb-player": "^2.1.0",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@axe-core/cli": "^4.12.1",

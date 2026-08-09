@@ -134,6 +134,9 @@ export default function PlaygroundsPage() {
                 <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">
                   Open from Traces
                 </Link>
+                <Link href="/evals?mode=datasets" className="ds-btn ds-btn-ghost ds-btn-sm">
+                  Browse datasets
+                </Link>
                 <button
                   type="button"
                   className="ds-btn ds-btn-primary ds-btn-sm"

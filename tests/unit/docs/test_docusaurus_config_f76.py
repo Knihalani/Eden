@@ -33,7 +33,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 CONFIG = Path("docs/docusaurus.config.js")
 
 

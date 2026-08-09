@@ -173,12 +173,20 @@ class RtbfRequestTracker:
                     )
             raise
 
-        # 3b. Success path: mark 'in_progress' immediately so
-        #     the operator dashboard can show "started", then
-        #     'completed' with the affected_rows count.
+        # 3b. Success path: mark lifecycle row from the service envelope.
+        envelope_status = result.get("status") if isinstance(result, dict) else None
+        payload = (
+            result.get("data", {})
+            if isinstance(result, dict) and isinstance(result.get("data"), dict)
+            else result if isinstance(result, dict) else {}
+        )
+        is_complete = (
+            envelope_status == "ok"
+            and bool(payload.get("complete"))
+        )
         affected_rows = int(
-            result.get("total_rows_anonymised", 0)
-            or result.get("total_rows_matched", 0)
+            payload.get("total_rows_anonymised", 0)
+            or payload.get("total_rows_matched", 0)
             or 0,
         )
         if self._pg is not None and not dry_run:
@@ -190,10 +198,13 @@ class RtbfRequestTracker:
                         started_at = COALESCE(started_at, NOW()),
                         completed_at = NOW(),
                         affected_rows = $3,
-                        error = NULL
+                        error = $4
                     WHERE id = $1
                     """,
-                    request_id, RTBF_STATUS_COMPLETED, affected_rows,
+                    request_id,
+                    RTBF_STATUS_COMPLETED if is_complete else RTBF_STATUS_FAILED,
+                    affected_rows,
+                    None if is_complete else str(payload.get("message") or envelope_status),
                 )
             except Exception as exc:
                 logger.warning(
@@ -205,7 +216,11 @@ class RtbfRequestTracker:
         if isinstance(result, dict):
             result["rtbf_request_id"] = str(request_id)
             result["rtbf_status"] = (
-                RTBF_STATUS_COMPLETED if not dry_run else RTBF_STATUS_PENDING
+                RTBF_STATUS_COMPLETED
+                if is_complete and not dry_run
+                else RTBF_STATUS_PENDING
+                if dry_run
+                else RTBF_STATUS_FAILED
             )
         return result
 

@@ -36,6 +36,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from eden.config import get_settings
@@ -48,6 +49,20 @@ _MAX_AGENTS_PER_ORG = 3
 _MAX_TRACES_PER_ORG = 50
 _MAX_NEW_DETECTORS_PER_ORG = 3
 _MAX_DIGEST_CHARS = 600
+
+#: Peak concurrent org reviews per nightly tick (OPT-24). Each org runs up
+#: to ``_MAX_AGENTS_PER_ORG`` sequential LLM calls; keep well below the
+#: Postgres pool size — mirrors ``_AUTO_CURATOR_CONCURRENCY`` in cron_tick.
+_SOFT_ISSUE_REVIEW_CONCURRENCY = 8
+
+#: Weekly shadow-promotion batch (OPT-26). Nightly creation is bounded by
+#: ``_MAX_ORGS_PER_NIGHT × _MAX_NEW_DETECTORS_PER_ORG × 7 ≈ 420``/week;
+#: evaluation must exceed that ceiling or the ``enabled=false`` backlog
+#: grows without bound. Was 200 (verified backlog drift in pass-4).
+_SHADOW_PROMOTE_BATCH_LIMIT = 500
+
+#: Default age cap for shadow detectors that never reach ``min_firings`` (OPT-37).
+_DEFAULT_SHADOW_HOLD_MAX_DAYS = 90
 
 
 class SoftIssueReviewer:
@@ -72,22 +87,49 @@ class SoftIssueReviewer:
             "spend_usd": 0.0,
             "orgs": [],
         }
-        for org_id in org_ids:
-            if dry_run:
-                out["orgs"].append({"org_id": org_id, "dry_run": True})
-                continue
+        if dry_run:
+            out["orgs"] = [{"org_id": oid, "dry_run": True} for oid in org_ids]
+            return out
+
+        from eden.async_tasks import bounded_gather
+
+        async def _review_claimed_org(org_id: str) -> dict[str, Any] | None:
             claimed = await self._claim_org(org_id)
             if not claimed:
-                continue
+                return None
             try:
-                result = await self._review_org(pg, org_id)
-                out["orgs"].append(result)
-                out["orgs_reviewed"] += 1
-                out["detectors_created"] += int(result.get("detectors_created", 0))
-                out["spend_usd"] += float(result.get("spend_usd", 0.0))
+                return await self._review_org(pg, org_id)
             except Exception as exc:  # noqa: BLE001 — one org must not abort the night
                 logger.exception("soft_issue_review: org=%s failed: %s", org_id, exc)
-                out["orgs"].append({"org_id": org_id, "errors": [str(exc)[:200]]})
+                return {"org_id": org_id, "errors": [str(exc)[:200]]}
+
+        # Was a strictly sequential ``for`` over up to 20 orgs, each with up
+        # to 3 LLM calls — wall clock was the *sum* of every org's latency.
+        # ``_claim_org`` (Redis SET NX) keeps cross-pod work safe; bounded
+        # overlap here only affects single-pod tick duration.
+        settled = await bounded_gather(
+            *(_review_claimed_org(org_id) for org_id in org_ids),
+            limit=_SOFT_ISSUE_REVIEW_CONCURRENCY,
+            return_exceptions=True,
+        )
+        for org_id, outcome in zip(org_ids, settled, strict=True):
+            if isinstance(outcome, BaseException):
+                logger.exception(
+                    "soft_issue_review: org=%s failed: %s", org_id, outcome
+                )
+                out["orgs"].append(
+                    {"org_id": org_id, "errors": [str(outcome)[:200]]}
+                )
+                continue
+            if outcome is None:
+                continue
+            out["orgs"].append(outcome)
+            if "errors" not in outcome:
+                out["orgs_reviewed"] += 1
+                out["detectors_created"] += int(
+                    outcome.get("detectors_created", 0)
+                )
+                out["spend_usd"] += float(outcome.get("spend_usd", 0.0))
         out["spend_usd"] = round(float(out["spend_usd"]), 6)
         return out
 
@@ -345,8 +387,10 @@ class SoftIssueReviewer:
         cluster_id = f"auto:{signal_signature(description)}"
         try:
             # Dedupe: same org + same content signature already exists.
+            # Existence check — order irrelevant. lint:unordered-limit-ok
             dupe = await pg.fetchval(
-                "SELECT 1 FROM nl_signals WHERE org_id = $1 AND cluster_id = $2 LIMIT 1",
+                "SELECT 1 FROM nl_signals WHERE org_id = $1 AND cluster_id = $2 LIMIT 1"
+                " -- lint:unordered-limit-ok",
                 org_id,
                 cluster_id,
             )
@@ -391,6 +435,10 @@ class SoftIssueReviewer:
         min_firings = int(getattr(settings, "shadow_promote_min_firings", 20) or 20)
         promote_p = float(getattr(settings, "shadow_promote_precision", 0.8) or 0.8)
         delete_p = float(getattr(settings, "shadow_delete_precision", 0.3) or 0.3)
+        hold_max_days = int(
+            getattr(settings, "shadow_hold_max_days", _DEFAULT_SHADOW_HOLD_MAX_DAYS)
+            or _DEFAULT_SHADOW_HOLD_MAX_DAYS
+        )
 
         from eden.storage.postgres import get_postgres_client
 
@@ -401,13 +449,22 @@ class SoftIssueReviewer:
         try:
             rows = await pg.fetch(
                 """
-                SELECT id, org_id, description, rule, match_count, cluster_id
-                FROM nl_signals
-                WHERE enabled = FALSE
-                  AND cluster_id LIKE 'auto:%'
-                ORDER BY created_at ASC
-                LIMIT 200
-                """
+                SELECT id, org_id, description, rule, match_count, cluster_id,
+                       created_at, updated_at
+                FROM (
+                    SELECT id, org_id, description, rule, match_count,
+                           cluster_id, created_at, updated_at,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY org_id ORDER BY created_at ASC
+                           ) AS rn
+                    FROM nl_signals
+                    WHERE enabled = FALSE
+                      AND cluster_id LIKE 'auto:%'
+                ) ranked
+                ORDER BY rn ASC, created_at ASC
+                LIMIT $1
+                """,
+                _SHADOW_PROMOTE_BATCH_LIMIT,
             )
         except Exception as exc:
             logger.debug("promote_shadow_detectors: scan failed: %s", exc)
@@ -425,6 +482,7 @@ class SoftIssueReviewer:
                 min_firings=min_firings,
                 promote_precision=promote_p,
                 delete_precision=delete_p,
+                hold_max_days=hold_max_days,
             )
             action = decision["action"]
             if action == "hold" or dry_run:
@@ -507,12 +565,41 @@ class SoftIssueReviewer:
             return True
 
 
+def _parse_shadow_timestamp(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    try:
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(text)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    except (TypeError, ValueError):
+        return None
+
+
+def _shadow_hold_age_days(row: dict[str, Any], *, now: datetime | None = None) -> float | None:
+    ref = _parse_shadow_timestamp(row.get("updated_at")) or _parse_shadow_timestamp(
+        row.get("created_at")
+    )
+    if ref is None:
+        return None
+    anchor = now or datetime.now(UTC)
+    return (anchor - ref).total_seconds() / 86400.0
+
+
 def evaluate_shadow_precision(
     row: dict[str, Any],
     *,
     min_firings: int = 20,
     promote_precision: float = 0.8,
     delete_precision: float = 0.3,
+    hold_max_days: int | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Pure decision helper for §6.5 (testable without DB).
 
@@ -559,12 +646,21 @@ def evaluate_shadow_precision(
             action = "promote"
         elif precision < delete_precision:
             action = "delete"
+
+    # OPT-37: stale shadow detectors that never reach min_firings expire.
+    hold_age_days: float | None = None
+    if action == "hold" and hold_max_days is not None and sample < min_firings:
+        hold_age_days = _shadow_hold_age_days(row, now=now)
+        if hold_age_days is not None and hold_age_days >= float(hold_max_days):
+            action = "delete"
+
     return {
         "action": action,
         "precision": precision,
         "firings": sample,
         "confirms": confirms,
         "dismisses": dismisses,
+        "hold_age_days": hold_age_days,
     }
 
 
@@ -653,11 +749,16 @@ async def _maybe_auto_disable_on_dismiss(pg: Any, row: dict[str, Any]) -> None:
         delete_p = float(
             getattr(settings, "shadow_delete_precision", 0.3) or 0.3
         )
+        hold_max_days = int(
+            getattr(settings, "shadow_hold_max_days", _DEFAULT_SHADOW_HOLD_MAX_DAYS)
+            or _DEFAULT_SHADOW_HOLD_MAX_DAYS
+        )
         decision = evaluate_shadow_precision(
             row,
             min_firings=min_firings,
             promote_precision=promote_p,
             delete_precision=delete_p,
+            hold_max_days=hold_max_days,
         )
         if decision["action"] != "delete":
             return

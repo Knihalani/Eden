@@ -10,7 +10,7 @@ Canonical PNG roots for portal UX freeze + peer grammar path contract.
 | `02-traces-hub` | `/traces` | `e2e/golden/screenshots/02-traces-hub.png` | vs Laminar / Braintrust — ≤8 first-paint controls; dense table |
 | `03-issues` | `/issues` | `e2e/golden/screenshots/03-issues.png` | vs Langfuse master–detail |
 | `04-artifacts` | `/artifacts` | `e2e/golden/screenshots/04-artifacts.png` | Improve loop calm list |
-| `05-playgrounds` | `/evals?tab=playgrounds` | `e2e/golden/screenshots/05-playgrounds.png` | Evaluate primary surface |
+| `05-playgrounds` | `/playgrounds` | `e2e/golden/screenshots/05-playgrounds.png` | Evaluate primary surface |
 | `06-alerts` | `/alerts` | `e2e/golden/screenshots/06-alerts.png` | Feed + severity strip |
 | `07-experiments` | `/evals?tab=experiments` | `e2e/golden/screenshots/07-experiments.png` | Compare |
 | `08-debugger-sessions` | `/debugger-sessions` | `e2e/golden/screenshots/08-debugger-sessions.png` | Advanced calm list |

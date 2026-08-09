@@ -55,6 +55,7 @@ class TestCachedCompressor:
     def test_rebuild_on_dict_swap(self, monkeypatch):
         """If ``DICT_PATH`` changes, the next call rebuilds."""
         import tempfile
+
         from eden.storage import compression
 
         c0 = compression._compressor()
@@ -74,7 +75,7 @@ class TestCachedCompressor:
         assert compression._cached_compressor_dict_id != old_id
 
         # And the decompressor rebuilds too.
-        d1 = compression._decompressor()
+        compression._decompressor()
         assert compression._cached_decompressor_dict_id == compression._cached_compressor_dict_id
 
     def test_invalidate_caches_resets_both(self):

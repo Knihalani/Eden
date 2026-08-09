@@ -18,7 +18,7 @@ import { PageHeader, Panel, StatusChip } from "@/components/ds/primitives";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
-import { playgroundApi } from "@/lib/api/resources";
+import { playgroundApi, datasetsApi } from "@/lib/api/resources";
 import { promptsV2Api } from "@/lib/api/portal";
 import {
   QueryErrorPanel,
@@ -28,9 +28,10 @@ import { EmptyState } from "@/lab/lab-ui";
 import { useLabToast } from "@/lab/lab-toast";
 import { cn } from "@/lib/utils";
 import {
-  defaultTask,
+  hubRowToPlaygroundRow,
   newTaskId,
   parsePlaygroundConfig,
+  playgroundRowsToRunPayload,
   serializePlaygroundConfig,
   type PlaygroundConfigView,
   type PlaygroundMessage,
@@ -48,6 +49,7 @@ import {
   streamPlaygroundRun,
 } from "@/lab/playgrounds/run-client";
 import { diffWords } from "@/lab/playgrounds/diff";
+import { DatasetAttachDialog } from "@/lab/playgrounds/dataset-attach-dialog";
 
 const OUTPUT_CAP = 4000;
 const CONCURRENCY_CHOICES = [1, 2, 3, 5, 8, 10];
@@ -291,6 +293,8 @@ export function PlaygroundEditor({
   const [name, setName] = useState("");
   const [view, setView] = useState<PlaygroundConfigView | null>(null);
   const [dirty, setDirty] = useState(false);
+  const editVersionRef = useRef(0);
+  const persistQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   const hydratedForRef = useRef<string | null>(null);
 
   // Hydrate editor state when a (new) playground record arrives. Never
@@ -319,43 +323,194 @@ export function PlaygroundEditor({
   const [promptSaving, setPromptSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
+  const [attachedDatasetName, setAttachedDatasetName] = useState<string | null>(
+    null,
+  );
 
-  const patchView = useCallback((update: Partial<PlaygroundConfigView>) => {
-    setView((v) => (v ? { ...v, ...update } : v));
+  const attachedDatasetId = view?.datasetId ?? null;
+  const datasetRowsQuery = useOrgQuery(
+    ["datasets", "rows", orgId, attachedDatasetId] as const,
+    orgId,
+    () => datasetsApi.listRows(orgId, attachedDatasetId!),
+    {
+      ...SHELL_QUERY,
+      enabled: Boolean(orgId && attachedDatasetId),
+    },
+  );
+  const datasetListQuery = useOrgQuery(
+    ["datasets", "list", orgId] as const,
+    orgId,
+    () => datasetsApi.list(orgId),
+    {
+      ...SHELL_QUERY,
+      enabled: Boolean(orgId && attachedDatasetId),
+    },
+  );
+
+  useEffect(() => {
+    if (!attachedDatasetId) {
+      setAttachedDatasetName(null);
+      return;
+    }
+    const match = datasetListQuery.data?.datasets.find(
+      (d) => d.id === attachedDatasetId,
+    );
+    if (match) setAttachedDatasetName(match.name);
+  }, [attachedDatasetId, datasetListQuery.data?.datasets]);
+
+  // When a dataset is attached, keep editor rows in sync with hub rows
+  // (on first open or after refresh — never clobber dirty manual edits).
+  useEffect(() => {
+    const hubRows = datasetRowsQuery.data?.rows;
+    if (!attachedDatasetId || !hubRows || dirty) return;
+    const mapped = hubRows.map(hubRowToPlaygroundRow);
+    setView((v) => {
+      if (!v || v.datasetId !== attachedDatasetId) return v;
+      return {
+        ...v,
+        rows: mapped.length > 0 ? mapped : [{ input: "" }],
+      };
+    });
+  }, [attachedDatasetId, datasetRowsQuery.data?.rows, dirty]);
+
+  const markDirty = useCallback(() => {
+    editVersionRef.current += 1;
     setDirty(true);
   }, []);
 
+  const patchView = useCallback(
+    (update: Partial<PlaygroundConfigView>) => {
+      setView((v) => (v ? { ...v, ...update } : v));
+      markDirty();
+    },
+    [markDirty],
+  );
+
   const persist = useCallback(
-    async (nextView?: PlaygroundConfigView, opts?: { silent?: boolean }) => {
+    (
+      nextView?: PlaygroundConfigView,
+      opts?: { silent?: boolean },
+    ): Promise<boolean> => {
       const current = nextView ?? view;
-      if (!current) return;
-      setSaving(true);
-      try {
-        await playgroundApi.patch(orgId, playgroundId, {
-          name: name.trim() || "Untitled playground",
-          config: serializePlaygroundConfig(current, playground?.config),
-        });
-        setDirty(false);
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.portal.playgrounds(orgId),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.portal.playgroundDetail(orgId, playgroundId),
-        });
-      } catch (e) {
-        if (!opts?.silent) {
-          pushToast({
-            title: "Save failed",
-            body: e instanceof Error ? e.message : "Could not save playground.",
-            tone: "fail",
+      if (!current) return Promise.resolve(false);
+      const saveVersion = editVersionRef.current;
+      const save = async (): Promise<boolean> => {
+        setSaving(true);
+        try {
+          await playgroundApi.patch(orgId, playgroundId, {
+            name: name.trim() || "Untitled playground",
+            config: serializePlaygroundConfig(current, playground?.config),
           });
+          if (editVersionRef.current === saveVersion) setDirty(false);
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.playgrounds(orgId),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.portal.playgroundDetail(orgId, playgroundId),
+          });
+          return true;
+        } catch (e) {
+          if (!opts?.silent) {
+            pushToast({
+              title: "Save failed",
+              body: e instanceof Error ? e.message : "Could not save playground.",
+              tone: "fail",
+            });
+          }
+          return false;
+        } finally {
+          setSaving(false);
         }
-      } finally {
-        setSaving(false);
-      }
+      };
+      const queued = persistQueueRef.current.then(save, save);
+      persistQueueRef.current = queued.then(
+        () => true,
+        () => true,
+      );
+      return queued;
     },
     [view, orgId, playgroundId, name, playground?.config, queryClient, pushToast],
   );
+
+  const attachDataset = useCallback(
+    async (datasetId: string, datasetName: string) => {
+      setDatasetDialogOpen(false);
+      try {
+        const res = await datasetsApi.listRows(orgId, datasetId);
+        const mapped = res.rows.map(hubRowToPlaygroundRow);
+        const nextView: PlaygroundConfigView = {
+          ...(view ?? parsePlaygroundConfig(playground?.config)),
+          datasetId,
+          rows: mapped.length > 0 ? mapped : [{ input: "" }],
+        };
+        setAttachedDatasetName(datasetName);
+        setView(nextView);
+        markDirty();
+        if (!(await persist(nextView, { silent: true }))) return;
+        pushToast({
+          title: "Dataset attached",
+          body: `${datasetName} · ${mapped.length} row${mapped.length === 1 ? "" : "s"}`,
+          tone: "ok",
+        });
+      } catch (e) {
+        pushToast({
+          title: "Attach failed",
+          body: e instanceof Error ? e.message : "Could not load dataset rows.",
+          tone: "fail",
+        });
+      }
+    },
+    [orgId, view, playground?.config, persist, pushToast],
+  );
+
+  const detachDataset = useCallback(() => {
+    patchView({ datasetId: null });
+    setAttachedDatasetName(null);
+  }, [patchView]);
+
+  const refreshDatasetRows = useCallback(async () => {
+    if (!attachedDatasetId) return;
+    try {
+      const res = await datasetsApi.listRows(orgId, attachedDatasetId);
+      const mapped = res.rows.map(hubRowToPlaygroundRow);
+      const nextView: PlaygroundConfigView = {
+        ...(view ?? parsePlaygroundConfig(playground?.config)),
+        datasetId: attachedDatasetId,
+        rows: mapped.length > 0 ? mapped : [{ input: "" }],
+      };
+      setView(nextView);
+      markDirty();
+      if (!(await persist(nextView, { silent: true }))) {
+        pushToast({
+          title: "Rows not refreshed",
+          body: "The dataset rows could not be saved to this playground.",
+          tone: "fail",
+        });
+        return;
+      }
+      void datasetRowsQuery.refetch();
+      pushToast({
+        title: "Rows refreshed",
+        body: `Loaded ${mapped.length} row${mapped.length === 1 ? "" : "s"} from the dataset.`,
+        tone: "ok",
+      });
+    } catch (e) {
+      pushToast({
+        title: "Refresh failed",
+        body: e instanceof Error ? e.message : "Could not reload dataset rows.",
+        tone: "fail",
+      });
+    }
+  }, [
+    attachedDatasetId,
+    orgId,
+    view,
+    playground?.config,
+    persist,
+    datasetRowsQuery,
+    pushToast,
+  ]);
 
   const stopRun = useCallback(() => {
     abortRef.current?.abort();
@@ -365,7 +520,15 @@ export function PlaygroundEditor({
     if (!view || running) return;
     setRunning(true);
     // Persist first so the server executes exactly what's on screen.
-    await persist(view, { silent: true });
+    if (!(await persist(view, { silent: true }))) {
+      setRunning(false);
+      pushToast({
+        title: "Run not started",
+        body: "Save the current playground changes before running.",
+        tone: "fail",
+      });
+      return;
+    }
 
     // Seed every task × row cell as pending so the matrix shows shape
     // immediately and streaming cells fill in progressively.
@@ -387,7 +550,8 @@ export function PlaygroundEditor({
 
     const controller = new AbortController();
     abortRef.current = controller;
-    const body = { params: { concurrency } };
+    const dataset_rows = playgroundRowsToRunPayload(view.rows);
+    const body = { params: { concurrency }, dataset_rows };
     let aborted = false;
     try {
       let sawEvent = false;
@@ -522,20 +686,25 @@ export function PlaygroundEditor({
     if (promoting) return;
     setPromoting(true);
     try {
-      await playgroundApi.promoteExperiment(orgId, playgroundId, {
+      // Promotion snapshots server config. Save first so the experiment
+      // matches the task/row matrix currently visible in the editor.
+      if (!(await persist(view ?? undefined))) return;
+      const promoted = await playgroundApi.promoteExperiment(orgId, playgroundId, {
         name: name.trim() || undefined,
         dataset_id: view?.datasetId ?? undefined,
       });
       pushToast({
-        title: "Experiment created",
-        body: "Immutable snapshot promoted — Evals will score it with the heuristic stub, not a real graded eval.",
-        href: "/evals?mode=compare",
+        title: "Experiment snapshot created",
+        body: "Created an offline experiment from this playground. Open Evals to run it against the attached dataset.",
+        href: promoted.experiment?.id
+          ? `/evals?mode=compare&compareId=${encodeURIComponent(String(promoted.experiment.id))}`
+          : "/evals",
         tone: "ok",
       });
     } catch (e) {
       pushToast({
-        title: "Promote failed",
-        body: e instanceof Error ? e.message : "Could not create experiment.",
+        title: "Experiment creation failed",
+        body: e instanceof Error ? e.message : "Could not create the experiment.",
         tone: "fail",
       });
     } finally {
@@ -600,7 +769,7 @@ export function PlaygroundEditor({
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
-                setDirty(true);
+                markDirty();
               }}
               onBlur={() => {
                 if (dirty) void persist();
@@ -636,10 +805,20 @@ export function PlaygroundEditor({
               type="button"
               className="ds-btn ds-btn-primary ds-btn-sm"
               disabled={promoting}
-              onClick={() => void promote()}
-              title="Creates an experiment scored by the heuristic stub — not a real graded eval."
+              onClick={() =>
+                view.datasetId ? void promote() : setDatasetDialogOpen(true)
+              }
+              title={
+                view.datasetId
+                  ? "Create an offline experiment from this playground"
+                  : "Attach a dataset before creating an experiment"
+              }
             >
-              {promoting ? "Promoting…" : "+ Experiment"}
+              {promoting
+                ? "Creating…"
+                : view.datasetId
+                  ? "+ Experiment"
+                  : "Attach dataset first"}
             </button>
           </>
         }
@@ -694,29 +873,69 @@ export function PlaygroundEditor({
 
         {/* Rows */}
         <section>
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <p className="type-label">Rows</p>
             <span className="type-meta">
               {"{{input}} / {{expected}} fill into task messages"}
             </span>
-            <button
-              type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm ml-auto"
-              onClick={() =>
-                patchView({ rows: [...view.rows, { input: "" }] })
-              }
-            >
-              + Row
-            </button>
+            {attachedDatasetId ? (
+              <span className="flex flex-wrap items-center gap-2 ml-auto">
+                <StatusChip tone="neutral">
+                  {attachedDatasetName ?? "Dataset"} · {view.rows.length} row
+                  {view.rows.length === 1 ? "" : "s"}
+                </StatusChip>
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  disabled={datasetRowsQuery.isFetching}
+                  onClick={() => void refreshDatasetRows()}
+                >
+                  {datasetRowsQuery.isFetching ? "Refreshing…" : "Refresh"}
+                </button>
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={detachDataset}
+                >
+                  Detach
+                </button>
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm ml-auto"
+                  onClick={() => setDatasetDialogOpen(true)}
+                >
+                  Attach dataset
+                </button>
+                <button
+                  type="button"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                  onClick={() =>
+                    patchView({ rows: [...view.rows, { input: "" }] })
+                  }
+                >
+                  + Row
+                </button>
+              </>
+            )}
           </div>
+          {attachedDatasetId && datasetRowsQuery.isError ? (
+            <QueryErrorPanel
+              error={datasetRowsQuery.error}
+              onRetry={() => void datasetRowsQuery.refetch()}
+            />
+          ) : null}
           <div className="space-y-2">
             {view.rows.map((row, i) => (
-              <Panel key={i} muted className="!p-3">
+              <Panel key={row.id ?? i} muted className="!p-3">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <label className="block">
                     <span className="type-label mb-1 block">Input · row {i + 1}</span>
                     <textarea
                       value={row.input}
+                      readOnly={Boolean(attachedDatasetId)}
                       onChange={(e) =>
                         patchView({
                           rows: view.rows.map((r, j) =>
@@ -733,6 +952,7 @@ export function PlaygroundEditor({
                     <span className="type-label mb-1 block">Expected (optional)</span>
                     <textarea
                       value={row.expected ?? ""}
+                      readOnly={Boolean(attachedDatasetId)}
                       onChange={(e) =>
                         patchView({
                           rows: view.rows.map((r, j) =>
@@ -748,7 +968,7 @@ export function PlaygroundEditor({
                     />
                   </label>
                 </div>
-                {view.rows.length > 1 ? (
+                {!attachedDatasetId && view.rows.length > 1 ? (
                   <button
                     type="button"
                     className="ds-btn ds-btn-ghost ds-btn-sm mt-2"
@@ -1020,6 +1240,14 @@ export function PlaygroundEditor({
             </div>
           </Panel>
         </div>
+      ) : null}
+
+      {datasetDialogOpen ? (
+        <DatasetAttachDialog
+          orgId={orgId}
+          onClose={() => setDatasetDialogOpen(false)}
+          onSelect={(ds) => void attachDataset(ds.id, ds.name)}
+        />
       ) : null}
     </div>
   );

@@ -6,19 +6,29 @@ import { agentById } from "@/lab/fixtures/agents";
 import { catalogGuardrailPolicies } from "@/lib/portal-catalog";
 
 /**
- * Mirrors the backend's `VALID_POLICY_TYPES` (`eden/guardrails/policy.py`) —
- * the only `type` values `GuardrailPolicy.create` will accept, so this is
- * also the only set of `kind`s that can ever come back from
- * `GuardrailPolicy.list`. See FEAT-32.
+ * Canonical policy kinds — mirrors `VALID_POLICY_TYPES` in
+ * `eden/guardrails/policy.py` and `kind` on portal cards from
+ * `GET /orgs/{org}/portal/guardrails/policies` (FEAT-125).
  */
-export type GuardrailKind =
-  | "prompt_injection"
-  | "pii_redaction"
-  | "hallucination"
-  | "content_policy"
-  | "judge_link";
+export const GUARDRAIL_KINDS = [
+  "prompt_injection",
+  "pii_redaction",
+  "hallucination",
+  "content_policy",
+  "judge_link",
+] as const;
 
-export type GuardrailStatus = "active" | "shadow" | "disabled";
+export type GuardrailKind = (typeof GUARDRAIL_KINDS)[number];
+
+/**
+ * Portal card statuses from `_map_guardrail_status` in `portal.py`.
+ * Backend `VALID_POLICY_STATUSES` only writes `active` / `disabled` on
+ * `guardrail_policies` rows; `shadow` appears when the stored status (or
+ * alias `dry_run` / `monitor`) is mapped on read.
+ */
+export const GUARDRAIL_STATUSES = ["active", "shadow", "disabled"] as const;
+
+export type GuardrailStatus = (typeof GUARDRAIL_STATUSES)[number];
 
 export type GuardrailAction = "block" | "redact" | "flag";
 
@@ -33,13 +43,12 @@ export type GuardrailPolicyFixture = {
   status: GuardrailStatus;
   /** Omit / undefined = fleet-wide */
   agentId?: string;
-  /**
-   * The backend's `GuardrailPolicy.list` never computes these — no
-   * column or derivation for match volume, severity scoring, last-hit
-   * time, or a human rule summary exists yet. Optional so a live API
-   * row renders blank instead of fabricating a number. See FEAT-32.
-   */
   severity?: GuardrailSeverity;
+  /**
+   * Populated by `GET /orgs/{org}/portal/guardrails/policies` from
+   * `intervention_log` rows attributed to each policy (InterventionEngine
+   * path only — FEAT-38). `lastHit` / `ruleSummary` are still not computed.
+   */
   matchCount24h?: number;
   lastHit?: string;
   ruleSummary?: string;

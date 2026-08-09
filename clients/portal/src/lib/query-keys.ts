@@ -105,6 +105,8 @@ export const queryKeys = {
       ["portal", "alertRules", orgId] as const,
     nlAlertRules: (orgId: string | null | undefined) =>
       ["portal", "nlAlertRules", orgId] as const,
+    alertSuppressionRules: (orgId: string | null | undefined) =>
+      ["portal", "alertSuppressionRules", orgId] as const,
     alertEvents: (orgId: string | null | undefined) =>
       ["portal", "alertEvents", orgId] as const,
     costDrivers: (orgId: string | null | undefined) =>
@@ -121,6 +123,8 @@ export const queryKeys = {
       ["portal", "role-assignments", orgId, roleId] as const,
     permissionsCatalogue: (orgId: string | null | undefined) =>
       ["portal", "permissions-catalogue", orgId] as const,
+    topics: (orgId: string | null | undefined, facet?: string | null) =>
+      ["portal", "topics", orgId, facet ?? null] as const,
     piiPolicy: (orgId: string | null | undefined) =>
       ["portal", "pii-policy", orgId] as const,
     members: (orgId: string | null | undefined) =>
@@ -129,6 +133,8 @@ export const queryKeys = {
       ["portal", "auditEvents", orgId] as const,
     auditPacks: (orgId: string | null | undefined) =>
       ["portal", "auditPacks", orgId] as const,
+    auditChainVerify: (orgId: string | null | undefined) =>
+      ["portal", "auditChainVerify", orgId] as const,
     slackInstall: (orgId: string | null | undefined) =>
       ["portal", "slackInstall", orgId] as const,
     slackChannels: (orgId: string | null | undefined) =>
@@ -164,6 +170,12 @@ export const queryKeys = {
       ["portal", "compareExperiments", orgId] as const,
     guardrailPolicies: (orgId: string | null | undefined) =>
       ["portal", "guardrailPolicies", orgId] as const,
+    redteamProbes: (orgId: string | null | undefined) =>
+      ["portal", "redteamProbes", orgId] as const,
+    redteamFindings: (orgId: string | null | undefined) =>
+      ["portal", "redteamFindings", orgId] as const,
+    drift: (orgId: string | null | undefined, agentId: string | null | undefined) =>
+      ["portal", "drift", orgId, agentId] as const,
     debuggerSessions: (orgId: string | null | undefined) =>
       ["portal", "debuggerSessions", orgId] as const,
     assistantThreads: (orgId: string | null | undefined) =>
@@ -182,6 +194,12 @@ export const queryKeys = {
     all: ["artifacts"] as const,
     list: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["artifacts", "list", orgId, filters ?? {}] as const,
+    context: (orgId: string | null | undefined, agentId: string | null | undefined) =>
+      ["artifacts", "context", orgId, agentId] as const,
+    demotions: (
+      orgId: string | null | undefined,
+      filters?: Record<string, unknown>,
+    ) => ["artifacts", "demotions", orgId, filters ?? {}] as const,
   },
   ledger: {
     all: ["ledger"] as const,
@@ -195,6 +213,12 @@ export const queryKeys = {
     delegation: (orgId: string | null | undefined) =>
       ["fleet", "delegation", orgId] as const,
   },
+  /** Session analytics (`GET /orgs/{id}/analytics/cohorts`, FEAT-139). */
+  analytics: {
+    all: ["analytics"] as const,
+    cohorts: (orgId: string | null | undefined, weeks: number) =>
+      ["analytics", "cohorts", orgId, weeks] as const,
+  },
   /** Labeling queues (`GET /orgs/{id}/labeling/*`) — FEAT-82/FEAT-83. */
   labeling: {
     all: ["labeling"] as const,
@@ -202,10 +226,17 @@ export const queryKeys = {
       ["labeling", "queues", orgId] as const,
     items: (orgId: string | null | undefined, filters?: Record<string, unknown>) =>
       ["labeling", "items", orgId, filters ?? {}] as const,
-    agreement: (orgId: string | null | undefined) =>
-      ["labeling", "agreement", orgId] as const,
-    pop: (orgId: string | null | undefined, userId: string | null | undefined) =>
-      ["labeling", "pop", orgId, userId] as const,
+    agreement: (
+      orgId: string | null | undefined,
+      itemIds?: readonly string[],
+    ) => ["labeling", "agreement", orgId, itemIds ?? []] as const,
+    pop: (
+      orgId: string | null | undefined,
+      userId: string | null | undefined,
+      strategy?: string,
+    ) => ["labeling", "pop", orgId, userId, strategy ?? "fifo"] as const,
+    board: (orgId: string | null | undefined, queueId: string | null | undefined) =>
+      ["labeling", "board", orgId, queueId] as const,
   },
 } as const;
 

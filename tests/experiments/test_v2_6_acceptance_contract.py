@@ -520,7 +520,7 @@ def test_invariant_16_tenant_scoping_on_routes() -> None:
         from eden.observability.trace_quality import queries
     except ImportError as exc:
         pytest.skip(f"queries module not importable: {exc}")
-    src = open(queries.__file__).read()
+    src = Path(queries.__file__).read_text(encoding="utf-8")
     # Every fetch helper MUST filter on tenant_id.
     assert "WHERE tenant_id = $1" in src, (
         "queries.py missing tenant-scoped WHERE clause"

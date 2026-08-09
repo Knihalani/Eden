@@ -35,10 +35,11 @@ class CreateExperimentRequest(BaseModel):
 async def list_offline_experiments(
     org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
     runner = OfflineExperimentRunner()
     try:
-        exps = await runner.list_experiments(org_id)
+        exps = await runner.list_experiments(org_id, limit=limit)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"status": "ok", "experiments": exps, "total": len(exps)}

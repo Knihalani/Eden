@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 from dataclasses import dataclass, field
@@ -49,14 +50,23 @@ class RetentionPolicy:
 DEFAULT_POLICIES: list[RetentionPolicy] = [
     # warm_days=90 matches Team-tier Postgres hot window; cold archive
     # moves rows older than warm_days to object storage.
+    # OPT-58: no ``derived_metrics`` entry — no table of that name exists
+    # (real analogs live under different names and are not retention-managed here).
     RetentionPolicy("raw_traces", 7, 90, 2555, 90, scrub_pii_after_days=30),
-    RetentionPolicy("derived_metrics", 7, 90, 2555, 2555),
     RetentionPolicy("user_feedback", 7, 90, 2555, 2555),
-    RetentionPolicy("training_datasets", 7, 90, 2555, 2555),
-    RetentionPolicy("audit_logs", 7, 90, 2555, 2555),
-    RetentionPolicy("error_logs", 7, 30, 90, 90),
+    # OPT-39: no ``training_datasets`` table — follow-up should add policies for
+    # real tables: ``datasets``, ``dataset_items``, ``dataset_snapshots``, and/or
+    # ``fine_tuning_runs`` / ``dataset_trace_lineage``.
+    # OPT-29: ``audit_logs`` was a phantom name — real table is
+    # ``agent_audit_ledger``. 7-year retention matches prior intent;
+    # compliance/legal-hold enforcement dispatch is a follow-up (OPT-29).
+    RetentionPolicy("agent_audit_ledger", 7, 90, 2555, 2555),
+    # OPT-57: no ``error_logs`` table — phantom policy removed.
     RetentionPolicy("debug_dumps", 7, 0, 0, 7),
     RetentionPolicy("quarantine_events", 7, 30, 90, 90),
+    RetentionPolicy("checkpoint_blobs", 7, 0, 0, 30),
+    RetentionPolicy("trace_replay_sessions", 7, 0, 0, 30),
+    RetentionPolicy("replay_sessions", 7, 0, 0, 30),
 ]
 
 # data_type → hot table eligible for cold archival. Policies without an
@@ -436,15 +446,18 @@ class DataRetentionManager:
             return len(to_delete)
 
         deleted = 0
+
+        def _delete_chunk(objs: list[dict[str, str]]) -> Any:
+            return s3.delete_objects(
+                Bucket=bucket,
+                Delete={"Objects": objs},
+            )
+
         # delete_objects accepts at most 1000 keys per request.
         for i in range(0, len(to_delete), 1000):
             chunk = to_delete[i : i + 1000]
             await loop.run_in_executor(
-                None,
-                lambda objs=chunk: s3.delete_objects(
-                    Bucket=bucket,
-                    Delete={"Objects": objs},
-                ),
+                None, functools.partial(_delete_chunk, chunk)
             )
             deleted += len(chunk)
         logger.info(
@@ -494,6 +507,136 @@ class DataRetentionManager:
         )
         return deleted
 
+    async def cleanup_user_feedback(self, before_date: datetime) -> int:
+        """Delete ``user_feedback`` rows older than the given date.
+
+        Returns the number of rows deleted (or, in dry-run, the number
+        that would be deleted).
+        """
+        client = await self._get_postgres()
+
+        if self.dry_run:
+            count = await client.fetchval(
+                "SELECT COUNT(*) FROM user_feedback WHERE created_at < $1",
+                before_date,
+            )
+            logger.info(
+                f"[DRY RUN] Would delete {count or 0} user_feedback rows "
+                f"before {before_date.isoformat()}"
+            )
+            return int(count or 0)
+
+        result = await client.execute(
+            "DELETE FROM user_feedback WHERE created_at < $1",
+            before_date,
+        )
+        # asyncpg returns status string like "DELETE 42"
+        try:
+            deleted = int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            deleted = 0
+        logger.info(
+            f"Deleted {deleted} user_feedback rows before {before_date.isoformat()}"
+        )
+        return deleted
+
+    async def cleanup_checkpoint_blobs(self, before_date: datetime) -> int:
+        """Delete ``checkpoint_blobs`` rows older than the given date.
+
+        Returns the number of rows deleted (or, in dry-run, the number
+        that would be deleted).
+        """
+        client = await self._get_postgres()
+
+        if self.dry_run:
+            count = await client.fetchval(
+                "SELECT COUNT(*) FROM checkpoint_blobs WHERE created_at < $1",
+                before_date,
+            )
+            logger.info(
+                f"[DRY RUN] Would delete {count or 0} checkpoint_blobs rows "
+                f"before {before_date.isoformat()}"
+            )
+            return int(count or 0)
+
+        result = await client.execute(
+            "DELETE FROM checkpoint_blobs WHERE created_at < $1",
+            before_date,
+        )
+        # asyncpg returns status string like "DELETE 42"
+        try:
+            deleted = int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            deleted = 0
+        logger.info(
+            f"Deleted {deleted} checkpoint_blobs rows before {before_date.isoformat()}"
+        )
+        return deleted
+
+    async def cleanup_trace_replay_sessions(self, before_date: datetime) -> int:
+        """Delete ``trace_replay_sessions`` rows older than the given date.
+
+        Returns the number of rows deleted (or, in dry-run, the number
+        that would be deleted).
+        """
+        client = await self._get_postgres()
+
+        if self.dry_run:
+            count = await client.fetchval(
+                "SELECT COUNT(*) FROM trace_replay_sessions WHERE updated_at < $1",
+                before_date,
+            )
+            logger.info(
+                f"[DRY RUN] Would delete {count or 0} trace_replay_sessions rows "
+                f"before {before_date.isoformat()}"
+            )
+            return int(count or 0)
+
+        result = await client.execute(
+            "DELETE FROM trace_replay_sessions WHERE updated_at < $1",
+            before_date,
+        )
+        try:
+            deleted = int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            deleted = 0
+        logger.info(
+            f"Deleted {deleted} trace_replay_sessions rows before {before_date.isoformat()}"
+        )
+        return deleted
+
+    async def cleanup_replay_sessions(self, before_date: datetime) -> int:
+        """Delete ``replay_sessions`` rows older than the given date.
+
+        Returns the number of rows deleted (or, in dry-run, the number
+        that would be deleted).
+        """
+        client = await self._get_postgres()
+
+        if self.dry_run:
+            count = await client.fetchval(
+                "SELECT COUNT(*) FROM replay_sessions WHERE created_at < $1",
+                before_date,
+            )
+            logger.info(
+                f"[DRY RUN] Would delete {count or 0} replay_sessions rows "
+                f"before {before_date.isoformat()}"
+            )
+            return int(count or 0)
+
+        result = await client.execute(
+            "DELETE FROM replay_sessions WHERE created_at < $1",
+            before_date,
+        )
+        try:
+            deleted = int(str(result).split()[-1])
+        except (ValueError, IndexError):
+            deleted = 0
+        logger.info(
+            f"Deleted {deleted} replay_sessions rows before {before_date.isoformat()}"
+        )
+        return deleted
+
     async def run_retention_policy(self, policy: RetentionPolicy) -> RetentionReport:
         """Run a single retention policy end-to-end."""
         report = RetentionReport()
@@ -534,6 +677,32 @@ class DataRetentionManager:
                 report.deleted_rows = await self.cleanup_quarantine_events(quarantine_before)
             except Exception as exc:
                 report.errors.append(f"Quarantine cleanup failed: {exc}")
+        elif policy.data_type == "user_feedback":
+            try:
+                feedback_before = now - timedelta(days=max(policy.delete_after_days, 1))
+                report.deleted_rows = await self.cleanup_user_feedback(feedback_before)
+            except Exception as exc:
+                report.errors.append(f"User feedback cleanup failed: {exc}")
+        elif policy.data_type == "checkpoint_blobs":
+            try:
+                blobs_before = now - timedelta(days=max(policy.delete_after_days, 1))
+                report.deleted_rows = await self.cleanup_checkpoint_blobs(blobs_before)
+            except Exception as exc:
+                report.errors.append(f"Checkpoint blobs cleanup failed: {exc}")
+        elif policy.data_type == "trace_replay_sessions":
+            try:
+                replay_before = now - timedelta(days=max(policy.delete_after_days, 1))
+                report.deleted_rows = await self.cleanup_trace_replay_sessions(
+                    replay_before
+                )
+            except Exception as exc:
+                report.errors.append(f"Trace replay sessions cleanup failed: {exc}")
+        elif policy.data_type == "replay_sessions":
+            try:
+                sessions_before = now - timedelta(days=max(policy.delete_after_days, 1))
+                report.deleted_rows = await self.cleanup_replay_sessions(sessions_before)
+            except Exception as exc:
+                report.errors.append(f"Replay sessions cleanup failed: {exc}")
 
         # Deletion — purge rows already in cold archive past retention.
         delete_before = now - timedelta(days=policy.delete_after_days)

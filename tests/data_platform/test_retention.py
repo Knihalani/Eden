@@ -14,10 +14,24 @@ from eden.data_platform.retention import (
 
 class TestRetentionPolicy:
     def test_default_policies_exist(self):
-        assert len(DEFAULT_POLICIES) > 0
+        assert len(DEFAULT_POLICIES) == 8
         types = {p.data_type for p in DEFAULT_POLICIES}
         assert "raw_traces" in types
-        assert "audit_logs" in types
+        assert "agent_audit_ledger" in types
+        assert "audit_logs" not in types  # OPT-29: phantom policy removed
+        assert "error_logs" not in types  # OPT-57: phantom policy removed
+        assert "training_datasets" not in types  # OPT-39: phantom policy removed
+        assert "checkpoint_blobs" in types
+        assert "trace_replay_sessions" in types
+        assert "replay_sessions" in types
+        assert "derived_metrics" not in types  # OPT-58: phantom policy removed
+
+    def test_agent_audit_ledger_compliance_retention(self):
+        policy = next(
+            p for p in DEFAULT_POLICIES if p.data_type == "agent_audit_ledger"
+        )
+        assert policy.delete_after_days == 2555
+        assert policy.cold_days == 2555
 
     def test_policy_days(self):
         policy = RetentionPolicy(
@@ -98,7 +112,7 @@ class TestDataRetentionManager:
 
 @pytest.mark.asyncio
 async def test_non_trace_policies_do_not_archive_silver_events():
-    """debug_dumps / error_logs must not call archive_to_cold(silver_events)."""
+    """debug_dumps / agent_audit_ledger must not call archive_to_cold(silver_events)."""
     from unittest.mock import AsyncMock, patch
 
     mgr = DataRetentionManager(dry_run=False)
@@ -111,7 +125,7 @@ async def test_non_trace_policies_do_not_archive_silver_events():
         patch.object(mgr, "cleanup_debug_dumps", cleanup_dumps),
         patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
     ):
-        for data_type in ("debug_dumps", "error_logs", "audit_logs"):
+        for data_type in ("debug_dumps", "agent_audit_ledger"):
             policy = next(p for p in DEFAULT_POLICIES if p.data_type == data_type)
             await mgr.run_retention_policy(policy)
 
@@ -329,6 +343,264 @@ async def test_cleanup_debug_dumps_failure_lands_in_report_errors():
 
     assert any("Debug dump cleanup failed" in e for e in report.errors)
     assert report.deleted_rows == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_user_feedback_dry_run_counts_without_deleting():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=True)
+    before = datetime.now(UTC) - timedelta(days=2555)
+    fake_client = MagicMock()
+    fake_client.fetchval = AsyncMock(return_value=42)
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_user_feedback(before)
+
+    assert count == 42
+    fake_client.fetchval.assert_awaited_once_with(
+        "SELECT COUNT(*) FROM user_feedback WHERE created_at < $1",
+        before,
+    )
+    fake_client.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_user_feedback_live_delete():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    before = datetime.now(UTC) - timedelta(days=2555)
+    fake_client = MagicMock()
+    fake_client.execute = AsyncMock(return_value="DELETE 15")
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_user_feedback(before)
+
+    assert count == 15
+    fake_client.execute.assert_awaited_once_with(
+        "DELETE FROM user_feedback WHERE created_at < $1",
+        before,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_retention_policy_user_feedback_calls_cleanup():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    archive = AsyncMock(return_value=(0, 0))
+    cleanup = AsyncMock(return_value=7)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "user_feedback")
+    with (
+        patch.object(mgr, "archive_to_cold", archive),
+        patch.object(mgr, "cleanup_user_feedback", cleanup),
+        patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
+    ):
+        report = await mgr.run_retention_policy(policy)
+
+    archive.assert_not_called()
+    cleanup.assert_awaited_once()
+    assert report.deleted_rows == 7
+
+
+@pytest.mark.asyncio
+async def test_cleanup_user_feedback_failure_lands_in_report_errors():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "user_feedback")
+    with patch.object(
+        mgr, "cleanup_user_feedback", AsyncMock(side_effect=RuntimeError("DB down"))
+    ):
+        report = await mgr.run_retention_policy(policy)
+
+    assert any("User feedback cleanup failed" in e for e in report.errors)
+    assert report.deleted_rows == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_checkpoint_blobs_dry_run_counts_without_deleting():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=True)
+    before = datetime.now(UTC) - timedelta(days=30)
+    fake_client = MagicMock()
+    fake_client.fetchval = AsyncMock(return_value=42)
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_checkpoint_blobs(before)
+
+    assert count == 42
+    fake_client.fetchval.assert_awaited_once_with(
+        "SELECT COUNT(*) FROM checkpoint_blobs WHERE created_at < $1",
+        before,
+    )
+    fake_client.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_checkpoint_blobs_live_delete():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    before = datetime.now(UTC) - timedelta(days=30)
+    fake_client = MagicMock()
+    fake_client.execute = AsyncMock(return_value="DELETE 15")
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_checkpoint_blobs(before)
+
+    assert count == 15
+    fake_client.execute.assert_awaited_once_with(
+        "DELETE FROM checkpoint_blobs WHERE created_at < $1",
+        before,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_retention_policy_checkpoint_blobs_calls_cleanup():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    archive = AsyncMock(return_value=(0, 0))
+    cleanup = AsyncMock(return_value=7)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "checkpoint_blobs")
+    with (
+        patch.object(mgr, "archive_to_cold", archive),
+        patch.object(mgr, "cleanup_checkpoint_blobs", cleanup),
+        patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
+    ):
+        report = await mgr.run_retention_policy(policy)
+
+    archive.assert_not_called()
+    cleanup.assert_awaited_once()
+    assert report.deleted_rows == 7
+
+
+@pytest.mark.asyncio
+async def test_cleanup_checkpoint_blobs_failure_lands_in_report_errors():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "checkpoint_blobs")
+    with patch.object(
+        mgr, "cleanup_checkpoint_blobs", AsyncMock(side_effect=RuntimeError("DB down"))
+    ):
+        report = await mgr.run_retention_policy(policy)
+
+    assert any("Checkpoint blobs cleanup failed" in e for e in report.errors)
+    assert report.deleted_rows == 0
+
+
+@pytest.mark.asyncio
+async def test_cleanup_trace_replay_sessions_dry_run_counts_without_deleting():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=True)
+    before = datetime.now(UTC) - timedelta(days=30)
+    fake_client = MagicMock()
+    fake_client.fetchval = AsyncMock(return_value=12)
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_trace_replay_sessions(before)
+
+    assert count == 12
+    fake_client.fetchval.assert_awaited_once_with(
+        "SELECT COUNT(*) FROM trace_replay_sessions WHERE updated_at < $1",
+        before,
+    )
+    fake_client.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_trace_replay_sessions_live_delete():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    before = datetime.now(UTC) - timedelta(days=30)
+    fake_client = MagicMock()
+    fake_client.execute = AsyncMock(return_value="DELETE 9")
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_trace_replay_sessions(before)
+
+    assert count == 9
+    fake_client.execute.assert_awaited_once_with(
+        "DELETE FROM trace_replay_sessions WHERE updated_at < $1",
+        before,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_retention_policy_trace_replay_sessions_calls_cleanup():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    archive = AsyncMock(return_value=(0, 0))
+    cleanup = AsyncMock(return_value=4)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "trace_replay_sessions")
+    with (
+        patch.object(mgr, "archive_to_cold", archive),
+        patch.object(mgr, "cleanup_trace_replay_sessions", cleanup),
+        patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
+    ):
+        report = await mgr.run_retention_policy(policy)
+
+    archive.assert_not_called()
+    cleanup.assert_awaited_once()
+    assert report.deleted_rows == 4
+
+
+@pytest.mark.asyncio
+async def test_cleanup_replay_sessions_dry_run_counts_without_deleting():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=True)
+    before = datetime.now(UTC) - timedelta(days=30)
+    fake_client = MagicMock()
+    fake_client.fetchval = AsyncMock(return_value=6)
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_replay_sessions(before)
+
+    assert count == 6
+    fake_client.fetchval.assert_awaited_once_with(
+        "SELECT COUNT(*) FROM replay_sessions WHERE created_at < $1",
+        before,
+    )
+    fake_client.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_replay_sessions_live_delete():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    before = datetime.now(UTC) - timedelta(days=30)
+    fake_client = MagicMock()
+    fake_client.execute = AsyncMock(return_value="DELETE 3")
+    with patch.object(mgr, "_get_postgres", AsyncMock(return_value=fake_client)):
+        count = await mgr.cleanup_replay_sessions(before)
+
+    assert count == 3
+    fake_client.execute.assert_awaited_once_with(
+        "DELETE FROM replay_sessions WHERE created_at < $1",
+        before,
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_retention_policy_replay_sessions_calls_cleanup():
+    from unittest.mock import AsyncMock, patch
+
+    mgr = DataRetentionManager(dry_run=False)
+    archive = AsyncMock(return_value=(0, 0))
+    cleanup = AsyncMock(return_value=2)
+    policy = next(p for p in DEFAULT_POLICIES if p.data_type == "replay_sessions")
+    with (
+        patch.object(mgr, "archive_to_cold", archive),
+        patch.object(mgr, "cleanup_replay_sessions", cleanup),
+        patch.object(mgr, "purge_archived_telemetry", AsyncMock(return_value=0)),
+    ):
+        report = await mgr.run_retention_policy(policy)
+
+    archive.assert_not_called()
+    cleanup.assert_awaited_once()
+    assert report.deleted_rows == 2
 
 
 @pytest.mark.asyncio

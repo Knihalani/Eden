@@ -67,6 +67,91 @@ class TestStorageLifecycleManager:
         assert "hot" in summary
         assert "warm" in summary
         assert "cold" in summary
+        assert "hot_bytes_total" in summary
+        for table in (
+            "usage_events",
+            "silver_events",
+            "quarantine_events",
+            "checkpoint_blobs",
+            "trace_replay_sessions",
+            "replay_sessions",
+            "user_feedback",
+            "agent_audit_ledger",
+        ):
+            assert table in summary["hot"]
+            assert "rows" in summary["hot"][table]
+            assert "bytes" in summary["hot"][table]
+
+    @pytest.mark.asyncio
+    async def test_get_storage_summary_includes_quarantine_unreprocessed_and_bytes(
+        self,
+    ):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        fake_client = MagicMock()
+        fake_client.fetchval = AsyncMock(
+            side_effect=lambda query, *args: (
+                True
+                if "information_schema.tables" in query
+                else 3
+                if "unreprocessed" in query.lower()
+                or "distinct from 'reprocessed'" in query.lower()
+                else 10
+                if "COUNT(*)" in query
+                else 4096
+                if "pg_total_relation_size" in query
+                else 0
+            )
+        )
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=fake_client),
+        ):
+            manager = StorageLifecycleManager()
+            summary = await manager.get_storage_summary()
+
+        quarantine = summary["hot"]["quarantine_events"]
+        assert quarantine["rows"] == 10
+        assert quarantine["bytes"] == 4096
+        assert quarantine["unreprocessed_rows"] == 3
+        assert summary["hot_bytes_total"] == 4096 * len(
+            (
+                "usage_events",
+                "silver_events",
+                "quarantine_events",
+                "checkpoint_blobs",
+                "trace_replay_sessions",
+                "replay_sessions",
+                "user_feedback",
+                "agent_audit_ledger",
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_storage_summary_missing_table_is_defensive(self):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        fake_client = MagicMock()
+        fake_client.fetchval = AsyncMock(
+            side_effect=lambda query, *args: False
+            if "information_schema.tables" in query
+            else 0
+        )
+
+        with patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=fake_client),
+        ):
+            manager = StorageLifecycleManager()
+            summary = await manager.get_storage_summary()
+
+        assert summary["hot"]["checkpoint_blobs"] == {
+            "rows": 0,
+            "bytes": 0,
+            "missing": True,
+        }
+        assert summary["hot_bytes_total"] == 0
 
     def test_lifecycle_report_defaults(self):
         report = LifecycleReport()

@@ -302,6 +302,67 @@ class TestUsageTracking:
         assert u.cache_reads == 0
         assert u.cache_writes == 0
 
+    def test_cache_tokens_from_openrouter_prompt_tokens_details(self):
+        """OPT-35: read cached_tokens / cache_write_tokens from nested usage."""
+        from types import SimpleNamespace
+
+        from eden.llm.client import _cache_tokens_from_usage
+
+        usage = SimpleNamespace(
+            prompt_tokens_details=SimpleNamespace(
+                cached_tokens=120,
+                cache_write_tokens=40,
+            )
+        )
+        reads, writes = _cache_tokens_from_usage(usage)
+        assert reads == 120
+        assert writes == 40
+
+    def test_cache_tokens_falls_back_to_legacy_flat_fields(self):
+        from types import SimpleNamespace
+
+        from eden.llm.client import _cache_tokens_from_usage
+
+        usage = SimpleNamespace(cache_reads=7, cache_writes=3)
+        reads, writes = _cache_tokens_from_usage(usage)
+        assert reads == 7
+        assert writes == 3
+
+    def test_make_request_populates_cache_reads_from_prompt_tokens_details(
+        self, monkeypatch,
+    ):
+        """_make_request maps OpenRouter nested cache fields into UsageStats."""
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        from eden.llm import client as client_module
+
+        c = client_module.OpenRouterClient(api_key="test")
+
+        def capture_create(**_kwargs):
+            m = MagicMock()
+            m.choices = [MagicMock()]
+            m.choices[0].message.content = "ok"
+            m.choices[0].finish_reason = "stop"
+            m.usage = SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=10,
+                total_tokens=110,
+                cost=0.05,
+                prompt_tokens_details=SimpleNamespace(
+                    cached_tokens=80,
+                    cache_write_tokens=20,
+                ),
+            )
+            return m
+
+        with patch.object(c.client.chat.completions, "create", side_effect=capture_create):
+            resp = c._make_request("openai/gpt-4o-mini", "hi", None, 100)
+
+        assert resp.usage.cache_reads == 80
+        assert resp.usage.cache_writes == 20
+        assert resp.usage.cost == 0.05
+
     def test_get_total_usage(self):
         """Total usage aggregates multiple calls."""
         client = OpenRouterClient(api_key="test")

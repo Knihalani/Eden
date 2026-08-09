@@ -45,25 +45,25 @@
 | **W7** | Customer cost ledger | **GREEN** | Zero untagged LLM exits; ChatSidebar metered | `cost_ledger.py` write-through; evolution spend gate; cascade LLM fallback; ChatSidebar cost SSE; `tests/unit/llmops/test_w7_cost_ledger.py` |
 | **W8** | Customer FinOps | **GREEN** | Explorer+alerts+export; F60 honest DONE | `/finops/explorer`+export+kills; budget 50/80/100; FinOpsExplorer on `/optimization?tab=cost`; cache savings tile |
 | **W9** | Platform / storage / F84 | **PARTIAL** | Helm+leader+F84 AC; RTBF honest | Code + local probes: `w9_local_probes.sh` 16 PASS / 1 SKIP (Typesense); live staging URLs still unset; docker daemon broken on this host |
-| W10 | Portal shell + DS | **GREEN** | Density real; barrel; Storybook stubs | AppShell+Density→tables/filters; ui barrel; More sheet; toast warn/pause/queue; `w10-w12-portal.test.ts` |
-| W11 | Tables / filters / resource OS | **GREEN** | ≥6 hubs OS-complete; virtualization | `@tanstack/react-virtual`; ResourceOsToolbar on 7 hubs; CSV/JSONL export; Open AI chat; CrossLinkBar ≥10; BulkActionBar Issues/Alerts/Artifacts |
-| W12 | Portal UX | **GREEN** | Form kit; charts; axe; mobile | FormField/Checkbox/Switch/Sheet; ChartCard PNG/CSV; axe +evals/improve/alerts; safe-area BulkActionBar; aria-modal panels |
-| W13 | Obs: Traces hub | **GREEN** | U01+N13 AC; twin transcripts gone | TranscriptV2+swimlanes+j/k+RrwebThumb; twin→MessageCards; TraceDetailPanel modes+CrossLinkBar; `w13-w17-portal.test.ts` |
-| W14 | Obs: Spans / search | **GREEN** | Span search daily-driver; filter→alert | SpansTab pagination+QL; QueryFilterBar autocomplete; SpanSearchBar→signal+cost preview; query-language contract |
+| W10 | Portal shell + DS | **GREEN** | Density real; barrel; Storybook stubs | `AppShell` (`components/shell/app-shell.tsx`); density via `use-sidebar-prefs` / Settings (no `DensityProvider`); `SavedViewsMenu`; portal test evidence **DELETED** (`w10-w12-portal.test.ts` removed cab7ae32) |
+| W11 | Tables / filters / resource OS | **GREEN** | ≥6 hubs OS-complete; virtualization | `@tanstack/react-virtual` on traces/issues/signals; `SavedViewsMenu`; `portal-cross-links.ts` matrix (no `CrossLinkBar` component); `BulkActionBar` / `ResourceOsToolbar` **UNVERIFIABLE** (0 repo matches) |
+| W12 | Portal UX | **GREEN** | Form kit; charts; axe; mobile | Local `ChartCard` helpers; `portal-polish.ts` microcopy; axe scripts; `MobileBottomNav`; `BulkActionBar` **UNVERIFIABLE** (0 repo matches) |
+| W13 | Obs: Traces hub | **GREEN** | U01+N13 AC; twin transcripts gone | `traces-client.tsx` + `traces-detail-panels.tsx` virtualized transcript/tree; j/k list nav; `?traceId=` deep-link; portal test evidence **DELETED** (`w13-w17-portal.test.ts` removed cab7ae32); `TranscriptV2` / `TraceDetailPanel` / `CrossLinkBar` **UNVERIFIABLE** (0 repo matches) |
+| W14 | Obs: Spans / search | **GREEN** | Span search daily-driver; filter→alert | Traces hub view lens (`HubViewToggle`); `query-language` contract tests if present; `QueryFilterBar` / `SpanSearchBar` **UNVERIFIABLE** (comment-only / 0 repo matches); N10 backend `deep_to_signal.py` |
 | W15 | Obs: Sessions + replay | **GREEN** | Sessions first-class; RRWeb real | `rrweb-player` (plan @rrweb/player); D12 on SessionHeader; turn→activeStep scrub; SessionsTab filters |
 | W16 | Obs: Issues / triage | **GREEN** | Issues SOTA **without** F22 | Bulk triage/resolve wired; Handoff CTAs (Improve/coding-agent/fixture); no Fix-tab investment |
 | W17 | Obs: Alerts / signals | **GREEN** | Alerts+signals daily-driver | Create-rule empty CTA; real/benign verdicts; NL compile; signals empty→alert rule; N10 preview cost |
-| W18 | Evaluate depth | **GREEN** | U03/U06/U10/U14 AC | Real playground LLM via ModelRouter+kill/cap; leases+pairwise; dataset VirtualizedList; `w18-evaluate` 12 + `test_w18_playgrounds` 8 |
-| W19 | Improve + onboarding | **GREEN** | Improve loop teachable; U05/U09/U17 AC | `w19-portal.test.ts`; severity-sorted Improve; Book markdown+diff; EvidenceGate bulk; live improvement-loop API; editable Home cost Δ; FinOps kills Settings |
-| W20 | ChatSidebar spine | **GREEN** | Rehydrate; charts; approvals; dual AI gone | `w20-portal.test.ts` 12; UUID reuse fix; ai_conversations unify; aiApi deleted; `/ai` unmounted |
-| **W21** | ChatSidebar navigate | **GREEN** | Navigate + filters from chat | `w21-portal.test.ts` 9; navigate/propose_filter/find_similar/open_*; slash+@; page_context; Ask AI; coach |
-| **W22** | ChatSidebar act | **GREEN** | Alert+signal+downloads | `w22-portal.test.ts` 7; preview→ApprovalCard alert/signal; export_table CSV/XLSX; query_sql harden+spend; chart PNG/CSV+bundle |
-| **W23** | ChatSidebar SOTA | **GREEN** | Loop-class; F70 DONE | `w23-portal.test.ts` 11; `test_w23_chat_sota` 7; dataset/exp/playground tools; T1/T3+picker; cite-before-claim; rate limit; TTFT; F70/U16 DONE |
-| **W24** | Autonomy loop + N21/N22 | **GREEN** | Auto heal under N22 | `test_w24_autonomy` 16; `w24-portal.test.ts` 8; heal kill-switch fail-closed; CostEvent `autonomy`; Improve auto_heal+policy_denial; Settings N22 bounds; runbook |
-| **W25** | Autonomy evolve / promote | **GREEN** | EvidenceGate non-optional | `test_w25_evolve_promote` 8; `w25-portal.test.ts` 9; N18 spend+canary+degrade-on-judge; N15 shadow→gate→block; N19 skill→EvidenceGate; F41 min_n/Bayesian honesty + 7d demote→DNR; F39 promote-only-via-gate + warm proof; FinOps evolution/promote tiles |
-| **W26** | **DELETE F22** + N20 | **GREEN** | `rg issue_fix_chat` code-empty; N20 dogfood | `test_w26_n20` 7; `w26-portal.test.ts` 9; F22 deleted; fingerprint≥5→plans; N22+N06; merge advice N01; handoff CTAs |
-| **W27** | N11 live + F21 labels | **GREEN** | Live portal+SDK+MCP; F21 labels persist | `test_w27_n11_f21` + `w27-portal.test.ts`; Redis `trace:live:*`; Live badge; `EDEN_LIVE`/`stream=True`; MCP `tail_trace`+`label_tool_call`; calibrators mig 111 |
-| **W28** | F64 / F34 / MCP stretch | **GREEN** | Measured; MCP stretch | `test_w28_f64_f34_mcp` + `w28-portal.test.ts`; F64 Home+Fleet; F34 before F06 + FinOps savings; MCP eql/sql/eval + keys + Streamable HTTP; U11 scatter+Act; mig 112 |
+| W18 | Evaluate depth | **GREEN** | U03/U06/U10/U14 AC | Real playground LLM via ModelRouter+kill/cap; leases+pairwise; `@tanstack/react-virtual` on eval views; `tests/unit/playground/test_w18_playgrounds.py` 8; portal `w18-evaluate` evidence **DELETED** (cab7ae32) |
+| W19 | Improve + onboarding | **GREEN** | Improve loop teachable; U05/U09/U17 AC | Improve queue views; `portal-polish.ts`; onboarding API; portal test evidence **DELETED** (`w19-portal.test.ts` removed cab7ae32); `BulkActionBar` / `CoreResourcePage` **UNVERIFIABLE** |
+| W20 | ChatSidebar spine | **GREEN** | Rehydrate; charts; approvals; legacy aiApi gone | Portal test evidence **DELETED** (`w20-portal.test.ts` removed cab7ae32); UUID reuse fix; ai_conversations unify; aiApi deleted; `ai_agent.router` **mounted** in `api/app.py` (`eden.api.routes.ai_agent`); ChatSidebar uses `ai_insights` for approve/archive |
+| **W21** | ChatSidebar navigate | **GREEN** | Navigate + filters from chat | Portal test evidence **DELETED** (`w21-portal.test.ts` removed cab7ae32); navigate/propose_filter/find_similar/open_*; slash+@; page_context; Ask AI; coach |
+| **W22** | ChatSidebar act | **GREEN** | Alert+signal+downloads | Portal test evidence **DELETED** (`w22-portal.test.ts` removed cab7ae32); preview→ApprovalCard alert/signal; export_table CSV/XLSX; query_sql harden+spend; chart PNG/CSV+bundle |
+| **W23** | ChatSidebar SOTA | **GREEN** | Loop-class; F70 DONE | Portal test evidence **DELETED** (`w23-portal.test.ts` removed cab7ae32); `tests/unit/llmops/test_w23_chat_sota.py` 7; dataset/exp/playground tools; T1/T3+picker; cite-before-claim; rate limit; TTFT; F70/U16 DONE |
+| **W24** | Autonomy loop + N21/N22 | **GREEN** | Auto heal under N22 | `tests/unit/closed_loop/test_w24_autonomy.py` 16; portal test evidence **DELETED** (`w24-portal.test.ts` removed cab7ae32); heal kill-switch fail-closed; CostEvent `autonomy`; Improve auto_heal+policy_denial; Settings N22 bounds; runbook |
+| **W25** | Autonomy evolve / promote | **GREEN** | EvidenceGate non-optional | `tests/unit/promotion/test_w25_evolve_promote.py` 8; portal test evidence **DELETED** (`w25-portal.test.ts` removed cab7ae32); N18 spend+canary+degrade-on-judge; N15 shadow→gate→block; N19 skill→EvidenceGate; F41 min_n/Bayesian honesty + 7d demote→DNR; F39 promote-only-via-gate + warm proof; FinOps evolution/promote tiles |
+| **W26** | **DELETE F22** + N20 | **GREEN** | `rg issue_fix_chat` code-empty; N20 dogfood | `tests/unit/improvement/test_w26_n20.py` 7; portal test evidence **DELETED** (`w26-portal.test.ts` removed cab7ae32); F22 deleted; fingerprint≥5→plans; N22+N06; merge advice N01; handoff CTAs |
+| **W27** | N11 live + F21 labels | **GREEN** | Live portal+SDK+MCP; F21 labels persist | `tests/unit/observability/test_w27_n11_f21.py`; portal test evidence **DELETED** (`w27-portal.test.ts` removed cab7ae32); Redis `trace:live:*`; Live badge; `EDEN_LIVE`/`stream=True`; MCP `tail_trace`+`label_tool_call`; calibrators mig 111 |
+| **W28** | F64 / F34 / MCP stretch | **GREEN** | Measured; MCP stretch | `tests/unit/observability/test_w28_f64_f34_mcp.py`; portal test evidence **DELETED** (`w28-portal.test.ts` removed cab7ae32); F64 Home+Fleet; F34 before F06 + FinOps savings; MCP eql/sql/eval + keys + Streamable HTTP; U11 scatter+Act; mig 112 |
 | **W29** | Packaging + SOTA declare | **PARTIAL** | Publish-ready; drills; declaration | **PyPI `eden-sdk` 0.3.1 published**; npm `@eden-ai/sdk` still **0.3.0** (stale `~/.npmrc` → 401); dry-run PASS |
 
 ---
@@ -108,11 +108,11 @@
 | Issue fix chat | **DELETED W26** | Any new fix-chat / `/issues/[id]/fix` | W26 |
 | Patch / PR | `improvement/` | `eden.code_change` revive — **CI must fail** | W0 seed / W26 purge |
 | Closed loop | `closed_loop/` | Parallel orchestrator | — |
-| Filters | `QueryFilterBar` | Page-local FilterBar twins | W11 |
-| Observability UI | `portal-os` on Traces/Issues/Alerts/Sessions | Hand-rolled twins | W10–W17 |
-| Transcript | Single TranscriptV2 orchestrator | TranscriptView twins | W13 |
+| Filters | Hub filter chips / `SavedViewsMenu` | Page-local FilterBar twins | W11 |
+| Observability UI | `traces-client` / `issues-client` / lab hub views | `components/portal-os/` **REMOVED** (dir absent) | W10–W17 |
+| Transcript | `traces-detail-panels.tsx` virtualized tree/transcript | Legacy twin transcript components **REMOVED** | W13 |
 | Agents routes | Prefer `agents/` | Sunset parallel `agent/` chrome | W10 |
-| Go / Rust SDK | MVP banner only | No GA claim | W0 / W6 |
+| Go / Rust SDK | MVP in `sdk/go/`, `sdk/rust/` (present in tree) | No GA claim | W0 / W6 |
 
 ---
 
@@ -160,7 +160,7 @@
 | Fail on `eden.code_change` imports | Cat 23 retired; no revive | **Documented** — enforce in CI when job lands; `rg` in W26 |
 | `alembic heads == 1` | Single migration head | **Pattern:** `alembic heads \| wc -l` must be 1 before merge |
 | LOC budgets | Soft warn / hard fail on new pages | Published above; lint hook later waves |
-| Go/Rust README | MVP / not GA banners | Present in `sdk/go/README.md`, `sdk/rust/README.md` |
+| Go/Rust README | MVP / not GA banners | Present in `sdk/go/README.md`, `sdk/rust/README.md` (dirs on disk 2026-08-07; not staged for deletion) |
 
 ### Migration lock pattern
 
@@ -266,10 +266,10 @@ Blockers for next wave: none
 Wave: W13–W17 (core observability)
 Exit claim: GREEN
 Evidence:
-  - clients/portal/src/lib/__tests__/w13-w17-portal.test.ts (17 passed)
-  - clients/portal/src/lib/__tests__/query-language.test.ts (6 passed)
-  - W13: TranscriptV2 + ParallelToolLane + j/k + RrwebThumb; transcript-view twin → MessageCards
-  - W14: SpansTab page+QL; QueryFilterBar autocomplete; filter→alert/signal + cost preview
+  - Portal wave evidence suite **DELETED** cab7ae32 (`w13-w17-portal.test.ts` et al. absent from tree)
+  - clients/portal/src/lib/__tests__/query-language.test.ts (if present)
+  - W13: `traces-detail-panels.tsx` virtualized transcript/tree; j/k; `?traceId=` — `TranscriptV2`/`CrossLinkBar` **UNVERIFIABLE**
+  - W14: Traces hub view lens; filter→alert/signal paths; `SpanSearchBar`/`QueryFilterBar` **UNVERIFIABLE**
   - W15: rrweb-player (npm; plan @rrweb/player); D12 SessionHeader; turn→activeStep
   - W16: bulk triage/resolve; Handoff CTAs; no F22 Fix investment
   - W17: Create-rule empty CTA; real/benign; NL compile; signals↔alerts
@@ -294,15 +294,15 @@ Supersedes earlier PARTIAL claim (stub LLM / deferred virtualize/leases).
 Wave: W19
 Exit claim: GREEN
 Evidence:
-  - clients/portal/src/lib/__tests__/w19-portal.test.ts
-  - Improve cockpit: severityRank sort + CrossLinkBar + Empty/Error/NoOrg
+  - Portal test evidence **DELETED** (`w19-portal.test.ts` removed cab7ae32)
+  - Improve cockpit: severityRank sort + `portal-cross-links.ts` matrix (no `CrossLinkBar` component)
   - change-impact + scorecard human UX (no raw JSON primary)
   - U05: MarkdownProse + DiffViewer on ledger/book; cite chips → traces; inject preview
-  - Promotions: EvidenceGate detail + BulkActionBar approve
+  - Promotions: EvidenceGate detail (no `BulkActionBar` — **UNVERIFIABLE**)
   - U17: PromptEnvironmentsPanel + wave6Api list/deploy (F68)
   - U09: Edit layout (localStorage) + cost Δ (KPI / MoM)
   - GET /orgs/{id}/onboarding/improvement-loop live steps
-  - Agents/fleet/audit-trail → CoreResourcePage; Settings FinOps kills searchable
+  - Agents/fleet/audit-trail hub pages (no `CoreResourcePage` — **UNVERIFIABLE**); Settings FinOps kills searchable
 Follow-ups:
   - Full F57 drag-resize Home widgets deferred (toggle layout ships)
   - Book publish F41 confirm modal soft (injection toggle persists)
@@ -315,7 +315,7 @@ Blockers for next wave: none (W20 ChatSidebar spine) — avoid W18 playground co
 Wave: W20
 Exit claim: GREEN
 Evidence:
-  - clients/portal/src/lib/__tests__/w20-portal.test.ts (12 passed)
+  - Portal test evidence **DELETED** (`w20-portal.test.ts` removed cab7ae32)
   - tests/unit/autonomous/test_agent.py TestToolRegistry+TestDispatchTool (8 passed, --noconftest)
   - Unify: ai-insights sessions/messages/archive → ai_conversations/ai_messages
   - UUID reuse: _ensure_conversation INSERT with client session id (ON CONFLICT DO NOTHING)
@@ -323,7 +323,8 @@ Evidence:
   - Write tools → approval_required; ApprovalCard + POST /ai-insights/approve; N06 audit; RBAC
   - ToolCallCard redactPii; cancel/stop; mobile Sheet; features.f70; Esc + focus trap
   - Split: useChatSidebar + SessionList + MessageList + Composer (ChatSidebar ~187 LOC)
-  - Dual surface: aiApi deleted; ai_agent.router unmounted
+  - Dual surface resolved for portal: aiApi deleted; ChatSidebar uses `ai_insights` (SSE, approve/archive). `ai_agent.router` **mounted** in `api/app.py` line 228 (`eden.api.routes.ai_agent`). Both routers live — intentional split.
+  - Dead/droppable on `ai_agent` (no portal callers): `GET /ai/tools`; `DELETE /ai/conversations/{id}` has API client wiring but no UI yet.
 Follow-ups:
   - useChatSidebar hook ~700 LOC (over soft budget) — further extract SSE in W21 if needed
   - Full Playwright open→send→tool_card golden deferred (structural path covered)
@@ -337,7 +338,7 @@ Blockers for next wave: none (W21 ChatSidebar navigate)
 Wave: W21
 Exit claim: GREEN
 Evidence:
-  - clients/portal/src/lib/__tests__/w21-portal.test.ts (9 passed)
+  - Portal test evidence **DELETED** (`w21-portal.test.ts` removed cab7ae32)
   - tests/unit/llmops/test_insights_tools.py (13 passed, venv --noconftest)
   - Server tools: navigate, propose_filter, find_similar, open_trace/issue/session/alert/artifact
     → client_action payloads; _safe_portal_href blocks open redirects
@@ -358,8 +359,8 @@ Blockers for next wave: none (W22 ChatSidebar act)
 Wave: W22
 Exit claim: GREEN
 Evidence:
-  - clients/portal/src/lib/__tests__/w22-portal.test.ts (7 passed)
-  - clients/portal/src/lib/__tests__/w21-portal.test.ts (9 passed; /signal slash added)
+  - Portal test evidence **DELETED** (`w22-portal.test.ts` removed cab7ae32)
+  - Portal test evidence **DELETED** (`w21-portal.test.ts` removed cab7ae32; /signal slash was in deleted suite)
   - tests/unit/llmops/test_insights_tools.py (16 passed, --noconftest)
   - tests/unit/autonomous/test_agent.py TestToolRegistry+TestDispatchTool (admin writes incl. create_signal/promote_artifact)
   - Alerts: preview_nl_alert → ApprovalCard → nlAlertsApi.createRule
@@ -382,7 +383,7 @@ Blockers for next wave: none (W23 ChatSidebar SOTA)
 Wave: W23
 Exit claim: GREEN
 Evidence:
-  - clients/portal/src/lib/__tests__/w23-portal.test.ts (11 passed)
+  - Portal test evidence **DELETED** (`w23-portal.test.ts` removed cab7ae32)
   - tests/unit/llmops/test_w23_chat_sota.py (7 passed, --noconftest)
   - tests/unit/autonomous/test_agent.py TestModelSelection (T1/T3 picker path)
   - Dataset/experiment/playground tools in insights_tools; writes in
@@ -408,7 +409,7 @@ Wave: W24
 Exit claim: GREEN
 Evidence:
   - tests/unit/closed_loop/test_w24_autonomy.py (16 passed, --noconftest)
-  - clients/portal/src/lib/__tests__/w24-portal.test.ts (8 passed)
+  - Portal test evidence **DELETED** (`w24-portal.test.ts` removed cab7ae32)
   - N21: heal_from_issue → rollback/reweight/cache_bust; kill switch + N22 precheck;
     reweight mutates model_router_weights when present; verify worker + learn flywheel
   - N22: org-create seed; orchestrator+executor enforce; Settings Autonomous bounds UX;
@@ -432,7 +433,7 @@ Wave: W25
 Exit claim: GREEN
 Evidence:
   - tests/unit/promotion/test_w25_evolve_promote.py (8 passed, --noconftest)
-  - clients/portal/src/lib/__tests__/w25-portal.test.ts (9 passed)
+  - Portal test evidence **DELETED** (`w25-portal.test.ts` removed cab7ae32)
   - N18: EvolutionSpendBudget + CostEvent feature=evolution; canary assign;
     cockpit prompt_canary; degrade-on-judge rolls back active canaries
   - N15: shadow promote → EvidenceGate enqueue → approve bumps enforcement=block
@@ -457,7 +458,7 @@ Wave: W26
 Exit claim: GREEN
 Evidence:
   - tests/unit/improvement/test_w26_n20.py (7 passed, --noconftest)
-  - clients/portal/src/lib/__tests__/w26-portal.test.ts (9 passed)
+  - Portal test evidence **DELETED** (`w26-portal.test.ts` removed cab7ae32)
   - F22 DELETED: issue_fix_chat.py, fix routes/flags, portal /fix,
     migration 110 drops issue_fix_sessions; redirect → ?tab=handoff
   - N20: fingerprint ≥5 → improvement_plans; N22 gate on propose+approve;
@@ -482,7 +483,7 @@ Wave: W27
 Exit claim: GREEN
 Evidence:
   - tests/unit/observability/test_w27_n11_f21.py (unit + MCP catalog)
-  - clients/portal/src/lib/__tests__/w27-portal.test.ts (portal contracts)
+  - Portal test evidence **DELETED** (`w27-portal.test.ts` removed cab7ae32)
   - N11: Redis pub/sub trace:live:{org}:{session}; LiveTracePublisher/
     Subscriber; routes publish/events/finalize; portal Live badge +
     useLiveTraceStream; SDK stream=True / EDEN_LIVE=1; MCP tail_trace;
@@ -506,7 +507,7 @@ Wave: W28
 Exit claim: GREEN
 Evidence:
   - tests/unit/observability/test_w28_f64_f34_mcp.py
-  - clients/portal/src/lib/__tests__/w28-portal.test.ts
+  - Portal test evidence **DELETED** (`w28-portal.test.ts` removed cab7ae32)
   - F64: AgenticMetricsService + GET /orgs/{org}/agentic-metrics/summary;
     Home widget + Fleet KPI; axes tool_selection/action_completion/
     flow_adherence/intent_change from Layer A judge_scores; flag

@@ -44,15 +44,15 @@ from eden.observability.telemetry_collector import TelemetryEvent
 
 
 def _event(**overrides) -> TelemetryEvent:
-    defaults = dict(
-        event_id="evt-1",
-        tenant_id="org-1",
-        project_id="proj-1",
-        trace_id="trace-1",
-        realm="production",
-        event_type="llm.completion",
-        timestamp="2026-07-20T00:00:00Z",
-    )
+    defaults = {
+        "event_id": "evt-1",
+        "tenant_id": "org-1",
+        "project_id": "proj-1",
+        "trace_id": "trace-1",
+        "realm": "production",
+        "event_type": "llm.completion",
+        "timestamp": "2026-07-20T00:00:00Z",
+    }
     defaults.update(overrides)
     return TelemetryEvent(**defaults)
 

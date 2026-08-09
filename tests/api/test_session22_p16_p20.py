@@ -259,123 +259,28 @@ class TestP18ReplayZset:
         )
 
 
-# ─── P-19: multi-provider fallback + circuit breaker ──────────────────
+# ─── P-19: multi-provider routing retired (FEAT-137) ─────────────────
 
 
-class TestP19FallbackChain:
-    """``AIGateway.complete`` walks up to
-    ``_MAX_FALLBACK_DEPTH = 3`` providers via the
-    per-provider CircuitBreaker. Pre-fix: 1 fallback attempt
-    with NO breaker on the fallback path — a broken
-    fallback burned money on every retry.
-    """
+class TestP19RoutingRetired:
+    """The dormant ``AIGateway.complete`` fallback chain was deleted.
+    /gateway/v1 records spend via ``budget_service.record_usage`` on
+    the live proxy path instead."""
 
-    def test_max_fallback_depth_is_three(self) -> None:
-        """The audit's risk callout was ``tenacity
-        stop_after_attempt=3``. We honour that with a plain
-        counter (each provider has its own CB so we don't
-        need exponential backoff)."""
+    def test_ai_gateway_has_no_complete_method(self) -> None:
         from eden.llmops.ai_gateway import AIGateway
 
-        assert AIGateway._MAX_FALLBACK_DEPTH == 3, (
-            f"P-19 regression: _MAX_FALLBACK_DEPTH="
-            f"{AIGateway._MAX_FALLBACK_DEPTH}, expected 3"
+        assert not hasattr(AIGateway, "complete"), (
+            "P-19: multi-provider complete() should stay deleted"
         )
 
-    def test_complete_routes_each_attempt_through_circuit_breaker(
-        self,
-    ) -> None:
-        """Every attempt in the fallback chain goes through
-        the per-provider ``CircuitBreaker.call()`` — not
-        a bare ``_execute_provider`` invocation."""
+    def test_ai_gateway_keeps_cost_and_filter_surface(self) -> None:
         from eden.llmops.ai_gateway import AIGateway
 
-        source = textwrap.dedent(
-            inspect.getsource(AIGateway.complete)
-        )
-        # Two or more ``cb.call`` invocations across the
-        # function — one in the primary path, one inside
-        # the fallback loop.
-        assert source.count("cb.call") >= 1, (
-            "P-19 regression: complete doesn't call cb.call "
-            "at all"
-        )
-        # The fallback path is a LOOP, not a single
-        # attempt — ``while`` (or ``for``) keyword present.
-        assert "while " in source, (
-            "P-19 regression: fallback chain isn't a loop"
-        )
-
-    @pytest.mark.asyncio
-    async def test_complete_falls_back_on_first_provider_failure(
-        self,
-    ) -> None:
-        """When the primary provider's circuit breaker
-        raises ProviderUnavailableError, the gateway retries
-        with a fallback provider."""
-        from eden.llmops.ai_gateway import (
-            AIGateway,
-            ModelRequest,
-            ModelResponse,
-            Provider,
-            ProviderUnavailableError,
-        )
-
-        # Two providers registered. We make the PRIMARY
-        # always raise ProviderUnavailableError (via CB); the
-        # FALLBACK returns a real response.
-        gw = AIGateway()
-        good_response = ModelResponse(
-            text="ok",
-            input_tokens=10,
-            output_tokens=5,
-            latency_ms=100,
-            cost_usd=0.001,
-            provider=Provider.OPENAI,
-            model="gpt-4o-mini",
-            cached=False,
-        )
-
-        class _AlwaysFail:
-            state = "closed"
-
-            async def call(self, fn, *a, **kw):
-                raise ProviderUnavailableError("primary broken")
-
-        class _AlwaysWorks:
-            state = "closed"
-
-            async def call(self, fn, *a, **kw):
-                return good_response
-
-        # Pretend two providers exist.
-        gw._providers = {Provider.OPENAI: object(), Provider.ANTHROPIC: object()}
-        gw._circuit_breakers = {
-            Provider.OPENAI: _AlwaysFail(),
-            Provider.ANTHROPIC: _AlwaysWorks(),
-        }
-        gw._select_provider = lambda req: Provider.OPENAI
-        gw._select_fallback = lambda cur, req: Provider.ANTHROPIC
-        gw._execute_provider = AsyncMock()
-        gw._record_metrics = lambda *a, **kw: None
-        gw._cache_response = AsyncMock()
-        gw._tenant_budgets = {}
-        gw._filters = MagicMock()
-        gw._filters.run = lambda req: (req, [])
-        gw.exact_cache = None
-        gw.semantic_cache = None
-
-        # Stash a sentinel for the primary attempt — should
-        # never be called by us directly because the breaker
-        # already raised.
-        req = ModelRequest(
-            tenant_id="t1",
-            prompt="hello",
-            model_family="openai",
-            model_version="gpt-4o-mini",
-        )
-        resp = await gw.complete(req)
-        assert resp is good_response
+        g = AIGateway()
+        assert hasattr(g, "resolve_cost")
+        assert hasattr(g, "_filters")
+        assert hasattr(g, "_check_semantic_cache")
 
 
 # ─── P-20: narrowed PATH_RESOURCE_MAP ─────────────────────────────────

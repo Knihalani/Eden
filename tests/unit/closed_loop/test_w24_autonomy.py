@@ -54,6 +54,24 @@ def test_assisted_allows_heal() -> None:
     assert decide(p, "reweight")[0] == "allow"
 
 
+def test_format_tier_ladder_maps_policy_names() -> None:
+    from eden.closed_loop.autonomy_policy import (
+        action_for_plan_kind,
+        format_tier_ladder,
+        tier_ladder_level,
+    )
+
+    assert tier_ladder_level("observe") == 0
+    assert format_tier_ladder("observe") == "T0"
+    assert format_tier_ladder("auto_runtime_heal") == "T2"
+    assert format_tier_ladder("auto_code_patch_pr") == "T2"
+    assert format_tier_ladder("auto_prompt_canary") == "T3"
+    assert format_tier_ladder("auto_code_patch_merge") == "T4"
+    assert format_tier_ladder("unknown_tier") is None
+    assert action_for_plan_kind("code_patch") == "propose_patch"
+    assert action_for_plan_kind("prompt_update") == "prompt_canary"
+
+
 # ── Kill switch fail-closed ──────────────────────────────────────────
 
 
@@ -329,11 +347,11 @@ async def test_record_spend_tags_cost_event() -> None:
         def __init__(self) -> None:
             self._ops: list[tuple[str, tuple]] = []
 
-        def incrbyfloat(self, key: str, amount: float) -> "_Pipe":
+        def incrbyfloat(self, key: str, amount: float) -> _Pipe:
             self._ops.append(("incrbyfloat", (key, amount)))
             return self
 
-        def expire(self, key: str, ttl: int) -> "_Pipe":
+        def expire(self, key: str, ttl: int) -> _Pipe:
             self._ops.append(("expire", (key, ttl)))
             return self
 

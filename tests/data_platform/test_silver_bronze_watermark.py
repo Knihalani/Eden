@@ -100,7 +100,7 @@ def _bronze_row(idx: int) -> dict[str, Any]:
     }
 
 
-def _pipeline_that_reaches_the_write(pg: "_FakePg") -> SilverETLPipeline:
+def _pipeline_that_reaches_the_write(pg: _FakePg) -> SilverETLPipeline:
     """A pipeline whose events reach step 7.
 
     ``_validate_contracts`` (step 2) quarantines anything that does not match the
@@ -113,7 +113,7 @@ def _pipeline_that_reaches_the_write(pg: "_FakePg") -> SilverETLPipeline:
     """
     pipeline = SilverETLPipeline(enforce_quality=False)
 
-    async def _get_pg() -> "_FakePg":
+    async def _get_pg() -> _FakePg:
         return pg
 
     pipeline._get_postgres = _get_pg  # type: ignore[method-assign]

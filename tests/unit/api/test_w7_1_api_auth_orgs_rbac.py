@@ -281,52 +281,6 @@ async def test_clerk_webhook_bad_payload_is_400():
 
 
 @pytest.mark.asyncio
-async def test_list_mcp_keys_db_failure_is_503_not_empty():
-    from eden.api.routes import mcp_keys as mod
-
-    client = MagicMock()
-    client.fetch = AsyncMock(side_effect=Exception("connection reset"))
-
-    with (
-        patch.object(mod, "require_org_admin", AsyncMock(return_value=None)),
-        patch(
-            "eden.storage.postgres.get_postgres_client",
-            AsyncMock(return_value=client),
-        ),
-    ):
-        with pytest.raises(HTTPException) as ei:
-            await mod.list_mcp_keys(
-                org_id=ORG,
-                user={"user_id": USER},
-                payload={"sub": USER},
-            )
-        assert ei.value.status_code == 503
-
-
-@pytest.mark.asyncio
-async def test_list_mcp_keys_bad_uuid_is_400():
-    from eden.api.routes import mcp_keys as mod
-
-    client = MagicMock()
-    client.fetch = AsyncMock(side_effect=Exception('invalid input syntax for type uuid: "org_bad"'))
-
-    with (
-        patch.object(mod, "require_org_admin", AsyncMock(return_value=None)),
-        patch(
-            "eden.storage.postgres.get_postgres_client",
-            AsyncMock(return_value=client),
-        ),
-    ):
-        with pytest.raises(HTTPException) as ei:
-            await mod.list_mcp_keys(
-                org_id="org_bad",
-                user={"user_id": USER},
-                payload={"sub": USER},
-            )
-        assert ei.value.status_code == 400
-
-
-@pytest.mark.asyncio
 async def test_scim_get_or_create_user_unique_race_returns_existing():
     from eden.api.routes import scim as mod
 

@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-
 # ── (a) synthetics: per-org activity gate ───────────────────────────
 
 

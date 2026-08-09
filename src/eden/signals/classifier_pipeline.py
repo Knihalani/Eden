@@ -261,6 +261,23 @@ class ClassifierTrainingPipeline:
         except Exception:
             return {"retrained": 0}
 
+        from eden.workers.leader import record_watermark_batch
+
+        try:
+            candidate_total = await pg.fetchval(
+                "SELECT COUNT(*) FROM ("
+                "SELECT DISTINCT org_id, signal_id FROM signal_events "
+                "WHERE detected_at > NOW() - INTERVAL '7 days'"
+                ") t"
+            )
+        except Exception:
+            candidate_total = None
+        record_watermark_batch(
+            "classifier_retrain",
+            batch_size=len(rows),
+            candidate_total=int(candidate_total) if candidate_total is not None else None,
+        )
+
         retrained = 0
         for row in rows:
             org_id = str(row["org_id"])

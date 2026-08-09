@@ -96,3 +96,54 @@ def test_autofix_dry_run(client: TestClient) -> None:
     data = resp.json()["data"]
     assert data["dry_run"] is True
     assert data["patch_summary"]["fingerprint"] == "fp"
+
+
+def test_merge_plan_route(client: TestClient) -> None:
+    with patch.object(
+        improve_routes,
+        "require_org_admin",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        improve_routes,
+        "_require_agent_v1_async",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "eden.api.routes.improve.manual_merge_plan",
+        new=AsyncMock(
+            return_value={
+                "status": "merged",
+                "plan_id": "plan_1",
+                "pr_number": 7,
+            }
+        ),
+    ):
+        resp = client.post(
+            "/orgs/org_1/improve/plans/plan_1/merge",
+            json={"force": False},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["status"] == "merged"
+
+
+def test_revert_plan_route(client: TestClient) -> None:
+    with patch.object(
+        improve_routes,
+        "require_org_admin",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        improve_routes,
+        "_require_agent_v1_async",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "eden.api.routes.improve.manual_revert_plan",
+        new=AsyncMock(
+            return_value={
+                "status": "revert_initiated",
+                "plan_id": "plan_1",
+                "revert_plan_id": "plan_2",
+            }
+        ),
+    ):
+        resp = client.post("/orgs/org_1/improve/plans/plan_1/revert")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["revert_plan_id"] == "plan_2"

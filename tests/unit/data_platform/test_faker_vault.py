@@ -511,20 +511,21 @@ class FakePg:
         if sql.startswith("update rtbf_requests"):
             # Two distinct UPDATE shapes:
             #   1) failure: status=$2, error=$3  → 3 args (id, status, err)
-            #   2) success: status=$2, affected_rows=$3 → 3 args (id, status, n)
+            #   2) success: status=$2, affected_rows=$3, error=$4
+            #      → 4 args (id, status, affected_rows, error)
             # The discriminator is the SQL column list.
-            is_failure = "error = $" in sql
+            is_failure = "affected_rows" not in sql
             req_id = args[0]
             status = args[1]
-            payload = args[2] if len(args) > 2 else None
             row = self._table.get(req_id)
             if row is None:
                 return "UPDATE 0"
             row["status"] = status
             if is_failure:
-                row["error"] = payload
+                row["error"] = args[2] if len(args) > 2 else None
             else:
-                row["affected_rows"] = payload
+                row["affected_rows"] = args[2] if len(args) > 2 else None
+                row["error"] = args[3] if len(args) > 3 else None
             return "UPDATE 1"
         return "OK"
 
@@ -558,11 +559,17 @@ class FakeRtbfService:
         })
         if self.raised is not None:
             raise self.raised
+        # Match the RtbfRequestTracker envelope contract: a top-level
+        # ``status`` plus ``data.complete`` (FEAT-160 re-verification).
         return {
-            "request_id": "rtbf-inner",
-            "user_id_hash": "anon-x",
-            "total_rows_anonymised": 42,
-            "total_rows_matched": 42,
+            "status": "ok",
+            "data": {
+                "request_id": "rtbf-inner",
+                "user_id_hash": "anon-x",
+                "total_rows_anonymised": 42,
+                "total_rows_matched": 42,
+                "complete": True,
+            },
         }
 
 

@@ -6,8 +6,8 @@ Covers: password hashing/verification, JWT create/decode,
 
 from datetime import timedelta
 
-import pytest
 import jwt
+import pytest
 
 from eden.api.utils.auth import (
     _BCRYPT_ROUNDS,

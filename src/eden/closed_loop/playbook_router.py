@@ -3,6 +3,10 @@
 Fuses issue kind, triage root_cause, StatGate checks, and stumble
 signals into a deterministic playbook + suggested_actions list for
 :class:`ClosedLoopOrchestrator` and :class:`TriageAgent`.
+
+FEAT-44: remediation ``category`` is orthogonal to notification routing.
+Shared severity/destination types live in ``eden.alerting.types`` and
+``eden.alerts.unified`` for when per-category paging is added.
 """
 
 from __future__ import annotations
@@ -55,7 +59,10 @@ _PLAYBOOK_ACTIONS: dict[str, tuple[str, str]] = {
     "task_failure": ("propose_patch", "Task failure — fix agent"),
     "prompt_regression": ("rollback", "Prompt regression — rollback"),
     "behavioral_drift": ("recommend", "Behavioral drift — eval slice"),
-    "fleet_slo_breach": ("escalate", "Fleet SLO breach — page operator"),
+    "fleet_slo_breach": (
+        "escalate",
+        "Fleet SLO breach — notify for human review",
+    ),
     "delegation_failure": ("escalate", "Delegation trust failure — review"),
     "guardrail_breach": ("escalate", "Guardrail breach — review policy"),
     "unknown": ("escalate", "No playbook match — human triage"),

@@ -193,6 +193,9 @@ def schedule_record_from_usage(
     cost_usd: float | None = None,
     org_id: str | None = None,
     feature: str | None = None,
+    cache_reads: int = 0,
+    cache_writes: int = 0,
+    cache_discount_usd: float | None = None,
 ) -> None:
     """Best-effort fire-and-forget from sync OpenRouter ``_log_usage``."""
     ctx = current_cost_context()
@@ -200,6 +203,14 @@ def schedule_record_from_usage(
     if not oid:
         return
     feat = (feature or ctx.get("feature") or "unknown").lower()
+    metadata: dict[str, Any] = {}
+    reads = int(cache_reads or 0)
+    writes = int(cache_writes or 0)
+    if reads or writes:
+        metadata["cache_reads"] = reads
+        metadata["cache_writes"] = writes
+    if cache_discount_usd is not None:
+        metadata["cache_discount_usd"] = float(cache_discount_usd)
     event = CostEvent(
         org_id=str(oid),
         feature=feat,
@@ -213,6 +224,7 @@ def schedule_record_from_usage(
         agent_id=ctx.get("agent_id"),
         session_id=ctx.get("session_id"),
         user_id=ctx.get("user_id"),
+        metadata=metadata,
     )
     try:
         asyncio.get_running_loop()

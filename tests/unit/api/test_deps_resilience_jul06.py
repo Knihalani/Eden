@@ -37,7 +37,6 @@ import pytest
 
 from eden.api.deps import get_user_by_id, require_org_member
 
-
 # ────────────────────────────────────────────────────────────────────
 # get_user_by_id — must NOT propagate DB exceptions
 # ────────────────────────────────────────────────────────────────────

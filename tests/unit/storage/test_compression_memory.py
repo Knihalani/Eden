@@ -19,7 +19,6 @@ import pytest
 from eden.storage import compression
 from eden.storage.compression import compress_jsonb, compress_many
 
-
 _TRAINED_DICT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "var", "zstd_dict.bin"),
 )
@@ -82,12 +81,10 @@ class TestMemoryFootprint:
         """
         tracemalloc.start()
         random.seed(42)
-        baseline = _rss_kb()
         for i in range(50_000):
             compress_jsonb({"i": i, "model": "gpt-4o", "msg": "x" * random.randint(10, 200)})
-        current, peak = tracemalloc.get_traced_memory()
+        _current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
-        growth_kb = (_rss_kb() - baseline)
         # The tracemalloc peak is the actual Python heap growth;
         # RSS includes C extensions, allocator overhead, etc.
         # We assert on tracemalloc peak (< 5 MB is comfortable).

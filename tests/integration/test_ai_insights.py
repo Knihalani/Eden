@@ -393,7 +393,7 @@ def _patch_blip(monkeypatch: pytest.MonkeyPatch, ai_mod: Any) -> None:
     via the module's ``__globals__`` dict, so this patch sticks
     for the duration of the test."""
 
-    async def _blip() -> "_FakeClient":
+    async def _blip() -> _FakeClient:
         return _FakeClient()
 
     monkeypatch.setattr(ai_mod, "get_postgres_client", _blip)

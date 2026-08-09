@@ -291,6 +291,29 @@ class TestOtelDualEmit:
         assert exporter._buffer == []
 
 
+# ─── FEAT-169: gen_ai.conversation.id must never be fabricated from trace_id ───
+
+
+class TestConversationIdNotFabricated:
+    def test_conversation_id_omitted_when_absent(self) -> None:
+        from eden.observability.otel_exporter import OTelDualExporter
+
+        exporter = OTelDualExporter()
+        span = exporter._event_to_otlp_span(_event(), include_content=False)
+        keys = {attr["key"] for attr in span["attributes"]}
+        assert "gen_ai.conversation.id" not in keys
+
+    def test_conversation_id_included_when_present(self) -> None:
+        from eden.observability.otel_exporter import OTelDualExporter
+
+        exporter = OTelDualExporter()
+        event = _event()
+        event.attributes["gen_ai.conversation.id"] = "conv-123"
+        span = exporter._event_to_otlp_span(event, include_content=False)
+        attrs = {attr["key"]: attr["value"] for attr in span["attributes"]}
+        assert attrs["gen_ai.conversation.id"] == {"stringValue": "conv-123"}
+
+
 # ─── S9/S10: single to_dict; enrich without full payload dump ───
 
 

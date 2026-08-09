@@ -27,9 +27,90 @@ class ToolCallLabelCreate:
 
 
 class ToolCallLabelService:
+    async def _lookup_telemetry_agent_id(
+        self,
+        pg: Any,
+        org_id: str,
+        span_id: str,
+        trace_id: str,
+    ) -> str | None:
+        row = await pg.fetchrow(
+            """
+            SELECT agent_id
+            FROM telemetry_events
+            WHERE tenant_id = $1 AND span_id = $2
+            ORDER BY timestamp ASC
+            LIMIT 1
+            """,
+            org_id,
+            span_id,
+        )
+        if row and row.get("agent_id"):
+            return str(row["agent_id"])
+        row = await pg.fetchrow(
+            """
+            SELECT agent_id
+            FROM telemetry_events
+            WHERE tenant_id = $1 AND trace_id = $2
+            ORDER BY timestamp ASC
+            LIMIT 1
+            """,
+            org_id,
+            trace_id,
+        )
+        if row and row.get("agent_id"):
+            return str(row["agent_id"])
+        return None
+
+    async def resolve_and_validate_agent_id(
+        self,
+        org_id: str,
+        span_id: str,
+        trace_id: str,
+        agent_id: str | None,
+    ) -> str | None:
+        """Validate caller ``agent_id`` against telemetry-derived span owner.
+
+        When telemetry exists, the resolved caller id must match the span/trace
+        owner (after alias/canonical resolution). With no telemetry or no DB,
+        fail open and return the caller value unchanged.
+        """
+        from eden.issues.agent_identity import resolve_agent_id
+
+        try:
+            from eden.storage.postgres import get_postgres_client
+
+            pg = await get_postgres_client()
+        except Exception as exc:
+            logger.debug("tool_call_labels: postgres unavailable: %s", exc)
+            return await resolve_agent_id(org_id, agent_id)
+        if pg is None:
+            return await resolve_agent_id(org_id, agent_id)
+
+        telemetry_agent_id = await self._lookup_telemetry_agent_id(
+            pg, org_id, span_id, trace_id
+        )
+        if telemetry_agent_id is None:
+            return await resolve_agent_id(org_id, agent_id)
+
+        canonical_owner = await resolve_agent_id(org_id, telemetry_agent_id)
+        if agent_id is None:
+            return canonical_owner
+
+        canonical_caller = await resolve_agent_id(org_id, agent_id)
+        if canonical_caller != canonical_owner:
+            raise PermissionError(
+                f"agent_id {agent_id!r} does not own span {span_id!r}"
+            )
+        return canonical_caller
+
     async def create_label(self, data: ToolCallLabelCreate) -> dict[str, Any]:
         if data.label not in ("good", "bad"):
             raise ValueError("label must be 'good' or 'bad'")
+
+        agent_id = await self.resolve_and_validate_agent_id(
+            data.org_id, data.span_id, data.trace_id, data.agent_id
+        )
 
         args_hash = ""
         if data.args_summary:
@@ -62,7 +143,7 @@ class ToolCallLabelService:
             data.org_id,
             data.span_id,
             data.trace_id,
-            data.agent_id,
+            agent_id,
             data.label,
             data.reason,
             data.tool_name,
@@ -75,6 +156,7 @@ class ToolCallLabelService:
             "span_id": data.span_id,
             "label": data.label,
             "tool_name": data.tool_name,
+            "agent_id": agent_id,
         }
 
     async def delete_label(self, org_id: str, span_id: str) -> bool:

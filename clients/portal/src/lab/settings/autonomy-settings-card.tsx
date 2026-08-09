@@ -121,9 +121,9 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
         <p className="type-meta mt-1.5">
           On by default. Roll back a bad canary, reweight routing, or bust a
           cache without a human click — capped at{" "}
-          {policy?.max_auto_rollbacks_per_day ?? 3} rollbacks/day. P0s still
-          page you, with the mitigation already applied. Turn off to
-          recommend-only.
+          {policy?.max_auto_rollbacks_per_day ?? 3} rollbacks/day. Critical
+          issues still need human review — Eden does not page for P0 security
+          events. Turn off to recommend-only.
         </p>
         {!healOn && (policy?.would_have_healed_count ?? 0) > 0 ? (
           <p className="type-meta mt-2 text-[var(--text)]">

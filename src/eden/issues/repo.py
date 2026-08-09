@@ -15,10 +15,20 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from eden.issues.agent_identity import agent_id_filter_sql
 from eden.issues.metrics import record_issue_list
 from eden.issues.models import Issue, StumbleCreate
 
 logger = logging.getLogger(__name__)
+
+# Sentinel for ``list_stumbles(agent_id=...)`` and
+# ``list_issues(agent_id=...)`` — matches portal ``UNATTRIBUTED_AGENT_ID``
+# so agent-less rows (``agent_id IS NULL``) are queryable instead of being
+# invisible from every per-agent filter.
+UNATTRIBUTED_AGENT_FILTER = "unattributed"
+
+# Defensive cap — matches API Query ``le=200`` on list endpoints.
+_LIST_LIMIT_CAP = 200
 
 _ISSUE_LIST_COLUMNS = (
     "id, org_id, fingerprint, kind, title, status, severity, "
@@ -171,13 +181,20 @@ class IssuesRepo:
         if kind:
             args.append(kind)
             clauses.append(f"kind = ${len(args)}")
-        if agent_id:
-            args.append(agent_id)
-            clauses.append(f"agent_id = ${len(args)}")
+        # Per-agent views pass a concrete agent_id; pass
+        # ``UNATTRIBUTED_AGENT_FILTER`` to list stumbles whose telemetry never
+        # got an agent_id stamped (``agent_id IS NULL``). Omitting the filter
+        # returns all stumbles including NULL agent_id rows.
+        if agent_id is not None:
+            if agent_id == UNATTRIBUTED_AGENT_FILTER:
+                clauses.append("agent_id IS NULL")
+            else:
+                args.append(agent_id)
+                clauses.append(agent_id_filter_sql(org_param=1, agent_param=len(args)))
         if since is not None:
             args.append(since)
             clauses.append(f"detected_at >= ${len(args)}")
-        args.append(int(limit))
+        args.append(min(int(limit), _LIST_LIMIT_CAP))
         sql = (
             f"SELECT {_STUMBLE_LIST_COLUMNS} FROM agent_stumbles WHERE "
             + " AND ".join(clauses)
@@ -273,6 +290,7 @@ class IssuesRepo:
         *,
         status: str | None = None,
         severity: str | None = None,
+        agent_id: str | None = None,
         sort: str | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -288,7 +306,13 @@ class IssuesRepo:
         if severity:
             args.append(severity)
             clauses.append(f"severity = ${len(args)}")
-        args.append(int(limit))
+        if agent_id is not None:
+            if agent_id == UNATTRIBUTED_AGENT_FILTER:
+                clauses.append("agent_id IS NULL")
+            else:
+                args.append(agent_id)
+                clauses.append(agent_id_filter_sql(org_param=1, agent_param=len(args)))
+        args.append(min(int(limit), _LIST_LIMIT_CAP))
         limit_pos = len(args)
         args.append(int(offset))
         offset_pos = len(args)
@@ -332,7 +356,12 @@ class IssuesRepo:
         client = await self._client()
         if client is None:
             return False
-        resolved = ", resolved_at = NOW()" if set_resolved_at else ""
+        if set_resolved_at:
+            resolved = ", resolved_at = NOW()"
+        elif status == "open":
+            resolved = ", resolved_at = NULL"
+        else:
+            resolved = ""
         try:
             res = await client.execute(
                 "UPDATE agent_issues "

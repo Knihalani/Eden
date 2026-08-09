@@ -7,9 +7,9 @@ import random
 import pytest
 
 from eden.observability.sampling.policy import (
+    PROFILE_KEEP_RATES,
     IntelligenceAwareSamplingPolicy,
     KeepSignals,
-    PROFILE_KEEP_RATES,
     get_sampling_policy,
     profile_keep_rate,
     reset_sampling_policy,
@@ -160,12 +160,12 @@ def test_keep_signals_maps_outcome_and_attrs() -> None:
 def test_decide_for_event_full_keeps() -> None:
     from types import SimpleNamespace
 
+    import eden.observability.sampling.policy as policy_mod
     from eden.observability.sampling.apply import decide_for_event
     from eden.observability.sampling.policy import (
         IntelligenceAwareSamplingPolicy,
         reset_sampling_policy,
     )
-    import eden.observability.sampling.policy as policy_mod
 
     reset_sampling_policy()
     policy_mod._policy = IntelligenceAwareSamplingPolicy(profile="full", rng_seed=0)
@@ -180,13 +180,13 @@ def test_decide_for_event_full_keeps() -> None:
 async def test_should_route_event_drops_and_summarizes() -> None:
     from types import SimpleNamespace
 
+    import eden.observability.sampling.policy as policy_mod
     from eden.observability.sampling.apply import should_route_event
     from eden.observability.sampling.policy import (
         IntelligenceAwareSamplingPolicy,
         reset_sampling_policy,
     )
     from eden.observability.sampling.summaries import get_sampling_summary_store
-    import eden.observability.sampling.policy as policy_mod
 
     reset_sampling_policy()
     store = get_sampling_summary_store()

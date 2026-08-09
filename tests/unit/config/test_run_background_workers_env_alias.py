@@ -20,8 +20,8 @@ def test_eden_prefixed_env_var_sets_run_background_workers(monkeypatch):
     monkeypatch.delenv("RUN_BACKGROUND_WORKERS", raising=False)
     monkeypatch.setenv("EDEN_RUN_BACKGROUND_WORKERS", "1")
 
-    Settings = _build_settings_class()
-    settings = Settings(_env_file=None)
+    settings_cls = _build_settings_class()
+    settings = settings_cls(_env_file=None)
 
     assert settings.run_background_workers is True
 
@@ -33,8 +33,8 @@ def test_unprefixed_env_var_still_sets_run_background_workers(monkeypatch):
     monkeypatch.delenv("EDEN_RUN_BACKGROUND_WORKERS", raising=False)
     monkeypatch.setenv("RUN_BACKGROUND_WORKERS", "1")
 
-    Settings = _build_settings_class()
-    settings = Settings(_env_file=None)
+    settings_cls = _build_settings_class()
+    settings = settings_cls(_env_file=None)
 
     assert settings.run_background_workers is True
 
@@ -45,7 +45,7 @@ def test_default_is_false_when_neither_env_var_is_set(monkeypatch):
     monkeypatch.delenv("EDEN_RUN_BACKGROUND_WORKERS", raising=False)
     monkeypatch.delenv("RUN_BACKGROUND_WORKERS", raising=False)
 
-    Settings = _build_settings_class()
-    settings = Settings(_env_file=None)
+    settings_cls = _build_settings_class()
+    settings = settings_cls(_env_file=None)
 
     assert settings.run_background_workers is False

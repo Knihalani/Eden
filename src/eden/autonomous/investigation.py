@@ -165,6 +165,8 @@ class InvestigationAgent:
             slot=slot,
             system_prompt=_INVESTIGATION_SYSTEM_PROMPT,
             max_tokens=600,
+            org_id=org_id,
+            feature="autonomous_investigation",
         )
         findings: list[dict[str, Any]] = []
         remediations: list[dict[str, Any]] = []
@@ -299,6 +301,8 @@ class InvestigationAgent:
             slot=DEFAULT_LLM_SLOT,
             system_prompt=_REPORT_SYSTEM_PROMPT,
             max_tokens=300,
+            org_id=org_id,
+            feature="autonomous_report",
         )
         if raw:
             parsed = _try_parse_json_object(raw)
@@ -1167,7 +1171,9 @@ def _try_parse_json_object(text: str) -> dict[str, Any] | None:
     return parsed
 
 
-async def _llm_rationale(agent: str, signal: str) -> str:
+async def _llm_rationale(
+    agent: str, signal: str, *, org_id: str | None = None
+) -> str:
     """One-line rationale via the LLM. Falls back to a
     deterministic one-liner on any failure so the
     recommendation is always returned with text."""
@@ -1176,6 +1182,8 @@ async def _llm_rationale(agent: str, signal: str) -> str:
         agent=f"autonomous_recommendation_{agent}",
         slot=DEFAULT_LLM_SLOT,
         max_tokens=80,
+        org_id=org_id,
+        feature="autonomous_recommendation_rationale",
     )
     if raw and isinstance(raw, str):
         cleaned = raw.strip().strip('"').strip()

@@ -121,6 +121,15 @@ vi.mock("@/components/portal/saved-views-menu", () => ({
   SavedViewsMenu: () => null,
 }));
 
+vi.mock("@/lab/annotate-trace-dialog", () => ({
+  AnnotateTraceDialog: ({ open }: { open: boolean }) =>
+    open ? (
+      <div role="dialog" aria-label="Annotate trace">
+        Annotate dialog
+      </div>
+    ) : null,
+}));
+
 const { default: TracesClient } = await import("./traces-client");
 
 afterEach(() => {
@@ -218,5 +227,16 @@ describe("traces-client selection vs. an in-flight manual click", () => {
 
     expect(activeAttr(/Run two/)).toBe("true");
     expect(activeAttr(/Run one/)).toBe("false");
+  });
+});
+
+describe("FEAT-115 annotate action", () => {
+  it("opens AnnotateTraceDialog from the trace detail action bar", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    render(<TracesClient />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Annotate" }));
+    expect(screen.getByRole("dialog", { name: "Annotate trace" })).toBeTruthy();
   });
 });

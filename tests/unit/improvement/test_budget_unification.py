@@ -7,8 +7,10 @@ kept a third private counter that ``evaluate_mode`` never saw. Now:
 
 * ``_budget_ok`` reads ``autonomy_policy.check_budget`` +
   ``patch_max_per_day`` and ANY error → ``(False, "budget_check_error")``.
-* ``TriageAgent._debit_budget`` also lands spend in ``autonomy:spend:``
-  via ``record_spend`` so the org-wide downgrade actually fires.
+* Triage LLM spend is metered via ``cost_context`` on the investigation
+  path (OPT-17/OPT-19). ``TriageAgent._debit_budget`` only maintains the
+  optional ``triage_spend:`` Redis counter — it does not write synthetic
+  CostEvents.
 """
 
 from __future__ import annotations
@@ -39,11 +41,11 @@ class FakeRedis:
     async def delete(self, key: str) -> int:
         return 1 if self.store.pop(key, None) is not None else 0
 
-    def pipeline(self, transaction: bool = False) -> "FakeRedis._Pipe":
+    def pipeline(self, transaction: bool = False) -> FakeRedis._Pipe:
         return FakeRedis._Pipe(self)
 
     class _Pipe:
-        def __init__(self, outer: "FakeRedis") -> None:
+        def __init__(self, outer: FakeRedis) -> None:
             self.outer = outer
             self.results: list[Any] = []
 
@@ -186,34 +188,37 @@ async def test_record_spend_visible_via_check_budget(fake_redis) -> None:
 
 
 @pytest.mark.asyncio
-async def test_triage_debit_lands_in_autonomy_spend(fake_redis) -> None:
-    from eden.closed_loop.autonomy_policy import check_budget
-    from eden.issues.triage_agent import TriageAgent
-
-    await TriageAgent()._debit_budget(ORG, 3.0)
-
-    _ok, spent, _limit = await check_budget(ORG)
-    assert spent == pytest.approx(3.0), (
-        "triage spend must land in the shared autonomy:spend: ledger"
-    )
-    # The triage-specific counter still tracks its own tighter cap.
-    triage_keys = [k for k in fake_redis.store if k.startswith("triage_spend:")]
-    assert triage_keys, "triage keeps its own daily counter for the triage cap"
-
-
-@pytest.mark.asyncio
-async def test_exhausted_triage_spend_downgrades_evaluate_mode(fake_redis) -> None:
-    """Once triage spend exceeds the org budget, evaluate_mode → observe."""
-    from eden.closed_loop.autonomy_policy import evaluate_mode
+async def test_triage_debit_updates_triage_redis_only(fake_redis) -> None:
+    """OPT-19: triage budget counter is separate from customer CostEvents."""
     from eden.issues.triage_agent import TriageAgent
 
     agent = TriageAgent()
-    # Blow through the 25.0 default org budget with triage debits.
-    for _ in range(6):
-        await agent._debit_budget(ORG, 5.0)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._resolve_budget_cap",
+        AsyncMock(return_value=10.0),
+    ):
+        await agent._debit_budget(ORG, 3.0)
 
-    mode = await evaluate_mode(ORG)
-    assert mode == "observe"
+    triage_keys = [k for k in fake_redis.store if k.startswith("triage_spend:")]
+    assert triage_keys
+    assert float(fake_redis.store[triage_keys[0]]) == pytest.approx(3.0)
+
+
+@pytest.mark.asyncio
+async def test_triage_debit_does_not_call_record_spend(fake_redis) -> None:
+    from eden.issues.triage_agent import TriageAgent
+
+    record = AsyncMock()
+    with patch(
+        "eden.closed_loop.autonomy_policy.record_spend",
+        record,
+    ), patch(
+        "eden.issues.triage_agent.TriageAgent._resolve_budget_cap",
+        AsyncMock(return_value=10.0),
+    ):
+        await TriageAgent()._debit_budget(ORG, 2.0)
+
+    record.assert_not_awaited()
 
 
 def test_budgeted_tiers_constant_deleted() -> None:

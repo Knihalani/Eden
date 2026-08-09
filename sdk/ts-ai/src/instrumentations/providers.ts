@@ -177,7 +177,7 @@ function extractGeminiTotalTokens(response: unknown): number | null {
   return null;
 }
 
-function wrapMethod(
+export function _instrumentedProviderMethod(
   original: (...a: unknown[]) => unknown,
   meta: { provider: "bedrock" | "gemini"; name: string; modelKey?: string },
   opts: TraceOptions,
@@ -241,7 +241,7 @@ export function wrapBedrock<T extends object>(client: T, opts: TraceOptions = {}
         typeof value === "function" &&
         ["send", "invokeModel", "converse", "InvokeModel", "Converse"].includes(prop)
       ) {
-        return wrapMethod(
+        return _instrumentedProviderMethod(
           value.bind(target) as (...a: unknown[]) => unknown,
           { provider: "bedrock", name: `bedrock.${prop}`, modelKey: "modelId" },
           opts,
@@ -278,7 +278,7 @@ export function wrapGemini<T extends object>(client: T, opts: TraceOptions = {})
                 typeof mVal === "function" &&
                 ["generateContent", "generateContentStream"].includes(mProp)
               ) {
-                return wrapMethod(
+                return _instrumentedProviderMethod(
                   mVal.bind(mTarget) as (...a: unknown[]) => unknown,
                   {
                     provider: "gemini",
@@ -299,7 +299,7 @@ export function wrapGemini<T extends object>(client: T, opts: TraceOptions = {})
         typeof value === "function" &&
         ["generateContent", "generate_content"].includes(prop)
       ) {
-        return wrapMethod(
+        return _instrumentedProviderMethod(
           value.bind(target) as (...a: unknown[]) => unknown,
           { provider: "gemini", name: `gemini.${prop}`, modelKey: "model" },
           opts,

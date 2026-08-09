@@ -25,7 +25,7 @@ def _user() -> dict:
     return {"id": "user-1", "user_id": "user-1", "sub": "user-1"}
 
 
-class _MissingTable(Exception):
+class _MissingTableError(Exception):
     sqlstate = "42P01"
 
     def __str__(self) -> str:
@@ -35,7 +35,7 @@ class _MissingTable(Exception):
 @pytest.mark.asyncio
 async def test_list_signals_missing_table_returns_empty() -> None:
     pg = MagicMock()
-    pg.fetch = AsyncMock(side_effect=_MissingTable())
+    pg.fetch = AsyncMock(side_effect=_MissingTableError())
 
     with patch.object(signals_mod, "get_postgres_client", AsyncMock(return_value=pg)):
         result = await signals_mod.list_signals(org_id="org-1", user=_user())
@@ -106,7 +106,7 @@ async def test_list_signals_skips_malformed_rows() -> None:
 @pytest.mark.asyncio
 async def test_create_signal_missing_table_returns_503() -> None:
     pg = MagicMock()
-    pg.execute = AsyncMock(side_effect=_MissingTable())
+    pg.execute = AsyncMock(side_effect=_MissingTableError())
 
     with patch.object(signals_mod, "get_postgres_client", AsyncMock(return_value=pg)):
         with pytest.raises(HTTPException) as excinfo:
@@ -128,7 +128,7 @@ async def test_create_signal_missing_table_returns_503() -> None:
 async def test_seed_defaults_missing_table_returns_503() -> None:
     with patch(
         "eden.signals.defaults.seed_org_signals",
-        AsyncMock(side_effect=_MissingTable()),
+        AsyncMock(side_effect=_MissingTableError()),
     ):
         with pytest.raises(HTTPException) as excinfo:
             await signals_mod.seed_default_signals(
@@ -157,7 +157,7 @@ async def test_seed_defaults_success() -> None:
 
 
 def test_is_missing_relation_detects_sqlstate() -> None:
-    assert signals_mod._is_missing_relation(_MissingTable()) is True
+    assert signals_mod._is_missing_relation(_MissingTableError()) is True
     assert signals_mod._is_missing_relation(RuntimeError("boom")) is False
     assert signals_mod._is_missing_relation(
         SimpleNamespace(sqlstate="42P01", __str__=lambda self: "x")

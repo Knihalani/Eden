@@ -769,10 +769,6 @@ async def stop_consumer() -> None:
     _STOP = None
 
 
-def is_consumer_running() -> bool:
-    return _TASK is not None and not _TASK.done()
-
-
 def get_consumer_stats() -> dict[str, int]:
     """Return a copy of process-local handle / DLQ counters."""
     return dict(_STATS)

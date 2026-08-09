@@ -47,7 +47,10 @@ class StumbleWriter:
         """
         started = time.perf_counter()
         fingerprint = compute_fingerprint(
-            sc.kind, sc.agent_id, error_signature_for(sc.kind, sc.detail)
+            sc.kind,
+            sc.agent_id,
+            error_signature_for(sc.kind, sc.detail),
+            trace_id=sc.trace_id,
         )
 
         # Same-second burst guard: absorb duplicates before they touch

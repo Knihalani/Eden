@@ -78,7 +78,7 @@ done
 # 4. Run a smoke query
 jobs_count=$(psql -h "$PGHOST" -U "$PGUSER" -d eden_restore_test -tAc "SELECT COUNT(*) FROM jobs" 2>/dev/null || echo "0")
 
-# 5. Try the golden-dataset eval
+# 5. Regression eval module smoke (replaces removed golden_dataset check)
 eval_pass=false
 PYTHON_BIN="${PYTHON:-}"
 if [ -z "$PYTHON_BIN" ] && [ -x "./.venv/bin/python" ]; then
@@ -86,14 +86,8 @@ if [ -z "$PYTHON_BIN" ] && [ -x "./.venv/bin/python" ]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 if PYTHONPATH=src "$PYTHON_BIN" -c "
-from eden.evaluation.golden_dataset import load_canonical_datasets
-reg = load_canonical_datasets()
-datasets = reg.list_datasets()
-assert datasets, 'expected at least one frozen golden dataset'
-ds = datasets[0]
-assert len(ds.cases) == 50, f'expected 50 golden cases, got {len(ds.cases)}'
-errors = ds.validate()
-assert not errors, f'golden dataset failed validation: {errors}'
+from eden.evaluation.regression_runner import RegressionRunner
+RegressionRunner(memory_only=True)
 "; then
     eval_pass=true
 fi

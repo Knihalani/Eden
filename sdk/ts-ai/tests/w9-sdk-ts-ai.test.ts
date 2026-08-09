@@ -112,8 +112,9 @@ describe("bad-key handling", () => {
     const report = await runDoctor({ emitTestEvent: true, timeoutMs: 2000 });
     const te = report.checks.find((c) => c.name === "testEvent");
     expect(te?.ok).toBe(false);
-    expect(te?.message).toContain("HTTP 401");
     expect(te?.detail?.statusCode).toBe(401);
+    expect(te?.detail?.failedDelta).toBe(1);
+    expect(te?.detail?.sentDelta).toBe(0);
     expect(report.ok).toBe(false);
   });
 });

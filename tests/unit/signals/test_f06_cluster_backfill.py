@@ -19,14 +19,33 @@ class _FakePg:
     def __init__(self) -> None:
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
         self._events: list[dict[str, Any]] = []
+        self.fetch_calls: list[tuple[str, tuple[Any, ...]]] = []
+
+    async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any] | None:
+        if "COUNT(DISTINCT trace_id)" in sql:
+            return {"n": 42}
+        if "OFFSET" in sql and "telemetry_events" in sql:
+            return {"trace_id": "t0"}
+        return None
 
     async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
+        self.fetch_calls.append((sql, args))
         if "FROM signal_events" in sql and "matched = TRUE" in sql:
             return self._events
         if "DISTINCT trace_id" in sql and "telemetry_events" in sql:
             return [{"trace_id": f"t{i}"} for i in range(3)]
         if "signal_backfill_jobs" in sql and "status IN" in sql:
-            return []
+            return [
+                {
+                    "id": uuid.uuid4(),
+                    "org_id": "org-1",
+                    "signal_id": uuid.uuid4(),
+                    "window_start": datetime.now(UTC) - timedelta(days=1),
+                    "window_end": datetime.now(UTC),
+                    "traces_total": 10,
+                    "traces_done": 2,
+                }
+            ]
         return []
 
     async def execute(self, sql: str, *args: Any) -> str:
@@ -38,15 +57,33 @@ class _FakePg:
             self.executed.append((sql, row_args))
         return "INSERT 0 1"
 
-    async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any] | None:
-        if "COUNT(DISTINCT trace_id)" in sql:
-            return {"n": 42}
-        return None
-
 
 def test_estimate_backfill_cost() -> None:
     assert bf.estimate_backfill_cost(100) == 1.0
     assert bf.estimate_backfill_cost(0) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_signal_backfill_worker_uses_keyset_not_offset() -> None:
+    pg = _FakePg()
+    worker = bf.SignalBackfillWorker()
+    with patch("eden.storage.postgres.get_postgres_client", AsyncMock(return_value=pg)):
+        with patch(
+            "eden.signals.investigator.investigate_trace",
+            AsyncMock(),
+        ) as investigate:
+            out = await worker.run_once(max_jobs=1)
+
+    assert out["processed"] == 1
+    batch_sql, batch_args = next(
+        call
+        for call in pg.fetch_calls
+        if "DISTINCT trace_id" in call[0] and "OFFSET" not in call[0]
+    )
+    assert "trace_id > $4" in batch_sql
+    assert "ORDER BY trace_id" in batch_sql
+    assert batch_args[3] == "t0"  # cursor from traces_done=2 resume lookup
+    assert investigate.await_count == 3
 
 
 @pytest.mark.asyncio

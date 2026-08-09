@@ -24,7 +24,6 @@ import ast
 import re
 from pathlib import Path
 
-
 ROOT = Path("src/eden/api")
 
 
@@ -113,8 +112,6 @@ class TestF75SweepCoverage:
             ("src/eden/api/routes/gateway_models.py", 289),
             ("src/eden/api/routes/gateway_models.py", 327),
             ("src/eden/api/routes/clerk_webhooks.py", 487),
-            ("src/eden/api/routes/cost.py", 50),
-            ("src/eden/api/routes/cost.py", 59),
             ("src/eden/api/routes/github.py", 317),
             ("src/eden/api/routes/github.py", 459),
             ("src/eden/api/routes/github.py", 572),

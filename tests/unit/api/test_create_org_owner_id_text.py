@@ -62,7 +62,7 @@ async def test_create_org_survives_text_owner_id_idempotency_lookup(monkeypatch)
     from eden.api.routes import orgs as orgs_mod
 
     mock_client = __import__("unittest.mock", fromlist=["MagicMock"]).MagicMock()
-    AsyncMock = __import__("unittest.mock", fromlist=["AsyncMock"]).AsyncMock
+    async_mock_cls = __import__("unittest.mock", fromlist=["AsyncMock"]).AsyncMock
 
     async def _fetchrow(query, *args):
         if "owner_id = $1" in query and "60 seconds" in query:
@@ -75,12 +75,12 @@ async def test_create_org_survives_text_owner_id_idempotency_lookup(monkeypatch)
             }
         raise AssertionError(f"unexpected fetchrow: {query[:80]}")
 
-    mock_client.fetchrow = AsyncMock(side_effect=_fetchrow)
-    mock_client.fetchval = AsyncMock()
-    mock_client.execute = AsyncMock()
+    mock_client.fetchrow = async_mock_cls(side_effect=_fetchrow)
+    mock_client.fetchval = async_mock_cls()
+    mock_client.execute = async_mock_cls()
 
-    monkeypatch.setattr(orgs_mod, "get_postgres_client", AsyncMock(return_value=mock_client))
-    monkeypatch.setattr(orgs_mod, "eden_user_id_from_auth", AsyncMock(return_value="user-text-id"))
+    monkeypatch.setattr(orgs_mod, "get_postgres_client", async_mock_cls(return_value=mock_client))
+    monkeypatch.setattr(orgs_mod, "eden_user_id_from_auth", async_mock_cls(return_value="user-text-id"))
 
     result = await orgs_mod.create_org(
         name="My workspace",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -87,7 +87,7 @@ async def test_get_org_members_2fa_status_uses_eden_org_uuid_not_path():
 
     captured: dict[str, str] = {}
     client = MagicMock()
-    joined = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    joined = datetime(2026, 1, 1, tzinfo=UTC)
 
     async def _fetch(query: str, *args):
         captured["org_id"] = args[0]

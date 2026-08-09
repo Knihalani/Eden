@@ -15,9 +15,9 @@ independent of Postgres. The DB-backed path is covered by the
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-from collections import OrderedDict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -117,8 +117,8 @@ def pii_policy_auth(api_client: TestClient, mock_collector, monkeypatch):
     from eden.api.deps import get_gateway_auth
     from eden.api.routes import gateway as gateway_module
     from eden.config import Settings, get_settings
-    from eden.observability import telemetry_collector as tc_module
     from eden.data_platform.pii import PIIPolicy
+    from eden.observability import telemetry_collector as tc_module
 
     fake_auth = {
         "org_id": "org-pii",
@@ -332,8 +332,8 @@ class TestPerRequestBypass:
         for value in ("1", "yes", "on", "TRUE", "True"):
             seen_messages: list[Any] = []
 
-            async def _create(**kwargs):
-                seen_messages.append(kwargs.get("messages"))
+            async def _create(_seen=seen_messages, **kwargs):
+                _seen.append(kwargs.get("messages"))
                 return _StubChatResponse(content="ok")
 
             from eden.api.routes import gateway as gateway_module
@@ -559,12 +559,11 @@ class TestDefaultCategories:
         include the June 2026 hardened categories — otherwise the
         gateway / ingest layer silently misses credentials that
         the source-of-truth regex set would catch."""
-        from eden.data_platform.pii import _DEFAULT_CATEGORIES
-        from eden.api.routes.pii_policy import PIIPolicyOut
-
         # Just construct the default response (no row in DB) and
         # check the categories include the June 2026 additions.
         from eden.api.routes.pii_policy import _DEFAULT_CATEGORIES as _ROUTE_DEFAULT
+        from eden.api.routes.pii_policy import PIIPolicyOut
+        from eden.data_platform.pii import _DEFAULT_CATEGORIES
         # The route now imports from pii.py — they should be the
         # same object.
         assert list(_ROUTE_DEFAULT) == list(_DEFAULT_CATEGORIES)

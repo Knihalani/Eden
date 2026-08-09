@@ -9,7 +9,6 @@ import pytest
 
 from eden.patches.knowledge_graph import CodebaseKnowledgeGraph, record_plan_outcome
 
-
 ORG = "org-kg"
 REPO = "agent-a"
 

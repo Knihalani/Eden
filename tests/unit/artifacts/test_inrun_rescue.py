@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from eden.nudges.inrun_rescue import InRunRescue, _TRACE_RESCUE_COUNT
+from eden.nudges.inrun_rescue import _TRACE_RESCUE_COUNT, InRunRescue
 from eden.nudges.models import Nudge
 
 

@@ -48,14 +48,3 @@ def resolve_playbook(
     if issue_kind and issue_kind in _KIND_PLAYBOOKS:
         return _KIND_PLAYBOOKS[issue_kind]
     return None
-
-
-def playbook_label(action_type: str | None) -> str:
-    labels = {
-        "rollback": "Roll back active canary / prompt version",
-        "reweight": "Shift model routing toward cheaper tier",
-        "cache_bust": "Flush semantic response cache",
-        "nudge_shadow": "Draft shadow Artifact from issue signals",
-        "prompt_canary": "Enroll prompt canary via EvidenceGate",
-    }
-    return labels.get(action_type or "", "Advisory — no automated heal")

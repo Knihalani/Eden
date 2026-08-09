@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── 1. SatisfactionJudge ────────────────────────────────────────────
 
 
@@ -196,8 +195,8 @@ class TestToolDriftHookAsync:
 
     @pytest.mark.asyncio
     async def test_on_drift_alert_is_awaited(self) -> None:
-        from eden.services.tool_intel._common import _fire_tool_drift_hook
         import eden.llmops.promotion_hooks as ph_module
+        from eden.services.tool_intel._common import _fire_tool_drift_hook
 
         mock_hook = MagicMock()
         mock_hook.on_drift_alert = AsyncMock(return_value=None)
@@ -214,8 +213,8 @@ class TestToolDriftHookAsync:
 
     @pytest.mark.asyncio
     async def test_below_threshold_does_not_fire(self) -> None:
-        from eden.services.tool_intel._common import _fire_tool_drift_hook
         import eden.llmops.promotion_hooks as ph_module
+        from eden.services.tool_intel._common import _fire_tool_drift_hook
 
         mock_hook = MagicMock()
         mock_hook.on_drift_alert = AsyncMock(return_value=None)

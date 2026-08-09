@@ -61,12 +61,12 @@ def test_attribute_access_via_module_works():
 
     # First access: triggers the PEP 562 __getattr__, which
     # imports openai. Cached after this.
-    OpenAI = client_module.OpenAI
-    assert OpenAI is not None
+    openai_cls = client_module.OpenAI
+    assert openai_cls is not None
     # After the access, openai should be in sys.modules.
     assert "openai" in sys.modules
     # And the module attribute should be cached.
-    assert client_module.OpenAI is OpenAI
+    assert client_module.OpenAI is openai_cls
 
 
 def test_lazy_resolver_works_under_patch():
@@ -75,7 +75,7 @@ def test_lazy_resolver_works_under_patch():
     The lazy loader uses ``globals()`` (well, ``getattr`` on
     the module) so unittest.mock patches remain effective.
     """
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     from eden.llm import client as client_module
 

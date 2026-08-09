@@ -381,7 +381,10 @@ class PlaygroundService:
                 totals["cost_usd"] += cost
                 specs = list(task.get("scorers") or global_scorers)
                 scores = run_scorers(
-                    specs, output=result.response, expected=expected
+                    specs,
+                    output=result.response,
+                    expected=expected,
+                    input_text=str(row_params.get("user") or ""),
                 )
                 cells[(task_index, row_index)] = {
                     "task_id": task.get("id"),
@@ -481,8 +484,10 @@ class PlaygroundService:
             dataset_id=str(ds_id),
             config={
                 "source_playground_id": playground_id,
-                "tasks": rec.config.get("tasks") or [],
-                "scorers": rec.config.get("scorers") or [],
+                "tasks": list(rec.config.get("tasks") or []),
+                "scorers": list(rec.config.get("scorers") or []),
+                "params": dict(rec.config.get("params") or {}),
+                "concurrency": rec.config.get("concurrency"),
             },
         )
         return {"experiment": exp.to_dict()}

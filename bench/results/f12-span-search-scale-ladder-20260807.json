@@ -1,0 +1,68 @@
+{
+  "bench": "f12-span-search-scale-ladder",
+  "recorded_at": "2026-08-07T12:39:53Z",
+  "target_gate": "p95 < 200ms",
+  "typesense_reachable": false,
+  "dry_run": false,
+  "default_rungs": [
+    "10k",
+    "100k",
+    "1m",
+    "10m"
+  ],
+  "rungs": [
+    {
+      "rung": "10k",
+      "corpus_size": 10000,
+      "status": "measured",
+      "results_path": "bench/results/f12-span-search-10k-sqlite-fallback-20260807.json",
+      "typesense_reachable": false,
+      "gate_met": null,
+      "baseline_p95_ms": 45.91,
+      "facet_ab": false
+    },
+    {
+      "rung": "100k",
+      "corpus_size": 100000,
+      "status": "measured",
+      "results_path": "bench/results/f12-span-search-100k-sqlite-fallback-20260807.json",
+      "typesense_reachable": false,
+      "gate_met": null,
+      "baseline_p95_ms": 480.27,
+      "facet_ab": false
+    },
+    {
+      "rung": "1m",
+      "corpus_size": 1100000,
+      "status": "prior_artifact",
+      "results_path": "bench/results/f12-span-search-1m-typesense-20260804.json",
+      "note": "Reusing committed prior Typesense measurement; not re-executed in this ladder pass because Typesense is unreachable.",
+      "gate_met": true
+    },
+    {
+      "rung": "10m",
+      "corpus_size": 10000000,
+      "status": "blocked_staging",
+      "note": "10,000,000 docs requires a reachable Typesense staging cluster (TYPESENSE_HOST/PORT/API_KEY). Numbers are never fabricated."
+    }
+  ],
+  "summary": {
+    "measured_count": 2,
+    "prior_artifact_count": 1,
+    "blocked_count": 1,
+    "gate_met_typesense_rungs": [
+      {
+        "rung": "1m",
+        "gate_met": true,
+        "results_path": "bench/results/f12-span-search-1m-typesense-20260804.json"
+      }
+    ]
+  },
+  "honest_caveats": [
+    "gate_met is harness-computed per rung (baseline p95 <= --gate-ms); never hand-edited.",
+    "SQLite-fallback rungs have gate_met=null \u2014 they cannot attest to the Typesense GA gate.",
+    "10M requires staging Typesense; blocked rungs have no fabricated numbers.",
+    "Typesense unreachable in this pass \u2014 only small rungs may run on the SQLite proxy; larger Typesense rungs reuse prior artifacts or are blocked."
+  ],
+  "manifest_path": "bench/results/f12-span-search-scale-ladder-20260807.json"
+}

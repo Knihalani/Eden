@@ -45,6 +45,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   debugger: { label: "Debugger", category: "assist" },
   synthetic: { label: "Synthetic Q/A", category: "observe" },
   signals: { label: "Signals", category: "observe" },
+  topics: { label: "Topics", category: "observe" },
   members: { label: "Members", category: "workspace" },
   guardrails: { label: "Guardrails", category: "improve" },
   autonomous: { label: "Autonomous", category: "evaluate" },

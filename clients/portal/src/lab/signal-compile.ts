@@ -1,10 +1,3 @@
-/**
- * Lab signal compile — mirrors Eden internal chat SSOT.
- * @see src/eden/llm/models.py INTERNAL_CHAT_MODEL
- * @see src/eden/optimization/model_router.py TIER_MODELS (all tiers = internal model)
- */
-export const T3_PRIMARY_MODEL = "deepseek/deepseek-v4-flash-0731";
-
 export type CompiledSignalDraft = {
   name: string;
   description: string;
@@ -16,13 +9,7 @@ export type CompiledSignalDraft = {
   tier: "t3";
 };
 
-export type CompileSignalRequest = {
-  prompt: string;
-  agentId?: string | null;
-  severity?: "auto" | "critical" | "error" | "warn";
-};
-
-/** Local fallback when OpenRouter / gateway is unavailable. */
+/** Display-only helper: derive a plain-English "watching" line from detector text. */
 export function compileNaturalLanguageFallback(prompt: string): CompiledSignalDraft {
   const text = prompt.trim();
   const lower = text.toLowerCase();
@@ -104,16 +91,3 @@ export function compileNaturalLanguageFallback(prompt: string): CompiledSignalDr
     tier: "t3",
   };
 }
-
-export const COMPILE_SYSTEM_PROMPT = `You compile Eden observability signals from natural language.
-Return ONLY valid JSON (no markdown) with this shape:
-{
-  "name": "short human title",
-  "description": "the user's request, cleaned up",
-  "kind": "error" | "latency" | "cost" | "policy" | "custom",
-  "severity": "critical" | "error" | "warn",
-  "condition": "compact matcher expression Eden can evaluate",
-  "watching": "one plain-English sentence of what Eden will watch for"
-}
-Do not invent metric freestyle for the user to type — produce the condition yourself.
-Keep name under 60 characters. Prefer practical detectors for agent runs.`;

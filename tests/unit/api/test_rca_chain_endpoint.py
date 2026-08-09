@@ -22,26 +22,29 @@ def _events() -> list[dict[str, Any]]:
         {
             "span_id": "span-a",
             "parent_span_id": None,
+            "agent_id": "agent-root",
             "event_type": "agent.start",
             "name": "start",
-            "outcome": "ok",
-            "error": None,
+            "outcome": "success",
+            "error_type": None,
         },
         {
             "span_id": "span-b",
             "parent_span_id": "span-a",
+            "agent_id": "agent-tool",
             "event_type": "tool.call",
             "name": "search",
-            "outcome": "error",
-            "error": {"type": "Timeout"},
+            "outcome": "failure",
+            "error_type": "Timeout",
         },
         {
             "span_id": "span-c",
             "parent_span_id": "span-a",
+            "agent_id": "agent-tool",
             "event_type": "tool.call",
             "name": "fetch",
-            "outcome": "error",
-            "error": {"type": "HTTP500"},
+            "outcome": "failure",
+            "error_type": "HTTP500",
         },
     ]
 
@@ -106,6 +109,8 @@ def test_rca_chain_returns_ordered_chain_with_span_ids(
     assert chain[1]["implicated"] is True
     assert chain[1]["error_type"] == "Timeout"
     assert chain[1]["parent_span_id"] == "span-a"
+    assert chain[0]["agent_id"] == "agent-root"
+    assert chain[1]["agent_id"] == "agent-tool"
 
     # Category comes from the reused engine (tool error rule).
     assert data["category"] == "tool"
@@ -137,7 +142,7 @@ def _events_with_delegation_attrs() -> list[dict[str, Any]]:
             "parent_span_id": None,
             "event_type": "agent.start",
             "name": "start",
-            "outcome": "error",
+            "outcome": "failure",
             "error": {"type": "ToolError"},
             "attributes": {
                 "parent_agent_span_id": "parent-span-x",
@@ -238,7 +243,7 @@ def test_rca_chain_walks_delegation_ancestor_and_flags_propagated_failure(
             "parent_span_id": None,
             "event_type": "agent.delegate",
             "name": "delegate_to_child",
-            "outcome": "error",
+            "outcome": "failure",
             "error": {"type": "DelegationFailed"},
         },
     ]
@@ -318,7 +323,7 @@ def test_rca_chain_delegation_ancestor_healthy_keeps_local_root_cause(
             "parent_span_id": None,
             "event_type": "agent.delegate",
             "name": "delegate_to_child",
-            "outcome": "ok",
+            "outcome": "success",
             "error": None,
         },
     ]

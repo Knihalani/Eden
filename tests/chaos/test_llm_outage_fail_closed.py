@@ -111,8 +111,8 @@ async def test_triage_llm_outage_yields_no_auto_actions(monkeypatch):
     # "No playbook match — human triage" — exactly the right landing.)
     assert tr["auto_escalate"] is False
     actions = tr["suggested_actions"]
-    _AUTO_EXECUTABLE = {"rollback", "reweight", "cache_bust", "propose_patch"}
-    assert all(a.get("type") not in _AUTO_EXECUTABLE for a in actions), actions
+    auto_executable = {"rollback", "reweight", "cache_bust", "propose_patch"}
+    assert all(a.get("type") not in auto_executable for a in actions), actions
     assert all(not a.get("auto") for a in actions), actions
     assert any(a.get("type") == "escalate" for a in actions), (
         "outage should surface a human-review escalation"
@@ -144,7 +144,7 @@ async def test_patch_critic_outage_fails_closed(monkeypatch):
     )
 
     verdict = await _critic_review(
-        router, "--- a/x.py\n+++ b/x.py\n", rca_summary="rca"
+        router, "--- a/x.py\n+++ b/x.py\n", org_id="org-chaos", rca_summary="rca"
     )
 
     # M4 (D13): outage == not reviewed == fail. The diff cannot ship.
@@ -163,7 +163,7 @@ async def test_patch_critic_budget_exhaustion_fails_closed(monkeypatch):
     )
     router = SimpleNamespace(aroute=AsyncMock())  # must never be called
 
-    verdict = await _critic_review(router, "diff", rca_summary="rca")
+    verdict = await _critic_review(router, "diff", org_id="org-chaos", rca_summary="rca")
 
     assert verdict["passed"] is False
     assert verdict["reason"] == "llm_budget_exhausted"

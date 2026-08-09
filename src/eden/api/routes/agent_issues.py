@@ -113,6 +113,7 @@ class ResolveRequest(BaseModel):
 
 
 _RESOLVE_STATUSES = frozenset({"open", "acknowledged", "resolved", "ignored"})
+_ISSUE_SORT_MODES = frozenset({"recency", "rank"})
 
 # BUG-4: the app-level statuses accepted above don't map 1:1 onto the
 # ``agent_issues.status`` Postgres CHECK constraint (see
@@ -148,12 +149,36 @@ async def list_issues(
     org_id: str = Depends(require_path_org_access),
     status: str | None = Query(None),
     severity: str | None = Query(None),
+    agent_id: str | None = Query(
+        None,
+        description=(
+            "Filter by agent_id; pass the literal ``unattributed`` to list "
+            "issues whose telemetry never got an agent_id stamped."
+        ),
+    ),
+    sort: str = Query(
+        "rank",
+        description="Issue ordering: rank (composite priority, default) or recency",
+    ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
+    sort_mode = sort if isinstance(sort, str) else "rank"
+    if sort_mode is not None and sort_mode not in _ISSUE_SORT_MODES:
+        allowed = ", ".join(sorted(_ISSUE_SORT_MODES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid issue sort {sort_mode!r}. Allowed values: {allowed}.",
+        )
     await _require_postgres()
     issues = await _repo.list_issues(
-        org_id, status=status, severity=severity, limit=limit, offset=offset
+        org_id,
+        status=status,
+        severity=severity,
+        agent_id=agent_id,
+        sort=sort_mode,
+        limit=limit,
+        offset=offset,
     )
     return _ok(
         "agent_issues",
@@ -185,12 +210,10 @@ async def resolve_issue(
 ) -> dict[str, Any]:
     await _require_postgres()
     if body.status not in _RESOLVE_STATUSES:
+        allowed = ", ".join(sorted(_RESOLVE_STATUSES))
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"invalid status {body.status!r}; must be one of "
-                f"{sorted(_RESOLVE_STATUSES)}"
-            ),
+            detail=f"Invalid issue status {body.status!r}. Allowed values: {allowed}.",
         )
     target = body.status
     db_status = _DB_STATUS_OVERRIDES.get(target, target)
@@ -216,6 +239,7 @@ async def resolve_issue(
     regression_cases: list[dict[str, Any]] = []
     regression_run: dict[str, Any] | None = None
     evolution: dict[str, Any] | None = None
+    issue = await _repo.get_issue(org_id, issue_id) if ok else None
     if ok and target == "resolved":
         try:
             from eden.evaluation.regression_builder import on_issue_resolved
@@ -226,7 +250,6 @@ async def resolve_issue(
         try:
             from eden.evaluation.regression_runner import RegressionRunner
 
-            issue = await _repo.get_issue(org_id, issue_id)
             agent_id = issue.agent_id if issue else None
             run = await RegressionRunner().run_suite(
                 org_id, agent_id=agent_id, change_id=f"issue-resolve-{issue_id}"
@@ -245,7 +268,6 @@ async def resolve_issue(
         try:
             from eden.kb.flywheel.coordinator import get_flywheel_coordinator
 
-            issue = await _repo.get_issue(org_id, issue_id)
             if issue:
                 await get_flywheel_coordinator().on_issue_resolved(
                     {
@@ -264,7 +286,6 @@ async def resolve_issue(
         try:
             from eden.services.soft_issue_review import record_shadow_feedback
 
-            issue = await _repo.get_issue(org_id, issue_id)
             stumble_ids = issue.example_stumble_ids if issue else []
             if stumble_ids:
                 stumble = await _repo.get_stumble(org_id, stumble_ids[0])

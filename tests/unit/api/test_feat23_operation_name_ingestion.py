@@ -25,7 +25,6 @@ from fastapi.testclient import TestClient
 
 from eden.observability.operation_names import _OPERATION_NAME_MAP, derive_operation_name
 
-
 # ── shared-module unit tests ────────────────────────────────────────
 
 

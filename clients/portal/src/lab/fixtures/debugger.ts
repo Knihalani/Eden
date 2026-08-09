@@ -20,9 +20,6 @@ import {
 
 export type DebuggerMode = "replay" | "compare" | "inspect" | "time-travel";
 
-/** @deprecated URL alias — prefer inspect / time-travel */
-export type DebuggerModeUrl = DebuggerMode | "notes";
-
 export type DebuggerCheckpoint = {
   id: string;
   stepId: string;

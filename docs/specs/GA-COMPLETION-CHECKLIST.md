@@ -138,7 +138,7 @@
 | F06 | **DONE** | Phase 7 | [f06-per-trace-signal-investigator.md](features/f06-per-trace-signal-investigator.md) | `clusterer.py` + `backfill.py`; migration `104_wave8_signals`; API clusters/backfill/events |
 | F65 | **DONE** | Phase 7 | [f65-topics-insights-clustering.md](features/f65-topics-insights-clustering.md) | `/topics` API + `/insights/topics` portal; patterns sync + dataset act |
 | F71 | **DONE** | Phase 7 | [f71-interactive-slack-bot.md](features/f71-interactive-slack-bot.md) | `/integrations/slack/commands` + interactions; ack/assign/trace; F47 buttons |
-| N10 | **DONE** | Phase 7 | [n10-deep-search-to-signal.md](features/n10-deep-search-to-signal.md) | Preview + backfill job + cost estimate; SpanSearchBar save-as-signal |
+| N10 | **DONE** | Phase 7 | [n10-deep-search-to-signal.md](features/n10-deep-search-to-signal.md) | Preview + backfill job + cost estimate (`deep_to_signal.py`); portal `SpanSearchBar` save-as-signal **UNVERIFIABLE** (0 repo matches) |
 
 ---
 
@@ -171,9 +171,9 @@
 
 | ID | Status | Wave | Spec | Notes |
 |---|---|---|---|---|
-| U18 | **DONE** | Phase 10 | [u18-portal-overhaul.md](ui/u18-portal-overhaul.md) | AppShell wired in `(portal)/layout.tsx`; DetailPanelShell on traces, artifacts, issues, alerts, experiments, promotions; CoreResourcePage on evaluate routes; ⌘K ≥5 actions; mobile nav 5 items; route-agreement CI test; Storybook stubs |
-| U19 | **DONE** | Phase 11 | [u19-portal-improvement.md](ui/u19-portal-improvement.md) | Cross-link matrix (`portal-cross-links.ts`); U02 artifacts full bar (tabs, evidence, bulk, j/k, promote modal); U05 ledger/drift histograms + inject preview; density on traces/issues/alerts/experiments/debugger-sessions; `u19-portal.test.ts` |
-| U20 | **DONE** | Phase 12 | [u20-portal-polish.md](ui/u20-portal-polish.md) | WCAG AA on Home/Traces/Issues/Artifacts/Playground; `prefers-reduced-motion`; unified issue badges; toast on promote/ack/approve/save; axe CI gate (critical-only) on main; authenticated axe **PASS** Jul 17 (8/8 routes, 0 critical); `u20-portal.test.ts` |
+| U18 | **DONE** | Phase 10 | [u18-portal-overhaul.md](ui/u18-portal-overhaul.md) | `AppShell` in `(portal)/layout.tsx`; trace/issue/alert detail in hub clients (no `DetailPanelShell` — **UNVERIFIABLE**); evaluate routes on lab hub views (no `CoreResourcePage` — **UNVERIFIABLE**); ⌘K; `MobileBottomNav`; `portal-routes` ↔ `sidebar-config`; `u18-portal.test.ts` evidence **DELETED** (cab7ae32) |
+| U19 | **DONE** | Phase 11 | [u19-portal-improvement.md](ui/u19-portal-improvement.md) | Cross-link matrix (`portal-cross-links.ts`); artifacts bulk/j/k; ledger/drift + inject preview; density on hubs; `u19-portal.test.ts` evidence **DELETED** (cab7ae32) |
+| U20 | **DONE** | Phase 12 | [u20-portal-polish.md](ui/u20-portal-polish.md) | WCAG AA routes in `portal-polish.ts`; `prefers-reduced-motion`; toast on mutations; axe CI gate; authenticated axe **PASS** Jul 17 (8/8 routes, 0 critical); `u20-portal.test.ts` evidence **DELETED** (cab7ae32) |
 
 ---
 
@@ -181,7 +181,7 @@
 
 | ID | Status | Wave | Spec | Notes |
 |---|---|---|---|---|
-| F82 | **DONE** | Phase 13 | [f82-portal-performance-budgets.md](features/f82-portal-performance-budgets.md) | InfiniteDataTable/VirtualizedList on core tables; progressive trace panel; perf marks; `web-vitals.yml` CI |
+| F82 | **DONE** | Phase 13 | [f82-portal-performance-budgets.md](features/f82-portal-performance-budgets.md) | `@tanstack/react-virtual` on traces/issues/signals; progressive trace panel (`traces-detail-panels.tsx`); perf marks; `web-vitals.yml` CI; `InfiniteDataTable`/`VirtualizedList` names **UNVERIFIABLE** |
 | F83 | **DONE** | Phase 13 | [f83-platform-wide-optimization.md](features/f83-platform-wide-optimization.md) | [optimization-pass.md](optimization-pass.md); PG indexes mig 106; CH MVs; `CostTracker`→`budget_service` mirror |
 | F84 | **PARTIAL** | Phase 13 | [f84-dogfood-debugging-self-observability.md](features/f84-dogfood-debugging-self-observability.md) | W9: heartbeats + `/admin/flags` + MCP `eden_health` + ingest lag UI; staging continuous probes still open |
 | F85 | **PARTIAL** | Phase 13 | [f85-critical-path-e2e-debug-hardening.md](features/f85-critical-path-e2e-debug-hardening.md) | **8/8 PASS local** Jul 17; seed-auth loud fail + `clerkSetup` in runner; CI strict (no continue-on-error) — **2026-07-31: blocked on GitHub Actions billing (run `30657530124`), local/portal quality gates wired and green** |
@@ -209,11 +209,11 @@
 | Flow | Desktop (≥1024px) | Tablet (768–1023px) | Mobile (<768px) |
 |---|---|---|---|
 | App shell load | Sidebar expanded/collapsed; ⌘K; org switcher; budget ticker | Sidebar drawer; breadcrumbs truncate | Bottom nav 5 items; hamburger drawer; no horizontal scroll on core tables |
-| Traces hub | Split-pane `DetailPanelShell`; j/k prev/next; `?traceId=` shareable | Detail panel sticky; list scrolls | Detail as full-screen drawer overlay |
-| Issues | List + `?issueId=` detail panel; link to full `/issues/[id]` | Same master-detail | Drawer detail; Esc closes |
-| Alerts | Feed + `?alertId=` detail; batch ack | Filters wrap; panel readable | Drawer detail |
-| Artifacts / Promotions | CoreResourcePage + detail panel | Approve/reject in panel header | Drawer detail |
-| Experiments / Datasets / Playgrounds | CoreResourcePage shell | Wide tables scroll internally | Evaluate routes usable without trap scroll |
+| Traces hub | Split-pane detail in `traces-client.tsx` / `traces-detail-panels.tsx`; j/k prev/next; `?traceId=` shareable | Detail panel sticky; list scrolls | Detail as full-screen drawer overlay |
+| Issues | List + `?issueId=` detail in `issues-client.tsx` | Same master-detail | Drawer detail; Esc closes |
+| Alerts | Feed + detail in hub clients | Filters wrap; panel readable | Drawer detail |
+| Artifacts / Promotions | Lab hub views + detail panels (no `CoreResourcePage` — **UNVERIFIABLE**) | Approve/reject in panel header | Drawer detail |
+| Experiments / Datasets / Playgrounds | Lab eval views (no `CoreResourcePage` shell — **UNVERIFIABLE**) | Wide tables scroll internally | Evaluate routes usable without trap scroll |
 | Command palette | ⌘K opens all core + Advanced routes + ≥5 actions | Same | Search icon opens palette |
 | Auth / org chrome | Session banner; org sync banner; Clerk switcher preserved under AppShell | Same | Same |
 

@@ -609,8 +609,16 @@ async def gateway_metrics(
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
-    metrics = _ai_gateway.get_metrics(tenant_id=org_id, limit=limit)
-    return {"metrics": metrics, "total": len(metrics)}
+    # FEAT-137: per-provider routing metrics retired with AIGateway.complete().
+    return {
+        "metrics": [],
+        "total": 0,
+        "retired": True,
+        "detail": (
+            "Provider-routing metrics were removed with the dormant "
+            "multi-provider engine; use /gateway/v1 telemetry instead."
+        ),
+    }
 
 
 @router.get("/gateway/health", response_model=dict[str, Any])
@@ -619,8 +627,15 @@ async def gateway_health(
     user: dict = Depends(get_current_user),
 ):
     _check_org_access(org_id, user)
-    health = _ai_gateway.get_provider_health()
-    return {"providers": [h.to_dict() if hasattr(h, "to_dict") else {"provider": str(h.provider), "healthy": h.healthy, "avg_latency_ms": h.avg_latency_ms} for h in health]}
+    # FEAT-137: provider health came from the deleted routing layer.
+    return {
+        "providers": [],
+        "retired": True,
+        "detail": (
+            "Per-provider circuit-breaker health was removed with the "
+            "dormant multi-provider engine."
+        ),
+    }
 
 
 # ============================================================================

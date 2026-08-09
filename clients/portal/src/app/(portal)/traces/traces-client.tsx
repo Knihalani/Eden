@@ -43,6 +43,7 @@ import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { playgroundApi } from "@/lib/api/resources";
+import { AnnotateTraceDialog } from "@/lab/annotate-trace-dialog";
 import { useLabToast } from "@/lab/lab-toast";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
@@ -137,6 +138,14 @@ const RcaCausalChainPanel = dynamic(
   { loading: () => panelFallback },
 );
 
+const SessionRetentionPanel = dynamic(
+  () =>
+    import("@/components/analytics/session-retention-panel").then((m) => ({
+      default: m.SessionRetentionPanel,
+    })),
+  { ssr: false, loading: () => panelFallback },
+);
+
 type DetailTab = "trace" | "tree" | "signals" | "chat" | "rca";
 type SeverityFilter = "all" | "error" | "warn" | "ok";
 
@@ -187,9 +196,13 @@ function LabTracesInner() {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const tracesQuery = useOrgQuery(
-    queryKeys.portal.traces(orgId),
+    queryKeys.portal.traces(orgId, agentId === "all" ? null : agentId),
     orgId,
-    () => portalApi.traces(orgId!),
+    () =>
+      portalApi.traces(
+        orgId!,
+        agentId === "all" ? undefined : { participantAgentId: agentId },
+      ),
     SHELL_QUERY,
   );
   // Keep agent filter options live — catalog singleton alone does not
@@ -225,7 +238,9 @@ function LabTracesInner() {
         const existing = map.get(traceId);
         if (
           !existing ||
-          (existing.status === "resolved" && issue.status !== "resolved")
+          ((existing.status === "resolved" || existing.status === "ignored") &&
+            issue.status !== "resolved" &&
+            issue.status !== "ignored")
         ) {
           map.set(traceId, issue);
         }
@@ -349,6 +364,7 @@ function LabTracesInner() {
   // U03: span replay — POST /playgrounds/from-span, then hard-nav into
   // the new playground (no useRouter in this file by convention).
   const [playgroundPending, setPlaygroundPending] = useState(false);
+  const [annotateOpen, setAnnotateOpen] = useState(false);
   // Toast chrome is optional here — existing tests mount this page
   // without LabToastProvider (hook order stays stable: useContext runs
   // inside useLabToast before it throws).
@@ -601,12 +617,8 @@ function LabTracesInner() {
   );
 
   const scopedTraces = useMemo(() => {
-    const base =
-      agentId === "all"
-        ? traces
-        : traces.filter((t) => t.agentId === agentId);
-    return sortTracesNewestFirst(base);
-  }, [agentId, traces]);
+    return sortTracesNewestFirst(traces);
+  }, [traces]);
 
   const scopedSessions = useMemo(() => {
     const base =
@@ -1035,6 +1047,15 @@ function LabTracesInner() {
         }
       />
 
+      {hubView === "sessions" ? (
+        <section
+          className="shrink-0 border-b border-[var(--line)] px-4 py-4 sm:px-5"
+          aria-label="Session cohort retention"
+        >
+          <SessionRetentionPanel />
+        </section>
+      ) : null}
+
       <div className="flex min-h-0 min-w-0 flex-1">
         <aside
           className={cn(
@@ -1377,6 +1398,16 @@ function LabTracesInner() {
                         {playgroundPending ? "Opening…" : "Playground"}
                       </button>
                     ) : null}
+                    {orgId ? (
+                      <button
+                        type="button"
+                        className="ds-btn ds-btn-ghost ds-btn-sm"
+                        onClick={() => setAnnotateOpen(true)}
+                        title="Score this run for the labeling queue"
+                      >
+                        Annotate
+                      </button>
+                    ) : null}
                     <Link
                       href={`/debugger?traceId=${selected.id}&agent=${selected.agentId}`}
                       className="ds-btn ds-btn-ghost ds-btn-sm"
@@ -1688,6 +1719,15 @@ function LabTracesInner() {
           )}
         </div>
       </div>
+
+      {orgId && selected ? (
+        <AnnotateTraceDialog
+          open={annotateOpen}
+          onClose={() => setAnnotateOpen(false)}
+          orgId={orgId}
+          traceId={selected.id}
+        />
+      ) : null}
     </div>
   );
 }

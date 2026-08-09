@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { PageHeader, StatusChip } from "@/components/ds/primitives";
 import { EmptyState } from "@/lab/lab-ui";
+import { useQueryPatch } from "@/lab/agent-scope";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -23,6 +25,7 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { cn } from "@/lib/utils";
 import { SignalsModeToggle } from "./automations-panel";
+import { SuppressionRulesSection } from "./suppression-rules-section";
 
 const SEVERITIES = ["critical", "error", "warning", "info"] as const;
 
@@ -195,6 +198,7 @@ function RuleDialog({
   mode,
   rule,
   orgId,
+  initialPrompt = "",
   onClose,
   onCreate,
   onUpdate,
@@ -203,6 +207,7 @@ function RuleDialog({
   mode: "create" | "edit";
   rule: NLAlertRule | null;
   orgId: string | null;
+  initialPrompt?: string;
   onClose: () => void;
   onCreate: (body: NLRuleCreateBody) => Promise<void>;
   onUpdate: (ruleId: string, body: NLRuleUpdateBody) => Promise<void>;
@@ -240,7 +245,7 @@ function RuleDialog({
       setIntervalMinutes("60");
       setPhase("review");
     } else {
-      setNlText("");
+      setNlText(initialPrompt);
       setCompiled(null);
       setName("");
       setSeverity("warning");
@@ -249,7 +254,7 @@ function RuleDialog({
       setEnabled(true);
       setPhase("compose");
     }
-  }, [open, mode, rule]);
+  }, [open, mode, rule, initialPrompt]);
 
   useEffect(() => {
     if (!open) return;
@@ -501,6 +506,8 @@ function RuleDialog({
 
 /** Full NL Alert Rules view, rendered by the /signals page at `?mode=nl-alerts`. */
 export function NlAlertRulesView() {
+  const searchParams = useSearchParams();
+  const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
   const canAuthor = useCanAuthorAlertRules();
@@ -518,7 +525,19 @@ export function NlAlertRulesView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
+  const [createPrompt, setCreatePrompt] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const createParam = searchParams.get("create");
+  const promptParam = searchParams.get("prompt");
+
+  useEffect(() => {
+    if (createParam !== "1") return;
+    setDialogMode("create");
+    setCreatePrompt(promptParam ?? "");
+    setDialogOpen(true);
+    patchQuery({ create: null, prompt: null });
+  }, [createParam, promptParam, patchQuery]);
 
   const selected = selectedId ? (rules.find((r) => r.id === selectedId) ?? null) : null;
   const enabledCount = rules.filter((r) => r.enabled).length;
@@ -600,6 +619,7 @@ export function NlAlertRulesView() {
         <span className="type-meta">
           {enabledCount} on · {rules.length} total
           {!canAuthor ? " · read-only" : ""}
+          {" · fires email org admins when matched — not P0 security paging"}
         </span>
       }
       actions={
@@ -656,6 +676,7 @@ export function NlAlertRulesView() {
           edit, or delete rules.
         </p>
       ) : null}
+      <SuppressionRulesSection orgId={orgId} />
       <div className="flex min-h-0 min-w-0 flex-1">
         <div
           className={cn(
@@ -667,7 +688,7 @@ export function NlAlertRulesView() {
             {rules.length === 0 ? (
               <EmptyState
                 title="No alert rules yet"
-                body="Describe the condition in plain English — Eden compiles it into a query and keeps watching."
+                body="Describe the condition in plain English — Eden compiles it into a monitored query. When a rule fires, matching org admins are emailed (best-effort, rate-limited). This is not P0 security or infrastructure paging."
                 action={
                   canAuthor ? (
                     <button
@@ -721,7 +742,11 @@ export function NlAlertRulesView() {
         mode={dialogMode}
         rule={dialogMode === "edit" ? selected : null}
         orgId={orgId}
-        onClose={() => setDialogOpen(false)}
+        initialPrompt={createPrompt}
+        onClose={() => {
+          setDialogOpen(false);
+          setCreatePrompt("");
+        }}
         onCreate={handleCreate}
         onUpdate={handleUpdate}
       />

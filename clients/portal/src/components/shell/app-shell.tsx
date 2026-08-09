@@ -7,7 +7,6 @@ import { MobileBottomNav } from "./mobile-nav";
 import { SidebarProvider } from "./sidebar-context";
 import { AlertsProvider } from "@/lab/alerts-context";
 import { LabToastProvider } from "@/lab/lab-toast";
-import { SignalJobsProvider } from "@/lab/signal-jobs-context";
 import { NotificationsProvider } from "@/hooks/use-notifications";
 import {
   PortalBootGate,
@@ -16,6 +15,7 @@ import {
 import { PortalCatalogSync } from "@/components/providers/portal-catalog-sync";
 import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner";
 import { ConfirmProvider } from "@/hooks/use-confirm";
+import { NotificationsBell } from "@/components/shell/notifications-bell";
 
 /** Alerts modal pulls heavy graphs — load after first paint. */
 const AlertsModal = dynamic(
@@ -57,10 +57,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <LabToastProvider>
           <NotificationsProvider>
             <AlertsProvider>
-              <SignalJobsProvider>
-                <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
+              <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
                   <SidebarNav />
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
+                    <div className="flex h-[var(--header-h)] shrink-0 items-center justify-end gap-1 border-b border-[var(--line)] bg-[var(--bg-sidebar)] px-2 md:hidden">
+                      <NotificationsBell />
+                    </div>
                     <PortalStatusBanners />
                     <OnboardingBanner />
                     <main className="min-h-0 flex-1 overflow-auto outline-none pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
@@ -84,7 +86,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <AlertsModal />
                 <OnboardingOverlay />
                 <CommandPalette />
-              </SignalJobsProvider>
             </AlertsProvider>
           </NotificationsProvider>
         </LabToastProvider>

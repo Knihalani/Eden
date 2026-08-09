@@ -13,7 +13,7 @@ export default function Page() {
       title="Privacy"
       paragraphs={[
         "Eden processes account data and telemetry you send to operate the service — traces, evals, and workspace settings scoped to your organization.",
-        "We do not sell personal information. For deletion, export, or DPA requests, email the address below. A fuller policy will replace this summary as we exit public beta.",
+        "We do not sell personal information. Deletion requests start a partial erasure flow — coverage varies by store and is not a certified GDPR-compliant guarantee. For deletion, export, or DPA requests, email the address below. A fuller policy will replace this summary as we exit public beta.",
       ]}
     />
   );

@@ -2,6 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { ShieldAlert } from "lucide-react";
 import {
   type GuardrailKind,
   type GuardrailStatus,
@@ -192,7 +194,16 @@ function LabGuardrailsInner() {
 
   return (
     <div className="ds-page flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Guardrails" meta={meta} />
+      <PageHeader
+        title="Guardrails"
+        meta={meta}
+        actions={
+          <Link href="/guardrails/redteam" className="ds-btn ds-btn-outline ds-btn-sm">
+            <ShieldAlert className="h-4 w-4" />
+            Red-team
+          </Link>
+        }
+      />
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[22rem] lg:shrink-0 lg:border-b-0 lg:border-r">

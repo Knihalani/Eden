@@ -20,7 +20,7 @@ import dynamic from "next/dynamic";
 import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKey, queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { improvePlansApi } from "@/lib/api/resources";
 import { isGithubPermissionsMissing } from "@/lib/improve-feature";
@@ -327,6 +327,72 @@ function LabImproveInner() {
     [orgId, queryClient, pushToast],
   );
 
+  const mergePlan = useCallback(
+    async (id: string) => {
+      if (!orgId) return;
+      try {
+        await improvePlansApi.mergePlan(orgId, id);
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.improvePlans(orgId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.improveQueue(orgId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKey("improvePlanDetail", orgId, id),
+        });
+        pushToast({ title: "PR merged", tone: "ok" });
+      } catch (err) {
+        pushToast({
+          title: "Merge failed",
+          body: err instanceof Error ? err.message : String(err),
+          tone: "fail",
+        });
+      }
+    },
+    [orgId, queryClient, pushToast],
+  );
+
+  const revertPlan = useCallback(
+    async (id: string) => {
+      if (!orgId) return;
+      try {
+        const envelope = await improvePlansApi.revertPlan(orgId, id);
+        const data = envelope.data;
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.improvePlans(orgId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.improveQueue(orgId),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKey("improvePlanDetail", orgId, id),
+        });
+        const revertId = data?.revert_plan_id;
+        if (revertId) {
+          await queryClient.invalidateQueries({
+            queryKey: queryKey("improvePlanDetail", orgId, revertId),
+          });
+          setPlanId(revertId);
+          setMode("plan");
+          patchQuery({ mode: "plan", id: revertId });
+        }
+        pushToast({
+          title: data?.auto_merged ? "Revert merged" : "Revert PR opened",
+          body: data?.message,
+          tone: "ok",
+        });
+      } catch (err) {
+        pushToast({
+          title: "Revert failed",
+          body: err instanceof Error ? err.message : String(err),
+          tone: "fail",
+        });
+      }
+    },
+    [orgId, queryClient, pushToast, patchQuery],
+  );
+
   const scopeCounts = useMemo(() => {
     const map: Record<string, number> = { all: allPlans.length };
     for (const a of agentsQuery.data ?? []) {
@@ -453,6 +519,8 @@ function LabImproveInner() {
             plan={selectedPlan}
             hasPlans={allPlans.length > 0}
             onStatus={setStatus}
+            onMerge={mergePlan}
+            onRevert={revertPlan}
             onBack={() => changeMode("queue")}
           />
           {selectedPlan ? (

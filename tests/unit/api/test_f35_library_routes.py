@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -94,7 +95,7 @@ async def test_backfill_estimate_route() -> None:
 async def test_update_signal_toggles_enabled_and_dual_writes() -> None:
     from datetime import datetime, timezone
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     updated_row = {
         "id": "sig-1",
         "org_id": "org-1",

@@ -421,6 +421,8 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
         leader_acquire_failure_count,
         leader_tick_counts,
         leader_work_failures,
+        refresh_watermark_coverage,
+        watermark_coverage_snapshot,
     )
 
     interval = _grid_interval("self_obs_probe_interval_seconds", multiple=600.0)
@@ -490,6 +492,17 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                 redis_state = f"error:{type(exc).__name__}"
 
             work_failures = leader_work_failures()
+            coverage_meta = watermark_coverage_snapshot()
+            try:
+                from eden.storage.postgres import get_postgres_client
+
+                pg = await asyncio.wait_for(get_postgres_client(), timeout=5.0)
+                if pg is not None:
+                    coverage_meta = await refresh_watermark_coverage(pg)
+            except Exception as exc:
+                logger.debug(
+                    "worker: watermark coverage refresh skipped: %s", exc
+                )
             healthy = (
                 failures == 0
                 and not dead
@@ -505,6 +518,7 @@ async def _worker_liveness_loop(stop: asyncio.Event) -> None:
                     "leader_acquire_failures": failures,
                     "work_failures": work_failures,
                     "ticks": leader_tick_counts(),
+                    "watermark_coverage": coverage_meta,
                     "redis": redis_state,
                 },
             )

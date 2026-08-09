@@ -31,8 +31,11 @@ def test_valid_severities_still_compare_equal_to_plain_strings() -> None:
     assert "bogus" not in _VALID_SEVERITIES
 
 
-def test_fireable_severities_excludes_critical_per_v13_design() -> None:
-    # Documented, deliberate v1.3 behavior (see _evaluate_rule) — not
-    # something this migration should change.
-    assert "critical" not in _FIREABLE_SEVERITIES
-    assert set(_FIREABLE_SEVERITIES) == {"info", "warning", "high"}
+def test_fireable_severities_includes_critical() -> None:
+    assert AlertSeverity.CRITICAL in _FIREABLE_SEVERITIES
+    assert set(_FIREABLE_SEVERITIES) == {
+        "info",
+        "warning",
+        "high",
+        "critical",
+    }

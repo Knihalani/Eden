@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentLaneColor,
   buildTranscriptRows,
   groupParallelSteps,
   parseLazyPayloadMarker,
@@ -101,6 +102,58 @@ describe("groupParallelSteps", () => {
     );
     expect(flat).toEqual(["s0", "s1", "s2", "s3"]);
   });
+
+  it("sorts parallel lanes by agent identity", () => {
+    const steps = [
+      step("b", {
+        parentId: "root",
+        agentId: "beta",
+        startedAt: at(100),
+        durationMs: 2_000,
+      }),
+      step("a", {
+        parentId: "root",
+        agentId: "alpha",
+        startedAt: at(0),
+        durationMs: 3_000,
+      }),
+    ];
+    const rows = groupParallelSteps(steps);
+    expect(rows).toHaveLength(1);
+    const par = rows[0];
+    if (par.type !== "parallel") throw new Error("expected parallel row");
+    expect(par.lanes.map((l) => l.id)).toEqual(["a", "b"]);
+  });
+
+  it("groups overlapping tools from different parents when agents differ", () => {
+    const steps = [
+      step("p1", {
+        parentId: "root-a",
+        agentId: "alpha",
+        startedAt: at(0),
+        durationMs: 3_000,
+      }),
+      step("p2", {
+        parentId: "root-b",
+        agentId: "beta",
+        startedAt: at(100),
+        durationMs: 2_500,
+      }),
+    ];
+    const rows = groupParallelSteps(steps);
+    expect(rows).toHaveLength(1);
+    const par = rows[0];
+    if (par.type !== "parallel") throw new Error("expected parallel row");
+    expect(par.lanes.map((l) => l.agentId)).toEqual(["alpha", "beta"]);
+  });
+});
+
+describe("agentLaneColor", () => {
+  it("returns a stable chart token for an agent id", () => {
+    expect(agentLaneColor("planner")).toBe(agentLaneColor("planner"));
+    expect(agentLaneColor("planner")).toMatch(/^var\(--chart-pie-/);
+    expect(agentLaneColor(undefined)).toBeUndefined();
+  });
 });
 
 describe("transcriptTimeline", () => {
@@ -114,6 +167,31 @@ describe("transcriptTimeline", () => {
     expect(timeline.map((t) => t.span_id)).toEqual(["a", "b"]);
     expect(timeline[0]).toMatchObject({ start_ms: 0, end_ms: 1_000 });
     expect(timeline[1]).toMatchObject({ start_ms: 500, end_ms: 750 });
+  });
+});
+
+describe("buildTranscriptRows handoff spans", () => {
+  it("labels a2a attribute sub-documents as handoff rows", () => {
+    const rows = buildTranscriptRows([
+      {
+        span_id: "sp-handoff",
+        name: "invoke_agent",
+        span_type: "invoke_agent",
+        timestamp: at(0),
+        duration_ms: 200,
+        attributes: {
+          a2a: {
+            invocation_type: "a2a.send_message",
+            parent_agent_id: "planner",
+            child_agent_id: "researcher",
+            response_status: "ok",
+          },
+        },
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].event_type).toBe("handoff");
+    expect(rows[0].name).toBe("planner → researcher (ok)");
   });
 });
 

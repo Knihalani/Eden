@@ -1720,3 +1720,75 @@ describe("EdenSDK process-exit safety net", () => {
     },
   );
 });
+
+describe("EdenSDK sent/failed counters", () => {
+  it("increments sent on successful event ingest", async () => {
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
+    sdk.emit(_makeEvent("openai", "llm_completion", 1));
+    expect(sdk.sent).toBe(0);
+    await sdk.flush();
+    expect(sdk.sent).toBe(1);
+    expect(sdk.failed).toBe(0);
+    await sdk.dispose();
+  });
+
+  it("credits sent from the server's accepted count on 2xx", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ accepted: 0, rejected: 1, total: 1 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch;
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
+    sdk.emit(_makeEvent("openai", "llm_completion", 1));
+    await sdk.flush();
+    expect(sdk.sent).toBe(0);
+    expect(sdk.failed).toBe(0);
+    await sdk.dispose();
+  });
+
+  it("increments failed on permanent ingest failure", async () => {
+    globalThis.fetch = (async () =>
+      new Response("unauthorized", { status: 401 })) as typeof fetch;
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
+    sdk.emit(_makeEvent("openai", "llm_completion", 1));
+    expect(sdk.failed).toBe(0);
+    await sdk.flush();
+    expect(sdk.sent).toBe(0);
+    expect(sdk.failed).toBe(1);
+    await sdk.dispose();
+  });
+
+  it("increments sent for successful chunk ingest", async () => {
+    const sdk = new EdenSDK({
+      orgId: "org_test",
+      apiKey: "key_test",
+      baseUrl: "http://localhost:8000",
+    });
+    sdk.bufferChunk({
+      eventId: "evt_1",
+      traceId: "trc_1",
+      chunkIndex: 0,
+      deltaText: "hi",
+      ttftMs: 1,
+      itlMs: null,
+      tpotMs: 1,
+      receivedAtClientMs: Date.now(),
+    });
+    await sdk.flushChunks();
+    expect(sdk.sent).toBe(1);
+    expect(sdk.failed).toBe(0);
+    await sdk.dispose();
+  });
+});

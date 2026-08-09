@@ -26,7 +26,13 @@ import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { timeTravelApi } from "@/lib/api/resources";
+import type { TimeTravelForkListItem } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
+import {
+  buildForkTree,
+  forkRowId,
+  type ForkTreeNode,
+} from "@/lab/debugger/fork-tree";
 import {
   QueryErrorPanel,
   QueryLoadingPanel,
@@ -681,6 +687,44 @@ export function DebuggerInspectView({
   );
 }
 
+function ForkTreeRow({ fork }: { fork: TimeTravelForkListItem }) {
+  return (
+    <>
+      <span className="text-[var(--text)]">{forkRowId(fork)}</span>
+      {" · step "}
+      {String(fork.fork_at_step ?? "?")}
+      {fork.name ? ` · ${String(fork.name)}` : ""}
+      {fork.last_replay_outcome
+        ? ` · last=${String(fork.last_replay_outcome)}`
+        : ""}
+    </>
+  );
+}
+
+function ForkTreeList({
+  nodes,
+  depth = 0,
+}: {
+  nodes: ForkTreeNode[];
+  depth?: number;
+}) {
+  if (nodes.length === 0) return null;
+  return (
+    <ul className={cn("mt-2 space-y-2", depth > 0 && "ml-4 border-l border-[var(--line)] pl-3")}>
+      {nodes.map((node) => (
+        <li key={forkRowId(node.fork)}>
+          <div className="type-meta rounded-[var(--radius)] border border-[var(--line)] px-3 py-2">
+            <ForkTreeRow fork={node.fork} />
+          </div>
+          {node.children.length > 0 ? (
+            <ForkTreeList nodes={node.children} depth={depth + 1} />
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Time travel — Cat 20 fork / live replay / side-by-side timeline     */
 /* ------------------------------------------------------------------ */
@@ -975,6 +1019,7 @@ export function DebuggerTimeTravelView({
   }, [playing, timeline, onFocusSpan]);
 
   const forks = forksQuery.data ?? [];
+  const forkTree = useMemo(() => buildForkTree(forks), [forks]);
   const error =
     actionError ??
     (stepsQuery.isError
@@ -1282,24 +1327,7 @@ export function DebuggerTimeTravelView({
               No forks yet — scrub to a step and replay from there.
             </p>
           ) : (
-            <ul className="mt-2 space-y-2">
-              {forks.map((f) => (
-                <li
-                  key={String(f.fork_id || f.id)}
-                  className="type-meta rounded-[var(--radius)] border border-[var(--line)] px-3 py-2"
-                >
-                  <span className="text-[var(--text)]">
-                    {String(f.fork_id || f.id)}
-                  </span>
-                  {" · step "}
-                  {String(f.fork_at_step ?? "?")}
-                  {f.name ? ` · ${String(f.name)}` : ""}
-                  {f.last_replay_outcome
-                    ? ` · last=${String(f.last_replay_outcome)}`
-                    : ""}
-                </li>
-              ))}
-            </ul>
+            <ForkTreeList nodes={forkTree} />
           )}
           <p className="type-meta mt-3 text-[var(--text-faint)]">
             Keys: j/k or ↑/↓ to scrub the run timeline
@@ -1396,19 +1424,5 @@ export function DebuggerNotesPanel({
         />
       </label>
     </aside>
-  );
-}
-
-/** @deprecated — notes are a panel now */
-export function DebuggerNotesView(props: {
-  notes: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <DebuggerNotesPanel
-      notes={props.notes}
-      onChange={props.onChange}
-      onClose={() => undefined}
-    />
   );
 }

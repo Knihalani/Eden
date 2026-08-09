@@ -12,6 +12,7 @@ export const LAB_SURFACES: LabSurface[] = [
   { id: "traces", label: "Traces", href: "/traces", status: "ready" },
   { id: "issues", label: "Issues", href: "/issues", status: "ready" },
   { id: "signals", label: "Detectors", href: "/signals", status: "ready" },
+  { id: "topics", label: "Topics", href: "/topics", status: "ready" },
   {
     id: "sessions",
     label: "Sessions",

@@ -124,7 +124,7 @@ class StrictAppEventsClient:
         for row in materialised:
             self._check(row)
         self.rows.extend(materialised)
-        return "INSERT 0 %d" % len(materialised)
+        return f"INSERT 0 {len(materialised)}"
 
 
 def _patch_client(m: pytest.MonkeyPatch, client: Any) -> None:

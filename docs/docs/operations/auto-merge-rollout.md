@@ -25,8 +25,9 @@ A fix PR is eligible to auto-merge only when **every** gate below passes
    (`reverted_count > 0`), the merge is blocked.
 7. **Branch protection** — required checks must be green on the PR branch.
 
-Guardian **auto-revert** bypasses the ladder in one direction only: reverting
-a merge that later regressed is always allowed for the same file class.
+Guardian **auto-revert** is **not** unconditional: it still requires
+`Settings.auto_revert_enabled`, N22 T4 `auto_code_patch_merge`, feature-kill,
+and compliance gates — see `docs/specs/strategic-review-2026-08/features/auto-revert-tuning.md`.
 
 ## Rollout ladder (do these in order)
 

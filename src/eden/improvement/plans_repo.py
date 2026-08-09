@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
 from datetime import datetime
@@ -66,7 +67,7 @@ async def emit_event(
     client = await get_postgres_client()
     if client is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         await client.execute(
             """
             INSERT INTO improvement_plan_events (
@@ -81,8 +82,6 @@ async def emit_event(
             detail,
             json.dumps(payload or {}),
         )
-    except Exception:
-        pass
 
 
 async def list_events(
@@ -271,6 +270,7 @@ async def find_open_by_fingerprint(org_id: str, source_fingerprint: str) -> dict
         SELECT * FROM improvement_plans
         WHERE org_id = $1 AND source_fingerprint = $2
           AND status = ANY($3::text[])
+        ORDER BY created_at DESC
         LIMIT 1
         """,
         org_id,
@@ -578,14 +578,12 @@ async def mark_closed(
         except Exception:
             pass
         if write_rejection:
-            try:
+            with contextlib.suppress(Exception):
                 await write_rejection_memory(
                     org_id,
                     plan,
                     rejection_reason=reason or "pr_closed_without_merge",
                 )
-            except Exception:
-                pass
         await emit_event(org_id, plan_id, "closed", detail=reason)
     return plan
 
@@ -770,6 +768,7 @@ async def is_rejection_active(
             f"""
             SELECT 1 FROM pr_rejection_memory
             WHERE {' AND '.join(clauses)}
+            ORDER BY id
             LIMIT 1
             """,
             *args,
@@ -819,6 +818,7 @@ async def find_blocking_by_fingerprint(
             WHERE org_id = $1 AND source_fingerprint = $2
               AND status = 'snoozed'
               AND (snoozed_until IS NULL OR snoozed_until > NOW())
+            ORDER BY created_at DESC
             LIMIT 1
             """,
             org_id,

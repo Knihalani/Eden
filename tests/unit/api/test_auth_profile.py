@@ -3,7 +3,7 @@
   - PATCH  /users/me            (update name / avatar_url)
   - POST   /users/me/password   (change password)
   - POST   /users/me/avatar     (upload avatar)
-  - DELETE /users/me            (soft-delete)
+  - DELETE /users/me            (GDPR erasure via erase_user_account)
 
 The tests build a minimal FastAPI app with the real auth routes mounted
 and override the postgres client + auth dependency. Avatar upload is
@@ -17,6 +17,7 @@ import json as _json
 import os
 from datetime import UTC, datetime, timezone
 from typing import Any
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -42,6 +43,8 @@ class _StubPostgresClient:
     def __init__(self) -> None:
         # user_id → {email, password_hash, name, deleted_at, token_version, avatar_url}
         self.users: dict[str, dict[str, Any]] = {}
+        # user_id → list of org_ids
+        self.org_members: dict[str, list[str]] = {}
 
     async def fetchrow(self, query: str, *args, **kwargs):
         q = " ".join(query.split())
@@ -54,10 +57,18 @@ class _StubPostgresClient:
         return None
 
     async def fetch(self, query: str, *args, **kwargs):
+        q = " ".join(query.split())
+        if "SELECT org_id FROM org_members" in q:
+            uid = args[0]
+            return [{"org_id": oid} for oid in self.org_members.get(uid, [])]
         return []
 
     async def execute(self, query: str, *args, **kwargs):
         q = " ".join(query.split())
+        if "DELETE FROM org_members" in q:
+            uid = args[0]
+            self.org_members[uid] = []
+            return None
         if "UPDATE users SET password_hash" in q:
             new_hash, uid = args[0], args[1]
             if uid in self.users:
@@ -69,6 +80,10 @@ class _StubPostgresClient:
             if uid in self.users and self.users[uid].get("deleted_at") is None:
                 self.users[uid]["deleted_at"] = datetime.now(UTC)
                 self.users[uid]["token_version"] = self.users[uid].get("token_version", 0) + 1
+                if "password_hash = NULL" in q:
+                    self.users[uid]["email"] = f"deleted+{uid}@eden.invalid"
+                    self.users[uid]["name"] = "Deleted User"
+                    self.users[uid]["password_hash"] = None
             return None
         # UPDATE users SET name = $1, avatar_url = $2 WHERE id = $3
         # (when PATCH /me provides both fields)
@@ -296,17 +311,134 @@ def test_avatar_upload_too_large_413(client, test_user, upload_dir):
 # ── Tests: DELETE /users/me ──────────────────────────────────────
 
 
-def test_delete_account_happy_path(client, test_user):
-    uid, u = test_user
-    resp = client.request(
-        "DELETE", "/auth/users/me",
-        content=_json.dumps({"confirm": "DELETE"}),
-        headers={"content-type": "application/json"},
+def _rtbf_ok_patch():
+    instance = AsyncMock()
+    instance.process_request = AsyncMock(
+        return_value={"status": "ok", "data": {"complete": True}}
     )
-    assert resp.status_code == 204
-    # The deleted_at is now set and token_version was rotated
+    return patch(
+        "eden.services.governance_intel.gdpr.RightToBeForgottenService",
+        return_value=instance,
+    )
+
+
+def test_delete_account_happy_path(client, test_user, stub_pg):
+    uid, u = test_user
+    stub_pg.org_members[uid] = ["org-a"]
+    with _rtbf_ok_patch() as rtbf_mock:
+        resp = client.request(
+            "DELETE", "/auth/users/me",
+            content=_json.dumps({"confirm": "DELETE"}),
+            headers={"content-type": "application/json"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["account_anonymized"] is True
+    assert isinstance(body["store_statuses"], list)
+    assert body["store_statuses"][0]["store"] == "postgres"
+    assert body["store_statuses"][0]["status"] == "ok"
     assert u["deleted_at"] is not None
     assert u["token_version"] == 1
+    assert u["email"] == f"deleted+{uid}@eden.invalid"
+    assert u["name"] == "Deleted User"
+    assert u["password_hash"] is None
+    assert stub_pg.org_members[uid] == []
+    rtbf_mock.return_value.process_request.assert_awaited_once_with(
+        "org-a", user_id=uid, requested_by=uid
+    )
+
+
+def test_delete_account_returns_per_store_fanout_statuses(client, test_user, stub_pg):
+    uid, u = test_user
+    stub_pg.org_members[uid] = ["org-a"]
+    fanout = [
+        {"store": "typesense", "status": "unsupported", "error": "no user_id field"},
+        {"store": "qdrant", "status": "failed", "error": "no per-user index"},
+    ]
+    instance = AsyncMock()
+    instance.process_request = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "complete": False,
+                "tables": [
+                    {
+                        "table": "telemetry_events",
+                        "status": "ok",
+                        "rows_matched": 3,
+                        "rows_anonymised": 3,
+                    },
+                ],
+                "fanout": fanout,
+            },
+        }
+    )
+    with patch(
+        "eden.services.governance_intel.gdpr.RightToBeForgottenService",
+        return_value=instance,
+    ):
+        resp = client.request(
+            "DELETE", "/auth/users/me",
+            content=_json.dumps({"confirm": "DELETE"}),
+            headers={"content-type": "application/json"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    stores = {s["store"]: s for s in body["store_statuses"]}
+    assert stores["postgres"]["status"] == "ok"
+    assert "3 rows" in stores["postgres"]["detail"]
+    assert stores["typesense"]["status"] == "unsupported"
+    assert stores["qdrant"]["status"] == "failed"
+    assert body["incomplete_orgs"] == ["org-a"]
+
+
+def test_delete_account_calls_erase_user_account(client, test_user):
+    uid, _ = test_user
+    with patch(
+        "eden.services.compliance_jobs.erase_user_account",
+        new_callable=AsyncMock,
+        return_value={
+            "user_id": uid,
+            "account_anonymized": True,
+            "failures": [],
+            "incomplete_orgs": [],
+            "rtbf_results": {},
+        },
+    ) as erase_mock:
+        resp = client.request(
+            "DELETE", "/auth/users/me",
+            content=_json.dumps({"confirm": "DELETE"}),
+            headers={"content-type": "application/json"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["account_anonymized"] is True
+    assert body["store_statuses"][0]["store"] == "postgres"
+    erase_mock.assert_awaited_once()
+    assert erase_mock.await_args.kwargs["requested_by"] == uid
+
+
+def test_delete_account_erasure_failure_500(client, test_user):
+    uid, u = test_user
+    with patch(
+        "eden.services.compliance_jobs.erase_user_account",
+        new_callable=AsyncMock,
+        return_value={
+            "user_id": uid,
+            "account_anonymized": False,
+            "failures": [{"org_id": "org-a", "error": "rtbf failed"}],
+            "incomplete_orgs": [],
+        },
+    ):
+        resp = client.request(
+            "DELETE", "/auth/users/me",
+            content=_json.dumps({"confirm": "DELETE"}),
+            headers={"content-type": "application/json"},
+        )
+    assert resp.status_code == 500
+    assert u["deleted_at"] is None
+    body = resp.json()
+    assert "failures" in body["detail"]
 
 
 def test_delete_account_wrong_confirm_400(client, test_user):
@@ -320,16 +452,18 @@ def test_delete_account_wrong_confirm_400(client, test_user):
     assert test_user[1]["deleted_at"] is None
 
 
-def test_deleted_user_cannot_change_password(client, test_user):
-    """After soft-delete, change-password is rejected because the
+def test_deleted_user_cannot_change_password(client, test_user, stub_pg):
+    """After erasure, change-password is rejected because the
     lookup filter ``deleted_at IS NULL`` returns no row."""
     uid, u = test_user
+    stub_pg.org_members[uid] = []
     # Delete first
-    client.request(
-        "DELETE", "/auth/users/me",
-        content=_json.dumps({"confirm": "DELETE"}),
-        headers={"content-type": "application/json"},
-    )
+    with _rtbf_ok_patch():
+        client.request(
+            "DELETE", "/auth/users/me",
+            content=_json.dumps({"confirm": "DELETE"}),
+            headers={"content-type": "application/json"},
+        )
     # Now try to change password
     resp = client.post(
         "/auth/users/me/password",

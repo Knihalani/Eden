@@ -145,6 +145,8 @@ class StorageSummaryResponse(BaseModel):
     hot: dict[str, Any]
     warm: dict[str, Any]
     cold: dict[str, Any]
+    # OPT-32: sum of pg_total_relation_size across tracked hot tables.
+    hot_bytes_total: int = 0
 
 
 # ============================================================================

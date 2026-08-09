@@ -189,6 +189,15 @@
 | 151_improvement_plan_events | improvement_plan_events | yes | forever | soft | low | New improvement_plan_events table + plan index for the plan event-log timeline | Improve |
 | 152_budget_scope | budgets, budget_consumption, budget_actions | yes | forever | soft | medium | Adds scope_type (default 'org') + scope_id to all three budget tables for org/team/agent-scoped budgets; existing rows backfill to scope_type='org' so org-level behavior is unchanged. Widens the budgets/budget_consumption unique indexes to `(..., scope_type, COALESCE(scope_id, ''))` so a scoped budget can coexist with the org-level one (FEAT-47) | Cost |
 | 153_regression_case_dataset_link | dataset_items | yes | forever | soft | low | Adds org_id/fingerprint/auto_generated + a partial unique `(org_id, fingerprint)` index to dataset_items so N01 regression cases can be written there instead of the schema-incompatible `regression_eval_cases.dataset_id`, preserving the fingerprint dedup guarantee (FEAT-74) | Eval |
+| 154_tool_call_labels_index | tool_call_labels | yes | forever | none | low | Composite `(org_id, agent_id, created_at DESC)` index for per-agent label list/count queries (OPT-16) | Learning |
+| 155_session_summaries_user_index | session_summaries | yes | forever | none | low | Composite `(org_id, user_id, session_start DESC)` index for cohort_retention per-user scans (FEAT-56) | Analytics |
+| 156_agent_link_columns_index | telemetry_events | yes | forever | soft | medium | Partial index on `(tenant_id, operation_name, agent_id)` for agent-invocation spans + bounded 30-day `operation_name` backfill (FEAT-98) | Observability |
+| 157_agent_artifact_context | agent_artifact_context | yes | forever | soft | medium | New per-agent uploaded context table (FEAT-128) | Artifacts |
+| 158_alert_suppression_rules | alert_suppression_rules | yes | forever | soft | low | Org-scoped alert suppression patterns for triage judge (FEAT-134) | Alerting |
+| 159_nl_alert_rules_severity | nl_alert_rules | yes | forever | soft | low | Persist severity on NL alert rules + backfill from bridged EQL rows (FEAT-102) | Alerting |
+| 160_signal_definitions_org_enabled_created | signal_definitions | yes | forever | none | low | Partial index on `(org_id, created_at ASC) WHERE enabled = TRUE` for investigator list path (OPT-42) | Signals |
+| 161_retention_archive_watermark | retention_archive_watermark | yes | forever | soft | low | Watermark table for retention_cron cold-archive org selection (OPT-52) | Retention |
+| 162_dataset_items_split | dataset_items | yes | forever | soft | low | Nullable `split` tag on dataset_items for eval subsetting (FEAT-167) | Eval |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)

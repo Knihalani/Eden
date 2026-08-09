@@ -52,7 +52,7 @@ export function wrapVercelAI<T extends AnyModule>(
         typeof prop === "string" &&
         _isVercelHelper(prop)
       ) {
-        return _wrapHelper(value as (...a: any[]) => any, prop, opts);
+        return _wrapVercelHelper(value as (...a: any[]) => any, prop, opts);
       }
       return value;
     },
@@ -71,7 +71,15 @@ function _isVercelHelper(name: string): boolean {
   );
 }
 
-function _wrapHelper(
+export const VERCEL_AI_HELPER_NAMES = [
+  "generateText",
+  "streamText",
+  "generateObject",
+  "streamObject",
+  "streamUI",
+] as const;
+
+export function _wrapVercelHelper(
   original: (...args: any[]) => any,
   name: string,
   opts: TraceOptions,

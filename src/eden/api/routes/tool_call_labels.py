@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_feature_flag, require_path_org_access
@@ -37,6 +37,10 @@ class LabelToolCallRequest(BaseModel):
     args_summary: str | None = None
 
 
+class RetrainToolCalibratorBody(BaseModel):
+    tool_name: str = Field(..., min_length=1)
+
+
 @router.post("/{span_id}/label")
 async def label_tool_call(
     span_id: str = Path(...),
@@ -45,23 +49,46 @@ async def label_tool_call(
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     labeled_by = str(user.get("sub") or user.get("user_id") or "")
-    result = await _svc.create_label(
-        ToolCallLabelCreate(
+    try:
+        result = await _svc.create_label(
+            ToolCallLabelCreate(
+                org_id=org_id,
+                span_id=span_id,
+                trace_id=body.trace_id,
+                tool_name=body.tool_name,
+                label=body.label,
+                reason=body.reason,
+                agent_id=body.agent_id,
+                args_summary=body.args_summary,
+                labeled_by=labeled_by or None,
+            )
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    bridge_item_id = None
+    try:
+        from eden.evaluation.labeling_unified import bridge_tool_call_label_to_queue
+
+        bridge_item_id = await bridge_tool_call_label_to_queue(
             org_id=org_id,
             span_id=span_id,
             trace_id=body.trace_id,
             tool_name=body.tool_name,
             label=body.label,
             reason=body.reason,
-            agent_id=body.agent_id,
-            args_summary=body.args_summary,
-            labeled_by=labeled_by or None,
+            agent_id=result.get("agent_id") or body.agent_id,
         )
-    )
+    except Exception as exc:
+        logger.debug("tool_call label bridge skipped: %s", redact_all(str(exc)))
     train_hint = None
-    if body.agent_id and await _svc.should_train(org_id, body.agent_id, body.tool_name):
+    resolved_agent_id = result.get("agent_id") or body.agent_id
+    if resolved_agent_id and await _svc.should_train(
+        org_id, resolved_agent_id, body.tool_name
+    ):
         try:
-            train_hint = await train_and_persist(org_id, body.agent_id, body.tool_name)
+            train_hint = await train_and_persist(
+                org_id, resolved_agent_id, body.tool_name
+            )
         except Exception as exc:
             logger.debug("calibrator train skipped: %s", redact_all(str(exc)))
             train_hint = {"status": "train_error", "error": str(exc)}
@@ -70,6 +97,7 @@ async def label_tool_call(
         "feature": "tool_call_labels",
         "live": True,
         "data": result,
+        "labeling_item_id": bridge_item_id,
         "calibrator": train_hint,
     }
 
@@ -122,11 +150,8 @@ async def get_tool_calibrators(
 @router.post("/agents/{agent_id}/tool-calibrators/retrain")
 async def retrain_tool_calibrator(
     agent_id: str = Path(...),
-    body: dict[str, Any] = Body(default_factory=dict),
+    body: RetrainToolCalibratorBody = Body(...),
     org_id: str = Depends(require_path_org_access),
 ) -> dict[str, Any]:
-    tool_name = str(body.get("tool_name") or "")
-    if not tool_name:
-        return {"status": "error", "error": "tool_name required"}
-    result = await train_and_persist(org_id, agent_id, tool_name)
+    result = await train_and_persist(org_id, agent_id, body.tool_name)
     return {"status": "ok", "feature": "tool_call_labels", "live": True, "data": result}

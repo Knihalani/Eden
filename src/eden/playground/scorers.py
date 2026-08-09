@@ -1,14 +1,21 @@
-"""F49 scorer registry — deterministic per-cell output scoring.
+"""F49 scorer registry — deterministic and LLM-judge per-cell output scoring.
 
 Scores are honest: when a scorer needs an expected value and the row
 has none, the score is ``None`` with a reason — never a fabricated
-midpoint. ``llm_judge`` is deliberately absent: wiring it through the
-internal router needs judge-prompt design and response parsing that is
-not trivially reusable here, and a fake judge is worse than none.
+midpoint. ``llm_judge`` routes through :class:`UnifiedJudge` via
+:mod:`eden.playground.llm_judge_adapter`; when no LLM is configured the
+scorer returns ``None`` with an explicit reason (never a fake score).
 
 Config shape (per task or playground-global)::
 
-    "scorers": [{"type": "regex", "pattern": "^ok"}, {"type": "exact_match"}]
+    "scorers": [
+        {"type": "regex", "pattern": "^ok"},
+        {"type": "exact_match"},
+        {"type": "llm_judge", "axis": "correctness"},
+    ]
+
+``llm_judge`` accepts optional ``axis`` (default ``correctness``) from
+:class:`~eden.llmops.judges.unified.UNIFIED_AXES`.
 
 ``name`` is accepted as a legacy alias for ``type``. Each result is
 ``{"name": str, "score": float | bool | None, "detail": str | None}``.
@@ -118,6 +125,23 @@ def _score_levenshtein_ratio(
     return 1.0 - (_levenshtein_distance(output, expected) / longest), None
 
 
+def _score_llm_judge(
+    output: str,
+    expected: str | None,
+    spec: dict[str, Any],
+    *,
+    input_text: str | None = None,
+) -> tuple[float | bool | None, str | None]:
+    from eden.playground.llm_judge_adapter import score_llm_judge_sync
+
+    return score_llm_judge_sync(
+        output,
+        expected,
+        spec,
+        input_text=input_text,
+    )
+
+
 SCORERS: dict[str, Scorer] = {
     "exact_match": _score_exact_match,
     "contains": _score_contains,
@@ -125,6 +149,7 @@ SCORERS: dict[str, Scorer] = {
     "regex": _score_regex,
     "json_valid": _score_json_valid,
     "levenshtein_ratio": _score_levenshtein_ratio,
+    "llm_judge": _score_llm_judge,
 }
 
 
@@ -133,6 +158,7 @@ def run_scorers(
     *,
     output: str,
     expected: str | None,
+    input_text: str | None = None,
 ) -> list[dict[str, Any]]:
     """Score ``output`` against every scorer spec.
 
@@ -155,7 +181,15 @@ def run_scorers(
             )
             continue
         try:
-            score, detail = fn(str(output or ""), expected, spec)
+            if stype == "llm_judge":
+                score, detail = _score_llm_judge(
+                    str(output or ""),
+                    expected,
+                    spec,
+                    input_text=input_text,
+                )
+            else:
+                score, detail = fn(str(output or ""), expected, spec)
         except Exception as exc:  # noqa: BLE001 — cell must survive a scorer bug
             logger.warning("scorer %s failed: %s", stype, exc)
             score, detail = None, f"scorer error: {exc}"

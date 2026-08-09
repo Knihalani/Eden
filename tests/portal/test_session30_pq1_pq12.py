@@ -57,7 +57,7 @@ class TestBudgetPageUsesPolling:
 
     _BUDGET = "src/app/(portal)/cost/page.tsx"
 
-    def test_no_raw_setInterval(self) -> None:
+    def test_no_raw_set_interval(self) -> None:
         source = _read(self._BUDGET)
         assert "setInterval" not in source, (
             "PQ-1 regression: cost/budget page still uses raw setInterval "
@@ -97,7 +97,7 @@ class TestOnboardingWaitUsesPolling:
 
     _WAIT = "src/components/onboarding/WaitingForFirstEvent.tsx"
 
-    def test_no_raw_setInterval(self) -> None:
+    def test_no_raw_set_interval(self) -> None:
         path = _PORTAL_ROOT / self._WAIT
         if not path.is_file():
             pytest.skip("WaitingForFirstEvent removed; PQ-2 surface N/A")

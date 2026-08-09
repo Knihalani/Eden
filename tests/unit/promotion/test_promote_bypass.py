@@ -12,8 +12,9 @@ async def test_promote_requires_evaluation(monkeypatch):
 
     async def fake_evaluate(org_id, candidate_id):
         calls.append("evaluate")
-        from eden.promotion.evidence_gate import EvidenceReport
         from uuid import UUID
+
+        from eden.promotion.evidence_gate import EvidenceReport
 
         return EvidenceReport(
             candidate_id=UUID(candidate_id),

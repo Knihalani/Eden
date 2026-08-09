@@ -1,4 +1,5 @@
 import type { TranscriptMessage, TranscriptRow } from "@/lib/observability/types";
+import { STORAGE_COLORS } from "@/lib/chart-colors";
 import {
   buildFallbackTimelineSteps,
   type TimelineStep,
@@ -158,9 +159,30 @@ export function filterSpanTreeKeepingAncestors(
   return walk(nodes);
 }
 
+function handoffLabelFromAttrs(
+  attributes: Record<string, unknown>,
+): string | null {
+  const a2a = asRecord(attributes.a2a);
+  const parent = a2a.parent_agent_id;
+  const child = a2a.child_agent_id;
+  const inv = a2a.invocation_type;
+  if (!parent && !child && !inv) return null;
+  const status = a2a.response_status;
+  if (parent && child) {
+    const base = `${String(parent)} → ${String(child)}`;
+    return status ? `${base} (${String(status)})` : base;
+  }
+  if (inv) return String(inv);
+  return "handoff";
+}
+
 function spanToRow(node: SpanNode, options: BuildTranscriptOptions): TranscriptRow {
   const payload = (node.payload as Record<string, unknown>) ?? {};
-  const spanType = String(node.span_type ?? node.event_type ?? "system");
+  const attributes = asRecord(node.attributes);
+  const handoffLabel = handoffLabelFromAttrs(attributes);
+  const spanType = handoffLabel
+    ? "handoff"
+    : String(node.span_type ?? node.event_type ?? "system");
   const messages = (payload.messages ?? payload.input_messages) as
     | Array<Record<string, unknown>>
     | undefined;
@@ -171,7 +193,7 @@ function spanToRow(node: SpanNode, options: BuildTranscriptOptions): TranscriptR
     span_id: String(node.span_id ?? ""),
     parent_span_id: (node.parent_span_id as string | null | undefined) ?? null,
     agent_id: (node.agent_id as string | null | undefined) ?? null,
-    name: String(node.name ?? "unnamed"),
+    name: handoffLabel ?? String(node.name ?? "unnamed"),
     event_type: spanType,
     timestamp: String(node.timestamp ?? node.started_at ?? new Date().toISOString()),
     duration_ms: Number(node.duration_ms ?? 0),
@@ -247,6 +269,8 @@ function nodeHasTranscriptContent(node: SpanNode): boolean {
   if (payload.request != null) return true;
   if (Array.isArray(payload.tool_calls) && payload.tool_calls.length > 0) return true;
   if (payload.tool_result != null) return true;
+  const attributes = asRecord(node.attributes);
+  if (handoffLabelFromAttrs(attributes)) return true;
   const spanType = String(node.span_type ?? node.event_type ?? "");
   if (
     spanType === "tool_invocation" ||
@@ -305,9 +329,28 @@ export function buildSpanTree(
 export interface TimedTranscriptStep {
   id: string;
   parentId?: string;
+  agentId?: string;
   kind?: string;
   startedAt?: string;
   durationMs: number;
+}
+
+/** Stable chart token for an agent swimlane accent (CSS var). */
+export function agentLaneColor(agentId: string | null | undefined): string | undefined {
+  if (!agentId) return undefined;
+  let hash = 0;
+  for (let i = 0; i < agentId.length; i++) {
+    hash = (hash * 31 + agentId.charCodeAt(i)) >>> 0;
+  }
+  return STORAGE_COLORS[hash % STORAGE_COLORS.length];
+}
+
+function laneSortKey(step: TimedTranscriptStep): string {
+  return `${step.agentId ?? "\uffff"}:${parseStartMs(step) ?? Number.MAX_SAFE_INTEGER}:${step.id}`;
+}
+
+function sortLanesByAgent<S extends TimedTranscriptStep>(lanes: S[]): S[] {
+  return [...lanes].sort((a, b) => laneSortKey(a).localeCompare(laneSortKey(b)));
 }
 
 export type TranscriptViewRow<S extends TimedTranscriptStep> =
@@ -337,7 +380,8 @@ export function groupParallelSteps<S extends TimedTranscriptStep>(
 
   const flush = () => {
     if (group.length >= 2) {
-      rows.push({ type: "parallel", id: `par:${group[0].id}`, lanes: group });
+      const lanes = sortLanesByAgent(group);
+      rows.push({ type: "parallel", id: `par:${lanes[0].id}`, lanes });
     } else {
       for (const s of group) rows.push({ type: "step", id: s.id, step: s });
     }
@@ -356,7 +400,13 @@ export function groupParallelSteps<S extends TimedTranscriptStep>(
     }
     const endMs = startMs + Math.max(0, step.durationMs);
     const overlaps =
-      group.length > 0 && step.parentId === groupParent && startMs < groupEndMs;
+      group.length > 0 &&
+      startMs < groupEndMs &&
+      (step.parentId === groupParent ||
+        Boolean(
+          step.agentId &&
+            group.some((lane) => lane.agentId && lane.agentId !== step.agentId),
+        ));
     if (!overlaps) flush();
     if (group.length === 0) groupParent = step.parentId;
     group.push(step);

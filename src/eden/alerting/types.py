@@ -21,9 +21,8 @@ model:
 2. **``eden.dsl.alerts`` (NL-alert / AlertAsCode / EQL watchdog).**
    Used a parallel, untyped ``frozenset[str]``: ``_VALID_SEVERITIES =
    {"info","warning","high","critical"}`` (compile-time validation) and
-   ``_FIREABLE_SEVERITIES = {"info","warning","high"}`` (runtime —
-   ``critical`` is deliberately excluded from firing in v1.3, a
-   documented gap unrelated to this migration). No channel concept of
+   ``_FIREABLE_SEVERITIES`` (runtime — info, warning, high, and
+   critical all fire). No channel concept of
    its own: every fired alert goes through ``AlertTriageJudge`` →
    ``send_nl_incident_email`` — always email, so there was never a
    parallel ``AlertChannel``-shaped thing to unify here.

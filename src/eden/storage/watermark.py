@@ -108,7 +108,7 @@ async def fetch_stale_candidates(
         ORDER BY w.{watermark_column} ASC NULLS FIRST
         LIMIT $1
         """
-    return await pg.fetch(query, limit)
+    return list(await pg.fetch(query, limit))
 
 
 async def advance_watermark(

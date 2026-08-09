@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from eden.services.soft_issue_review import (
+    _SHADOW_PROMOTE_BATCH_LIMIT,
     SoftIssueReviewer,
     evaluate_shadow_precision,
     record_shadow_feedback,
@@ -131,6 +133,27 @@ async def test_promote_shadow_detectors_enables_and_deletes() -> None:
     assert "DELETE FROM nl_signals" in delete_sql
 
 
+@pytest.mark.asyncio
+async def test_promote_shadow_detectors_uses_fair_per_org_sql_and_higher_limit() -> None:
+    """OPT-26: weekly batch exceeds creation throughput and round-robins orgs."""
+    pg = MagicMock()
+    pg.fetch = AsyncMock(return_value=[])
+    pg.execute = AsyncMock()
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=pg),
+    ):
+        await SoftIssueReviewer().promote_shadow_detectors()
+
+    sql = pg.fetch.await_args.args[0]
+    assert "ROW_NUMBER() OVER" in sql
+    assert "PARTITION BY org_id" in sql
+    assert "ORDER BY rn ASC" in sql
+    assert pg.fetch.await_args.args[1] == _SHADOW_PROMOTE_BATCH_LIMIT
+    assert _SHADOW_PROMOTE_BATCH_LIMIT > 200
+
+
 # ── FEAT-29 P0-C: dismiss made consequential without the weekly job ──────
 
 
@@ -230,3 +253,239 @@ async def test_record_shadow_feedback_dismiss_already_promoted_no_delete() -> No
 
     assert ok is True
     pg.execute.assert_not_awaited()
+
+
+# ── OPT-37: stale hold-state shadow detectors expire ─────────────────
+
+
+def test_stale_hold_below_min_firings_expires_to_delete() -> None:
+    now = datetime(2026, 8, 7, tzinfo=UTC)
+    stale_created = now - timedelta(days=100)
+    row = {
+        "match_count": 2,
+        "rule": {},
+        "created_at": stale_created,
+        "updated_at": stale_created,
+    }
+    d = evaluate_shadow_precision(
+        row,
+        min_firings=20,
+        hold_max_days=90,
+        now=now,
+    )
+    assert d["action"] == "delete"
+    assert d["hold_age_days"] == pytest.approx(100.0)
+
+
+def test_recent_hold_below_min_firings_stays_hold() -> None:
+    now = datetime(2026, 8, 7, tzinfo=UTC)
+    recent = now - timedelta(days=10)
+    row = {
+        "match_count": 2,
+        "rule": {},
+        "created_at": recent,
+        "updated_at": recent,
+    }
+    d = evaluate_shadow_precision(
+        row,
+        min_firings=20,
+        hold_max_days=90,
+        now=now,
+    )
+    assert d["action"] == "hold"
+
+
+@pytest.mark.asyncio
+async def test_promote_shadow_detectors_deletes_stale_hold_rows() -> None:
+    now = datetime(2026, 8, 7, tzinfo=UTC)
+    stale_row = {
+        "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "org_id": "org-1",
+        "description": "[auto:a] stale",
+        "cluster_id": "auto:stale",
+        "match_count": 1,
+        "rule": {},
+        "created_at": now - timedelta(days=120),
+        "updated_at": now - timedelta(days=120),
+    }
+    pg = MagicMock()
+    pg.fetch = AsyncMock(return_value=[stale_row])
+    pg.execute = AsyncMock()
+
+    with (
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=pg),
+        ),
+        patch(
+            "eden.services.soft_issue_review._notify_shadow_promoted",
+            AsyncMock(),
+        ),
+    ):
+        result = await SoftIssueReviewer().promote_shadow_detectors()
+
+    assert result["deleted"] == 1
+    assert result["promoted"] == 0
+    delete_sql = pg.execute.await_args.args[0]
+    assert "DELETE FROM nl_signals" in delete_sql
+
+
+# ── FEAT-155: end-to-end-ish feedback → promote/delete behavior ─────
+
+
+class _ShadowDetectorStore:
+    """In-memory nl_signals stand-in — feedback persists, weekly sweep reads it."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows: dict[str, dict[str, Any]] = {
+            str(r["id"]): {**r, "rule": dict(r.get("rule") or {})} for r in rows
+        }
+        self.deleted: set[str] = set()
+        self.promoted: set[str] = set()
+
+    async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any] | None:
+        sig_id, org_id, bump_c, bump_d = args[0], args[1], args[2], args[3]
+        row = self._rows.get(str(sig_id))
+        if row is None or row.get("org_id") != org_id or sig_id in self.deleted:
+            return None
+        rule = dict(row.get("rule") or {})
+        rule["operator_confirms"] = int(rule.get("operator_confirms", 0)) + int(
+            bump_c
+        )
+        rule["operator_dismisses"] = int(rule.get("operator_dismisses", 0)) + int(
+            bump_d
+        )
+        updated = {**row, "rule": rule}
+        self._rows[str(sig_id)] = updated
+        return updated
+
+    async def fetch(self, sql: str, *args: Any) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self._rows.values()
+            if r["id"] not in self.deleted and not r.get("enabled")
+        ]
+
+    async def execute(self, sql: str, *args: Any) -> None:
+        sig_id = str(args[0])
+        if "DELETE FROM nl_signals" in sql:
+            self.deleted.add(sig_id)
+        elif "enabled = TRUE" in sql:
+            self.promoted.add(sig_id)
+            if sig_id in self._rows:
+                self._rows[sig_id]["enabled"] = True
+
+
+@pytest.mark.asyncio
+async def test_confirm_feedback_then_weekly_promote_causal_chain() -> None:
+    """Operator confirm persists → ``promote_shadow_detectors`` promotes on
+    the next sweep (not just ``evaluate_shadow_precision`` in isolation)."""
+    sig_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    store = _ShadowDetectorStore(
+        [
+            {
+                "id": sig_id,
+                "org_id": "org-1",
+                "description": "[auto:a] almost there",
+                "cluster_id": "auto:almost",
+                "match_count": 19,
+                "enabled": False,
+                "rule": {
+                    "operator_confirms": 17,
+                    "operator_dismisses": 2,
+                    "firings": 19,
+                },
+            }
+        ]
+    )
+    before = evaluate_shadow_precision(store._rows[sig_id])
+    assert before["action"] == "hold"
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=store),
+    ):
+        ok = await record_shadow_feedback("org-1", sig_id, confirm=True)
+        assert ok is True
+        with patch(
+            "eden.services.soft_issue_review._notify_shadow_promoted",
+            AsyncMock(),
+        ):
+            result = await SoftIssueReviewer().promote_shadow_detectors()
+
+    after = evaluate_shadow_precision(store._rows[sig_id])
+    assert after["action"] == "promote"
+    assert result["promoted"] == 1
+    assert sig_id in store.promoted
+
+
+@pytest.mark.asyncio
+async def test_dismiss_feedback_then_weekly_noop_after_inline_delete() -> None:
+    """Inline dismiss delete removes the row — weekly sweep is a no-op."""
+    sig_id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+    store = _ShadowDetectorStore(
+        [
+            {
+                "id": sig_id,
+                "org_id": "org-1",
+                "description": "[auto:a] sliding bad",
+                "cluster_id": "auto:slide",
+                "match_count": 19,
+                "enabled": False,
+                "rule": {
+                    "operator_confirms": 4,
+                    "operator_dismisses": 15,
+                    "firings": 19,
+                },
+            }
+        ]
+    )
+    assert evaluate_shadow_precision(store._rows[sig_id])["action"] == "hold"
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=store),
+    ):
+        ok = await record_shadow_feedback("org-1", sig_id, dismiss=True)
+        assert ok is True
+        assert sig_id in store.deleted
+        result = await SoftIssueReviewer().promote_shadow_detectors()
+
+    assert result["promoted"] == 0
+    assert result["deleted"] == 0
+
+
+@pytest.mark.asyncio
+async def test_dismiss_feedback_accumulates_to_inline_delete_threshold() -> None:
+    """Repeated dismiss feedback crosses delete precision inline — counters
+    persist between calls (causal chain, not one-shot helper math)."""
+    sig_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    store = _ShadowDetectorStore(
+        [
+            {
+                "id": sig_id,
+                "org_id": "org-1",
+                "description": "[auto:a] borderline",
+                "cluster_id": "auto:border",
+                "match_count": 19,
+                "enabled": False,
+                "rule": {
+                    "operator_confirms": 6,
+                    "operator_dismisses": 13,
+                    "firings": 19,
+                },
+            }
+        ]
+    )
+    assert evaluate_shadow_precision(store._rows[sig_id])["action"] == "hold"
+
+    with patch(
+        "eden.storage.postgres.get_postgres_client",
+        AsyncMock(return_value=store),
+    ):
+        await record_shadow_feedback("org-1", sig_id, dismiss=True)
+        assert sig_id not in store.deleted
+        assert evaluate_shadow_precision(store._rows[sig_id])["action"] == "hold"
+
+        await record_shadow_feedback("org-1", sig_id, dismiss=True)
+        assert sig_id in store.deleted

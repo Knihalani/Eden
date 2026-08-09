@@ -61,6 +61,10 @@ __all__ = [
     "enrich_step_attributes",
     "extract_step_index",
     "extract_step_judges",
+    "resolve_step_index",
+    "scores_to_step_judges",
+    "stamp_event_judge_scores",
+    "persist_step_judge_attributes",
     "STEP_INDEX_ATTR",
     "STEP_JUDGES_ATTR",
 ]
@@ -69,6 +73,10 @@ __all__ = [
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "OtelV141Enricher": (".otel_v141", "OtelV141Enricher"),
     "StepJudgeStamper": (".step_judges", "StepJudgeStamper"),
+    "resolve_step_index": (".step_judges", "resolve_step_index"),
+    "scores_to_step_judges": (".step_judges", "scores_to_step_judges"),
+    "stamp_event_judge_scores": (".step_judges", "stamp_event_judge_scores"),
+    "persist_step_judge_attributes": (".step_judges", "persist_step_judge_attributes"),
     "DecisionPathDepthMetric": (".metrics", "DecisionPathDepthMetric"),
     "ToolCallSuccessRateMetric": (".metrics", "ToolCallSuccessRateMetric"),
     "CostPerStepMetric": (".metrics", "CostPerStepMetric"),

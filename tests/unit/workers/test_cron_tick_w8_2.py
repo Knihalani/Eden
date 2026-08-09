@@ -271,6 +271,7 @@ async def test_auto_curator_queries_org_id_column():
     """organizations PK is ``id`` — wrong column made curator always fail."""
     pg = MagicMock()
     pg.fetch = AsyncMock(return_value=[])
+    pg.execute = AsyncMock(return_value="INSERT 0 1")
 
     with (
         patch(
@@ -286,8 +287,47 @@ async def test_auto_curator_queries_org_id_column():
 
     sql = pg.fetch.await_args.args[0]
     assert "FROM organizations" in sql
-    assert "id::text" in sql
-    assert "org_id::text" not in sql
+    assert "c.id::text AS org_id" in sql
+    assert "LEFT JOIN auto_curator_watermark" in sql
+    assert "ORDER BY w.last_processed_at ASC NULLS FIRST" in sql
+    assert pg.fetch.await_args.args[1] == cron_tick._AUTO_CURATOR_BATCH_SIZE
+
+
+@pytest.mark.asyncio
+async def test_auto_curator_advances_watermark_per_org():
+    """Each org must advance the watermark after curation — success or failure."""
+    pg = MagicMock()
+    pg.fetch = AsyncMock(return_value=[{"org_id": "a"}, {"org_id": "b"}])
+    pg.execute = AsyncMock(return_value="INSERT 0 1")
+
+    curator = MagicMock()
+
+    async def _run(oid: str):
+        if oid == "b":
+            raise RuntimeError("curator boom")
+        return {"org_id": oid, "ok": True}
+
+    curator.run_for_org = AsyncMock(side_effect=_run)
+
+    with (
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            AsyncMock(return_value=pg),
+        ),
+        patch(
+            "eden.evaluation.auto_curator.AutoCurator",
+            return_value=curator,
+        ),
+    ):
+        await cron_tick._run_auto_curator()
+
+    assert pg.execute.await_count == 2
+    advanced_orgs = [call.args[1] for call in pg.execute.await_args_list]
+    assert set(advanced_orgs) == {"a", "b"}
+    for call in pg.execute.await_args_list:
+        query = call.args[0]
+        assert "INSERT INTO auto_curator_watermark" in query
+        assert "ON CONFLICT (org_id) DO UPDATE" in query
 
 
 @pytest.mark.asyncio
@@ -296,6 +336,7 @@ async def test_auto_curator_isolates_per_org_failures():
     pg.fetch = AsyncMock(
         return_value=[{"org_id": "a"}, {"org_id": "b"}, {"org_id": "c"}]
     )
+    pg.execute = AsyncMock(return_value="INSERT 0 1")
 
     curator = MagicMock()
 

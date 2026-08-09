@@ -7,8 +7,10 @@ sidebar_position: 3
 
 # TypeScript SDK
 
-Drop-in observability for OpenAI, Anthropic, Vercel AI, LangChain, and
-Mastra on Node.js, Bun, and Deno.
+Observability for OpenAI, Anthropic, Vercel AI, LangChain, and
+Mastra on Node.js, Bun, and Deno. OpenAI and Anthropic can be traced with
+a single `instrument()` call (prototype patch); other frameworks use
+per-instance `wrap*` wrappers.
 
 - **Package** — `@eden-ai/sdk` on npm
 - **Default ingest API** — `https://api.edenobservability.com`
@@ -184,8 +186,9 @@ const mastra = wrapMastra(mastraInstance, { tags: ["prod"] });
 
 ### `instrument()` convenience helper
 
-Returns all `wrap*` functions plus detection status. Does **not**
-auto-wrap clients — you still call the wrappers yourself:
+Enables prototype-level auto-patch for OpenAI and Anthropic (default
+`autoPatch: true`) and returns all `wrap*` factories for everything else.
+Call `wrap*` on clients for frameworks the prototype pass does not cover:
 
 ```ts
 import { configure, instrument } from "@eden-ai/sdk";
@@ -193,13 +196,20 @@ import OpenAI from "openai";
 
 configure({ orgId: "org_abc", apiKey: "sk_eden_..." });
 
-const { wrapOpenAI, detected } = instrument({ tags: ["prod"] });
-// detected: { openai: true, anthropic: false, vercelAi: false, langchain: false, mastra: false }
+const { wrapOpenAI, wrapLangChain, detected, patched } = instrument({ tags: ["prod"] });
+// patched.openai / patched.anthropic — true when prototype patch applied
+// detected — which packages are installed
 
-if (detected.openai) {
-  const openai = wrapOpenAI(new OpenAI());
+// OpenAI/Anthropic: often no wrap needed when autoPatch succeeded
+const openai = patched.openai ? new OpenAI() : wrapOpenAI(new OpenAI());
+
+// LangChain, Vercel AI, Mastra, etc. — always wrap explicitly
+if (detected.langchain) {
+  const chat = wrapLangChain(new ChatOpenAI({ modelName: "gpt-4o-mini" }));
 }
 ```
+
+Pass `autoPatch: false` to get wrap factories only (no prototype patch).
 
 ### Detection helpers
 

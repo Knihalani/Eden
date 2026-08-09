@@ -22,6 +22,7 @@ import {
   type TraceFixture,
   type TranscriptStep,
 } from "@/lab/fixtures/traces";
+import { agentById } from "@/lab/fixtures/agents";
 import { type IssueFixture } from "@/lab/fixtures/issues";
 import { signalsForTrace } from "@/lab/fixtures/signals";
 import {
@@ -30,6 +31,7 @@ import {
   SeverityBadge,
   stepKindLabel,
 } from "@/lab/lab-ui";
+import { agentLaneColor } from "@/lib/observability/build-transcript-rows";
 import { cn } from "@/lib/utils";
 
 type TreeRow = {
@@ -95,6 +97,10 @@ const TreeRowButton = memo(function TreeRowButton({
 }) {
   const bad = isBadStep(step);
   const handleClick = useCallback(() => onFocus(step.id), [onFocus, step.id]);
+  const laneColor = agentLaneColor(step.agentId);
+  const agentLabel = step.agentId
+    ? agentById(step.agentId)?.name ?? step.agentId
+    : undefined;
   return (
     <button
       type="button"
@@ -105,17 +111,31 @@ const TreeRowButton = memo(function TreeRowButton({
       aria-setsize={setSize}
       aria-selected={active}
       aria-expanded={hasChildren ? true : undefined}
+      data-agent-id={step.agentId}
       className={cn(
         "flex w-full items-center gap-2 py-2.5 pr-4 text-left transition-colors hover:bg-[var(--bg-hover)]",
         active && "bg-[var(--accent-muted)] shadow-[inset_2px_0_0_var(--accent)]",
         bad && !active && "bg-[var(--error-muted)]",
         bad && active && "shadow-[inset_2px_0_0_var(--error)]",
       )}
-      style={{ paddingLeft: `${0.75 + depth * 1.1}rem` }}
+      style={{
+        paddingLeft: `${0.75 + depth * 1.1}rem`,
+        ...(laneColor
+          ? { borderLeft: `3px solid ${laneColor}` }
+          : undefined),
+      }}
     >
       <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
         {stepKindLabel(step.kind)}
       </span>
+      {agentLabel ? (
+        <span
+          className="ds-chip hidden max-w-[6rem] shrink-0 truncate border border-[var(--line)] text-[var(--text-muted)] sm:inline"
+          title={step.agentId}
+        >
+          {agentLabel}
+        </span>
+      ) : null}
       <span
         className={cn(
           "type-ui min-w-0 flex-1 truncate !font-normal",

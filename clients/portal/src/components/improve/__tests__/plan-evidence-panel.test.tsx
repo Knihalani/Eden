@@ -101,4 +101,20 @@ describe("PlanEvidencePanel", () => {
       screen.getByText(/No evidence attached/),
     ).toBeInTheDocument();
   });
+
+  it("surfaces merged supervision status from raw plan + evidence", () => {
+    render(
+      <PlanEvidencePanel
+        plan={makePlan({ status: "done", prUrl: "https://github.com/o/r/pull/1" })}
+        raw={{
+          ...makeRaw({
+            auto_merge: { merged: true, manual: true, eligible: false },
+          }),
+          status: "merged",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("supervision: merged (manual)")).toBeInTheDocument();
+  });
 });

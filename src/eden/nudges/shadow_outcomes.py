@@ -38,6 +38,7 @@ class ShadowOutcomeJoiner:
                   AND no.outcome_success IS NULL
                   AND no.matched = true
                   AND no.recorded_at >= now() - interval '14 days'
+                ORDER BY no.recorded_at ASC
                 LIMIT $1
                 """,
                 limit,

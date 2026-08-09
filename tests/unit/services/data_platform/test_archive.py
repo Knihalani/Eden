@@ -472,36 +472,32 @@ class TestPerOrgWarmScanIsolation:
         # org_A has an override of 120 days — longer than the default.
         org_warm_days = {"org_A": 120}
 
-        captured_sql: list[str] = []
+        mock_fetch = AsyncMock(return_value=[{"tenant_id": "org_default"}])
 
-        async def fake_get_client():
-            client = MagicMock()
-
-            async def fake_fetch(sql, *args, **kwargs):
-                captured_sql.append(sql)
-                return [{"tenant_id": "org_default"}]
-
-            client.fetch = fake_fetch
-            return client
-
-        # get_postgres_client is imported locally inside the function body;
-        # patch at the source module so the local import resolves to the mock.
-        with patch(
-            "eden.storage.postgres.get_postgres_client",
-            new=AsyncMock(side_effect=fake_get_client),
+        with (
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                new=AsyncMock(return_value=MagicMock()),
+            ),
+            patch(
+                "eden.storage.watermark.fetch_stale_candidates",
+                new=mock_fetch,
+            ),
         ):
             orgs = await retention_cron._list_orgs_with_old_traces(
                 archive_svc, org_warm_days
             )
 
         assert orgs == ["org_default"]
-        # The INTERVAL used must be <= DEFAULT_COLD_AGE_DAYS (90), not 120.
-        assert captured_sql, "Expected a SQL query to be issued"
-        sql = captured_sql[0]
-        assert f"INTERVAL '{DEFAULT_COLD_AGE_DAYS} days'" in sql, (
+        call_kwargs = mock_fetch.await_args.kwargs
+        candidate_table = call_kwargs["candidate_table"]
+        assert f"INTERVAL '{DEFAULT_COLD_AGE_DAYS} days'" in candidate_table, (
             f"Expected scan to use DEFAULT_COLD_AGE_DAYS ({DEFAULT_COLD_AGE_DAYS}), "
-            f"not the longer override (120). SQL: {sql}"
+            f"not the longer override (120). candidate_table: {candidate_table}"
         )
+        assert call_kwargs["watermark_table"] == "retention_archive_watermark"
+        assert call_kwargs["watermark_id_column"] == "tenant_id"
+        assert call_kwargs["limit"] == retention_cron._RETENTION_ARCHIVE_BATCH_SIZE
 
     @pytest.mark.asyncio
     async def test_shorter_override_sets_scan_cutoff(self):
@@ -512,28 +508,24 @@ class TestPerOrgWarmScanIsolation:
         archive_svc = ArchiveService()
         org_warm_days = {"org_B": 30}
 
-        captured_sql: list[str] = []
+        mock_fetch = AsyncMock(return_value=[])
 
-        async def fake_get_client():
-            client = MagicMock()
-
-            async def fake_fetch(sql, *args, **kwargs):
-                captured_sql.append(sql)
-                return []
-
-            client.fetch = fake_fetch
-            return client
-
-        with patch(
-            "eden.storage.postgres.get_postgres_client",
-            new=AsyncMock(side_effect=fake_get_client),
+        with (
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                new=AsyncMock(return_value=MagicMock()),
+            ),
+            patch(
+                "eden.storage.watermark.fetch_stale_candidates",
+                new=mock_fetch,
+            ),
         ):
             await retention_cron._list_orgs_with_old_traces(
                 archive_svc, org_warm_days
             )
 
-        sql = captured_sql[0]
-        assert "INTERVAL '30 days'" in sql
+        candidate_table = mock_fetch.await_args.kwargs["candidate_table"]
+        assert "INTERVAL '30 days'" in candidate_table
 
 
 # ── Wave 1: purge index-guard ─────────────────────────────────────────
@@ -625,6 +617,7 @@ class TestArchiveSqlUsesTenantId:
 
     def test_candidate_query_uses_tenant_id(self):
         import inspect
+
         from eden.services.data_platform.archive import ArchiveService
 
         source = inspect.getsource(ArchiveService.archive_old_rows)
@@ -633,6 +626,7 @@ class TestArchiveSqlUsesTenantId:
 
     def test_archive_one_trace_uses_tenant_id(self):
         import inspect
+
         from eden.services.data_platform.archive import ArchiveService
 
         source = inspect.getsource(ArchiveService._archive_one_trace)

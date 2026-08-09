@@ -11,8 +11,7 @@ import pytest
 from eden.data_platform.retention import ARCHIVE_CHUNK_SIZE, DataRetentionManager
 from eden.observability.search_service import SearchService
 from eden.observability.typesense_client import TypesenseClient
-from eden.services.cat2_intel.signals import SignalClusterer, compile_signal
-from eden.services.cat2_intel.signals import NLSignal
+from eden.services.cat2_intel.signals import NLSignal, SignalClusterer, compile_signal
 
 
 class _CapturingPG:
@@ -121,21 +120,24 @@ class TestB4RetentionChunking:
 
 class TestB12B13ListLimits:
     def test_playground_route_limit_le_100(self):
-        from eden.api.routes import playgrounds as mod
         import inspect
+
+        from eden.api.routes import playgrounds as mod
         src = inspect.getsource(mod.list_playgrounds)
         assert "le=100" in src
         assert "Query(" in src
 
     def test_automations_route_limit_le_100(self):
-        from eden.api.routes import wave6_online as mod
         import inspect
+
+        from eden.api.routes import wave6_online as mod
         src = inspect.getsource(mod.list_automations)
         assert "le=100" in src
 
     def test_labeling_board_limit_le_100(self):
-        from eden.api.routes import labeling as mod
         import inspect
+
+        from eden.api.routes import labeling as mod
         src = inspect.getsource(mod.queue_board)
         assert "le=100" in src
 

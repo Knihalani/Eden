@@ -26,6 +26,7 @@ from eden.improvement.cockpit_aggregator import (
     snooze_item,
 )
 from eden.improvement.schedule import resolved_schedule
+from eden.improvement.supervise import manual_merge_plan, manual_revert_plan
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,9 @@ class PlanPatchRequest(BaseModel):
 
 class RejectRequest(BaseModel):
     reason: str = Field(default="", max_length=2000)
+
+class MergePlanRequest(BaseModel):
+    force: bool = False
 
 class SnoozePlanRequest(BaseModel):
     snoozed_until: str | None = None
@@ -253,6 +257,66 @@ async def snooze_plan_route(
         raise HTTPException(status_code=404, detail="plan not found")
     updated = await plans_repo.snooze_plan(org_id, plan_id, snoozed_until=until)
     return _ok("improvement_plans", {"plan": updated, "snoozed_until": until.isoformat()})
+
+@router.post("/plans/{plan_id}/merge")
+async def merge_plan_route(
+    org_id: str = Depends(require_path_org_access),
+    plan_id: str = Path(...),
+    body: MergePlanRequest = Body(default=MergePlanRequest()),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    """Operator supervision — merge the open PR for a ``pr_opened`` plan."""
+    await require_org_admin(org_id, payload)
+    await _require_agent_v1_async(org_id)
+    merged_by = _actor_from_payload(payload)
+    result = await manual_merge_plan(
+        org_id,
+        plan_id,
+        merged_by=merged_by,
+        force=body.force,
+    )
+    status = result.get("status")
+    if status == "not_found":
+        raise HTTPException(status_code=404, detail="plan not found")
+    if status == "invalid_state":
+        raise HTTPException(status_code=409, detail=result)
+    if status == "unsupported_kind":
+        raise HTTPException(status_code=400, detail=result)
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={"blocked_reason": result.get("blocked_reason"), **result},
+        )
+    if status == "error":
+        raise HTTPException(status_code=503, detail=result)
+    return _ok("improvement_plans", result)
+
+@router.post("/plans/{plan_id}/revert")
+async def revert_plan_route(
+    org_id: str = Depends(require_path_org_access),
+    plan_id: str = Path(...),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    """Operator supervision — draft + approve a revert for a merged plan."""
+    await require_org_admin(org_id, payload)
+    await _require_agent_v1_async(org_id)
+    reverted_by = _actor_from_payload(payload)
+    result = await manual_revert_plan(org_id, plan_id, reverted_by=reverted_by)
+    status = result.get("status")
+    if status == "not_found":
+        raise HTTPException(status_code=404, detail="plan not found")
+    if status == "invalid_state":
+        raise HTTPException(status_code=409, detail=result)
+    if status == "unsupported_kind":
+        raise HTTPException(status_code=400, detail=result)
+    if status == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={"blocked_reason": result.get("blocked_reason"), **result},
+        )
+    if status == "error":
+        raise HTTPException(status_code=503, detail=result)
+    return _ok("improvement_plans", result)
 
 @router.get("/runs")
 async def list_runs(

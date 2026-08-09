@@ -23,7 +23,7 @@ import secrets
 import time
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -32,6 +32,7 @@ from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding as rsa_padding
+from cryptography.hazmat.primitives.asymmetric import rsa as _rsa
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 
@@ -73,6 +74,17 @@ _OIDC_CACHE_TTL_SECONDS = 3600
 # persisted in Redis under this prefix with a TTL of 10 minutes.
 _SSO_STATE_TTL_SECONDS = 600
 _SSO_STATE_PREFIX = "eden:sso:state:"
+
+# Provider slugs that share the same IdP token-exchange handlers.
+# ``okta``/``google`` are OIDC-family in practice; ``saml`` is a common
+# alias for ``saml2``.
+_OIDC_FAMILY_PROVIDERS = frozenset(
+    {"oidc", "okta", "google", "azure_ad", "azuread", "entra", "entra_id", "auth0", "keycloak"}
+)
+_SAML_FAMILY_PROVIDERS = frozenset({"saml2", "saml", "saml2.0"})
+
+# Well-known authorize URLs when the portal stores only client credentials.
+_GOOGLE_OIDC_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 # PATCH body keys that map onto ``sso_configurations`` columns.
 # ``sso_url`` is accepted as an alias for ``authorization_endpoint``
@@ -120,6 +132,47 @@ def _hash_token(token: str) -> str:
 def _generate_scim_token() -> str:
     """Generate a random SCIM bearer token."""
     return secrets.token_urlsafe(32)
+
+
+def _normalize_provider_type(provider_type: str) -> str:
+    """Lower-case/strip a provider slug for family matching."""
+    return provider_type.lower().strip()
+
+
+def _is_oidc_family(provider_type: str) -> bool:
+    return _normalize_provider_type(provider_type) in _OIDC_FAMILY_PROVIDERS
+
+
+def _is_saml_family(provider_type: str) -> bool:
+    return _normalize_provider_type(provider_type) in _SAML_FAMILY_PROVIDERS
+
+
+def _oidc_issuer_origin(provider: dict[str, Any]) -> str:
+    """Derive the OIDC issuer base used for discovery/JWKS lookup.
+
+  ``authorization_endpoint`` (or the Okta org base URL stored there)
+  drives discovery. Google providers may omit the endpoint in storage —
+  fall back to Google's well-known authorize URL so client_id/secret
+  from ``sso_configurations`` still work without plaintext extras.
+    """
+    import urllib.parse
+
+    provider_type = _normalize_provider_type(provider.get("provider_type") or "")
+    auth_endpoint = (provider.get("authorization_endpoint") or "").strip()
+    if not auth_endpoint:
+        if provider_type == "google":
+            auth_endpoint = _GOOGLE_OIDC_AUTHORIZE_URL
+        else:
+            return ""
+
+    parsed = urllib.parse.urlparse(auth_endpoint)
+    if not parsed.scheme or not parsed.hostname:
+        return ""
+
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if provider_type == "okta" and "/oauth2/" not in auth_endpoint:
+        return f"{origin}/oauth2/default"
+    return origin
 
 
 def _login_config_from_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -535,6 +588,8 @@ async def _persist_sso_state(state: str, provider_id: str, org_id: str) -> None:
     Audit 2026-07-02 S-3 — single-use, TTL-bounded nonce.
     """
     redis = await get_redis_client()
+    if redis is None:
+        raise HTTPException(status_code=503, detail="SSO state store is unavailable")
     await redis.set(
         f"{_SSO_STATE_PREFIX}{state}",
         f"{provider_id}|{org_id}",
@@ -553,6 +608,8 @@ async def _consume_sso_state(
         raise HTTPException(status_code=400, detail="Missing state nonce")
 
     redis = await get_redis_client()
+    if redis is None:
+        raise HTTPException(status_code=503, detail="SSO state store is unavailable")
     stored = await redis.get(f"{_SSO_STATE_PREFIX}{state}")
     if not stored:
         raise HTTPException(status_code=400, detail="Invalid or expired state nonce")
@@ -719,7 +776,7 @@ def _verify_saml_signature(assertion: ET.Element, cert_pem: str) -> None:
     digest = hashes.Hash(hashes.SHA256())
     digest.update(canonical_assertion.encode("utf-8"))
     expected_digest = base64.b64encode(digest.finalize()).decode("ascii")
-    if not hmac.compare_digest(expected_digest, digest_value_el.text.strip()):
+    if not hmac.compare_digest(expected_digest, (digest_value_el.text or "").strip()):
         raise ValueError("SAML assertion digest mismatch — assertion was tampered with")
 
     try:
@@ -727,10 +784,12 @@ def _verify_saml_signature(assertion: ET.Element, cert_pem: str) -> None:
     except ValueError as exc:
         raise ValueError(f"Registered SAML certificate is invalid: {exc}") from exc
     public_key = cert.public_key()
+    if not isinstance(public_key, _rsa.RSAPublicKey):
+        raise ValueError("Registered SAML certificate is not an RSA key")
 
     canonical_signed_info = ET.canonicalize(ET.tostring(signed_info_el, encoding="unicode"))
     try:
-        signature = base64.b64decode(signature_value_el.text.strip())
+        signature = base64.b64decode((signature_value_el.text or "").strip())
     except Exception as exc:  # noqa: BLE001 — malformed base64 in attacker input
         raise ValueError("SAML assertion signature is not valid base64") from exc
 
@@ -769,14 +828,14 @@ def _validate_saml_assertion(assertion: ET.Element, cert_pem: str) -> dict[str, 
     name_id_el = assertion.find("saml:Subject/saml:NameID", _SAML_NS)
     if name_id_el is None or not (name_id_el.text or "").strip():
         raise ValueError("SAML assertion is missing a Subject/NameID")
-    email = name_id_el.text.strip()
+    email = (name_id_el.text or "").strip()
 
     name: str | None = None
     for attr in assertion.findall("saml:AttributeStatement/saml:Attribute", _SAML_NS):
         if attr.get("Name") == "name":
             value_el = attr.find("saml:AttributeValue", _SAML_NS)
             if value_el is not None and (value_el.text or "").strip():
-                name = value_el.text.strip()
+                name = (value_el.text or "").strip()
 
     return {"email": email, "name": name}
 
@@ -835,7 +894,7 @@ async def _fetch_oidc_discovery(issuer_origin: str) -> dict[str, Any]:
         raise ValueError(f"OIDC discovery endpoint returned {resp.status_code}")
     doc = resp.json()
     _OIDC_DISCOVERY_CACHE[issuer_origin] = (doc, now)
-    return doc
+    return dict(doc)
 
 
 async def _fetch_oidc_jwks(jwks_uri: str) -> dict[str, Any]:
@@ -851,7 +910,7 @@ async def _fetch_oidc_jwks(jwks_uri: str) -> dict[str, Any]:
         raise ValueError(f"OIDC JWKS endpoint returned {resp.status_code}")
     doc = resp.json()
     _OIDC_JWKS_CACHE[jwks_uri] = (doc, now)
-    return doc
+    return dict(doc)
 
 
 def _oidc_verify_id_token(id_token: str, jwks: dict[str, Any], client_id: str, issuer: str) -> dict[str, Any]:
@@ -876,7 +935,7 @@ def _oidc_verify_id_token(id_token: str, jwks: dict[str, Any], client_id: str, i
         public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(matching_jwk))
         claims = jwt.decode(
             id_token,
-            key=public_key,
+            key=cast(_rsa.RSAPublicKey, public_key),
             algorithms=["RS256"],
             audience=client_id,
             issuer=issuer,
@@ -891,19 +950,15 @@ async def _handle_oidc_callback(code: str | None, provider: dict[str, Any]) -> t
     """Exchange an OIDC authorization ``code`` for an ID token
     (discovery + JWKS + real signature verification) and return
     ``(email, name)`` on success."""
-    import urllib.parse
-
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
-    auth_endpoint = provider.get("authorization_endpoint") or ""
-    parsed = urllib.parse.urlparse(auth_endpoint)
-    if not parsed.scheme or not parsed.hostname:
+    issuer_origin = _oidc_issuer_origin(provider)
+    if not issuer_origin:
         raise HTTPException(
             status_code=503,
             detail="OIDC authorization_endpoint is not configured for this provider",
         )
-    issuer_origin = f"{parsed.scheme}://{parsed.netloc}"
 
     try:
         discovery = await _fetch_oidc_discovery(issuer_origin)
@@ -952,7 +1007,10 @@ async def _handle_oidc_callback(code: str | None, provider: dict[str, Any]) -> t
 
     try:
         claims = _oidc_verify_id_token(
-            id_token, jwks, provider.get("client_id"), discovery.get("issuer") or issuer_origin
+            id_token,
+            jwks,
+            str(provider.get("client_id") or ""),
+            discovery.get("issuer") or issuer_origin,
         )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=f"Invalid ID token: {exc}") from exc
@@ -1061,15 +1119,11 @@ async def sso_callback(
 
     provider_type = provider["provider_type"]
 
-    if provider_type == "saml2":
+    if _is_saml_family(provider_type):
         email, name = await _handle_saml_callback(saml_response, provider)
-    elif provider_type == "oidc":
+    elif _is_oidc_family(provider_type):
         email, name = await _handle_oidc_callback(code, provider)
     else:
-        # Generic OIDC (FEAT-1) and hand-rolled SAML (FEAT-1) are the
-        # only providers with a real IdP token exchange wired up so
-        # far. ``okta``/``google``/anything else decline honestly
-        # rather than mismint a session from an unverified code.
         raise HTTPException(
             status_code=503,
             detail={

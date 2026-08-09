@@ -29,6 +29,34 @@ function verdictCopy(grade: CompareGrade, compareName: string): string {
   return `${compareName} is unchanged`;
 }
 
+function ScoringHonestyBadges({
+  baseline,
+  compare,
+}: {
+  baseline?: ExperimentFixture;
+  compare?: ExperimentFixture;
+}) {
+  const synthetic = compare?.synthetic || baseline?.synthetic;
+  const method = compare?.method ?? baseline?.method;
+  if (!synthetic && !method) return null;
+  return (
+    <>
+      {synthetic ? (
+        <StatusChip tone="neutral">
+          {method === "offline_fallback"
+            ? "Offline fallback scoring"
+            : method === "heuristic_stub"
+              ? "Legacy heuristic scoring"
+              : "Synthetic scoring"}
+        </StatusChip>
+      ) : null}
+      {method ? (
+        <StatusChip tone="neutral">{method}</StatusChip>
+      ) : null}
+    </>
+  );
+}
+
 export function EvalsCompareView({
   baselineId,
   compareId,
@@ -195,9 +223,7 @@ export function EvalsCompareView({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CompareGradeChip grade={summary.overallGrade} />
-              {(compare?.synthetic || baseline?.synthetic) && (
-                <StatusChip tone="neutral">Synthetic scoring (heuristic)</StatusChip>
-              )}
+              <ScoringHonestyBadges baseline={baseline} compare={compare} />
               <p className="type-ui truncate text-[var(--text)]">
                 {verdictCopy(
                   summary.overallGrade,
@@ -510,7 +536,15 @@ function ExpPlain({
   return (
     <div>
       <p className="type-label">{title}</p>
-      <p className="type-ui mt-1 text-[var(--text)]">{exp.name}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <p className="type-ui text-[var(--text)]">{exp.name}</p>
+        {exp.synthetic ? (
+          <StatusChip tone="neutral">Synthetic</StatusChip>
+        ) : null}
+        {exp.method ? (
+          <StatusChip tone="neutral">{exp.method}</StatusChip>
+        ) : null}
+      </div>
       <p className="type-value mt-1.5 !text-[0.6875rem]">
         {formatScore(primary)} · {latencyLabel} · {formatUsd(exp.costUsd, 3)}
       </p>

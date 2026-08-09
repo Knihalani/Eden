@@ -129,7 +129,7 @@ class DiscoverResponse(BaseModel):
 
 # ─- Helpers ───────────────────────────────────────────────────────
 
-def _make_live_llm_fn(org_id: str):  # type: ignore[no-untyped-def]
+def _make_live_llm_fn(org_id: str) -> Any:
     """Build an async llm_fn for the F01 live-rerun path.
 
     Adapts the checkpoint's chat ``messages`` into the sanctioned playground
@@ -298,20 +298,20 @@ async def rerun(
             "model_invoked": result.model_invoked,
         }
     else:
-        engine = ReRunEngine(store)
-        result = await engine.rerun(
+        rerun_engine = ReRunEngine(store)
+        rerun_result = await rerun_engine.rerun(
             body.trace_id,
             from_step=body.from_step,
             prompt_override=body.prompt_override,
             org_id=org_id,
         )
         out = RerunResponse(
-            source_trace_id=result.source_trace_id,
-            from_step=result.from_step,
-            to_step=result.to_step,
-            prompt_override=result.prompt_override,
-            checkpoints=[_checkpoint_to_response(c) for c in result.checkpoints],
-            diff=result.diff,
+            source_trace_id=rerun_result.source_trace_id,
+            from_step=rerun_result.from_step,
+            to_step=rerun_result.to_step,
+            prompt_override=rerun_result.prompt_override,
+            checkpoints=[_checkpoint_to_response(c) for c in rerun_result.checkpoints],
+            diff=rerun_result.diff,
         ).model_dump()
 
     if body.session_id:

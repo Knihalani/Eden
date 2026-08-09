@@ -212,6 +212,67 @@ def test_sdk_live_mode_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert live_mode_enabled() is True
 
 
+@pytest.mark.asyncio
+async def test_train_and_persist_persists_even_with_inference_flag_off() -> None:
+    """FEAT-177: persistence must not depend on `tool_call_inference_v1`.
+
+    The flag defaults to False and has no org-level override anywhere in
+    the repo, so gating persistence on it made a trained calibrator's
+    weights/metrics permanently unreachable (dead `list_calibrators()` /
+    portal surface). Training should always persist once it succeeds.
+    """
+    from eden.learning import tool_call_calibrator as calibrator_mod
+
+    rows: list[tuple[list[float], int]] = []
+    for i in range(10):
+        rows.append(([0.9 if i < 8 else -0.9] + [0.0] * 15, 1 if i < 8 else 0))
+
+    executed: list[tuple[str, tuple]] = []
+
+    class _FakePg:
+        async def execute(self, query: str, *args):  # noqa: ANN001
+            executed.append((query, args))
+
+    class _Settings:
+        tool_call_inference_v1 = False  # explicit default — the "inert" state
+
+    with (
+        patch(
+            "eden.learning.tool_call_labels.ToolCallLabelService.export_training_rows",
+            new=AsyncMock(return_value=rows),
+        ),
+        patch("eden.config.get_settings", return_value=_Settings()),
+        patch(
+            "eden.storage.postgres.get_postgres_client",
+            new=AsyncMock(return_value=_FakePg()),
+        ),
+    ):
+        result = await calibrator_mod.train_and_persist("org1", "agent1", "sql.query")
+
+    assert result["status"] == "ok"
+    assert result["persisted"] is True
+    assert result.get("reason") is None
+    assert result.get("calibrator_id")
+    assert len(executed) == 1
+    assert "insert into tool_call_calibrators" in executed[0][0].lower()
+
+
+@pytest.mark.asyncio
+async def test_infer_tool_misuse_still_gated_by_inference_flag() -> None:
+    """FEAT-177: the inference-time gate (auto-flagging misuse) is untouched
+    — only persistence was de-gated."""
+    from eden.learning import tool_call_calibrator as calibrator_mod
+
+    class _Settings:
+        tool_call_inference_v1 = False
+
+    with patch("eden.config.get_settings", return_value=_Settings()):
+        result = await calibrator_mod.infer_tool_misuse(
+            "org1", "agent1", "sql.query", "args summary",
+        )
+    assert result is None
+
+
 def test_migration_111_chains_from_110() -> None:
     from pathlib import Path
 

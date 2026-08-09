@@ -27,7 +27,6 @@ class _FakeDb:
     def __init__(self) -> None:
         self.datasets: dict[str, dict] = {}
         self.dataset_items: list[dict] = []
-        self.regression_eval_cases: list[dict] = []
 
     async def fetch(self, query: str, *args):
         if "JOIN datasets d" in query:
@@ -76,9 +75,6 @@ class _FakeDb:
         return None
 
     async def execute(self, query: str, *args):
-        if "INSERT INTO regression_eval_cases" in query:
-            self.regression_eval_cases.append(args)
-            return "INSERT 0 1"
         if "INSERT INTO dataset_items" in query:
             (
                 item_id,
@@ -301,3 +297,75 @@ async def test_from_issue_dedup_via_dataset_items(
     assert len(second_cases) == 1
     assert second_cases[0].id == first_cases[0].id
     assert len(db.dataset_items) == len(first_cases)
+
+
+@pytest.mark.asyncio
+async def test_persist_does_not_touch_legacy_regression_eval_cases() -> None:
+    """FEAT-74: writes go only to ``dataset_items``, not ``regression_eval_cases``."""
+    db = _FakeDb()
+    executed_queries: list[str] = []
+    original_execute = db.execute
+
+    async def _tracking_execute(query: str, *args):
+        executed_queries.append(query)
+        return await original_execute(query, *args)
+
+    db.execute = _tracking_execute  # type: ignore[method-assign]
+    builder = RegressionCaseBuilder(pg=db)
+    case = RegressionCase(
+        id=str(uuid.uuid4()),
+        org_id="org-1",
+        dataset_id="checkout/regressions",
+        source_issue_id="iss-1",
+        source_trace_id="trace-1",
+        fingerprint="fp-only-dataset-items",
+        auto_generated=True,
+    )
+    await builder._persist(case)
+
+    assert len(db.dataset_items) == 1
+    assert any("INSERT INTO dataset_items" in q for q in executed_queries)
+    assert not any("regression_eval_cases" in q for q in executed_queries)
+
+
+@pytest.mark.asyncio
+async def test_list_cases_reads_dataset_items_only() -> None:
+    db = _FakeDb()
+    builder = RegressionCaseBuilder(pg=db)
+    case = RegressionCase(
+        id=str(uuid.uuid4()),
+        org_id="org-1",
+        dataset_id="checkout/regressions",
+        source_issue_id="iss-list",
+        source_trace_id="trace-list",
+        fingerprint="fp-list",
+        auto_generated=True,
+        expected_data={"no_stumble_kinds": ["loop"]},
+    )
+    await builder._persist(case)
+
+    listed = await builder.list_cases("org-1", agent_id="checkout", limit=10)
+    assert len(listed) == 1
+    assert listed[0].id == case.id
+    assert listed[0].dataset_id == "checkout/regressions"
+
+
+@pytest.mark.asyncio
+async def test_list_for_issue_reads_dataset_items_only() -> None:
+    db = _FakeDb()
+    builder = RegressionCaseBuilder(pg=db)
+    case = RegressionCase(
+        id=str(uuid.uuid4()),
+        org_id="org-1",
+        dataset_id="checkout/regressions",
+        source_issue_id="iss-for-issue",
+        source_trace_id="trace-for-issue",
+        fingerprint="fp-for-issue",
+        auto_generated=True,
+    )
+    await builder._persist(case)
+
+    listed = await builder.list_for_issue("org-1", "iss-for-issue")
+    assert len(listed) == 1
+    assert listed[0].id == case.id
+    assert listed[0].source_issue_id == "iss-for-issue"

@@ -19,10 +19,10 @@ def _patched(**overrides):
     a test overrides them."""
     from eden.services import alert_email
 
-    defaults = dict(
-        _allow_send=AsyncMock(return_value=True),
-        _org_alert_recipients=AsyncMock(return_value=["owner@example.com"]),
-    )
+    defaults = {
+        "_allow_send": AsyncMock(return_value=True),
+        "_org_alert_recipients": AsyncMock(return_value=["owner@example.com"]),
+    }
     defaults.update(overrides)
     return alert_email, defaults
 

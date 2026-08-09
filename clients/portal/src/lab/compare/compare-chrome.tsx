@@ -11,7 +11,6 @@ import type {
 import {
   layoutLabel,
   layoutSubtitle,
-  statusLabel,
   verdictLabel,
 } from "@/lab/fixtures/compare";
 import { cn } from "@/lib/utils";
@@ -55,16 +54,6 @@ export function AbRecChip({ rec }: { rec: AbRecommendation }) {
         ? "fail"
         : "neutral";
   return <StatusChip tone={tone}>{verdictLabel(rec)}</StatusChip>;
-}
-
-export function AbStatusChip({ status }: { status: AbStatus }) {
-  const tone =
-    status === "winner_detected"
-      ? "ok"
-      : status === "active"
-        ? "live"
-        : "neutral";
-  return <StatusChip tone={tone}>{statusLabel(status)}</StatusChip>;
 }
 
 /** Segmented Decision / Examples / Trend — Debugger-style, with tooltips. */

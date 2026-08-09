@@ -101,6 +101,48 @@ async def enqueue_backfill(
     }
 
 
+async def _resolve_backfill_trace_cursor(
+    pg: Any,
+    org_id: str,
+    window_start: Any,
+    window_end: Any,
+    *,
+    traces_done: int,
+    last_trace_id: str | None,
+) -> str | None:
+    """Resume cursor for keyset pagination over ``trace_id``.
+
+    When ``last_trace_id`` is already known (same batch loop), use it directly.
+    Otherwise derive the last processed id from ``traces_done`` so jobs remain
+    resumable without storing a separate cursor column.
+    """
+    if last_trace_id:
+        return last_trace_id
+    if traces_done <= 0:
+        return None
+    row = await pg.fetchrow(
+        """
+        SELECT trace_id FROM (
+            SELECT DISTINCT trace_id
+            FROM telemetry_events
+            WHERE tenant_id = $1
+              AND timestamp >= $2
+              AND timestamp <= $3
+            ORDER BY trace_id
+            OFFSET $4
+            LIMIT 1
+        ) sub
+        """,
+        org_id,
+        window_start,
+        window_end,
+        traces_done - 1,
+    )
+    if row is None:
+        return None
+    return str(row["trace_id"])
+
+
 async def get_backfill_job(
     org_id: str, signal_id: str, job_id: str
 ) -> dict[str, Any] | None:
@@ -194,6 +236,14 @@ class SignalBackfillWorker:
         window_start = job["window_start"]
         window_end = job["window_end"]
         traces_done = int(job["traces_done"] or 0)
+        last_trace_id = await _resolve_backfill_trace_cursor(
+            pg,
+            org_id,
+            window_start,
+            window_end,
+            traces_done=traces_done,
+            last_trace_id=None,
+        )
 
         await pg.execute(
             "UPDATE signal_backfill_jobs SET status = 'running' WHERE id = $1",
@@ -208,14 +258,14 @@ class SignalBackfillWorker:
                 WHERE tenant_id = $1
                   AND timestamp >= $2
                   AND timestamp <= $3
+                  AND ($4::text IS NULL OR trace_id > $4)
                 ORDER BY trace_id
-                OFFSET $4
                 LIMIT $5
                 """,
                 org_id,
                 window_start,
                 window_end,
-                traces_done,
+                last_trace_id,
                 _MAX_TRACES_PER_MINUTE,
             )
         except Exception as exc:

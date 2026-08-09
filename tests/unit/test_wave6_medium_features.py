@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── 1. Time-travel _re_execute_step ────────────────────────────────
 
 
@@ -29,13 +28,9 @@ class TestReExecuteStep:
         replayer = TraceReplayer()
 
         fake_resp = MagicMock()
-        fake_resp.text = "hello world"
-        fake_resp.input_tokens = 10
-        fake_resp.output_tokens = 5
-        fake_resp.cost_usd = 0.0001
-
-        fake_gw = MagicMock()
-        fake_gw.complete = AsyncMock(return_value=fake_resp)
+        fake_resp.content = "hello world"
+        fake_resp.usage.total_tokens = 15
+        fake_resp.usage.cost = 0.0001
 
         step = {
             "payload": {
@@ -46,10 +41,13 @@ class TestReExecuteStep:
             },
         }
 
-        with patch("eden.api.routes.gateway.get_ai_gateway", return_value=fake_gw):
+        with patch(
+            "eden.llm.internal_router.route_async",
+            new=AsyncMock(return_value=fake_resp),
+        ) as route:
             result = await replayer._re_execute_step(org_id="org1", step=step)
 
-        assert fake_gw.complete.called
+        assert route.called
         assert result["tokens_used"] == 15
         assert result["cost_usd"] == pytest.approx(0.0001)
         assert len(result["response_hash"]) == 32
@@ -82,7 +80,7 @@ class TestReExecuteStep:
         }
 
         with patch(
-            "eden.api.routes.gateway.get_ai_gateway",
+            "eden.llm.internal_router.route_async",
             side_effect=RuntimeError("provider down"),
         ):
             result = await replayer._re_execute_step(org_id="org1", step=step)
@@ -100,13 +98,9 @@ class TestReExecuteStep:
         replayer = TraceReplayer()
 
         fake_resp = MagicMock()
-        fake_resp.text = "parsed"
-        fake_resp.input_tokens = 5
-        fake_resp.output_tokens = 3
-        fake_resp.cost_usd = 0.0
-
-        fake_gw = MagicMock()
-        fake_gw.complete = AsyncMock(return_value=fake_resp)
+        fake_resp.content = "parsed"
+        fake_resp.usage.total_tokens = 8
+        fake_resp.usage.cost = 0.0
 
         step = {
             "payload": json.dumps(
@@ -114,10 +108,16 @@ class TestReExecuteStep:
             ),
         }
 
-        with patch("eden.api.routes.gateway.get_ai_gateway", return_value=fake_gw):
+        with patch(
+            "eden.llm.internal_router.route_async",
+            new=AsyncMock(return_value=fake_resp),
+        ) as route:
             result = await replayer._re_execute_step(org_id="org1", step=step)
 
-        assert fake_gw.complete.called
+        assert route.called
+        # The JSON-string payload must be parsed into a real prompt — assert
+        # the routed prompt carries the parsed user message content.
+        assert "Hi" in route.await_args.args[1]
         assert result["tokens_used"] == 8
 
 

@@ -5,8 +5,7 @@ import type { LabelingQueue } from "@/lib/api/labeling";
 
 /**
  * F50 kanban queue table for `/labeling` (FEAT-82). Selecting a row
- * hands off to the annotator work surface at `/labeling/annotate` —
- * see the page shell for the navigation wiring.
+ * opens the kanban board at `/labeling/queues/[queueId]`.
  */
 export function LabelingQueueTable({
   queues,

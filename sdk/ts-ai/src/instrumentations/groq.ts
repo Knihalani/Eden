@@ -111,7 +111,7 @@ export function wrapGroq<T extends object>(client: T, opts: TraceOptions = {}): 
   return proxy;
 }
 
-function _instrumentedCreate(
+export function _instrumentedCreate(
   originalCreate: (...args: any[]) => any,
   self: unknown,
   args: any[],

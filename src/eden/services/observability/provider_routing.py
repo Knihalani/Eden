@@ -147,6 +147,50 @@ class ProviderRoutingService:
             logger.debug("provider_routing.record_attempt failed: %s", exc)
             return None
 
+    async def ingest_attempt(
+        self,
+        org_id: str,
+        *,
+        router: str,
+        payload: dict[str, Any],
+        headers: dict[str, Any] | None = None,
+        attributes: dict[str, Any] | None = None,
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> str | None:
+        """Decode an external-router payload and persist one attempt.
+
+        Observe-not-replace: the decoder only translates the
+        customer's LiteLLM / Portkey / OpenRouter trace into the
+        canonical ``record_attempt`` shape — no routing decisions
+        are made here.
+        """
+        from eden.services.observability.provider_routing_decoders import (
+            decode_provider_routing_payload,
+        )
+
+        decoded = decode_provider_routing_payload(
+            router,  # type: ignore[arg-type]
+            payload,
+            headers=headers,
+            attributes=attributes,
+            trace_id=trace_id,
+            span_id=span_id,
+        )
+        if decoded["ignored"]:
+            return None
+        return await self.record_attempt(
+            org_id,
+            trace_id=decoded["trace_id"],
+            span_id=decoded["span_id"],
+            attempted_provider=decoded["attempted_provider"],
+            attempted_model=decoded["attempted_model"],
+            sequence_index=decoded["sequence_index"],
+            decision=decoded["decision"],
+            failure_reason=decoded["failure_reason"],
+            latency_ms=decoded["latency_ms"],
+        )
+
     async def get_attempts_for_trace(
         self,
         trace_id: str,

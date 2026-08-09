@@ -369,6 +369,8 @@ async def test_replay_case_signature_passes_when_absent(monkeypatch) -> None:
     assert result.status == "passed"
     assert result.reason == "replay_signature_absent"
     assert result.traces_checked == 1
+    assert result.regenerated_output == "Checkout complete."
+    assert result.to_json()["regenerated_output"] == "Checkout complete."
     # The stored input was replayed verbatim — not a synthesized prompt.
     assert calls and "checkout my cart" in calls[0]["prompt"]
 
@@ -464,14 +466,10 @@ async def test_gateway_complete_routes_through_internal_llm_client(
 async def test_gateway_complete_does_not_use_dormant_ai_gateway(
     monkeypatch,
 ) -> None:
-    """Regression guard for FEAT-26: the helper must never reach
-    ``AIGateway.complete()`` — that path unconditionally raises
-    ``ProviderUnavailableError`` because no provider is ever
-    registered (``register_providers_from_env`` has no callers).
+    """Regression guard for FEAT-137: the helper must never reach
+    the deleted ``AIGateway.complete()`` path.
     """
     from unittest.mock import AsyncMock, MagicMock
-
-    from eden.llmops.ai_gateway import ProviderUnavailableError
 
     def _boom_get_ai_gateway():
         raise AssertionError(
@@ -490,8 +488,5 @@ async def test_gateway_complete_does_not_use_dormant_ai_gateway(
         AsyncMock(return_value=fake_resp),
     )
 
-    # Would raise ProviderUnavailableError (or the AssertionError above)
-    # if this still routed through AIGateway.
     out = await rv._gateway_complete(ORG, "test-model", "prompt")
     assert out["text"] == "ok"
-    assert ProviderUnavailableError  # imported to document the old failure mode

@@ -22,7 +22,7 @@ Recurring violations gate (weekly; see .github/workflows/autonomy-baseline.yml):
 
 The violation counts (issues in ``triaged`` with an empty triage
 payload; issues in ``fix_pending`` older than 24h; issues stuck in
-``learning`` with no ``regression_eval_cases`` / N01 row) are printed as
+``learning`` with no ``dataset_items`` / N01 row) are printed as
 a table (or JSON with ``--json``). ``--strict`` exits 1 when any count
 is > 0 — or cannot be measured, which strict treats as a failure too
 (you cannot prove the loop clean without a database). ``--snapshot DIR``
@@ -172,7 +172,7 @@ QUERIES: dict[str, tuple[str, str]] = {
 # name -> (description, SQL returning a single row with an ``n`` count).
 # Table/column names verified against the alembic migrations:
 #   agent_issues            084_agent_issues.py (+136 statuses incl. learning)
-#   regression_eval_cases   092_market_ready_consolidated.py (source_issue_id)
+#   dataset_items           101_eval_loop.py (origin_issue_id; FEAT-74 N01)
 VIOLATIONS: dict[str, tuple[str, str]] = {
     "triaged_empty_payload": (
         "issues in `triaged` whose triage payload is empty or an error stub",
@@ -193,14 +193,14 @@ VIOLATIONS: dict[str, tuple[str, str]] = {
         """,
     ),
     "learning_without_n01_case": (
-        "issues stuck in `learning` with no regression_eval_cases (N01) row "
+        "issues stuck in `learning` with no dataset_items (N01) row "
         "(the documented orchestrator._flywheel_on_resolved failure signature)",
         """
         SELECT COUNT(*) AS n FROM agent_issues i
         WHERE i.status = 'learning'
           AND NOT EXISTS (
-              SELECT 1 FROM regression_eval_cases c
-              WHERE c.org_id = i.org_id AND c.source_issue_id = i.id
+              SELECT 1 FROM dataset_items di
+              WHERE di.org_id = i.org_id AND di.origin_issue_id = i.id
           )
         """,
     ),

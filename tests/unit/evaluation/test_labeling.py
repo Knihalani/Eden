@@ -54,7 +54,9 @@ What's covered:
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from typing import Any, Optional
 from unittest.mock import AsyncMock, patch
 
@@ -327,13 +329,34 @@ class FakePg:
             return "INSERT 0 1"
         if sql.startswith("update labeling_items"):
             # UPDATE statements: handle by SQL structure.
+            if "annotations_required = $3" in sql and "status = 'pending'" in sql:
+                item_id, org_id, new_required = args[0], args[1], args[2]
+                item = self._items.get(item_id)
+                if item is not None and item["org_id"] == org_id:
+                    item["annotations_required"] = new_required
+                    item["status"] = "pending"
+                    item["assigned_to"] = None
+                    return "UPDATE 1"
+                return "UPDATE 0"
+            if "status = 'pending'" in sql and "assigned_to = null" in sql:
+                item_id = args[0]
+                item = self._items.get(item_id)
+                if item is not None and item["status"] == "in_progress":
+                    item["status"] = "pending"
+                    item["assigned_to"] = None
+                    return "UPDATE 1"
+                return "UPDATE 0"
             if "status = 'in_progress'" in sql:
                 item_id = args[0]
                 item = self._items.get(item_id)
-                # Mirror the real WHERE id = $1 AND status = 'pending'
-                # guard: a concurrent claim that already flipped the
-                # item's status makes this a no-op (0 rows).
-                if item is not None and item["status"] == "pending":
+                # Mirror the real WHERE id = $1 AND status IN
+                # ('pending', 'in_progress') guard (FEAT-78: also allows
+                # reclaiming an already in_progress item, e.g. after its
+                # claimant's lease expired). Any other status (completed,
+                # skipped) makes this a no-op (0 rows) — as does a
+                # concurrent claim that already won when this same check
+                # runs a second time for a *different* candidate row.
+                if item is not None and item["status"] in ("pending", "in_progress"):
                     item["status"] = "in_progress"
                     return "UPDATE 1"
                 return "UPDATE 0"
@@ -367,13 +390,24 @@ class FakePg:
             if (item_id, ann_id) in self._assignments:
                 return {"x": 1}
             return None
-        if "select annotations_required" in sql:
+        if "from labeling_items" in sql and "where id = $1" in sql and "join" not in sql and "label_schema" in sql:
+            item_id = args[0]
+            item = self._items.get(item_id)
+            if item is not None:
+                return dict(item)
+            return None
+        if "annotations_required" in sql and "from labeling_items" in sql:
             item_id = args[0]
             item = self._items.get(item_id)
             if item is None:
                 return None
             if len(args) > 1 and item["org_id"] != args[1]:
                 return None
+            if "select id," in sql or sql.strip().startswith("select id,"):
+                return {
+                    "id": item["id"],
+                    "annotations_required": item["annotations_required"],
+                }
             return {"annotations_required": item["annotations_required"]}
         if "from annotations" in sql and "where item_id" in sql and "annotator_id" in sql:
             item_id, ann_id = args
@@ -411,8 +445,14 @@ class FakePg:
             # Filter by org_id + status + assigned_to.
             org_id = args[0]
             rows = [r for r in self._items.values() if r["org_id"] == org_id]
-            if "status = 'pending'" in sql:
+            if "status in ('pending', 'in_progress')" in sql:
+                rows = [
+                    r for r in rows if r["status"] in ("pending", "in_progress")
+                ]
+            elif "status = 'pending'" in sql:
                 rows = [r for r in rows if r["status"] == "pending"]
+            elif "status = 'in_progress'" in sql:
+                rows = [r for r in rows if r["status"] == "in_progress"]
             if "assigned_to = $2" in sql:
                 uid = args[1]
                 rows = [r for r in rows if r.get("assigned_to") == uid]
@@ -422,7 +462,7 @@ class FakePg:
                 limit = args[-1]
                 rows = rows[:limit]
             return [dict(r) for r in rows]
-        if "select i.id, i.payload, count(*)" in sql:
+        if "select i.id, i.payload" in sql and "count(*)" in sql:
             org_id = args[0]
             # Group by item, count annotations.
             counts: dict[str, int] = {}
@@ -430,14 +470,21 @@ class FakePg:
                 item = self._items.get(iid)
                 if item and item["org_id"] == org_id:
                     counts[iid] = counts.get(iid, 0) + 1
+            min_n = 2
+            if "having count(*) >= 1" in sql:
+                min_n = 1
             out = []
             for iid, n in counts.items():
-                if n >= 2:
+                if n >= min_n:
                     out.append({
                         "id": iid,
                         "payload": self._items[iid]["payload"],
+                        "annotations_required": self._items[iid]["annotations_required"],
                         "n": n,
                     })
+            if "any($2::uuid[])" in sql:
+                item_ids = args[1]
+                out = [r for r in out if r["id"] in item_ids]
             return out
         if "select item_id, annotator_id, label" in sql:
             # All annotations for the given items.
@@ -450,6 +497,16 @@ class FakePg:
                 }
                 for (iid, aid), row in self._annotations.items()
                 if iid in item_ids
+            ]
+        if "select item_id, count(*)::int as annotations_count" in sql:
+            item_ids = args[0]
+            counts: dict[str, int] = {}
+            for (iid, _aid), _row in self._annotations.items():
+                if iid in item_ids:
+                    counts[iid] = counts.get(iid, 0) + 1
+            return [
+                {"item_id": iid, "annotations_count": n}
+                for iid, n in counts.items()
             ]
         if "select a.item_id, a.annotator_id" in sql:
             org_id = args[0]
@@ -475,6 +532,39 @@ class FakePg:
                     })
             return rows[:limit]
         return []
+
+
+class RacyFakePg(FakePg):
+    """FakePg that yields to the event loop on every I/O call.
+
+    FEAT-136: plain ``async def`` methods that never actually suspend
+    (no real I/O) run to completion in a single scheduler turn even
+    under ``asyncio.gather`` — two "concurrent" ``pop()`` calls would
+    just execute sequentially, back-to-back, defeating the purpose of a
+    race test. Inserting a genuine ``await asyncio.sleep(0)`` at every
+    query forces the event loop to interleave multiple in-flight
+    ``pop()`` coroutines (their SELECTs can both observe the same
+    'pending' item before either one's UPDATE claims it), so the
+    exclusivity guards in ``LabelingService.pop`` are actually exercised
+    under contention rather than trivially passing by accident of
+    scheduling order.
+    """
+
+    async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
+        await asyncio.sleep(0)
+        return await super().fetch(query, *args)
+
+    async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
+        await asyncio.sleep(0)
+        return await super().fetchrow(query, *args)
+
+    async def fetchval(self, query: str, *args: Any) -> Any:
+        await asyncio.sleep(0)
+        return await super().fetchval(query, *args)
+
+    async def execute(self, query: str, *args: Any) -> str:
+        await asyncio.sleep(0)
+        return await super().execute(query, *args)
 
 
 class TestLabelingService:
@@ -579,6 +669,22 @@ class TestLabelingService:
         assert pg._items[item_id]["status"] == "skipped"
 
     @pytest.mark.asyncio
+    async def test_skip_bulk_marks_all_skipped(self) -> None:
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_a = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        item_b = await svc.seed(org_id="o-1", payload={"x": 2}, label_schema={})
+        count = await svc.skip_bulk(
+            org_id="o-1",
+            item_ids=[item_a, item_b],
+            annotator_id="u-1",
+            reason="noise",
+        )
+        assert count == 2
+        assert pg._items[item_a]["status"] == "skipped"
+        assert pg._items[item_b]["status"] == "skipped"
+
+    @pytest.mark.asyncio
     async def test_iaa_perfect_agreement(self) -> None:
         pg = self._pg()
         svc = LabelingService(pg)
@@ -615,6 +721,74 @@ class TestLabelingService:
         report = await svc.compute_iaa(org_id="o-1")
         assert report.item_count == 0
         assert report.kappa == 0.0
+
+    @pytest.mark.asyncio
+    async def test_escalate_bumps_required_and_requeues(self) -> None:
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(
+            org_id="o-1",
+            payload={"x": 1},
+            label_schema={},
+            annotations_required=2,
+        )
+        await svc.annotate(org_id="o-1", item_id=item_id, annotator_id="u-1", label="up")
+        await svc.annotate(org_id="o-1", item_id=item_id, annotator_id="u-2", label="down")
+        item = await svc.escalate(org_id="o-1", item_id=item_id)
+        assert item.annotations_required == 3
+        assert item.status == "pending"
+        popped = await svc.pop(org_id="o-1", annotator_id="u-3", limit=5)
+        assert any(i.id == item_id for i in popped)
+
+    @pytest.mark.asyncio
+    async def test_iaa_per_item_includes_annotations_required(self) -> None:
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(
+            org_id="o-1", payload={"x": 1}, label_schema={}, annotations_required=3,
+        )
+        await svc.annotate(org_id="o-1", item_id=item_id, annotator_id="u-1", label="up")
+        await svc.annotate(org_id="o-1", item_id=item_id, annotator_id="u-2", label="down")
+        report = await svc.compute_iaa(org_id="o-1", item_ids=[item_id])
+        entry = report.per_item[item_id]
+        assert entry["annotations_required"] == 3.0
+        assert entry["annotations_count"] == 2.0
+
+    @pytest.mark.asyncio
+    async def test_iaa_per_item_includes_single_annotation_count(self) -> None:
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        await svc.annotate(org_id="o-1", item_id=item_id, annotator_id="u-1", label="up")
+        report = await svc.compute_iaa(org_id="o-1", item_ids=[item_id])
+        assert report.per_item[item_id]["annotations_count"] == 1.0
+        assert "agreement" not in report.per_item[item_id]
+
+    @pytest.mark.asyncio
+    async def test_pop_active_learning_prefers_disagreement(self) -> None:
+        pg = self._pg()
+        svc = LabelingService(pg)
+        agree_id = await svc.seed(
+            org_id="o-1", payload={"confidence": 0.9}, label_schema={},
+            annotations_required=3,
+        )
+        disagree_id = await svc.seed(
+            org_id="o-1", payload={"confidence": 0.1}, label_schema={},
+            annotations_required=3,
+        )
+        plain_id = await svc.seed(
+            org_id="o-1", payload={}, label_schema={}, annotations_required=3,
+        )
+        await svc.annotate(org_id="o-1", item_id=agree_id, annotator_id="u-a", label="up")
+        await svc.annotate(org_id="o-1", item_id=agree_id, annotator_id="u-b", label="up")
+        await svc.annotate(org_id="o-1", item_id=disagree_id, annotator_id="u-a", label="up")
+        await svc.annotate(org_id="o-1", item_id=disagree_id, annotator_id="u-b", label="down")
+        items = await svc.pop(
+            org_id="o-1", annotator_id="u-1", limit=2, strategy="active_learning",
+        )
+        assert len(items) == 2
+        assert items[0].id == disagree_id
+        assert items[1].id in {agree_id, plain_id}
 
     @pytest.mark.asyncio
     async def test_export_returns_jsonl(self) -> None:
@@ -687,13 +861,21 @@ class TestLabelingService:
         """FEAT-77: if the UPDATE ... WHERE status = 'pending' guard
         matches 0 rows (a concurrent pop() already claimed the item),
         pop() must not return that item to the caller."""
+        import eden.evaluation.labeling_leases as leases
+
         pg = self._pg()
         svc = LabelingService(pg)
         item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
         # Simulate a concurrent writer that already flipped the item
         # to in_progress between the SELECT and the UPDATE.
         pg._items[item_id]["status"] = "in_progress"
-        items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        pg._items[item_id]["assigned_to"] = "u-9"
+        lease_key = f"labeling:lease:o-1:{item_id}"
+        leases._memory_leases[lease_key] = ("u-9", time.time() + 600)
+        try:
+            items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        finally:
+            leases._memory_leases.pop(lease_key, None)
         assert items == []
         assert len(pg._assignments) == 0
 
@@ -710,6 +892,201 @@ class TestLabelingService:
         assert items[0].status == "in_progress"
         assert pg._items[item_id]["status"] == "in_progress"
         assert len(pg._assignments) == 1
+
+    # ── Concurrency / race tests (FEAT-136) ────────────────────
+
+    @pytest.mark.asyncio
+    async def test_pop_concurrent_gather_exclusive_claim_single_item(self) -> None:
+        """Two annotators race for the SAME pending item via
+        asyncio.gather(). Exactly one must claim it; the other gets
+        nothing back, and no double assignment/status-flip occurs."""
+        pg = RacyFakePg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        with patch(
+            "eden.storage.redis.get_redis_client",
+            new=AsyncMock(return_value=None),
+        ):
+            result_a, result_b = await asyncio.gather(
+                svc.pop(org_id="o-1", annotator_id="u-1", limit=1),
+                svc.pop(org_id="o-1", annotator_id="u-2", limit=1),
+            )
+        winners = [r for r in (result_a, result_b) if r]
+        losers = [r for r in (result_a, result_b) if not r]
+        assert len(winners) == 1, "exactly one concurrent pop() must claim the item"
+        assert len(losers) == 1
+        assert winners[0][0].id == item_id
+        assert winners[0][0].status == "in_progress"
+        # The item was flipped exactly once (not fought over / reverted).
+        assert pg._items[item_id]["status"] == "in_progress"
+        # Exactly one assignment row was recorded — no double-claim.
+        assert len(pg._assignments) == 1
+
+    @pytest.mark.asyncio
+    async def test_pop_concurrent_gather_no_overlap_across_many_items(self) -> None:
+        """Three annotators race for three pending items concurrently.
+        Every item is claimed by exactly one annotator; nobody gets an
+        item someone else already has."""
+        pg = RacyFakePg()
+        svc = LabelingService(pg)
+        item_ids = [
+            await svc.seed(org_id="o-1", payload={"x": i}, label_schema={})
+            for i in range(3)
+        ]
+        with patch(
+            "eden.storage.redis.get_redis_client",
+            new=AsyncMock(return_value=None),
+        ):
+            results = await asyncio.gather(
+                svc.pop(org_id="o-1", annotator_id="u-1", limit=3),
+                svc.pop(org_id="o-1", annotator_id="u-2", limit=3),
+                svc.pop(org_id="o-1", annotator_id="u-3", limit=3),
+            )
+        claimed_ids = [item.id for r in results for item in r]
+        # Every seeded item claimed exactly once, in total, across all
+        # concurrent callers — no duplicates, nothing missed.
+        assert sorted(claimed_ids) == sorted(item_ids)
+        assert len(claimed_ids) == len(set(claimed_ids))
+        for iid in item_ids:
+            assert pg._items[iid]["status"] == "in_progress"
+        # One assignment row per item, no more.
+        assert len(pg._assignments) == len(item_ids)
+
+    @pytest.mark.asyncio
+    async def test_pop_reclaims_item_after_lease_expiry_for_assigned_annotator(
+        self,
+    ) -> None:
+        """FEAT-78/FEAT-136: an item stuck 'in_progress' (its claimant's
+        session dropped and the Redis lease TTL elapsed) is reclaimable
+        by pop() when the SAME (assigned_to) annotator asks again — the
+        expired lease must not permanently strand the item."""
+        import eden.evaluation.labeling_leases as leases
+
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        # Simulate a stuck claim: a prior pop() flipped the item to
+        # in_progress and assigned it to u-1, but the process died
+        # before annotate()/release_lease() ran.
+        pg._items[item_id]["status"] = "in_progress"
+        pg._items[item_id]["assigned_to"] = "u-1"
+        lease_key = f"labeling:lease:o-1:{item_id}"
+        leases._memory_leases[lease_key] = ("u-1", time.time() - 10)  # expired
+        try:
+            with patch(
+                "eden.storage.redis.get_redis_client",
+                new=AsyncMock(return_value=None),
+            ):
+                items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        finally:
+            leases._memory_leases.pop(lease_key, None)
+        assert len(items) == 1
+        assert items[0].id == item_id
+        assert items[0].status == "in_progress"
+
+    @pytest.mark.asyncio
+    async def test_pop_does_not_reclaim_stuck_item_for_a_different_annotator(
+        self,
+    ) -> None:
+        """An item stuck in_progress and assigned to u-1 must NOT be
+        handed to a different annotator (u-2) while u-1 still holds
+        an active lease."""
+        import eden.evaluation.labeling_leases as leases
+
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        pg._items[item_id]["status"] = "in_progress"
+        pg._items[item_id]["assigned_to"] = "u-1"
+        lease_key = f"labeling:lease:o-1:{item_id}"
+        leases._memory_leases[lease_key] = ("u-1", time.time() + 600)
+        try:
+            with patch(
+                "eden.storage.redis.get_redis_client",
+                new=AsyncMock(return_value=None),
+            ):
+                items = await svc.pop(org_id="o-1", annotator_id="u-2", limit=5)
+        finally:
+            leases._memory_leases.pop(lease_key, None)
+        assert items == []
+        assert pg._items[item_id]["assigned_to"] == "u-1"
+        assert pg._items[item_id]["status"] == "in_progress"
+
+    @pytest.mark.asyncio
+    async def test_pop_reclaims_orphan_in_progress_for_different_annotator(
+        self,
+    ) -> None:
+        """FEAT-78: when no active lease exists, sweep reverts orphaned
+        in_progress items so another annotator can claim them."""
+        import eden.evaluation.labeling_leases as leases
+
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        pg._items[item_id]["status"] = "in_progress"
+        pg._items[item_id]["assigned_to"] = "u-1"
+        lease_key = f"labeling:lease:o-1:{item_id}"
+        leases._memory_leases[lease_key] = ("u-1", time.time() - 10)  # expired
+        try:
+            with patch(
+                "eden.storage.redis.get_redis_client",
+                new=AsyncMock(return_value=None),
+            ):
+                items = await svc.pop(org_id="o-1", annotator_id="u-2", limit=5)
+        finally:
+            leases._memory_leases.pop(lease_key, None)
+        assert len(items) == 1
+        assert items[0].id == item_id
+        assert items[0].status == "in_progress"
+        assert pg._items[item_id]["status"] == "in_progress"
+        assert len(pg._assignments) == 1
+
+    @pytest.mark.asyncio
+    async def test_sweep_orphaned_in_progress_reverts_unleased_rows(self) -> None:
+        """Cron-friendly sweep reverts stranded in_progress rows."""
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        pg._items[item_id]["status"] = "in_progress"
+        pg._items[item_id]["assigned_to"] = "u-1"
+        with patch(
+            "eden.evaluation.labeling_leases.has_active_lease",
+            new=AsyncMock(return_value=False),
+        ):
+            n = await svc.sweep_orphaned_in_progress("o-1")
+        assert n == 1
+        assert pg._items[item_id]["status"] == "pending"
+        assert pg._items[item_id]["assigned_to"] is None
+
+    @pytest.mark.asyncio
+    async def test_pop_rowcount_parse_failure_fails_closed(self) -> None:
+        """Fail-open/rowcount gap: if the UPDATE result string can't be
+        parsed into a rowcount (unexpected driver response shape), pop()
+        must treat that as rowcount=0 and decline the item rather than
+        silently trusting an unparsed claim."""
+        pg = self._pg()
+        svc = LabelingService(pg)
+        item_id = await svc.seed(org_id="o-1", payload={"x": 1}, label_schema={})
+        real_execute = pg.execute
+
+        async def _garbled_execute(query: str, *args: Any) -> str:
+            result = await real_execute(query, *args)
+            sql = " ".join(query.strip().lower().split())
+            if "status = 'in_progress'" in sql:
+                # Simulate a driver returning something with no
+                # trailing integer rowcount token.
+                return "UPDATE"
+            return result
+
+        pg.execute = _garbled_execute  # type: ignore[method-assign]
+        items = await svc.pop(org_id="o-1", annotator_id="u-1", limit=5)
+        assert items == []
+        assert len(pg._assignments) == 0
+        # The underlying row WAS flipped by the real update (the parse
+        # failure is purely about pop()'s own rowcount bookkeeping /
+        # return value, not the database write itself) — but pop()
+        # still must not report the item as claimed to the caller.
+        assert pg._items[item_id]["status"] == "in_progress"
 
 
 # ── IAA report dataclass ─────────────────────────────────────────

@@ -288,6 +288,7 @@ class DatasetHub:
         expected_output: str = "",
         payload: dict[str, Any] | None = None,
         origin_trace_id: str | None = None,
+        split: str | None = None,
     ) -> dict[str, Any]:
         """Insert a pre-extracted item into an existing dataset.
 
@@ -300,12 +301,12 @@ class DatasetHub:
         row_id = str(uuid.uuid4())
         client = await self._client()
         if client is None:
-            return {"dataset_id": dataset_id, "row_id": row_id}
+            return {"dataset_id": dataset_id, "row_id": row_id, "split": split}
         await client.execute(
             """
             INSERT INTO dataset_items
-                (id, dataset_id, input, expected_output, payload, origin_trace_id)
-            VALUES ($1::uuid, $2::uuid, $3, $4, $5::jsonb, $6)
+                (id, dataset_id, input, expected_output, payload, origin_trace_id, split)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5::jsonb, $6, $7)
             """,
             row_id,
             dataset_id,
@@ -313,12 +314,13 @@ class DatasetHub:
             expected_output,
             json.dumps(payload or {}, default=str),
             origin_trace_id,
+            split,
         )
         await client.execute(
             "UPDATE datasets SET updated_at = NOW(), version = version + 1 WHERE id = $1::uuid",
             dataset_id,
         )
-        return {"dataset_id": dataset_id, "row_id": row_id}
+        return {"dataset_id": dataset_id, "row_id": row_id, "split": split}
 
     async def list_dataset_items(
         self,
@@ -326,6 +328,7 @@ class DatasetHub:
         *,
         limit: int = 1000,
         offset: int = 0,
+        split: str | None = None,
     ) -> list[dict[str, Any]]:
         """Read back items for a dataset.
 
@@ -338,17 +341,41 @@ class DatasetHub:
             return []
         rows = await client.fetch(
             """
-            SELECT id, dataset_id, input, expected_output, payload, origin_trace_id, created_at
+            SELECT id, dataset_id, input, expected_output, payload,
+                   origin_trace_id, split, created_at
             FROM dataset_items
             WHERE dataset_id = $1::uuid
+              AND ($4::text IS NULL OR split = $4)
             ORDER BY created_at ASC
             LIMIT $2 OFFSET $3
             """,
             dataset_id,
             limit,
             offset,
+            split,
         )
         return [dict(r) for r in rows]
+
+    async def get_dataset_item(
+        self,
+        dataset_id: str,
+        item_id: str,
+    ) -> dict[str, Any] | None:
+        """Load one dataset item by id, scoped to ``dataset_id``."""
+        client = await self._client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            """
+            SELECT id, dataset_id, input, expected_output, payload,
+                   origin_trace_id, split, created_at
+            FROM dataset_items
+            WHERE dataset_id = $1::uuid AND id = $2::uuid
+            """,
+            dataset_id,
+            item_id,
+        )
+        return dict(row) if row else None
 
     async def get_dataset_by_id(self, dataset_id: str) -> DatasetRecord | None:
         """Look up a dataset without an ``org_id`` filter.
@@ -395,7 +422,7 @@ class DatasetHub:
             raise ValueError("dataset not found")
         rows = await client.fetch(
             """
-            SELECT id, input, expected_output, payload, origin_trace_id
+            SELECT id, input, expected_output, payload, origin_trace_id, split
             FROM dataset_items WHERE dataset_id = $1::uuid ORDER BY created_at
             """,
             dataset_id,

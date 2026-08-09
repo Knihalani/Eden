@@ -87,7 +87,7 @@ async def _fetch_batch(
             ORDER BY event_id
             LIMIT $1
         """
-        return await client.fetch(sql, limit)
+        return list(await client.fetch(sql, limit))
 
     sql = """
         SELECT event_id, tenant_id, attributes
@@ -96,7 +96,7 @@ async def _fetch_batch(
         ORDER BY event_id
         LIMIT $2
     """
-    return await client.fetch(sql, after_event_id, limit)
+    return list(await client.fetch(sql, after_event_id, limit))
 
 
 async def run(dry_run: bool, limit: int | None, batch_size: int) -> int:
@@ -153,6 +153,7 @@ async def run(dry_run: bool, limit: int | None, batch_size: int) -> int:
         print(f"[dry-run] would patch {matched} Typesense document(s).")
         return 0
 
+    assert ts is not None  # dry-run returned above; missing Typesense returned 2
     if pairs:
         patched = await ts.backfill_user_ids(pairs)
         print(f"Patched {patched} Typesense document(s).")

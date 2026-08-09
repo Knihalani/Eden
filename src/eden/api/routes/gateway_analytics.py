@@ -129,26 +129,5 @@ async def _cache_stats_safe() -> dict[str, Any] | None:
 
 
 async def _provider_health_safe() -> list[dict[str, Any]]:
-    try:
-        from eden.api.routes.llmops import _ai_gateway
-
-        health = _ai_gateway.get_provider_health()
-        out: list[dict[str, Any]] = []
-        for h in health or []:
-            if hasattr(h, "to_dict"):
-                out.append(h.to_dict())
-            else:
-                out.append(
-                    {
-                        "provider": str(getattr(h, "provider", h)),
-                        "healthy": bool(getattr(h, "healthy", False)),
-                        "avg_latency_ms": float(
-                            getattr(h, "avg_latency_ms", 0) or 0
-                        ),
-                        "error_rate": float(getattr(h, "error_rate", 0) or 0),
-                    }
-                )
-        return out
-    except Exception as exc:
-        logger.debug("gateway overview health failed: %s", redact_all(str(exc)))
-        return []
+    # FEAT-137: routing health retired with AIGateway multi-provider engine.
+    return []

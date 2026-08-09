@@ -429,35 +429,32 @@ class TraceReplayer:
                 "reason": "no_usable_prompt_content",
             }
 
-        model = str(
-            _first(
-                payload.get("model"),
-                payload.get("model_version"),
-                request.get("model"),
-                request.get("model_version"),
-            )
-            or ""
-        )
+        # NOTE: the recorded model is intentionally not forwarded —
+        # ``route_async`` selects the slot/tier itself (time_travel_replay
+        # is pinned to the fast slot).
         try:
-            from eden.api.routes.gateway import get_ai_gateway
-            from eden.llmops.ai_gateway import ModelRequest
+            from eden.llm.internal_router import route_async
 
-            gw = get_ai_gateway()
-            req = ModelRequest(
-                model_family=model.split("/")[-1].split(":")[0] if model else "default",
-                model_version=model,
-                prompt=prompt,
-                tenant_id=org_id,
-                estimated_tokens=len(prompt.split()),
+            resp = await route_async(
+                "time_travel_replay",
+                prompt,
+                slot="fast",
+                org_id=org_id or None,
+                feature="time_travel_replay",
+                output_type="text",
+                requires_quality_check=False,
             )
-            resp = await gw.complete(req)
+            response_text = resp.content or ""
             response_hash = _hashlib.sha256(
-                resp.text.encode("utf-8", errors="replace")
+                response_text.encode("utf-8", errors="replace")
             ).hexdigest()[:32]
+            tokens_used = int(getattr(resp.usage, "total_tokens", 0) or 0)
+            if not tokens_used:
+                tokens_used = len(response_text.split())
             return {
                 "response_hash": response_hash,
-                "tokens_used": resp.input_tokens + resp.output_tokens,
-                "cost_usd": float(resp.cost_usd or 0.0),
+                "tokens_used": tokens_used,
+                "cost_usd": float(getattr(resp.usage, "cost", 0.0) or 0.0),
                 "re_executed": True,
                 "cannot_replay": False,
             }

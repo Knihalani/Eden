@@ -481,7 +481,3 @@ async def stop_consumer() -> None:
                 await _TASK
     _TASK = None
     _STOP = None
-
-
-def is_consumer_running() -> bool:
-    return _TASK is not None and not _TASK.done()

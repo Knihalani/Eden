@@ -1,4 +1,10 @@
-"""Intelligence Gap — RCA & Incidents (Cat 2) routes."""
+"""Intelligence Gap — RCA & Incidents (Cat 2) routes.
+
+Tier-aware reads: trace events are fetched via
+:func:`eden.insights.rca._common._fetch_trace_events`, which serves hot
+Postgres within ``warm_days`` and cold-archive rehydrate past that window
+(OPT-61 / cold tier).
+"""
 
 from __future__ import annotations
 
@@ -21,6 +27,7 @@ from eden.insights.rca._common import (
     _not_found_envelope,
     _ok_envelope,
     _resolve_incident_cluster,
+    event_is_failure,
 )
 from eden.insights.rca.analyzer import RootCauseAnalyzer
 from eden.services.observability import get_a2a_service
@@ -76,11 +83,10 @@ async def explain(
     return await _rca.explain(org_id, trace_id)
 
 
-def _event_failed(ev: dict[str, Any]) -> bool:
-    return bool(ev.get("error")) or ev.get("outcome") == "error"
-
-
 def _event_error_type(ev: dict[str, Any]) -> str | None:
+    et_col = ev.get("error_type")
+    if isinstance(et_col, str) and et_col.strip():
+        return et_col
     err = ev.get("error")
     if isinstance(err, dict):
         t = err.get("type")
@@ -191,7 +197,7 @@ async def _fetch_delegation_ancestors(
         delegating_span_error_type: str | None = None
         for pev in parent_events:
             if str(pev.get("span_id")) == str(parent_span_id):
-                delegating_span_failed = _event_failed(pev)
+                delegating_span_failed = event_is_failure(pev)
                 delegating_span_error_type = _event_error_type(pev)
                 break
 
@@ -259,7 +265,7 @@ def _build_causal_chain(events: list[dict[str, Any]]) -> dict[str, Any]:
     for step, ev in enumerate(events):
         span_id = ev.get("span_id")
         span_id = str(span_id) if span_id is not None else None
-        failed = _event_failed(ev)
+        failed = event_is_failure(ev)
         chain.append(
             {
                 "step": step,
@@ -269,6 +275,7 @@ def _build_causal_chain(events: list[dict[str, Any]]) -> dict[str, Any]:
                     if ev.get("parent_span_id") is not None
                     else None
                 ),
+                "agent_id": ev.get("agent_id"),
                 "event_type": ev.get("event_type"),
                 "name": ev.get("name"),
                 "outcome": ev.get("outcome"),

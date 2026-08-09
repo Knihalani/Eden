@@ -243,8 +243,6 @@ class TestB1RLSMiddleware:
             RLSOrgContextMiddleware,
         )
 
-        acquire_called = False
-
         class _FakeClient:
             _pool = object()  # truthy sentinel; acquire() must never fire
 

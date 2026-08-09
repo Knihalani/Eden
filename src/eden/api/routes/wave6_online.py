@@ -206,6 +206,17 @@ class AutomationCreate(BaseModel):
     action_type: str = "dataset"
     action_config: dict[str, Any] = Field(default_factory=dict)
 
+class AutomationPatch(BaseModel):
+    name: str | None = None
+    trigger_type: str | None = None
+    trigger_config: dict[str, Any] | None = None
+    action_type: str | None = None
+    action_config: dict[str, Any] | None = None
+    enabled: bool | None = None
+
+class AutomationToggle(BaseModel):
+    enabled: bool
+
 @router.get("/automations")
 async def list_automations(
     org_id: str = Depends(require_path_org_access),
@@ -220,6 +231,62 @@ async def create_automation(
 ) -> dict[str, Any]:
     rec = await AutomationsEngine().create(org_id, **body.model_dump())
     return _ok("f61", {"automation": rec})
+
+@router.get("/automations/runs")
+async def list_automation_runs_for_org(
+    org_id: str = Depends(require_path_org_access),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    page = await AutomationsEngine().list_runs(org_id, limit=limit, offset=offset)
+    return _ok("f61", page)
+
+@router.patch("/automations/{automation_id}")
+async def patch_automation(
+    org_id: str = Depends(require_path_org_access),
+    automation_id: str = Path(...),
+    body: AutomationPatch = Body(...),
+) -> dict[str, Any]:
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    rec = await AutomationsEngine().update_automation(org_id, automation_id, **fields)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="automation not found")
+    return _ok("f61", {"automation": rec})
+
+@router.delete("/automations/{automation_id}")
+async def delete_automation(
+    org_id: str = Depends(require_path_org_access),
+    automation_id: str = Path(...),
+) -> dict[str, Any]:
+    deleted = await AutomationsEngine().delete_automation(org_id, automation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="automation not found")
+    return _ok("f61", {"deleted": True, "id": automation_id})
+
+@router.post("/automations/{automation_id}/toggle")
+async def toggle_automation(
+    org_id: str = Depends(require_path_org_access),
+    automation_id: str = Path(...),
+    body: AutomationToggle = Body(...),
+) -> dict[str, Any]:
+    rec = await AutomationsEngine().toggle_automation(
+        org_id, automation_id, enabled=body.enabled
+    )
+    if rec is None:
+        raise HTTPException(status_code=404, detail="automation not found")
+    return _ok("f61", {"automation": rec})
+
+@router.get("/automations/{automation_id}/runs")
+async def list_automation_runs(
+    org_id: str = Depends(require_path_org_access),
+    automation_id: str = Path(...),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    page = await AutomationsEngine().list_runs(
+        org_id, automation_id=automation_id, limit=limit, offset=offset
+    )
+    return _ok("f61", page)
 
 # ── F57 dashboards ──────────────────────────────────────────────────
 
@@ -509,6 +576,11 @@ class CIEvalRequest(BaseModel):
     repo_full_name: str | None = None
     # Opt-in per request; still gated behind ci_eval_commit_status_v1.
     post_commit_status: bool = False
+    # FEAT-13: run playground deterministic scorers on regression dataset cases.
+    enable_playground_scorers: bool = False
+    scorer_specs: list[dict[str, Any]] = Field(default_factory=list)
+    treatment_outputs: dict[str, str] = Field(default_factory=dict)
+    scorer_regression_threshold: float | None = None
 
 @router.post("/ci-eval/run")
 async def ci_eval_run(org_id: str = Depends(require_path_org_access), body: CIEvalRequest = Body(...)) -> dict[str, Any]:
@@ -521,6 +593,10 @@ async def ci_eval_run(org_id: str = Depends(require_path_org_access), body: CIEv
         ref=body.ref,
         commit_sha=body.commit_sha,
         pr_number=body.pr_number,
+        enable_playground_scorers=body.enable_playground_scorers,
+        scorer_specs=body.scorer_specs or None,
+        treatment_outputs=body.treatment_outputs or None,
+        scorer_regression_threshold=body.scorer_regression_threshold,
     )
     # Optional commit-status writeback (F56). Behind config flag + per-request
     # opt-in + repo/sha present; fail-open so an eval never fails on this.

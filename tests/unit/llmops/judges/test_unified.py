@@ -13,14 +13,14 @@ from eden.llmops.judges.unified import UnifiedJudge, _parse_multi_axis
 
 
 def _fake_event(**kwargs):
-    defaults = dict(
-        event_id="evt_1",
-        trace_id="tr_1",
-        span_id="sp_1",
-        event_type="openai.chat",
-        payload={"openai": {"first_message_content": "Hello world."}},
-        tenant_id="t1",
-    )
+    defaults = {
+        "event_id": "evt_1",
+        "trace_id": "tr_1",
+        "span_id": "sp_1",
+        "event_type": "openai.chat",
+        "payload": {"openai": {"first_message_content": "Hello world."}},
+        "tenant_id": "t1",
+    }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
 

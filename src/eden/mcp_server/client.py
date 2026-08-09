@@ -43,6 +43,7 @@ class EdenApiClient(Protocol):
         prompt_override: str | None = None,
         rerun_mode: str | None = None,
         live_prefix: bool | None = None,
+        live: bool | None = None,
     ) -> dict[str, Any]: ...
 
     async def search_issues(
@@ -117,6 +118,78 @@ class EdenApiClient(Protocol):
 
     async def export_fixture(
         self, org_id: str, issue_id: str
+    ) -> dict[str, Any]: ...
+
+    # FEAT-183: read access to the Artifacts / Book / Ledger knowledge system.
+
+    async def get_book(self, org_id: str, agent_id: str) -> dict[str, Any]: ...
+
+    async def list_artifacts(
+        self,
+        org_id: str,
+        *,
+        agent_id: str | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def list_ledgers(self, org_id: str) -> dict[str, Any]: ...
+
+    async def get_ledger(self, org_id: str, agent_id: str) -> dict[str, Any]: ...
+
+    async def eden_status(self, org_id: str) -> dict[str, Any]: ...
+
+    async def label_tool_call(
+        self,
+        org_id: str,
+        *,
+        span_id: str,
+        label: str,
+        tool_name: str,
+        trace_id: str,
+        reason: str | None = None,
+        agent_id: str | None = None,
+        args_summary: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def compile_nl_alert(
+        self,
+        org_id: str,
+        *,
+        nl_text: str,
+        context: dict[str, Any] | None = None,
+        eql_override: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def query_sql(
+        self, org_id: str, *, sql: str, limit: int = 100
+    ) -> dict[str, Any]: ...
+
+    async def list_datasets(
+        self, org_id: str, *, limit: int = 50
+    ) -> dict[str, Any]: ...
+
+    async def list_experiments(
+        self, org_id: str, *, limit: int = 50
+    ) -> dict[str, Any]: ...
+
+    async def get_judge_scores(
+        self,
+        org_id: str,
+        *,
+        trace_id: str,
+        judge_name: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def get_cost_breakdown(
+        self, org_id: str, *, window_hours: int = 24
+    ) -> dict[str, Any]: ...
+
+    async def get_agentic_metrics(
+        self,
+        org_id: str,
+        *,
+        window_hours: int = 24,
+        agent_id: str | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -251,6 +324,7 @@ class HttpEdenClient:
         prompt_override: str | None = None,
         rerun_mode: str | None = None,
         live_prefix: bool | None = None,
+        live: bool | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"trace_id": trace_id, "from_step": from_step}
         if prompt_override is not None:
@@ -259,6 +333,8 @@ class HttpEdenClient:
             body["rerun_mode"] = rerun_mode
         if live_prefix is not None:
             body["live_prefix"] = live_prefix
+        if live is not None:
+            body["live"] = live
         return await self._request(
             "POST", f"/orgs/{org_id}/debugger/rerun", json_body=body
         )
@@ -403,4 +479,168 @@ class HttpEdenClient:
         return await self._request(
             "POST",
             f"/orgs/{org_id}/agent-issues/{issue_id}/export-fixture",
+        )
+
+    # ── FEAT-183: Artifacts / Book / Ledger read access ─────────────────
+    #
+    # Mirrors the real routes ``learn.py`` mounts under the ``/orgs/{org_id}``
+    # ``learn`` router (F39/F40 Artifacts+Book, ledger aliases) — no new
+    # backend surface was invented for this.
+
+    async def get_book(self, org_id: str, agent_id: str) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/agents/{agent_id}/book`` — F40 agent Book.
+
+        When Ledger (F44+) is enabled for the org this route transparently
+        returns the ledger under the same ``book``/``ledger`` keys — this
+        client method is a thin passthrough either way.
+        """
+        return await self._request(
+            "GET", f"/orgs/{org_id}/agents/{agent_id}/book"
+        )
+
+    async def list_artifacts(
+        self,
+        org_id: str,
+        *,
+        agent_id: str | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/artifacts`` — F39 Nudges/Artifacts list."""
+        params: dict[str, Any] = {}
+        if agent_id:
+            params["agent_id"] = agent_id
+        if mode:
+            params["mode"] = mode
+        return await self._request(
+            "GET", f"/orgs/{org_id}/artifacts", params=params or None
+        )
+
+    async def list_ledgers(self, org_id: str) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/ledger`` — org-wide ledger summary rows."""
+        return await self._request("GET", f"/orgs/{org_id}/ledger")
+
+    async def get_ledger(self, org_id: str, agent_id: str) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/agents/{agent_id}/ledger`` — one agent's ledger."""
+        return await self._request(
+            "GET", f"/orgs/{org_id}/agents/{agent_id}/ledger"
+        )
+
+    async def eden_status(self, org_id: str) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/admin/eden-status`` — F84 component health."""
+        return await self._request("GET", f"/orgs/{org_id}/admin/eden-status")
+
+    async def label_tool_call(
+        self,
+        org_id: str,
+        *,
+        span_id: str,
+        label: str,
+        tool_name: str,
+        trace_id: str,
+        reason: str | None = None,
+        agent_id: str | None = None,
+        args_summary: str | None = None,
+    ) -> dict[str, Any]:
+        """``POST /orgs/{org_id}/tool-calls/{span_id}/label`` — F21 labels."""
+        return await self._request(
+            "POST",
+            f"/orgs/{org_id}/tool-calls/{span_id}/label",
+            json_body={
+                "trace_id": trace_id,
+                "tool_name": tool_name,
+                "label": label,
+                "reason": reason,
+                "agent_id": agent_id,
+                "args_summary": args_summary,
+            },
+        )
+
+    async def compile_nl_alert(
+        self,
+        org_id: str,
+        *,
+        nl_text: str,
+        context: dict[str, Any] | None = None,
+        eql_override: str | None = None,
+    ) -> dict[str, Any]:
+        """``POST /orgs/{org_id}/alerts/compile`` — NL / EQL alert compile."""
+        body: dict[str, Any] = {"nl_text": nl_text}
+        if context is not None:
+            body["context"] = context
+        if eql_override is not None:
+            body["eql_override"] = eql_override
+        return await self._request(
+            "POST", f"/orgs/{org_id}/alerts/compile", json_body=body
+        )
+
+    async def query_sql(
+        self, org_id: str, *, sql: str, limit: int = 100
+    ) -> dict[str, Any]:
+        """``POST /orgs/{org_id}/sql/execute`` — org-scoped read-only SQL."""
+        return await self._request(
+            "POST",
+            f"/orgs/{org_id}/sql/execute",
+            json_body={"sql": sql, "max_rows": limit},
+        )
+
+    async def list_datasets(
+        self, org_id: str, *, limit: int = 50
+    ) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/datasets`` — eval datasets hub."""
+        return await self._request(
+            "GET", f"/orgs/{org_id}/datasets", params={"limit": limit}
+        )
+
+    async def list_experiments(
+        self, org_id: str, *, limit: int = 50
+    ) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/experiments/offline`` — offline experiments."""
+        return await self._request(
+            "GET",
+            f"/orgs/{org_id}/experiments/offline",
+            params={"limit": limit},
+        )
+
+    async def get_judge_scores(
+        self,
+        org_id: str,
+        *,
+        trace_id: str,
+        judge_name: str | None = None,
+    ) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/observability/judges`` — list judge scores."""
+        params: dict[str, Any] = {"trace_id": trace_id}
+        if judge_name:
+            params["judge_name"] = judge_name
+        return await self._request(
+            "GET",
+            f"/orgs/{org_id}/observability/judges",
+            params=params,
+        )
+
+    async def get_cost_breakdown(
+        self, org_id: str, *, window_hours: int = 24
+    ) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/finops/explorer`` — cost rollup."""
+        return await self._request(
+            "GET",
+            f"/orgs/{org_id}/finops/explorer",
+            params={"window_hours": window_hours},
+        )
+
+    async def get_agentic_metrics(
+        self,
+        org_id: str,
+        *,
+        window_hours: int = 24,
+        agent_id: str | None = None,
+    ) -> dict[str, Any]:
+        """``GET /orgs/{org_id}/agentic-metrics/summary`` — F64 metrics pack."""
+        params: dict[str, Any] = {"window_hours": window_hours}
+        if agent_id:
+            params["agent_id"] = agent_id
+        return await self._request(
+            "GET",
+            f"/orgs/{org_id}/agentic-metrics/summary",
+            params=params,
         )

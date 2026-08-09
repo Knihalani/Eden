@@ -8,17 +8,57 @@ import { extractLabelOptions } from "@/lab/labeling/label-schema";
 import type { LabelingItem } from "@/lib/api/labeling";
 
 /**
+ * Shift+1..5 → confidence tiers (0.2–1.0 in equal steps).
+ * Keyed by ``KeyboardEvent.code`` (DigitN) so US layouts where
+ * Shift+1 yields ``key === "!"`` still work.
+ */
+const CONFIDENCE_BY_CODE: Record<string, number> = {
+  Digit1: 0.2,
+  Digit2: 0.4,
+  Digit3: 0.6,
+  Digit4: 0.8,
+  Digit5: 1.0,
+};
+
+function formatSessionAvgSeconds(seconds: number): string {
+  const rounded = Math.round(seconds * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+export function formatAnnotateSessionStats(
+  labeled: number,
+  avgSeconds: number,
+): string {
+  if (labeled === 0) return "0 labeled this session";
+  return `${labeled} labeled this session · avg ${formatSessionAvgSeconds(avgSeconds)}s/item`;
+}
+
+/**
  * Keyboard-driven annotator work surface (FEAT-83). Shortcuts:
  *
- *   1-9   select label option N (only meaningful for option-shaped
- *         schemas — see `extractLabelOptions`)
- *   s     skip the current item
- *   Enter submit the current annotation
+ *   1-9      select label option N (only meaningful for option-shaped
+ *            schemas — see `extractLabelOptions`)
+ *   Shift+1-5 set confidence tier (0.2, 0.4, … 1.0)
+ *   s        skip the current item
+ *   Enter    submit the current annotation
+ *   u / Backspace  undo the last submission (re-UPSERT previous label)
  *
  * Shortcuts are suppressed while focus is inside the notes textarea
  * so annotators can type freely (including literal digits and
  * newlines via Enter) without accidentally submitting or skipping.
  */
+export function formatItemDisagreementHint(
+  annotationsCount: number,
+  agreement: number | null | undefined,
+): string | null {
+  if (annotationsCount < 1) return null;
+  const countLabel = `${annotationsCount} annotation${annotationsCount === 1 ? "" : "s"}`;
+  if (agreement != null) {
+    return `${countLabel} · agreement ${agreement.toFixed(2)} so far`;
+  }
+  return `${countLabel} so far`;
+}
+
 export function AnnotateView({
   item,
   queueLabel,
@@ -30,9 +70,16 @@ export function AnnotateView({
   onNotesChange,
   onSubmit,
   onSkip,
+  onUndo,
   submitting,
   skipping,
+  undoing = false,
+  canUndo = false,
   remaining,
+  sessionLabeled,
+  sessionAvgSeconds,
+  annotationsCount = 0,
+  agreementSoFar,
 }: {
   item: LabelingItem;
   queueLabel?: string | null;
@@ -44,9 +91,16 @@ export function AnnotateView({
   onNotesChange: (value: string) => void;
   onSubmit: () => void;
   onSkip: () => void;
+  onUndo?: () => void;
   submitting: boolean;
   skipping: boolean;
+  undoing?: boolean;
+  canUndo?: boolean;
   remaining: number;
+  sessionLabeled?: number;
+  sessionAvgSeconds?: number;
+  annotationsCount?: number;
+  agreementSoFar?: number | null;
 }) {
   useEffect(() => {
     const options = extractLabelOptions(item.label_schema);
@@ -66,7 +120,17 @@ export function AnnotateView({
         onSkip();
         return;
       }
-      if (/^[1-9]$/.test(e.key) && options) {
+      if ((e.key === "u" || e.key === "U" || e.key === "Backspace") && canUndo && onUndo) {
+        e.preventDefault();
+        onUndo();
+        return;
+      }
+      if (e.shiftKey && e.code in CONFIDENCE_BY_CODE) {
+        e.preventDefault();
+        onConfidenceChange(CONFIDENCE_BY_CODE[e.code]!);
+        return;
+      }
+      if (/^[1-9]$/.test(e.key) && !e.shiftKey && options) {
         const idx = Number(e.key) - 1;
         const opt = options[idx];
         if (opt) {
@@ -78,7 +142,19 @@ export function AnnotateView({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [item.label_schema, onSubmit, onSkip, onLabelChange]);
+  }, [
+    item.label_schema,
+    onSubmit,
+    onSkip,
+    onUndo,
+    onLabelChange,
+    onConfidenceChange,
+    canUndo,
+  ]);
+
+  const disagreementHint = formatItemDisagreementHint(annotationsCount, agreementSoFar);
+  const disagreementTone =
+    agreementSoFar != null && agreementSoFar < 0.5 ? "fail" : "neutral";
 
   const traceHref = item.source_trace_id
     ? `/traces?id=${encodeURIComponent(item.source_trace_id)}${
@@ -101,8 +177,18 @@ export function AnnotateView({
               View source trace →
             </Link>
           ) : null}
+          {disagreementHint ? (
+            <StatusChip tone={disagreementTone}>{disagreementHint}</StatusChip>
+          ) : null}
         </div>
-        <span className="type-meta">{remaining} remaining in this lease</span>
+        <div className="flex flex-col items-end gap-0.5">
+          {sessionLabeled !== undefined ? (
+            <span className="type-meta">
+              {formatAnnotateSessionStats(sessionLabeled, sessionAvgSeconds ?? 0)}
+            </span>
+          ) : null}
+          <span className="type-meta">{remaining} remaining in this lease</span>
+        </div>
       </div>
 
       <section className="ds-panel-muted mt-4 p-4">
@@ -124,7 +210,9 @@ export function AnnotateView({
       </section>
 
       <section className="mt-5 space-y-2">
-        <h3 className="type-ui text-[var(--text-secondary)]">Confidence</h3>
+        <h3 className="type-ui text-[var(--text-secondary)]">
+          Confidence <span className="type-meta">(Shift+1–5)</span>
+        </h3>
         <div className="flex items-center gap-3">
           <input
             type="range"
@@ -171,6 +259,16 @@ export function AnnotateView({
         >
           Skip <span className="type-meta ml-1.5 opacity-70">S</span>
         </button>
+        {canUndo && onUndo ? (
+          <button
+            type="button"
+            className="ds-btn ds-btn-outline"
+            disabled={undoing}
+            onClick={onUndo}
+          >
+            Undo <span className="type-meta ml-1.5 opacity-70">U</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );

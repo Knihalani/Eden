@@ -32,7 +32,7 @@ _LINKED = [{"path": "agent/checkout.py", "content": "def checkout():\n    return
 async def test_critic_outage_fails_closed() -> None:
     router = MagicMock()
     router.aroute = AsyncMock(side_effect=RuntimeError("llm down"))
-    verdict = await _critic_review(router, _GOOD_DIFF, rca_summary="s")
+    verdict = await _critic_review(router, _GOOD_DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is False
     assert verdict["reason"] == "critic_error"
 
@@ -45,7 +45,7 @@ async def test_critic_empty_response_fails_closed() -> None:
             content="", usage=SimpleNamespace(cost=0.0), model="m"
         )
     )
-    verdict = await _critic_review(router, _GOOD_DIFF, rca_summary="s")
+    verdict = await _critic_review(router, _GOOD_DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is False
     assert verdict["reason"] == "critic_error"
 
@@ -57,7 +57,7 @@ async def test_critic_budget_exhaustion_fails_closed() -> None:
     sb.clear_sweep_llm_budget()
     try:
         with sb.llm_budget_scope(0):
-            verdict = await _critic_review(MagicMock(), _GOOD_DIFF, rca_summary="s")
+            verdict = await _critic_review(MagicMock(), _GOOD_DIFF, org_id="org-test", rca_summary="s")
     finally:
         sb.clear_sweep_llm_budget()
     assert verdict["passed"] is False

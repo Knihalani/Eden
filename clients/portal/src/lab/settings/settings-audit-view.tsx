@@ -16,6 +16,7 @@ import {
   VerifyChip,
   type AuditTab,
 } from "@/lab/settings/settings-chrome";
+import { AuditChainTrustSignal } from "@/lab/settings/audit-chain-trust-signal";
 import { cn } from "@/lib/utils";
 
 type EventFilter = "all" | "keys" | "members" | "ops" | "workspace" | "other";
@@ -69,7 +70,10 @@ export function SettingsAuditView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:px-6">
-        <AuditTabNav value={tab} onChange={onTab} />
+        <div className="flex flex-wrap items-center gap-2">
+          <AuditTabNav value={tab} onChange={onTab} />
+          <AuditChainTrustSignal />
+        </div>
         {tab === "packs" ? (
           <label className="flex items-center gap-1.5">
             <span className="sr-only">Agent</span>

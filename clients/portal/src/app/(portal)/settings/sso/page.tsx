@@ -146,7 +146,7 @@ export default function SettingsSsoPage() {
     <div className="ds-page">
       <PageHeader
         title="SSO"
-        meta="Configure SAML / OIDC identity providers for this workspace and enforce single sign-on."
+        meta="Native Eden OIDC/SAML providers for self-hosted deployments (see warning below). Clerk-hosted SSO is configured in the Clerk dashboard."
         actions={
           <div className="flex items-center gap-2">
             {nav}
@@ -164,6 +164,35 @@ export default function SettingsSsoPage() {
       />
 
       <div className="flex flex-col gap-4 px-5 py-5 sm:px-6">
+        <div
+          role="note"
+          className="rounded-[var(--radius)] border border-[var(--warning)]/40 bg-[var(--warning-muted)] px-4 py-3 type-meta text-[var(--text)]"
+        >
+          <p className="type-ui text-[var(--text)]">Clerk-hosted deployments</p>
+          <p className="mt-1">
+            Production and most hosted Eden workspaces authenticate through{" "}
+            <strong>Clerk</strong>. Configure SSO and SCIM in the{" "}
+            <a
+              className="text-[var(--accent)] underline"
+              href="https://dashboard.clerk.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Clerk dashboard
+            </a>{" "}
+            — not here. Providers you add on this screen call Eden&apos;s native{" "}
+            <code>sso.py</code> API and only affect self-hosted deployments that
+            do not use Clerk; they do not drive Clerk login traffic.
+          </p>
+          <p className="mt-2">
+            See{" "}
+            <a className="text-[var(--accent)] underline" href="https://docs.edenobservability.com/how-to/sso">
+              Configure SSO + SCIM
+            </a>{" "}
+            for the authoritative setup guide.
+          </p>
+        </div>
+
         {creating && (
           <Panel>
             <div className="flex flex-col gap-3 p-4 sm:p-5">
@@ -265,8 +294,8 @@ export default function SettingsSsoPage() {
 
         {providers.length === 0 && !creating ? (
           <EmptyState
-            title="No SSO providers configured"
-            body="Add an Okta, Google, OIDC, or SAML provider to let members sign in via SSO."
+            title="No native SSO providers configured"
+            body="Self-hosted only: add an Okta, Google, OIDC, or SAML provider for Eden's native login path. Clerk-hosted orgs should configure SSO in Clerk instead."
           />
         ) : (
           <Panel className="!p-0">
@@ -324,8 +353,8 @@ export default function SettingsSsoPage() {
           </Panel>
         )}
         <p className="type-meta text-[var(--text-faint)]">
-          Login is served at <code>/sso/login/&#123;provider_id&#125;</code>; SCIM token
-          provisioning lives on the{" "}
+          Native (self-hosted) login is served at{" "}
+          <code>/sso/login/&#123;provider_id&#125;</code>; SCIM token provisioning lives on the{" "}
           <Link className="text-[var(--accent)]" href="/settings/scim">
             SCIM
           </Link>{" "}

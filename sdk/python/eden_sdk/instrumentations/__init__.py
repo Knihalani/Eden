@@ -13,6 +13,9 @@ LangChain + LlamaIndex pull in numpy / pydantic / tiktoken transitively.
 
 Lock-in: the eager-import test (``test_no_eager_imports_of_optional_deps``)
 asserts that ``import eden`` does NOT pull in any framework dep.
+
+The ``__all__`` list below is a living target — when adding a framework,
+follow ``ADDING_INSTRUMENTATION.md`` in this directory (FEAT-178).
 """
 
 from __future__ import annotations
