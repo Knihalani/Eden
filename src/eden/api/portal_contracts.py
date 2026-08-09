@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 AgentStatus = Literal["live", "idle", "error"]
 TraceStatus = Literal["ok", "error"]
 TraceSeverity = Literal["error", "warn", "none"]
-TranscriptKind = Literal["task", "llm", "tool", "bash", "span"]
+TranscriptKind = Literal["task", "llm", "tool", "bash", "span", "agent", "handoff"]
 SessionOutcome = Literal["ok", "error", "mixed"]
-IssueStatus = Literal["open", "acknowledged", "resolved"]
+IssueStatus = Literal["open", "acknowledged", "resolved", "ignored"]
 IssueSeverity = Literal["error", "warn"]
 SignalSeverity = Literal["critical", "error", "warn"]
 SignalKind = Literal["error", "latency", "cost", "policy", "custom"]
@@ -91,6 +91,7 @@ class TranscriptStep(BaseModel):
     startedAt: str | None = None
     spanId: str | None = None
     parentId: str | None = None
+    agentId: str | None = None
     model: str | None = None
     provider: str | None = None
     tokensIn: int | None = None
@@ -114,6 +115,7 @@ class TraceListItem(BaseModel):
 
     id: str
     agentId: str = ""
+    participants: list[str] = Field(default_factory=list)
     name: str = ""
     status: TraceStatus = "ok"
     startedAt: str = ""
@@ -177,6 +179,8 @@ class IssueCard(BaseModel):
     patchBlockedReason: str = ""
     patchBlockedMessage: str = ""
     tags: list[str] = Field(default_factory=list)
+    # FEAT-159: composite rank score (same formula as ``IssuesRepo`` sort=rank).
+    rankScore: float | None = None
 
 
 # ── Signals (SignalFixture) ───────────────────────────────────────
@@ -213,6 +217,7 @@ class AlertRuleCard(BaseModel):
     name: str = ""
     description: str = ""
     condition: str = ""
+    compiledEql: str = ""
     severity: AlertSeverity = "warn"
     agentId: str | None = None
     channel: AlertChannel = "email"
@@ -229,6 +234,8 @@ class AlertEventCard(BaseModel):
     ruleId: str = ""
     title: str = ""
     body: str = ""
+    condition: str = ""
+    compiledEql: str = ""
     severity: AlertSeverity = "warn"
     status: AlertEventStatus = "firing"
     agentId: str = ""
@@ -464,6 +471,8 @@ class ImprovePlanCard(BaseModel):
     hermeticStatus: str | None = None
     failurePackStatus: str | None = None
     evScore: float | None = None
+    # FEAT-156: autonomy tier governing autonomous execution for this plan.
+    autonomyTierRequired: str | None = None
 
 
 class AbExperimentCard(BaseModel):
@@ -487,7 +496,7 @@ class GuardrailPolicyCard(BaseModel):
 
     id: str
     name: str = ""
-    kind: str = "custom"
+    kind: str = "content_policy"
     status: GuardrailStatus = "active"
     agentId: str | None = None
     severity: str = "medium"

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from eden.api.deps import require_feature_flag, require_path_org_access
 from eden.api.utils.redact import redact_all
 from eden.api.utils.safe_error import safe_detail
+from eden.evaluation.eval_intel import EvalToGuardrailLink
 from eden.guardrails import (
     ContentPolicyEnforcer,
     GuardrailMetrics,
@@ -23,7 +24,6 @@ from eden.guardrails import (
     HallucinationBlocker,
     InterventionEngine,
     InterventionLog,
-    LegacyEvalToGuardrailLink,
     LLMFirewall,
     PIIFirewall,
     PromptInjectionDetector,
@@ -49,7 +49,7 @@ _pii = PIIFirewall()
 _hallu = HallucinationBlocker()
 _content = ContentPolicyEnforcer()
 _engine = InterventionEngine()
-_promote = LegacyEvalToGuardrailLink()
+_promote = EvalToGuardrailLink()
 _firewall = LLMFirewall()
 _log = InterventionLog()
 _metrics = GuardrailMetrics()
@@ -197,7 +197,14 @@ async def promote_judge(
     org_id: str = Depends(require_path_org_access),
     body: PromoteRequest = Body(...),
 ) -> dict[str, Any]:
-    return await _promote.promote(
+    """Promote a Cat-3 judge into a live guardrail (FEAT-34).
+
+    Delegates to the canonical
+    :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+    implementation — same enforcement path as
+    ``POST .../intelligence/eval/promote-to-guardrail``.
+    """
+    return await _promote.promote_to_guardrail(
         org_id, judge_name=body.judge_name, threshold=body.threshold
     )
 

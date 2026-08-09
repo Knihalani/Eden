@@ -294,5 +294,5 @@ class SessionRollupIndexer:
 def _first(rows: list[Any], key: str) -> str | None:
     for row in rows:
         if row[key]:
-            return row[key]
+            return str(row[key])
     return None

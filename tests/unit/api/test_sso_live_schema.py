@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -95,7 +95,7 @@ class _RecordingConn:
             self.store["sso_config_id"] = args[2]
             self.store["enabled"] = False
             self.store["enforce_sso"] = False
-            self.store["created_at"] = datetime.now(timezone.utc)
+            self.store["created_at"] = datetime.now(UTC)
             return {"id": args[0]}
         if "from org_sso_settings" in q and "join sso_configurations" in q:
             if not self.store.get("settings_id"):
@@ -135,7 +135,7 @@ class _RecordingConn:
                     "enforce_sso": self.store.get("enforce_sso", False),
                     "scim_enabled": bool(self.store.get("scim_enabled", False)),
                     "created_at": self.store.get(
-                        "created_at", datetime.now(timezone.utc)
+                        "created_at", datetime.now(UTC)
                     ),
                 }
             ]

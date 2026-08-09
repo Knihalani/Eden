@@ -1461,9 +1461,11 @@ class ChatService:
         client = OpenRouterClient()
         # Anthropic prompt-cache: tag the system message with an
         # ephemeral ``cache_control`` breakpoint so Sonnet/Opus
-        # re-bills the prefix at 1/10 cost on subsequent calls.
-        # ~4k system-prompt tokens × N chats × 90% saving is the
-        # single biggest line item in the agent budget.
+        # re-bill the prefix at ~1/10 cost on subsequent calls.
+        # Soft Autonomy routes T1/T2/T3 internal chat through
+        # ``INTERNAL_CHAT_MODEL`` (deepseek-v4-flash), so this branch
+        # is a no-op on the default Cmd-J path — it only applies when
+        # the resolved model is actually Claude/Anthropic.
         # Call on the instance — tests replace the class with a
         # mock lambda and the staticmethod resolves through the
         # instance attribute.

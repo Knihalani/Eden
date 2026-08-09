@@ -18,7 +18,7 @@ from typing import Any
 _OPENAI_ATTRS: dict | None = None
 
 
-def _ensure_openai():
+def _ensure_openai() -> dict[str, Any]:
     """Resolve all five openai symbols we use. Cached at the
     module level so we only pay the import cost once per process."""
     global _OPENAI_ATTRS
@@ -40,7 +40,7 @@ def _ensure_openai():
     return _OPENAI_ATTRS
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """PEP 562 module-level __getattr__ — resolve the openai
     symbols lazily on first attribute access. ``patch(
     "eden.llm.client.OpenAI")`` still works because unittest.mock
@@ -52,6 +52,45 @@ def __getattr__(name: str):
 from eden.config import get_settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+# OPT-36 — prompt-cache observability via ``simple_metrics`` (exposed on ``/metrics``).
+try:
+    from eden.observability.simple_metrics import Counter as _MetricsCounter
+except Exception:  # noqa: BLE001 — metrics are best-effort on the LLM hot path
+    _MetricsCounter = None  # type: ignore[misc, assignment]
+
+if _MetricsCounter is not None:
+    _PROMPT_CACHE_READS_TOKENS = _MetricsCounter(
+        "eden_llm_prompt_cache_reads_tokens_total",
+        "Upstream prompt-cache tokens read (OpenRouter cached_tokens / cache_reads).",
+    )
+    _PROMPT_CACHE_WRITES_TOKENS = _MetricsCounter(
+        "eden_llm_prompt_cache_writes_tokens_total",
+        "Upstream prompt-cache tokens written (cache_write_tokens / cache_writes).",
+    )
+    _PROMPT_CACHE_HITS = _MetricsCounter(
+        "eden_llm_prompt_cache_hits_total",
+        "LLM requests where upstream prompt-cache reads > 0.",
+    )
+    _PROMPT_CACHE_DISCOUNT_USD = _MetricsCounter(
+        "eden_llm_prompt_cache_discount_usd_total",
+        "Cumulative upstream prompt-cache discount in USD when reported.",
+    )
+    _INPROCESS_CACHE_HITS = _MetricsCounter(
+        "eden_llm_inprocess_cache_hits_total",
+        "In-process LRU cache hits (L0, EDEN_LLM_INPROCESS_CACHE).",
+    )
+    _INPROCESS_CACHE_MISSES = _MetricsCounter(
+        "eden_llm_inprocess_cache_misses_total",
+        "In-process LRU cache misses (L0, EDEN_LLM_INPROCESS_CACHE).",
+    )
+else:
+    _PROMPT_CACHE_READS_TOKENS = None  # type: ignore[assignment]
+    _PROMPT_CACHE_WRITES_TOKENS = None  # type: ignore[assignment]
+    _PROMPT_CACHE_HITS = None  # type: ignore[assignment]
+    _PROMPT_CACHE_DISCOUNT_USD = None  # type: ignore[assignment]
+    _INPROCESS_CACHE_HITS = None  # type: ignore[assignment]
+    _INPROCESS_CACHE_MISSES = None  # type: ignore[assignment]
 
 #: Per-request ceiling for a single upstream LLM HTTP request, seconds.
 #:
@@ -80,8 +119,32 @@ class UsageStats:
     completion_tokens: int = 0
     total_tokens: int = 0
     cost: float | None = None
+    cache_discount: float | None = None
     cache_reads: int = 0
     cache_writes: int = 0
+
+
+def _cache_tokens_from_usage(usage: Any) -> tuple[int, int]:
+    """Extract cache hit/write tokens from OpenRouter usage (OPT-35).
+
+    OPT-36 hit-rate interpretation (upstream Anthropic/OpenRouter prompt cache):
+    - ``token_hit_rate = reads / (reads + writes)`` when writes are reported;
+    - ``request_hit_rate = hits / upstream_requests`` where a hit is any
+      request with ``reads > 0``. In-process LRU hits are tracked separately
+      via ``eden_llm_inprocess_cache_hits_total``.
+    """
+    if usage is None:
+        return 0, 0
+    ptd = getattr(usage, "prompt_tokens_details", None)
+    if ptd is not None:
+        reads = getattr(ptd, "cached_tokens", None)
+        writes = getattr(ptd, "cache_write_tokens", None)
+        if reads is not None or writes is not None:
+            return int(reads or 0), int(writes or 0)
+    return (
+        int(getattr(usage, "cache_reads", 0) or 0),
+        int(getattr(usage, "cache_writes", 0) or 0),
+    )
 
 
 @dataclass
@@ -257,6 +320,12 @@ class OpenRouterClient:
         )
         self._cache_hits = 0
         self._cache_misses = 0
+        # OPT-36 — upstream prompt-cache tallies (network responses only).
+        self._prompt_cache_reads_tokens = 0
+        self._prompt_cache_writes_tokens = 0
+        self._prompt_cache_hits = 0
+        self._upstream_llm_requests = 0
+        self._prompt_cache_discount_usd = 0.0
         # §11.4 — per-provider error counters split by openai vs anthropic
         # so the observability dashboard can break them out by provider.
         self._provider_errors: dict[str, int] = {}
@@ -330,13 +399,35 @@ class OpenRouterClient:
         self._provider_errors[key] = self._provider_errors.get(key, 0) + 1
         self._provider_calls[provider] = self._provider_calls.get(provider, 0) + 1
 
+    def _record_prompt_cache_metrics(self, usage: UsageStats) -> None:
+        """Bump upstream prompt-cache counters after a real network response."""
+        self._upstream_llm_requests += 1
+        reads = int(usage.cache_reads or 0)
+        writes = int(usage.cache_writes or 0)
+        self._prompt_cache_reads_tokens += reads
+        self._prompt_cache_writes_tokens += writes
+        if reads > 0:
+            self._prompt_cache_hits += 1
+        discount = usage.cache_discount
+        if discount:
+            self._prompt_cache_discount_usd += float(discount)
+
+        if _PROMPT_CACHE_READS_TOKENS is not None and reads:
+            _PROMPT_CACHE_READS_TOKENS.inc(reads)
+        if _PROMPT_CACHE_WRITES_TOKENS is not None and writes:
+            _PROMPT_CACHE_WRITES_TOKENS.inc(writes)
+        if _PROMPT_CACHE_HITS is not None and reads > 0:
+            _PROMPT_CACHE_HITS.inc()
+        if _PROMPT_CACHE_DISCOUNT_USD is not None and discount:
+            _PROMPT_CACHE_DISCOUNT_USD.inc(float(discount))
+
     async def acall(
         self,
         agent: str,
         prompt: str,
         slot: str = "reasoning",
         system_prompt: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Async LLM call with retry and circuit breaker.
 
@@ -379,7 +470,7 @@ class OpenRouterClient:
         slot: str = "reasoning",
         system_prompt: str | None = None,
         model: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Make an LLM call with retry and circuit breaker.
 
@@ -539,16 +630,22 @@ class OpenRouterClient:
         cached = self._in_process_cache.get(key)
         if cached is None:
             self._cache_misses += 1
+            if _INPROCESS_CACHE_MISSES is not None:
+                _INPROCESS_CACHE_MISSES.inc()
             return None
         expires_at, response = cached
         if time.monotonic() >= expires_at:
             # Expired — drop and treat as miss.
             self._in_process_cache.pop(key, None)
             self._cache_misses += 1
+            if _INPROCESS_CACHE_MISSES is not None:
+                _INPROCESS_CACHE_MISSES.inc()
             return None
         # Move to end (most-recently-used).
         self._in_process_cache.move_to_end(key)
         self._cache_hits += 1
+        if _INPROCESS_CACHE_HITS is not None:
+            _INPROCESS_CACHE_HITS.inc()
         return response
 
     def _cache_put(self, key: str, response: "LLMResponse") -> None:
@@ -567,7 +664,7 @@ class OpenRouterClient:
         prompt: str,
         system_prompt: str | None = None,
         max_tokens: int = 4096,
-        **kwargs,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Make a single request to OpenRouter."""
         max_tokens = self._clamp_max_tokens(max_tokens)
@@ -626,13 +723,15 @@ class OpenRouterClient:
             **kwargs,
         )
 
+        cache_reads, cache_writes = _cache_tokens_from_usage(response.usage)
         usage = UsageStats(
             prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
             completion_tokens=response.usage.completion_tokens if response.usage else 0,
             total_tokens=response.usage.total_tokens if response.usage else 0,
             cost=getattr(response.usage, "cost", None),
-            cache_reads=getattr(response.usage, "cache_reads", 0) or 0,
-            cache_writes=getattr(response.usage, "cache_writes", 0) or 0,
+            cache_discount=getattr(response, "cache_discount", None),
+            cache_reads=cache_reads,
+            cache_writes=cache_writes,
         )
 
         result = LLMResponse(
@@ -642,6 +741,7 @@ class OpenRouterClient:
             finish_reason=response.choices[0].finish_reason or "unknown",
             raw_response=response,
         )
+        self._record_prompt_cache_metrics(usage)
         # Stash in the in-process cache for the next identical
         # call within the TTL window. Skipped for non-deterministic
         # (temperature > 0) calls — see _make_request.
@@ -668,6 +768,13 @@ class OpenRouterClient:
                 cost_usd=float(response.usage.cost)
                 if response.usage.cost is not None
                 else None,
+                cache_reads=int(response.usage.cache_reads or 0),
+                cache_writes=int(response.usage.cache_writes or 0),
+                cache_discount_usd=(
+                    float(response.usage.cache_discount)
+                    if response.usage.cache_discount is not None
+                    else None
+                ),
             )
         except Exception as exc:
             logger.debug("OpenRouterClient cost ledger write-through failed: %s", exc)
@@ -681,6 +788,8 @@ class OpenRouterClient:
             total.total_tokens += usage.total_tokens
             if usage.cost:
                 total.cost = (total.cost or 0) + usage.cost
+            if usage.cache_discount:
+                total.cache_discount = (total.cache_discount or 0) + usage.cache_discount
             total.cache_reads += usage.cache_reads
             total.cache_writes += usage.cache_writes
         return total
@@ -740,3 +849,28 @@ def get_provider_error_counts() -> dict[str, dict[str, float]]:
             "error_rate": rate,
         }
     return out
+
+
+def get_prompt_cache_stats() -> dict[str, float]:
+    """OPT-36 — upstream + in-process prompt-cache snapshot from the singleton.
+
+    Returns cumulative counters and derived hit rates so operators can verify
+    cache effectiveness via ``/metrics`` or this helper without scraping.
+    """
+    client = _get_llm_client()
+    reads = float(client._prompt_cache_reads_tokens)
+    writes = float(client._prompt_cache_writes_tokens)
+    hits = float(client._prompt_cache_hits)
+    requests = float(client._upstream_llm_requests)
+    token_den = reads + writes
+    return {
+        "prompt_cache_reads_tokens": reads,
+        "prompt_cache_writes_tokens": writes,
+        "prompt_cache_hits": hits,
+        "upstream_llm_requests": requests,
+        "prompt_cache_discount_usd": float(client._prompt_cache_discount_usd),
+        "inprocess_cache_hits": float(client._cache_hits),
+        "inprocess_cache_misses": float(client._cache_misses),
+        "token_hit_rate": (reads / token_den) if token_den > 0 else 0.0,
+        "request_hit_rate": (hits / requests) if requests > 0 else 0.0,
+    }

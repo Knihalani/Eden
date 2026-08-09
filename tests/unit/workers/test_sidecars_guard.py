@@ -48,6 +48,9 @@ async def test_second_process_is_blocked_when_guard_already_held() -> None:
         "eden.closed_loop.event_bus.start_consumer",
         new_callable=AsyncMock,
     ), patch(
+        "eden.workers.alert_kafka_consumer.start_consumer",
+        new_callable=AsyncMock,
+    ), patch(
         "eden.closed_loop.verify.start_verify_worker",
         new_callable=AsyncMock,
     ):
@@ -101,6 +104,8 @@ async def test_guard_retries_before_failing_closed() -> None:
     ), patch(
         "eden.closed_loop.event_bus.start_consumer", new_callable=AsyncMock
     ), patch(
+        "eden.workers.alert_kafka_consumer.start_consumer", new_callable=AsyncMock
+    ), patch(
         "eden.closed_loop.verify.start_verify_worker", new_callable=AsyncMock
     ):
         ok = await sidecars_module.start_quality_and_closed_loop_sidecars("worker")
@@ -129,6 +134,8 @@ async def test_stop_releases_guard_and_resets_started_state() -> None:
     ), patch(
         "eden.closed_loop.event_bus.start_consumer", new_callable=AsyncMock
     ), patch(
+        "eden.workers.alert_kafka_consumer.start_consumer", new_callable=AsyncMock
+    ), patch(
         "eden.closed_loop.verify.start_verify_worker", new_callable=AsyncMock
     ), patch(
         "eden.observability.quality_pipeline.worker.stop_worker",
@@ -139,6 +146,8 @@ async def test_stop_releases_guard_and_resets_started_state() -> None:
     ), patch(
         "eden.closed_loop.event_bus.stop_consumer", new_callable=AsyncMock
     ), patch(
+        "eden.workers.alert_kafka_consumer.stop_consumer", new_callable=AsyncMock
+    ), patch(
         "eden.closed_loop.verify.stop_verify_worker", new_callable=AsyncMock
     ):
         await sidecars_module.start_quality_and_closed_loop_sidecars("worker")
@@ -148,3 +157,33 @@ async def test_stop_releases_guard_and_resets_started_state() -> None:
     release_mock.assert_awaited()
     assert sidecars_module._guard_lock is None
     assert sidecars_module._started is False
+
+
+@pytest.mark.asyncio
+async def test_sidecars_start_alert_kafka_consumer() -> None:
+    """FEAT-14: the alert rule engine consumer must be part of the bundle."""
+    from eden.workers import sidecars as sidecars_module
+
+    with patch(
+        "eden.workers.sidecars.Lock.acquire", new=AsyncMock(return_value=True)
+    ), patch(
+        "eden.workers.sidecars.Lock.release", new=AsyncMock(return_value=True)
+    ), patch(
+        "eden.workers.sidecars._extend_lock_periodically", new=AsyncMock()
+    ), patch(
+        "eden.observability.quality_pipeline.worker.start_worker",
+        new_callable=AsyncMock,
+    ), patch(
+        "eden.workers.trace_finalized_consumer.start_consumer",
+        new_callable=AsyncMock,
+    ), patch(
+        "eden.closed_loop.event_bus.start_consumer", new_callable=AsyncMock
+    ), patch(
+        "eden.workers.alert_kafka_consumer.start_consumer",
+        new_callable=AsyncMock,
+    ) as start_alert, patch(
+        "eden.closed_loop.verify.start_verify_worker", new_callable=AsyncMock
+    ):
+        await sidecars_module.start_quality_and_closed_loop_sidecars("worker")
+
+    start_alert.assert_awaited_once()

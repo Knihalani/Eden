@@ -84,7 +84,7 @@ async def test_run_suite_empty_passes() -> None:
 @pytest.mark.asyncio
 async def test_evaluate_case_no_constraints_is_skipped() -> None:
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(_case())
+    status, reason, _meta = await runner._evaluate_case(_case())
     assert status == "skipped"
     assert reason == "no_constraints"
 
@@ -233,3 +233,58 @@ async def test_canary_409_includes_breakdown() -> None:
     assert breakdown["errors"] == 1
     assert detail["run"]["errors"] == 1
     assert detail["run"]["cases"][0]["reason"] == "telemetry_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_run_suite_populates_f51_grades_from_scorers() -> None:
+    runner = RegressionRunner(memory_only=True)
+    _stub_cases(
+        runner,
+        [
+            _case(
+                case_id="scored",
+                expected={
+                    "scorers": [{"type": "exact_match"}],
+                    "expected": "hello",
+                    "output": "hello",
+                },
+            ),
+            _case(case_id="bare", expected={}),
+        ],
+    )
+    result = await runner.run_suite("org-1")
+    assert len(result.f51_grades) == 2
+    by_id = {g["case_id"]: g for g in result.f51_grades}
+    assert by_id["scored"]["current_score"] == 1.0
+    assert by_id["scored"]["status"] == "passed"
+    assert by_id["bare"]["current_score"] is None
+    assert by_id["bare"]["reason"] == "no_scorers"
+    assert result.to_dict()["f51_grades"] == result.f51_grades
+
+
+@pytest.mark.asyncio
+async def test_run_suite_f51_uses_regenerated_output() -> None:
+    runner = RegressionRunner(memory_only=True)
+
+    async def _eval(case, *, replay_budget=None):
+        return (
+            "passed",
+            "replay_signature_absent",
+            {"regenerated_output": "hello"},
+        )
+
+    runner._evaluate_case = _eval  # type: ignore[method-assign]
+    _stub_cases(
+        runner,
+        [
+            _case(
+                case_id="replay",
+                expected={
+                    "scorers": [{"type": "exact_match"}],
+                    "expected": "hello",
+                },
+            ),
+        ],
+    )
+    result = await runner.run_suite("org-1")
+    assert result.f51_grades[0]["current_score"] == 1.0

@@ -456,9 +456,13 @@ class SearchService:
         # Typesense entirely and serve Postgres results directly.
         try:
             from eden.config import get_settings
-            _flag_on = getattr(get_settings(), "typesense_search_v1", True)
+
+            _settings = get_settings()
+            _flag_on = getattr(_settings, "typesense_search_v1", True)
+            _cutoff_ms = int(getattr(_settings, "typesense_search_cutoff_ms", 150))
         except Exception:
             _flag_on = True
+            _cutoff_ms = 150
 
         client = self.client if _flag_on else None
         if client is None:
@@ -529,11 +533,6 @@ class SearchService:
         # budget. On a 1.1M-doc corpus this pulls keyword-search p95 from
         # ~555ms to ~164ms (< the 200ms F12 GA gate) and leaves already-
         # fast selective queries untouched. ``0`` disables the cap.
-        try:
-            from eden.config import get_settings as _gs
-            _cutoff_ms = int(getattr(_gs(), "typesense_search_cutoff_ms", 150))
-        except Exception:
-            _cutoff_ms = 150
         if _cutoff_ms > 0:
             params["search_cutoff_ms"] = _cutoff_ms
 

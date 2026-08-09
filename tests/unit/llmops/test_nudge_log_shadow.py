@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from eden.nudges.models import Nudge
 from eden.llmops.filters import nudge as nudge_mod
+from eden.nudges.models import Nudge
 
 
 def test_log_shadow_scheduled_on_match(monkeypatch):
@@ -45,4 +45,6 @@ def test_log_shadow_scheduled_on_match(monkeypatch):
         nudge_audit=[],
     )
     filt.apply(req)
-    assert engine.log_shadow.called or True  # scheduled via create_task
+    # No running loop in this sync test, so ``_schedule`` runs the shadow
+    # log inline via ``asyncio.run`` — the call must have completed.
+    assert engine.log_shadow.called

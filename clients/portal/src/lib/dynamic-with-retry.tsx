@@ -108,9 +108,16 @@ class PanelErrorBoundary extends Component<
     console.error("[dynamic-with-retry] panel failed to load", error);
   }
 
+  private handleRetry = (): void => {
+    // Remount via parent `key={attempt}` first so the next render gets a
+    // fresh `React.lazy` — clearing local error alone would re-render the
+    // same permanently-rejected lazy singleton.
+    this.props.onRetry();
+  };
+
   render(): ReactNode {
     if (this.state.error) {
-      return this.props.fallback(this.state.error, this.props.onRetry);
+      return this.props.fallback(this.state.error, this.handleRetry);
     }
     return this.props.children;
   }

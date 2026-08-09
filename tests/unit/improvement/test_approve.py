@@ -10,7 +10,6 @@ import pytest
 from eden.improvement.approve import ApproveBlockedError, approve_plan
 from eden.providers import PullRequestInfo
 
-
 _SAMPLE_DIFF = """--- a/foo.py
 +++ b/foo.py
 @@ -1 +1 @@

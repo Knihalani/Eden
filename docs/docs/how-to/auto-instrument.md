@@ -56,8 +56,9 @@ configure({
   orgId: process.env.EDEN_ORG_ID!,
 });
 
-const { wrapOpenAI } = instrument();
-const openai = wrapOpenAI(new OpenAI());
+// Prototype-patches OpenAI/Anthropic; returns wrap* for other frameworks.
+const { wrapOpenAI, patched } = instrument();
+const openai = patched.openai ? new OpenAI() : wrapOpenAI(new OpenAI());
 
 const reply = await openai.chat.completions.create({
   model: "gpt-4o-mini",

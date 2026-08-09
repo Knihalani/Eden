@@ -572,9 +572,12 @@ async def _get_parent_steps(
             if isinstance(val, str):
                 with contextlib.suppress(ValueError, TypeError):
                     d[jk] = json.loads(val)
-        attrs = d.get("attributes") if isinstance(d.get("attributes"), dict) else {}
-        payload = d.get("payload") if isinstance(d.get("payload"), dict) else {}
-        response = payload.get("response") if isinstance(payload.get("response"), dict) else {}
+        _attrs = d.get("attributes")
+        attrs = _attrs if isinstance(_attrs, dict) else {}
+        _payload = d.get("payload")
+        payload = _payload if isinstance(_payload, dict) else {}
+        _response = payload.get("response")
+        response = _response if isinstance(_response, dict) else {}
         d["response_hash"] = (
             d.get("response_hash")
             or attrs.get("response_hash")
@@ -663,20 +666,21 @@ def _normalize_parent_step_indices(
 
 def _step_has_replayable_prompt(step: dict[str, Any]) -> bool:
     """True when the recorded step carries prompt/messages for live re-exec."""
-    payload = step.get("payload") if isinstance(step.get("payload"), dict) else {}
-    request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
+    _payload = step.get("payload")
+    payload = _payload if isinstance(_payload, dict) else {}
+    _request = payload.get("request")
+    request = _request if isinstance(_request, dict) else {}
     prompt = request.get("prompt") or payload.get("prompt") or ""
     if isinstance(prompt, str) and prompt.strip():
         return True
     messages = request.get("messages") or payload.get("messages") or []
-    if isinstance(messages, list) and messages:
-        return True
-    return False
+    return bool(isinstance(messages, list) and messages)
 
 
 def _recorded_cache_key(step: dict[str, Any]) -> str | None:
     """Prefer the cache key written at record time (survives index remap)."""
-    attrs = step.get("attributes") if isinstance(step.get("attributes"), dict) else {}
+    _attrs = step.get("attributes")
+    attrs = _attrs if isinstance(_attrs, dict) else {}
     key = attrs.get("cache_key")
     if isinstance(key, str) and key.strip():
         return key

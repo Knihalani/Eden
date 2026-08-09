@@ -217,14 +217,14 @@ def test_kill_switch_default_off_for_mutating() -> None:
     from eden.config import get_settings
 
     settings = get_settings()
-    MUTATING = (
+    mutating_actions = (
         "truncate_context",
         "block_user",
         "escalate_to_admin",
         "revoke_api_key",
         "apply_policy_change",
     )
-    for action_class in MUTATING:
+    for action_class in mutating_actions:
         assert settings.get_action_default(action_class) is False, (
             f"mutating action {action_class} defaulted ON — "
             "violates spec §04 #9"
@@ -315,11 +315,12 @@ def test_safe_float_handles_nan_and_inf() -> None:
     raising. A malformed event payload must not 500 the
     guardrail.
     """
+    import math
+
     from eden.observability.trace_quality.hooks import (
         _safe_float,
         _safe_int,
     )
-    import math
 
     assert _safe_float(float("nan")) == 0.0
     assert _safe_float(float("inf")) == 0.0

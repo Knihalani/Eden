@@ -8,15 +8,20 @@ import {
 } from "@/lab/fixtures/improve";
 import { AgentLink, EmptyState } from "@/lab/lab-ui";
 import {
+  AutonomyTierChip,
   ImproveKindChip,
   ImproveStatusChip,
 } from "@/lab/improve/improve-chrome";
 import { RejectPlanDialog } from "@/components/improve/reject-plan-dialog";
+import { MergePlanDialog } from "@/components/improve/merge-plan-dialog";
+import { RevertPlanDialog } from "@/components/improve/revert-plan-dialog";
 
 export function ImprovePlanView({
   plan,
   hasPlans = true,
   onStatus,
+  onMerge,
+  onRevert,
   onBack,
 }: {
   plan: ImprovePlanFixture | null;
@@ -27,10 +32,16 @@ export function ImprovePlanView({
     status: ImprovePlanFixture["status"],
     reason?: string,
   ) => void | Promise<void>;
+  onMerge?: (id: string) => void | Promise<void>;
+  onRevert?: (id: string) => void | Promise<void>;
   onBack: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [rejectBusy, setRejectBusy] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [revertBusy, setRevertBusy] = useState(false);
   if (!plan) {
     if (!hasPlans) {
       return (
@@ -83,6 +94,19 @@ export function ImprovePlanView({
     (plan.status === "needs_you" ||
       plan.status === "in_progress" ||
       plan.status === "verify");
+  const canMerge =
+    !isSynthesized &&
+    plan.kind === "code_patch" &&
+    plan.status === "verify" &&
+    Boolean(plan.prUrl) &&
+    Boolean(onMerge);
+  const canRevert =
+    !isSynthesized &&
+    plan.kind === "code_patch" &&
+    plan.status === "done" &&
+    Boolean(plan.prUrl) &&
+    !plan.parentPlanId &&
+    Boolean(onRevert);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -91,6 +115,7 @@ export function ImprovePlanView({
           <div className="flex flex-wrap items-center gap-2">
             <ImproveStatusChip status={plan.status} />
             <ImproveKindChip kind={plan.kind} />
+            <AutonomyTierChip tierApplied={plan.autonomyTierRequired} />
           </div>
           <h2 className="type-ui mt-2 text-[var(--text)]">{plan.title}</h2>
           <p className="type-meta mt-1">
@@ -118,6 +143,26 @@ export function ImprovePlanView({
               onClick={() => setRejecting(true)}
             >
               Reject
+            </button>
+          ) : null}
+          {canRevert ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm !text-[var(--error)]"
+              title="Draft and open a revert PR for this merged fix"
+              onClick={() => setReverting(true)}
+            >
+              Revert
+            </button>
+          ) : null}
+          {canMerge ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              title="Merge the open PR on GitHub"
+              onClick={() => setMerging(true)}
+            >
+              Merge PR
             </button>
           ) : null}
           {canDecide ? (
@@ -210,7 +255,7 @@ export function ImprovePlanView({
               ) : null}
               {plan.playgroundId ? (
                 <Link
-                  href={`/evals?mode=playground&id=${plan.playgroundId}`}
+                  href={`/playgrounds/${plan.playgroundId}`}
                   className="ds-btn ds-btn-ghost ds-btn-sm"
                 >
                   Try draft
@@ -273,6 +318,40 @@ export function ImprovePlanView({
           }}
         />
       ) : null}
+      {merging && onMerge ? (
+        <MergePlanDialog
+          planTitle={plan.title}
+          prUrl={plan.prUrl}
+          busy={mergeBusy}
+          onCancel={() => setMerging(false)}
+          onConfirm={async () => {
+            setMergeBusy(true);
+            try {
+              await onMerge(plan.id);
+              setMerging(false);
+            } finally {
+              setMergeBusy(false);
+            }
+          }}
+        />
+      ) : null}
+      {reverting && onRevert ? (
+        <RevertPlanDialog
+          planTitle={plan.title}
+          prUrl={plan.prUrl}
+          busy={revertBusy}
+          onCancel={() => setReverting(false)}
+          onConfirm={async () => {
+            setRevertBusy(true);
+            try {
+              await onRevert(plan.id);
+              setReverting(false);
+            } finally {
+              setRevertBusy(false);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -299,7 +378,7 @@ function primaryHref(
 ): { href: string; label: string } | null {
   if (plan.primaryAction === "try_evals" && plan.playgroundId) {
     return {
-      href: `/evals?mode=playground&id=${plan.playgroundId}`,
+      href: `/playgrounds/${plan.playgroundId}`,
       label: "Try in Evals",
     };
   }
@@ -335,7 +414,7 @@ function primaryHref(
   }
   if (plan.playgroundId) {
     return {
-      href: `/evals?mode=playground&id=${plan.playgroundId}`,
+      href: `/playgrounds/${plan.playgroundId}`,
       label: "Try in Evals",
     };
   }

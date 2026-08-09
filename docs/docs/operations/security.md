@@ -40,7 +40,8 @@
   [`docs/soc2-control-mapping.md`](soc2-control-mapping.md).
 * **GDPR**: self-service erasure (`DELETE /auth/users/me`) plus an
   admin-triggered path, both backed by the same erasure service.
-  Coverage is real but partial and self-reported per request — see
+  Coverage is real but **partial** and self-reported per request — Eden
+  does **not** offer a certified "GDPR-compliant" guarantee. See
   [Security model → GDPR right-to-be-forgotten](/explanation/security-model#gdpr-right-to-be-forgotten)
   for what's covered today. Audit event + metric emitted per request
   (§9.2.2). DPA available on request.

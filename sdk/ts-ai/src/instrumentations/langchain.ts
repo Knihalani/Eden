@@ -33,7 +33,8 @@ const _proxies = new WeakMap<object, object>();
 const WRAP_MARKER = Symbol.for("@eden-ai/sdk.wrapLangChain");
 
 const METHODS_TO_WRAP = ["invoke", "call", "stream", "batch"] as const;
-type MethodName = (typeof METHODS_TO_WRAP)[number];
+export type LangChainMethodName = (typeof METHODS_TO_WRAP)[number];
+export { METHODS_TO_WRAP as LANGCHAIN_METHODS_TO_WRAP };
 
 export function wrapLangChain<T extends object>(
   chatModel: T,
@@ -55,7 +56,7 @@ export function wrapLangChain<T extends object>(
       ) {
         const original = Reflect.get(target, prop, receiver);
         if (typeof original !== "function") return original;
-        return _wrapMethod(
+        return _wrapLangChainMethod(
           original as (...a: any[]) => any,
           prop as MethodName,
           opts,
@@ -74,7 +75,9 @@ export function wrapLangChain<T extends object>(
   return proxy;
 }
 
-function _wrapMethod(
+type MethodName = LangChainMethodName;
+
+export function _wrapLangChainMethod(
   original: (...args: any[]) => any,
   method: MethodName,
   opts: TraceOptions,

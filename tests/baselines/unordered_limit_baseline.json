@@ -1,0 +1,330 @@
+{
+  "_comment": "Known LIMIT-without-ORDER-BY violations. Burn this list down to []; do not add to it. Regenerate with `python scripts/lint_unordered_limit.py --write-baseline`.",
+  "violations": [
+    {
+      "file": "src/eden/agents/agent_intel/_common.py",
+      "line": 489,
+      "snippet": "SELECT id, org_id, agent_id, display_name, slack_identity,"
+    },
+    {
+      "file": "src/eden/agents/agent_intel/_common.py",
+      "line": 701,
+      "snippet": "SELECT id FROM agent_fleet_identities"
+    },
+    {
+      "file": "src/eden/agents/evolution/components.py",
+      "line": 597,
+      "snippet": "SELECT id FROM users WHERE clerk_id = 'system' LIMIT 1"
+    },
+    {
+      "file": "src/eden/api/deps.py",
+      "line": 419,
+      "snippet": "SELECT role"
+    },
+    {
+      "file": "src/eden/api/deps.py",
+      "line": 438,
+      "snippet": "SELECT 1"
+    },
+    {
+      "file": "src/eden/api/deps.py",
+      "line": 759,
+      "snippet": "SELECT id FROM users WHERE id::text = $1 OR clerk_id::text = $1 LIMIT 1"
+    },
+    {
+      "file": "src/eden/api/deps.py",
+      "line": 805,
+      "snippet": "SELECT id FROM organizations"
+    },
+    {
+      "file": "src/eden/api/deps.py",
+      "line": 900,
+      "snippet": "SELECT id FROM organizations"
+    },
+    {
+      "file": "src/eden/api/deps.py",
+      "line": 1085,
+      "snippet": "SELECT id FROM organizations"
+    },
+    {
+      "file": "src/eden/api/routes/auth.py",
+      "line": 499,
+      "snippet": "SELECT s.id AS provider_id, s.org_id"
+    },
+    {
+      "file": "src/eden/api/routes/clerk_webhooks.py",
+      "line": 479,
+      "snippet": "SELECT id FROM organizations"
+    },
+    {
+      "file": "src/eden/api/routes/clerk_webhooks.py",
+      "line": 550,
+      "snippet": "SELECT om.org_id, om.user_id"
+    },
+    {
+      "file": "src/eden/api/routes/github.py",
+      "line": 780,
+      "snippet": "SELECT org_id, completed_by_users"
+    },
+    {
+      "file": "src/eden/api/routes/github.py",
+      "line": 1254,
+      "snippet": "SELECT org_id FROM org_github_installations"
+    },
+    {
+      "file": "src/eden/api/routes/github.py",
+      "line": 1599,
+      "snippet": "SELECT id FROM repo_connections"
+    },
+    {
+      "file": "src/eden/api/routes/integrations_status.py",
+      "line": 85,
+      "snippet": "SELECT 1 FROM org_github_installations"
+    },
+    {
+      "file": "src/eden/api/routes/orgs.py",
+      "line": 787,
+      "snippet": "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users"
+    },
+    {
+      "file": "src/eden/api/routes/portal.py",
+      "line": 2397,
+      "snippet": "SELECT DISTINCT s.detail->>'signal_id' AS def_id,"
+    },
+    {
+      "file": "src/eden/api/routes/slack.py",
+      "line": 224,
+      "snippet": "SELECT org_id FROM onboarding_state"
+    },
+    {
+      "file": "src/eden/data_platform/analytics_engine.py",
+      "line": 374,
+      "snippet": "SELECT COUNT(DISTINCT user_id)"
+    },
+    {
+      "file": "src/eden/data_platform/analytics_engine.py",
+      "line": 391,
+      "snippet": "SELECT COUNT(DISTINCT user_id)"
+    },
+    {
+      "file": "src/eden/db_migrations/versions/007_billing_enhancements.py",
+      "line": 39,
+      "snippet": "UPDATE jobs"
+    },
+    {
+      "file": "src/eden/debugger/checkpoints.py",
+      "line": 271,
+      "snippet": "SELECT payload"
+    },
+    {
+      "file": "src/eden/evaluation/agentic_metrics/service.py",
+      "line": 77,
+      "snippet": "SELECT judge_name,"
+    },
+    {
+      "file": "src/eden/evaluation/eval_intel/_common.py",
+      "line": 550,
+      "snippet": "SELECT id, org_id, name, spec_json, status, created_at"
+    },
+    {
+      "file": "src/eden/evaluation/human_labels.py",
+      "line": 170,
+      "snippet": "SELECT id FROM labeling_items"
+    },
+    {
+      "file": "src/eden/evaluation/labeling.py",
+      "line": 322,
+      "snippet": "SELECT id FROM labeling_items"
+    },
+    {
+      "file": "src/eden/evaluation/regression_builder.py",
+      "line": 204,
+      "snippet": "SELECT di.id, di.org_id, d.name AS dataset_name,"
+    },
+    {
+      "file": "src/eden/experiments/issue_link.py",
+      "line": 89,
+      "snippet": "SELECT outcome FROM telemetry_events"
+    },
+    {
+      "file": "src/eden/experiments/issue_link.py",
+      "line": 102,
+      "snippet": "SELECT outcome FROM telemetry_events"
+    },
+    {
+      "file": "src/eden/fleet/service.py",
+      "line": 480,
+      "snippet": "INSERT INTO agent_registry"
+    },
+    {
+      "file": "src/eden/fleet/service.py",
+      "line": 509,
+      "snippet": "SELECT DISTINCT agent_id FROM agent_stumbles"
+    },
+    {
+      "file": "src/eden/improvement/agent.py",
+      "line": 1241,
+      "snippet": "SELECT id, agent_id, name FROM nudges"
+    },
+    {
+      "file": "src/eden/improvement/agent.py",
+      "line": 1251,
+      "snippet": "SELECT id, agent_id, name FROM nudges"
+    },
+    {
+      "file": "src/eden/improvement/cockpit_aggregator.py",
+      "line": 784,
+      "snippet": "SELECT agent_id, version, updated_at"
+    },
+    {
+      "file": "src/eden/improvement/guardian.py",
+      "line": 92,
+      "snippet": "SELECT 1 FROM improvement_plans"
+    },
+    {
+      "file": "src/eden/improvement/plans_repo.py",
+      "line": 270,
+      "snippet": "SELECT * FROM improvement_plans"
+    },
+    {
+      "file": "src/eden/improvement/plans_repo.py",
+      "line": 770,
+      "snippet": "SELECT 1 FROM pr_rejection_memory"
+    },
+    {
+      "file": "src/eden/improvement/plans_repo.py",
+      "line": 817,
+      "snippet": "SELECT * FROM improvement_plans"
+    },
+    {
+      "file": "src/eden/improvement/schedule.py",
+      "line": 122,
+      "snippet": "SELECT id FROM organizations LIMIT 500"
+    },
+    {
+      "file": "src/eden/integrations/pagerduty/store.py",
+      "line": 84,
+      "snippet": "SELECT routing_key_enc FROM org_pagerduty_configs"
+    },
+    {
+      "file": "src/eden/issues/agent_identity.py",
+      "line": 50,
+      "snippet": "SELECT agent_id"
+    },
+    {
+      "file": "src/eden/issues/agent_identity.py",
+      "line": 66,
+      "snippet": "SELECT agent_id"
+    },
+    {
+      "file": "src/eden/issues/triage_agent.py",
+      "line": 412,
+      "snippet": "SELECT 1 FROM issue_verifications"
+    },
+    {
+      "file": "src/eden/kb/ledger/retrieve.py",
+      "line": 122,
+      "snippet": "SELECT le.id, le.chapter, le.text, le.weight, le.version,"
+    },
+    {
+      "file": "src/eden/llmops/insights_tools.py",
+      "line": 1978,
+      "snippet": "SELECT trace_id,"
+    },
+    {
+      "file": "src/eden/llmops/promotion_hooks.py",
+      "line": 266,
+      "snippet": "SELECT experiment_id, agent"
+    },
+    {
+      "file": "src/eden/nudges/shadow_outcomes.py",
+      "line": 24,
+      "snippet": "SELECT no.id AS outcome_id, no.trace_id, n.id AS nudge_id,"
+    },
+    {
+      "file": "src/eden/observability/live_tail/service.py",
+      "line": 432,
+      "snippet": "SELECT {}"
+    },
+    {
+      "file": "src/eden/observability/message_store.py",
+      "line": 387,
+      "snippet": "SELECT tm.trace_id"
+    },
+    {
+      "file": "src/eden/observability/patterns_clusterer.py",
+      "line": 62,
+      "snippet": "SELECT DISTINCT tenant_id FROM telemetry_events LIMIT 100"
+    },
+    {
+      "file": "src/eden/patches/rca_linker.py",
+      "line": 174,
+      "snippet": "SELECT DISTINCT attributes->>'code_path' AS code_path FROM telemetry_events WHER"
+    },
+    {
+      "file": "src/eden/prompts/pg_store.py",
+      "line": 51,
+      "snippet": "SELECT 1 FROM prompt_templates"
+    },
+    {
+      "file": "src/eden/self_obs/synthetics.py",
+      "line": 55,
+      "snippet": "SELECT 1 FROM telemetry_events"
+    },
+    {
+      "file": "src/eden/services/alert_email.py",
+      "line": 36,
+      "snippet": "SELECT DISTINCT u.email"
+    },
+    {
+      "file": "src/eden/services/budget_service.py",
+      "line": 259,
+      "snippet": "SELECT cost_usd, requests_count, window_start, window_end"
+    },
+    {
+      "file": "src/eden/services/compliance_jobs.py",
+      "line": 175,
+      "snippet": "-- Canonical table is ``org_api_keys`` with a ``key_prefix``"
+    },
+    {
+      "file": "src/eden/services/governance_intel/approval.py",
+      "line": 233,
+      "snippet": "SELECT steps_json, status FROM approval_workflows WHERE id = $1 AND org_id = $2 "
+    },
+    {
+      "file": "src/eden/services/governance_intel/approval.py",
+      "line": 370,
+      "snippet": "SELECT requested_by, state, payload_json FROM approval_requests WHERE id = $1 AN"
+    },
+    {
+      "file": "src/eden/services/governance_intel/compliance.py",
+      "line": 729,
+      "snippet": "SELECT evidence_json FROM compliance_evidence WHERE id = $1 AND org_id = $2 LIMI"
+    },
+    {
+      "file": "src/eden/services/governance_intel/lineage.py",
+      "line": 171,
+      "snippet": "SELECT id FROM outcomes WHERE org_id = $1 AND trace_id = $2 LIMIT 50"
+    },
+    {
+      "file": "src/eden/services/governance_intel/lineage.py",
+      "line": 182,
+      "snippet": "SELECT DISTINCT user_id FROM telemetry_events WHERE org_id = $1 AND trace_id = $"
+    },
+    {
+      "file": "src/eden/services/governance_intel/lineage.py",
+      "line": 195,
+      "snippet": "SELECT trace_id FROM outcomes WHERE org_id = $1 AND id = $2 LIMIT 1"
+    },
+    {
+      "file": "src/eden/services/tool_intel/_common.py",
+      "line": 530,
+      "snippet": "SELECT DISTINCT"
+    },
+    {
+      "file": "src/eden/storage/postgres.py",
+      "line": 1426,
+      "snippet": "SELECT id, org_id, agent_id, upload_version, code_path,"
+    }
+  ]
+}

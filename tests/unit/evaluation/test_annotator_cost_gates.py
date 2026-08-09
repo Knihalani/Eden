@@ -166,7 +166,7 @@ async def test_annotator_records_spend_against_the_budget() -> None:
     assert record.await_args.args[1] == 0.004
 
 
-async def test_records_spend_from_the_REAL_LLMResponse_shape() -> None:
+async def test_records_spend_from_the_real_llm_response_shape() -> None:
     """The regression this file missed.
 
     ``test_annotator_records_spend_against_the_budget`` above passes a

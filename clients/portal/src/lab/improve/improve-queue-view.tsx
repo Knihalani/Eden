@@ -10,6 +10,7 @@ import {
 } from "@/lab/fixtures/improve";
 import { AgentLink, EmptyState, FilterChips } from "@/lab/lab-ui";
 import {
+  AutonomyTierChip,
   ImproveKindChip,
   ImproveStatusChip,
 } from "@/lab/improve/improve-chrome";
@@ -61,6 +62,16 @@ export function ImproveQueueView({
     for (const item of queueItems) {
       const pid = planIdFromQueueItem(item);
       if (pid) map.set(pid, item.column);
+    }
+    return map;
+  }, [queueItems]);
+
+  const tierByPlanId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of queueItems) {
+      const pid = planIdFromQueueItem(item);
+      const tier = item.autonomy_tier_required;
+      if (pid && tier) map.set(pid, tier);
     }
     return map;
   }, [queueItems]);
@@ -230,6 +241,8 @@ export function ImproveQueueView({
               const agent = agentForPlan(p);
               const active = p.id === selected?.id;
               const column = columnByPlanId.get(p.id);
+              const autonomyTier =
+                p.autonomyTierRequired ?? tierByPlanId.get(p.id) ?? null;
               return (
                 <li key={p.id}>
                   <button
@@ -244,6 +257,7 @@ export function ImproveQueueView({
                     <div className="flex flex-wrap items-center gap-2">
                       <ImproveStatusChip status={p.status} />
                       <ImproveKindChip kind={p.kind} />
+                      <AutonomyTierChip tierApplied={autonomyTier} />
                       {column === "fix_now" || column === "improve_later" ? (
                         <span className="type-meta text-[var(--text-faint)]">
                           {column === "fix_now" ? "Fix now" : "Improve later"}
@@ -325,6 +339,7 @@ function QueuePeek({
       <div className="flex flex-wrap items-center gap-2">
         <ImproveStatusChip status={plan.status} />
         <ImproveKindChip kind={plan.kind} />
+        <AutonomyTierChip tierApplied={plan.autonomyTierRequired} />
         <EvidenceChips plan={plan} />
       </div>
       <h2 className="type-ui mt-3 text-[var(--text)]">{plan.title}</h2>

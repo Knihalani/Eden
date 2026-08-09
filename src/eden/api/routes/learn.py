@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
@@ -460,6 +460,224 @@ async def author_artifact_nl(
         org_id, agent_id=body.agent_id, description=body.description
     )
     return _ok("artifacts", {"artifact_id": aid})
+
+
+@router.post("/agents/{agent_id}/artifacts/context")
+async def upload_artifact_context(
+    org_id: str = Depends(require_path_org_access),
+    agent_id: str = Path(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """FEAT-148 — upload team .txt/.md context for Book/Ledger synthesis."""
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+    from eden.kb.artifact_context import (
+        infer_context_content_type,
+        insert_agent_context,
+        is_allowed_context_filename,
+        serialize_context_row,
+    )
+
+    safe_name = (file.filename or "context.txt").split("/")[-1].split("\\")[-1]
+    if not is_allowed_context_filename(safe_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Only .txt and .md files are accepted for team context uploads.",
+        )
+    raw = await file.read(512 * 1024 + 1)
+    if len(raw) > 512 * 1024:
+        raise HTTPException(status_code=413, detail="Context file too large (512KB max)")
+    try:
+        text_content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text") from None
+    if not text_content.strip():
+        raise HTTPException(status_code=400, detail="Context file is empty")
+
+    content_type = infer_context_content_type(safe_name)
+    if file.content_type and file.content_type.startswith("text/"):
+        content_type = file.content_type
+
+    row = await insert_agent_context(
+        org_id,
+        agent_id,
+        filename=safe_name,
+        content=text_content,
+        content_type=content_type,
+        created_by=str(user.get("user_id") or "unknown"),
+    )
+    if row is None:
+        raise HTTPException(status_code=503, detail="Failed to store team context")
+    payload = serialize_context_row(row)
+    payload["agent_id"] = agent_id
+    return _ok("artifact_context", payload)
+
+
+@router.get("/agents/{agent_id}/artifacts/context")
+async def list_artifact_context(
+    org_id: str = Depends(require_path_org_access),
+    agent_id: str = Path(...),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    """FEAT-148 — list team-uploaded context rows for an agent."""
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+    from eden.kb.artifact_context import list_agent_context, serialize_context_row
+
+    rows = await list_agent_context(org_id, agent_id, limit=limit)
+    return _ok(
+        "artifact_context",
+        {"items": [serialize_context_row(r) for r in rows]},
+    )
+
+
+@router.get("/artifacts/demotions")
+async def list_artifact_demotions(
+    org_id: str = Depends(require_path_org_access),
+    agent_id: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict[str, Any]:
+    """FEAT-157 — recent artifact demotions from promotion_candidates + archived nudges."""
+    if not await artifacts_enabled(org_id):
+        return preview_disabled_envelope("artifacts")
+
+    items: list[dict[str, Any]] = []
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return _ok("artifacts", {"demotions": [], "items": []})
+
+        if agent_id:
+            gate_rows = await client.fetch(
+                """
+                SELECT pc.id AS candidate_id, pc.ref_id, pc.demoted_at, pc.evidence,
+                       n.id AS artifact_id, n.agent_id, n.name, n.mode, n.content
+                FROM promotion_candidates pc
+                JOIN nudges n ON n.id::text = pc.ref_id
+                WHERE pc.org_id = $1
+                  AND pc.kind = 'nudge'
+                  AND pc.status = 'demoted'
+                  AND n.agent_id = $2
+                ORDER BY pc.demoted_at DESC NULLS LAST
+                LIMIT $3
+                """,
+                org_id,
+                agent_id,
+                limit,
+            )
+        else:
+            gate_rows = await client.fetch(
+                """
+                SELECT pc.id AS candidate_id, pc.ref_id, pc.demoted_at, pc.evidence,
+                       n.id AS artifact_id, n.agent_id, n.name, n.mode, n.content
+                FROM promotion_candidates pc
+                JOIN nudges n ON n.id::text = pc.ref_id
+                WHERE pc.org_id = $1
+                  AND pc.kind = 'nudge'
+                  AND pc.status = 'demoted'
+                ORDER BY pc.demoted_at DESC NULLS LAST
+                LIMIT $2
+                """,
+                org_id,
+                limit,
+            )
+
+        for row in gate_rows or []:
+            evidence = row.get("evidence") or {}
+            if isinstance(evidence, str):
+                import json as _json
+
+                try:
+                    evidence = _json.loads(evidence)
+                except Exception:
+                    evidence = {}
+            demoted_at = row.get("demoted_at")
+            if isinstance(demoted_at, datetime):
+                demoted_at = demoted_at.isoformat()
+            items.append(
+                {
+                    "artifact_id": str(row.get("artifact_id") or row.get("ref_id") or ""),
+                    "agent_id": row.get("agent_id"),
+                    "name": row.get("name"),
+                    "mode": row.get("mode"),
+                    "reason": str(evidence.get("demote_reason") or "demoted"),
+                    "demoted_at": demoted_at,
+                    "source": "evidence_gate",
+                    "content_preview": (str(row.get("content") or "")[:200]),
+                }
+            )
+
+        seen = {item["artifact_id"] for item in items}
+        remaining = max(0, limit - len(items))
+        if remaining > 0:
+            if agent_id:
+                archived_rows = await client.fetch(
+                    """
+                    SELECT id, agent_id, name, mode, content, archived_at, evidence
+                    FROM nudges
+                    WHERE org_id = $1 AND agent_id = $2 AND mode = 'archived'
+                      AND archived_at IS NOT NULL
+                    ORDER BY archived_at DESC
+                    LIMIT $3
+                    """,
+                    org_id,
+                    agent_id,
+                    remaining,
+                )
+            else:
+                archived_rows = await client.fetch(
+                    """
+                    SELECT id, agent_id, name, mode, content, archived_at, evidence
+                    FROM nudges
+                    WHERE org_id = $1 AND mode = 'archived'
+                      AND archived_at IS NOT NULL
+                    ORDER BY archived_at DESC
+                    LIMIT $2
+                    """,
+                    org_id,
+                    remaining,
+                )
+            for row in archived_rows or []:
+                aid = str(row["id"])
+                if aid in seen:
+                    continue
+                evidence = row.get("evidence") or {}
+                if isinstance(evidence, str):
+                    import json as _json
+
+                    try:
+                        evidence = _json.loads(evidence)
+                    except Exception:
+                        evidence = {}
+                archived_at = row.get("archived_at")
+                if isinstance(archived_at, datetime):
+                    archived_at = archived_at.isoformat()
+                reason = (
+                    evidence.get("demote_reason")
+                    or evidence.get("archive_reason")
+                    or "archived"
+                )
+                items.append(
+                    {
+                        "artifact_id": aid,
+                        "agent_id": row.get("agent_id"),
+                        "name": row.get("name"),
+                        "mode": row.get("mode"),
+                        "reason": str(reason),
+                        "demoted_at": archived_at,
+                        "source": "archived_nudge",
+                        "content_preview": (str(row.get("content") or "")[:200]),
+                    }
+                )
+    except Exception as exc:
+        logger.debug(
+            "list_artifact_demotions failed: %s", redact_all(str(exc))
+        )
+
+    return _ok("artifacts", {"demotions": items, "items": items})
 
 
 @router.get("/artifacts/export")

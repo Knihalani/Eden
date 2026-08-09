@@ -7,10 +7,11 @@ sidebar_position: 6
 
 # Auto-instrumentation matrix
 
-The Eden SDKs patch the most popular LLM SDKs at import time (Python) or
-wrap client instances (TypeScript), so "trace my agent" is a one-liner.
-The matrix below lists every framework the SDKs know how to wrap and what
-gets recorded.
+Python's `eden.instrument()` is a true one-liner across 13 frameworks.
+TypeScript's `instrument()` prototype-patches the frameworks listed below
+(OpenAI, Anthropic, Groq, LangChain, Gemini, Mistral); others still need
+`wrap*()` — see the TS matrix. The tables list every framework the SDKs
+know how to wrap and what gets recorded.
 
 ## Three-tier model
 
@@ -37,6 +38,9 @@ See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 | `pydantic_ai` | Patch `Agent.run` / `run_sync` | agent name, input/output, duration, `source_format: pydantic-ai` |
 | `bedrock` | boto3 `bedrock-runtime` API call wrap | model, request/response, tokens, latency |
 | `gemini` | `google.generativeai` `generate_content` wrap | model, prompt, response, tokens, latency |
+| `groq` | Patch `chat.completions.create` | model, prompt, response, tokens; streaming metrics |
+| `cohere` | Patch v2 `chat` / `chat_stream` | model, response, tokens, tool calls |
+| `mistral` | Patch `Chat.complete` / `.stream` | model, response, tokens; streaming metrics |
 | `mastra` | No-op (use TypeScript SDK) | — |
 
 ### Tier 2 — Python universal fallback
@@ -49,16 +53,40 @@ See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 
 ### TypeScript (`@eden-ai/sdk`)
 
-The TypeScript SDK wraps **client instances** (Proxy-based), not global
-module exports. Call `wrap*` on the object you already use in production.
+`instrument()` patches supported frameworks **once at class/prototype level**
+(mirroring Python's one-liner UX). Check `result.patched` (sync CJS pass)
+and `result.patchedAsync` (async ESM pass for dual-package SDKs) to see
+what applied in your process. Pass `autoPatch: false` to opt out.
 
-| Framework | Wrapper | Recorded |
-|-----------|---------|----------|
-| `openai` | `wrapOpenAI(client)` | model, prompt, response, tokens; streaming metrics + chunk replay |
-| `anthropic` | `wrapAnthropic(client)` | model, messages, response, tokens, cache tokens |
-| `ai` (Vercel AI) | `wrapVercelAI(aiModule)` — pass `import * as ai from "ai"` | model, prompt/response from `generateText` / `streamText` |
-| `langchain` | `wrapLangChain(chatModelInstance)` | invoke/call/stream/batch on any chat model |
-| `mastra` | `wrapMastra(mastraInstance)` | agent/workflow name, step outcomes, `source_format: mastra` |
+| Framework | `instrument()` auto-patch | `wrap*` fallback | Recorded |
+|-----------|---------------------------|------------------|----------|
+| `openai` | Yes — `Chat.Completions.prototype.create` (+ xAI via `baseURL`) | `wrapOpenAI` / `wrapXai` | model, prompt, response, tokens; streaming + chunk replay |
+| `anthropic` | Yes — `Messages.prototype.create` | `wrapAnthropic` | model, messages, response, tokens, cache tokens |
+| `groq` | Yes — `Chat.Completions.prototype.create` | `wrapGroq` | model, prompt, response, tokens; streaming metrics |
+| `langchain` | Yes — `BaseChatModel` invoke/call/stream/batch | `wrapLangChain` | invoke/call/stream/batch on any chat model |
+| `gemini` | Yes — `GenerativeModel.generateContent` / `@google/genai` Models | `wrapGemini` | model, prompt, response, tokens |
+| `mistral` | Yes — `Chat.complete` / `.stream` (when installed) | `wrapMistral` | model, response, tokens; streaming metrics |
+| `ai` (Vercel AI) | **No** — ESM namespace exports are immutable | `wrapVercelAI` | model, prompt/response from `generateText` / `streamText` |
+| `cohere` | No — dual client shapes (`CohereClient` vs `CohereClientV2`) | `wrapCohere` | v2 chat/chatStream; tool calls |
+| `bedrock` | No — AWS SDK command `send` pattern | `wrapBedrock` | model, request/response, tokens |
+| `mastra` | No — instance-level agent/workflow API | `wrapMastra` | agent/workflow name, step outcomes |
+| `llamaindex` | No — no global span-handler API | `wrapLlamaIndex` | query/chat/retrieve duration, `sourceNodes` |
+
+#### Why not `import-in-the-middle`?
+
+Prototype patching covers every framework with a mutable class prototype
+(OpenAI-shaped clients, LangChain `BaseChatModel`, Gemini `GenerativeModel`,
+etc.) without adding a loader-hook dependency or requiring a `--import`
+startup flag for ESM apps. Vercel AI is the main exception: its API is
+top-level functions on an ESM module namespace object, whose bindings
+cannot be reassigned from outside the module. Loader hooks could intercept
+`ai` at load time but are intentionally deferred (Phase 2 in the SDK DX
+spec) to keep `instrument()` a zero-config one-liner for the common case.
+
+Dual-package SDKs (`openai`, `@anthropic-ai/sdk`, `groq-sdk`) ship
+separate CJS and ESM builds. `instrument()` runs both a synchronous
+`require()` pass (`patched`) and an async dynamic `import()` pass
+(`patchedAsync`) so both import styles are covered.
 
 ### Tier 2 — TypeScript universal fallback
 
@@ -152,9 +180,12 @@ eden.uninstrument("http_capture")  # undo httpx capture
 ```
 
 ```ts
-// TypeScript — create a fresh unwrapped client (no global uninstrument)
+// TypeScript — opt out of auto-patch (wrap* factories still work)
+instrument({ autoPatch: false });
+
+// Or create a fresh unwrapped client in a process that was patched
+// before your code ran (patches are process-global):
 const raw = new OpenAI();
-// do not pass through wrapOpenAI()
 
 // Or disable telemetry entirely:
 configure({ disabled: true });

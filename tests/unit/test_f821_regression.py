@@ -21,7 +21,6 @@ import importlib
 
 import pytest
 
-
 # Each tuple is (module_name, attribute) — the attribute should now be
 # importable (or a known-side-effect call should succeed).
 _REGRESSION_TARGETS: list[tuple[str, str]] = [

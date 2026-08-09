@@ -161,7 +161,7 @@ class TestGuardrailHook:
             "eden.llmops.promotion_hooks._record_action",
             AsyncMock(side_effect=_capture),
         ), patch(
-            "eden.guardrails.LegacyEvalToGuardrailLink.promote",
+            "eden.evaluation.eval_intel.integration.EvalToGuardrailLink.promote_to_guardrail",
             AsyncMock(return_value={"status": "ok", "data": {"id": "p1"}}),
         ):
             await GuardrailHook().on_judge_threshold_breach(
@@ -184,7 +184,7 @@ class TestGuardrailHook:
             "eden.llmops.promotion_hooks._record_action",
             AsyncMock(side_effect=_capture),
         ), patch(
-            "eden.guardrails.LegacyEvalToGuardrailLink.demote",
+            "eden.evaluation.eval_intel.integration.EvalToGuardrailLink.demote",
             AsyncMock(return_value={"status": "ok", "data": {"status": "disabled"}}),
         ):
             await GuardrailHook().on_judge_below_floor(

@@ -7,6 +7,13 @@ name: eden-eval (F56 / N01)
 # Optional:
 #   EDEN_BASE_URL — defaults to https://api.eden.com inside the action
 #
+# Merge gate: POST /orgs/{org}/ci-eval/run runs the trace-based regression
+# suite (N01) and, when enable_playground_scorers is true, FEAT-13
+# deterministic playground scorers on dataset cases. The workflow fails when
+# either gate returns ok=false (scorer failures, baseline score regression,
+# or trace regressions). Enable server-side via ci_eval_playground_scorers_v1
+# or per-run via the action's enable-playground-scorers input.
+#
 # When secrets are missing the job fails loudly (no silent green).
 
 on:
@@ -86,3 +93,4 @@ jobs:
           changed-files: ${{ steps.files.outputs.list }}
           portal-url: ${{ secrets.EDEN_PORTAL_URL || 'https://app.eden.com' }}
           fail-on-regression: "true"
+          enable-playground-scorers: "true"

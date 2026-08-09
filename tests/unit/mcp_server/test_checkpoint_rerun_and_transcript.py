@@ -29,9 +29,10 @@ class _FakeClient:
         prompt_override: str | None = None,
         rerun_mode: str | None = None,
         live_prefix: bool | None = None,
+        live: bool | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
-            ("rerun", org_id, trace_id, from_step, rerun_mode, live_prefix)
+            ("rerun", org_id, trace_id, from_step, rerun_mode, live_prefix, live)
         )
         return {
             "status": "ok",
@@ -88,7 +89,9 @@ async def test_checkpoint_rerun_uses_live_path_and_returns_stats() -> None:
     assert result["cache_hits"] == 2
     assert result["populated_steps"] == 3
     # Delegated to the existing live-rerun client method with live defaults.
-    assert fake.calls == [("rerun", "org-1", "t1", 2, "cached_live", True)]
+    # BUG-28: `live` must default to False — never silently invoke/bill a
+    # real model on the live gateway without an explicit opt-in.
+    assert fake.calls == [("rerun", "org-1", "t1", 2, "cached_live", True, False)]
 
 
 @pytest.mark.asyncio
@@ -102,6 +105,77 @@ async def test_checkpoint_rerun_replay_mode_passthrough() -> None:
     )
     assert out["status"] == "ok"
     assert out["result"]["rerun_mode"] == "replay"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_rerun_forwards_explicit_live_opt_in() -> None:
+    """BUG-28: an explicit ``live=True`` must reach the client call."""
+    fake = _FakeClient()
+    out = await call_tool(
+        "checkpoint_rerun",
+        {"org_id": "org-1", "trace_id": "t1", "live": True},
+        client=fake,
+        auth=_debug_auth(),
+    )
+    assert out["status"] == "ok"
+    assert fake.calls == [("rerun", "org-1", "t1", 0, "cached_live", True, True)]
+
+
+@pytest.mark.asyncio
+async def test_rerun_debugger_forwards_live_param() -> None:
+    """BUG-28: the plain ``rerun_debugger`` tool also forwards ``live``."""
+    fake = _FakeClient()
+    out = await call_tool(
+        "rerun_debugger",
+        {"org_id": "org-1", "trace_id": "t1", "live": True},
+        client=fake,
+        auth=_debug_auth(),
+    )
+    assert out["status"] == "ok"
+    assert fake.calls == [("rerun", "org-1", "t1", 0, None, None, True)]
+
+
+@pytest.mark.asyncio
+async def test_rerun_debugger_live_defaults_to_none() -> None:
+    """Existing callers who don't pass ``live`` see no behavior change."""
+    fake = _FakeClient()
+    await call_tool(
+        "rerun_debugger",
+        {"org_id": "org-1", "trace_id": "t1"},
+        client=fake,
+        auth=_debug_auth(),
+    )
+    assert fake.calls == [("rerun", "org-1", "t1", 0, None, None, None)]
+
+
+@pytest.mark.asyncio
+async def test_http_client_rerun_debugger_includes_live_in_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BUG-28: ``HttpEdenClient.rerun_debugger`` must map ``live`` into the
+    HTTP request body sent to ``POST /orgs/{org_id}/debugger/rerun``."""
+    from eden.mcp_server.client import HttpEdenClient
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_request(self, method, path, *, json_body=None, params=None):
+        captured["method"] = method
+        captured["path"] = path
+        captured["json_body"] = json_body
+        return {"status": "ok"}
+
+    monkeypatch.setattr(HttpEdenClient, "_request", _fake_request)
+
+    client = HttpEdenClient(auth=_debug_auth())
+    await client.rerun_debugger(
+        "org-1", trace_id="t1", from_step=2, live=True
+    )
+
+    assert captured["json_body"]["live"] is True
+
+    captured.clear()
+    await client.rerun_debugger("org-1", trace_id="t1")
+    assert "live" not in captured["json_body"]
 
 
 @pytest.mark.asyncio

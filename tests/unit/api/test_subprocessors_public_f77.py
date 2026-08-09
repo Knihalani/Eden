@@ -66,7 +66,8 @@ class TestF77SubprocessorsPublic:
         accidentally drops it would break the §1.5 audit."""
         from eden.api.middleware import default_deny
 
-        text = open(default_deny.__file__).read()
+        with open(default_deny.__file__, encoding="utf-8") as _f:
+            text = _f.read()
         assert '"/subprocessors"' in text, (
             "F77 regression: '/subprocessors' is no longer in the "
             "DEFAULT_PUBLIC_PREFIXES tuple in default_deny.py. "

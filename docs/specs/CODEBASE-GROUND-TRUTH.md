@@ -158,15 +158,15 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | Asset | Path / status |
 |---|---|
 | **U12 IA freeze** | **SHIPPED** — `sidebar-config.ts` ≤12 core items; Observe/Improve/Evaluate groups; `CORE_NAV_ITEM_COUNT`; legacy redirects in `next.config.ts` |
-| **U00 portal-os** | **SHIPPED (v0)** — `clients/portal/src/components/portal-os/` (`AppShell`, `ResourcePageShell`, `CoreResourcePage`, `DetailPanelShell`, `MobileBottomNav`, `DensityProvider`, `QueryFilterBar`, `ViewsMenu`, `InfiniteDataTable`, `BulkActionBar`, URL state hooks, Storybook stubs) |
-| **U18 portal overhaul** | **SHIPPED (Phase 10)** — `(portal)/layout.tsx` wired through `AppShell`; `DetailPanelShell` on traces, artifacts, issues, alerts, experiments, promotions; evaluate routes on `CoreResourcePage`; mobile nav IA locked; ⌘K ≥5 actions; `portal-routes` ↔ `sidebar-config` CI test; trace deep-link redirects; Storybook stubs |
-| **U19 portal improvement** | **SHIPPED (Phase 11)** — `lib/portal-cross-links.ts` + `CrossLinkBar` on trace/issue/alert/experiment/artifact panels; U02 `/artifacts` KPI tabs, evidence/export detail, bulk archive, j/k, `?artifactId=`; U05 ledger diff/citations/inject/max-tokens + drift histogram cards + trace drill-down; `DriftHistogram`; debugger-sessions `CoreResourcePage`; `u19-portal.test.ts` |
-| **U20 portal polish** | **SHIPPED (Phase 12)** — `lib/portal-polish.ts` (axe routes, Gap 4.8 microcopy, toast registry); unified `IssuePriorityBadge`/`IssueWorkflowBadge` in `status-badge.tsx`; motion tokens (`panel-enter`, `row-select-highlight`, `live-append-pulse`) + `prefers-reduced-motion`; toasts on artifact/promotion mutations; `scripts/audit-a11y.cjs` U20 core routes (critical gate); `portal-ci.yml` a11y job required after build; `u20-portal.test.ts` |
+| **U00 portal-os** | **PARTIAL / REMOVED** — `clients/portal/src/components/portal-os/` **absent** (2026-08-07). Real shell: `AppShell` (`components/shell/app-shell.tsx`), `MobileBottomNav` (`components/shell/mobile-nav.tsx`), `SavedViewsMenu`. Fabricated names with 0 repo matches: `ResourcePageShell`, `CoreResourcePage`, `DetailPanelShell`, `DensityProvider`, `QueryFilterBar`, `ViewsMenu`, `InfiniteDataTable`, `BulkActionBar` |
+| **U18 portal overhaul** | **PARTIAL** — `(portal)/layout.tsx` wired through `AppShell`; trace/issue/alert detail in `traces-client.tsx` / `issues-client.tsx` (no `DetailPanelShell` / `CoreResourcePage` — **UNVERIFIABLE**); mobile nav via `MobileBottomNav`; `portal-routes.ts` + `sidebar-config.ts`; `u18-portal.test.ts` evidence **DELETED** (cab7ae32) |
+| **U19 portal improvement** | **PARTIAL** — `lib/portal-cross-links.ts` matrix (no `CrossLinkBar` component); `portal-polish.ts`; bulk/archive via page-local UX (no `BulkActionBar`); `DriftHistogram` **UNVERIFIABLE**; `u19-portal.test.ts` evidence **DELETED** (cab7ae32) |
+| **U20 portal polish** | **PARTIAL** — `lib/portal-polish.ts` (axe routes, microcopy, toast registry); motion via CSS tokens; toasts on mutations; `scripts/audit-a11y.cjs`; `portal-ci.yml` a11y job; `status-badge.tsx` **REMOVED**; `u20-portal.test.ts` evidence **DELETED** (cab7ae32) |
 | **F58 / U08 saved views** | **SHIPPED** — wraps Phase N `saved-searches` API via `savedViewsApi`; `?view=` + `?q=` on `/traces` |
-| **U01 traces hub** | **SHIPPED** — `/traces?view=traces\|spans\|sessions`; split-pane `TraceDetailPanel` + full `TranscriptView` default |
+| **U01 traces hub** | **SHIPPED** — `/traces` with `traces-client.tsx` + `traces-detail-panels.tsx`; split-pane detail; `?traceId=` deep-link; virtualized list/transcript via `@tanstack/react-virtual` |
 | **F23 agent sessions** | **SHIPPED** — `sdk/python/eden_sdk/session.py` `begin()`; `agent_sessions` table + API; Sessions tab + `/sessions/[sessionId]` |
 | **N12 session timeline** | **SHIPPED** — `SessionTurnTimeline` + `TurnCard` on session page; keyboard ←/→ |
-| **N13 transcript v2** | **PARTIAL** — `VirtualizedTranscript` progressive render for 50+ steps; swimlanes / RRWeb shipped W13–W15; **F21 labels DONE (W27)** on MessageCards + ParallelToolLane + legacy TranscriptView |
+| **N13 transcript v2** | **PARTIAL** — `traces-detail-panels.tsx` virtualized transcript/tree; swimlanes / RRWeb types present; **F21 labels DONE (W27)**; `TranscriptV2` / `VirtualizedTranscript` component names **UNVERIFIABLE** (0 repo matches) |
 | **N11 live streaming** | **DONE (W27)** — Redis `trace:live:{org}:{session}`; `observability/live/*` + `observability_live` routes; portal Live badge; SDK `EDEN_LIVE`/`stream=True`; MCP `tail_trace` |
 | **F21 tool labels** | **DONE (W27)** — label API + calibrator; transcript ✓/✗; MCP `label_tool_call`; mig `111_w27_live_labels` |
 
@@ -179,7 +179,7 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | **F06 Investigator API** | **SHIPPED** — `api/routes/signal_investigator.py` events/clusters/backfill |
 | **F65 Topics** | **SHIPPED** — `src/eden/topics/service.py`, `api/routes/topics.py`; portal `/insights/topics` |
 | **F71 Slack interactive** | **SHIPPED** — `integrations/slack/interactive.py`; `/integrations/slack/{commands,interactions}` |
-| **N10 Search→signal** | **SHIPPED** — `search/deep_to_signal.py` preview + backfill; `SpanSearchBar` save button |
+| **N10 Search→signal** | **SHIPPED (backend)** — `search/deep_to_signal.py` preview + backfill; portal `SpanSearchBar` save button **UNVERIFIABLE** (0 repo matches) |
 
 ### Enterprise fleet & audit (Phase 9 — Wave 10 P1)
 

@@ -56,41 +56,36 @@ describe("promptsV2Api.get (F41-6)", () => {
 });
 
 /**
- * Regression test for FEAT-32: ``portalApi.guardrailPolicies`` used to be
- * typed ``fetchApi<GuardrailPolicyFixture[]>``, but
- * ``GuardrailPolicy.list`` (``eden/guardrails/policy.py``) wraps rows in
- * the standard ok-envelope ``{status, feature, live, timestamp, data:
- * {policies, count}}``. Any real, non-empty response was an envelope
- * object rather than the array the page assumed, and the bug only hid
- * because the zero-policy fixture fallback happened to also be an empty
- * array.
+ * Regression test for FEAT-32 / FEAT-38: ``portalApi.guardrailPolicies``
+ * maps the portal read-model cards from
+ * ``GET /orgs/{org}/portal/guardrails/policies`` (bare
+ * ``GuardrailPolicyCard[]``, not the intelligence ``GuardrailPolicy.list``
+ * ok-envelope). ``matchCount24h`` is sourced from ``intervention_log``
+ * (InterventionEngine path only).
  */
-describe("portalApi.guardrailPolicies (FEAT-32)", () => {
-  it("unwraps data.policies and maps each row's `type` onto `kind`", async () => {
+describe("portalApi.guardrailPolicies (FEAT-32 / FEAT-38)", () => {
+  it("maps portal policy cards including matchCount24h from intervention_log", async () => {
     const { portalApi } = await import("../portal");
     fetchMock.mockResolvedValue(
-      jsonResponse(200, {
-        status: "ok",
-        feature: "guardrail_policy",
-        live: true,
-        timestamp: "2026-01-01T00:00:00Z",
-        data: {
-          policies: [
-            {
-              id: "gp_1",
-              org_id: "org_1",
-              name: "block-ssn",
-              type: "pii_redaction",
-              spec: { patterns: ["ssn"] },
-              action: "redact",
-              direction: "both",
-              status: "active",
-              created_at: "2026-01-01T00:00:00Z",
-            },
-          ],
-          count: 1,
+      jsonResponse(200, [
+        {
+          id: "gp_1",
+          name: "block-ssn",
+          kind: "pii_redaction",
+          status: "active",
+          agentId: "agt_1",
+          severity: "high",
+          matchCount24h: 3,
+          action: "redact",
         },
-      }),
+        {
+          id: "gp_2",
+          name: "off-policy",
+          kind: "content_policy",
+          status: "disabled",
+          action: "flag",
+        },
+      ]),
     );
 
     const result = await portalApi.guardrailPolicies("org_1");
@@ -101,15 +96,61 @@ describe("portalApi.guardrailPolicies (FEAT-32)", () => {
         kind: "pii_redaction",
         status: "active",
         action: "redact",
+        agentId: "agt_1",
+        severity: "high",
+        matchCount24h: 3,
+      },
+      {
+        id: "gp_2",
+        name: "off-policy",
+        kind: "content_policy",
+        status: "disabled",
+        action: "flag",
       },
     ]);
   });
 
-  it("resolves to an empty array (never throws) when data is missing", async () => {
+  it("resolves to an empty array (never throws) when the response is not an array", async () => {
     const { portalApi } = await import("../portal");
     fetchMock.mockResolvedValue(jsonResponse(200, { status: "ok" }));
 
     const result = await portalApi.guardrailPolicies("org_1");
     expect(result).toEqual([]);
+  });
+});
+
+/**
+ * FEAT-110 — ``portalApi.verifyAuditChain`` calls the live compliance
+ * ``POST /orgs/{org}/compliance/verify`` route (not the portal read-model).
+ */
+describe("portalApi.verifyAuditChain (FEAT-110)", () => {
+  it("POSTs to /compliance/verify and returns the ok-envelope", async () => {
+    const { portalApi } = await import("../portal");
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        status: "ok",
+        feature: "agent_audit_ledger_verify",
+        live: true,
+        data: {
+          verified: true,
+          total_rows: 3,
+          ok_rows: 3,
+          broken_rows: 0,
+        },
+      }),
+    );
+
+    const result = await portalApi.verifyAuditChain("org_1", {
+      agentId: "agent-a",
+      limit: 50,
+    });
+
+    expect(result.data?.verified).toBe(true);
+    expect(result.data?.ok_rows).toBe(3);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/orgs/org_1/compliance/verify");
+    expect(String(url)).toContain("agent_id=agent-a");
+    expect(String(url)).toContain("limit=50");
+    expect(init?.method).toBe("POST");
   });
 });

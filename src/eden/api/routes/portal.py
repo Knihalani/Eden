@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -111,7 +112,7 @@ def _iso(value: Any) -> str:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=UTC)
-        return value.astimezone(UTC).isoformat()
+        return str(value.astimezone(UTC).isoformat())
     return str(value)
 
 
@@ -157,7 +158,9 @@ def _map_issue_status(raw: str | None) -> str:
     s = (raw or "open").lower()
     if s in ("open",):
         return "open"
-    if s in ("resolved", "ignored"):
+    if s in ("ignored",):
+        return "ignored"
+    if s in ("resolved",):
         return "resolved"
     # triaged / fix_pending / verifying / learning / regressed / escalated
     # / acknowledged — ``escalated`` (M4, D17) is "waiting on a human",
@@ -174,19 +177,40 @@ def _map_issue_severity(raw: str | None) -> str:
     return "warn"
 
 
-def _map_trace_outcome(outcome: str | None) -> tuple[str, str]:
-    """Return (status, severity) for TraceListItem."""
-    o = (outcome or "").lower()
-    if o in ("error", "failed", "failure", "fail", "errored"):
-        return "error", "error"
-    if o in ("warn", "warning", "partial", "degraded"):
-        return "ok", "warn"
-    return "ok", "none"
+def _issue_rank_score(issue: Any) -> float:
+    """Composite priority — mirrors ``IssuesRepo.list_issues`` sort=rank."""
+    sev = str(getattr(issue, "severity", None) or "").lower()
+    weight = {"p0": 4, "p1": 3, "p2": 2}.get(sev, 1)
+    user_count = max(int(getattr(issue, "user_count", 0) or 0), 1)
+    stumble_count = max(int(getattr(issue, "stumble_count", 0) or 0), 1)
+    triage = getattr(issue, "triage_result", None) or {}
+    confidence = 0.5
+    if isinstance(triage, dict) and triage.get("confidence") is not None:
+        try:
+            confidence = float(triage["confidence"])
+        except (TypeError, ValueError):
+            confidence = 0.5
+    return (
+        weight
+        * math.log(user_count + 1)
+        * math.log(stumble_count + 1)
+        * confidence
+    )
 
 
 _ERROR_OUTCOMES = frozenset(
     {"error", "failed", "failure", "fail", "errored", "crash", "timeout"}
 )
+
+
+def _map_trace_outcome(outcome: str | None) -> tuple[str, str]:
+    """Return (status, severity) for TraceListItem."""
+    o = (outcome or "").lower()
+    if o in _ERROR_OUTCOMES:
+        return "error", "error"
+    if o in ("warn", "warning", "partial", "degraded"):
+        return "ok", "warn"
+    return "ok", "none"
 
 _BARE_OUTCOME_MESSAGES = frozenset(
     {"error", "failed", "failure", "fail", "errored", "crash", "timeout", "success", "ok"}
@@ -361,7 +385,34 @@ def _alert_severity(raw: str | None) -> str:
         return "error"
     if s in ("warning", "warn", "medium", "p2"):
         return "warn"
+    if s in ("info", "p3"):
+        return "warn"
     return "warn"
+
+
+async def _eql_alert_severity_by_name(org_id: str) -> dict[str, str]:
+    """Bridged ``eql_alert_rules`` severities keyed by rule name."""
+    client = await _pg()
+    if client is None:
+        return {}
+    try:
+        rows = await client.fetch(
+            """
+            SELECT name, severity
+            FROM eql_alert_rules
+            WHERE org_id::text = $1
+              AND lower(coalesce(severity, '')) IN
+                  ('info', 'warning', 'high', 'critical')
+            """,
+            org_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "portal alert rules: eql severity lookup failed: %s",
+            redact_all(str(exc)),
+        )
+        return {}
+    return {str(r["name"]): str(r["severity"]) for r in rows if r.get("name")}
 
 
 def _alert_event_status(*, acknowledged: bool, verdict: str | None) -> str:
@@ -441,16 +492,59 @@ async def _require_pg(feature: str) -> Any:
 _OK_OUTCOMES = {"success", "ok", "completed", "complete"}
 
 
-def _step_kind(event_type: str | None, name: str | None) -> str:
+def _scalar_step_attrs(
+    attrs: dict[str, Any],
+) -> dict[str, str | int | float | bool]:
+    """Scalar-only attributes for TranscriptStep — flatten nested ``a2a``."""
+    out: dict[str, str | int | float | bool] = {}
+    for key, value in attrs.items():
+        if key == "a2a" and isinstance(value, dict):
+            for sub_key, sub_val in value.items():
+                if isinstance(sub_val, (str, int, float, bool)):
+                    out[f"a2a.{sub_key}"] = sub_val
+        elif isinstance(value, (str, int, float, bool)):
+            out[key] = value
+    return out
+
+
+def _handoff_title(a2a: dict[str, Any], fallback: str) -> str:
+    parent = a2a.get("parent_agent_id")
+    child = a2a.get("child_agent_id")
+    inv = a2a.get("invocation_type")
+    base = f"{parent} → {child}" if parent and child else fallback or "handoff"
+    if inv:
+        return f"{base} ({inv})"
+    return base
+
+
+def _step_kind(
+    event_type: str | None,
+    name: str | None,
+    attrs: dict[str, Any] | None = None,
+) -> str:
     et = (event_type or "").lower()
     nm = (name or "").lower()
+    a = attrs or {}
+    a2a = a.get("a2a")
+    if isinstance(a2a, dict) and a2a:
+        return "handoff"
+    if a.get("parent_agent_span_id") or a.get("child_agent_trace_id"):
+        return "handoff"
+    if (
+        "invoke_agent" in et
+        or et in ("invoke_agent", "create_agent")
+        or "invoke_agent" in nm
+        or et in ("agent_run", "agent")
+        or et.startswith("agent.")
+    ):
+        return "agent"
     if "llm" in et or "completion" in et or "chat" in et or "llm" in nm:
         return "llm"
     if "tool" in et or "tool" in nm:
         return "tool"
     if "bash" in et or "shell" in et or "command" in nm or "bash" in nm:
         return "bash"
-    if et in ("task", "run", "agent_run", "session"):
+    if et in ("task", "run", "session"):
         return "task"
     return "span"
 
@@ -561,13 +655,14 @@ def _humanize_io_preview(value: Any, *, limit: int = 800) -> str | None:
     choices = parsed.get("choices")
     if isinstance(choices, list) and choices:
         first = choices[0] if isinstance(choices[0], dict) else {}
-        msg = first.get("message") if isinstance(first.get("message"), dict) else {}
+        _first_msg = first.get("message")
+        msg = _first_msg if isinstance(_first_msg, dict) else {}
         content = _strip_think_blocks(_message_content_text(msg.get("content")))
         if content:
             return content[:limit]
-        text = first.get("text")
-        if isinstance(text, str) and text.strip():
-            return _strip_think_blocks(text.strip())[:limit]
+        first_text = first.get("text")
+        if isinstance(first_text, str) and first_text.strip():
+            return _strip_think_blocks(first_text.strip())[:limit]
 
     messages = parsed.get("messages")
     if isinstance(messages, list) and messages:
@@ -694,7 +789,8 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
     )
     # Nested provider payloads (OpenAI-compatible) often stash the model
     # under payload.openai.model when top-level model fields are empty.
-    nested_openai = payload.get("openai") if isinstance(payload.get("openai"), dict) else {}
+    _nested_openai = payload.get("openai")
+    nested_openai = _nested_openai if isinstance(_nested_openai, dict) else {}
     req_model = (
         request_body.get("model")
         if isinstance(request_body, dict)
@@ -749,17 +845,37 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         except Exception:  # noqa: BLE001
             pass
 
-    safe_attrs = {k: v for k, v in attrs.items() if isinstance(v, (str, int, float, bool))} or None
+    a2a_raw = attrs.get("a2a")
+    a2a = a2a_raw if isinstance(a2a_raw, dict) else {}
+    step_kind = _step_kind(node.get("event_type"), name, attrs)
+    title = _handoff_title(a2a, name) if step_kind == "handoff" and a2a else name
+    safe_attrs = _scalar_step_attrs(attrs) or None
+
+    handoff_status = a2a.get("response_status")
+    handoff_preview = (
+        f"status: {handoff_status}"
+        if isinstance(handoff_status, str) and handoff_status.strip()
+        else None
+    )
 
     return TranscriptStep(
         id=span_id or str(node.get("timestamp") or name),
-        kind=_step_kind(node.get("event_type"), name),  # type: ignore[arg-type]
-        title=name,
+        kind=step_kind,  # type: ignore[arg-type]
+        title=title,
         durationMs=int(round(float(node.get("duration_ms") or 0))),
         status=_step_status(outcome),  # type: ignore[arg-type]
         startedAt=_iso(node.get("timestamp")) or None,
         spanId=span_id or None,
         parentId=str(node["parent_span_id"]) if node.get("parent_span_id") else None,
+        agentId=(
+            str(node["agent_id"])
+            if node.get("agent_id")
+            else (
+                str(a2a["child_agent_id"])
+                if isinstance(a2a.get("child_agent_id"), str)
+                else None
+            )
+        ),
         model=str(model) if model else None,
         provider=str(provider) if provider else None,
         tokensIn=tokens_in_i,
@@ -772,7 +888,8 @@ def _tree_node_to_step(node: dict[str, Any]) -> TranscriptStep:
         or _humanize_io_preview(
             payload.get("messages") or payload.get("input") or payload.get("prompt")
         ),
-        outputPreview=_humanize_io_preview(response_body)
+        outputPreview=handoff_preview
+        or _humanize_io_preview(response_body)
         or _humanize_io_preview(
             payload.get("output")
             or payload.get("content")
@@ -819,6 +936,14 @@ COALESCE(
 )
 """
 
+# Distinct agent_ids that appeared on any span in the trace (for participant
+# filtering without changing the preferred display winner above).
+_PARTICIPANT_AGENT_IDS_SQL = """
+ARRAY_AGG(DISTINCT {alias}agent_id ORDER BY {alias}agent_id)
+  FILTER (WHERE {alias}agent_id IS NOT NULL)
+"""
+_PARTICIPANT_AGENT_IDS_SQL_ALIASED = _PARTICIPANT_AGENT_IDS_SQL.format(alias="e.")
+
 # Prefer the agent.run / framework root label over the first LLM model id
 # so the Traces list reads as a run name, not "MiniMax-M3" / "gpt-4o".
 _PREFERRED_TRACE_NAME_SQL = """
@@ -852,6 +977,15 @@ _SAFE_COST_SUM_SQL = (
     "  COALESCE((NULLIF({alias}metrics->>'cost_usd', ''))::float, 0)\n"
     "), 0)::float"
 )
+
+
+def _participants_list(raw: Any) -> list[str]:
+    """Coerce a PG text[] (or scalar) into a clean participant id list."""
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [raw] if raw else []
+    return [str(x) for x in raw if x]
 
 
 # ── GET /agents ───────────────────────────────────────────────────
@@ -1465,6 +1599,13 @@ async def list_portal_traces(
             "activity is older than the org's most-recent traces)."
         ),
     ),
+    participant_agent_id: str | None = Query(
+        None,
+        description=(
+            "FEAT-147: include traces where this agent participated on "
+            "any span, even when it is not the preferred display agent."
+        ),
+    ),
     _user: dict = Depends(get_current_user),
 ) -> list[TraceListItem]:
     """Trace list mapped to portal ``TraceListItem`` (empty OK)."""
@@ -1513,15 +1654,22 @@ async def list_portal_traces(
                 FROM recent
                 GROUP BY trace_id
             ),
+            participant_ids AS (
+                SELECT DISTINCT r.trace_id
+                FROM recent r
+                WHERE r.agent_id = $5
+            ),
             ids AS (
                 SELECT trace_id
                 FROM trace_agent
-                WHERE $4::text IS NULL OR agent_id = $4
+                WHERE ($5::text IS NULL OR trace_id IN (SELECT trace_id FROM participant_ids))
+                  AND ($4::text IS NULL OR agent_id = $4)
                 ORDER BY last_ts DESC
                 LIMIT $3
             )
             SELECT e.trace_id,
                    {_PREFERRED_AGENT_ID_SQL} AS agent_id,
+                   {_PARTICIPANT_AGENT_IDS_SQL_ALIASED} AS participants,
                    {_PREFERRED_TRACE_NAME_SQL_ALIASED} AS name,
                    MIN(e.timestamp) AS started_at,
                    (ARRAY_AGG(e.outcome ORDER BY e.timestamp DESC)
@@ -1559,6 +1707,7 @@ async def list_portal_traces(
             window_secs,
             limit,
             agent_id,
+            participant_agent_id,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal traces: query failed: %s", redact_all(str(exc)))
@@ -1587,6 +1736,7 @@ async def list_portal_traces(
             TraceListItem(
                 id=str(r["trace_id"]),
                 agentId=str(r["agent_id"] or ""),
+                participants=_participants_list(r.get("participants")),
                 name=name,
                 status=status,  # type: ignore[arg-type]
                 startedAt=_iso(r.get("started_at")),
@@ -1633,6 +1783,7 @@ async def get_portal_trace(
             f"""
             SELECT trace_id,
                    {_PREFERRED_AGENT_ID_SQL} AS agent_id,
+                   {_PARTICIPANT_AGENT_IDS_SQL.format(alias="")} AS participants,
                    {_PREFERRED_TRACE_NAME_SQL_UNALIASED} AS name,
                    MIN(timestamp) AS started_at,
                    (ARRAY_AGG(outcome ORDER BY timestamp DESC)
@@ -1779,6 +1930,7 @@ async def get_portal_trace(
     return TraceListItem(
         id=str(row["trace_id"]),
         agentId=str(row["agent_id"] or ""),
+        participants=_participants_list(row.get("participants")),
         name=name,
         status=status,  # type: ignore[arg-type]
         startedAt=_iso(row.get("started_at")),
@@ -1800,20 +1952,107 @@ async def get_portal_trace(
 # ── GET /sessions ─────────────────────────────────────────────────
 
 
+def _portal_outcome_from_summary(
+    stored: str | None,
+    *,
+    had_stumble: bool,
+) -> Literal["ok", "error", "mixed"]:
+    """Map ``session_summaries.outcome`` (+ stumble hint) to portal ``SessionOutcome``."""
+    o = (stored or "").lower()
+    if o == "fail":
+        return "error"
+    if o in ("partial", "live", "mixed"):
+        return "mixed"
+    if o == "success":
+        return "mixed" if had_stumble else "ok"
+    return "mixed"
+
+
+def _session_summary_to_rollup(summary: dict[str, Any]) -> SessionRollup:
+    """Project one ``session_summaries`` row into portal ``SessionRollup``."""
+    trace_ids = [str(t) for t in list(summary.get("trace_ids") or [])]
+    turn_count = int(summary.get("turn_count") or len(trace_ids))
+    had_stumble = bool(summary.get("had_stumble"))
+    stumble_count = int(summary.get("stumble_count") or 0)
+    stored_outcome = str(summary.get("outcome") or "")
+    outcome = _portal_outcome_from_summary(stored_outcome, had_stumble=had_stumble)
+    duration_ms = 0
+    latency = summary.get("total_latency_ms")
+    if latency is not None:
+        try:
+            duration_ms = max(0, int(float(latency)))
+        except (TypeError, ValueError):
+            duration_ms = 0
+    if duration_ms == 0:
+        try:
+            started = summary.get("session_start")
+            ended = summary.get("session_end")
+            if started and ended:
+                st = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+                en = datetime.fromisoformat(str(ended).replace("Z", "+00:00"))
+                duration_ms = max(0, int((en - st).total_seconds() * 1000))
+        except Exception:
+            duration_ms = 0
+    total_tokens = int(summary.get("total_input_tokens") or 0) + int(
+        summary.get("total_output_tokens") or 0
+    )
+    cost_raw = summary.get("total_cost_usd")
+    cost_usd = float(cost_raw) if cost_raw is not None else None
+    diagnosis: str | None = None
+    last_error: str | None = None
+    if stored_outcome == "live":
+        diagnosis = "Session in progress"
+    elif had_stumble and stumble_count > 0:
+        diagnosis = (
+            f"{stumble_count} stumble{'s' if stumble_count != 1 else ''} detected"
+        )
+        last_error = diagnosis
+    elif outcome == "error":
+        diagnosis = "Session ended with failures"
+        last_error = diagnosis
+    elif turn_count > 0:
+        diagnosis = f"{turn_count} turn{'s' if turn_count != 1 else ''} completed"
+    linked = summary.get("linked_issue_id")
+    related: list[str] = [str(linked)] if linked else []
+    return SessionRollup(
+        id=str(summary.get("session_id") or ""),
+        agentId=str(summary.get("agent_id") or ""),
+        userId=str(summary["user_id"]) if summary.get("user_id") else None,
+        startedAt=_iso(summary.get("session_start")),
+        endedAt=_iso(summary.get("session_end")) or None,
+        turnCount=turn_count,
+        outcome=outcome,
+        durationMs=duration_ms,
+        totalTokens=total_tokens,
+        costUsd=cost_usd,
+        lastErrorSummary=last_error,
+        diagnosis=diagnosis,
+        relatedIssueIds=related,
+        traceIds=trace_ids[:40],
+    )
+
+
 @router.get("/sessions", response_model=list[SessionRollup])
 async def list_portal_sessions(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
     _user: dict = Depends(get_current_user),
 ) -> list[SessionRollup]:
-    """Session rollups mapped to portal ``SessionRollup`` (empty OK)."""
+    """Session rollups from ``session_summaries`` (N12 read model)."""
     await _require_pg("Sessions")
     try:
-        from eden.services.agent_sessions import AgentSessionService
+        from eden.sessions import list_sessions
 
-        sessions = await AgentSessionService().list_sessions(
-            org_id, limit=limit, preview_trace_limit=40
+        result = await list_sessions(org_id, limit=limit)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        logger.warning(
+            "portal sessions: storage unavailable: %s", redact_all(str(exc))
         )
+        raise HTTPException(
+            status_code=503,
+            detail="Sessions temporarily unavailable; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal sessions: service unavailable: %s", redact_all(str(exc)))
         raise HTTPException(
@@ -1822,69 +2061,20 @@ async def list_portal_sessions(
             headers={"Retry-After": "5"},
         ) from exc
 
-    out: list[SessionRollup] = []
-    for s in sessions:
-        data = s.to_dict() if hasattr(s, "to_dict") else dict(s)
-        success = data.get("success")
-        if success is True:
-            outcome = "ok"
-        elif success is False:
-            outcome = "error"
-        else:
-            outcome = "mixed"
-        duration_ms = 0
-        try:
-            started = data.get("started_at")
-            ended = data.get("ended_at")
-            if started and ended:
-                st = datetime.fromisoformat(str(started).replace("Z", "+00:00"))
-                en = datetime.fromisoformat(str(ended).replace("Z", "+00:00"))
-                duration_ms = max(0, int((en - st).total_seconds() * 1000))
-        except Exception:
-            duration_ms = 0
-        trace_ids = list(data.get("trace_ids") or [])
-        turn_count = int(data.get("turn_count") or len(trace_ids))
-        failure_reason = data.get("failure_reason")
-        diagnosis = None
-        if failure_reason:
-            diagnosis = str(failure_reason)
-        elif outcome == "error":
-            diagnosis = "Session ended unsuccessfully"
-        elif outcome == "ok" and turn_count > 0:
-            diagnosis = f"{turn_count} turn{'s' if turn_count != 1 else ''} completed"
-        session_id = str(data.get("id") or "")
-        out.append(
-            SessionRollup(
-                id=session_id,
-                agentId=str(data.get("agent_id") or ""),
-                userId=str(data["user_id"]) if data.get("user_id") else None,
-                startedAt=_iso(data.get("started_at")),
-                endedAt=_iso(data.get("ended_at")) or None,
-                turnCount=turn_count,
-                outcome=outcome,  # type: ignore[arg-type]
-                durationMs=duration_ms,
-                totalTokens=int(data.get("total_tokens") or 0),
-                costUsd=(
-                    float(data["cost_usd"])
-                    if data.get("cost_usd") is not None
-                    else None
-                ),
-                lastErrorSummary=str(failure_reason) if failure_reason else None,
-                diagnosis=diagnosis,
-                relatedIssueIds=[],  # filled below
-                traceIds=[str(t) for t in trace_ids],
-            )
-        )
-
+    out = [_session_summary_to_rollup(s) for s in result.get("sessions") or []]
     related = await _related_issue_ids_by_session(
         org_id, [s.id for s in out if s.id]
     )
     for s in out:
-        s.relatedIssueIds = related.get(s.id, [])[:10]
+        merged = list(dict.fromkeys([*s.relatedIssueIds, *related.get(s.id, [])]))
+        s.relatedIssueIds = merged[:10]
     return out
 
 
 # ── GET /issues ───────────────────────────────────────────────────
+
+
+_ISSUE_SORT_MODES = frozenset({"recency", "rank"})
 
 
 @router.get("/issues", response_model=list[IssueCard])
@@ -1892,14 +2082,27 @@ async def list_portal_issues(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    sort: str = Query(
+        "rank",
+        description="Issue ordering: rank (composite priority, default) or recency",
+    ),
     _user: dict = Depends(get_current_user),
 ) -> list[IssueCard]:
-    """Issue cards with status mapped to open|acknowledged|resolved."""
+    """Issue cards with status mapped to open|acknowledged|resolved|ignored."""
+    sort_mode = sort if isinstance(sort, str) else "rank"
+    if sort_mode not in _ISSUE_SORT_MODES:
+        allowed = ", ".join(sorted(_ISSUE_SORT_MODES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid issue sort {sort_mode!r}. Allowed values: {allowed}.",
+        )
     await _require_pg("Issues")
     try:
         from eden.issues.repo import IssuesRepo
 
-        issues = await IssuesRepo().list_issues(org_id, limit=limit, offset=offset)
+        issues = await IssuesRepo().list_issues(
+            org_id, limit=limit, offset=offset, sort=sort_mode
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal issues: repo unavailable: %s", redact_all(str(exc)))
         raise HTTPException(
@@ -1988,7 +2191,12 @@ async def list_portal_issues(
                 patchBlockedMessage=_clip_text(
                     str(patch_blocked.get("message") or ""), 400
                 ),
-                tags=[],
+                tags=[
+                    t
+                    for t in [str(getattr(i, "kind", None) or "").strip()]
+                    if t
+                ],
+                rankScore=_issue_rank_score(i),
             )
         )
     return out
@@ -2350,6 +2558,7 @@ async def _related_issue_ids_by_portal_signal(
               )
               AND s.detail->>'signal_id' = ANY($2::text[])
               AND COALESCE(i.status, 'open') NOT IN ('resolved', 'ignored')
+            ORDER BY def_id, issue_id
             LIMIT 500
             """,
             org_id,
@@ -2432,7 +2641,8 @@ async def list_portal_signals(
                 rule = {}
         if not isinstance(rule, dict):
             rule = {}
-        scope = rule.get("scope") if isinstance(rule.get("scope"), dict) else {}
+        _scope = rule.get("scope")
+        scope = _scope if isinstance(_scope, dict) else {}
         agent_id = scope.get("agent_id") or scope.get("agentId")
         condition = ""
         if rule.get("metric"):
@@ -2449,7 +2659,7 @@ async def list_portal_signals(
                 name=str(r.get("description") or "")[:80],
                 description=str(r.get("description") or ""),
                 kind=_signal_kind_from_rule(rule),  # type: ignore[arg-type]
-                severity="warn",
+                severity=_alert_severity(rule.get("severity")),  # type: ignore[arg-type]
                 condition=condition or str(r.get("description") or ""),
                 agentId=str(agent_id) if agent_id else None,
                 enabled=bool(r.get("enabled", True)),
@@ -2487,16 +2697,24 @@ async def list_portal_alert_rules(
             headers={"Retry-After": "5"},
         ) from exc
 
+    eql_severity_by_name = await _eql_alert_severity_by_name(org_id)
+
     out: list[AlertRuleCard] = []
     for r in rules:
         channel, destination = _pick_channel(r.get("channels"))
+        nl_text = str(r.get("nl_text") or "")
+        compiled_eql = str(r.get("compiled_eql") or "")
+        raw_severity = r.get("severity") or eql_severity_by_name.get(
+            str(r.get("name") or "")
+        )
         out.append(
             AlertRuleCard(
                 id=str(r.get("id") or ""),
                 name=str(r.get("name") or ""),
-                description=str(r.get("nl_text") or ""),
-                condition=str(r.get("compiled_eql") or r.get("nl_text") or ""),
-                severity="warn",
+                description=nl_text,
+                condition=nl_text or compiled_eql,
+                compiledEql=compiled_eql,
+                severity=_alert_severity(raw_severity),  # type: ignore[arg-type]
                 agentId=None,
                 channel=channel,  # type: ignore[arg-type]
                 destination=destination,
@@ -2529,13 +2747,24 @@ async def list_portal_alert_events(
 
     out: list[AlertEventCard] = []
     for e in events:
-        payload = e.get("payload") if isinstance(e.get("payload"), dict) else {}
+        _event_payload = e.get("payload")
+        payload = _event_payload if isinstance(_event_payload, dict) else {}
+        nl_text = str(payload.get("nl_text") or "")
+        eql_query = str(
+            payload.get("eql_query") or payload.get("compiled_eql") or ""
+        )
+        condition = nl_text or eql_query
+        body = str(payload.get("body") or e.get("triage_reason") or "")
+        if not body and condition:
+            body = condition
         out.append(
             AlertEventCard(
                 id=str(e.get("id") or ""),
                 ruleId=str(e.get("rule_id") or ""),
                 title=str(e.get("title") or ""),
-                body=str(payload.get("body") or e.get("triage_reason") or ""),
+                body=body,
+                condition=condition,
+                compiledEql=eql_query,
                 severity=_alert_severity(e.get("severity")),  # type: ignore[arg-type]
                 status=_alert_event_status(  # type: ignore[arg-type]
                     acknowledged=bool(e.get("acknowledged")),
@@ -2587,7 +2816,8 @@ async def list_portal_cost_drivers(
         ):
             continue
         conf = float(data.get("confidence") or 0)
-        meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+        _meta = data.get("metadata")
+        meta = _meta if isinstance(_meta, dict) else {}
         est = meta.get("est_save_usd") or meta.get("estimated_savings_usd") or 0
         try:
             est_f = float(est)
@@ -2806,18 +3036,31 @@ def _map_guardrail_action(raw: str | None) -> str:
 
 
 def _map_guardrail_kind(raw: str | None) -> str:
-    s = (raw or "custom").lower()
-    if "pii" in s:
-        return "pii"
-    if "toxic" in s or "content" in s:
-        return "toxicity"
-    if "tool" in s or "allowlist" in s:
-        return "tool_allowlist"
-    if "rate" in s:
-        return "rate_limit"
-    if s in ("pii", "toxicity", "tool_allowlist", "rate_limit", "custom"):
+    """Normalise DB ``type`` to portal card ``kind`` (``VALID_POLICY_TYPES``).
+
+    FE guardrails filters and ``GuardrailPolicyCard.kind`` use the same
+    canonical names as ``GuardrailPolicy.create`` accepts — not legacy
+    portal labels such as ``pii`` / ``toxicity`` / ``custom``.
+    """
+    from eden.guardrails.policy import VALID_POLICY_TYPES
+
+    s = (raw or "").strip().lower()
+    if s in VALID_POLICY_TYPES:
         return s
-    return "custom"
+    if "pii" in s:
+        return "pii_redaction"
+    if "injection" in s:
+        return "prompt_injection"
+    if "halluc" in s:
+        return "hallucination"
+    if "judge" in s:
+        return "judge_link"
+    if "toxic" in s or "content" in s:
+        return "content_policy"
+    # Legacy portal-only labels with no 1:1 backend type.
+    if s in ("tool_allowlist", "rate_limit", "custom", "pii", "toxicity"):
+        return "content_policy"
+    return "content_policy"
 
 
 def _map_debugger_mode(raw: str | None) -> str:
@@ -2932,7 +3175,7 @@ async def list_portal_members(
 
     async def _fetch_members() -> list[dict]:
         try:
-            return await client.fetch(
+            rows = await client.fetch(
                 """
                 SELECT om.user_id, om.role, om.last_active_at,
                        u.email, u.name
@@ -2945,6 +3188,7 @@ async def list_portal_members(
                 org_id,
                 limit,
             )
+            return [dict(r) for r in rows]
         except Exception as exc:  # noqa: BLE001
             logger.warning("portal members: query failed: %s", redact_all(str(exc)))
             raise HTTPException(
@@ -3155,7 +3399,7 @@ async def list_portal_datasets(
 
     out: list[DatasetCard] = []
     for rec in records or []:
-        data = rec.to_dict() if hasattr(rec, "to_dict") else dict(rec)
+        data = rec if isinstance(rec, dict) else rec.to_dict()
         out.append(
             DatasetCard(
                 id=str(data.get("id") or ""),
@@ -3193,9 +3437,11 @@ async def list_portal_playgrounds(
 
     out: list[PlaygroundCard] = []
     for rec in records or []:
-        data = rec.to_dict() if hasattr(rec, "to_dict") else dict(rec)
-        cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
-        variants = cfg.get("variants") if isinstance(cfg.get("variants"), list) else []
+        data = rec if isinstance(rec, dict) else rec.to_dict()
+        _cfg = data.get("config")
+        cfg = _cfg if isinstance(_cfg, dict) else {}
+        _variants = cfg.get("variants")
+        variants = _variants if isinstance(_variants, list) else []
         out.append(
             PlaygroundCard(
                 id=str(data.get("id") or ""),
@@ -3309,6 +3555,19 @@ async def list_portal_improve_plans(
             ev_score = float(ev_raw) if ev_raw is not None else None
         except (TypeError, ValueError):
             ev_score = None
+        autonomy_tier: str | None = None
+        try:
+            from eden.closed_loop.autonomy_policy import (
+                action_for_plan_kind,
+                decide,
+                resolve,
+            )
+
+            action = action_for_plan_kind(str(p.get("plan_kind") or ""))
+            policy = await resolve(org_id, p.get("agent_id"))
+            _verdict, _reason, autonomy_tier = decide(policy, action)
+        except Exception:
+            autonomy_tier = None
         out.append(
             ImprovePlanCard(
                 id=str(p.get("id") or ""),
@@ -3340,6 +3599,7 @@ async def list_portal_improve_plans(
                     else None
                 ),
                 evScore=ev_score,
+                autonomyTierRequired=autonomy_tier,
             )
         )
     return out
@@ -3384,9 +3644,13 @@ async def list_portal_ab_experiments(
     # Both live sources missing: if Postgres is also down, this is an
     # outage (not "no experiments"). Healthy PG still continues so we
     # can surface durable ``portal_compare_seeds`` rows.
-    if not tests and not registry_ok and not tracker_ok:
-        if await _pg() is None:
-            raise _pg_unavailable("Compare experiments")
+    if (
+        not tests
+        and not registry_ok
+        and not tracker_ok
+        and await _pg() is None
+    ):
+        raise _pg_unavailable("Compare experiments")
 
     out: list[AbExperimentCard] = []
     seen_ids: set[str] = set()
@@ -3981,6 +4245,15 @@ async def list_portal_guardrail_policies(
             return None
 
     async def _fetch_match_counts() -> dict[str, int]:
+        """Per-policy 24h hit counts from ``intervention_log`` only.
+
+        FEAT-38: this table is written by
+        ``InterventionEngine.evaluate_and_act`` (and best-effort
+        standalone detector scans with ``policy_id IS NULL``). The
+        removed trajectory-hot-path bypass (``feature=trajectory_guardrail``,
+        FEAT-3/FEAT-33) never inserted rows here, so these counts cannot
+        conflate cost/loop/latency checks with content-safety enforcement.
+        """
         match_counts: dict[str, int] = {}
         if client is not None:
             try:
@@ -3989,6 +4262,7 @@ async def list_portal_guardrail_policies(
                     SELECT policy_id::text AS policy_id, COUNT(*)::int AS hits
                     FROM intervention_log
                     WHERE org_id = $1
+                      AND policy_id IS NOT NULL
                       AND created_at > NOW() - INTERVAL '24 hours'
                     GROUP BY policy_id
                     """,
@@ -4057,7 +4331,7 @@ async def list_portal_debugger_sessions(
 
     out: list[DebuggerSessionCard] = []
     for s in sessions or []:
-        data = s.to_dict() if hasattr(s, "to_dict") else dict(s)
+        data = s if isinstance(s, dict) else s.to_dict()
         runs = data.get("runs") if isinstance(data.get("runs"), list) else []
         compare_id = None
         mode = "inspect"

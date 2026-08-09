@@ -35,7 +35,7 @@ def _reload_init(monkeypatch: pytest.MonkeyPatch, dsn: str | None):
     # Ensure a fresh lookup of the function from the loaded module.
     import eden.api.app as app_mod
 
-    importlib.reload  # keep importlib referenced for clarity
+    _ = importlib.reload  # keep importlib referenced for clarity
     return app_mod._init_sentry
 
 
@@ -63,13 +63,13 @@ def test_init_sentry_swallows_bad_dsn(monkeypatch: pytest.MonkeyPatch, caplog):
     """Even if validation misses, BadDsn from sentry-sdk must not escape."""
     init = _reload_init(monkeypatch, "https://bad@example/1")
 
-    class _BadDsn(Exception):
+    class _BadDsnError(Exception):
         pass
 
     fake_sdk = MagicMock()
-    fake_sdk.init.side_effect = _BadDsn("Unsupported scheme ''")
+    fake_sdk.init.side_effect = _BadDsnError("Unsupported scheme ''")
     fake_utils = MagicMock()
-    fake_utils.BadDsn = _BadDsn
+    fake_utils.BadDsn = _BadDsnError
     fake_fastapi = MagicMock()
     fake_starlette = MagicMock()
 

@@ -15,7 +15,7 @@
 
 | Surface | Route | Baseline PNG | Notes |
 |---------|-------|--------------|-------|
-| Playgrounds | `/evals?tab=playgrounds` | `e2e/golden/screenshots/05-playgrounds.png` (+ optional `-fail.png`) | W12 golden; V3 matrix/Run hierarchy — refresh when auth healthy |
+| Playgrounds | `/playgrounds` | `e2e/golden/screenshots/05-playgrounds.png` (+ optional `-fail.png`) | W12 golden; V3 matrix/Run hierarchy — refresh when auth healthy |
 | Experiments compare | `/evals?tab=experiments` | `e2e/golden/screenshots/07-experiments.png` (+ optional `-fail.png`) | W12 golden; V3 baseline/Diff/grades — refresh when auth healthy |
 | Datasets | `/evals?tab=datasets` | *(no dedicated W12 slot)* | Deferred capture target: `e2e/golden/screenshots/agent09-evaluate/` or new `09-datasets.png` |
 | agent09 evaluate probe | `/evals` + compare hop | `e2e/golden/screenshots/agent09-evaluate/{desktop-1280,mobile-375}.png` | Directory exists; **empty this freeze** (live hop failed) |

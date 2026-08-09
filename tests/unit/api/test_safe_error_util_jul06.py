@@ -26,7 +26,6 @@ import re
 
 from eden.api.utils.safe_error import redact_upstream_error, safe_detail
 
-
 # Realistic upstream error text — exactly the kind of strings these
 # helpers are meant to scrub from client responses.
 _API_KEY_LEAK = (
@@ -58,7 +57,7 @@ def test_safe_detail_fallback_overrides_default():
     out = safe_detail(Exception("leaked"), fallback="Could not save canary")
     assert out == "Could not save canary"
     assert "leaked" not in out
-    assert "Could not save canary" == out
+    assert out == "Could not save canary"
 
 
 def test_safe_detail_never_embeds_api_key():

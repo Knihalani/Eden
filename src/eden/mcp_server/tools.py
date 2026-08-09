@@ -51,6 +51,7 @@ async def rerun_debugger(
     prompt_override: str | None = None,
     rerun_mode: str | None = None,
     live_prefix: bool | None = None,
+    live: bool | None = None,
 ) -> dict[str, Any]:
     return await client.rerun_debugger(
         org_id,
@@ -59,6 +60,7 @@ async def rerun_debugger(
         prompt_override=prompt_override,
         rerun_mode=rerun_mode,
         live_prefix=live_prefix,
+        live=live,
     )
 
 
@@ -196,27 +198,7 @@ async def eden_health(
 ) -> dict[str, Any]:
     """F84 — component health via admin status API (or local fallback)."""
     try:
-        if hasattr(client, "eden_status"):
-            return await client.eden_status(org_id)
-        if hasattr(client, "get"):
-            return await client.get(f"/orgs/{org_id}/admin/eden-status")
-    except Exception as exc:
-        return {"status": "error", "error": str(exc), "org_id": org_id}
-
-    # Local fallback for smoke tests without HTTP client methods.
-    try:
-        from eden.observability.ingestion.shed import shed_snapshot
-        from eden.self_obs.heartbeats import probe_and_record_workers
-
-        workers = await probe_and_record_workers(org_id)
-        return {
-            "status": workers.get("status", "unknown"),
-            "org_id": org_id,
-            "components": {
-                "workers": workers,
-                "ingest_shed": shed_snapshot(),
-            },
-        }
+        return await client.eden_status(org_id)
     except Exception as exc:
         return {"status": "error", "error": str(exc), "org_id": org_id}
 
@@ -280,45 +262,16 @@ async def label_tool_call(
     args_summary: str | None = None,
 ) -> dict[str, Any]:
     """F21 — persist a good/bad tool-call label."""
-    if hasattr(client, "label_tool_call"):
-        return await client.label_tool_call(
-            org_id,
-            span_id=span_id,
-            label=label,
-            tool_name=tool_name,
-            trace_id=trace_id,
-            reason=reason,
-            agent_id=agent_id,
-            args_summary=args_summary,
-        )
-    if hasattr(client, "post"):
-        return await client.post(
-            f"/orgs/{org_id}/tool-calls/{span_id}/label",
-            json={
-                "trace_id": trace_id,
-                "tool_name": tool_name,
-                "label": label,
-                "reason": reason,
-                "agent_id": agent_id,
-                "args_summary": args_summary,
-            },
-        )
-    # Direct service path for smoke tests.
-    from eden.learning.tool_call_labels import ToolCallLabelCreate, ToolCallLabelService
-
-    result = await ToolCallLabelService().create_label(
-        ToolCallLabelCreate(
-            org_id=org_id,
-            span_id=span_id,
-            trace_id=trace_id,
-            tool_name=tool_name,
-            label=label,
-            reason=reason,
-            agent_id=agent_id,
-            args_summary=args_summary,
-        )
+    return await client.label_tool_call(
+        org_id,
+        span_id=span_id,
+        label=label,
+        tool_name=tool_name,
+        trace_id=trace_id,
+        reason=reason,
+        agent_id=agent_id,
+        args_summary=args_summary,
     )
-    return {"status": "ok", "feature": "tool_call_labels", "data": result}
 
 
 async def query_eql(
@@ -328,29 +281,19 @@ async def query_eql(
     nl_text: str | None = None,
     eql: str | None = None,
 ) -> dict[str, Any]:
-    """Preview / compile EQL (mirrors ChatSidebar preview_nl_alert path)."""
-    if hasattr(client, "post"):
-        body: dict[str, Any] = {}
-        if nl_text:
-            body["nl_text"] = nl_text
-        if eql:
-            body["eql"] = eql
-        try:
-            return await client.post(
-                f"/orgs/{org_id}/alerts/nl/preview",
-                json=body or {"nl_text": "errors in last hour"},
-            )
-        except Exception as exc:
-            return {"status": "error", "error": str(exc), "org_id": org_id}
-    # Local compile fallback for smoke tests.
-    text = (eql or nl_text or "").strip()
-    return {
-        "status": "ok",
-        "feature": "query_eql",
-        "eql": text or 'status = "error"',
-        "org_id": org_id,
-        "compiled": True,
-    }
+    """Preview / compile EQL (``POST /orgs/{org}/alerts/compile``)."""
+    nl = (nl_text or "").strip()
+    eql_override = (eql or "").strip() or None
+    if not nl:
+        nl = "Lint and compile provided EQL" if eql_override else "errors in last hour"
+    try:
+        return await client.compile_nl_alert(
+            org_id,
+            nl_text=nl,
+            eql_override=eql_override,
+        )
+    except Exception as exc:
+        return {"status": "error", "error": str(exc), "org_id": org_id}
 
 
 async def query_sql(
@@ -359,21 +302,11 @@ async def query_sql(
     *,
     sql: str,
     limit: int = 100,
+    max_rows: int | None = None,
 ) -> dict[str, Any]:
     """Read-only SQL (org-scoped) — ChatSidebar query_sql mirror."""
-    if hasattr(client, "post"):
-        return await client.post(
-            f"/orgs/{org_id}/sql",
-            json={"sql": sql, "limit": limit},
-        )
-    return {
-        "status": "ok",
-        "feature": "query_sql",
-        "org_id": org_id,
-        "sql": sql,
-        "rows": [],
-        "note": "smoke stub — wire HttpEdenClient for live results",
-    }
+    row_cap = max_rows if max_rows is not None else limit
+    return await client.query_sql(org_id, sql=sql, limit=row_cap)
 
 
 async def list_datasets(
@@ -382,12 +315,7 @@ async def list_datasets(
     *,
     limit: int = 50,
 ) -> dict[str, Any]:
-    if hasattr(client, "get"):
-        return await client.get(
-            f"/orgs/{org_id}/datasets",
-            params={"limit": limit},
-        )
-    return {"status": "ok", "datasets": [], "org_id": org_id}
+    return await client.list_datasets(org_id, limit=limit)
 
 
 async def list_experiments(
@@ -396,12 +324,7 @@ async def list_experiments(
     *,
     limit: int = 50,
 ) -> dict[str, Any]:
-    if hasattr(client, "get"):
-        return await client.get(
-            f"/orgs/{org_id}/experiments/offline",
-            params={"limit": limit},
-        )
-    return {"status": "ok", "experiments": [], "org_id": org_id}
+    return await client.list_experiments(org_id, limit=limit)
 
 
 async def get_judge_scores(
@@ -410,20 +333,16 @@ async def get_judge_scores(
     *,
     trace_id: str,
 ) -> dict[str, Any]:
-    if hasattr(client, "get"):
-        try:
-            return await client.get(
-                f"/orgs/{org_id}/observability/traces/{trace_id}/scores",
-            )
-        except Exception:
-            pass
-    return {
-        "status": "ok",
-        "feature": "get_judge_scores",
-        "org_id": org_id,
-        "trace_id": trace_id,
-        "scores": [],
-    }
+    try:
+        return await client.get_judge_scores(org_id, trace_id=trace_id)
+    except Exception:
+        return {
+            "status": "ok",
+            "feature": "get_judge_scores",
+            "org_id": org_id,
+            "trace_id": trace_id,
+            "scores": [],
+        }
 
 
 async def get_cost_breakdown(
@@ -432,17 +351,7 @@ async def get_cost_breakdown(
     *,
     window_hours: int = 24,
 ) -> dict[str, Any]:
-    if hasattr(client, "get"):
-        return await client.get(
-            f"/orgs/{org_id}/finops/explorer",
-            params={"window_hours": window_hours},
-        )
-    return {
-        "status": "ok",
-        "org_id": org_id,
-        "window_hours": window_hours,
-        "by_feature": [],
-    }
+    return await client.get_cost_breakdown(org_id, window_hours=window_hours)
 
 
 async def get_agentic_metrics(
@@ -452,18 +361,8 @@ async def get_agentic_metrics(
     window_hours: int = 24,
     agent_id: str | None = None,
 ) -> dict[str, Any]:
-    if hasattr(client, "get"):
-        params: dict[str, Any] = {"window_hours": window_hours}
-        if agent_id:
-            params["agent_id"] = agent_id
-        return await client.get(
-            f"/orgs/{org_id}/agentic-metrics/summary",
-            params=params,
-        )
-    from eden.evaluation.agentic_metrics import AgenticMetricsService
-
-    return await AgenticMetricsService().summary(
-        org_id, agent_id=agent_id, window_hours=window_hours
+    return await client.get_agentic_metrics(
+        org_id, window_hours=window_hours, agent_id=agent_id
     )
 
 
@@ -476,6 +375,7 @@ async def checkpoint_rerun(
     prompt_override: str | None = None,
     rerun_mode: str = "cached_live",
     live_prefix: bool = True,
+    live: bool = False,
 ) -> dict[str, Any]:
     """F01 — rerun the debugger live from a checkpoint step.
 
@@ -486,6 +386,11 @@ async def checkpoint_rerun(
     debugger route returns. Defaults target the F01 live path
     (``rerun_mode="cached_live"``, ``live_prefix=True``); pass
     ``rerun_mode="replay"`` for the deterministic no-LLM replay.
+
+    ``live`` is a separate opt-in for the real ``live_gateway`` model
+    invocation (gated by ``debugger_live_rerun_v1``) and defaults to
+    ``False`` — never silently invoke/bill a real model without the
+    caller explicitly asking for it.
     """
     return await client.rerun_debugger(
         org_id,
@@ -494,7 +399,53 @@ async def checkpoint_rerun(
         prompt_override=prompt_override,
         rerun_mode=rerun_mode,
         live_prefix=live_prefix,
+        live=live,
     )
+
+
+async def get_book(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    agent_id: str,
+) -> dict[str, Any]:
+    """FEAT-183 — F40 agent Book (or its F44 Ledger successor when enabled)."""
+    if hasattr(client, "get_book"):
+        return await client.get_book(org_id, agent_id)
+    from eden.kb.book.generator import BookGenerator
+
+    book = await BookGenerator().get_latest(org_id, agent_id)
+    config = await BookGenerator().get_config(org_id, agent_id)
+    return {"status": "ok", "feature": "agent_book", "data": {"book": book, "config": config}}
+
+
+async def list_artifacts(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """FEAT-183 — F39 Artifacts (runtime prompt Nudges), read-only."""
+    return await client.list_artifacts(org_id, agent_id=agent_id, mode=mode)
+
+
+async def get_ledger(
+    client: EdenApiClient,
+    org_id: str,
+    *,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    """FEAT-183 — Ledger read access.
+
+    With ``agent_id``, fetches that agent's ledger detail
+    (``GET /agents/{agent_id}/ledger``). Without it, lists the org-wide
+    ledger summary rows (``GET /ledger``) — same split the portal's
+    Ledger page uses (``ledgerApi.list`` vs ``ledgerApi.get``).
+    """
+    if agent_id:
+        return await client.get_ledger(org_id, agent_id)
+    return await client.list_ledgers(org_id)
 
 
 async def confirm_shadow_detector(

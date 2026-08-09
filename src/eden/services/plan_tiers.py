@@ -278,19 +278,6 @@ def list_public_plan_tiers() -> list[PlanTier]:
     return list(PLAN_TIERS.values())
 
 
-def list_plan_tiers() -> list[PlanTier]:
-    """All known tiers including paid placeholders."""
-    return list(PLAN_TIERS.values()) + list(_PAID_TIERS_PLACEHOLDER.values())
-
-
-def get_feature_list() -> list[str]:
-    """Union of every feature flag across free tiers."""
-    out: set[str] = set()
-    for tier in PLAN_TIERS.values():
-        out |= set(tier.features)
-    return sorted(out)
-
-
 def default_plan_name() -> str:
     """Plan assigned to every new multi-member org."""
     return "org_free"

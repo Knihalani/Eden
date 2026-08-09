@@ -15,6 +15,7 @@ directly rather than the module-level ``_probe_*`` names.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -43,7 +44,7 @@ def _build_app(allowed_ips: str | None = None) -> FastAPI:
 
 
 @pytest.fixture
-def app() -> "typing.Iterator[FastAPI]":
+def app() -> Iterator[FastAPI]:
     # Audit 2026-07-06 — env-var-mutating fixture MUST restore the
     # prior value via a finalizer. Previously this fixture wrote
     # ``os.environ["INTERNAL_ALLOWED_IPS"] = "testclient"`` and

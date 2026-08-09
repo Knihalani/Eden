@@ -29,7 +29,7 @@ Five audit items from Part G "Portal polish" final pass:
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
 
 import pytest
@@ -41,7 +41,7 @@ _PORTAL_ROOT = Path(__file__).parent.parent.parent / "clients/portal"
 
 # Cached: the repo-wide PQ-14 sweep below reads every portal client
 # source once per assertion, and the sources can't change mid-run.
-@lru_cache(maxsize=None)
+@cache
 def _read(rel: str) -> str:
     if rel in ("src/lib/api.ts", "src/lib/api"):
         raw = portal_api_source()
@@ -232,7 +232,7 @@ class TestApiErrorClass:
             "PQ-10 regression: ApiError must be export-ed"
         )
 
-    def test_fetchApi_throws_typed_error(self) -> None:
+    def test_fetch_api_throws_typed_error(self) -> None:
         """The generic ``fetchApi`` path throws an ``ApiError``
         (not a bare ``new Error``) so callers get the status."""
         source = _read("src/lib/api.ts")

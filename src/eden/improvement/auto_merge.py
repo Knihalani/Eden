@@ -29,6 +29,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 #: Evidence tiers that may ride the auto-merge ladder.
+#: Stage-1 exit: merge-and-hold ≥80% — see
+#: ``docs/docs/operations/auto-merge-rollout.md``.
 _ELIGIBLE_TIERS = frozenset({"replay", "tested"})
 
 #: Compliance profiles that never auto-merge (mirrors N22 decide()).
@@ -578,6 +580,10 @@ async def auto_revert_permitted(org_id: str, agent_id: str | None) -> bool:
     Gated on auto-merge class (T4 + kill switch + compliance), NOT on
     ``auto_runtime_heal`` — plan §9 couples canary revert to the merge
     ladder, not runtime heal opt-in.
+
+    Requires ``Settings.auto_revert_enabled`` (default False) in addition
+    to the forward-merge gates — see
+    ``docs/specs/strategic-review-2026-08/features/auto-revert-tuning.md``.
     """
     try:
         from eden.config import get_settings

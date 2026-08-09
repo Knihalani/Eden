@@ -41,6 +41,11 @@ class JudgeContext:
     decision: the event itself, the LLM client (lazily imported so
     tests can substitute), the model slot to use, and the trace_id
     for downstream correlation.
+
+    Playground/F51 dataset rows are adapted into a
+    :class:`~eden.observability.telemetry_collector.TelemetryEvent`
+    before scoring — see
+    :mod:`eden.playground.llm_judge_adapter`.
     """
 
     event: TelemetryEvent

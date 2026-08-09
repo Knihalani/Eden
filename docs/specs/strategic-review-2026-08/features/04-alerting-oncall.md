@@ -434,7 +434,8 @@ product is out of scope.
    EQL-triage payloads so duplicate-alert suppression (`AlertTriageJudge._find_duplicate_issue`)
    can trigger — both currently inert (§0.5).
 9. **Do not** build schedules, rotations, ack/snooze UI, or SLA timers in-house — let a real on-call
-   tool own that graph, per §2's technical comparison.
+   tool own that graph, per §2's technical comparison. Canonical forward-looking record:
+   [on-call-scope-decision.md](./on-call-scope-decision.md) (FEAT-105).
 
 ## 4. Recommendation
 

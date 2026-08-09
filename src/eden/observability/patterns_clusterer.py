@@ -13,21 +13,134 @@ as a coverage gap. An Insight is emitted so the closed-loop tab
 surfaces it, and the portal's Patterns page can show it as
 ``🟡 partial`` or ``🔴 no coverage``.
 
-The clusterer runs as a background job (the FastAPI lifespan
-starts it; it's idempotent and time-bounded).
+The clusterer runs on demand when topics are generated:
+``eden.topics.service.generate_topics`` calls
+``get_patterns_clusterer().run_once()`` (e.g. via ``POST /topics/generate``).
+Each ``run_once`` pass is idempotent and time-bounded.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from eden.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# FEAT-142 — recent-window volume vs longer baseline for trend badges.
+TREND_RECENT_DAYS = 7
+TREND_BASELINE_DAYS = 21
+TREND_FLAT_THRESHOLD = 0.25
+
+
+def compute_cluster_trend(
+    recent_count: int,
+    baseline_count: int,
+    *,
+    recent_days: int = TREND_RECENT_DAYS,
+    baseline_days: int = TREND_BASELINE_DAYS,
+    flat_threshold: float = TREND_FLAT_THRESHOLD,
+) -> dict[str, Any]:
+    """Compare per-day volume in the recent window vs the baseline window.
+
+    ``baseline_count`` is the event count across the full baseline window
+    (which includes the recent window). Rates are ``count / window_days``;
+    ``trend_score`` is ``recent_rate / baseline_rate - 1`` when baseline
+    rate is positive, else ``1.0`` when recent activity exists and ``0.0``
+    when both windows are quiet. Labels use ±``flat_threshold`` on the score.
+    """
+    recent = max(0, int(recent_count))
+    baseline = max(0, int(baseline_count))
+    recent_days = max(1, int(recent_days))
+    baseline_days = max(1, int(baseline_days))
+
+    recent_rate = recent / recent_days
+    baseline_rate = baseline / baseline_days
+
+    if baseline_rate == 0.0:
+        if recent_rate > 0.0:
+            trend_score = 1.0
+            trend = "rising"
+        else:
+            trend_score = 0.0
+            trend = "flat"
+    else:
+        trend_score = recent_rate / baseline_rate - 1.0
+        if trend_score >= flat_threshold:
+            trend = "rising"
+        elif trend_score <= -flat_threshold:
+            trend = "falling"
+        else:
+            trend = "flat"
+
+    return {
+        "trend": trend,
+        "trend_score": float(trend_score),
+        "recent_count": recent,
+        "baseline_count": baseline,
+    }
+
+
+def _count_window_events(
+    timestamps: list[datetime],
+    *,
+    recent_cutoff: datetime,
+    baseline_cutoff: datetime,
+) -> tuple[int, int]:
+    """Return (recent_count, baseline_count) for the given event timestamps."""
+    recent = 0
+    baseline = 0
+    for ts in timestamps:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        if ts >= baseline_cutoff:
+            baseline += 1
+        if ts >= recent_cutoff:
+            recent += 1
+    return recent, baseline
+
+
+def _topic_fingerprint(topic: str) -> str:
+    """Normalize topic text for within-cluster dedup."""
+    return re.sub(r"\s+", " ", (topic or "").strip().lower())
+
+
+def dedupe_cluster_members(
+    topics: list[str],
+    trace_ids: list[str],
+) -> tuple[list[str], list[str]]:
+    """Collapse duplicate trace_ids and identical topic fingerprints (FEAT-143)."""
+    seen_traces: set[str] = set()
+    seen_topics: set[str] = set()
+    out_topics: list[str] = []
+    out_traces: list[str] = []
+    for topic, trace_id in zip(topics, trace_ids, strict=True):
+        tid = (trace_id or "").strip()
+        if tid and tid in seen_traces:
+            continue
+        topic_key = _topic_fingerprint(topic)
+        if not tid and topic_key and topic_key in seen_topics:
+            continue
+        if tid:
+            seen_traces.add(tid)
+        if topic_key:
+            seen_topics.add(topic_key)
+        out_topics.append(topic)
+        out_traces.append(trace_id)
+    return out_topics, out_traces
+
+
+def stable_pattern_id(tenant_id: str, label: str) -> str:
+    """Deterministic pattern id for cross-run merge by tenant + normalized label."""
+    norm = _topic_fingerprint(label)
+    digest = hashlib.sha256(f"{tenant_id}:{norm}".encode()).hexdigest()[:32]
+    return digest
 
 
 # ── Optional heavy imports are deferred ─────────────────────────────
@@ -57,7 +170,9 @@ class PatternsClusterer:
             client = await get_postgres_client()
             if not client:
                 return {"tenants_processed": 0, "patterns_created": 0}
-            rows = await client.fetch("SELECT DISTINCT tenant_id FROM telemetry_events LIMIT 100")
+            rows = await client.fetch(
+                "SELECT DISTINCT tenant_id FROM telemetry_events ORDER BY tenant_id ASC LIMIT 100"
+            )
             tenants = [str(r["tenant_id"]) for r in rows]
         except Exception as exc:
             logger.warning(f"PatternsClusterer could not list tenants: {exc}")
@@ -77,7 +192,17 @@ class PatternsClusterer:
         settings = get_settings()
         lookback = getattr(settings, "patterns_clusterer_lookback_days", 7)
         min_cluster_size = getattr(settings, "patterns_clusterer_min_cluster_size", 20)
-        cutoff = datetime.now(UTC) - timedelta(days=lookback)
+        trend_recent_days = getattr(
+            settings, "patterns_clusterer_trend_recent_days", TREND_RECENT_DAYS
+        )
+        trend_baseline_days = getattr(
+            settings, "patterns_clusterer_trend_baseline_days", TREND_BASELINE_DAYS
+        )
+        effective_lookback = max(lookback, trend_baseline_days)
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(days=effective_lookback)
+        recent_cutoff = now - timedelta(days=trend_recent_days)
+        baseline_cutoff = now - timedelta(days=trend_baseline_days)
 
         # 1) Pull events with a request body on either the plaintext
         # JSONB column or its zstd shadow — Phase 4 storage: reads must
@@ -87,7 +212,7 @@ class PatternsClusterer:
         client = await get_postgres_client()
         rows = await client.fetch(
             """
-            SELECT event_id, trace_id, name, request_body, request_body_zstd,
+            SELECT event_id, trace_id, name, timestamp, request_body, request_body_zstd,
                    metrics, attributes
             FROM telemetry_events
             WHERE tenant_id = $1
@@ -107,6 +232,7 @@ class PatternsClusterer:
         # chars to avoid huge inputs.
         topics: list[str] = []
         trace_ids: list[str] = []
+        timestamps: list[datetime] = []
         for r in rows:
             # zstd first — matches the canonical reader
             # (telemetry_collector.get_trace_tree) and rules_engine's
@@ -140,6 +266,11 @@ class PatternsClusterer:
             if topic:
                 topics.append(topic)
                 trace_ids.append(str(r.get("trace_id") or ""))
+                ts = r.get("timestamp")
+                if isinstance(ts, datetime):
+                    timestamps.append(ts)
+                else:
+                    timestamps.append(now)
         if len(topics) < min_cluster_size:
             return 0
 
@@ -178,23 +309,43 @@ class PatternsClusterer:
                 return 0
 
         # 5) For each non-noise cluster, label and persist
-        import uuid
         cluster_topics: dict[int, list[str]] = {}
         cluster_traces: dict[int, list[str]] = {}
+        cluster_times: dict[int, list[datetime]] = {}
         for i, lbl in enumerate(labels):
             if lbl < 0:
                 continue  # HDBSCAN noise
             cluster_topics.setdefault(int(lbl), []).append(topics[i])
             cluster_traces.setdefault(int(lbl), []).append(trace_ids[i])
+            cluster_times.setdefault(int(lbl), []).append(timestamps[i])
 
         created = 0
         for cluster_id, items in cluster_topics.items():
             traces = cluster_traces[cluster_id]
-            sample = items[:5]
+            dedup_topics, dedup_traces = dedupe_cluster_members(items, traces)
+            if not dedup_topics:
+                continue
+            sample = dedup_topics[:5]
             # LLM label
             label = await self._label_cluster(sample)
             # Coherence = mean intra-cluster cosine similarity
             coherence = _coherence(vectors, [i for i, l in enumerate(labels) if l == cluster_id])
+            recent_count, baseline_count = _count_window_events(
+                cluster_times.get(cluster_id, []),
+                recent_cutoff=recent_cutoff,
+                baseline_cutoff=baseline_cutoff,
+            )
+            trend = compute_cluster_trend(
+                recent_count,
+                baseline_count,
+                recent_days=trend_recent_days,
+                baseline_days=trend_baseline_days,
+            )
+            metadata = {
+                "sample_topics": sample[:3],
+                **trend,
+            }
+            pattern_id = stable_pattern_id(tenant_id, label)
             # Persist
             try:
                 await client.execute(
@@ -210,18 +361,22 @@ class PatternsClusterer:
                     SET sample_count = EXCLUDED.sample_count,
                         coherence_score = EXCLUDED.coherence_score,
                         representative_trace_ids = EXCLUDED.representative_trace_ids,
-                        last_seen = EXCLUDED.last_seen
+                        last_seen = EXCLUDED.last_seen,
+                        metadata = EXCLUDED.metadata,
+                        name = EXCLUDED.name,
+                        description = EXCLUDED.description,
+                        topic_label = EXCLUDED.topic_label
                     """,
-                    str(uuid.uuid4()),
+                    pattern_id,
                     tenant_id,
                     label[:200],
-                    f"Pattern with {len(items)} traces in the last {lookback} days",
+                    f"Pattern with {len(dedup_topics)} traces in the last {lookback} days",
                     label[:200],
                     float(coherence),
-                    len(items),
-                    traces[:10],
-                    datetime.now(UTC),
-                    json.dumps({"sample_topics": sample[:3]}, default=str),
+                    len(dedup_topics),
+                    dedup_traces[:10],
+                    now,
+                    json.dumps(metadata, default=str),
                 )
                 created += 1
             except Exception as exc:

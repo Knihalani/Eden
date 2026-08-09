@@ -524,6 +524,7 @@ async def _critic_review(
     router: ModelRouter,
     diff: str,
     *,
+    org_id: str,
     rca_summary: str,
 ) -> dict[str, Any]:
     """Run the critic v2 pass on a generated diff (M8, §4.4).
@@ -574,6 +575,8 @@ async def _critic_review(
     try:
         response = await router.aroute(
             task, prompt, system_prompt=_CRITIC_SYSTEM_PROMPT, max_tokens=200,
+            org_id=org_id,
+            feature="patches",
         )
         raw = (response.content or "").strip()
         cost = float(getattr(getattr(response, "usage", None), "cost", 0) or 0)
@@ -889,6 +892,7 @@ class PatchGenerator:
             output_type="code",
             expected_min_length=100,
             requires_quality_check=True,
+            org_id=org_id,
         )
 
         # Phase 3b: read size + dedup settings once. The scheduler
@@ -966,6 +970,7 @@ class PatchGenerator:
                     system_prompt=system_prompt,
                     org_id=org_id,
                     user_id=None,
+                    feature="patches",
                     max_tokens=4096,
                 )
             except Exception as exc:
@@ -1031,6 +1036,7 @@ class PatchGenerator:
             critic_verdict = await _critic_review(
                 self._router,
                 candidate,
+                org_id=org_id,
                 rca_summary=rca_summary,
             )
             cost_usd += float(critic_verdict.get("cost_usd") or 0.0)

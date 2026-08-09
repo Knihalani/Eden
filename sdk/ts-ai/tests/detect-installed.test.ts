@@ -39,7 +39,7 @@ describe("detectInstalledFrameworks (ESM-safe)", () => {
     expect([true, false]).toContain(r.openai);
   });
 
-  test("autoInstrument alias returns the same shape", () => {
+  test("autoInstrument deprecated alias returns the same shape", () => {
     expect(autoInstrument()).toEqual(detectInstalledFrameworks());
   });
 });

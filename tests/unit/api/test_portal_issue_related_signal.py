@@ -92,3 +92,5 @@ async def test_issue_with_signal_investigator_stumble_gets_related_signal_id():
         "issue with no signal-investigator-linked stumble must stay None, "
         "not have a value forced onto it"
     )
+    assert by_id["iss-1"].tags == ["latency_spike"]
+    assert by_id["iss-2"].tags == ["latency_spike"]

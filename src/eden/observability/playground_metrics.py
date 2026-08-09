@@ -43,8 +43,8 @@ def reset_for_tests() -> None:
     with _lock:
         for key in _stats:
             _stats[key] = 0.0
-        for key in _run_seconds_buckets:
-            _run_seconds_buckets[key] = 0.0
+        for bucket in _run_seconds_buckets:
+            _run_seconds_buckets[bucket] = 0.0
 
 
 def record_playground_run_seconds(seconds: float) -> None:

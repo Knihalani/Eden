@@ -202,12 +202,10 @@ def test_closed_loop_hooks_register() -> None:
 def test_intelligence_judges_registered() -> None:
     """Defaults: Satisfaction only; UnifiedJudge behind judges_llm_v1."""
     from eden.llmops.judges import register_default_judges
-    from eden.llmops.judges.builtin_v9 import register_intelligence_judges
     from eden.llmops.judges.registry import JudgeRegistry
 
     registry = JudgeRegistry()
     register_default_judges(registry)
-    assert register_intelligence_judges(registry) == 0
     assert registry.get("satisfaction") is not None
     assert registry.get("unified") is None
 

@@ -137,6 +137,23 @@ DEFAULT_TRANSITIONS: list[TierTransition] = [
 #: STANDARD_IA / GLACIER_IR / GLACIER transitions are meaningless.
 _IMPOSSIBLE_CLOUD = os.environ.get("EDEN_STORAGE_BACKEND", "").lower() == "impossible_cloud"
 
+# Hot Postgres tables surfaced in ``get_storage_summary``.  Original trio
+# kept for backward compatibility; gap / no-op-policy tables added in
+# OPT-32 so ops can reason about $/GB (via ``pg_total_relation_size``).
+_HOT_STORAGE_SUMMARY_TABLES: tuple[str, ...] = (
+    "usage_events",
+    "silver_events",
+    "quarantine_events",
+    "checkpoint_blobs",
+    "trace_replay_sessions",
+    "replay_sessions",
+    "user_feedback",
+    "agent_audit_ledger",
+)
+
+# Validated identifier — only tables from the allow-list above.
+_TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
 
 class StorageLifecycleManager:
     """Manages storage lifecycle rules for the data platform.
@@ -531,14 +548,14 @@ class StorageLifecycleManager:
             "cold": {},
         }
 
-        # PostgreSQL hot storage
         client = await self._get_postgres()
-        for table in ["usage_events", "silver_events", "quarantine_events"]:
-            try:
-                count = await client.fetchval(f"SELECT COUNT(*) FROM {table}") or 0
-                summary["hot"][table] = {"rows": count}
-            except Exception:
-                summary["hot"][table] = {"rows": 0, "error": "query failed"}
+        hot_bytes_total = 0
+        for table in _HOT_STORAGE_SUMMARY_TABLES:
+            stats = await self._fetch_hot_table_stats(client, table)
+            summary["hot"][table] = stats
+            hot_bytes_total += int(stats.get("bytes") or 0)
+
+        summary["hot_bytes_total"] = hot_bytes_total
 
         # S3 warm/cold
         bucket = getattr(settings, "bronze_s3_bucket", "")
@@ -570,3 +587,47 @@ class StorageLifecycleManager:
                 summary["s3_error"] = str(exc)
 
         return summary
+
+    async def _fetch_hot_table_stats(self, client: Any, table: str) -> dict[str, Any]:
+        """Row count, on-disk bytes, and table-specific extras for one hot table."""
+        if table not in _HOT_STORAGE_SUMMARY_TABLES or not _TABLE_NAME_RE.match(table):
+            return {"rows": 0, "bytes": 0, "error": "unsupported table"}
+
+        try:
+            exists = await client.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = $1
+                )
+                """,
+                table,
+            )
+            if not exists:
+                return {"rows": 0, "bytes": 0, "missing": True}
+
+            row_count = await client.fetchval(f"SELECT COUNT(*)::bigint FROM {table}")
+            table_bytes = await client.fetchval(
+                f"SELECT pg_total_relation_size('{table}'::regclass)::bigint"
+            )
+            stats: dict[str, Any] = {
+                "rows": int(row_count or 0),
+                "bytes": int(table_bytes or 0),
+            }
+
+            if table == "quarantine_events":
+                unreprocessed = await client.fetchval(
+                    """
+                    SELECT COUNT(*)::bigint
+                    FROM quarantine_events
+                    WHERE resolution IS DISTINCT FROM 'reprocessed'
+                    """
+                )
+                stats["unreprocessed_rows"] = int(unreprocessed or 0)
+
+            return stats
+        except Exception as exc:
+            logger.debug("hot storage summary failed for %s: %s", table, exc)
+            return {"rows": 0, "bytes": 0, "error": "query failed"}

@@ -86,5 +86,5 @@ class TestNoUntrackedShippedSources:
         ]
         assert not offenders, (
             "untracked migration file(s) — these may already have run "
-            f"against a real database:\n  " + "\n  ".join(offenders)
+            "against a real database:\n  " + "\n  ".join(offenders)
         )

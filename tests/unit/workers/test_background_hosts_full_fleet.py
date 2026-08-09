@@ -25,7 +25,6 @@ import pytest
 
 from eden.workers import background as bg
 
-
 #: Loops that have no home other than the API bundle now.
 ADOPTED = {
     "webhook_drain",

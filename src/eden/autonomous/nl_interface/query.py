@@ -139,6 +139,8 @@ class NLQueryEngine:
             slot=DEFAULT_LLM_SLOT,
             system_prompt=_NL_TO_SQL_SYSTEM_PROMPT,
             max_tokens=500,
+            org_id=org_id,
+            feature="autonomous_nl_to_sql",
         )
         sql_text: str | None = None
         if raw:
@@ -189,6 +191,8 @@ class NLQueryEngine:
             slot=DEFAULT_LLM_SLOT,
             system_prompt=_NL_SUMMARY_SYSTEM_PROMPT,
             max_tokens=200,
+            org_id=org_id,
+            feature="autonomous_nl_summariser",
         )
         if raw2:
             parsed2 = _try_parse_json_object(raw2)
@@ -267,6 +271,8 @@ class AutoDashboardBuilder:
             slot=DEFAULT_LLM_SLOT,
             system_prompt=_DASHBOARD_SYSTEM_PROMPT,
             max_tokens=500,
+            org_id=org_id,
+            feature="autonomous_dashboard",
         )
         panels: list[dict[str, Any]] = []
         llm_used = False
@@ -338,6 +344,8 @@ class NLReportGenerator:
             slot=DEFAULT_LLM_SLOT,
             system_prompt=_NL_REPORT_SYSTEM_PROMPT,
             max_tokens=200,
+            org_id=org_id,
+            feature="autonomous_nl_report",
         )
         period = "weekly"
         focus: list[str] = []

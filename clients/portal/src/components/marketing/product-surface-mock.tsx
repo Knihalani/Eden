@@ -233,21 +233,3 @@ export function ProductSurfaceMock({
     </div>
   );
 }
-
-/** @deprecated Prefer ProductSurfaceMock — kept for any stray imports. */
-export function TraceTimelineMock({
-  className,
-  compact,
-  hero,
-}: {
-  className?: string;
-  compact?: boolean;
-  hero?: boolean;
-}) {
-  return (
-    <ProductSurfaceMock
-      variant={compact ? "auth" : hero ? "hero" : "hero"}
-      className={className}
-    />
-  );
-}

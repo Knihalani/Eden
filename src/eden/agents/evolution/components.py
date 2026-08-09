@@ -29,6 +29,7 @@ without touching the trigger.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import UTC
@@ -77,21 +78,54 @@ settings = _SettingsProxy()
 # The JOIN is left-side: judge rows without a matching
 # telemetry event are dropped (their ``agent_id`` would be NULL).
 _AGG_QUERY = """
+    WITH joined AS (
+        SELECT
+            js.judge_name,
+            js.score,
+            js.rationale,
+            js.trace_id,
+            js.span_id,
+            js.model,
+            js.scored_at,
+            te.attributes->>'agent_id' AS agent_id
+        FROM judge_scores js
+        LEFT JOIN telemetry_events te
+          ON te.id::text = js.trace_id
+        WHERE js.scored_at >= NOW() - INTERVAL '24 hours'
+    )
     SELECT
-        js.judge_name,
-        js.score,
-        js.rationale,
-        js.trace_id,
-        js.span_id,
-        js.model,
-        js.scored_at,
-        te.attributes->>'agent_id' AS agent_id
-    FROM judge_scores js
-    LEFT JOIN telemetry_events te
-      ON te.id::text = js.trace_id
-    WHERE js.scored_at >= NOW() - INTERVAL '24 hours'
-      AND te.attributes->>'agent_id' IS NOT NULL
+        j.judge_name,
+        j.score,
+        j.rationale,
+        j.trace_id,
+        j.span_id,
+        j.model,
+        j.scored_at,
+        j.agent_id,
+        stats.dropped_null_agent_id
+    FROM joined j
+    CROSS JOIN (
+        SELECT COUNT(*)::bigint AS dropped_null_agent_id
+        FROM joined
+        WHERE agent_id IS NULL
+    ) stats
+    WHERE j.agent_id IS NOT NULL
 """
+
+_DROPPED_NULL_AGENT_ID = None
+
+
+def _dropped_null_agent_id_counter() -> Any:
+    """Lazy singleton — mirrors ``checkpoint_hook._Metrics`` pattern."""
+    global _DROPPED_NULL_AGENT_ID
+    if _DROPPED_NULL_AGENT_ID is None:
+        from eden.observability.simple_metrics import Counter
+
+        _DROPPED_NULL_AGENT_ID = Counter(
+            "eden_evolution_dropped_null_agent_id_total",
+            "Judge scores dropped from prompt-evolution scoring (missing agent_id)",
+        )
+    return _DROPPED_NULL_AGENT_ID
 
 
 class EvolutionComponent:
@@ -164,7 +198,27 @@ class JudgeScorePromptEvolver(EvolutionComponent):
         """Pull the recent judge-score rows used by ``run``."""
         client = await self._get_postgres()
         rows = await client.fetch(_AGG_QUERY)
-        return list(rows or [])
+        rows_list = list(rows or [])
+        dropped = 0
+        if rows_list:
+            dropped = int(rows_list[0].get("dropped_null_agent_id") or 0)
+        if dropped > 0:
+            logger.info(
+                "evolution.dropped_null_agent_id: %d judge scores skipped "
+                "(no agent_id attribution)",
+                dropped,
+            )
+            with contextlib.suppress(Exception):  # metrics must never break scoring
+                _dropped_null_agent_id_counter().inc(dropped)
+        cleaned: list[dict[str, Any]] = []
+        for row in rows_list:
+            if isinstance(row, dict):
+                cleaned.append(
+                    {k: v for k, v in row.items() if k != "dropped_null_agent_id"}
+                )
+            else:
+                cleaned.append(row)
+        return cleaned
 
     def _aggregate_degraded(
         self, rows: list[dict[str, Any]]
@@ -539,7 +593,7 @@ class PromptEvolvers(EvolutionComponent):
         # Best-effort audit — never flips success after experiment write.
         try:
             user_id = await pg.fetchval(
-                "SELECT id FROM users WHERE clerk_id = 'system' LIMIT 1"
+                "SELECT id FROM users WHERE clerk_id = 'system' ORDER BY id LIMIT 1"
             )
             if not user_id:
                 logger.debug(
@@ -874,6 +928,23 @@ class IssuePromptEvolver(EvolutionComponent):
                 "prompt_canary_experiments write failed or "
                 "evolver_auto_canary_pct disabled"
             )
+
+        # FEAT-92: attempt a draft GitHub fix PR (or stamp patch_blocked).
+        try:
+            from eden.agents.evolution.issue_fix_pr import attempt_issue_prompt_fix_pr
+
+            fix_pr = await attempt_issue_prompt_fix_pr(
+                org_id,
+                issue_id,
+                agent=agent,
+                prompt_template=revised,
+                issue_title=issue.title or "",
+                fingerprint=issue.fingerprint or "",
+            )
+            result["fix_pr"] = fix_pr
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("IssuePromptEvolver fix_pr attempt failed: %s", exc)
+
         return result
 
 

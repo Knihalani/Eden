@@ -97,6 +97,7 @@ _EXPECTED_KEYS = {
     "ok",
     "gate",
     "regression",
+    "scorer_gate",
     "summary",
     "score_table",
     "skips",
@@ -127,6 +128,7 @@ def test_ci_eval_run_contract_keys(client: TestClient) -> None:
     assert data["response_version"] == "v1"
     assert data["gate"] == "pass"
     assert data["ok"] is True
+    assert data["scorer_gate"]["enabled"] is False
     # summary breakdown
     assert data["summary"] == {
         "passed": 2,
@@ -136,10 +138,10 @@ def test_ci_eval_run_contract_keys(client: TestClient) -> None:
         "total": 3,
         "ok": True,
     }
-    # score table row shape
+    # score table row shape (aggregate rows; per-case F51 rows add case_id/reason)
     assert data["score_table"]
     for row in data["score_table"]:
-        assert set(row.keys()) == {"metric", "baseline", "current", "delta", "verdict"}
+        assert {"metric", "baseline", "current", "delta", "verdict"} <= set(row.keys())
     # skips breakdown carries per-case reasons
     assert data["skips"]["count"] == 1
     assert data["skips"]["cases"][0]["reason"] == "no_trace"

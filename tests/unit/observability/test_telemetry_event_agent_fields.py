@@ -47,21 +47,21 @@ _NEW_COLUMNS = (
 
 
 def _event(**overrides) -> TelemetryEvent:
-    fields = dict(
-        event_id="evt-agent-1",
-        tenant_id="org-1",
-        project_id="proj-1",
-        trace_id="trace-1",
-        realm="environment",
-        event_type="span.start",
-        timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        agent_id="agent-1",
-        operation_name="chat.completions",
-        provider_name="anthropic",
-        error_type="RateLimitError",
-        parent_agent_span_id="span-parent-1",
-        child_agent_trace_id="trace-child-1",
-    )
+    fields = {
+        "event_id": "evt-agent-1",
+        "tenant_id": "org-1",
+        "project_id": "proj-1",
+        "trace_id": "trace-1",
+        "realm": "environment",
+        "event_type": "span.start",
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "agent_id": "agent-1",
+        "operation_name": "chat.completions",
+        "provider_name": "anthropic",
+        "error_type": "RateLimitError",
+        "parent_agent_span_id": "span-parent-1",
+        "child_agent_trace_id": "trace-child-1",
+    }
     fields.update(overrides)
     return TelemetryEvent(**fields)
 

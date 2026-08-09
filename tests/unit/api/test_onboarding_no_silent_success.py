@@ -204,7 +204,7 @@ class TestMembershipSelfHealWritesWithoutARoleClaim:
 
         #: Functions whose org argument is, by construction, the Clerk
         #: session's own org — the whole function is the guard.
-        SESSION_SCOPED_FUNCS = {
+        session_scoped_funcs = {
             "ensure_clerk_org_from_session",
             "resolve_clerk_org_for_session",
         }
@@ -220,7 +220,7 @@ class TestMembershipSelfHealWritesWithoutARoleClaim:
             if "ensure_clerk_membership(" not in body_src:
                 continue
             examined.append(func.name)
-            if func.name in SESSION_SCOPED_FUNCS:
+            if func.name in session_scoped_funcs:
                 continue
             # Otherwise the enclosing function must contain an explicit
             # session/IDOR guard.

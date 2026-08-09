@@ -55,6 +55,7 @@ async def test_auto_curator_fans_out_under_a_concurrency_cap():
     pg.fetch = AsyncMock(
         return_value=[{"org_id": f"org-{i}"} for i in range(n_orgs)]
     )
+    pg.execute = AsyncMock(return_value="INSERT 0 1")
 
     inflight = 0
     peak = 0

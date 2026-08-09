@@ -111,11 +111,15 @@ export default function SettingsScimPage() {
     <div className="ds-page">
       <PageHeader
         title="SCIM"
-        meta="Generate a bearer token per SSO provider so an IdP can provision / deprovision members automatically."
+        meta="Native Eden SCIM tokens for self-hosted deployments. Clerk-hosted orgs provision via Clerk — see Settings → SSO."
         actions={nav}
       />
 
       <div className="flex flex-col gap-4 px-5 py-5 sm:px-6">
+        <p className="type-meta text-[var(--text-faint)]">
+          Clerk-hosted workspaces: configure SCIM in the Clerk dashboard, not here.
+          This screen issues tokens for Eden&apos;s native <code>sso.py</code> path only.
+        </p>
         {providers.length === 0 ? (
           <EmptyState
             title="No SSO providers configured"

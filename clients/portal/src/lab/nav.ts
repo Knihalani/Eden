@@ -9,6 +9,7 @@ export type NavIcon =
   | "traces"
   | "issues"
   | "signals"
+  | "topics"
   | "evals"
   | "playgrounds"
   | "improve"
@@ -45,6 +46,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "traces", label: "Traces", href: "/traces", icon: "traces" },
       { id: "issues", label: "Issues", href: "/issues", icon: "issues" },
       { id: "signals", label: "Detectors", href: "/signals", icon: "signals" },
+      { id: "topics", label: "Topics", href: "/topics", icon: "topics" },
     ],
   },
   {

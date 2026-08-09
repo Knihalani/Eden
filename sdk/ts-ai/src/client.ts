@@ -577,6 +577,23 @@ export class EdenSDK {
   private sampler: ClientSampler;
   sampledOut = 0;
   /**
+   * Events the SDK successfully ingested (HTTP 2xx). For regular
+   * event batches this tracks the server's ``accepted`` count from
+   * the ingest response body (falling back to the batch size when
+   * the body is not that shape). For streaming chunks this tracks
+   * the number of chunks in each successful POST. Mirrors the Python
+   * SDK's ``sent`` property.
+   */
+  sent = 0;
+  /**
+   * Events whose ingest POST failed after retries (or on a
+   * non-retryable 4xx). Distinct from ``rejectedTotal`` (the server
+   * accepted the request but refused to store the row) and from
+   * ``sampledOut`` / ``droppedTotal``. Mirrors the Python SDK's
+   * ``failed`` property.
+   */
+  failed = 0;
+  /**
    * Events evicted from the front of the queue because it hit
    * ``maxQueueSize`` before a flush could drain it.
    *
@@ -1486,8 +1503,14 @@ export class EdenSDK {
       return "fail";
     }
     const wired = redacted.map(eventToWire);
-    const outcome = await this.postJson(url, wired);
-    if (outcome === "ok") return "ok";
+    const outcome = await this.postJson(url, wired, redacted.length);
+    if (outcome === "ok") {
+      this.sent += this._lastIngestAccepted;
+      return "ok";
+    }
+    if (outcome === "spill" || outcome === "drop") {
+      this.failed += redacted.length;
+    }
     if (outcome === "too_large" && redacted.length > 1) {
       const mid = Math.floor(redacted.length / 2);
       if (this.config.debug) {
@@ -1578,7 +1601,7 @@ export class EdenSDK {
     batch: ReturnType<typeof chunkToWire>[],
   ): Promise<void> {
     if (batch.length === 0) return;
-    const outcome = await this.postJson(url, { chunks: batch });
+    const outcome = await this.postJson(url, { chunks: batch }, batch.length);
     if (outcome === "too_large" && batch.length > 1) {
       const mid = Math.floor(batch.length / 2);
       if (this.config.debug) {
@@ -1595,6 +1618,13 @@ export class EdenSDK {
       await this.postChunkBatch(url, batch.slice(0, mid));
       await this.postChunkBatch(url, batch.slice(mid));
       return;
+    }
+    if (outcome === "ok") {
+      this.sent += batch.length;
+      return;
+    }
+    if (outcome === "spill" || outcome === "drop") {
+      this.failed += batch.length;
     }
     // Only transient failures (408/429/5xx/network) spill -- a
     // permanent 4xx ("drop") would poison the offline queue with a
@@ -1616,41 +1646,44 @@ export class EdenSDK {
   }
 
   /**
-   * POST gzip JSON to an ingest URL.
-   * @returns ``"ok"`` on 2xx; ``"spill"`` after exhausting retryable
-   * failures (408/429/5xx/network) for offline queue; ``"drop"`` on
-   * permanent 4xx (auth/validation) — do not spill; ``"too_large"``
-   * on 413 so chunk ingest can bisect and retry.
+   * Accepted row count from the most recent 2xx ingest response.
    */
+  private _lastIngestAccepted = 0;
+
   /**
-   * Record the per-row outcome carried by a 2xx ingest response.
-   *
-   * The gateway answers ``{accepted, rejected, deduplicated, total}``.
-   * Reading only ``res.ok`` treated a fully-rejected batch as a clean
-   * flush, which is precisely how a broken ingest endpoint went
-   * unnoticed. Counters are left untouched when the body is not that
-   * shape, so an older or differently-shaped gateway can never make
-   * the SDK report something it did not observe.
+   * Parse per-row outcomes from a 2xx ingest body and return how
+   * many rows to credit to ``sent``. Falls back to ``sentCount`` when
+   * the body is not the ``{accepted, rejected, ...}`` shape so an
+   * older gateway can never make the SDK under-report what it sent.
    */
-  private async recordIngestOutcome(res: Response): Promise<void> {
+  private async recordIngestOutcome(
+    res: Response,
+    sentCount: number,
+  ): Promise<number> {
     let parsed: unknown;
     try {
       parsed = await res.clone().json();
     } catch {
-      return; // Not JSON — nothing reliable to record.
+      return sentCount;
     }
-    if (typeof parsed !== "object" || parsed === null) return;
+    if (typeof parsed !== "object" || parsed === null) return sentCount;
     const body = parsed as Record<string, unknown>;
     if (
       !("accepted" in body) &&
       !("rejected" in body) &&
       !("sampled_out" in body)
     ) {
-      return;
+      return sentCount;
     }
 
-    const accepted = Number(body.accepted ?? 0);
-    const rejected = Number(body.rejected ?? 0);
+    let accepted = 0;
+    let rejected = 0;
+    try {
+      accepted = Number(body.accepted ?? sentCount) || 0;
+      rejected = Number(body.rejected ?? 0) || 0;
+    } catch {
+      return sentCount;
+    }
     const sampledOut = Number(body.sampled_out ?? 0);
     if (Number.isFinite(accepted) && accepted > 0) {
       this.acceptedTotal += accepted;
@@ -1668,11 +1701,20 @@ export class EdenSDK {
           `malformed; they will NOT be retried`,
       );
     }
+    return accepted;
   }
 
+  /**
+   * POST gzip JSON to an ingest URL.
+   * @returns ``"ok"`` on 2xx; ``"spill"`` after exhausting retryable
+   * failures (408/429/5xx/network) for offline queue; ``"drop"`` on
+   * permanent 4xx (auth/validation) — do not spill; ``"too_large"``
+   * on 413 so chunk ingest can bisect and retry.
+   */
   private async postJson(
     url: string,
     body: unknown,
+    sentCount = 1,
   ): Promise<"ok" | "spill" | "drop" | "too_large"> {
     if (typeof fetch === "undefined") {
       throw new Error(
@@ -1709,7 +1751,10 @@ export class EdenSDK {
         });
         this.lastIngestHttpStatus = res.status;
         if (res.ok) {
-          await this.recordIngestOutcome(res);
+          this._lastIngestAccepted = await this.recordIngestOutcome(
+            res,
+            sentCount,
+          );
           return "ok";
         }
         const status = res.status;

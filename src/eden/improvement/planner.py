@@ -136,14 +136,16 @@ def compute_ev(
 
     token_est = float(cand.llm_cost_usd or evid.get("est_token_cost") or 0.05)
     # Intentional 0.0 premium must win over cand.kg_revert_premium (falsy bug).
-    if kg_premium is not None:
-        premium = float(kg_premium)
-    else:
-        premium = float(cand.kg_revert_premium or 0.0)
-    if cand.est_fix_cost is not None:
-        fix_cost = float(cand.est_fix_cost)
-    else:
-        fix_cost = token_est + premium
+    premium = (
+        float(kg_premium)
+        if kg_premium is not None
+        else float(cand.kg_revert_premium or 0.0)
+    )
+    fix_cost = (
+        float(cand.est_fix_cost)
+        if cand.est_fix_cost is not None
+        else token_est + premium
+    )
 
     return severity_w * confidence * recurrence * user_w * issue_cost - fix_cost
 

@@ -2050,11 +2050,6 @@ class TelemetryCollector:
             if hydrate_bodies:
                 request_body = _resolve_request_for(row, decoded_cols)
                 response_body = _resolve_response_for(row, decoded_cols)
-            else:
-                # Cheap path for portal structure: keep inline JSONB
-                # previews, skip message_store reconstruct + body zstd.
-                request_body = row.get("request_body")
-                response_body = row.get("response_body")
             def _json_obj(value: Any, *, default: Any = None) -> Any:
                 """Normalize JSONB that asyncpg sometimes returns as ``str``."""
                 if value is None:
@@ -2093,17 +2088,6 @@ class TelemetryCollector:
                 if decoded_cols.get("payload_zstd") is not None
                 else _json_obj(row.get("payload"), default={}) or {},
                 "outcome": row.get("outcome"),
-                "request_body": _json_obj(request_body, default=request_body),
-                "response_body": _json_obj(response_body, default=response_body),
-                "reasoning": decoded_cols.get("reasoning_zstd")
-                if decoded_cols.get("reasoning_zstd") is not None
-                else row.get("reasoning"),
-                "tool_calls_full": decoded_cols.get("tool_calls_full_zstd")
-                if decoded_cols.get("tool_calls_full_zstd") is not None
-                else (row.get("tool_calls_full") or []),
-                "tool_results": decoded_cols.get("tool_results_zstd")
-                if decoded_cols.get("tool_results_zstd") is not None
-                else (row.get("tool_results") or []),
                 "images": row.get("images") or [],
                 "audio": row.get("audio") or [],
                 "logprobs": row.get("logprobs"),
@@ -2115,10 +2099,30 @@ class TelemetryCollector:
                 "prompt_cache_savings_usd": row.get("prompt_cache_savings_usd"),
                 "model_version": row.get("model_version"),
                 "service_tier": row.get("service_tier"),
+                "agent_id": row.get("agent_id"),
+                "operation_name": row.get("operation_name"),
                 "error_type": row.get("error_type"),
                 "error_message": row.get("error_message"),
                 "children": [],
             }
+            if hydrate_bodies:
+                node["request_body"] = _json_obj(request_body, default=request_body)
+                node["response_body"] = _json_obj(response_body, default=response_body)
+                node["reasoning"] = (
+                    decoded_cols.get("reasoning_zstd")
+                    if decoded_cols.get("reasoning_zstd") is not None
+                    else row.get("reasoning")
+                )
+                node["tool_calls_full"] = (
+                    decoded_cols.get("tool_calls_full_zstd")
+                    if decoded_cols.get("tool_calls_full_zstd") is not None
+                    else (row.get("tool_calls_full") or [])
+                )
+                node["tool_results"] = (
+                    decoded_cols.get("tool_results_zstd")
+                    if decoded_cols.get("tool_results_zstd") is not None
+                    else (row.get("tool_results") or [])
+                )
             span_map[span_id] = node
             total_duration = max(total_duration, duration)
 

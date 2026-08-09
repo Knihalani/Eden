@@ -9,11 +9,13 @@ Covers:
   threshold (no hook), detect_repeated_failures above
   threshold (fires hook).
 * Routes: POST /v1/provider_routing/{org}/attempts,
+  POST /v1/provider_routing/{org}/attempts/ingest,
   GET /v1/traces/{id}/provider_routing,
   GET /v1/provider_routing/{org}/attempts,
   GET /v1/provider_routing/{org}/failure_rate,
   GET /v1/provider_routing/{org}/repeated_failures.
 * SDK: record_attempt happy, build_provider_routing_attributes,
+  decode_litellm_payload, ingest_attempt,
   retry_with_fallback primary→fallback→success records
   full trace, retry_with_fallback all-fail records aborts
   and re-raises.
@@ -153,6 +155,27 @@ class TestProviderRoutingService:
                 sequence_index=-1,
                 decision="success",
             )
+
+    async def test_ingest_attempt_decodes_litellm(
+        self, mock_postgres_client: MagicMock,
+    ):
+        from eden.services.observability import get_provider_routing_service
+        svc = get_provider_routing_service()
+        mock_postgres_client.fetchrow = AsyncMock(return_value={
+            "id": "00000000-0000-0000-0000-0000000000dd",
+        })
+        attempt_id = await svc.ingest_attempt(
+            "org-1",
+            router="litellm",
+            payload={
+                "model": "gpt-4o-mini-2024-07-18",
+                "custom_llm_provider": "openai",
+                "metadata": {"trace_id": _TID, "span_id": _SID},
+            },
+        )
+        assert attempt_id == "00000000-0000-0000-0000-0000000000dd"
+        args = mock_postgres_client.fetchrow.call_args.args[1:]
+        assert args[3] == "openai"  # attempted_provider
 
     async def test_get_attempts_for_trace_returns_rows(
         self, mock_postgres_client: MagicMock,
@@ -309,6 +332,49 @@ class TestProviderRoutingRoutes:
         assert body["status"] == "error"
         assert "unknown decision" in body["message"]
 
+    def test_post_ingest_litellm_payload(
+        self, mock_postgres_client: MagicMock, routing_client: TestClient,
+    ):
+        mock_postgres_client.fetchrow = AsyncMock(return_value={
+            "id": "00000000-0000-0000-0000-0000000000dd",
+        })
+        resp = routing_client.post(
+            "/v1/provider_routing/org-1/attempts/ingest",
+            json={
+                "router": "litellm",
+                "payload": {
+                    "model": "gpt-4o-mini-2024-07-18",
+                    "custom_llm_provider": "openai",
+                    "status": "success",
+                    "response_time": 0.32,
+                    "metadata": {
+                        "trace_id": _TID,
+                        "span_id": _SID,
+                        "sequence_index": 0,
+                    },
+                },
+            },
+            headers={"X-Org-Id": "org-1"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert body["data"]["router"] == "litellm"
+        assert body["data"]["decoded"]["attempted_provider"] == "openai"
+        assert body["data"]["decoded"]["latency_ms"] == 320
+
+    def test_post_ingest_ignored_payload(
+        self, routing_client: TestClient,
+    ):
+        resp = routing_client.post(
+            "/v1/provider_routing/org-1/attempts/ingest",
+            json={"router": "portkey", "payload": {}},
+            headers={"X-Org-Id": "org-1"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["data"]["ignored"] is True
+
     def test_get_trace_provider_routing(
         self, mock_postgres_client: MagicMock, routing_client: TestClient,
     ):
@@ -383,6 +449,40 @@ class TestProviderRoutingSdk:
         assert pr["decision"] == "success"
         assert pr["sequence_index"] == 0
         assert pr["latency_ms"] == 320
+
+    def test_decode_litellm_payload_sdk_wrapper(self):
+        from eden.sdk.provider_routing import decode_litellm_payload
+
+        decoded = decode_litellm_payload(
+            {
+                "model": "gpt-4o-mini-2024-07-18",
+                "custom_llm_provider": "openai",
+                "metadata": {"trace_id": _TID, "span_id": _SID},
+            },
+        )
+        assert decoded["ignored"] is False
+        assert decoded["attempted_provider"] == "openai"
+
+    async def test_ingest_attempt_persists_decoded_payload(
+        self, mock_postgres_client: MagicMock,
+    ):
+        from eden.sdk.provider_routing import ingest_attempt
+
+        mock_postgres_client.fetchrow = AsyncMock(return_value={
+            "id": "00000000-0000-0000-0000-0000000000dd",
+        })
+        attempt_id = await ingest_attempt(
+            "org-1",
+            router="openrouter",
+            payload={
+                "model": "anthropic/claude-3.5-sonnet",
+                "provider": "Anthropic",
+                "trace_id": _TID,
+                "span_id": _SID,
+                "route": {"type": "primary", "sequence_index": 0},
+            },
+        )
+        assert attempt_id == "00000000-0000-0000-0000-0000000000dd"
 
     async def test_retry_with_fallback_walks_chain_on_failure(
         self, mock_postgres_client: MagicMock,

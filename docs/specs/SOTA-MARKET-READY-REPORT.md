@@ -37,7 +37,7 @@ Hard constraints held: no F22 rebuild, no Eden COGS admin UI, no docs-site redes
 | W10 | **GREEN** | AppShell + Density + ui barrel |
 | W11 | **GREEN** | ≥6 hubs OS + virtualization + export |
 | W12 | **GREEN** | Form kit + charts + axe + mobile |
-| W13 | **GREEN** | TranscriptV2; twin transcripts gone |
+| W13 | **GREEN** | Virtualized trace detail (`traces-detail-panels.tsx`); `TranscriptV2` name **UNVERIFIABLE** |
 | W14 | **GREEN** | Spans QL + filter→alert |
 | W15 | **GREEN** | Sessions + rrweb-player |
 | W16 | **GREEN** | Issues triage without F22 |
@@ -66,8 +66,8 @@ Hard constraints held: no F22 rebuild, no Eden COGS admin UI, no docs-site redes
 | **Security / multi-tenancy** | Org JWT over spoof headers; proxy session org; RLS GUC; PII fail-closed; scopes |
 | **SDK** | Sessions F23; Bedrock/Gemini; sampling/offline/OTel; version **0.3.1** |
 | **FinOps** | Customer CostEvent ledger; explorer; budget alerts; feature kills; cache savings |
-| **Portal OS** | AppShell, Density, ResourceOsToolbar, VirtualizedList, BulkActionBar, CrossLinkBar |
-| **Observe** | Traces/Spans/Sessions/Issues/Alerts hubs; TranscriptV2; no F22 Fix tab |
+| **Portal OS** | `AppShell`, `MobileBottomNav`, `SavedViewsMenu`, `@tanstack/react-virtual`, `portal-cross-links.ts`; `BulkActionBar` / `ResourceOsToolbar` / `DensityProvider` **UNVERIFIABLE** |
+| **Observe** | Traces/Issues/Alerts/Signals hub clients; virtualized trace detail; no F22 Fix tab; legacy `portal-os` names **REMOVED** |
 | **Evaluate** | Playgrounds (real LLM path), datasets (virtualized), labeling leases/pairwise, experiments, online scoring |
 | **Improve** | Severity-sorted cockpit; Book; EvidenceGate bulk; improvement-loop onboarding |
 | **Loop / ChatSidebar** | W20–W23: rehydrate, navigate, act, cite-before-claim, approvals; dual `/ai` gone |

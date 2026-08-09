@@ -15,6 +15,7 @@ From-address is always ``alerts@edenobservability.com`` via
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -23,9 +24,47 @@ from eden.services.email_service import get_email_service
 
 logger = logging.getLogger(__name__)
 
+_MAX_RECIPIENTS = 25
+
+
+def _parse_org_settings(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+async def _org_extra_alert_recipients(org_id: str) -> list[str]:
+    """Org-level soft-alert emails from ``organizations.settings`` (FEAT-106)."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return []
+        row = await client.fetchrow(
+            "SELECT settings FROM organizations WHERE id = $1",
+            org_id,
+        )
+        settings = _parse_org_settings(row["settings"] if row else None)
+        emails: list[str] = []
+        for key in ("budget_alert_emails", "soft_alert_recipients"):
+            val = settings.get(key)
+            if isinstance(val, list):
+                emails.extend(str(e).strip() for e in val if e)
+        return emails
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("alert_email: extra recipient lookup failed: %s", exc)
+        return []
+
 
 async def _org_alert_recipients(org_id: str) -> list[str]:
-    """Resolve owner/admin emails for an org (best-effort)."""
+    """Resolve owner/admin emails plus org settings extras (best-effort)."""
+    admins: list[str] = []
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -41,14 +80,27 @@ async def _org_alert_recipients(org_id: str) -> list[str]:
               AND m.role IN ('owner', 'admin')
               AND u.email IS NOT NULL
               AND u.email <> ''
+            ORDER BY u.email ASC
             LIMIT 10
             """,
             org_id,
         )
-        return [str(r["email"]) for r in rows if r.get("email")]
+        admins = [str(r["email"]) for r in rows if r.get("email")]
     except Exception as exc:  # noqa: BLE001
         logger.debug("alert_email: recipient lookup failed: %s", exc)
-        return []
+
+    extras = await _org_extra_alert_recipients(org_id)
+    seen: set[str] = set()
+    merged: list[str] = []
+    for email in [*admins, *extras]:
+        key = email.lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(email)
+        if len(merged) >= _MAX_RECIPIENTS:
+            break
+    return merged
 
 
 async def _allow_send(org_id: str, dedupe_key: str) -> bool:

@@ -311,9 +311,26 @@ function EventDetail({
             <h3 className="type-ui text-[var(--text)]">Rule</h3>
             <div>
               <p className="type-label">Condition</p>
-              <p className="type-mono mt-1.5 !text-[0.75rem] !text-[var(--text)]">
-                {rule.condition}
+              <p className="type-ui mt-1.5 text-[var(--text)]">
+                {rule.description || rule.condition || event.condition}
               </p>
+              {(rule.compiledEql || event.compiledEql) ? (
+                <p className="type-mono mt-2 !text-[0.6875rem] text-[var(--text-faint)]">
+                  {rule.compiledEql || event.compiledEql}
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : event.condition ? (
+          <section className="space-y-3">
+            <h3 className="type-ui text-[var(--text)]">Condition</h3>
+            <div>
+              <p className="type-ui text-[var(--text)]">{event.condition}</p>
+              {event.compiledEql ? (
+                <p className="type-mono mt-2 !text-[0.6875rem] text-[var(--text-faint)]">
+                  {event.compiledEql}
+                </p>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -732,7 +749,8 @@ export function AlertRulesView({ orgId }: { orgId: string | null }) {
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-4 sm:px-7">
         <p className="type-meta">
           {rules.length} rule{rules.length === 1 ? "" : "s"} · describe an alert
-          in plain English and eden compiles it to a monitored query
+          in plain English and eden compiles it to a monitored query · email
+          delivery to org admins when rules fire (not P0 security paging)
         </p>
         <button
           type="button"
@@ -755,7 +773,7 @@ export function AlertRulesView({ orgId }: { orgId: string | null }) {
         ) : rules.length === 0 ? (
           <EmptyState
             title="No alert rules yet"
-            body='Write a rule like "alert me when error rate exceeds 5% in the last hour" and eden turns it into a monitored query.'
+            body='Write a rule like "alert me when error rate exceeds 5% in the last hour" and eden turns it into a monitored query. Fired rules email org admins (best-effort) — not P0 security paging.'
             action={
               <button
                 type="button"

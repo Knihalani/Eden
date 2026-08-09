@@ -381,7 +381,7 @@ function AgentDetailBody({
   const tracesQuery = useOrgQuery(
     queryKeys.portal.traces(orgId, agent.id),
     orgId,
-    () => portalApi.traces(orgId!, agent.id),
+    () => portalApi.traces(orgId!, { agentId: agent.id }),
     SHELL_QUERY,
   );
   const runs = useMemo(() => {

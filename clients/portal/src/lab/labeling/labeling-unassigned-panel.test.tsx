@@ -68,4 +68,20 @@ describe("LabelingUnassignedPanel", () => {
     );
     expect(screen.getByText(/agreement 0\.42/i)).toBeInTheDocument();
   });
+
+  it("calls onSkipSelected with checked item ids when Skip selected is clicked", () => {
+    const onSkipSelected = vi.fn();
+    render(
+      <LabelingUnassignedPanel
+        items={[item({ id: "item-a" }), item({ id: "item-b", prompt: "Second item" })]}
+        perItem={undefined}
+        onSelect={vi.fn()}
+        onStartLabeling={vi.fn()}
+        onSkipSelected={onSkipSelected}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/select rate this response/i));
+    fireEvent.click(screen.getByRole("button", { name: /skip selected \(1\)/i }));
+    expect(onSkipSelected).toHaveBeenCalledWith(["item-a"]);
+  });
 });

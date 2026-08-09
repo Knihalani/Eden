@@ -118,7 +118,9 @@ async def test_triage_falls_back_to_llm() -> None:
 
     repo = MagicMock()
     repo.get_issue = AsyncMock(
-        return_value=_issue(kind="tool_error", severity="p2", stumble_count=1)
+        return_value=_issue(
+            kind="tool_error", severity="p2", stumble_count=1, agent_id="agent-1"
+        )
     )
     repo.list_stumbles = AsyncMock(
         return_value=[
@@ -155,6 +157,7 @@ async def test_triage_falls_back_to_llm() -> None:
 
     tr = res["data"]["triage_result"]
     assert tr["source"] == "llm"
+    assert tr["source"] != "llm_error"
     assert tr["root_cause"] == "API key expired"
     assert tr["confidence"] == 0.8
     assert tr["suggested_actions"][0]["type"] == "propose_patch"
@@ -163,6 +166,44 @@ async def test_triage_falls_back_to_llm() -> None:
     inv_instance.investigate.assert_awaited_once()
     _a, kwargs = inv_instance.investigate.call_args
     assert kwargs["trigger"] == "issue:iss-1"
+
+
+@pytest.mark.asyncio
+async def test_triage_llm_path_does_not_record_synthetic_spend() -> None:
+    """OPT-19: no flat $0.02 CostEvent after LLM triage."""
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(kind="tool_error", severity="p2", stumble_count=1)
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {}}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "findings": [{"summary": "x", "confidence": 0.5}],
+                "proposed_remediations": [],
+                "llm_used": True,
+            },
+        }
+    )
+    record_spend = AsyncMock()
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.closed_loop.autonomy_policy.record_spend", record_spend
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        await agent.triage("org_test", "iss-1")
+
+    record_spend.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -446,20 +487,20 @@ async def test_manual_triage_rate_limited() -> None:
 
 @pytest.mark.asyncio
 async def test_manual_rate_limit_counter() -> None:
-    from eden.issues.triage_agent import TriageAgent, _MANUAL_TRIAGE_PER_HOUR
+    from eden.issues.triage_agent import _MANUAL_TRIAGE_PER_HOUR, TriageAgent
 
     counter = {"n": 0}
 
     class _Pipe:
-        def __init__(self, redis: "_R") -> None:
+        def __init__(self, redis: _R) -> None:
             self._redis = redis
             self._ops: list[tuple[str, tuple]] = []
 
-        def incr(self, key: str) -> "_Pipe":
+        def incr(self, key: str) -> _Pipe:
             self._ops.append(("incr", (key,)))
             return self
 
-        def expire(self, key: str, ttl: int) -> "_Pipe":
+        def expire(self, key: str, ttl: int) -> _Pipe:
             self._ops.append(("expire", (key, ttl)))
             return self
 
@@ -546,3 +587,255 @@ async def test_f46_issue_created_never_passes_force() -> None:
     triage.triage.assert_awaited_once_with("org_test", "iss-1")
     # Positional-only call — no force kwarg.
     assert triage.triage.call_args.kwargs.get("force") in (None, False)
+
+
+# ── FEAT-144: Ledger integration ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_triage_fetches_ledger_before_evidence() -> None:
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(
+            kind="tool_error", severity="p2", stumble_count=1, agent_id="agent-42"
+        )
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {}, "span_id": "s1"}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    ledger_data = {
+        "ledger_id": "led-1",
+        "version": 3,
+        "entries": [
+            {
+                "chapter": "do_not_repeat",
+                "text": "Never call refund API without order_id",
+                "citations": ["artifact:n1"],
+                "weight": 10.0,
+            }
+        ],
+    }
+    get_latest = AsyncMock(return_value=ledger_data)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "findings": [{"summary": "known pattern", "confidence": 0.7}],
+                "proposed_remediations": [],
+                "llm_used": True,
+            },
+        }
+    )
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.kb.ledger.generator.LedgerGenerator.get_latest", get_latest
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        res = await agent.triage("org_test", "iss-1")
+
+    get_latest.assert_awaited_once_with("org_test", "agent-42")
+    tr = res["data"]["triage_result"]
+    assert tr["ledger_version"] == 3
+    assert tr["source"] == "llm"
+
+
+@pytest.mark.asyncio
+async def test_triage_ledger_included_in_investigation_evidence() -> None:
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(
+            kind="tool_error", severity="p2", stumble_count=1, agent_id="agent-1"
+        )
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {"error": "boom"}}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "findings": [{"summary": "x", "confidence": 0.5}],
+                "proposed_remediations": [],
+                "llm_used": True,
+            },
+        }
+    )
+
+    ledger_data = {
+        "version": 2,
+        "entries": [{"chapter": "recent_failures", "text": "Prior timeout on checkout"}],
+    }
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.kb.ledger.generator.LedgerGenerator.get_latest",
+        AsyncMock(return_value=ledger_data),
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        await agent.triage("org_test", "iss-1")
+
+    _a, kwargs = inv_instance.investigate.call_args
+    evidence = kwargs["untrusted_evidence"]
+    assert "Prior timeout on checkout" in evidence
+    assert "Ledger v2" in evidence
+
+
+@pytest.mark.asyncio
+async def test_triage_ledger_missing_fails_soft() -> None:
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(
+            kind="tool_error", severity="p2", stumble_count=1, agent_id="agent-1"
+        )
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {}, "span_id": "s1"}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "findings": [{"summary": "ok", "confidence": 0.6}],
+                "proposed_remediations": [],
+                "llm_used": True,
+            },
+        }
+    )
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.kb.ledger.generator.LedgerGenerator.get_latest",
+        AsyncMock(return_value=None),
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        res = await agent.triage("org_test", "iss-1")
+
+    assert res["status"] == "ok"
+    assert "ledger_version" not in res["data"]["triage_result"]
+    inv_instance.investigate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_triage_ledger_error_fails_soft() -> None:
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(
+            kind="tool_error", severity="p2", stumble_count=1, agent_id="agent-1"
+        )
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {}, "span_id": "s1"}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "findings": [{"summary": "ok", "confidence": 0.6}],
+                "proposed_remediations": [],
+                "llm_used": True,
+            },
+        }
+    )
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.kb.ledger.generator.LedgerGenerator.get_latest",
+        AsyncMock(side_effect=RuntimeError("db down")),
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        res = await agent.triage("org_test", "iss-1")
+
+    assert res["status"] == "ok"
+    inv_instance.investigate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_triage_no_agent_id_skips_ledger() -> None:
+    from eden.issues.triage_agent import TriageAgent
+
+    repo = MagicMock()
+    repo.get_issue = AsyncMock(
+        return_value=_issue(kind="tool_error", severity="p2", stumble_count=1)
+    )
+    repo.list_stumbles = AsyncMock(
+        return_value=[{"kind": "tool_error", "detail": {}, "span_id": "s1"}]
+    )
+    repo.set_triage_result = AsyncMock(return_value=True)
+
+    inv_instance = MagicMock()
+    inv_instance.investigate = AsyncMock(
+        return_value={
+            "status": "ok",
+            "data": {
+                "findings": [{"summary": "ok", "confidence": 0.6}],
+                "proposed_remediations": [],
+                "llm_used": True,
+            },
+        }
+    )
+    get_latest = AsyncMock()
+
+    agent = TriageAgent(repo=repo)
+    with patch(
+        "eden.issues.triage_agent.TriageAgent._budget_ok", AsyncMock(return_value=True)
+    ), patch(
+        "eden.kb.ledger.generator.LedgerGenerator.get_latest", get_latest
+    ), patch("eden.autonomous.InvestigationAgent", return_value=inv_instance):
+        await agent.triage("org_test", "iss-1")
+
+    get_latest.assert_not_awaited()
+
+
+def test_ledger_context_for_prompt_empty_cases() -> None:
+    from eden.issues.triage_agent import _ledger_context_for_prompt
+
+    assert _ledger_context_for_prompt(None) == ""
+    assert _ledger_context_for_prompt({}) == ""
+    assert _ledger_context_for_prompt({"entries": []}) == ""
+    assert _ledger_context_for_prompt({"entries": [{"text": ""}]}) == ""
+
+
+def test_ledger_context_for_prompt_formats_entries() -> None:
+    from eden.issues.triage_agent import _ledger_context_for_prompt
+
+    out = _ledger_context_for_prompt(
+        {
+            "version": 5,
+            "entries": [
+                {
+                    "chapter": "do_not_repeat",
+                    "text": "Do not retry without backoff",
+                    "citations": ["iss-99"],
+                }
+            ],
+        }
+    )
+    assert "Ledger v5" in out
+    assert "do_not_repeat" in out
+    assert "Do not retry without backoff" in out

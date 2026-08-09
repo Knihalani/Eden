@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-
 ORG = "00000000-0000-0000-0000-000000000001"
 USER = "00000000-0000-0000-0000-000000000002"
 

@@ -158,6 +158,7 @@ class RegressionCaseBuilder:
         org_id: str,
         *,
         agent_id: str | None = None,
+        split: str | None = None,
         limit: int = 50,
     ) -> list[RegressionCase]:
         client = await self._client()
@@ -179,12 +180,14 @@ class RegressionCaseBuilder:
                 JOIN datasets d ON d.id = di.dataset_id
                 WHERE di.org_id = $1
                   AND ($2::text IS NULL OR d.name = $2)
+                  AND ($4::text IS NULL OR di.split = $4)
                 ORDER BY di.created_at DESC
                 LIMIT $3
                 """,
                 org_id,
                 _dataset_name(agent_id) if agent_id else None,
                 limit,
+                split,
             )
             return [_dataset_item_row_to_case(dict(r)) for r in rows]
         except Exception as exc:
@@ -210,6 +213,7 @@ class RegressionCaseBuilder:
             FROM dataset_items di
             JOIN datasets d ON d.id = di.dataset_id
             WHERE di.org_id = $1 AND di.fingerprint = $2
+            ORDER BY di.created_at ASC, di.id ASC
             LIMIT 1
             """,
             org_id,
@@ -279,46 +283,14 @@ class RegressionCaseBuilder:
         if client is None:
             return
 
-        # Legacy table (092): a free-text ``dataset_id`` VARCHAR that can
-        # never join to the UUID-keyed ``datasets``/``dataset_items``
-        # system (F53). Kept as a best-effort compatibility write only
-        # because ``ClosedLoopOrchestrator._enrich_cases_for_replay``
-        # still ``UPDATE``s it by id — nothing reads it as the source of
-        # truth any more; see ``_find_by_fingerprint``/``list_cases``/
-        # ``list_for_issue`` below, which are now on ``dataset_items``.
-        try:
-            await client.execute(
-                """
-                INSERT INTO regression_eval_cases (
-                    id, org_id, dataset_id, source_issue_id, source_trace_id,
-                    fingerprint, auto_generated, input_data, expected_data, metadata
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb)
-                ON CONFLICT DO NOTHING
-                """,
-                case.id,
-                case.org_id,
-                case.dataset_id,
-                case.source_issue_id,
-                case.source_trace_id,
-                case.fingerprint,
-                case.auto_generated,
-                json.dumps(case.input_data),
-                json.dumps(case.expected_data),
-                json.dumps(case.metadata),
-            )
-        except Exception as exc:
-            logger.debug("regression_builder legacy persist failed: %s", exc)
-
-        # Canonical (FEAT-74): resolve the free-text dataset name (e.g.
+        # FEAT-74: resolve the free-text dataset name (e.g.
         # "checkout/regressions") to a real UUID ``datasets`` row via the
-        # F53 hub, then write the case into ``dataset_items`` under it —
-        # this is what makes regression cases finally joinable to the
-        # rest of the dataset system.
+        # F53 hub, then write the case into ``dataset_items`` under it.
         dataset_id = await self._resolve_dataset_id(client, case.org_id, case.dataset_id)
         if dataset_id is None:
             logger.debug(
                 "regression_builder: could not resolve dataset for org=%s name=%s; "
-                "case %s only persisted to legacy table",
+                "case %s not persisted to Postgres",
                 case.org_id,
                 case.dataset_id,
                 case.id,

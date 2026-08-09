@@ -149,7 +149,7 @@ export function PromptsDetailView({
           <PromptTabNav value={tab} onChange={onTab} />
           <div className="flex flex-wrap gap-2">
             <Link
-              href={`/evals?mode=playground&agent=${prompt.agentId}`}
+              href={`/playgrounds?agent=${prompt.agentId}`}
               className="ds-btn ds-btn-ghost ds-btn-sm"
             >
               Playground

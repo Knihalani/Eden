@@ -86,18 +86,20 @@ class FakePg:
             rows = [self._row_with_count(r) for r in self.datasets.values() if r["org_id"] == org_id]
             return rows[:limit]
         if "from dataset_items" in sql:
-            dataset_id, limit, offset = args
+            dataset_id, limit, offset, split = args
             rows = sorted(
                 (r for r in self.items if r["dataset_id"] == dataset_id),
                 key=lambda r: r["created_at"],
             )
+            if split is not None:
+                rows = [r for r in rows if r.get("split") == split]
             return rows[offset : offset + limit]
         return []
 
     async def execute(self, query: str, *args: Any) -> str:
         sql = " ".join(query.strip().lower().split())
         if sql.startswith("insert into dataset_items"):
-            row_id, dataset_id, input_data, expected_output, payload, origin_trace_id = args
+            row_id, dataset_id, input_data, expected_output, payload, origin_trace_id, *rest = args
             if isinstance(payload, str):
                 payload = json.loads(payload)
             self.items.append(
@@ -108,6 +110,7 @@ class FakePg:
                     "expected_output": expected_output,
                     "payload": payload or {},
                     "origin_trace_id": origin_trace_id,
+                    "split": rest[0] if rest else None,
                     "created_at": datetime.now(UTC),
                 }
             )

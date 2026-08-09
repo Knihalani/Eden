@@ -16,8 +16,10 @@ export type AlertRule = {
   id: string;
   name: string;
   description: string;
-  /** Detector / threshold expression */
+  /** Detector / threshold expression — NL text when available (FEAT-103). */
   condition: string;
+  /** Compiled EQL when bridged from NL rules (secondary display). */
+  compiledEql?: string;
   severity: AlertSeverity;
   /** null = fleet-wide */
   agentId: string | null;
@@ -35,6 +37,9 @@ export type AlertEvent = {
   ruleId: string;
   title: string;
   body: string;
+  /** User-facing condition — NL text when available (FEAT-103). */
+  condition?: string;
+  compiledEql?: string;
   severity: AlertSeverity;
   status: AlertEventStatus;
   agentId: string;

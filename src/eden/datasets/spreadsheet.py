@@ -102,6 +102,7 @@ class SpreadsheetRow:
     expected_output: str
     # column_id → value
     values: dict[str, Any] = field(default_factory=dict)
+    split: str | None = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -112,6 +113,7 @@ class SpreadsheetRow:
             "input": self.input,
             "expected_output": self.expected_output,
             "values": dict(self.values),
+            "split": self.split,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -353,6 +355,7 @@ class SpreadsheetService:
         input: str,
         expected_output: str = "",
         values: dict[str, Any] | None = None,
+        split: str | None = None,
     ) -> SpreadsheetRow:
         """Add a new row to the dataset."""
         row_id = str(uuid.uuid4())
@@ -360,16 +363,18 @@ class SpreadsheetService:
             """
             INSERT INTO dataset_items
                 (id, dataset_id, input, expected_output, payload,
-                 created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, NOW(), NOW())
+                 split, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW(), NOW())
             """,
             row_id, dataset_id, input, expected_output,
             json.dumps(values or {}),
+            split,
         )
         return SpreadsheetRow(
             id=row_id, dataset_id=dataset_id,
             input=input, expected_output=expected_output,
             values=values or {},
+            split=split,
             created_at=datetime.now(UTC).isoformat(),
             updated_at=datetime.now(UTC).isoformat(),
         )
@@ -431,6 +436,7 @@ class SpreadsheetService:
         sort_spec: list[dict[str, Any]] | None = None,
         limit: int = 200,
         offset: int = 0,
+        split: str | None = None,
     ) -> list[SpreadsheetRow]:
         """List rows for a dataset, with optional filter + sort."""
         # We use Postgres to do the heavy lifting for the
@@ -440,13 +446,14 @@ class SpreadsheetService:
         rows = await self._pg.fetch(
             """
             SELECT id, dataset_id, input, expected_output, payload,
-                   created_at, updated_at
+                   split, created_at, updated_at
             FROM dataset_items
             WHERE dataset_id = $1
+              AND ($4::text IS NULL OR split = $4)
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
             """,
-            dataset_id, limit, offset,
+            dataset_id, limit, offset, split,
         )
         out: list[SpreadsheetRow] = []
         for r in rows:
@@ -462,6 +469,7 @@ class SpreadsheetService:
                 input=str(r.get("input", "")),
                 expected_output=str(r.get("expected_output", "")),
                 values=payload or {},
+                split=r.get("split"),
                 created_at=str(r.get("created_at", "")),
                 updated_at=str(r.get("updated_at", "")),
             ))
@@ -477,7 +485,7 @@ class SpreadsheetService:
         rows = await self._pg.fetch(
             """
             SELECT id, dataset_id, input, expected_output, payload,
-                   created_at, updated_at
+                   split, created_at, updated_at
             FROM dataset_items
             WHERE id = $1
             """,
@@ -498,6 +506,7 @@ class SpreadsheetService:
             input=str(r.get("input", "")),
             expected_output=str(r.get("expected_output", "")),
             values=payload or {},
+            split=r.get("split"),
             created_at=str(r.get("created_at", "")),
             updated_at=str(r.get("updated_at", "")),
         )

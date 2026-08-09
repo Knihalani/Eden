@@ -1,4 +1,5 @@
 import { fetchApi, API_BASE } from "./core";
+import { labelingApi as labelingApiModule } from "./labeling";
 
 /** Matches BE ``InsightResponse`` from ``POST /orgs/{org}/insights/detectors/run``. */
 export type InsightResponse = {
@@ -18,6 +19,21 @@ export type InsightResponse = {
 export type RunDetectorsRequest = {
   detector_names?: string[] | null;
   realm?: string | null;
+};
+
+/** Per-store erasure status from ``DELETE /auth/users/me`` (FEAT-109). */
+export type StoreErasureStatus = {
+  store: string;
+  status: string;
+  detail?: string | null;
+  org_id?: string | null;
+};
+
+/** Response body for self-service account erasure. */
+export type AccountDeleteResponse = {
+  account_anonymized: boolean;
+  incomplete_orgs: string[];
+  store_statuses: StoreErasureStatus[];
 };
 
 /** Matches BE ``OverviewResponse`` from ``GET /orgs/{org}/insights/overview``. */
@@ -113,6 +129,7 @@ export interface NlAlertRuleUpdateBody {
   triage_enabled?: boolean;
   channels?: Record<string, unknown> | null;
   enabled?: boolean;
+  severity?: string;
 }
 
 /** Matches BE ``CompileResponse`` from ``POST /orgs/{org}/alerts/compile``. */
@@ -495,7 +512,7 @@ export const api = {
   },
 
   deleteAccount: (confirm: string) =>
-    fetchApi<void>("/auth/users/me", {
+    fetchApi<AccountDeleteResponse>("/auth/users/me", {
       method: "DELETE",
       body: JSON.stringify({ confirm }),
     }),
@@ -815,17 +832,6 @@ export const api = {
       `/orgs/${orgId}/optimization/savings${days ? `?days=${days}` : ""}`
     ),
 
-  getOptimizationBudget: (orgId: string) =>
-    fetchApi<{
-      budget_usd: number;
-      spent_usd: number;
-      burn_pct: number;
-      days_into_period: number;
-      days_remaining: number;
-      projected_eom_cost_usd: number;
-      on_track: boolean;
-    }>(`/orgs/${orgId}/optimization/budget`),
-
   getOptimizationCostPerTrace: (orgId: string, days?: number) =>
     fetchApi<{
       points: Array<{
@@ -875,6 +881,13 @@ export const api = {
         avg_latency_ms: number;
       }>;
     }>(`/orgs/${orgId}/analytics/top-agents${days ? `?days=${days}` : ""}`),
+
+  // Session cohort retention (analytics v2)
+  getCohortRetention: (orgId: string, weeks = 8) =>
+    fetchApi<CohortRetentionResponse>(
+      `/orgs/${orgId}/analytics/cohorts?weeks=${weeks}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
 
   // SCIM
   getScimConfig: (orgId: string) =>
@@ -1948,12 +1961,6 @@ export const api = {
     }>(`/orgs/${orgId}/agentic-metrics/summary?${q}`);
   },
 
-  createMcpKey: (orgId: string, name = "MCP", scopes?: string[]) =>
-    fetchApi<{ raw_key?: string; id?: string }>(`/orgs/${orgId}/mcp/keys`, {
-      method: "POST",
-      body: JSON.stringify({ name, scopes }),
-    }),
-
   labelToolCall: (
     orgId: string,
     spanId: string,
@@ -2303,27 +2310,13 @@ export const api = {
       };
     }>(`/orgs/${orgId}/optimization/overview?days=${days}`),
 
-  // ── Cost comparison (this month vs last month) ───────────────────
-  // Cat 23 audit (2026-06-21): the dashboard "last-month trend"
-  // tile used to render "—" forever because no endpoint existed.
-  // Returns { previous_month_cents, current_month_cents, delta_cents,
-  // delta_pct } — both cents fields can be null when Redis has no
-  // recorded spend for that month yet.
-  getCostComparison: (orgId: string) =>
-    fetchApi<{
-      org_id: string;
-      current_month: string;
-      previous_month: string;
-      current_month_cents: number | null;
-      previous_month_cents: number | null;
-      delta_cents: number | null;
-      delta_pct: number | null;
-    }>(`/orgs/${orgId}/cost/comparison`),
-
   // ── Budget admin (D.10 cost guardrails) ────────────────────────
-  // Distinct from `getOptimizationBudget` above — this is the
-  // per-org enforcement config + rollup shown on /optimization/budget,
-  // not the 30d optimization-total burn-rate summary.
+  // FEAT-171 (2026-08-06): removed `getOptimizationBudget` and
+  // `getCostComparison` wrappers (zero call sites) — they backed
+  // `GET /optimization/budget` and `GET /cost/comparison`, both dead
+  // endpoints reading a Redis cache never fed by live gateway traffic
+  // (FEAT-20). This `getBudget` is the live per-org enforcement
+  // config + rollup shown on /optimization/budget in the portal.
   getBudget: (orgId: string) =>
     fetchApi<{
       data: {
@@ -2846,13 +2839,70 @@ export const agentsApi = {
 // ── Agent Issues (F29) ─────────────────────────────────────────────
 // Backend: POST /orgs/{org_id}/agent-issues/{issue_id}/resolve
 // Accepts open | acknowledged | resolved | ignored (portal triage uses
-// the first three; ignored soft-dismisses and maps to resolved in the
-// portal list).
+// all four; ignored soft-dismisses into the Dismissed board column).
 export type AgentIssueResolveStatus =
   | "open"
   | "acknowledged"
   | "resolved"
   | "ignored";
+
+/** Matches BE ``RegressionCase.to_dict()`` (regression_builder.py). */
+export type AgentIssueRegressionCase = {
+  id: string;
+  org_id: string;
+  dataset_id: string;
+  source_issue_id: string | null;
+  source_trace_id: string | null;
+  fingerprint: string | null;
+  auto_generated: boolean;
+  input: Record<string, unknown>;
+  expected: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+/** Matches BE ``RegressionRunResult.to_dict()`` (regression_runner.py). */
+export type AgentIssueRegressionRun = {
+  id: string;
+  org_id: string;
+  agent_id: string | null;
+  change_id: string | null;
+  passed: number;
+  failed: number;
+  skipped: number;
+  errors: number;
+  failures: Array<Record<string, unknown>>;
+  cases: Array<Record<string, unknown>>;
+  f51_grades: Array<Record<string, unknown>>;
+  status: string;
+  created_at: string;
+};
+
+/** Matches BE ``IssuePromptEvolver.evolve_from_issue`` return (components.py). */
+export type AgentIssuePromptEvolution = {
+  created: number;
+  skipped?: boolean;
+  reason?: string;
+  error?: string;
+  agent?: string;
+  version?: number;
+  issue_id?: string;
+  prompt_version_id?: string;
+  canary_enrolled?: boolean;
+  canary_error?: string;
+};
+
+export type AgentIssueResolveResponse = {
+  status: string;
+  data: {
+    issue_id: string;
+    status: string;
+    updated: boolean;
+    regression_cases: AgentIssueRegressionCase[];
+    regression_run: AgentIssueRegressionRun | null;
+    prompt_evolution: AgentIssuePromptEvolution | null;
+  };
+};
 
 export const agentIssuesApi = {
   resolve: async (
@@ -2860,15 +2910,15 @@ export const agentIssuesApi = {
     issueId: string,
     status: AgentIssueResolveStatus = "resolved",
   ) => {
-    const res = await fetchApi<{
-      status: string;
-      data: { issue_id: string; status: string; updated: boolean };
-    }>(`/orgs/${orgId}/agent-issues/${issueId}/resolve`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-      noDedup: true,
-    });
+    const res = await fetchApi<AgentIssueResolveResponse>(
+      `/orgs/${orgId}/agent-issues/${issueId}/resolve`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+        noDedup: true,
+      },
+    );
     // BUG-4 defense-in-depth: the backend now surfaces a real HTTP error
     // when the underlying status write fails, but guard here too in case
     // a future 200-with-updated:false path slips back in — the portal's
@@ -3018,6 +3068,7 @@ export type ImprovementPlanStatus =
   | "pr_opened"
   | "merged"
   | "rejected"
+  | "closed"
   | "snoozed"
   | "superseded";
 
@@ -3114,6 +3165,33 @@ export const improvePlansApi = {
       `/orgs/${orgId}/improve/plans/${planId}/reject`,
       { method: "POST", body: JSON.stringify({ reason: reason ?? "" }) },
     ),
+  mergePlan: (orgId: string, planId: string, force = false) =>
+    fetchApi<
+      ImproveFeatureEnvelope<{
+        plan_id: string;
+        status: string;
+        pr_url?: string;
+        pr_number?: number;
+        plan?: ImprovementPlan;
+        message?: string;
+      }>
+    >(`/orgs/${orgId}/improve/plans/${planId}/merge`, {
+      method: "POST",
+      body: JSON.stringify({ force }),
+    }),
+  revertPlan: (orgId: string, planId: string) =>
+    fetchApi<
+      ImproveFeatureEnvelope<{
+        plan_id: string;
+        status: string;
+        revert_plan_id?: string;
+        revert_plan?: ImprovementPlan;
+        approve_status?: string;
+        pr_url?: string;
+        auto_merged?: boolean;
+        message?: string;
+      }>
+    >(`/orgs/${orgId}/improve/plans/${planId}/revert`, { method: "POST" }),
   snoozePlan: (orgId: string, planId: string, snoozedUntil: string) =>
     fetchApi<ImproveFeatureEnvelope<{ plan: ImprovementPlan }>>(
       `/orgs/${orgId}/improve/plans/${planId}/snooze`,
@@ -3309,6 +3387,26 @@ export type TimeTravelForkData = {
   edits_applied: string[];
 };
 
+/** Fork summary returned by listForks (includes lineage). */
+export type TimeTravelForkListItem = {
+  fork_id?: string;
+  id?: string;
+  parent_fork_id?: string | null;
+  fork_at_step?: number;
+  name?: string;
+  last_replay_outcome?: string;
+};
+
+/** Offline experiment run/promote honesty payload (F51). */
+export type OfflineExperimentRunResult = {
+  experiment_id?: string;
+  status?: string;
+  rows?: number;
+  grades?: Record<string, number>;
+  synthetic?: boolean;
+  method?: string;
+};
+
 export type TimeTravelReplayData = {
   replay_id: string;
   fork_id: string;
@@ -3418,7 +3516,7 @@ export const timeTravelApi = {
   listForks: (orgId: string, parentTraceId: string) =>
     fetchApi<
       TimeTravelEnvelope<{
-        forks: Array<Record<string, unknown>>;
+        forks: TimeTravelForkListItem[];
         n_forks: number;
       }>
     >(
@@ -3685,48 +3783,75 @@ export const slackApi = {
 
 // ── Labeling (Phase D) ────────────────────────────────────────────────
 
-export interface LabelingItem {
+/** Narrow list-row shape from `GET /labeling/items` (`LabelingItemListEntry`). */
+export interface LabelingItemListEntry {
   id: string;
   prompt: string;
-  context?: string;
+  context: string | null;
   tags: string[];
   source: string;
   created_at: string;
   annotations_count: number;
 }
 
-export interface LabelingAnnotation {
+export interface LabelingItemsListResponse {
+  items: LabelingItemListEntry[];
+  total: number;
+}
+
+/** Full item shape from pop/queue endpoints (`ItemResponse`). */
+export interface LabelingItem {
   id: string;
+  org_id: string;
+  payload: Record<string, unknown>;
+  label_schema: Record<string, unknown>;
+  prompt: string | null;
+  status: string;
+  tags: string[];
+  annotations_required: number;
+  required_skills: string[];
+  source_trace_id: string | null;
+  source_span_id: string | null;
+  source_dataset_id: string | null;
+  source_synthetic_qa_id: string | null;
+  assigned_to: string | null;
+}
+
+export interface AnnotateRequestBody {
   item_id: string;
-  label: string;
-  confidence: number;
-  notes?: string;
+  label: unknown;
+  confidence?: number;
+  notes?: string | null;
+  time_spent_ms?: number | null;
+  skills_exercised?: string[];
+}
+
+/** Annotation write response (`AnnotationResponse`). */
+export interface AnnotationResponse {
+  id: string;
+  org_id: string;
+  item_id: string;
   annotator_id: string;
+  label: unknown;
+  confidence: number;
+  notes: string | null;
+  time_spent_ms: number | null;
+  skills_exercised: string[];
   created_at: string;
+  updated_at: string;
+}
+
+/** @deprecated Use {@link AnnotationResponse} — kept for older imports. */
+export type LabelingAnnotation = AnnotationResponse;
+
+export interface LabelingSeedItemResponse {
+  item_id: string;
 }
 
 const labelingApi = {
-  listItems: (orgId: string) =>
-    fetchApi<{ items: LabelingItem[]; total: number }>(
-      `/orgs/${orgId}/labeling/items`,
-      { headers: { "X-Org-Id": orgId } },
-    ),
-  annotate: (orgId: string, body: { item_id: string; label: string; notes?: string }) =>
-    fetchApi<LabelingAnnotation>(`/orgs/${orgId}/labeling/annotate`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      noDedup: true,
-    }),
-  skip: (orgId: string, body: { item_id: string; reason?: string }) =>
-    fetchApi<{ skipped: boolean }>(`/orgs/${orgId}/labeling/skip`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      noDedup: true,
-    }),
+  ...labelingApiModule,
   seedItem: (orgId: string, body: { prompt: string; tags?: string[] }) =>
-    fetchApi<LabelingItem>(`/orgs/${orgId}/labeling/items`, {
+    fetchApi<LabelingSeedItemResponse>(`/orgs/${orgId}/labeling/items`, {
       method: "POST",
       headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -3822,6 +3947,7 @@ export interface NLAlertRule {
   triage_enabled: boolean;
   channels: Record<string, unknown>;
   enabled: boolean;
+  severity?: string;
   created_by: string | null;
   /** ISO timestamp, or "" if the rule has never fired. */
   last_fired_at: string;
@@ -3856,7 +3982,7 @@ export interface NLRuleCreateBody {
   interval_seconds?: number;
 }
 
-/** Matches BE `NLRuleUpdate` — note severity/interval_seconds aren't updatable. */
+/** Matches BE `NLRuleUpdate`. */
 export interface NLRuleUpdateBody {
   name?: string;
   nl_text?: string;
@@ -3864,7 +3990,33 @@ export interface NLRuleUpdateBody {
   triage_enabled?: boolean;
   channels?: Record<string, unknown> | null;
   enabled?: boolean;
+  severity?: string;
 }
+
+/** Session cohort retention row (`GET /orgs/{org}/analytics/cohorts`, FEAT-139). */
+export type CohortRetentionRow = {
+  /** e.g. "week-2026-07-20" */
+  cohort: string;
+  start_date: string;
+  size: number;
+  /** "0".."N" → fraction retained (0.0–1.0) */
+  retention: Record<string, number>;
+};
+
+export type CohortRetentionResponse = {
+  org_id: string;
+  weeks: number;
+  cohorts: CohortRetentionRow[];
+};
+
+/** Thin analytics read API — keeps session-retention-panel off the `api` object. */
+export const analyticsApi = {
+  cohorts: (orgId: string, weeks = 8) =>
+    fetchApi<CohortRetentionResponse>(
+      `/orgs/${orgId}/analytics/cohorts?weeks=${weeks}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+};
 
 export const nlAlertRulesApi = {
   compile: (orgId: string, body: CompileNlAlertBody) =>
@@ -3904,6 +4056,63 @@ export const nlAlertRulesApi = {
   delete: (orgId: string, ruleId: string) =>
     fetchApi<{ status: string; rule_id: string }>(
       `/orgs/${orgId}/nl-alert-rules/${encodeURIComponent(ruleId)}`,
+      { method: "DELETE", headers: { "X-Org-Id": orgId }, noDedup: true },
+    ),
+};
+
+/** Org-scoped alert suppression patterns (FEAT-134). */
+export interface AlertSuppressionRule {
+  id: string;
+  org_id: string;
+  pattern: string;
+  reason: string;
+  window_hours: number | null;
+  enabled: boolean;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertSuppressionRuleCreateBody {
+  pattern: string;
+  reason?: string;
+  window_hours?: number | null;
+  enabled?: boolean;
+}
+
+export interface AlertSuppressionRuleUpdateBody {
+  pattern?: string;
+  reason?: string;
+  window_hours?: number | null;
+  enabled?: boolean;
+}
+
+export const alertSuppressionRulesApi = {
+  list: (orgId: string) =>
+    fetchApi<{ rules: AlertSuppressionRule[]; total: number }>(
+      `/orgs/${orgId}/alert-suppression-rules`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  create: (orgId: string, body: AlertSuppressionRuleCreateBody) =>
+    fetchApi<AlertSuppressionRule>(`/orgs/${orgId}/alert-suppression-rules`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      noDedup: true,
+    }),
+  update: (orgId: string, ruleId: string, body: AlertSuppressionRuleUpdateBody) =>
+    fetchApi<AlertSuppressionRule>(
+      `/orgs/${orgId}/alert-suppression-rules/${encodeURIComponent(ruleId)}`,
+      {
+        method: "PATCH",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        noDedup: true,
+      },
+    ),
+  delete: (orgId: string, ruleId: string) =>
+    fetchApi<{ status: string; rule_id: string }>(
+      `/orgs/${orgId}/alert-suppression-rules/${encodeURIComponent(ruleId)}`,
       { method: "DELETE", headers: { "X-Org-Id": orgId }, noDedup: true },
     ),
 };
@@ -4198,6 +4407,43 @@ const redteamApi = {
     }),
 };
 
+// ── Drift (F42 behavioral drift) ───────────────────────────────────
+
+export type DriftDimension = {
+  dimension: string;
+  psi: number;
+  flagged: boolean;
+  delta_pct: number;
+  sample_count: number;
+};
+
+export type DriftReport = {
+  id?: string;
+  org_id?: string;
+  agent_id?: string;
+  dimensions: DriftDimension[];
+  plain_english_summary: string;
+  report_period_start?: string;
+  report_period_end?: string;
+};
+
+const driftApi = {
+  report: (orgId: string, agentId: string) =>
+    fetchApi<{ status: string; data: { report: DriftReport | null } }>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/drift`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  compute: (orgId: string, agentId: string) =>
+    fetchApi<{ status: string; data: { report: DriftReport | null } }>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/drift/compute`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+        noDedup: true,
+      },
+    ),
+};
+
 // ── Datasets (Phase S — spreadsheet) ─────────────────────────────────
 
 export interface DatasetColumn {
@@ -4459,7 +4705,11 @@ const playgroundApi = {
     playgroundId: string,
     body?: { name?: string; dataset_id?: string },
   ) =>
-    fetchApi<{ status: string; experiment: Record<string, unknown> }>(
+    fetchApi<{
+      status: string;
+      experiment: Record<string, unknown>;
+      result?: OfflineExperimentRunResult;
+    }>(
       `/orgs/${orgId}/playgrounds/${playgroundId}/promote-experiment`,
       {
         method: "POST",
@@ -4487,20 +4737,14 @@ const offlineExperimentsApi = {
       noDedup: true,
     }),
   run: (orgId: string, experimentId: string) =>
-    fetchApi<{
-      result: {
-        experiment_id?: string;
-        status?: string;
-        rows?: number;
-        grades?: Record<string, number>;
-        synthetic?: boolean;
-        method?: string;
-      };
-    }>(`/orgs/${orgId}/experiments/offline/${experimentId}/run`, {
-      method: "POST",
-      headers: { "X-Org-Id": orgId },
-      noDedup: true,
-    }),
+    fetchApi<{ result: OfflineExperimentRunResult }>(
+      `/orgs/${orgId}/experiments/offline/${experimentId}/run`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId },
+        noDedup: true,
+      },
+    ),
   compare: (orgId: string, experimentId: string, baselineId?: string) => {
     const qs = baselineId ? `?baseline_id=${encodeURIComponent(baselineId)}` : "";
     return fetchApi<{
@@ -4851,10 +5095,10 @@ const sessionsApi = {
     ),
 };
 
-// ── Automations operator (F61) ───────────────────────────────────────
-// Backend today exposes only GET/POST /orgs/{org}/automations
-// (wave6_online.py). No edit / enable-disable / run-history HTTP routes
-// exist yet — `enabled` is returned by list but not settable via create.
+// ── Automations operator (F61 / FEAT-133 / FEAT-170) ─────────────────
+// Backend: GET/POST/PATCH/DELETE /orgs/{org}/automations[/{id}], plus
+// POST .../automations/{id}/toggle and GET .../automations/{id}/runs
+// (wave6_online.py).
 export interface Automation {
   id: string;
   org_id?: string;
@@ -4873,6 +5117,28 @@ export interface AutomationCreateBody {
   trigger_config?: Record<string, unknown>;
   action_type?: string;
   action_config?: Record<string, unknown>;
+}
+export interface AutomationUpdateBody {
+  name?: string;
+  trigger_type?: string;
+  trigger_config?: Record<string, unknown>;
+  action_type?: string;
+  action_config?: Record<string, unknown>;
+  enabled?: boolean;
+}
+export interface AutomationRun {
+  id: string;
+  org_id: string;
+  automation_id: string;
+  status: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+export interface AutomationRunsPage {
+  runs: AutomationRun[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 /** wave6 endpoints wrap payloads in a `{ status, ..., data }` envelope. */
 export interface Wave6Envelope<T> {
@@ -4897,6 +5163,34 @@ const automationsApi = {
         headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       },
+    ),
+  update: (orgId: string, automationId: string, body: AutomationUpdateBody) =>
+    fetchApi<Wave6Envelope<{ automation: Automation }>>(
+      `/orgs/${orgId}/automations/${encodeURIComponent(automationId)}`,
+      {
+        method: "PATCH",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  remove: (orgId: string, automationId: string) =>
+    fetchApi<Wave6Envelope<{ deleted: boolean; id: string }>>(
+      `/orgs/${orgId}/automations/${encodeURIComponent(automationId)}`,
+      { method: "DELETE", headers: { "X-Org-Id": orgId } },
+    ),
+  toggle: (orgId: string, automationId: string, enabled: boolean) =>
+    fetchApi<Wave6Envelope<{ automation: Automation }>>(
+      `/orgs/${orgId}/automations/${encodeURIComponent(automationId)}/toggle`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      },
+    ),
+  listRuns: (orgId: string, automationId: string, limit = 20, offset = 0) =>
+    fetchApi<Wave6Envelope<AutomationRunsPage>>(
+      `/orgs/${orgId}/automations/${encodeURIComponent(automationId)}/runs?limit=${limit}&offset=${offset}`,
+      { headers: { "X-Org-Id": orgId } },
     ),
 };
 
@@ -4984,7 +5278,66 @@ const savedSearchesApi = {
 (api as unknown as Record<string, unknown>).browserSessionsApi = browserSessionsApi;
 (api as unknown as Record<string, unknown>).qaApi = qaApi;
 (api as unknown as Record<string, unknown>).redteamApi = redteamApi;
+(api as unknown as Record<string, unknown>).driftApi = driftApi;
 (api as unknown as Record<string, unknown>).datasetsApi = datasetsApi;
+
+// ── Topics / insights clustering (F65 / FEAT-90 / FEAT-142 / FEAT-179) ──
+
+export interface TopicCluster {
+  id: string;
+  facet: string;
+  name: string;
+  description?: string | null;
+  share_pct: number | null;
+  keywords: string[];
+  sample_count: number;
+  representative_trace_ids: string[];
+  pattern_id: string | null;
+  signal_cluster_id: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  source: string;
+  /** FEAT-142 — recent vs baseline volume direction. */
+  trend?: "rising" | "falling" | "flat" | null;
+  trend_score?: number | null;
+  recent_count?: number | null;
+  baseline_count?: number | null;
+}
+
+const topicsApi = {
+  /** `GET /topics` — list topic clusters (facet filter optional). */
+  list: (orgId: string, facet?: string) =>
+    fetchApi<{ status: string; topics: TopicCluster[]; count: number }>(
+      `/orgs/${orgId}/topics${facet ? `?facet=${encodeURIComponent(facet)}` : ""}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  /** `POST /topics/generate` — run the HDBSCAN clusterer + sync. */
+  generate: (orgId: string, facet: string = "task") =>
+    fetchApi<{ status: string; data: { patterns_summary: unknown; topics_synced: number; facet: string } }>(
+      `/orgs/${orgId}/topics/generate`,
+      {
+        method: "POST",
+        headers: { "X-Org-Id": orgId, "Content-Type": "application/json" },
+        body: JSON.stringify({ facet }),
+        noDedup: true,
+      },
+    ),
+  /**
+   * `GET /topics/export` — cluster results as CSV (plain text) — FEAT-179.
+   * Uses ``stream: true`` so fetchApi returns a Blob instead of
+   * JSON-parsing the body (same pattern as ``labelingApi.exportJsonl``).
+   */
+  exportCsv: async (orgId: string, facet?: string): Promise<string> => {
+    const q = new URLSearchParams({ format: "csv" });
+    if (facet) q.set("facet", facet);
+    const blob = await fetchApi<Blob>(
+      `/orgs/${orgId}/topics/export?${q.toString()}`,
+      { headers: { "X-Org-Id": orgId }, stream: true },
+    );
+    return blob.text();
+  },
+};
+(api as unknown as Record<string, unknown>).topicsApi = topicsApi;
 
 export {
   sessionsApi,
@@ -4998,10 +5351,12 @@ export {
   browserSessionsApi,
   qaApi,
   redteamApi,
+  driftApi,
   datasetsApi,
   playgroundApi,
   offlineExperimentsApi,
   labelingQueuesApi,
   changeImpactApi,
   wave6Api,
+  topicsApi,
 };

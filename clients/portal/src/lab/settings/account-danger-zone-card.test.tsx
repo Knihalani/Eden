@@ -1,8 +1,10 @@
+/** @vitest-environment jsdom */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LabToastProvider } from "@/lab/lab-toast";
 import { AccountDangerZoneCard } from "@/lab/settings/account-danger-zone-card";
+import type { AccountDeleteResponse } from "@/lib/api/resources";
 
 const { deleteAccountMock, signOutMock } = vi.hoisted(() => ({
   deleteAccountMock: vi.fn(),
@@ -28,6 +30,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+const sampleErasureResult: AccountDeleteResponse = {
+  account_anonymized: true,
+  incomplete_orgs: ["org-a"],
+  store_statuses: [
+    { store: "postgres", status: "ok", detail: "12 rows anonymised across 6 tables" },
+    { store: "qdrant", status: "failed", detail: "no per-user index" },
+    { store: "typesense", status: "unsupported", detail: "collection lacks user_id field" },
+  ],
+};
+
 function renderCard() {
   render(
     <LabToastProvider>
@@ -39,6 +51,7 @@ function renderCard() {
 beforeEach(() => {
   deleteAccountMock.mockReset();
   signOutMock.mockReset();
+  vi.useRealTimers();
 });
 
 describe("AccountDangerZoneCard", () => {
@@ -70,10 +83,9 @@ describe("AccountDangerZoneCard", () => {
     expect(confirmButton).toBeEnabled();
   });
 
-  it("calls api.deleteAccount then signs out on success", async () => {
+  it("shows per-store erasure statuses after deletion succeeds", async () => {
     const user = userEvent.setup();
-    deleteAccountMock.mockResolvedValue(undefined);
-    signOutMock.mockResolvedValue(undefined);
+    deleteAccountMock.mockResolvedValue(sampleErasureResult);
     renderCard();
 
     await user.click(screen.getByRole("button", { name: "Delete my account" }));
@@ -86,9 +98,38 @@ describe("AccountDangerZoneCard", () => {
     );
 
     await waitFor(() => expect(deleteAccountMock).toHaveBeenCalledWith("DELETE"));
-    await waitFor(() =>
-      expect(signOutMock).toHaveBeenCalledWith({ redirectUrl: "/" }),
+
+    expect(
+      screen.getByRole("list", { name: "Per-store erasure status" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Postgres:")).toBeInTheDocument();
+    expect(screen.getByText("erased")).toBeInTheDocument();
+    expect(screen.getByText("Qdrant:")).toBeInTheDocument();
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.getByText("Typesense:")).toBeInTheDocument();
+    expect(screen.getByText("not yet supported")).toBeInTheDocument();
+    expect(screen.getByText(/no per-user index/)).toBeInTheDocument();
+  });
+
+  it("schedules sign-out after erasure succeeds", async () => {
+    const user = userEvent.setup();
+    const timeoutSpy = vi.spyOn(window, "setTimeout");
+    deleteAccountMock.mockResolvedValue(sampleErasureResult);
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Delete my account" }));
+    await user.type(
+      screen.getByLabelText("Type DELETE to confirm account deletion"),
+      "DELETE",
     );
+    await user.click(
+      screen.getByRole("button", { name: "Permanently delete my account" }),
+    );
+
+    await waitFor(() => expect(deleteAccountMock).toHaveBeenCalledWith("DELETE"));
+    await waitFor(() => expect(timeoutSpy).toHaveBeenCalled());
+    expect(timeoutSpy.mock.calls.some((call) => call[1] === 4000)).toBe(true);
+    timeoutSpy.mockRestore();
   });
 
   it("does not sign out and re-enables the form when deletion fails", async () => {
@@ -115,6 +156,9 @@ describe("AccountDangerZoneCard", () => {
       ).toBeEnabled(),
     );
     expect(signOutMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("list", { name: "Per-store erasure status" }),
+    ).not.toBeInTheDocument();
   });
 
   it("cancel clears the confirm state", async () => {

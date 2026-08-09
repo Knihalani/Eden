@@ -7,6 +7,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
 import { formatRelativeTime } from "@/lib/format";
 import { QueryErrorPanel } from "@/components/shell/query-error-panel";
+import { AuditChainTrustSignal } from "@/lab/settings/audit-chain-trust-signal";
 
 type AutonomyBudgetPayload = {
   budget?: {
@@ -63,7 +64,10 @@ export function AutonomyAuditCard() {
 
   return (
     <section id="autonomy-audit" className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
-      <p className="type-label">Autonomy audit</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="type-label">Autonomy audit</p>
+        <AuditChainTrustSignal />
+      </div>
       <p className="type-meta mt-1">
         Recent allow / deny decisions for runtime heals and maintenance actions.
       </p>

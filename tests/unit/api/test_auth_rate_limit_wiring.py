@@ -8,6 +8,7 @@ Retry-After header when the bucket is exhausted.
 import pytest
 
 from eden.api.utils.rate_limit import (
+    RateLimitExceededError,
     login_email_limiter,
     login_limiter,
     password_reset_limiter,
@@ -23,7 +24,7 @@ async def test_login_limiter_rejects_after_10_attempts():
     # itself to simulate the route's behaviour.
     for _ in range(login_limiter.max_requests):
         await login_limiter.check("test-ip-login")
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(RateLimitExceededError) as excinfo:
         await login_limiter.check("test-ip-login")
     # Retry-After must be a positive integer.
     assert excinfo.value.retry_after >= 1.0
@@ -35,7 +36,7 @@ async def test_login_email_limiter_independent_of_ip():
     # Drain the per-email bucket for one address.
     for _ in range(login_email_limiter.max_requests):
         await login_email_limiter.check("victim@example.com")
-    with pytest.raises(Exception):
+    with pytest.raises(RateLimitExceededError):
         await login_email_limiter.check("victim@example.com")
     # A different email still has full quota.
     await login_email_limiter.check("other@example.com")
@@ -46,7 +47,7 @@ async def test_signup_limiter_caps_at_5_per_minute():
     """Signup limiter rejects the 6th attempt within 60s."""
     for _ in range(signup_limiter.max_requests):
         await signup_limiter.check("test-ip-signup")
-    with pytest.raises(Exception):
+    with pytest.raises(RateLimitExceededError):
         await signup_limiter.check("test-ip-signup")
 
 
@@ -55,7 +56,7 @@ async def test_password_reset_limiter_caps_at_3_per_5min():
     """Password reset limiter rejects the 4th attempt within 300s."""
     for _ in range(password_reset_limiter.max_requests):
         await password_reset_limiter.check("test-ip-pwreset")
-    with pytest.raises(Exception):
+    with pytest.raises(RateLimitExceededError):
         await password_reset_limiter.check("test-ip-pwreset")
 
 

@@ -330,6 +330,111 @@ async def erase_user_account(
     }
 
 
+_FANOUT_STATUS_SEVERITY: dict[str, int] = {
+    "failed": 0,
+    "unavailable": 1,
+    "unsupported": 2,
+    "dry_run": 3,
+    "ok": 4,
+}
+
+
+def _worse_fanout_status(left: str, right: str) -> str:
+    """Pick the more severe fanout status (failed beats unsupported beats ok)."""
+    left_rank = _FANOUT_STATUS_SEVERITY.get(left, -1)
+    right_rank = _FANOUT_STATUS_SEVERITY.get(right, -1)
+    return left if left_rank <= right_rank else right
+
+
+def summarize_store_erasure_statuses(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten per-org RTBF envelopes into a UI-friendly per-store list (FEAT-109).
+
+    Postgres table erasure is summarised as a single ``postgres`` entry;
+  secondary stores come from ``fanout_rtbf`` results embedded in each org
+    envelope's ``data.fanout``.
+    """
+    rtbf_results = summary.get("rtbf_results") or {}
+    multi_org = len(rtbf_results) > 1
+
+    all_tables: list[dict[str, Any]] = []
+    fanout_by_store: dict[str, dict[str, Any]] = {}
+
+    for org_id, envelope in rtbf_results.items():
+        data = envelope.get("data") or {}
+        for table in data.get("tables") or []:
+            all_tables.append({**table, "org_id": org_id})
+        for fanout in data.get("fanout") or []:
+            store = str(fanout.get("store") or "unknown")
+            entry = {**fanout, "org_id": org_id}
+            existing = fanout_by_store.get(store)
+            if existing is None:
+                fanout_by_store[store] = entry
+                continue
+            worse = _worse_fanout_status(
+                str(existing.get("status") or ""),
+                str(entry.get("status") or ""),
+            )
+            detail = existing.get("detail") or existing.get("error")
+            new_detail = entry.get("detail") or entry.get("error")
+            merged_detail = detail
+            if new_detail and new_detail != detail:
+                merged_detail = (
+                    f"{detail}; {new_detail}" if detail else new_detail
+                )
+            fanout_by_store[store] = {
+                **existing,
+                "status": worse,
+                "detail": merged_detail,
+                "error": existing.get("error") or entry.get("error"),
+            }
+
+    store_statuses: list[dict[str, Any]] = []
+
+    if all_tables:
+        failed_tables = [t for t in all_tables if t.get("status") == "failed"]
+        if failed_tables:
+            first = failed_tables[0]
+            postgres_status = "failed"
+            postgres_detail = (
+                first.get("error")
+                or f"table {first.get('table')} erasure failed"
+            )
+        else:
+            postgres_status = "ok"
+            rows = sum(int(t.get("rows_anonymised") or 0) for t in all_tables)
+            postgres_detail = (
+                f"{rows} rows anonymised across {len(all_tables)} tables"
+            )
+    elif summary.get("account_anonymized"):
+        postgres_status = "ok"
+        postgres_detail = "account row anonymised"
+    else:
+        postgres_status = "failed"
+        postgres_detail = "erasure did not complete"
+
+    store_statuses.append(
+        {
+            "store": "postgres",
+            "status": postgres_status,
+            "detail": postgres_detail,
+        }
+    )
+
+    for store in sorted(fanout_by_store):
+        entry = fanout_by_store[store]
+        detail = entry.get("detail") or entry.get("error")
+        item: dict[str, Any] = {
+            "store": store,
+            "status": entry.get("status"),
+            "detail": detail,
+        }
+        if multi_org:
+            item["org_id"] = entry.get("org_id")
+        store_statuses.append(item)
+
+    return store_statuses
+
+
 async def run_user_delete_job(job_id: str, user_id: str) -> None:
     try:
         await _mark_job(job_id, status="running")

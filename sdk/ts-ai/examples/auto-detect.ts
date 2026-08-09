@@ -5,17 +5,16 @@
  *   bun add openai @anthropic-ai/sdk ai @langchain/core  # any subset
  *   OPENAI_API_KEY=sk-... bun run examples/auto-detect.ts
  *
- * The example calls `autoInstrument()` (alias of
- * `detectInstalledFrameworks()`) to find out which LLM SDKs are
- * importable, then dynamically imports + wraps the ones that are
- * present. This is the idiomatic pattern when the consumer code
- * doesn't know in advance which frameworks a downstream user will
+ * The example calls `detectInstalledFrameworks()` to find out which
+ * LLM SDKs are importable, then dynamically imports + wraps the ones
+ * that are present. This is the idiomatic pattern when the consumer
+ * code doesn't know in advance which frameworks a downstream user will
  * have installed.
  */
 
 import {
-  autoInstrument,
   configure,
+  detectInstalledFrameworks,
   getDefaultClient,
   type AutoInstrumentResult,
 } from "@eden-ai/sdk";
@@ -28,7 +27,7 @@ async function main(): Promise<void> {
     debug: false,
   });
 
-  const detected: AutoInstrumentResult = autoInstrument();
+  const detected: AutoInstrumentResult = detectInstalledFrameworks();
   const installed = (Object.keys(detected) as Array<keyof AutoInstrumentResult>)
     .filter((k) => detected[k]);
   console.log("Detected installed LLM SDKs:", installed);

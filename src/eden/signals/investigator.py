@@ -23,6 +23,7 @@ import contextlib
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,9 @@ except Exception:  # pragma: no cover - import guard
     get_postgres_client = None  # type: ignore[assignment]
 
 _MIN_STEPS = 3
+
+# StatGate scans cap at the same bound as ``compress_trace`` (OPT-22).
+_STATGATE_EVENT_CAP = 80
 
 # Rough per-batch LLM cost estimate (single call regardless of schema count).
 _LLM_BATCH_COST_USD = 0.01
@@ -74,11 +78,13 @@ def compress_trace(events: list[dict[str, Any]], *, max_chars: int = 4000) -> st
 
 
 def _heuristic_match(
-    description: str, events: list[dict[str, Any]]
+    description: str,
+    events: list[dict[str, Any]],
+    *,
+    summary: str,
 ) -> tuple[bool, dict[str, Any], float]:
     """Cheap keyword/heuristic matcher when LLM is unavailable."""
     desc = description.lower()
-    summary = compress_trace(events).lower()
     matched = False
     payload: dict[str, Any] = {"method": "heuristic"}
 
@@ -108,27 +114,61 @@ def _heuristic_match(
     return matched, payload, 0.6 if matched else 0.2
 
 
+@dataclass(frozen=True)
+class _StatGateEventState:
+    """Per-trace derived fields reused across many ``statgate_rule`` evals."""
+
+    tool_names: tuple[str, ...]
+    max_cost_z_score: float
+
+
+def _precompute_statgate_state(
+    events: list[dict[str, Any]],
+) -> _StatGateEventState:
+    """Scan capped events once; share across all StatGate rules (OPT-22)."""
+    tool_names: list[str] = []
+    best_z = 0.0
+    for e in events[:_STATGATE_EVENT_CAP]:
+        et = _s(e.get("event_type")).lower()
+        if "tool" in et or e.get("tool_calls_full"):
+            tool_names.append(
+                _s(e.get("name")) or _s((e.get("attributes") or {}).get("tool_name"))
+            )
+        attrs = e.get("attributes") or {}
+        for k in ("cost_z_score", "cost_zscore"):
+            try:
+                best_z = max(best_z, float(e.get(k) or attrs.get(k) or 0.0))
+            except (TypeError, ValueError):
+                continue
+    return _StatGateEventState(
+        tool_names=tuple(tool_names),
+        max_cost_z_score=best_z,
+    )
+
+
 def _eval_statgate_rule(
-    rule: str, events: list[dict[str, Any]]
+    rule: str,
+    events: list[dict[str, Any]],
+    *,
+    shared: _StatGateEventState | None = None,
 ) -> tuple[bool, dict[str, Any], float]:
     """Deterministic StatGate evaluation — **$0**, never calls an LLM.
 
     Supports the default-library rules:
     * ``tool_call_rate > X`` — repeated-tool-call fraction over threshold.
     * ``cost_per_call > Nsigma`` — any event whose cost z-score ≥ N.
-    """
+
+    ``shared`` avoids re-scanning events when many rules run on one trace.
+  """
     rule_l = rule.lower().strip()
     payload: dict[str, Any] = {"method": "statgate", "rule": rule, "cost_usd": 0.0}
+    state = shared or _precompute_statgate_state(events)
 
     if "tool_call_rate" in rule_l:
         threshold = 0.05
         with contextlib.suppress(IndexError, ValueError):
             threshold = float(rule_l.split(">", 1)[1].strip())
-        tools = [
-            _s(e.get("name")) or _s((e.get("attributes") or {}).get("tool_name"))
-            for e in events
-            if "tool" in _s(e.get("event_type")).lower() or e.get("tool_calls_full")
-        ]
+        tools = state.tool_names
         n = len(tools)
         repeats = n - len(set(tools)) if n else 0
         rate = (repeats / n) if n else 0.0
@@ -138,31 +178,18 @@ def _eval_statgate_rule(
 
     if "cost_per_call" in rule_l or "sigma" in rule_l:
         sigma = 3.0
-        best_z = 0.0
-        for e in events:
-            attrs = e.get("attributes") or {}
-            for k in ("cost_z_score", "cost_zscore"):
-                try:
-                    best_z = max(best_z, float(e.get(k) or attrs.get(k) or 0.0))
-                except (TypeError, ValueError):
-                    continue
-        matched = best_z >= sigma
-        payload.update({"cost_z_score": round(best_z, 4), "sigma": sigma})
+        matched = state.max_cost_z_score >= sigma
+        payload.update(
+            {
+                "cost_z_score": round(state.max_cost_z_score, 4),
+                "sigma": sigma,
+            }
+        )
         return matched, payload, 0.9 if matched else 0.1
 
     # Unknown rule → treat as not matched, $0.
     payload["unmatched_rule"] = True
     return False, payload, 0.0
-
-
-async def run_investigator_llm_batch(
-    org_id: str,
-    batch: list[dict[str, Any]],
-    events: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """Deprecated — always returns {}. Use StatGate/heuristics instead."""
-    _ = (org_id, batch, events)
-    return {}
 
 
 async def _one_completion(prompt: str) -> str:
@@ -220,6 +247,10 @@ async def investigate_trace(
     if pg is None:
         return []
 
+    from eden.issues.agent_identity import resolve_agent_id
+
+    resolved_agent_id = await resolve_agent_id(org_id, agent_id)
+
     try:
         if signal_id:
             rows = await pg.fetch(
@@ -251,52 +282,135 @@ async def investigate_trace(
         return []
 
     written: list[dict[str, Any]] = []
+    batch_events: list[tuple[str, bool, dict[str, Any], float]] = []
+    matched_followups: list[tuple[Any, dict[str, Any], str]] = []
+    statgate_shared: _StatGateEventState | None = None
+    if any(_row_get(row, "statgate_rule") for row in rows):
+        statgate_shared = _precompute_statgate_state(events)
+
+    heuristic_summary = ""
+    if any(not _row_get(row, "statgate_rule") for row in rows):
+        heuristic_summary = compress_trace(events).lower()
 
     for row in rows:
-        signal_id = str(row["id"])
+        row_signal_id = str(row["id"])
         statgate_rule = _row_get(row, "statgate_rule")
         inv_prompt = _row_get(row, "investigator_prompt")
         description = _s(row["description"])
 
         if statgate_rule:
-            matched, payload, confidence = _eval_statgate_rule(statgate_rule, events)
-            written.append(
-                await _write_event(
-                    pg, org_id, signal_id, trace_id, matched, payload, confidence
-                )
+            matched, payload, confidence = _eval_statgate_rule(
+                statgate_rule,
+                events,
+                shared=statgate_shared,
             )
-            if matched:
-                await _maybe_write_stumble(
-                    org_id, trace_id, row, payload, agent_id=agent_id
-                )
-                await _trigger_clustering(org_id, signal_id)
         elif inv_prompt:
-            # LLM investigator path removed — heuristics only (UnifiedJudge
-            # + Layer A cover semantic detection without per-signal LLM).
-            matched, payload, confidence = _heuristic_match(description, events)
+            matched, payload, confidence = _heuristic_match(
+                description, events, summary=heuristic_summary
+            )
             payload = {**payload, "method": "heuristic_no_llm"}
-            written.append(
-                await _write_event(
-                    pg, org_id, signal_id, trace_id, matched, payload, confidence
-                )
-            )
-            if matched:
-                await _maybe_write_stumble(
-                    org_id, trace_id, row, payload, agent_id=agent_id
-                )
-                await _trigger_clustering(org_id, signal_id)
         else:
-            matched, payload, confidence = _heuristic_match(description, events)
-            written.append(
-                await _write_event(
-                    pg, org_id, signal_id, trace_id, matched, payload, confidence
-                )
+            matched, payload, confidence = _heuristic_match(
+                description, events, summary=heuristic_summary
             )
-            if matched:
-                await _maybe_write_stumble(
-                    org_id, trace_id, row, payload, agent_id=agent_id
+
+        batch_events.append((row_signal_id, matched, payload, confidence))
+        if matched:
+            matched_followups.append((row, payload, row_signal_id))
+
+    written = await _write_events_batch(pg, org_id, trace_id, batch_events)
+
+    if matched_followups:
+        from eden.async_tasks import bounded_gather
+
+        async def _handle_matched(
+            row: Any, payload: dict[str, Any], row_signal_id: str
+        ) -> None:
+            await _maybe_write_stumble(
+                org_id,
+                trace_id,
+                row,
+                payload,
+                agent_id=resolved_agent_id,
+            )
+            await _trigger_clustering(org_id, row_signal_id)
+
+        results = await bounded_gather(
+            *(
+                _handle_matched(row, payload, row_signal_id)
+                for row, payload, row_signal_id in matched_followups
+            ),
+            limit=8,
+            return_exceptions=True,
+        )
+        for res in results:
+            if isinstance(res, Exception):
+                logger.debug(
+                    "signal_investigator: matched follow-up failed: %s", res
                 )
-                await _trigger_clustering(org_id, signal_id)
+
+    return written
+
+
+async def _write_events_batch(
+    pg: Any,
+    org_id: str,
+    trace_id: str,
+    events: list[tuple[str, bool, dict[str, Any], float]],
+) -> list[dict[str, Any]]:
+    """Insert many ``signal_events`` rows in one round trip."""
+    if not events:
+        return []
+
+    ids: list[str] = []
+    signal_ids: list[str] = []
+    matched_flags: list[bool] = []
+    payload_json: list[str] = []
+    confidences: list[float] = []
+    written: list[dict[str, Any]] = []
+
+    for signal_id, matched, payload, confidence in events:
+        event_id = str(uuid.uuid4())
+        ids.append(event_id)
+        signal_ids.append(signal_id)
+        matched_flags.append(matched)
+        payload_json.append(
+            json.dumps(payload, default=str, separators=(",", ":"))
+        )
+        confidences.append(confidence)
+        written.append(
+            {
+                "id": event_id,
+                "signal_id": signal_id,
+                "trace_id": trace_id,
+                "matched": matched,
+                "confidence": confidence,
+                "cost_usd": float(payload.get("cost_usd", 0.0) or 0.0),
+            }
+        )
+
+    try:
+        await pg.execute(
+            """
+            INSERT INTO signal_events
+                (id, org_id, signal_id, trace_id, matched, payload,
+                 investigator_confidence)
+            SELECT t.id::uuid, $1, t.signal_id::uuid, $2, t.matched,
+                   t.payload::jsonb, t.confidence
+            FROM UNNEST(
+                $3::uuid[], $4::text[], $5::bool[], $6::text[], $7::float8[]
+            ) AS t(id, signal_id, matched, payload, confidence)
+            """,
+            org_id,
+            trace_id,
+            ids,
+            signal_ids,
+            matched_flags,
+            payload_json,
+            confidences,
+        )
+    except Exception as exc:
+        logger.debug("signal_investigator: batch insert failed: %s", exc)
 
     return written
 

@@ -8,6 +8,7 @@ no Redis — all faked.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,7 +17,10 @@ import pytest
 from eden.services import soft_issue_review
 from eden.services.soft_issue_review import (
     _MAX_NEW_DETECTORS_PER_ORG,
+    _SHADOW_PROMOTE_BATCH_LIMIT,
+    _SOFT_ISSUE_REVIEW_CONCURRENCY,
     SoftIssueReviewer,
+    evaluate_shadow_precision,
 )
 
 
@@ -131,6 +135,50 @@ class TestRunOnce:
         assert out["orgs_reviewed"] == 1
         assert out["detectors_created"] == 1
         assert any("errors" in o for o in out["orgs"])
+
+    @pytest.mark.asyncio
+    async def test_run_once_uses_bounded_gather_with_org_concurrency_cap(self) -> None:
+        """OPT-24: nightly org reviews overlap under bounded_gather(limit=8)."""
+        reviewer = SoftIssueReviewer()
+        pg = MagicMock()
+        gather_calls: list[int] = []
+
+        async def _fake_gather(*aws, limit=None, return_exceptions=False):
+            gather_calls.append(limit)
+            return [await aw for aw in aws]
+
+        with (
+            patch.object(soft_issue_review, "get_settings", return_value=_settings()),
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=pg),
+            ),
+            patch.object(
+                reviewer,
+                "_rank_hot_orgs",
+                AsyncMock(return_value=[f"org-{i}" for i in range(4)]),
+            ),
+            patch.object(reviewer, "_claim_org", AsyncMock(return_value=True)),
+            patch.object(
+                reviewer,
+                "_review_org",
+                AsyncMock(
+                    return_value={
+                        "org_id": "x",
+                        "detectors_created": 0,
+                        "spend_usd": 0.0,
+                    }
+                ),
+            ),
+            patch(
+                "eden.async_tasks.bounded_gather",
+                side_effect=_fake_gather,
+            ),
+        ):
+            out = await reviewer.run_once()
+
+        assert gather_calls == [_SOFT_ISSUE_REVIEW_CONCURRENCY]
+        assert out["orgs_reviewed"] == 4
 
 
 class TestBudgetGate:
@@ -252,3 +300,23 @@ class TestClaim:
             "eden.storage.redis.get_redis_client", AsyncMock(return_value=None)
         ):
             assert await reviewer._claim_org("org-1") is True
+
+
+class TestShadowHoldExpiry:
+    """OPT-37: stale non-firing shadow detectors expire from hold."""
+
+    def test_stale_hold_expires_without_operator_labels(self) -> None:
+        now = datetime(2026, 8, 7, tzinfo=UTC)
+        row = {
+            "match_count": 0,
+            "rule": {},
+            "created_at": now - timedelta(days=95),
+        }
+        d = evaluate_shadow_precision(
+            row,
+            min_firings=20,
+            hold_max_days=90,
+            now=now,
+        )
+        assert d["action"] == "delete"
+        assert d["precision"] is None

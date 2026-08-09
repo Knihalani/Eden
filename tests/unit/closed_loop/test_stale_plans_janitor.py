@@ -9,7 +9,6 @@ import pytest
 
 from eden.closed_loop import verify
 
-
 ORG = "org-stale"
 PLAN = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 

@@ -7,3 +7,4 @@
 # `python -m bench.compare <baseline.json> <candidate.json>`.
 *.json
 !baseline.json
+!f12-span-search-*.json

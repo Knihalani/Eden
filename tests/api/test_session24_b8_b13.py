@@ -6,9 +6,9 @@ Six audit items, mix of safety + per-tenant correctness:
   ``act_<sha256[:16]>`` (content-derived), matching the
   HookBus path's wire format. Pre-fix: pure ``uuid4`` was
   un-grep-able across the two paths.
-* **B-9** — ``LegacyEvalToGuardrailLink.promote`` defaults
-  ``fire_hook=False`` (auto-promote is opt-in). Pre-fix: True
-  → recursive ``on_judge_threshold_breach`` → ``promote()``.
+* **B-9** — ``EvalToGuardrailLink.promote_to_guardrail`` defaults
+  ``fire_hook=True``; hook path passes ``fire_hook=False`` to avoid
+  recursive ``on_judge_threshold_breach`` → ``promote_to_guardrail``.
 * **B-10** — ``validate_org_api_key`` debounces
   ``UPDATE last_used_at`` to > 60s old. Pre-fix: every
   successful auth wrote a row → 3.6M UPDATEs/hour/key for
@@ -110,7 +110,7 @@ class TestB8ActionIdFormat:
         except (TypeError, ValueError):
             raise AssertionError(
                 f"B-8 regression: id {id1!r} is not a valid UUID"
-            )
+            ) from None
         # uuid5 is version 5 — confirm we got the right scheme
         # (defence against accidental uuid4 / random fallback
         # slipping back in).
@@ -215,21 +215,30 @@ class TestB8Uuid5ColumnSafety:
 
 
 class TestB9FireHookDefault:
-    """``LegacyEvalToGuardrailLink.promote`` defaults ``fire_hook=False``.
+    """``EvalToGuardrailLink.promote_to_guardrail`` defaults ``fire_hook=True``.
 
     The recursive guard (``fire_hook=False`` inside
-    ``GuardrailHook.on_judge_threshold_breach``) was already
-    there; this is the outer default flip.
+    ``GuardrailHook.on_judge_threshold_breach``) prevents
+    promote → hook → promote loops.
     """
 
-    def test_default_fire_hook_false(self) -> None:
-        """Static check: the ``fire_hook`` parameter defaults to False."""
-        from eden.guardrails import intervention
+    def test_default_fire_hook_true(self) -> None:
+        """Static check: the ``fire_hook`` parameter defaults to True."""
+        from eden.evaluation.eval_intel import integration
 
-        sig = inspect.signature(intervention.LegacyEvalToGuardrailLink.promote)
-        assert sig.parameters["fire_hook"].default is False, (
-            "B-9 regression: fire_hook default is not False"
+        sig = inspect.signature(integration.EvalToGuardrailLink.promote_to_guardrail)
+        assert sig.parameters["fire_hook"].default is True, (
+            "B-9 regression: fire_hook default is not True"
         )
+
+    def test_hook_uses_fire_hook_false(self) -> None:
+        """Static check: hook promote path passes fire_hook=False."""
+        from eden.llmops import promotion_hooks
+
+        source = textwrap.dedent(
+            inspect.getsource(promotion_hooks.GuardrailHook.on_judge_threshold_breach)
+        )
+        assert "fire_hook=False" in source
 
 
 # ─── B-10: last_used_at debounce ────────────────────────────────────

@@ -12,7 +12,7 @@ import {
   GuardrailSeverityChip,
   GuardrailStatusChip,
 } from "@/lab/guardrails/guardrails-chrome";
-import { AgentLink, AgentScopeFilter, EmptyState } from "@/lab/lab-ui";
+import { AgentLink, EmptyState } from "@/lab/lab-ui";
 
 export function GuardrailsDetailView({
   policy,
@@ -130,34 +130,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dd className="type-mono mt-0.5 tabular-nums !text-[0.75rem] text-[var(--text)]">
         {value}
       </dd>
-    </div>
-  );
-}
-
-/** Dry-run tab — no durable samples API yet; honesty empty instead of fixture theater. */
-export function GuardrailsTestView({
-  agentId,
-  onAgentChange,
-  counts,
-}: {
-  agentId: string;
-  onAgentChange: (id: string) => void;
-  counts?: Record<string, number>;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-        <AgentScopeFilter
-          value={agentId}
-          onChange={onAgentChange}
-          counts={counts}
-        />
-      </div>
-      <EmptyState
-        title="Dry-run not connected"
-        body="Guardrail test samples are not wired to an API yet. Policy list and detail still work."
-        compact
-      />
     </div>
   );
 }

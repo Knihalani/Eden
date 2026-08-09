@@ -47,10 +47,19 @@ vi.mock("@/hooks/use-confirm", () => ({
 }));
 
 const replaceMock = vi.fn();
+let mockSearchParams: Record<string, string | null> = {};
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => ({ get: () => null, toString: () => "" }),
+  useSearchParams: () => ({
+    get: (key: string) => mockSearchParams[key] ?? null,
+    toString: () => "",
+  }),
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
   usePathname: () => "/signals",
+}));
+
+const patchQueryMock = vi.fn();
+vi.mock("@/lab/agent-scope", () => ({
+  useQueryPatch: () => patchQueryMock,
 }));
 
 import { NlAlertRulesView } from "./nl-alert-rules-panel";
@@ -90,6 +99,8 @@ beforeEach(() => {
   confirmMock.mockReset();
   confirmMock.mockResolvedValue(true);
   replaceMock.mockReset();
+  patchQueryMock.mockReset();
+  mockSearchParams = {};
   mockRole = "admin";
 });
 
@@ -110,6 +121,16 @@ describe("NlAlertRulesView (FEAT-18)", () => {
     await screen.findByText("No alert rules yet");
     fireEvent.click(screen.getAllByRole("button", { name: /Create rule/i })[0]);
     expect(await screen.findByText("New alert rule")).toBeTruthy();
+  });
+
+  it("opens the create dialog when ?create=1 is present", async () => {
+    mockSearchParams = { create: "1", prompt: "error rate exceeds 5%" };
+    listMock.mockResolvedValue({ rules: [], total: 0 });
+    render(withClient(<NlAlertRulesView />));
+
+    expect(await screen.findByText("New alert rule")).toBeTruthy();
+    expect(screen.getByDisplayValue("error rate exceeds 5%")).toBeTruthy();
+    expect(patchQueryMock).toHaveBeenCalledWith({ create: null, prompt: null });
   });
 
   it("runs the compile → review → save flow and calls create with the compiled EQL", async () => {

@@ -570,12 +570,6 @@ class ImprovementAgent:
             "ev_scores": score_rows,
         }
 
-    async def _from_issues(
-        self, org_id: str, since: datetime, agent_id: str | None
-    ) -> list[PlanCandidate]:
-        """Deprecated empty-card path — kept for tests; returns []."""
-        return []
-
     async def _from_traces(
         self, org_id: str, since: datetime, agent_id: str | None
     ) -> list[PlanCandidate]:
@@ -1241,6 +1235,7 @@ class ImprovementAgent:
                     """
                     SELECT id, agent_id, name FROM nudges
                     WHERE org_id = $1 AND agent_id = $2 AND mode = 'shadow'
+                    ORDER BY name ASC, id ASC
                     LIMIT 10
                     """,
                     org_id,
@@ -1251,6 +1246,7 @@ class ImprovementAgent:
                     """
                     SELECT id, agent_id, name FROM nudges
                     WHERE org_id = $1 AND mode = 'shadow'
+                    ORDER BY name ASC, id ASC
                     LIMIT 10
                     """,
                     org_id,

@@ -55,8 +55,10 @@ ISSUE_STATUSES: frozenset[str] = frozenset(
     }
 )
 
-# Default severity per kind — high-signal kinds escalate to p1, softer
-# signals to p2/p3. IssuePromoter may bump this based on blast radius.
+# Default severity per kind — high-signal kinds map to p1, softer signals
+# to p2/p3. IssuePromoter escalates from the new stumble's resolved
+# severity using blast-radius counters (user_count / stumble_count /
+# repetition_count) and never downgrades via ``_more_severe``.
 _DEFAULT_SEVERITY: dict[str, Severity] = {
     StumbleKind.TOOL_ERROR.value: "p1",
     StumbleKind.TASK_FAILURE.value: "p1",

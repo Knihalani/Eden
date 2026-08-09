@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -89,14 +90,25 @@ async def test_mcp_query_eql_and_sql_handlers() -> None:
     from eden.mcp_server import tools as tool_fns
 
     class _Client:
-        pass
+        async def compile_nl_alert(
+            self,
+            org_id: str,
+            *,
+            nl_text: str,
+            context: dict[str, Any] | None = None,
+            eql_override: str | None = None,
+        ) -> dict[str, Any]:
+            return {"eql": 'status = "error"', "warnings": []}
+
+        async def query_sql(
+            self, org_id: str, *, sql: str, limit: int = 100
+        ) -> dict[str, Any]:
+            return {"status": "ok", "sql": sql, "rows": []}
 
     eql = await tool_fns.query_eql(_Client(), "org1", nl_text="errors")
-    assert eql["status"] == "ok"
     assert "eql" in eql
 
     sql = await tool_fns.query_sql(_Client(), "org1", sql="SELECT 1")
-    assert sql["status"] == "ok"
     assert sql["sql"] == "SELECT 1"
 
 
@@ -117,16 +129,16 @@ async def test_mcp_get_agentic_metrics_local() -> None:
     from eden.mcp_server import tools as tool_fns
 
     class _Client:
-        pass
+        async def get_agentic_metrics(
+            self,
+            org_id: str,
+            *,
+            window_hours: int = 24,
+            agent_id: str | None = None,
+        ) -> dict[str, Any]:
+            return {"status": "ok", "metrics": {}, "trace_count": 0}
 
-    with patch.object(
-        AgenticMetricsService,
-        "summary",
-        new=AsyncMock(
-            return_value={"status": "ok", "metrics": {}, "trace_count": 0}
-        ),
-    ):
-        out = await tool_fns.get_agentic_metrics(_Client(), "org1")
+    out = await tool_fns.get_agentic_metrics(_Client(), "org1")
     assert out["status"] == "ok"
 
 

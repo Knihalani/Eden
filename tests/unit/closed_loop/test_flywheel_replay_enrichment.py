@@ -73,7 +73,8 @@ async def test_enrichment_writes_signature_and_checkpoint(monkeypatch) -> None:
 
     assert len(pg.executed) == 1
     query, args = pg.executed[0]
-    assert "regression_eval_cases" in query
+    assert "dataset_items" in query
+    assert "expected_output" in query
     assert args[0] == CASE_ID
     assert args[1] == ORG
     enrichment = json.loads(args[2])

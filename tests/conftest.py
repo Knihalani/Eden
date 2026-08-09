@@ -809,10 +809,8 @@ def _reset_trace_quality_state() -> None:
     yield
     # Tear-down: cancel the drain task so it doesn't leak into
     # the next test's loop.
-    try:
+    with suppress(Exception):
         hooks.reset_for_tests()
-    except Exception:
-        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────

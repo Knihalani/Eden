@@ -184,6 +184,19 @@ async def test_rtbf_fanout_unavailable_visible() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rtbf_redis_fanout_unsupported_not_false_ok() -> None:
+    """FEAT-108: Redis keys lack user_id — report unsupported, not ok+deleted:0."""
+    from eden.services.governance_intel.rtbf_fanout import _fanout_redis
+
+    live = await _fanout_redis("org1", user_id="u1", dry_run=False)
+    assert live["status"] == "unsupported"
+    assert live["store"] == "redis"
+
+    dry = await _fanout_redis("org1", user_id="u1", dry_run=True)
+    assert dry["status"] == "dry_run"
+
+
+@pytest.mark.asyncio
 async def test_mcp_eden_health_registered() -> None:
     from eden.mcp_server.server import TOOL_CATALOG, call_tool
 

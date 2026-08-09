@@ -13,6 +13,137 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+async def reverify_rtbf_stores(
+    org_id: str,
+    *,
+    user_id: str,
+    fanout_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Re-query secondary stores after delete to confirm erasure.
+
+    Only stores that reported ``status=ok`` during fanout are checked.
+    A non-zero residual count or an unreachable store yields
+    ``status=residual`` / ``status=failed`` so callers can fail closed.
+    """
+    results: list[dict[str, Any]] = []
+    for entry in fanout_results:
+        if entry.get("status") != "ok":
+            continue
+        store = entry.get("store")
+        if store == "typesense":
+            results.append(
+                await _reverify_typesense(org_id, user_id=user_id)
+            )
+        elif store == "qdrant":
+            results.append(
+                await _reverify_qdrant(org_id, user_id=user_id)
+            )
+    return results
+
+
+async def _reverify_typesense(
+    org_id: str, *, user_id: str
+) -> dict[str, Any]:
+    store = "typesense"
+    try:
+        from eden.observability.typesense_client import get_typesense_client
+
+        client = get_typesense_client()
+    except Exception as exc:
+        return {"store": store, "status": "failed", "error": str(exc)}
+    if client is None:
+        return {
+            "store": store,
+            "status": "failed",
+            "error": "Typesense client not configured",
+        }
+    try:
+        if hasattr(client, "has_user_id_field") and not await client.has_user_id_field():
+            return {
+                "store": store,
+                "status": "skipped",
+                "detail": "collection lacks user_id field",
+            }
+        remaining: int | None
+        if hasattr(client, "count_by_user"):
+            remaining = await client.count_by_user(org_id, user_id)
+        elif hasattr(client, "count_by_filter"):
+            remaining = await client.count_by_filter(
+                f"tenant_id:={org_id} && user_id:={user_id}"
+            )
+        else:
+            return {
+                "store": store,
+                "status": "failed",
+                "error": "Typesense client lacks user-scoped count",
+            }
+        if remaining is None:
+            return {
+                "store": store,
+                "status": "failed",
+                "error": "Typesense re-verify search failed",
+            }
+        if remaining > 0:
+            return {
+                "store": store,
+                "status": "residual",
+                "remaining": remaining,
+            }
+        return {"store": store, "status": "ok", "remaining": 0}
+    except Exception as exc:
+        logger.warning("rtbf typesense re-verify failed: %s", exc)
+        return {"store": store, "status": "failed", "error": str(exc)}
+
+
+async def _reverify_qdrant(
+    org_id: str, *, user_id: str
+) -> dict[str, Any]:
+    store = "qdrant"
+    try:
+        from eden.storage.qdrant import get_qdrant_client
+    except Exception:
+        try:
+            from eden.retrieval.qdrant_client import get_qdrant_client  # type: ignore
+        except Exception as exc:
+            return {"store": store, "status": "failed", "error": str(exc)}
+    try:
+        client = get_qdrant_client()
+        if hasattr(client, "__await__"):
+            client = await client
+    except Exception as exc:
+        return {"store": store, "status": "failed", "error": str(exc)}
+    if client is None:
+        return {
+            "store": store,
+            "status": "failed",
+            "error": "Qdrant client not configured",
+        }
+    try:
+        if not hasattr(client, "count_by_user"):
+            return {
+                "store": store,
+                "status": "skipped",
+                "detail": "Qdrant client lacks count_by_user",
+            }
+        remaining = await client.count_by_user(org_id, user_id)
+        if remaining is None:
+            return {
+                "store": store,
+                "status": "failed",
+                "error": "Qdrant re-verify count failed",
+            }
+        if int(remaining) > 0:
+            return {
+                "store": store,
+                "status": "residual",
+                "remaining": int(remaining),
+            }
+        return {"store": store, "status": "ok", "remaining": 0}
+    except Exception as exc:
+        logger.warning("rtbf qdrant re-verify failed: %s", exc)
+        return {"store": store, "status": "failed", "error": str(exc)}
+
+
 async def fanout_rtbf(
     org_id: str,
     *,
@@ -53,6 +184,17 @@ async def _fanout_typesense(
     if dry_run:
         return {"store": store, "status": "dry_run", "detail": "would filter-delete by user_id"}
     try:
+        if hasattr(client, "ensure_collection"):
+            await client.ensure_collection()
+        if hasattr(client, "has_user_id_field") and not await client.has_user_id_field():
+            return {
+                    "store": store,
+                    "status": "unsupported",
+                    "error": (
+                        "Typesense collection lacks user_id field; run "
+                        "eden.scripts.typesense_backfill_user_id after schema migrate"
+                    ),
+                }
         deleted = 0
         if hasattr(client, "delete_by_user"):
             deleted = int(await client.delete_by_user(org_id, user_id))
@@ -77,35 +219,28 @@ async def _fanout_typesense(
 async def _fanout_redis(
     org_id: str, *, user_id: str, dry_run: bool
 ) -> dict[str, Any]:
-    store = "redis"
-    try:
-        from eden.storage.redis import get_redis_client
+    """Per-user Redis erasure — unsupported (FEAT-108).
 
-        client = await get_redis_client()
-    except Exception as exc:
-        return {"store": store, "status": "unavailable", "error": str(exc)}
-    if client is None:
+    Eden Redis keys are org- or hash-scoped only (``eden:cost:{org}:…``,
+    ``eden:dedup:{digest}``, etc.); none embed ``user_id``, so SCAN+DEL
+    cannot perform scoped erasure. Report ``unsupported`` rather than a
+    false ``ok`` with ``deleted: 0``.
+    """
+    _ = org_id  # no tenant-wide DEL is correct for per-user RTBF
+    store = "redis"
+    if dry_run:
         return {
             "store": store,
-            "status": "unavailable",
-            "error": "Redis client not configured",
+            "status": "dry_run",
+            "detail": "per-user Redis erasure unsupported (no user_id in key patterns)",
+            "user_id": user_id,
         }
-    pattern = f"eden:*:{org_id}:*:{user_id}*"
-    if dry_run:
-        return {"store": store, "status": "dry_run", "detail": f"would SCAN {pattern}"}
-    try:
-        deleted = 0
-        cursor = 0
-        while True:
-            cursor, keys = await client.scan(cursor=cursor, match=pattern, count=200)
-            if keys:
-                deleted += int(await client.delete(*keys))
-            if cursor == 0:
-                break
-        return {"store": store, "status": "ok", "deleted": deleted}
-    except Exception as exc:
-        logger.warning("rtbf redis fanout failed: %s", exc)
-        return {"store": store, "status": "failed", "error": str(exc)}
+    return {
+        "store": store,
+        "status": "unsupported",
+        "error": "Redis keys are org- or hash-scoped; no user_id in key namespace",
+        "user_id": user_id,
+    }
 
 
 async def _fanout_qdrant(

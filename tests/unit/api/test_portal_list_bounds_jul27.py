@@ -36,9 +36,11 @@ def test_portal_agents_metrics_sample_bound_reduced():
     assert "LIMIT 15000" not in src
 
 
-def test_portal_sessions_uses_trace_preview_cap():
+def test_portal_sessions_reads_session_summaries():
     src = inspect.getsource(portal_mod.list_portal_sessions)
-    assert "preview_trace_limit=40" in src
+    assert "eden.sessions" in src or "list_sessions" in src
+    assert "AgentSessionService" not in src
+    assert "_session_summary_to_rollup" in inspect.getsource(portal_mod)
 
 
 def test_issue_list_columns_project_slim_triage():

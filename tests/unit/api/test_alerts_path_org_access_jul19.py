@@ -5,11 +5,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
-from fastapi import FastAPI
 
-from eden.api.deps import get_current_user, resolve_path_org_access, require_path_org_access
+from eden.api.deps import get_current_user, require_path_org_access, resolve_path_org_access
 from eden.api.routes import replay
 
 

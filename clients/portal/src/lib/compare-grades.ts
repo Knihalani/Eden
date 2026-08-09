@@ -138,10 +138,3 @@ export function gradeChipClass(grade: ComparisonGrade): string {
       return "border-[var(--border-default)] bg-[var(--surface-raised)] text-[var(--text-muted)]";
   }
 }
-
-export const GRADE_LABELS: Record<ComparisonGrade, string> = {
-  improve: "Improve",
-  regress: "Regress",
-  tradeoff: "Tradeoff",
-  tie: "Tie",
-};

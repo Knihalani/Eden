@@ -107,6 +107,59 @@ export type CompareSummary = {
   tieCount: number;
 };
 
+/** Run/promote API payload fragment with honesty flags and grades. */
+export type ExperimentRunResult = {
+  grades?: Record<string, number>;
+  synthetic?: boolean;
+  method?: string;
+};
+
+/** Map offline experiment + optional run result into a portal ExperimentFixture. */
+export function experimentFixtureFromApi(
+  experiment: Record<string, unknown>,
+  options: {
+    result?: ExperimentRunResult | null;
+    overrides?: Partial<ExperimentFixture>;
+    /** Promote stubs omit flags — default honesty when API has no scored run. */
+    heuristicStub?: boolean;
+  } = {},
+): ExperimentFixture {
+  const { result, overrides = {}, heuristicStub = false } = options;
+  const grades =
+    result?.grades ??
+    (experiment.grades as Record<string, number> | undefined) ??
+    (experiment.avg_scores as Record<string, number> | undefined) ??
+    (experiment.avgScores as Record<string, number> | undefined) ??
+    {};
+
+  let synthetic: boolean | undefined;
+  if (result?.synthetic != null) synthetic = result.synthetic;
+  else if (experiment.synthetic != null) synthetic = Boolean(experiment.synthetic);
+  else if (heuristicStub) synthetic = true;
+
+  let method: string | undefined;
+  if (result?.method) method = result.method;
+  else if (experiment.method) method = String(experiment.method);
+  else if (heuristicStub) method = "heuristic_stub";
+
+  return {
+    id: String(experiment.id ?? overrides.id ?? ""),
+    name: String(experiment.name ?? overrides.name ?? ""),
+    datasetId: String(
+      experiment.dataset_id ?? experiment.datasetId ?? overrides.datasetId ?? "",
+    ),
+    status: overrides.status ?? "completed",
+    createdAt: overrides.createdAt ?? "just now",
+    avgScores: grades,
+    latencyMs: overrides.latencyMs ?? null,
+    costUsd: overrides.costUsd ?? null,
+    errorRate: overrides.errorRate ?? null,
+    ...overrides,
+    ...(synthetic != null ? { synthetic } : {}),
+    ...(method ? { method } : {}),
+  };
+}
+
 export const DATASET_CASES: DatasetCaseFixture[] = [];
 
 export const DATASET_LIST: DatasetFixture[] = [];

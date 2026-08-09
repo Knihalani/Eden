@@ -4,7 +4,6 @@ Covers bugs found in scoped API auth surface:
 - require_org_owner must be owner-only (not admin)
 - get_optional_org must not pass cookie string as JWT payload
 - orgs invite accept/decline invitee+path checks (IDOR)
-- mcp_keys path-scoped admin (IDOR via Header-only Depends)
 - tenant_rate_limit Clerk Bearer org resolution
 """
 
@@ -23,7 +22,6 @@ from eden.api.deps import (
     require_org_member,
     require_org_owner,
 )
-from eden.api.routes.mcp_keys import list_mcp_keys
 from eden.api.routes.orgs import _assert_invitation_for_caller
 
 
@@ -169,24 +167,6 @@ async def test_assert_invitation_rejects_org_path_mismatch(monkeypatch):
             user={"user_id": "u1"},
         )
     assert exc_info.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_list_mcp_keys_path_scoped_admin_blocks_cross_org(monkeypatch):
-    """Admin of JWT org A must not list keys for path org B."""
-    monkeypatch.setattr(
-        "eden.api.routes.mcp_keys.require_org_admin",
-        AsyncMock(
-            side_effect=HTTPException(status_code=403, detail="Not a member")
-        ),
-    )
-    with pytest.raises(HTTPException) as exc_info:
-        await list_mcp_keys(
-            org_id="org-b",
-            user={"user_id": "u1"},
-            payload={"sub": "u1", "o": {"id": "org-a", "rol": "admin"}},
-        )
-    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio

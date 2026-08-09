@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   DATASET_CASES,
   caseForIssue,
@@ -30,6 +30,7 @@ import {
   type DatasetFixture,
   type ExperimentCaseResult,
   type ExperimentFixture,
+  experimentFixtureFromApi,
   type PlaygroundFixture,
 } from "@/lab/fixtures/evals";
 import { issueById } from "@/lab/fixtures/issues";
@@ -189,6 +190,7 @@ function mapPersistedPlayground(
 
 function LabEvalsInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const paramMode = searchParams.get("mode");
   const paramTab = searchParams.get("tab");
   const paramId = searchParams.get("id");
@@ -208,6 +210,17 @@ function LabEvalsInner() {
   const [mode, setMode] = useState<EvalsMode>(() =>
     parseEvalsMode(paramTab, paramMode),
   );
+
+  // FEAT-168: `/playgrounds` is canonical — legacy evals playground URLs redirect.
+  useEffect(() => {
+    const legacyMode = parseEvalsMode(paramTab, paramMode);
+    if (legacyMode !== "playground") return;
+    const target = paramId
+      ? `/playgrounds/${encodeURIComponent(paramId)}`
+      : "/playgrounds";
+    router.replace(target);
+  }, [paramTab, paramMode, paramId, router]);
+
   const agentsQuery = useOrgQuery(
     queryKeys.portal.agents(orgId),
     orgId,
@@ -1176,6 +1189,9 @@ function LabEvalsInner() {
           case: null,
           failures: null,
         });
+      } else if (next === "playground") {
+        router.push("/playgrounds");
+        return;
       } else if (next === "datasets") {
         patchQuery({
           mode: "datasets",
@@ -1190,23 +1206,9 @@ function LabEvalsInner() {
           failures: null,
           case: null,
         });
-      } else {
-        patchQuery({
-          mode: "playground",
-          tab: null,
-          id: playgroundId || defaultPlaygroundId() || null,
-          from: null,
-          baselineId: null,
-          compareId: null,
-          layout: null,
-          grade: null,
-          diff: null,
-          failures: null,
-          case: null,
-        });
       }
     },
-    [patchQuery, baselineId, compareId, datasetId, playgroundId],
+    [patchQuery, baselineId, compareId, datasetId, router],
   );
 
   const openComparePair = useCallback(
@@ -1273,21 +1275,14 @@ function LabEvalsInner() {
           const expId = String(experiment.id ?? "");
           if (!expId) throw new Error("No experiment id returned");
           const { result } = await offlineExperimentsApi.run(orgId, expId);
-          const mapped: ExperimentFixture = {
-            id: expId,
-            name: String(experiment.name ?? `${ds.name} · run ${runN}`),
-            datasetId: dsId,
-            status: "completed",
-            createdAt: "just now",
-            avgScores: result.grades ?? {},
-            latencyMs: null,
-            costUsd: null,
-            errorRate: null,
-            suggestedBaselineId: olderId || undefined,
-            // F51: backend scoring is always a heuristic stub — surface it, don't drop it.
-            synthetic: result.synthetic ?? true,
-            method: result.method ?? "heuristic_stub",
-          };
+          const mapped = experimentFixtureFromApi(experiment, {
+            result,
+            overrides: {
+              name: String(experiment.name ?? `${ds.name} · run ${runN}`),
+              datasetId: dsId,
+              suggestedBaselineId: olderId || undefined,
+            },
+          });
           setExtraExperiments((prev) => [
             mapped,
             ...prev.filter((e) => e.id !== expId),
@@ -1370,34 +1365,27 @@ function LabEvalsInner() {
 
       void (async () => {
         try {
-          const result = await playgroundApi.promoteExperiment(orgId, pg.id, {
+          const promoteRes = await playgroundApi.promoteExperiment(orgId, pg.id, {
             name: `${pg.name} · saved`,
             dataset_id: pg.datasetId,
           });
-          const experiment = (result.experiment ?? {}) as Record<
+          const experiment = (promoteRes.experiment ?? {}) as Record<
             string,
             unknown
           >;
           const expId = String(experiment.id ?? "");
           if (!expId) throw new Error("No experiment id returned");
 
-          const mapped: ExperimentFixture = {
-            id: expId,
-            name: String(experiment.name ?? `${pg.name} · saved`),
-            datasetId: pg.datasetId!,
-            playgroundId: pg.id,
-            status: "completed",
-            createdAt: "just now",
-            avgScores: {},
-            latencyMs: null,
-            costUsd: null,
-            errorRate: null,
-            suggestedBaselineId: olderId || undefined,
-            // promote-experiment doesn't score yet, but this platform never grades
-            // with anything but the F51 heuristic stub — flag it up front.
-            synthetic: true,
-            method: "heuristic_stub",
-          };
+          const mapped = experimentFixtureFromApi(experiment, {
+            result: promoteRes.result,
+            heuristicStub: true,
+            overrides: {
+              name: String(experiment.name ?? `${pg.name} · saved`),
+              datasetId: pg.datasetId!,
+              playgroundId: pg.id,
+              suggestedBaselineId: olderId || undefined,
+            },
+          });
           setExtraExperiments((prev) => [
             mapped,
             ...prev.filter((e) => e.id !== expId),
@@ -1461,6 +1449,18 @@ function LabEvalsInner() {
         title="Evals"
         message="Select a workspace to view evals."
       />
+    );
+  }
+
+  if (parseEvalsMode(paramTab, paramMode) === "playground") {
+    return (
+      <div className="ds-page">
+        <PageHeader
+          title="Evals"
+          meta={<span className="type-meta">Redirecting…</span>}
+        />
+        <QueryLoadingPanel label="Opening Playgrounds…" />
+      </div>
     );
   }
 

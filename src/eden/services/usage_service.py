@@ -603,15 +603,3 @@ class UsageService:
             return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         else:
             return now - timedelta(days=30)
-
-
-# Singleton convenience instance
-_usage_service: UsageService | None = None
-
-
-async def get_usage_service() -> UsageService:
-    """Get the singleton UsageService instance."""
-    global _usage_service
-    if _usage_service is None:
-        _usage_service = UsageService()
-    return _usage_service

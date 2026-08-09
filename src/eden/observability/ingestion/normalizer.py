@@ -49,10 +49,12 @@ def _normalize_timestamp(value: Any) -> str:
         s = value.strip()
         if s.endswith("Z"):
             s = s[:-1] + "+00:00"
-        # Validate by round-trip.
+        # Validate by round-trip; offset-less strings are treated as UTC.
         try:
-            datetime.fromisoformat(s)
-            return s
+            parsed = datetime.fromisoformat(s)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.isoformat()
         except ValueError:
             logger.debug(f"timestamp not ISO 8601, using now(): {value!r}")
             return datetime.now(UTC).isoformat()

@@ -22,13 +22,13 @@ class TestRetentionCronRun:
         # Each default policy name is present
         expected_policies = {
             "raw_traces",
-            "derived_metrics",
             "user_feedback",
-            "training_datasets",
-            "audit_logs",
-            "error_logs",
+            "agent_audit_ledger",
             "debug_dumps",
             "quarantine_events",
+            "checkpoint_blobs",
+            "trace_replay_sessions",
+            "replay_sessions",
         }
         assert expected_policies.issubset(results.keys())
         # Lifecycle rules and sweep
@@ -79,13 +79,11 @@ class TestRetentionCronRun:
         # Every policy should have an error recorded, not raise
         for key in (
             "raw_traces",
-            "derived_metrics",
             "user_feedback",
-            "training_datasets",
-            "audit_logs",
-            "error_logs",
+            "agent_audit_ledger",
             "debug_dumps",
             "quarantine_events",
+            "checkpoint_blobs",
         ):
             assert "errors" in results[key]
             assert "boom" in results[key]["errors"][0]

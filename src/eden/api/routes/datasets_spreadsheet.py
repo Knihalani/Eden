@@ -88,6 +88,7 @@ class RowResponse(BaseModel):
     input: str
     expected_output: str
     values: dict[str, Any]
+    split: str | None = None
     created_at: str
     updated_at: str
 
@@ -101,6 +102,7 @@ class AddRowRequest(BaseModel):
     input: str = Field(default="", max_length=100_000)
     expected_output: str = Field(default="", max_length=100_000)
     values: dict[str, Any] = Field(default_factory=dict)
+    split: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
     def _derive_input_from_values(self) -> AddRowRequest:
@@ -156,6 +158,7 @@ def _row_to_response(r: SpreadsheetRow) -> RowResponse:
         id=r.id, dataset_id=r.dataset_id,
         input=r.input, expected_output=r.expected_output,
         values=r.values,
+        split=r.split,
         created_at=r.created_at, updated_at=r.updated_at,
     )
 
@@ -247,6 +250,7 @@ async def list_rows_route(
     dataset_id: str = Path(...),
     filter: str | None = Query(default=None, description="JSON-encoded list of filter specs."),
     sort: str | None = Query(default=None, description="JSON-encoded list of sort specs."),
+    split: str | None = Query(default=None, description="Filter by eval subset tag (e.g. smoke, full)."),
     limit: int = Query(default=200, ge=1, le=10_000),
     offset: int = Query(default=0, ge=0),
     user: dict = Depends(get_current_user),
@@ -265,6 +269,7 @@ async def list_rows_route(
             filter_spec=filter_spec,
             sort_spec=sort_spec,
             limit=limit, offset=offset,
+            split=split,
         )
     except Exception as exc:
         logger.warning("list_rows failed: %s", redact_all(str(exc)))
@@ -297,6 +302,7 @@ async def add_row_route(
             input=body.input,
             expected_output=body.expected_output,
             values=body.values,
+            split=body.split,
         )
     except Exception as exc:
         logger.warning("add_row failed: %s", redact_all(str(exc)))

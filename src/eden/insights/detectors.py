@@ -38,6 +38,7 @@ class Insight:
     recommended_action: str = ""
     auto_created_dataset: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    mixed_population: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +52,7 @@ class Insight:
             "recommended_action": self.recommended_action,
             "auto_created_dataset": self.auto_created_dataset,
             "metadata": self.metadata,
+            "mixed_population": self.mixed_population,
         }
 
 
@@ -187,6 +189,7 @@ class PerformanceAnomalyDetector(BaseDetector):
             by_version[t.agent_version or "unknown"].append(t)
 
         for version, version_traces in by_version.items():
+            mixed_population = version == "unknown"
             for metric_name, extractor in self._metric_extractors().items():
                 values = [(t, extractor(t)) for t in version_traces if extractor(t) is not None]
                 if len(values) < 5:
@@ -206,7 +209,23 @@ class PerformanceAnomalyDetector(BaseDetector):
                     z_score = abs(val - mean) / stdev if stdev > 0 else 0
                     if z_score >= self.z_threshold:
                         confidence = min(0.99, 0.7 + (z_score - self.z_threshold) * 0.1)
+                        if mixed_population:
+                            confidence = min(confidence, 0.55)
                         direction = "spike" if val > mean else "drop"
+                        pattern: dict[str, Any] = {
+                            "metric": metric_name,
+                            "value": val,
+                            "baseline_mean": mean,
+                            "baseline_stdev": stdev,
+                            "z_score": z_score,
+                            "direction": direction,
+                            "agent_version": version,
+                        }
+                        if mixed_population:
+                            pattern["mixed_population"] = True
+                        metadata: dict[str, Any] = {}
+                        if mixed_population:
+                            metadata["warning"] = "mixed_unversioned_baseline"
                         insights.append(Insight(
                             insight_id=self._make_id("pa", trace.trace_id, metric_name),
                             detector=self.name,
@@ -214,16 +233,10 @@ class PerformanceAnomalyDetector(BaseDetector):
                             confidence=confidence,
                             summary=f"{metric_name} {direction}: {val:.1f} (z={z_score:.1f}, baseline={mean:.1f})",
                             affected_trace_ids=[trace.trace_id],
-                            pattern={
-                                "metric": metric_name,
-                                "value": val,
-                                "baseline_mean": mean,
-                                "baseline_stdev": stdev,
-                                "z_score": z_score,
-                                "direction": direction,
-                                "agent_version": version,
-                            },
+                            pattern=pattern,
                             recommended_action=f"Investigate {metric_name} {direction} in agent version {version}",
+                            metadata=metadata,
+                            mixed_population=mixed_population,
                         ))
 
         return insights
@@ -311,6 +324,25 @@ class RegressionDetector(BaseDetector):
 
             latest_trace_ids = [t.trace_id for t in by_version[latest]]
 
+            mixed_population = latest[0] == "unknown" or any(
+                v[0] == "unknown" for v in baseline_versions
+            )
+            if mixed_population:
+                confidence = min(confidence, 0.55)
+
+            pattern: dict[str, Any] = {
+                "metric": metric,
+                "latest_version": latest[0],
+                "baseline_versions": [v[0] for v in baseline_versions],
+                "latest_mean": latest_mean,
+                "baseline_mean": baseline_mean,
+                "delta": delta,
+                "latest_samples": len(latest_values),
+                "baseline_samples": len(baseline_values),
+            }
+            if mixed_population:
+                pattern["mixed_population"] = True
+
             insights.append(Insight(
                 insight_id=self._make_id("reg", latest[0], metric),
                 detector=self.name,
@@ -318,18 +350,10 @@ class RegressionDetector(BaseDetector):
                 confidence=confidence,
                 summary=f"Regression in {metric}: latest={latest_mean:.3f}, baseline={baseline_mean:.3f} (Δ={delta:.3f})",
                 affected_trace_ids=latest_trace_ids[:50],
-                pattern={
-                    "metric": metric,
-                    "latest_version": latest[0],
-                    "baseline_versions": [v[0] for v in baseline_versions],
-                    "latest_mean": latest_mean,
-                    "baseline_mean": baseline_mean,
-                    "delta": delta,
-                    "latest_samples": len(latest_values),
-                    "baseline_samples": len(baseline_values),
-                },
+                pattern=pattern,
                 recommended_action=f"Investigate changes between version {latest[0]} and baseline; run targeted benchmarks",
                 auto_created_dataset=f"ds_regression_{metric}_{latest[0][:16]}",
+                mixed_population=mixed_population,
             ))
 
         return insights

@@ -418,9 +418,9 @@ class TestRowCap:
 
 class TestTimeoutDetection:
     def test_is_timeout_detects_query_canceled(self) -> None:
-        class _Exc(Exception):
+        class _ExcError(Exception):
             sqlstate = "57014"
-        assert _is_timeout(_Exc()) is True
+        assert _is_timeout(_ExcError()) is True
 
     def test_is_timeout_detects_by_name(self) -> None:
         class QueryCanceledError(Exception):

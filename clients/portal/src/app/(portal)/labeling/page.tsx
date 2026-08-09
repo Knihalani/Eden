@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ds/primitives";
 import { useOrg } from "@/hooks/use-org";
-import { useOrgQuery } from "@/hooks/use-api-query";
+import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { labelingApi } from "@/lib/api/labeling";
 import { SHELL_QUERY } from "@/lib/portal-query";
@@ -13,6 +14,8 @@ import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LabelingQueueTable } from "@/lab/labeling/labeling-queue-table";
 import { LabelingUnassignedPanel } from "@/lab/labeling/labeling-unassigned-panel";
 import { sortItemsByDisagreement } from "@/lab/labeling/labeling-sort";
+import { downloadFile } from "@/lib/export";
+import { useLabToast } from "@/lab/lab-toast";
 
 /**
  * `/labeling` — queue list + disagreement-first item pool (FEAT-82).
@@ -23,6 +26,8 @@ function LabelingInner() {
   const router = useRouter();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const { pushToast } = useLabToast();
+  const [exporting, setExporting] = useState(false);
 
   const queuesQuery = useOrgQuery(
     queryKeys.labeling.queues(orgId),
@@ -46,6 +51,27 @@ function LabelingInner() {
     { ...SHELL_QUERY, retry: false },
   );
 
+  const skipBulkMutation = useOrgMutation(
+    (itemIds: string[]) => labelingApi.skipBulk(orgId!, { item_ids: itemIds }),
+    {
+      invalidateKeys: orgId
+        ? [queryKeys.labeling.items(orgId, { limit: 200 }), queryKeys.labeling.agreement(orgId)]
+        : undefined,
+      onSuccess: (_data, itemIds) => {
+        pushToast({
+          title: `Skipped ${itemIds.length} item${itemIds.length === 1 ? "" : "s"}`,
+          tone: "ok",
+        });
+      },
+      onError: (err) =>
+        pushToast({
+          title: "Bulk skip failed",
+          body: err instanceof Error ? err.message : String(err),
+          tone: "fail",
+        }),
+    },
+  );
+
   const queues = queuesQuery.data?.queues ?? [];
   const items = itemsQuery.data?.items ?? [];
   const perItem = agreementQuery.data?.per_item;
@@ -58,6 +84,33 @@ function LabelingInner() {
   const goToAnnotate = (params: Record<string, string>) => {
     const qs = new URLSearchParams(params).toString();
     router.push(`/labeling/annotate${qs ? `?${qs}` : ""}`);
+  };
+
+  const goToQueue = (queueId: string) => {
+    router.push(`/labeling/queues/${encodeURIComponent(queueId)}`);
+  };
+
+  const exportJsonl = async () => {
+    if (!orgId || exporting) return;
+    setExporting(true);
+    try {
+      const body = await labelingApi.exportJsonl(orgId, { status: "completed" });
+      const date = new Date().toISOString().slice(0, 10);
+      downloadFile(
+        `labeling-${orgId}-${date}.jsonl`,
+        body,
+        "application/x-ndjson;charset=utf-8",
+      );
+      pushToast({ title: "Exported labeling JSONL", tone: "ok" });
+    } catch (err) {
+      pushToast({
+        title: "Export failed",
+        body: err instanceof Error ? err.message : String(err),
+        tone: "fail",
+      });
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (!orgId) {
@@ -111,7 +164,25 @@ function LabelingInner() {
 
   return (
     <div className="ds-page flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Labeling" meta={meta} />
+      <PageHeader
+        title="Labeling"
+        meta={meta}
+        actions={
+          <>
+            <button
+              type="button"
+              className="ds-btn ds-btn-outline ds-btn-sm"
+              disabled={exporting}
+              onClick={() => void exportJsonl()}
+            >
+              {exporting ? "Exporting…" : "Export JSONL"}
+            </button>
+            <Link href="/labeling/iaa" className="ds-btn ds-btn-outline ds-btn-sm">
+              IAA dashboard
+            </Link>
+          </>
+        }
+      />
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[26rem] lg:shrink-0 lg:border-b-0 lg:border-r">
           <div className="border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
@@ -119,7 +190,7 @@ function LabelingInner() {
           </div>
           <LabelingQueueTable
             queues={queues}
-            onSelect={(queueId) => goToAnnotate({ queue: queueId })}
+            onSelect={goToQueue}
           />
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -128,6 +199,8 @@ function LabelingInner() {
             perItem={perItem}
             onSelect={(itemId) => goToAnnotate({ item: itemId })}
             onStartLabeling={() => goToAnnotate({})}
+            onSkipSelected={(itemIds) => skipBulkMutation.mutate(itemIds)}
+            skipping={skipBulkMutation.isPending}
           />
         </div>
       </div>

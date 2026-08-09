@@ -11,10 +11,10 @@
 | Surface (standard) | Target p95 | Evidence | Verdict |
 |---|---|---|---|
 | Portal page load (issues list) | <800ms | Portal OS hubs (W10–W12); axe green locally; F82 web-vitals workflow wired; **auth CI secrets soft** | **SOFT** — local axe OK; CI auth-green PARTIAL (W3) |
-| Trace detail / transcript | <1.2s | TranscriptV2 + virtualization (W13); progressive load | **SOFT** — structural + unit; staging p95 not measured |
+| Trace detail / transcript | <1.2s | `traces-detail-panels.tsx` + `@tanstack/react-virtual` (W13 structural); progressive load; `TranscriptV2` **UNVERIFIABLE** | **SOFT** — structural; staging p95 not measured; portal wave tests **DELETED** (cab7ae32) |
 | MCP tool response (read) | <800ms | `eden-mcp` smoke + W28 tool catalog; exclude upstream LLM | **SOFT** — install/smoke OK; no staging latency histogram |
 | Issue created after trace | <60s | Async workers + stumble/signal path | **SOFT** — unit contracts; staging dogfood open |
-| Search (Typesense) F12 | <200ms | **Real Typesense 1.1M docs**: SearchService end-to-end p95 **184ms** with `search_cutoff_ms=150` (server keyword p95 555→164). Untuned p95 was ~446–551ms. Single-node laptop; 10M not yet run. `bench/results/f12-span-search-1m-typesense-20260804.json`. Harness (`scripts/bench_f12_span_search.py`) now has a `facet_by=None` vs `facet_by=DEFAULT_FACET_FIELDS` A/B toggle (`--facet-ab`, on by default) that measures the faceting-cost claim instead of asserting it, and computes `gate_met` programmatically from the run's own measured p95 vs `--gate-ms` (never hand-edited) — written to the results JSON, `null` when running the SQLite fallback proxy since that mode can't attest to the Typesense gate either way. Scale ladder (10k→100k→1M→10M) still needs `docker compose up typesense postgres`; **not runnable in this sandbox** — Docker CLI present but daemon unreachable (`docker info` fails to connect to the socket) and no standalone `typesense-server` binary is installed, so no additional rung (including 10k/100k) could be executed here. | **MET @1.1M** (tuned) — 10M staging follow-up; scale-ladder re-runs blocked on infra availability, not on missing harness features |
+| Search (Typesense) F12 | <200ms | **Real Typesense 1.1M docs**: SearchService end-to-end p95 **184ms** with `search_cutoff_ms=150` (server keyword p95 555→164). Untuned p95 was ~446–551ms. Single-node laptop; 10M not yet run. Prior artifact: `bench/results/f12-span-search-1m-typesense-20260804.json`. Harness (`scripts/bench_f12_span_search.py`): `--facet-ab` / `--no-facet-ab` (default on) measures faceting cost; `gate_met` is harness-computed from measured baseline p95 vs `--gate-ms` (null on SQLite proxy). **Scale ladder** (`--scale-ladder` / `--corpus-sizes 10k,100k,1m,10m`; `--dry-run` for manifest-only): manifest `bench/results/f12-span-search-scale-ladder-20260807.json` — **10k/100k measured** on SQLite proxy (contract wiring, `gate_met=null`); **1.1M prior Typesense** (`gate_met=true`, p95 184ms, not re-run here); **10M blocked_staging** (no fabricated numbers). Typesense rungs need `docker compose -f docker/docker-compose.yml up -d typesense` + env vars. | **MET @1.1M** (tuned) — 10M staging follow-up; ladder harness complete, 10M genuinely unmeasured |
 | StatGate (N08) | <80ms | Microbench, 2000 iterations over a 200-incident synthetic pool (mixed kinds/severities, 0–8 stumbles, ~20% with metric samples driving the numeric gate; pure compute, no I/O): p50=0.0090ms p95=0.0757ms p99=0.0801ms vs SLA p95<80ms p99<150ms (`tests/perf/test_statgate_microbench.py`) | **MET** (local) |
 | Ingest hot-path overhead | ≤5ms p99 | Evolution scorecard + `tests/perf/test_hot_path_microbench.py` | **MET** (local) |
 | Live stream publish (N11) | <500ms | Unit/local buffer proof (W27); staging p95 open | **SOFT** |
@@ -72,7 +72,7 @@
 | Cost controls | 5 | 1 | 0 |
 | Async/cache | 3 | 1 | 0 |
 
-**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; F12 span-search now met at 1.1M on real Typesense (`search_cutoff_ms=150`, p95 184ms), with a 10M-on-staging run as the remaining follow-up; human-facing p95s remain unproven. F12's facet-cost claim and `gate_met` field are now harness-computed (`--facet-ab`, programmatic gate check) rather than asserted/hand-edited; the 10k/100k/10M scale-ladder rungs remain genuinely blocked on infra (no reachable Docker daemon or Typesense binary in the current sandbox), not fabricated.
+**Overall:** **PARTIAL-GREEN** — core cost + ingest hot-path + StatGate (N08) latency gates met locally; F12 span-search met at 1.1M on real Typesense (`search_cutoff_ms=150`, p95 184ms), with 10M-on-staging as the remaining follow-up; human-facing p95s remain unproven. F12 harness now supports scale ladder (`--scale-ladder`, `--corpus-sizes`, `--dry-run`), facet A/B (`--facet-ab`), and programmatic `gate_met`. Ladder manifest `bench/results/f12-span-search-scale-ladder-20260807.json`: 10k/100k SQLite-proxy measured (wiring only), 1.1M Typesense prior artifact (`gate_met=true`), 10M `blocked_staging` — no numbers fabricated.
 
 ---
 
@@ -82,8 +82,15 @@
 # Hot-path / inject budget
 python -m bench.evolution.run --suite smoke
 
-# Portal structural (incl. W29 sweep contracts)
-cd clients/portal && bun test src/lib/__tests__/w29-portal.test.ts
+# F12 span-search scale ladder (manifest + per-rung JSON under bench/results/)
+TYPESENSE_HOST=localhost TYPESENSE_PORT=8108 TYPESENSE_API_KEY=<key> \
+  python scripts/bench_f12_span_search.py --scale-ladder
+
+# Manifest only (no seeding/benchmarking) when Typesense is down
+python scripts/bench_f12_span_search.py --scale-ladder --dry-run
+
+# Portal structural contracts — w29-portal.test.ts DELETED (cab7ae32); use surviving portal tests:
+cd clients/portal && bun test src/lib/api/__tests__/portal.test.ts
 
 # Packaging dry-run
 bash scripts/publish_sdk.sh dry-run

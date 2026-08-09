@@ -10,7 +10,6 @@ from eden.evaluation.ci_eval_commit_status import build_check_payload, post_comm
 from eden.evaluation.ci_eval_history import CIEvalHistoryStore
 from eden.evaluation.ci_webhook import build_score_table, render_summary_md
 
-
 # ── score table ──────────────────────────────────────────────────────
 
 def test_score_table_no_baseline_is_new() -> None:
@@ -52,6 +51,63 @@ def test_score_table_improvement_direction() -> None:
     assert by["fail_rate"]["verdict"] == "improvement"
 
 
+def test_score_table_includes_per_case_f51_rows() -> None:
+    rows = build_score_table(
+        {"passed": 1, "failed": 0, "skipped": 0, "errors": 0, "total": 1},
+        {"passed": 1, "failed": 0, "skipped": 0, "errors": 0, "total": 1},
+        f51_grades=[
+            {
+                "case_id": "c1",
+                "fingerprint": "fp-c1",
+                "current_score": 0.9,
+                "reason": "ok",
+            },
+            {
+                "case_id": "c2",
+                "fingerprint": None,
+                "current_score": 0.4,
+                "reason": "ok",
+            },
+        ],
+        baseline_f51_grades=[
+            {"case_id": "c1", "current_score": 0.8},
+            {"case_id": "c2", "current_score": 0.5},
+        ],
+    )
+    metrics = {r["metric"] for r in rows}
+    assert "pass_rate" in metrics
+    assert "case:fp-c1" in metrics
+    assert "case:c2" in metrics
+    by = {r["metric"]: r for r in rows}
+    assert by["case:fp-c1"]["verdict"] == "improvement"
+    assert by["case:fp-c1"]["delta"] == pytest.approx(0.1)
+    assert by["case:c2"]["verdict"] == "regression"
+    assert by["case:c2"]["delta"] == pytest.approx(-0.1)
+
+
+def test_score_table_per_case_no_baseline_is_new() -> None:
+    rows = build_score_table(
+        {"passed": 1, "failed": 0, "skipped": 0, "errors": 0, "total": 1},
+        None,
+        f51_grades=[{"case_id": "c9", "current_score": 1.0, "reason": "ok"}],
+    )
+    case_rows = [r for r in rows if r["metric"].startswith("case:")]
+    assert len(case_rows) == 1
+    assert case_rows[0]["verdict"] == "new"
+    assert case_rows[0]["baseline"] is None
+
+
+def test_score_table_per_case_unscored_is_skipped() -> None:
+    rows = build_score_table(
+        {"passed": 0, "failed": 0, "skipped": 1, "errors": 0, "total": 1},
+        None,
+        f51_grades=[{"case_id": "c0", "current_score": None, "reason": "no_scorers"}],
+    )
+    case_rows = [r for r in rows if r["metric"].startswith("case:")]
+    assert case_rows[0]["verdict"] == "skipped"
+    assert case_rows[0]["current"] is None
+
+
 def test_render_summary_md_has_table_and_verdict() -> None:
     data = {
         "summary": {
@@ -70,6 +126,26 @@ def test_render_summary_md_has_table_and_verdict() -> None:
     assert "Regression gate: **block**" in md
     assert "| metric | baseline | current | delta | verdict |" in md
     assert "pass_rate" in md
+
+
+def test_render_summary_md_includes_scorer_gate() -> None:
+    data = {
+        "summary": {"passed": 1, "failed": 0, "skipped": 0, "errors": 0, "total": 1, "ok": True},
+        "score_table": build_score_table(
+            {"passed": 1, "failed": 0, "skipped": 0, "errors": 0, "total": 1}, None
+        ),
+        "scorer_gate": {
+            "ran": True,
+            "ok": False,
+            "mean_score": 0.8,
+            "baseline_mean_score": 1.0,
+            "passed": 0,
+            "failed": 1,
+            "errors": 0,
+        },
+    }
+    md = render_summary_md(data)
+    assert "Scorer gate: **block**" in md
 
 
 # ── history shaping ──────────────────────────────────────────────────

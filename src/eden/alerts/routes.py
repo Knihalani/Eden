@@ -55,6 +55,7 @@ class NLRuleUpdate(BaseModel):
     triage_enabled: bool | None = None
     channels: dict[str, Any] | None = None
     enabled: bool | None = None
+    severity: str | None = None
 
 
 class OverrideRequest(BaseModel):
@@ -66,6 +67,20 @@ class AcknowledgeRequest(BaseModel):
         default=True,
         description="True = mute (acknowledged); False = unmute.",
     )
+
+
+class SuppressionRuleCreate(BaseModel):
+    pattern: str = Field(..., min_length=1, max_length=512)
+    reason: str = Field(default="", max_length=1_000)
+    window_hours: int | None = Field(default=None, ge=1, le=24 * 365)
+    enabled: bool = True
+
+
+class SuppressionRuleUpdate(BaseModel):
+    pattern: str | None = Field(default=None, min_length=1, max_length=512)
+    reason: str | None = Field(default=None, max_length=1_000)
+    window_hours: int | None = Field(default=None, ge=1, le=24 * 365)
+    enabled: bool | None = None
 
 
 async def _require_org_member(
@@ -157,6 +172,7 @@ async def create_nl_alert_rule(
             triage_enabled=body.triage_enabled,
             channels=body.channels,
             enabled=body.enabled,
+            severity=body.severity,
             created_by=user_id,
         )
         await AlertAsCode().compile(
@@ -207,6 +223,7 @@ async def update_nl_alert_rule(
         triage_enabled=body.triage_enabled,
         channels=body.channels,
         enabled=body.enabled,
+        severity=body.severity,
     )
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -321,3 +338,84 @@ async def acknowledge_alert_event(
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Alert not found")
     return {"status": "ok", "alert_id": alert_id, "acknowledged": True}
+
+
+@router.get("/orgs/{org_id}/alert-suppression-rules")
+async def list_alert_suppression_rules(
+    org_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    eden_org_id = await _require_org_member(org_id, user, payload)
+    rules = await repo.list_suppression_rules(eden_org_id)
+    return {"rules": rules, "total": len(rules)}
+
+
+@router.post("/orgs/{org_id}/alert-suppression-rules")
+async def create_alert_suppression_rule(
+    body: SuppressionRuleCreate,
+    org_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    eden_org_id = await _require_org_admin(org_id, user, payload)
+    user_id = await eden_user_id_from_auth(user)
+    pattern_error = repo.validate_suppression_pattern(body.pattern)
+    if pattern_error:
+        raise HTTPException(status_code=400, detail=pattern_error)
+    try:
+        rule = await repo.create_suppression_rule(
+            org_id=eden_org_id,
+            pattern=body.pattern.strip(),
+            reason=body.reason.strip(),
+            window_hours=body.window_hours,
+            enabled=body.enabled,
+            created_by_user_id=user_id,
+        )
+    except Exception as exc:
+        logger.exception("create_alert_suppression_rule failed org=%s", org_id)
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Could not save suppression rule"),
+        ) from None
+    return rule
+
+
+@router.patch("/orgs/{org_id}/alert-suppression-rules/{rule_id}")
+async def update_alert_suppression_rule(
+    body: SuppressionRuleUpdate,
+    org_id: str = Path(...),
+    rule_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    eden_org_id = await _require_org_admin(org_id, user, payload)
+    if body.pattern is not None:
+        pattern_error = repo.validate_suppression_pattern(body.pattern)
+        if pattern_error:
+            raise HTTPException(status_code=400, detail=pattern_error)
+    rule = await repo.update_suppression_rule(
+        eden_org_id,
+        rule_id,
+        pattern=body.pattern.strip() if body.pattern is not None else None,
+        reason=body.reason.strip() if body.reason is not None else None,
+        window_hours=body.window_hours,
+        enabled=body.enabled,
+    )
+    if not rule:
+        raise HTTPException(status_code=404, detail="Suppression rule not found")
+    return rule
+
+
+@router.delete("/orgs/{org_id}/alert-suppression-rules/{rule_id}")
+async def delete_alert_suppression_rule(
+    org_id: str = Path(...),
+    rule_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    eden_org_id = await _require_org_admin(org_id, user, payload)
+    deleted = await repo.delete_suppression_rule(eden_org_id, rule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Suppression rule not found")
+    return {"status": "ok", "rule_id": rule_id}

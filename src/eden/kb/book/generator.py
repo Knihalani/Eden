@@ -128,6 +128,11 @@ class BookGenerator:
             else:
                 sections.append("## Proven fixes\n_No promoted nudges yet._")
 
+            from eden.kb.artifact_context import format_book_section, list_agent_context
+
+            ctx_rows = await list_agent_context(org_id, agent_id)
+            sections.append(format_book_section(ctx_rows))
+
             sections.append("## Tool/MCP gotchas\n_Review procedural KB skills for patterns._")
             sections.append("## Do-not-repeat\n_Archived nudges and regressions appear here._")
             return "\n\n".join(sections)

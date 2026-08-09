@@ -60,3 +60,15 @@ repos:
           - openai>=1.0.0
           - types-python-jose
           - types-passlib
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # LIMIT-without-ORDER-BY ratchet (OPT-38)
+  # ─────────────────────────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: lint-unordered-limit
+        name: LIMIT without ORDER BY (ratchet)
+        entry: uv run python scripts/lint_unordered_limit.py
+        language: system
+        files: ^src/eden/.*\.py$
+        pass_filenames: false

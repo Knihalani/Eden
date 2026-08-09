@@ -12,35 +12,15 @@ import contextlib
 import logging
 import os
 import socket
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
 
+from eden.observability.simple_metrics import Gauge
 from eden.storage.empty_cooldown import next_grid_delay
 from eden.storage.redis import Lock
 
 logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def leader_session(
-    name: str,
-    *,
-    ttl: int = 90,
-) -> AsyncIterator[bool]:
-    """Try to acquire a leader lock for the duration of the context.
-
-    Yields ``True`` when this process is the leader, ``False`` otherwise.
-    The lock is released on exit.
-    """
-    lock = Lock(name, ttl=ttl, prefix="eden:leader")
-    acquired = await lock.acquire()
-    if not acquired:
-        yield False
-        return
-    try:
-        yield True
-    finally:
-        await lock.release()
 
 
 async def _extend_lock_periodically(
@@ -199,12 +179,186 @@ def leader_work_failures() -> dict[str, str]:
     return dict(_work_failures)
 
 
+# ── Watermark batch coverage (OPT-28) ─────────────────────────────────────
+#
+# Leader-gated cron loops that pick a bounded batch via
+# ``fetch_stale_candidates`` can look perfectly healthy while silently
+# starving everything past ``LIMIT`` when selection regresses to an
+# unordered query. Exception-based monitoring cannot see that — the tick
+# succeeds, heartbeats stay green, and the excluded tail only grows.
+#
+# These gauges compare "entities processed in the last N days" against the
+# live candidate population for each watermarked job. A shrinking ratio is
+# the alertable signal that batch selection is no longer cycling.
+
+
+_DEFAULT_COVERAGE_WINDOW_DAYS = 7
+_COVERAGE_WARN_RATIO = 0.5
+
+
+@dataclass(frozen=True)
+class _WatermarkCoverageJob:
+    name: str
+    candidate_count_sql: str
+    processed_recent_sql: str
+
+
+_WATERMARK_COVERAGE_JOBS: tuple[_WatermarkCoverageJob, ...] = (
+    _WatermarkCoverageJob(
+        "auto_curator",
+        "SELECT COUNT(*)::float FROM organizations",
+        (
+            "SELECT COUNT(*)::float FROM auto_curator_watermark "
+            "WHERE last_processed_at > NOW() - make_interval(days => $1)"
+        ),
+    ),
+    _WatermarkCoverageJob(
+        "classifier_retrain",
+        (
+            "SELECT COUNT(*)::float FROM ("
+            "SELECT DISTINCT org_id, signal_id FROM signal_events "
+            "WHERE detected_at > NOW() - INTERVAL '7 days'"
+            ") t"
+        ),
+        (
+            "SELECT COUNT(*)::float FROM classifier_retrain_watermark "
+            "WHERE last_processed_at > NOW() - make_interval(days => $1)"
+        ),
+    ),
+    _WatermarkCoverageJob(
+        "drift_baselines",
+        (
+            "SELECT COUNT(*)::float FROM ("
+            "SELECT DISTINCT org_id, agent_id FROM agent_issues "
+            "WHERE last_seen >= NOW() - INTERVAL '7 days' "
+            "AND agent_id IS NOT NULL"
+            ") t"
+        ),
+        (
+            "SELECT COUNT(*)::float FROM drift_baseline_watermark "
+            "WHERE last_processed_at > NOW() - make_interval(days => $1)"
+        ),
+    ),
+    _WatermarkCoverageJob(
+        "retention_archive",
+        "SELECT COUNT(*)::float FROM organizations",
+        (
+            "SELECT COUNT(*)::float FROM retention_archive_watermark "
+            "WHERE last_processed_at > NOW() - make_interval(days => $1)"
+        ),
+    ),
+)
+
+
+class _WatermarkCoverageMetrics:
+    candidates_total = Gauge(
+        "watermark_coverage_candidates_total",
+        "Live candidate population for a watermarked batch job",
+        labelnames=("job",),
+    )
+    processed_recent = Gauge(
+        "watermark_coverage_processed_recent_total",
+        "Distinct entities processed inside the coverage window",
+        labelnames=("job", "window_days"),
+    )
+    ratio = Gauge(
+        "watermark_coverage_ratio",
+        "processed_recent / candidates_total for a watermarked batch job",
+        labelnames=("job", "window_days"),
+    )
+
+
+_last_watermark_coverage: dict[str, dict[str, float]] = {}
+
+
+def watermark_coverage_snapshot() -> dict[str, dict[str, float]]:
+    """Last computed coverage per job — surfaced on the worker heartbeat."""
+    return {job: dict(stats) for job, stats in _last_watermark_coverage.items()}
+
+
+def reset_watermark_coverage() -> None:
+    """Test-only: clear cached coverage snapshots."""
+    _last_watermark_coverage.clear()
+    _WatermarkCoverageMetrics.candidates_total.reset()
+    _WatermarkCoverageMetrics.processed_recent.reset()
+    _WatermarkCoverageMetrics.ratio.reset()
+
+
+async def refresh_watermark_coverage(
+    pg: Any,
+    *,
+    window_days: int = _DEFAULT_COVERAGE_WINDOW_DAYS,
+) -> dict[str, dict[str, float]]:
+    """Recompute coverage gauges for every registered watermarked job."""
+    window_key = str(window_days)
+    out: dict[str, dict[str, float]] = {}
+    for job in _WATERMARK_COVERAGE_JOBS:
+        try:
+            total = float(await pg.fetchval(job.candidate_count_sql) or 0.0)
+            recent = float(
+                await pg.fetchval(job.processed_recent_sql, window_days) or 0.0
+            )
+        except Exception as exc:
+            logger.warning(
+                "leader: watermark coverage query failed for %s: %s",
+                job.name,
+                exc,
+            )
+            continue
+        ratio = (recent / total) if total > 0 else 1.0
+        stats = {
+            "candidates_total": total,
+            "processed_recent": recent,
+            "ratio": ratio,
+            "window_days": float(window_days),
+        }
+        out[job.name] = stats
+        _last_watermark_coverage[job.name] = stats
+        _WatermarkCoverageMetrics.candidates_total.labels(job=job.name).set(total)
+        _WatermarkCoverageMetrics.processed_recent.labels(
+            job=job.name, window_days=window_key
+        ).set(recent)
+        _WatermarkCoverageMetrics.ratio.labels(
+            job=job.name, window_days=window_key
+        ).set(ratio)
+        if total > 0 and ratio < _COVERAGE_WARN_RATIO:
+            logger.warning(
+                "leader: watermark coverage low for %s: %.0f/%.0f processed "
+                "in last %d days (ratio=%.3f) — batch selection may be "
+                "starving candidates",
+                job.name,
+                recent,
+                total,
+                window_days,
+                ratio,
+            )
+    return out
+
+
+def record_watermark_batch(
+    job: str,
+    *,
+    batch_size: int,
+    candidate_total: int | None = None,
+) -> None:
+    """Record the most recent batch size for a watermarked job.
+
+    Cheap in-process signal for the last tick; :func:`refresh_watermark_coverage`
+    is the durable cross-window check against the watermark tables.
+    """
+    stats = _last_watermark_coverage.setdefault(job, {})
+    stats["last_batch_size"] = float(batch_size)
+    if candidate_total is not None:
+        stats["last_candidate_total"] = float(candidate_total)
+
+
 def reset_leader_failure_counts() -> None:
     """Test-only: clear the failure counters."""
     _acquire_failures.clear()
     _work_failures.clear()
     _tick_counts.clear()
     _pg_fallback_held.clear()
+    reset_watermark_coverage()
 
 
 async def run_if_leader(

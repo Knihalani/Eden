@@ -9,6 +9,7 @@ import { installHttpCapture } from "./http-capture.js";
 import {
   patchAllPrototypes,
   patchAllPrototypesAsync,
+  EMPTY_PROTOTYPE_PATCH_RESULT,
   type PrototypePatchResult,
 } from "./prototype-instrument.js";
 import { wrapAnthropic } from "./instrumentations/anthropic.js";
@@ -40,8 +41,10 @@ export interface InstrumentOptions extends TraceOptions {
    * AFTER `instrument()` runs is traced automatically — no `wrap*()`
    * call needed at each call site. Mirrors the Python SDK's
    * `eden.instrument()` one-liner UX. Currently covers OpenAI (and,
-   * transitively, xAI/Grok — same client class) and Anthropic; see
-   * `patched` on the return value for which frameworks actually got
+   * transitively, xAI/Grok — same client class), Anthropic, Groq,
+   * LangChain (`BaseChatModel`), Gemini, and Mistral; Vercel AI
+   * (`ai`) remains wrap-only (ESM namespace immutability — use
+   * `wrapVercelAI`); see `patched` on the return value for which actually got
    * patched in THIS process (a framework absent from the consuming
    * app's `node_modules` is silently skipped, not an error).
    *
@@ -110,14 +113,14 @@ export function instrument(opts: InstrumentOptions = {}): InstrumentResult {
   const autoPatchEnabled = opts.autoPatch !== false;
   const patched: PrototypePatchResult = autoPatchEnabled
     ? patchAllPrototypes(opts)
-    : { openai: false, anthropic: false };
+    : { ...EMPTY_PROTOTYPE_PATCH_RESULT };
   // Fire-and-forget: covers native-ESM consumers the sync (CJS
   // `require`) pass above can't reach. See `patchedAsync`'s doc for
   // why this is a genuinely separate pass, not redundant with the
   // one above.
   const patchedAsync = autoPatchEnabled
     ? patchAllPrototypesAsync(opts)
-    : Promise.resolve<PrototypePatchResult>({ openai: false, anthropic: false });
+    : Promise.resolve<PrototypePatchResult>({ ...EMPTY_PROTOTYPE_PATCH_RESULT });
   return {
     detected: detectInstalledFrameworks(opts),
     patched,

@@ -23,6 +23,8 @@ def _fake_settings():
     # Low threshold so a couple of test rows clear the "enough topics
     # to bother clustering" gate without needing 20 fixture rows.
     s.patterns_clusterer_min_cluster_size = 1
+    s.patterns_clusterer_trend_recent_days = 1
+    s.patterns_clusterer_trend_baseline_days = 1
     return s
 
 

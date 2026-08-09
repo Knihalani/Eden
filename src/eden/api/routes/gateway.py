@@ -833,8 +833,7 @@ def _get_or_build_upstream_client(base_url: str, api_key: str):
     function deliberately bypasses that cache (it always builds a
     fresh client unless the URL/key pair has been seen before) so
     a test that sets ``base_url="https://openrouter.ai/api/v1"``
-    with a dummy key still gets the stub. The compatibility shim
-    is in ``_get_async_client_for_legacy_tests``.
+    with a dummy key still gets the stub.
 
     Audit 2026-07-06 — return type is a runtime-resolved class,
     not a forward reference, so callers can isinstance() it.
@@ -1039,19 +1038,6 @@ def _parse_bool_header(value: str) -> bool:
     if lowered in _FALSY:
         return False
     return False
-
-
-def _get_async_client_for_legacy_tests() -> AsyncOpenAI | None:
-    """Return the module-level ``_async_client`` if it has been set
-    (by tests) — otherwise ``None``.
-
-    The legacy tests stub ``_async_client`` to a ``MagicMock`` to
-    intercept every gateway call regardless of per-request URL. This
-    helper exists so those tests keep passing while the production
-    path uses ``_get_or_build_upstream_client``. Tests should keep
-    stubbing ``_async_client``; this helper is the read-side bridge.
-    """
-    return _async_client
 
 
 async def _resolve_request_pii_policy(

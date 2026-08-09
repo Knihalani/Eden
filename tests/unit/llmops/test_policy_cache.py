@@ -110,8 +110,8 @@ class TestCacheFailOpen:
     ):
         """When the DB resolver raises, the cache returns a default
         policy rather than crashing the gateway."""
-        from eden.llmops.policy_cache import get_policy_for_tenant
         from eden.data_platform.pii import PIIPolicy
+        from eden.llmops.policy_cache import get_policy_for_tenant
 
         async def _boom(tenant_id):
             raise RuntimeError("DB unreachable")

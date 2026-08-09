@@ -429,6 +429,21 @@ class QualityValidator:
             return None
 
 
+def _resolve_cost_attribution(
+    task: PipelineTask,
+    *,
+    org_id: str | None,
+    user_id: str | None,
+    feature: str | None,
+    kwargs: dict[str, Any],
+) -> tuple[str | None, str | None, str]:
+    """Resolve org/user/feature for ``cost_context`` (OPT-18)."""
+    oid = org_id if org_id is not None else task.org_id
+    uid = user_id if user_id is not None else task.user_id
+    feat = feature if feature is not None else kwargs.pop("feature", None)
+    return oid, uid, (feat or "unknown").lower()
+
+
 class ModelRouter:
     """Routes LLM requests through T1→T2→T3 tiers with caching and validation.
 
@@ -463,6 +478,9 @@ class ModelRouter:
         task: PipelineTask,
         prompt: str,
         system_prompt: str | None = None,
+        org_id: str | None = None,
+        user_id: str | None = None,
+        feature: str | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Route an LLM request through the tiered fallback chain (synchronous).
@@ -475,6 +493,11 @@ class ModelRouter:
 
         For async usage, call ``aroute()`` instead.
         """
+        from eden.llmops.cost_ledger import cost_context
+
+        oid, uid, feat = _resolve_cost_attribution(
+            task, org_id=org_id, user_id=user_id, feature=feature, kwargs=kwargs
+        )
         # Use heuristic classification in sync path to avoid blocking
         classification = self.classifier._heuristic_classify(task)
         # Default for sync path when classification is None
@@ -494,14 +517,17 @@ class ModelRouter:
             for model in models:
                 try:
                     # Override the model slot to use our chosen model
-                    response = self.llm_client.call(
-                        agent=task.agent,
-                        prompt=prompt,
-                        slot="reasoning",
-                        system_prompt=system_prompt,
-                        model=model,
-                        **kwargs,
-                    )
+                    with cost_context(
+                        oid, feat, agent_id=task.agent, user_id=uid
+                    ):
+                        response = self.llm_client.call(
+                            agent=task.agent,
+                            prompt=prompt,
+                            slot="reasoning",
+                            system_prompt=system_prompt,
+                            model=model,
+                            **kwargs,
+                        )
 
                     # Validate (lightweight — no LLM judge in sync path)
                     validation = self.validator.validate_sync(response, task, tier)
@@ -542,6 +568,7 @@ class ModelRouter:
         system_prompt: str | None = None,
         org_id: str | None = None,
         user_id: str | None = None,
+        feature: str | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Async route with full classification and validation.
@@ -551,6 +578,11 @@ class ModelRouter:
         """
         import asyncio
 
+        from eden.llmops.cost_ledger import cost_context
+
+        oid, uid, feat = _resolve_cost_attribution(
+            task, org_id=org_id, user_id=user_id, feature=feature, kwargs=kwargs
+        )
         classification = await self.classifier.classify(task)
         start_tier = classification.tier
         if _chat_tiers_share_model():
@@ -571,19 +603,20 @@ class ModelRouter:
                     # was booked against no org — i.e. dropped before it
                     # reached the ledger. See cost_ledger.bind_event_loop
                     # for the other half of that bug.
-                    response = await asyncio.to_thread(
-                        # S-21: ``m=model`` default-arg binds
-                        # ``model`` at lambda-creation time so the
-                        # late-binding-for-loop bug never recurs.
-                        lambda m=model: self.llm_client.call(  # type: ignore[misc]
-                            agent=task.agent,
-                            prompt=prompt,
-                            slot="reasoning",
-                            system_prompt=system_prompt,
-                            model=m,
-                            **kwargs,
-                        ),
-                    )
+                    def _call_routed(m: str = model) -> LLMResponse:
+                        with cost_context(
+                            oid, feat, agent_id=task.agent, user_id=uid
+                        ):
+                            return self.llm_client.call(
+                                agent=task.agent,
+                                prompt=prompt,
+                                slot="reasoning",
+                                system_prompt=system_prompt,
+                                model=m,
+                                **kwargs,
+                            )
+
+                    response = await asyncio.to_thread(_call_routed)
 
                     validation = await self.validator.validate(response, task, tier)
                     if validation.passed:

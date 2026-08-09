@@ -38,6 +38,9 @@ class RegressionRunResult:
     # Per-case outcome: {case_id, fingerprint, status, reason} for every
     # case, including skipped/error ones (visibility, N01 fail-closed).
     cases: list[dict[str, Any]] = field(default_factory=list)
+    # F51-style per-case scorer grades (control vs treatment via grade_datapoint
+    # in CI); parallel to the cheap canary path, not a replacement for it.
+    f51_grades: list[dict[str, Any]] = field(default_factory=list)
     status: str = "completed"
     created_at: str = field(
         default_factory=lambda: datetime.now(UTC).isoformat()
@@ -55,6 +58,7 @@ class RegressionRunResult:
             "errors": self.errors,
             "failures": list(self.failures),
             "cases": list(self.cases),
+            "f51_grades": list(self.f51_grades),
             "status": self.status,
             "created_at": self.created_at,
         }
@@ -67,11 +71,11 @@ class RegressionRunResult:
         ``regression_gate_skip_policy="allow"``; under ``"block"`` they
         fail it too.
         """
-        if self.failed > 0 or self.errors > 0:
-            return False
-        if self.skipped > 0 and _skip_policy() == "block":
-            return False
-        return True
+        return not (
+            self.failed > 0
+            or self.errors > 0
+            or (self.skipped > 0 and _skip_policy() == "block")
+        )
 
 
 def _skip_policy() -> str:
@@ -119,7 +123,7 @@ class RegressionRunner:
         # cases so a 100-case suite cannot blow through the caps.
         replay_budget = {"llm_steps": 0, "cost_usd": 0.0}
         for case in cases:
-            status, reason = await self._evaluate_case(
+            status, reason, meta = await self._evaluate_case(
                 case, replay_budget=replay_budget
             )
             counts[status] += 1
@@ -129,9 +133,12 @@ class RegressionRunner:
                 "status": status,
                 "reason": reason,
             }
+            if meta:
+                entry.update(meta)
             case_results.append(entry)
             if status in ("failed", "error"):
                 failures.append(entry)
+        f51_grades = await self._run_f51_grades(cases, case_results)
         result = RegressionRunResult(
             id=str(uuid.uuid4()),
             org_id=org_id,
@@ -143,6 +150,7 @@ class RegressionRunner:
             errors=counts["error"],
             failures=failures,
             cases=case_results,
+            f51_grades=f51_grades,
         )
         await self._persist(result)
         return result
@@ -184,12 +192,14 @@ class RegressionRunner:
         case: RegressionCase,
         *,
         replay_budget: dict[str, Any] | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, dict[str, Any]]:
         """Evaluate one case.
 
-        Returns ``(status, reason)`` with status in
+        Returns ``(status, reason, meta)`` with status in
         ``{"passed", "failed", "skipped", "error"}``. Infrastructure
         failure is an *error*, never a silent pass (fail closed).
+        ``meta`` may include replay artifacts such as
+        ``regenerated_output``.
 
         When ``regression_replay_v1`` is ON and the case carries a
         stored failure signature + checkpoint reference, the stored
@@ -213,34 +223,73 @@ class RegressionRunner:
                         case.org_id, cp_trace_id, sig, budget=replay_budget
                     )
                     if verdict is not None:
-                        return verdict
+                        status, reason, meta = verdict
+                        return status, reason, meta
                 # Replay impossible (no checkpoint / signature absent in
                 # the original recording) — fall back to post-hoc trace
                 # checks; when the case has no trace constraints either,
                 # skip honestly.
                 if not has_constraints:
-                    return "skipped", "no_checkpoint"
+                    return "skipped", "no_checkpoint", {}
 
         if not no_stumble:
-            return "skipped", "no_constraints"
+            return "skipped", "no_constraints", {}
         trace_id = case.source_trace_id or (case.input_data or {}).get("trace_id")
         if not trace_id:
-            return "skipped", "no_trace"
+            return "skipped", "no_trace", {}
         try:
             kinds = await self._stumble_kinds_for_trace(str(trace_id))
         except TelemetryUnavailableError:
-            return "error", "telemetry_unavailable"
+            return "error", "telemetry_unavailable", {}
         blocked = [k for k in no_stumble if k in kinds]
         if blocked:
-            return "failed", f"stumble kinds present: {blocked}"
+            return "failed", f"stumble kinds present: {blocked}", {}
         if expected.get("statgate_pass") is True:
             try:
                 sg = await self._statgate_pass(str(trace_id))
             except TelemetryUnavailableError:
-                return "error", "telemetry_unavailable"
+                return "error", "telemetry_unavailable", {}
             if not sg:
-                return "failed", "statgate failed on trace"
-        return "passed", "ok"
+                return "failed", "statgate failed on trace", {}
+        return "passed", "ok", {}
+
+    async def _run_f51_grades(
+        self,
+        cases: list[RegressionCase],
+        case_results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Score regression cases with F51-style ``grade_datapoint`` inputs.
+
+        Reuses the playground scorer path (same primitives as
+        ``OfflineExperimentRunner`` and ``prompt_regression_gate``) against the
+        org/agent unified dataset. Treatment output prefers replay
+        ``regenerated_output`` (FEAT-96) when present.
+        """
+        from eden.evaluation.prompt_regression_gate import _evaluate_case
+
+        treatment_outputs = {
+            str(row["case_id"]): str(row["regenerated_output"])
+            for row in case_results
+            if row.get("regenerated_output")
+        }
+        grades: list[dict[str, Any]] = []
+        for case in cases:
+            scored = _evaluate_case(
+                case,
+                global_specs=None,
+                treatment_outputs=treatment_outputs or None,
+            )
+            grades.append(
+                {
+                    "case_id": case.id,
+                    "fingerprint": case.fingerprint,
+                    "current_score": scored.get("aggregate_score"),
+                    "status": scored.get("status"),
+                    "reason": scored.get("reason"),
+                    "scores": scored.get("scores") or [],
+                }
+            )
+        return grades
 
     # ── replay verification (regression_replay_v1) ──────────────
 
@@ -300,28 +349,28 @@ class RegressionRunner:
         sig: Any,
         *,
         budget: dict[str, Any] | None,
-    ) -> tuple[str, str] | None:
+    ) -> tuple[str, str, dict[str, Any]] | None:
         """Replay the stored failing step against current behavior.
 
-        Returns a final ``(status, reason)`` verdict, or ``None`` when
-        replay is impossible for this case (no checkpoints / signature
-        absent in the original) and post-hoc fallback should apply.
-        Infrastructure failure and cost-cap aborts are errors — replay
-        can never silently pass (fail closed).
+        Returns a final ``(status, reason, meta)`` verdict, or ``None``
+        when replay is impossible for this case (no checkpoints /
+        signature absent in the original) and post-hoc fallback should
+        apply. Infrastructure failure and cost-cap aborts are errors —
+        replay can never silently pass (fail closed).
         """
         max_steps, max_cost = self._replay_caps()
         if budget is not None and (
             budget.get("llm_steps", 0) >= max_steps
             or budget.get("cost_usd", 0.0) >= max_cost
         ):
-            return "error", "cost_cap"
+            return "error", "cost_cap", {}
         try:
             from eden.improvement.replay_verify import replay_case_signature
 
             result = await replay_case_signature(org_id, trace_id, sig)
         except Exception as exc:
             logger.warning("regression replay failed: %s", exc)
-            return "error", "replay_failed"
+            return "error", "replay_failed", {}
         if budget is not None:
             budget["llm_steps"] = budget.get("llm_steps", 0) + int(
                 result.traces_checked or 0
@@ -329,15 +378,18 @@ class RegressionRunner:
             budget["cost_usd"] = budget.get("cost_usd", 0.0) + float(
                 result.cost_usd or 0.0
             )
+        meta: dict[str, Any] = {}
+        if result.regenerated_output is not None:
+            meta["regenerated_output"] = result.regenerated_output
         if result.status == "passed":
-            return "passed", "replay_signature_absent"
+            return "passed", "replay_signature_absent", meta
         if result.status == "failed":
-            return "failed", "replay_signature_present"
+            return "failed", "replay_signature_present", meta
         if result.reason == "cost_cap":
-            return "error", "cost_cap"
+            return "error", "cost_cap", meta
         if result.reason in ("no_checkpoints", "signature_absent_in_original"):
             return None  # honest fallback to post-hoc verification
-        return "error", "replay_failed"
+        return "error", "replay_failed", meta
 
     async def _stumble_kinds_for_trace(self, trace_id: str) -> set[str]:
         client = await self._client()

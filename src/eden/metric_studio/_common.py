@@ -2,7 +2,7 @@
 
 Centralises:
 * the envelope shape used for live (non-stub) responses
-  (``_ok_envelope``, ``_not_implemented_envelope``) — same
+  (``_ok_envelope``, ``_validation_envelope``) — same
   shape as the Cat 16 ``_common.py`` so the front-end renders
   uniformly
 * the persistence pattern (``_delete_then_insert``) used by
@@ -76,19 +76,6 @@ def _ok_envelope(feature: str, data: dict[str, Any]) -> dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat(),
         "data": data,
     }
-
-
-def _not_implemented_envelope(
-    feature: str, message: str, *, data: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    """Deprecated alias for :func:`_validation_envelope`.
-
-    Kept so older call sites and tests that patch the name
-    keep working. Prefer :func:`_validation_envelope` for
-    input errors and :func:`_error_envelope` for runtime
-    failures (LLM missing, etc.).
-    """
-    return _validation_envelope(feature, message, data=data)
 
 
 def _validation_envelope(

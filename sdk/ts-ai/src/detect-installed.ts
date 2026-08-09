@@ -53,6 +53,11 @@ export function _safeRequire(name: string): unknown {
   }
 }
 
+/**
+ * Report which LLM SDK packages are importable in the current
+ * process. Detection-only — does not install instrumentation; call
+ * `instrument()` or the returned `wrap*` helpers to trace calls.
+ */
 export function detectInstalledFrameworks(
   _opts: TraceOptions = {},
 ): AutoInstrumentResult {
@@ -143,6 +148,12 @@ export function detectInstalledFrameworks(
   return result;
 }
 
+/**
+ * @deprecated Use {@link detectInstalledFrameworks} instead. This name
+ * is misleading — it does **not** install instrumentation; it only
+ * reports which LLM SDKs are importable (same as
+ * `detectInstalledFrameworks()`).
+ */
 export function autoInstrument(opts: TraceOptions = {}): AutoInstrumentResult {
   return detectInstalledFrameworks(opts);
 }

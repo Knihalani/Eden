@@ -78,6 +78,14 @@ class TestLabelingPathOrgAccess:
         )
         assert r.status_code == 403, r.text
 
+    def test_skip_bulk_cross_org_403(self) -> None:
+        client = _app_with_cross_org_denial()
+        r = client.post(
+            "/orgs/org-B/labeling/skip/bulk",
+            json={"item_ids": ["00000000-0000-0000-0000-000000000001"]},
+        )
+        assert r.status_code == 403, r.text
+
     def test_list_queues_cross_org_403(self) -> None:
         client = _app_with_cross_org_denial()
         r = client.get("/orgs/org-B/labeling/queues")
@@ -145,6 +153,63 @@ async def test_list_items_member_uses_resolved_eden_org(monkeypatch) -> None:
 
     assert resp.status_code == 200, resp.text
     assert captured["org_id"] == "eden-org-resolved"
+
+
+@pytest.mark.asyncio
+async def test_skip_bulk_member_calls_service(monkeypatch) -> None:
+    """FEAT-117: bulk skip passes org, annotator, and item ids to the service."""
+    from httpx import ASGITransport, AsyncClient
+
+    captured: dict[str, object] = {}
+
+    class _StubSvc:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        async def skip_bulk(
+            self,
+            *,
+            org_id: str,
+            item_ids: list[str],
+            annotator_id: str,
+            reason: str | None = None,
+        ) -> int:
+            captured["org_id"] = org_id
+            captured["item_ids"] = item_ids
+            captured["annotator_id"] = annotator_id
+            captured["reason"] = reason
+            return len(item_ids)
+
+    application = FastAPI()
+    application.include_router(labeling_routes.router)
+    application.dependency_overrides[require_path_org_access] = lambda: "org-1"
+    application.dependency_overrides[get_current_user] = lambda: {"user_id": "u-9"}
+
+    monkeypatch.setattr(
+        labeling_routes,
+        "get_postgres_client",
+        AsyncMock(return_value=MagicMock()),
+    )
+    monkeypatch.setattr(labeling_routes, "LabelingService", _StubSvc)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as http:
+        resp = await http.post(
+            "/orgs/org-1/labeling/skip/bulk",
+            json={
+                "item_ids": ["item-a", "item-b"],
+                "reason": "ambiguous",
+            },
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"skipped": True, "skipped_count": 2}
+    assert captured == {
+        "org_id": "org-1",
+        "item_ids": ["item-a", "item-b"],
+        "annotator_id": "u-9",
+        "reason": "ambiguous",
+    }
 
 
 @pytest.mark.asyncio

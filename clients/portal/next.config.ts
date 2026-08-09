@@ -141,15 +141,14 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
       {
-        // portal-cross-links.ts generates /ledger and /drift for an agent;
-        // only /drift had a rule, so the ledger cross-link 404'd.
+        // Agent cross-links → dedicated Improve surfaces (FEAT-6/7/89).
         source: "/agents/:id/ledger",
-        destination: "/agents?id=:id",
+        destination: "/ledger?agent=:id",
         permanent: false,
       },
       {
         source: "/agents/:id/drift",
-        destination: "/agents?id=:id",
+        destination: "/drift?agent=:id",
         permanent: false,
       },
       {
@@ -256,14 +255,8 @@ const nextConfig: NextConfig = {
         destination: "/evals?mode=compare",
         permanent: false,
       },
-      // Labeling / Studio / Synthetic are not live Evaluate modes — don't
-      // silently dump users onto Results (default when tab is unknown).
-      { source: "/labeling", destination: "/unavailable", permanent: false },
-      {
-        source: "/labeling/queues/:id",
-        destination: "/unavailable",
-        permanent: false,
-      },
+      // Labeling is live (FEAT-80–83). Studio / Synthetic are not live
+      // Evaluate modes — don't silently dump users onto Results.
       { source: "/studio", destination: "/unavailable", permanent: false },
       {
         source: "/synthetic",
@@ -379,12 +372,12 @@ const nextConfig: NextConfig = {
       { source: "/llmops/:path*", destination: "/cost", permanent: false },
       {
         source: "/redteam",
-        destination: "/guardrails",
+        destination: "/guardrails/redteam",
         permanent: false,
       },
       {
         source: "/redteam/:path*",
-        destination: "/guardrails",
+        destination: "/guardrails/redteam",
         permanent: false,
       },
 
@@ -434,7 +427,7 @@ const nextConfig: NextConfig = {
       { source: "/users/:path*", destination: "/unavailable", permanent: false },
       { source: "/tools", destination: "/unavailable", permanent: false },
       { source: "/tools/:path*", destination: "/unavailable", permanent: false },
-      { source: "/insights/topics", destination: "/unavailable", permanent: false },
+      { source: "/insights/topics", destination: "/topics", permanent: false },
       { source: "/insights", destination: "/unavailable", permanent: false },
       { source: "/insights/:path*", destination: "/unavailable", permanent: false },
 

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from eden.improvement.agent import ImprovementAgent, _SWEEP_TIMEOUT_S
+from eden.improvement.agent import _SWEEP_TIMEOUT_S, ImprovementAgent
 from eden.improvement.planner import PlanCandidate
 
 

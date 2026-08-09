@@ -106,7 +106,8 @@ def _parse_color(
         r, g, b = (float(rgba_m.group(i)) for i in (1, 2, 3))
         alpha = float(rgba_m.group(4)) if rgba_m.group(4) else 1.0
         return tuple(  # type: ignore[return-value]
-            alpha * c + (1 - alpha) * o for c, o in zip((r, g, b), over)
+            alpha * c + (1 - alpha) * o
+            for c, o in zip((r, g, b), over, strict=True)
         )
 
     return None
@@ -265,7 +266,7 @@ def test_theme_file_exists():
     assert THEME_PATH.exists(), f"Missing Clerk theme file: {THEME_PATH}"
 
 
-def test_theme_exports_clerkAppearance(theme_source: str):
+def test_theme_exports_clerk_appearance(theme_source: str):
     assert "export { clerkAppearance }" in theme_source
 
 

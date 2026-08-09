@@ -308,12 +308,14 @@ async def list_parent_steps(
     n_replayable = 0
     n_cacheable = 0
     for step in steps:
-        payload = step.get("payload") if isinstance(step.get("payload"), dict) else {}
-        request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
-        attrs = step.get("attributes") if isinstance(step.get("attributes"), dict) else {}
-        response = (
-            payload.get("response") if isinstance(payload.get("response"), dict) else {}
-        )
+        _payload = step.get("payload")
+        payload = _payload if isinstance(_payload, dict) else {}
+        _request = payload.get("request")
+        request = _request if isinstance(_request, dict) else {}
+        _attrs = step.get("attributes")
+        attrs = _attrs if isinstance(_attrs, dict) else {}
+        _response = payload.get("response")
+        response = _response if isinstance(_response, dict) else {}
         cacheable = bool(attrs.get("cacheable"))
         replayable = _step_has_replayable_prompt(step)
         if cacheable:

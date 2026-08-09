@@ -151,6 +151,12 @@ jobs:
       - name: spec drift (blocking)
         run: uv run python scripts/spec_drift_check.py
 
+      # Ratchet: fail on NEW LIMIT-without-ORDER-BY DB call sites. Known
+      # backlog is frozen in tests/baselines/unordered_limit_baseline.json;
+      # shrink that file deliberately — do not grow it.
+      - name: unordered LIMIT ratchet (blocking)
+        run: uv run python scripts/lint_unordered_limit.py
+
   test:
     name: pytest
     runs-on: ubuntu-latest

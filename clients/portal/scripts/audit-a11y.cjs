@@ -23,10 +23,10 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const PORT = process.env.PORT || "3000";
-// Live portal leaves only (2026-08-01). Retired routes (/dashboard,
-// /artifacts, /playgrounds, /ledger, /optimization) soft-land to
-// /unavailable or /home — auditing them measured the redirect target,
-// not a real surface, and produced false-pass reports.
+// Live portal leaves only. `/artifacts` and `/ledger` are real Improve
+// surfaces (see portal-routes.ts LIVE_PORTAL_PREFIXES). Retired routes
+// soft-land to /unavailable or /home — auditing them measured the redirect
+// target, not a real surface, and produced false-pass reports.
 const ROUTES = [
   "/home",
   "/traces",

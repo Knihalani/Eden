@@ -1,0 +1,27 @@
+{
+  "bench": "f12-span-search",
+  "recorded_at": "2026-08-07T12:39:53Z",
+  "target_gate": "p95 < 200ms",
+  "mode": "SQLite in-memory (PG-ILIKE fallback proxy)",
+  "typesense_reachable": false,
+  "corpus": {
+    "num_documents": 100000,
+    "tenant": "bench-org"
+  },
+  "requests": 200,
+  "baseline_no_facet": {
+    "p50": 172.5,
+    "p95": 480.27,
+    "p99": 596.11,
+    "max": 665.7
+  },
+  "gate_met": null,
+  "gate_note": "SQLite fallback proxy (no real Typesense reachable) \u2014 a worst-case floor for the PG-ILIKE path, not a Typesense measurement. gate_met is intentionally null.",
+  "scale_ladder_rung": "100k",
+  "facet_ab": null,
+  "facet_ab_note": "Not applicable \u2014 SQLite fallback mode has no facet computation to toggle.",
+  "honest_caveats": [
+    "SQLite LIKE-query proxy, NOT Typesense. Worst-case floor for the PG-ILIKE fallback path only; gate_met is null because this run cannot attest to the Typesense GA gate.",
+    "Corpus is 100,000 docs, below the 10M GA-gate target corpus size used by the full scale ladder (10k -> 100k -> 1M -> 10M). This result covers only this rung."
+  ]
+}

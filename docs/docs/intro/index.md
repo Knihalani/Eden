@@ -2,7 +2,7 @@
 slug: /
 id: index
 title: Eden — observability + improvement for AI agents
-description: Drop-in observability and evals for LLM applications and AI agents. OpenTelemetry-native, auto-instrumentation, deterministic judge scores, cost intelligence.
+description: Observability and evals for LLM applications and AI agents. OpenTelemetry-native, Python one-line auto-instrumentation, deterministic judge scores, cost intelligence.
 keywords: [eden, llm, observability, ai agents, evaluation, tracing, opentelemetry]
 sidebar_label: Home
 sidebar_position: 1
@@ -16,7 +16,8 @@ hide_table_of_contents: true
     Observability and improvement for AI agents.
   </h1>
   <p class="eden-hero__subtitle">
-    Drop-in tracing, auto-instrumentation, deterministic judges, cost
+    Tracing, auto-instrumentation (one-line in Python; TypeScript via
+    <code>instrument()</code> + wrappers), deterministic judges, cost
     intelligence — and a portal that turns traces into reviewable patches.
   </p>
   <div class="eden-hero__cta">
@@ -44,7 +45,10 @@ patch suggestions.
 The platform ships:
 
 - **Two production SDKs** — Python (`eden-sdk`) and TypeScript
-  (`@eden-ai/sdk`). Fire-and-forget; producer p99 overhead budgeted ≤ 5 ms.
+  (`@eden-ai/sdk`). Python's `eden.instrument()` is a true one-liner
+  across 13+ frameworks; TypeScript uses `instrument()` (prototype patch
+  for OpenAI/Anthropic) plus per-instance `wrap*()` for the rest until
+  full parity ships. Fire-and-forget; producer p99 overhead budgeted ≤ 5 ms.
 - **Open ingestion** — OpenAI, Anthropic, Bedrock, Gemini, LangChain,
   LlamaIndex, CrewAI, AutoGen, Vercel AI, and raw `custom` events.
   Wire it from your own code even without an SDK.

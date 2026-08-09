@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .base import Judge, JudgeContext, JudgeScore
 
@@ -99,7 +99,25 @@ class JudgeRunner:
         results: list[JudgeScore] = []
         for batch in scored:
             results.extend(batch)
+        if results:
+            await self._stamp_step_judges(event, results)
         return results
+
+    async def _stamp_step_judges(
+        self,
+        event: TelemetryEvent,
+        scores: list[JudgeScore],
+    ) -> None:
+        """Map judge scores onto per-step attributes (Cat 22).
+
+        Best-effort — failures are logged and never raised.
+        """
+        try:
+            from eden.apm_depth.step_judges import stamp_event_judge_scores
+
+            await stamp_event_judge_scores(event, scores)
+        except Exception as exc:
+            logger.debug("judge step_judges stamp failed: %s", exc)
 
     async def _persist(self, score: JudgeScore) -> None:
         """Write one score to the ``judge_scores`` table. Best-effort.
@@ -163,3 +181,33 @@ async def run_judges_for_event(
     """
     runner = JudgeRunner(llm_client=llm_client)
     return await runner.run_for_event(event, judges)
+
+
+async def score_playground_row(
+    *,
+    output: str,
+    input_text: str | None = None,
+    expected: str | None = None,
+    axis: str = "correctness",
+    spec: dict[str, Any] | None = None,
+    llm_client: object | None = None,
+    persist: bool = False,
+) -> tuple[float | None, str | None, list[JudgeScore]]:
+    """Score a playground/F51 dataset row via :class:`UnifiedJudge`.
+
+    Thin wrapper around :mod:`eden.playground.llm_judge_adapter` that
+    optionally persists all axis rows through this runner's storage path.
+    """
+    from eden.playground.llm_judge_adapter import score_llm_judge_async
+
+    merged = dict(spec or {})
+    if axis:
+        merged.setdefault("axis", axis)
+    return await score_llm_judge_async(
+        output,
+        expected,
+        merged,
+        input_text=input_text,
+        llm_client=llm_client,
+        persist=persist,
+    )

@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import pytest
 
+from eden.config import Settings
+
 
 def _settings(**overrides) -> Settings:
     """Instantiate a fresh ``Settings`` with explicit overrides."""

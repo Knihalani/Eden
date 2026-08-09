@@ -109,8 +109,10 @@ TOOL_CATALOG: list[dict[str, Any]] = [
         "description": (
             "Rerun a trace from a checkpoint step using the prefix cache populated by F03. "
             "Returns cache_hits and populated_steps when the debugger_llm_cache has data for this trace. "
-            "Note: new_trace_id is not returned until the F01 live gateway ships (Wave 7). "
-            "rerun_mode='cached_live' uses the prefix cache; 'replay' replays without LLM calls."
+            "rerun_mode is a client-side hint only (cached_live/replay) — the server has no "
+            "rerun_mode field and never reads it. To actually invoke a real model on the mutated "
+            "tail step (F01 live gateway), set the separate `live` boolean; it requires "
+            "debugger_live_rerun_v1 and defaults to false so nothing is silently billed."
         ),
         "scope": "mcp:debug",
         "inputSchema": {
@@ -123,11 +125,21 @@ TOOL_CATALOG: list[dict[str, Any]] = [
                 "rerun_mode": {
                     "type": "string",
                     "enum": ["cached_live", "replay"],
-                    "description": "cached_live uses prefix cache; replay replays without LLM calls.",
+                    "description": (
+                        "Client-side hint only; not forwarded to the API. Use `live` to "
+                        "actually reach the live gateway."
+                    ),
                 },
                 "live_prefix": {
                     "type": "boolean",
                     "description": "When true, prefer live prefix cache rows from debugger_llm_cache.",
+                },
+                "live": {
+                    "type": "boolean",
+                    "description": (
+                        "Actually invoke the model on the mutated tail step (F01 live gateway); "
+                        "requires debugger_live_rerun_v1. Defaults false — never silently billed."
+                    ),
                 },
             },
             "required": ["org_id", "trace_id"],
@@ -136,9 +148,12 @@ TOOL_CATALOG: list[dict[str, Any]] = [
     {
         "name": "checkpoint_rerun",
         "description": (
-            "Rerun the debugger live from a checkpoint step (F01 live-rerun path). "
-            "rerun_mode='cached_live' uses the prefix cache; 'replay' replays without LLM calls. "
-            "Returns the debugger route's honesty stats (cache_hits / populated_steps)."
+            "Rerun the debugger from a checkpoint step (F01 live-rerun path). "
+            "rerun_mode is a client-side hint only (cached_live/replay) — the server has no "
+            "rerun_mode field and never reads it. Returns the debugger route's honesty stats "
+            "(cache_hits / populated_steps). To actually invoke a real model on the mutated "
+            "tail step, set the separate `live` boolean; it requires debugger_live_rerun_v1 "
+            "and defaults to false so nothing is silently billed."
         ),
         "scope": "mcp:debug",
         "inputSchema": {
@@ -151,11 +166,21 @@ TOOL_CATALOG: list[dict[str, Any]] = [
                 "rerun_mode": {
                     "type": "string",
                     "enum": ["cached_live", "replay"],
-                    "description": "cached_live uses prefix cache; replay replays without LLM calls.",
+                    "description": (
+                        "Client-side hint only; not forwarded to the API. Use `live` to "
+                        "actually reach the live gateway."
+                    ),
                 },
                 "live_prefix": {
                     "type": "boolean",
                     "description": "When true, prefer live prefix cache rows from debugger_llm_cache.",
+                },
+                "live": {
+                    "type": "boolean",
+                    "description": (
+                        "Actually invoke the model on the mutated tail step (F01 live gateway); "
+                        "requires debugger_live_rerun_v1. Defaults false — never silently billed."
+                    ),
                 },
             },
             "required": ["org_id", "trace_id"],
@@ -419,7 +444,7 @@ TOOL_CATALOG: list[dict[str, Any]] = [
             "properties": {
                 "org_id": {"type": "string"},
                 "sql": {"type": "string"},
-                "limit": {"type": "integer"},
+                "max_rows": {"type": "integer"},
             },
             "required": ["org_id", "sql"],
         },
@@ -490,6 +515,55 @@ TOOL_CATALOG: list[dict[str, Any]] = [
             "required": ["org_id"],
         },
     },
+    {
+        "name": "get_book",
+        "description": (
+            "Read an agent's Book (F40) — structured behavior/knowledge record. "
+            "When Ledger is enabled for the org the same route may return ledger content."
+        ),
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "agent_id": {"type": "string"},
+            },
+            "required": ["org_id", "agent_id"],
+        },
+    },
+    {
+        "name": "list_artifacts",
+        "description": (
+            "List Artifacts / Nudges (F39) for the org — runtime prompt interventions. "
+            "Optional agent_id / mode filters."
+        ),
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "agent_id": {"type": "string"},
+                "mode": {"type": "string"},
+            },
+            "required": ["org_id"],
+        },
+    },
+    {
+        "name": "get_ledger",
+        "description": (
+            "Read Ledger content. Pass agent_id for one agent's ledger; omit it "
+            "to list org-wide ledger summary rows."
+        ),
+        "scope": "mcp:read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string"},
+                "agent_id": {"type": "string"},
+            },
+            "required": ["org_id"],
+        },
+    },
 ]
 
 _HANDLERS: dict[str, ToolHandler] = {
@@ -522,6 +596,9 @@ _HANDLERS: dict[str, ToolHandler] = {
     "get_judge_scores": tool_fns.get_judge_scores,
     "get_cost_breakdown": tool_fns.get_cost_breakdown,
     "get_agentic_metrics": tool_fns.get_agentic_metrics,
+    "get_book": tool_fns.get_book,
+    "list_artifacts": tool_fns.list_artifacts,
+    "get_ledger": tool_fns.get_ledger,
 }
 
 _SCOPE_BY_NAME = {t["name"]: t["scope"] for t in TOOL_CATALOG}

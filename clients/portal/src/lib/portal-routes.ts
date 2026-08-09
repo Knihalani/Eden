@@ -10,7 +10,6 @@ export const STUB_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/jobs",
   "/eval-harnesses",
   "/sandbox",
-  "/redteam",
   "/observability",
   "/inspector",
   "/analytics",
@@ -40,9 +39,6 @@ export const STUB_PORTAL_PATH_PREFIXES: readonly string[] = [
   "/shell",
 ] as const;
 
-/** @deprecated Use STUB_PORTAL_PATH_PREFIXES — kept for older imports. */
-export const REMOVED_PORTAL_PATH_PREFIXES = STUB_PORTAL_PATH_PREFIXES;
-
 export function isRemovedPortalPath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   const p = pathname.split("?")[0].split("#")[0];
@@ -63,6 +59,8 @@ export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/issues",
   "/alerts",
   "/signals",
+  "/topics",
+  "/drift",
   "/evals",
   "/playgrounds",
   "/improve",

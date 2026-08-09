@@ -1226,6 +1226,11 @@ def _build_settings_class():
         auto_issue_detection_v1: bool = True
         per_trace_signals_v1: bool = True
         tool_call_label_learning_v1: bool = True
+        # FEAT-177: gates only *live inference* (auto-flagging tool misuse,
+        # which can create F28 stumbles) in `infer_tool_misuse()`. Calibrator
+        # training/persistence in `train_and_persist()` is unconditional —
+        # it no longer checks this flag, since storing a model is a safe,
+        # idempotent upsert with no customer-facing effect on its own.
         tool_call_inference_v1: bool = False
         tool_call_min_labels: int = 5
         # N11 live in-flight trace streaming (Redis pub/sub). Defaults on
@@ -1326,6 +1331,9 @@ def _build_settings_class():
         shadow_promote_min_firings: int = 20
         shadow_promote_precision: float = 0.8
         shadow_delete_precision: float = 0.3
+        # OPT-37: shadow detectors stuck in ``hold`` below min_firings expire
+        # after this many days (uses ``updated_at``, else ``created_at``).
+        shadow_hold_max_days: int = 90
 
         # ── M7 (§4.1) replay-before-PR verify ───────────────────────────
         # Signature-based replay of the checkpointed failing step before
@@ -1376,6 +1384,16 @@ def _build_settings_class():
         # Absent repo/sha or App install it silently no-ops (never fails the
         # eval), and the API response's ``commit_status`` records the reason.
         ci_eval_commit_status_v1: bool = False
+
+        # ── FEAT-13 playground scorers in CI-eval ───────────────────────
+        # ``ci_eval_playground_scorers_v1``: when ``POST /ci-eval/run`` sets
+        # ``enable_playground_scorers`` (or this flag is on), dataset cases
+        # with scorer specs are graded via ``eden.playground.scorers``.
+        # Per-request ``scorer_specs`` / ``treatment_outputs`` override or
+        # supplement case metadata. Off by default for safe rollout.
+        ci_eval_playground_scorers_v1: bool = False
+        # Max allowed drop in mean aggregate scorer score vs the baseline run.
+        ci_eval_scorer_regression_threshold: float = 0.05
 
         # ── M14 (§8) cost & speed ───────────────────────────────────────
         # §8.1 Neon scale-to-zero: **env-gated for dev/staging only**.

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,11 @@ def _skip_policy() -> str:
 
 def _row_ok(passed: int, failed: int, skipped: int, errors: int) -> bool:
     """Gate verdict mirroring RegressionRunResult.ok (fail closed)."""
-    if failed > 0 or errors > 0:
-        return False
-    if skipped > 0 and _skip_policy() == "block":
-        return False
-    return True
+    return not (
+        failed > 0
+        or errors > 0
+        or (skipped > 0 and _skip_policy() == "block")
+    )
 
 
 class CIEvalHistoryStore:
@@ -69,6 +70,8 @@ class CIEvalHistoryStore:
         commit_sha: str | None = None,
         pr_number: int | None = None,
         changed_files: list[str] | None = None,
+        scorer_gate: dict[str, Any] | None = None,
+        f51_grades: list[dict[str, Any]] | None = None,
     ) -> None:
         """Fold the tri-state breakdown + CI context into metadata JSONB.
 
@@ -87,6 +90,10 @@ class CIEvalHistoryStore:
             "pr_number": pr_number,
             "changed_files": changed_files or [],
         }
+        if scorer_gate is not None:
+            metadata["scorer_gate"] = scorer_gate
+        if f51_grades is not None:
+            metadata["f51_grades"] = f51_grades
         try:
             await client.execute(
                 """
@@ -113,7 +120,11 @@ class CIEvalHistoryStore:
         skipped = int(meta.get("skipped") or 0)
         errors = int(meta.get("errors") or 0)
         created = row.get("created_at")
-        created_iso = created.isoformat() if hasattr(created, "isoformat") else created
+        created_iso = (
+            created.isoformat()
+            if isinstance(created, datetime)
+            else str(created or "")
+        )
         out: dict[str, Any] = {
             "id": str(row.get("id")),
             "org_id": row.get("org_id"),
@@ -133,6 +144,12 @@ class CIEvalHistoryStore:
             "status": row.get("status"),
             "created_at": created_iso,
         }
+        scorer_gate = meta.get("scorer_gate")
+        if isinstance(scorer_gate, dict) and scorer_gate:
+            out["scorer_gate"] = scorer_gate
+        f51_grades = meta.get("f51_grades")
+        if isinstance(f51_grades, list) and f51_grades:
+            out["f51_grades"] = f51_grades
         if detail:
             failures = row.get("failures") or []
             if isinstance(failures, str):

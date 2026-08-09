@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -22,10 +21,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from eden.config import get_settings
-
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 class AlertSeverity(StrEnum):
@@ -63,8 +59,10 @@ class AlertRule:
     window_seconds: int = 300  # 5 min default window
     # Actions
     channels: list[AlertChannel] = field(default_factory=lambda: [AlertChannel.IN_APP])
+    # Out of scope per on-call-scope-decision.md (FEAT-105): intentionally
+    # unused — integrate with external on-call tools for escalation/SLA timers.
     auto_escalate: bool = False
-    escalation_delay_seconds: int = 300
+    escalation_delay_seconds: int = 300  # intentionally inert (FEAT-105)
     # Metadata
     enabled: bool = True
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -150,13 +148,16 @@ class AlertStreamProcessor:
         AlertRule(
             rule_id="rule_cost_spike",
             name="Cost Spike",
-            description="Alert when daily cost exceeds 3x average",
+            description=(
+                "Notify via in-app, websocket, and webhook when daily cost "
+                "exceeds threshold (not on-call paging)"
+            ),
             event_types=["metering.cost_report"],
             severity_threshold=AlertSeverity.HIGH,
             metric_name="daily_cost_usd",
             metric_threshold=100.0,
             channels=[AlertChannel.IN_APP, AlertChannel.WEBSOCKET, AlertChannel.WEBHOOK],
-            auto_escalate=True,
+            auto_escalate=False,
         ),
         AlertRule(
             rule_id="rule_hilt_waiting",
@@ -177,7 +178,10 @@ class AlertStreamProcessor:
         AlertRule(
             rule_id="rule_sandbox_escape",
             name="Sandbox Security Alert",
-            description="Critical alert for sandbox escape attempts",
+            description=(
+                "Critical security alert — notify via configured channels "
+                "(email/webhook; not on-call paging)"
+            ),
             event_types=["sandbox.security_alert"],
             severity_threshold=AlertSeverity.CRITICAL,
             channels=[
@@ -271,7 +275,10 @@ class AlertStreamProcessor:
         elif "cost" in event_type:
             cost = context.get("daily_cost_usd", "unknown")
             title = f"Cost Alert: ${cost}"
-            message = f"Daily cost is {context.get('cost_multiplier', 'elevated')}x average"
+            message = (
+                "Daily cost exceeded threshold — review spend via configured "
+                "notification channels"
+            )
         elif "hilt" in event_type:
             event.get("payload", {}).get("state", {})
             title = "Human Approval Required"
@@ -317,144 +324,13 @@ class AlertStreamProcessor:
             return True
 
     async def _dispatch_alert(self, alert: GeneratedAlert) -> None:
-        """Dispatch alert to all configured channels."""
-        for channel in alert.channels:
-            try:
-                if channel == AlertChannel.IN_APP:
-                    await self._dispatch_in_app(alert)
-                elif channel == AlertChannel.WEBSOCKET:
-                    await self._dispatch_websocket(alert)
-                elif channel == AlertChannel.EMAIL:
-                    await self._dispatch_email(alert)
-                elif channel == AlertChannel.WEBHOOK:
-                    await self._dispatch_webhook(alert)
-                elif channel == AlertChannel.PAGERDUTY:
-                    await self._dispatch_pagerduty(alert)
-            except Exception as exc:
-                logger.warning(f"Alert dispatch to {channel.value} failed: {exc}")
+        """Dispatch alert to all configured channels via FEAT-44 unified router."""
+        from eden.alerts.unified import (
+            dispatch_unified_alert,
+            route_request_from_generated_alert,
+        )
 
-    async def _dispatch_in_app(self, alert: GeneratedAlert) -> None:
-        """Create in-app notifications for each org member."""
-        try:
-            from eden.api.deps import resolve_eden_org_id
-            from eden.storage.postgres import get_postgres_client
-
-            client = await get_postgres_client()
-            if not client:
-                return
-
-            org_id = await resolve_eden_org_id(alert.tenant_id) if alert.tenant_id else None
-            if not org_id:
-                logger.debug("Skipping in-app alert dispatch — no org_id for tenant %s", alert.tenant_id)
-                return
-
-            members = await client.fetch(
-                "SELECT user_id FROM org_members WHERE org_id = $1",
-                org_id,
-            )
-            if not members:
-                return
-
-            payload = {
-                "is_alert": True,
-                "severity": alert.severity.value,
-                "entity_id": alert.entity_id,
-                "rule_id": alert.rule_id,
-                "channels": [c.value for c in alert.channels],
-                **alert.context,
-            }
-
-            for member in members:
-                notif_id = str(uuid.uuid4())
-                await client.execute(
-                    """
-                    INSERT INTO notifications (id, user_id, org_id, type, title, body, data, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    """,
-                    notif_id,
-                    str(member["user_id"]),
-                    org_id,
-                    f"alert:{alert.severity.value}",
-                    alert.title,
-                    alert.message,
-                    json.dumps(payload),
-                    alert.timestamp,
-                )
-        except Exception as exc:
-            logger.warning(f"In-app alert dispatch failed: {exc}")
-
-    async def _dispatch_websocket(self, alert: GeneratedAlert) -> None:
-        """Push alert to connected WebSocket clients for the entity."""
-        try:
-            from eden.api.routes.websocket import broadcast_to_job_websockets
-
-            if not alert.entity_id:
-                return
-            await broadcast_to_job_websockets(
-                alert.entity_id,
-                {"type": "alert", "alert": alert.to_dict()},
-            )
-        except Exception as exc:
-            logger.debug(f"WebSocket alert dispatch failed: {exc}")
-
-    async def _dispatch_email(self, alert: GeneratedAlert) -> None:
-        """Sparse email via SendKit (alerts@) — best-effort, rate-limited upstream."""
-        try:
-            from eden.services.alert_email import send_issue_alert_email
-
-            await send_issue_alert_email(
-                org_id=str(alert.tenant_id),
-                event_kind="realtime_alert",
-                issue_id=getattr(alert, "entity_id", None),
-                severity=str(getattr(alert, "severity", "P1") or "P1"),
-                title=str(alert.title),
-                detail=str(getattr(alert, "message", "") or ""),
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Email alert dispatch failed: %s", exc)
-
-    async def _dispatch_webhook(self, alert: GeneratedAlert) -> None:
-        """Send alert to configured webhook URL."""
-        webhook_url = getattr(settings, "alert_webhook_url", None)
-        if not webhook_url:
-            return
-
-        try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                await session.post(
-                    webhook_url,
-                    json=alert.to_dict(),
-                    timeout=aiohttp.ClientTimeout(total=10),
-                )
-        except Exception as exc:
-            logger.warning(f"Webhook alert dispatch failed: {exc}")
-
-    async def _dispatch_pagerduty(self, alert: GeneratedAlert) -> None:
-        """Send alert to PagerDuty via the Events API v2 sender (FEAT-42).
-
-        Logged skip (not an exception) when the org — and the
-        platform-level fallback — have no routing key configured; see
-        ``eden.integrations.pagerduty.store.get_routing_key``.
-        """
-        try:
-            from eden.services.pagerduty_delivery import send_pagerduty_event
-
-            await send_pagerduty_event(
-                org_id=str(alert.tenant_id) if alert.tenant_id else None,
-                summary=alert.title,
-                source=alert.entity_id or "eden",
-                severity=alert.severity.value,
-                dedup_key=f"{alert.rule_id}:{alert.entity_id}",
-                custom_details={
-                    "message": alert.message,
-                    "rule_id": alert.rule_id,
-                    "entity_id": alert.entity_id,
-                    **alert.context,
-                },
-            )
-        except Exception as exc:
-            logger.warning(f"PagerDuty alert dispatch failed: {exc}")
+        await dispatch_unified_alert(route_request_from_generated_alert(alert))
 
     def add_rule(self, rule: AlertRule) -> None:
         """Add a custom alert rule."""

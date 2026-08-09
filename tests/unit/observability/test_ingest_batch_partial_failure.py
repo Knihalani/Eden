@@ -98,14 +98,19 @@ class TestPartialRoutingFailure:
         async def _emit(events: list[Any]) -> None:
             billed.append(list(events))
 
+        bg = _InlineBackground()
         with (
             patch.object(collector, "_route", new=AsyncMock(side_effect=_route)),
             patch.object(
                 collector, "_emit_billing_events", new=AsyncMock(side_effect=_emit)
             ),
-            patch.object(collector, "_spawn_bg", new=lambda coro: coro),
+            patch.object(collector, "_spawn_bg", new=bg),
         ):
             result = await collector.ingest_batch([_event(i) for i in range(3)])
+            # Drain checkpoints / agent-registration coroutines too, not just
+            # billing — a bare ``lambda coro: coro`` stub left them unawaited
+            # and every run emitted "coroutine ... was never awaited" warnings.
+            await bg.drain()
 
         assert result["accepted"] == 3
 

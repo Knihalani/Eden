@@ -10,7 +10,6 @@ import pytest
 
 from eden.llmops import insights_tools as tools
 
-
 ORG = "org_test_insights"
 
 

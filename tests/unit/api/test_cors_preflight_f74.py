@@ -39,13 +39,13 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from eden.api.middleware.default_deny import (
     DefaultDenyAuthMiddleware,
     _scope_has_credential,
 )
-from starlette.responses import PlainTextResponse
 
 
 class TestF74CORSHelper:

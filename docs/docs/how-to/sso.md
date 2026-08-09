@@ -12,24 +12,19 @@ configuration lives in the Clerk dashboard — Eden inherits the
 identity provider you connect there.
 
 > **Note (2026-08):** This is the mechanism that's actually wired
-> into login — whenever `clerk_secret_key` is configured (true in
-> production), Eden's own password-login endpoint is disabled
-> outright and Clerk owns authentication end to end. Eden's backend
-> separately ships a native OIDC/SAML SSO + SCIM admin API
+> into login for **Clerk-hosted** deployments — whenever `clerk_secret_key`
+> is configured (true in production), Eden's own password-login endpoint is
+> disabled outright and Clerk owns authentication end to end.
+>
+> Eden's backend also ships a **native** OIDC/SAML SSO + SCIM admin API
 > (`POST /sso/providers`, `/sso/login/{id}`, `/sso/callback/{id}`,
-> etc. — see `src/eden/api/routes/sso.py`) intended for self-hosted
-> deployments that don't use Clerk. As of this writing that native
-> API has **no portal UI** — the portal only calls it to check
-> whether an SSO provider is configured, not to create/enable/enforce
-> one — and its login/callback routes aren't linked from any
-> "Sign in with SSO" button anywhere in the product. Configuring a
-> provider through that API is real (it's a working backend, and
-> enabling "enforce" on it does block Eden's native password-login
-> endpoint for that org's members), but it will not give end users a
-> way to actually complete an SSO sign-in until the portal frontend
-> is wired up to call those routes. Don't configure it expecting a
-> login button to appear — build the frontend integration first, or
-> use Clerk instead.
+> etc. — see `src/eden/api/routes/sso.py`) for **self-hosted**
+> deployments that don't use Clerk. The portal **Settings → SSO** screen
+> configures this native path only — it does **not** drive Clerk SSO.
+> Providers created there affect Eden's native login routes; they will not
+> change how members sign in when Clerk is your IdP. For Clerk-hosted orgs,
+> configure SSO and SCIM in the [Clerk dashboard](https://dashboard.clerk.com)
+> per the steps below.
 
 ## Supported identity providers
 

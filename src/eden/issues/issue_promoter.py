@@ -29,9 +29,49 @@ _EXAMPLE_CAP = 20
 _USER_CAP = 10_000
 
 
+_SEVERITY_LADDER: tuple[str, ...] = ("p0", "p1", "p2", "p3")
+
+
 def _more_severe(a: str, b: str) -> str:
     # p0 < p1 < p2 < p3 lexicographically → min == most severe.
     return min(a, b)
+
+
+def _severity_index(severity: str) -> int:
+    try:
+        return _SEVERITY_LADDER.index(severity)
+    except ValueError:
+        return 2  # unknown → treat as p2
+
+
+def _bump_severity(severity: str, levels: int) -> str:
+    """Move ``levels`` steps toward p0 (more severe). Never past p0."""
+    if levels <= 0:
+        return severity
+    idx = max(0, _severity_index(severity) - levels)
+    return _SEVERITY_LADDER[idx]
+
+
+def _severity_from_blast_radius(
+    base: str,
+    *,
+    user_count: int,
+    stumble_count: int,
+    repetition_count: int,
+) -> str:
+    """Escalate kind/default severity when blast-radius counters grow.
+
+    Ladder (tiers stack — tier 2 also satisfies tier 1):
+    - +1 level: ``user_count >= 10`` OR ``stumble_count >= 20``
+    - +1 more: ``user_count >= 50`` OR ``stumble_count >= 100`` OR
+      ``repetition_count >= 5``
+    """
+    bumps = 0
+    if user_count >= 10 or stumble_count >= 20:
+        bumps += 1
+    if user_count >= 50 or stumble_count >= 100 or repetition_count >= 5:
+        bumps += 1
+    return _bump_severity(base, bumps)
 
 
 class IssuePromoter:
@@ -136,7 +176,15 @@ class IssuePromoter:
         if sc.user_id and sc.user_id not in affected and len(affected) < _USER_CAP:
             affected.append(sc.user_id)
 
-        new_severity = _more_severe(existing["severity"], severity)
+        stumble_count = int(existing["stumble_count"]) + 1
+        user_count = max(int(existing["user_count"]), len(affected))
+        escalated = _severity_from_blast_radius(
+            severity,
+            user_count=user_count,
+            stumble_count=stumble_count,
+            repetition_count=repetition,
+        )
+        new_severity = _more_severe(existing["severity"], escalated)
 
         await conn.execute(
             """
@@ -157,7 +205,7 @@ class IssuePromoter:
             status,
             repetition,
             new_severity,
-            max(int(existing["user_count"]), len(affected)),
+            user_count,
             affected,
             examples,
         )
@@ -169,8 +217,8 @@ class IssuePromoter:
             title=existing["title"],
             status=status,
             severity=new_severity,  # type: ignore[arg-type]
-            stumble_count=int(existing["stumble_count"]) + 1,
-            user_count=max(int(existing["user_count"]), len(affected)),
+            stumble_count=stumble_count,
+            user_count=user_count,
             repetition_count=repetition,
             agent_id=existing.get("agent_id"),
             affected_user_ids=affected,

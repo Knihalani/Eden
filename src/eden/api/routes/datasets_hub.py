@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from eden.api.deps import (
@@ -64,6 +65,56 @@ class DatasetDetailResponse(DatasetResponse):
     rows: list[dict[str, Any]] = Field(default_factory=list)
     snapshots: list[dict[str, Any]] = Field(default_factory=list)
 
+
+class DatasetItemResponse(BaseModel):
+    id: str
+    dataset_id: str
+    input: str
+    expected_output: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    origin_trace_id: str | None = None
+    split: str | None = None
+    created_at: str = ""
+
+
+class DatasetItemListResponse(BaseModel):
+    items: list[DatasetItemResponse]
+    total: int
+
+
+class CreateDatasetItemRequest(BaseModel):
+    input: str = Field(..., max_length=100_000)
+    expected_output: str = Field(default="", max_length=100_000)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    origin_trace_id: str | None = None
+    split: str | None = Field(default=None, max_length=100)
+
+
+def _item_to_response(row: dict[str, Any]) -> DatasetItemResponse:
+    payload = row.get("payload")
+    if isinstance(payload, str):
+        import json
+
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = {}
+    created = row.get("created_at")
+    return DatasetItemResponse(
+        id=str(row["id"]),
+        dataset_id=str(row["dataset_id"]),
+        input=str(row.get("input") or ""),
+        expected_output=str(row.get("expected_output") or ""),
+        payload=payload if isinstance(payload, dict) else {},
+        origin_trace_id=row.get("origin_trace_id"),
+        split=row.get("split"),
+        created_at=(
+            created.isoformat()
+            if isinstance(created, datetime)
+            else str(created or "")
+        ),
+    )
+
 def _to_response(rec: Any) -> DatasetResponse:
     d = rec.to_dict()
     return DatasetResponse(**d)
@@ -72,9 +123,10 @@ def _to_response(rec: Any) -> DatasetResponse:
 async def list_datasets(
     org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
+    limit: int = Query(50, ge=1, le=200),
 ) -> DatasetListResponse:
     hub = DatasetHub()
-    datasets = await hub.list_datasets(org_id)
+    datasets = await hub.list_datasets(org_id, limit=limit)
     return DatasetListResponse(
         datasets=[_to_response(d) for d in datasets],
         total=len(datasets),
@@ -272,3 +324,87 @@ async def import_dataset_rows(
         )
         inserted += 1
     return {"status": "ok", "inserted": inserted, "dataset_id": dataset_id}
+
+
+@router.get("/{dataset_id}/items", response_model=DatasetItemListResponse)
+async def list_dataset_items(
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
+    split: str | None = Query(default=None, description="Filter by eval subset tag (e.g. smoke, full)."),
+    limit: int = Query(default=1000, ge=1, le=10_000),
+    offset: int = Query(default=0, ge=0),
+    user: dict = Depends(get_current_user),
+) -> DatasetItemListResponse:
+    hub = DatasetHub()
+    rec = await hub.get_dataset(org_id, dataset_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    try:
+        items = await hub.list_dataset_items(
+            dataset_id,
+            limit=limit,
+            offset=offset,
+            split=split,
+        )
+    except Exception as exc:
+        logger.warning("list_dataset_items failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="dataset items unavailable",
+            uuid_detail="Invalid dataset id",
+        )
+    return DatasetItemListResponse(
+        items=[_item_to_response(i) for i in items],
+        total=len(items),
+    )
+
+
+@router.post("/{dataset_id}/items", response_model=DatasetItemResponse)
+async def create_dataset_item(
+    body: CreateDatasetItemRequest,
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> DatasetItemResponse:
+    hub = DatasetHub()
+    rec = await hub.get_dataset(org_id, dataset_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    try:
+        result = await hub.add_dataset_item(
+            dataset_id,
+            input_data=body.input,
+            expected_output=body.expected_output,
+            payload=body.payload,
+            origin_trace_id=body.origin_trace_id,
+            split=body.split,
+        )
+    except Exception as exc:
+        logger.warning("create_dataset_item failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="dataset item create failed",
+            uuid_detail="Invalid dataset id",
+            fk_detail="Dataset not found",
+        )
+    row = await hub.get_dataset_item(dataset_id, result["row_id"])
+    if row is None:
+        raise HTTPException(status_code=500, detail="item created but not readable")
+    return _item_to_response(row)
+
+
+@router.get("/{dataset_id}/items/{item_id}", response_model=DatasetItemResponse)
+async def get_dataset_item(
+    org_id: str = Depends(require_path_org_access),
+    dataset_id: str = Path(...),
+    item_id: str = Path(...),
+    user: dict = Depends(get_current_user),
+) -> DatasetItemResponse:
+    hub = DatasetHub()
+    rec = await hub.get_dataset(org_id, dataset_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    row = await hub.get_dataset_item(dataset_id, item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="dataset item not found")
+    return _item_to_response(row)

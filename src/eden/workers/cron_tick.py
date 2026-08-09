@@ -1,20 +1,20 @@
 """eden-cron entry point (Phase 3b, 2026-06-23).
 
 Wired into the Northflank ``eden-cron`` scheduled job
-(northflank.yml ``*/5 * * * *``). Every tick:
+(northflank.yml ``*/5 * * * *``). Every tick runs
+:func:`run_maintenance_due`, which:
 
-1. EQL alert watchdog + columnar compaction (hourly window).
-2. MCP rollup + classifier retrain (every 15 min).
-3. N23 improvement sweeps when org schedule is due.
-4. If the UTC hour matches one of the heavier scheduled jobs,
-   runs that as well:
+1. Runs columnar compaction on an hourly window.
+2. Runs MCP rollup + classifier retrain every 15 minutes.
+3. At **03:00 UTC**, runs the daily retention cron + Typesense TTL cleanup.
 
-   * **03:00 UTC** — retention cron + Typesense TTL cleanup.
+It deliberately **skips** EQL alert watchdog, artifact demotion, and
+N23 improvement sweeps — those are hosted separately on ``eden-worker``
+or intentionally off (see :func:`run_maintenance_due`).
 
-The hourly cadence is intentionally simple: every tick is
-cheap, and only the daily jobs cost real money. The Northflank job
-runs at ``*/5 * * * *`` with ``--no-dry-run``; we ignore the
-intermediate ticks for the heavy jobs.
+The 5-minute Northflank cadence is intentional: every tick is cheap,
+and only the daily jobs cost real money. Intermediate ticks are no-ops
+for the heavy daily work.
 
 CLI:
 
@@ -188,6 +188,9 @@ async def _run_columnar_compaction(*, dry_run: bool) -> dict[str, object]:
 #: chain of Postgres queries, so this is also the peak number of pool
 #: connections the step holds.
 _AUTO_CURATOR_CONCURRENCY = 8
+#: Daily batch size — watermarked oldest-processed-first, not a fixed prefix.
+_AUTO_CURATOR_BATCH_SIZE = 50
+_AUTO_CURATOR_WATERMARK_TABLE = "auto_curator_watermark"
 
 
 async def _run_auto_curator() -> dict[str, object]:
@@ -195,13 +198,58 @@ async def _run_auto_curator() -> dict[str, object]:
     from eden.async_tasks import bounded_gather
     from eden.evaluation.auto_curator import AutoCurator
     from eden.storage.postgres import get_postgres_client
+    from eden.storage.watermark import advance_watermark, fetch_stale_candidates
 
     pg = await get_postgres_client()
     if pg is None:
         return {"skipped": True, "reason": "postgres_unavailable"}
-    org_rows = await pg.fetch("SELECT id::text AS org_id FROM organizations LIMIT 50")
+    # Watermarked oldest-processed-first selection (OPT-3) — the prior bare
+    # ``SELECT id::text AS org_id FROM organizations LIMIT 50`` with no
+    # ``ORDER BY`` returned the same stable-but-arbitrary 50 orgs every
+    # single day forever, silently starving everything past row 50. See
+    # ``eden.storage.watermark`` and migration 144_auto_curator_watermark.
+    org_rows = await fetch_stale_candidates(
+        pg,
+        candidate_table="organizations",
+        watermark_table=_AUTO_CURATOR_WATERMARK_TABLE,
+        candidate_id_column="id",
+        watermark_id_column="org_id",
+        id_alias="org_id",
+        limit=_AUTO_CURATOR_BATCH_SIZE,
+    )
+    from eden.workers.leader import record_watermark_batch
+
+    try:
+        org_total = await pg.fetchval("SELECT COUNT(*) FROM organizations")
+    except Exception:
+        org_total = None
+    record_watermark_batch(
+        "auto_curator",
+        batch_size=len(org_rows),
+        candidate_total=int(org_total) if org_total is not None else None,
+    )
     curator = AutoCurator()
     org_ids = [str(orow["org_id"]) for orow in org_rows]
+
+    async def _curate_org_and_advance(oid: str) -> dict[str, object]:
+        try:
+            return await curator.run_for_org(oid)
+        finally:
+            # Advance on success *and* failure — a poison org that always
+            # raises must still advance, or it permanently occupies the
+            # front of the watermark ordering and blocks every org behind
+            # it forever.
+            try:
+                await advance_watermark(
+                    pg,
+                    watermark_table=_AUTO_CURATOR_WATERMARK_TABLE,
+                    entity_id=oid,
+                )
+            except Exception:
+                logger.exception(
+                    "[cron_tick] auto_curator watermark advance failed org=%s",
+                    oid,
+                )
 
     # Was a strictly sequential ``for`` over up to 50 orgs, each of which
     # issues several Postgres round-trips (``_top_agents``, one
@@ -224,7 +272,7 @@ async def _run_auto_curator() -> dict[str, object]:
     # ``bounded_gather`` preserves input order, so ``runs`` still lines up
     # with ``org_rows``.
     settled = await bounded_gather(
-        *(curator.run_for_org(oid) for oid in org_ids),
+        *(_curate_org_and_advance(oid) for oid in org_ids),
         limit=_AUTO_CURATOR_CONCURRENCY,
         return_exceptions=True,
     )

@@ -165,7 +165,7 @@ def test_a10_owner_is_a10() -> None:
 
 def test_prometheus_series_names_documented() -> None:
     text = CHECKLIST.read_text(encoding="utf-8")
-    for name in (
+    for _ in (
         "eden_ingest_redis_commands",
         "eden_ch_flush_batch_size",
         "eden_sse_publish_skipped",

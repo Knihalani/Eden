@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # ── _is_new_degradation: the anti-spam core ─────────────────────────
 
 

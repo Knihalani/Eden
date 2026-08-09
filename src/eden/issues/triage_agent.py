@@ -31,10 +31,6 @@ from eden.prompt_safety import wrap_untrusted_data
 
 logger = logging.getLogger(__name__)
 
-# Rough per-triage LLM cost estimate ($) used to debit the daily budget
-# when the provider does not report an exact cost.
-_TRIAGE_COST_ESTIMATE_USD = 0.02
-
 # Hard timeout for the LLM investigation. p95 target is <60s; the 90s
 # ceiling guarantees a bounded response — on timeout we persist a partial
 # ``source="timeout"`` result instead of blocking the loop.
@@ -204,8 +200,11 @@ class TriageAgent:
                 status="budget_exceeded",
             )
 
+        # ── Ledger first pass (cheap context before ReAct evidence loop) ──
+        ledger = await self._fetch_ledger(org_id, issue)
+
         # ── Bounded evidence gathering (thin ReAct loop, ≤8 tool calls) ──
-        evidence = await self._gather_evidence(org_id, issue, stumbles)
+        evidence = await self._gather_evidence(org_id, issue, stumbles, ledger=ledger)
 
         # ── LLM triage via InvestigationAgent (issue: trigger) ──
         # Hard 90s ceiling → partial ``source="timeout"`` on breach.
@@ -216,6 +215,9 @@ class TriageAgent:
         # tests lock this so a TaskClassifier heuristic change cannot
         # silently upgrade the tier (same pattern as patch critic).
         untrusted_evidence = _trace_content_for_prompt(stumbles)
+        ledger_prompt = evidence.get("ledger_context") or ""
+        if ledger_prompt:
+            untrusted_evidence = f"{ledger_prompt}\n\n{untrusted_evidence}"
         llm_error = False
         try:
             from eden.autonomous import InvestigationAgent
@@ -256,6 +258,8 @@ class TriageAgent:
                 "severity_at_triage": issue.severity,
                 "triaged_at": datetime.now(UTC).isoformat(),
             }
+            if evidence.get("ledger_version") is not None:
+                triage_result["ledger_version"] = evidence["ledger_version"]
             triage_result = _enrich_playbook(triage_result, issue)
             triage_result = _append_debugger_handoff(triage_result, stumbles)
             await self._repo.set_triage_result(org_id, issue_id, triage_result)
@@ -305,19 +309,39 @@ class TriageAgent:
             "severity_at_triage": issue.severity,
             "triaged_at": datetime.now(UTC).isoformat(),
         }
+        if evidence.get("ledger_version") is not None:
+            triage_result["ledger_version"] = evidence["ledger_version"]
         triage_result = _enrich_playbook(triage_result, issue)
         triage_result = _append_debugger_handoff(triage_result, stumbles)
         await self._repo.set_triage_result(org_id, issue_id, triage_result)
-        if llm_used:
-            await self._debit_budget(org_id, _TRIAGE_COST_ESTIMATE_USD)
         return _envelope(
             "triage", {"issue_id": issue_id, "triage_result": triage_result}
         )
 
+    # ── ledger context (FEAT-144) ─────────────────────────────────
+
+    async def _fetch_ledger(self, org_id: str, issue: Any) -> dict[str, Any] | None:
+        """Cheap first pass: institutional memory before the ReAct loop."""
+        agent_id = getattr(issue, "agent_id", None)
+        if not agent_id:
+            return None
+        try:
+            from eden.kb.ledger.generator import LedgerGenerator
+
+            return await LedgerGenerator().get_latest(org_id, str(agent_id))
+        except Exception as exc:  # pragma: no cover - fail soft
+            logger.debug("triage_agent: ledger fetch failed: %s", exc)
+            return None
+
     # ── thin ReAct evidence gathering ───────────────────────────────
 
     async def _gather_evidence(
-        self, org_id: str, issue: Any, seed_stumbles: list[dict[str, Any]]
+        self,
+        org_id: str,
+        issue: Any,
+        seed_stumbles: list[dict[str, Any]],
+        *,
+        ledger: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Bounded evidence collection over the issue's stumbles.
 
@@ -349,12 +373,21 @@ class TriageAgent:
                 span_ids.append(sid)
 
         linked_files = _linked_files_hints(pool, None)
+        ledger_context = _ledger_context_for_prompt(ledger)
+        ledger_version: int | None = None
+        if ledger and ledger.get("version") is not None:
+            try:
+                ledger_version = int(ledger["version"])
+            except (TypeError, ValueError):
+                ledger_version = None
         return {
             "span_ids": span_ids,
             "linked_files": linked_files,
             "react_calls": calls,
             # M11: pre-wrapped blob for any downstream LLM prompt use.
             "prompt_evidence": _trace_content_for_prompt(pool),
+            "ledger_context": ledger_context,
+            "ledger_version": ledger_version,
         }
 
     async def _manual_rate_ok(self, org_id: str) -> bool:
@@ -420,6 +453,7 @@ class TriageAgent:
                     WHERE org_id = $1
                       AND status = 'pending'
                       AND (issue_id::text = $2 OR fingerprint = $3)
+                    ORDER BY 1
                     LIMIT 1
                     """,
                     org_id,
@@ -486,20 +520,15 @@ class TriageAgent:
             return True
 
     async def _debit_budget(self, org_id: str, amount: float) -> None:
-        # M4 (D12): single spend writer — triage spend also lands in the
-        # shared maintenance ledger (Redis ``autonomy:spend:`` + W24 cost
-        # event) so ``evaluate_mode``'s daily-budget downgrade actually
-        # fires. The triage-specific daily cap below keeps its own
-        # counter (``triage_spend:``) so the tighter triage ceiling stays
-        # enforced independently of the org-wide budget.
-        try:
-            from eden.closed_loop.autonomy_policy import record_spend
+        """Increment the triage-specific daily cap counter (non-ledger gate).
 
-            await record_spend(
-                org_id, amount, feature="triage", model="triage"
-            )
-        except Exception:  # pragma: no cover - best-effort ledger tag
-            pass
+        Metered LLM cost for triage is recorded via ``cost_context`` on the
+        investigation path (OPT-17/OPT-19). This helper only maintains the
+        separate ``triage_spend:`` Redis counter when callers pass a real
+        positive amount for the tighter triage ceiling.
+        """
+        if amount <= 0:
+            return
         if await self._resolve_budget_cap(org_id) is None:
             return
         try:
@@ -523,6 +552,33 @@ class TriageAgent:
     def _statgate_root_cause(score: Any, issue: Any) -> str:
         checks = ", ".join(score.p0_checks) or "p0"
         return f"Deterministic P0 escalation ({checks}) for {issue.kind} issue"
+
+
+def _ledger_context_for_prompt(ledger: dict[str, Any] | None) -> str:
+    """Format Ledger entries for triage investigation context (FEAT-144)."""
+    if not ledger:
+        return ""
+    entries = ledger.get("entries") or []
+    if not entries:
+        return ""
+    parts: list[str] = []
+    for entry in entries[:10]:
+        if not isinstance(entry, dict):
+            continue
+        text = str(entry.get("text") or "").strip()
+        if not text:
+            continue
+        chapter = str(entry.get("chapter") or "unknown")
+        citations = entry.get("citations")
+        cite_s = f" citations={citations}" if citations else ""
+        parts.append(f"[{chapter}]{cite_s}\n{text}")
+    if not parts:
+        return ""
+    version = ledger.get("version", "?")
+    body = (
+        f"Ledger v{version} institutional memory:\n\n" + "\n---\n".join(parts)
+    )
+    return wrap_untrusted_data(body)
 
 
 def _trace_content_for_prompt(stumbles: list[dict[str, Any]]) -> str:

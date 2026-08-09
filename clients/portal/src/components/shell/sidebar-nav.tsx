@@ -21,6 +21,7 @@ import {
   Settings,
   PanelLeftClose,
   Tag,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -33,7 +34,7 @@ import { EdenLogo } from "@/components/ds/eden-logo";
 import { useSidebar } from "@/components/shell/sidebar-context";
 import { SidebarAuthFooter } from "@/components/shell/portal-auth-chrome";
 import { AlertsBell } from "@/lab/alerts-bell";
-import { useSignalJobs } from "@/lab/signal-jobs-context";
+import { NotificationsBell } from "@/components/shell/notifications-bell";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
@@ -42,6 +43,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   traces: GitBranch,
   issues: AlertTriangle,
   signals: Activity,
+  topics: Layers,
   evals: FlaskConical,
   playgrounds: Play,
   improve: Sparkles,
@@ -60,14 +62,10 @@ function NavLink({
   item,
   pathname,
   collapsed,
-  attention,
-  onActivate,
 }: {
   item: NavItem;
   pathname: string;
   collapsed: boolean;
-  attention: boolean;
-  onActivate?: () => void;
 }) {
   const Icon = ICONS[item.icon];
   const active = isNavActive(pathname, item.href);
@@ -76,21 +74,17 @@ function NavLink({
       href={item.href}
       data-tour-id={item.id}
       data-active={active ? "true" : "false"}
-      data-attention={attention ? "true" : "false"}
       data-collapsed={collapsed ? "true" : "false"}
       title={item.label}
       className={cn(
         "type-ui ds-nav-item",
         collapsed && "justify-center !px-0",
       )}
-      onClick={onActivate}
     >
       <Icon
         className={cn(
           "h-[15px] w-[15px] shrink-0",
-          active || attention
-            ? "text-[var(--accent)]"
-            : "text-[var(--text-faint)]",
+          active ? "text-[var(--accent)]" : "text-[var(--text-faint)]",
         )}
         strokeWidth={1.6}
         aria-hidden
@@ -103,7 +97,6 @@ function NavLink({
 export function SidebarNav() {
   const pathname = usePathname() ?? "";
   const { collapsed, toggle, animate } = useSidebar();
-  const { signalsNavAttention, clearSignalsNavAttention } = useSignalJobs();
 
   return (
     <aside
@@ -141,6 +134,7 @@ export function SidebarNav() {
             >
               <PanelLeftClose className="h-3.5 w-3.5 rotate-180" />
             </button>
+            <NotificationsBell collapsed />
             <AlertsBell collapsed />
           </div>
         ) : (
@@ -152,6 +146,7 @@ export function SidebarNav() {
               <EdenLogo size={22} />
               <span className="type-title truncate !text-[0.875rem]">eden</span>
             </Link>
+            <NotificationsBell />
             <AlertsBell />
             <button
               type="button"
@@ -195,16 +190,6 @@ export function SidebarNav() {
                       item={item}
                       pathname={pathname}
                       collapsed={collapsed}
-                      attention={
-                        item.id === "signals" &&
-                        signalsNavAttention &&
-                        !isNavActive(pathname, item.href)
-                      }
-                      onActivate={
-                        item.id === "signals"
-                          ? clearSignalsNavAttention
-                          : undefined
-                      }
                     />
                   </li>
                 ))}

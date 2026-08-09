@@ -1151,7 +1151,7 @@ class ClosedLoopOrchestrator:
         """N01 replay enrichment — make cases replayable, honestly.
 
         For each freshly created regression case, merge into
-        ``expected_data``:
+        ``dataset_items.expected_output`` (JSON text):
 
         * ``failure_signature`` — the machine-checkable "what was
           wrong", extracted through the same M7 machinery the failure
@@ -1198,9 +1198,14 @@ class ClosedLoopOrchestrator:
                 if client is not None:
                     await client.execute(
                         """
-                        UPDATE regression_eval_cases
-                        SET expected_data =
-                            COALESCE(expected_data, '{}'::jsonb) || $3::jsonb
+                        UPDATE dataset_items
+                        SET expected_output = (
+                                COALESCE(
+                                    NULLIF(trim(expected_output), '')::jsonb,
+                                    '{}'::jsonb
+                                ) || $3::jsonb
+                            )::text,
+                            updated_at = NOW()
                         WHERE id = $1::uuid AND org_id = $2
                         """,
                         case_id,

@@ -115,6 +115,18 @@ export function PlanEvidencePanel({
       ? (autoMerge.details as Evidence)
       : null;
   const hasAutoMergeDecision = autoMergeEligible != null;
+  const autoMergeMerged = autoMerge ? readBool(autoMerge, "merged") : null;
+  const autoMergeManual = autoMerge ? readBool(autoMerge, "manual") : null;
+  const manualMerge =
+    ev.manual_merge && typeof ev.manual_merge === "object"
+      ? (ev.manual_merge as Evidence)
+      : null;
+  const operatorRevert =
+    ev.operator_revert && typeof ev.operator_revert === "object"
+      ? (ev.operator_revert as Evidence)
+      : null;
+  const guardianAction = readStr(ev, "guardian_action") ?? readStr(ev, "guardian");
+  const rawStatus = raw?.status ?? null;
 
   const traceIds = planTraceIds(plan, raw);
   const hasChips =
@@ -124,7 +136,27 @@ export function PlanEvidencePanel({
     ciStatus != null ||
     failurePack != null ||
     severity != null ||
-    confidence != null;
+    confidence != null ||
+    autoMergeMerged != null ||
+    guardianAction != null ||
+    manualMerge != null ||
+    operatorRevert != null;
+
+  const supervisionLabel = (() => {
+    if (rawStatus === "merged" || autoMergeMerged) {
+      return autoMergeManual ? "merged (manual)" : "merged";
+    }
+    if (operatorRevert || guardianAction === "revert" || guardianAction === "auto_revert") {
+      return "reverted";
+    }
+    if (rawStatus === "rejected" || rawStatus === "closed") {
+      return "blocked";
+    }
+    if (autoMergeBlockedBy) {
+      return `blocked (${autoMergeBlockedBy})`;
+    }
+    return null;
+  })();
 
   return (
     <section
@@ -139,6 +171,22 @@ export function PlanEvidencePanel({
         </p>
       ) : (
         <>
+          {supervisionLabel ? (
+            <div className="mt-2">
+              <StatusChip
+                tone={
+                  supervisionLabel.startsWith("merged")
+                    ? "ok"
+                    : supervisionLabel.startsWith("reverted") ||
+                        supervisionLabel.startsWith("blocked")
+                      ? "fail"
+                      : "neutral"
+                }
+              >
+                supervision: {supervisionLabel}
+              </StatusChip>
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {tier ? <StatusChip tone="neutral">tier: {tier}</StatusChip> : null}
             {staticStatus ? (

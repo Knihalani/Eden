@@ -29,8 +29,8 @@ Canonical Wave-1 / Wave-2 register. Agents update their rows only.
 | B29 | A7 | P2 | DONE | silver_etl usage_events column projection |
 | B30 | A7 | P2 | DONE | labeling_items / labeling_queues SELECT projection |
 | K35 | A8 | P0 | DONE | Py+TS gzip Content-Encoding on ingest POST |
-| K36 | A8 | P0 | DONE | Go SDK queue+batch flush |
-| K37 | A8 | P0 | DONE | Rust send_batch raw JSON array |
+| K36 | A8 | P0 | DONE | Go SDK queue+batch flush (`sdk/go/client.go` `flushLoop` + `BatchSize`; present in tree 2026-08-07) |
+| K37 | A8 | P0 | DONE | Rust `send_batch` raw JSON array (`sdk/rust/src/client.rs`; present in tree 2026-08-07) |
 | K38 | A8 | P1 | DONE | Py chunk retries+Retry-After; batch_size default 50 |
 | K39 | A8 | P1 | DONE | TS sideEffects:false + model-advisor subpath |
 | K40 | A8 | P1 | DONE | Py ModelAdvisor PEP 562 lazy import |
@@ -75,7 +75,7 @@ Canonical Wave-1 / Wave-2 register. Agents update their rows only.
 | P5 | A2 | P0 | DONE | Budget page refetchInterval 30s |
 | P6 | A2 | P0 | DONE | Top-8 pages migrated to `useOrgQuery` (remainder → P6b) |
 | P6b | W15-a | P2 | DONE | Batch migrate (~16) high-traffic hand-rolled → `useOrgQuery`; remainder → P6b-remainder |
-| P6b-remainder | W15-a | P2 | DEFERRED | 11 low-traffic surfaces left on hand-rolled fetch (not blocking P0/P1): profile/page, replay/page, settings autonomous-tab, TraceShareModal, AnnotateTraceDialog, 2fa-setup-dialog, api-keys-settings, invite-panel, members-settings, transfer-ownership-dialog, SpanSearchBar |
+| P6b-remainder | W15-a | P2 | DEFERRED | 11 low-traffic surfaces left on hand-rolled fetch (not blocking P0/P1): profile/page, replay/page, settings autonomous-tab, TraceShareModal, AnnotateTraceDialog, 2fa-setup-dialog, api-keys-settings, invite-panel, members-settings, transfer-ownership-dialog; span search→signal UI (`SpanSearchBar` name **UNVERIFIABLE** — 0 repo matches) |
 | P7 | A2 | P1 | DONE | Extended `query-keys.ts` (cost.kpi, sessionTraces, tokens, P6 domains) |
 | P12 | A2 | P1 | DONE | Alerts + improve queue use `VirtualizedList` |
 | P18 | A2 | P1 | DONE | `portal-dehydrate.ts` + dashboard/traces layouts hydrate via Eden `/auth/me` org UUID + shared days |

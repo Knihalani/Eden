@@ -34,6 +34,19 @@ inputs:
     description: Fail workflow when gate is block
     required: false
     default: "true"
+  enable-playground-scorers:
+    description: >
+      Run FEAT-13 playground deterministic scorers on regression dataset cases
+      (also requires ci_eval_playground_scorers_v1 on the Eden deployment, or
+      this input set to true).
+    required: false
+    default: "true"
+  scorer-specs-json:
+    description: >
+      Optional JSON array of global scorer specs, e.g.
+      [{"type":"exact_match"}]. Merged with per-case specs in dataset metadata.
+    required: false
+    default: ""
 
 outputs:
   gate:
@@ -66,10 +79,14 @@ runs:
         ")
         payload=$(python - <<PY
         import json, os
+        scorer_raw = """${{ inputs.scorer-specs-json }}""".strip()
+        scorer_specs = json.loads(scorer_raw) if scorer_raw else []
         print(json.dumps({
             "change_id": "${{ inputs.change-id }}",
             "changed_files": json.loads('''$files_json'''),
             "agent_id": "${{ inputs.agent-id }}" or None,
+            "enable_playground_scorers": "${{ inputs.enable-playground-scorers }}" == "true",
+            "scorer_specs": scorer_specs,
         }))
         PY
         )

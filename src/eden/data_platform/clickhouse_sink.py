@@ -17,8 +17,8 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any

@@ -95,10 +95,46 @@ export type SkipRequestBody = {
   reason?: string | null;
 };
 
+export type BulkSkipRequestBody = {
+  item_ids: string[];
+  reason?: string | null;
+};
+
+export type LabelingKanbanStatus = "todo" | "in_progress" | "done" | "skipped";
+
+export type LabelingKanbanItem = {
+  id: string;
+  prompt: string | null;
+  payload: Record<string, unknown>;
+  kanban_status: LabelingKanbanStatus;
+  tags: string[];
+  created_at: string;
+};
+
+export type LabelingKanbanBoard = Record<LabelingKanbanStatus, LabelingKanbanItem[]>;
+
+export type LabelingQueueAgreement = {
+  kappa?: number;
+  n?: number;
+  agreement_rate?: number;
+};
+
+export type LabelingQueueBoardResponse = {
+  queue_id: string;
+  board: LabelingKanbanBoard;
+};
+
+export type LabelingQueueAgreementResponse = {
+  queue_id: string;
+  iaa: LabelingQueueAgreement;
+};
+
 /** Per-item agreement entry — 2 annotators gives `kappa` + `agreement`; N>2 gives `agreement` only. */
 export type LabelingPerItemAgreement = {
   kappa?: number;
-  agreement: number;
+  agreement?: number;
+  annotations_count?: number;
+  annotations_required?: number;
 };
 
 export type LabelingAgreementReport = {
@@ -118,8 +154,29 @@ export const labelingApi = {
 
   /** `GET /queues/{id}/agreement` — Cohen's kappa from dual-labeled items in a queue. */
   queueAgreement: (orgId: string, queueId: string) =>
-    fetchApi<{ queue_id: string; iaa: Record<string, unknown> }>(
+    fetchApi<LabelingQueueAgreementResponse>(
       labelingPath(orgId, `queues/${encodeURIComponent(queueId)}/agreement`),
+    ),
+
+  /** `GET /queues/{id}/board` — F50 kanban columns for a queue. */
+  queueBoard: (orgId: string, queueId: string) =>
+    fetchApi<LabelingQueueBoardResponse>(
+      labelingPath(orgId, `queues/${encodeURIComponent(queueId)}/board`),
+    ),
+
+  /** `POST /queues/{id}/move` — move a kanban card to another column. */
+  moveItem: (
+    orgId: string,
+    queueId: string,
+    itemId: string,
+    status: LabelingKanbanStatus,
+  ) =>
+    fetchApi<{ moved: boolean; item_id: string; status: string }>(
+      labelingPath(orgId, `queues/${encodeURIComponent(queueId)}/move`),
+      {
+        method: "POST",
+        body: JSON.stringify({ item_id: itemId, status }),
+      },
     ),
 
   /** `GET /items` — org-wide item list with annotation counts (the "Unassigned items" panel source). */
@@ -147,10 +204,17 @@ export const labelingApi = {
   },
 
   /** `GET /queue/{user_id}` — pop (and lease) the next N pending items for an annotator. */
-  popQueue: (orgId: string, userId: string, limit = 5) =>
-    fetchApi<LabelingPopResponse>(
-      labelingPath(orgId, `queue/${encodeURIComponent(userId)}?limit=${limit}`),
-    ),
+  popQueue: (
+    orgId: string,
+    userId: string,
+    limit = 5,
+    strategy: "fifo" | "active_learning" = "fifo",
+  ) => {
+    const q = new URLSearchParams({ limit: String(limit), strategy });
+    return fetchApi<LabelingPopResponse>(
+      labelingPath(orgId, `queue/${encodeURIComponent(userId)}?${q.toString()}`),
+    );
+  },
 
   /** `POST /annotate` — submit (or revise) an annotation; releases the item's lease. */
   annotate: (orgId: string, body: AnnotateRequestBody) =>
@@ -165,4 +229,43 @@ export const labelingApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  /** `POST /skip/bulk` — mark multiple items un-labelable in one request. */
+  skipBulk: (orgId: string, body: BulkSkipRequestBody) =>
+    fetchApi<{ skipped: boolean; skipped_count: number }>(
+      labelingPath(orgId, "skip/bulk"),
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
+
+  /** `POST /items/{id}/escalate` — bump annotations_required and re-queue (FEAT-119). */
+  escalate: (orgId: string, itemId: string) =>
+    fetchApi<LabelingItem>(
+      labelingPath(orgId, `items/${encodeURIComponent(itemId)}/escalate`),
+      { method: "POST" },
+    ),
+
+  /**
+   * `GET /export` — approved annotations as JSONL (plain text).
+   * Uses ``stream: true`` so fetchApi returns a Blob instead of JSON.
+   */
+  exportJsonl: async (
+    orgId: string,
+    params?: {
+      status?: "pending" | "in_progress" | "completed" | "skipped";
+      limit?: number;
+    },
+  ): Promise<string> => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    const blob = await fetchApi<Blob>(
+      labelingPath(orgId, "export") + (qs ? `?${qs}` : ""),
+      { stream: true },
+    );
+    return blob.text();
+  },
 };

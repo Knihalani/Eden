@@ -3,6 +3,12 @@
  * Mutations stay on domain routes via ``api`` / ``promptsApi`` helpers.
  */
 import { ApiError, fetchApi } from "@/lib/api/core";
+import {
+  issueFixtureListSchema,
+  portalSchema,
+  sessionFixtureListSchema,
+  traceFixtureListSchema,
+} from "@/lib/api/schemas";
 import type {
   AgentFixture,
 } from "@/lab/fixtures/agents";
@@ -47,21 +53,22 @@ function portalPath(orgId: string, suffix: string): string {
 }
 
 /**
- * Raw `guardrail_policies` row as returned by `GuardrailPolicy.list`'s
- * `_row_to_policy` normaliser (`eden/guardrails/policy.py`) — the shape
- * inside the list envelope's `data.policies`, before it's mapped onto
- * the portal's `GuardrailPolicyFixture`.
+ * Portal read-model card from `GET /orgs/{org}/portal/guardrails/policies`
+ * (`GuardrailPolicyCard` in `eden/api/portal_contracts.py`). The route
+ * returns a bare array (not the intelligence `GuardrailPolicy.list`
+ * ok-envelope). `matchCount24h` is derived from `intervention_log` rows
+ * attributed to each policy — the same table `InterventionEngine.evaluate_and_act`
+ * writes to (FEAT-38); the removed trajectory bypass never logged here.
  */
-type GuardrailPolicyRow = {
+type GuardrailPolicyCardRow = {
   id: string;
-  org_id: string;
   name: string;
-  type: string;
-  spec: Record<string, unknown>;
-  action: string;
-  direction: string;
+  kind: string;
   status: string;
-  created_at: string;
+  agentId?: string | null;
+  severity?: string;
+  matchCount24h?: number;
+  action: string;
 };
 
 export const portalApi = {
@@ -91,12 +98,27 @@ export const portalApi = {
    * fetching the org-wide most-recent list and filtering client-side
    * (which silently empties for an agent whose activity is older than
    * the org's most-recent traces).
+   *
+   * FEAT-147: ``participantAgentId`` includes traces where that agent
+   * appeared on any span, even when it is not the preferred display id.
    */
-  traces: (orgId: string, agentId?: string) =>
-    fetchApi<TraceFixture[]>(
-      portalPath(orgId, "traces") +
-        (agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ""),
-    ),
+  traces: (
+    orgId: string,
+    filters?: { agentId?: string; participantAgentId?: string },
+  ) => {
+    const params = new URLSearchParams();
+    if (filters?.agentId) {
+      params.set("agent_id", filters.agentId);
+    }
+    if (filters?.participantAgentId) {
+      params.set("participant_agent_id", filters.participantAgentId);
+    }
+    const qs = params.toString();
+    return fetchApi<TraceFixture[]>(
+      portalPath(orgId, "traces") + (qs ? `?${qs}` : ""),
+      { schema: portalSchema<TraceFixture[]>(traceFixtureListSchema) },
+    );
+  },
 
   /**
    * Single-trace detail — same shape as ``traces()`` rows but with
@@ -111,15 +133,22 @@ export const portalApi = {
     ),
 
   sessions: (orgId: string) =>
-    fetchApi<SessionFixture[]>(portalPath(orgId, "sessions")),
+    fetchApi<SessionFixture[]>(portalPath(orgId, "sessions"), {
+      schema: portalSchema<SessionFixture[]>(sessionFixtureListSchema),
+    }),
 
-  issues: (orgId: string, filters?: { limit?: number; offset?: number }) => {
+  issues: (
+    orgId: string,
+    filters?: { limit?: number; offset?: number; sort?: "recency" | "rank" },
+  ) => {
     const q = new URLSearchParams();
     if (typeof filters?.limit === "number") q.set("limit", String(filters.limit));
     if (typeof filters?.offset === "number") q.set("offset", String(filters.offset));
+    if (filters?.sort) q.set("sort", filters.sort);
     const qs = q.toString();
     return fetchApi<IssueFixture[]>(
       portalPath(orgId, "issues") + (qs ? `?${qs}` : ""),
+      { schema: portalSchema<IssueFixture[]>(issueFixtureListSchema) },
     );
   },
 
@@ -195,6 +224,30 @@ export const portalApi = {
   auditPacks: (orgId: string) =>
     fetchApi<AuditPackFixture[]>(portalPath(orgId, "audit/packs")),
 
+  /** `POST /orgs/{org}/compliance/verify` — hash-chain tamper check (FEAT-110). */
+  verifyAuditChain: (
+    orgId: string,
+    opts?: { agentId?: string; limit?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (opts?.agentId) q.set("agent_id", opts.agentId);
+    if (opts?.limit != null) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return fetchApi<{
+      status: string;
+      feature?: string;
+      live?: boolean;
+      data: {
+        verified?: boolean;
+        total_rows?: number;
+        ok_rows?: number;
+        broken_rows?: number;
+      };
+    }>(`/orgs/${orgId}/compliance/verify${qs ? `?${qs}` : ""}`, {
+      method: "POST",
+    });
+  },
+
   evalDatasets: (orgId: string) =>
     fetchApi<DatasetFixture[]>(portalPath(orgId, "evals/datasets")),
 
@@ -231,29 +284,26 @@ export const portalApi = {
     }),
 
   /**
-   * `GuardrailPolicy.list` (`eden/guardrails/policy.py`) wraps its rows in
-   * the standard ok-envelope — `{status, feature, live, timestamp,
-   * data: {policies, count}}` (see `_ok_envelope`) — rather than returning
-   * a bare array. Unwrap `data.policies` and map each raw
-   * `guardrail_policies` row (`id, name, type, spec, action, direction,
-   * status, created_at` — see `_row_to_policy`) onto the portal's
-   * `GuardrailPolicyFixture` shape. The backend never computes severity,
-   * match-volume, last-hit, rule-summary, or issue/trace links, so those
-   * fields are left `undefined` and render blank rather than fabricated
-   * (FEAT-32).
+   * Portal guardrail policy cards (`list_portal_guardrail_policies` in
+   * `eden/api/routes/portal.py`). Maps onto `GuardrailPolicyFixture`.
+   * `matchCount24h` comes from `intervention_log` (InterventionEngine
+   * path only — see FEAT-38 audit). `lastHit`, `ruleSummary`, and
+   * issue/trace links are still not computed server-side.
    */
   guardrailPolicies: (orgId: string) =>
-    fetchApi<{
-      status: string;
-      data: { policies: GuardrailPolicyRow[]; count: number } | null;
-    }>(portalPath(orgId, "guardrails/policies")).then((r) =>
-      (r.data?.policies ?? []).map(
+    fetchApi<GuardrailPolicyCardRow[]>(
+      portalPath(orgId, "guardrails/policies"),
+    ).then((rows) =>
+      (Array.isArray(rows) ? rows : []).map(
         (row): GuardrailPolicyFixture => ({
           id: row.id,
           name: row.name,
-          kind: row.type as GuardrailKind,
+          kind: row.kind as GuardrailKind,
           status: row.status as GuardrailPolicyFixture["status"],
           action: row.action as GuardrailPolicyFixture["action"],
+          agentId: row.agentId ?? undefined,
+          severity: row.severity as GuardrailPolicyFixture["severity"],
+          matchCount24h: row.matchCount24h,
         }),
       ),
     ),
@@ -380,6 +430,29 @@ export type ArtifactRow = {
   cost?: { tokens?: number; usd?: number } & Record<string, unknown>;
 };
 
+export type ArtifactContextItem = {
+  id: string;
+  filename?: string | null;
+  content_type?: string;
+  content_preview?: string;
+  preview_truncated?: boolean;
+  size_bytes?: number;
+  created_at?: string | null;
+  created_by?: string;
+  agent_id?: string;
+};
+
+export type ArtifactDemotionRow = {
+  artifact_id: string;
+  agent_id: string;
+  name: string;
+  mode: string;
+  reason: string;
+  demoted_at?: string | null;
+  source: string;
+  content_preview?: string;
+};
+
 export const artifactsApi = {
   list: (orgId: string, filters?: { agentId?: string; mode?: ArtifactMode }) => {
     const q = new URLSearchParams();
@@ -419,6 +492,32 @@ export const artifactsApi = {
       `/orgs/${orgId}/artifacts/${encodeURIComponent(artifactId)}/archive`,
       { method: "POST" },
     ),
+
+  listContext: (orgId: string, agentId: string) =>
+    fetchApi<{ status: string; data: { items: ArtifactContextItem[] } }>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/artifacts/context`,
+    ).then((r) => r.data?.items ?? []),
+
+  uploadContext: (orgId: string, agentId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    return fetchApi<{ status: string; data: ArtifactContextItem }>(
+      `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/artifacts/context`,
+      { method: "POST", body: formData },
+    );
+  },
+
+  listDemotions: (orgId: string, filters?: { agentId?: string }) => {
+    const q = new URLSearchParams();
+    if (filters?.agentId) q.set("agent_id", filters.agentId);
+    const qs = q.toString();
+    return fetchApi<{
+      status: string;
+      data: { items?: ArtifactDemotionRow[]; demotions?: ArtifactDemotionRow[] };
+    }>(`/orgs/${orgId}/artifacts/demotions${qs ? `?${qs}` : ""}`).then(
+      (r) => r.data?.items ?? r.data?.demotions ?? [],
+    );
+  },
 };
 
 /** Ledger (`src/eden/kb/ledger/`) — `/orgs/{orgId}/ledger`. */

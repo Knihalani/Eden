@@ -338,10 +338,7 @@ class TestClickHouseJsonxInsert:
         # (we patched the module-level alias the sink calls).
         body = session.post.call_args.kwargs.get("data") or session.post.call_args[1].get("data")
         # aiohttp form: data={"query": ..., "": body} for CH
-        if isinstance(body, dict):
-            ndjson = body.get("") or ""
-        else:
-            ndjson = body
+        ndjson = body.get("") or "" if isinstance(body, dict) else body
         assert "e1" in str(ndjson)
 
 

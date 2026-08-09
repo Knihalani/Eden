@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from eden.api.deps import ensure_clerk_membership
-from eden.api.routes.clerk_webhooks import _upsert_membership
 from eden.api.routes import orgs as orgs_routes
+from eden.api.routes.clerk_webhooks import _upsert_membership
 from eden.services.invitation_service import accept_invitation
 
 

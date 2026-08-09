@@ -7,34 +7,23 @@ Four services:
   (``verdict: "block"``, ``live: false``). Only enforced
   detector policies flip the envelope to ``live: true``.
 
-* :class:`LegacyEvalToGuardrailLink` — promote a Cat 3 judge
-  into a production guardrail (Galileo's eval-to-guardrail
-  lifecycle). Writes a row to ``eval_to_guardrail_links`` and
-  creates a sibling ``judge_link`` policy in
-  ``guardrail_policies``. FEAT-34: this is the **legacy**
-  half of the eval-to-guardrail concept — see the class
-  docstring and
-  :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
-  (the canonical, enforcing half) for the reconciled picture.
-
 * :class:`InterventionLog` — read the log of decisions
   (queries the existing ``intervention_log`` table).
 
 * :class:`GuardrailMetrics` — dashboard counters (trigger rate
   per org, per policy, per action).
 
+Eval-to-guardrail promotion/demotion is handled by the canonical
+:class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+(FEAT-34). Shared DB helpers
+(:func:`_insert_eval_to_guardrail_link`,
+:func:`_disable_eval_guardrail_link`) live in this module.
+
 Closed-loop wiring:
 
 * :class:`InterventionEngine` fires
   :func:`GuardrailHook.on_judge_threshold_breach` when a
-  judge-driven policy is reliably catching real issues (i.e.
-  the link was created with ``fire_hook=True`` and the
-  threshold is breached on a sample of the org's judge
-  scores).
-
-* :class:`LegacyEvalToGuardrailLink.promote` is also called by
-  :func:`GuardrailHook.on_judge_threshold_breach` — a true
-  bidirectional link.
+  judge-driven policy is reliably catching real issues.
 """
 
 from __future__ import annotations
@@ -45,8 +34,6 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
-
-from eden.intelligence_envelope import not_implemented
 
 from .detectors import HallucinationBlocker, PIIFirewall, PromptInjectionDetector
 from .policy import (
@@ -397,19 +384,50 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     return d
 
 
+# ─── Canonical enforcement types (FEAT-37) ───────────────────────
+#
+# Single source of truth for which policy types
+# :meth:`InterventionEngine.evaluate_and_act` actually enforces.
+# ``judge_link`` (written by legacy promotion shims and some Cat 3
+# rows) is intentionally excluded — see
+# ``docs/docs/observability/37-runtime-guardrails.md``
+# ("Single source of truth: which guardrail enforcement path is
+# active (FEAT-37)").
+_ENFORCED_POLICY_TYPES = frozenset(
+    {
+        "prompt_injection",
+        "pii_redaction",
+        "hallucination",
+        "content_policy",
+    }
+)
+
+
 # ─── InterventionEngine ──────────────────────────────────────────
+#
+# ARCHITECTURE (FEAT-37): ``InterventionEngine.evaluate_and_act`` is
+# Eden's *only* canonical content-safety enforcement pipeline. The
+# trajectory hot path (``POST /v1/guardrails/trajectory/check`` and
+# ``TrajectoryInterventionGatewayFilter``) is a separate, legitimate
+# surface for cost/loop/latency — it must never be substituted in
+# place of this method. Bypass detection:
+# :func:`is_evaluate_and_act_patched` + :func:`record_guardrail_bypass_if_detected`.
+# Full statement: ``docs/docs/observability/37-runtime-guardrails.md`` §
+# "Single source of truth: which guardrail enforcement path is active".
 
 
 class InterventionEngine:
     """The headline guardrail route.
 
     :func:`evaluate_and_act` evaluates ``text`` against every
-    active policy of types ``prompt_injection``,
-    ``pii_redaction``, ``hallucination``, ``content_policy``,
-    and ``judge_link`` and returns the most-restrictive
-    verdict. The action also drives the *editing* of the
-    text — for ``redact`` actions the returned ``edited_text``
-    has the PII / injection match replaced with a
+    active policy of types in :data:`_ENFORCED_POLICY_TYPES`
+    (``prompt_injection``, ``pii_redaction``, ``hallucination``,
+    ``content_policy``) and returns the most-restrictive verdict.
+    ``judge_link`` policies are *not* enforced here (they may exist
+    for record-keeping / gateway hot-reload but do not flip
+    ``live: true`` on this path). The action also drives the
+    *editing* of the text — for ``redact`` actions the returned
+    ``edited_text`` has the PII / injection match replaced with a
     placeholder.
 
     **Direction filtering:** a policy's ``direction`` field
@@ -522,16 +540,8 @@ class InterventionEngine:
 
         # judge_link policies are declared but not evaluated here —
         # do not advertise live enforcement solely because they exist.
-        _enforced_types = frozenset(
-            {
-                "prompt_injection",
-                "pii_redaction",
-                "hallucination",
-                "content_policy",
-            }
-        )
         enforced_policies = [
-            p for p in policies if p.get("type") in _enforced_types
+            p for p in policies if p.get("type") in _ENFORCED_POLICY_TYPES
         ]
         if not enforced_policies:
             has_judge = any(p.get("type") == "judge_link" for p in policies)
@@ -880,79 +890,27 @@ def get_guardrail_bypass_counts() -> dict[str, int]:
     return dict(_guardrail_bypass_counts)
 
 
-# ─── LegacyEvalToGuardrailLink ──────────────────────────────────
+# ─── LegacyEvalToGuardrailLink (non-enforcing, FEAT-34/37) ───────
+#
+# Historical Cat 15 promotion shim kept for callers that still import
+# from this module. Writes ``judge_link`` policies that
+# :meth:`InterventionEngine.evaluate_and_act` never enforces (see
+# :data:`_ENFORCED_POLICY_TYPES`). For production promotion/demotion
+# use :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`.
 
 
 class LegacyEvalToGuardrailLink:
-    """Legacy eval-to-guardrail link (FEAT-34: superseded, kept for compatibility).
-
-    FEAT-34 reconciliation note: this class and
-    :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
-    used to share the identical name ``EvalToGuardrailLink``,
-    which made it look like an accidental duplicate. They are
-    not duplicates — they represent the "record intent" half
-    (this class) and the "actually enforce" half (the other
-    class) of the same lifecycle concept, kept as two classes
-    because their callers cannot be safely merged in one change
-    (see below). This class was renamed to
-    ``LegacyEvalToGuardrailLink`` so the two are distinguishable
-    by name alone; the other class keeps the ``EvalToGuardrailLink``
-    name as the canonical one.
+    """Non-enforcing eval-to-guardrail record keeper (legacy).
 
     .. deprecated::
-        This is **not** the production enforcement path. The
-        canonical implementation is
-        :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
-        — it is the one reachable from
-        ``POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail``,
-        ``.../eval/promote-to-shadow-guardrail``, and
-        ``.../eval/demote-guardrail``, and it is the one that
-        actually enforces anything, because it hot-reloads the
-        live :mod:`eden.llmops.filters.guardrail` gateway filter on
-        every promote/demote. New integrations should use that
-        class, not this one.
-
-        This class is retained only because two things still
-        depend on its exact type/import surface and cannot be
-        safely deleted in the same change: the legacy
-        ``POST /orgs/{org_id}/intelligence/guardrails/promote-judge``
-        route (``eden.api.routes.intelligence_guardrails``) and
-        :class:`eden.llmops.promotion_hooks.GuardrailHook`'s
-        ``on_judge_threshold_breach`` / ``on_judge_below_floor``
-        closed-loop callbacks.
-
-    Writes a row to ``eval_to_guardrail_links`` and creates a
-    sibling ``judge_link`` policy in ``guardrail_policies``. That
-    policy is **not enforced**: ``judge_link`` is hard-excluded
-    from :class:`InterventionEngine`'s ``_enforced_types``
-    (``evaluate_and_act`` returns ``reason:
-    "judge_link_not_enforced"`` when it is the only policy type
-    present), and unlike the canonical class's ``promote_to_guardrail``,
-    ``.promote()`` here never hot-reloads the live gateway filter
-    either. Calling ``.promote()`` on this class alone therefore has
-    **no live enforcement effect** — it only records intent
-    (``guardrail_policies``/``eval_to_guardrail_links`` rows) that a
-    human or the canonical class's promote path would need to act
-    on for the guardrail to actually run. ``.demote()`` is
-    symmetric and does work end-to-end for what this class itself
-    wrote (it also reloads the gateway filter, so it is safe to
-    call even though ``.promote()`` never added anything there), but
-    there is no REST route that reaches it. The policy's ``spec`` is::
-
-        {
-            "judge_name": "...",
-            "threshold": 0.6,
-            "action": "block"
-        }
-
-    The hook :class:`GuardrailHook.on_judge_threshold_breach`
-    is the *reverse* direction — it fires from Cat 3 when a
-    judge has reliably caught real issues and is a strong
-    candidate for promotion. That hook calls this ``promote``
-    to do the work.
+        Use :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+        for production promotion — it hot-reloads the live gateway filter.
+        This class only persists a ``judge_link`` row that
+        :meth:`InterventionEngine.evaluate_and_act` explicitly does
+        **not** enforce.
     """
 
-    name = "eval_to_guardrail_link"
+    name = "legacy_eval_to_guardrail"
 
     async def promote(
         self,
@@ -960,90 +918,55 @@ class LegacyEvalToGuardrailLink:
         *,
         judge_name: str,
         threshold: float,
-        action: str = "block",
-        fire_hook: bool = False,
     ) -> dict[str, Any]:
-        """Create the link and the policy.
+        """Write a ``judge_link`` policy row (not enforced by evaluate_and_act)."""
+        import json
 
-        Returns ``data: {"link_id": "...", "policy_id": "...",
-        "judge_name": "...", "threshold": ...}``.
-        """
-        from .policy import GuardrailPolicy
+        from eden.evaluation.eval_intel._common import _insert_guardrail_policy
 
-        if not isinstance(judge_name, str) or not judge_name:
-            return not_implemented(self.name, message="judge_name is required")
-        if not isinstance(threshold, (int, float)):
-            return not_implemented(self.name, message="threshold must be a number")
-        if action not in VALID_ACTIONS:
-            action = "block"
-
-        # Create the guardrail policy first
-        policy_name = f"judge_link:{judge_name}"
-        gp = GuardrailPolicy()
-        policy_resp = await gp.create(
-            org_id,
-            name=policy_name,
-            type="judge_link",
-            spec={
-                "judge_name": judge_name,
-                "threshold": float(threshold),
-            },
-            action=action,
-        )
-        if (policy_resp.get("data") or {}).get("id") is None:
-            return not_implemented(
+        if not isinstance(judge_name, str) or not judge_name.strip():
+            return _ok_envelope(
                 self.name,
-                message="policy creation failed",
+                {
+                    "status": "error",
+                    "message": "judge_name must be a non-empty string",
+                },
             )
-        policy_id = (policy_resp.get("data") or {}).get("id")
-
-        # Then create the link row
-        link_id = await _insert_eval_to_guardrail_link(
+        judge_name = judge_name.strip()[:64]
+        spec = {"judge_name": judge_name, "threshold": float(threshold)}
+        policy_id = await _insert_guardrail_policy(
+            org_id,
+            name=f"judge_link:{judge_name}@{threshold}",
+            type_="judge_link",
+            spec_json=json.dumps(spec),
+            action="block_if_below",
+            status="active",
+        )
+        if policy_id is None:
+            return _ok_envelope(
+                self.name,
+                {
+                    "status": "error",
+                    "message": "guardrail policy insert failed",
+                },
+            )
+        await _insert_eval_to_guardrail_link(
             org_id,
             judge_name=judge_name,
-            guardrail_policy_id=str(policy_id),
-            threshold=float(threshold),
+            guardrail_policy_id=policy_id,
+            threshold=threshold,
+            status="active",
         )
-
-        # Best-effort hook fire
-        if fire_hook:
-            try:
-                from eden.llmops.promotion_hooks import get_guardrail_hook
-                hook = get_guardrail_hook()
-                coro = hook.on_judge_threshold_breach(
-                    org_id,
-                    judge_name=judge_name,
-                    threshold=float(threshold),
-                )
-                # ``on_judge_threshold_breach`` is now async
-                # (it persists the action to the DB). Await
-                # if we're inside an event loop, otherwise
-                # fire-and-forget (we're in a sync context).
-                if coro is not None and hasattr(coro, "__await__"):
-                    import asyncio
-
-                    try:
-                        asyncio.get_running_loop()
-                        from eden.async_tasks import bounded_create_task
-
-                        bounded_create_task(coro, name="guardrail-judge-breach")
-                    except RuntimeError:
-                        # No running loop — likely a sync
-                        # caller. Close the coroutine to
-                        # avoid the "never awaited" warning.
-                        with contextlib.suppress(Exception):
-                            coro.close()
-            except Exception:  # pragma: no cover - defensive
-                pass
-
         return _ok_envelope(
             self.name,
             {
-                "link_id": link_id,
-                "policy_id": policy_id,
+                "org_id": org_id,
+                "guardrail_policy_id": policy_id,
                 "judge_name": judge_name,
-                "threshold": float(threshold),
-                "action": action,
+                "threshold": threshold,
+                "type": "judge_link",
+                "enforced_by_evaluate_and_act": False,
+                "status": "active",
             },
         )
 
@@ -1054,47 +977,16 @@ class LegacyEvalToGuardrailLink:
         judge_name: str,
         reason: str = "",
     ) -> dict[str, Any]:
-        """Disable a promoted judge guardrail (eval-to-guardrail demote)."""
-        if not isinstance(judge_name, str) or not judge_name:
-            return not_implemented(self.name, message="judge_name is required")
-
+        """Disable promoted judge rows (DB only — no live filter reload)."""
         result = await _disable_eval_guardrail_link(
-            org_id,
-            judge_name=judge_name,
-            reason=reason,
+            org_id, judge_name=judge_name, reason=reason,
         )
-        if not result.get("disabled"):
-            return _ok_envelope(
-                self.name,
-                {
-                    "org_id": org_id,
-                    "judge_name": judge_name,
-                    "status": "not_found",
-                    "reason": reason,
-                },
-            )
-
-        try:
-            from eden.llmops.filters.guardrail import get_guardrail_filter
-            from eden.llmops.learn_wiring import install_learn_filters
-
-            install_learn_filters()
-            filt = get_guardrail_filter()
-            remaining = [
-                p
-                for p in filt._policies.get(org_id, [])
-                if str(p.get("judge_name") or "") != judge_name
-            ]
-            filt.load_policies(org_id, remaining)
-        except Exception as hook_exc:
-            logger.debug("eval_to_guardrail: gateway filter reload failed: %s", hook_exc)
-
         return _ok_envelope(
             self.name,
             {
                 "org_id": org_id,
                 "judge_name": judge_name,
-                "status": "disabled",
+                "disabled": bool(result.get("disabled")),
                 "policy_ids": result.get("policy_ids") or [],
                 "link_ids": result.get("link_ids") or [],
                 "reason": reason,
@@ -1152,6 +1044,13 @@ class GuardrailMetrics:
     ``intervention_log`` for the last 7 days. The data is
     cheap to compute (a single ``fetch`` + in-memory reduce)
     so the dashboard hits this on every render.
+
+    FEAT-38: ``intervention_log`` is the canonical audit trail for
+    ``InterventionEngine.evaluate_and_act`` only. The removed
+    trajectory-hot-path bypass (``feature=trajectory_guardrail``) never
+    wrote here. Any future customer-facing metrics UI must read this
+    table (or this class) and must reject payloads carrying the bypass
+    marker — same rule as :func:`record_guardrail_bypass_if_detected`.
     """
 
     name = "guardrail_metrics"

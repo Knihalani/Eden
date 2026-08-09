@@ -796,6 +796,8 @@ spec:
   # Smallest compute — this job never does real work.
   compute:
     name: nf-compute-10
+  settings:
+    backoffLimit: 3
   build:
     type: dockerfile
     dockerfilePath: ./Dockerfile

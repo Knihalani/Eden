@@ -337,8 +337,8 @@ async def stale_plans_janitor(limit: int = 50) -> int:
         org_id = str(r["org_id"])
         plan_id = str(r["id"])
         try:
-            # Stamp closed_reason into evidence jsonb.
-            try:
+            # Stamp closed_reason into evidence jsonb (best-effort).
+            with contextlib.suppress(Exception):
                 await client.execute(
                     """
                     UPDATE improvement_plans SET
@@ -350,8 +350,6 @@ async def stale_plans_janitor(limit: int = 50) -> int:
                     org_id,
                     plan_id,
                 )
-            except Exception:
-                pass
             from eden.improvement import plans_repo
 
             updated = await plans_repo.mark_closed(
@@ -805,10 +803,6 @@ async def stop_verify_worker() -> None:
                 await _TASK
     _TASK = None
     _STOP = None
-
-
-def is_verify_worker_running() -> bool:
-    return _TASK is not None and not _TASK.done()
 
 
 # ── helpers ─────────────────────────────────────────────────────────

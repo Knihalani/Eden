@@ -51,6 +51,7 @@ from eden.insights.rca._common import (
     _severity_for_count,
     _tokenize,
     _update_cluster_summary,
+    event_is_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -185,7 +186,7 @@ class IncidentClusterer:
             category, _conf, _sigs = _classify_events(events, [])
             first = _first_failed_event(events)
             error_type = _error_type_from_event(first)
-            agent_id = _agent_id_from_event(first)
+            agent_id = _agent_id_from_event(first, trace_id=trace_id)
             key: tuple[str, str, str] = (category, error_type, agent_id)
             per_trace.append((trace_id, key))
             # Collect error messages for Jaccard
@@ -195,7 +196,7 @@ class IncidentClusterer:
                 m = err.get("message") or err.get("detail") or err.get("reason")
                 if isinstance(m, str):
                     msg = m
-            if not msg and first.get("outcome") == "error":
+            if not msg and event_is_failure(first):
                 msg = first.get("name") or first.get("event_type") or ""
             error_messages_by_key[key].append(msg or error_type)
 
@@ -332,11 +333,9 @@ class IncidentClusterer:
                 total_events += 1
                 et = (ev.get("event_type") or "unknown").lower()
                 event_type_counts[et] += 1
-                err = ev.get("error")
-                if isinstance(err, dict):
-                    err_type = err.get("type")
-                    if isinstance(err_type, str) and err_type:
-                        error_type_counts[err_type] += 1
+                err_type = _error_type_from_event(ev)
+                if err_type != "unknown":
+                    error_type_counts[err_type] += 1
                 d = ev.get("duration_ms")
                 if isinstance(d, (int, float)):
                     durations.append(float(d))

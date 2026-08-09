@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { LabToastProvider } from "@/lab/lab-toast";
 
 // F61 — the Automations view wires the /signals surface to the real
 // GET/POST /orgs/{org}/automations endpoints. These tests exercise the
@@ -35,7 +36,11 @@ function withClient(node: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <LabToastProvider>{node}</LabToastProvider>
+    </QueryClientProvider>
+  );
 }
 
 const envelope = (automations: unknown[]) => ({

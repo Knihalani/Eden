@@ -114,18 +114,3 @@ export function usePermissions(): UsePermissionsResult {
     };
   }, [currentOrg, clerkOrgRole]);
 }
-
-export const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  member: "Member",
-  viewer: "Viewer",
-};
-
-// Role badge colors — roles are identity, not good/bad outcomes.
-export const ROLE_COLORS: Record<string, string> = {
-  owner: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-secondary)]",
-  admin: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-secondary)]",
-  member: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-muted)]",
-  viewer: "border-[var(--line)] bg-[var(--bg-inset)] text-[var(--text-muted)]",
-};

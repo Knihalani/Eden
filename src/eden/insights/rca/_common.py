@@ -117,7 +117,7 @@ TRACE_EVENTS_LIMIT: int = 2000
 _TRACE_EVENTS_COLUMNS_FULL: str = (
     "event_id, trace_id, span_id, event_type, payload, "
     "attributes, tags, source_format, timestamp, name, "
-    "duration_ms, outcome, error, parent_span_id, "
+    "duration_ms, outcome, error_type, parent_span_id, "
     "agent_id, reasoning, tool_calls_full, tool_results, "
     "request_body, response_body, tenant_id"
 )
@@ -134,9 +134,97 @@ _TRACE_EVENTS_COLUMNS_FULL: str = (
 #: — ``thin=True`` is only safe for read-only chain/list rendering.
 _TRACE_EVENTS_COLUMNS_THIN: str = (
     "event_id, trace_id, span_id, event_type, source_format, "
-    "timestamp, name, duration_ms, outcome, error, parent_span_id, "
+    "timestamp, name, duration_ms, outcome, error_type, parent_span_id, "
     "agent_id, reasoning, tenant_id"
 )
+
+#: OPT-61 — process-local tier counters (hot Postgres vs cold archive).
+_trace_events_hot_hits: int = 0
+_trace_events_cold_rehydrates: int = 0
+_trace_events_misses: int = 0
+
+#: Max distinct failed traces returned by :func:`_fetch_failed_traces_in_window`.
+_FAILED_TRACES_LIMIT: int = 500
+
+#: Per-call cap on cold rehydrates when supplementing windowed failure queries.
+_COLD_FAILED_TRACES_REHYDRATE_CAP: int = 30
+
+# OPT-61 — export tier counters via ``simple_metrics`` (mirrors OPT-36 in ``llm/client.py``).
+try:
+    from eden.observability.simple_metrics import Counter as _MetricsCounter
+except Exception:  # noqa: BLE001 — metrics are best-effort on the RCA hot path
+    _MetricsCounter = None  # type: ignore[misc, assignment]
+
+if _MetricsCounter is not None:
+    _TRACE_EVENTS_HOT_HITS = _MetricsCounter(
+        "eden_rca_trace_events_hot_hits_total",
+        "RCA trace event reads served from hot Postgres.",
+    )
+    _TRACE_EVENTS_COLD_REHYDRATES = _MetricsCounter(
+        "eden_rca_trace_events_cold_rehydrates_total",
+        "RCA trace event reads rehydrated from cold archive.",
+    )
+    _TRACE_EVENTS_MISSES = _MetricsCounter(
+        "eden_rca_trace_events_misses_total",
+        "RCA trace event reads missing in both hot and cold tiers.",
+    )
+else:
+    _TRACE_EVENTS_HOT_HITS = None  # type: ignore[assignment]
+    _TRACE_EVENTS_COLD_REHYDRATES = None  # type: ignore[assignment]
+    _TRACE_EVENTS_MISSES = None  # type: ignore[assignment]
+
+
+def _bump_trace_events_counter(kind: str) -> None:
+    """Increment process-local and Prometheus tier counters."""
+    global _trace_events_hot_hits, _trace_events_cold_rehydrates, _trace_events_misses
+    if kind == "hot":
+        _trace_events_hot_hits += 1
+        if _TRACE_EVENTS_HOT_HITS is not None:
+            _TRACE_EVENTS_HOT_HITS.inc()
+    elif kind == "cold":
+        _trace_events_cold_rehydrates += 1
+        if _TRACE_EVENTS_COLD_REHYDRATES is not None:
+            _TRACE_EVENTS_COLD_REHYDRATES.inc()
+    elif kind == "miss":
+        _trace_events_misses += 1
+        if _TRACE_EVENTS_MISSES is not None:
+            _TRACE_EVENTS_MISSES.inc()
+
+
+def _trace_event_column_keys(columns: str) -> list[str]:
+    return [c.strip() for c in columns.split(",") if c.strip()]
+
+
+def _project_trace_event_columns(
+    rows: list[dict[str, Any]], columns: str
+) -> list[dict[str, Any]]:
+    keys = _trace_event_column_keys(columns)
+    return [{k: row.get(k) for k in keys} for row in rows]
+
+
+async def _load_trace_events_from_archive(
+    org_id: str, trace_id: str
+) -> list[dict[str, Any]]:
+    """Cold-tier fallback when hot Postgres has no rows (OPT-61).
+
+    Traces older than the org's ``warm_days`` window are archived to
+    Impossible Cloud via ``trace_archive_index`` and
+    :class:`eden.services.data_platform.ArchiveService` (cold tier).
+    Mirrors :meth:`eden.observability.telemetry_collector.TelemetryCollector._load_from_archive`.
+    """
+    try:
+        from eden.services.data_platform import ArchiveService
+    except Exception as exc:
+        logger.warning("rca._common: archive import failed: %s", exc)
+        return []
+    archive = ArchiveService()
+    try:
+        return await archive.rehydrate(trace_id, org_id=org_id)
+    except Exception as exc:
+        logger.warning(
+            "rca._common: rehydrate failed for trace %s: %s", trace_id, exc
+        )
+        return []
 
 
 async def _fetch_trace_events(
@@ -184,9 +272,29 @@ async def _fetch_trace_events(
             limit,
         )
     except Exception as exc:
-        logger.debug("rca._common: fetch events failed: %s", exc)
+        logger.warning("rca._common: fetch events failed: %s", exc)
         return []
-    return [dict(r) for r in rows]
+
+    if rows:
+        _bump_trace_events_counter("hot")
+        return [dict(r) for r in rows]
+
+    # OPT-61: cold tier — past warm_days, rows live in archive index only.
+    archived = await _load_trace_events_from_archive(org_id, trace_id)
+    if not archived:
+        _bump_trace_events_counter("miss")
+        return []
+
+    _bump_trace_events_counter("cold")
+    logger.info(
+        "rca._common: cold rehydrate for trace %s (org %s), %d events",
+        trace_id,
+        org_id,
+        len(archived),
+    )
+    archived.sort(key=lambda row: str(row.get("timestamp") or ""))
+    archived = archived[:limit]
+    return _project_trace_event_columns(archived, columns)
 
 
 async def _fetch_judge_scores(org_id: str, trace_id: str) -> list[dict[str, Any]]:
@@ -224,12 +332,165 @@ async def _fetch_judge_scores(org_id: str, trace_id: str) -> list[dict[str, Any]
     return [dict(r) for r in rows]
 
 
+def _coerce_event_timestamp(value: Any) -> datetime | None:
+    """Parse event ``timestamp`` values from Postgres or archived NDJSON."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return None
+
+
+def _trace_has_failure_in_window(
+    events: list[dict[str, Any]], *, window_start: datetime
+) -> bool:
+    """True when any failure event falls on/after ``window_start``.
+
+    Unparseable timestamps on failure events are treated as in-window so
+    cold-only traces are not silently dropped.
+    """
+    for ev in events:
+        if not event_is_failure(ev):
+            continue
+        ts = _coerce_event_timestamp(ev.get("timestamp"))
+        if ts is None or ts >= window_start:
+            return True
+    return False
+
+
+async def _fetch_archived_trace_ids_in_window(
+    client: Any,
+    org_id: str,
+    interval_sql: str,
+    *,
+    exclude: set[str],
+    limit: int,
+) -> list[str]:
+    """Return cold-tier ``trace_id`` values archived within ``interval_sql``."""
+    try:
+        rows = await client.fetch(
+            """
+            SELECT trace_id
+            FROM trace_archive_index
+            WHERE org_id = $1
+              AND archived_at > NOW() - $2::interval
+              AND trace_id <> ALL($3::text[])
+            ORDER BY trace_id
+            LIMIT $4
+            """,
+            org_id,
+            interval_sql,
+            list(exclude),
+            limit,
+        )
+    except Exception as exc:
+        logger.warning("rca._common: fetch archived trace_ids failed: %s", exc)
+        return []
+    return [r["trace_id"] for r in rows]
+
+
+async def _probe_archived_trace_for_failure(
+    org_id: str,
+    trace_id: str,
+    *,
+    window_start: datetime,
+) -> str | None:
+    """Rehydrate one archived trace and return ``trace_id`` if it failed in-window."""
+    events = await _load_trace_events_from_archive(org_id, trace_id)
+    if not events:
+        return None
+    _bump_trace_events_counter("cold")
+    if _trace_has_failure_in_window(events, window_start=window_start):
+        return trace_id
+    return None
+
+
+async def _supplement_failed_traces_from_archive(
+    client: Any,
+    org_id: str,
+    interval_sql: str,
+    hot_trace_ids: list[str],
+    *,
+    remaining_slots: int,
+) -> list[str]:
+    """Add cold-tier failures not present in the hot Postgres result set."""
+    if remaining_slots <= 0:
+        return []
+
+    exclude = set(hot_trace_ids)
+    cold_cap = min(_COLD_FAILED_TRACES_REHYDRATE_CAP, remaining_slots)
+    candidate_ids = await _fetch_archived_trace_ids_in_window(
+        client,
+        org_id,
+        interval_sql,
+        exclude=exclude,
+        limit=cold_cap,
+    )
+    if not candidate_ids:
+        return []
+
+    try:
+        cutoff_row = await client.fetchrow(
+            "SELECT (NOW() - $1::interval) AS window_start",
+            interval_sql,
+        )
+    except Exception as exc:
+        logger.warning("rca._common: window cutoff failed: %s", exc)
+        return []
+    if cutoff_row is None:
+        return []
+    window_start = cutoff_row["window_start"]
+    if isinstance(window_start, datetime) and window_start.tzinfo is None:
+        window_start = window_start.replace(tzinfo=UTC)
+
+    from eden.async_tasks import bounded_gather
+
+    results = await bounded_gather(
+        *(
+            _probe_archived_trace_for_failure(
+                org_id, tid, window_start=window_start
+            )
+            for tid in candidate_ids
+        ),
+        limit=8,
+        return_exceptions=True,
+    )
+    cold_failures: list[str] = []
+    for res in results:
+        if isinstance(res, Exception):
+            logger.debug("rca._common: cold failure probe failed: %s", res)
+            continue
+        if res is not None:
+            cold_failures.append(str(res))
+            if len(cold_failures) >= remaining_slots:
+                break
+    if cold_failures:
+        logger.info(
+            "rca._common: cold window supplement added %d failed traces (org %s)",
+            len(cold_failures),
+            org_id,
+        )
+    return cold_failures
+
+
 async def _fetch_failed_traces_in_window(
     org_id: str, interval_sql: str
 ) -> list[str]:
     """Return the distinct ``trace_id`` values that have at least
     one failed event in the last ``interval_sql`` (a Postgres
     interval literal like ``'24 hours'``).
+
+    Hot Postgres is queried first; when slots remain under
+    :data:`_FAILED_TRACES_LIMIT`, :data:`trace_archive_index` is
+    scanned for recently archived traces and up to
+    :data:`_COLD_FAILED_TRACES_REHYDRATE_CAP` are rehydrated and
+    filtered with :func:`event_is_failure` / event timestamps.
 
     Used by :class:`IncidentClusterer.cluster` to pick the
     candidate set before bucketing. Returns ``[]`` on failure.
@@ -250,17 +511,35 @@ async def _fetch_failed_traces_in_window(
             FROM telemetry_events
             WHERE tenant_id = $1
               AND timestamp > NOW() - $2::interval
-              AND (error IS NOT NULL OR outcome = 'error')
+              AND (
+                  error_type IS NOT NULL
+                  OR (outcome IS NOT NULL AND outcome <> 'success')
+              )
             ORDER BY trace_id
-            LIMIT 500
+            LIMIT $3
             """,
             org_id,
             interval_sql,
+            _FAILED_TRACES_LIMIT,
         )
     except Exception as exc:
-        logger.debug("rca._common: fetch failed traces failed: %s", exc)
+        logger.warning("rca._common: fetch failed traces failed: %s", exc)
         return []
-    return [r["trace_id"] for r in rows]
+    hot_trace_ids = [r["trace_id"] for r in rows]
+    if len(hot_trace_ids) >= _FAILED_TRACES_LIMIT:
+        return hot_trace_ids
+
+    cold_ids = await _supplement_failed_traces_from_archive(
+        client,
+        org_id,
+        interval_sql,
+        hot_trace_ids,
+        remaining_slots=_FAILED_TRACES_LIMIT - len(hot_trace_ids),
+    )
+    if not cold_ids:
+        return hot_trace_ids
+    merged = sorted(set(hot_trace_ids) | set(cold_ids))
+    return merged[:_FAILED_TRACES_LIMIT]
 
 
 async def _fetch_cluster_members(
@@ -283,6 +562,8 @@ async def _fetch_cluster_members(
             SELECT trace_id
             FROM incident_cluster_members
             WHERE cluster_id = $1
+            ORDER BY trace_id ASC
+            LIMIT 500
             """,
             cluster_id,
         )
@@ -735,6 +1016,27 @@ async def _fetch_incident_clusters(
     return [dict(r) for r in rows]
 
 
+# ── Event failure detection (canonical outcome vocabulary) ─────────
+
+
+def event_is_failure(ev: dict[str, Any]) -> bool:
+    """Return True when an event represents a failed span.
+
+    Canonical ``outcome`` values are ``success|failure|partial|timeout|crash``
+    — not the legacy literal ``"error"``. Matches the idiom used in
+    :mod:`eden.observability.telemetry_collector` (any non-success outcome
+    is a failure) plus ``error_type`` (DB column) and legacy ``error`` dicts
+    from archived NDJSON rows.
+    """
+    if ev.get("error_type"):
+        return True
+    err = ev.get("error")
+    if isinstance(err, dict) and err:
+        return True
+    outcome = ev.get("outcome")
+    return bool(outcome and outcome != "success")
+
+
 # ── Jaccard similarity (for the secondary cluster similarity) ──────
 
 
@@ -775,22 +1077,20 @@ def _jaccard_mean(sets: list[set[str]]) -> float:
 
 
 def _has_tool_error(events: list[dict[str, Any]]) -> tuple[bool, list[str]]:
-    """Rule 1: any ``tool.*`` event with ``error`` set or
-    ``outcome="error"``."""
+    """Rule 1: any ``tool.*`` event that :func:`event_is_failure` marks."""
     signals: list[str] = []
     for ev in events:
         et = (ev.get("event_type") or "").lower()
         if not et.startswith("tool."):
             continue
-        err = ev.get("error")
-        if err or (ev.get("outcome") == "error"):
-            # Try to surface the tool name and error type
-            name = et.removeprefix("tool.")
-            err_type = (err or {}).get("type") if isinstance(err, dict) else None
-            signals.append(
-                f"tool '{name}' failed"
-                + (f" with {err_type}" if err_type else "")
-            )
+        if not event_is_failure(ev):
+            continue
+        name = et.removeprefix("tool.")
+        err_type = _error_type_from_event(ev)
+        signals.append(
+            f"tool '{name}' failed"
+            + (f" with {err_type}" if err_type != "unknown" else "")
+        )
     return (len(signals) > 0, signals)
 
 
@@ -879,44 +1179,39 @@ def _has_memory_error(events: list[dict[str, Any]]) -> tuple[bool, list[str]]:
         et = (ev.get("event_type") or "").lower()
         if not et.startswith("memory."):
             continue
-        if ev.get("outcome") and ev.get("outcome") != "success":
+        if event_is_failure(ev):
             op = et.removeprefix("memory.")
-            err = ev.get("error")
-            err_type = (err or {}).get("type") if isinstance(err, dict) else None
+            err_type = _error_type_from_event(ev)
             signals.append(
                 f"memory op '{op}' failed"
-                + (f" with {err_type}" if err_type else "")
+                + (f" with {err_type}" if err_type != "unknown" else "")
             )
     return (len(signals) > 0, signals)
 
 
 def _has_prompt_error(events: list[dict[str, Any]]) -> tuple[bool, list[str]]:
-    """Rule 6: any ``prompt.*`` event with ``error`` set."""
+    """Rule 6: any ``prompt.*`` event that :func:`event_is_failure` marks."""
     signals: list[str] = []
     for ev in events:
         et = (ev.get("event_type") or "").lower()
         if not et.startswith("prompt."):
             continue
-        if ev.get("error"):
-            name = et.removeprefix("prompt.")
-            err = ev.get("error")
-            err_type = (err or {}).get("type") if isinstance(err, dict) else None
-            signals.append(
-                f"prompt '{name}' failed"
-                + (f" with {err_type}" if err_type else "")
-            )
+        if not event_is_failure(ev):
+            continue
+        name = et.removeprefix("prompt.")
+        err_type = _error_type_from_event(ev)
+        signals.append(
+            f"prompt '{name}' failed"
+            + (f" with {err_type}" if err_type != "unknown" else "")
+        )
     return (len(signals) > 0, signals)
 
 
 def _trace_is_failure(events: list[dict[str, Any]]) -> bool:
-    """A trace is a failure if any event has ``outcome="error"`` or
-    an ``error`` column set. Used as the fallback gate for rule 7."""
-    for ev in events:
-        if ev.get("outcome") == "error":
-            return True
-        if ev.get("error"):
-            return True
-    return False
+    """A trace is a failure if any event passes :func:`event_is_failure`.
+
+    Used as the fallback gate for rule 7."""
+    return any(event_is_failure(ev) for ev in events)
 
 
 def _pick_top_signals(raw_signals: list[str], k: int = 3) -> list[str]:
@@ -1039,31 +1334,45 @@ def _severity_for_count(member_count: int) -> str:
 
 
 def _first_failed_event(events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return the first event that is a failure (error or
-    outcome='error'). Falls back to the first event, then to
-    an empty dict."""
+    """Return the first event that :func:`event_is_failure` marks.
+
+    Falls back to the first event, then to an empty dict."""
     for ev in events:
-        if ev.get("error") or ev.get("outcome") == "error":
+        if event_is_failure(ev):
             return ev
     return events[0] if events else {}
 
 
 def _error_type_from_event(ev: dict[str, Any]) -> str:
     """Best-effort error type extraction from one event."""
+    et_col = ev.get("error_type")
+    if isinstance(et_col, str) and et_col.strip():
+        return et_col
     err = ev.get("error")
     if isinstance(err, dict):
         et = err.get("type")
         if isinstance(et, str) and et.strip():
             return et
-    if ev.get("outcome") == "error":
-        return "error"
+    outcome = ev.get("outcome")
+    if isinstance(outcome, str) and outcome.strip() and outcome != "success":
+        return outcome
     return "unknown"
 
 
-def _agent_id_from_event(ev: dict[str, Any]) -> str:
+def _agent_id_from_event(
+    ev: dict[str, Any], *, trace_id: str | None = None
+) -> str:
+    """Cluster-key agent slot — per-trace when ``agent_id`` is missing.
+
+    Mirrors :func:`eden.issues.fingerprint._fingerprint_agent_key`: unrelated
+    traces without ``agent_id`` must not share the legacy ``"unknown"`` bucket.
+    """
     aid = ev.get("agent_id")
     if isinstance(aid, str) and aid.strip():
         return aid
+    tid = trace_id or ev.get("trace_id")
+    if isinstance(tid, str) and tid.strip():
+        return f"__unattributed__:{tid}"
     return "unknown"
 
 

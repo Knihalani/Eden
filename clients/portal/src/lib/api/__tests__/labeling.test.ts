@@ -19,7 +19,17 @@ function jsonResponse(status: number, body: unknown): Response {
 beforeEach(() => {
   fetchMock.mockReset();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
-  (window as unknown as { Clerk?: unknown }).Clerk = undefined;
+  // fetchApi may read `window.Clerk`; clear it without assuming jsdom
+  // (plain `bun test` has no window — vitest+jsdom does).
+  const g = globalThis as typeof globalThis & {
+    window?: { Clerk?: unknown };
+    Clerk?: unknown;
+  };
+  if (typeof g.window !== "undefined") {
+    g.window.Clerk = undefined;
+  } else {
+    g.Clerk = undefined;
+  }
 });
 
 afterEach(() => {
@@ -149,10 +159,50 @@ describe("labelingApi", () => {
     });
   });
 
+  it("skipBulk — POSTs item_ids to /skip/bulk", async () => {
+    const labelingApi = await importLabelingApi();
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { skipped: true, skipped_count: 2 }));
+
+    const result = await labelingApi.skipBulk("org-1", {
+      item_ids: ["item-a", "item-b"],
+      reason: "noise",
+    });
+
+    expect(result).toEqual({ skipped: true, skipped_count: 2 });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/orgs/org-1/labeling/skip/bulk");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init?.body as string)).toEqual({
+      item_ids: ["item-a", "item-b"],
+      reason: "noise",
+    });
+  });
+
   it("propagates a non-ok response as a thrown error", async () => {
     const labelingApi = await importLabelingApi();
     fetchMock.mockResolvedValueOnce(jsonResponse(404, { detail: "queue not found" }));
 
     await expect(labelingApi.listQueues("org-1")).rejects.toThrow();
+  });
+
+  it("exportJsonl — GETs /export with stream and returns plain text", async () => {
+    const labelingApi = await importLabelingApi();
+    fetchMock.mockResolvedValueOnce(
+      new Response('{"id":"item-1"}\n', {
+        status: 200,
+        headers: { "content-type": "application/x-ndjson" },
+      }),
+    );
+
+    const body = await labelingApi.exportJsonl("org-1", {
+      status: "completed",
+      limit: 100,
+    });
+
+    expect(body).toBe('{"id":"item-1"}\n');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/orgs/org-1/labeling/export");
+    expect(String(url)).toContain("status=completed");
+    expect(String(url)).toContain("limit=100");
   });
 });

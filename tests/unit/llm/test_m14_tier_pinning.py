@@ -82,7 +82,9 @@ async def test_critic_review_builds_fast_slot_task(monkeypatch: pytest.MonkeyPat
             usage=SimpleNamespace(cost=0.0),
         )
     )
-    await _critic_review(router, "--- a/x\n+++ b/x\n", rca_summary="rca")
+    await _critic_review(
+        router, "--- a/x\n+++ b/x\n", org_id="org-test", rca_summary="rca"
+    )
     task = router.aroute.await_args.args[0]
     assert task.slot == "fast"
     assert task.agent == "patch_critic"

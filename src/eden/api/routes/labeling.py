@@ -1,15 +1,23 @@
 """Phase D — labeling queue API routes.
 
-Six routes:
+Fifteen routes:
 
   * ``GET  /orgs/{org}/labeling/items`` — list items + annotation counts
   * ``POST /orgs/{org}/labeling/items`` — seed new items
   * ``POST /orgs/{org}/labeling/traces/{trace_id}/annotate`` — trace score
-  * ``GET  /orgs/{org}/labeling/queue/{user}`` — pop the next batch
+  * ``GET  /orgs/{org}/labeling/queue/{user_id}`` — pop the next batch
   * ``POST /orgs/{org}/labeling/annotate`` — submit a label
   * ``POST /orgs/{org}/labeling/skip`` — mark an item skipped
+  * ``POST /orgs/{org}/labeling/items/{item_id}/escalate`` — bump annotations_required
   * ``GET  /orgs/{org}/labeling/agreement`` — inter-annotator agreement
   * ``GET  /orgs/{org}/labeling/export`` — JSONL of approved labels
+  * ``GET  /orgs/{org}/labeling/queues`` — list labeling queues
+  * ``POST /orgs/{org}/labeling/queues`` — create a labeling queue
+  * ``GET  /orgs/{org}/labeling/queues/{queue_id}`` — queue detail
+  * ``GET  /orgs/{org}/labeling/queues/{queue_id}/board`` — kanban board
+  * ``GET  /orgs/{org}/labeling/queues/{queue_id}/agreement`` — queue IAA
+  * ``POST /orgs/{org}/labeling/queues/{queue_id}/move`` — move board item
+  * ``POST /orgs/{org}/labeling/queues/{queue_id}/push-to-dataset`` — export to dataset
 """
 
 from __future__ import annotations
@@ -133,6 +141,10 @@ class IIAResponse(BaseModel):
 
 class SkipRequest(BaseModel):
     item_id: str
+    reason: str | None = None
+
+class BulkSkipRequest(BaseModel):
+    item_ids: list[str] = Field(..., min_length=1, max_length=200)
     reason: str | None = None
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -275,11 +287,12 @@ async def pop_queue(
     org_id: str = Depends(require_path_org_access),
     user_id: str = Path(...),
     limit: int = Query(default=5, ge=1, le=50),
+    strategy: str = Query(default="fifo", pattern="^(fifo|active_learning)$"),
 ) -> QueueResponse:
     pg = await get_postgres_client()
     svc = LabelingService(pg, user_skills=_user_skills)
     items = await svc.pop(
-        org_id=org_id, annotator_id=user_id, limit=limit,
+        org_id=org_id, annotator_id=user_id, limit=limit, strategy=strategy,
     )
     return QueueResponse(items=[_item_to_response(i) for i in items])
 
@@ -326,6 +339,28 @@ async def annotate(
     return _annotation_to_response(ann)
 
 @router.post(
+    "/skip/bulk",
+    summary="Mark multiple items as skipped (un-labelable)",
+)
+async def skip_bulk(
+    body: BulkSkipRequest,
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user),
+) -> dict[str, int | bool]:
+    user_id = str(user.get("id") or user.get("user_id") or user.get("sub"))
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    pg = await get_postgres_client()
+    svc = LabelingService(pg, user_skills=_user_skills)
+    count = await svc.skip_bulk(
+        org_id=org_id,
+        item_ids=body.item_ids,
+        annotator_id=user_id,
+        reason=body.reason,
+    )
+    return {"skipped": True, "skipped_count": count}
+
+@router.post(
     "/skip",
     summary="Mark an item as skipped (un-labelable)",
 )
@@ -344,6 +379,36 @@ async def skip(
         annotator_id=user_id, reason=body.reason,
     )
     return {"skipped": True}
+
+@router.post(
+    "/items/{item_id}/escalate",
+    response_model=ItemResponse,
+    summary="Escalate an item — bump annotations_required and re-queue (FEAT-119)",
+)
+async def escalate_item(
+    org_id: str = Depends(require_path_org_access),
+    item_id: str = Path(...),
+) -> ItemResponse:
+    pg = await get_postgres_client()
+    svc = LabelingService(pg, user_skills=_user_skills)
+    try:
+        item = await svc.escalate(org_id=org_id, item_id=item_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=_annotation_value_error_status(exc),
+            detail={"error": "escalate_failed", "detail": str(exc)},
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.warning("escalate_item failed: %s", redact_all(str(exc)))
+        raise_mapped_db_error(
+            exc,
+            fallback="labeling escalate failed",
+            uuid_detail="Invalid item or organization id",
+        )
+    return _item_to_response(item)
+
 
 @router.get(
     "/agreement",

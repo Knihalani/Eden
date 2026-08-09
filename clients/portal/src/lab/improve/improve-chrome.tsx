@@ -7,6 +7,8 @@ import {
   type ImproveKind,
   type ImproveStatus,
 } from "@/lab/fixtures/improve";
+import { autonomyTierChipLabel } from "@/lib/autonomy-tier";
+import { cn } from "@/lib/utils";
 
 export type ImproveMode = "queue" | "plan";
 
@@ -44,6 +46,25 @@ export function ImproveStatusChip({ status }: { status: ImproveStatus }) {
 
 export function ImproveKindChip({ kind }: { kind: ImproveKind }) {
   return <StatusChip tone="neutral">{kindLabel(kind)}</StatusChip>;
+}
+
+export function AutonomyTierChip({
+  tierApplied,
+  className,
+}: {
+  tierApplied?: string | null;
+  className?: string;
+}) {
+  const label = autonomyTierChipLabel(tierApplied);
+  if (!label) return null;
+  const level = label.replace("Autonomy T", "");
+  const tone =
+    level === "4" ? "fail" : level === "3" ? "neutral" : "ok";
+  return (
+    <span className={cn(className)}>
+      <StatusChip tone={tone}>{label}</StatusChip>
+    </span>
+  );
 }
 
 export function ImproveModeNav({

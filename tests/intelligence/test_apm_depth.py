@@ -249,6 +249,108 @@ class TestStepJudgeStamper:
         assert r["data"]["steps"] == []
 
 
+class TestStepJudgeAutoLoop:
+    def test_resolve_step_index_prefers_apm_attribute(self) -> None:
+        from eden.apm_depth.step_judges import resolve_step_index
+
+        event = type(
+            "Ev",
+            (),
+            {
+                "attributes": {"apm.step_index": 4, "step_index": 9},
+                "payload": {"step_index": 1},
+            },
+        )()
+        assert resolve_step_index(event) == 4
+
+    def test_resolve_step_index_falls_back_to_payload(self) -> None:
+        from eden.apm_depth.step_judges import resolve_step_index
+
+        event = type("Ev", (), {"attributes": {}, "payload": {"step_index": 7}})()
+        assert resolve_step_index(event) == 7
+
+    def test_scores_to_step_judges_maps_names(self) -> None:
+        from eden.apm_depth.step_judges import scores_to_step_judges
+        from eden.llmops.judges.base import JudgeScore
+
+        scores = [
+            JudgeScore(
+                judge_name="hallucination",
+                judge_version="1",
+                trace_id="tr1",
+                span_id="sp1",
+                score=0.85,
+                rationale=None,
+                model="test",
+            ),
+            JudgeScore(
+                judge_name="correctness",
+                judge_version="1",
+                trace_id="tr1",
+                span_id="sp1",
+                score=0.92,
+                rationale=None,
+                model="test",
+            ),
+        ]
+        assert scores_to_step_judges(scores) == {
+            "hallucination": 0.85,
+            "correctness": 0.92,
+        }
+
+    async def test_stamp_event_judge_scores_calls_stamper(self) -> None:
+        from eden.apm_depth.step_judges import StepJudgeStamper, stamp_event_judge_scores
+        from eden.llmops.judges.base import JudgeScore
+
+        event = type(
+            "Ev",
+            (),
+            {
+                "tenant_id": "org_t",
+                "trace_id": "trace-1",
+                "span_id": "span-1",
+                "event_id": "evt-1",
+                "attributes": {"apm.step_index": 2},
+                "payload": {},
+            },
+        )()
+        scores = [
+            JudgeScore(
+                judge_name="hallucination",
+                judge_version="1",
+                trace_id="trace-1",
+                span_id="span-1",
+                score=0.9,
+                rationale=None,
+                model="test",
+            )
+        ]
+        stamper = StepJudgeStamper()
+        with (
+            patch.object(stamper, "stamp") as stamp_mock,
+            patch(
+                "eden.apm_depth.step_judges.persist_step_judge_attributes",
+                AsyncMock(return_value=True),
+            ) as persist_mock,
+        ):
+            stamp_mock.return_value = {
+                "data": {
+                    "attributes": {
+                        "apm.step_index": 2,
+                        "apm.step_judges": {"hallucination": 0.9},
+                    }
+                }
+            }
+            ok = await stamp_event_judge_scores(event, scores, stamper=stamper)
+
+        assert ok is True
+        stamp_mock.assert_called_once()
+        _, kwargs = stamp_mock.call_args
+        assert kwargs["step_index"] == 2
+        assert kwargs["step_judges"] == {"hallucination": 0.9}
+        persist_mock.assert_awaited_once()
+
+
 # ─── Metrics tests ────────────────────────────────────────────────
 
 

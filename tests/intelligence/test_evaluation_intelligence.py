@@ -1550,10 +1550,8 @@ class TestEvalToGuardrailLink:
         assert "guardrail_policy_id" in result["data"]
         assert result["data"]["guardrail_policy_id"] == "my-policy"
 
-    # ── FEAT-34: demote path (canonical class must be able to walk
-    #    back a promotion end-to-end; the legacy
-    #    ``eden.guardrails.intervention.EvalToGuardrailLink`` has a
-    #    demote() but no route reaches it) ──
+    # ── FEAT-34: demote path (canonical class walks back a promotion
+    #    end-to-end via ``POST .../eval/demote-guardrail``) ──
 
     @pytest.mark.asyncio
     async def test_demote_rejects_empty_judge(
@@ -2011,17 +2009,14 @@ class TestAutoDatasetBridge:
         ]
         pg = _pg_router(judge_scores_low=rows)
         with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
-            "eden.evaluation.eval_intel.integration.AutoDatasetPromoter",
-        ) as promoter_cls:
-            promoter_instance = MagicMock()
-            promoter_instance.process_traces = AsyncMock(
-                return_value={
-                    "processed": 10,
-                    "new_cases_added": 7,
-                    "dataset_id": "gd_hallucination_golden",
-                }
+            "eden.datasets.hub.DatasetHub",
+        ) as hub_cls:
+            hub_instance = MagicMock()
+            hub_instance.create_dataset = AsyncMock(
+                return_value=MagicMock(id="gd_hallucination_golden")
             )
-            promoter_cls.return_value = promoter_instance
+            hub_instance.promote_trace = AsyncMock()
+            hub_cls.return_value = hub_instance
             with patch(
                 "eden.evaluation.eval_intel.integration._insert_auto_dataset_bridge",
                 new=AsyncMock(),
@@ -2032,7 +2027,7 @@ class TestAutoDatasetBridge:
                 )
         assert result["status"] == "ok"
         assert result["data"]["dataset_id"] == "gd_hallucination_golden"
-        assert result["data"]["samples_added"] == 7
+        assert result["data"]["samples_added"] == 10
         assert result["data"]["samples_processed"] == 10
         persist.assert_called_once()
 
@@ -2064,13 +2059,14 @@ class TestAutoDatasetBridge:
         rows = [_judge_score_row(score=0.3) for _ in range(10)]
         pg = _pg_router(judge_scores_low=rows)
         with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
-            "eden.evaluation.eval_intel.integration.AutoDatasetPromoter",
-        ) as promoter_cls:
-            promoter_instance = MagicMock()
-            promoter_instance.process_traces = AsyncMock(
-                return_value={"new_cases_added": 0, "processed": 10}
+            "eden.datasets.hub.DatasetHub",
+        ) as hub_cls:
+            hub_instance = MagicMock()
+            hub_instance.create_dataset = AsyncMock(
+                return_value=MagicMock(id="ds-1")
             )
-            promoter_cls.return_value = promoter_instance
+            hub_instance.promote_trace = AsyncMock()
+            hub_cls.return_value = hub_instance
             with patch(
                 "eden.evaluation.eval_intel.integration._insert_auto_dataset_bridge",
                 new=AsyncMock(),
@@ -2079,7 +2075,8 @@ class TestAutoDatasetBridge:
                     "org_test", judge_name="hallucination",
                     target_dataset_name="hallucination_golden",
                 )
-        promoter_instance.process_traces.assert_called_once()
+        hub_instance.create_dataset.assert_called_once()
+        assert hub_instance.promote_trace.await_count == 10
 
     @pytest.mark.asyncio
     async def test_bridge_persists_to_auto_dataset_bridge(
@@ -2090,13 +2087,14 @@ class TestAutoDatasetBridge:
         rows = [_judge_score_row(score=0.3) for _ in range(10)]
         pg = _pg_router(judge_scores_low=rows)
         with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
-            "eden.evaluation.eval_intel.integration.AutoDatasetPromoter",
-        ) as promoter_cls:
-            promoter_instance = MagicMock()
-            promoter_instance.process_traces = AsyncMock(
-                return_value={"new_cases_added": 0, "processed": 10}
+            "eden.datasets.hub.DatasetHub",
+        ) as hub_cls:
+            hub_instance = MagicMock()
+            hub_instance.create_dataset = AsyncMock(
+                return_value=MagicMock(id="ds-1")
             )
-            promoter_cls.return_value = promoter_instance
+            hub_instance.promote_trace = AsyncMock()
+            hub_cls.return_value = hub_instance
             with patch(
                 "eden.evaluation.eval_intel.integration._insert_auto_dataset_bridge",
                 new=AsyncMock(),
@@ -2116,17 +2114,14 @@ class TestAutoDatasetBridge:
         rows = [_judge_score_row(score=0.3) for _ in range(10)]
         pg = _pg_router(judge_scores_low=rows)
         with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
-            "eden.evaluation.eval_intel.integration.AutoDatasetPromoter",
-        ) as promoter_cls:
-            promoter_instance = MagicMock()
-            promoter_instance.process_traces = AsyncMock(
-                return_value={
-                    "new_cases_added": 5,
-                    "processed": 10,
-                    "dataset_id": "my-dataset-id",
-                }
+            "eden.datasets.hub.DatasetHub",
+        ) as hub_cls:
+            hub_instance = MagicMock()
+            hub_instance.create_dataset = AsyncMock(
+                return_value=MagicMock(id="my-dataset-id")
             )
-            promoter_cls.return_value = promoter_instance
+            hub_instance.promote_trace = AsyncMock()
+            hub_cls.return_value = hub_instance
             with patch(
                 "eden.evaluation.eval_intel.integration._insert_auto_dataset_bridge",
                 new=AsyncMock(),
@@ -2146,16 +2141,14 @@ class TestAutoDatasetBridge:
         rows = [_judge_score_row(score=0.3) for _ in range(10)]
         pg = _pg_router(judge_scores_low=rows)
         with patch("eden.storage.postgres.get_postgres_client", return_value=pg), patch(
-            "eden.evaluation.eval_intel.integration.AutoDatasetPromoter",
-        ) as promoter_cls:
-            promoter_instance = MagicMock()
-            promoter_instance.process_traces = AsyncMock(
-                return_value={
-                    "new_cases_added": 3,
-                    "processed": 10,
-                }
+            "eden.datasets.hub.DatasetHub",
+        ) as hub_cls:
+            hub_instance = MagicMock()
+            hub_instance.create_dataset = AsyncMock(
+                return_value=MagicMock(id="ds-1")
             )
-            promoter_cls.return_value = promoter_instance
+            hub_instance.promote_trace = AsyncMock(side_effect=[None, None, None] + [Exception("skip")] * 7)
+            hub_cls.return_value = hub_instance
             with patch(
                 "eden.evaluation.eval_intel.integration._insert_auto_dataset_bridge",
                 new=AsyncMock(),
@@ -2417,6 +2410,29 @@ def test_promote_to_guardrail_route(eval_client: TestClient) -> None:
         )
     assert resp.status_code == 200
     assert resp.json()["feature"] == "eval_to_guardrail"
+
+
+def test_demote_guardrail_route(eval_client: TestClient) -> None:
+    with patch(
+        "eden.api.routes.intelligence_eval._promote.demote",
+        new=AsyncMock(
+            return_value={
+                "status": "ok",
+                "feature": "eval_to_guardrail",
+                "live": True,
+                "trace_id": "ei_abc",
+                "timestamp": "2026-06-11T00:00:00Z",
+                "data": {"status": "disabled", "judge_name": "hallucination"},
+            }
+        ),
+    ):
+        resp = eval_client.post(
+            "/orgs/org_x/intelligence/eval/demote-guardrail",
+            json={"judge_name": "hallucination", "reason": "no_longer_reliable"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["feature"] == "eval_to_guardrail"
+    assert resp.json()["data"]["status"] == "disabled"
 
 
 def test_modalities_declare_route(eval_client: TestClient) -> None:

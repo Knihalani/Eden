@@ -789,11 +789,12 @@ class GuardrailHook:
 
     The v0 ship: each event records the recommended action to
     ``closed_loop_actions``. The reverse direction
-    (this hook → :class:`LegacyEvalToGuardrailLink.promote`) is
-    also wired: :meth:`on_judge_threshold_breach` is the
+    (this hook → :class:`EvalToGuardrailLink.promote_to_guardrail`)
+    is also wired: :meth:`on_judge_threshold_breach` is the
     entry point of the eval-to-guardrail lifecycle and
-    delegates to :class:`LegacyEvalToGuardrailLink` to create
-    the policy + link row.
+    delegates to :class:`eden.evaluation.eval_intel.integration.EvalToGuardrailLink`
+    to create the policy + link row and hot-reload the live
+    gateway filter.
     """
 
     name = "guardrail_hook"
@@ -804,16 +805,18 @@ class GuardrailHook:
         *,
         judge_name: str,
         threshold: float,
+        ensure_promoted: bool = True,
     ) -> str | None:
         """A judge has reliably triggered below its threshold — promote
         the judge into a production guardrail (Galileo's eval-to-
         guardrail lifecycle).
 
         The v0 ship records the recommended action AND (best-
-        effort) calls :class:`LegacyEvalToGuardrailLink.promote` to
-        create the link + policy. The link creation is
-        idempotent: re-running on the same judge creates the
-        same ``(judge_name, threshold)`` policy.
+        effort) calls :class:`EvalToGuardrailLink.promote_to_guardrail`
+        to create the link + policy and hot-reload the live gateway
+        filter. Pass ``ensure_promoted=False`` when the promotion was
+        already performed by the caller (e.g. the eval promote REST
+        route) to avoid a recursive promote → hook → promote loop.
         """
         action_id = await _record_action(
             org_id,
@@ -826,30 +829,25 @@ class GuardrailHook:
             },
             severity="high",
         )
-        # Best-effort: also call LegacyEvalToGuardrailLink.promote
-        # so the Cat 15 policy + link row get created. The
-        # link service is fail-safe (returns a not_implemented
-        # envelope on any error without raising).
-        try:
-            from eden.guardrails import LegacyEvalToGuardrailLink
+        if ensure_promoted:
+            try:
+                from eden.evaluation.eval_intel.integration import (
+                    EvalToGuardrailLink,
+                )
 
-            link = LegacyEvalToGuardrailLink()
-            # The promote method needs a policy to attach the
-            # link to; we create a minimal one inline if the
-            # caller hasn't already done so.
-            policy_resp = await link.promote(
-                org_id,
-                judge_name=judge_name,
-                threshold=float(threshold),
-                action="block",
-                fire_hook=False,  # avoid recursion
-            )
-            _ = policy_resp
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.debug(
-                "guardrail_hook: LegacyEvalToGuardrailLink.promote failed: %s",
-                exc,
-            )
+                link = EvalToGuardrailLink()
+                policy_resp = await link.promote_to_guardrail(
+                    org_id,
+                    judge_name=judge_name,
+                    threshold=float(threshold),
+                    fire_hook=False,
+                )
+                _ = policy_resp
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.debug(
+                    "guardrail_hook: EvalToGuardrailLink.promote_to_guardrail failed: %s",
+                    exc,
+                )
         logger.debug(
             "guardrail_hook.on_judge_threshold_breach org=%s judge=%s "
             "threshold=%.3f action_id=%s",
@@ -873,9 +871,11 @@ class GuardrailHook:
             severity="medium",
         )
         try:
-            from eden.guardrails import LegacyEvalToGuardrailLink
+            from eden.evaluation.eval_intel.integration import (
+                EvalToGuardrailLink,
+            )
 
-            link = LegacyEvalToGuardrailLink()
+            link = EvalToGuardrailLink()
             await link.demote(
                 org_id,
                 judge_name=judge_name,
@@ -883,7 +883,7 @@ class GuardrailHook:
             )
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug(
-                "guardrail_hook: LegacyEvalToGuardrailLink.demote failed: %s",
+                "guardrail_hook: EvalToGuardrailLink.demote failed: %s",
                 exc,
             )
         logger.debug(

@@ -122,8 +122,9 @@ async def test_fix_removed_signature_passes_with_replay_reason(
         monkeypatch, store=store, gateway_text="Checkout complete, no errors."
     )
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
+    status, reason, meta = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
     assert (status, reason) == ("passed", "replay_signature_absent")
+    assert meta.get("regenerated_output") == "Checkout complete, no errors."
     # The replay sent the STORED input, not something synthesized.
     assert calls and "checkout my cart" in calls[0]["prompt"]
 
@@ -138,7 +139,7 @@ async def test_signature_persists_fails(monkeypatch) -> None:
         gateway_text="Sorry — division by zero in checkout step 9 again",
     )
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
     assert (status, reason) == ("failed", "replay_signature_present")
 
 
@@ -152,7 +153,7 @@ async def test_replay_verdict_beats_posthoc_telemetry_outage(
     _patch_seams(monkeypatch, store=store, gateway_text="all clean")
     runner = RegressionRunner(memory_only=True)
     expected = {**ENRICHED, "no_stumble_kinds": ["tool_error"]}
-    status, reason = await runner._evaluate_case(_case(expected=expected))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=expected))
     assert (status, reason) == ("passed", "replay_signature_absent")
 
 
@@ -168,7 +169,7 @@ async def test_suite_budget_exhausted_is_error(monkeypatch) -> None:
     from eden.config import get_settings
 
     max_steps = int(get_settings().replay_max_llm_steps)
-    status, reason = await runner._evaluate_case(
+    status, reason, _meta = await runner._evaluate_case(
         _case(expected=dict(ENRICHED)),
         replay_budget={"llm_steps": max_steps, "cost_usd": 0.0},
     )
@@ -185,7 +186,7 @@ async def test_llm_budget_exhausted_is_error(monkeypatch) -> None:
 
     monkeypatch.setattr(sb, "try_consume_llm_call", lambda: False)
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(
+    status, reason, _meta = await runner._evaluate_case(
         _case(expected=dict(ENRICHED)), replay_budget={"llm_steps": 0, "cost_usd": 0.0}
     )
     assert (status, reason) == ("error", "cost_cap")
@@ -222,7 +223,7 @@ async def test_gateway_failure_is_error(monkeypatch) -> None:
     monkeypatch.setattr(rv, "_get_checkpoint_store", _fake_store)
     monkeypatch.setattr(rv, "_gateway_complete", _boom)
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
     assert (status, reason) == ("error", "replay_failed")
 
 
@@ -237,7 +238,7 @@ async def test_no_checkpoint_and_no_constraints_skips(monkeypatch) -> None:
         "replay": {"checkpoint_available": False, "checkpoint_trace_id": None},
     }
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(_case(expected=expected))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=expected))
     assert (status, reason) == ("skipped", "no_checkpoint")
 
 
@@ -250,7 +251,7 @@ async def test_checkpoints_vanished_falls_back_to_posthoc(monkeypatch) -> None:
     pg = _FakePg(rows=[{"kind": "timeout"}])  # clean of "tool_error"
     runner = RegressionRunner(pg=pg)
     expected = {**ENRICHED, "no_stumble_kinds": ["tool_error"]}
-    status, reason = await runner._evaluate_case(_case(expected=expected))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=expected))
     # Post-hoc pass keeps its own reason — proof quality stays labeled.
     assert (status, reason) == ("passed", "ok")
 
@@ -264,7 +265,7 @@ async def test_flag_off_enriched_case_without_constraints_skips(
 ) -> None:
     _enable(monkeypatch, on=False)
     runner = RegressionRunner(memory_only=True)
-    status, reason = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=dict(ENRICHED)))
     assert (status, reason) == ("skipped", "no_constraints")
 
 
@@ -276,7 +277,7 @@ async def test_flag_off_never_touches_replay_seams(monkeypatch) -> None:
     pg = _FakePg(rows=[{"kind": "loop"}])
     runner = RegressionRunner(pg=pg)
     expected = {**ENRICHED, "no_stumble_kinds": ["loop"]}
-    status, reason = await runner._evaluate_case(_case(expected=expected))
+    status, reason, _meta = await runner._evaluate_case(_case(expected=expected))
     assert status == "failed"  # post-hoc found the stumble, as today
     assert reason.startswith("stumble kinds present")
     assert not calls  # no gateway traffic with the flag off

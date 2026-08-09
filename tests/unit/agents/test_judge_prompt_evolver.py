@@ -391,3 +391,57 @@ async def test_run_joins_judge_scores_to_telemetry_for_agent_id(monkeypatch):
     result = await e.run()
     assert result["variants_generated"] == 1
     assert pv.inserts[0]["agent"] == "refiner"
+
+
+@pytest.mark.asyncio
+async def test_fetch_recent_judge_rows_strips_dropped_count_and_emits_metric(
+    monkeypatch,
+):
+    """Rows with null agent_id are excluded from scoring but counted."""
+    rows = [
+        {
+            **_judge_row(score=0.3, trace_id="tr_0"),
+            "dropped_null_agent_id": 3,
+        }
+    ]
+    pg = _FakePostgres(rows=rows)
+    counter = MagicMock()
+    monkeypatch.setattr(
+        "eden.agents.evolution.components._dropped_null_agent_id_counter",
+        lambda: counter,
+    )
+
+    e = JudgeScorePromptEvolver(llm_client=MagicMock())
+
+    async def _get_pg():
+        return pg
+
+    monkeypatch.setattr(e, "_get_postgres", _get_pg)
+
+    fetched = await e._fetch_recent_judge_rows()
+    assert len(fetched) == 1
+    assert "dropped_null_agent_id" not in fetched[0]
+    counter.inc.assert_called_once_with(3)
+
+
+@pytest.mark.asyncio
+async def test_fetch_recent_judge_rows_no_metric_when_nothing_dropped(
+    monkeypatch,
+):
+    rows = [{**_judge_row(score=0.3), "dropped_null_agent_id": 0}]
+    pg = _FakePostgres(rows=rows)
+    counter = MagicMock()
+    monkeypatch.setattr(
+        "eden.agents.evolution.components._dropped_null_agent_id_counter",
+        lambda: counter,
+    )
+
+    e = JudgeScorePromptEvolver(llm_client=MagicMock())
+
+    async def _get_pg():
+        return pg
+
+    monkeypatch.setattr(e, "_get_postgres", _get_pg)
+
+    await e._fetch_recent_judge_rows()
+    counter.inc.assert_not_called()

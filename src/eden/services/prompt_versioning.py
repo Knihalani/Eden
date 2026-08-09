@@ -7,13 +7,17 @@ Public surface:
   ``prompt_versions``.
 * :func:`template_hash` — sha256 of the normalized template
   (used as the dedup key + the diff identifier).
-* :func:`run_auto_eval` — best-effort eval runner fired
-  on every new version when ``auto_eval_on_save=true``.
+* :func:`run_prompt_lint` — best-effort prompt-template
+  quality score fired on every new version when
+  ``auto_eval_on_save=true`` (clarity/specificity only;
+  does **not** evaluate against a dataset).
+* :func:`run_auto_eval` — deprecated alias of
+  :func:`run_prompt_lint`.
 
 The service degrades gracefully: every fetcher is best-
 effort so an empty database returns empty lists rather
-than 500ing. The auto-eval runner is single-shot LLM (slot
-``fast``) per the existing Cat 14 / Cat 6 patterns.
+than 500ing. The prompt-lint runner is single-shot LLM
+(slot ``fast``) per the existing Cat 14 / Cat 6 patterns.
 
 See ``docs/spec/upgradespec-original-2026-06.md`` §D.9 /
 §B.2 / §C.2 for the full spec.
@@ -235,7 +239,7 @@ class PromptService:
     ) -> dict[str, Any] | None:
         """Create a new version. Auto-increments ``version``.
 
-        Also fires :func:`run_auto_eval` when the prompt
+        Also fires :func:`run_prompt_lint` when the prompt
         has ``auto_eval_on_save=true``.
 
         Args:
@@ -311,10 +315,40 @@ class PromptService:
             return None
         if prompt.get("auto_eval_on_save"):
             try:
-                await run_auto_eval(org_id, prompt_version_id=new_id)
+                await run_prompt_lint(org_id, prompt_version_id=new_id)
             except Exception as exc:
                 logger.debug("prompt_service: auto_eval failed: %s", exc)
+        try:
+            await trigger_regen_on_prompt_version_change(
+                org_id,
+                prompt_name,
+                version=next_version,
+                reason="create_version",
+            )
+        except Exception as exc:
+            logger.debug("prompt_service: regen on create_version failed: %s", exc)
         return await self.get_version(org_id, prompt_name, next_version)
+
+    async def promote(
+        self,
+        org_id: str,
+        prompt_name: str,
+        version: int,
+    ) -> dict[str, Any] | None:
+        """Mark a prompt version as the active production target and regen artifacts."""
+        version_row = await self.get_version(org_id, prompt_name, version)
+        if version_row is None:
+            return None
+        try:
+            await trigger_regen_on_prompt_version_change(
+                org_id,
+                prompt_name,
+                version=version,
+                reason="promote",
+            )
+        except Exception as exc:
+            logger.debug("prompt_service: regen on promote failed: %s", exc)
+        return version_row
 
     async def get_version(
         self,
@@ -393,25 +427,27 @@ class PromptService:
         return out
 
 
-# ── auto-eval runner ─────────────────────────────────────────────────
+# ── prompt-template lint runner ──────────────────────────────────────
 
 
-async def run_auto_eval(
+async def run_prompt_lint(
     org_id: str,
     *,
     prompt_version_id: str,
-    dataset_id: str | None = None,
-    baseline_version_id: str | None = None,
 ) -> str | None:
-    """Best-effort auto-eval runner.
+    """Best-effort prompt-template quality lint.
 
-    Inserts a ``pending`` ``prompt_eval_runs`` row, then
-    transitions it through ``running`` → ``completed``
-    via a single-shot LLM call (slot ``fast``). Returns
-    the eval_run_id on success.
+    Scores the prompt *template text* for clarity and
+    specificity via a single-shot LLM call (slot ``fast``).
+    This does NOT evaluate against a dataset — use the
+    F51 offline experiment runner for dataset-backed evals.
 
-    Best-effort: any DB or LLM error flips the row to
-    ``failed`` with the error in ``results``.
+    Inserts a ``prompt_eval_runs`` row (``dataset_id`` left
+    NULL — the column is reserved for future dataset-backed
+    evals, not used here), transitions it through
+    ``running`` → ``completed``, and returns the run id on
+    success. Best-effort: any DB or LLM error flips the row
+    to ``failed`` with the error in ``results``.
     """
     client = await _get_client()
     if client is None:
@@ -425,23 +461,19 @@ async def run_auto_eval(
                 baseline_version_id, status,
                 created_at, started_at
             ) VALUES (
-                $1, $2, $3, $4,
-                $5, 'running',
+                $1, $2, $3, NULL,
+                NULL, 'running',
                 NOW(), NOW()
             )
             """,
             eval_id,
             org_id,
             prompt_version_id,
-            dataset_id,
-            baseline_version_id,
         )
     except Exception as exc:
-        logger.debug("prompt_service: eval insert failed: %s", exc)
+        logger.debug("prompt_service: lint insert failed: %s", exc)
         return None
-    # Best-effort LLM call. Fall back to a deterministic
-    # "no dataset, no eval" result if the LLM is unavailable.
-    score = await _llm_score(org_id, prompt_version_id)
+    score = await _score_prompt_template_text(org_id, prompt_version_id)
     status = "completed" if score is not None else "failed"
     try:
         await client.execute(
@@ -457,20 +489,30 @@ async def run_auto_eval(
             eval_id,
             status,
             _json_dumps(score or {"error": "no_score"}),
-            _json_dumps({"prompt_version_id": prompt_version_id}),
+            _json_dumps(
+                {
+                    "kind": "prompt_lint",
+                    "prompt_version_id": prompt_version_id,
+                }
+            ),
             1,
         )
     except Exception as exc:
-        logger.debug("prompt_service: eval update failed: %s", exc)
+        logger.debug("prompt_service: lint update failed: %s", exc)
     return eval_id
 
 
-async def _llm_score(
+# Deprecated alias — same callable as :func:`run_prompt_lint`.
+run_auto_eval = run_prompt_lint
+
+
+async def _score_prompt_template_text(
     org_id: str,
     prompt_version_id: str,
 ) -> dict[str, Any] | None:
-    """Single-shot LLM scoring call. Returns a small dict
-    or ``None`` when the LLM is unavailable.
+    """Single-shot LLM prompt-text quality score.
+
+    Returns a small dict or ``None`` when the LLM is unavailable.
     """
     try:
         from eden.llm.internal_router import route_async
@@ -493,8 +535,73 @@ async def _llm_score(
         except Exception:
             return {"score": None, "raw": str(response.content)[:200]}
     except Exception as exc:
-        logger.debug("prompt_service: llm_score failed: %s", exc)
+        logger.debug("prompt_service: prompt_template_score failed: %s", exc)
         return None
+
+
+async def _llm_score(
+    org_id: str,
+    prompt_version_id: str,
+) -> dict[str, Any] | None:
+    """Deprecated alias for :func:`_score_prompt_template_text`."""
+    return await _score_prompt_template_text(org_id, prompt_version_id)
+
+
+async def trigger_regen_on_prompt_version_change(
+    org_id: str,
+    agent_id: str,
+    *,
+    version: int,
+    reason: str = "",
+) -> dict[str, Any]:
+    """FEAT-145 — regenerate Book/Ledger when a prompt version changes."""
+    summary: dict[str, Any] = {
+        "ok": True,
+        "agent_id": agent_id,
+        "version": version,
+        "reason": reason,
+        "book": None,
+        "ledger_entry": None,
+    }
+    book_result: dict[str, Any] | None = None
+    ledger_entry: str | None = None
+    book_ok = False
+    ledger_ok = False
+
+    try:
+        from eden.kb.book.generator import BookGenerator
+
+        book = await BookGenerator().generate(
+            org_id,
+            agent_id,
+            publish_mode="auto_draft",
+            published_by="prompt_versioning",
+        )
+        if book:
+            book_result = {"id": str(book.get("id") or ""), "version": int(book.get("version") or 0)}
+            book_ok = True
+    except Exception as exc:
+        logger.debug("trigger_regen: book generate failed: %s", exc)
+
+    try:
+        from eden.kb.ledger.generator import LedgerGenerator
+
+        note = f"Prompt v{version} changed ({reason or 'version_change'})."
+        ledger_entry = await LedgerGenerator().upsert_do_not_repeat(
+            org_id,
+            agent_id,
+            text=note,
+            source_ids=[f"prompt_version:{version}"],
+        )
+        if ledger_entry:
+            ledger_ok = True
+    except Exception as exc:
+        logger.debug("trigger_regen: ledger upsert failed: %s", exc)
+
+    summary["book"] = book_result
+    summary["ledger_entry"] = ledger_entry
+    summary["ok"] = book_ok or ledger_ok
+    return summary
 
 
 # ── JSON helpers ─────────────────────────────────────────────────────
@@ -511,5 +618,7 @@ def _json_dumps(obj: Any) -> str:
 __all__ = [
     "PromptService",
     "run_auto_eval",
+    "run_prompt_lint",
     "template_hash",
+    "trigger_regen_on_prompt_version_change",
 ]

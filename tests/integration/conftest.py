@@ -72,9 +72,9 @@ def awaited_once() -> Callable[..., None]:
                 "telemetry task may not have been scheduled at all"
             ),
         )
-        assert int(getattr(mock, "await_count")) == n, (
+        assert int(mock.await_count) == n, (
             f"expected exactly {n} await(s), got "
-            f"{getattr(mock, 'await_count')}"
+            f"{mock.await_count}"
         )
 
     return _check

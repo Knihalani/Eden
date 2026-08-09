@@ -76,7 +76,7 @@ Everything above treats "the user" as eden's own PM mining *other vendors'* comp
 
 **Why it doesn't yet deliver the value it's built for:**
 - **No portal UI at all.** Grepped `clients/portal/src` for `topics` and `patterns` (case-insensitive), zero matches in either. A PM or support lead has to hit the raw API or query `topic_clusters`/`trace_patterns` directly by SQL — there's nothing to click. This is a bigger visibility gap than the prompt-evolution-loop UI gap raised in §8 above, and it sits squarely under this doc's own title, yet a title-literal search of eden's own code never happened in prior passes.
-- **On-demand only, no scheduling.** `generate_topics` is called from exactly one place — the `POST .../topics/generate` route (confirmed via `grep -rn "generate_topics\b" src/eden/`) — with no lifespan/cron/worker wiring anywhere. This directly contradicts `patterns_clusterer.py`'s own module docstring, which claims *"the clusterer runs as a background job (the FastAPI lifespan starts it...)"* — aspirational, not true today. In practice nothing surfaces new topics unless someone explicitly calls the endpoint.
+- **On-demand only, no scheduling.** `generate_topics` is called from exactly one place — the `POST .../topics/generate` route (confirmed via `grep -rn "generate_topics\b" src/eden/`) — with no lifespan/cron/worker wiring anywhere. The module docstring now matches that on-demand path (FEAT-180); the scheduling gap itself remains — nothing surfaces new topics unless someone explicitly calls the endpoint.
 - **No trending.** `share_pct` is a snapshot recomputed fresh on every `generate_topics` call (`topics/service.py:163`), with no comparison against the previous run. A PM asking "is this getting worse week over week" has nothing to look at except manually diffing two API responses.
 - **No dedup across runs.** Each run inserts brand-new `topic_clusters` rows with a fresh `uuid4()` id, `ON CONFLICT (id) DO NOTHING` — a no-op since the id is always novel. Running `generate_topics` twice against overlapping traffic would leave two "active" rows for the same underlying pattern, both shown side by side (inferred from the insert/read code path, not observed against live data — eden has no live traffic yet).
 - **No export to a roadmap tool.** `act_on_topic`'s only real action is `dataset`. The other declared action, `alert`, is a stub — `if action != "dataset": return {"action": action, "topic_id": topic_id, "status": "queued"}` (`topics/service.py:222-223`) — it echoes "queued" and does nothing. No Linear/Jira/GitHub-Issues path exists.
@@ -88,6 +88,101 @@ Everything above treats "the user" as eden's own PM mining *other vendors'* comp
 4. Wire `action=alert` for real, and add `action=export` to push a topic (name, description, sample traces, trend) to Linear/Jira/GitHub Issues as one call — mirroring the already-working `action=dataset` bridge.
 
 This exact subsystem is independently verified in more depth in `01-competitor-matrix.md:374-387,480,521,627`, which benchmarks it directly against Braintrust's 2026 "Topics" feature (Braintrust's own framing: "headline 2026 feature") and flags the same two structural gaps — top-50 mirroring instead of a fresh per-trace pass, and the `alert` no-op stub. That comparison, not fresh competitor-GitHub-issue mining, is the more relevant "is this good enough" bar for this specific eden capability; readers should treat `01-competitor-matrix.md`'s F65 entry as the primary reference and this section as the user-flow complement to it.
+
+## Positioning (shipped) — FEAT-181
+
+**Status: shipped.** Wave 6 closed the "no portal UI at all" gap called out
+above — `/topics` (`clients/portal/src/app/(portal)/topics/page.tsx`) now
+ships as a real page: facet tabs (task/sentiment/issues/custom), one card
+per cluster with name, description, keywords, sample count, trend badge,
+and a CSV export, plus a "Generate clusters" action that re-runs the
+HDBSCAN pipeline on demand. This closes the precondition this section
+flagged as unmet in prior passes.
+
+With the UI live, this section adds the product-positioning action this
+doc's own competitor research (§0–§8 above) sets up but never states
+explicitly: **F65 Topics is eden's answer to the "user request mining" /
+issue-mining product category that Langfuse, Arize (Phoenix), Helicone, and
+LangSmith are all independently building toward** (per the vendor issue
+trackers and changelog entries mined in this file). Eden already did the
+hard engineering — HDBSCAN clustering, LLM cluster labeling, trend
+detection (`recent_count`/`baseline_count`/`trend`), and a working
+"turn a cluster into a dataset" action — that competitors in this exact
+category charge for as a distinct, separately-marketed feature. That
+engineering work was, until Wave 6, invisible to any user; it no longer is,
+and should not stay unmarketed:
+
+- **Category framing to use externally:** "eden surfaces what your users
+  are actually asking your agent to do — trending topic and issue clusters
+  mined automatically from live traffic — the same category Langfuse,
+  Arize, Helicone, and LangSmith are each building toward, without
+  requiring you to read individual traces."
+- **What to lead with:** the trend badges (rising/falling/flat vs. a
+  7-day baseline) and the dataset-bridging action
+  (`POST /topics/{id}/act?action=dataset`) are the two capabilities that
+  most directly differentiate a *product feature* from a raw clustering
+  script — both are real and shipped, not aspirational.
+- **What not to claim yet:** do not market this as having scheduled/
+  automatic trending or cross-run dedup — `generate_topics` is still
+  on-demand only (no cron/worker wiring), and each run inserts fresh rows
+  rather than updating existing clusters in place (see "Why it doesn't yet
+  deliver the value it's built for" above, items 2 and 4) — both remain
+  open gaps, not just historical color.
+
+## UX mandate: framing AI-generated labels and fixes — FEAT-182
+
+This section captures a design principle as a standing mandate, not a
+one-time UI note, since it applies to the topics/patterns UI above and to
+any other surface (e.g. the `improvement/` auto-patch loop, the
+prompt-evolution canary UI) that presents an AI-derived conclusion or
+suggested action to a user.
+
+**The mandate:** any UI that shows an AI-generated conclusion, label, or
+suggested fix must give the user a way to check it, and must not imply the
+system already validated it on the user's behalf. Concretely:
+
+1. **Show the label is AI-derived, not fact.** A cluster's name,
+   description, and keywords are LLM output over a real cluster of traces —
+   useful, but not guaranteed correct. Say so where the label is shown,
+   not just in developer-facing docs.
+2. **Always ship an evidence trail next to the conclusion**, not just the
+   conclusion — link to the underlying sample traces (or diff, or score
+   history) so a user can verify the claim themselves in one click, rather
+   than being asked to simply trust it.
+3. **Require explicit human review before any action with real
+   consequences** (creating a dataset from a cluster, promoting a
+   suggested fix, auto-merging a patch) — AI-derived output should inform
+   a decision, not silently make one, until the specific action is
+   explicitly designed and gated as autonomous.
+4. **Don't invent a confidence score the backend doesn't compute.** Where
+   no real confidence/precision number exists (as with topic clusters
+   today), prefer a plain evidence link over a fabricated-looking percentage
+   — a made-up number is worse than no number, per §8's own research.
+
+**Why this is a mandate and not a one-off:** §8 above documents, across
+three independent 2026 sources plus a named developer-trust survey
+(96% of developers don't fully trust AI-generated output), that users are
+actively and publicly skeptical of AI-generated analysis and fixes they
+can't inspect — and that vendors who ship "black box" AI claims without an
+evidence trail read as marketing, not as the trustworthy analysis they're
+claiming to be. This is the same finding this doc already applies to eden's
+prompt-evolution canary UI (§8, `03-prompt-playground.md`'s scoped tables);
+this section formalizes it as a mandate so it also governs the topics/
+patterns UI's own AI-generated labels going forward, and any future
+AI-suggested-fix surface, rather than being re-derived per feature.
+
+**Applied here (Wave 14):** the `/topics` page now marks each cluster's
+name with a visible "AI-labeled, spot-check before acting" hint and a
+"Review N sample traces" link to the cluster's representative traces
+(`clients/portal/src/app/(portal)/topics/page.tsx`), so the label is never
+presented as unverified fact with no way to check it. This is a minimal
+application of the mandate — it does not add a fabricated confidence score,
+and it does not gate the existing "Generate clusters" or CSV-export actions
+behind a review step, since neither of those actions has the "AI suggests,
+human approves before consequence" shape the mandate is about; the
+"create dataset from cluster" action (`act_on_topic`, action=`dataset`)
+already requires an explicit user click per cluster, which satisfies
+point 3 above without further UI change.
 
 ## Full source list
 - [LangSmith public changelog (Jun 29–Jul 31 2026 entries)](https://docs.langchain.com/langsmith/changelog)

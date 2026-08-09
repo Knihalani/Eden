@@ -4,6 +4,13 @@ F56 productization: the returned payload is versioned (``response_version``)
 and additive. It carries the tri-state breakdown (skipped/errors + per-case
 reasons) from ``RegressionRunResult`` and a per-metric score table vs a
 baseline run, reusing the compare grading in ``eden.experiments.compare``.
+
+FEAT-13: when ``enable_playground_scorers`` is set (or the deployment flag
+``ci_eval_playground_scorers_v1`` is on), dataset cases with scorer specs
+are also evaluated via :mod:`eden.evaluation.prompt_regression_gate`, which
+calls :func:`eden.playground.scorers.run_scorers`. The overall ``ok`` /
+``gate`` verdict requires both the trace-based suite and the scorer gate
+to pass.
 """
 
 from __future__ import annotations
@@ -12,8 +19,9 @@ import logging
 from typing import Any
 
 from eden.evaluation.ci_eval_history import CIEvalHistoryStore
+from eden.evaluation.prompt_regression_gate import run_prompt_regression_gate
 from eden.evaluation.regression_runner import RegressionRunner, _skip_policy
-from eden.experiments.compare import grade_datapoint
+from eden.experiments.compare import build_case_grade_row, grade_datapoint
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +79,41 @@ def _metric_row(
 
 
 def build_score_table(
-    current_counts: dict[str, Any], baseline_counts: dict[str, Any] | None
+    current_counts: dict[str, Any],
+    baseline_counts: dict[str, Any] | None,
+    *,
+    f51_grades: list[dict[str, Any]] | None = None,
+    baseline_f51_grades: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     cur = _rates(current_counts)
     base = _rates(baseline_counts) if baseline_counts else None
-    return [
+    rows = [
         _metric_row(name, base[name] if base else None, cur[name], hib)
         for name, hib in _METRICS
     ]
+    if not f51_grades:
+        return rows
+    baseline_by_case = {
+        str(row.get("case_id")): row for row in (baseline_f51_grades or [])
+    }
+    for grade in f51_grades:
+        case_id = str(grade.get("case_id") or "")
+        if not case_id:
+            continue
+        baseline_row = baseline_by_case.get(case_id)
+        baseline_score = (
+            baseline_row.get("current_score") if baseline_row else None
+        )
+        rows.append(
+            build_case_grade_row(
+                case_id,
+                baseline_score=baseline_score,
+                current_score=grade.get("current_score"),
+                fingerprint=grade.get("fingerprint"),
+                reason=grade.get("reason"),
+            )
+        )
+    return rows
 
 
 def render_summary_md(data: dict[str, Any]) -> str:
@@ -100,6 +135,18 @@ def render_summary_md(data: dict[str, Any]) -> str:
         d = "—" if row["delta"] is None else f"{row['delta']:+.3f}"
         lines.append(
             f"| {row['metric']} | {b} | {row['current']:.3f} | {d} | {row['verdict']} |"
+        )
+    scorer = data.get("scorer_gate") or {}
+    if scorer.get("ran"):
+        lines.extend(
+            [
+                "",
+                f"Scorer gate: **{'pass' if scorer.get('ok') else 'block'}** "
+                f"(mean {scorer.get('mean_score', '—')} vs baseline "
+                f"{scorer.get('baseline_mean_score', '—')})",
+                f"passed {scorer.get('passed', 0)} · failed {scorer.get('failed', 0)} · "
+                f"errors {scorer.get('errors', 0)}",
+            ]
         )
     return "\n".join(lines)
 
@@ -126,6 +173,10 @@ class CIWebhookHandler:
         ref: str | None = None,
         commit_sha: str | None = None,
         pr_number: int | None = None,
+        enable_playground_scorers: bool = False,
+        scorer_specs: list[dict[str, Any]] | None = None,
+        treatment_outputs: dict[str, str] | None = None,
+        scorer_regression_threshold: float | None = None,
     ) -> dict[str, Any]:
         runner = self._runner or RegressionRunner()
         history = self._history or CIEvalHistoryStore()
@@ -141,19 +192,6 @@ class CIWebhookHandler:
         }
         summary = {**counts, "ok": result.ok}
 
-        # Enrich persisted row with tri-state + CI context (base row was
-        # written by the runner; we never touch its INSERT).
-        await history.enrich(
-            reg["id"],
-            skipped=reg["skipped"],
-            errors=reg["errors"],
-            cases=reg["cases"],
-            ref=ref,
-            commit_sha=commit_sha,
-            pr_number=pr_number,
-            changed_files=changed_files,
-        )
-
         baseline_row, baseline_source = await history.resolve_baseline(
             org_id,
             agent_id=agent_id,
@@ -161,7 +199,40 @@ class CIWebhookHandler:
             exclude_id=reg["id"],
         )
         baseline_counts = baseline_row.get("counts") if baseline_row else None
-        score_table = build_score_table(counts, baseline_counts)
+        baseline_f51 = (baseline_row or {}).get("f51_grades")
+        score_table = build_score_table(
+            counts,
+            baseline_counts,
+            f51_grades=reg.get("f51_grades"),
+            baseline_f51_grades=baseline_f51,
+        )
+
+        scorer_gate = await run_prompt_regression_gate(
+            org_id,
+            agent_id=agent_id,
+            enable=enable_playground_scorers,
+            global_specs=scorer_specs,
+            treatment_outputs=treatment_outputs,
+            baseline_row=baseline_row,
+            regression_threshold=scorer_regression_threshold,
+        )
+        scorer_gate_dict = scorer_gate.to_dict()
+        gate_ok = result.ok and scorer_gate_dict["ok"]
+
+        # Enrich persisted row with tri-state + CI context (base row was
+        # written by the runner; we never touch its INSERT).
+        await history.enrich(
+            reg["id"],
+            skipped=reg["skipped"],
+            errors=reg["errors"],
+            cases=reg["cases"],
+            f51_grades=reg.get("f51_grades"),
+            ref=ref,
+            commit_sha=commit_sha,
+            pr_number=pr_number,
+            changed_files=changed_files,
+            scorer_gate=scorer_gate_dict,
+        )
 
         skip_cases = [
             {"case_id": c.get("case_id"), "reason": c.get("reason")}
@@ -182,10 +253,11 @@ class CIWebhookHandler:
             "commit_sha": commit_sha,
             "pr_number": pr_number,
             "run_id": reg["id"],
-            "ok": result.ok,
-            "gate": "pass" if result.ok else "block",
+            "ok": gate_ok,
+            "gate": "pass" if gate_ok else "block",
             "regression": reg,
-            "summary": summary,
+            "scorer_gate": scorer_gate_dict,
+            "summary": {**summary, "ok": gate_ok},
             "score_table": score_table,
             "skips": {
                 "count": reg["skipped"],

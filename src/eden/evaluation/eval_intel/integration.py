@@ -21,11 +21,10 @@ Three services:
   The :attr:`name` is ``"custom_python_eval"``.
 
 * :class:`AutoDatasetBridge` — Braintrust-style auto-curate a
-  golden dataset from low-score traces. ``from_judge_failures``
+  dataset from low-score traces. ``from_judge_failures``
   pulls low-score ``judge_scores`` rows for the given judge
-  name, builds a list of trace dicts, and calls the existing
-  :class:`eden.evaluation.auto_dataset.AutoDatasetPromoter` to
-  do the actual promotion.
+  name and promotes their traces into a Postgres-backed dataset
+  via :class:`eden.datasets.hub.DatasetHub`.
 
   The :attr:`name`` is ``"auto_dataset_bridge"``.
 
@@ -37,8 +36,6 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-
-from eden.evaluation.auto_dataset import AutoDatasetPromoter
 
 from ._common import (
     AUTO_DATASET_MAX_SAMPLES,
@@ -65,33 +62,29 @@ logger = logging.getLogger(__name__)
 
 
 class EvalToGuardrailLink:
-    """Galileo eval-to-guardrail lifecycle — the canonical implementation.
+    """Galileo eval-to-guardrail lifecycle — the canonical implementation (FEAT-34).
 
-    This is the implementation actually reachable from production
-    routes: ``POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail``
-    (:meth:`promote_to_guardrail`), ``POST .../eval/promote-to-shadow-guardrail``
-    (:meth:`promote_to_shadow`), and ``POST .../eval/demote-guardrail``
-    (:meth:`demote`) — see ``eden.api.routes.intelligence_eval`` and
+    **Not to be confused with** the legacy, non-enforcing
+    :class:`eden.guardrails.intervention.LegacyEvalToGuardrailLink`
+    (FEAT-37) — that class only writes ``judge_link`` rows that
+    :meth:`eden.guardrails.intervention.InterventionEngine.evaluate_and_act`
+    never enforces. This class is the production path: it hot-reloads
+    the live AI Gateway guardrail filter on promotion/demotion.
+
+    Reachable from production routes:
+
+    * ``POST /orgs/{org_id}/intelligence/eval/promote-to-guardrail``
+      (:meth:`promote_to_guardrail`)
+    * ``POST .../eval/promote-to-shadow-guardrail`` (:meth:`promote_to_shadow`)
+    * ``POST .../eval/demote-guardrail`` (:meth:`demote`)
+    * ``POST /orgs/{org_id}/intelligence/guardrails/promote-judge``
+      (legacy Cat-15 namespace; delegates to :meth:`promote_to_guardrail`)
+
+    See ``eden.api.routes.intelligence_eval``,
+    ``eden.api.routes.intelligence_guardrails``, and
     ``eden.api.routes.wave6_online``.
 
-    A second, older class,
-    :class:`eden.guardrails.intervention.LegacyEvalToGuardrailLink`
-    (FEAT-34: renamed from ``EvalToGuardrailLink`` to remove the
-    identical-name ambiguity with this class), still
-    exists (reachable from the legacy ``POST
-    /orgs/{org_id}/intelligence/guardrails/promote-judge`` route and
-    from :class:`eden.llmops.promotion_hooks.GuardrailHook`'s
-    closed-loop callbacks) but is **not** the enforcement path: its
-    ``.promote()`` only writes a ``guardrail_policies`` row of type
-    ``"judge_link"`` — a type ``InterventionEngine.evaluate_and_act``
-    hard-excludes from ``_enforced_types`` — and never touches the
-    live AI-gateway guardrail filter, so by itself it has no runtime
-    effect. Do not add new integrations against that class; it is
-    kept only because ``GuardrailHook`` and the legacy route depend
-    on its exact type/import surface. See that class's docstring for
-    detail.
-
-    **How enforcement actually happens here:** :meth:`promote_to_guardrail`
+    **How enforcement happens:** :meth:`promote_to_guardrail`
     does two things the legacy class does not: (1) gates the
     promotion on the judge's sample count and false-positive rate
     (:data:`eden.evaluation.eval_intel._common.MIN_SAMPLES_FOR_PROMOTION` /
@@ -116,6 +109,7 @@ class EvalToGuardrailLink:
         *,
         judge_name: str,
         threshold: float,
+        fire_hook: bool = True,
     ) -> dict[str, Any]:
         # 1. Validate inputs.
         if not judge_name or not isinstance(judge_name, str):
@@ -203,10 +197,13 @@ class EvalToGuardrailLink:
             status="active",
         )
 
-        # 4. Fire the closed-loop hook (best-effort).
-        _fire_eval_to_guardrail_promotion(
-            org_id, judge_name=judge_name, threshold=threshold,
-        )
+        # 4. Fire the closed-loop hook (best-effort). Callers that
+        # are already inside the hook path pass fire_hook=False to
+        # avoid recursive promote → hook → promote loops.
+        if fire_hook:
+            _fire_eval_to_guardrail_promotion(
+                org_id, judge_name=judge_name, threshold=threshold,
+            )
 
         # 5. N15 — hot-reload live guardrail filter on gateway.
         try:
@@ -305,16 +302,12 @@ class EvalToGuardrailLink:
     ) -> dict[str, Any]:
         """Disable a promoted judge guardrail (FEAT-34).
 
-        Ports :meth:`eden.guardrails.intervention.LegacyEvalToGuardrailLink.demote`'s
-        disable logic (same ``eval_to_guardrail_links`` /
-        ``guardrail_policies`` tables — reused directly rather than
-        duplicated) and additionally removes the policy from the
-        *live* gateway filter that :meth:`promote_to_guardrail` /
-        :meth:`promote_to_shadow` hot-reload on promotion. That
-        second step is the one the legacy class's ``.promote()``
-        never needed (it never added anything to the live filter in
-        the first place) but this class does — without it, a
-        "disabled" guardrail would keep firing on live traffic.
+        Disables matching rows in ``eval_to_guardrail_links`` and
+        ``guardrail_policies`` (via
+        :func:`eden.guardrails.intervention._disable_eval_guardrail_link`)
+        and removes the policy from the *live* gateway filter that
+        :meth:`promote_to_guardrail` / :meth:`promote_to_shadow`
+        hot-reload on promotion.
         """
         if not isinstance(judge_name, str) or not judge_name:
             return _bad_request_envelope(
@@ -452,11 +445,7 @@ class CustomPythonEval:
 
 
 def _judge_score_to_trace_dict(row: dict[str, Any]) -> dict[str, Any]:
-    """Convert a :sql:`judge_scores` row to the trace-dict
-    shape that
-    :meth:`eden.evaluation.auto_dataset.AutoDatasetPromoter.process_traces`
-    expects. Defensive: missing fields are filled in with
-    sensible defaults."""
+    """Convert a :sql:`judge_scores` row to a trace-dict for logging."""
     return {
         "trace_id": str(row.get("trace_id", "")),
         "description": (
@@ -554,18 +543,39 @@ class AutoDatasetBridge:
                 },
             )
 
-        # 3. Convert to trace dicts and call the promoter.
+        # 3. Promote failing traces into a Postgres-backed dataset.
         traces = [_judge_score_to_trace_dict(r) for r in rows]
-        promoter = AutoDatasetPromoter(promotion_threshold=float(min_confidence))
-        result = await promoter.process_traces(
-            traces, target_dataset_id=f"gd_{target_dataset_name}",
+        from eden.datasets.hub import DatasetHub
+
+        hub = DatasetHub()
+        created = await hub.create_dataset(
+            org_id,
+            name=target_dataset_name,
+            description=(
+                f"Auto-curated from low-{judge_name} judge failures"
+            ),
+            source_type="auto_dataset_bridge",
+            source_ref=judge_name,
         )
+        dataset_id = created.id
+        added = 0
+        for row in rows:
+            trace_id = str(row.get("trace_id") or "").strip()
+            if not trace_id:
+                continue
+            try:
+                await hub.promote_trace(org_id, trace_id, dataset_id=dataset_id)
+                added += 1
+            except Exception:
+                continue
+        result = {
+            "processed": len(traces),
+            "new_cases_added": added,
+            "dataset_id": dataset_id,
+        }
 
         # 4. Persist the bridge row.
-        target_dataset_id = result.get("dataset_id") if isinstance(result, dict) else None
-        target_dataset_id_str: str | None = (
-            str(target_dataset_id) if target_dataset_id else None
-        )
+        target_dataset_id_str = str(dataset_id)
         await _insert_auto_dataset_bridge(
             org_id,
             judge_name=judge_name,

@@ -197,7 +197,7 @@ class TestUseAuthRefetchesOnUpdatedAt:
             "PQ-13 regression: refreshUser must call fetchMeQuery"
         )
 
-    def test_updatedAt_not_snake_case(self) -> None:
+    def test_updated_at_not_snake_case(self) -> None:
         """Clerk's React SDK exposes camelCase ``updatedAt`` (not
         snake-case ``updated_at``). Do not introduce a silent
         snake_case dep if an effect is re-added later.

@@ -197,7 +197,6 @@ _DEFERRED_ROUTERS: tuple[tuple[str, str], ...] = (
     ("eden.api.routes.billing", "router"),  # /orgs/{org_id}/billing
     ("eden.api.routes.budgets", "router"),  # /orgs/{org_id}/budget + ticker + actions (D.10)
     ("eden.api.routes.finops", "router"),  # /orgs/{org_id}/finops/* (SOTA W8)
-    ("eden.api.routes.cost", "router"),  # /orgs/{org_id}/cost/comparison (Cat 23 audit)
     ("eden.api.routes.analytics", "router"),  # /orgs/{org_id}/analytics
     ("eden.api.routes.export", "router"),  # /orgs/{org_id}/export
     ("eden.api.routes.export_destinations", "router"),  # export/{destinations,schedules,run-now}

@@ -68,22 +68,27 @@ def _sign_id_token(private_key: Any, kid: str, claims: dict[str, Any]) -> str:
     return jwt.encode(claims, pem, algorithm="RS256", headers={"kid": kid})
 
 
-def _provider_row() -> dict[str, Any]:
+def _provider_row(provider_type: str = "oidc") -> dict[str, Any]:
+    auth = f"{ISSUER}/authorize"
+    if provider_type == "okta":
+        auth = "https://example.okta.com"
+    elif provider_type == "google":
+        auth = "https://accounts.google.com/o/oauth2/v2/auth"
     return {
         "id": PROVIDER_ID,
         "org_id": ORG,
-        "provider_type": "oidc",
-        "name": "oidc",
+        "provider_type": provider_type,
+        "name": provider_type,
         "client_id": CLIENT_ID,
         "client_secret": "sekret",
-        "authorization_endpoint": f"{ISSUER}/authorize",
+        "authorization_endpoint": auth,
         "token_endpoint": f"{ISSUER}/token",
         "userinfo_endpoint": None,
         "certificate": None,
     }
 
 
-def _pg_with_provider() -> MagicMock:
+def _pg_with_provider(provider_type: str = "oidc") -> MagicMock:
     """Query-routing Postgres mock — tracks JIT-provisioned users/
     memberships in-process so ``_get_or_create_sso_user`` /
     ``_ensure_sso_org_membership`` see real "not found yet" ->
@@ -92,7 +97,7 @@ def _pg_with_provider() -> MagicMock:
     users/org_members row and crash on ``existing["role"]``).
     """
     pg = MagicMock()
-    provider_row = _provider_row()
+    provider_row = _provider_row(provider_type)
     users: dict[str, dict[str, Any]] = {}
     memberships: set[tuple[str, str]] = set()
 
@@ -156,14 +161,16 @@ class _FakeRedis:
         return 1 if self.store.pop(key, None) is not None else 0
 
 
-def _build_app_with_state(state: str = "valid-state") -> tuple[FastAPI, _FakeRedis, MagicMock]:
+def _build_app_with_state(
+    state: str = "valid-state", provider_type: str = "oidc"
+) -> tuple[FastAPI, _FakeRedis, MagicMock]:
     from eden.api.routes import sso as sso_routes
 
     app = FastAPI()
     app.include_router(sso_routes.router)
     redis = _FakeRedis()
     redis.store[f"eden:sso:state:{state}"] = f"{PROVIDER_ID}|{ORG}"
-    pg = _pg_with_provider()
+    pg = _pg_with_provider(provider_type)
     return app, redis, pg
 
 
@@ -382,3 +389,45 @@ def test_oidc_callback_rejects_id_token_without_email_claim() -> None:
 
     assert resp.status_code == 400, resp.text
     assert "email" in resp.text.lower()
+
+
+@pytest.mark.parametrize("provider_type", ["okta", "google"])
+def test_oidc_family_provider_routes_to_oidc_handler(provider_type: str) -> None:
+    """Okta/Google provider slugs must use the OIDC code exchange path."""
+    private_key, public_key = _rsa_keypair()
+    kid = "key-1"
+    discovery, jwks = _discovery_and_jwks(public_key, kid)
+    id_token = _sign_id_token(
+        private_key,
+        kid,
+        {
+            "iss": ISSUER,
+            "aud": CLIENT_ID,
+            "sub": "user-sub-1",
+            "email": f"person@{provider_type}.example.com",
+            "name": "Person Example",
+            "exp": time_module.time() + 300,
+            "iat": time_module.time(),
+        },
+    )
+    token_response = _FakeHTTPResponse(200, {"id_token": id_token, "access_token": "at-1"})
+    fake_client_cls = _make_fake_async_client(discovery, jwks, token_response)
+
+    app, redis, pg = _build_app_with_state(provider_type=provider_type)
+    from eden.api.routes import sso as sso_routes
+
+    with (
+        patch.object(sso_routes, "get_redis_client", AsyncMock(return_value=redis)),
+        patch.object(sso_routes, "get_postgres_client", AsyncMock(return_value=pg)),
+        patch("httpx.AsyncClient", fake_client_cls),
+    ):
+        client = TestClient(app)
+        resp = client.post(
+            f"/sso/callback/{PROVIDER_ID}?org_id={ORG}&code=real-code&state=valid-state"
+        )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["email"] == f"person@{provider_type}.example.com"
+    assert "sso_not_enabled" not in resp.text.lower()
+    assert resp.cookies.get("authorization")

@@ -7,12 +7,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
-import { ChevronDown, ChevronRight, PanelLeft, PanelLeftClose } from "lucide-react";
+import { ChevronDown, ChevronRight, PanelLeft } from "lucide-react";
 import {
   formatDuration,
   formatTokens,
@@ -20,8 +21,9 @@ import {
   type TraceFixture,
   type TranscriptStep,
 } from "@/lab/fixtures/traces";
-import { AGENT_LIST, agentForTrace } from "@/lab/fixtures/agents";
+import { AGENT_LIST, agentById, agentForTrace } from "@/lab/fixtures/agents";
 import {
+  agentLaneColor,
   groupParallelSteps,
   parseLazyPayloadMarker,
   type LazyPayloadMarker,
@@ -29,31 +31,9 @@ import {
 import { agentIssuesApi } from "@/lib/api/resources";
 import { useCatalogAgents } from "@/hooks/use-catalog-agents";
 import { StatusChip } from "@/components/ds/primitives";
-import { useSidebar } from "@/components/shell/sidebar-context";
 import { cn } from "@/lib/utils";
 
 export { MetricCell } from "@/lab/lab-metric-cell";
-
-export function NavToggle({ className }: { className?: string }) {
-  const { collapsed, toggle } = useSidebar();
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className={cn("ds-btn ds-btn-ghost ds-btn-sm", className)}
-      title={collapsed ? "Expand navigation ( [ )" : "Collapse navigation ( [ )"}
-      aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-      aria-pressed={collapsed}
-    >
-      {collapsed ? (
-        <PanelLeft className="h-3.5 w-3.5" />
-      ) : (
-        <PanelLeftClose className="h-3.5 w-3.5" />
-      )}
-      <span className="hidden sm:inline">Nav</span>
-    </button>
-  );
-}
 
 /** Reveal a collapsed master list — lives in the page header so it never shoves title text. */
 export function ListRevealButton({
@@ -126,31 +106,6 @@ export function EmptyState({
         <div className={cn(compact ? "mt-3" : "mt-5")}>{action}</div>
       ) : null}
     </div>
-  );
-}
-
-export function SectionHead({
-  title,
-  hint,
-  meta,
-  actions,
-}: {
-  title: string;
-  hint?: string;
-  meta?: ReactNode;
-  actions?: ReactNode;
-}) {
-  return (
-    <header className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-3 sm:px-5">
-      <div className="min-w-0">
-        <h2 className="type-ui text-[var(--text)]">{title}</h2>
-        {hint ? <p className="type-meta mt-0.5">{hint}</p> : null}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {meta}
-        {actions}
-      </div>
-    </header>
   );
 }
 
@@ -227,10 +182,22 @@ const KIND_LABEL: Record<TranscriptStep["kind"], string> = {
   tool: "Tool",
   bash: "Bash",
   span: "Span",
+  agent: "Agent",
+  handoff: "Handoff",
 };
 
 export function stepKindLabel(kind: TranscriptStep["kind"]): string {
   return KIND_LABEL[kind];
+}
+
+function agentStepLabel(agentId?: string): string | undefined {
+  if (!agentId) return undefined;
+  return agentById(agentId)?.name ?? agentId;
+}
+
+function agentLaneStyle(agentId?: string): CSSProperties | undefined {
+  const color = agentLaneColor(agentId);
+  return color ? { borderLeftWidth: "3px", borderLeftStyle: "solid", borderLeftColor: color } : undefined;
 }
 
 export function isBadStep(step: TranscriptStep) {
@@ -716,6 +683,8 @@ const TranscriptRow = memo(function TranscriptRow({
 }) {
   const bad = isBadStep(step);
   const handleClick = useCallback(() => onToggle(step.id), [onToggle, step.id]);
+  const laneStyle = agentLaneStyle(step.agentId);
+  const agentLabel = agentStepLabel(step.agentId);
 
   return (
     <>
@@ -728,8 +697,10 @@ const TranscriptRow = memo(function TranscriptRow({
           open && "bg-[var(--bg-hover)]",
           active && "shadow-[inset_0_0_0_1px_var(--accent)]",
         )}
+        style={laneStyle}
         aria-expanded={open}
         data-active={active ? "true" : undefined}
+        data-agent-id={step.agentId}
       >
         <span className="type-mono w-5 shrink-0 tabular-nums !text-[var(--text-faint)]">
           {index + 1}
@@ -737,6 +708,14 @@ const TranscriptRow = memo(function TranscriptRow({
         <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
           {KIND_LABEL[step.kind]}
         </span>
+        {agentLabel ? (
+          <span
+            className="ds-chip hidden max-w-[7rem] shrink-0 truncate border border-[var(--line)] text-[var(--text-muted)] sm:inline"
+            title={step.agentId}
+          >
+            {agentLabel}
+          </span>
+        ) : null}
         <span
           className={cn(
             "type-ui min-w-0 flex-1 truncate !font-normal",
@@ -798,6 +777,9 @@ const ParallelGroupRow = memo(function ParallelGroupRow({
   actionContext?: StepActionContext;
   loadPayload?: LoadStepPayload;
 }) {
+  const agentIds = new Set(lanes.map((lane) => lane.agentId).filter(Boolean));
+  const multiAgent = agentIds.size > 1;
+
   return (
     <div data-parallel-group>
       <div
@@ -813,7 +795,9 @@ const ParallelGroupRow = memo(function ParallelGroupRow({
           ‖ {lanes.length} parallel
         </span>
         <span className="type-label !text-[var(--text-faint)]">
-          overlapping tool calls
+          {multiAgent
+            ? `${agentIds.size} agents · overlapping tool calls`
+            : "overlapping tool calls"}
         </span>
       </div>
       <div className="flex min-w-0 divide-x divide-[var(--line)]">
@@ -821,6 +805,8 @@ const ParallelGroupRow = memo(function ParallelGroupRow({
           const bad = isBadStep(step);
           const open = openIds.has(step.id);
           const active = activeId === step.id;
+          const laneStyle = agentLaneStyle(step.agentId);
+          const agentLabel = agentStepLabel(step.agentId);
           return (
             <button
               key={step.id}
@@ -833,15 +819,25 @@ const ParallelGroupRow = memo(function ParallelGroupRow({
                 bad && "bg-[var(--error-muted)]",
                 active && "shadow-[inset_0_0_0_1px_var(--accent)]",
               )}
+              style={laneStyle}
               aria-expanded={open}
               data-step-id={step.id}
               data-lane-index={laneIndex}
+              data-agent-id={step.agentId}
               data-active={active ? "true" : undefined}
             >
               <span className="flex w-full min-w-0 items-center gap-1.5">
                 <span className="ds-chip shrink-0 border border-[var(--line)] text-[var(--text-muted)]">
                   {KIND_LABEL[step.kind]}
                 </span>
+                {agentLabel ? (
+                  <span
+                    className="ds-chip max-w-[6rem] shrink-0 truncate border border-[var(--line)] text-[var(--text-muted)]"
+                    title={step.agentId}
+                  >
+                    {agentLabel}
+                  </span>
+                ) : null}
                 <span
                   className={cn(
                     "type-ui min-w-0 flex-1 truncate !font-normal",

@@ -127,8 +127,33 @@ export async function runDoctor(opts: {
     },
   });
 
+  const droppedTotal = client.droppedTotal;
+  const sampledOut = client.sampledOut;
+  const dropSamplingParts: string[] = [
+    `droppedTotal=${droppedTotal}`,
+    `sampledOut=${sampledOut}`,
+  ];
+  if (droppedTotal > 0) {
+    dropSamplingParts.push(
+      "events were evicted from the queue (check maxQueueSize / flush cadence)",
+    );
+  }
+  if (sampledOut > 0) {
+    dropSamplingParts.push(
+      "events were client-sampled out (check EDEN_SAMPLING_PROFILE)",
+    );
+  }
+  checks.push({
+    name: "dropSampling",
+    ok: droppedTotal === 0,
+    message: dropSamplingParts.join("; "),
+    detail: { droppedTotal, sampledOut },
+  });
+
   if (emitTestEvent && cfg.orgId && !cfg.disabled) {
     const eventId = `doctor_${randomId()}`;
+    const sent0 = client.sent;
+    const failed0 = client.failed;
     client.emit({
       eventId,
       tenantId: cfg.orgId ?? "default",
@@ -145,37 +170,34 @@ export async function runDoctor(opts: {
       attributes: { doctor: true },
       tags: ["doctor", "sdk"],
     });
-    const rejectedBefore = client.rejectedTotal;
-    const flushedOk = await client.flush();
+    await client.flush();
     const status = client.lastIngestHttpStatus;
-    // A 2xx is not proof the event was stored — the body carries the
-    // per-row outcome, and a fully-rejected batch still returns 200.
-    // Keying `ok` off the HTTP status alone meant a customer whose
-    // events were being 100% discarded ran `doctor`, was told
-    // "ok: true — Emitted test event (HTTP 2xx)", saw nothing in the
-    // portal, and filed a bug nobody could reproduce. That is the
-    // single worst place in the product for a false all-clear.
-    const rejected = client.rejectedTotal - rejectedBefore;
-    const stored = flushedOk && rejected === 0;
+    const sentDelta = client.sent - sent0;
+    const failedDelta = client.failed - failed0;
+    const emitOk = sentDelta > 0 && failedDelta === 0;
 
-    let failMsg = `Test event ${eventId} ingest did not confirm HTTP 2xx`;
-    if (flushedOk && rejected > 0) {
-      failMsg =
-        `Test event ${eventId} was accepted by the server but REJECTED ` +
-        `as malformed (HTTP 2xx, rejected=${rejected}). Nothing was ` +
-        `stored — it will not appear in the portal.`;
-    } else if (!flushedOk && (status === 401 || status === 403)) {
-      failMsg = `Test event ${eventId} rejected (HTTP ${status}) — check API key / org`;
-    } else if (!flushedOk && status != null) {
-      failMsg = `Test event ${eventId} ingest did not confirm HTTP 2xx (HTTP ${status})`;
+    let emitMsg: string;
+    if (emitOk) {
+      emitMsg = `Emitted test event ${eventId} (HTTP 2xx)`;
+    } else if (failedDelta > 0) {
+      emitMsg =
+        `Test event ${eventId} ingest failed ` +
+        `(failed+=${failedDelta}; expect HTTP 2xx)`;
+    } else {
+      emitMsg =
+        `Test event ${eventId} did not confirm HTTP 2xx ` +
+        `(sent+=${sentDelta}, failed+=${failedDelta})`;
     }
     checks.push({
       name: "testEvent",
-      ok: stored,
-      message: stored
-        ? `Emitted test event ${eventId} (HTTP 2xx, accepted)`
-        : failMsg,
-      detail: { eventId, statusCode: status, rejected },
+      ok: emitOk,
+      message: emitMsg,
+      detail: {
+        eventId,
+        statusCode: status,
+        sentDelta,
+        failedDelta,
+      },
     });
   }
 

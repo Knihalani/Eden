@@ -10,74 +10,103 @@
  * automatically with zero further code changes.
  *
  * This module gives the TS SDK the same class-level behavior for the
- * frameworks it can safely reach: it `require()`s the framework's
- * module once (Node CJS/ESM interop covers `openai` and
- * `@anthropic-ai/sdk` — both ship a `default` export that IS the
- * client class, so `mod.default ?? mod` gets the class either way)
- * and replaces the resource class's prototype method in place —
- * `OpenAI.Chat.Completions.prototype.create` and
- * `Anthropic.Messages.prototype.create` — with a wrapper that drives
- * the *exact same* instrumentation logic the per-instance `wrapOpenAI`
- * / `wrapAnthropic` Proxies use (`_instrumentedCreate`, imported from
- * each instrumentation module), so the captured span/event shape is
- * identical regardless of which mechanism produced it.
+ * frameworks it can safely reach. It `require()`s (or dynamically
+ * `import()`s) the framework module once and replaces the relevant
+ * prototype method or module export in place — with the *exact same*
+ * instrumentation logic the per-instance `wrap*` Proxies use — so the
+ * captured span/event shape is identical regardless of mechanism.
  *
- * No loader hook (`require-in-the-middle` / `import-in-the-middle`) is
- * used — but a plain `require()` alone is NOT enough, either:
- * `openai` and `@anthropic-ai/sdk` both ship a genuine **dual
- * package** (separate `./index.js` CJS build for the `"require"`
- * export condition and a separate `./index.mjs` ESM build for the
- * `"default"`/`import` condition — verified empirically under both
- * Node 22 and Bun: `require("openai") !== (await import("openai")).default`,
- * different `Chat` class objects, different prototypes entirely).
- * A consuming app that does `import OpenAI from "openai"` constructs
- * instances from a DIFFERENT class than the one `require("openai")`
- * would hand back, so patching only the CJS class's prototype would
- * silently miss every ESM-import consumer (a real, likely majority,
- * chunk of TypeScript apps). This module therefore patches BOTH:
- *   - `patchOpenAIPrototype` / `patchAnthropicPrototype` — synchronous,
- *     via `require()` (through the shared `_safeRequire` helper).
- *     Also covers the common case of a TS project compiled with
- *     `"module": "commonjs"`, where a source-level `import` is
- *     transpiled down to `require()`.
- *   - `patchOpenAIPrototypeESM` / `patchAnthropicPrototypeESM` —
- *     asynchronous, via dynamic `import()`, which resolves to the
- *     SAME cached module instance a real `import OpenAI from "openai"`
- *     elsewhere in the app resolves to (verified: dynamic and static
- *     `import` of the same specifier share one module-cache entry).
- * `instrument()` runs the sync (CJS) pass immediately — so its
- * return value's `patched` field is available synchronously, matching
- * the Python SDK's synchronous one-liner — and separately kicks off
- * the async (ESM) pass without awaiting it, exposed as
- * `patchedAsync` on the result for callers who want to `await` it
- * (e.g. a serverless cold-start that constructs its client
- * immediately after `instrument()`); real app code between
- * `instrument()` and the first LLM call almost always has an `await`
- * of its own before it, so in practice the ESM pass is done well
- * before the first real request.
+ * ## Why not `import-in-the-middle`?
  *
- * Every framework/module-format combination is loaded and patched
- * inside its own try/catch — a framework that isn't installed in the
- * consuming app (a `require`/`import` throw) or whose shape doesn't
- * match what we expect (defensive: SDKs can rename internals across
- * majors) is silently skipped, never thrown from `instrument()`.
+ * We deliberately avoid loader hooks (`require-in-the-middle` /
+ * `import-in-the-middle`). They add a runtime dependency, complicate
+ * bundlers (Next.js, esbuild, Bun), and are unnecessary for the
+ * frameworks we can reach via a one-time `require()` / dynamic
+ * `import()` at `instrument()` call time — before the consuming app
+ * constructs its first client. Prototype patching is lighter, works
+ * in every Node 18+ runtime without loader registration, and matches
+ * how the Python SDK patches class methods directly.
+ *
+ * A plain `require()` alone is NOT enough for dual-package SDKs:
+ * `openai`, `@anthropic-ai/sdk`, and `groq-sdk` all ship separate
+ * CJS and ESM builds that resolve to genuinely different class objects
+ * (`require("openai") !== (await import("openai")).default`). This
+ * module therefore runs two passes for those packages:
+ *   - Sync pass via `require()` — CJS consumers and TS compiled to
+ *     `"module": "commonjs"`.
+ *   - Async pass via dynamic `import()` — native ESM consumers.
+ *
+ * `instrument()` runs the sync pass immediately (so `patched` is
+ * available synchronously) and kicks off the async pass without
+ * awaiting it (`patchedAsync`).
+ *
+ * ## Auto-patch coverage (FEAT-71)
+ *
+ * | Framework | Patch target | Notes |
+ * |-----------|--------------|-------|
+ * | OpenAI (+ xAI) | `Chat.Completions.prototype.create` | dual CJS/ESM |
+ * | Anthropic | `Messages.prototype.create` | dual CJS/ESM |
+ * | Groq | `Chat.Completions.prototype.create` | OpenAI-shaped |
+ * | LangChain | `BaseChatModel.prototype` (`invoke`, …) | class-level wrapLangChain |
+ * | Gemini (legacy) | `GenerativeModel.prototype.generateContent` | `@google/generative-ai` |
+ * | Gemini (new) | `Models.prototype.generateContent` | `@google/genai` when present |
+ * | Mistral | `Chat.prototype.complete` / `.stream` | `@mistralai/mistralai` |
+ *
+ * **Vercel AI (`ai`) is wrap-only:** its exports (`generateText`, …) live on
+ * an ESM module namespace object whose bindings are non-configurable — they
+ * cannot be reassigned or `defineProperty`-patched from outside the module
+ * (`TypeError: Cannot replace module namespace object's binding's value`).
+ * Use `wrapVercelAI(ai)` (or `result.wrapVercelAI` from `instrument()`).
+ * Loader hooks (`import-in-the-middle`) could intercept at load time but add
+ * a required `--import` startup flag for ESM apps — intentionally deferred.
+ *
+ * Still wrap-only (no stable global prototype to patch):
+ * Cohere (dual client shapes), Bedrock (command `send` pattern),
+ * Mastra, LlamaIndex.TS — use the returned `wrap*` factories.
+ *
+ * Every framework is loaded and patched inside its own try/catch —
+ * missing packages or unexpected shapes are reported `false`, never
+ * thrown from `instrument()`.
  */
 
 import { _safeRequire } from "./detect-installed.js";
 import { _instrumentedCreate as openaiInstrumentedCreate } from "./instrumentations/openai.js";
 import { _instrumentedCreate as anthropicInstrumentedCreate } from "./instrumentations/anthropic.js";
+import { _instrumentedCreate as groqInstrumentedCreate } from "./instrumentations/groq.js";
+import {
+  LANGCHAIN_METHODS_TO_WRAP,
+  _wrapLangChainMethod,
+  type LangChainMethodName,
+} from "./instrumentations/langchain.js";
+import {
+  _instrumentedComplete as mistralInstrumentedComplete,
+  _instrumentedStream as mistralInstrumentedStream,
+} from "./instrumentations/mistral.js";
+import { _instrumentedProviderMethod } from "./instrumentations/providers.js";
 import type { TraceOptions } from "./types.js";
 
 /** Result of a single `instrument()` call's prototype-patch pass. */
 export interface PrototypePatchResult {
   openai: boolean;
   anthropic: boolean;
+  groq: boolean;
+  vercelAi: boolean;
+  langchain: boolean;
+  gemini: boolean;
+  mistral: boolean;
 }
 
-// Stamped on the REPLACEMENT function (not the original) so calling
-// `patchAllPrototypes` twice — e.g. two `instrument()` calls in the
-// same process — recognizes an already-patched prototype and no-ops
-// instead of wrapping the wrapper.
+/** All-false patch result — used when `autoPatch: false`. */
+export const EMPTY_PROTOTYPE_PATCH_RESULT: PrototypePatchResult = {
+  openai: false,
+  anthropic: false,
+  groq: false,
+  vercelAi: false,
+  langchain: false,
+  gemini: false,
+  mistral: false,
+};
+
 const PATCH_MARKER = Symbol.for("@eden-ai/sdk.prototypePatched");
 
 interface PatchRecord {
@@ -86,10 +115,6 @@ interface PatchRecord {
   original: unknown;
 }
 
-// Every prototype method this module has patched, in patch order.
-// Used by `_unpatchAllForTests` to restore the real SDK classes
-// between test files so one test's global class-level patch can't
-// leak into another test's fake-client assertions.
 const _patchRecords: PatchRecord[] = [];
 
 function _isMarked(fn: unknown): boolean {
@@ -99,17 +124,36 @@ function _isMarked(fn: unknown): boolean {
   );
 }
 
-/**
- * Patch `OpenAI.Chat.Completions.prototype.create` on the GIVEN
- * `OpenAI` class object (and therefore every
- * `client.chat.completions.create(...)` call on every instance of
- * THAT class constructed after this runs — including xAI's Grok,
- * which uses the identical `OpenAI` client class pointed at a
- * different `baseURL`). Shared by the sync (CJS `require`) and async
- * (dynamic `import()`) entry points below — see the module doc for
- * why both exist (dual CJS/ESM package builds resolve to genuinely
- * different class objects).
- */
+function _patchFunctionProperty(
+  target: Record<string, unknown> | null | undefined,
+  prop: string,
+  patchedFn: (...args: unknown[]) => unknown,
+): boolean {
+  if (!target || typeof target[prop] !== "function") return false;
+  if (_isMarked(target[prop])) return true;
+  const original = target[prop] as (...args: unknown[]) => unknown;
+  (patchedFn as unknown as { [k: symbol]: unknown })[PATCH_MARKER] = true;
+  target[prop] = patchedFn;
+  _patchRecords.push({ target, prop, original });
+  return true;
+}
+
+function _resolveDefaultExport<T>(mod: { default?: T } | T | null | undefined): T | null {
+  if (!mod) return null;
+  // CJS/ESM interop: the `require()` result is often a function
+  // (the default export) that ALSO carries sibling named exports on
+  // itself — `groq-sdk` and `ai` both resolve this way under Bun/
+  // Node. Check `.default` for both objects AND functions.
+  if (
+    (typeof mod === "object" || typeof mod === "function") &&
+    "default" in (mod as object)
+  ) {
+    const d = (mod as { default?: T }).default;
+    if (d !== undefined) return d;
+  }
+  return mod as T;
+}
+
 function _applyOpenAIPatch(
   OpenAICls: { Chat?: { Completions?: { prototype?: Record<string, unknown> } } } | null | undefined,
   opts: TraceOptions,
@@ -120,30 +164,15 @@ function _applyOpenAIPatch(
 
   const original = proto.create as (...args: unknown[]) => unknown;
   const patched = function (this: unknown, ...args: unknown[]): unknown {
-    // `this` is the `Completions` resource instance; the OpenAI
-    // SDK stashes the owning client on `this._client`, which is
-    // where `baseURL` lives — the only thing that distinguishes an
-    // xAI (Grok) client from a real OpenAI client, since both use
-    // the identical `OpenAI` class.
     const client = (this as { _client?: { baseURL?: unknown } } | undefined)?._client;
     const baseURL = typeof client?.baseURL === "string" ? client.baseURL : "";
     const provider = baseURL.includes("x.ai") ? "xai" : "openai";
     const bound = original.bind(this);
     return openaiInstrumentedCreate(bound, this, args, opts, provider);
   };
-  (patched as unknown as { [k: symbol]: unknown })[PATCH_MARKER] = true;
-  proto.create = patched;
-  _patchRecords.push({ target: proto, prop: "create", original });
-  return true;
+  return _patchFunctionProperty(proto, "create", patched);
 }
 
-/**
- * Patch `Anthropic.Messages.prototype.create` on the GIVEN
- * `Anthropic` class object — every `client.messages.create(...)`
- * call on every instance of THAT class constructed after this runs
- * is traced automatically. Shared by the sync/async entry points
- * below for the same dual-package reason as `_applyOpenAIPatch`.
- */
 function _applyAnthropicPatch(
   AnthropicCls: { Messages?: { prototype?: Record<string, unknown> } } | null | undefined,
   opts: TraceOptions,
@@ -157,53 +186,142 @@ function _applyAnthropicPatch(
     const bound = original.bind(this);
     return anthropicInstrumentedCreate(bound, this, args, opts);
   };
-  (patched as unknown as { [k: symbol]: unknown })[PATCH_MARKER] = true;
-  proto.create = patched;
-  _patchRecords.push({ target: proto, prop: "create", original });
-  return true;
+  return _patchFunctionProperty(proto, "create", patched);
 }
 
-/**
- * Synchronous pass, via `require()` (through `_safeRequire`, which
- * itself falls back to a synthesized `createRequire` under pure ESM).
- * Covers direct `require("openai")` consumers and TS projects
- * compiled with `"module": "commonjs"` (a source-level `import`
- * transpiles down to `require()`, landing on this same CJS class
- * object). Returns `true` if the `openai` package was found and
- * (already was, or now is) patched; `false` if the package isn't
- * installed or its shape didn't match what we expect.
- */
+function _applyGroqPatch(
+  GroqCls: { Chat?: { Completions?: { prototype?: Record<string, unknown> } } } | null | undefined,
+  opts: TraceOptions,
+): boolean {
+  const proto = GroqCls?.Chat?.Completions?.prototype;
+  if (!proto || typeof proto.create !== "function") return false;
+  if (_isMarked(proto.create)) return true;
+
+  const original = proto.create as (...args: unknown[]) => unknown;
+  const patched = function (this: unknown, ...args: unknown[]): unknown {
+    const bound = original.bind(this);
+    return groqInstrumentedCreate(bound, this, args, opts);
+  };
+  return _patchFunctionProperty(proto, "create", patched);
+}
+
+function _applyLangChainPatch(
+  BaseChatModelCls: { prototype?: Record<string, unknown> } | null | undefined,
+  opts: TraceOptions,
+): boolean {
+  const proto = BaseChatModelCls?.prototype;
+  if (!proto) return false;
+  let patchedAny = false;
+  for (const method of LANGCHAIN_METHODS_TO_WRAP) {
+    if (typeof proto[method] !== "function") continue;
+    if (_isMarked(proto[method])) {
+      patchedAny = true;
+      continue;
+    }
+    const original = proto[method] as (...args: unknown[]) => unknown;
+    const wrapped = _wrapLangChainMethod(
+      original as (...a: any[]) => any,
+      method as LangChainMethodName,
+      opts,
+    );
+    if (_patchFunctionProperty(proto, method, wrapped as (...args: unknown[]) => unknown)) {
+      patchedAny = true;
+    }
+  }
+  return patchedAny;
+}
+
+function _applyGeminiLegacyPatch(
+  GenerativeModelCls: { prototype?: Record<string, unknown> } | null | undefined,
+  opts: TraceOptions,
+): boolean {
+  const proto = GenerativeModelCls?.prototype;
+  if (!proto || typeof proto.generateContent !== "function") return false;
+  if (_isMarked(proto.generateContent)) return true;
+
+  const original = proto.generateContent as (...args: unknown[]) => unknown;
+  const patched = _instrumentedProviderMethod(original, {
+    provider: "gemini",
+    name: "gemini.generateContent",
+    modelKey: "model",
+  }, opts);
+  return _patchFunctionProperty(proto, "generateContent", patched);
+}
+
+function _applyGeminiNewPatch(
+  ModelsCls: { prototype?: Record<string, unknown> } | null | undefined,
+  opts: TraceOptions,
+): boolean {
+  const proto = ModelsCls?.prototype;
+  if (!proto) return false;
+  let patchedAny = false;
+  for (const method of ["generateContent", "generateContentStream"] as const) {
+    if (typeof proto[method] !== "function") continue;
+    if (_isMarked(proto[method])) {
+      patchedAny = true;
+      continue;
+    }
+    const original = proto[method] as (...args: unknown[]) => unknown;
+    const patched = _instrumentedProviderMethod(original, {
+      provider: "gemini",
+      name: `gemini.${method}`,
+      modelKey: "model",
+    }, opts);
+    if (_patchFunctionProperty(proto, method, patched)) patchedAny = true;
+  }
+  return patchedAny;
+}
+
+function _applyMistralPatch(
+  ChatCls: { prototype?: Record<string, unknown> } | null | undefined,
+  opts: TraceOptions,
+): boolean {
+  const proto = ChatCls?.prototype;
+  if (!proto) return false;
+  let patchedAny = false;
+
+  if (typeof proto.complete === "function" && !_isMarked(proto.complete)) {
+    const original = proto.complete as (...args: unknown[]) => unknown;
+    const patched = function (this: unknown, ...args: unknown[]): unknown {
+      const bound = original.bind(this);
+      return mistralInstrumentedComplete(bound as (...a: any[]) => any, this, args, opts);
+    };
+    if (_patchFunctionProperty(proto, "complete", patched)) patchedAny = true;
+  } else if (_isMarked(proto.complete)) {
+    patchedAny = true;
+  }
+
+  if (typeof proto.stream === "function" && !_isMarked(proto.stream)) {
+    const original = proto.stream as (...args: unknown[]) => unknown;
+    const patched = function (this: unknown, ...args: unknown[]): unknown {
+      const bound = original.bind(this);
+      return mistralInstrumentedStream(bound as (...a: any[]) => any, this, args, opts);
+    };
+    if (_patchFunctionProperty(proto, "stream", patched)) patchedAny = true;
+  } else if (_isMarked(proto.stream)) {
+    patchedAny = true;
+  }
+
+  return patchedAny;
+}
+
 export function patchOpenAIPrototype(opts: TraceOptions = {}): boolean {
   try {
-    const mod = _safeRequire("openai") as
-      | { default?: unknown; Chat?: unknown }
-      | null
-      | undefined;
+    const mod = _safeRequire("openai") as { default?: unknown } | null | undefined;
     if (!mod) return false;
-    const OpenAICls = (mod.default ?? mod) as {
+    const OpenAICls = _resolveDefaultExport(mod) as {
       Chat?: { Completions?: { prototype?: Record<string, unknown> } };
     };
     return _applyOpenAIPatch(OpenAICls, opts);
   } catch {
-    // Package not installed, or its internals don't match the shape
-    // we expect (defensive against future major-version reshuffles).
     return false;
   }
 }
 
-/**
- * Async pass, via dynamic `import("openai")` — resolves to the SAME
- * cached module instance a real `import OpenAI from "openai"`
- * elsewhere in the consuming app resolves to (verified: dynamic and
- * static `import` of one specifier share a single module-cache
- * entry), which is a genuinely DIFFERENT class object than the one
- * `require("openai")` returns for this package (dual CJS/ESM build).
- * Covers native-ESM consumers the sync pass above cannot reach.
- */
 export async function patchOpenAIPrototypeESM(opts: TraceOptions = {}): Promise<boolean> {
   try {
-    const mod = (await import("openai")) as { default?: unknown; Chat?: unknown };
-    const OpenAICls = (mod.default ?? mod) as {
+    const mod = (await import("openai")) as { default?: unknown };
+    const OpenAICls = _resolveDefaultExport(mod) as {
       Chat?: { Completions?: { prototype?: Record<string, unknown> } };
     };
     return _applyOpenAIPatch(OpenAICls, opts);
@@ -212,12 +330,6 @@ export async function patchOpenAIPrototypeESM(opts: TraceOptions = {}): Promise<
   }
 }
 
-/**
- * Synchronous pass, via `require()`. See `patchOpenAIPrototype` doc
- * for what this covers. Returns `true` if the `@anthropic-ai/sdk`
- * package was found and (already was, or now is) patched; `false`
- * otherwise.
- */
 export function patchAnthropicPrototype(opts: TraceOptions = {}): boolean {
   try {
     const mod = _safeRequire("@anthropic-ai/sdk") as
@@ -234,12 +346,6 @@ export function patchAnthropicPrototype(opts: TraceOptions = {}): boolean {
   }
 }
 
-/**
- * Async pass, via dynamic `import("@anthropic-ai/sdk")`. See
- * `patchOpenAIPrototypeESM` doc for why this exists (dual CJS/ESM
- * package build) — covers native-ESM consumers the sync pass above
- * cannot reach.
- */
 export async function patchAnthropicPrototypeESM(opts: TraceOptions = {}): Promise<boolean> {
   try {
     const mod = (await import("@anthropic-ai/sdk")) as {
@@ -255,46 +361,177 @@ export async function patchAnthropicPrototypeESM(opts: TraceOptions = {}): Promi
   }
 }
 
-/**
- * Patch every framework this module knows how to class-level patch,
- * synchronously (CJS `require` pass only — see the module doc). Safe
- * to call more than once (each individual patch is idempotent) and
- * never throws — a framework that isn't installed, or whose
- * internals don't match, is just reported `false`.
- */
+export function patchGroqPrototype(opts: TraceOptions = {}): boolean {
+  try {
+    const mod = _safeRequire("groq-sdk") as { default?: unknown } | null | undefined;
+    if (!mod) return false;
+    const GroqCls = _resolveDefaultExport(mod) as {
+      Chat?: { Completions?: { prototype?: Record<string, unknown> } };
+    };
+    return _applyGroqPatch(GroqCls, opts);
+  } catch {
+    return false;
+  }
+}
+
+export async function patchGroqPrototypeESM(opts: TraceOptions = {}): Promise<boolean> {
+  try {
+    const mod = (await import("groq-sdk")) as { default?: unknown };
+    const GroqCls = _resolveDefaultExport(mod) as {
+      Chat?: { Completions?: { prototype?: Record<string, unknown> } };
+    };
+    return _applyGroqPatch(GroqCls, opts);
+  } catch {
+    return false;
+  }
+}
+
+export function patchVercelAIPrototype(_opts: TraceOptions = {}): boolean {
+  // ESM module namespace exports are non-configurable — see module doc.
+  void _opts;
+  return false;
+}
+
+export async function patchVercelAIPrototypeESM(_opts: TraceOptions = {}): Promise<boolean> {
+  void _opts;
+  return false;
+}
+
+export function patchLangChainPrototype(opts: TraceOptions = {}): boolean {
+  try {
+    const mod = _safeRequire("@langchain/core/language_models/chat_models") as
+      | { BaseChatModel?: { prototype?: Record<string, unknown> } }
+      | null
+      | undefined;
+    if (!mod?.BaseChatModel) return false;
+    return _applyLangChainPatch(mod.BaseChatModel, opts);
+  } catch {
+    return false;
+  }
+}
+
+export async function patchLangChainPrototypeESM(opts: TraceOptions = {}): Promise<boolean> {
+  try {
+    const mod = (await import("@langchain/core/language_models/chat_models")) as unknown as {
+      BaseChatModel?: { prototype?: Record<string, unknown> };
+    };
+    if (!mod.BaseChatModel) return false;
+    return _applyLangChainPatch(mod.BaseChatModel, opts);
+  } catch {
+    return false;
+  }
+}
+
+export function patchGeminiPrototype(opts: TraceOptions = {}): boolean {
+  let patched = false;
+  try {
+    const legacy = _safeRequire("@google/generative-ai") as
+      | { GenerativeModel?: { prototype?: Record<string, unknown> } }
+      | null
+      | undefined;
+    if (legacy?.GenerativeModel && _applyGeminiLegacyPatch(legacy.GenerativeModel, opts)) {
+      patched = true;
+    }
+  } catch {
+    // not installed
+  }
+  try {
+    const genai = _safeRequire("@google/genai") as
+      | { Models?: { prototype?: Record<string, unknown> } }
+      | null
+      | undefined;
+    if (genai?.Models && _applyGeminiNewPatch(genai.Models, opts)) {
+      patched = true;
+    }
+  } catch {
+    // not installed
+  }
+  return patched;
+}
+
+export async function patchGeminiPrototypeESM(opts: TraceOptions = {}): Promise<boolean> {
+  let patched = false;
+  try {
+    const legacy = (await import("@google/generative-ai")) as unknown as {
+      GenerativeModel?: { prototype?: Record<string, unknown> };
+    };
+    if (legacy.GenerativeModel && _applyGeminiLegacyPatch(legacy.GenerativeModel, opts)) {
+      patched = true;
+    }
+  } catch {
+    // not installed
+  }
+  try {
+    const genai = (await import("@google/genai")) as unknown as {
+      Models?: { prototype?: Record<string, unknown> };
+    };
+    if (genai.Models && _applyGeminiNewPatch(genai.Models, opts)) {
+      patched = true;
+    }
+  } catch {
+    // not installed
+  }
+  return patched;
+}
+
+export function patchMistralPrototype(opts: TraceOptions = {}): boolean {
+  try {
+    const mod = _safeRequire("@mistralai/mistralai") as
+      | { Chat?: { prototype?: Record<string, unknown> }; default?: { Chat?: unknown } }
+      | null
+      | undefined;
+    if (!mod) return false;
+    const ChatCls = (mod.Chat ??
+      (mod.default as { Chat?: { prototype?: Record<string, unknown> } } | undefined)?.Chat) as
+      | { prototype?: Record<string, unknown> }
+      | undefined;
+    return _applyMistralPatch(ChatCls, opts);
+  } catch {
+    return false;
+  }
+}
+
+export async function patchMistralPrototypeESM(opts: TraceOptions = {}): Promise<boolean> {
+  try {
+    // Optional peer — dynamic import keeps typecheck clean when absent.
+    const mod = (await import(
+      "@mistralai/mistralai" as string
+    )) as unknown as {
+      Chat?: { prototype?: Record<string, unknown> };
+    };
+    return _applyMistralPatch(mod.Chat, opts);
+  } catch {
+    return false;
+  }
+}
+
 export function patchAllPrototypes(opts: TraceOptions = {}): PrototypePatchResult {
   return {
     openai: patchOpenAIPrototype(opts),
     anthropic: patchAnthropicPrototype(opts),
+    groq: patchGroqPrototype(opts),
+    vercelAi: patchVercelAIPrototype(opts),
+    langchain: patchLangChainPrototype(opts),
+    gemini: patchGeminiPrototype(opts),
+    mistral: patchMistralPrototype(opts),
   };
 }
 
-/**
- * Patch every framework this module knows how to class-level patch,
- * asynchronously (dynamic `import()` pass — covers native-ESM
- * consumers `patchAllPrototypes`'s CJS `require` pass can't reach;
- * see the module doc for why both passes exist). Safe to call more
- * than once and never throws.
- */
 export async function patchAllPrototypesAsync(
   opts: TraceOptions = {},
 ): Promise<PrototypePatchResult> {
-  const [openai, anthropic] = await Promise.all([
+  const [openai, anthropic, groq, vercelAi, langchain, gemini, mistral] = await Promise.all([
     patchOpenAIPrototypeESM(opts),
     patchAnthropicPrototypeESM(opts),
+    patchGroqPrototypeESM(opts),
+    patchVercelAIPrototypeESM(opts),
+    patchLangChainPrototypeESM(opts),
+    patchGeminiPrototypeESM(opts),
+    patchMistralPrototypeESM(opts),
   ]);
-  return { openai, anthropic };
+  return { openai, anthropic, groq, vercelAi, langchain, gemini, mistral };
 }
 
-/**
- * Test-only: restore every prototype method this module has patched
- * back to the original, and forget the patch records. Exists so the
- * test suite can run `instrument()`'s prototype-patch pass in
- * isolation (without a real, permanently class-level-patched `OpenAI`
- * / `Anthropic` bleeding from one test file's process into another's,
- * since prototype patches are process-global mutable state, not
- * per-test-file state).
- */
 export function _unpatchAllForTests(): void {
   while (_patchRecords.length > 0) {
     const rec = _patchRecords.pop();

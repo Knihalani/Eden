@@ -16,6 +16,8 @@ import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-err
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { cn } from "@/lib/utils";
+import { TeamContextPanel } from "@/components/artifacts/team-context-panel";
+import { DemotionActivityPanel } from "@/components/artifacts/demotion-activity-panel";
 
 /** F39 Nudges ("Artifacts") — evidence-gated runtime prompt fixes. */
 
@@ -274,7 +276,17 @@ function ArtifactsInner() {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {!selected ? (
-            <EmptyState title="Select an artifact" compact />
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              <EmptyState title="Select an artifact" compact />
+              {agentId !== "all" ? (
+                <>
+                  <TeamContextPanel orgId={orgId} agentId={agentId} />
+                  <DemotionActivityPanel orgId={orgId} agentId={agentId} />
+                </>
+              ) : (
+                <DemotionActivityPanel orgId={orgId} />
+              )}
+            </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -354,6 +366,15 @@ function ArtifactsInner() {
                   </Link>
                 </p>
               ) : null}
+
+              {agentId !== "all" ? (
+                <TeamContextPanel orgId={orgId} agentId={agentId} />
+              ) : null}
+
+              <DemotionActivityPanel
+                orgId={orgId}
+                agentId={agentId !== "all" ? agentId : undefined}
+              />
             </div>
           )}
         </div>

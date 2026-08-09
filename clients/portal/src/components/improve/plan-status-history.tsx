@@ -75,6 +75,14 @@ export function derivePlanHistory(
       tone: "ok",
     });
   }
+  if (raw?.status === "merged") {
+    events.push({
+      key: "merged",
+      label: "PR merged",
+      at: raw.updated_at ?? null,
+      tone: "ok",
+    });
+  }
   if (updatedAt && updatedAt !== createdAt) {
     events.push({ key: "updated", label: "Last updated", at: updatedAt });
   }

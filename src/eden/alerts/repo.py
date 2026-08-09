@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import Any
 
@@ -10,13 +11,31 @@ from eden.storage.postgres import get_postgres_client
 
 _NL_RULE_COLUMNS = (
     "id, org_id, name, nl_text, compiled_eql, triage_enabled, "
-    "channels, enabled, created_by, last_fired_at, created_at, updated_at"
+    "channels, enabled, severity, created_by, last_fired_at, created_at, "
+    "updated_at"
 )
+def _normalize_nl_rule_severity(raw: str | None) -> str:
+    """Map portal/EQL aliases to persisted ``nl_alert_rules.severity``."""
+    s = (raw or "warning").lower()
+    if s in ("critical", "crit", "p0"):
+        return "critical"
+    if s in ("high", "error", "err", "p1"):
+        return "high"
+    if s in ("info", "p3"):
+        return "info"
+    if s in ("warning", "warn", "medium", "p2"):
+        return "warning"
+    return "warning"
 
 _ALERT_EVENT_COLUMNS = (
     "id, org_id, rule_id, title, severity, payload, triage_verdict, "
     "triage_reason, triage_confidence, incident_id, acknowledged, "
     "created_at, updated_at"
+)
+
+_SUPPRESSION_RULE_COLUMNS = (
+    "id, org_id, pattern, reason, window_hours, enabled, "
+    "created_by_user_id, created_at, updated_at"
 )
 
 
@@ -37,16 +56,18 @@ async def create_nl_rule(
     triage_enabled: bool = True,
     channels: dict[str, Any] | None = None,
     enabled: bool = True,
+    severity: str = "warning",
     created_by: str | None = None,
 ) -> dict[str, Any]:
     rule_id = str(uuid.uuid4())
+    sev = _normalize_nl_rule_severity(severity)
     client = await get_postgres_client()
     await client.execute(
         """
         INSERT INTO nl_alert_rules (
             id, org_id, name, nl_text, compiled_eql,
-            triage_enabled, channels, enabled, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+            triage_enabled, channels, enabled, severity, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
         """,
         rule_id,
         org_id,
@@ -56,6 +77,7 @@ async def create_nl_rule(
         triage_enabled,
         json.dumps(channels or {"in_app": True}),
         enabled,
+        sev,
         created_by,
     )
     return await get_nl_rule(org_id, rule_id)
@@ -94,6 +116,7 @@ async def update_nl_rule(
     triage_enabled: bool | None = None,
     channels: dict[str, Any] | None = None,
     enabled: bool | None = None,
+    severity: str | None = None,
 ) -> dict[str, Any] | None:
     sets: list[str] = []
     params: list[Any] = [org_id, rule_id]
@@ -104,6 +127,7 @@ async def update_nl_rule(
         ("compiled_eql", compiled_eql),
         ("triage_enabled", triage_enabled),
         ("enabled", enabled),
+        ("severity", _normalize_nl_rule_severity(severity) if severity is not None else None),
     ):
         if value is not None:
             sets.append(f"{field} = ${idx}")
@@ -122,6 +146,148 @@ async def update_nl_rule(
         *params,
     )
     return await get_nl_rule(org_id, rule_id)
+
+
+async def list_enabled_suppression_patterns(org_id: str) -> list[dict[str, Any]]:
+    """Enabled org patterns for ``AlertTriageJudge`` (FEAT-134)."""
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        """
+        SELECT pattern, reason, window_hours
+        FROM alert_suppression_rules
+        WHERE org_id = $1 AND enabled = TRUE
+        ORDER BY created_at ASC
+        """,
+        org_id,
+    )
+    return [
+        {
+            "pattern": str(row["pattern"]),
+            "reason": str(row.get("reason") or ""),
+            "window_hours": (
+                int(row["window_hours"])
+                if row.get("window_hours") is not None
+                else None
+            ),
+        }
+        for row in rows
+    ]
+
+
+async def list_suppression_rules(org_id: str) -> list[dict[str, Any]]:
+    client = await get_postgres_client()
+    rows = await client.fetch(
+        f"""
+        SELECT {_SUPPRESSION_RULE_COLUMNS} FROM alert_suppression_rules
+        WHERE org_id = $1
+        ORDER BY created_at DESC
+        """,
+        org_id,
+    )
+    return [_suppression_row(r) for r in rows]
+
+
+async def create_suppression_rule(
+    *,
+    org_id: str,
+    pattern: str,
+    reason: str = "",
+    window_hours: int | None = None,
+    enabled: bool = True,
+    created_by_user_id: str | None = None,
+) -> dict[str, Any]:
+    rule_id = str(uuid.uuid4())
+    client = await get_postgres_client()
+    await client.execute(
+        """
+        INSERT INTO alert_suppression_rules (
+            id, org_id, pattern, reason, window_hours, enabled, created_by_user_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        """,
+        rule_id,
+        org_id,
+        pattern,
+        reason,
+        window_hours,
+        enabled,
+        created_by_user_id,
+    )
+    return await get_suppression_rule(org_id, rule_id)  # type: ignore[return-value]
+
+
+async def get_suppression_rule(
+    org_id: str, rule_id: str
+) -> dict[str, Any] | None:
+    client = await get_postgres_client()
+    row = await client.fetchrow(
+        f"""
+        SELECT {_SUPPRESSION_RULE_COLUMNS} FROM alert_suppression_rules
+        WHERE org_id = $1 AND id = $2
+        """,
+        org_id,
+        rule_id,
+    )
+    return _suppression_row(row) if row else None
+
+
+async def update_suppression_rule(
+    org_id: str,
+    rule_id: str,
+    *,
+    pattern: str | None = None,
+    reason: str | None = None,
+    window_hours: int | None = None,
+    enabled: bool | None = None,
+) -> dict[str, Any] | None:
+    sets: list[str] = []
+    params: list[Any] = [org_id, rule_id]
+    idx = 3
+    for field, value in (
+        ("pattern", pattern),
+        ("reason", reason),
+        ("window_hours", window_hours),
+        ("enabled", enabled),
+    ):
+        if value is not None:
+            sets.append(f"{field} = ${idx}")
+            params.append(value)
+            idx += 1
+    if not sets:
+        return await get_suppression_rule(org_id, rule_id)
+    client = await get_postgres_client()
+    await client.execute(
+        f"""
+        UPDATE alert_suppression_rules
+        SET {', '.join(sets)}, updated_at = NOW()
+        WHERE org_id = $1 AND id = $2
+        """,
+        *params,
+    )
+    return await get_suppression_rule(org_id, rule_id)
+
+
+async def delete_suppression_rule(org_id: str, rule_id: str) -> bool:
+    client = await get_postgres_client()
+    result = await client.execute(
+        "DELETE FROM alert_suppression_rules WHERE org_id = $1 AND id = $2",
+        org_id,
+        rule_id,
+    )
+    return result != "DELETE 0"
+
+
+def validate_suppression_pattern(pattern: str) -> str | None:
+    """Return an error message when ``pattern`` is unusable."""
+    trimmed = pattern.strip()
+    if not trimmed:
+        return "Pattern is required"
+    if len(trimmed) > 512:
+        return "Pattern must be at most 512 characters"
+    try:
+        re.compile(trimmed, re.IGNORECASE)
+    except re.error:
+        return None
+    return None
 
 
 async def delete_nl_rule(org_id: str, rule_id: str) -> bool:
@@ -280,6 +446,24 @@ async def record_triage_feedback(
     }
 
 
+def _suppression_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "org_id": str(row["org_id"]),
+        "pattern": row["pattern"],
+        "reason": row.get("reason") or "",
+        "window_hours": (
+            int(row["window_hours"])
+            if row.get("window_hours") is not None
+            else None
+        ),
+        "enabled": bool(row["enabled"]),
+        "created_by_user_id": row.get("created_by_user_id"),
+        "created_at": _ts(row.get("created_at")),
+        "updated_at": _ts(row.get("updated_at")),
+    }
+
+
 def _rule_row(row: Any) -> dict[str, Any]:
     channels = row["channels"]
     if isinstance(channels, str):
@@ -293,6 +477,7 @@ def _rule_row(row: Any) -> dict[str, Any]:
         "triage_enabled": bool(row["triage_enabled"]),
         "channels": channels if isinstance(channels, dict) else {},
         "enabled": bool(row["enabled"]),
+        "severity": row.get("severity") or "warning",
         "created_by": row.get("created_by"),
         "last_fired_at": _ts(row.get("last_fired_at")),
         "created_at": _ts(row.get("created_at")),

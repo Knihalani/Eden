@@ -87,9 +87,9 @@ async def test_background_leader_lock_ttl_decoupled_from_interval() -> None:
     short-lived per-tick locks. The invariant under test is unchanged —
     fixed, and far below any interval-derived value.
     """
+    from eden.storage.redis import Lock as RealLock
     from eden.workers import background as background_module
     from eden.workers.background import _BUNDLE_LOCK_TTL_SECONDS
-    from eden.storage.redis import Lock as RealLock
 
     captured_ttls: list[int] = []
     orig_init = RealLock.__init__
@@ -126,7 +126,7 @@ async def test_background_leader_lock_ttl_decoupled_from_interval() -> None:
     # supervise interval must too — at TTL=60/interval=120 the lock could
     # expire between two consecutive liveness checks.
     assert background_module._BUNDLE_LOCK_RENEW_SECONDS < _BUNDLE_LOCK_TTL_SECONDS
-    assert 120.0 < _BUNDLE_LOCK_TTL_SECONDS
+    assert _BUNDLE_LOCK_TTL_SECONDS > 120.0
 
 
 @pytest.mark.asyncio

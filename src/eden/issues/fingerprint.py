@@ -78,19 +78,35 @@ def error_signature_for(kind: str, detail: dict[str, Any]) -> str:
     )
 
 
+def _fingerprint_agent_key(agent_id: str | None, trace_id: str | None) -> str:
+    """Stable agent slot for fingerprint hashing.
+
+    When ``agent_id`` is missing we must not collapse unrelated agents into
+    the legacy shared ``"unknown"`` bucket. Prefer a per-trace key so two
+    different traces with the same ``(kind, error_signature)`` stay distinct.
+    """
+    if agent_id:
+        return agent_id
+    if trace_id:
+        return f"__unattributed__:{trace_id}"
+    # Last resort for callers without trace context — still avoids the old
+    # shared ``"unknown"`` literal that merged every agent-less stumble.
+    return "__unattributed__"
+
+
 def compute_fingerprint(
-    kind: str, agent_id: str | None, error_signature: str
+    kind: str,
+    agent_id: str | None,
+    error_signature: str,
+    *,
+    trace_id: str | None = None,
 ) -> str:
     """Return the 32-char hex fingerprint for ``(kind, agent, signature)``.
 
     Matches the F29 spec: ``sha256(f"{kind}|{agent}|{sig}")[:32]``.
+    ``trace_id`` is used only when ``agent_id`` is missing (see
+    :func:`_fingerprint_agent_key`).
     """
-    raw = f"{kind}|{agent_id or 'unknown'}|{error_signature}"
+    agent_key = _fingerprint_agent_key(agent_id, trace_id)
+    raw = f"{kind}|{agent_key}|{error_signature}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
-
-
-def fingerprint_from_detail(
-    kind: str, agent_id: str | None, detail: dict[str, Any]
-) -> str:
-    """Convenience: build the signature from ``detail`` then hash it."""
-    return compute_fingerprint(kind, agent_id, error_signature_for(kind, detail))

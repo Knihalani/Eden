@@ -6,6 +6,7 @@ Portal fix-chat is deleted — this is the only issue→code path.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -777,12 +778,10 @@ async def _regenerate_after_test_failure(
     if retry_summary.get("status") == "failed":
         return data, retry_summary, False
     # Fold the first attempt's cost into the accepted candidate.
-    try:
+    with contextlib.suppress(TypeError, ValueError):
         regen_data["cost_usd"] = float(regen_data.get("cost_usd") or 0.0) + float(
             data.get("cost_usd") or 0.0
         )
-    except Exception:
-        pass
     return regen_data, retry_summary, True
 
 

@@ -10,6 +10,12 @@ from eden.storage.watermark import advance_watermark, fetch_stale_candidates
 
 logger = logging.getLogger(__name__)
 
+#: Peak concurrent dimension histograms / upserts per weekly tick (OPT-25).
+#: Each (org_id, agent_id) pair touches ``len(DRIFT_DIMENSIONS)`` independent
+#: DB round-trips; overlap them under the shared gather semaphore so a slow
+#: dimension cannot monopolise the tick — mirrors auto_curator's limit=8.
+_DRIFT_BASELINE_CONCURRENCY = 8
+
 #: Watermark table created by migration 147_drift_baseline_watermark
 #: (OPT-8). ``agent_issues.org_id``/``agent_id`` are ``VARCHAR`` (not
 #: FK'd to a UUID primary key — see 084_agent_issues), so the composite
@@ -73,25 +79,77 @@ class DriftBaselineWorker:
                 limit=limit,
             )
 
+            from eden.workers.leader import record_watermark_batch
+
+            try:
+                candidate_total = await client.fetchval(
+                    "SELECT COUNT(*) FROM ("
+                    "SELECT DISTINCT org_id, agent_id FROM agent_issues "
+                    "WHERE last_seen >= now() - interval '7 days' "
+                    "AND agent_id IS NOT NULL"
+                    ") t"
+                )
+            except Exception:
+                candidate_total = None
+            record_watermark_batch(
+                "drift_baselines",
+                batch_size=len(rows),
+                candidate_total=(
+                    int(candidate_total) if candidate_total is not None else None
+                ),
+            )
+
             builder = DriftReportBuilder()
-            for row in rows or []:
+            from eden.async_tasks import bounded_gather
+
+            async def _refresh_pair(row: Any) -> int:
                 org_id = str(row["org_id"])
                 agent_id = str(row["agent_id"])
+                pair_updated = 0
                 try:
-                    for dim in DRIFT_DIMENSIONS:
+
+                    async def _refresh_dimension(dim: str) -> int:
                         counts = await self._histogram(org_id, agent_id, dim)
                         if counts:
                             await builder.upsert_baseline(
-                                org_id, agent_id, dim, counts, sample_count=sum(counts)
+                                org_id,
+                                agent_id,
+                                dim,
+                                counts,
+                                sample_count=sum(counts),
                             )
-                            updated += 1
+                            return 1
+                        return 0
+
+                    # Was a nested sequential loop: up to ``limit`` pairs ×
+                    # ``len(DRIFT_DIMENSIONS)`` histogram + upsert RTs each,
+                    # all awaited one-at-a-time (~1400 RTs/tick at limit=100).
+                    dim_outcomes = await bounded_gather(
+                        *(
+                            _refresh_dimension(dim)
+                            for dim in DRIFT_DIMENSIONS
+                        ),
+                        limit=_DRIFT_BASELINE_CONCURRENCY,
+                        return_exceptions=True,
+                    )
+                    for dim, outcome in zip(
+                        DRIFT_DIMENSIONS, dim_outcomes, strict=True
+                    ):
+                        if isinstance(outcome, BaseException):
+                            logger.exception(
+                                "drift baseline dimension=%s failed pair=%s: %s",
+                                dim,
+                                _org_agent_key(org_id, agent_id),
+                                outcome,
+                            )
+                            continue
+                        pair_updated += int(outcome)
                 except Exception:
                     # Isolate one poison pair's failure to itself — without
                     # this, an exception here would propagate past the
-                    # ``finally`` below and out of the ``for row in rows``
-                    # loop entirely, silently skipping (and never
-                    # watermark-advancing) every remaining pair in this
-                    # batch. Each pair must be independent, mirroring
+                    # ``finally`` below and out of the pair batch entirely,
+                    # silently skipping (and never watermark-advancing) every
+                    # remaining pair. Each pair must be independent, mirroring
                     # ``cron_tick._run_org_and_advance_watermark``'s
                     # per-entity isolation.
                     logger.exception(
@@ -100,7 +158,7 @@ class DriftBaselineWorker:
                     )
                 finally:
                     # Advance once per pair, after the full DRIFT_DIMENSIONS
-                    # loop finishes (success or failure) — not per-dimension
+                    # pass finishes (success or failure) — not per-dimension
                     # — so a pair only cycles to the back of the watermark
                     # ordering once its whole baseline refresh pass is
                     # done. A poison pair that always raises must still
@@ -120,6 +178,20 @@ class DriftBaselineWorker:
                             "drift baseline watermark advance failed pair=%s",
                             _org_agent_key(org_id, agent_id),
                         )
+                return pair_updated
+
+            pair_outcomes = await bounded_gather(
+                *(_refresh_pair(row) for row in (rows or [])),
+                limit=_DRIFT_BASELINE_CONCURRENCY,
+                return_exceptions=True,
+            )
+            for outcome in pair_outcomes:
+                if isinstance(outcome, BaseException):
+                    logger.exception(
+                        "drift baseline pair pass failed: %s", outcome
+                    )
+                    continue
+                updated += int(outcome)
         except Exception as exc:
             logger.warning("drift baseline worker failed: %s", exc)
         return {"updated": updated}

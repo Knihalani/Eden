@@ -30,8 +30,14 @@ beforeEach(() => {
   globalThis.fetch = fetchMock as unknown as typeof fetch;
   // fetchApi reads the client Clerk session imperatively off
   // `window.Clerk` — leave it undefined so the "attach bearer" branch
-  // is a no-op and doesn't affect these tests.
-  (window as unknown as { Clerk?: unknown }).Clerk = undefined;
+  // is a no-op and doesn't affect these tests. Use globalThis so plain
+  // `bun test` (no jsdom) still works alongside vitest+jsdom.
+  const g = globalThis as typeof globalThis & { window?: { Clerk?: unknown }; Clerk?: unknown };
+  if (typeof g.window !== "undefined") {
+    g.window.Clerk = undefined;
+  } else {
+    g.Clerk = undefined;
+  }
 });
 
 afterEach(() => {
@@ -164,6 +170,59 @@ describe("fetchApi — raw response mode (F41-4)", () => {
     });
 
     expect(capturedHeaders?.get("authorization")).toBe("Bearer tok_123");
+  });
+});
+
+describe("fetchApi — optional Zod schema validation (BUG-16)", () => {
+  it("returns parsed data when the schema accepts the body", async () => {
+    const { fetchApi, __resetFetchApiInflightForTests } = await import("../core");
+    const { z } = await import("zod");
+    __resetFetchApiInflightForTests();
+
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { hello: "world" }),
+    );
+
+    const schema = z.object({ hello: z.string() });
+    const data = await fetchApi("/orgs/org_1/ping", {
+      noDedup: true,
+      schema,
+    });
+    expect(data).toEqual({ hello: "world" });
+  });
+
+  it("throws ApiContractError when the schema rejects a 2xx body", async () => {
+    const { fetchApi, ApiContractError, __resetFetchApiInflightForTests } =
+      await import("../core");
+    const { z } = await import("zod");
+    __resetFetchApiInflightForTests();
+
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { hello: 123 }),
+    );
+
+    const schema = z.object({ hello: z.string() });
+    await expect(
+      fetchApi("/orgs/org_1/ping", { noDedup: true, schema }),
+    ).rejects.toMatchObject({
+      name: "ApiContractError",
+      message: "API contract changed",
+      endpoint: "/orgs/org_1/ping",
+    });
+  });
+
+  it("skips validation when no schema is provided (backward compatible)", async () => {
+    const { fetchApi, __resetFetchApiInflightForTests } = await import("../core");
+    __resetFetchApiInflightForTests();
+
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { unexpected: true }),
+    );
+
+    const data = await fetchApi<{ unexpected: boolean }>("/legacy", {
+      noDedup: true,
+    });
+    expect(data).toEqual({ unexpected: true });
   });
 });
 

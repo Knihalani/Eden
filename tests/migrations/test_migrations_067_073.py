@@ -131,7 +131,12 @@ def test_alembic_upgrade_head_clean() -> None:
     )
 
 
-def test_alembic_downgrade_base_clean() -> None:
+def test_067_downgrade_does_not_drop_finish_reason() -> None:
+    """``finish_reason`` was added by migration 011, not 067."""
+    path = MIGRATIONS_DIR / "067_trace_quality_otel_columns.py"
+    src = path.read_text()
+    downgrade = src.split("def downgrade", 1)[1]
+    assert "finish_reason" not in downgrade
     """The first new migration's ``down_revision`` is 066 (the
     last pre-existing migration), so downgrade-to-base is
     possible."""

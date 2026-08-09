@@ -22,9 +22,44 @@ export type PlaygroundTask = {
 };
 
 export type PlaygroundRowInput = {
+  /** Hub row id when sourced from Dataset Hub (F53). */
+  id?: string;
   input: string;
   expected?: string;
 };
+
+/** Map a Dataset Hub row into editor row shape. */
+export function hubRowToPlaygroundRow(row: {
+  id: string;
+  input?: string;
+  expected_output?: string;
+  values?: Record<string, unknown>;
+}): PlaygroundRowInput {
+  const inputFromValues =
+    row.values?.input != null ? String(row.values.input) : "";
+  const expectedFromValues =
+    row.values?.expected_output != null
+      ? String(row.values.expected_output)
+      : undefined;
+  return {
+    id: row.id,
+    input: row.input ?? inputFromValues,
+    expected: row.expected_output || expectedFromValues || undefined,
+  };
+}
+
+/** Rows sent to `POST /playgrounds/{id}/run` as `dataset_rows`. */
+export function playgroundRowsToRunPayload(
+  rows: PlaygroundRowInput[],
+): Array<Record<string, unknown>> {
+  return rows.map((r, i) => ({
+    id: r.id ?? `row_${i}`,
+    input: r.input,
+    ...(r.expected != null && r.expected !== ""
+      ? { expected_output: r.expected }
+      : {}),
+  }));
+}
 
 export type PlaygroundRunSummary = {
   runId: string | null;
@@ -134,6 +169,7 @@ export function parsePlaygroundConfig(
     ? cfg.rows
         .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
         .map((r) => ({
+          id: typeof r.id === "string" ? r.id : undefined,
           input:
             typeof r.input === "string"
               ? r.input
@@ -182,7 +218,11 @@ export function serializePlaygroundConfig(
       max_tokens: t.maxTokens,
       messages: t.messages,
     })),
-    rows: view.rows.map((r) => ({ input: r.input, expected: r.expected })),
+    rows: view.rows.map((r) => ({
+      id: r.id,
+      input: r.input,
+      expected: r.expected,
+    })),
     dataset_id: view.datasetId ?? undefined,
     runs: view.runs.map((r) => ({
       run_id: r.runId,

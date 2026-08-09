@@ -18,6 +18,7 @@ import {
   RETRY_AFTER_DEFAULT_MS,
 } from "@/lib/proxy";
 import { toUserFacingError } from "@/lib/safe-error-message";
+import type { ZodTypeAny } from "zod";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "/api/proxy";
@@ -70,6 +71,22 @@ export class ApiError extends Error {
     if (retryAfterMs != null && Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
       this.retryAfterMs = retryAfterMs;
     }
+  }
+}
+
+/**
+ * Thrown when an optional Zod ``schema`` rejects a successful (2xx)
+ * response body — the upstream contract drifted from the portal types.
+ */
+export class ApiContractError extends Error {
+  readonly endpoint: string;
+  readonly issues: string;
+
+  constructor(endpoint: string, issues: string) {
+    super("API contract changed");
+    this.name = "ApiContractError";
+    this.endpoint = endpoint;
+    this.issues = issues;
   }
 }
 
@@ -150,7 +167,7 @@ function combineSignals(
   return combined.signal;
 }
 
-interface FetchOptions extends RequestInit {
+interface FetchOptions<T = unknown> extends RequestInit {
   credentials?: "include" | "omit";
   /** Disable the 30s default timeout. Used for SSE streams. */
   stream?: boolean;
@@ -173,11 +190,32 @@ interface FetchOptions extends RequestInit {
    * chrome — a JWT race on a non-critical GET must not kick the user.
    */
   softAuth?: boolean;
+  /** Optional runtime validation for JSON success bodies (BUG-16). */
+  schema?: ZodTypeAny;
+}
+
+function parseJsonBody<T>(
+  endpoint: string,
+  rawText: string,
+  schema?: ZodTypeAny,
+): T {
+  const parsed: unknown = JSON.parse(rawText);
+  if (!schema) {
+    return parsed as T;
+  }
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+    throw new ApiContractError(endpoint, issues);
+  }
+  return result.data;
 }
 
 export async function fetchApi<T>(
   endpoint: string,
-  options: FetchOptions = {}
+  options: FetchOptions<T> = {},
 ): Promise<T> {
   const {
     credentials = "include",
@@ -187,6 +225,7 @@ export async function fetchApi<T>(
     noDedup,
     raw,
     softAuth,
+    schema,
     signal: callerSignal,
     ...rest
   } = options;
@@ -503,7 +542,7 @@ export async function fetchApi<T>(
     if (!rawText) {
       return undefined as unknown as T;
     }
-    return JSON.parse(rawText) as T;
+    return parseJsonBody(endpoint, rawText, schema);
   })();
 
   if (!noDedup && (method === "GET" || method === "HEAD" || method === "OPTIONS")) {

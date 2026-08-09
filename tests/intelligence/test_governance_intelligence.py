@@ -958,6 +958,14 @@ class TestRTBF:
             new=AsyncMock(return_value=[
                 {"store": "redis", "status": "ok"},
             ]),
+        ), patch(
+            "eden.services.governance_intel.gdpr.RightToBeForgottenService._reverify_postgres",
+            new=AsyncMock(return_value=[
+                {"store": "postgres:telemetry_events", "status": "ok", "remaining": 0},
+            ]),
+        ), patch(
+            "eden.services.governance_intel.rtbf_fanout.reverify_rtbf_stores",
+            new=AsyncMock(return_value=[]),
         ):
             out = await svc.process_request(
                 "org_test",
@@ -1113,6 +1121,14 @@ class TestRTBF:
         ), patch(
             "eden.services.governance_intel.rtbf_fanout.fanout_rtbf",
             new=AsyncMock(return_value=[{"store": "redis", "status": "ok"}]),
+        ), patch(
+            "eden.services.governance_intel.gdpr.RightToBeForgottenService._reverify_postgres",
+            new=AsyncMock(return_value=[
+                {"store": "postgres:telemetry_events", "status": "ok", "remaining": 0},
+            ]),
+        ), patch(
+            "eden.services.governance_intel.rtbf_fanout.reverify_rtbf_stores",
+            new=AsyncMock(return_value=[]),
         ):
             out = await svc.process_request(
                 "org_test", user_id="user_to_forget",

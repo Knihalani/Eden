@@ -9,8 +9,39 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+try:
+    from eden.observability.simple_metrics import Counter as _MetricsCounter
+except Exception:  # noqa: BLE001 — metrics are best-effort
+    _MetricsCounter = None  # type: ignore[misc, assignment]
+
 _DEFAULT_LEASE_TTL = 900  # 15 min
 _memory_leases: dict[str, tuple[str, float]] = {}
+_memory_fallback_total: int = 0
+
+if _MetricsCounter is not None:
+    _MEMORY_FALLBACK_COUNTER = _MetricsCounter(
+        "eden_labeling_lease_memory_fallback_total",
+        "Labeling lease ops that used in-process memory fallback (Redis unavailable)",
+        labelnames=("operation",),
+    )
+else:
+    _MEMORY_FALLBACK_COUNTER = None  # type: ignore[assignment]
+
+
+def _record_memory_fallback(operation: str, exc: Exception | None = None) -> None:
+    """Log and count in-memory lease fallback — exclusivity is process-local only."""
+    global _memory_fallback_total
+    _memory_fallback_total += 1
+    if _MEMORY_FALLBACK_COUNTER is not None:
+        _MEMORY_FALLBACK_COUNTER.labels(operation=operation).inc()
+    logger.warning(
+        "labeling lease exclusivity degraded: using in-memory fallback for %s "
+        "(redis unavailable; cross-instance exclusivity not guaranteed; "
+        "fallback_total=%d)",
+        operation,
+        _memory_fallback_total,
+        exc_info=exc,
+    )
 
 
 def lease_ttl_seconds() -> int:
@@ -41,8 +72,9 @@ async def claim_lease(org_id: str, item_id: str, annotator_id: str) -> bool:
             if holder is None:
                 return bool(await redis.set(key, annotator_id, nx=True, ex=ttl))
             return str(holder) == str(annotator_id)
+        _record_memory_fallback("claim_lease")
     except Exception as exc:
-        logger.debug("labeling lease redis failed: %s", exc)
+        _record_memory_fallback("claim_lease", exc)
 
     now = time.time()
     holder, exp = _memory_leases.get(key, ("", 0.0))
@@ -50,6 +82,24 @@ async def claim_lease(org_id: str, item_id: str, annotator_id: str) -> bool:
         return False
     _memory_leases[key] = (annotator_id, now + ttl)
     return True
+
+
+async def has_active_lease(org_id: str, item_id: str) -> bool:
+    """Return True when an exclusive lease is currently held (Redis or memory)."""
+    key = _lease_key(org_id, item_id)
+    try:
+        from eden.storage.redis import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is not None:
+            holder = await redis.get(key)
+            return holder is not None
+        _record_memory_fallback("has_active_lease")
+    except Exception as exc:
+        _record_memory_fallback("has_active_lease", exc)
+
+    holder, exp = _memory_leases.get(key, ("", 0.0))
+    return bool(holder) and exp > time.time()
 
 
 async def release_lease(org_id: str, item_id: str, annotator_id: str) -> None:
@@ -63,8 +113,9 @@ async def release_lease(org_id: str, item_id: str, annotator_id: str) -> None:
             if holder is None or str(holder) == str(annotator_id):
                 await redis.delete(key)
             return
+        _record_memory_fallback("release_lease")
     except Exception as exc:
-        logger.debug("labeling lease release failed: %s", exc)
+        _record_memory_fallback("release_lease", exc)
     holder, _exp = _memory_leases.get(key, ("", 0.0))
     if holder == annotator_id or not holder:
         _memory_leases.pop(key, None)
@@ -104,7 +155,9 @@ def pairwise_winner_from_label(label: Any) -> str | None:
 __all__ = [
     "build_pairwise_payload",
     "claim_lease",
+    "has_active_lease",
     "lease_ttl_seconds",
     "pairwise_winner_from_label",
     "release_lease",
+    "_memory_fallback_total",
 ]

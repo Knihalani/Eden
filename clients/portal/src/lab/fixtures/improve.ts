@@ -51,6 +51,8 @@ export type ImprovePlanFixture = {
   hermeticStatus?: string | null;
   failurePackStatus?: string | null;
   evScore?: number | null;
+  /** Autonomy tier governing autonomous execution (FEAT-156). */
+  autonomyTierRequired?: string | null;
   /** Primary next action */
   primaryAction: "try_evals" | "recompare" | "open_trace" | "open_issue";
 };

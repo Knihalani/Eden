@@ -1,4 +1,8 @@
-"""F06 — signal investigator API (definitions events, clusters, backfill)."""
+"""F06 — signal investigator API (definitions events, clusters, backfill).
+
+Trace reads for investigation use :func:`eden.insights.rca._common._fetch_trace_events`
+(hot Postgres within ``warm_days``, cold-archive rehydrate past that window — OPT-61).
+"""
 
 from __future__ import annotations
 
@@ -99,6 +103,8 @@ async def list_signal_clusters(
     org_id: str = Depends(require_path_org_access),
     signal_id: str | None = Query(None),
     status: str = Query("open"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     _ = user
@@ -113,6 +119,12 @@ async def list_signal_clusters(
     if status != "all":
         args.append(status)
         clauses.append(f"status = ${len(args)}")
+    # Pagination uses last_seen DESC; idx on (org_id, last_seen DESC) would
+    # help large orgs — no migration added here (OPT-34).
+    args.append(limit)
+    limit_pos = len(args)
+    args.append(offset)
+    offset_pos = len(args)
     try:
         rows = await pg.fetch(
             f"""
@@ -121,7 +133,7 @@ async def list_signal_clusters(
             FROM signal_clusters
             WHERE {' AND '.join(clauses)}
             ORDER BY last_seen DESC NULLS LAST
-            LIMIT 200
+            LIMIT ${limit_pos} OFFSET ${offset_pos}
             """,
             *args,
         )
@@ -146,7 +158,13 @@ async def list_signal_clusters(
         }
         for r in rows
     ]
-    return {"status": "ok", "clusters": clusters}
+    return {
+        "status": "ok",
+        "clusters": clusters,
+        "count": len(clusters),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.post("/signal-clusters/{cluster_id}/resolve")
@@ -268,6 +286,7 @@ async def investigate_trace_endpoint(
     _ = user
     from eden.closed_loop.autonomy_policy import check_budget, record_spend
     from eden.config import get_settings
+    from eden.issues.agent_identity import resolve_agent_id
     from eden.signals import investigator as signal_investigator
 
     if not bool(getattr(get_settings(), "signal_investigator_llm_v1", False)):
@@ -298,11 +317,13 @@ async def investigate_trace_endpoint(
             },
         )
 
+    resolved_agent_id = await resolve_agent_id(org_id, body.agent_id)
+
     findings = await signal_investigator.investigate_trace(
         org_id,
         trace_id,
         events=body.events,
-        agent_id=body.agent_id,
+        agent_id=resolved_agent_id,
         signal_id=body.signal_id,
     )
     total_cost = sum(float(f.get("cost_usd", 0.0) or 0.0) for f in findings)

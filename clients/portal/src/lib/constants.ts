@@ -24,11 +24,6 @@ export const FREE_TIER_CREDITS_SOFT = 320; // ≈ $3.20
 export const FREE_TIER_CREDITS_HARD = 400; // ≈ $4 MAX
 export const FREE_TIER_CAP_USD = FREE_TIER_CREDITS_HARD / CREDITS_PER_USD;
 
-/** @deprecated Use FREE_TIER_CAP_USD — personal and org share the same ~$4 credit pool. */
-export const FREE_TIER_PERSONAL_CAP_USD = FREE_TIER_CAP_USD;
-/** @deprecated Use FREE_TIER_CAP_USD */
-export const FREE_TIER_ORG_CAP_USD = FREE_TIER_CAP_USD;
-
 /** Short free-tier line for hero KPIs and compact UI. */
 export const FREE_TIER_CAP_SHORT = `${FREE_TIER_CREDITS_HARD.toLocaleString()} credits / mo (≈ $${FREE_TIER_CAP_USD})`;
 

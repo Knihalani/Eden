@@ -91,6 +91,7 @@ async def test_agent_id_param_scopes_traces_server_side():
             window="24h",
             limit=50,
             agent_id="agent-a",
+            participant_agent_id=None,
             _user={"sub": "u1"},
         )
         unscoped = await portal_mod.list_portal_traces(
@@ -98,11 +99,12 @@ async def test_agent_id_param_scopes_traces_server_side():
             window="24h",
             limit=50,
             agent_id=None,
+            participant_agent_id=None,
             _user={"sub": "u1"},
         )
 
     assert [t.id for t in scoped] == ["t-agent-a"]
     assert {t.id for t in unscoped} == {"t-agent-a", "t-agent-b"}
-    # Backend param, in tenant/window/limit/agent_id order.
-    assert fake.fetch_calls[0][1][-1] == "agent-a"
-    assert fake.fetch_calls[1][1][-1] is None
+    # Args: org_id, window_secs, limit, agent_id, participant_agent_id (FEAT-147).
+    assert fake.fetch_calls[0][1][-2:] == ("agent-a", None)
+    assert fake.fetch_calls[1][1][-2:] == (None, None)

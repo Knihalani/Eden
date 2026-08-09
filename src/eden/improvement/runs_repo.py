@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import uuid
 from datetime import UTC, datetime
@@ -140,7 +141,7 @@ async def merge_run_metadata(
     client = await get_postgres_client()
     if client is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         await client.execute(
             """
             UPDATE improvement_runs SET
@@ -151,8 +152,6 @@ async def merge_run_metadata(
             run_id,
             json.dumps(patch),
         )
-    except Exception:
-        pass
 
 
 async def get_run(org_id: str, run_id: str) -> dict[str, Any] | None:

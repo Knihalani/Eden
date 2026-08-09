@@ -279,16 +279,20 @@ class ReplayResult:
     reason: str
     cost_usd: float = 0.0
     traces_checked: int = 0
+    regenerated_output: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "status": self.status,
             "reason": self.reason,
             "cost_usd": round(self.cost_usd, 6),
             "traces_checked": self.traces_checked,
             "details": self.details,
         }
+        if self.regenerated_output is not None:
+            out["regenerated_output"] = self.regenerated_output
+        return out
 
 
 def _skipped(reason: str, **details: Any) -> ReplayResult:
@@ -475,6 +479,7 @@ async def _evaluate_traces(
     cost_total = 0.0
     any_checkpoints = False
     capped_reason: str | None = None
+    regenerated_output: str | None = None
 
     engine = ReRunEngine(store)
     for trace_id in trace_ids:
@@ -543,6 +548,7 @@ async def _evaluate_traces(
             continue
         llm_steps += 1
         cost_total += float(out.get("cost_usd") or 0.0)
+        regenerated_output = str(out.get("text") or "") or None
 
         in_replay = signature_present(out.get("text") or "", sig)
         per_trace.append(
@@ -576,6 +582,7 @@ async def _evaluate_traces(
                 reason=capped_reason,
                 cost_usd=cost_total,
                 traces_checked=0,
+                regenerated_output=regenerated_output,
                 details=details,
             )
         if not any_checkpoints:
@@ -584,6 +591,7 @@ async def _evaluate_traces(
                 reason="no_checkpoints",
                 cost_usd=cost_total,
                 traces_checked=0,
+                regenerated_output=regenerated_output,
                 details=details,
             )
         skips = {str(e.get("skip") or "") for e in per_trace}
@@ -600,6 +608,7 @@ async def _evaluate_traces(
             reason=reason,
             cost_usd=cost_total,
             traces_checked=0,
+            regenerated_output=regenerated_output,
             details=details,
         )
     if present == 0:
@@ -608,6 +617,7 @@ async def _evaluate_traces(
             reason="signature_absent_in_replay",
             cost_usd=cost_total,
             traces_checked=evaluated,
+            regenerated_output=regenerated_output,
             details=details,
         )
     if absent == 0:
@@ -616,6 +626,7 @@ async def _evaluate_traces(
             reason="signature_still_present",
             cost_usd=cost_total,
             traces_checked=evaluated,
+            regenerated_output=regenerated_output,
             details=details,
         )
     # Contradictory traces — not proof either way.
@@ -624,6 +635,7 @@ async def _evaluate_traces(
         reason="inconclusive",
         cost_usd=cost_total,
         traces_checked=evaluated,
+        regenerated_output=regenerated_output,
         details=details,
     )
 
@@ -840,6 +852,7 @@ async def replay_case_signature(
         return _skipped("replay_error", error=str(exc)[:200])
 
     cost = float(out.get("cost_usd") or 0.0)
+    regenerated_output = str(out.get("text") or "") or None
     in_replay = signature_present(out.get("text") or "", sig)
     details = {
         "trace_id": trace_id,
@@ -854,6 +867,7 @@ async def replay_case_signature(
             reason="replay_signature_present",
             cost_usd=cost,
             traces_checked=1,
+            regenerated_output=regenerated_output,
             details=details,
         )
     return ReplayResult(
@@ -861,6 +875,7 @@ async def replay_case_signature(
         reason="replay_signature_absent",
         cost_usd=cost,
         traces_checked=1,
+        regenerated_output=regenerated_output,
         details=details,
     )
 

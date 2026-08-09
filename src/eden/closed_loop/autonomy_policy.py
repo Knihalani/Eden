@@ -504,3 +504,51 @@ async def why_blocked(
     if verdict == "allow":
         return None, tier
     return reason, tier
+
+
+# ── T0–T4 ladder labels (FEAT-156) ───────────────────────────────────
+
+# ``tier_applied`` / ``decide`` tier names → N22 ladder level for UI chips.
+_TIER_NAME_LEVEL: dict[str, int] = {
+    "observe": 0,
+    "auto_runtime_heal": 2,
+    "auto_code_patch_pr": 2,
+    "auto_prompt_canary": 3,
+    "auto_nudge_promote": 3,
+    "auto_guardrail_promote": 3,
+    "auto_code_patch_merge": 4,
+    "budget": 0,
+    "admin": 0,
+}
+
+
+def tier_ladder_level(tier_name: str | None) -> int | None:
+    """Map a policy ``tier_applied`` name to the T0–T4 ladder level."""
+    if not tier_name:
+        return None
+    key = str(tier_name).strip().lower()
+    if key in _TIER_NAME_LEVEL:
+        return _TIER_NAME_LEVEL[key]
+    return None
+
+
+def format_tier_ladder(tier_name: str | None) -> str | None:
+    """Human label for UI chips, e.g. ``auto_code_patch_pr`` → ``T2``."""
+    level = tier_ladder_level(tier_name)
+    if level is None:
+        return None
+    return f"T{level}"
+
+
+def action_for_plan_kind(plan_kind: str | None) -> str:
+    """Primary autonomy action consumed by an improve plan kind."""
+    k = (plan_kind or "").lower()
+    if k == "code_patch":
+        return "propose_patch"
+    if k in ("prompt_update", "guardrail_tune"):
+        return "prompt_canary"
+    if "guardrail" in k:
+        return "guardrail_promote"
+    if "nudge" in k:
+        return "nudge_promote"
+    return "recommend"

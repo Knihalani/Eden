@@ -57,7 +57,7 @@ def _router(content: str) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_schema_parse_pass() -> None:
-    verdict = await _critic_review(_router(_verdict_json()), _DIFF, rca_summary="s")
+    verdict = await _critic_review(_router(_verdict_json()), _DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is True
     structured = verdict["structured"]
     assert structured["verdict"] == "PASS"
@@ -70,7 +70,7 @@ async def test_schema_parse_pass() -> None:
 @pytest.mark.asyncio
 async def test_fenced_json_still_parses() -> None:
     content = f"```json\n{_verdict_json()}\n```"
-    verdict = await _critic_review(_router(content), _DIFF, rca_summary="s")
+    verdict = await _critic_review(_router(content), _DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is True
 
 
@@ -80,7 +80,7 @@ async def test_fenced_json_still_parses() -> None:
 )
 @pytest.mark.asyncio
 async def test_malformed_output_fails_closed(content: str) -> None:
-    verdict = await _critic_review(_router(content), _DIFF, rca_summary="s")
+    verdict = await _critic_review(_router(content), _DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is False
     assert verdict["reason"] == "critic_error"
 
@@ -88,7 +88,7 @@ async def test_malformed_output_fails_closed(content: str) -> None:
 @pytest.mark.asyncio
 async def test_verdict_fail_suppresses() -> None:
     content = _verdict_json(verdict="FAIL", risk_note="does not compile")
-    verdict = await _critic_review(_router(content), _DIFF, rca_summary="s")
+    verdict = await _critic_review(_router(content), _DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is False
     assert verdict["reason"] == "does not compile"
 
@@ -96,7 +96,7 @@ async def test_verdict_fail_suppresses() -> None:
 @pytest.mark.asyncio
 async def test_root_cause_false_suppresses_even_on_pass() -> None:
     content = _verdict_json(root_cause_addressed=False)
-    verdict = await _critic_review(_router(content), _DIFF, rca_summary="s")
+    verdict = await _critic_review(_router(content), _DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is False
     assert verdict["reason"] == "root_cause_not_addressed"
 
@@ -104,7 +104,7 @@ async def test_root_cause_false_suppresses_even_on_pass() -> None:
 @pytest.mark.asyncio
 async def test_injection_suspected_suppresses_even_on_pass() -> None:
     content = _verdict_json(injection_suspected=True)
-    verdict = await _critic_review(_router(content), _DIFF, rca_summary="s")
+    verdict = await _critic_review(_router(content), _DIFF, org_id="org-test", rca_summary="s")
     assert verdict["passed"] is False
     assert verdict["reason"] == "injection_suspected"
 
@@ -113,7 +113,7 @@ async def test_injection_suspected_suppresses_even_on_pass() -> None:
 async def test_slot_pinned_to_fast_and_max_tokens_capped() -> None:
     """Correction #8: pin the SLOT (deterministic T1 heuristic route)."""
     router = _router(_verdict_json())
-    await _critic_review(router, _DIFF, rca_summary="s")
+    await _critic_review(router, _DIFF, org_id="org-test", rca_summary="s")
 
     task = router.aroute.await_args.args[0]
     assert task.slot == "fast"
@@ -131,7 +131,9 @@ async def test_slot_pinned_to_fast_and_max_tokens_capped() -> None:
 async def test_system_prompt_static_dynamic_in_user_portion() -> None:
     """Prompt-cache hygiene: per-call content never touches the system text."""
     router = _router(_verdict_json())
-    await _critic_review(router, _DIFF, rca_summary="unique-rca-text")
+    await _critic_review(
+        router, _DIFF, org_id="org-test", rca_summary="unique-rca-text"
+    )
 
     kwargs = router.aroute.await_args.kwargs
     assert kwargs["system_prompt"] is _CRITIC_SYSTEM_PROMPT

@@ -1,6 +1,8 @@
 # @eden-ai/sdk
 
-Eden TypeScript runtime SDK — drop-in auto-instrumentation for OpenAI, Anthropic, Vercel AI, and LangChain with fire-and-forget telemetry to the [Eden](https://eden.dev) gateway.
+Eden TypeScript runtime SDK — observability for OpenAI, Anthropic, Vercel AI, LangChain, and more with fire-and-forget telemetry to the [Eden](https://eden.dev) gateway.
+
+**Auto-instrumentation:** call `instrument()` once after `configure()`. By default it prototype-patches OpenAI, Anthropic, Groq, LangChain, Gemini, and Mistral (check `patched` / `patchedAsync` for what applied). Vercel AI, Cohere, Bedrock, Mastra, and LlamaIndex still need the returned `wrap*` factories.
 
 The SDK mirrors the surface of Eden's Python SDK (`eden-sdk` / `eden.trace`) so existing agent code can be ported by changing the import.
 
@@ -154,21 +156,21 @@ for await (const chunk of stream) process.stdout.write(chunk.response);
 
 ## Instrumentation parity matrix
 
-| Framework | Status | API |
+| Framework | Auto-patch (`instrument()`) | Manual wrap |
 |---|---|---|
-| OpenAI | Supported | `wrapOpenAI` |
-| xAI (Grok) | Supported | `wrapXai` (thin alias over `wrapOpenAI` — xAI's `api.x.ai` is OpenAI chat-completions compatible; only the `provider` telemetry label differs) |
-| Anthropic | Supported | `wrapAnthropic` |
-| Vercel AI | Supported | `wrapVercelAI` |
-| LangChain | Supported | `wrapLangChain` |
-| Mastra | Supported | `wrapMastra` |
-| Bedrock | Supported (auto-detected) | `wrapBedrock` |
-| Gemini / Vertex | Supported (auto-detected) | `wrapGemini` |
-| LlamaIndex.TS | Supported (auto-detected) | `wrapLlamaIndex` |
-| Groq | Supported (auto-detected) — native wrapper (structured streaming-delta + tool-call parsing), not just generic HTTP-capture | `wrapGroq` |
-| Cohere | Supported (auto-detected) — native wrapper for the Chat API v2 (`client.v2.chat` / `client.v2.chatStream`); the legacy v1 surface still only gets generic HTTP-capture | `wrapCohere` |
-| Mistral | Supported (auto-detected) — native wrapper (structured streaming-delta + tool-call parsing), not just generic HTTP-capture | `wrapMistral` |
-| CrewAI / AutoGen / Pydantic AI | Python-only frameworks — no official TS/JS port exists upstream, so there is nothing for this SDK to wrap. Not a TS gap; use `eden-sdk` (Python) for these. | — |
+| OpenAI | Yes (`Chat.Completions.prototype.create`) | `wrapOpenAI` |
+| xAI (Grok) | Yes (same OpenAI class, `baseURL` detection) | `wrapXai` |
+| Anthropic | Yes (`Messages.prototype.create`) | `wrapAnthropic` |
+| Groq | Yes (`Chat.Completions.prototype.create`) | `wrapGroq` |
+| LangChain | Yes (`BaseChatModel` invoke/call/stream/batch) | `wrapLangChain` |
+| Gemini / Vertex | Yes (`GenerativeModel` / `@google/genai` Models) | `wrapGemini` |
+| Mistral | Yes (`Chat.complete` / `.stream`) when installed | `wrapMistral` |
+| Vercel AI | **No** — ESM namespace exports are immutable; use `wrapVercelAI` | `wrapVercelAI` |
+| Cohere | No (dual client shapes) | `wrapCohere` |
+| Bedrock | No (command `send` pattern) | `wrapBedrock` |
+| Mastra | No (instance-level API) | `wrapMastra` |
+| LlamaIndex.TS | No (no global span handler) | `wrapLlamaIndex` |
+| CrewAI / AutoGen / Pydantic AI | Python-only — use `eden-sdk` | — |
 
 ### Agent sessions (F23)
 
@@ -181,6 +183,19 @@ await session.trace("turn-1", async () => { /* ... */ });
 await session.completeSession(true);
 // POSTs to /orgs/{orgId}/ingest/agent-sessions with X-Org-Api-Key
 ```
+
+### Agent identity (`agentId`)
+
+Set a stable `agentId` on every trace — not only in `begin(...)`. Eden uses it for per-agent analytics breakdowns, issue extraction, and segmentation; those features only key off it when the field is populated.
+
+```ts
+import { configure } from "@eden-ai/sdk";
+
+// Process-wide default (also via EDEN_AGENT_ID)
+configure({ orgId: "org_abc", apiKey: "sk_...", agentId: "support-bot" });
+```
+
+When omitted on an individual event, the configured `agentId` is stamped on the payload and sent as `X-Eden-Agent-Id`.
 
 ### Stumbles (F28)
 
@@ -291,23 +306,25 @@ const result = await trace("myAgent", async (ctx) => {
 ## Auto-instrument everything
 
 ```ts
-import { configure, instrument, autoInstrument } from "@eden-ai/sdk";
+import { configure, instrument } from "@eden-ai/sdk";
 import OpenAI from "openai";
 
 configure({ orgId: "org_abc", apiKey: "sk_..." });
 
-// Convenience helper — returns wrap* factories + detection (does not
-// auto-patch modules; call wrapOpenAI yourself, same as the portal snippet).
-const { wrapOpenAI, detected } = instrument();
-if (detected.openai) {
-  const openai = wrapOpenAI(new OpenAI());
-}
+// One-liner: class-level patches for supported frameworks.
+const { patched, patchedAsync, wrapVercelAI } = instrument({ tags: ["prod"] });
+// patched: { openai, anthropic, groq, langchain, gemini, mistral, vercelAi }
+// vercelAi is always false — use wrapVercelAI(ai) for Vercel AI SDK.
 
-// Detection-only alias (does not wrap):
-const status = autoInstrument({ tags: ["prod"] });
-// { openai: true, anthropic: true, vercelAi: true, langchain: false,
-//   mastra: false, bedrock: false, gemini: false, llamaIndex: false }
+const openai = new OpenAI(); // auto-traced when patched.openai === true
+await patchedAsync; // await before first ESM-imported client if needed
+
+import * as ai from "ai";
+const wrappedAi = wrapVercelAI(ai); // required for Vercel AI
 ```
+
+`instrument({ autoPatch: false })` opts out of class-level patching; `wrap*`
+factories remain on the return value. Detection-only: `detectInstalledFrameworks()`.
 
 Missing modules return `false` (the SDK never hard-imports them). Detection checks for `@aws-sdk/client-bedrock-runtime` (Bedrock), `@google/generative-ai` or `@google/genai` (Gemini), and `llamaindex` (LlamaIndex.TS) — mirroring the Python SDK's `boto3`/`botocore` and `google.generativeai`/`google.genai` checks.
 
@@ -419,7 +436,7 @@ MIT
 ## What's new in 0.3.5
 
 - **`wrapLlamaIndex` — native LlamaIndex.TS instrumentation.** Wraps `query()` / `chat()` / `retrieve()` on any query engine, chat engine, or retriever (`index.asQueryEngine()` / `asChatEngine()` / `asRetriever()`), emitting one `agent.run` event per call (duration, outcome, `sourceNodes` count), with streaming responses buffered to `/ingest/chunks` for per-chunk timing (parity with OpenAI/Anthropic/LangChain). Auto-detected when `llamaindex` is installed.
-- **Bedrock + Gemini are now auto-detected.** `wrapBedrock` / `wrapGemini` shipped full usage-extraction in 0.3.3 but were never wired into `instrument()` / `autoInstrument()` — callers had to already know to import them manually. `detectInstalledFrameworks()` now reports `bedrock` (`@aws-sdk/client-bedrock-runtime`) and `gemini` (`@google/generative-ai` or `@google/genai`), and `instrument()` returns `wrapBedrock` / `wrapGemini` / `wrapLlamaIndex` alongside the existing wrap helpers.
+- **Bedrock + Gemini are now auto-detected.** `wrapBedrock` / `wrapGemini` shipped full usage-extraction in 0.3.3 but were never wired into `instrument()` / `detectInstalledFrameworks()` — callers had to already know to import them manually. `detectInstalledFrameworks()` now reports `bedrock` (`@aws-sdk/client-bedrock-runtime`) and `gemini` (`@google/generative-ai` or `@google/genai`), and `instrument()` returns `wrapBedrock` / `wrapGemini` / `wrapLlamaIndex` alongside the existing wrap helpers.
 - CrewAI / AutoGen / Pydantic AI remain Python-only frameworks with no official TS/JS port — clarified in the parity matrix that this is not a TS gap (there's no upstream package to wrap).
 
 ## What's new in 0.3.2
@@ -436,5 +453,5 @@ MIT
 - **Retry with backoff.** `EdenSDK.postJson` retries transient gateway failures (3 attempts, honours `Retry-After`, never retries 4xx other than 408/429).
 - **Config parity with Python.** New `maxQueueSize` (default 4096, oldest-event drop), `timeoutS` (default 5), `redactOnClient` (default `true`), and `disabled` flags.
 - **Client-side PII safety net.** `redactPayload()` masks obvious emails / phones / SSNs / credit cards in every outgoing payload. Disable via `new EdenSDK({ redactOnClient: false })` when the gateway is your trusted redaction point.
-- **Detection helpers.** `autoInstrument()` and `detectInstalledFrameworks()` report which LLM SDKs are installed; same shape as the Python SDK.
+- **Detection helpers.** `detectInstalledFrameworks()` reports which LLM SDKs are installed (detection-only; `autoInstrument()` is a deprecated alias); same shape as the Python SDK.
 - **CHANGELOG.md** ships with the package; see `sdk/ts-ai/CHANGELOG.md` for the full 0.2.0 notes.

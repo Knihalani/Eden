@@ -442,26 +442,22 @@ async def test_aigateway_resolve_cost_no_org_uses_static(patch_postgres):
 
 @pytest.mark.asyncio
 async def test_model_response_carries_cost_source_and_pricing_version(patch_postgres):
-    """The new ModelResponse fields propagate through the gateway."""
-    from eden.llmops.ai_gateway import AIGateway, ModelRequest, ModelResponse, Provider
+    """resolve_cost carries provenance used by gateway telemetry."""
+    from eden.llmops.ai_gateway import AIGateway, Provider
 
     g = AIGateway()
-
-    # Directly build the response via the same path _execute_provider uses.
-    class FakeClient:
-        async def complete(self, **kwargs):
-            return {"text": "hello", "input_tokens": 100, "output_tokens": 50}
-
-    g.register_provider(Provider.OPENAI, FakeClient())
-    request = ModelRequest(
-        model_family="openai",
+    cost, source, no_cache, cache_cost = await g.resolve_cost(
+        Provider.OPENAI,
+        input_tokens=100,
+        output_tokens=50,
         model_version="gpt-4o",
-        prompt="hi",
-        tenant_id=str(uuid.uuid4()),
+        org_id=str(uuid.uuid4()),
     )
-    response: ModelResponse = await g._execute_provider(Provider.OPENAI, request)
-    assert response.cost_source == "static"  # no override, static seed
-    assert response.pricing_version.startswith("seed=2026-07;")
+    assert source == "static"
+    assert cost > 0.0
+    assert no_cache == cost
+    assert cache_cost == 0.0
+    assert g._pricing_version.startswith("seed=2026-07;")
 
 
 # ─────────────────────────────────────────────────────────────────────

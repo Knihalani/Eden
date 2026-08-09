@@ -4,6 +4,10 @@ Replaces the previous fleet of per-axis judges (hallucination,
 correctness, tone, groundedness, relevance, safety,
 action_completion, tool_selection_quality, reasoning_coherence).
 
+Playground/F51 dataset rows reach this judge through
+:mod:`eden.playground.llm_judge_adapter`, which wraps
+``(input, output, expected)`` as a :class:`TelemetryEvent`.
+
 :class:`SatisfactionJudge` stays separate (SQL / feedback, no LLM).
 Custom Metric Studio rubric judges stay separate (user-defined).
 """

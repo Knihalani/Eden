@@ -10,7 +10,7 @@ heuristics.
 
 Phase 1 upgrade path (deferred): an LLM-as-judge fallback for
 cases where no rule fires with confidence > 0.6. The LLM would
-use the existing :class:`eden.llmops.judges.builtin_v9` registry
+use the existing :class:`eden.llmops.judges.unified.UnifiedJudge` registry
 the same way :class:`eden.decision.decision_scorer.DecisionScorer`
 does. For this run the response carries
 ``model: "rule_based_v1"`` so the front-end knows what it got.

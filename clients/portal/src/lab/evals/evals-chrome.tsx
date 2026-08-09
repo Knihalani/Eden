@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { StatusChip } from "@/components/ds/primitives";
 import type { CompareGrade } from "@/lab/fixtures/evals";
 import { formatDelta } from "@/lab/fixtures/evals";
@@ -75,7 +76,6 @@ export function EvalsModeNav({
         [
           ["compare", "Results"],
           ["datasets", "Datasets"],
-          ["playground", "Try"],
         ] as const
       ).map(([id, label]) => (
         <button
@@ -89,6 +89,9 @@ export function EvalsModeNav({
           {label}
         </button>
       ))}
+      <Link href="/playgrounds" className="ds-tab" role="tab" aria-selected={false}>
+        Playgrounds
+      </Link>
     </div>
   );
 }

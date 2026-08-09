@@ -66,6 +66,7 @@ class LedgerGenerator:
             f"{summary}\n"
             f"Citations: {', '.join(citations)}"
         )
+        text, citations = await self._append_team_context(org_id, agent_id, text, citations)
         return await self._upsert_entry(
             org_id,
             agent_id,
@@ -87,16 +88,35 @@ class LedgerGenerator:
         ledger_id = await self.get_or_create_ledger(org_id, agent_id)
         if not ledger_id:
             return None
+        body, citations = await self._append_team_context(
+            org_id, agent_id, text[:2000], list(source_ids)
+        )
         return await self._upsert_entry(
             org_id,
             agent_id,
             ledger_id,
             chapter="do_not_repeat",
-            text=text[:2000],
-            citations=source_ids,
-            source_ids=source_ids,
+            text=body,
+            citations=citations,
+            source_ids=citations,
             weight=10.0,
         )
+
+    async def _append_team_context(
+        self,
+        org_id: str,
+        agent_id: str,
+        text: str,
+        citations: list[str],
+    ) -> tuple[str, list[str]]:
+        from eden.kb.artifact_context import format_ledger_appendix, list_agent_context
+
+        ctx_rows = await list_agent_context(org_id, agent_id)
+        appendix, ctx_cites = format_ledger_appendix(ctx_rows)
+        if not appendix:
+            return text, citations
+        merged_cites = list(citations) + ctx_cites
+        return f"{text}\n\n{appendix}", merged_cites
 
     async def get_latest(self, org_id: str, agent_id: str) -> dict[str, Any] | None:
         try:

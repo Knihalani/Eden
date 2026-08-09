@@ -51,6 +51,26 @@ class AlertTriageJudge:
                     "confidence": 0.82,
                 }
 
+        from eden.alerts.repo import list_enabled_suppression_patterns
+
+        for rule in await list_enabled_suppression_patterns(org_id):
+            pattern = str(rule.get("pattern") or "")
+            if not pattern:
+                continue
+            matched = False
+            try:
+                matched = bool(re.search(pattern, text_blob, re.IGNORECASE))
+            except re.error:
+                matched = pattern.lower() in text_blob.lower()
+            if matched:
+                reason = str(rule.get("reason") or "").strip()
+                return {
+                    "verdict": "benign",
+                    "reason": reason or "Matched org suppression rule.",
+                    "confidence": 0.85,
+                    "suppression_pattern": pattern,
+                }
+
         duplicate = await self._find_duplicate_issue(org_id, payload)
         if duplicate:
             return {

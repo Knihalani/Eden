@@ -529,7 +529,6 @@ class TestSearchServiceFacets:
 
     @pytest.fixture(autouse=True)
     def _clear_facets_cache(self):
-        from eden.observability.search_service import _facets_cache
         _facets_cache.clear()
         yield
         _facets_cache.clear()
@@ -638,6 +637,7 @@ def test_span_schema_has_required_fields():
     names = {f["name"] for f in SPAN_SCHEMA["fields"]}
     assert "id" not in names  # id is auto
     assert "tenant_id" in names
+    assert "user_id" in names
     assert "trace_id" in names
     assert "input_text" in names
     assert "output_text" in names

@@ -67,7 +67,7 @@ async def test_runner_skips_failing_judge_continues_with_others():
 async def test_runner_persists_scores(monkeypatch):
     """When a score is produced, ``_persist`` writes to Postgres."""
     fake_pg = MagicMock()
-    fake_pg.execute = AsyncMock()
+    fake_pg.execute = AsyncMock(return_value=MagicMock(rowcount=1))
 
     async def _get_pg():
         return fake_pg
@@ -79,9 +79,13 @@ async def test_runner_persists_scores(monkeypatch):
     runner = JudgeRunner(llm_client=MagicMock())
     judges = [_FakeJudge("a", 0.6)]
     await runner.run_for_event(_FakeEvent(), judges)
-    fake_pg.execute.assert_awaited_once()
-    sql = fake_pg.execute.await_args[0][0]
-    assert "INSERT INTO judge_scores" in sql
+    assert fake_pg.execute.await_count >= 1
+    insert_calls = [
+        call
+        for call in fake_pg.execute.await_args_list
+        if "INSERT INTO judge_scores" in call.args[0]
+    ]
+    assert len(insert_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -115,3 +119,43 @@ async def test_run_judges_for_event_helper():
     judges = [_FakeJudge("a", 0.5)]
     scores = await run_judges_for_event(_FakeEvent(), judges, llm_client=MagicMock())
     assert scores[0].judge_name == "a"
+
+
+@pytest.mark.asyncio
+async def test_runner_stamps_step_judges_after_scoring(monkeypatch):
+    """FEAT-146: JudgeRunner invokes the automatic step_judges loop."""
+    stamp_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "eden.apm_depth.step_judges.stamp_event_judge_scores",
+        stamp_mock,
+    )
+
+    class _StepEvent(_FakeEvent):
+        def __init__(self):
+            super().__init__()
+            self.tenant_id = "org_t"
+            self.attributes = {"apm.step_index": 3}
+
+    runner = JudgeRunner(llm_client=MagicMock())
+    judges = [_FakeJudge("hallucination", 0.88)]
+    event = _StepEvent()
+    scores = await runner.run_for_event(event, judges)
+
+    assert len(scores) == 1
+    stamp_mock.assert_awaited_once()
+    stamped_event, stamped_scores = stamp_mock.await_args.args
+    assert stamped_event is event
+    assert stamped_scores[0].judge_name == "hallucination"
+    assert stamped_scores[0].score == 0.88
+
+
+@pytest.mark.asyncio
+async def test_runner_skips_step_judge_stamp_when_no_scores(monkeypatch):
+    stamp_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "eden.apm_depth.step_judges.stamp_event_judge_scores",
+        stamp_mock,
+    )
+    runner = JudgeRunner(llm_client=MagicMock())
+    assert await runner.run_for_event(_FakeEvent(), []) == []
+    stamp_mock.assert_not_awaited()

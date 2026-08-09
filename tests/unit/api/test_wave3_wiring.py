@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -148,9 +147,8 @@ def _simulate_health(*, worker_running, bg_running, worker_enabled, pg, qdrant):
         kb.get("postgres") == "connected" and kb.get("qdrant") == "connected"
     ) else "degraded"
 
-    if overall == "healthy":
-        if (worker_enabled and bg_running and not worker_running):
-            overall = "degraded"
+    if overall == "healthy" and (worker_enabled and bg_running and not worker_running):
+        overall = "degraded"
 
     return overall
 

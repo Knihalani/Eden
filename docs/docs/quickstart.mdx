@@ -132,7 +132,7 @@ configure({
   apiKey: process.env.EDEN_API_KEY,
   orgId: process.env.EDEN_ORG_ID,
 });
-const { wrapOpenAI } = instrument();
+instrument(); // prototype-patches OpenAI/Anthropic when installed
 
 Python:
 import os
@@ -149,12 +149,12 @@ module scope — not per request.
 
 ## Step 5 — Wrap clients auto-instrumentation cannot reach
 
-Python's eden.instrument() patches supported libraries in place and usually
-needs nothing further.
+Python's `eden.instrument()` patches every installed framework in place and
+usually needs nothing further.
 
-In TypeScript, instrument() returns wrappers — wrapOpenAI, wrapAnthropic,
-wrapVercelAI, wrapLangChain, wrapMastra, wrapBedrock, wrapGemini, wrapGroq,
-wrapCohere, wrapMistral, wrapLlamaIndex, wrapXai. Apply the relevant one at
+In TypeScript, `instrument()` prototype-patches OpenAI and Anthropic only.
+For LangChain, Vercel AI, Mastra, Bedrock, Gemini, Groq, Cohere, Mistral,
+and LlamaIndex, use the `wrap*` factories returned from `instrument()` at
 each client construction site:
 
 const openai = wrapOpenAI(new OpenAI());

@@ -131,9 +131,11 @@ class KafkaEventConsumer:
 
         self._consumer: Any = None
         self._running = False
-        self._semaphore: asyncio.Semaphore | None = None
+        # Eagerly created (never ``None`` after ``__init__``); the lazy
+        # ``_get_consumer`` reassigns it after the consumer starts.
+        self._semaphore = asyncio.Semaphore(max_workers)
         self._tasks: set[asyncio.Task] = set()
-        self._metrics = {
+        self._metrics: dict[str, Any] = {
             "messages_consumed": 0,
             "messages_processed": 0,
             "messages_failed": 0,
@@ -371,6 +373,60 @@ class KafkaEventConsumer:
                     await close_clickhouse_sink()
                 except Exception:
                     pass
+
+    async def consume_alerts(
+        self,
+        topic: str = "eden-alert",
+    ) -> None:
+        """Consume alert events and evaluate them through AlertStreamProcessor.
+
+        This is the live entrypoint for FEAT-14: events published to the
+        ``eden-alert`` topic (e.g. ``sandbox.security_alert`` from the
+        sandbox runner) are routed through
+        :meth:`eden.realtime.alert_stream.AlertStreamProcessor.process_event`.
+        """
+        consumer = await self._get_consumer()
+        self._consumer.subscribe([topic])
+        logger.info(f"Subscribed to topic: {topic} (alert rule evaluation)")
+
+        from eden.realtime.alert_stream import get_alert_processor
+
+        processor = await get_alert_processor()
+
+        try:
+            async for msg in consumer:
+                if not self._running:
+                    break
+
+                async with self._semaphore:
+                    try:
+                        events = (
+                            msg.value if isinstance(msg.value, list) else [msg.value]
+                        )
+                        for event in events:
+                            if not isinstance(event, dict):
+                                logger.warning(
+                                    "Skipping non-dict alert event: %s",
+                                    type(event).__name__,
+                                )
+                                continue
+                            await processor.process_event(event)
+
+                        self._metrics["messages_processed"] += 1
+                        await consumer.commit()
+
+                    except Exception as exc:
+                        logger.error(
+                            f"Alert processing failed for offset {msg.offset}: {exc}"
+                        )
+                        self._metrics["messages_failed"] += 1
+                        await self._send_to_dlq(msg, str(exc))
+
+                    self._metrics["messages_consumed"] += 1
+                    self._metrics["last_message_at"] = datetime.now(UTC).isoformat()
+
+        except Exception as exc:
+            logger.error(f"Kafka alert consumer error: {exc}")
 
     async def _send_to_dlq(self, msg: Any, error: str) -> None:
         """Send a failed message to the dead-letter queue topic."""

@@ -86,7 +86,11 @@ export function interpretOfflineRunResult(
       kind: "completed",
       synthetic,
       message: synthetic
-        ? "Heuristic stub run finished — not a live model eval"
+        ? result.method === "offline_fallback"
+          ? "Offline fallback run finished — not a live model eval"
+          : result.method === "heuristic_stub"
+            ? "Legacy heuristic run finished — not a live model eval"
+            : "Synthetic run finished — not a live model eval"
         : "Experiment completed",
     };
   }

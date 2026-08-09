@@ -22,6 +22,7 @@ import {
   FileText,
   Play,
   Settings,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ export const CORE_NAV_LEAF_IDS = [
   "traces",
   "issues",
   "signals",
+  "topics",
   "evals",
   "playgrounds",
   "prompts",
@@ -66,9 +68,6 @@ export const CORE_NAV_LEAF_IDS = [
 ] as const;
 
 export type CoreNavLeafId = (typeof CORE_NAV_LEAF_IDS)[number];
-
-/** @deprecated Prefer CORE_NAV_LEAF_IDS — kept for stub-era smoke tests. */
-export const STUB_CORE_SURFACE_IDS = CORE_NAV_LEAF_IDS;
 
 export type StubCoreSurfaceId = CoreNavLeafId;
 
@@ -110,6 +109,7 @@ export const MOBILE_BOTTOM_NAV = [
 export const MOBILE_MORE_NAV = [
   { id: "agents" as const, href: "/agents", labelKey: "nav.leaves.agents" },
   { id: "signals" as const, href: "/signals", labelKey: "nav.leaves.signals" },
+  { id: "topics" as const, href: "/topics", labelKey: "nav.leaves.topics" },
   {
     id: "playgrounds" as const,
     href: "/playgrounds",
@@ -175,6 +175,13 @@ export const DEFAULT_SIDEBAR: SidebarGroup[] = [
         href: "/signals",
         labelKey: "nav.leaves.signals",
         icon: Activity,
+        category: "core",
+      },
+      {
+        id: "topics",
+        href: "/topics",
+        labelKey: "nav.leaves.topics",
+        icon: Layers,
         category: "core",
       },
     ],
@@ -307,6 +314,7 @@ export const SIDEBAR_ITEM_LABELS: Record<string, string> = {
   traces: "Traces",
   issues: "Issues",
   signals: "Detectors",
+  topics: "Topics",
   evals: "Evals",
   playgrounds: "Playgrounds",
   prompts: "Prompts",

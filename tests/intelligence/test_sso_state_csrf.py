@@ -20,7 +20,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 
@@ -174,19 +174,18 @@ def test_callback_rejects_state_for_wrong_provider() -> None:
 
 
 def test_callback_consumes_state_and_succeeds() -> None:
-    """State CSRF gate runs before the "SSO not enabled" response.
+    """Valid state is single-use consumed before the IdP handler runs.
 
-    IdP token exchange is not wired up in this deployment, so a valid
-    state still yields a structured 503 (not a raw 501 that looks like
-    a bug), but the nonce must be consumed so replay is rejected with
-    400.
+    Unsupported provider types still yield a structured 503, but OIDC-
+    family providers (okta/google) route into the real OIDC exchange —
+    see ``test_oidc_family_provider_routes_to_oidc_handler``.
     """
     fake = _FakeRedis()
     fake.store["eden:sso:state:valid-state"] = "prov-1|org-1"
     with patch("eden.api.routes.sso.get_redis_client", AsyncMock(return_value=fake)):
         with patch(
             "eden.api.routes.sso.get_postgres_client",
-            AsyncMock(return_value=_pg_with_provider("okta")),
+            AsyncMock(return_value=_pg_with_provider("ldap")),
         ):
             client = TestClient(_build_app())
             resp = client.post(
@@ -202,12 +201,37 @@ def test_callback_consumes_state_and_succeeds() -> None:
     with patch("eden.api.routes.sso.get_redis_client", AsyncMock(return_value=fake)):
         with patch(
             "eden.api.routes.sso.get_postgres_client",
-            AsyncMock(return_value=_pg_with_provider("okta")),
+            AsyncMock(return_value=_pg_with_provider("ldap")),
         ):
             resp2 = client.post(
                 "/sso/callback/prov-1?org_id=org-1&code=abc&state=valid-state"
             )
     assert resp2.status_code == 400
+
+
+def test_callback_oidc_family_does_not_return_sso_not_enabled() -> None:
+    """Okta/Google must route to the OIDC handler, not the blanket 503."""
+    fake = _FakeRedis()
+    fake.store["eden:sso:state:valid-state"] = "prov-1|org-1"
+    with patch("eden.api.routes.sso.get_redis_client", AsyncMock(return_value=fake)):
+        with patch(
+            "eden.api.routes.sso.get_postgres_client",
+            AsyncMock(return_value=_pg_with_provider("okta")),
+        ):
+            with patch(
+                "eden.api.routes.sso._handle_oidc_callback",
+                AsyncMock(
+                    side_effect=HTTPException(
+                        status_code=400, detail="Missing authorization code"
+                    )
+                ),
+            ):
+                client = TestClient(_build_app())
+                resp = client.post(
+                    "/sso/callback/prov-1?org_id=org-1&state=valid-state"
+                )
+    assert resp.status_code == 400, resp.text
+    assert "sso_not_enabled" not in resp.text.lower()
 
 
 # ─── helpers ──────────────────────────────────────────────────────────

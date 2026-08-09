@@ -95,8 +95,6 @@ the module form instead:
 Restart Cursor (or reload MCP servers from settings). Eden appears under
 **MCP Tools** in the agent panel.
 
-You can also copy a pre-filled config from **Portal → Settings → MCP**.
-
 ## Claude Code
 
 Create `.claude/mcp.json`. Claude Code expects an explicit `"type": "stdio"`:
@@ -146,9 +144,10 @@ Create `.claude/mcp.json`. Claude Code expects an explicit `"type": "stdio"`:
 | `get_cost_breakdown` | read | FinOps explorer rollup |
 | `get_agentic_metrics` | read | F64 agentic metrics pack |
 
-Scopes `mcp:read`, `mcp:debug`, and `mcp:fix` gate tools. Create an
-MCP-scoped key from **Settings → MCP** (`POST /orgs/{org}/mcp/keys`) or
-use **MCP presets** on **Settings → API Keys**.
+Scopes `mcp:read`, `mcp:debug`, and `mcp:fix` gate tools. Use an org API
+key from **Settings → API Keys** in the portal (`EDEN_API_KEY`). Dedicated
+MCP key routes (`POST /orgs/{org}/mcp/keys`) are **not mounted** in the
+current beta — do not rely on them.
 
 ## Streamable HTTP (W28)
 
@@ -177,8 +176,8 @@ Try these in Cursor's agent chat after MCP connects:
 
 ## Smoke test
 
-1. Copy config from **Settings → MCP** (or paste the JSON above).
-2. Replace `<your-api-key>` with a real MCP-scoped key.
+1. Paste the JSON config above (or build it from **Settings → API Keys**).
+2. Set `EDEN_API_KEY` to a real org API key (`sk_eden_…`).
 3. In Cursor agent chat: *"Call `search_traces` for org `{org_id}` with limit 5."*
 4. Optionally: *"Call `get_agentic_metrics`"* and *"Call `query_eql` with nl_text errors"*.
 5. You should see JSON tool results.

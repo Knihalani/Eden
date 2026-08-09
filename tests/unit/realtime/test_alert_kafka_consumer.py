@@ -101,3 +101,22 @@ class TestStartStopLifecycle:
         fake_consumer.stop.assert_awaited_once()
         assert mod._TASK is None
         assert mod._CONSUMER is None
+
+
+class TestRunWiring:
+    @pytest.mark.asyncio
+    async def test_run_subscribes_to_eden_alert_and_calls_consume_alerts(self) -> None:
+        import eden.workers.alert_kafka_consumer as mod
+
+        fake_consumer = AsyncMock()
+        fake_consumer.start = AsyncMock()
+        fake_consumer.consume_alerts = AsyncMock()
+
+        with patch(
+            "eden.realtime.kafka_consumer.KafkaEventConsumer",
+            return_value=fake_consumer,
+        ):
+            await mod._run()
+
+        fake_consumer.start.assert_awaited_once()
+        fake_consumer.consume_alerts.assert_awaited_once_with("eden-alert")

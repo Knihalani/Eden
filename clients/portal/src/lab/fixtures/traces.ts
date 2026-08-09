@@ -2,7 +2,7 @@ import { catalogTraces } from "@/lib/portal-catalog";
 
 export type TranscriptStep = {
   id: string;
-  kind: "task" | "llm" | "tool" | "bash" | "span";
+  kind: "task" | "llm" | "tool" | "bash" | "span" | "agent" | "handoff";
   title: string;
   durationMs: number;
   status?: "ok" | "error";
@@ -10,6 +10,8 @@ export type TranscriptStep = {
   /** Span / span id Eden assigns */
   spanId?: string;
   parentId?: string;
+  /** Agent that produced this span (multi-agent traces). */
+  agentId?: string;
   model?: string;
   provider?: string;
   tokensIn?: number;
@@ -26,6 +28,8 @@ export type TranscriptStep = {
 export type TraceFixture = {
   id: string;
   agentId: string;
+  /** Distinct agent ids that participated on any span in this trace. */
+  participants?: string[];
   name: string;
   status: "ok" | "error";
   startedAt: string;

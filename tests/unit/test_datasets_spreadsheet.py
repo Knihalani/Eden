@@ -85,13 +85,14 @@ class FakePg:
         self.calls.append((query.strip().lower(), args))
         sql = " ".join(query.strip().lower().split())
         if sql.startswith("insert into dataset_items"):
-            row_id, dataset_id, input_, expected_output, payload = args
+            row_id, dataset_id, input_, expected_output, payload, split = args
             if isinstance(payload, str):
                 payload = json.loads(payload)
             self._rows.append({
                 "id": row_id, "dataset_id": dataset_id,
                 "input": input_, "expected_output": expected_output,
                 "payload": payload or {},
+                "split": split,
                 "created_at": "2026-06-17T12:00:00+00:00",
                 "updated_at": "2026-06-17T12:00:00+00:00",
             })
@@ -147,7 +148,11 @@ class FakePg:
                 row_id = args[0] if args else None
                 return [r for r in self._rows if r["id"] == row_id]
             dataset_id = args[0] if args else None
-            return [r for r in self._rows if r["dataset_id"] == dataset_id]
+            split = args[3] if len(args) > 3 else None
+            rows = [r for r in self._rows if r["dataset_id"] == dataset_id]
+            if split is not None:
+                rows = [r for r in rows if r.get("split") == split]
+            return rows
         return []
 
     async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:

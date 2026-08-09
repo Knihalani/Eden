@@ -141,19 +141,26 @@ async def test_re_execute_edited_prompt_changes_hash() -> None:
         output_tokens = 6
         cost_usd = 0.01
 
-    gw = MagicMock()
-    gw.complete = AsyncMock(return_value=_Resp())
+    class _Usage:
+        total_tokens = 10
+        cost = 0.01
 
-    with patch("eden.api.routes.gateway.get_ai_gateway", return_value=gw):
+    class _RouteResp:
+        content = "totally different model output"
+        usage = _Usage()
+
+    route_async = AsyncMock(return_value=_RouteResp())
+
+    with patch("eden.llm.internal_router.route_async", route_async):
         result = await TraceReplayer()._re_execute_step(org_id="org", step=edited)
 
     assert result["re_executed"] is True
     assert result["cannot_replay"] is False
     assert result["response_hash"] != "orig_hash"
     assert len(result["response_hash"]) == 32
-    gw.complete.assert_awaited_once()
-    call_req = gw.complete.await_args.args[0]
-    assert "brand new edited prompt" in call_req.prompt
+    route_async.assert_awaited_once()
+    call_args = route_async.await_args.args
+    assert "brand new edited prompt" in call_args[1]
 
 
 @pytest.mark.asyncio

@@ -54,7 +54,7 @@ const PATHS = [
   { id: "02-traces-hub",          route: "/traces",            label: "Traces hub" },
   { id: "03-issues",              route: "/issues",            label: "Issues list" },
   { id: "04-improve",             route: "/improve",           label: "Improve queue" },
-  { id: "05-playgrounds",         route: "/evals?tab=playgrounds",       label: "Playground" },
+  { id: "05-playgrounds",         route: "/playgrounds",       label: "Playground" },
   { id: "06-alerts",              route: "/alerts",            label: "Alerts" },
   { id: "07-experiments",         route: "/evals?tab=experiments",       label: "Experiments compare" },
   { id: "08-debugger-sessions",   route: "/debugger",          label: "Debugger sessions" },
@@ -63,7 +63,6 @@ const PATHS = [
 // Retired aliases must keep redirecting to their live replacements.
 const LEGACY_REDIRECTS = [
   { from: "/dashboard", to: "/home" },
-  { from: "/artifacts", to: "/improve" },
   { from: "/debugger-sessions", to: "/debugger" },
 ];
 
@@ -189,23 +188,28 @@ async function assertImprove(page) {
  */
 async function assertPlaygrounds(page) {
   await assertAuthShell(page);
+
+  const url = page.url();
+  if (!/\/playgrounds\/?(\?|$)/.test(url)) {
+    await page.waitForURL(/\/playgrounds\/?(\?|$)/, { timeout: 15_000 }).catch(() => {});
+  }
+
   const heading = await assertPageLoaded(page);
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
-  // The playground page should always have a "New playground" button or empty state
+  const onCanonicalPlaygrounds =
+    /\/playgrounds\/?(\?|$)/.test(page.url()) &&
+    !/redirecting|loading playgrounds/i.test(bodyText);
   const hasAffordance =
-    /new playground|create playground|no playground|run/i.test(bodyText) ||
-    (await page.locator('button:has-text("New"), button:has-text("playground"), [data-testid="new-playground"]').count()) > 0;
+    /new playground|no playgrounds yet|playgrounds/i.test(bodyText) ||
+    (await page.locator(
+      'button:has-text("New playground"), [data-testid="new-playground"]',
+    ).count()) > 0;
 
-  if (!hasAffordance) {
-    console.log("  SKIPPED (05-playground run): no playground affordance found — checking for empty state");
-    const hasPage = heading != null || /playground/i.test(bodyText);
-    if (!hasPage) {
-      throw new Error("Playgrounds page rendered no recognisable content");
-    }
-  } else {
-    console.log("  ✓ 05 Playground affordance (New/Run) visible");
+  if (!onCanonicalPlaygrounds || !hasAffordance) {
+    throw new Error("Playgrounds page rendered no recognisable content");
   }
+  console.log("  ✓ 05 Playgrounds list surface visible");
   return heading || "(playgrounds)";
 }
 

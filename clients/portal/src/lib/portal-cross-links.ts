@@ -262,15 +262,16 @@ export function experimentHref(experimentId?: string, issueId?: string): string 
 }
 
 export function ledgerHref(agentId?: string): string {
-  const q = new URLSearchParams({ mode: "queue" });
+  const q = new URLSearchParams();
   if (agentId) q.set("agent", agentId);
-  return `/improve?${q.toString()}`;
+  const qs = q.toString();
+  return qs ? `/ledger?${qs}` : "/ledger";
 }
 
 export function driftHref(agentId: string, dimension?: string): string {
-  const q = new URLSearchParams({ id: agentId });
-  if (dimension) q.set("q", `dimension:${encodeURIComponent(dimension)}`);
-  return `/agents?${q.toString()}`;
+  const q = new URLSearchParams({ agent: agentId });
+  if (dimension) q.set("dimension", dimension);
+  return `/drift?${q.toString()}`;
 }
 
 export function tracesFilteredHref(filters: {
@@ -292,11 +293,10 @@ export function tracesFilteredHref(filters: {
   return qs ? `/traces?${qs}` : "/traces";
 }
 
-/** Labeling queues are not a live Evaluate mode yet — soft-land honestly. */
+/** Labeling queues — kanban board at `/labeling/queues/{id}`. */
 export function labelingQueueHref(queueId?: string): string {
-  const q = new URLSearchParams({ from: "/labeling" });
-  if (queueId) q.set("queueId", queueId);
-  return `/unavailable?${q.toString()}`;
+  if (queueId) return `/labeling/queues/${encodeURIComponent(queueId)}`;
+  return "/labeling";
 }
 
 export function incidentHref(clusterId?: string): string {

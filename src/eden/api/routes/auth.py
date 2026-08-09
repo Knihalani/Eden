@@ -90,7 +90,7 @@ COOKIE_NAME = "authorization"
 
 
 def _cookie_max_age() -> int:
-    return get_settings().jwt_exp_days * 24 * 60 * 60
+    return int(get_settings().jwt_exp_days) * 24 * 60 * 60
 
 
 def _set_session_cookie(response: Response, value: str) -> None:
@@ -2071,17 +2071,34 @@ class _AccountDeleteRequest(BaseModel):
     confirm: str = Field(min_length=1)
 
 
-@router.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
+class _StoreErasureStatus(BaseModel):
+    store: str
+    status: str
+    detail: str | None = None
+    org_id: str | None = None
+
+
+class _AccountDeleteResponse(BaseModel):
+    account_anonymized: bool
+    incomplete_orgs: list[str] = Field(default_factory=list)
+    store_statuses: list[_StoreErasureStatus] = Field(default_factory=list)
+
+
+@router.delete("/users/me", response_model=_AccountDeleteResponse)
 async def delete_my_account(
     payload: _AccountDeleteRequest,
+    response: Response,
     user: dict = Depends(get_current_user),
 ):
-    """Soft-delete the signed-in user's account.
+    """Self-service GDPR erasure for the signed-in account (FEAT-5).
 
-    Sets ``deleted_at`` and rotates ``token_version`` so any active
-    session JWTs are immediately invalidated. The actual row is
-    retained (with deleted_at) so audit trails and org-membership
-    history stay intact.
+    Runs the consolidated ``erase_user_account`` path: RTBF per org,
+    then anonymises the ``users`` row and removes ``org_members``.
+    On success, ``token_version`` is rotated (inside erasure), the
+    session cookie is cleared, and a JSON body with per-store fanout
+    status is returned so the client can report erasure honestly
+    (FEAT-109). Hard RTBF failures leave the account active and
+    return 500 with per-org error detail.
     """
     if payload.confirm != "DELETE":
         raise HTTPException(
@@ -2089,18 +2106,48 @@ async def delete_my_account(
             detail="Confirmation string must be exactly 'DELETE'",
         )
 
-    client = await get_postgres_client()
+    from eden.services import compliance_jobs as jobs
+
     user_id = user["user_id"]
-    await client.execute(
-        """
-        UPDATE users SET
-            deleted_at = NOW(),
-            token_version = COALESCE(token_version, 0) + 1
-        WHERE id = $1 AND deleted_at IS NULL
-        """,
-        user_id,
+    client = await get_postgres_client()
+    summary = await jobs.erase_user_account(
+        user_id, requested_by=user_id, client=client
     )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    if not summary.get("account_anonymized"):
+        failures = summary.get("failures") or []
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": (
+                    "Account erasure could not be completed. "
+                    "Your account is still active."
+                ),
+                "failures": failures,
+            },
+        )
+
+    incomplete = summary.get("incomplete_orgs") or []
+    if incomplete:
+        logger.warning(
+            "delete_my_account incomplete cross-store fanout user_id=%s orgs=%s",
+            user_id,
+            incomplete,
+        )
+
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=not get_settings().debug,
+        samesite="lax",
+    )
+    store_statuses = jobs.summarize_store_erasure_statuses(summary)
+    return _AccountDeleteResponse(
+        account_anonymized=True,
+        incomplete_orgs=incomplete,
+        store_statuses=store_statuses,
+    )
 
 
 # ───────────────────────────────────────────────────────────────────

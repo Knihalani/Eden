@@ -2331,6 +2331,7 @@ its source doc.
 **Severity:** Low
 **Effort:** Large
 **Confidence:** High
+**Backlog:** tracked as `FEAT-172`, deferred — see [`BACKLOG-FEAT-172-spend-anomaly.md`](BACKLOG-FEAT-172-spend-anomaly.md).
 
 ### #173. Fix self-contradictory docstring in `api/routes/labeling.py`
 **Source:** `08-annotation-labeling.md`, §1 (citing `api/routes/labeling.py:1-13`).
