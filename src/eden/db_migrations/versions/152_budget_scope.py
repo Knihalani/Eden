@@ -49,6 +49,16 @@ conflict target that matches these indexes exactly.
 audit log keyed by a UUID primary key, not by ``(org_id, window)``),
 so only the two new columns are added there — no index changes are
 required for backward compatibility.
+
+Robustness (2026-08-09)
+-----------------------
+The three tables are guarded with existence checks. A schema can
+drift from the migration history (e.g. a restored snapshot that never
+created ``budget_consumption``); previously a missing table made the
+``CREATE UNIQUE INDEX`` raise ``UndefinedTable``, rolled back the
+whole chain, and crash-looped the API at boot. Each section now runs
+only when its table actually exists — behavior is unchanged on any
+healthy database where all three tables are present.
 """
 
 from __future__ import annotations
@@ -63,82 +73,100 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _existing_tables() -> set[str]:
+    """Return the set of table names present on the connected database."""
+    from sqlalchemy import inspect
+
+    bind = op.get_bind()
+    return set(inspect(bind).get_table_names())
+
+
 def upgrade() -> None:
+    tables = _existing_tables()
+
     # ── 1. budgets — add scope columns, widen the unique index ────
-    op.execute(
-        """
-        ALTER TABLE budgets
-        ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'org',
-        ADD COLUMN IF NOT EXISTS scope_id VARCHAR(128) NULL
-        """
-    )
     op.execute("DROP INDEX IF EXISTS idx_budgets_org_window")
-    op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_org_window_scope "
-        "ON budgets (org_id, \"window\", scope_type, COALESCE(scope_id, '')) "
-        "WHERE enforcement_enabled = TRUE"
-    )
+    if "budgets" in tables:
+        op.execute(
+            """
+            ALTER TABLE budgets
+            ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'org',
+            ADD COLUMN IF NOT EXISTS scope_id VARCHAR(128) NULL
+            """
+        )
+        op.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_org_window_scope "
+            "ON budgets (org_id, \"window\", scope_type, COALESCE(scope_id, '')) "
+            "WHERE enforcement_enabled = TRUE"
+        )
 
     # ── 2. budget_consumption — add scope columns, widen the index ─
-    op.execute(
-        """
-        ALTER TABLE budget_consumption
-        ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'org',
-        ADD COLUMN IF NOT EXISTS scope_id VARCHAR(128) NULL
-        """
-    )
     op.execute("DROP INDEX IF EXISTS idx_budget_consumption_active")
-    op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_consumption_active_scope "
-        "ON budget_consumption "
-        "(org_id, \"window\", window_start, scope_type, COALESCE(scope_id, ''))"
-    )
+    if "budget_consumption" in tables:
+        op.execute(
+            """
+            ALTER TABLE budget_consumption
+            ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'org',
+            ADD COLUMN IF NOT EXISTS scope_id VARCHAR(128) NULL
+            """
+        )
+        op.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_consumption_active_scope "
+            "ON budget_consumption "
+            "(org_id, \"window\", window_start, scope_type, COALESCE(scope_id, ''))"
+        )
 
     # ── 3. budget_actions — add scope columns (no unique index) ────
-    op.execute(
-        """
-        ALTER TABLE budget_actions
-        ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'org',
-        ADD COLUMN IF NOT EXISTS scope_id VARCHAR(128) NULL
-        """
-    )
+    if "budget_actions" in tables:
+        op.execute(
+            """
+            ALTER TABLE budget_actions
+            ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'org',
+            ADD COLUMN IF NOT EXISTS scope_id VARCHAR(128) NULL
+            """
+        )
 
 
 def downgrade() -> None:
+    tables = _existing_tables()
+
     # ── 3. budget_actions ───────────────────────────────────────
-    op.execute(
-        """
-        ALTER TABLE budget_actions
-        DROP COLUMN IF EXISTS scope_type,
-        DROP COLUMN IF EXISTS scope_id
-        """
-    )
+    if "budget_actions" in tables:
+        op.execute(
+            """
+            ALTER TABLE budget_actions
+            DROP COLUMN IF EXISTS scope_type,
+            DROP COLUMN IF EXISTS scope_id
+            """
+        )
 
     # ── 2. budget_consumption ───────────────────────────────────
     op.execute("DROP INDEX IF EXISTS idx_budget_consumption_active_scope")
-    op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_consumption_active "
-        "ON budget_consumption (org_id, \"window\", window_start)"
-    )
-    op.execute(
-        """
-        ALTER TABLE budget_consumption
-        DROP COLUMN IF EXISTS scope_type,
-        DROP COLUMN IF EXISTS scope_id
-        """
-    )
+    if "budget_consumption" in tables:
+        op.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_consumption_active "
+            "ON budget_consumption (org_id, \"window\", window_start)"
+        )
+        op.execute(
+            """
+            ALTER TABLE budget_consumption
+            DROP COLUMN IF EXISTS scope_type,
+            DROP COLUMN IF EXISTS scope_id
+            """
+        )
 
     # ── 1. budgets ──────────────────────────────────────────────
     op.execute("DROP INDEX IF EXISTS idx_budgets_org_window_scope")
-    op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_org_window "
-        "ON budgets (org_id, \"window\") "
-        "WHERE enforcement_enabled = TRUE"
-    )
-    op.execute(
-        """
-        ALTER TABLE budgets
-        DROP COLUMN IF EXISTS scope_type,
-        DROP COLUMN IF EXISTS scope_id
-        """
-    )
+    if "budgets" in tables:
+        op.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_org_window "
+            "ON budgets (org_id, \"window\") "
+            "WHERE enforcement_enabled = TRUE"
+        )
+        op.execute(
+            """
+            ALTER TABLE budgets
+            DROP COLUMN IF EXISTS scope_type,
+            DROP COLUMN IF EXISTS scope_id
+            """
+        )
