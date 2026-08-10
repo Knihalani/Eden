@@ -32,17 +32,14 @@ import { queryKeys } from "@/lib/query-keys";
 import { promptsV2Api } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import {
+  LoadingFallback,
   QueryErrorPanel,
   QueryLoadingPanel,
 } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 
-const promptsFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const promptsFallback = <LoadingFallback label="Loading prompts…" />;
 
 const PromptsListView = dynamic(
   () =>

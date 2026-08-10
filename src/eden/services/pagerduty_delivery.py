@@ -42,7 +42,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from eden.services.webhook_delivery import _RETRY_DELAYS, _get_httpx
+from eden.services.webhook_delivery import _RETRY_DELAYS
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +94,11 @@ def _build_payload(
 async def _post_once(body: dict[str, Any]) -> tuple[bool, int | None, str | None]:
     """One HTTP attempt. Returns (success, http_status, error_text)."""
     try:
-        httpx = _get_httpx()
+        from eden.util.shared_http import shared_httpx_ctx
     except ImportError as exc:
         return False, None, str(exc)
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with shared_httpx_ctx(timeout=10.0) as client:
             resp = await client.post(
                 PAGERDUTY_EVENTS_URL,
                 content=json.dumps(body).encode("utf-8"),

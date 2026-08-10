@@ -20,9 +20,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from eden.config import Settings, get_settings
+from eden.util.shared_http import shared_httpx_ctx
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +82,20 @@ async def check_redis() -> str:
     return "ok"
 
 
-async def check_qdrant() -> str:
-    """Verify Qdrant lists collections."""
-    from eden.storage.qdrant import get_qdrant_client
+async def check_pgvector() -> str:
+    """Verify the pgvector store (vector_documents table) is usable.
 
-    client = get_qdrant_client()
-    client._get_client().get_collections()
+    N4 — Qdrant replaced by pgvector (same Postgres as everything else),
+    so this is a table-liveness probe rather than a separate service.
+    """
+    from eden.storage.postgres import get_postgres_client
+
+    client = await get_postgres_client()
+    # Table-liveness probe — arbitrary row not needed, so the unordered
+    # LIMIT is deliberate (see scripts/lint_unordered_limit.py escape hatch).
+    await client.fetchval(
+        "SELECT 1 FROM vector_documents LIMIT 0  -- lint:unordered-limit-ok"
+    )
     return "ok"
 
 
@@ -122,7 +129,7 @@ async def check_openrouter(settings: Settings | None = None) -> str:
     url = f"{base}/models"
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with shared_httpx_ctx(timeout=10.0) as client:
             resp = await client.get(url, headers=headers)
     except Exception as exc:
         return f"error: request failed ({exc})"
@@ -187,7 +194,7 @@ async def run_startup_checks(
     probes: dict[str, Any] = {
         "postgres": check_postgres,
         "redis": check_redis,
-        "qdrant": check_qdrant,
+        "pgvector": check_pgvector,
         "typesense": check_typesense,
         "openrouter": lambda: check_openrouter(settings),
     }

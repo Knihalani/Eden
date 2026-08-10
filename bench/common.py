@@ -19,10 +19,43 @@ Nothing here requires an external service, so the whole harness runs in CI.
 from __future__ import annotations
 
 import asyncio
+import os
 import statistics
+import sys
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolve ``eden`` to the app package, not the SDK stub.
+#
+# ``sdk/python/eden/__init__.py`` is the user-facing SDK shim and shadows
+# ``src/eden`` on ``sys.path`` (the editable install puts ``sdk/python``
+# ahead of ``src``). pytest (``[tool.pytest] pythonpath = ["src", "."]``),
+# ``tests/conftest.py`` (surgical ``sys.path``/``sys.modules`` fixup) and the
+# CI ``startup-budget`` workflow (``PYTHONPATH="src:."``) all already work
+# around it — the bench harness was the one place that didn't, which is why
+# ``bench.startup`` / ``bench.gateway_overhead`` crashed with
+# ``ModuleNotFoundError: No module named 'eden.api'``. Prepend ``src`` here so
+# every bench that imports ``eden.*`` in-process works, and expose
+# :func:`bench_env` so subprocess-based benches (``startup``) inherit the same
+# fix. Mirrors ``tests/conftest.py``.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SRC = _REPO_ROOT / "src"
+_src_str = str(_SRC)
+if _src_str in sys.path:
+    sys.path.remove(_src_str)
+sys.path.insert(0, _src_str)
+
+
+def bench_env() -> dict[str, str]:
+    """Env for bench subprocesses: ``src`` first so ``eden`` = the app."""
+    env = dict(os.environ)
+    src_first = _src_str + os.pathsep + str(_REPO_ROOT)
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = src_first + (os.pathsep + existing if existing else "")
+    return env
 
 
 @dataclass

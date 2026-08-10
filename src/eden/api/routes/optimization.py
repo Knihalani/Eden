@@ -211,9 +211,15 @@ async def get_optimization_overview(
     except Exception as exc:
         # Last-resort fallback. Log the error for ops but return a
         # well-formed empty response so the dashboard doesn't go red.
+        # F70: run ``exc`` through ``redact_all`` — a downstream call
+        # (Postgres/Redis/model provider) may embed tenant data in the
+        # exception text. This is the log site the F70 source test pins.
         import logging
         logging.getLogger(__name__).warning(
-            "optimization overview fallback for org=%s days=%s: %s", org_id, days, exc
+            "optimization overview fallback for org=%s days=%s: %s",
+            org_id,
+            days,
+            redact_all(str(exc)),
         )
         return _empty_optimization_overview(org_id, days)
 
@@ -299,30 +305,18 @@ async def _build_optimization_overview(org_id: str, days: int):
     soft_limit = limits.get("soft_limit_cents", float("inf"))
     hard_limit = limits.get("hard_limit_cents", float("inf"))
 
-    # Get current month spend from Redis for accurate real-time data
-    from eden.storage.redis import get_redis_client
-    redis = await get_redis_client()
-    current_spend = 0.0
-    if redis:
-        month_key = now.strftime("%Y-%m")
-        try:
-            raw = await redis.hget(f"eden:cost:{org_id}:month:{month_key}", "total_cents")
-            current_spend = float(raw or 0.0)
-        except Exception as exc:
-            # Redis blip shouldn't 500 the entire overview tile —
-            # Postgres fallback will pick up the spend, and the
-            # utilization % just renders blank. June 2026 hardening.
-            # F70 — defensive redaction. ``org_id`` and
-            # ``month_key`` are internal IDs (not PII), but the
-            # ``exc`` could theoretically include user data in a
-            # future refactor. ``redact_all`` is a no-op on
-            # typical Python exceptions (no email/credential
-            # patterns) but defends against the long tail.
-            logger.warning(
-                "redis hget failed for org=%s month=%s: %s",
-                org_id, month_key, redact_all(str(exc)),
-            )
-            current_spend = 0.0
+    # Current-month spend derived from the in-memory tracker. The Redis
+    # hash this used to read (``eden:cost:{org_id}:month:{...}``) has had
+    # no writer since FEAT-171 (2026-08-06) removed the unreachable
+    # ``CostTracker.track`` sink, so it always returned zero. Derive it
+    # from the same events the cost breakdown above uses instead — no
+    # Redis round-trip, no stale/empty hash.
+    month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
+    current_spend = sum(
+        e.total_cost_cents
+        for e in events
+        if datetime.fromisoformat(e.timestamp) >= month_start
+    )
 
     utilization = round((current_spend / hard_limit) * 100, 2) if hard_limit != float("inf") and hard_limit > 0 else 0.0
 

@@ -13,7 +13,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft, SearchX, ShieldCheck, X } from "lucide-react";
 import {
   agentForIssue,
   occurrencesForIssue,
@@ -37,15 +37,21 @@ import {
   AgentScopeFilter,
   EmptyState,
   FilterChips,
+  SearchInput,
   SeverityBadge,
 } from "@/lab/lab-ui";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { agentIssuesApi } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
@@ -159,7 +165,7 @@ const IssueRow = memo(function IssueRow({
         </div>
         <p className="type-ui truncate text-[var(--text)]">{issue.title}</p>
         <p className="type-meta truncate">
-          {agent?.name ?? "unknown"} · {issue.lastSeen}
+          {agent?.name ?? "unknown"} · {formatRelativeTime(issue.lastSeen)}
         </p>
       </div>
     </button>
@@ -232,7 +238,9 @@ function IssueDetail({
             <p className="type-meta">
               <AgentLink agentId={agent?.id} name={agent?.name ?? "unknown"} />
               <span className="text-[var(--text-faint)]"> · </span>
-              {issue.lastSeen}
+              <span title={formatAbsoluteTime(issue.lastSeen)}>
+                {formatRelativeTime(issue.lastSeen)}
+              </span>
             </p>
           </div>
           <button
@@ -332,14 +340,35 @@ function IssueDetail({
 
       <dl className="lab-metric-strip shrink-0">
         {[
-          { label: "Occurrences", value: String(issue.occurrenceTraceIds.length) },
-          { label: "Signals", value: String(issue.signalCount) },
-          { label: "First seen", value: issue.firstSeen },
-          { label: "Last seen", value: issue.lastSeen },
+          {
+            label: "Occurrences",
+            value: String(issue.occurrenceTraceIds.length),
+            title: undefined,
+          },
+          {
+            label: "Signals",
+            value: String(issue.signalCount),
+            title: undefined,
+          },
+          {
+            label: "First seen",
+            value: formatRelativeTime(issue.firstSeen),
+            title: formatAbsoluteTime(issue.firstSeen),
+          },
+          {
+            label: "Last seen",
+            value: formatRelativeTime(issue.lastSeen),
+            title: formatAbsoluteTime(issue.lastSeen),
+          },
         ].map((row) => (
           <div key={row.label}>
             <p className="type-label">{row.label}</p>
-            <p className="type-mono mt-1.5 truncate !text-[var(--text)]">{row.value}</p>
+            <p
+              className="type-mono mt-1.5 truncate !text-[var(--text)]"
+              title={row.title}
+            >
+              {row.value}
+            </p>
           </div>
         ))}
       </dl>
@@ -409,7 +438,7 @@ function IssueDetail({
         {tab === "runs" ? (
           <div className="px-5 py-6 sm:px-6">
             {runs.length === 0 ? (
-              <EmptyState title="No linked runs" />
+              <EmptyState icon={ShieldCheck} title="No linked runs" />
             ) : (
               <ul className="overflow-hidden rounded-[var(--radius)] shadow-[0_0_0_1px_var(--line)]">
                 {runs.map((trace) => {
@@ -432,7 +461,13 @@ function IssueDetail({
                           <div className="min-w-0 flex-1">
                             <p className="type-ui text-[var(--text)]">{trace.name}</p>
                             <p className="type-meta mt-1">
-                              {trace.startedAt} · {formatDuration(trace.durationMs)} ·{" "}
+                              <span
+                                title={formatAbsoluteTime(trace.startedAt)}
+                              >
+                                {formatRelativeTime(trace.startedAt)}
+                              </span>
+                              {" · "}
+                              {formatDuration(trace.durationMs)} ·{" "}
                               {formatTokens(trace.tokens)} ·{" "}
                               {formatUsd(trace.costUsd, 3)}
                             </p>
@@ -821,8 +856,7 @@ function LabIssuesInner() {
           )}
         >
           <div className="lab-list-chrome border-b border-[var(--line)] sm:!flex-row sm:flex-wrap sm:items-end">
-            <div className="min-w-[12rem] flex-1 space-y-2 sm:max-w-xs">
-              <p className="type-label">Agent</p>
+            <div className="min-w-[12rem] flex-1 sm:max-w-xs">
               <AgentScopeFilter
                 value={agentId}
                 onChange={setAgentId}
@@ -831,13 +865,11 @@ function LabIssuesInner() {
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <p className="type-label">Search</p>
-              <input
-                type="search"
+              <SearchInput
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search…"
-                className="ds-input w-full"
-                aria-label="Search issues"
+                onChange={setQuery}
+                placeholder="Search issues, ids, agents…"
+                ariaLabel="Search issues"
               />
             </div>
             <div className="space-y-2">
@@ -847,8 +879,8 @@ function LabIssuesInner() {
                 onChange={setSeverityFilter}
                 options={[
                   { id: "all", label: "All", count: severityCounts.all },
-                  { id: "error", label: "Fail", count: severityCounts.error },
-                  { id: "warn", label: "Warn", count: severityCounts.warn },
+                  { id: "error", label: "Failed", count: severityCounts.error },
+                  { id: "warn", label: "Warning", count: severityCounts.warn },
                 ]}
               />
             </div>
@@ -897,6 +929,11 @@ function LabIssuesInner() {
           >
             {filtered.length === 0 ? (
               <EmptyState
+                icon={
+                  query.trim() || severityFilter !== "all" || agent
+                    ? SearchX
+                    : ShieldCheck
+                }
                 title={
                   agent
                     ? `No issues for ${agent.name}`
@@ -1000,7 +1037,7 @@ export default function LabIssuesPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader title="Issues" meta={<span className="type-meta">Loading…</span>} />
+          <PageHeader title="Issues" meta={<InlineLoading label="Loading issues" />} />
         </div>
       }
     >

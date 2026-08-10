@@ -89,8 +89,13 @@ class TestF70AuthPasswordRehash:
 
 
 class TestF70OptimizationRedisHget:
-    """``optimization.py`` redis hget log MUST run the exc through
-    ``redact_all``."""
+    """``optimization.py`` overview fallback log MUST run the exc
+    through ``redact_all``.
+
+    FEAT-171 (2026-08-06) removed the Redis cost-hash read whose
+    ``redis hget failed for org=`` log line this class used to pin; the
+    live fallback log site is now the overview route's last-resort
+    handler (``optimization overview fallback for org=``)."""
 
     def test_optimization_imports_redact_all(self) -> None:
         from eden.api.routes import optimization
@@ -104,14 +109,14 @@ class TestF70OptimizationRedisHget:
         from eden.api.routes import optimization
 
         src = inspect.getsource(optimization)
-        marker_idx = src.find("redis hget failed for org=")
+        marker_idx = src.find("optimization overview fallback for org=")
         assert marker_idx != -1, (
-            "F70 test setup: 'redis hget failed for org=' not "
+            "F70 test setup: 'optimization overview fallback for org=' not "
             "found in optimization.py source"
         )
         window = src[max(0, marker_idx - 50): marker_idx + 400]
         assert "redact_all(str(exc))" in window, (
-            "F70 regression: optimization.py redis hget log no "
+            "F70 regression: optimization.py overview fallback log no "
             "longer runs the exc through redact_all"
         )
 

@@ -125,12 +125,12 @@ export function LabelingUnassignedPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     {agreement != null ? (
                       <StatusChip tone={agreement < 0.5 ? "fail" : "neutral"}>
-                        agreement {agreement.toFixed(2)}
+                        Agreement {agreement.toFixed(2)}
                       </StatusChip>
                     ) : needsAttention ? (
-                      <StatusChip tone="fail">needs 2nd pass</StatusChip>
+                      <StatusChip tone="fail">Needs 2nd pass</StatusChip>
                     ) : (
-                      <StatusChip tone="neutral">unlabeled</StatusChip>
+                      <StatusChip tone="neutral">Unlabeled</StatusChip>
                     )}
                     <span className="type-meta">
                       {item.annotations_count} annotation{item.annotations_count === 1 ? "" : "s"}

@@ -3101,6 +3101,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/observability/traces/diff": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/observability/traces/{trace_id}/export": [
       "200:application/json",
       "422:application/json"
@@ -3560,7 +3564,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 906,
+  "route_count": 907,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -4353,6 +4357,7 @@
     "POST /orgs/{org_id}/observability/telemetry/ingest",
     "POST /orgs/{org_id}/observability/telemetry/ingest/batch",
     "POST /orgs/{org_id}/observability/traces/compare",
+    "POST /orgs/{org_id}/observability/traces/diff",
     "POST /orgs/{org_id}/observability/traces/{trace_id}/export",
     "POST /orgs/{org_id}/onboarding/state",
     "POST /orgs/{org_id}/online-scoring/apply/{trace_id}",
@@ -4469,7 +4474,7 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 555,
+  "schema_count": 556,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -4924,6 +4929,7 @@
     "ToolCatalogEntry",
     "TopicActRequest",
     "TraceAnnotateRequest",
+    "TraceDiffRequest",
     "TraceEfficiencyReport",
     "TraceExportRequest",
     "TraceExportResponse",

@@ -84,23 +84,27 @@ class RequestCoalescer:
                     self._inflight[k].future.cancel()
                 del self._inflight[k]
 
-            # Check if identical request is in flight
+            # Decide under the lock: join an identical in-flight request,
+            # or register ourselves as the leader. Registration is atomic
+            # with the check, so no twin can slip in between.
             if key in self._inflight:
                 self._coalesced += 1
                 future = self._inflight[key].future
-                # Release lock before waiting on the future
-                try:
-                    return await future
-                except asyncio.CancelledError:
-                    raise
+                coalesced = True
+            else:
+                future = asyncio.get_running_loop().create_future()
+                self._inflight[key] = _InflightRequest(
+                    future=future,
+                    created_at=now,
+                    key=key,
+                )
+                coalesced = False
 
-            # Create a new future for this request
-            future = asyncio.get_event_loop().create_future()
-            self._inflight[key] = _InflightRequest(
-                future=future,
-                created_at=now,
-                key=key,
-            )
+        # Both paths run OUTSIDE the lock: a waiter must never hold the
+        # lock while awaiting, or it would serialise every unrelated
+        # request behind the in-flight call.
+        if coalesced:
+            return await future
 
         # We are the leader — perform the actual call (outside the lock)
         try:
@@ -114,7 +118,12 @@ class RequestCoalescer:
             raise
         finally:
             async with self._lock:
-                self._inflight.pop(key, None)
+                # Pop by identity, not key: if the entry expired while we
+                # were in call_fn and a new leader registered under the
+                # same key, our finally must not remove their entry.
+                entry = self._inflight.get(key)
+                if entry is not None and entry.future is future:
+                    self._inflight.pop(key, None)
 
     def get_stats(self) -> dict:
         """Return coalescing statistics."""

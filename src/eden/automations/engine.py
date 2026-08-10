@@ -363,8 +363,8 @@ class AutomationsEngine:
             }
 
         try:
-            import httpx
-        except ImportError as exc:  # pragma: no cover - httpx always installed
+            from eden.util.shared_http import shared_httpx_ctx
+        except ImportError as exc:  # pragma: no cover - always installed
             return {"status": "error", "error": str(exc)}
 
         body = json.dumps(json_payload, default=str).encode("utf-8")
@@ -372,7 +372,7 @@ class AutomationsEngine:
         last_error = "unknown error"
         for attempt in range(1, _DISPATCH_MAX_ATTEMPTS + 1):
             try:
-                async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_S) as client:
+                async with shared_httpx_ctx(timeout=_DISPATCH_TIMEOUT_S) as client:
                     resp = await client.post(url, content=body, headers=send_headers)
                 if 200 <= resp.status_code < 300:
                     return {"status": "sent", "http_status": resp.status_code}

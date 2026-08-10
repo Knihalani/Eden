@@ -23,6 +23,7 @@ import { AutonomyAuditCard } from "@/lab/settings/autonomy-audit-card";
 import { SlackSettingsCard } from "@/lab/settings/slack-settings-card";
 import { AccountDangerZoneCard } from "@/lab/settings/account-danger-zone-card";
 import { useLabToast } from "@/lab/lab-toast";
+import { formatSmartTime } from "@/lib/format";
 
 export function SettingsWorkspaceView({
   workspace,
@@ -143,7 +144,7 @@ export function SettingsWorkspaceView({
               <span className="mx-1.5 text-[var(--text-faint)]">·</span>
               {workspace.planLabel} plan
               <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-              since {workspace.createdAt}
+              since {formatSmartTime(workspace.createdAt)}
             </p>
           </div>
           <Link href="/cost" className="ds-btn ds-btn-ghost ds-btn-sm">

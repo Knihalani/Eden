@@ -26,7 +26,16 @@ class ProductionEvalSampler:
         *,
         agent_id: str | None = None,
         is_stumble: bool = False,
+        events: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any] | None:
+        """Sample production traces and record lightweight eval scores.
+
+        ``events`` is the trace's already-fetched event list (the
+        trace.finalized pipeline fetches it once and threads it through
+        every stage). Passing it lets the rules engine derive judge
+        content from memory instead of issuing its own telemetry_events
+        read for the sampled trace.
+        """
         if not self._enabled():
             return None
         policy = await self._resolve_policy(org_id, agent_id)
@@ -40,7 +49,7 @@ class ProductionEvalSampler:
         if not await self._budget_allows(org_id, policy):
             return None
         score, passed, billed_cost = await self._score_trace(
-            org_id, trace_id, agent_id
+            org_id, trace_id, agent_id, events=events
         )
         if score == 0.0 and not passed and billed_cost == 0.0:
             rules_exist = await self._org_has_rules(org_id)
@@ -129,15 +138,25 @@ class ProductionEvalSampler:
             return False
 
     async def _score_trace(
-        self, org_id: str, trace_id: str, agent_id: str | None
+        self,
+        org_id: str,
+        trace_id: str,
+        agent_id: str | None,
+        *,
+        events: list[dict[str, Any]] | None = None,
     ) -> tuple[float, bool, float]:
-        """Apply online rules; reuse Layer A scores; skip if no signal."""
+        """Apply online rules; reuse Layer A scores; skip if no signal.
+
+        ``events`` (when provided) is forwarded to the rules engine so it
+        can build the judge payload from the already-fetched trace events
+        instead of re-reading telemetry_events itself.
+        """
         try:
             from eden.evaluation.online.rules_engine import OnlineScoringRulesEngine
 
             engine = OnlineScoringRulesEngine()
             applied = await engine.apply_rules_for_trace(
-                org_id, trace_id, agent_id=agent_id
+                org_id, trace_id, agent_id=agent_id, events=events
             )
             if applied:
                 score = float(applied[0].get("score") or 0)

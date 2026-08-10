@@ -22,6 +22,7 @@ import {
   type SessionTurn as ApiSessionTurn,
 } from "@/lib/api/resources";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
+import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type HubView = "runs" | "sessions";
@@ -111,7 +112,8 @@ export const SessionListButton = memo(function SessionListButton({
         </p>
         <p className="type-meta mt-1 truncate">
           {agent?.name ?? session.agentId} · {session.turnCount} turn
-          {session.turnCount === 1 ? "" : "s"} · {session.startedAt}
+          {session.turnCount === 1 ? "" : "s"} ·
+          {formatRelativeTime(session.startedAt)}
         </p>
       </div>
       <div className="hidden shrink-0 flex-col items-end gap-0.5 sm:flex">
@@ -178,7 +180,13 @@ const TurnCard = memo(function TurnCard({
         {turn.outcome ? (
           <>
             <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-            {turn.outcome}
+            {turn.outcome === "error"
+              ? "Failed"
+              : turn.outcome === "mixed"
+                ? "Warning"
+                : turn.outcome === "ok"
+                  ? "OK"
+                  : turn.outcome}
           </>
         ) : null}
       </p>
@@ -531,8 +539,10 @@ export function SessionReader({
               {" · "}
               {session.turnCount} turn{session.turnCount === 1 ? "" : "s"}
               {" · "}
-              {session.startedAt}
-              {session.endedAt ? ` → ${session.endedAt}` : ""}
+              {formatRelativeTime(session.startedAt)}
+              {session.endedAt
+                ? ` → ${formatRelativeTime(session.endedAt)}`
+                : ""}
             </p>
             <p className="type-mono mt-1.5 tabular-nums !text-[0.6875rem] !text-[var(--text-muted)]">
               {formatDuration(session.durationMs)}

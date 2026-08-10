@@ -58,7 +58,15 @@ TARGETS = (
 def _measure_subprocess(module, samples):
     """Run ``python -c 'import <module>'`` ``samples`` times in a fresh
     subprocess and return per-run millisecond wall-clock times.
+
+    ``bench.common`` prepends repo ``src/`` to the *parent* ``sys.path``;
+    the subprocess needs the same fix via ``PYTHONPATH`` (the editable
+    ``sdk/python/eden`` stub would otherwise shadow ``src/eden`` and
+    ``import eden.api.app`` would fail). The cwd is derived from this file's
+    location rather than hard-coded, so the suite works from any checkout.
     """
+    from bench.common import _REPO_ROOT, bench_env
+
     times = []
     for _ in range(samples):
         code = (
@@ -71,7 +79,8 @@ def _measure_subprocess(module, samples):
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            cwd="/Users/kaiavnihalani/Downloads/Eden",
+            cwd=str(_REPO_ROOT),
+            env=bench_env(),
             check=True,
         )
         last = result.stdout.strip().splitlines()

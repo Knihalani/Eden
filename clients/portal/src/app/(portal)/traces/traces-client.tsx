@@ -18,8 +18,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  GitBranch,
   MoreHorizontal,
   PanelLeftClose,
+  Radar,
+  SearchX,
 } from "lucide-react";
 import {
   preferKnownCostUsd,
@@ -44,8 +47,13 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { playgroundApi } from "@/lib/api/resources";
 import { AnnotateTraceDialog } from "@/lab/annotate-trace-dialog";
-import { useLabToast } from "@/lab/lab-toast";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import { TraceDiffDialog } from "@/lab/trace-diff-dialog";
+import { useLabToastSafe } from "@/lab/lab-toast";
+import {
+  InlineLoading,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { FirstEventWaitAction } from "@/components/shell/first-event-wait";
 import {
@@ -65,8 +73,10 @@ import {
   ListRevealButton,
   RunListButton,
   RunMeta,
+  SearchInput,
   SeverityBadge,
 } from "@/lab/lab-ui";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/format";
 import {
   HubViewToggle,
   parseHubView,
@@ -82,8 +92,13 @@ import {
 } from "@/lib/portal-polish";
 
 const panelFallback = (
-  <div className="flex min-h-[8rem] items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
+  <div
+    className="flex min-h-[8rem] flex-col justify-center gap-2.5 px-5"
+    role="status"
+    aria-label="Loading panel"
+  >
+    <div className="eden-skeleton-pulse h-3.5 w-1/3 rounded bg-[var(--line)]" />
+    <div className="eden-skeleton-pulse h-3 w-1/2 rounded bg-[var(--line)]" />
   </div>
 );
 
@@ -365,16 +380,18 @@ function LabTracesInner() {
   // the new playground (no useRouter in this file by convention).
   const [playgroundPending, setPlaygroundPending] = useState(false);
   const [annotateOpen, setAnnotateOpen] = useState(false);
+  // Wave 9 — compare the selected run against any other run in the org.
+  const [diffOpen, setDiffOpen] = useState(false);
+  // Wave 10 — one-click compare-to-previous pre-selects the other run.
+  const [diffPrefill, setDiffPrefill] = useState<string | null>(null);
+  // More menu is controlled so choosing an action (e.g. Compare runs)
+  // can close it — an uncontrolled <details> would stay open behind the
+  // dialog it just opened.
+  const [moreOpen, setMoreOpen] = useState(false);
   // Toast chrome is optional here — existing tests mount this page
-  // without LabToastProvider (hook order stays stable: useContext runs
-  // inside useLabToast before it throws).
-  let pushToast: ReturnType<typeof useLabToast>["pushToast"] | null = null;
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    pushToast = useLabToast().pushToast;
-  } catch {
-    pushToast = null;
-  }
+  // without LabToastProvider; useLabToastSafe returns a no-op pushToast
+  // outside the provider (unconditional hook call).
+  const { pushToast } = useLabToastSafe();
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
@@ -924,6 +941,23 @@ function LabTracesInner() {
   const signalCount =
     selected?.signals.count ?? (selected?.severity === "none" ? 0 : 1);
 
+  // Wave 10 — the chronologically-previous run of the SAME agent, for a
+  // one-click "compare to previous run" (the default regression-debugging
+  // motion: is this run worse than the last one like it?). ``scopedTraces``
+  // is newest-first, so idx+1 is older. Falls back to the plain previous
+  // run when nothing older exists for the same agent.
+  const previousRunId = useMemo(() => {
+    if (!selected) return null;
+    const idx = scopedTraces.findIndex((t) => t.id === selected.id);
+    if (idx < 0) return null;
+    for (let i = idx + 1; i < scopedTraces.length; i++) {
+      if (scopedTraces[i].agentId === selected.agentId) {
+        return scopedTraces[i].id;
+      }
+    }
+    return scopedTraces[idx + 1]?.id ?? null;
+  }, [scopedTraces, selected]);
+
   const severityCounts = useMemo(() => {
     if (hubView === "sessions") {
       return {
@@ -1089,13 +1123,15 @@ function LabTracesInner() {
               onChange={setAgentId}
               counts={agentCounts}
             />
-            <input
-              type="search"
+            <SearchInput
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
-              className="ds-input w-full"
-              aria-label={
+              onChange={setQuery}
+              placeholder={
+                hubView === "sessions"
+                  ? "Search sessions, ids…"
+                  : "Search runs, ids, agents…"
+              }
+              ariaLabel={
                 hubView === "sessions" ? "Filter sessions" : "Filter traces"
               }
             />
@@ -1105,9 +1141,9 @@ function LabTracesInner() {
               scroll
               options={[
                 { id: "all", label: "All", count: severityCounts.all },
-                { id: "error", label: "Fail", count: severityCounts.error },
-                { id: "warn", label: "Warn", count: severityCounts.warn },
-                { id: "ok", label: "Ok", count: severityCounts.ok },
+                { id: "error", label: "Failed", count: severityCounts.error },
+                { id: "warn", label: "Warning", count: severityCounts.warn },
+                { id: "ok", label: "OK", count: severityCounts.ok },
               ]}
             />
           </div>
@@ -1118,6 +1154,13 @@ function LabTracesInner() {
           >
             {feedRows.length === 0 ? (
               <EmptyState
+                icon={
+                  query || scopeAgent
+                    ? SearchX
+                    : hubView === "sessions"
+                      ? Radar
+                      : GitBranch
+                }
                 title={
                   hubView === "sessions"
                     ? query
@@ -1259,7 +1302,11 @@ function LabTracesInner() {
                         ) : null}
                       </button>
                       {" · "}
-                      {selected.startedAt}
+                      <span
+                        title={formatAbsoluteTime(selected.startedAt)}
+                      >
+                        {formatRelativeTime(selected.startedAt)}
+                      </span>
                       {" · "}
                       <AgentLink
                         agentId={agent?.id}
@@ -1358,13 +1405,14 @@ function LabTracesInner() {
                         </button>
                       </div>
                     ) : null}
-                    {badStepIds[0] ? (
+                    {badStepIds.length > 0 ? (
                       <button
                         type="button"
                         className="ds-btn ds-btn-ghost ds-btn-sm"
                         onClick={() => focusStep(badStepIds[0])}
+                        title={`Jump to the first of ${badStepIds.length} failed span${badStepIds.length === 1 ? "" : "s"}`}
                       >
-                        Fail
+                        Jump to failure
                       </button>
                     ) : null}
                     {issue ? (
@@ -1398,6 +1446,19 @@ function LabTracesInner() {
                         {playgroundPending ? "Opening…" : "Playground"}
                       </button>
                     ) : null}
+                    {orgId && previousRunId ? (
+                      <button
+                        type="button"
+                        className="ds-btn ds-btn-ghost ds-btn-sm"
+                        onClick={() => {
+                          setDiffPrefill(previousRunId);
+                          setDiffOpen(true);
+                        }}
+                        title="Compare against the previous run of this agent"
+                      >
+                        vs prev
+                      </button>
+                    ) : null}
                     {orgId ? (
                       <button
                         type="button"
@@ -1414,7 +1475,11 @@ function LabTracesInner() {
                     >
                       Debugger
                     </Link>
-                    <details className="relative">
+                    <details
+                      className="relative"
+                      open={moreOpen}
+                      onToggle={(e) => setMoreOpen(e.currentTarget.open)}
+                    >
                       <summary
                         className="ds-btn ds-btn-ghost ds-btn-sm cursor-pointer list-none [&::-webkit-details-marker]:hidden"
                         aria-label="More actions"
@@ -1424,8 +1489,22 @@ function LabTracesInner() {
                       </summary>
                       <div
                         role="menu"
-                        className="absolute right-0 z-20 mt-1 min-w-[10rem] overflow-hidden rounded-[var(--radius)] bg-[var(--bg)] py-1 shadow-[0_0_0_1px_var(--line)]"
+                        className="absolute right-0 z-20 mt-1 min-w-[11rem] overflow-hidden rounded-[var(--radius)] bg-[var(--bg)] py-1 shadow-[0_0_0_1px_var(--line)]"
                       >
+                        {orgId ? (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="type-ui block w-full px-3 py-2 text-left text-[var(--text)] hover:bg-[var(--accent-muted)]"
+                            onClick={() => {
+                              setDiffPrefill(null);
+                              setDiffOpen(true);
+                              setMoreOpen(false);
+                            }}
+                          >
+                            Compare runs
+                          </button>
+                        ) : null}
                         <Link
                           role="menuitem"
                           href={`/debugger?traceId=${selected.id}&agent=${selected.agentId}&mode=time-travel`}
@@ -1707,6 +1786,7 @@ function LabTracesInner() {
             </>
           ) : (
             <EmptyState
+              icon={hubView === "sessions" ? Radar : GitBranch}
               title={
                 hubView === "sessions" ? "No session selected" : "No run selected"
               }
@@ -1728,6 +1808,20 @@ function LabTracesInner() {
           traceId={selected.id}
         />
       ) : null}
+      {orgId && selected ? (
+        <TraceDiffDialog
+          open={diffOpen}
+          onClose={() => {
+            setDiffOpen(false);
+            setDiffPrefill(null);
+          }}
+          orgId={orgId}
+          traceId={selected.id}
+          traceName={selected.name}
+          candidates={scopedTraces.map((t) => ({ id: t.id, name: t.name }))}
+          prefillTraceId={diffPrefill}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1737,10 +1831,7 @@ export default function TracesClient() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader
-            title="Traces"
-            meta={<span className="type-meta">Loading…</span>}
-          />
+          <PageHeader title="Traces" meta={<InlineLoading label="Loading traces" />} />
         </div>
       }
     >

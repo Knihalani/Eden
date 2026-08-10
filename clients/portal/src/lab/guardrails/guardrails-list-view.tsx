@@ -92,7 +92,7 @@ export function GuardrailsListView({
             type="search"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search…"
+            placeholder="Search policies, ids…"
             className="ds-input w-full !py-1.5 !pl-8"
             aria-label="Search policies"
           />

@@ -13,7 +13,14 @@ import {
 import Link from "next/link";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
-import { ChevronDown, ChevronRight, PanelLeft } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  PanelLeft,
+  Search,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import {
   formatDuration,
   formatTokens,
@@ -28,6 +35,7 @@ import {
   parseLazyPayloadMarker,
   type LazyPayloadMarker,
 } from "@/lib/observability/build-transcript-rows";
+import { formatRelativeTime } from "@/lib/format";
 import { agentIssuesApi } from "@/lib/api/resources";
 import { useCatalogAgents } from "@/hooks/use-catalog-agents";
 import { StatusChip } from "@/components/ds/primitives";
@@ -57,17 +65,30 @@ export function ListRevealButton({
   );
 }
 
+/**
+ * Single site-wide severity vocabulary (Wave 11). All severity chips must
+ * go through this so the UI never leaks raw enum fragments ("warn", "ok").
+ */
+export function severityLabel(
+  severity: "critical" | "error" | "warn" | "none" | "ok" | (string & {}),
+): string {
+  if (severity === "critical") return "Critical";
+  if (severity === "error") return "Failed";
+  if (severity === "warn") return "Warning";
+  if (severity === "none" || severity === "ok") return "OK";
+  // Unknown severities pass through rather than inventing a label.
+  return severity;
+}
+
 export function SeverityBadge({
   severity,
 }: {
   severity: TraceFixture["severity"] | "ok";
 }) {
   if (severity === "error" || severity === "warn") {
-    return (
-      <StatusChip tone="fail">{severity === "warn" ? "warn" : "fail"}</StatusChip>
-    );
+    return <StatusChip tone="fail">{severityLabel(severity)}</StatusChip>;
   }
-  return <StatusChip tone="ok">ok</StatusChip>;
+  return <StatusChip tone="ok">{severityLabel(severity)}</StatusChip>;
 }
 
 export function AgentStatusBadge({
@@ -87,12 +108,16 @@ export function EmptyState({
   body,
   action,
   compact,
+  icon,
 }: {
   title: string;
   body?: string;
   action?: ReactNode;
   compact?: boolean;
+  /** Optional lucide glyph — gives a zero-data surface a visual anchor. */
+  icon?: LucideIcon;
 }) {
+  const Icon = icon;
   return (
     <div
       className={cn(
@@ -100,6 +125,20 @@ export function EmptyState({
         compact ? "py-8" : "py-16",
       )}
     >
+      {Icon ? (
+        <div
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--bg-inset)]",
+            compact ? "mb-3" : "mb-4",
+          )}
+        >
+          <Icon
+            className="h-[18px] w-[18px] text-[var(--text-faint)]"
+            strokeWidth={1.6}
+            aria-hidden
+          />
+        </div>
+      ) : null}
       <p className="type-ui text-[var(--text)]">{title}</p>
       {body ? <p className="type-body mt-2.5 max-w-sm">{body}</p> : null}
       {action ? (
@@ -159,7 +198,7 @@ export const RunListButton = memo(function RunListButton({
         <p className="type-ui truncate text-[var(--text)]">{trace.name}</p>
         <p className="type-meta mt-1 truncate">
           {showAgent && agent ? `${agent.name} · ` : ""}
-          {trace.startedAt}
+          {formatRelativeTime(trace.startedAt)}
           {trace.severity === "error" && trace.signals.body
             ? ` · ${trace.signals.body}`
             : trace.severity !== "none"
@@ -541,9 +580,17 @@ function StepDetail({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
         {[
           { label: "Kind", value: KIND_LABEL[step.kind] },
-          { label: "Status", value: step.status ?? (bad ? "error" : "ok") },
+          {
+            label: "Status",
+            value: severityLabel(
+              step.status ?? (bad ? "error" : "ok"),
+            ),
+          },
           { label: "Duration", value: formatDuration(step.durationMs) },
-          { label: "Started", value: step.startedAt ?? "—" },
+          {
+            label: "Started",
+            value: step.startedAt ? formatRelativeTime(step.startedAt) : "—",
+          },
           { label: "Span", value: step.spanId ?? step.id },
           { label: "Parent", value: step.parentId ?? "—" },
           { label: "Model", value: step.model ?? "—" },
@@ -568,10 +615,10 @@ function StepDetail({
               className={cn(
                 "type-mono mt-0.5 truncate tabular-nums !text-[var(--text)]",
                 row.label === "Status" &&
-                  row.value === "error" &&
+                  row.value === "Failed" &&
                   "!text-[var(--error)]",
                 row.label === "Status" &&
-                  row.value === "ok" &&
+                  (row.value === "OK" || row.value === "Warning") &&
                   "!text-[var(--success)]",
               )}
             >
@@ -1379,6 +1426,61 @@ export function AgentScopeFilter({
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * Search field with a visible search glyph and a one-click clear (×)
+ * button that appears once the field has text. The native WebKit
+ * cancel button is hidden so every browser gets the same affordance,
+ * and clearing keeps focus in the field so a follow-up query is one
+ * keystroke away. Used by the master-list feeds (traces, issues,
+ * agents, detectors) so filtering behaves identically everywhere.
+ */
+export function SearchInput({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className={cn("relative min-w-0", className)}>
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-faint)]"
+        aria-hidden
+      />
+      <input
+        ref={inputRef}
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className="ds-input w-full pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
+          className="ds-btn ds-btn-ghost ds-btn-icon absolute right-1 top-1/2 !h-5 !w-5 -translate-y-1/2"
+          aria-label={`Clear search`}
+          title="Clear search"
+        >
+          <X className="h-3 w-3" aria-hidden />
+        </button>
+      ) : null}
+    </div>
   );
 }
 

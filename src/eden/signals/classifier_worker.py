@@ -95,9 +95,15 @@ async def run_classifiers_before_investigator(
             "estimated_savings_usd": est,
         }
         predictions.append(rec)
-        await _persist_prediction(org_id, trace_id, rec)
         if investigator_skipped:
             await _record_savings_cost_event(org_id, trace_id, est, signal_id)
+
+    # Wave 8 — one executemany for the whole per-trace prediction set
+    # instead of a round-trip per classifier (the org can hold up to 50
+    # active classifiers, so this is up to 50 INSERTs per finalized trace
+    # on the always-on detection path). Best-effort: a write failure must
+    # not fail the detection pipeline.
+    await _persist_predictions(org_id, trace_id, predictions)
 
     return {
         "skip_investigator": skip,
@@ -145,9 +151,22 @@ def _extract_features(events: list[dict[str, Any]], trace_id: str) -> list[float
     return ClassifierTrainingPipeline._hash_features(text)
 
 
-async def _persist_prediction(
-    org_id: str, trace_id: str, rec: dict[str, Any]
+# NOTE (Wave 8) — residual training/serving skew. Training
+# (``classifier_pipeline._load_training_rows``) hashes
+# ``signal_events.payload`` (detection metadata), while inference here
+# hashes the trace events. They are different text distributions, so the
+# model is out-of-distribution at inference even now that the events are
+# threaded through (pre-fix it saw a hash of an EMPTY list, which was
+# worse). Aligning both extractors on the same text representation is a
+# follow-up; the gate is shadow-mode by default so the risk is contained.
+
+
+async def _persist_predictions(
+    org_id: str, trace_id: str, recs: list[dict[str, Any]]
 ) -> None:
+    """Insert a trace's classifier predictions in ONE executemany."""
+    if not recs:
+        return
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -157,25 +176,30 @@ async def _persist_prediction(
     if pg is None:
         return
     try:
-        await pg.execute(
+        await pg.executemany(
             """
             INSERT INTO classifier_predictions (
                 id, org_id, trace_id, classifier_id, signal_id,
                 score, fired, investigator_skipped, estimated_savings_usd
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
-            rec["id"],
-            org_id,
-            trace_id,
-            rec["classifier_id"],
-            rec["signal_id"],
-            float(rec["score"]),
-            bool(rec["fired"]),
-            bool(rec["investigator_skipped"]),
-            float(rec["estimated_savings_usd"]),
+            [
+                (
+                    rec["id"],
+                    org_id,
+                    trace_id,
+                    rec["classifier_id"],
+                    rec["signal_id"],
+                    float(rec["score"]),
+                    bool(rec["fired"]),
+                    bool(rec["investigator_skipped"]),
+                    float(rec["estimated_savings_usd"]),
+                )
+                for rec in recs
+            ],
         )
     except Exception as exc:
-        logger.debug("classifier_worker: persist failed: %s", exc)
+        logger.debug("classifier_worker: persist batch failed: %s", exc)
 
 
 async def _record_savings_cost_event(

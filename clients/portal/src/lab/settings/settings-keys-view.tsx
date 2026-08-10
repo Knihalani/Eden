@@ -9,6 +9,7 @@ import {
 import { EmptyState, FilterChips } from "@/lab/lab-ui";
 import { useLabToast } from "@/lab/lab-toast";
 import { KeyStatusChip } from "@/lab/settings/settings-chrome";
+import { formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type KeyFilter = "all" | "active" | "revoked";
@@ -204,7 +205,10 @@ export function SettingsKeysView({
                     <p className="type-meta">
                       {k.scopes.join(" · ")}
                       <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-                      last used {k.lastUsed ?? "never"}
+                      last used{" "}
+                      {k.lastUsed
+                        ? formatSmartTime(k.lastUsed)
+                        : "never"}
                     </p>
                   </button>
                 </li>
@@ -225,7 +229,8 @@ export function SettingsKeysView({
             </div>
             <h2 className="type-ui mt-3 text-[var(--text)]">{selected.name}</h2>
             <p className="type-meta mt-1">
-              Created {selected.createdAt} by {selected.createdBy}
+              Created {formatSmartTime(selected.createdAt)} by{" "}
+              {selected.createdBy}
             </p>
 
             {selected.secret ? (
@@ -283,7 +288,9 @@ export function SettingsKeysView({
               <div>
                 <dt className="type-label">Last used</dt>
                 <dd className="type-body mt-1 text-[var(--text-secondary)]">
-                  {selected.lastUsed ?? "never"}
+                  {selected.lastUsed
+                    ? formatSmartTime(selected.lastUsed)
+                    : "never"}
                 </dd>
               </div>
             </dl>

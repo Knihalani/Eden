@@ -3,13 +3,10 @@
 import logging
 from typing import Optional
 
-# Audit 2026-07-06 - lazy-load Qdrant and Postgres clients. The
-# Qdrant client in particular pulls ~570ms of import time (grpc
-# protobufs + numpy). Previously the eager imports here meant
-# every ``from eden.kb.episodic.client import ...`` paid the cost,
-# even though the episodic client only uses Postgres. Lazy
-# import keeps the KB subpackage import time in the sub-100ms
-# range so KB unit tests don't pay the Qdrant import cost.
+# Audit 2026-07-06 - lazy-load Postgres clients. N4 (2026-08-10): the
+# Qdrant client is gone entirely (pgvector replaced it), so there is no
+# heavyweight SDK to keep out of the import path anymore — the vector
+# store is Postgres itself.
 
 
 def classify_postgres_health(select_result: object, read_only_guc: object) -> str:
@@ -48,13 +45,6 @@ def _get_postgres_client():
     return get_postgres_client
 
 
-def _get_qdrant_client():
-    """Lazy import + return the Qdrant client factory."""
-    from eden.storage.qdrant import get_qdrant_client
-
-    return get_qdrant_client
-
-
 logger = logging.getLogger(__name__)
 
 # Cache /health Postgres+Qdrant probes so LB/monitor chatter doesn't
@@ -70,22 +60,16 @@ _HEALTH_CACHE_TTL_S = 90.0
 async def initialize_kb() -> None:
     """Initialize the Knowledge Base storage layer.
 
-    Creates PostgreSQL schema and Qdrant collections if they don't exist.
+    Creates PostgreSQL schema if it doesn't exist. The vector store is
+    pgvector (N4) — same Postgres, no separate service to initialize;
+    the ``vector_documents`` table + HNSW index come from migration 164.
     Should be called on application startup.
     """
-    # Lazy-resolve the client factories (audit 2026-07-06).
-    # The assignments are intentional side-effects to force the
-    # Qdrant / Postgres SDK modules into ``sys.modules`` so the
-    # downstream initialisers can use them; we don't need the
-    # returned factory objects here.
+    # Lazy-resolve the client factory (audit 2026-07-06).
     _ = _get_postgres_client()  # noqa: F841
-    _ = _get_qdrant_client()  # noqa: F841
 
     # Initialize PostgreSQL schema
     await _initialize_postgres_schema()
-
-    # Initialize Qdrant collections
-    _initialize_qdrant_collections()
 
     # Seed initial prompts if none exist
     await _seed_initial_prompts()
@@ -146,27 +130,6 @@ async def _initialize_postgres_schema() -> None:
         raise
 
 
-def _initialize_qdrant_collections() -> None:
-    """Initialize Qdrant collections.
-
-    Soft on failure: Qdrant is not required for non-vector portal paths
-    (auth, traces list via Postgres, etc.). Raising here under
-    ``EDEN_PRODUCTION=1`` previously risked taking the whole API down
-    for an Errno-99 Cloud misconfig while Postgres was healthy.
-    """
-    get_qdrant_client = _get_qdrant_client()
-    client = get_qdrant_client()
-
-    try:
-        client.initialize_collections()
-        logger.info("Qdrant collections initialized")
-    except Exception as e:
-        logger.error(
-            "Failed to initialize Qdrant collections (soft — API continues): %s",
-            e,
-        )
-
-
 async def health_check() -> dict:
     """Check Knowledge Base health.
 
@@ -183,12 +146,11 @@ async def health_check() -> dict:
 
     health = {
         "postgres": "unknown",
-        "qdrant": "unknown",
+        "pgvector": "unknown",
     }
 
-    # Lazy-resolve clients (audit 2026-07-06).
+    # Lazy-resolve the client factory (audit 2026-07-06).
     get_postgres_client = _get_postgres_client()
-    get_qdrant_client = _get_qdrant_client()
 
     # Check PostgreSQL.
     #
@@ -212,14 +174,19 @@ async def health_check() -> dict:
     except Exception as e:
         health["postgres"] = f"error: {str(e)[:100]}"
 
-    # Check Qdrant
+    # Check pgvector (N4) — the vector_documents table is the store.
+    # Uses the same Postgres client, so a Postgres outage already
+    # degrades this; the probe verifies the table + vector type exist.
     try:
-        client = get_qdrant_client()
-        # Simple health check - try to list collections
-        client._get_client().get_collections()
-        health["qdrant"] = "connected"
+        client = await get_postgres_client()
+        # Table-liveness probe — unordered LIMIT deliberate (see
+        # scripts/lint_unordered_limit.py escape hatch).
+        await client.fetchval(
+            "SELECT 1 FROM vector_documents LIMIT 0  -- lint:unordered-limit-ok"
+        )
+        health["pgvector"] = "connected"
     except Exception as e:
-        health["qdrant"] = f"error: {str(e)[:100]}"
+        health["pgvector"] = f"error: {str(e)[:100]}"
 
     _HEALTH_CACHE["at"] = now
     _HEALTH_CACHE["value"] = dict(health)

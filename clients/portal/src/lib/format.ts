@@ -27,6 +27,43 @@ export function formatRelativeTime(dateString: string | Date): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/**
+ * Timestamp formatter for surfaces that mix sources.
+ *
+ * Some data comes from the API as ISO timestamps, some from fixtures or
+ * client state as already-human strings ("just now", "2h ago", "—",
+ * "never"). ``formatRelativeTime`` turns non-parseable strings into "—",
+ * so it can't be applied blindly. This formatter parses first: if the
+ * value is a real timestamp it renders relative time; otherwise it passes
+ * the existing display string through untouched.
+ */
+export function formatSmartTime(
+  value: string | Date | null | undefined,
+  fallback = "—",
+): string {
+  if (value == null || value === "") return fallback;
+  if (typeof value !== "string") return formatRelativeTime(value);
+  if (value === fallback) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return formatRelativeTime(date);
+}
+
+/**
+ * Absolute timestamp for hover ``title`` attributes — "Aug 10, 2026, 9:15 AM"
+ * — or ``undefined`` when the value isn't a parseable timestamp. Guards
+ * surfaces that mix API ISO strings with human fixture strings ("just now",
+ * "2h ago") so a non-parseable value never yields an "Invalid Date" tooltip.
+ */
+export function formatAbsoluteTime(
+  value: string | Date | null | undefined,
+): string | undefined {
+  if (value == null || value === "") return undefined;
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toLocaleString();
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null || bytes === 0) return "0 B";
   const k = 1024;

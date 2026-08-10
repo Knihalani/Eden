@@ -1,8 +1,16 @@
 "use client";
 
 /**
- * Minimal ⌘K / Ctrl+K command palette — filters buildNavCommands().
- * Signal Black instrument chrome (ds tokens); no purple / glow.
+ * ⌘K / Ctrl+K command palette.
+ *
+ * Wave 10 — no longer a static navigation index. On open (once per org
+ * per session) it loads the org's live traces, issues, and agents and
+ * surfaces them under "Runs" / "Issues" / "Agents" as you type, so ⌘K is a
+ * true jump-to-anything: fuzzy-match a run by name/id/agent, an issue, an
+ * agent, or paste a full trace id for a direct "Open run" jump.
+ *
+ * The static nav/actions/settings commands from buildNavCommands() remain,
+ * merged beneath the live groups.
  */
 
 import {
@@ -14,13 +22,46 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CornerDownLeft,
+  GitBranch,
+  Search,
+  X,
+} from "lucide-react";
 import {
   buildNavCommands,
   OPEN_AI_CHAT_HREF,
   type NavCommand,
 } from "@/lib/nav-commands";
+import { useOrg } from "@/hooks/use-org";
+import { portalApi } from "@/lib/api/portal";
+import { OPEN_PALETTE_EVENT } from "@/lib/palette";
+import { severityLabel } from "@/lab/lab-ui";
+import type { AgentFixture } from "@/lab/fixtures/agents";
+import type { IssueFixture } from "@/lab/fixtures/issues";
+import type { TraceFixture } from "@/lab/fixtures/traces";
 import { cn } from "@/lib/utils";
+
+/**
+ * One vocabulary for palette descriptions (Wave 11 mandate). Raw enums
+ * ("error", "open", "live") must not leak into the result rows.
+ */
+function issueStatusLabel(status: string): string {
+  if (status === "open") return "open";
+  if (status === "acknowledged") return "in progress";
+  if (status === "resolved") return "resolved";
+  if (status === "ignored") return "dismissed";
+  return status;
+}
+
+function agentStatusLabel(status: string): string {
+  if (status === "live") return "active";
+  if (status === "error") return "error";
+  if (status === "idle") return "idle";
+  return status;
+}
 
 function matchesQuery(cmd: NavCommand, q: string): boolean {
   if (!q) return true;
@@ -28,20 +69,185 @@ function matchesQuery(cmd: NavCommand, q: string): boolean {
   return q.split(/\s+/).every((token) => hay.includes(token));
 }
 
+/** Field-scored live match: id-prefix beats id-contains beats name/agent. */
+function liveScore(q: string, id: string, name: string, extra: string): number {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return 0;
+  const idL = id.toLowerCase();
+  const nameL = name.toLowerCase();
+  const extraL = extra.toLowerCase();
+  if (idL.startsWith(needle)) return 0;
+  if (idL.includes(needle)) return 1;
+  if (nameL.includes(needle)) return 2;
+  if (extraL.includes(needle)) return 3;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+type LiveData = {
+  traces: TraceFixture[];
+  issues: IssueFixture[];
+  agents: AgentFixture[];
+};
+
 export function CommandPalette() {
   const router = useRouter();
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? null;
+
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const titleId = useId();
+  const liveRef = useRef<{ org: string | null; data: LiveData | null }>({
+    org: null,
+    data: null,
+  });
+  const [liveLoaded, setLiveLoaded] = useState(false);
+  const [, forceLive] = useState(0);
+
+  // True while the live fetch for this org is still in flight (or hasn't
+  // been attempted yet). Powers the "Loading runs…" skeleton row so an
+  // empty palette doesn't read as "no data" before the fetch settles.
+  const livePending =
+    Boolean(open) && Boolean(orgId) && (liveRef.current.org !== orgId || !liveLoaded);
 
   const commands = useMemo(() => buildNavCommands(), []);
+
+  // Load live data once per org per session (portal data is already
+  // polling-fresh; one fetch per ⌘K session avoids an N+1 on every open).
+  useEffect(() => {
+    if (!open || !orgId) return;
+    if (liveRef.current.org === orgId && liveRef.current.data) return;
+    let cancelled = false;
+    portalApi
+      .agents(orgId)
+      .then(async (agentList) => {
+        const [traceList, issueList] = await Promise.all([
+          portalApi.traces(orgId).catch(() => [] as TraceFixture[]),
+          portalApi.issues(orgId).catch(() => [] as IssueFixture[]),
+        ]);
+        return { agents: agentList, traces: traceList, issues: issueList };
+      })
+      .then(({ agents: agentList, traces: traceList, issues: issueList }) => {
+        if (cancelled) return;
+        liveRef.current = {
+          org: orgId,
+          data: { traces: traceList, issues: issueList, agents: agentList },
+        };
+        setLiveLoaded(true);
+        forceLive((n) => n + 1);
+      })
+      .catch(() => {
+        // Offline / auth blip — palette keeps working with static commands.
+        // Mark the fetch settled for THIS org (data stays null → the next
+        // open retries) so the "Loading runs…" hint clears and static nav
+        // stays front and center.
+        if (!cancelled) {
+          liveRef.current = { org: orgId, data: null };
+          setLiveLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, orgId]);
+
+  const live = liveRef.current.data;
+
+  const liveTraces = useMemo(() => {
+    if (!live || !orgId) return [];
+    return live.traces
+      .map((t) => ({ t, s: liveScore(query, t.id, t.name, t.agentId) }))
+      .filter((x) => x.s !== Number.MAX_SAFE_INTEGER)
+      .sort((a, b) => a.s - b.s)
+      .slice(0, 6);
+  }, [live, query, orgId]);
+
+  const liveIssues = useMemo(() => {
+    if (!live || !orgId) return [];
+    return live.issues
+      .map((i) => ({ i, s: liveScore(query, i.id, i.title, i.agentId) }))
+      .filter((x) => x.s !== Number.MAX_SAFE_INTEGER)
+      .sort((a, b) => a.s - b.s)
+      .slice(0, 4);
+  }, [live, query, orgId]);
+
+  const liveAgents = useMemo(() => {
+    if (!live || !orgId) return [];
+    return live.agents
+      .map((a) => ({ a, s: liveScore(query, a.id, a.name, a.purpose) }))
+      .filter((x) => x.s !== Number.MAX_SAFE_INTEGER)
+      .sort((a, b) => a.s - b.s)
+      .slice(0, 4);
+  }, [live, query, orgId]);
+
+  const staticFiltered = useMemo(
+    () => commands.filter((c) => matchesQuery(c, query)),
+    [commands, query],
+  );
+
+  // Direct jump: a plausible trace id that no live trace matched exactly.
+  const q = query.trim();
+  const directJump: NavCommand | null = useMemo(() => {
+    if (!q || q.length < 8) return null;
+    if (!/^[a-zA-Z0-9_.-]+$/.test(q)) return null;
+    const exact = liveTraces.some(({ t }) => t.id === q);
+    if (exact) return null;
+    return {
+      href: `/traces?id=${encodeURIComponent(q)}`,
+      label: `Open run ${q.length > 40 ? `${q.slice(0, 40)}…` : q}`,
+      description: "Jump straight to this trace id",
+      group: "Runs",
+      icon: CornerDownLeft,
+      kind: "action",
+    };
+  }, [q, liveTraces]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return commands.filter((c) => matchesQuery(c, q));
-  }, [commands, query]);
+    const out: NavCommand[] = [];
+    if (liveTraces.length) {
+      out.push(
+        ...liveTraces.map<NavCommand>(({ t }) => ({
+          href: `/traces?id=${encodeURIComponent(t.id)}&agent=${encodeURIComponent(t.agentId)}`,
+          label: t.name,
+          description: `run · ${t.id.slice(0, 18)} · ${t.agentId} · ${severityLabel(t.severity)}`,
+          group: "Runs",
+          icon: GitBranch,
+          kind: "route",
+        })),
+      );
+    }
+    if (directJump) out.push(directJump);
+    if (liveIssues.length) {
+      out.push(
+        ...liveIssues.map<NavCommand>(({ i }) => ({
+          href: `/issues?id=${encodeURIComponent(i.id)}&agent=${encodeURIComponent(i.agentId)}`,
+          label: i.title,
+          description: `issue · ${issueStatusLabel(i.status)} · ${severityLabel(i.severity)}`,
+          group: "Issues",
+          icon: AlertTriangle,
+          kind: "route",
+        })),
+      );
+    }
+    if (liveAgents.length) {
+      out.push(
+        ...liveAgents.map<NavCommand>(({ a }) => ({
+          href: `/agents?id=${encodeURIComponent(a.id)}`,
+          label: a.name,
+          description: `agent · ${agentStatusLabel(a.status)} · ${a.purpose}`,
+          group: "Agents",
+          icon: Bot,
+          kind: "route",
+        })),
+      );
+    }
+    // Static nav + actions + settings merge beneath the live groups.
+    out.push(...staticFiltered);
+    return out;
+  }, [liveTraces, liveIssues, liveAgents, directJump, staticFiltered]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -76,8 +282,14 @@ export function CommandPalette() {
         });
       }
     };
+    // Visible triggers (sidebar / mobile header) open via this event too.
+    const onOpenEvent = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OPEN_PALETTE_EVENT, onOpenEvent);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_PALETTE_EVENT, onOpenEvent);
+    };
   }, []);
 
   useEffect(() => {
@@ -142,8 +354,8 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             type="search"
-            className="ds-input min-w-0 flex-1 border-0 bg-transparent px-0 py-3.5 shadow-none focus-visible:ring-0"
-            placeholder="Go to…"
+            className="ds-input min-w-0 flex-1 border-0 bg-transparent px-0 py-3.5 shadow-none focus-visible:ring-0 [&::-webkit-search-cancel-button]:hidden"
+            placeholder="Go to a run, issue, agent, or page…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -179,20 +391,59 @@ export function CommandPalette() {
             autoComplete="off"
             spellCheck={false}
           />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                inputRef.current?.focus();
+              }}
+              className="ds-btn ds-btn-ghost ds-btn-icon shrink-0 !h-6 !w-6"
+              aria-label="Clear search"
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <kbd className="type-mono hidden shrink-0 rounded border border-[var(--line)] px-1.5 py-0.5 !text-[0.625rem] !text-[var(--text-faint)] sm:inline">
             esc
           </kbd>
         </div>
 
+        {/* Live-data hint sits OUTSIDE the listbox (a `role=status` row
+            inside `role=listbox` would violate ARIA nesting) and never
+            replaces the static commands — jump-to-page works even while
+            the live fetch is in flight or failed. */}
+        {livePending && !query ? (
+          <div
+            role="status"
+            className="border-b border-[var(--line)] px-4 py-3"
+          >
+            <div className="flex items-center gap-2.5 rounded-[var(--radius)] px-2.5 py-2">
+              <span className="eden-skeleton-pulse h-3.5 w-3.5 shrink-0 rounded bg-[var(--line)]" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="eden-skeleton-pulse h-3 w-1/2 rounded bg-[var(--line)]" />
+                <div className="eden-skeleton-pulse h-2.5 w-2/3 rounded bg-[var(--line)]" />
+              </div>
+            </div>
+            <span className="sr-only">Loading runs…</span>
+          </div>
+        ) : null}
+
         <ul
           id="command-palette-list"
           ref={listRef}
           role="listbox"
-          className="max-h-[min(22rem,50vh)] overflow-y-auto py-2"
+          className="max-h-[min(26rem,55vh)] overflow-y-auto py-2"
         >
           {filtered.length === 0 ? (
             <li className="px-4 py-6 text-center">
-              <p className="type-meta">No matches</p>
+              <p className="type-ui text-[var(--text)]">
+                No matches{query ? ` for “${query}”` : ""}
+              </p>
+              <p className="type-meta mt-1">
+                Try a run id, issue title, agent name, or page.
+              </p>
             </li>
           ) : (
             groups.map(([group, items]) => (
@@ -249,6 +500,20 @@ export function CommandPalette() {
             ))
           )}
         </ul>
+
+        {/* Keyboard hints — the palette is a keyboard-first surface; the
+            footer makes the shortcuts visible to mouse users too. */}
+        <div className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-2">
+          <span className="type-mono !text-[0.625rem] text-[var(--text-faint)]">
+            ↑↓ navigate
+          </span>
+          <span className="type-mono !text-[0.625rem] text-[var(--text-faint)]">
+            ↵ open
+          </span>
+          <span className="type-mono !text-[0.625rem] text-[var(--text-faint)]">
+            esc close
+          </span>
+        </div>
       </div>
     </div>
   );

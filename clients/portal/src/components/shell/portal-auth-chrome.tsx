@@ -593,8 +593,18 @@ export function PortalBootGate({ children }: { children: ReactNode }) {
       !hasCachedMe)
   ) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-[var(--bg)]">
-        <p className="type-meta text-[var(--text-faint)]">Loading…</p>
+      <div
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-[var(--bg)] px-6"
+        role="status"
+        aria-label="Loading Eden"
+      >
+        <div className="eden-skeleton-pulse h-3.5 w-40 rounded bg-[var(--line)]" />
+        <div className="eden-skeleton-pulse h-2.5 w-64 rounded bg-[var(--line)]" />
+        <div className="mt-3 w-full max-w-sm space-y-2">
+          <div className="eden-skeleton-pulse h-9 rounded-[0.5rem] border border-[var(--line)] bg-[var(--bg-inset)]" />
+          <div className="eden-skeleton-pulse h-9 rounded-[0.5rem] border border-[var(--line)] bg-[var(--bg-inset)]" />
+          <div className="eden-skeleton-pulse h-9 rounded-[0.5rem] border border-[var(--line)] bg-[var(--bg-inset)]" />
+        </div>
       </div>
     );
   }

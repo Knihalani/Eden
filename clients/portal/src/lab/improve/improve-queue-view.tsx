@@ -8,7 +8,13 @@ import {
   type ImprovePlanFixture,
   type ImproveStatus,
 } from "@/lab/fixtures/improve";
-import { AgentLink, EmptyState, FilterChips } from "@/lab/lab-ui";
+import {
+  AgentLink,
+  EmptyState,
+  FilterChips,
+  SearchInput,
+} from "@/lab/lab-ui";
+import { formatSmartTime } from "@/lib/format";
 import {
   AutonomyTierChip,
   ImproveKindChip,
@@ -189,13 +195,12 @@ export function ImproveQueueView({
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
-          <input
-            type="search"
+          <SearchInput
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search plans…"
-            className="ds-input min-w-[10rem] flex-1 !h-8 !py-0 !text-[0.75rem] sm:max-w-xs"
-            aria-label="Search improve plans"
+            onChange={setQuery}
+            placeholder="Search plans, ids…"
+            ariaLabel="Search improve plans"
+            className="min-w-[10rem] flex-1 sm:max-w-xs"
           />
           <FilterChips
             value={status}
@@ -272,7 +277,7 @@ export function ImproveQueueView({
                     <p className="type-meta">
                       {agent?.name ?? p.agentId}
                       <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-                      {p.updatedAt}
+                      {formatSmartTime(p.updatedAt)}
                     </p>
                   </button>
                 </li>
@@ -346,7 +351,7 @@ function QueuePeek({
       <p className="type-meta mt-1">
         <AgentLink agentId={agent?.id} name={agent?.name ?? plan.agentId} />
         <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-        {plan.updatedAt}
+        {formatSmartTime(plan.updatedAt)}
       </p>
       <p className="type-body mt-4 text-[var(--text-secondary)]">{plan.rca}</p>
       <div className="mt-auto flex flex-wrap gap-1 pt-4">

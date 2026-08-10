@@ -260,14 +260,14 @@ async def _post_json_webhook(
         return False, "webhook url rejected: SSRF guard unavailable"
 
     try:
-        import httpx
+        from eden.util.shared_http import shared_httpx_ctx
     except ImportError as exc:  # pragma: no cover
         return False, str(exc)
 
     body = json.dumps(payload, default=str).encode("utf-8")
     send_headers = {"Content-Type": "application/json", **(headers or {})}
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
+        async with shared_httpx_ctx(timeout=8.0) as client:
             resp = await client.post(url, content=body, headers=send_headers)
         if 200 <= resp.status_code < 300:
             return True, None

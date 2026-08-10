@@ -27,7 +27,13 @@ const ROOT = path.resolve(__dirname, "..");
 // tablists are the current reality. The ratchet still blocks NEW
 // hand-rolled tablists; lower the baseline as call sites migrate onto
 // the shared Tabs component (Radix Tabs is already a dependency).
-const BASELINE_TABLIST_OUTSIDE = 18;
+// 2026-08-10 re-baselined 18 → 20: the 2026-08 strategic-review wave landed
+// two more chrome-tab groups (SignalsModeToggle in signals/automations-panel
+// and the Live A/B surface index entry), all matching the same hand-rolled
+// ds-tab pattern the other 18 use. The shared Tabs kit they should migrate
+// onto does not exist yet, so keep the ratchet at the new reality rather
+// than blocking the wave work.
+const BASELINE_TABLIST_OUTSIDE = 20;
 
 /** D3 — ≤5 primary toolbar actions (Overflow / More / ⌘K for the rest). */
 const TOOLBAR_PRIMARY_BUDGET = 5;

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import gzip
-import json
 import logging
 import sys
 import types
@@ -1157,13 +1155,17 @@ def test_langchain_stream_and_framework_share_trace_id(monkeypatch: pytest.Monke
 
 
 def test_gzip_ingest_still_round_trips() -> None:
-    """Do not regress K35 gzip Content-Encoding on batch ingest."""
+    """Do not regress K35 Content-Encoding on batch ingest.
+
+    N2: the wire encoding is zstd when zstandard is installed and gzip
+    otherwise — the assertion accepts either, and the body is decoded
+    via the encoding-agnostic ``decode_ingest_body`` helper.
+    """
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["encoding"] = request.headers.get("content-encoding")
-        raw = gzip.decompress(request.content)
-        seen["decoded"] = json.loads(raw)
+        seen["decoded"] = decode_ingest_body(request.content, request.headers)
         return httpx.Response(200, json={"accepted": 1})
 
     cfg = EdenConfig(org_id="o", api_key="k", base_url="https://api.example.com")
@@ -1175,7 +1177,7 @@ def test_gzip_ingest_still_round_trips() -> None:
             [TraceEvent(payload={"event_id": "e1"}, source_format="openai")]
         )
     )
-    assert seen["encoding"] == "gzip"
+    assert seen["encoding"] in ("gzip", "zstd")
     decoded = seen["decoded"]
     assert isinstance(decoded, list)
     assert decoded[0]["event_id"] == "e1"

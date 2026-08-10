@@ -15,7 +15,7 @@ import pytest
 
 from eden.mcp_server.auth import McpAuthContext
 from eden.mcp_server.server import call_tool
-from eden.storage.qdrant import SearchResult, SearchResults
+from eden.storage.pgvector import SearchResult, SearchResults
 
 
 @pytest.mark.asyncio
@@ -130,7 +130,7 @@ async def test_vector_client_unwraps_search_results() -> None:
     client.search_async = AsyncMock(return_value=wrapped)
     with (
         patch(
-            "eden.kb.semantic.vector_client.get_qdrant_client",
+            "eden.kb.semantic.vector_client.get_pgvector_client",
             return_value=client,
         ),
         patch(
@@ -165,7 +165,7 @@ async def test_vector_client_hybrid_applies_filter_conditions() -> None:
     client.search_hybrid_async = AsyncMock(return_value=wrapped)
     with (
         patch(
-            "eden.kb.semantic.vector_client.get_qdrant_client",
+            "eden.kb.semantic.vector_client.get_pgvector_client",
             return_value=client,
         ),
         patch(

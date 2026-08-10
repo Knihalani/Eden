@@ -56,7 +56,12 @@ class _Sampler(ProductionEvalSampler):
         return False
 
     async def _score_trace(
-        self, org_id: str, trace_id: str, agent_id: str | None
+        self,
+        org_id: str,
+        trace_id: str,
+        agent_id: str | None,
+        *,
+        events: list[dict[str, Any]] | None = None,
     ) -> tuple[float, bool, float]:
         self.scored = True
         return 0.8, True, 0.001

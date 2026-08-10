@@ -131,10 +131,10 @@ async def test_rtbf_fanout_unavailable_visible() -> None:
         ),
         patch.object(
             fanout_mod,
-            "_fanout_qdrant",
+            "_fanout_pgvector",
             new=AsyncMock(
                 return_value={
-                    "store": "qdrant",
+                    "store": "pgvector",
                     "status": "unavailable",
                     "error": "not configured",
                 }

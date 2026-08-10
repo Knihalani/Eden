@@ -53,6 +53,7 @@
     "typecheck": "tsc --noEmit",
     "doctor": "bun run src/doctor.ts",
     "test": "bun test tests/",
+    "test:bun": "bun test tests/",
     "lint": "tsc --noEmit",
     "test:parallel": "bun test --parallel tests/"
   },

@@ -10,7 +10,7 @@ import {
   type PlaygroundFixture,
 } from "@/lab/fixtures/evals";
 import { StatusChip } from "@/components/ds/primitives";
-import { EmptyState } from "@/lab/lab-ui";
+import { EmptyState, SearchInput } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 
 export function EvalsPlaygroundView({
@@ -131,13 +131,12 @@ export function EvalsPlaygroundView({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
         {scoped.length > 5 ? (
-          <input
-            type="search"
+          <SearchInput
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={setQuery}
             placeholder="Search drafts…"
-            className="ds-input w-36 !h-8 !py-0 !text-[0.75rem]"
-            aria-label="Search drafts"
+            ariaLabel="Search drafts"
+            className="w-36"
           />
         ) : null}
         <label className="flex min-w-0 flex-1 items-center gap-2 sm:max-w-xs">
@@ -155,7 +154,7 @@ export function EvalsPlaygroundView({
             ))}
           </select>
         </label>
-        {dirty ? <StatusChip tone="neutral">unsaved</StatusChip> : null}
+        {dirty ? <StatusChip tone="neutral">Unsaved</StatusChip> : null}
         <label className="flex min-w-0 items-center gap-1.5">
           <span className="type-label shrink-0">Dataset</span>
           <select
@@ -322,7 +321,7 @@ export function EvalsPlaygroundView({
                               pass && "!text-[var(--success)]",
                             )}
                           >
-                            {`${pass ? "pass" : "fail"} · ${formatScore(score)}`}
+                            {`${pass ? "Pass" : "Fail"} · ${formatScore(score)}`}
                           </td>
                         );
                       })}

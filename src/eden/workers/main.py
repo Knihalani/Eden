@@ -266,6 +266,18 @@ async def _run_forever() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("cost ledger loop binding failed: %s", exc)
 
+    # Wave 9 — periodic $0-cost ledger flush (classifier savings markers
+    # buffered + written in one executemany instead of one INSERT per
+    # event). Cancelled + drained during shutdown below, before the
+    # Postgres pool closes.
+    ledger_flusher: asyncio.Task | None = None
+    try:
+        from eden.llmops.cost_ledger import start_zero_cost_flusher
+
+        ledger_flusher = start_zero_cost_flusher()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cost ledger flusher start failed: %s", exc)
+
     try:
         from eden.dogfood import bootstrap_dogfood_sdk
 
@@ -383,6 +395,15 @@ async def _run_forever() -> None:
                 await asyncio.gather(*(t for _, t in loops), return_exceptions=True)
 
         await _stop_sidecar_workers()
+
+        # Wave 9 — final flush of buffered $0 cost-ledger rows before the
+        # process exits (the worker owns the classifier savings markers).
+        try:
+            from eden.llmops.cost_ledger import stop_zero_cost_flusher
+
+            await stop_zero_cost_flusher(ledger_flusher)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("cost ledger final flush failed: %s", exc)
 
         # Drain in-flight webhook deliveries + release the HTTP pool.
         try:

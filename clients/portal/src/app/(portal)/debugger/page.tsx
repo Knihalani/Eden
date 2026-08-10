@@ -20,7 +20,11 @@ import {
   type DebugSessionRecord,
 } from "@/lib/api/resources";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { catalogTraces } from "@/lib/portal-catalog";
 import { useLabToast } from "@/lab/lab-toast";
@@ -312,7 +316,7 @@ export default function LabDebuggerPage() {
         <div className="ds-page">
           <PageHeader
             title="Debugger"
-            meta={<span className="type-meta">Loading…</span>}
+            meta={<InlineLoading label="Loading debugger" />}
           />
         </div>
       }

@@ -191,7 +191,8 @@ async def test_trace_finalized_runs_investigator() -> None:
             return_value=MagicMock(per_trace_signals_v1=True),
         ):
             await mod._run_signal_investigator("org_x", "trace_y")
-    inv.assert_awaited_once_with("org_x", "trace_y")
+    # Investigator call carries the keyword-only events param (default None).
+    inv.assert_awaited_once_with("org_x", "trace_y", events=None)
 
 
 @pytest.mark.asyncio

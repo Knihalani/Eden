@@ -2,7 +2,19 @@
 
 from __future__ import annotations
 
+import pytest
+
 import eden.storage.redis as redis_mod
+
+
+@pytest.fixture(autouse=True)
+def _reset_circuit_after():
+    """Teardown the circuit so a trip here can't poison later tests
+    (the health route reads ``redis_quota_exhausted()`` — a leak made
+    ``test_health_redis_and_worker`` report ``quota_exhausted`` for
+    every Redis probe depending on test order)."""
+    yield
+    redis_mod._redis_quota_blocked_until_mono = 0.0
 
 
 def test_note_redis_quota_exhausted_trips_and_ignores_other_errors() -> None:

@@ -25,7 +25,12 @@ import { portalApi } from "@/lib/api/portal";
 import { budgetApi } from "@/lib/api/budget";
 import { api } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import {
   EditBudgetDialog,
@@ -33,11 +38,7 @@ import {
 } from "@/lab/cost/edit-budget-dialog";
 import { useLabToast } from "@/lab/lab-toast";
 
-const costFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const costFallback = <LoadingFallback label="Loading cost…" />;
 
 const CostSpendView = dynamic(
   () =>
@@ -397,10 +398,8 @@ export default function LabCostPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader
-            title="Cost"
-            meta={<span className="type-meta">Loading…</span>}
-          />
+          <PageHeader title="Cost" meta={<InlineLoading label="Loading cost" />} />
+          <LoadingFallback label="Loading cost…" rows={4} />
         </div>
       }
     >

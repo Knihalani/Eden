@@ -29,11 +29,14 @@ def _cache_with_fake_embedder(vector: list[float] | None = None) -> SemanticCach
     return cache
 
 
-def _fake_qdrant() -> MagicMock:
-    qdrant = MagicMock()
-    qdrant.search.return_value = SimpleNamespace(results=[])
-    qdrant.upsert.return_value = None
-    return qdrant
+def _fake_vector_store() -> MagicMock:
+    """pgvector store fake with the async API the cache now calls."""
+    store = MagicMock()
+    store.search_async = AsyncMock(
+        return_value=SimpleNamespace(results=[], total=0, unavailable=False)
+    )
+    store.upsert_async = AsyncMock(return_value=True)
+    return store
 
 
 def _response() -> LLMResponse:
@@ -84,8 +87,8 @@ async def test_memo_is_bounded() -> None:
 async def test_get_then_set_embeds_once_for_one_request() -> None:
     cache = _cache_with_fake_embedder()
     prompt = "Explain the cost model"
-    with patch("eden.optimization.cache._get_qdrant_client",
-               return_value=lambda: _fake_qdrant()):
+    with patch("eden.optimization.cache._get_vector_store",
+               return_value=lambda: _fake_vector_store()):
         assert await cache.get(prompt, "gpt-4") is None          # miss
         assert await cache.set(prompt, "gpt-4", _response()) is True
     assert cache.embed_calls == 1, "cache-miss still billed two embeddings"
@@ -93,8 +96,8 @@ async def test_get_then_set_embeds_once_for_one_request() -> None:
 
 async def test_set_accepts_a_precomputed_embedding_and_does_not_embed() -> None:
     cache = _cache_with_fake_embedder()
-    with patch("eden.optimization.cache._get_qdrant_client",
-               return_value=lambda: _fake_qdrant()):
+    with patch("eden.optimization.cache._get_vector_store",
+               return_value=lambda: _fake_vector_store()):
         assert await cache.set("p", "gpt-4", _response(), embedding=VEC) is True
     assert cache.embed_calls == 0
 
@@ -102,8 +105,8 @@ async def test_set_accepts_a_precomputed_embedding_and_does_not_embed() -> None:
 async def test_embedding_for_exposes_the_vector_from_get() -> None:
     cache = _cache_with_fake_embedder()
     prompt = "  Mixed   CASE  prompt "
-    with patch("eden.optimization.cache._get_qdrant_client",
-               return_value=lambda: _fake_qdrant()):
+    with patch("eden.optimization.cache._get_vector_store",
+               return_value=lambda: _fake_vector_store()):
         await cache.get(prompt, "gpt-4")
     # Works through the same normalization ``set`` would apply.
     assert cache.embedding_for(prompt) == VEC
@@ -112,8 +115,8 @@ async def test_embedding_for_exposes_the_vector_from_get() -> None:
 
 async def test_get_accepts_a_precomputed_embedding() -> None:
     cache = _cache_with_fake_embedder()
-    with patch("eden.optimization.cache._get_qdrant_client",
-               return_value=lambda: _fake_qdrant()):
+    with patch("eden.optimization.cache._get_vector_store",
+               return_value=lambda: _fake_vector_store()):
         await cache.get("p", "gpt-4", embedding=VEC)
     assert cache.embed_calls == 0
 

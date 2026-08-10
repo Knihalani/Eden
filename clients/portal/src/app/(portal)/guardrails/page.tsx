@@ -21,14 +21,14 @@ import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 
-const guardrailsFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const guardrailsFallback = <LoadingFallback label="Loading guardrails…" />;
 
 const GuardrailsListView = dynamic(
   () =>

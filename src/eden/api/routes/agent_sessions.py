@@ -71,7 +71,7 @@ async def session_contract() -> dict[str, Any]:
 @router.post("/start")
 async def start_session(
     org_id: str = Depends(require_path_org_access),
-    body: SessionStartRequest = Body(default=SessionStartRequest()),
+    body: SessionStartRequest = Body(default_factory=SessionStartRequest),
 ) -> dict[str, Any]:
     session = await _svc.start(
         org_id,
@@ -115,7 +115,7 @@ async def get_session(
 async def end_session(
     org_id: str = Depends(require_path_org_access),
     session_id: str = Path(...),
-    body: SessionEndRequest = Body(default=SessionEndRequest()),
+    body: SessionEndRequest = Body(default_factory=SessionEndRequest),
 ) -> dict[str, Any]:
     session = await _svc.complete(
         org_id,

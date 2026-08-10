@@ -31,6 +31,19 @@ function expId(row: ExperimentRow): string {
   return str(row, "id") ?? str(row, "experiment_id") ?? "";
 }
 
+/** API experiment status → display label ("completed" → "Completed"). */
+const EXP_STATUS_LABEL: Record<string, string> = {
+  queued: "Queued",
+  running: "Running",
+  completed: "Completed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+function expStatusLabel(status: string): string {
+  return EXP_STATUS_LABEL[status] ?? status;
+}
+
 type CompareResult = {
   summary?: Record<string, number>;
   datapoints?: Array<Record<string, unknown>>;
@@ -78,7 +91,7 @@ export function AgentExperimentsTab({
         title: "Experiment run started",
         body:
           res.result?.status || res.result?.rows != null
-            ? `${res.result?.status ?? "ok"}${res.result?.rows != null ? ` · ${res.result.rows} rows` : ""}`
+            ? `${res.result?.status ? expStatusLabel(res.result.status) : "Completed"}${res.result?.rows != null ? ` · ${res.result.rows} rows` : ""}`
             : undefined,
         tone: "ok",
       });
@@ -161,7 +174,7 @@ export function AgentExperimentsTab({
                 <div className="min-w-0">
                   <p className="type-ui min-w-0 truncate">{name}</p>
                   <p className="type-meta mt-0.5">
-                    {status ? <>{status} · </> : null}
+                    {status ? <>{expStatusLabel(status)} · </> : null}
                     {createdAt ? (
                       <>created {formatRelativeTime(createdAt)} · </>
                     ) : null}

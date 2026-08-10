@@ -1,7 +1,7 @@
 """Multi-layer caching for LLM responses.
 
 L1: Exact-match cache (Redis) — SHA256 key on normalized prompt+model+temp
-L2: Semantic cache (Qdrant) — embedding similarity search
+L2: Semantic cache (pgvector, N4) — embedding similarity search
 """
 
 import hashlib
@@ -9,17 +9,18 @@ import json
 import logging
 import time
 from datetime import UTC
+from typing import Any
 
 from eden.llm.client import LLMResponse
 from eden.storage.redis import get_redis_client
 from eden.util.stable_hash import stable_seed
 
 
-def _get_qdrant_client():
-    """Lazy import to avoid pulling the Qdrant client (grpc + numpy)
-    into every optimization cache import. Audit 2026-07-06."""
-    from eden.storage.qdrant import get_qdrant_client
-    return get_qdrant_client
+def _get_vector_store() -> Any:
+    """Lazy import the pgvector store (lightweight — no grpc/numpy)."""
+    from eden.storage.pgvector import get_pgvector_client
+
+    return get_pgvector_client
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +245,7 @@ async def _maybe_emit_cache_hit(
 
 
 class SemanticCache:
-    """L2 semantic cache backed by Qdrant vector search.
+    """L2 semantic cache backed by pgvector search (N4).
 
     Stores prompt embeddings with their responses.
     Queries use cosine similarity to find near-matches.
@@ -376,53 +377,20 @@ class SemanticCache:
         memoized, and can be read back with :meth:`embedding_for` to hand
         to the paired :meth:`set`.
         """
-        import asyncio
-
         if not self._enabled():
             self._misses += 1
             return None
         threshold = similarity_threshold or self.threshold
-        qdrant = _get_qdrant_client()()
-        loop = asyncio.get_event_loop()
-
-        # Ensure collection exists (run sync Qdrant ops in executor)
-        try:
-            await loop.run_in_executor(
-                None,
-                lambda: qdrant._get_client().get_collection(
-                    qdrant.collection_prefix + self.COLLECTION
-                ),
-            )
-        except Exception:
-            try:
-                from qdrant_client.http import models
-
-                def _create_collection():
-                    qdrant._get_client().create_collection(
-                        collection_name=qdrant.collection_prefix + self.COLLECTION,
-                        vectors_config=models.VectorParams(
-                            size=self.VECTOR_SIZE,
-                            distance=models.Distance.COSINE,
-                        ),
-                    )
-
-                await loop.run_in_executor(None, _create_collection)
-            except Exception as e:
-                logger.warning(f"Semantic cache collection creation failed: {e}")
-                self._misses += 1
-                return None
+        vector_store = _get_vector_store()()
 
         try:
             if embedding is None:
                 embedding = await self._get_embedding(self._normalize(prompt))
-            results = await loop.run_in_executor(
-                None,
-                lambda: qdrant.search(
-                    collection=self.COLLECTION,
-                    query_vector=embedding,
-                    limit=3,
-                    score_threshold=threshold,
-                ),
+            results = await vector_store.search_async(
+                collection=self.COLLECTION,
+                query_vector=embedding,
+                limit=3,
+                score_threshold=threshold,
             )
 
             for hit in results.results:
@@ -465,13 +433,11 @@ class SemanticCache:
         by that call is consulted before falling back to a fresh embed, so
         a get/set pair costs one embedding, not two.
         """
-        import asyncio
         from datetime import datetime
 
         if not self._enabled():
             return False
-        qdrant = _get_qdrant_client()()
-        loop = asyncio.get_event_loop()
+        vector_store = _get_vector_store()()
         try:
             if embedding is None:
                 embedding = await self._get_embedding(self._normalize(prompt))
@@ -490,9 +456,7 @@ class SemanticCache:
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             }
-            await loop.run_in_executor(
-                None, lambda: qdrant.upsert(collection=self.COLLECTION, points=[point])
-            )
+            await vector_store.upsert_async(collection=self.COLLECTION, points=[point])
             return True
         except Exception as e:
             logger.warning(f"Semantic cache write error: {e}")

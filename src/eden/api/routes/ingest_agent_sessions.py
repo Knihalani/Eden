@@ -91,7 +91,7 @@ class AttachTraceRequest(BaseModel):
 @router.post("/start")
 async def start_session(
     org_id: str = Path(..., description="Organization ID"),
-    body: SessionStartRequest = Body(default=SessionStartRequest()),
+    body: SessionStartRequest = Body(default_factory=SessionStartRequest),
     auth: dict = Depends(get_ingest_auth),
 ) -> dict[str, Any]:
     _assert_ingest_org(auth, org_id)
@@ -125,7 +125,7 @@ async def start_session(
 async def end_session(
     org_id: str = Path(..., description="Organization ID"),
     session_id: str = Path(...),
-    body: SessionEndRequest = Body(default=SessionEndRequest()),
+    body: SessionEndRequest = Body(default_factory=SessionEndRequest),
     auth: dict = Depends(get_ingest_auth),
 ) -> dict[str, Any]:
     _assert_ingest_org(auth, org_id)

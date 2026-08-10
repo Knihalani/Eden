@@ -39,8 +39,7 @@ dependencies = [
     # undeclared dep that broke test collection through the
     # `eden.api.middleware → eden.storage.redis` import chain.
     "redis>=5.0.0,<6.0.0",
-    # Vector search
-    "qdrant-client>=1.9.0,<2.0.0",
+    # Vector search is pgvector (N4) — no separate client dependency.
     # API
     "fastapi>=0.115.0,<0.137.0",  # pin below 0.137: PR #15745 made include_router() lazy
     # (app.routes holds opaque _IncludedRouter wrappers w/o .path), breaking route-count

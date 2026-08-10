@@ -1,9 +1,12 @@
-"""M2 (D4) — consumer no longer dies on Redis-down; PEL reclaim; honest acks."""
+"""N5 — closed-loop consumer polls the Postgres outbox (no Redis).
+
+Covers the run loop: dispatch via ``drain_outbox``, idle poll, clean
+stop, and the D4 "keep trying when Postgres is down" behaviour.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,15 +14,13 @@ import pytest
 import eden.closed_loop.event_bus as eb
 
 
-def _fields(**overrides) -> dict[str, str]:
-    base = {
-        "type": "verify_passed",
-        "org_id": "org-1",
-        "issue_id": "00000000-0000-0000-0000-000000000001",
-        "ref": "ref-1",
-    }
-    base.update(overrides)
-    return base
+@pytest.fixture(autouse=True)
+def _reset_bus_state():
+    eb.last_publish_failure_ts = None
+    eb._seen.clear()
+    yield
+    eb.last_publish_failure_ts = None
+    eb._seen.clear()
 
 
 def _consumer(orch: MagicMock | None = None) -> eb.ClosedLoopConsumer:
@@ -29,157 +30,94 @@ def _consumer(orch: MagicMock | None = None) -> eb.ClosedLoopConsumer:
     return eb.ClosedLoopConsumer(orchestrator=orch)
 
 
-# ── startup: retry, don't die ───────────────────────────────────────
-
-
 @pytest.mark.asyncio
-async def test_no_redis_at_start_retries_instead_of_returning():
+async def test_run_polls_outbox_with_consumer_orchestrator():
     consumer = _consumer()
     stop = asyncio.Event()
-    get_client = AsyncMock(return_value=None)
+    calls = 0
+    seen: list[tuple[int, object]] = []
 
-    with patch("eden.storage.redis.get_redis_stream_client", get_client):
-        task = asyncio.create_task(consumer.run(stop))
-        await asyncio.sleep(0.05)
-        # Old behaviour returned immediately; now it must still be alive,
-        # waiting out the backoff before retrying.
-        assert not task.done()
-        assert get_client.await_count >= 1
-        stop.set()
-        await asyncio.wait_for(task, timeout=2.0)
-
-
-@pytest.mark.asyncio
-async def test_start_drains_outbox_once_group_ensured():
-    consumer = _consumer()
-    stop = asyncio.Event()
-    redis = MagicMock()
-    redis.xgroup_create = AsyncMock()
-
-    async def _read_batch_stop(_redis):
-        stop.set()
-        return []
+    async def _drain(limit: int = 500, orchestrator=None) -> int:
+        nonlocal calls
+        calls += 1
+        seen.append((limit, orchestrator))
+        if calls >= 2:
+            stop.set()
+        return 0
 
     with (
-        patch(
-            "eden.storage.redis.get_redis_stream_client",
-            AsyncMock(return_value=redis),
-        ),
-        patch.object(eb, "drain_outbox", AsyncMock(return_value=0)) as drain,
-        patch.object(consumer, "_read_batch", _read_batch_stop),
+        patch.object(eb, "drain_outbox", _drain),
+        patch.object(eb, "_POLL_INTERVAL_S", 0.01),
     ):
         await asyncio.wait_for(consumer.run(stop), timeout=2.0)
 
-    redis.xgroup_create.assert_awaited_once()
-    drain.assert_awaited_once()
-
-
-# ── PEL reclaim via XAUTOCLAIM ──────────────────────────────────────
+    assert calls >= 2
+    assert seen[0][0] == eb._BATCH
+    assert seen[0][1] is consumer._orch
 
 
 @pytest.mark.asyncio
-async def test_read_batch_processes_reclaimed_entries():
+async def test_run_dispatches_events_via_drain():
     consumer = _consumer()
-    consumer._last_autoclaim_mono = -1e9  # force the autoclaim branch
-    redis = MagicMock()
-    redis.xautoclaim = AsyncMock(
-        return_value=("0-0", [("7-0", _fields(ref="reclaimed"))], [])
-    )
-    redis.xreadgroup = AsyncMock(return_value=[])
+    stop = asyncio.Event()
+    calls = 0
 
-    out = await consumer._read_batch(redis)
+    async def _drain(limit: int = 500, orchestrator=None) -> int:
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            stop.set()
+        return 1
 
-    assert ("7-0", _fields(ref="reclaimed")) in out
-    kwargs = redis.xautoclaim.await_args.kwargs
-    assert kwargs["min_idle_time"] == eb._PENDING_IDLE_MS
-    assert redis.xautoclaim.await_args.args[0] == eb.LOOP_STREAM
+    with patch.object(eb, "drain_outbox", _drain):
+        await asyncio.wait_for(consumer.run(stop), timeout=2.0)
+
+    assert calls >= 2  # kept going after dispatching, not one-shot
 
 
 @pytest.mark.asyncio
-async def test_read_batch_rate_limits_autoclaim():
+async def test_no_pg_at_start_keeps_polling():
+    """D4 — a Postgres blip at start must not permanently disable the
+    loop; the consumer keeps polling (via drain_outbox returning 0)."""
     consumer = _consumer()
-    consumer._last_autoclaim_mono = -1e9
-    redis = MagicMock()
-    redis.xautoclaim = AsyncMock(return_value=("0-0", [], []))
-    redis.xreadgroup = AsyncMock(return_value=[])
+    stop = asyncio.Event()
+    calls = 0
 
-    await consumer._read_batch(redis)
-    await consumer._read_batch(redis)  # immediately after — inside interval
+    async def _drain(limit: int = 500, orchestrator=None) -> int:
+        nonlocal calls
+        calls += 1
+        if calls >= 3:
+            stop.set()
+        return 0
 
-    assert redis.xautoclaim.await_count == 1
-    assert redis.xreadgroup.await_count == 2
+    with (
+        patch.object(eb, "drain_outbox", _drain),
+        patch.object(eb, "_POLL_INTERVAL_S", 0.01),
+    ):
+        await asyncio.wait_for(consumer.run(stop), timeout=2.0)
+
+    assert calls >= 3
 
 
 @pytest.mark.asyncio
-async def test_read_batch_survives_missing_xautoclaim():
-    """Older Redis without XAUTOCLAIM must fall through to XREADGROUP."""
+async def test_run_stops_promptly_on_signal():
     consumer = _consumer()
-    consumer._last_autoclaim_mono = -1e9
-    redis = MagicMock()
-    redis.xautoclaim = AsyncMock(side_effect=Exception("ERR unknown command"))
-    redis.xreadgroup = AsyncMock(
-        return_value=[(eb.LOOP_STREAM, [("1-0", _fields())])]
-    )
+    stop = asyncio.Event()
+    calls = 0
 
-    out = await consumer._read_batch(redis)
+    async def _drain(limit: int = 500, orchestrator=None) -> int:
+        nonlocal calls
+        calls += 1
+        return 0  # empty — go idle
 
-    assert out == [("1-0", _fields())]
+    with (
+        patch.object(eb, "drain_outbox", _drain),
+        patch.object(eb, "_POLL_INTERVAL_S", 30.0),
+    ):
+        task = asyncio.create_task(consumer.run(stop))
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        stop.set()
+        await asyncio.wait_for(task, timeout=2.0)
 
-
-# ── honest acks: no ack on failure, dead-letter after max deliveries ─
-
-
-def _redis_for_handle(fail_count: int) -> MagicMock:
-    redis = MagicMock()
-    redis.set = AsyncMock(return_value=True)  # idempotency key fresh
-    redis.incr = AsyncMock(return_value=fail_count)
-    redis.expire = AsyncMock()
-    redis.xack = AsyncMock()
-    redis.delete = AsyncMock()
-    return redis
-
-
-@pytest.mark.asyncio
-async def test_handler_exception_leaves_entry_unacked_first_time():
-    orch = MagicMock()
-    orch.on_event = AsyncMock(side_effect=RuntimeError("handler boom"))
-    consumer = _consumer(orch)
-    redis = _redis_for_handle(fail_count=1)
-
-    await consumer._handle(redis, "1-0", _fields())
-
-    orch.on_event.assert_awaited_once()
-    redis.xack.assert_not_awaited()
-    redis.incr.assert_awaited_once_with("loop:fail:1-0")
-
-
-@pytest.mark.asyncio
-async def test_dead_letter_ack_after_max_deliveries(caplog):
-    orch = MagicMock()
-    orch.on_event = AsyncMock(side_effect=RuntimeError("handler boom"))
-    consumer = _consumer(orch)
-    redis = _redis_for_handle(fail_count=eb._MAX_DELIVERIES)
-
-    with caplog.at_level(logging.ERROR, logger="eden.closed_loop.event_bus"):
-        await consumer._handle(redis, "1-0", _fields())
-
-    redis.xack.assert_awaited_once_with(eb.LOOP_STREAM, eb._GROUP, "1-0")
-    redis.delete.assert_awaited_once_with("loop:fail:1-0")
-    assert any(
-        r.levelno == logging.ERROR and "dead-letter" in r.getMessage()
-        for r in caplog.records
-    )
-
-
-@pytest.mark.asyncio
-async def test_successful_handle_acks():
-    orch = MagicMock()
-    orch.on_event = AsyncMock()
-    consumer = _consumer(orch)
-    redis = _redis_for_handle(fail_count=1)
-
-    await consumer._handle(redis, "1-0", _fields())
-
-    orch.on_event.assert_awaited_once()
-    redis.xack.assert_awaited_once()
-    redis.incr.assert_not_awaited()
+    assert calls == 1  # one drain, then idle-wait woke on stop

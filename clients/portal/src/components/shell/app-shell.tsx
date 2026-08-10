@@ -16,6 +16,8 @@ import { PortalCatalogSync } from "@/components/providers/portal-catalog-sync";
 import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner";
 import { ConfirmProvider } from "@/hooks/use-confirm";
 import { NotificationsBell } from "@/components/shell/notifications-bell";
+import { openCommandPalette } from "@/lib/palette";
+import { Search } from "lucide-react";
 
 /** Alerts modal pulls heavy graphs — load after first paint. */
 const AlertsModal = dynamic(
@@ -61,6 +63,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <SidebarNav />
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
                     <div className="flex h-[var(--header-h)] shrink-0 items-center justify-end gap-1 border-b border-[var(--line)] bg-[var(--bg-sidebar)] px-2 md:hidden">
+                      <button
+                        type="button"
+                        onClick={openCommandPalette}
+                        className="ds-btn ds-btn-ghost ds-btn-icon"
+                        title="Search (⌘K)"
+                        aria-label="Search (⌘K)"
+                      >
+                        <Search className="h-4 w-4" aria-hidden />
+                      </button>
                       <NotificationsBell />
                     </div>
                     <PortalStatusBanners />

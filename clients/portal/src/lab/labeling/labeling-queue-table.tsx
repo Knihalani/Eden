@@ -3,6 +3,17 @@ import { EmptyState } from "@/lab/lab-ui";
 import { formatRelativeTime } from "@/lib/format";
 import type { LabelingQueue } from "@/lib/api/labeling";
 
+/** API queue status → display label ("active" → "Active"). */
+const QUEUE_STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  paused: "Paused",
+  archived: "Archived",
+};
+
+function queueStatusLabel(status: string): string {
+  return QUEUE_STATUS_LABEL[status] ?? status;
+}
+
 /**
  * F50 kanban queue table for `/labeling` (FEAT-82). Selecting a row
  * opens the kanban board at `/labeling/queues/[queueId]`.
@@ -56,7 +67,7 @@ export function LabelingQueueTable({
           </span>
           <span role="cell">
             <StatusChip tone={q.status === "active" ? "live" : "neutral"}>
-              {q.status}
+              {queueStatusLabel(q.status)}
             </StatusChip>
           </span>
           <span role="cell" className="type-meta">

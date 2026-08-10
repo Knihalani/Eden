@@ -95,7 +95,9 @@ export function RcaCausalChainPanel({
       <div className="flex flex-wrap items-center gap-2">
         <span className="type-label text-[var(--text-muted)]">Failure category</span>
         <StatusChip tone={data.category ? "fail" : "neutral"}>
-          {data.category ?? "unknown"}
+          {data.category
+            ? data.category.charAt(0).toUpperCase() + data.category.slice(1)
+            : "Unknown"}
         </StatusChip>
         {typeof data.confidence === "number" ? (
           <span className="type-meta">
@@ -213,7 +215,9 @@ function DelegationHopRow({
       <div className="flex flex-wrap items-center gap-2">
         <span className="type-meta text-[var(--text-muted)]">#{depth}</span>
         <StatusChip tone={hop.delegating_span_failed ? "fail" : "ok"}>
-          {hop.delegating_span_failed ? "delegating span failed" : "delegating span ok"}
+          {hop.delegating_span_failed
+            ? "Delegating span failed"
+            : "Delegating span OK"}
         </StatusChip>
         {hop.response_status ? (
           <span className="type-meta">a2a status: {hop.response_status}</span>
@@ -261,11 +265,18 @@ function CausalChainRow({
           {node.name ?? node.event_type ?? node.span_id ?? "span"}
         </span>
         {node.implicated ? (
-          <StatusChip tone="fail">{node.error_type ?? "error"}</StatusChip>
+          <StatusChip tone="fail">
+            {node.error_type
+              ? node.error_type.charAt(0).toUpperCase() +
+                node.error_type.slice(1)
+              : "Failed"}
+          </StatusChip>
         ) : null}
-        {isRootCause ? <StatusChip tone="fail">root cause</StatusChip> : null}
+        {isRootCause ? (
+          <StatusChip tone="fail">Root cause</StatusChip>
+        ) : null}
         {node.delegation ? (
-          <StatusChip tone="neutral">delegation</StatusChip>
+          <StatusChip tone="neutral">Delegation</StatusChip>
         ) : null}
       </div>
       {node.delegation ? (

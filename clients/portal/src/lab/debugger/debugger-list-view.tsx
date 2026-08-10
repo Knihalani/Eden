@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Search } from "lucide-react";
 import {
   agentLabel,
   modeHintLabel,
@@ -10,7 +9,8 @@ import {
 } from "@/lab/fixtures/debugger";
 import { traceById } from "@/lab/fixtures/traces";
 import { DebuggerOutcomeChip } from "@/lab/debugger/debugger-chrome";
-import { AgentScopeFilter, EmptyState } from "@/lab/lab-ui";
+import { AgentScopeFilter, EmptyState, SearchInput } from "@/lab/lab-ui";
+import { formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 
@@ -48,20 +48,13 @@ export function DebuggerListView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-        <label className="relative min-w-[12rem] flex-1">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search…"
-            className="ds-input w-full !py-1.5 !pl-8"
-            aria-label="Search debugger sessions"
-          />
-        </label>
+        <SearchInput
+          value={query}
+          onChange={onQueryChange}
+          placeholder="Search sessions, ids…"
+          ariaLabel="Search debugger sessions"
+          className="min-w-[12rem] flex-1"
+        />
         <AgentScopeFilter value={agentId} onChange={onAgentChange} />
         <button
           type="button"
@@ -133,8 +126,8 @@ export function DebuggerListView({
                     <DebuggerOutcomeChip outcome={outcome} />
                     <span className="type-meta text-[var(--text-faint)]">
                       {s.lastReplay
-                        ? `Replayed · ${s.updatedAt}`
-                        : `${modeHintLabel(s.modeHint)} · ${s.updatedAt}`}
+                        ? `Replayed · ${formatSmartTime(s.updatedAt)}`
+                        : `${modeHintLabel(s.modeHint)} · ${formatSmartTime(s.updatedAt)}`}
                     </span>
                   </div>
                 </button>

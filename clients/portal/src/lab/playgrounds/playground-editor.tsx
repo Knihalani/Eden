@@ -26,6 +26,7 @@ import {
 } from "@/components/shell/query-error-panel";
 import { EmptyState } from "@/lab/lab-ui";
 import { useLabToast } from "@/lab/lab-toast";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   hubRowToPlaygroundRow,
@@ -777,7 +778,7 @@ export function PlaygroundEditor({
               className="ds-input !h-8 w-48 !py-0 !text-[0.8125rem] sm:w-64"
               aria-label="Playground name"
             />
-            {dirty ? <StatusChip tone="neutral">unsaved</StatusChip> : null}
+            {dirty ? <StatusChip tone="neutral">Unsaved</StatusChip> : null}
           </span>
         }
         actions={
@@ -1029,7 +1030,7 @@ export function PlaygroundEditor({
             </select>
           </label>
           {running ? (
-            <StatusChip tone="live">streaming</StatusChip>
+            <StatusChip tone="live">Streaming</StatusChip>
           ) : runState.phase === "done" ? (
             <span className="type-meta">
               Run complete
@@ -1091,10 +1092,10 @@ export function PlaygroundEditor({
                             className="min-w-[14rem] px-3 py-2.5"
                           >
                             {cell.status === "pending" ? (
-                              <span className="type-meta">queued…</span>
+                              <span className="type-meta">Queued…</span>
                             ) : cell.status === "error" ? (
                               <div className="space-y-1">
-                                <StatusChip tone="fail">error</StatusChip>
+                                <StatusChip tone="fail">Failed</StatusChip>
                                 <p className="type-meta break-words !text-[var(--error)]">
                                   {cell.error ?? "Cell failed."}
                                 </p>
@@ -1161,16 +1162,21 @@ export function PlaygroundEditor({
                     key={`${r.runId ?? "run"}-${i}`}
                     className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5"
                   >
-                    <span className="type-ui text-[var(--text)]">
-                      {r.at ? new Date(r.at).toLocaleString() : "Run"}
+                    <span
+                      className="type-ui text-[var(--text)]"
+                      title={formatAbsoluteTime(r.at)}
+                    >
+                      {r.at ? formatRelativeTime(r.at) : "Run"}
                     </span>
                     <span className="type-meta">
                       {r.cells} cell{r.cells === 1 ? "" : "s"}
                     </span>
                     {r.errors > 0 ? (
-                      <StatusChip tone="fail">{r.errors} failed</StatusChip>
+                      <StatusChip tone="fail">
+                        {r.errors} failed
+                      </StatusChip>
                     ) : (
-                      <StatusChip tone="ok">clean</StatusChip>
+                      <StatusChip tone="ok">Clean</StatusChip>
                     )}
                     <span className="type-value ml-auto tabular-nums">
                       {r.costUsd != null ? `$${r.costUsd.toFixed(4)}` : "—"}

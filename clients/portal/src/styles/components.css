@@ -127,6 +127,16 @@ select.ds-input {
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
+  /* Tactile press: a hairline sink on click so controls feel
+     mechanical rather than flat. Deliberately subtle (1px) and only
+     on :active — hover keeps the gold-wash convention. No persistent
+     transform base: a non-none transform on every button would create
+     a stacking context app-wide and can subtly re-layer popovers that
+     sit against a button's z-index. */
+}
+
+.ds-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .ds-btn:disabled {
@@ -143,6 +153,10 @@ select.ds-input {
 .ds-btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   color: var(--accent-fg);
+}
+
+.ds-btn-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--eden-gold-400) 78%, #000);
 }
 
 .ds-btn-sm {
@@ -305,6 +319,10 @@ select.ds-input {
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
+}
+
+.ds-tab:active:not([aria-selected="true"]):not([aria-pressed="true"]) {
+  transform: translateY(1px);
 }
 
 @media (pointer: coarse) {
@@ -672,6 +690,59 @@ select.ds-input {
   .lab-agent-msg {
     animation: none;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Toasts — entrance motion + auto-dismiss progress                   */
+/* ------------------------------------------------------------------ */
+
+@keyframes lab-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Auto-dismiss progress: a hairline that drains over the 8s lifetime.
+   The width animation doubles as a live countdown cue (longer than the
+   toast title/body text, so it reads as "this is temporary" without
+   demanding an eye-tracked bar). `animation-fill-mode: forwards` holds
+   the end state until the toast is removed. */
+@keyframes lab-toast-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.lab-toast {
+  animation: lab-toast-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lab-toast__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  transform-origin: left;
+  animation: lab-toast-drain 8s linear forwards;
+  background: var(--accent-muted);
+  pointer-events: none;
+}
+
+.lab-toast__progress[data-tone="ok"] {
+  background: color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+.lab-toast__progress[data-tone="fail"] {
+  background: color-mix(in srgb, var(--error) 40%, transparent);
 }
 
 /* ------------------------------------------------------------------ */

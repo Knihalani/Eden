@@ -34,9 +34,9 @@ async def reverify_rtbf_stores(
             results.append(
                 await _reverify_typesense(org_id, user_id=user_id)
             )
-        elif store == "qdrant":
+        elif store == "pgvector":
             results.append(
-                await _reverify_qdrant(org_id, user_id=user_id)
+                await _reverify_pgvector(org_id, user_id=user_id)
             )
     return results
 
@@ -95,53 +95,23 @@ async def _reverify_typesense(
         return {"store": store, "status": "failed", "error": str(exc)}
 
 
-async def _reverify_qdrant(
+async def _reverify_pgvector(
     org_id: str, *, user_id: str
 ) -> dict[str, Any]:
-    store = "qdrant"
-    try:
-        from eden.storage.qdrant import get_qdrant_client
-    except Exception:
-        try:
-            from eden.retrieval.qdrant_client import get_qdrant_client  # type: ignore
-        except Exception as exc:
-            return {"store": store, "status": "failed", "error": str(exc)}
-    try:
-        client = get_qdrant_client()
-        if hasattr(client, "__await__"):
-            client = await client
-    except Exception as exc:
-        return {"store": store, "status": "failed", "error": str(exc)}
-    if client is None:
-        return {
-            "store": store,
-            "status": "failed",
-            "error": "Qdrant client not configured",
-        }
-    try:
-        if not hasattr(client, "count_by_user"):
-            return {
-                "store": store,
-                "status": "skipped",
-                "detail": "Qdrant client lacks count_by_user",
-            }
-        remaining = await client.count_by_user(org_id, user_id)
-        if remaining is None:
-            return {
-                "store": store,
-                "status": "failed",
-                "error": "Qdrant re-verify count failed",
-            }
-        if int(remaining) > 0:
-            return {
-                "store": store,
-                "status": "residual",
-                "remaining": int(remaining),
-            }
-        return {"store": store, "status": "ok", "remaining": 0}
-    except Exception as exc:
-        logger.warning("rtbf qdrant re-verify failed: %s", exc)
-        return {"store": store, "status": "failed", "error": str(exc)}
+    """pgvector re-verify — unsupported (N4).
+
+    ``vector_documents`` rows are org/collection scoped; none embed
+    ``user_id``, so a per-user residual count is not possible. Report
+    ``skipped`` (reverify only re-checks stores that reported ``ok``,
+    and the fanout below never reports ``ok``), so the honest answer
+    is "cannot re-verify".
+    """
+    _ = org_id, user_id
+    return {
+        "store": "pgvector",
+        "status": "skipped",
+        "detail": "vector store has no user_id column; per-user reverify unsupported",
+    }
 
 
 async def fanout_rtbf(
@@ -158,7 +128,7 @@ async def fanout_rtbf(
     results: list[dict[str, Any]] = []
     results.append(await _fanout_typesense(org_id, user_id=user_id, dry_run=dry_run))
     results.append(await _fanout_redis(org_id, user_id=user_id, dry_run=dry_run))
-    results.append(await _fanout_qdrant(org_id, user_id=user_id, dry_run=dry_run))
+    results.append(await _fanout_pgvector(org_id, user_id=user_id, dry_run=dry_run))
     results.append(await _fanout_s3(org_id, user_id=user_id, dry_run=dry_run))
     results.append(await _fanout_clickhouse(org_id, user_id=user_id, dry_run=dry_run))
     results.append(await _fanout_blob_refs(org_id, user_id=user_id, dry_run=dry_run))
@@ -243,43 +213,31 @@ async def _fanout_redis(
     }
 
 
-async def _fanout_qdrant(
+async def _fanout_pgvector(
     org_id: str, *, user_id: str, dry_run: bool
 ) -> dict[str, Any]:
-    store = "qdrant"
-    try:
-        from eden.storage.qdrant import get_qdrant_client
-    except Exception:
-        try:
-            from eden.retrieval.qdrant_client import get_qdrant_client  # type: ignore
-        except Exception as exc:
-            return {"store": store, "status": "unavailable", "error": str(exc)}
-    try:
-        client = get_qdrant_client()
-        if hasattr(client, "__await__"):
-            client = await client
-    except Exception as exc:
-        return {"store": store, "status": "unavailable", "error": str(exc)}
-    if client is None:
-        return {
-            "store": store,
-            "status": "unavailable",
-            "error": "Qdrant client not configured",
-        }
+    """pgvector erasure — unsupported (N4).
+
+    ``vector_documents`` rows are org/collection scoped; none embed
+    ``user_id``, so per-user erasure cannot be performed. Report
+    ``unsupported`` (the same honest pattern as Redis) rather than a
+    false ``ok`` with ``deleted: 0``.
+    """
+    _ = org_id  # no tenant-wide DELETE is correct for per-user RTBF
+    store = "pgvector"
     if dry_run:
-        return {"store": store, "status": "dry_run", "detail": "would delete points by user filter"}
-    try:
-        if hasattr(client, "delete_by_user"):
-            n = await client.delete_by_user(org_id, user_id)
-            return {"store": store, "status": "ok", "deleted": int(n or 0)}
         return {
             "store": store,
-            "status": "failed",
-            "error": "Qdrant client lacks user-scoped delete",
+            "status": "dry_run",
+            "detail": "per-user pgvector erasure unsupported (no user_id column)",
+            "user_id": user_id,
         }
-    except Exception as exc:
-        logger.warning("rtbf qdrant fanout failed: %s", exc)
-        return {"store": store, "status": "failed", "error": str(exc)}
+    return {
+        "store": store,
+        "status": "unsupported",
+        "error": "vector_documents rows are org/collection scoped; no user_id column",
+        "user_id": user_id,
+    }
 
 
 async def _fanout_s3(

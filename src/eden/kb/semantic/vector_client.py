@@ -1,6 +1,6 @@
 """Semantic memory - vector search client.
 
-Handles embedding-based retrieval using Qdrant.
+Handles embedding-based retrieval using pgvector (N4 — Qdrant replaced).
 """
 
 from __future__ import annotations
@@ -9,13 +9,13 @@ import logging
 from typing import Any
 
 from eden.kb.retrieval_logger import get_retrieval_logger
-from eden.storage.qdrant import SearchResult, SearchResults, get_qdrant_client
+from eden.storage.pgvector import SearchResult, SearchResults, get_pgvector_client
 
 logger = logging.getLogger(__name__)
 
 
 def _as_result_list(raw: SearchResults | list[SearchResult] | Any) -> list[SearchResult]:
-    """Normalize Qdrant wrapper output to ``list[SearchResult]``."""
+    """Normalize pgvector wrapper output to ``list[SearchResult]``."""
     if isinstance(raw, SearchResults):
         return list(raw.results or [])
     if isinstance(raw, list):
@@ -39,7 +39,7 @@ def _payload_matches(payload: dict[str, Any], filter_conditions: dict[str, Any])
 class SemanticVectorClient:
     """Client for semantic vector search operations.
 
-    Uses Qdrant for hybrid dense+sparse search.
+    Uses Postgres pgvector for dense search (N4).
     """
 
     async def search(
@@ -62,9 +62,8 @@ class SemanticVectorClient:
         Returns:
             List of SearchResult objects
         """
-        client = get_qdrant_client()
+        client = get_pgvector_client()
 
-        # K17: prefer async wrappers so sync qdrant I/O leaves the event loop.
         raw = await client.search_async(
             collection=collection,
             query_vector=query_vector,
@@ -111,10 +110,10 @@ class SemanticVectorClient:
         Returns:
             List of SearchResult objects
         """
-        client = get_qdrant_client()
+        client = get_pgvector_client()
 
         # Prefer dense search with server-side filters when filters are present;
-        # hybrid fusion in the Qdrant wrapper does not accept query_filter yet.
+        # hybrid fusion in the wrapper does not accept query_filter yet.
         if filter_conditions:
             raw = await client.search_async(
                 collection=collection,
@@ -170,8 +169,7 @@ class SemanticVectorClient:
         Returns:
             True if successful
         """
-        client = get_qdrant_client()
-        # K17: upsert_async offloads sync qdrant HTTP to a worker thread.
+        client = get_pgvector_client()
         return await client.upsert_async(collection, points)
 
     async def delete(
@@ -188,7 +186,7 @@ class SemanticVectorClient:
         Returns:
             True if successful
         """
-        client = get_qdrant_client()
+        client = get_pgvector_client()
         return await client.delete_async(collection, point_ids)
 
     async def count(
@@ -205,7 +203,7 @@ class SemanticVectorClient:
         Returns:
             Count of matching vectors
         """
-        client = get_qdrant_client()
+        client = get_pgvector_client()
         return await client.count_async(collection, filter_conditions)
 
 

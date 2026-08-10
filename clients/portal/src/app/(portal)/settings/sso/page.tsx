@@ -14,6 +14,7 @@ import { useLabToast } from "@/lab/lab-toast";
 import { SettingsModeNav } from "@/lab/settings/settings-chrome";
 import { api } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-keys";
+import { formatSmartTime } from "@/lib/format";
 
 const PROVIDER_TYPES = ["okta", "google", "oidc", "saml2"] as const;
 
@@ -318,7 +319,7 @@ export default function SettingsSsoPage() {
                       {p.provider_type}
                       {p.default_for_domain && <> · default for {p.default_for_domain}</>}
                       {" · created "}
-                      {new Date(p.created_at).toLocaleDateString()}
+                      {formatSmartTime(p.created_at)}
                     </p>
                   </div>
                   {canEdit && (

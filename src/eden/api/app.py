@@ -4,8 +4,9 @@ import asyncio
 import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -132,6 +133,12 @@ from eden.observability.metrics_endpoint import router as metrics_endpoint_route
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Wave 9 — the periodic $0-cost ledger flusher task started in the
+# lifespan and drained by the shutdown registry (before Postgres closes).
+# Kept at module scope so ``_shutdown_steps`` can reach it without threading
+# it through the asynccontextmanager.
+_ledger_flusher_task: asyncio.Task | None = None
 
 # B26 — intelligence_* routers are feature-flag gated and numpy-heavy.
 # Defer import+include until lifespan (or explicit ``mount_deferred_routers``)
@@ -450,7 +457,7 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     postgres: str
-    qdrant: str
+    pgvector: str
     quality_worker_running: bool = False
     statgate_installed: bool = False
     evolution_loop_running: bool = False
@@ -564,6 +571,11 @@ def _shutdown_steps(
 
         await drain_background_tasks(timeout=_SHUTDOWN_TIMEOUT_DRAIN - 1.0)
 
+    async def _cost_ledger_flush() -> None:
+        from eden.llmops.cost_ledger import stop_zero_cost_flusher
+
+        await stop_zero_cost_flusher(_ledger_flusher_task)
+
     async def _otel() -> None:
         from eden.observability.otel_exporter import close_otel_dual_exporter
 
@@ -624,6 +636,11 @@ def _shutdown_steps(
 
         await get_webhook_delivery_service().aclose()
 
+    async def _shared_http() -> None:
+        from eden.util.shared_http import close_shared_httpx
+
+        await close_shared_httpx()
+
     async def _dogfood_sdk() -> None:
         from eden.dogfood import flush_dogfood_sdk
 
@@ -649,6 +666,9 @@ def _shutdown_steps(
         ("trace_quality", _trace_quality, _SHUTDOWN_TIMEOUT_DRAIN),
         ("telemetry_collector", _telemetry_collector, _SHUTDOWN_TIMEOUT_DRAIN),
         ("bronze_sink", _bronze, _SHUTDOWN_TIMEOUT_DRAIN),
+        # Wave 9 — flush the buffered $0 cost-ledger rows before the
+        # Postgres pool closes (a Postgres-writing drainer).
+        ("cost_ledger_flush", _cost_ledger_flush, _SHUTDOWN_TIMEOUT_DRAIN),
         # Fire-and-forget tasks still writing (billing emits, telemetry
         # fan-out, checkpoints). Drained before the Postgres pool closes, since
         # that is what they are writing through.
@@ -667,6 +687,7 @@ def _shutdown_steps(
         # ── 3. HTTP pools ──
         ("clerk_auth", _clerk, _SHUTDOWN_TIMEOUT_CLIENT),
         ("webhook_delivery", _webhooks, _SHUTDOWN_TIMEOUT_CLIENT),
+        ("shared_http", _shared_http, _SHUTDOWN_TIMEOUT_CLIENT),
         ("redis", _redis, _SHUTDOWN_TIMEOUT_CLIENT),
         # ── 4. Postgres pool, last ──
         ("postgres", _postgres, _SHUTDOWN_TIMEOUT_CLIENT),
@@ -675,7 +696,7 @@ def _shutdown_steps(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
 
     logger.info("Starting Eden API...")
@@ -693,6 +714,18 @@ async def lifespan(app: FastAPI):
         bind_event_loop()
     except Exception as exc:  # noqa: BLE001 - never block startup on this
         logger.warning("cost ledger loop binding failed: %s", exc)
+
+    # Wave 9 — periodic $0-cost ledger flush (buffered classifier markers
+    # written in one executemany instead of one INSERT per event). Drained
+    # via the shutdown registry before the Postgres pool closes. Failures
+    # never block startup.
+    global _ledger_flusher_task
+    try:
+        from eden.llmops.cost_ledger import start_zero_cost_flusher
+
+        _ledger_flusher_task = start_zero_cost_flusher()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cost ledger flusher start failed: %s", exc)
 
     # Dogfood: instrument this process as an Eden customer when
     # EDEN_API_KEY + EDEN_ORG_ID are set (same path as any other agent).
@@ -1152,7 +1185,7 @@ def _request_id(request: Request) -> str:
 
 
 @app.exception_handler(Exception)
-async def _unhandled_exception(request: Request, exc: Exception):
+async def _unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
     rid = _request_id(request)
     # Log the full traceback once, on the server, with the request id
     # the user (or our own error envelope) will surface. ``exc_info``
@@ -1179,7 +1212,7 @@ async def _unhandled_exception(request: Request, exc: Exception):
 
 
 @app.exception_handler(StarletteHTTPException)
-async def _http_exception(request: Request, exc: StarletteHTTPException):
+async def _http_exception(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     rid = _request_id(request)
     status = exc.status_code
     # Map the most common middleware raises to a stable, frontend-
@@ -1225,7 +1258,7 @@ async def _http_exception(request: Request, exc: StarletteHTTPException):
     return JSONResponse(
         status_code=status,
         content={"error": err, "detail": detail, "request_id": rid},
-        headers=apply_security_headers(exc.headers or {}),
+        headers=apply_security_headers(dict(exc.headers or {})),
     )
 
 
@@ -1334,7 +1367,7 @@ def _resolve_serving_commit() -> str:
 
 
 @app.get("/live")
-async def liveness_probe():
+async def liveness_probe() -> dict[str, Any]:
     """Kubernetes liveness probe — process is up.
 
     Also reports the commit actually serving traffic. ``app_version`` is
@@ -1351,8 +1384,11 @@ async def liveness_probe():
     }
 
 
-@app.get("/ready")
-async def readiness_probe(request: Request):
+# response_model=None: this probe returns either a plain dict or a 503
+# JSONResponse — the union is not a valid Pydantic field, so FastAPI must
+# not try to build a response model from the return annotation.
+@app.get("/ready", response_model=None)
+async def readiness_probe(request: Request) -> dict[str, Any] | JSONResponse:
     """Load-balancer readiness probe — required deps are reachable.
 
     July 2026: readiness is gated on Postgres only (see
@@ -1393,8 +1429,14 @@ async def readiness_probe(request: Request):
     return JSONResponse(status_code=503, content=body)
 
 
+# Module-level flag store: marks whether the DB-target debug detail has
+# been shown once on /health. A dict (not a function attribute) so both
+# ruff (B010) and mypy (attr-defined on decorated callables) stay happy.
+_health_debug_flags: dict[str, bool] = {}
+
+
 @app.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check() -> HealthResponse | JSONResponse:
     """Detailed system health for monitors and the portal badge.
 
     Soft deps (Qdrant, quality worker) mark the body ``degraded`` and,
@@ -1412,7 +1454,7 @@ async def health_check():
 
     overall = (
         "healthy"
-        if (kb_health.get("postgres") == "connected" and kb_health.get("qdrant") == "connected")
+        if (kb_health.get("postgres") == "connected" and kb_health.get("pgvector") == "connected")
         else "degraded"
     )
 
@@ -1423,7 +1465,7 @@ async def health_check():
     # informative message when the connection is failing, but only on
     # the first failing health check after startup (to avoid spamming).
     pg = kb_health.get("postgres", "unknown")
-    if pg != "connected" and not getattr(health_check, "_shown_target", False):
+    if pg != "connected" and not _health_debug_flags.get("db_target_shown", False):
         try:
             from urllib.parse import urlsplit
 
@@ -1438,7 +1480,7 @@ async def health_check():
                 f"sslmode:{settings.postgres_sslmode or 'off'} "
                 f"database_url_set:{bool(settings.database_url)}"
             )
-            health_check._shown_target = True
+            _health_debug_flags["db_target_shown"] = True
         except Exception:
             pass
 
@@ -1620,7 +1662,7 @@ async def health_check():
         status=overall,
         version=settings.app_version,
         postgres=pg,
-        qdrant=kb_health.get("qdrant", "unknown"),
+        pgvector=kb_health.get("pgvector", "unknown"),
         redis=redis_status,
         worker_heartbeat_age_seconds=heartbeat_age,
         background_loops=_background_loops_snapshot(),

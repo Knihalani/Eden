@@ -17,6 +17,7 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:bun": "vitest run",
     "test:watch": "vitest",
     "lint:portal-layout": "node scripts/lint-portal-layout.cjs",
     "lint:portal-classes": "node scripts/lint-portal-classes.cjs",

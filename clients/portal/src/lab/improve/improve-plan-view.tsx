@@ -15,6 +15,7 @@ import {
 import { RejectPlanDialog } from "@/components/improve/reject-plan-dialog";
 import { MergePlanDialog } from "@/components/improve/merge-plan-dialog";
 import { RevertPlanDialog } from "@/components/improve/revert-plan-dialog";
+import { formatSmartTime } from "@/lib/format";
 
 export function ImprovePlanView({
   plan,
@@ -124,7 +125,7 @@ export function ImprovePlanView({
               name={agent?.name ?? plan.agentId}
             />
             <span className="type-sep mx-1.5">·</span>
-            {plan.updatedAt}
+            {formatSmartTime(plan.updatedAt)}
           </p>
         </div>
         <div className="flex flex-wrap gap-1">

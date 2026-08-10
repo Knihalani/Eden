@@ -6,7 +6,6 @@ import {
   Check,
   Copy,
   MessageSquare,
-  Search,
   Square,
   X,
 } from "lucide-react";
@@ -21,6 +20,8 @@ import { PinKindChip } from "@/lab/agent/agent-chrome";
 import { AgentCitationRow } from "@/lab/agent/agent-citation-chip";
 import { AgentActionCards } from "@/lab/agent/agent-action-card";
 import { AgentComposer } from "@/lab/agent/agent-composer";
+import { SearchInput } from "@/lab/lab-ui";
+import { formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
 
@@ -89,20 +90,12 @@ export function AgentHistoryRail({
         </button>
       </div>
       <div className="border-b border-[var(--line)] px-2.5 py-2">
-        <label className="relative block">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search…"
-            className="ds-input w-full !py-1.5 !pl-8 !text-[0.8125rem]"
-            aria-label="Search conversations"
-          />
-        </label>
+        <SearchInput
+          value={query}
+          onChange={onQueryChange}
+          placeholder="Search conversations…"
+          ariaLabel="Search conversations"
+        />
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
@@ -150,7 +143,7 @@ export function AgentHistoryRail({
                     {lastTextPreview(t)}
                   </p>
                   <p className="type-meta mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 !text-[0.625rem]">
-                    <span>{t.updatedAt}</span>
+                    <span>{formatSmartTime(t.updatedAt)}</span>
                     {t.pins.length > 0 ? (
                       <span className="text-[var(--text-faint)]">
                         · {t.pins.length} context
@@ -280,7 +273,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
       >
         <p className="type-label mb-1.5 flex items-center gap-1.5">
           <span>{isUser ? "You" : "Eden"}</span>
-          <span className="text-[var(--text-faint)]">· {message.at}</span>
+          <span className="text-[var(--text-faint)]">· {formatSmartTime(message.at)}</span>
           {!isUser && plainText ? (
             <button
               type="button"
@@ -426,7 +419,8 @@ export function AgentChatStream({
             </div>
             <p className="type-meta">
               {thread.messages.length} message
-              {thread.messages.length === 1 ? "" : "s"} · {thread.updatedAt}
+              {thread.messages.length === 1 ? "" : "s"} ·{" "}
+              {formatSmartTime(thread.updatedAt)}
             </p>
           </div>
         </div>

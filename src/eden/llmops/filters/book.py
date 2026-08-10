@@ -1,12 +1,18 @@
-"""F40 agent Book / Ledger gateway filter."""
+"""F40 agent Book / Ledger gateway filter.
+
+Boot-cost note (PERF): importing this module must stay cheap. The
+Ledger retriever pulls the whole KB chain (~100ms cold), so both heavy
+imports are deferred to first request in :meth:`BookGatewayFilter.apply`
+— the filter is registered at boot on every gateway, but only runs when
+an org has the ledger feature enabled. Keeps ``gateway.py → ai_gateway
+→ filters → book`` out of the eager boot graph.
+"""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from eden.kb.ledger.retrieve import LedgerRetriever
-from eden.llmops.warm_learn import schedule_warm_learn
 from eden.preview.gates import ledger_enabled_sync
 
 logger = logging.getLogger(__name__)
@@ -38,6 +44,11 @@ class BookGatewayFilter:
         org_s = str(org_id)
         agent_s = str(agent_id)
         if ledger_enabled_sync(org_s):
+            # Lazy: ``LedgerRetriever`` pulls the KB chain (~100ms cold);
+            # ``schedule_warm_learn`` fires a background warm-up task.
+            from eden.kb.ledger.retrieve import LedgerRetriever
+            from eden.llmops.warm_learn import schedule_warm_learn
+
             text, audit = LedgerRetriever().pack_sync(org_s, agent_s)
             if audit.get("cache_miss"):
                 schedule_warm_learn(

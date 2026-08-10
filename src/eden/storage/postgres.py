@@ -28,6 +28,26 @@ from eden.util.jsonx import dumps as _jsonx_dumps
 
 logger = logging.getLogger(__name__)
 
+
+def _encode_vector(value: Any) -> str | None:
+    """Encode a Python vector to the pgvector text form ``[1.0,2.0]``."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return "[" + ",".join(str(float(x)) for x in value) + "]"
+
+
+def _decode_vector(value: str | None) -> list[float] | None:
+    """Decode the pgvector text form ``[1.0,2.0]`` to ``list[float]``."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped or stripped == "[]":
+        return []
+    return [float(x) for x in stripped.strip("[]").split(",")]
+
+
 # Request-scoped asyncpg connection pinned by RLSOrgContextMiddleware.
 # When set, PostgresClient.acquire/fetch/execute reuse this connection so
 # FORCE RLS policies see ``app.current_org_id`` (SET LOCAL on that conn).
@@ -645,6 +665,24 @@ class PostgresClient:
             await conn.execute(
                 f"SET idle_in_transaction_session_timeout = {_idle_in_tx_timeout_ms}"
             )
+            # N4 — pgvector codec. Without this, binding a Python
+            # ``list[float]`` to a ``vector`` column raises a DataError,
+            # which silently broke every KB typed-embedding insert (the
+            # clients catch and log). Registering the text-format codec
+            # makes ``list[float]`` ↔ ``vector`` work on every pooled
+            # connection, so the KB typed columns and the new
+            # ``vector_documents`` store both bind cleanly.
+            #
+            # Fresh DB pre-migration the vector type doesn't exist yet;
+            # the vector columns don't either, so nothing to bind. The
+            # codec registers on the next connection after upgrade.
+            with contextlib.suppress(Exception):  # pragma: no cover - ext missing
+                await conn.set_type_codec(
+                    "vector",
+                    encoder=_encode_vector,
+                    decoder=_decode_vector,
+                    format="text",
+                )
 
         # SSL config (Phase 7 — Neon cutover). Managed providers
         # (Neon, RDS, Aurora) reject unencrypted connections; the
@@ -1430,6 +1468,7 @@ class PostgresClient:
                    is_active
             FROM agent_uploads
             WHERE org_id = $1 AND agent_id = $2 AND is_active = TRUE
+            ORDER BY uploaded_at DESC
             LIMIT 1
             """,
             org_id,

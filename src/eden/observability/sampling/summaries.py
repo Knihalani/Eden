@@ -50,7 +50,14 @@ class SamplingSummaryStore:
         self._rows.clear()
 
     async def persist(self, summary: TraceSamplingSummary) -> bool:
-        """Upsert into ``trace_sampling_summaries`` when Postgres is up."""
+        """Upsert ONE summary row into ``trace_sampling_summaries``.
+
+        Kept for backward compatibility / single-shot callers. The ingest
+        hot path must NOT use this per event — it is one DB round-trip per
+        sampled-out event, which defeats the purpose of sampling under
+        ``balanced``/``aggressive`` profiles. Use
+        :meth:`persist_buffered` (one ``executemany`` per batch) instead.
+        """
         self.record(summary)
         try:
             from eden.storage.postgres import get_postgres_client
@@ -89,6 +96,70 @@ class SamplingSummaryStore:
         except Exception as exc:
             logger.debug("sampling summary persist failed: %s", exc)
             return False
+
+    async def persist_buffered(self, client: Any | None = None) -> int:
+        """Flush the in-memory buffer with ONE ``executemany``.
+
+        Dedupes by ``(org_id, trace_id)`` (a multi-span dropped trace
+        contributes several summaries) and upserts the whole batch in a
+        single round-trip — the batch equivalent of ``persist``, for the
+        ingest hot path. Returns the number of rows written; 0 when the
+        table is missing or Postgres is down (best-effort — the buffer
+        is kept on failure so the next flush retries).
+        """
+        # Atomic snapshot-then-clear BEFORE the await: rows buffered while
+        # the DB write is in flight must not be lost by a concurrent flush
+        # clearing them, and a failed write must restore exactly what was
+        # snapshotted (not swallow rows recorded during the await).
+        to_flush, self._rows = self._rows, []
+        if not to_flush:
+            return 0
+        if client is None:
+            try:
+                from eden.storage.postgres import get_postgres_client
+
+                client = await get_postgres_client()
+            except Exception as exc:
+                logger.debug("sampling summary: postgres unavailable: %s", exc)
+                self._rows = to_flush + self._rows
+                return 0
+            if client is None:
+                self._rows = to_flush + self._rows
+                return 0
+        # Dedupe by trace — keep the LAST (richest) summary per trace.
+        by_trace: dict[tuple[str, str], TraceSamplingSummary] = {}
+        for s in to_flush:
+            by_trace[(s.org_id, s.trace_id)] = s
+        rows = [
+            (s.org_id, s.trace_id, s.agent_id, s.duration_ms, s.cost_usd,
+             s.span_count, s.drop_reason)
+            for s in by_trace.values()
+        ]
+        try:
+            await client.executemany(
+                """
+                INSERT INTO trace_sampling_summaries (
+                    org_id, trace_id, agent_id, duration_ms, cost_usd,
+                    span_count, drop_reason
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (org_id, trace_id) DO UPDATE SET
+                    agent_id = EXCLUDED.agent_id,
+                    duration_ms = EXCLUDED.duration_ms,
+                    cost_usd = EXCLUDED.cost_usd,
+                    span_count = EXCLUDED.span_count,
+                    drop_reason = EXCLUDED.drop_reason,
+                    dropped_at = now()
+                """,
+                rows,
+            )
+            return len(rows)
+        except Exception as exc:
+            # Restore the snapshot (plus anything buffered during the await)
+            # so a later flush retries everything.
+            logger.debug("sampling summary batch persist failed: %s", exc)
+            self._rows = to_flush + self._rows
+            return 0
 
 
 _store: SamplingSummaryStore | None = None

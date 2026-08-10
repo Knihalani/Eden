@@ -168,6 +168,7 @@ class TraceFinalizedConsumer:
         if remaining == 0:
             return out
         block_ms = _block_ms() if not out else 1
+        read_started = _time.monotonic()
         try:
             resp = await redis.xreadgroup(
                 _GROUP,
@@ -182,6 +183,20 @@ class TraceFinalizedConsumer:
                 await asyncio.sleep(1.0)
             return out
         if not resp:
+            if not out:
+                # Sleep-on-empty (P0-1 A1): emulate server-side BLOCK
+                # client-side when the server ignores it (Upstash returns
+                # instantly on empty streams, billing each read). If the
+                # server honored BLOCK, ``elapsed`` is ~block_ms and the
+                # remainder is ~0 — no extra latency is added. If it
+                # returned instantly, sleeping the remainder pins the idle
+                # command rate to 1 per block_ms (300s → ~9k cmds/mo per
+                # consumer idle) instead of a tight spin that previously
+                # burned the whole Upstash free tier.
+                waited_ms = (_time.monotonic() - read_started) * 1000.0
+                remainder_s = (block_ms - waited_ms) / 1000.0
+                if remainder_s > 0:
+                    await asyncio.sleep(remainder_s)
             return out
         for _stream, entries in resp:
             for mid, fields in entries:
@@ -300,17 +315,34 @@ class TraceFinalizedConsumer:
         axes to avoid duplicate partial rows.
         """
         _record_queue_lag(message_id)
+        # Wave 8 — single-fetch pipeline. Every downstream consumer used to
+        # issue its own full-window ``_fetch_trace_events`` (Layer A, the
+        # scanner, and the signal investigator each re-scanned up to
+        # TRACE_EVENTS_LIMIT wide rows per finalized trace), and the F34
+        # classifier gate was invoked with NO events — so its trained
+        # models hashed an empty list. Fetch once here and thread the same
+        # list through every stage; empty events just skip the pipeline
+        # (same as before, minus the repeated scans).
+        events = await _fetch_pipeline_events(org_id, trace_id)
         layer_a_report = await self._run_layer_a(
             org_id,
             trace_id,
+            events=events,
             agent_id=data.get("agent_id") or None,
             session_id=data.get("session_id") or None,
             user_id=data.get("user_id") or None,
         )
-        await self._run_annotator(org_id, trace_id, layer_a_report, attempt=attempt)
+        await self._run_annotator(
+            org_id,
+            trace_id,
+            layer_a_report,
+            events=events,
+            attempt=attempt,
+        )
         scan_results = await self._scanner.scan(
             org_id,
             trace_id,
+            events=events,
             agent_id=data.get("agent_id") or None,
             session_id=data.get("session_id") or None,
             user_id=data.get("user_id") or None,
@@ -329,24 +361,39 @@ class TraceFinalizedConsumer:
         except Exception as rail_exc:
             logger.debug("trace_finalized: statgate_p0_rail: %s", rail_exc)
         if not _layer_a_primary_hit(layer_a_report):
-            # F34: classifiers before F06 investigator.
-            skip_inv = await _run_signal_classifiers(org_id, trace_id)
+            # F34: classifiers before F06 investigator. Thread the same
+            # events the rest of the pipeline already fetched — pre-fix the
+            # classifier gate ran on an empty event list (its features
+            # never reflected the trace).
+            skip_inv = await _run_signal_classifiers(
+                org_id, trace_id, events=events
+            )
             if not skip_inv:
-                await _run_signal_investigator(org_id, trace_id)
+                await _run_signal_investigator(
+                    org_id, trace_id, events=events
+                )
         await self._maybe_prod_eval(
             org_id,
             trace_id,
+            events=events,
             agent_id=data.get("agent_id") or None,
         )
         # N12 — session timeline rollup, after the detectors so the
         # stumbles this trace produced are counted on its turn.
         await self._run_session_rollup(org_id, trace_id, data)
+        # Wave 6 — materialize the trace's summary row (the list read path
+        # serves from ``trace_summaries`` instead of re-aggregating
+        # telemetry_events per page load). Recomputed-then-upserted, so a
+        # retry converges; runs after the detectors but the summary only
+        # reads events, so ordering does not matter for its inputs.
+        await self._run_trace_summary(org_id, trace_id)
 
     async def _run_layer_a(
         self,
         org_id: str,
         trace_id: str,
         *,
+        events: list[dict[str, Any]] | None = None,
         agent_id: str | None,
         session_id: str | None,
         user_id: str | None,
@@ -363,7 +410,8 @@ class TraceFinalizedConsumer:
             from eden.issues.models import StumbleCreate
             from eden.issues.stumble_writer import StumbleWriter
 
-            events = await _fetch_trace_events(org_id, trace_id)
+            if events is None:
+                events = await _fetch_trace_events(org_id, trace_id)
             if not events:
                 return None
             report = DescriptorEngine(online=True).describe(events, trace_id=trace_id)
@@ -442,6 +490,7 @@ class TraceFinalizedConsumer:
         trace_id: str,
         layer_a_report: Any | None,
         *,
+        events: list[dict[str, Any]] | None = None,
         attempt: int = 1,
     ) -> None:
         """T1 semantic tags after Layer A — observability only.
@@ -464,8 +513,19 @@ class TraceFinalizedConsumer:
             from eden.evaluation.annotator import annotate_and_persist
             from eden.insights.rca._common import _fetch_trace_events
 
-            events = getattr(layer_a_report, "_events", None) if layer_a_report else None
-            if not events:
+            # Wave 8.1 — reuse the pipeline's single fetch. ``events`` from
+            # ``_process_trace`` is authoritative: a threaded-but-empty list
+            # means the trace genuinely has no events (or the shared fetch
+            # already degraded for this run) and must NOT re-scan
+            # telemetry_events. Only a caller that passed neither ``events``
+            # nor a report carrying ``_events`` falls back to the DB read.
+            if events is None:
+                events = (
+                    getattr(layer_a_report, "_events", None)
+                    if layer_a_report
+                    else None
+                )
+            if events is None:
                 events = await _fetch_trace_events(org_id, trace_id)
             layer_ids = (
                 set(getattr(layer_a_report, "descriptor_ids", ()) or ())
@@ -517,15 +577,41 @@ class TraceFinalizedConsumer:
                 raise
             logger.debug("trace_finalized: session rollup skipped: %s", exc)
 
+    async def _run_trace_summary(self, org_id: str, trace_id: str) -> None:
+        """Wave 6 — upsert the trace's materialized summary row.
+
+        Same failure contract as ``_run_session_rollup``: transient storage
+        errors bubble so the handle-retry ladder re-runs (recompute-upsert
+        converges); anything else is logged and dropped — a summary bug must
+        not dead-letter the detection pipeline.
+        """
+        try:
+            from eden.observability.trace_summary import TraceSummaryIndexer
+
+            await TraceSummaryIndexer().index_trace(org_id, trace_id)
+        except Exception as exc:
+            if _is_transient(exc):
+                raise
+            logger.debug("trace_finalized: trace summary skipped: %s", exc)
+
     async def _maybe_prod_eval(
-        self, org_id: str, trace_id: str, *, agent_id: str | None
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        events: list[dict[str, Any]] | None = None,
+        agent_id: str | None,
     ) -> None:
         try:
             from eden.evaluation.production.sampler import ProductionEvalSampler
 
             sampler = ProductionEvalSampler()
             await sampler.maybe_score_trace(
-                org_id, trace_id, agent_id=agent_id, is_stumble=False
+                org_id,
+                trace_id,
+                agent_id=agent_id,
+                is_stumble=False,
+                events=events,
             )
         except Exception as exc:
             # Prod eval is optional; never poison the main scan path.
@@ -544,6 +630,35 @@ def _layer_a_primary_hit(report: Any | None) -> bool:
         return bool(report.descriptor_ids & LAYER_A_PRIMARY)
     except Exception:
         return False
+
+
+async def _fetch_pipeline_events(
+    org_id: str, trace_id: str
+) -> list[dict[str, Any]]:
+    """Fetch one trace's events for the whole detection pipeline (Wave 8).
+
+    Single fetch per finalized trace, shared by Layer A, the scanner, the
+    F34 classifiers and the F06 investigator. Best-effort: a fetch failure
+    degrades to ``[]`` and the WHOLE pipeline skips this trace (pre-fix,
+    each stage ran its own fetch, so a blip between two fetches could let
+    a later stage still succeed while an earlier one saw empty — with one
+    shared fetch the degradation is all-or-nothing). Never raises into the
+    retry ladder; ``_fetch_trace_events`` already swallows its own errors.
+
+    Note (Wave 8.1): because the list is threaded as authoritative, the
+    annotator no longer runs its own second-chance fetch when this returns
+    ``[]`` on a transient blip — the one paid LLM stage now skips exactly
+    like every other stage. That is the intended all-or-nothing tradeoff;
+    a genuinely empty trace also skips it, and ``annotate_and_persist``
+    costs nothing on the empty path.
+    """
+    try:
+        from eden.insights.rca._common import _fetch_trace_events
+
+        return await _fetch_trace_events(org_id, trace_id)
+    except Exception as exc:
+        logger.debug("trace_finalized: pipeline events fetch failed: %s", exc)
+        return []
 
 
 def _decode(fields: Any) -> dict[str, str]:
@@ -662,14 +777,18 @@ def _record_queue_lag(message_id: Any) -> None:
         pass
 
 
-async def _run_signal_classifiers(org_id: str, trace_id: str) -> bool:
+async def _run_signal_classifiers(
+    org_id: str, trace_id: str, *, events: list[dict[str, Any]] | None = None
+) -> bool:
     """F34 — run classifiers before investigator; True = skip F06."""
     try:
         from eden.signals.classifier_worker import (
             run_classifiers_before_investigator,
         )
 
-        result = await run_classifiers_before_investigator(org_id, trace_id)
+        result = await run_classifiers_before_investigator(
+            org_id, trace_id, events=events
+        )
         if result.get("skip_investigator"):
             logger.info(
                 "f34: skip investigator org=%s trace=%s savings=%.4f",
@@ -683,7 +802,12 @@ async def _run_signal_classifiers(org_id: str, trace_id: str) -> bool:
     return False
 
 
-async def _run_signal_investigator(org_id: str, trace_id: str) -> None:
+async def _run_signal_investigator(
+    org_id: str,
+    trace_id: str,
+    *,
+    events: list[dict[str, Any]] | None = None,
+) -> None:
     """F06 — per-trace signal investigator (best-effort)."""
     try:
         from eden.config import get_settings
@@ -696,7 +820,7 @@ async def _run_signal_investigator(org_id: str, trace_id: str) -> None:
         from eden.llmops.cost_ledger import CostEvent, record_cost_event
         from eden.signals.investigator import investigate_trace
 
-        await investigate_trace(org_id, trace_id)
+        await investigate_trace(org_id, trace_id, events=events)
         # Meter that the investigator path ran, for the FinOps
         # comparison against classifier savings — but at cost_usd=0.0,
         # because this path spends nothing.

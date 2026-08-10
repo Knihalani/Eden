@@ -27,8 +27,8 @@
  */
 
 import { describe, expect, test, afterEach } from "bun:test";
-import { gunzipSync } from "node:zlib";
 import { mkdtempSync, readFileSync } from "node:fs";
+import { parseFetchBody } from "./_parseBody.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -49,7 +49,7 @@ function sizeLimitGateway(max: number) {
   const batches: number[] = [];
   const accepted: string[] = [];
   globalThis.fetch = (async (_u: string, init: { body: Uint8Array }) => {
-    const parsed = JSON.parse(gunzipSync(Buffer.from(init.body)).toString());
+    const parsed = parseFetchBody(init);
     const arr = Array.isArray(parsed) ? parsed : [parsed];
     batches.push(arr.length);
     if (arr.length > max) return new Response("too large", { status: 413 });
@@ -141,7 +141,7 @@ describe("maxBatchSize caps the batch, not just the flush trigger", () => {
     const batches: number[] = [];
     let first = true;
     globalThis.fetch = (async (_u: string, init: { body: Uint8Array }) => {
-      const parsed = JSON.parse(gunzipSync(Buffer.from(init.body)).toString());
+      const parsed = parseFetchBody(init);
       batches.push(Array.isArray(parsed) ? parsed.length : 1);
       if (first) {
         first = false;

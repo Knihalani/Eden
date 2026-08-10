@@ -101,7 +101,7 @@ export function CompareDetailView({
             </div>
             <p className="type-meta flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
               <DeltaStat
-                label="Fail"
+                label="Fail rate"
                 value={formatDeltaDisplay("stumble", stumble.delta)}
                 good={stumble.delta < -0.0005}
                 bad={stumble.delta > 0.0005}

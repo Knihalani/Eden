@@ -140,11 +140,11 @@ def test_get_ai_gateway_installs_learn_filters():
 # 3. Health degrade when quality worker should be running but is dead
 # ---------------------------------------------------------------------------
 
-def _simulate_health(*, worker_running, bg_running, worker_enabled, pg, qdrant):
+def _simulate_health(*, worker_running, bg_running, worker_enabled, pg, pgvector):
     """Reproduce the /health overall-status logic in isolation."""
-    kb = {"postgres": pg, "qdrant": qdrant}
+    kb = {"postgres": pg, "pgvector": pgvector}
     overall = "healthy" if (
-        kb.get("postgres") == "connected" and kb.get("qdrant") == "connected"
+        kb.get("postgres") == "connected" and kb.get("pgvector") == "connected"
     ) else "degraded"
 
     if overall == "healthy" and (worker_enabled and bg_running and not worker_running):
@@ -159,7 +159,7 @@ def test_health_degrades_when_leader_and_worker_dead():
         bg_running=True,
         worker_enabled=True,
         pg="connected",
-        qdrant="connected",
+        pgvector="connected",
     ) == "degraded"
 
 
@@ -169,7 +169,7 @@ def test_health_stays_healthy_when_not_leader():
         bg_running=False,
         worker_enabled=True,
         pg="connected",
-        qdrant="connected",
+        pgvector="connected",
     ) == "healthy"
 
 
@@ -179,7 +179,7 @@ def test_health_stays_healthy_when_worker_disabled():
         bg_running=True,
         worker_enabled=False,
         pg="connected",
-        qdrant="connected",
+        pgvector="connected",
     ) == "healthy"
 
 
@@ -189,7 +189,7 @@ def test_health_stays_healthy_when_worker_running():
         bg_running=True,
         worker_enabled=True,
         pg="connected",
-        qdrant="connected",
+        pgvector="connected",
     ) == "healthy"
 
 

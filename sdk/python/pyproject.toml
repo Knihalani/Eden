@@ -36,6 +36,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Wire-path speed: orjson makes the send hot path ~6.7× faster on the
+# serialization step and zstd (N2) makes the compressed wire ~3.8× faster
+# than gzip-1 at the same ratio. Kept optional so the base install stays
+# minimal; ``_fast_json`` and ``_wire_compress`` fall back with identical
+# bytes when they are absent.
+fast = ["orjson>=3.9", "zstandard>=0.23"]
 # Provider instrumentations
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.30"]
@@ -68,6 +74,9 @@ all = [
     "groq>=0.9",
     "cohere>=5.0",
     "mistralai>=2.0",
+    # Wire-path speed (see the ``fast`` extra).
+    "orjson>=3.9",
+    "zstandard>=0.23",
 ]
 dev = [
     "pytest>=8.0",
@@ -77,6 +86,12 @@ dev = [
     "mypy>=1.8",
     "respx>=0.21",
     "anyio>=4.0",
+    # Exercised by tests/test_fast_json.py — the parity test only compares
+    # both branches when orjson is installed, so CI (which installs ``dev``)
+    # must have it or the fast path silently rots.
+    "orjson>=3.9",
+    # Same for the zstd wire branch (tests/test_wire_compress.py).
+    "zstandard>=0.23",
 ]
 
 [project.scripts]

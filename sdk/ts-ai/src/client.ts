@@ -77,40 +77,103 @@ function _isWireEnvelope(stored: Record<string, unknown>): boolean {
 }
 
 /**
- * Lazily-cached ``gzipSync`` so each ingest POST does not pay for
- * a fresh ``import("node:zlib")``. Dynamic import is kept (not a
- * static top-level import) so edge/bundler builds that tree-shake
- * unused Node builtins still resolve at runtime only when posting.
- * ``level: 1`` matches the Python SDK's ``compresslevel=1`` —
- * fastest deflate for telemetry payloads where wire size is already
- * dominated by JSON structure, not archive ratio.
+ * Wire-compression for ingest POSTs (N2). Prefers zstd when the runtime
+ * provides it — Bun ships a native ``Bun.zstdCompressSync`` — and falls
+ * back to gzip level 1 (``node:zlib``) everywhere else, mirroring the
+ * Python SDK's ``_wire_compress`` exactly:
  *
- * Deliberately still ``gzipSync``, not the threadpool-backed
- * ``zlib.gzip``. Measured on this payload shape at level 1: 0.4ms per
- * call for a 621KB body, scaling at roughly 0.5ms/MB. Switching to the
- * async form cost ~40% more wall-clock per call (11ms vs 8ms over 20
- * calls) for the threadpool round-trip, to hand back a fraction of a
- * millisecond of event loop. Since ``flush()`` now caps a batch at
- * ``maxBatchSize`` (default 50) rather than shipping the whole queue,
- * the realistic body is a few hundred KB and the sync call is the
- * cheaper choice. Revisit only if a caller raises ``maxBatchSize`` into
- * the thousands *and* carries large prompts — at ~20MB the stall
- * reaches ~10ms, which is where the trade flips.
+ *   - zstd frame magic is ``28 B5 2F FD``, the same constant the backend
+ *     ``providers.py`` sniffs (``_ZSTD_MAGIC``) when a proxy strips the
+ *     ``Content-Encoding`` header.
+ *   - ``Content-Encoding`` must be set to whatever this returns
+ *     (``"zstd"`` or ``"gzip"``), not hard-coded to gzip, or the backend
+ *     would treat a zstd body as plain JSON and reject it.
+ *
+ * The gzip fallback deliberately stays ``gzipSync`` (cached, dynamic
+ * import) not the threadpool-backed ``zlib.gzip``. Measured on this
+ * payload shape at level 1: 0.4ms per call for a 621KB body, scaling at
+ * roughly 0.5ms/MB — the async form cost ~40% more wall-clock per call
+ * for the threadpool round-trip. The dynamic import is kept so
+ * edge/bundler builds that tree-shake unused Node builtins still resolve
+ * at runtime only when posting.
  */
 type GzipSync = typeof import("node:zlib").gzipSync;
 let _gzipSync: GzipSync | null = null;
 
+/** ``Content-Encoding`` values this module can emit. */
+export type WireEncoding = "zstd" | "gzip" | "identity";
+
 /**
- * Exported so other ingest-shaped call sites (e.g. ``session.ts``'s
- * agent-session lifecycle notify) can reuse the same cached
- * ``gzipSync`` instead of each maintaining its own copy.
+ * Probe for the Bun zstd compressor. Intentionally NOT cached — it is a
+ * single ``typeof`` check per POST (negligible next to the network I/O)
+ * and caching would freeze the answer for the whole process, which
+ * breaks tests that simulate a runtime without zstd and keeps the code
+ * honest about what the current runtime provides. ``null`` = no zstd.
+ *
+ * ``_zstdOverride`` is a test hook: Bun's ``Bun.zstdCompressSync`` is a
+ * non-configurable property, so tests cannot stub it via ``globalThis``
+ * (``defineProperty`` throws). ``compressWireBodyForTests`` lets tests
+ * force the fast-path off, force a broken compressor, or restore the
+ * real probe without touching ``Bun``. Never used in production paths.
  */
-export async function gzipJsonBody(body: unknown): Promise<Buffer> {
+type ZstdCompressSync = (data: Uint8Array) => Uint8Array;
+let _zstdOverride: ZstdCompressSync | null | undefined;
+
+/**
+ * Test-only override for the zstd probe. ``null`` forces the gzip
+ * fallback; a function replaces the compressor; ``undefined`` (default)
+ * restores the live ``globalThis.Bun`` probe. Not part of the public
+ * SDK surface.
+ */
+export function _setZstdProbeForTests(
+  fn: ZstdCompressSync | null | undefined,
+): void {
+  _zstdOverride = fn;
+}
+
+function _resolveZstd(): ZstdCompressSync | null {
+  if (_zstdOverride !== undefined) return _zstdOverride;
+  // ``zstdCompressSync`` is a standalone (stateless) function on the Bun
+  // namespace — called unbound, so no per-call ``bind`` allocation.
+  const g = globalThis as { Bun?: { zstdCompressSync?: ZstdCompressSync } };
+  return typeof g.Bun?.zstdCompressSync === "function"
+    ? (g.Bun.zstdCompressSync as ZstdCompressSync)
+    : null;
+}
+
+/**
+ * Compress a JSON-serializable body for the wire.
+ *
+ * Returns ``{ body, encoding }`` — callers must send ``encoding`` as
+ * the ``Content-Encoding`` header. Never throws: on zstd failure it
+ * falls through to gzip, and on gzip failure it returns the raw JSON
+ * as ``"identity"`` so a broken compressor can never kill telemetry
+ * (mirrors ``_wire_compress.compress_wire`` in the Python SDK).
+ *
+ * Exported so other ingest-shaped call sites (e.g. ``session.ts``'s
+ * agent-session lifecycle notify) reuse the same cached compressors.
+ */
+export async function compressJsonBody(
+  body: unknown,
+): Promise<{ body: Buffer; encoding: WireEncoding }> {
+  const raw = Buffer.from(JSON.stringify(body), "utf8");
+  const zstd = _resolveZstd();
+  if (zstd !== null) {
+    try {
+      return { body: Buffer.from(zstd(raw)), encoding: "zstd" };
+    } catch {
+      // Fall through to gzip — a broken runtime zstd must not block telemetry.
+    }
+  }
   if (_gzipSync === null) {
     const zlib = await import("node:zlib");
     _gzipSync = zlib.gzipSync;
   }
-  return _gzipSync(Buffer.from(JSON.stringify(body), "utf8"), { level: 1 });
+  try {
+    return { body: _gzipSync(raw, { level: 1 }), encoding: "gzip" };
+  } catch {
+    return { body: raw, encoding: "identity" };
+  }
 }
 
 /**
@@ -1722,11 +1785,11 @@ export class EdenSDK {
           "use Node 18+ or a fetch polyfill (e.g. undici).",
       );
     }
-    // Gzip once per call (not per retry). Cached zlib + level 1
-    // matches Python SDK ingest; body Buffer is reused across
-    // attempts so a 429/5xx retry does not re-serialize.
-    const compressed = await gzipJsonBody(body);
-    const headers = this.buildHeaders({ "Content-Encoding": "gzip" });
+    // Compress once per call (not per retry). Cached zstd/gzip
+    // matches the Python SDK's ``_wire_compress``; the body Buffer is
+    // reused across attempts so a 429/5xx retry does not re-serialize.
+    const { body: compressed, encoding } = await compressJsonBody(body);
+    const headers = this.buildHeaders({ "Content-Encoding": encoding });
     // Retry transient failures with exponential backoff. 4xx other
     // than 408/429 are treated as permanent and not retried. Honours
     // the ``Retry-After`` response header up to 30s. 413 is returned

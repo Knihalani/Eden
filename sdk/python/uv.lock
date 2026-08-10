@@ -1072,8 +1072,10 @@ all = [
     { name = "llama-index-core" },
     { name = "mistralai" },
     { name = "openai" },
+    { name = "orjson" },
     { name = "pyautogen" },
     { name = "pydantic-ai" },
+    { name = "zstandard" },
 ]
 anthropic = [
     { name = "anthropic" },
@@ -1093,11 +1095,17 @@ crewai = [
 dev = [
     { name = "anyio" },
     { name = "mypy" },
+    { name = "orjson" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "respx" },
     { name = "ruff" },
+    { name = "zstandard" },
+]
+fast = [
+    { name = "orjson" },
+    { name = "zstandard" },
 ]
 gemini = [
     { name = "google-generativeai" },
@@ -1152,6 +1160,9 @@ requires-dist = [
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.30" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.24" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.24" },
+    { name = "orjson", marker = "extra == 'all'", specifier = ">=3.9" },
+    { name = "orjson", marker = "extra == 'dev'", specifier = ">=3.9" },
+    { name = "orjson", marker = "extra == 'fast'", specifier = ">=3.9" },
     { name = "pyautogen", marker = "extra == 'all'", specifier = ">=0.2" },
     { name = "pyautogen", marker = "extra == 'autogen'", specifier = ">=0.2" },
     { name = "pydantic-ai", marker = "extra == 'all'", specifier = ">=0.1" },
@@ -1161,8 +1172,11 @@ requires-dist = [
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.12" },
     { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+    { name = "zstandard", marker = "extra == 'all'", specifier = ">=0.23" },
+    { name = "zstandard", marker = "extra == 'dev'", specifier = ">=0.23" },
+    { name = "zstandard", marker = "extra == 'fast'", specifier = ">=0.23" },
 ]
-provides-extras = ["openai", "anthropic", "langchain", "llama-index", "crewai", "autogen", "bedrock", "gemini", "groq", "cohere", "mistral", "mastra", "pydantic-ai", "otel", "all", "dev"]
+provides-extras = ["fast", "openai", "anthropic", "langchain", "llama-index", "crewai", "autogen", "bedrock", "gemini", "groq", "cohere", "mistral", "mastra", "pydantic-ai", "otel", "all", "dev"]
 
 [[package]]
 name = "email-validator"

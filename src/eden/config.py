@@ -170,27 +170,8 @@ def _build_settings_class():
         # known to run *session*-mode pooling (or no pooler at all).
         postgres_statement_cache_size: int = 0
 
-        # Qdrant
-        qdrant_host: str = "localhost"
-        qdrant_port: int = 6333
-        qdrant_collection_prefix: str = "eden_"
-        # Qdrant Cloud (or any TLS-terminated upstream) needs HTTPS + API key.
-        # ``qdrant_api_key`` maps to env var ``QDRANT_API_KEY`` (the qdrant-client
-        # Python lib also reads ``QDRANT_API_KEY`` natively, but we plumb it
-        # through Settings so the rest of the app can read the same value).
-        qdrant_https: bool = False
-        qdrant_api_key: str = ""
-
-        @field_validator("qdrant_host", mode="before")
-        @classmethod
-        def _normalize_qdrant_host(cls, v: object) -> object:
-            """Strip accidental https:// prefix from QDRANT_HOST."""
-            if isinstance(v, str):
-                for prefix in ("https://", "http://"):
-                    if v.startswith(prefix):
-                        v = v[len(prefix) :]
-                return v.rstrip("/")
-            return v
+        # N4 (2026-08-10): Qdrant settings removed — vector search moved
+        # to pgvector (same Postgres; migration 164). No separate config.
 
         # Typesense — full-text search across spans (Phase B).
         # TYPESENSE_API_KEY is required and must match docker-compose.yml.
@@ -408,6 +389,19 @@ def _build_settings_class():
         # W20 / F70 — in-product ChatSidebar copilot (features.f70).
         # OFF by default; set FEATURES_F70=true to enable.
         features_f70: bool = False
+        # Wave 9 — batch $0-cost ledger writes (cost_ledger.py).
+        # ``customer_cost_events`` rows with cost_usd = 0 (classifier
+        # savings markers on the always-on trace.finalized path, etc.)
+        # are buffered in-process and flushed in ONE executemany instead
+        # of one INSERT per event. Events with cost > 0 stay write-through
+        # (billing-critical: budget + alert round-trips). Flag off =>
+        # identical to the pre-batching write path. ``cost_ledger_batch_max``
+        # bounds buffered latency (inline flush at that depth);
+        # ``cost_ledger_batch_interval_seconds`` is the periodic flush
+        # cadence for trickling markers in the API and worker processes.
+        cost_ledger_batch_v1: bool = True
+        cost_ledger_batch_max: int = 200
+        cost_ledger_batch_interval_seconds: float = 5.0
         # DL-10: hard cap on the ChatService gateway's request
         # ``max_tokens`` parameter. The OpenRouter upstream caps at
         # 4096 by default; set to 0 to disable the cap. The test
@@ -1226,6 +1220,27 @@ def _build_settings_class():
         auto_issue_detection_v1: bool = True
         per_trace_signals_v1: bool = True
         tool_call_label_learning_v1: bool = True
+        # Wave 6: serve the trace list from the materialized
+        # ``trace_summaries`` table instead of re-aggregating
+        # ``telemetry_events`` per page load (~418x page read measured).
+        # Default OFF: enabling requires the table (migration 167), the
+        # backfill script, and the ingest placeholder writer. See
+        # docs/wave6-trace-summaries.md.
+        trace_summaries_read_v1: bool = False
+        # Wave 7: cache the dashboard ``observability_summary`` response in
+        # Redis for a short TTL (default 20s). The endpoint fires 7 full-window
+        # aggregations over telemetry_events per request; dashboard polling
+        # collapses to one compute per window per org. Exact-equivalent read
+        # (same queries, cached result) — never stale beyond the TTL.
+        observability_summary_cache_v1: bool = False
+        observability_summary_cache_ttl_s: float = 20.0
+        # Wave 7: cache the (non-hydrated) trace tree in Redis. Traces are
+        # immutable after ``trace.finalized``, so a finalized trace's tree
+        # never changes — the cache is written only for finalized traces
+        # (a ``trace_summaries`` row with span_count > 0) and never for
+        # in-flight ones. Hydrated bodies are too large to cache.
+        trace_tree_cache_v1: bool = False
+        trace_tree_cache_ttl_s: float = 3600.0
         # FEAT-177: gates only *live inference* (auto-flagging tool misuse,
         # which can create F28 stumbles) in `infer_tool_misuse()`. Calibrator
         # training/persistence in `train_and_persist()` is unconditional —

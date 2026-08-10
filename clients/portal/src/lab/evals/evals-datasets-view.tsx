@@ -12,7 +12,13 @@ import {
   type DatasetSource,
   type ExperimentFixture,
 } from "@/lab/fixtures/evals";
-import { AgentLink, EmptyState, FilterChips } from "@/lab/lab-ui";
+import {
+  AgentLink,
+  EmptyState,
+  FilterChips,
+  SearchInput,
+} from "@/lab/lab-ui";
+import { formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
 
@@ -118,13 +124,12 @@ export function EvalsDatasetsView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
-        <input
-          type="search"
+        <SearchInput
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search datasets…"
-          className="ds-input min-w-[10rem] flex-1 !h-8 !py-0 !text-[0.75rem] sm:max-w-xs"
-          aria-label="Search datasets"
+          onChange={setQuery}
+          placeholder="Search datasets, ids…"
+          ariaLabel="Search datasets"
+          className="min-w-[10rem] flex-1 sm:max-w-xs"
         />
         <FilterChips
           value={source}
@@ -227,7 +232,7 @@ export function EvalsDatasetsView({
                       {d.caseIds.length}
                     </td>
                     <td className="type-meta py-2.5 pr-4 sm:pr-6">
-                      {d.updatedAt}
+                      {formatSmartTime(d.updatedAt)}
                     </td>
                   </tr>
                 );
@@ -632,7 +637,9 @@ function DatasetDock({
                     <span className="type-value !text-[0.6875rem]">
                       {formatScore(Object.values(e.avgScores)[0] ?? 0)}
                     </span>
-                    <span className="type-meta shrink-0">{e.createdAt}</span>
+                    <span className="type-meta shrink-0">
+                      {formatSmartTime(e.createdAt)}
+                    </span>
                   </button>
                 </li>
               ))}

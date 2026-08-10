@@ -9,8 +9,8 @@ import pytest
 from eden.api.startup_checks import (
     StartupCheckError,
     check_openrouter,
+    check_pgvector,
     check_postgres,
-    check_qdrant,
     check_redis,
     check_typesense,
     run_startup_checks,
@@ -76,11 +76,12 @@ async def test_check_redis_ok():
 
 
 @pytest.mark.asyncio
-async def test_check_qdrant_ok():
-    mock_qdrant = MagicMock()
-    mock_qdrant._get_client.return_value.get_collections.return_value = []
-    with patch("eden.storage.qdrant.get_qdrant_client", return_value=mock_qdrant):
-        assert await check_qdrant() == "ok"
+async def test_check_pgvector_ok():
+    mock_client = MagicMock()
+    mock_client.fetchval = AsyncMock(return_value=None)
+    with patch("eden.storage.postgres.get_postgres_client",
+               AsyncMock(return_value=mock_client)):
+        assert await check_pgvector() == "ok"
 
 
 @pytest.mark.asyncio
@@ -136,7 +137,7 @@ async def test_run_startup_checks_strict_raises():
     with (
         patch("eden.api.startup_checks.check_postgres", _fail_postgres),
         patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="ok")),
-        patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="ok")),
+        patch("eden.api.startup_checks.check_pgvector", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_typesense", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_openrouter", AsyncMock(return_value="ok")),
     ):
@@ -157,7 +158,7 @@ async def test_run_startup_checks_strict_ignores_soft_failures():
     with (
         patch("eden.api.startup_checks.check_postgres", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="error: down")),
-        patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="error: down")),
+        patch("eden.api.startup_checks.check_pgvector", AsyncMock(return_value="error: down")),
         patch(
             "eden.api.startup_checks.check_typesense",
             AsyncMock(return_value="error: typesense unreachable"),
@@ -187,7 +188,7 @@ async def test_run_startup_checks_non_strict_returns_errors():
     with (
         patch("eden.api.startup_checks.check_postgres", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_redis", AsyncMock(return_value="error: down")),
-        patch("eden.api.startup_checks.check_qdrant", AsyncMock(return_value="ok")),
+        patch("eden.api.startup_checks.check_pgvector", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_typesense", AsyncMock(return_value="ok")),
         patch("eden.api.startup_checks.check_openrouter", AsyncMock(return_value="ok")),
     ):
