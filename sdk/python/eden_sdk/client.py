@@ -51,7 +51,7 @@ from eden_sdk.ingest_format import resolve_ingest_path
 # import time; if the package is re-installed the new value
 # takes effect. The gateway logs the SDK version on every POST
 # so version drift across the fleet is visible in one place.
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 _USER_AGENT = f"eden-sdk/{__version__} (python)"
 
 # Match BE ``settings.ingestion_chunks_max_per_request`` (default 1000).
