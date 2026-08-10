@@ -7,6 +7,7 @@ import {
   formatFailRate,
   liveVersion,
   previousVersion,
+  statusLabel,
   versionById,
   type PromptDetailTab,
   type PromptEnv,
@@ -18,6 +19,7 @@ import {
   PromptTabNav,
 } from "@/lab/prompts/prompts-chrome";
 import { AgentLink, EmptyState } from "@/lab/lab-ui";
+import { formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function PromptsDetailView({
@@ -101,7 +103,7 @@ export function PromptsDetailView({
                 </>
               ) : null}
               <span className="text-[var(--text-faint)]"> · </span>
-              prod {prompt.lastDeployed}
+              prod {formatSmartTime(prompt.lastDeployed)}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -251,7 +253,7 @@ function EditorPane({
           >
             {prompt.versions.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.label} · {v.status}
+                {v.label} · {statusLabel(v.status)}
               </option>
             ))}
           </select>
@@ -355,7 +357,9 @@ function VersionsPane({
                 ))}
               </div>
               <span className="type-meta">
-                {v.deployedAt ? `deployed ${v.deployedAt}` : v.createdAt}
+                {v.deployedAt
+                  ? `deployed ${formatSmartTime(v.deployedAt)}`
+                  : formatSmartTime(v.createdAt)}
               </span>
             </button>
           </li>
@@ -397,7 +401,7 @@ function DeployPane({
           >
             {prompt.versions.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.label} · {v.status}
+                {v.label} · {statusLabel(v.status)}
               </option>
             ))}
           </select>
@@ -433,7 +437,7 @@ function DeployPane({
               >
                 <dt className="type-label">{env}</dt>
                 <dd className="type-ui mt-1 text-[var(--text)]">
-                  {v ? `${v.label} · ${v.status}` : "—"}
+                  {v ? `${v.label} · ${statusLabel(v.status)}` : "—"}
                 </dd>
               </div>
             );

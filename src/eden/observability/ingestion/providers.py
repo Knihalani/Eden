@@ -60,21 +60,72 @@ def _gunzip_limited(body: bytes) -> bytes:
     return b"".join(chunks)
 
 
+# zstd frame magic (little-endian 0xFD2FB528). Matches the SDK's
+# ``_wire_compress`` constant; both SDKs send ``Content-Encoding: zstd``
+# (N2) and the gateway must accept it the same way it accepts gzip.
+_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+
+
+def _zstd_decompress_limited(body: bytes) -> bytes:
+    """Decompress zstd with absolute + ratio caps on the output size.
+
+    Mirrors :func:`_gunzip_limited`'s bomb protection: an attacker (or a
+    buggy SDK) must not be able to make the API allocate unbounded memory
+    from a tiny compressed request.
+    """
+    limit = min(
+        _MAX_GUNZIP_BYTES,
+        max(len(body) * _MAX_GUNZIP_RATIO, _GUNZIP_CHUNK),
+    )
+    try:
+        import zstandard
+    except ImportError:  # pragma: no cover - backend always has zstandard
+        raise ValueError("zstd decompression unavailable") from None
+    chunks: list[bytes] = []
+    total = 0
+    dctx = zstandard.ZstdDecompressor()
+    try:
+        reader = dctx.stream_reader(io.BytesIO(body))
+        while True:
+            chunk = reader.read(_GUNZIP_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise ValueError(
+                    f"zstd decompressed size exceeds {limit} bytes"
+                )
+            chunks.append(chunk)
+    except zstandard.ZstdError as exc:
+        raise ValueError(f"invalid zstd body: {exc}") from exc
+    return b"".join(chunks)
+
+
 def maybe_gunzip_body(
     body: bytes,
     content_encoding: str | None = None,
 ) -> bytes:
-    """Decode ``Content-Encoding: gzip`` request bodies for ingest.
+    """Decode ``Content-Encoding: gzip`` / ``zstd`` request bodies for ingest.
 
-    SDKs may POST gzip-compressed JSON with ``Content-Encoding: gzip``.
-    Identity / missing encodings pass through unchanged. Invalid gzip
-    or oversize inflate raises ``ValueError`` so the route can return 400.
+    SDKs may POST compressed JSON with ``Content-Encoding: gzip`` (both
+    SDKs, always) or ``Content-Encoding: zstd`` (N2: the wire fast path
+    when zstandard is installed). Identity / missing encodings pass
+    through unchanged. Invalid data or oversize inflate raises
+    ``ValueError`` so the route can return 400.
     """
     if not body:
         return body
     encoding = (content_encoding or "").lower().strip()
     if not encoding or encoding == "identity":
-        # Also accept raw gzip magic when the header was stripped by a proxy.
+        # Also accept raw magic bytes when the header was stripped by a
+        # proxy (zstd frame magic, then gzip).
+        if len(body) >= 4 and body[:4] == _ZSTD_MAGIC:
+            try:
+                return _zstd_decompress_limited(body)
+            except ValueError as exc:
+                if "exceeds" in str(exc):
+                    raise
+                return body
         if len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B:
             try:
                 return _gunzip_limited(body)
@@ -85,9 +136,12 @@ def maybe_gunzip_body(
                     raise
                 return body
         return body
-    if "gzip" not in encoding.split(","):
-        return body
-    return _gunzip_limited(body)
+    encodings = [e.strip() for e in encoding.split(",")]
+    if "zstd" in encodings:
+        return _zstd_decompress_limited(body)
+    if "gzip" in encodings:
+        return _gunzip_limited(body)
+    return body
 
 
 def _needs_gunzip(body: bytes, content_encoding: str | None) -> bool:
@@ -95,8 +149,12 @@ def _needs_gunzip(body: bytes, content_encoding: str | None) -> bool:
         return False
     encoding = (content_encoding or "").lower().strip()
     if encoding and encoding != "identity":
-        return "gzip" in encoding.split(",")
-    return len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B
+        parts = [e.strip() for e in encoding.split(",")]
+        return "gzip" in parts or "zstd" in parts
+    return (
+        (len(body) >= 4 and body[:4] == _ZSTD_MAGIC)
+        or (len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B)
+    )
 
 
 async def maybe_gunzip_body_async(

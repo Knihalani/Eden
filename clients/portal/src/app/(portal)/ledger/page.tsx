@@ -11,7 +11,11 @@ import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi, ledgerApi, type LedgerSummaryRow } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { formatRelativeTime } from "@/lib/format";
@@ -305,8 +309,9 @@ export default function LedgerPage() {
   return (
     <Suspense
       fallback={
-        <div className="ds-page flex min-h-0 flex-1 items-center justify-center">
-          <p className="type-meta">Loading ledger…</p>
+        <div className="ds-page">
+          <PageHeader title="Ledger" />
+          <LoadingFallback label="Loading ledger…" />
         </div>
       }
     >

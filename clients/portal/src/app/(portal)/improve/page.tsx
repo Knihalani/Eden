@@ -25,17 +25,18 @@ import { portalApi } from "@/lib/api/portal";
 import { improvePlansApi } from "@/lib/api/resources";
 import { isGithubPermissionsMissing } from "@/lib/improve-feature";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
 import { NudgesPromotionsPanel } from "@/components/improve/nudges-promotions-panel";
 
-const improveFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const improveFallback = <LoadingFallback label="Loading improve plans…" />;
 
 const ImproveQueueView = dynamic(
   () =>
@@ -543,8 +544,9 @@ export default function LabImprovePage() {
         <div className="ds-page">
           <PageHeader
             title="Improve"
-            meta={<span className="type-meta">Loading…</span>}
+            meta={<InlineLoading label="Loading improve plans" />}
           />
+          <LoadingFallback label="Loading improve plans…" rows={4} />
         </div>
       }
     >

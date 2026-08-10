@@ -296,14 +296,14 @@ def test_chunk_buffer_overflow_uses_deque_eviction():
 
 
 def test_compact_json_separators_roundtrip():
-    """Compact separators stay JSON-compatible for ingest gzip bodies."""
+    """Compact wire serializer stays JSON-compatible for ingest gzip bodies."""
     import gzip
     import json
 
-    from eden_sdk.client import _JSON_SEPARATORS
+    from eden_sdk._fast_json import dumps_bytes
 
     payloads = [{"id": f"e{i}", "model": "gpt-4o-mini"} for i in range(50)]
-    raw = json.dumps(payloads, default=str, separators=_JSON_SEPARATORS).encode()
+    raw = dumps_bytes(payloads)
     body = gzip.compress(raw, compresslevel=1)
     assert body[:2] == b"\x1f\x8b"
     assert json.loads(gzip.decompress(body)) == payloads

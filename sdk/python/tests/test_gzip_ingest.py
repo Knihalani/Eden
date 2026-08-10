@@ -1,4 +1,4 @@
-"""Gzip Content-Encoding round-trip for SDK ingest (K35)."""
+"""Wire Content-Encoding round-trip for SDK ingest (K35 + N2 zstd)."""
 
 from __future__ import annotations
 
@@ -10,18 +10,19 @@ from pathlib import Path
 
 import httpx
 
+from eden_sdk import _wire_compress as wc
 from eden_sdk.client import EdenClient, TraceEvent
 from eden_sdk.config import EdenConfig
+from tests._http_body import decode_ingest_body
 
 
-def test_send_batch_sets_gzip_content_encoding() -> None:
+def test_send_batch_sets_wire_content_encoding() -> None:
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["encoding"] = request.headers.get("content-encoding")
         seen["body"] = bytes(request.content)
-        raw = gzip.decompress(request.content)
-        seen["decoded"] = json.loads(raw)
+        seen["decoded"] = decode_ingest_body(request.content, request.headers)
         return httpx.Response(200, json={"accepted": 1})
 
     cfg = EdenConfig(
@@ -43,10 +44,15 @@ def test_send_batch_sets_gzip_content_encoding() -> None:
     ]
     asyncio.run(client._send_batch(batch))
 
-    assert seen["encoding"] == "gzip"
     body = seen["body"]
     assert isinstance(body, (bytes, bytearray))
-    assert body[:2] == b"\x1f\x8b"
+    encoding = seen["encoding"]
+    if wc._HAVE_ZSTD:
+        assert encoding == "zstd"
+        assert bytes(body)[:4] == wc._ZSTD_MAGIC
+    else:
+        assert encoding == "gzip"
+        assert bytes(body)[:2] == b"\x1f\x8b"
     decoded = seen["decoded"]
     assert isinstance(decoded, list)
     assert decoded[0]["event_id"] == "e1"
@@ -61,9 +67,24 @@ def test_maybe_gunzip_round_trip() -> None:
     try:
         from eden.observability.ingestion.providers import maybe_gunzip_body
     except ImportError:
-        def maybe_gunzip_body(body: bytes, content_encoding: str | None = None) -> bytes:
+        from eden_sdk._wire_compress import (
+            WIRE_GZIP,
+            compress_wire,
+            is_zstd_body,
+        )
+
+        def maybe_gunzip_body(
+            body: bytes, content_encoding: str | None = None
+        ) -> bytes:
+            """Local fallback mirroring the backend's decode logic."""
             encoding = (content_encoding or "").lower()
-            if "gzip" in encoding or (len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B):
+            if "zstd" in encoding or is_zstd_body(body):
+                import zstandard
+
+                return zstandard.ZstdDecompressor().decompress(body)
+            if "gzip" in encoding or (
+                len(body) >= 2 and body[0] == 0x1F and body[1] == 0x8B
+            ):
                 return gzip.decompress(body)
             return body
 
@@ -71,3 +92,9 @@ def test_maybe_gunzip_round_trip() -> None:
     compressed = gzip.compress(payload)
     assert maybe_gunzip_body(compressed, "gzip") == payload
     assert maybe_gunzip_body(payload, None) == payload
+    # N2: the backend must also accept the SDK's zstd wire encoding.
+    z_body, z_enc = compress_wire(payload)
+    if z_enc == WIRE_GZIP:
+        return  # zstandard not installed in this env — nothing to verify
+    assert maybe_gunzip_body(z_body, z_enc) == payload
+    assert maybe_gunzip_body(z_body, None) == payload  # magic sniffing

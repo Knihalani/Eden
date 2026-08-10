@@ -1,4 +1,8 @@
-"""M2 (D4) — durable outbox fallback for the closed-loop event bus."""
+"""N5 — Postgres outbox is the primary closed-loop queue.
+
+Covers publish (insert + pending-key dedup), drain (claim / dispatch /
+backoff / dead-letter), depth, oldest-pending age, and TTL cleanup.
+"""
 
 from __future__ import annotations
 
@@ -8,16 +12,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import eden.closed_loop.event_bus as eb
 from eden.closed_loop.events import LoopEvent
 
 
 @pytest.fixture(autouse=True)
-def _reset_failure_ts():
-    import eden.closed_loop.event_bus as eb
-
+def _reset_bus_state():
     eb.last_publish_failure_ts = None
+    eb._seen.clear()
     yield
     eb.last_publish_failure_ts = None
+    eb._seen.clear()
 
 
 def _event(**overrides) -> LoopEvent:
@@ -31,40 +36,43 @@ def _event(**overrides) -> LoopEvent:
     return LoopEvent.from_fields(fields)
 
 
-@pytest.mark.asyncio
-async def test_publish_without_redis_writes_outbox_row(caplog):
-    import eden.closed_loop.event_bus as eb
+def _rows(*refs: str, attempts: int = 0) -> list[dict]:
+    return [
+        {
+            "id": i + 1,
+            "event": json.dumps(_event(ref=ref).to_fields()),
+            "attempts": attempts,
+        }
+        for i, ref in enumerate(refs)
+    ]
 
+
+# ── publish ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_publish_writes_outbox_row():
     client = MagicMock()
     client.execute = AsyncMock()
-    with (
-        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)),
-        patch.object(eb, "_pg", AsyncMock(return_value=client)),
-        caplog.at_level(logging.ERROR, logger="eden.closed_loop.event_bus"),
-    ):
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
         ok = await eb.publish(_event())
 
-    assert ok is True  # durably queued
-    assert eb.last_publish_failure_ts is not None
-    assert any(
-        r.levelno == logging.ERROR and "publish failed" in r.getMessage()
-        for r in caplog.records
-    )
+    assert ok is True
+    assert eb.last_publish_failure_ts is None
     client.execute.assert_awaited_once()
-    sql, org_id, event_json = client.execute.await_args.args
+    sql, org_id, event_json, idem_key = client.execute.await_args.args
     assert "INSERT INTO loop_events_outbox" in sql
+    assert "ON CONFLICT (idempotency_key) WHERE drained_at IS NULL" in sql
     assert org_id == "org-1"
     fields = json.loads(event_json)
     assert fields["type"] == "verify_passed"
     assert fields["issue_id"] == "00000000-0000-0000-0000-000000000001"
+    assert idem_key == "00000000-0000-0000-0000-000000000001:verify_passed:ref-1"
 
 
 @pytest.mark.asyncio
-async def test_publish_with_pg_also_down_returns_false(caplog):
-    import eden.closed_loop.event_bus as eb
-
+async def test_publish_with_pg_down_returns_false(caplog):
     with (
-        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)),
         patch.object(eb, "_pg", AsyncMock(return_value=None)),
         caplog.at_level(logging.ERROR, logger="eden.closed_loop.event_bus"),
     ):
@@ -72,110 +80,156 @@ async def test_publish_with_pg_also_down_returns_false(caplog):
 
     assert ok is False
     assert eb.last_publish_failure_ts is not None
-    assert any("outbox insert failed" in r.getMessage() for r in caplog.records)
+    assert any("publish failed" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_successful_publish_clears_failure_ts():
-    import eden.closed_loop.event_bus as eb
-
     eb.last_publish_failure_ts = 123.0
-    redis = MagicMock()
-    redis.xadd = AsyncMock()
-
-    ok = await eb.publish(_event(), redis=redis)
+    client = MagicMock()
+    client.execute = AsyncMock()
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        ok = await eb.publish(_event())
 
     assert ok is True
     assert eb.last_publish_failure_ts is None
-    redis.xadd.assert_awaited_once()
-    assert redis.xadd.await_args.args[0] == eb.LOOP_STREAM
 
 
 @pytest.mark.asyncio
-async def test_drain_replays_in_order_once_and_stamps_drained():
-    import eden.closed_loop.event_bus as eb
-
-    f1 = _event(ref="a").to_fields()
-    f2 = _event(ref="b").to_fields()
-    rows = [
-        {"id": 1, "event": json.dumps(f1)},  # asyncpg jsonb-as-str
-        {"id": 2, "event": dict(f2)},  # jsonb codec configured
-    ]
+async def test_schedule_retry_sets_future_retry_after():
     client = MagicMock()
-    client.fetch = AsyncMock(return_value=rows)
     client.execute = AsyncMock()
-    redis = MagicMock()
-    redis.xadd = AsyncMock()
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        ok = await eb.schedule_retry(_event(), delay_seconds=90)
 
-    with (
-        patch.object(eb, "_pg", AsyncMock(return_value=client)),
-        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=redis)),
-    ):
-        drained = await eb.drain_outbox()
+    assert ok is True
+    sql = client.execute.await_args.args[0]
+    assert "retry_after_ts" in sql
+    assert "ON CONFLICT" in sql
 
-    assert drained == 2
+
+# ── drain ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_drain_dispatches_in_order_and_stamps_drained():
+    orch = MagicMock()
+    orch.on_event = AsyncMock()
+    client = MagicMock()
+    client.fetch = AsyncMock(return_value=_rows("a", "b"))
+    client.execute = AsyncMock()
+
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        handled = await eb.drain_outbox(orchestrator=orch)
+
+    assert handled == 2
     fetch_sql = client.fetch.await_args.args[0]
     assert "drained_at IS NULL" in fetch_sql
     assert "retry_after_ts IS NULL OR retry_after_ts <= NOW()" in fetch_sql
     assert "ORDER BY id ASC" in fetch_sql
-    # Replayed oldest-first, exactly once each.
-    assert [c.args[1]["ref"] for c in redis.xadd.await_args_list] == ["a", "b"]
-    # drained_at stamped per row.
+    assert "FOR UPDATE SKIP LOCKED" in fetch_sql
+    # Dispatched oldest-first, exactly once each.
+    assert [c.args[0].ref for c in orch.on_event.await_args_list] == ["a", "b"]
     stamped = [c.args for c in client.execute.await_args_list]
     assert all("SET drained_at = NOW()" in s[0] for s in stamped)
     assert [s[1] for s in stamped] == [1, 2]
 
 
 @pytest.mark.asyncio
-async def test_drain_stops_on_first_publish_failure():
-    import eden.closed_loop.event_bus as eb
-
-    rows = [
-        {"id": i, "event": json.dumps(_event(ref=str(i)).to_fields())}
-        for i in (1, 2, 3)
-    ]
+async def test_drain_failure_increments_attempts_and_requeues():
+    orch = MagicMock()
+    orch.on_event = AsyncMock(side_effect=RuntimeError("handler boom"))
     client = MagicMock()
-    client.fetch = AsyncMock(return_value=rows)
+    client.fetch = AsyncMock(return_value=_rows("a", attempts=1))
     client.execute = AsyncMock()
-    redis = MagicMock()
-    redis.xadd = AsyncMock(side_effect=[None, ConnectionError("gone"), None])
 
-    with (
-        patch.object(eb, "_pg", AsyncMock(return_value=client)),
-        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=redis)),
-    ):
-        drained = await eb.drain_outbox()
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        handled = await eb.drain_outbox(orchestrator=orch)
 
-    assert drained == 1
-    assert redis.xadd.await_count == 2  # row 3 never attempted
-    # Only row 1 stamped.
-    assert [c.args[1] for c in client.execute.await_args_list] == [1]
+    assert handled == 0  # nothing handled successfully
+    sql, row_id, attempts, err, backoff = client.execute.await_args.args
+    assert "SET attempts = $2" in sql
+    assert "retry_after_ts" in sql
+    assert row_id == 1
+    assert attempts == 2
+    assert "handler boom" in err
+    assert int(backoff) >= 10
 
 
 @pytest.mark.asyncio
-async def test_drain_without_redis_leaves_rows():
-    import eden.closed_loop.event_bus as eb
-
+async def test_drain_dead_letters_after_max_deliveries(caplog):
+    orch = MagicMock()
+    orch.on_event = AsyncMock(side_effect=RuntimeError("handler boom"))
     client = MagicMock()
     client.fetch = AsyncMock(
-        return_value=[{"id": 1, "event": json.dumps(_event().to_fields())}]
+        return_value=_rows("a", attempts=eb._MAX_DELIVERIES - 1)
     )
     client.execute = AsyncMock()
 
     with (
         patch.object(eb, "_pg", AsyncMock(return_value=client)),
-        patch("eden.storage.redis.get_redis_client", AsyncMock(return_value=None)),
+        caplog.at_level(logging.ERROR, logger="eden.closed_loop.event_bus"),
     ):
-        drained = await eb.drain_outbox()
+        handled = await eb.drain_outbox(orchestrator=orch)
 
-    assert drained == 0
-    client.execute.assert_not_awaited()
+    assert handled == 0
+    sql, row_id, attempts, err = client.execute.await_args.args
+    # Dead-lettered via a drained stamp (GC'd by cleanup_drained later).
+    assert "SET drained_at = NOW()" in sql
+    assert attempts == eb._MAX_DELIVERIES
+    assert any("dead-letter" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_drain_skips_seen_idempotency_key():
+    orch = MagicMock()
+    orch.on_event = AsyncMock()
+    client = MagicMock()
+    client.fetch = AsyncMock(return_value=_rows("a"))
+    client.execute = AsyncMock()
+
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        assert await eb.drain_outbox(orchestrator=orch) == 1
+    assert orch.on_event.await_count == 1
+
+    # Same key again within the window → acknowledged, not re-dispatched.
+    orch.on_event.reset_mock()
+    client.execute.reset_mock()
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        assert await eb.drain_outbox(orchestrator=orch) == 1
+
+    orch.on_event.assert_not_awaited()
+    stamped = [c.args for c in client.execute.await_args_list]
+    assert all("SET drained_at = NOW()" in s[0] for s in stamped)
+
+
+@pytest.mark.asyncio
+async def test_drain_without_pg_returns_zero():
+    with patch.object(eb, "_pg", AsyncMock(return_value=None)):
+        assert await eb.drain_outbox() == 0
+
+
+@pytest.mark.asyncio
+async def test_drain_defaults_to_real_orchestrator():
+    """No explicit orchestrator → the singleton orchestrator is used."""
+    client = MagicMock()
+    client.fetch = AsyncMock(return_value=_rows("a"))
+    client.execute = AsyncMock()
+
+    from eden.closed_loop.orchestrator import get_orchestrator
+
+    real = get_orchestrator()
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        assert await eb.drain_outbox() == 1
+    client.execute.assert_awaited_once()
+    assert real is not None
+
+
+# ── depth / age / cleanup ────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_outbox_depth_counts_undrained():
-    import eden.closed_loop.event_bus as eb
-
     client = MagicMock()
     client.fetchrow = AsyncMock(return_value={"n": 4})
     with patch.object(eb, "_pg", AsyncMock(return_value=client)):
@@ -188,9 +242,22 @@ async def test_outbox_depth_counts_undrained():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_deletes_only_old_drained_rows():
-    import eden.closed_loop.event_bus as eb
+async def test_oldest_pending_age_s():
+    client = MagicMock()
+    client.fetchrow = AsyncMock(return_value={"age": 42.5})
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        assert await eb.oldest_pending_age_s() == 42.5
 
+    client.fetchrow = AsyncMock(return_value={"age": None})
+    with patch.object(eb, "_pg", AsyncMock(return_value=client)):
+        assert await eb.oldest_pending_age_s() is None
+
+    with patch.object(eb, "_pg", AsyncMock(return_value=None)):
+        assert await eb.oldest_pending_age_s() is None
+
+
+@pytest.mark.asyncio
+async def test_cleanup_deletes_only_old_drained_rows():
     client = MagicMock()
     client.execute = AsyncMock(return_value="DELETE 3")
     with patch.object(eb, "_pg", AsyncMock(return_value=client)):

@@ -15,6 +15,7 @@ import {
   type ExperimentFixture,
 } from "@/lab/fixtures/evals";
 import { formatDuration, formatUsd } from "@/lab/fixtures/traces";
+import { formatSmartTime } from "@/lib/format";
 import { EmptyState, FilterChips } from "@/lab/lab-ui";
 import { CompareGradeChip, Delta } from "@/lab/evals/evals-chrome";
 import { StatusChip } from "@/components/ds/primitives";
@@ -166,7 +167,7 @@ export function EvalsCompareView({
 
   const runLabel = (e: ExperimentFixture) => {
     const score = formatScore(Object.values(e.avgScores)[0] ?? 0);
-    return `${e.name} · ${score} · ${e.createdAt}`;
+    return `${e.name} · ${score} · ${formatSmartTime(e.createdAt)}`;
   };
 
   if (experiments.length === 0) {

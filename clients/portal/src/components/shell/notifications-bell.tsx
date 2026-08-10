@@ -14,18 +14,9 @@
 import { useEffect, useId, useState } from "react";
 import { Inbox, X } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
+import { EmptyState } from "@/lab/lab-ui";
+import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "";
-  const diffMin = Math.round((Date.now() - then) / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return `${Math.round(diffHr / 24)}d ago`;
-}
 
 export function NotificationsBell({
   collapsed = false,
@@ -123,9 +114,12 @@ export function NotificationsBell({
 
             <div className="min-h-0 flex-1 overflow-y-auto">
               {notifications.length === 0 ? (
-                <p className="type-meta px-4 py-6 text-center">
-                  No notifications yet.
-                </p>
+                <EmptyState
+                  icon={Inbox}
+                  title="No notifications yet"
+                  body="Budget thresholds and workspace events land here."
+                  compact
+                />
               ) : (
                 <ul className="divide-y divide-[var(--line)]">
                   {notifications.map((n) => (
@@ -146,7 +140,7 @@ export function NotificationsBell({
                         <p className="type-ui text-[var(--text)]">{n.title}</p>
                         <p className="type-meta mt-0.5">{n.message}</p>
                         <p className="type-meta mt-1 text-[var(--text-faint)]">
-                          {relativeTime(n.created_at)}
+                          {formatRelativeTime(n.created_at)}
                         </p>
                       </button>
                       <button

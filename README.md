@@ -207,7 +207,7 @@ curl "https://api.edenobservability.com/orgs/$EDEN_ORG_ID/…" \
 ## Development
 
 ```bash
-# Run tests
+# Run tests (backend)
 pytest
 
 # Type checking
@@ -218,6 +218,16 @@ ruff check src/eden
 
 # Web platform
 cd clients/portal && bun install && bun run dev
+```
+
+The repo is a **bun** workspace, so run the JS/TS suites with bun rather
+than npm — `npm test` still works but can mask runner-version drift.
+Both `clients/portal` (vitest) and `sdk/ts-ai` (bun test) expose an
+identical `test:bun` alias for the runner they actually use:
+
+```bash
+cd clients/portal && bun run test:bun   # vitest run
+cd sdk/ts-ai && bun run test:bun        # bun test tests/
 ```
 
 ## Documentation

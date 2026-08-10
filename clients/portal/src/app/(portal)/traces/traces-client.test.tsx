@@ -240,3 +240,23 @@ describe("FEAT-115 annotate action", () => {
     expect(screen.getByRole("dialog", { name: "Annotate trace" })).toBeTruthy();
   });
 });
+
+describe("Wave 10 action-bar mounts", () => {
+  it("shows 'vs prev' and pre-fills TraceDiffDialog with the previous same-agent run", () => {
+    // t2 is the newest same-agent run; its chronologically-previous
+    // same-agent run is t1 — the "vs prev" button must prefill that id.
+    mockParams = { id: "t2" };
+    mockTraces = [T1, T2];
+    render(<TracesClient />);
+
+    const vsPrev = screen.getByRole("button", { name: /vs prev/ });
+    expect(vsPrev).toBeTruthy();
+    fireEvent.click(vsPrev);
+
+    const dialog = screen.getByRole("dialog", { name: "Compare runs" });
+    expect(dialog).toBeTruthy();
+    expect(
+      (screen.getByLabelText("Other run id") as HTMLInputElement).value,
+    ).toBe("t1");
+  });
+});

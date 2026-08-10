@@ -75,7 +75,9 @@ export function CostDriversView({
                           −{formatSpend(d.estSaveUsd)}
                         </span>
                       ) : (
-                        <span className="type-meta">ok</span>
+                        <span className="type-meta text-[var(--text-faint)]">
+                          no savings yet
+                        </span>
                       )}
                     </div>
                     <p className="type-body line-clamp-1">{d.summary}</p>

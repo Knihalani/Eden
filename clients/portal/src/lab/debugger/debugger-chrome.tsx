@@ -73,7 +73,7 @@ export function DebuggerOutcomeChip({
 }) {
   return (
     <StatusChip tone={outcome === "ok" ? "ok" : "fail"}>
-      {outcome === "ok" ? "ok" : "fail"}
+      {outcome === "ok" ? "OK" : "Failed"}
     </StatusChip>
   );
 }

@@ -2,9 +2,10 @@
 
 Two representative writes:
 
-1. The durable-outbox insert (Redis already down, now PG dies too —
-   total outage). Contract: the loss is EXPLICIT — ``publish`` returns
-   ``False`` and logs at ERROR. Never a silent success.
+1. The outbox insert behind ``publish`` (N5: the outbox *is* the
+   closed-loop queue — there is no second store to buffer into).
+   Contract: the loss is EXPLICIT — ``publish`` returns ``False`` and
+   logs at ERROR. Never a silent success.
 
 2. The issue state-transition audit row
    (``state_machine._record_transition``). Today a PG failure there is
@@ -48,10 +49,11 @@ def _reset_bus_state():
 
 @pytest.mark.asyncio
 async def test_total_outage_outbox_insert_fails_loud_not_silent(caplog):
-    """Redis dead AND Postgres dead: publish must say so.
+    """Postgres down under publish: the loss must be explicit.
 
-    ``publish`` returns False (the event is lost) and both legs log at
-    ERROR — the failure is visible to operators, not swallowed.
+    ``publish`` returns False (the event is lost — the outbox is the
+    queue, so there is nowhere else to go) and logs at ERROR — the
+    failure is visible to operators, not swallowed.
     """
     import eden.closed_loop.event_bus as eb
 
@@ -60,21 +62,16 @@ async def test_total_outage_outbox_insert_fails_loud_not_silent(caplog):
         side_effect=ConnectionError("chaos: postgres down")
     )
 
-    class _DeadRedis:
-        async def xadd(self, *a, **k):
-            raise ConnectionError("chaos: redis down")
-
     with (
         patch.object(eb, "_pg", AsyncMock(return_value=dead_pg)),
         caplog.at_level(logging.ERROR, logger="eden.closed_loop.event_bus"),
     ):
-        ok = await eb.publish(_event(), redis=_DeadRedis())
+        ok = await eb.publish(_event())
 
     assert ok is False  # explicit loss — the caller can react
     assert eb.last_publish_failure_ts is not None  # probe stamped
     messages = [r.getMessage() for r in caplog.records]
     assert any("publish failed" in m for m in messages)
-    assert any("outbox insert failed" in m for m in messages)
 
 
 @pytest.mark.asyncio

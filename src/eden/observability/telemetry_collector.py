@@ -13,12 +13,14 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
 import time
 import uuid
 from collections import OrderedDict, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -33,7 +35,37 @@ from eden.observability.ingest_hot_path_metrics import (
     record_ingest_sampled_out as _record_ingest_sampled_out,
 )
 
+# Import once, not per call. The previous per-call ``from eden.util.jsonx
+# import dumps`` inside ``_json_dumps`` paid the import machinery + a
+# try/except on every serialization — and ``_build_postgres_row`` alone
+# calls ``_dump_jsonb`` ~7x per event (15+ with the CH row). jsonx itself
+# falls back to stdlib when orjson is absent, so this cannot raise at
+# import time in any environment that can import this module.
+_jsonx_dumps: Callable[..., str] | None = None
+with contextlib.suppress(Exception):  # jsonx is always present in-app; defensive
+    from eden.util.jsonx import dumps as _jsonx_dumps
+
 logger = logging.getLogger(__name__)
+
+# Lazy holder for ``eden.llmops.pricing.estimate_cost_usd``. Imported on
+# first use (not at module load, to keep the collector's boot footprint
+# small), then cached so the ingest hot path's per-event ``from ... import``
+# becomes a module-attribute lookup. ``_stamp_cost_usd`` runs on every
+# event, so the per-call import machinery is not free.
+_estimate_cost_usd: Any = None
+
+
+def _get_estimate_cost_usd() -> Any:
+    """Return the cached ``estimate_cost_usd`` callable (import on first use)."""
+    global _estimate_cost_usd
+    if _estimate_cost_usd is None:
+        try:
+            from eden.llmops.pricing import estimate_cost_usd
+
+            _estimate_cost_usd = estimate_cost_usd
+        except Exception:  # pragma: no cover - pricing is always importable
+            return None
+    return _estimate_cost_usd
 
 
 @dataclass
@@ -106,6 +138,16 @@ class TelemetryEvent:
     # messages to extract.
     request_message_hashes: list[str] = field(default_factory=list)
     response_message_hashes: list[str] = field(default_factory=list)
+    # Wave 5 (PERF): the ISO timestamp parsed once in ``_validate`` is stashed
+    # here so ``_compute_ingest_latency``, ``_build_postgres_row`` and the
+    # late-span policy reuse it instead of re-parsing the string 3-4x/event.
+    # Not in ``to_dict``/``from_dict`` — it is a per-process cache, not data.
+    # ``compare=False, repr=False`` keeps it out of dataclass equality /
+    # repr, so two otherwise-identical events compare equal whether or not
+    # one was validated.
+    _parsed_timestamp: datetime | None = field(
+        default=None, compare=False, repr=False
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -243,15 +285,12 @@ class TimelineData:
 
 def _json_dumps(value: Any, *, sort_keys: bool = False) -> str:
     """Prefer A4 ``eden.util.jsonx`` when present; else compact stdlib."""
-    try:
-        from eden.util.jsonx import dumps as _jsonx_dumps
-
-        if sort_keys:
-            # jsonx may not accept sort_keys; fall back for hash inputs.
-            return json.dumps(value, default=str, separators=(",", ":"), sort_keys=True)
+    if sort_keys:
+        # jsonx may not accept sort_keys; fall back for hash inputs.
+        return json.dumps(value, default=str, separators=(",", ":"), sort_keys=True)
+    if _jsonx_dumps is not None:
         return _jsonx_dumps(value)
-    except Exception:
-        return json.dumps(value, default=str, separators=(",", ":"), sort_keys=sort_keys)
+    return json.dumps(value, default=str, separators=(",", ":"), sort_keys=sort_keys)
 
 
 def _dump_jsonb(value):
@@ -289,7 +328,26 @@ _TOKEN_METRIC_KEYS = frozenset(
 )
 
 
+def _tok_int(metrics: dict, key: str) -> int:
+    """Coerce ``metrics[key]`` to int, defaulting to 0 (module-level so
+    ``_stamp_cost_usd`` doesn't build a closure per event — Wave 5)."""
+    raw = metrics.get(key)
+    if raw is None:
+        return 0
+    try:
+        return int(float(raw))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _normalize_token_metrics_dict(metrics: dict) -> dict:
+    # Fast path: the dict copy below is only needed when a token key is
+    # actually present. ``_dump_jsonb`` runs this on every dict it sees
+    # (payload, attributes, request_body, ...) and those almost never
+    # contain token metrics — measured 100k dict copies per 20k events
+    # (5/event) in the row-build profile, nearly all wasted.
+    if not (_TOKEN_METRIC_KEYS & metrics.keys()):
+        return metrics
     out = dict(metrics)
     for key in _TOKEN_METRIC_KEYS:
         if key not in out or out[key] is None:
@@ -348,6 +406,9 @@ class TelemetryCollector:
 
     # Hot-path Redis stream maxlen per trace
     STREAM_MAXLEN = 10000
+    # Cooldown before re-attempting the Redis client after a failure. Stops
+    # the per-event connect storm + warning flood while Redis is down.
+    REDIS_RETRY_COOLDOWN_S = 30.0
     # ClickHouse telemetry batch insert size.
     # Raised 100→250 (2026-07 Wave 2): fewer CH round-trips under SDK
     # batch flush; still flushed by CH_FLUSH_INTERVAL_S so latency bound
@@ -365,11 +426,17 @@ class TelemetryCollector:
     _DEDUP_CACHE_MAX = 50_000  # backward-compat alias for older imports
     # Max events to keep in memory per tenant
     MAX_EVENTS_PER_TENANT = 50000
+    # Wave 7: single-event sampling flush cooldown — at most one background
+    # flush of the sampled-out summary buffer per this window per process,
+    # so N dropped events never spawn N flush tasks (the batch path still
+    # flushes once per batch, which is the primary drain).
+    SAMPLING_FLUSH_COOLDOWN_S = 2.0
 
     def __init__(self) -> None:
         self._redis: Any = None
         self._postgres: Any = None
         self._clickhouse: Any = None
+        self._redis_retry_after: float | None = None
         # Audit 2026-07-02 P-14: OrderedDict for O(1) FIFO eviction
         # at the 50k cap. ``dict`` is insertion-ordered in CPython
         # 3.7+ but the type system is happier with the explicit
@@ -385,17 +452,28 @@ class TelemetryCollector:
         # ``_step_expire_at`` in ingestion/checkpoint_hook.py.
         self._stream_expire_at = BoundedExpiryCache(resolve_max_entries())
         self._bg_tasks: set[asyncio.Task[Any]] = set()
+        self._last_sampling_flush = 0.0
 
     # ── Sink accessors ────────────────────────────────────────────────────
 
     async def _get_redis(self) -> Any:
         if self._redis is not None:
             return self._redis
+        # Wave 5 / PERF: when Redis is down, ``get_redis_client`` attempts a
+        # connect (with a 10s ceiling) and the collector logged a warning per
+        # event — a per-event connect storm that serialises ingest behind
+        # socket timeouts and floods logs. Cache the failure with a cooldown
+        # so at most one attempt per window happens.
+        now = time.monotonic()
+        if self._redis_retry_after is not None and now < self._redis_retry_after:
+            return None
         try:
             from eden.storage.redis import get_redis_client
 
             self._redis = await get_redis_client()
+            self._redis_retry_after = None
         except Exception as exc:
+            self._redis_retry_after = now + self.REDIS_RETRY_COOLDOWN_S
             logger.warning(f"Redis unavailable for telemetry: {exc}")
         return self._redis
 
@@ -495,6 +573,20 @@ class TelemetryCollector:
                     "Telemetry event %s sampled out (N16 metrics-only)",
                     event.event_id,
                 )
+                # Flush buffered summaries fire-and-forget — but gated by a
+                # cooldown so the single-event path spawns AT MOST one
+                # background flush per window (never one task per dropped
+                # event, which would be O(N) create_task + full-buffer
+                # executemany under aggressive sampling).
+                try:
+                    from eden.observability.sampling.apply import (
+                        flush_sampling_summaries,
+                    )
+
+                    if self._sampling_flush_due():
+                        self._spawn_bg(flush_sampling_summaries())
+                except Exception:  # noqa: BLE001
+                    pass
                 return self._single_result(sampled_out=1)
         except Exception:  # noqa: BLE001 — never fail ingest for sampling
             pass
@@ -519,6 +611,20 @@ class TelemetryCollector:
         except BaseException:
             self._release_dedup(event)
             raise
+
+        # 5b. Wave 6 — trace_summaries placeholder row (best-effort). One
+        #     INSERT ... ON CONFLICT DO NOTHING so in-flight traces appear
+        #     in the list before finalize. No aggregates, so a retried event
+        #     can never double-count. Gated by the same flag as the read path.
+        try:
+            from eden.config import get_settings
+
+            if getattr(get_settings(), "trace_summaries_read_v1", False):
+                from eden.observability.trace_summary import upsert_trace_placeholders
+
+                await upsert_trace_placeholders([event])
+        except Exception:  # noqa: BLE001 — never fail ingest for summaries
+            pass
 
         # 5b. Phase 7.x — billing roll-up (deferred; must not block ingest).
         #
@@ -608,6 +714,21 @@ class TelemetryCollector:
             to_route.append(event)
             accepted += 1
 
+        # N16 sampling summaries: ONE executemany flush for the whole
+        # batch's sampled-out events (never per-event — that was one
+        # Postgres round-trip per dropped event, the exact opposite of
+        # why sampling exists). Best-effort; the buffer is kept on
+        # failure and retried on the next flush.
+        if sampled_out:
+            try:
+                from eden.observability.sampling.apply import (
+                    flush_sampling_summaries,
+                )
+
+                await flush_sampling_summaries()
+            except Exception:  # noqa: BLE001 — never fail ingest for summaries
+                pass
+
         # Per-event routing in parallel.
         #
         # ``return_exceptions=True`` matters here. A bare gather propagates the
@@ -692,18 +813,30 @@ class TelemetryCollector:
                     failures[0],
                 )
 
+        # Wave 6 — trace_summaries placeholder rows (best-effort, gated).
+        # One executemany per batch over the batch's distinct trace_ids, so
+        # in-flight traces appear in the list before finalize. Aggregate-free
+        # ON CONFLICT DO NOTHING → a retried batch cannot double-count.
+        try:
+            from eden.config import get_settings
+
+            if getattr(get_settings(), "trace_summaries_read_v1", False):
+                from eden.observability.trace_summary import upsert_trace_placeholders
+
+                await upsert_trace_placeholders(to_route)
+        except Exception:  # noqa: BLE001 — never fail ingest for summaries
+            pass
+
         # Phase 7.x — billing roll-up (deferred; must not block ingest).
         self._spawn_bg(self._emit_billing_events(list(to_route)))
         # F03 — best-effort debugger checkpoints (fire-and-forget).
-        try:
-            from eden.observability.ingestion.checkpoint_hook import (
-                maybe_persist_checkpoint,
-            )
-
-            for ev in to_route:
-                self._spawn_bg(maybe_persist_checkpoint(ev))
-        except Exception:  # noqa: BLE001
-            pass
+        # Wave 5 / PERF: previously spawned ONE task per event (N
+        # ``create_task`` + context-copy per batch). The hook itself is
+        # per-event DB work with no per-event scheduling need, so one
+        # task that loops the batch is equivalent and removes N task
+        # creations from the ingest path (measured ~7 create_task/event).
+        if to_route:
+            self._spawn_bg(self._persist_checkpoints_batch(list(to_route)))
         self._spawn_bg(self._touch_agent_registrations(list(to_route)))
 
         return {
@@ -713,6 +846,26 @@ class TelemetryCollector:
             "sampled_out": sampled_out,
             "total": len(events),
         }
+
+    async def _persist_checkpoints_batch(self, events: list[TelemetryEvent]) -> None:
+        """F03 best-effort debugger checkpoints for a batch, in ONE task.
+
+        Same semantics as the old per-event ``_spawn_bg(maybe_persist_checkpoint(ev))``
+        fan-out (each event still gets its own best-effort persist; a failure
+        in one never fails ingest or aborts the loop), but collapses N task
+        creations into one.
+        """
+        try:
+            from eden.observability.ingestion.checkpoint_hook import (
+                maybe_persist_checkpoint,
+            )
+        except Exception:  # pragma: no cover — hook always importable
+            return
+        for ev in events:
+            try:
+                await maybe_persist_checkpoint(ev)
+            except Exception:  # noqa: BLE001 — never fail ingest for debugger
+                continue
 
     async def _emit_billing_events(self, events: list[TelemetryEvent]) -> None:
         """Record a ``usage_events`` row for every LLM completion event.
@@ -790,19 +943,19 @@ class TelemetryCollector:
             )
             cost_usd = None
             try:
-                from eden.llmops.pricing import estimate_cost_usd
-
                 stamped = (event.metrics or {}).get("cost_usd")
                 if stamped is not None:
                     cost_usd = float(stamped)
                 else:
-                    cost_usd = estimate_cost_usd(
-                        model=str(model),
-                        input_tokens=int(input_tokens),
-                        output_tokens=int(output_tokens),
-                        cache_read_tokens=int(cache_read),
-                        cache_write_tokens=int(cache_write),
-                    )
+                    estimate_cost_usd = _get_estimate_cost_usd()
+                    if estimate_cost_usd is not None:
+                        cost_usd = estimate_cost_usd(
+                            model=str(model),
+                            input_tokens=int(input_tokens),
+                            output_tokens=int(output_tokens),
+                            cache_read_tokens=int(cache_read),
+                            cache_write_tokens=int(cache_write),
+                        )
             except Exception:  # noqa: BLE001
                 cost_usd = None
             pending.append(
@@ -838,6 +991,14 @@ class TelemetryCollector:
                 await service.track_events_batch(pending)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(f"billing roll-up batch failed ({len(pending)} events): {exc}")
+
+    def _sampling_flush_due(self) -> bool:
+        """Cooldown gate for the single-event sampling-summary flush."""
+        now = time.monotonic()
+        if now - self._last_sampling_flush < self.SAMPLING_FLUSH_COOLDOWN_S:
+            return False
+        self._last_sampling_flush = now
+        return True
 
     def _spawn_bg(self, coro: Any) -> None:
         """Fire-and-forget a coroutine; keep a strong ref until done.
@@ -949,7 +1110,13 @@ class TelemetryCollector:
             logger.warning(f"Invalid realm '{event.realm}' in telemetry event {event.event_id}")
             return False
         try:
-            datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+            # Parse once, stash on the event. ``_compute_ingest_latency``,
+            # ``_build_postgres_row`` and the late-span policy all re-parse
+            # this same ISO string (Wave 5 measurement: 3-4 fromisoformat
+            # calls per event on the ingest hot path).
+            event._parsed_timestamp = datetime.fromisoformat(
+                event.timestamp.replace("Z", "+00:00")
+            )
         except ValueError:
             logger.warning(f"Invalid timestamp in telemetry event {event.event_id}")
             return False
@@ -978,7 +1145,12 @@ class TelemetryCollector:
     def _compute_ingest_latency(self, event: TelemetryEvent) -> None:
         """Stamp ``_ingest_latency_ms``; log (don't fail) on bad timestamps."""
         try:
-            event_ts = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+            # Reuse the parse from ``_validate`` when available.
+            event_ts = getattr(event, "_parsed_timestamp", None)
+            if event_ts is None:
+                event_ts = datetime.fromisoformat(
+                    event.timestamp.replace("Z", "+00:00")
+                )
             ingest_latency_ms = (datetime.now(UTC) - event_ts).total_seconds() * 1000
             event.metrics["_ingest_latency_ms"] = max(0.0, round(ingest_latency_ms, 2))
         except Exception as exc:  # noqa: BLE001 — never fail ingest for a metric
@@ -1005,19 +1177,12 @@ class TelemetryCollector:
         except (TypeError, ValueError):
             pass
 
-        def _tok(key: str) -> int:
-            raw = metrics.get(key)
-            if raw is None:
-                return 0
-            try:
-                return int(float(raw))
-            except (TypeError, ValueError):
-                return 0
-
-        input_tokens = _tok("input_tokens") or _tok("prompt_tokens")
-        output_tokens = _tok("output_tokens") or _tok("completion_tokens")
-        cache_read = _tok("cache_read_tokens") or _tok("cached_tokens")
-        cache_write = _tok("cache_creation_tokens") or _tok("cache_creation_input_tokens")
+        input_tokens = _tok_int(metrics, "input_tokens") or _tok_int(metrics, "prompt_tokens")
+        output_tokens = _tok_int(metrics, "output_tokens") or _tok_int(metrics, "completion_tokens")
+        cache_read = _tok_int(metrics, "cache_read_tokens") or _tok_int(metrics, "cached_tokens")
+        cache_write = _tok_int(metrics, "cache_creation_tokens") or _tok_int(
+            metrics, "cache_creation_input_tokens"
+        )
         if input_tokens + output_tokens + cache_read + cache_write <= 0:
             return
 
@@ -1029,9 +1194,10 @@ class TelemetryCollector:
             or event.model_name
             or payload.get("model")
         )
+        estimate_cost_usd = _get_estimate_cost_usd()
+        if estimate_cost_usd is None:
+            return
         try:
-            from eden.llmops.pricing import estimate_cost_usd
-
             cost = estimate_cost_usd(
                 model=str(model) if model else None,
                 input_tokens=input_tokens,
@@ -1414,10 +1580,14 @@ class TelemetryCollector:
             event.realm,
             event.event_type,
             # asyncpg requires datetime for timestamptz — TelemetryEvent
-            # keeps ISO strings on the wire / dataclass.
+            # keeps ISO strings on the wire / dataclass. Prefer the parse
+            # stashed by ``_validate`` (Wave 5: one parse instead of three).
             event.timestamp
             if isinstance(event.timestamp, datetime)
-            else datetime.fromisoformat(str(event.timestamp).replace("Z", "+00:00")),
+            else (
+                getattr(event, "_parsed_timestamp", None)
+                or datetime.fromisoformat(str(event.timestamp).replace("Z", "+00:00"))
+            ),
             event.agent_id,
             event.agent_version,
             event.environment_id,
@@ -1891,15 +2061,62 @@ class TelemetryCollector:
         for span structure without N message round-trips. Attributes,
         payload, and metrics zstd are still decoded so error text,
         tokens, and cost remain available on the cheap path.
+
+        Wave 7 (PERF): the non-hydrated tree is cached in Redis for
+        finalized traces. Traces are immutable after ``trace.finalized``,
+        so a finalized trace's tree never changes — the cache is written
+        only when the trace has a ``trace_summaries`` row with
+        span_count > 0 (the finalize signal), never for in-flight traces,
+        so a stale partial tree can never be served. Hydrated bodies are
+        too large to cache; only the structure path (the portal default)
+        is cached. Flag-gated (``trace_tree_cache_v1``), default off.
         """
         client = await self._get_postgres()
         if not client:
             return None
 
+        # Wave 7 — cached read. Best-effort; any Redis/flag failure falls
+        # through to the live build.
+        cached_tree: TraceTree | None = None
+        try:
+            from eden.config import get_settings
+
+            if (
+                not hydrate_bodies
+                and getattr(get_settings(), "trace_tree_cache_v1", False)
+            ):
+                cached_tree = await self._get_cached_trace_tree(tenant_id, trace_id)
+        except Exception as exc:  # noqa: BLE001 — never fail the trace view
+            logger.debug("trace tree cache read failed: %s", exc)
+            cached_tree = None
+        if cached_tree is not None:
+            return cached_tree
+
         try:
             rows = await client.fetch(
                 """
-                SELECT * FROM telemetry_events
+                -- Wave 4 (Part 4.4): narrowed from SELECT * to exactly
+                -- the columns get_trace_tree reads. The inline JSONB
+                -- bodies stay (zstd soft-fail fallback); 10 unused
+                -- columns (agent_version, environment_id, tags,
+                -- source_format, model, model_name, provider_name,
+                -- parent_agent_span_id, child_agent_trace_id, created_at)
+                -- are no longer shipped per row.
+                SELECT tenant_id, trace_id, realm, event_type, timestamp,
+                       agent_id, parent_span_id, span_id, name,
+                       duration_ms, outcome, payload, metrics, attributes,
+                       request_body, response_body, reasoning,
+                       tool_calls_full, tool_results, images, audio,
+                       logprobs, citations, finish_reason, stop_sequence,
+                       system_fingerprint, cache_hit,
+                       prompt_cache_savings_usd, model_version,
+                       service_tier, operation_name, error_type,
+                       request_message_hashes, response_message_hashes,
+                       request_body_zstd, response_body_zstd,
+                       reasoning_zstd, tool_calls_full_zstd,
+                       tool_results_zstd, payload_zstd, metrics_zstd,
+                       attributes_zstd
+                FROM telemetry_events
                 WHERE tenant_id = $1 AND trace_id = $2
                 ORDER BY timestamp ASC
                 LIMIT $3
@@ -2134,7 +2351,7 @@ class TelemetryCollector:
             else:
                 root_spans.append(node)
 
-        return TraceTree(
+        tree = TraceTree(
             trace_id=trace_id,
             tenant_id=tenant_id,
             realm=realm,
@@ -2144,6 +2361,108 @@ class TelemetryCollector:
             span_count=len(span_map),
             outcome=outcome,
         )
+
+        # Wave 7 — cache write. Only for the structure path, and only when
+        # the trace is finalized (has a trace_summaries row with
+        # span_count > 0). Best-effort; a cache failure never fails the
+        # trace view.
+        try:
+            from eden.config import get_settings
+
+            if (
+                not hydrate_bodies
+                and getattr(get_settings(), "trace_tree_cache_v1", False)
+            ):
+                ttl = float(getattr(get_settings(), "trace_tree_cache_ttl_s", 3600.0))
+                await self._set_cached_trace_tree(tenant_id, trace_id, tree, ttl)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("trace tree cache write failed: %s", exc)
+
+        return tree
+
+    async def _get_cached_trace_tree(
+        self, tenant_id: str, trace_id: str,
+    ) -> TraceTree | None:
+        """Read a cached non-hydrated trace tree from Redis."""
+        try:
+            from eden.storage.redis import get_redis_client
+
+            redis = await get_redis_client()
+            if redis is None:
+                return None
+            raw = await redis.get(f"eden:tree:{tenant_id}:{trace_id}")
+            if raw is None:
+                return None
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                return None
+            return TraceTree(
+                trace_id=str(data.get("trace_id") or trace_id),
+                tenant_id=str(data.get("tenant_id") or tenant_id),
+                realm=str(data.get("realm") or "environment"),
+                root_spans=list(data.get("root_spans") or []),
+                span_map={
+                    str(k): v for k, v in (data.get("span_map") or {}).items()
+                },
+                total_duration_ms=float(data.get("total_duration_ms") or 0.0),
+                span_count=int(data.get("span_count") or 0),
+                outcome=data.get("outcome"),
+            )
+        except Exception as exc:  # noqa: BLE001 — never fail the trace view
+            logger.debug("trace tree cache read failed: %s", exc)
+            return None
+
+    async def _set_cached_trace_tree(
+        self,
+        tenant_id: str,
+        trace_id: str,
+        tree: TraceTree,
+        ttl: float,
+    ) -> None:
+        """Cache a trace tree — ONLY for finalized traces.
+
+        A trace is finalized when it has a ``trace_summaries`` row with
+        span_count > 0 (written by the finalized consumer; placeholders
+        carry span_count 0). Skipping in-flight traces keeps the cache
+        free of partial trees that would go stale.
+        """
+        try:
+            client = await self._get_postgres()
+            if client is None:
+                return
+            finalized = await client.fetchval(
+                "SELECT span_count > 0 FROM trace_summaries "
+                "WHERE org_id = $1 AND trace_id = $2",
+                tenant_id,
+                trace_id,
+            )
+            if not finalized:
+                return
+            from eden.storage.redis import get_redis_client
+
+            redis = await get_redis_client()
+            if redis is None:
+                return
+            payload = json.dumps(
+                {
+                    "trace_id": tree.trace_id,
+                    "tenant_id": tree.tenant_id,
+                    "realm": tree.realm,
+                    "root_spans": tree.root_spans,
+                    "span_map": tree.span_map,
+                    "total_duration_ms": tree.total_duration_ms,
+                    "span_count": tree.span_count,
+                    "outcome": tree.outcome,
+                },
+                default=str,
+            )
+            await redis.set(
+                f"eden:tree:{tenant_id}:{trace_id}",
+                payload,
+                ex=int(max(60.0, ttl)),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("trace tree cache write failed: %s", exc)
 
     async def get_heatmap(
         self,

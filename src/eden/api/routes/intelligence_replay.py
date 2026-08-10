@@ -185,7 +185,7 @@ async def _create_replay_session_row(client: Any, org_id: str, body: CreateRepla
 async def replay_trace(
     org_id: str = Depends(require_path_org_access),
     trace_id: str = Path(...),
-    body: ReplayRequest = ReplayRequest(),
+    body: ReplayRequest = Body(default_factory=ReplayRequest),
 ) -> dict[str, Any]:
     return await _replay.replay_trace(
         org_id, trace_id, cursor=body.cursor, page_size=body.page_size

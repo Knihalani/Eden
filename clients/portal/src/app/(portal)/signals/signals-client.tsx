@@ -5,7 +5,7 @@ import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Plus, ChevronLeft, X } from "lucide-react";
+import { Activity, Plus, ChevronLeft, SearchX, X } from "lucide-react";
 import {
   agentForSignal,
   issuesForSignal,
@@ -21,7 +21,10 @@ import {
   AgentScopeFilter,
   EmptyState,
   FilterChips,
+  SearchInput,
+  severityLabel,
 } from "@/lab/lab-ui";
+import { formatAbsoluteTime, formatSmartTime } from "@/lib/format";
 import { compileNaturalLanguageFallback } from "@/lab/signal-compile";
 import { cn } from "@/lib/utils";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
@@ -31,7 +34,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { signalsApi } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import { useLabToast } from "@/lab/lab-toast";
@@ -77,7 +84,7 @@ const SignalRow = memo(function SignalRow({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusChip tone={severityTone(signal.severity)}>{signal.severity}</StatusChip>
+          <StatusChip tone={severityTone(signal.severity)}>{severityLabel(signal.severity)}</StatusChip>
           <StatusChip tone={signal.enabled ? "live" : "neutral"}>
             {signal.enabled ? "on" : "off"}
           </StatusChip>
@@ -129,7 +136,7 @@ function SignalDetail({
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <StatusChip tone={severityTone(signal.severity)}>{signal.severity}</StatusChip>
+              <StatusChip tone={severityTone(signal.severity)}>{severityLabel(signal.severity)}</StatusChip>
               <StatusChip tone={signal.enabled ? "live" : "neutral"}>
                 {signal.enabled ? "on" : "off"}
               </StatusChip>
@@ -206,7 +213,12 @@ function SignalDetail({
           </div>
           <div>
             <p className="type-label">Last hit</p>
-            <p className="type-mono mt-1 !text-[var(--text)]">{signal.lastHit ?? "—"}</p>
+            <p
+              className="type-mono mt-1 !text-[var(--text)]"
+              title={formatAbsoluteTime(signal.lastHit)}
+            >
+              {formatSmartTime(signal.lastHit)}
+            </p>
           </div>
         </dl>
       </div>
@@ -441,8 +453,7 @@ function LabSignalsInner() {
           )}
         >
           <div className="lab-list-chrome shrink-0 border-b border-[var(--line)] sm:!flex-row sm:flex-wrap sm:items-end">
-            <div className="min-w-[11rem] flex-1 space-y-2 sm:max-w-[14rem]">
-              <p className="type-label">Agent</p>
+            <div className="min-w-[11rem] flex-1 sm:max-w-[14rem]">
               <AgentScopeFilter
                 value={agentId}
                 onChange={setAgentId}
@@ -451,13 +462,11 @@ function LabSignalsInner() {
             </div>
             <div className="min-w-0 flex-[1.4] space-y-2">
               <p className="type-label">Search</p>
-              <input
-                type="search"
+              <SearchInput
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search…"
-                className="ds-input w-full"
-                aria-label="Search detectors"
+                onChange={setQuery}
+                placeholder="Search detectors, agents…"
+                ariaLabel="Search detectors"
               />
             </div>
             <div className="space-y-2">
@@ -497,6 +506,11 @@ function LabSignalsInner() {
           >
             {filtered.length === 0 ? (
               <EmptyState
+                icon={
+                  catalog.length === 0 && !query
+                    ? Activity
+                    : SearchX
+                }
                 title={
                   catalog.length === 0
                     ? "No detectors yet"
@@ -571,7 +585,7 @@ export default function LabSignalsPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader title="Detectors" meta={<span className="type-meta">Loading…</span>} />
+          <PageHeader title="Detectors" meta={<InlineLoading label="Loading detectors" />} />
         </div>
       }
     >

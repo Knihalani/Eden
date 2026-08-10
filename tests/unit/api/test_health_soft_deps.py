@@ -21,12 +21,12 @@ def test_required_for_ready_is_postgres_only():
     assert frozenset({"postgres"}) == REQUIRED_FOR_READY
 
 
-def test_ready_stays_green_when_qdrant_down():
-    """Errno-99-style Qdrant failure must not flip readiness."""
+def test_ready_stays_green_when_pgvector_down():
+    """A vector-store probe failure must not flip readiness."""
     checks = {
         "postgres": "ok",
         "redis": "ok",
-        "qdrant": "error: [Errno 99] Cannot assign requested address",
+        "pgvector": "error: relation vector_documents does not exist",
         "openrouter": "ok",
     }
     assert is_ready(checks) is True
@@ -37,7 +37,7 @@ def test_ready_stays_green_when_all_soft_deps_down():
         {
             "postgres": "ok",
             "redis": "error: down",
-            "qdrant": "error: down",
+            "pgvector": "error: down",
             "typesense": "error: typesense unreachable",
             "openrouter": "error: down",
         }
@@ -50,7 +50,7 @@ def test_ready_fails_when_postgres_down():
             {
                 "postgres": "error: connection refused",
                 "redis": "ok",
-                "qdrant": "ok",
+                "pgvector": "ok",
                 "openrouter": "ok",
             }
         )
@@ -73,8 +73,8 @@ def test_health_probe_http_status_modes(overall: str, mode: str, expected: int):
     assert health_probe_http_status(overall, mode) == expected
 
 
-def test_health_degraded_body_matches_prod_qdrant_evidence():
+def test_health_degraded_body_matches_prod_pgvector_evidence():
     """Body shape from w2-07 health_api_health.json must map to 503 in auto."""
-    # Evidence: postgres connected, qdrant Errno 99 → status degraded
+    # Evidence: postgres connected, vector store degraded → status degraded
     overall = "degraded"
     assert health_probe_http_status(overall, "auto") == 503

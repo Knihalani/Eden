@@ -11,6 +11,7 @@ import { useOrgMutation, useOrgQuery } from "@/hooks/use-api-query";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useLabToast } from "@/lab/lab-toast";
 import { SettingsModeNav } from "@/lab/settings/settings-chrome";
+import { formatSmartTime } from "@/lib/format";
 import { api } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -331,7 +332,7 @@ export default function SettingsRolesPage() {
                       <h2 className="type-ui text-[var(--text)]">{selectedRole.name}</h2>
                       <p className="type-meta text-[var(--text-faint)]">
                         base: {selectedRole.base_role} · created{" "}
-                        {new Date(selectedRole.created_at).toLocaleDateString()}
+                        {formatSmartTime(selectedRole.created_at)}
                       </p>
                     </div>
                     {canEdit && (
@@ -397,7 +398,14 @@ export default function SettingsRolesPage() {
                   <div className="border-t border-[var(--line)] pt-4">
                     <h3 className="type-ui mb-2 text-[var(--text)]">Assigned members</h3>
                     {assignmentsQuery.isLoading ? (
-                      <p className="type-meta text-[var(--text-faint)]">Loading…</p>
+                      <div
+                        className="space-y-1.5"
+                        role="status"
+                        aria-label="Loading assigned members"
+                      >
+                        <div className="eden-skeleton-pulse h-3.5 w-2/5 rounded bg-[var(--line)]" />
+                        <div className="eden-skeleton-pulse h-3.5 w-1/3 rounded bg-[var(--line)]" />
+                      </div>
                     ) : (assignmentsQuery.data ?? []).length === 0 ? (
                       <p className="type-meta text-[var(--text-faint)]">
                         No members assigned to this role yet.

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
@@ -29,6 +30,108 @@ from eden.observability.telemetry_collector import (  # noqa: F401
 from eden.util.jsonx import dumps as json_dumps
 
 logger = logging.getLogger(__name__)
+
+# Wave 6: the materialized read path probes ``trace_summaries`` presence
+# via ``to_regclass`` once per call. On the hottest read path that is a
+# wasted round-trip per page load — the table appears with its migration
+# and (short of a broken downgrade) never disappears. Cache the positive
+# result with a TTL so steady-state requests skip the probe entirely;
+# a failure re-probes (the table may legitimately be absent pre-migration
+# or during a migration).
+_trace_summaries_probe: tuple[float, bool] | None = None
+_TRACE_SUMMARIES_PROBE_TTL_S = 300.0
+
+
+async def _trace_summaries_known(client: Any) -> bool:
+    global _trace_summaries_probe
+    now = time.monotonic()
+    if _trace_summaries_probe is not None and now - _trace_summaries_probe[0] < _TRACE_SUMMARIES_PROBE_TTL_S:
+        return _trace_summaries_probe[1]
+    try:
+        present = bool(await client.fetchval("SELECT to_regclass('trace_summaries') IS NOT NULL"))
+    except Exception:
+        present = False
+    _trace_summaries_probe = (now, present)
+    return present
+
+
+# Wave 7 — dashboard summary response cache. The summary endpoint fires 7
+# full-window aggregations over telemetry_events per request; under portal
+# polling that is the same compute repeated every few seconds. Caching the
+# assembled response for a short TTL collapses it to one compute per window
+# per org. The cached payload is the exact response the live path returns
+# (same queries, cached result), so staleness is bounded by the TTL only.
+_SUMMARY_CACHE_PREFIX = "eden:obs:summary"
+
+
+def _summary_cache_key(
+    org_id: str,
+    *,
+    window_hours: int,
+    agent_id: str | None,
+    compare_previous: bool,
+) -> str:
+    return (
+        f"{_SUMMARY_CACHE_PREFIX}:{org_id}:{window_hours}h:"
+        f"{agent_id or '-'}:{1 if compare_previous else 0}"
+    )
+
+
+# Cooldown latch: when Redis is down, ``get_redis_client`` can block on a
+# connect attempt per call. The dashboard must not pay a connect storm on
+# every load, so cache the failure for a window (mirrors the collector's
+# ``REDIS_RETRY_COOLDOWN_S`` pattern).
+_summary_cache_redis_down_until: float = 0.0
+_SUMMARY_CACHE_REDIS_COOLDOWN_S = 30.0
+
+
+async def _summary_redis_client() -> Any | None:
+    global _summary_cache_redis_down_until
+    now = time.monotonic()
+    if now < _summary_cache_redis_down_until:
+        return None
+    try:
+        from eden.storage.redis import get_redis_client
+
+        client = await get_redis_client()
+        if client is None:
+            _summary_cache_redis_down_until = now + _SUMMARY_CACHE_REDIS_COOLDOWN_S
+            return None
+        return client
+    except Exception as exc:  # noqa: BLE001
+        _summary_cache_redis_down_until = now + _SUMMARY_CACHE_REDIS_COOLDOWN_S
+        logger.debug("observability summary: redis unavailable: %s", redact_all(str(exc)))
+        return None
+
+
+async def _summary_cache_get(cache_key: str) -> dict[str, Any] | None:
+    try:
+        client = await _summary_redis_client()
+        if client is None:
+            return None
+        raw = await client.get(cache_key)
+        if raw is None:
+            return None
+        import json as _json
+
+        data = _json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except Exception as exc:  # noqa: BLE001 — never fail the dashboard for cache
+        logger.debug("observability summary cache get failed: %s", redact_all(str(exc)))
+        return None
+
+
+async def _summary_cache_set(cache_key: str, payload: dict[str, Any], ttl_s: float) -> None:
+    try:
+        client = await _summary_redis_client()
+        if client is None:
+            return
+        import json as _json
+
+        await client.set(cache_key, _json.dumps(payload, default=str), ex=int(max(1.0, ttl_s)))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("observability summary cache set failed: %s", redact_all(str(exc)))
+        return
 
 
 # Audit 2026-07-03 — every observability route MUST validate that the
@@ -139,6 +242,13 @@ class TimelineResponse(BaseModel):
 class ComparativeRequest(BaseModel):
     env_trace_id: str
     prod_trace_id: str
+
+
+class TraceDiffRequest(BaseModel):
+    """Two arbitrary traces (same org) to align and diff (Wave 9)."""
+
+    trace_a: str = Field(..., min_length=1)
+    trace_b: str = Field(..., min_length=1)
 
 
 class ComparativeDimension(BaseModel):
@@ -335,6 +445,95 @@ async def ingest_telemetry_batch(
         ) from exc
 
 
+async def _list_traces_from_summaries(
+    client: Any,
+    *,
+    org_id: str,
+    batch_ids: list[str] | None,
+    trace_id: str | None,
+    since: Any | None,
+    realm: str | None,
+    agent_id: str | None,
+    outcome: str | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[Any] | None, int | None]:
+    """Wave 6: serve the trace-list page from ``trace_summaries``.
+
+    One indexed row per trace (PK ``(org_id, trace_id)`` + the
+    ``(org_id, started_at DESC)`` list index) instead of a GROUP BY over
+    ``telemetry_events`` with two correlated subqueries per row. Measured
+    at 20k traces: ~203 ms → ~0.5 ms page, ~39 ms → ~2.7 ms count.
+
+    Returns ``(None, None)`` when the table is absent (pre-migration) so
+    the caller falls back to the legacy aggregation. ``total`` is the
+    distinct-trace count for the filters (skipped when the page is clearly
+    last, matching the legacy path).
+
+    Filter semantics vs legacy: ``outcome`` / ``agent_id`` filter on the
+    trace-level value the list *displays* (the max-aggregated outcome /
+    agent), which is what users expect the filter to mean; the legacy
+    query matched any-event-with-value. For single-trace and trace_ids
+    lookups the PK serves the row directly.
+    """
+    cols = (
+        "trace_id", "started_at", "realm", "agent_id", "model",
+        "provider", "session_id", "outcome", "error_type", "attr_error",
+        "input_tokens", "output_tokens", "cost_usd", "span_count",
+        "duration_ms", "tags", "agent_session_id",
+    )
+    sel = "SELECT " + ", ".join(cols) + " FROM trace_summaries WHERE "
+    args: list[Any] = [org_id]
+    where = "org_id = $1"
+    if batch_ids:
+        where += f" AND trace_id = ANY(${len(args) + 1}::text[])"
+        args.append(batch_ids)
+    elif trace_id:
+        where += f" AND trace_id = ${len(args) + 1}"
+        args.append(trace_id)
+    else:
+        where += f" AND started_at >= ${len(args) + 1}"
+        args.append(since)
+        if realm:
+            where += f" AND realm = ${len(args) + 1}"
+            args.append(realm)
+        if agent_id:
+            where += f" AND agent_id = ${len(args) + 1}"
+            args.append(agent_id)
+    # ``outcome`` is applied OUTSIDE the branch structure, mirroring the
+    # legacy query (which also filters single-trace/batch lookups by
+    # outcome). Filtering on the summary's trace-level outcome column
+    # keeps page/count/legacy consistent for list filters.
+    if outcome:
+        where += f" AND outcome = ${len(args) + 1}"
+        args.append(outcome)
+    try:
+        if not await _trace_summaries_known(client):
+            return None, None
+        rows = await client.fetch(
+            sel + where + " ORDER BY started_at DESC "
+            f"LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}",
+            *args,
+            limit,
+            offset,
+        )
+        if len(rows) < limit:
+            total = offset + len(rows)
+        else:
+            total = await client.fetchval(
+                "SELECT count(*) FROM trace_summaries WHERE " + where,
+                *args,
+            )
+        return rows, total
+    except Exception as exc:
+        # Table missing (pre-migration) or query failure → legacy fallback.
+        logger.warning(
+            "list_traces: materialized path unavailable, falling back: %s",
+            redact_all(str(exc)),
+        )
+        return None, None
+
+
 @router.get("/traces", response_model=TraceListResponse)
 async def list_traces(
     org_id: str = Depends(require_path_org_access),
@@ -430,156 +629,185 @@ async def list_traces(
         )
         args.append(outcome)
 
+    # Wave 6 — materialized read path. When ``trace_summaries_read_v1`` is
+    # on and the table exists, serve the page from one indexed row per
+    # trace instead of re-aggregating ``telemetry_events`` (measured ~284x
+    # page / ~13.5x count at 20k traces). In-flight traces are present via
+    # the ingest-time placeholder rows; history via the backfill script.
+    # Falls back to the legacy aggregation on any error or when disabled.
+    rows: list[Any] | None = None
+    total: int | None = None
     try:
-        # Total = distinct traces matching ``where`` (not event rows).
-        # ``pg_class.reltuples`` was abandoned — table-level estimate
-        # leaks cross-tenant counts. GROUP BY subquery stays filterable
-        # by tenant_id + timestamp indexes.
-        # Rows query: aggregate spans first (no LATERAL unnest) so
-        # count/sum/tokens stay correct, then attach tags only for the
-        # page of traces (avoids multiplying every event by tag count).
-        lim_idx = len(args) + 1
-        off_idx = len(args) + 2
-        # Schema note: prod ``telemetry_events`` (mig 009+) has JSONB
-        # ``tags``, ``error_type`` (not ``error``), and cost in
-        # metrics/payload JSON — not top-level ``cost_usd`` / TEXT[].
-        # insights_tools.list_traces already follows that shape; keep
-        # this route aligned so list never 503s on UndefinedColumn.
-        rows = await client.fetch(
-            f"""
-            WITH page AS (
-                SELECT trace_id,
-                       min(timestamp) AS started_at,
-                       max(realm) AS realm,
-                       coalesce(
-                           max(agent_id),
-                           max(attributes->>'agent_id')
-                       ) AS agent_id,
-                       coalesce(
-                           max(model),
-                           max(model_name),
-                           max(attributes->>'model'),
-                           max(attributes->>'openai.model'),
-                           max(attributes->>'anthropic.model'),
-                           max(attributes->>'bedrock.model_id'),
-                           max(attributes->>'gen_ai.request.model')
-                       ) AS model,
-                       coalesce(
-                           max(provider_name),
-                           max(attributes->>'provider')
-                       ) AS provider,
-                       coalesce(
-                           max(session_id),
-                           max(attributes->>'session_id')
-                       ) AS session_id,
-                       max(attributes->>'agent_session_id') AS attr_agent_session_id,
-                       max(outcome) AS outcome,
-                       max(error_type) AS error_type,
-                       max(attributes->>'error') AS attr_error,
-                       sum(
-                           coalesce(
-                               (NULLIF(payload->>'input_tokens', ''))::numeric,
-                               usage_prompt_tokens,
-                               0
-                           )
-                       ) AS input_tokens,
-                       sum(
-                           coalesce(
-                               (NULLIF(payload->>'output_tokens', ''))::numeric,
-                               usage_completion_tokens,
-                               0
-                           )
-                       ) AS output_tokens,
-                       sum(
-                           coalesce(
-                               NULLIF(metrics->>'cost_usd', '')::float,
-                               NULLIF(payload->>'cost_usd', '')::float,
-                               NULLIF(attributes->>'cost_usd', '')::float
-                           )
-                       ) AS cost_usd,
-                       count(*) AS span_count,
-                       max(duration_ms) AS duration_ms
-                FROM telemetry_events
-                WHERE {where}
-                GROUP BY trace_id
-                ORDER BY started_at DESC
-                LIMIT ${lim_idx} OFFSET ${off_idx}
+        from eden.config import get_settings
+
+        if getattr(get_settings(), "trace_summaries_read_v1", False):
+            rows, total = await _list_traces_from_summaries(
+                client,
+                org_id=org_id,
+                batch_ids=batch_ids or None,
+                trace_id=trace_id,
+                since=datetime.now(UTC) - timedelta(days=days) if not (batch_ids or trace_id) else None,
+                realm=realm,
+                agent_id=agent_id,
+                outcome=outcome,
+                limit=limit,
+                offset=offset,
             )
-            SELECT p.trace_id,
-                   p.started_at,
-                   p.realm,
-                   p.agent_id,
-                   p.model,
-                   p.provider,
-                   p.session_id,
-                   p.outcome,
-                   p.error_type,
-                   p.attr_error,
-                   p.input_tokens,
-                   p.output_tokens,
-                   p.cost_usd,
-                   p.span_count,
-                   p.duration_ms,
-                   (
-                       SELECT array_agg(DISTINCT tag)
-                       FROM telemetry_events e2
-                       CROSS JOIN LATERAL jsonb_array_elements_text(
-                           CASE
-                               WHEN jsonb_typeof(e2.tags) = 'array' THEN e2.tags
-                               ELSE '[]'::jsonb
-                           END
-                       ) AS tag
-                       WHERE e2.tenant_id = $1
-                         AND e2.trace_id = p.trace_id
-                         AND tag IS NOT NULL
-                   ) AS tags,
-                   coalesce(
-                       p.attr_agent_session_id,
+    except Exception as exc:  # noqa: BLE001 — never break the list for summaries
+        logger.warning(
+            "list_traces: materialized path failed, falling back: %s",
+            redact_all(str(exc)),
+        )
+        rows, total = None, None
+
+    if rows is None:
+        # Legacy aggregation over ``telemetry_events`` (GROUP BY + correlated
+        # subqueries). Wrapped with the COUNT so a query failure becomes a
+        # 503, never a fake empty list.
+        #
+        # WAVE-6 DRIFT WARNING: this per-trace aggregate is duplicated
+        # byte-for-byte in ``trace_summary.py`` (``_TRACE_SQL`` / ``_TAGS_SQL`` /
+        # ``_SESSION_ID_SQL``). Edit both, or the live-parity test
+        # (``tests/unit/observability/test_trace_summaries.py``) will fail.
+        try:
+            lim_idx = len(args) + 1
+            off_idx = len(args) + 2
+            page_rows = await client.fetch(
+                f"""
+                WITH page AS (
+                    SELECT trace_id,
+                           min(timestamp) AS started_at,
+                           max(realm) AS realm,
+                           coalesce(
+                               max(agent_id),
+                               max(attributes->>'agent_id')
+                           ) AS agent_id,
+                           coalesce(
+                               max(model),
+                               max(model_name),
+                               max(attributes->>'model'),
+                               max(attributes->>'openai.model'),
+                               max(attributes->>'anthropic.model'),
+                               max(attributes->>'bedrock.model_id'),
+                               max(attributes->>'gen_ai.request.model')
+                           ) AS model,
+                           coalesce(
+                               max(provider_name),
+                               max(attributes->>'provider')
+                           ) AS provider,
+                           coalesce(
+                               max(session_id),
+                               max(attributes->>'session_id')
+                           ) AS session_id,
+                           max(attributes->>'agent_session_id') AS attr_agent_session_id,
+                           max(outcome) AS outcome,
+                           max(error_type) AS error_type,
+                           max(attributes->>'error') AS attr_error,
+                           sum(
+                               coalesce(
+                                   (NULLIF(payload->>'input_tokens', ''))::numeric,
+                                   usage_prompt_tokens,
+                                   0
+                               )
+                           ) AS input_tokens,
+                           sum(
+                               coalesce(
+                                   (NULLIF(payload->>'output_tokens', ''))::numeric,
+                                   usage_completion_tokens,
+                                   0
+                               )
+                           ) AS output_tokens,
+                           sum(
+                               coalesce(
+                                   NULLIF(metrics->>'cost_usd', '')::float,
+                                   NULLIF(payload->>'cost_usd', '')::float,
+                                   NULLIF(attributes->>'cost_usd', '')::float
+                               )
+                           ) AS cost_usd,
+                           count(*) AS span_count,
+                           max(duration_ms) AS duration_ms
+                    FROM telemetry_events
+                    WHERE {where}
+                    GROUP BY trace_id
+                    ORDER BY started_at DESC
+                    LIMIT ${lim_idx} OFFSET ${off_idx}
+                )
+                SELECT p.trace_id,
+                       p.started_at,
+                       p.realm,
+                       p.agent_id,
+                       p.model,
+                       p.provider,
+                       p.session_id,
+                       p.outcome,
+                       p.error_type,
+                       p.attr_error,
+                       p.input_tokens,
+                       p.output_tokens,
+                       p.cost_usd,
+                       p.span_count,
+                       p.duration_ms,
                        (
-                           SELECT split_part(tag, ':', 2)
-                           FROM telemetry_events e3
+                           SELECT array_agg(DISTINCT tag)
+                           FROM telemetry_events e2
                            CROSS JOIN LATERAL jsonb_array_elements_text(
                                CASE
-                                   WHEN jsonb_typeof(e3.tags) = 'array' THEN e3.tags
+                                   WHEN jsonb_typeof(e2.tags) = 'array' THEN e2.tags
                                    ELSE '[]'::jsonb
                                END
                            ) AS tag
-                           WHERE e3.tenant_id = $1
-                             AND e3.trace_id = p.trace_id
-                             AND tag LIKE 'agent_session_id:%'
-                           LIMIT 1
-                       )
-                   ) AS agent_session_id
-            FROM page p
-            ORDER BY p.started_at DESC
-            """,
-            *args,
-            limit,
-            offset,
-        )
-        # Skip the expensive distinct-trace COUNT when this page is
-        # clearly the last (or only) page — common for small tenants
-        # and deep-link single-trace lookups.
-        if len(rows) < limit:
-            total = offset + len(rows)
-        else:
-            total = await client.fetchval(
-                f"""
-                SELECT count(*) FROM (
-                    SELECT trace_id FROM telemetry_events
-                    WHERE {where}
-                    GROUP BY trace_id
-                ) AS _traces
+                           WHERE e2.tenant_id = $1
+                             AND e2.trace_id = p.trace_id
+                             AND tag IS NOT NULL
+                       ) AS tags,
+                       coalesce(
+                           p.attr_agent_session_id,
+                           (
+                               SELECT split_part(tag, ':', 2)
+                               FROM telemetry_events e3
+                               CROSS JOIN LATERAL jsonb_array_elements_text(
+                                   CASE
+                                       WHEN jsonb_typeof(e3.tags) = 'array' THEN e3.tags
+                                       ELSE '[]'::jsonb
+                                   END
+                               ) AS tag
+                               WHERE e3.tenant_id = $1
+                                 AND e3.trace_id = p.trace_id
+                                 AND tag LIKE 'agent_session_id:%'
+                               LIMIT 1
+                           )
+                       ) AS agent_session_id
+                FROM page p
+                ORDER BY p.started_at DESC
                 """,
                 *args,
+                limit,
+                offset,
             )
-    except Exception as exc:
-        logger.warning("list_traces: query failed: %s", redact_all(str(exc)))
+            rows = list(page_rows or [])
+            if len(rows) < limit:
+                total = offset + len(rows)
+            else:
+                total = await client.fetchval(
+                    f"""
+                    SELECT count(*) FROM (
+                        SELECT trace_id FROM telemetry_events
+                        WHERE {where}
+                        GROUP BY trace_id
+                    ) AS _traces
+                    """,
+                    *args,
+                )
+        except Exception as exc:
+            logger.warning("list_traces: query failed: %s", redact_all(str(exc)))
+            rows = None
+
+    if rows is None:
         raise HTTPException(
             status_code=503,
             detail="Traces temporarily unavailable",
             headers={"Retry-After": "5"},
-        ) from exc
+        )
 
     items = [
         TraceListItem(
@@ -611,6 +839,7 @@ async def list_traces(
         for r in rows
     ]
     return TraceListResponse(traces=items, total=int(total or 0), limit=limit, offset=offset)
+
 
 
 @router.get("/traces/{trace_id}/tree", response_model=TraceTreeResponse)
@@ -719,6 +948,33 @@ async def compare_traces_route(
         recommendations=summary.get("recommendations", []),
         metadata=summary.get("metadata", {}),
     )
+
+
+@router.post("/traces/diff", response_model=dict)
+async def trace_diff_route(
+    org_id: str = Depends(require_path_org_access),
+    body: TraceDiffRequest = Body(...),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Align and diff ANY two traces for this org (Wave 9).
+
+    Unlike :func:`compare_traces_route` (env-vs-prod dimensional
+    comparison), this returns an event-by-event aligned diff: per-step
+    kind (same/changed/added/removed), per-side outcome/error/duration/
+    cost, and aggregate deltas. Pure read — two lean ``telemetry_events``
+    scans, aligned in memory in ``O(n+m)``.
+
+    Returns 404 when either trace has no events for this org.
+    """
+    from eden.observability.trace_diff import diff_traces
+
+    result = await diff_traces(org_id, body.trace_a, body.trace_b)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="One or both traces not found",
+        )
+    return result
 
 
 @router.post("/traces/{trace_id}/export", response_model=TraceExportResponse)
@@ -955,6 +1211,31 @@ async def observability_summary(
     scoped to the org + window.
     """
     from datetime import UTC, datetime, timedelta
+
+    # Wave 7 — cached read path (flag-gated, default off). The summary fires
+    # 7 full-window aggregations over telemetry_events; portal polling
+    # repeats them every few seconds. Serve the assembled response from
+    # Redis when fresh; compute (and refresh) on miss. Exact-equivalent
+    # result, staleness bounded by the TTL.
+    try:
+        from eden.config import get_settings as _get_settings
+
+        _settings = _get_settings()
+        _cache_on = bool(getattr(_settings, "observability_summary_cache_v1", False))
+        _cache_ttl = float(getattr(_settings, "observability_summary_cache_ttl_s", 20.0))
+    except Exception:
+        _cache_on = False
+        _cache_ttl = 20.0
+    if _cache_on:
+        _cache_key = _summary_cache_key(
+            org_id,
+            window_hours=window_hours,
+            agent_id=agent_id,
+            compare_previous=compare_previous,
+        )
+        _cached = await _summary_cache_get(_cache_key)
+        if _cached is not None:
+            return _cached
 
     from eden.storage import postgres as _pg_module
 
@@ -1219,5 +1500,8 @@ async def observability_summary(
     # as unknown instead of drawing an empty chart that reads as zero.
     if degraded_panels:
         result["degraded_panels"] = degraded_panels
+
+    if _cache_on:
+        await _summary_cache_set(_cache_key, result, _cache_ttl)
 
     return result

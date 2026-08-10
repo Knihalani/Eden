@@ -5,7 +5,16 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { PanelLeftClose, ChevronLeft, ChevronRight, ExternalLink, Pencil, X } from "lucide-react";
+import {
+  Bot,
+  PanelLeftClose,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Pencil,
+  Radar,
+  X,
+} from "lucide-react";
 import {
   tracesForAgent,
   type AgentFixture,
@@ -30,6 +39,7 @@ import {
   RunListButton,
   RunMeta,
   RunTranscript,
+  SearchInput,
   SeverityBadge,
 } from "@/lab/lab-ui";
 import { MetricCell } from "@/lab/lab-metric-cell";
@@ -40,7 +50,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { SHELL_QUERY, LIVE_STALE } from "@/lib/portal-query";
 import { U20_EMPTY_COPY } from "@/lib/portal-polish";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { AgentHealthStrip } from "@/components/agents/agent-health-strip";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
@@ -258,6 +272,7 @@ function RunInspector({
           <QueryLoadingPanel label="Loading transcript…" />
         ) : !stepsLoading && trace.steps.length === 0 ? (
           <EmptyState
+            icon={Radar}
             title="No spans"
             body="This run has no span events yet, or the transcript could not be reconstructed."
             compact
@@ -298,6 +313,7 @@ function AgentDetail({
     return (
       <div className="space-y-4 p-5">
         <EmptyState
+          icon={Bot}
           title="No agents yet"
           body={U20_EMPTY_COPY.agents}
         />
@@ -693,7 +709,7 @@ function AgentDetailBody({
           label="Issues"
           value={String(agent.openIssues)}
           tone={agent.openIssues > 0 ? "error" : "default"}
-          hint={`${failures.length} fail · ${warnings.length} warn in list`}
+          hint={`${failures.length} failed · ${warnings.length} warning in list`}
         />
       </div>
 
@@ -738,12 +754,11 @@ function AgentDetailBody({
                 {selectedIndex >= 0 ? selectedIndex + 1 : 0}/{filtered.length}
               </span>
             </div>
-            <input
+            <SearchInput
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
-              className="ds-input w-full"
-              aria-label="Filter runs"
+              onChange={setQuery}
+              placeholder="Search runs, ids…"
+              ariaLabel="Filter runs"
             />
             <FilterChips
               value={runFilter}
@@ -751,11 +766,11 @@ function AgentDetailBody({
               scroll
               options={[
                 { id: "all", label: "All", count: runs.length },
-                { id: "error", label: "Fail", count: failures.length },
-                { id: "warn", label: "Warn", count: warnings.length },
+                { id: "error", label: "Failed", count: failures.length },
+                { id: "warn", label: "Warning", count: warnings.length },
                 {
                   id: "ok",
-                  label: "Ok",
+                  label: "OK",
                   count: runs.filter((t) => t.severity === "none").length,
                 },
               ]}
@@ -773,6 +788,7 @@ function AgentDetailBody({
             ) : filtered.length === 0 ? (
               <li>
                 <EmptyState
+                  icon={Bot}
                   title={
                     runs.length === 0
                       ? !tracesQuery.isLoading && agent.runs24h > 0
@@ -821,7 +837,7 @@ function AgentDetailBody({
               onRetrySteps={() => void traceDetailQuery.refetch()}
             />
           ) : (
-            <EmptyState title="Select a run" />
+            <EmptyState icon={Radar} title="Select a run" />
           )}
         </section>
       </div>
@@ -1031,6 +1047,7 @@ function LabAgentsInner() {
             {ordered.length === 0 ? (
               <li className="px-3 py-5">
                 <EmptyState
+                  icon={Bot}
                   title="No agents yet"
                   body={U20_EMPTY_COPY.agents}
                 />
@@ -1116,7 +1133,7 @@ export default function LabAgentsPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader title="Agents" meta={<span className="type-meta">Loading…</span>} />
+          <PageHeader title="Agents" meta={<InlineLoading label="Loading agents" />} />
         </div>
       }
     >

@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from eden.integrations import INTEGRATION_API_VERSION
+from eden.util.shared_http import shared_httpx_ctx
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ async def forward_to_support_webhook(payload: dict[str, Any], *, webhook_url: st
         "X-Eden-Source": "support-webhook",
     }
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with shared_httpx_ctx(timeout=10.0) as client:
             response = await client.post(webhook_url, json=payload, headers=headers)
         if 200 <= response.status_code < 300:
             return True

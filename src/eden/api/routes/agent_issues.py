@@ -206,7 +206,7 @@ async def get_issue(
 async def resolve_issue(
     org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
-    body: ResolveRequest = Body(default=ResolveRequest()),
+    body: ResolveRequest = Body(default_factory=ResolveRequest),
 ) -> dict[str, Any]:
     await _require_postgres()
     if body.status not in _RESOLVE_STATUSES:
@@ -320,7 +320,7 @@ async def resolve_issue(
 async def triage_issue(
     org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
-    body: TriageRequest = Body(default=TriageRequest()),
+    body: TriageRequest = Body(default_factory=TriageRequest),
 ) -> dict[str, Any]:
     from eden.issues.triage_agent import TriageAgent
 
@@ -478,7 +478,7 @@ async def get_detection_settings_route(
 @router.patch("/settings/detection")
 async def patch_detection_settings_route(
     org_id: str = Depends(require_path_org_access),
-    body: DetectionSettingsRequest = Body(default=DetectionSettingsRequest()),
+    body: DetectionSettingsRequest = Body(default_factory=DetectionSettingsRequest),
 ) -> dict[str, Any]:
     from eden.issues.detection_settings import set_detection_settings
 
@@ -513,7 +513,7 @@ async def export_fixture(
 async def create_issue_experiment(
     org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
-    body: CreateExperimentRequest = Body(default=CreateExperimentRequest()),
+    body: CreateExperimentRequest = Body(default_factory=CreateExperimentRequest),
 ) -> dict[str, Any]:
     from eden.experiments.issue_link import IssueExperimentWizard
 
@@ -568,7 +568,7 @@ async def list_regression_cases(
 async def create_regression_cases(
     org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
-    body: RegressionCaseRequest = Body(default=RegressionCaseRequest()),
+    body: RegressionCaseRequest = Body(default_factory=RegressionCaseRequest),
 ) -> dict[str, Any]:
     from eden.evaluation.regression_builder import RegressionCaseBuilder
 

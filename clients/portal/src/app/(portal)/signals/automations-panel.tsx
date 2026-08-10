@@ -20,6 +20,7 @@ import {
 } from "@/lib/api/resources";
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
+import { formatAbsoluteTime, formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
 
@@ -54,6 +55,32 @@ export function SignalsModeToggle({ mode }: { mode: SignalsMode }) {
 
 const TRIGGER_TYPES = ["score_threshold", "stumble", "error_rate"] as const;
 const ACTION_TYPES = ["dataset", "webhook", "slack"] as const;
+
+const TRIGGER_LABELS: Record<(typeof TRIGGER_TYPES)[number], string> = {
+  score_threshold: "Score threshold",
+  stumble: "Stumble",
+  error_rate: "Error rate",
+};
+
+const ACTION_LABELS: Record<(typeof ACTION_TYPES)[number], string> = {
+  dataset: "Dataset",
+  webhook: "Webhook",
+  slack: "Slack",
+};
+
+function triggerLabel(type: string): string {
+  return (
+    TRIGGER_LABELS[type as (typeof TRIGGER_TYPES)[number]] ??
+    type.replace(/_/g, " ")
+  );
+}
+
+function actionLabel(type: string): string {
+  return (
+    ACTION_LABELS[type as (typeof ACTION_TYPES)[number]] ??
+    type.replace(/_/g, " ")
+  );
+}
 
 const ACTION_NOTES: Record<(typeof ACTION_TYPES)[number], string> = {
   dataset:
@@ -98,15 +125,17 @@ const AutomationRow = memo(function AutomationRow({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip tone={enabled ? "live" : "neutral"}>
-            {enabled ? "on" : "off"}
+            {enabled ? "On" : "Off"}
           </StatusChip>
-          <span className="type-meta capitalize">{automation.trigger_type}</span>
+          <span className="type-meta">
+            {triggerLabel(automation.trigger_type)}
+          </span>
         </div>
         <p className="type-ui truncate text-[var(--text)]">{automation.name}</p>
         <p className="type-meta truncate">
-          {automation.trigger_type}
+          {triggerLabel(automation.trigger_type)}
           {" → "}
-          {automation.action_type}
+          {actionLabel(automation.action_type)}
         </p>
       </div>
     </button>
@@ -118,6 +147,13 @@ const RUN_STATUS_TONE: Record<string, "live" | "neutral" | "ok" | "fail"> = {
   sent: "ok",
   failed: "fail",
   error: "fail",
+};
+
+const RUN_STATUS_LABEL: Record<string, string> = {
+  completed: "Completed",
+  sent: "Sent",
+  failed: "Failed",
+  error: "Failed",
 };
 
 function RunHistorySection({
@@ -155,10 +191,13 @@ function RunHistorySection({
             >
               <div className="flex items-center justify-between gap-2">
                 <StatusChip tone={RUN_STATUS_TONE[run.status] ?? "neutral"}>
-                  {run.status}
+                  {RUN_STATUS_LABEL[run.status] ?? run.status}
                 </StatusChip>
-                <span className="type-meta !text-[0.6875rem] text-[var(--text-faint)]">
-                  {run.created_at ? new Date(run.created_at).toLocaleString() : "—"}
+                <span
+                  className="type-meta !text-[0.6875rem] text-[var(--text-faint)]"
+                  title={formatAbsoluteTime(run.created_at)}
+                >
+                  {formatSmartTime(run.created_at)}
                 </span>
               </div>
               {run.payload && Object.keys(run.payload).length > 0 ? (
@@ -202,9 +241,11 @@ function AutomationDetail({
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone={enabled ? "live" : "neutral"}>
-                {enabled ? "on" : "off"}
+                {enabled ? "On" : "Off"}
               </StatusChip>
-              <span className="type-meta capitalize">{automation.trigger_type}</span>
+              <span className="type-meta">
+                {triggerLabel(automation.trigger_type)}
+              </span>
             </div>
             <h2 className="type-title text-[var(--text)] !text-[1.2rem] !leading-snug">
               {automation.name}
@@ -250,14 +291,18 @@ function AutomationDetail({
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
         <section className="space-y-2">
           <h3 className="type-label">Trigger</h3>
-          <p className="type-ui text-[var(--text)]">{automation.trigger_type}</p>
+          <p className="type-ui text-[var(--text)]">
+            {triggerLabel(automation.trigger_type)}
+          </p>
           <pre className="type-mono overflow-x-auto rounded-[var(--radius)] bg-[var(--accent-muted)] px-3 py-2 !text-[0.6875rem]">
             {JSON.stringify(automation.trigger_config ?? {}, null, 2)}
           </pre>
         </section>
         <section className="space-y-2">
           <h3 className="type-label">Action</h3>
-          <p className="type-ui text-[var(--text)]">{automation.action_type}</p>
+          <p className="type-ui text-[var(--text)]">
+            {actionLabel(automation.action_type)}
+          </p>
           <pre className="type-mono overflow-x-auto rounded-[var(--radius)] bg-[var(--accent-muted)] px-3 py-2 !text-[0.6875rem]">
             {JSON.stringify(automation.action_config ?? {}, null, 2)}
           </pre>

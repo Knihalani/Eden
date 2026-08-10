@@ -33,15 +33,16 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { api } from "@/lib/api/resources";
 import { SETTINGS_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 
-const settingsFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const settingsFallback = <LoadingFallback label="Loading settings…" />;
 
 const SettingsWorkspaceView = dynamic(
   () =>
@@ -833,7 +834,7 @@ function SettingsSuspenseFallback() {
     <div className="ds-page">
       <PageHeader
         title="Settings"
-        meta={<span className="type-meta">Loading…</span>}
+        meta={<InlineLoading label="Loading settings" />}
         actions={
           // Non-interactive while the real page suspends — tabs that
           // look clickable but swallow clicks read as broken.
@@ -842,6 +843,7 @@ function SettingsSuspenseFallback() {
           </div>
         }
       />
+      <LoadingFallback label="Loading settings…" rows={4} />
     </div>
   );
 }

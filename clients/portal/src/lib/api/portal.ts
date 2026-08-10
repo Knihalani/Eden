@@ -313,6 +313,69 @@ export const portalApi = {
 
   assistantThreads: (orgId: string) =>
     fetchApi<AgentThread[]>(portalPath(orgId, "assistant/threads")),
+
+  /**
+   * Wave 9 — align and diff any two traces for an org. Raw observability
+   * route (NOT under ``/portal``): ``POST /orgs/{org}/observability/traces/diff``.
+   * Returns per-step kinds (same/changed/added/removed) + aggregate deltas.
+   */
+  traceDiff: (orgId: string, traceA: string, traceB: string) =>
+    fetchApi<TraceDiffResult>(`/orgs/${orgId}/observability/traces/diff`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Org-Id": orgId,
+      },
+      body: JSON.stringify({ trace_a: traceA, trace_b: traceB }),
+    }),
+};
+
+/** One aligned row in a trace diff (Wave 9). */
+export type TraceDiffStep = {
+  index: number;
+  kind: "same" | "changed" | "only_a" | "only_b";
+  span_id: string;
+  name_a: string | null;
+  name_b: string | null;
+  event_type_a: string | null;
+  event_type_b: string | null;
+  outcome_a: string | null;
+  outcome_b: string | null;
+  error_a: string | null;
+  error_b: string | null;
+  duration_ms_a: number;
+  duration_ms_b: number;
+  duration_delta_ms: number;
+  cost_usd_a: number;
+  cost_usd_b: number;
+};
+
+/** Response of ``POST /orgs/{org}/observability/traces/diff`` (Wave 9). */
+export type TraceDiffResult = {
+  trace_a: TraceDiffRollup;
+  trace_b: TraceDiffRollup;
+  totals: {
+    cost_delta_usd: number;
+    duration_delta_ms: number;
+    span_count_delta: number;
+    failures_a: number;
+    failures_b: number;
+    token_delta: number;
+  };
+  shared: { agent_id: string | null; matched_spans: number };
+  counts: { same: number; changed: number; added: number; removed: number };
+  steps: TraceDiffStep[];
+  took_ms: number;
+};
+
+export type TraceDiffRollup = {
+  trace_id: string;
+  span_count: number;
+  duration_ms: number;
+  cost_usd: number;
+  failures: number;
+  input_tokens: number;
+  output_tokens: number;
 };
 
 /** Prompt registry (prompts_v2) — not under /portal. */

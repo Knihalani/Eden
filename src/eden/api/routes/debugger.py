@@ -351,7 +351,7 @@ async def list_debug_sessions(
 )
 async def create_debug_session(
     org_id: str = Depends(require_path_org_access),
-    body: CreateDebugSessionRequest = Body(default=CreateDebugSessionRequest()),
+    body: CreateDebugSessionRequest = Body(default_factory=CreateDebugSessionRequest),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     pg = await get_postgres_client()

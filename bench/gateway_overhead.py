@@ -21,6 +21,12 @@ import time
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+# Resolve ``eden`` to the app package, not the ``sdk/python/eden`` stub.
+# Importing ``bench.common`` runs its ``sys.path`` fixup (see its module
+# docstring). Without this, ``import eden.api.app`` in ``_build`` crashes
+# with ``ModuleNotFoundError`` when the bench is run directly.
+import bench.common  # noqa: F401  (side-effect: sys.path fixup)
+
 
 def _pct(values: list[float], p: float) -> float:
     if not values:
@@ -76,11 +82,11 @@ def _build() -> tuple[Any, Any]:
     """Wire TestClient + gateway stubs the same way integration tests do."""
     from fastapi.testclient import TestClient
 
+    import eden.config as config_mod
     from eden.api.app import app
     from eden.api.deps import get_gateway_auth
     from eden.api.routes import gateway as gateway_module
     from eden.config import Settings
-    import eden.config as config_mod
     from eden.observability import telemetry_collector as tc_module
 
     # Clear lru_cache on the real get_settings before we replace it.
@@ -122,8 +128,8 @@ def _build() -> tuple[Any, Any]:
     config_mod.get_settings = lambda: blank  # type: ignore[assignment]
 
     # Middleware imports get_settings at call time via eden.config / local imports.
-    from eden.api.middleware import tenant_rate_limit as trl
     from eden.api.middleware import quota_enforcement as qe
+    from eden.api.middleware import tenant_rate_limit as trl
 
     trl.get_settings = lambda: blank  # type: ignore[attr-defined]
     qe.get_settings = lambda: blank  # type: ignore[attr-defined]

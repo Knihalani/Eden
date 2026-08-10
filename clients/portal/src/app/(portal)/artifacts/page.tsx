@@ -4,7 +4,12 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader, StatusChip } from "@/components/ds/primitives";
-import { AgentScopeFilter, EmptyState, FilterChips } from "@/lab/lab-ui";
+import {
+  AgentScopeFilter,
+  EmptyState,
+  FilterChips,
+  SearchInput,
+} from "@/lab/lab-ui";
 import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
 import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
@@ -12,7 +17,11 @@ import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi, artifactsApi, type ArtifactMode, type ArtifactRow } from "@/lib/api/portal";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { cn } from "@/lib/utils";
@@ -202,16 +211,13 @@ function ArtifactsInner() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="flex min-h-0 w-full flex-col border-b border-[var(--line)] lg:w-[22rem] lg:shrink-0 lg:border-b-0 lg:border-r">
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-            <label className="relative min-w-[10rem] flex-1">
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search artifacts…"
-                className="ds-input w-full !py-1.5"
-                aria-label="Search artifacts"
-              />
-            </label>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Search artifacts…"
+              ariaLabel="Search artifacts"
+              className="min-w-[10rem] flex-1"
+            />
             <AgentScopeFilter value={agentId} onChange={setAgentId} />
           </div>
           <div className="border-b border-[var(--line)] px-4 py-2 sm:px-5">
@@ -387,8 +393,9 @@ export default function ArtifactsPage() {
   return (
     <Suspense
       fallback={
-        <div className="ds-page flex min-h-0 flex-1 items-center justify-center">
-          <p className="type-meta">Loading artifacts…</p>
+        <div className="ds-page">
+          <PageHeader title="Artifacts" />
+          <LoadingFallback label="Loading artifacts…" />
         </div>
       }
     >

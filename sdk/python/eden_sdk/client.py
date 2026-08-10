@@ -28,8 +28,6 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import gzip
-import json
 import logging
 import os
 import queue as _queue
@@ -42,13 +40,12 @@ from typing import Any
 
 import httpx
 
+from eden_sdk._fast_json import dumps_bytes as _fast_dumps_bytes
+from eden_sdk._wire_compress import compress_wire as _compress_wire
 from eden_sdk.config import EdenConfig, get_config
 from eden_sdk.filters import _redact_string as _redact_text
 from eden_sdk.filters import redact_payload
 from eden_sdk.ingest_format import resolve_ingest_path
-
-# Compact JSON for the wire — fewer bytes to gzip, faster dumps.
-_JSON_SEPARATORS = (",", ":")
 
 # ``User-Agent`` for ingestion. Pulled from ``__version__`` at
 # import time; if the package is re-installed the new value
@@ -136,9 +133,7 @@ class TraceEvent:
         self.offline_row_id = offline_row_id
 
     def to_json_bytes(self) -> bytes:
-        return json.dumps(
-            self.payload, default=str, separators=_JSON_SEPARATORS
-        ).encode("utf-8")
+        return _fast_dumps_bytes(self.payload)
 
 
 def _parse_ingest_counts(resp: Any, sent_count: int) -> tuple[int, int, int]:
@@ -1031,17 +1026,10 @@ class EdenClient:
         if not batch:
             return
         try:
-            body = gzip.compress(
-                json.dumps(
-                    {"chunks": batch},
-                    default=str,
-                    separators=_JSON_SEPARATORS,
-                ).encode("utf-8"),
-                compresslevel=1,
-            )
+            body, encoding = _compress_wire(_fast_dumps_bytes({"chunks": batch}))
             headers = self.config.auth_headers()
             headers.setdefault("Content-Type", "application/json")
-            headers.setdefault("Content-Encoding", "gzip")
+            headers.setdefault("Content-Encoding", encoding)
             headers.setdefault("User-Agent", _USER_AGENT)
 
             attempt = 0
@@ -1238,20 +1226,19 @@ class EdenClient:
                 url = self.config.ingest_url(source_format)
                 headers = dict(base_headers)
                 headers.setdefault("Content-Type", "application/json")
-                headers.setdefault("Content-Encoding", "gzip")
                 headers.setdefault("User-Agent", _USER_AGENT)
                 if self.config.redact_on_client:
                     payloads = [redact_payload(p) for p in payloads]
                 if self._BATCH_AS_ARRAY:
-                    raw = json.dumps(
-                        payloads, default=str, separators=_JSON_SEPARATORS
-                    ).encode("utf-8")
+                    raw = _fast_dumps_bytes(payloads)
                 else:
-                    raw = json.dumps(
-                        payloads[0], default=str, separators=_JSON_SEPARATORS
-                    ).encode("utf-8")
+                    raw = _fast_dumps_bytes(payloads[0])
                     count = 1
-                body = gzip.compress(raw, compresslevel=1)
+                body, encoding = _compress_wire(raw)
+                # Direct assignment (not setdefault): the wire encoding is
+                # decided by ``_compress_wire`` (zstd when available, else
+                # gzip) and must match the bytes actually sent.
+                headers["Content-Encoding"] = encoding
                 attempt = 0
                 max_attempts = 3
                 base_delay_s = 0.2

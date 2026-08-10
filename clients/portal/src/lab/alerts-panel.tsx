@@ -15,7 +15,13 @@ import {
 } from "@/lab/fixtures/alerts";
 import { StatusChip } from "@/components/ds/primitives";
 import { useAlerts } from "@/lab/alerts-context";
-import { AgentLink, EmptyState, FilterChips, SeverityBadge } from "@/lab/lab-ui";
+import {
+  AgentLink,
+  EmptyState,
+  FilterChips,
+  SeverityBadge,
+  severityLabel,
+} from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
@@ -52,6 +58,12 @@ function severityTone(severity: AlertSeverity): "fail" | "neutral" {
     return "fail";
   }
   return "neutral";
+}
+
+function statusLabel(status: AlertEventStatus): string {
+  if (status === "firing") return "Firing";
+  if (status === "muted") return "Muted";
+  return "Resolved";
 }
 
 function statusTone(status: AlertEventStatus): "fail" | "neutral" | "ok" {
@@ -91,8 +103,8 @@ function EventRow({
         />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <StatusChip tone={severityTone(event.severity)}>{event.severity}</StatusChip>
-        <StatusChip tone={statusTone(event.status)}>{event.status}</StatusChip>
+        <StatusChip tone={severityTone(event.severity)}>{severityLabel(event.severity)}</StatusChip>
+        <StatusChip tone={statusTone(event.status)}>{statusLabel(event.status)}</StatusChip>
         <span className="type-meta ml-auto">{event.firedAt}</span>
       </div>
       <p className="type-ui mt-2 text-[var(--text)]">{event.title}</p>
@@ -133,8 +145,8 @@ function EventDetail({
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusChip tone={severityTone(event.severity)}>{event.severity}</StatusChip>
-              <StatusChip tone={statusTone(event.status)}>{event.status}</StatusChip>
+              <StatusChip tone={severityTone(event.severity)}>{severityLabel(event.severity)}</StatusChip>
+              <StatusChip tone={statusTone(event.status)}>{statusLabel(event.status)}</StatusChip>
             </div>
             <h2 className="type-title text-[var(--text)] !text-[1.25rem]">
               {event.title}

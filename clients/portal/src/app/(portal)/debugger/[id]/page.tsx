@@ -28,15 +28,16 @@ import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
 import { debuggerApi, debugSessionsApi } from "@/lib/api/resources";
 import { ASSIST_STALE, SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { EmptyState } from "@/lab/lab-ui";
 import { catalogTraces } from "@/lib/portal-catalog";
 
-const debuggerFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const debuggerFallback = <LoadingFallback label="Loading debugger view…" />;
 
 const DebuggerCompareView = dynamic(
   () =>
@@ -512,8 +513,9 @@ export default function LabDebuggerDetailPage() {
         <div className="ds-page">
           <PageHeader
             title="Debugger"
-            meta={<span className="type-meta">Loading…</span>}
+            meta={<InlineLoading label="Loading debugger session" />}
           />
+          <LoadingFallback label="Loading debugger session…" rows={4} />
         </div>
       }
     >

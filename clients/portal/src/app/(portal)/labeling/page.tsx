@@ -9,7 +9,11 @@ import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { labelingApi } from "@/lib/api/labeling";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LabelingQueueTable } from "@/lab/labeling/labeling-queue-table";
 import { LabelingUnassignedPanel } from "@/lab/labeling/labeling-unassigned-panel";
@@ -212,8 +216,9 @@ export default function LabelingPage() {
   return (
     <Suspense
       fallback={
-        <div className="ds-page flex min-h-0 flex-1 items-center justify-center">
-          <p className="type-meta">Loading labeling…</p>
+        <div className="ds-page">
+          <PageHeader title="Labeling" />
+          <LoadingFallback label="Loading labeling…" />
         </div>
       }
     >

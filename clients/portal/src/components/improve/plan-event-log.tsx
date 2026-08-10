@@ -86,7 +86,15 @@ export function PlanEventLog({
           recorded a transition yet.
         </p>
       ) : eventsQuery.isLoading ? (
-        <p className="type-meta mt-2">Loading…</p>
+        <div
+          className="mt-2 space-y-1.5"
+          role="status"
+          aria-label="Loading event log"
+        >
+          <div className="eden-skeleton-pulse h-3.5 w-2/5 rounded bg-[var(--line)]" />
+          <div className="eden-skeleton-pulse h-3.5 w-1/3 rounded bg-[var(--line)]" />
+          <div className="eden-skeleton-pulse h-3.5 w-1/2 rounded bg-[var(--line)]" />
+        </div>
       ) : events.length === 0 ? (
         <p className="type-meta mt-2">
           No events recorded yet — either this plan predates the event log

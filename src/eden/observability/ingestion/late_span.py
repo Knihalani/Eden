@@ -49,7 +49,12 @@ def evaluate_late_span(event: Any) -> str:
         return "ok"
 
     try:
-        event_ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+        # Wave 5: reuse the timestamp the collector's ``_validate`` already
+        # parsed and stashed on the event (``_parsed_timestamp``) instead of
+        # re-parsing the ISO string here on the ingest hot path.
+        event_ts = getattr(event, "_parsed_timestamp", None)
+        if event_ts is None:
+            event_ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
         if event_ts.tzinfo is None:
             event_ts = event_ts.replace(tzinfo=UTC)
     except ValueError:

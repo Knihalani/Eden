@@ -86,6 +86,50 @@ def _row_to_rule(row: dict[str, Any]) -> ScoringRule:
     )
 
 
+def _trace_events_limit() -> int:
+    """The telemetry_events row cap applied by ``_fetch_trace_events``.
+
+    Mirrored (not hard-coded) so the truncation guard in
+    :meth:`OnlineScoringRulesEngine._load_content` stays in lockstep with
+    the actual fetch limit.
+    """
+    try:
+        from eden.insights.rca._common import TRACE_EVENTS_LIMIT
+
+        return int(TRACE_EVENTS_LIMIT)
+    except Exception:  # pragma: no cover - defensive
+        return 2000
+
+
+def _content_from_events(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Derive the judge content dict from an already-fetched event list.
+
+    Events from ``_fetch_trace_events`` arrive in ``timestamp ASC`` order,
+    so the last element is the newest — the same row
+    :meth:`OnlineScoringRulesEngine._load_span_content`'s
+    ``ORDER BY timestamp DESC LIMIT 1`` picks. Returns an empty dict for
+    an empty list (mirroring the no-row result of the DB read).
+    """
+    out: dict[str, Any] = {}
+    if not events:
+        return out
+    ev = events[-1]
+    if ev.get("agent_id"):
+        out["agent_id"] = str(ev["agent_id"])
+    if ev.get("outcome"):
+        out["outcome"] = str(ev["outcome"])
+    if ev.get("name"):
+        out["name"] = str(ev["name"])
+    inp = ev.get("request_body")
+    resp = ev.get("response_body")
+    if inp is not None:
+        out["input"] = inp
+    if resp is not None:
+        out["output"] = resp
+        out["text"] = resp if isinstance(resp, str) else str(resp)
+    return out
+
+
 class OnlineScoringRulesEngine:
     """CRUD + apply online scoring rules on production traces/spans."""
 
@@ -212,16 +256,23 @@ class OnlineScoringRulesEngine:
         *,
         agent_id: str | None = None,
         span_id: str | None = None,
+        events: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
-        """Evaluate enabled rules; persist span/trace scores when cascade succeeds."""
+        """Evaluate enabled rules; persist span/trace scores when cascade succeeds.
+
+        ``events`` — when provided — is the trace's already-fetched event
+        list (the trace.finalized pipeline threads it through every
+        stage). It replaces the per-call ``telemetry_events`` read for
+        the judge payload (see :meth:`_load_content`).
+        """
         from eden.evaluation.online.span_scores import SpanScoreStore
 
         rules = [r for r in await self.list_rules(org_id) if r.enabled]
         if not rules:
             return []
 
-        content = await self._load_span_content(
-            org_id, trace_id, span_id=span_id
+        content = await self._load_content(
+            org_id, trace_id, span_id=span_id, events=events
         )
         resolved_agent = agent_id or content.get("agent_id")
         outcome = content.get("outcome")
@@ -321,6 +372,59 @@ class OnlineScoringRulesEngine:
         key = f"{rule_id}:{trace_id}" if rule_id else trace_id
         bucket = int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) % 10_000
         return bucket < int(rate * 10_000)
+
+    async def _load_content(
+        self,
+        org_id: str,
+        trace_id: str,
+        *,
+        span_id: str | None = None,
+        events: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Span/trace I/O for the judge payload — DB read OR in-memory events.
+
+        When the caller already fetched the trace's events (the
+        trace.finalized pipeline), derive content from the last event
+        instead of re-reading ``telemetry_events`` — mirroring
+        :meth:`_load_span_content`'s ``ORDER BY timestamp DESC LIMIT 1``
+        semantics (events arrive in ``timestamp ASC`` order, so the last
+        element is the newest). Falls back to the DB read when:
+
+        * ``events`` was not provided at all (API / rewind callers), or
+        * ``span_id`` targeting is required (the caller needs a specific
+          span, which a flat event list cannot reliably resolve), or
+        * the fetched events carry ``NULL`` request/response blobs —
+          zstd-only storage leaves the plaintext columns empty and only
+          the DB read can decode the compressed payloads, so judges keep
+          seeing the same content they always did, or
+        * the event list hit the fetch cap (``TRACE_EVENTS_LIMIT``) —
+          ``events[-1]`` is then the *cap-th* oldest, not the newest,
+          so the DB read is authoritative again.
+
+        A threaded-but-empty list is authoritative (the shared fetch
+        already decided the trace is empty for this run) — it returns
+        ``{}`` without touching the DB.
+        """
+        if events is None or span_id is not None:
+            return await self._load_span_content(
+                org_id, trace_id, span_id=span_id
+            )
+        content = _content_from_events(events)
+        if events and content.get("input") is None and content.get("output") is None:
+            # zstd-only storage — plaintext blobs NULL on the fetched
+            # events; only the DB read has the compressed payloads.
+            content = await self._load_span_content(
+                org_id, trace_id, span_id=None
+            )
+        elif len(events) >= _trace_events_limit():
+            # ``_fetch_trace_events`` caps the ASC list at the limit, so a
+            # list this long has almost certainly been truncated and
+            # ``events[-1]`` is NOT the newest event. ``_load_span_content``
+            # reads the true newest row — authoritative for judge content.
+            content = await self._load_span_content(
+                org_id, trace_id, span_id=None
+            )
+        return content
 
     async def _load_span_content(
         self,

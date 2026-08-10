@@ -198,6 +198,11 @@
 | 160_signal_definitions_org_enabled_created | signal_definitions | yes | forever | none | low | Partial index on `(org_id, created_at ASC) WHERE enabled = TRUE` for investigator list path (OPT-42) | Signals |
 | 161_retention_archive_watermark | retention_archive_watermark | yes | forever | soft | low | Watermark table for retention_cron cold-archive org selection (OPT-52) | Retention |
 | 162_dataset_items_split | dataset_items | yes | forever | soft | low | Nullable `split` tag on dataset_items for eval subsetting (FEAT-167) | Eval |
+| 163_loop_events_outbox_primary | loop_events_outbox | no | instant | hard | high | Outbox becomes the primary closed-loop queue; Redis XREADGROUP removed from the loop path (N5) | Improve |
+| 164_vector_documents | vector_documents | yes | forever | soft | medium | Generic pgvector point table (collection/point_id PK + HNSW) replaces Qdrant (N4) | Semantic |
+| 165_drop_dead_test_tables | test_y, test_part_full_renamed | yes | forever | soft | critical | Drop the two proven-dead partition-experiment leftovers; live tables app_events/clickhouse_fallback/jobs untouched (P3.3) | Decommission |
+| 166_telemetry_chunk_retention | telemetry_events | yes | forever | none | medium | Hypertable tuning: 7-day chunks, 90-day retention policy, guarded compression (P3.4) | Decommission |
+| 167_trace_summaries | trace_summaries | yes | forever | soft | low | Materialized per-trace summary table powering the Wave 6 read-path 10x (list_traces no longer re-aggregates telemetry_events) | Observability |
 
 
 ### Migration chain repair (2026-07-17, GA hardening)

@@ -213,7 +213,7 @@ async def approve_plan_route(
 async def reject_plan_route(
     org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
-    body: RejectRequest = Body(default=RejectRequest()),
+    body: RejectRequest = Body(default_factory=RejectRequest),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
     await require_org_admin(org_id, payload)
@@ -237,7 +237,7 @@ async def reject_plan_route(
 async def snooze_plan_route(
     org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
-    body: SnoozePlanRequest = Body(default=SnoozePlanRequest()),
+    body: SnoozePlanRequest = Body(default_factory=SnoozePlanRequest),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
     await require_org_admin(org_id, payload)
@@ -262,7 +262,7 @@ async def snooze_plan_route(
 async def merge_plan_route(
     org_id: str = Depends(require_path_org_access),
     plan_id: str = Path(...),
-    body: MergePlanRequest = Body(default=MergePlanRequest()),
+    body: MergePlanRequest = Body(default_factory=MergePlanRequest),
     payload: dict | None = Depends(_try_resolve_token_payload),
 ) -> dict[str, Any]:
     """Operator supervision — merge the open PR for a ``pr_opened`` plan."""
@@ -349,7 +349,7 @@ async def get_run(
 @router.post("/runs")
 async def trigger_run(
     org_id: str = Depends(require_path_org_access),
-    body: ManualRunRequest = Body(default=ManualRunRequest()),
+    body: ManualRunRequest = Body(default_factory=ManualRunRequest),
 ) -> dict[str, Any]:
     await _require_agent_v1_async(org_id)
     result = await ImprovementAgent().sweep(
@@ -384,7 +384,7 @@ async def put_schedule(
 async def snooze(
     org_id: str = Depends(require_path_org_access),
     item_ref: str = Path(...),
-    body: SnoozeRequest = Body(default=SnoozeRequest()),
+    body: SnoozeRequest = Body(default_factory=SnoozeRequest),
 ) -> dict[str, Any]:
     until = datetime.now(UTC) + timedelta(hours=body.hours)
     await snooze_item(org_id, item_ref, until)
@@ -452,7 +452,7 @@ async def approve(
 async def autofix(
     org_id: str = Depends(require_path_org_access),
     issue_id: str = Path(...),
-    body: AutofixRequest = Body(default=AutofixRequest()),
+    body: AutofixRequest = Body(default_factory=AutofixRequest),
 ) -> dict[str, Any]:
     """F04 ``run_autofix`` backend — dry_run returns triage/context only."""
     from eden.issues.repo import IssuesRepo

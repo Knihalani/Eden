@@ -13,9 +13,10 @@ import asyncio
 import contextvars
 import json
 import logging
+import threading
 import uuid
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -66,6 +67,63 @@ _user_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "cost_ledger_request_id", default=None
 )
+
+#: Shared INSERT for ``customer_cost_events`` — used by both the
+#: write-through path (cost > 0) and the batched $0 path (Wave 9).
+_LEDGER_INSERT_SQL = """
+INSERT INTO customer_cost_events (
+    id, org_id, feature, model, cost_usd,
+    input_tokens, output_tokens, total_tokens,
+    request_id, trace_id, agent_id, session_id, user_id,
+    metadata, recorded_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8,
+    $9, $10, $11, $12, $13,
+    $14::jsonb, NOW()
+)
+"""
+
+# Wave 9 — $0-cost events buffer in-process and flush in ONE executemany.
+# Only ever receives events with cost_usd == 0 (classifier savings markers
+# on the always-on path). Billing-relevant writes never enter this buffer.
+_zero_cost_buffer: list[CostEvent] = []
+_zero_cost_buffer_lock = threading.Lock()
+
+
+def _zero_cost_batching_enabled() -> bool:
+    try:
+        from eden.config import get_settings
+
+        return bool(getattr(get_settings(), "cost_ledger_batch_v1", True))
+    except Exception:
+        return True
+
+
+def _zero_cost_batch_max() -> int:
+    try:
+        from eden.config import get_settings
+
+        return max(1, int(getattr(get_settings(), "cost_ledger_batch_max", 200) or 200))
+    except Exception:
+        return 200
+
+
+def _zero_cost_batch_interval() -> float:
+    try:
+        from eden.config import get_settings
+
+        return max(
+            0.5,
+            float(
+                getattr(
+                    get_settings(), "cost_ledger_batch_interval_seconds", 5.0
+                )
+                or 5.0
+            ),
+        )
+    except Exception:
+        return 5.0
 
 
 @dataclass
@@ -263,8 +321,19 @@ async def _safe_record(event: CostEvent) -> None:
 async def record_cost_event(event: CostEvent) -> bool:
     """Persist a CostEvent to Postgres and align budget_consumption.
 
-    Returns True when the ledger row was written. Best-effort: never raises
-    to callers on the LLM hot path.
+    Returns True when the ledger row was accepted. Best-effort: never
+    raises to callers on the LLM hot path.
+
+    Delivery semantics depend on the row's cost:
+
+    * cost > 0 — write-through: the row is INSERTed immediately and
+      ``record_usage`` / ``evaluate_budget_alerts`` run (billing-critical).
+    * cost == 0 (with ``cost_ledger_batch_v1`` on) — buffered in-process
+      and flushed in ONE ``executemany`` by :func:`flush_zero_cost_events`
+      (inline at ``cost_ledger_batch_max``, plus a periodic flusher in the
+      API/worker processes). At-most-once: buffered rows are dropped on a
+      crash before the next flush. They carry no billable spend, so this
+      is acceptable on the always-on detection path.
     """
     if not event.org_id:
         return False
@@ -274,6 +343,21 @@ async def record_cost_event(event: CostEvent) -> bool:
         event.total_tokens
         or (int(event.input_tokens or 0) + int(event.output_tokens or 0))
     )
+
+    # Wave 9 — $0-cost events are the bulk of ledger writes on the
+    # always-on detection path (classifier savings markers). Buffer them
+    # and flush in one executemany; an inline flush runs once the buffer
+    # reaches ``cost_ledger_batch_max`` so nothing lingers indefinitely
+    # under a marker flood. Billing-relevant (cost > 0) writes stay
+    # write-through below.
+    if cost == 0 and _zero_cost_batching_enabled():
+        with _zero_cost_buffer_lock:
+            _zero_cost_buffer.append(event)
+            buffered = len(_zero_cost_buffer)
+        if buffered >= _zero_cost_batch_max():
+            await flush_zero_cost_events()
+        return True
+
     try:
         from eden.storage.postgres import get_postgres_client
 
@@ -287,19 +371,7 @@ async def record_cost_event(event: CostEvent) -> bool:
     row_id = uuid.uuid4()
     try:
         await client.execute(
-            """
-            INSERT INTO customer_cost_events (
-                id, org_id, feature, model, cost_usd,
-                input_tokens, output_tokens, total_tokens,
-                request_id, trace_id, agent_id, session_id, user_id,
-                metadata, recorded_at
-            ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8,
-                $9, $10, $11, $12, $13,
-                $14::jsonb, NOW()
-            )
-            """,
+            _LEDGER_INSERT_SQL,
             row_id,
             event.org_id,
             feature,
@@ -337,6 +409,119 @@ async def record_cost_event(event: CostEvent) -> bool:
             logger.debug("cost_ledger: alert eval failed: %s", exc)
 
     return True
+
+
+async def flush_zero_cost_events() -> int:
+    """Flush buffered $0-cost events in ONE executemany.
+
+    Returns the number of rows written (0 when the buffer was empty or
+    Postgres was unavailable). Best-effort, matching ``record_cost_event``:
+    a flush failure drops the batch with a debug log — these rows carry no
+    billable spend, so at-most-once delivery is acceptable on the hot path.
+    """
+    global _zero_cost_buffer
+    with _zero_cost_buffer_lock:
+        events = _zero_cost_buffer
+        _zero_cost_buffer = []
+    if not events:
+        return 0
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception as exc:
+        logger.debug("cost_ledger: batched flush pg unavailable: %s", exc)
+        return 0
+    if client is None:
+        return 0
+    rows = [
+        (
+            uuid.uuid4(),
+            ev.org_id,
+            ev.normalized_feature(),
+            ev.model or "unknown",
+            0.0,
+            int(ev.input_tokens or 0),
+            int(ev.output_tokens or 0),
+            int(
+                ev.total_tokens
+                or (int(ev.input_tokens or 0) + int(ev.output_tokens or 0))
+            ),
+            ev.request_id,
+            ev.trace_id,
+            ev.agent_id,
+            ev.session_id,
+            ev.user_id,
+            json_dumps(ev.metadata or {}),
+        )
+        for ev in events
+    ]
+    try:
+        await client.executemany(_LEDGER_INSERT_SQL, rows)
+        return len(rows)
+    except Exception as exc:
+        logger.debug("cost_ledger: batched insert failed: %s", exc)
+        return 0
+
+
+def pending_zero_cost_event_count() -> int:
+    """Number of buffered $0 events not yet flushed (tests/observability)."""
+    with _zero_cost_buffer_lock:
+        return len(_zero_cost_buffer)
+
+
+def reset_zero_cost_buffer_for_tests() -> None:
+    """Drop any buffered $0 events. Tests only — never called in prod."""
+    with _zero_cost_buffer_lock:
+        _zero_cost_buffer.clear()
+
+
+async def _zero_cost_flusher_loop(interval: float) -> None:
+    """Periodic flush cadence for trickling $0 markers. Never raises."""
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            await flush_zero_cost_events()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - loop must survive tick errors
+            logger.debug("cost_ledger: periodic flush failed: %s", exc)
+
+
+def start_zero_cost_flusher() -> asyncio.Task | None:
+    """Start the periodic $0-event flusher on the current loop.
+
+    Call once from a long-lived async entrypoint (API lifespan, worker
+    ``_run_forever``). Returns ``None`` when batching is disabled or no
+    loop is running — the flusher must be a task on the process's own
+    loop, which is exactly the loop those entrypoints are already on.
+    """
+    if not _zero_cost_batching_enabled():
+        return None
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    task = loop.create_task(
+        _zero_cost_flusher_loop(_zero_cost_batch_interval()),
+        name="cost-ledger-zero-flush",
+    )
+    return task
+
+
+async def stop_zero_cost_flusher(task: asyncio.Task | None) -> None:
+    """Cancel the periodic flusher and do a final flush of buffered rows.
+
+    Best-effort; call during shutdown before the Postgres pool closes.
+    """
+    if task is not None and not task.done():
+        task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await task
+    try:
+        await flush_zero_cost_events()
+    except Exception as exc:  # noqa: BLE001 - shutdown must not raise
+        logger.debug("cost_ledger: final flush failed: %s", exc)
 
 
 async def sum_feature_spend_today(

@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  ChevronRight,
+  GitBranch,
+  X,
+} from "lucide-react";
 import {
   agentForTrace,
   homeSnapshot,
@@ -62,10 +68,16 @@ function Kpi({
       href={href}
       aria-label={`${label}: ${value}. ${hint}`}
       className={cn(
-        "min-w-0 flex-1 basis-[8rem] border-b border-[var(--line)] px-5 py-5 transition-colors hover:bg-[var(--accent-muted)] sm:border-b-0 sm:border-r sm:last:border-r-0",
+        "group relative min-w-0 flex-1 basis-[8rem] border-b border-[var(--line)] px-5 py-5 transition-colors hover:bg-[var(--accent-muted)] sm:border-b-0 sm:border-r sm:last:border-r-0",
         className,
       )}
     >
+      {/* Shown only on lg+ where cards are wide enough that the chevron
+          can't run under a long value (e.g. "$1,234.56"). */}
+      <ChevronRight
+        className="absolute right-2.5 top-1/2 hidden h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-70 lg:block"
+        aria-hidden
+      />
       <p className="type-label">{label}</p>
       <p
         className={cn(
@@ -108,7 +120,7 @@ function AttentionCard({
   return (
     <li
       className={cn(
-        "border-b border-[var(--line)] last:border-b-0",
+        "group border-b border-[var(--line)] transition-[background-color,box-shadow] last:border-b-0 hover:shadow-[inset_0_0_0_1px_var(--line-strong)]",
         isError && "bg-[var(--error-muted)]",
         trace.severity === "warn" && "bg-[var(--error-muted)]",
       )}
@@ -180,7 +192,11 @@ export default function HomeClient() {
   const orgId = currentOrg?.id ?? null;
   const [showAllFleet, setShowAllFleet] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
-  const [showFleet, setShowFleet] = useState(false);
+  // Wave 10 — Recent runs + Fleet render by default: the queries above are
+  // unconditional, so hiding them behind a button only gated the *render*
+  // (pure friction). Collapsing is still available for users who want the
+  // attention-first view.
+  const [showFleet, setShowFleet] = useState(true);
 
   /**
    * Attention path first: traces + issues. Fleet/agents wait until
@@ -316,7 +332,6 @@ export default function HomeClient() {
       cost: byKey("cost_usd"),
       traces: byKey("traces"),
       cacheSavings: byKey("cache_savings_usd"),
-      source: payload?.data_source,
       ready: costKpiQuery.data !== undefined && !costKpiQuery.isError,
     };
   }, [costKpiQuery.data, costKpiQuery.isError]);
@@ -332,6 +347,7 @@ export default function HomeClient() {
   const dismissedCount = snap.attention.length - visibleAlerts.length;
   const attentionFails = visibleAlerts.filter((t) => t.severity === "error").length;
   const attentionWarns = visibleAlerts.filter((t) => t.severity === "warn").length;
+  const attentionTotal = visibleAlerts.length;
 
   const orderedFleet = useMemo(
     () =>
@@ -408,7 +424,7 @@ export default function HomeClient() {
             openIssuesCount > 0
               ? `${openIssuesCount} open issues`
               : snap.failures.length
-                ? "in feed"
+                ? "failing runs"
                 : "none"
           }
           tone={snap.failures.length ? "error" : "default"}
@@ -432,11 +448,9 @@ export default function HomeClient() {
           }
           hint={
             liveTiles.ready
-              ? liveTiles.source === "clickhouse"
-                ? "24h · analytics"
-                : "24h · live"
+              ? "last 24h"
               : traces.length
-                ? "from feed"
+                ? "recent runs"
                 : "no runs yet"
           }
           tone="default"
@@ -468,10 +482,10 @@ export default function HomeClient() {
           tone="default"
           hint={
             liveTiles.ready && liveTiles.cost?.delta_pct != null
-              ? `${liveTiles.cost.delta_pct > 0 ? "+" : ""}${liveTiles.cost.delta_pct}% vs prior`
+              ? `${liveTiles.cost.delta_pct > 0 ? "+" : ""}${liveTiles.cost.delta_pct}% vs prior 24h`
               : liveTiles.cacheSavings?.value
-                ? `${formatUsd(Number(liveTiles.cacheSavings.value))} cached`
-                : "24h"
+                ? `${formatUsd(Number(liveTiles.cacheSavings.value))} saved by cache`
+                : "last 24h"
           }
           hintTone={
             liveTiles.cost?.delta_pct != null && liveTiles.cost.delta_pct > 20
@@ -505,7 +519,8 @@ export default function HomeClient() {
             <h2 className="type-ui text-[var(--text)]">Needs attention</h2>
             {visibleAlerts.length > 0 ? (
               <p className="type-meta mt-1">
-                {attentionFails} fail · {attentionWarns} warn
+                {attentionFails} failed · {attentionWarns} warning
+                {attentionTotal > 3 ? ` · showing 3 of ${attentionTotal}` : ""}
               </p>
             ) : (
               <p className="type-meta mt-1">
@@ -530,6 +545,7 @@ export default function HomeClient() {
 
         {visibleAlerts.length === 0 ? (
           <EmptyState
+            icon={zeroData ? undefined : CheckCircle2}
             title={zeroData ? FIRST_EVENT_WAIT.title : "All clear"}
             body={
               zeroData
@@ -558,16 +574,28 @@ export default function HomeClient() {
             }
           />
         ) : (
-          <ul>
-            {visibleAlerts.slice(0, 3).map((trace) => (
-              <AttentionCard
-                key={trace.id}
-                trace={trace}
-                issue={resolveIssueForTrace(trace.id)}
-                onDismiss={() => alerts.dismiss(trace.id)}
-              />
-            ))}
-          </ul>
+          <>
+            <ul>
+              {visibleAlerts.slice(0, 3).map((trace) => (
+                <AttentionCard
+                  key={trace.id}
+                  trace={trace}
+                  issue={resolveIssueForTrace(trace.id)}
+                  onDismiss={() => alerts.dismiss(trace.id)}
+                />
+              ))}
+            </ul>
+            {visibleAlerts.length > 3 ? (
+              <div className="border-t border-[var(--line)] px-5 py-2.5 sm:px-6">
+                <Link
+                  href={openIssuesCount > 0 ? "/issues" : "/traces"}
+                  className="type-meta text-[var(--accent)] hover:underline"
+                >
+                  See all {visibleAlerts.length} runs needing attention
+                </Link>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
 
@@ -619,15 +647,17 @@ export default function HomeClient() {
         </button>
       </div>
 
-      {/* Below fold / disclosure — fleet + recent */}
-      <div className="border-b border-[var(--line)] px-5 py-3 sm:px-6">
+      {/* Below fold — fleet + recent. Rendered by default (see state
+          comment); the header doubles as a collapse control. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-5 py-3 sm:px-6">
+        <h2 className="type-ui text-[var(--text)]">Runs &amp; fleet</h2>
         <button
           type="button"
           className="ds-btn ds-btn-ghost ds-btn-sm"
           onClick={() => setShowFleet((v) => !v)}
           aria-expanded={showFleet}
         >
-          {showFleet ? "Hide fleet" : "Show fleet"}
+          {showFleet ? "Collapse" : "Show"}
         </button>
       </div>
 
@@ -649,6 +679,7 @@ export default function HomeClient() {
               </header>
               {recent.length === 0 ? (
                 <EmptyState
+                  icon={GitBranch}
                   title="No recent runs"
                   body={U20_EMPTY_COPY.dashboardTraces}
                   action={
@@ -702,6 +733,7 @@ export default function HomeClient() {
             </header>
             {fleet.length === 0 ? (
               <EmptyState
+                icon={Bot}
                 title="No agents yet"
                 body={U20_EMPTY_COPY.agents}
                 action={

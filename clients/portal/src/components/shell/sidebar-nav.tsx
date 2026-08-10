@@ -20,6 +20,7 @@ import {
   Shield,
   Settings,
   PanelLeftClose,
+  Search,
   Tag,
   Layers,
   type LucideIcon,
@@ -31,6 +32,7 @@ import {
   type NavItem,
 } from "@/lab/nav";
 import { EdenLogo } from "@/components/ds/eden-logo";
+import { openCommandPalette } from "@/lib/palette";
 import { useSidebar } from "@/components/shell/sidebar-context";
 import { SidebarAuthFooter } from "@/components/shell/portal-auth-chrome";
 import { AlertsBell } from "@/lab/alerts-bell";
@@ -134,6 +136,15 @@ export function SidebarNav() {
             >
               <PanelLeftClose className="h-3.5 w-3.5 rotate-180" />
             </button>
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="ds-btn ds-btn-ghost ds-btn-icon !h-7 !w-7"
+              title="Search runs, issues, agents… (⌘K)"
+              aria-label="Search (⌘K)"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden />
+            </button>
             <NotificationsBell collapsed />
             <AlertsBell collapsed />
           </div>
@@ -146,6 +157,18 @@ export function SidebarNav() {
               <EdenLogo size={22} />
               <span className="type-title truncate !text-[0.875rem]">eden</span>
             </Link>
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="ds-btn ds-btn-ghost ds-btn-sm shrink-0 !gap-1.5"
+              title="Search runs, issues, agents… (⌘K)"
+              aria-label="Search (⌘K)"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden />
+              <kbd className="type-mono hidden rounded border border-[var(--line)] px-1 py-px !text-[0.625rem] !text-[var(--text-faint)] lg:inline">
+                ⌘K
+              </kbd>
+            </button>
             <NotificationsBell />
             <AlertsBell />
             <button

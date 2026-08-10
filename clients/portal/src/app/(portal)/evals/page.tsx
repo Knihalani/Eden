@@ -57,16 +57,17 @@ import {
   playgroundApi,
 } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  LoadingFallback,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
-const viewFallback = (
-  <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-    <p className="type-meta">Loading…</p>
-  </div>
-);
+const viewFallback = <LoadingFallback label="Loading evals…" />;
 
 const EvalsCompareView = dynamic(
   () =>
@@ -1687,10 +1688,8 @@ export default function LabEvalsPage() {
     <Suspense
       fallback={
         <div className="ds-page">
-          <PageHeader
-            title="Evals"
-            meta={<span className="type-meta">Loading…</span>}
-          />
+          <PageHeader title="Evals" meta={<InlineLoading label="Loading evals" />} />
+          <LoadingFallback label="Loading evals…" rows={4} />
         </div>
       }
     >

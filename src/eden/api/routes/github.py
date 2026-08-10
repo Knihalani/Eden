@@ -1522,9 +1522,9 @@ async def connect_org_repo(
             if match is not None:
                 default_branch = (match.default_branch or "").strip()
             if not default_branch:
-                import httpx
+                from eden.util.shared_http import shared_httpx_ctx
 
-                async with httpx.AsyncClient(timeout=15.0) as http:
+                async with shared_httpx_ctx(timeout=15.0) as http:
                     r = await http.get(
                         f"https://api.github.com/repos/{repo_full_name}",
                         headers={

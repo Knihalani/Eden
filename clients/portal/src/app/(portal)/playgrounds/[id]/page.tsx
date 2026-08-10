@@ -3,15 +3,14 @@
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { PageHeader } from "@/components/ds/primitives";
+import { LoadingFallback } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useOrg } from "@/hooks/use-org";
 
 const editorFallback = (
   <div className="ds-page">
     <PageHeader title="Playground" />
-    <div className="flex min-h-[12rem] flex-1 items-center justify-center px-5">
-      <p className="type-meta">Loading…</p>
-    </div>
+    <LoadingFallback label="Loading playground…" />
   </div>
 );
 

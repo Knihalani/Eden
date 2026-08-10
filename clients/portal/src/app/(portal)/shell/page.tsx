@@ -45,10 +45,10 @@ export default function LabShellPage() {
         <section>
           <h3 className="type-ui text-[var(--text)]">Status</h3>
           <div className="mt-3 flex flex-wrap gap-2">
-            <StatusChip tone="ok">ok</StatusChip>
-            <StatusChip tone="fail">fail</StatusChip>
-            <StatusChip tone="live">live</StatusChip>
-            <StatusChip tone="neutral">idle</StatusChip>
+            <StatusChip tone="ok">OK</StatusChip>
+            <StatusChip tone="fail">Failed</StatusChip>
+            <StatusChip tone="live">Live</StatusChip>
+            <StatusChip tone="neutral">Idle</StatusChip>
           </div>
         </section>
 

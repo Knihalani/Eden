@@ -344,32 +344,41 @@ async def test_subscribe_bridges_hook_to_loop_event() -> None:
 
 
 @pytest.mark.asyncio
-async def test_consumer_dedups_on_idempotency_key() -> None:
+async def test_consumer_run_polls_outbox_with_injected_orchestrator() -> None:
+    """N5 — the consumer polls the outbox; dedup lives in drain_outbox.
+
+    The pre-N5 consumer owned a ``_handle`` that deduped on
+    idempotency_key per Redis delivery. The outbox migration (163) moved
+    dedup into publish/drain (pending-key ON CONFLICT + seen-key skip),
+    covered by tests/unit/closed_loop/test_event_bus_outbox.py. This pins
+    the new wiring: ``run()`` delegates to ``drain_outbox`` with the
+    injected orchestrator so dispatch never loses it.
+    """
+    import asyncio
+
     from eden.closed_loop.event_bus import ClosedLoopConsumer
 
     orch = MagicMock()
     orch.on_event = AsyncMock()
     consumer = ClosedLoopConsumer(orchestrator=orch)
 
-    ev = LoopEvent(
-        type=EventType.ISSUE_CREATED,
-        org_id="o",
-        issue_id="iss-1",
-        ref="fp",
-    )
-    fields = ev.to_fields()
+    drained: list[tuple[int, Any]] = []
 
-    redis = MagicMock()
-    # first call: SET NX succeeds (returns truthy); second: already set → None
-    redis.set = AsyncMock(side_effect=[True, None])
-    redis.xack = AsyncMock()
+    async def fake_drain(limit: int, orchestrator: Any) -> int:
+        drained.append((limit, orchestrator))
+        return 0
 
-    await consumer._handle(redis, "1-0", fields)
-    await consumer._handle(redis, "1-1", fields)
+    with patch(
+        "eden.closed_loop.event_bus.drain_outbox", side_effect=fake_drain
+    ):
+        stop = asyncio.Event()
+        task = asyncio.create_task(consumer.run(stop))
+        await asyncio.sleep(0.05)
+        stop.set()
+        await asyncio.wait_for(task, timeout=5.0)
 
-    # processed only once despite two deliveries of the same key
-    orch.on_event.assert_awaited_once()
-    assert redis.xack.await_count == 2  # both acked either way
+    assert drained, "consumer should poll drain_outbox"
+    assert drained[0][1] is orch
 
 
 # ── G8: apply_approved dispatch ─────────────────────────────────────

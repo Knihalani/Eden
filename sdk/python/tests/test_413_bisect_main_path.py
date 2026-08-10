@@ -27,8 +27,6 @@ of one, where the permanent-failure verdict is finally the right one.
 
 from __future__ import annotations
 
-import gzip
-import json
 from typing import Any
 
 import httpx
@@ -37,6 +35,7 @@ import pytest
 from eden_sdk.client import EdenClient
 from eden_sdk.config import EdenConfig
 from eden_sdk.trace import TraceEvent
+from tests._http_body import decode_ingest_body
 
 
 class _SizeLimitTransport(httpx.AsyncBaseTransport):
@@ -48,8 +47,7 @@ class _SizeLimitTransport(httpx.AsyncBaseTransport):
         self.accepted: list[dict[str, Any]] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        body = gzip.decompress(request.content)
-        parsed = json.loads(body)
+        parsed = decode_ingest_body(request.content, request.headers)
         events = parsed if isinstance(parsed, list) else [parsed]
         self.batch_sizes.append(len(events))
         if len(events) > self.max_events:

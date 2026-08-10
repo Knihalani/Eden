@@ -17,7 +17,7 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Body, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 
 from eden.api.deps import get_current_user, require_path_org_access
@@ -327,7 +327,7 @@ def _row_to_signal(row: Any) -> tuple[NLSignal, int]:
     summary="Seed the F35 default signal library for this org",
 )
 async def seed_default_signals(
-    body: SeedDefaultsRequest = SeedDefaultsRequest(),
+    body: SeedDefaultsRequest = Body(default_factory=SeedDefaultsRequest),
     org_id: str = Depends(require_path_org_access),
     user: dict = Depends(get_current_user),
 ) -> SeedDefaultsResponse:

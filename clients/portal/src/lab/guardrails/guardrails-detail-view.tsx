@@ -13,6 +13,7 @@ import {
   GuardrailStatusChip,
 } from "@/lab/guardrails/guardrails-chrome";
 import { AgentLink, EmptyState } from "@/lab/lab-ui";
+import { formatAbsoluteTime, formatSmartTime } from "@/lib/format";
 
 export function GuardrailsDetailView({
   policy,
@@ -95,7 +96,11 @@ export function GuardrailsDetailView({
                   : "—"
               }
             />
-            <Stat label="Last hit" value={policy.lastHit ?? "—"} />
+            <Stat
+              label="Last hit"
+              value={formatSmartTime(policy.lastHit)}
+              title={formatAbsoluteTime(policy.lastHit)}
+            />
             <Stat label="Scope" value={agentLabel(policy.agentId)} />
           </dl>
         </section>
@@ -123,11 +128,22 @@ export function GuardrailsDetailView({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+}) {
   return (
     <div>
       <dt className="type-meta text-[var(--text-faint)]">{label}</dt>
-      <dd className="type-mono mt-0.5 tabular-nums !text-[0.75rem] text-[var(--text)]">
+      <dd
+        className="type-mono mt-0.5 tabular-nums !text-[0.75rem] text-[var(--text)]"
+        title={title}
+      >
         {value}
       </dd>
     </div>

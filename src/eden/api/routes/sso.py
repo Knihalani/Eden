@@ -26,7 +26,6 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
 
-import httpx
 import jwt
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
@@ -47,6 +46,7 @@ from eden.api.utils.auth import create_access_token
 from eden.api.utils.redact import redact_all
 from eden.config import get_settings
 from eden.storage.redis import get_redis_client
+from eden.util.shared_http import shared_httpx_ctx
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -888,7 +888,7 @@ async def _fetch_oidc_discovery(issuer_origin: str) -> dict[str, Any]:
         return cached[0]
 
     discovery_url = f"{issuer_origin}/.well-known/openid-configuration"
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
+    async with shared_httpx_ctx(timeout=10.0) as http_client:
         resp = await http_client.get(discovery_url)
     if resp.status_code >= 400:
         raise ValueError(f"OIDC discovery endpoint returned {resp.status_code}")
@@ -904,7 +904,7 @@ async def _fetch_oidc_jwks(jwks_uri: str) -> dict[str, Any]:
     if cached and now - cached[1] < _OIDC_CACHE_TTL_SECONDS:
         return cached[0]
 
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
+    async with shared_httpx_ctx(timeout=10.0) as http_client:
         resp = await http_client.get(jwks_uri)
     if resp.status_code >= 400:
         raise ValueError(f"OIDC JWKS endpoint returned {resp.status_code}")
@@ -970,7 +970,7 @@ async def _handle_oidc_callback(code: str | None, provider: dict[str, Any]) -> t
         raise HTTPException(status_code=503, detail="OIDC token endpoint is not configured")
 
     redirect_uri = f"{settings.app_url}/auth/sso/callback"
-    async with httpx.AsyncClient(timeout=10.0) as http_client:
+    async with shared_httpx_ctx(timeout=10.0) as http_client:
         token_resp = await http_client.post(
             token_endpoint,
             data={

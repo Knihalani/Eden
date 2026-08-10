@@ -28,15 +28,16 @@ def test_autoclaim_interval_floor():
         assert redis_mod.redis_stream_autoclaim_interval_s() == 30
 
 
-def test_event_bus_uses_stream_client_helper():
+def test_event_bus_consumer_is_outbox_backed_not_redis():
+    """N5 — the closed-loop consumer must NOT touch the Redis stream
+    client: the Postgres outbox is the queue, the consumer drains it."""
     import inspect
 
     from eden.closed_loop import event_bus
 
-    acquire_src = inspect.getsource(event_bus.ClosedLoopConsumer._acquire_redis)
     run_src = inspect.getsource(event_bus.ClosedLoopConsumer.run)
-    assert "get_redis_stream_client" in acquire_src
-    assert "block_ms" in run_src
+    assert "get_redis_stream_client" not in run_src
+    assert "drain_outbox" in run_src
 
 
 def test_trace_finalized_uses_stream_client_and_throttled_autoclaim():

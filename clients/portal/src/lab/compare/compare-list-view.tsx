@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Search } from "lucide-react";
 import {
   agentLabel,
   armDelta,
@@ -12,7 +11,13 @@ import {
   type AbStatus,
 } from "@/lab/fixtures/compare";
 import { AbRecChip } from "@/lab/compare/compare-chrome";
-import { AgentScopeFilter, EmptyState, FilterChips } from "@/lab/lab-ui";
+import {
+  AgentScopeFilter,
+  EmptyState,
+  FilterChips,
+  SearchInput,
+} from "@/lab/lab-ui";
+import { formatSmartTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function CompareListView({
@@ -61,20 +66,13 @@ export function CompareListView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-        <label className="relative min-w-[10rem] flex-1">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search…"
-            className="ds-input w-full !py-1.5 !pl-8"
-            aria-label="Search splits"
-          />
-        </label>
+        <SearchInput
+          value={query}
+          onChange={onQueryChange}
+          placeholder="Search splits, ids…"
+          ariaLabel="Search splits"
+          className="min-w-[10rem] flex-1"
+        />
         <AgentScopeFilter
           value={agentId}
           onChange={onAgentChange}
@@ -176,7 +174,8 @@ export function CompareListView({
                     {e.name}
                   </span>
                   <span className="type-meta">
-                    {agentLabel(e.agentId)} · {split} · {e.createdAt || "—"}
+                    {agentLabel(e.agentId)} · {split} ·{" "}
+                    {formatSmartTime(e.createdAt)}
                   </span>
                 </button>
               </li>

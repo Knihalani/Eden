@@ -2,14 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/ds/primitives";
+import { LoadingFallback } from "@/components/shell/query-error-panel";
 
 const GatewayClient = dynamic(() => import("./gateway-client"), {
   loading: () => (
     <div className="ds-page">
-      <PageHeader
-        title="Gateway"
-        meta={<span className="type-meta">Loading…</span>}
-      />
+      <PageHeader title="Gateway" />
+      <LoadingFallback label="Loading gateway…" rows={4} />
     </div>
   ),
 });

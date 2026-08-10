@@ -107,8 +107,6 @@ def test_settings() -> Settings:
         # with quota_enabled; production keeps both True.
         rate_limit_enabled=False,
         openrouter_api_key="test-api-key",
-        qdrant_host="localhost",
-        qdrant_port=6333,
         cors_origins="*",
         # Disable Redis in the rate-limit middleware so it falls
         # back to the in-memory bucket immediately rather than

@@ -74,7 +74,7 @@ async def export_topics(
 @router.post("/generate")
 async def run_topic_generation(
     org_id: str = Depends(require_path_org_access),
-    body: GenerateTopicsRequest = Body(default=GenerateTopicsRequest()),
+    body: GenerateTopicsRequest = Body(default_factory=GenerateTopicsRequest),
     user: dict = Depends(get_current_user),
 ) -> dict[str, Any]:
     _ = user

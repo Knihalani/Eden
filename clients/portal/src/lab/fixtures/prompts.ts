@@ -160,7 +160,10 @@ export function agentLabel(agentId: string): string {
 }
 
 export function statusLabel(status: PromptStatus): string {
-  return status;
+  if (status === "draft") return "Draft";
+  if (status === "shadow") return "Shadow";
+  if (status === "live") return "Live";
+  return "Archived";
 }
 
 export function formatFailRate(rate: number): string {

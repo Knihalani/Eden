@@ -1,20 +1,23 @@
-"""Chaos — Redis killed mid-loop (closed-loop event bus, M2/D4).
+"""Chaos — Postgres killed mid-loop (closed-loop event bus, N5).
 
-Kills Redis under ``eden.closed_loop.event_bus.publish`` (the client
-raises ``ConnectionError``) and asserts the loop degrades *durably*:
+Kills Postgres under ``eden.closed_loop.event_bus.publish`` (the client
+is unavailable / raises) and asserts the loop fails *loudly* and
+recovers:
 
-1. events land in the ``loop_events_outbox`` Postgres table,
-2. ``last_publish_failure_ts`` is stamped (feeds the loop-health probe),
-3. ``outbox_depth()`` reflects the queued events,
-4. ``drain_outbox`` replays them in order once Redis comes back, and
-5. the ``loop_dead_alert`` idle chore (verify worker) turns a stale
+1. ``publish`` returns False and stamps ``last_publish_failure_ts`` —
+   events are dropped *honestly* (the outbox *is* the queue; there is
+   no second store to buffer into),
+2. the ``loop_dead_alert`` idle chore (verify worker) turns a stale
    failure stamp into an actual alert artifact — end-to-end from the
    bus probe to alert emission (the chore's internals are covered by
-   ``tests/unit/closed_loop/test_loop_dead_alerting.py``).
+   ``tests/unit/closed_loop/test_loop_dead_alerting.py``), and
+3. once Postgres returns, a successful publish clears the stamp and a
+   crash-left pending row is re-claimed and dispatched on the next
+   drain (at-least-once delivery via ``FOR UPDATE SKIP LOCKED``).
 
-Same conventions as the rest of ``tests/chaos``: no real Redis or
-Postgres — a stateful in-memory outbox stands in for PG and the Redis
-client is a hand-rolled fake, mirroring the fixtures in
+Same conventions as the rest of ``tests/chaos``: no real Postgres — a
+stateful in-memory outbox stands in for PG and a dead client raises on
+every call, mirroring the fixtures in
 ``tests/unit/closed_loop/test_event_bus_outbox.py``.
 """
 
@@ -24,33 +27,30 @@ import json
 import logging
 import time
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from eden.closed_loop.events import LoopEvent
 
 
-class DeadRedis:
-    """Redis client whose stream writes fail — 'killed mid-loop'."""
+class DeadPG:
+    """Postgres stand-in whose calls all raise — 'killed mid-loop'."""
 
     def __init__(self) -> None:
         self.attempts = 0
 
-    async def xadd(self, *args: Any, **kwargs: Any) -> None:
+    async def execute(self, *args: Any, **kwargs: Any) -> str:
         self.attempts += 1
-        raise ConnectionError("chaos: redis killed mid-loop")
+        raise ConnectionError("chaos: postgres killed mid-loop")
 
+    async def fetch(self, *args: Any, **kwargs: Any) -> list[Any]:
+        self.attempts += 1
+        raise ConnectionError("chaos: postgres killed mid-loop")
 
-class RecordingRedis:
-    """Healthy Redis stand-in that records every XADD."""
-
-    def __init__(self) -> None:
-        self.stream: list[tuple[str, dict[str, Any]]] = []
-
-    async def xadd(self, stream: str, fields: dict[str, Any], **kwargs: Any) -> str:
-        self.stream.append((stream, dict(fields)))
-        return f"{len(self.stream)}-0"
+    async def fetchrow(self, *args: Any, **kwargs: Any) -> dict[str, Any] | None:
+        self.attempts += 1
+        raise ConnectionError("chaos: postgres killed mid-loop")
 
 
 class FakeOutboxPG:
@@ -71,15 +71,28 @@ class FakeOutboxPG:
                     "id": self._next_id,
                     "org_id": args[0],
                     "event": args[1],
+                    "attempts": 0,
                     "drained_at": None,
                 }
             )
             self._next_id += 1
             return "INSERT 0 1"
-        if s.startswith("UPDATE loop_events_outbox SET drained_at"):
+        if "SET drained_at = NOW()" in s and "attempts = $2" in s:
+            # dead-letter stamp
             for r in self.rows:
                 if r["id"] == args[0]:
                     r["drained_at"] = time.time()
+                    r["attempts"] = args[1]
+            return "UPDATE 1"
+        if "SET drained_at = NOW()" in s:
+            for r in self.rows:
+                if r["id"] == args[0]:
+                    r["drained_at"] = time.time()
+            return "UPDATE 1"
+        if "SET attempts = $2" in s:
+            for r in self.rows:
+                if r["id"] == args[0]:
+                    r["attempts"] = args[1]
             return "UPDATE 1"
         raise AssertionError(f"unexpected SQL against fake outbox: {s}")
 
@@ -87,7 +100,8 @@ class FakeOutboxPG:
         assert "FROM loop_events_outbox" in sql
         limit = int(args[0]) if args else 500
         return [
-            {"id": r["id"], "event": r["event"]} for r in self._undrained()
+            {"id": r["id"], "event": r["event"], "attempts": r["attempts"]}
+            for r in self._undrained()
         ][:limit]
 
     async def fetchrow(self, sql: str, *args: Any) -> dict[str, Any]:
@@ -111,66 +125,43 @@ def _reset_bus_state():
     import eden.closed_loop.event_bus as eb
 
     eb.last_publish_failure_ts = None
+    eb._seen.clear()
     yield
     eb.last_publish_failure_ts = None
+    eb._seen.clear()
 
 
 @pytest.mark.asyncio
-async def test_redis_kill_midloop_events_survive_in_outbox_and_drain(caplog):
+async def test_pg_kill_midloop_fails_loudly_and_recovers(caplog):
     import eden.closed_loop.event_bus as eb
 
-    pg = FakeOutboxPG()
-    dead = DeadRedis()
-
-    # ── Phase 1: Redis dies mid-loop; three events are published ────
+    dead = DeadPG()
     with (
-        patch.object(eb, "_pg", AsyncMock(return_value=pg)),
+        patch.object(eb, "_pg", AsyncMock(return_value=dead)),
         caplog.at_level(logging.ERROR, logger="eden.closed_loop.event_bus"),
     ):
         results = [
-            await eb.publish(_event(ref=ref), redis=dead)
-            for ref in ("a", "b", "c")
+            await eb.publish(_event(ref=ref)) for ref in ("a", "b", "c")
         ]
 
-        # Durably queued — publish reports success, not silent loss.
-        assert results == [True, True, True]
-        assert dead.attempts == 3
+        # Honest drop: publish reports failure — nothing silently buffered.
+        assert results == [False, False, False]
+        assert dead.attempts >= 3
 
         # The bus probe is stamped for the loop-health surface.
         assert eb.last_publish_failure_ts is not None
         assert eb.last_publish_failure_ts == pytest.approx(time.time(), abs=30)
 
-        # Failure was loud (ERROR), one log per failed XADD.
+        # Failure was loud (ERROR), one log per failed publish.
         publish_errors = [
             r for r in caplog.records if "publish failed" in r.getMessage()
         ]
         assert len(publish_errors) == 3
 
-        # Every event landed in the durable outbox, in order.
-        assert [json.loads(r["event"])["ref"] for r in pg.rows] == ["a", "b", "c"]
-        assert await eb.outbox_depth() == 3
-
-    # ── Phase 2: Redis returns; the outbox drains oldest-first ──────
-    recorder = RecordingRedis()
-    with (
-        patch.object(eb, "_pg", AsyncMock(return_value=pg)),
-        patch(
-            "eden.storage.redis.get_redis_client",
-            AsyncMock(return_value=recorder),
-        ),
-    ):
-        drained = await eb.drain_outbox()
-        assert drained == 3
-        assert [s for s, _ in recorder.stream] == [eb.LOOP_STREAM] * 3
-        assert [f["ref"] for _, f in recorder.stream] == ["a", "b", "c"]
-        assert await eb.outbox_depth() == 0
-
-        # A second drain is a no-op — nothing is replayed twice.
-        assert await eb.drain_outbox() == 0
-        assert len(recorder.stream) == 3
-
-    # A successful publish clears the failure stamp (probe goes green).
-    assert await eb.publish(_event(ref="d"), redis=recorder) is True
+    # Recovery: a healthy Postgres clears the failure stamp (probe green).
+    pg = FakeOutboxPG()
+    with patch.object(eb, "_pg", AsyncMock(return_value=pg)):
+        assert await eb.publish(_event(ref="d")) is True
     assert eb.last_publish_failure_ts is None
 
 
@@ -216,7 +207,7 @@ def alert_sinks(monkeypatch):
 async def test_stale_publish_failure_reaches_alert_artifact(alert_sinks):
     """Bus probe → loop_dead_alert chore, end to end.
 
-    The failure stamp is produced by the REAL publish path (Redis
+    The failure stamp is produced by the REAL publish path (Postgres
     raising), then aged past the 120s threshold; the chore must turn
     it into an alert artifact carrying the probe values.
     """
@@ -224,12 +215,11 @@ async def test_stale_publish_failure_reaches_alert_artifact(alert_sinks):
     from eden.closed_loop import verify
 
     alert_events, slack_msgs = alert_sinks
-    pg = FakeOutboxPG()
+    dead = DeadPG()
 
-    with patch.object(eb, "_pg", AsyncMock(return_value=pg)):
-        # Production stamp: publish fails against a dead Redis and
-        # falls back to the outbox — no hand-crafted probe values.
-        assert await eb.publish(_event(ref="stale"), redis=DeadRedis()) is True
+    with patch.object(eb, "_pg", AsyncMock(return_value=dead)):
+        # Production stamp: publish fails against a dead Postgres.
+        assert await eb.publish(_event(ref="stale")) is False
         assert eb.last_publish_failure_ts is not None
 
         # Healthy loop first: a fresh failure must NOT page.
@@ -243,18 +233,47 @@ async def test_stale_publish_failure_reaches_alert_artifact(alert_sinks):
         assert fired is True
 
     # One alert artifact, sourced from the watchdog, carrying the
-    # bus probe values (failure age + outbox depth of the real row).
+    # bus probe values (failure age + outbox depth).
     assert len(alert_events) == 1
     evt = alert_events[0]
     assert evt["org_id"] == "org-chaos"
     assert evt["severity"] == "critical"
     assert evt["payload"]["source"] == "loop_dead_watchdog"
     assert evt["payload"]["publish_failure_age_s"] >= 120
-    assert evt["payload"]["outbox_depth"] == 1
     assert any("publish failing" in r for r in evt["payload"]["reasons"])
     assert len(slack_msgs) == 1
 
     # Debounce: the chore pages once per cooldown window, not per tick.
-    with patch.object(eb, "_pg", AsyncMock(return_value=pg)):
-        assert await verify.loop_dead_alert_check() is False
+    assert await verify.loop_dead_alert_check() is False
     assert len(alert_events) == 1
+
+
+@pytest.mark.asyncio
+async def test_crash_left_pending_row_reclaimed_on_next_drain():
+    """At-least-once: a crash mid-dispatch leaves the row undrained; the
+    next drain re-claims and dispatches it (and counts the failure)."""
+    import eden.closed_loop.event_bus as eb
+
+    pg = FakeOutboxPG()
+    with patch.object(eb, "_pg", AsyncMock(return_value=pg)):
+        # Event queued, then the consumer crashes mid-dispatch.
+        assert await eb.publish(_event(ref="crash")) is True
+        assert await eb.outbox_depth() == 1
+
+        # First drain: dispatch fails (transient) → row re-queued.
+        failing = MagicMock()
+        failing.on_event = AsyncMock(side_effect=RuntimeError("transient boom"))
+        assert await eb.drain_outbox(orchestrator=failing) == 0
+        assert await eb.outbox_depth() == 1  # still pending
+        assert pg.rows[0]["attempts"] == 1
+
+        # Second drain: healthy → dispatched and stamped drained.
+        ok = MagicMock()
+        ok.on_event = AsyncMock()
+        assert await eb.drain_outbox(orchestrator=ok) == 1
+        assert await eb.outbox_depth() == 0
+        ok.on_event.assert_awaited_once()
+        # The recovered event is exactly the queued one.
+        assert ok.on_event.await_args.args[0].ref == "crash"
+
+    assert json.loads(pg.rows[0]["event"])["ref"] == "crash"

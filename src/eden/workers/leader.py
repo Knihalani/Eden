@@ -69,8 +69,14 @@ async def _extend_lock_periodically(
 #: take over for hours. Keeping it fixed + short, renewed frequently
 #: while work is in-flight, bounds the failover window to roughly one
 #: renewal period regardless of how long the tick itself is.
-_DEFAULT_LOCK_TTL_SECONDS = 60
-_DEFAULT_LOCK_RENEW_SECONDS = 20.0
+#:
+#: P0-1 (2026-08-10): both values raised 3× (TTL 60→180, renew 20→60)
+#: to cut Upstash EVAL burn — every renewal is one Redis command, so
+#: this is 4,320 → 1,440 cmds/day per held lock. The 3:1 TTL:renew ratio
+#: is preserved (matching ``sidecars``' guard), keeping a delayed/slow
+#: renewal comfortably inside the TTL.
+_DEFAULT_LOCK_TTL_SECONDS = 180
+_DEFAULT_LOCK_RENEW_SECONDS = 60.0
 
 #: Hard ceiling on a single acquisition attempt. Generous next to the
 #: client's own 2s socket timeout — this is not a latency budget, it is

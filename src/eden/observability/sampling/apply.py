@@ -150,6 +150,15 @@ async def should_route_event(event: Any) -> bool:
     M14 (§8.3): warm per-org ``sampling_profile_override`` before the sync
     decide path so production ingest honors org settings (not only the
     process-wide ``full`` default).
+
+    Fast path (Wave 5 / PERF): when the process-wide policy can never drop
+    (``full`` profile, disabled, or keep_rate >= 1.0) and the org has no
+    override, ``decide_for_event`` returns a keep for *every* input — the
+    ``keep_signals_for_event`` extraction (attribute scans, cost parse,
+    threshold lookups) is wasted work on the ingest hot path. Measured:
+    ~0.7s per 10k events in the idle-sink batch profile. Skipping the
+    signal extraction is behavior-identical because ``decide``'s first
+    branch is exactly this condition.
     """
     org_id = str(getattr(event, "tenant_id", "") or "")
     if org_id:
@@ -159,6 +168,16 @@ async def should_route_event(event: Any) -> bool:
             await ensure_org_sampling_warmed(org_id)
         except Exception:  # noqa: BLE001 — never block ingest for warm
             pass
+    try:
+        from eden.preview.gates import sampling_profile_override_sync
+
+        override = sampling_profile_override_sync(org_id)
+    except Exception:  # noqa: BLE001
+        override = None
+    if override is None:
+        policy = get_sampling_policy()
+        if not policy.enabled or policy.profile == "full" or policy.keep_rate >= 1.0:
+            return True
     decision = decide_for_event(event)
     if decision.keep:
         return True
@@ -173,8 +192,35 @@ async def should_route_event(event: Any) -> bool:
             drop_reason=decision.reason or "sampled_out",
         )
         store = get_sampling_summary_store()
-        # Fire-and-forget persist; in-memory buffer always updated.
-        await store.persist(summary)
+        # In-memory buffer ONLY — no DB round-trip on the ingest hot path.
+        # ``store.persist`` (one ``execute`` per sampled-out event) was
+        # serialising ingest behind N Postgres round-trips under
+        # balanced/aggressive profiles — the exact opposite of why
+        # sampling exists. The collector flushes the buffer with one
+        # ``executemany`` per batch via ``flush_sampling_summaries``.
+        store.record(summary)
     except Exception as exc:  # noqa: BLE001
         logger.debug("n16 sampling summary failed: %s", exc)
     return False
+
+
+async def flush_sampling_summaries(
+    client: Any | None = None,
+) -> int:
+    """Flush buffered sampled-out summaries with one ``executemany``.
+
+    Called once per ingest batch (and on a timer for the single-event
+    path), NOT once per dropped event. Best-effort: 0 when Postgres is
+    down or the table is missing; the buffer is kept so the next flush
+    retries. Returns rows written.
+    """
+    try:
+        from eden.observability.sampling.summaries import get_sampling_summary_store
+
+        store = get_sampling_summary_store()
+        if not store.buffered():
+            return 0
+        return await store.persist_buffered(client=client)
+    except Exception as exc:  # noqa: BLE001 — never fail ingest for summaries
+        logger.debug("n16 sampling summary flush failed: %s", exc)
+        return 0

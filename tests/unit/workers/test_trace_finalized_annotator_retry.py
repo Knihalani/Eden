@@ -79,7 +79,7 @@ async def test_process_trace_passes_its_attempt_number_down() -> None:
     consumer = _consumer()
     seen: list[int] = []
 
-    async def _capture(org_id, trace_id, report, *, attempt=1):
+    async def _capture(org_id, trace_id, report, *, events=None, attempt=1):
         seen.append(attempt)
 
     consumer._scanner.scan = AsyncMock(return_value=[])

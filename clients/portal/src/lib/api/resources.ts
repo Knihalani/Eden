@@ -1994,39 +1994,6 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  createTraceShare: (
-    orgId: string,
-    traceId: string,
-    body?: { expiry_days?: number; label?: string; base_url?: string },
-  ) =>
-    fetchApi<{
-      id: string;
-      url?: string;
-      token?: string;
-      expires_at: string | null;
-    }>(`/orgs/${orgId}/traces/${traceId}/share`, {
-      method: "POST",
-      body: JSON.stringify(body ?? {}),
-    }),
-
-  listTraceShares: (orgId: string, traceId: string) =>
-    fetchApi<{
-      shares: Array<{
-        id: string;
-        trace_id: string;
-        label: string | null;
-        expires_at: string | null;
-        revoked_at: string | null;
-        created_at: string;
-        active: boolean;
-      }>;
-    }>(`/orgs/${orgId}/traces/${traceId}/shares`),
-
-  revokeTraceShare: (orgId: string, shareId: string) =>
-    fetchApi<{ revoked: boolean }>(`/orgs/${orgId}/shares/${shareId}`, {
-      method: "DELETE",
-    }),
-
   getTraceTimeline: (
     orgId: string,
     traceId: string,

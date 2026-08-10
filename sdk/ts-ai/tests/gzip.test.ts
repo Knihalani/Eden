@@ -1,10 +1,27 @@
 /**
- * K35 — gzip Content-Encoding on ingest POST.
+ * K35 — wire Content-Encoding on ingest POST (N2: zstd-when-available,
+ * gzip fallback). The SDK compresses every ingest POST; on the Bun
+ * runtime it prefers native `Bun.zstdCompressSync` (`Content-Encoding:
+ * zstd`), falling back to gzip level 1 elsewhere. These tests accept
+ * whichever encoding the active runtime produces and round-trip it.
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { gunzipSync } from "node:zlib";
 import { EdenSDK, resetDefaultClient } from "../src/client.js";
 import { type TelemetryEvent } from "../src/types.js";
+
+/** Decompress a wire body according to its Content-Encoding header. */
+function decodeWire(body: Buffer, encoding: string | null | undefined): string {
+  const enc = (encoding ?? "").toLowerCase().trim();
+  if (enc === "zstd") {
+    // Bun runtime only — tests run under Bun so this is available.
+    const dec = (globalThis as { Bun?: { zstdDecompressSync?: (d: Uint8Array) => Uint8Array } })
+      .Bun?.zstdDecompressSync;
+    if (!dec) throw new Error("zstd body but no Bun.zstdDecompressSync");
+    return new TextDecoder().decode(dec(body));
+  }
+  return gunzipSync(body).toString("utf8");
+}
 
 function makeEvent(): TelemetryEvent {
   return {
@@ -20,7 +37,7 @@ function makeEvent(): TelemetryEvent {
   };
 }
 
-describe("gzip ingest", () => {
+describe("wire-compressed ingest", () => {
   let originalFetch: typeof fetch;
 
   beforeEach(() => {
@@ -33,7 +50,7 @@ describe("gzip ingest", () => {
     resetDefaultClient();
   });
 
-  it("posts gzip Content-Encoding and round-trips JSON", async () => {
+  it("posts a supported Content-Encoding and round-trips JSON", async () => {
     const seen: { encoding?: string | null; body?: Buffer } = {};
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       seen.encoding = new Headers(init?.headers).get("content-encoding");
@@ -56,9 +73,11 @@ describe("gzip ingest", () => {
     sdk.emit(makeEvent());
     await sdk.flush();
 
-    expect(seen.encoding).toBe("gzip");
+    // Either zstd (Bun runtime) or gzip (Node) — both are accepted by
+    // the gateway (providers.py sniffs zstd magic + Content-Encoding).
+    expect(["gzip", "zstd"]).toContain(seen.encoding);
     expect(seen.body).toBeTruthy();
-    const decoded = JSON.parse(gunzipSync(seen.body!).toString("utf8"));
+    const decoded = JSON.parse(decodeWire(seen.body!, seen.encoding));
     expect(Array.isArray(decoded)).toBe(true);
     // Full TelemetryEvent wire envelope (eventToWire), not nested
     // payload alone — otherwise event_type is missing on the wire.
@@ -72,7 +91,7 @@ describe("gzip ingest", () => {
     });
   });
 
-  it("reuses gzip body across retries without re-encoding", async () => {
+  it("reuses the compressed body across retries without re-encoding", async () => {
     let attempts = 0;
     const bodies: Buffer[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -107,7 +126,7 @@ describe("gzip ingest", () => {
 
     expect(attempts).toBe(2);
     expect(bodies.length).toBe(2);
-    // Same Buffer instance reused across retry attempts (no re-gzip).
+    // Same Buffer instance reused across retry attempts (no re-compress).
     expect(bodies[0]).toBe(bodies[1]);
   });
 });

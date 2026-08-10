@@ -349,7 +349,7 @@ class WebhookDeliveryService:
         except ValueError as exc:
             return WebhookTestResult(success=False, error=str(exc))
         try:
-            httpx = _get_httpx()
+            from eden.util.shared_http import shared_httpx_ctx
         except ImportError as exc:
             return WebhookTestResult(success=False, error=str(exc))
         body = json.dumps(
@@ -361,7 +361,7 @@ class WebhookDeliveryService:
         ).encode("utf-8")
         signature = WebhookSigner.sign_v1(secret, body.decode("utf-8"))
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with shared_httpx_ctx(timeout=10.0) as client:
                 resp = await client.post(
                     url,
                     content=body,

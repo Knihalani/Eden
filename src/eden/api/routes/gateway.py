@@ -2432,9 +2432,9 @@ async def list_models(
     upstream_rows: list[dict[str, Any]] | None = None
     if api_key and api_key != "sk-no-key-configured":
         try:
-            import httpx
+            from eden.util.shared_http import shared_httpx_ctx
 
-            async with httpx.AsyncClient(timeout=5.0) as http:
+            async with shared_httpx_ctx(timeout=5.0) as http:
                 r = await http.get(
                     f"{base_url.rstrip('/')}/models",
                     headers={"Authorization": f"Bearer {api_key}"},

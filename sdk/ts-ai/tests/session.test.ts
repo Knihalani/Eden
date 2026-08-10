@@ -2,7 +2,7 @@
  * F23 agent session SDK tests.
  */
 
-import { gunzipSync } from "node:zlib";
+import { parseFetchBody } from "./_parseBody.js";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   begin,
@@ -15,13 +15,15 @@ import { configure, resetDefaultClient } from "../src/client.js";
 
 const posts: Array<{ url: string; headers: Record<string, string>; body: unknown }> = [];
 
-/** Every lifecycle notify body is gzip-compressed (see ``session.ts``'s
- * ``notifySession``) — decode the same way the server's
- * ``GunzipRequestMiddleware`` does before parsing as JSON. */
+/** Every lifecycle notify body is wire-compressed (see ``session.ts``'s
+ * ``notifySession``: zstd when the runtime supports it, else gzip) —
+ * decode the same way the server's ``GunzipRequestMiddleware`` does
+ * before parsing as JSON. ``parseFetchBody`` sniffs the zstd/gzip magic
+ * bytes, so no encoding needs to be hard-coded here. */
 function decodeBody(body: unknown): unknown {
   if (!body) return null;
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(body as ArrayBuffer);
-  return JSON.parse(gunzipSync(buf).toString("utf8"));
+  return parseFetchBody({ body: buf });
 }
 
 beforeEach(() => {
@@ -72,7 +74,7 @@ describe("session F23", () => {
       expect(p.headers["X-Org-Id"]).toBe("test-org");
       // Phase 5 — every lifecycle notify is gzip-compressed like the
       // main ingest path (parity with the Python SDK's session.py).
-      expect(p.headers["Content-Encoding"]).toBe("gzip");
+      expect(["gzip", "zstd"]).toContain(p.headers["Content-Encoding"]);
     }
   });
 
