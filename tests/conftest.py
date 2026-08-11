@@ -88,6 +88,13 @@ def test_settings() -> Settings:
     return Settings(
         jwt_secret="test-jwt-secret-do-not-use-in-production-ever",
         debug=True,
+        # Never inherit the developer's .env DATABASE_URL — it points at
+        # the production Neon instance. Every DB-touching test must go
+        # through the localhost POSTGRES_* overrides below; without this,
+        # the compression integration tests silently ran against
+        # production and failed on schema drift (7-day chunks, dropped
+        # plaintext columns) instead of the local test database.
+        database_url="",
         postgres_host="localhost",
         postgres_db="eden_test",
         postgres_user="eden_test",

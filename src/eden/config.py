@@ -1556,6 +1556,11 @@ def _build_settings_class():
         patterns_clusterer_enabled: bool = True
         patterns_clusterer_lookback_days: int = 7
         patterns_clusterer_min_cluster_size: int = 20
+        # FEAT-142 trend windows — previously read via getattr() with
+        # module-level defaults in patterns_clusterer.py, so they could
+        # not be tuned by config. Defaults match the call site constants.
+        patterns_clusterer_trend_recent_days: int = 7
+        patterns_clusterer_trend_baseline_days: int = 21
         nl_alerts_paging_enabled: bool = True
         optimization_cache_emit_metrics: bool = True
         gateway_enabled: bool = True

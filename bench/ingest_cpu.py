@@ -17,11 +17,19 @@ runs after a code change are what matter. Run:
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+# Direct-run bootstrap: ``python bench/ingest_cpu.py`` — add the repo
+# root so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 # Ensure ``src`` resolves to the app package (mirror bench.common).
-import bench.common  # noqa: F401
+import bench.common  # noqa: F401, E402
 
 
 @dataclass

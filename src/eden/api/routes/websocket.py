@@ -633,11 +633,19 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
     # Audit 2026-07-02 S-8 — Clerk-first, legacy-fallback.
     # B-6 (Session 23): verify_clerk_token is async; await it so the
     # WebSocket upgrade handshake doesn't block on a sync JWKS fetch.
+    #
+    # Deleted accounts: a valid-but-orphaned JWT (Clerk user deleted,
+    # session not yet refreshed client-side) must NOT open a WS —
+    # same ``deleted_at`` guard the HTTP deps enforce. Best-effort:
+    # a DB blip here falls through to the JWT-only accept rather than
+    # 500ing the handshake.
     try:
         from eden.api.utils.clerk_auth import verify_clerk_token
 
         clerk_payload = await verify_clerk_token(token)
         if clerk_payload:
+            if await _ws_user_is_deleted(clerk_payload.get("sub")):
+                return None
             return {
                 "user_id": clerk_payload.get("sub"),
                 "email": clerk_payload.get("email"),
@@ -651,6 +659,8 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
 
         payload = decode_access_token(token)
         if payload:
+            if await _ws_user_is_deleted(payload.get("sub")):
+                return None
             return {
                 "user_id": payload.get("sub"),
                 "email": payload.get("email"),
@@ -660,6 +670,32 @@ async def _authenticate_ws(websocket: WebSocket) -> dict | None:
         logger.warning(f"WebSocket auth failed: {exc}")
 
     return None
+
+
+async def _ws_user_is_deleted(user_id: str | None) -> bool:
+    """True when ``user_id`` maps to a soft-deleted Eden user row.
+
+    Mirrors the ``deleted_at`` guard in ``api.deps`` for the WS auth
+    path (which bypasses FastAPI dependencies). ``user_id`` may be a
+    Clerk string id or an Eden UUID; both lookups are tried. Best-
+    effort — any lookup failure returns False so a DB blip can't
+    crash the handshake (the JWT itself is still verified).
+    """
+    if not user_id:
+        return False
+    try:
+        from eden.api.deps import get_user_by_id
+
+        row = await get_user_by_id(str(user_id), lookup_column="clerk_id")
+        if row is not None:
+            return bool(row.get("deleted_at"))
+        if not str(user_id).startswith("user_"):
+            row = await get_user_by_id(str(user_id), lookup_column="id")
+            return bool(row and row.get("deleted_at"))
+        return False
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        logger.debug("WS deleted-user check failed for %s: %s", user_id, redact_all(str(exc)))
+        return False
 
 
 _WS_AUTH_SUBPROTOCOL_PREFIX = "eden-auth-"

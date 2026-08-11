@@ -96,6 +96,18 @@ class ClerkAPIError(RuntimeError):
     """Raised when Clerk Backend API returns non-2xx or times out."""
 
 
+class ClerkUserNotFoundError(ClerkAPIError):
+    """Raised when the Clerk Backend API answers 404 for a resource.
+
+    Distinct from :class:`ClerkAPIError` so callers can tell a
+    *deleted* Clerk user (``GET /users/{id}`` → 404) from a transient
+    API failure (timeout / 5xx). This distinction is what lets
+    ``/auth/me`` refuse to auto-provision a row for a session JWT
+    whose Clerk account no longer exists, instead of resurrecting
+    the account from a still-valid token.
+    """
+
+
 async def _post(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> dict[str, Any]:
     """POST JSON to Clerk Backend API and return the decoded body.
 
@@ -135,6 +147,11 @@ async def _post(path: str, body: dict[str, Any], *, timeout: float = 10.0) -> di
         raise ClerkAPIError(f"Clerk client error: {path}: {exc}") from exc
 
     if response.status_code < 200 or response.status_code >= 300:
+        # 404 = the resource (user/org) no longer exists in Clerk —
+        # surfaced distinctly so callers can fail closed instead of
+        # treating "deleted" the same as "Clerk is having a bad day".
+        if response.status_code == 404:
+            raise ClerkUserNotFoundError(f"Clerk 404 on {path}")
         # Truncate the body so we never log a Clerk JWT or PII.
         raise ClerkAPIError(
             f"Clerk {response.status_code} on {path}: {response.text[:300]}"
@@ -289,6 +306,12 @@ async def get_user(clerk_id: str) -> dict[str, Any] | None:
             return hit
         try:
             payload = await _get(f"/users/{clerk_id}")
+        except ClerkUserNotFoundError:
+            # 404 → the Clerk user was deleted. Propagate (do NOT
+            # swallow): callers like /auth/me use this to refuse to
+            # auto-provision a row for a deleted account. Negative
+            # results are never cached either way.
+            raise
         except ClerkAPIError as exc:
             # F70 — defensive redaction. ``ClerkAPIError`` on a 4xx
             # contains ``response.text[:300]`` which Clerk often fills

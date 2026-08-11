@@ -16,10 +16,21 @@ import argparse
 import asyncio
 import json
 import statistics
+import sys
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from starlette.testclient import TestClient
+# Direct-run bootstrap: ``python bench/request_path.py`` puts ``bench/``
+# on sys.path, not the repo root — add the root so ``bench.common``
+# resolves (it then pins ``eden`` to ``src/``).
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from starlette.testclient import TestClient  # noqa: E402
+
+import bench.common  # noqa: F401, E402  (side-effect: sys.path fixup)
 
 
 def _build_client():

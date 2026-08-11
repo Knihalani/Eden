@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { mapHealth, type HealthState } from "@/lib/health-status";
+import { marketingMetadata } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,11 +20,12 @@ import { cn } from "@/lib/utils";
  */
 
 export const revalidate = 60;
-export const metadata: Metadata = {
+export const metadata = marketingMetadata({
+  path: "/status",
   title: "Status · Eden",
   description:
     "Live operational status for the Eden API and its core dependencies.",
-};
+});
 
 /** Subset of the backend `/health` body this page reads. */
 type BackendHealth = {

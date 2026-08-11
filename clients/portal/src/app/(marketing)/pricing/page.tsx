@@ -1,35 +1,25 @@
-import type { Metadata } from "next";
-
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
+import { JsonLd } from "@/components/seo/json-ld";
 import {
   FREE_TIER_CAP_SHORT,
   FREE_TIER_TAGLINE,
   SALES_EMAIL,
 } from "@/lib/constants";
+import { marketingMetadata, pricingProductJsonLd } from "@/lib/seo";
 import { cn } from "@/lib/utils";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = {
+export const metadata = marketingMetadata({
+  path: "/pricing",
   title: "Pricing · Eden",
   description:
-    "Free during public beta. Team and Enterprise plans coming soon.",
-  robots: { index: true, follow: true },
-  openGraph: {
-    title: "Pricing · Eden",
-    description: FREE_TIER_TAGLINE,
-    images: [
-      { url: "/og-pricing.png", width: 1200, height: 630, alt: "Eden Pricing" },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Pricing · Eden",
-    description: FREE_TIER_TAGLINE,
-    images: ["/og-pricing.png"],
-  },
-};
+    "Free during public beta — no credit card. Team and Enterprise plans coming soon.",
+  ogTitle: "Pricing · Eden",
+  ogDescription: FREE_TIER_TAGLINE,
+  ogImage: "/og-pricing.png",
+});
 
 const TIERS = [
   {
@@ -82,6 +72,8 @@ const TIERS = [
 export default function PricingPage() {
   return (
     <main>
+      {/* Product schema — Free offer only (Team/Enterprise are roadmap). */}
+      <JsonLd data={pricingProductJsonLd()} />
       <MarketingShell
         kicker="Pricing"
         title="Start free. Paid plans coming soon."

@@ -14,11 +14,20 @@ import argparse
 import asyncio
 import json
 import statistics
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Awaitable, Callable
 
-from bench.common import BenchResult, bench_async
+# Direct-run bootstrap: ``python bench/middleware.py`` puts ``bench/`` on
+# sys.path, not the repo root — add the root so the ``bench`` package
+# resolves. ``bench.common`` then pins ``eden`` to ``src/``.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from bench.common import BenchResult, bench_async  # noqa: E402
 
 
 def _build_scope(

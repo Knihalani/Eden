@@ -14,11 +14,18 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
-from bench.common import BenchResult, bench_async
+# Direct-run bootstrap: ``python bench/latency.py`` — add the repo root
+# so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
+from bench.common import BenchResult, bench_async  # noqa: E402
 
 DEFAULT_ENDPOINTS = [
     ("GET", "/health"),

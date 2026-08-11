@@ -48,6 +48,8 @@ async def _cohorts_clickhouse(org_id: str, *, weeks: int) -> list[Cohort]:
         from eden.data_platform.analytics_engine import get_engine
         engine = get_engine()
     except Exception:
+        # ClickHouse optional — fall back to the Postgres path below.
+        logger.debug("clickhouse engine unavailable for cohorts", exc_info=True)
         return []
     sql = """
         SELECT

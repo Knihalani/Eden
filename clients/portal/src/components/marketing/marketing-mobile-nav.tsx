@@ -14,6 +14,7 @@ type NavLink =
 
 function navLinks(signedIn: boolean): NavLink[] {
   const base: NavLink[] = [
+    { href: "/why-eden", label: "Why Eden" },
     { href: "/pricing", label: "Pricing" },
     { href: DOCS_URL, label: "Docs", external: true },
     { href: "/about", label: "About" },

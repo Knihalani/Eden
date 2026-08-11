@@ -1,10 +1,14 @@
-import type { Metadata } from "next";
-
 import { ThinMarketingDoc } from "@/components/marketing/thin-marketing-doc";
+import { marketingMetadata } from "@/lib/seo";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = { title: "DPA · Eden" };
+export const metadata = marketingMetadata({
+  path: "/dpa",
+  title: "DPA · Eden",
+  description:
+    "Eden Data Processing Agreement for enterprise customers — subprocessors, security measures, and residency.",
+});
 
 export default function Page() {
   return (

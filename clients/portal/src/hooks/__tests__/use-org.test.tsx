@@ -52,6 +52,9 @@ vi.mock("@/lib/api/auth-client", () => ({
 vi.mock("@clerk/nextjs", () => ({
   useOrganization: () => ({ organization: null, membership: null, isLoaded: true }),
   useUser: () => ({ user: { id: "user_1" }, isLoaded: true }),
+  // OrgProvider reads ``useClerk().signOut`` for the deleted-account
+  // sign-out path; the mock keeps it inert for these tests.
+  useClerk: () => ({ signOut: vi.fn(async () => undefined) }),
   useOrganizationList: () => ({
     isLoaded: true,
     setActive: vi.fn(async () => undefined),

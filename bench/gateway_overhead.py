@@ -18,14 +18,22 @@ import json
 import statistics
 import sys
 import time
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+
+# Direct-run bootstrap: ``python bench/gateway_overhead.py`` puts
+# ``bench/`` on sys.path, not the repo root — add the root so the
+# ``bench`` package resolves at all.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 # Resolve ``eden`` to the app package, not the ``sdk/python/eden`` stub.
 # Importing ``bench.common`` runs its ``sys.path`` fixup (see its module
 # docstring). Without this, ``import eden.api.app`` in ``_build`` crashes
 # with ``ModuleNotFoundError`` when the bench is run directly.
-import bench.common  # noqa: F401  (side-effect: sys.path fixup)
+import bench.common  # noqa: F401, E402  (side-effect: sys.path fixup)
 
 
 def _pct(values: list[float], p: float) -> float:

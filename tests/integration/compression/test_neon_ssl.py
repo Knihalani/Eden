@@ -29,7 +29,7 @@ async def _try_get_pool():
         password=settings.postgres_password,
     )
     try:
-        await asyncio.wait_for(client.initialize(), timeout=3.0)
+        await asyncio.wait_for(client.initialize(), timeout=10.0)
     except Exception:
         return None
     return client
@@ -63,6 +63,9 @@ class TestDSNBuilder:
             database_url="postgresql+asyncpg://override:secret@override-host/override-db?sslmode=verify-full",
             postgres_host="should-be-ignored",
             postgres_user="should-be-ignored",
+            # Pin the port so the assertion below is hermetic regardless of
+            # the ambient POSTGRES_PORT (CI sets 5432; local .env may differ).
+            postgres_port=5432,
             postgres_sslmode="require",
         )
         dsn = build_dsn(settings)
@@ -80,6 +83,9 @@ class TestDSNBuilder:
             postgres_user="eden",
             postgres_password="secret",
             postgres_db="eden",
+            # Hermetic: CI sets POSTGRES_PORT=5432, but a local shell or
+            # .env may override it — the DSN shape must not depend on that.
+            postgres_port=5432,
             postgres_sslmode="require",
         )
         dsn = build_dsn(settings)
@@ -100,6 +106,7 @@ class TestDSNBuilder:
             postgres_user="eden",
             postgres_password="secret",
             postgres_db="eden",
+            postgres_port=5432,
             postgres_sslmode="require",
             postgres_channel_binding="require",
         )
@@ -120,6 +127,7 @@ class TestDSNBuilder:
             postgres_user="eden",
             postgres_password="",
             postgres_db="eden",
+            postgres_port=5432,
             postgres_sslmode="",
             postgres_channel_binding="",
         )

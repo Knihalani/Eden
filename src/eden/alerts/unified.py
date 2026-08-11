@@ -355,15 +355,13 @@ async def _dispatch_webhook(
         "context": request.context,
     }
     try:
-        import aiohttp
+        # Reuse the shared pooled client — a per-request aiohttp session
+        # paid a fresh TCP/TLS setup for every alert webhook (see
+        # eden.util.shared_http for the 15.6x measurement).
+        from eden.util.shared_http import shared_httpx_ctx
 
-        async with aiohttp.ClientSession() as session:
-            await session.post(
-                webhook_url,
-                json=payload,
-                headers=dest.headers,
-                timeout=aiohttp.ClientTimeout(total=10),
-            )
+        async with shared_httpx_ctx(timeout=10.0) as client:
+            await client.post(webhook_url, json=payload, headers=dest.headers)
     except Exception as exc:  # noqa: BLE001
         return DestinationDispatchResult(
             kind=dest.kind,

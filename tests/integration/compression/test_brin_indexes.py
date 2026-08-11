@@ -34,12 +34,12 @@ async def _try_get_pool():
         password=settings.postgres_password,
     )
     try:
-        await asyncio.wait_for(client.initialize(), timeout=3.0)
+        await asyncio.wait_for(client.initialize(), timeout=10.0)
         # initialize() may complete without actually connecting
         # (lazy asyncpg pool). Force a real round-trip via SELECT 1
         # so the fixture skips cleanly when the DB is unreachable
         # rather than failing every test with a ConnectionError.
-        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=3.0)
+        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=10.0)
     except Exception:
         return None
     return client
@@ -156,6 +156,14 @@ async def test_brin_planner_uses_index(pg_client: Any) -> None:
     """EXPLAIN of a time-range query should mention the BRIN index."""
     # The query is against telemetry_events since it's the largest table and
     # most likely to trigger the planner to consider the BRIN index.
+    #
+    # On an empty table the planner constant-folds the query to
+    # ``Result (One-Time Filter: false)`` — no index is consulted no
+    # matter which indexes exist (reltuples=0). The BRIN-wins assertion
+    # is only meaningful once the table holds rows.
+    n_rows = await pg_client.fetchval("SELECT count(*) FROM telemetry_events")
+    if not n_rows:
+        pytest.skip("telemetry_events is empty; the planner has no rows to index")
     plan = await pg_client.fetchval(
         """
         EXPLAIN SELECT 1 FROM telemetry_events

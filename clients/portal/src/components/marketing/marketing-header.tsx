@@ -7,6 +7,7 @@ import { MarketingRail } from "@/components/marketing/marketing-primitives";
 import { cn } from "@/lib/utils";
 
 const NAV = [
+  { href: "/why-eden", label: "Why Eden" },
   { href: "/pricing", label: "Pricing" },
   { href: DOCS_URL, label: "Docs", external: true },
   { href: "/about", label: "About" },

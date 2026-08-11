@@ -204,5 +204,5 @@ If nothing shows after **120 seconds**, check:
 ## What's next
 
 - [Quickstart](/quickstart) — five-minute first trace
-- [MCP in Cursor](/how-to/mcp-cursor) — debug from your IDE
+- [Agent sessions](/how-to/agent-sessions) — group traces by user interaction
 - [Instrument an existing repo](/how-to/auto-instrument)

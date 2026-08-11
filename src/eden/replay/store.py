@@ -37,6 +37,7 @@ class BrowserSessionStore:
 
             return await get_postgres_client()
         except Exception:
+            logger.debug("postgres client unavailable for replay store", exc_info=True)
             return None
 
     async def create_session(

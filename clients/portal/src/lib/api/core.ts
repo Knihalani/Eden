@@ -496,7 +496,7 @@ export async function fetchApi<T>(
           window.sessionStorage.setItem("eden:auth:error", "session");
           window.dispatchEvent(
             new CustomEvent("eden:auth:session-expired", {
-              detail: { message },
+              detail: { message, detail: detailStr },
             }),
           );
         } catch {

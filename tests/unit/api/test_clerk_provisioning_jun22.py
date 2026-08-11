@@ -66,6 +66,22 @@ class TestAuthMeClerkProvisioning:
             "eden.api.utils.clerk_auth.verify_clerk_token",
             new_callable=AsyncMock,
             return_value={"sub": clerk_id, "email": "newuser@example.com"},
+        ), patch(
+            # /auth/me now gates auto-provision on a Clerk existence
+            # check (404 → 401, never provision). The user exists here,
+            # so the gate must pass through and the INSERT must run.
+            "eden.api.routes.auth.clerk_get_user",
+            new_callable=AsyncMock,
+            return_value={
+                "id": clerk_id,
+                "email_addresses": [
+                    {"email_address": "newuser@example.com", "id": "idn_1"},
+                ],
+                "primary_email_address_id": "idn_1",
+                "first_name": "New",
+                "last_name": "User",
+                "image_url": "",
+            },
         ):
             response = api_client.get(
                 "/auth/me",

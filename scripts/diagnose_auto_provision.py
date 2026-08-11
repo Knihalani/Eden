@@ -12,7 +12,11 @@ import asyncio
 import secrets
 import sys
 
-from eden.api.utils.clerk_client import extract_user_profile, get_user
+from eden.api.utils.clerk_client import (
+    ClerkUserNotFoundError,
+    extract_user_profile,
+    get_user,
+)
 from eden.storage.postgres import close_postgres_client, get_postgres_client
 
 
@@ -63,10 +67,19 @@ async def main() -> int:
         print("  done.")
         print()
 
-        # Now: simulate a Clerk API lookup with a fake id (should fail cleanly)
-        print("Step 4: clerk_get_user with a fake id (should return None)")
-        result = await get_user("user_fake_zzz999")
-        print(f"  result: {result}")
+        # Now: simulate a Clerk API lookup with a fake id. A 404 from
+        # Clerk raises ClerkUserNotFoundError (the /auth/me existence
+        # gate turns that into a 401 so a deleted account is never
+        # auto-provisioned); any other failure returns None.
+        print(
+            "Step 4: clerk_get_user with a fake id "
+            "(expect ClerkUserNotFoundError on 404)"
+        )
+        try:
+            result = await get_user("user_fake_zzz999")
+            print(f"  result: {result}")
+        except ClerkUserNotFoundError:
+            print("  result: ClerkUserNotFoundError (expected for deleted user)")
         print()
 
         # And: extract_user_profile with an empty payload

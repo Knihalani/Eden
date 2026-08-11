@@ -1,15 +1,15 @@
-import type { Metadata } from "next";
-
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
 import { DOCS_URL } from "@/lib/constants";
+import { marketingMetadata } from "@/lib/seo";
 
 export const revalidate = 3600;
-export const metadata: Metadata = {
+export const metadata = marketingMetadata({
+  path: "/why-eden",
   title: "Why Eden · closed-loop vs traces-only",
   description:
     "Why Eden is the closed-loop option: observe, heal by default, prove fixes — not just capture traces.",
-  robots: { index: true, follow: true },
-};
+});
 
 const ROWS = [
   {
@@ -53,6 +53,24 @@ export default function WhyEdenPage() {
         lead="Langfuse, Helicone, and Braintrust help you see LLM traffic. Eden detects failures, heals when it is safe, and opens proven fix plans — heal on by default, opt out in Settings."
       >
         <div className="max-w-3xl space-y-10">
+          <div className="grid grid-cols-2 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-4">
+            {[
+              { v: "≤5ms", k: "Gateway overhead" },
+              { v: "OTel", k: "Ingest protocol" },
+              { v: "Closed", k: "Observe → Improve loop" },
+              { v: "Free", k: "During public beta" },
+            ].map((row) => (
+              <div key={row.k} className="bg-[var(--bg)] px-4 py-5">
+                <p className="font-mono text-[1.25rem] font-semibold tabular-nums tracking-[-0.02em] text-[var(--accent)]">
+                  {row.v}
+                </p>
+                <p className="mt-1 font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                  {row.k}
+                </p>
+              </div>
+            ))}
+          </div>
+
           <div className="overflow-hidden border border-[var(--line)]">
             <table className="w-full text-left text-[0.875rem]">
               <thead>
@@ -94,6 +112,22 @@ export default function WhyEdenPage() {
             </a>
             .
           </p>
+
+          <div className="flex flex-col items-start gap-5 border border-[var(--line)] bg-[color-mix(in_srgb,var(--accent)_5%,var(--bg))] px-6 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            <div>
+              <p className="text-[1.0625rem] font-semibold tracking-[-0.015em] text-[var(--text)]">
+                Instrument today. Improve tomorrow.
+              </p>
+              <p className="mt-1.5 type-meta text-[var(--text-faint)]">
+                Free during public beta — no credit card.
+              </p>
+            </div>
+            <MarketingPrimaryCta
+              signedOutHref="/sign-up"
+              signedOutLabel="Get started"
+              className="px-6"
+            />
+          </div>
         </div>
       </MarketingShell>
     </main>

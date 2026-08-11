@@ -10,7 +10,12 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { useOrganization, useOrganizationList, useUser } from "@clerk/nextjs";
+import {
+  useClerk,
+  useOrganization,
+  useOrganizationList,
+  useUser,
+} from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/core";
 import type { Organization } from "@/lib/types";
@@ -58,6 +63,16 @@ interface OrgContextType {
 }
 
 const OrgContext = createContext<OrgContextType | null>(null);
+
+/**
+ * Backend 401 details that mean "this account no longer exists" — as
+ * opposed to an ordinary expired/rotated session JWT. When the backend
+ * reports one of these, the Clerk user itself is gone (deleted in
+ * Clerk, or erased in Eden), so the stale client session must be ended
+ * rather than shown a "Sign in again" banner that would just bounce
+ * the user back into the same zombie session.
+ */
+const DELETED_ACCOUNT_DETAIL_RE = /account.*(?:deleted|deactiv|no longer exists)/i;
 
 function applyMeToOrgState(
   me: MeResponse,
@@ -163,6 +178,7 @@ function mapOrgLoadError(
  * share one ``/auth/me`` network call.
  */
 export function OrgProvider({ children }: { children: ReactNode }) {
+  const { signOut } = useClerk();
   const { organization: clerkOrg, membership, isLoaded: clerkOrgLoaded } =
     useOrganization();
   const { user, isLoaded: userLoaded } = useUser();
@@ -324,7 +340,23 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   // Global 401s from fetchApi (after Clerk refresh retry) surface here.
   useEffect(() => {
     function onSessionExpired(ev: Event) {
-      const detail = (ev as CustomEvent<{ message?: string }>).detail;
+      const detail = (ev as CustomEvent<{ message?: string; detail?: string }>)
+        .detail;
+      // Deleted account: the Clerk user no longer exists, so the
+      // still-valid session JWT is a zombie. End the client session
+      // (clears the stale Clerk cookies) instead of showing a
+      // "Sign in again" banner that re-enters the same dead session.
+      // If the sign-out itself fails, fall back to the banner.
+      if (
+        detail?.detail &&
+        DELETED_ACCOUNT_DETAIL_RE.test(detail.detail)
+      ) {
+        signOut({ redirectUrl: "/" }).catch(() => {
+          setAuthError("Account has been deleted. Sign in again.");
+          setAuthErrorKind("session");
+        });
+        return;
+      }
       setAuthError(
         detail?.message?.trim() ||
           "Session expired. Sign in again to continue.",
@@ -342,7 +374,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         onSessionExpired as EventListener,
       );
     };
-  }, []);
+  }, [signOut]);
 
   const meEnabled = userLoaded && clerkOrgLoaded && Boolean(user);
   const meQuery = useMeQuery(meEnabled);

@@ -16,9 +16,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 import time
+from pathlib import Path
 
-import bench.common  # noqa: F401  (sys.path fixup)
+# Direct-run bootstrap: ``python bench/ingest_batch_path.py`` — add the
+# repo root so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import bench.common  # noqa: F401, E402  (sys.path fixup)
 
 
 class _NoopPG:

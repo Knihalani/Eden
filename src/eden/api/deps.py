@@ -514,7 +514,8 @@ async def get_current_org_member(
     try:
         row = await client.fetchrow(
             """
-            SELECT om.role, u.name AS user_name, u.email
+            SELECT om.role, u.name AS user_name, u.email,
+                   u.deleted_at AS user_deleted_at
             FROM org_members om
             JOIN users u ON u.id = om.user_id
             WHERE om.user_id = $1 AND om.org_id = $2
@@ -529,15 +530,40 @@ async def get_current_org_member(
             eden_org_id,
             exc,
         )
+    # Deleted account (Clerk ``user.deleted`` webhook or Eden erasure):
+    # fail closed BEFORE the self-heal upsert. A stale session JWT must
+    # never re-create memberships for a deleted user.
+    if row is not None and row.get("user_deleted_at"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deleted",
+        )
 
     # Upsert only when Clerk session org matches trusted org — never
     # for a spoofed header pointing at a foreign tenant.
     if not row and is_clerk and session_matches:
+        # Guard the upsert itself: a deleted account (Clerk
+        # ``user.deleted`` webhook or Eden erasure) whose
+        # ``org_members`` rows were removed must not be re-admitted by
+        # the self-heal below — the re-fetch would catch
+        # ``deleted_at`` and 401 anyway, but only after writing a
+        # zombie membership row for a dead account. ``None`` here
+        # means the users row is still provisioning (legit webhook
+        # lag) — only an existing row with ``deleted_at`` blocks the
+        # heal. ``users.clerk_id`` is preserved by erasure (anonymised
+        # row, not a delete), so the lookup still resolves.
+        db_user = await get_user_by_id(clerk_user_id, lookup_column="clerk_id")
+        if db_user and db_user.get("deleted_at"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account has been deleted",
+            )
         await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
         try:
             row = await client.fetchrow(
                 """
-                SELECT om.role, u.name AS user_name, u.email
+                SELECT om.role, u.name AS user_name, u.email,
+                       u.deleted_at AS user_deleted_at
                 FROM org_members om
                 JOIN users u ON u.id = om.user_id
                 WHERE om.user_id = $1 AND om.org_id = $2
@@ -547,9 +573,22 @@ async def get_current_org_member(
             )
         except Exception:
             row = None
+        if row is not None and row.get("user_deleted_at"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account has been deleted",
+            )
         if not row:
-            # Pending webhook sync — only for session-matched org.
+            # Pending webhook sync — only for session-matched org. A
+            # deleted user must not fall through here either (the row
+            # JOIN above would have flagged it, but a DB blip during the
+            # fetch must not admit a deleted account).
             db_user = await get_user_by_id(clerk_user_id, lookup_column="clerk_id")
+            if db_user and db_user.get("deleted_at"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Account has been deleted",
+                )
             return OrgMember(
                 user_id=eden_user_id or clerk_user_id,
                 org_id=eden_org_id,
@@ -622,7 +661,7 @@ async def get_current_user(
         try:
             client = await get_postgres_client()
             row = await client.fetchrow(
-                "SELECT token_version, last_seen_at FROM users WHERE id = $1",
+                "SELECT token_version, last_seen_at, deleted_at FROM users WHERE id = $1",
                 user_id,
             )
         except Exception as exc:
@@ -638,6 +677,17 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload",
+            )
+        # Soft-deleted account (deleted via Clerk ``user.deleted``
+        # webhook, Eden self-service erasure, or compliance jobs).
+        # Deletion must end EVERY session immediately — a cookie JWT
+        # minted before the delete carries the old ``token_version``
+        # (webhook deletions don't rotate it) and must not keep
+        # working for the token's remaining lifetime.
+        if row.get("deleted_at"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account has been deleted",
             )
         if (row.get("token_version") or 0) != token_version:
             # Token was minted before a version bump (login, password
@@ -706,6 +756,18 @@ async def get_current_user(
     if _is_clerk_payload_public(payload):
         db_user = await get_user_by_id(user_id, lookup_column="clerk_id")
         if db_user:
+            # A soft-deleted Eden row means the Clerk account was
+            # deleted (``user.deleted`` webhook). The session JWT may
+            # still be unexpired — Clerk revokes sessions on user
+            # deletion, but the browser can hold a valid token until
+            # its next refresh. Reject here so EVERY endpoint fails
+            # closed instead of letting the deleted user keep working
+            # (or worse, auto-provisioning a zombie row).
+            if db_user.get("deleted_at"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Account has been deleted",
+                )
             user_id = str(db_user["id"])
 
     return {"user_id": user_id, "email": email}
@@ -730,6 +792,18 @@ async def get_optional_user(
     if not payload:
         return None
     user_id = payload.get("sub") or extract_user_id(payload)
+    # Fail closed for deleted accounts (same invariant as
+    # ``get_current_user``, minus the raise — optional-auth routes
+    # treat a deleted user as unauthenticated). Covers BOTH auth
+    # paths: Clerk payloads resolve by ``clerk_id``, legacy Eden
+    # cookie payloads carry the UUID ``sub`` and resolve by ``id``.
+    if user_id:
+        db_user = await get_user_by_id(
+            user_id,
+            lookup_column="clerk_id" if _is_clerk_payload_public(payload) else "id",
+        )
+        if db_user and db_user.get("deleted_at"):
+            return None
     return {"user_id": user_id, "email": payload.get("email")}
 
 
@@ -887,6 +961,20 @@ async def resolve_path_org_access(
             org = None
         if org and org.get("org_id"):
             return user_id, str(org["org_id"])
+
+    # Defense-in-depth: ``get_current_org`` returns None for deleted
+    # users, but this inline fallback (org row + membership checks
+    # below) would pass a deleted user whose ``org_members`` rows are
+    # still intact. Callers that reach this fallback must not admit a
+    # soft-deleted account. (Fast path callers are already gated by
+    # ``get_current_user`` / ``get_optional_user``, which reject
+    # deleted users — this closes the loop for any direct caller.)
+    db_row = await get_eden_user_row_from_auth(user)
+    if db_row and db_row.get("deleted_at"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deleted",
+        )
 
     client = await get_postgres_client()
     if client is None:
@@ -1246,7 +1334,8 @@ async def get_user_by_id(user_id: str, lookup_column: str = "id") -> dict | None
     try:
         client = await get_postgres_client()
         query = (
-            "SELECT id, email, name, created_at, preferred_org_id, clerk_id "
+            "SELECT id, email, name, created_at, preferred_org_id, clerk_id, "
+            "deleted_at "
             f"FROM users WHERE {lookup_column}::text = $1"
         )
         return await client.fetchrow(query, user_id)
@@ -1347,9 +1436,11 @@ async def get_current_org(
             if include_archived:
                 row = await client.fetchrow(
                     """
-                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at,
+                           u.deleted_at AS user_deleted_at
                     FROM org_members om
                     JOIN organizations o ON o.id = om.org_id
+                    JOIN users u ON u.id = om.user_id
                     WHERE om.user_id = $1 AND om.org_id = $2
                     """,
                     eden_user_id,
@@ -1358,9 +1449,11 @@ async def get_current_org(
             else:
                 row = await client.fetchrow(
                     """
-                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at,
+                           u.deleted_at AS user_deleted_at
                     FROM org_members om
                     JOIN organizations o ON o.id = om.org_id
+                    JOIN users u ON u.id = om.user_id
                     WHERE om.user_id = $1 AND om.org_id = $2 AND o.archived_at IS NULL
                     """,
                     eden_user_id,
@@ -1374,15 +1467,30 @@ async def get_current_org(
                 eden_org_id,
                 exc,
             )
-        if not row and session_matches:
+        # Deleted account (Clerk ``user.deleted`` webhook or Eden
+        # erasure): fail closed BEFORE the self-heal — a stale session
+        # JWT must never re-create memberships/orgs for a deleted user
+        # via ``ensure_clerk_membership``.
+        if row is not None and row.get("user_deleted_at"):
+            return None
+        if not row and session_matches and user_id:
+            # Same deleted-account guard as ``get_current_org_member``:
+            # the self-heal upsert must not re-create memberships for a
+            # deleted user whose ``org_members`` rows erasure removed.
+            # ``None`` = users row still provisioning (legit lag).
+            db_user = await get_user_by_id(user_id, lookup_column="clerk_id")
+            if db_user and db_user.get("deleted_at"):
+                return None
             await ensure_clerk_membership(eden_user_id, eden_org_id, clerk_role)
             try:
                 client = await get_postgres_client()
                 row = await client.fetchrow(
                     """
-                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+                    SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at,
+                           u.deleted_at AS user_deleted_at
                     FROM org_members om
                     JOIN organizations o ON o.id = om.org_id
+                    JOIN users u ON u.id = om.user_id
                     WHERE om.user_id = $1 AND om.org_id = $2
                     """,
                     eden_user_id,
@@ -1390,6 +1498,8 @@ async def get_current_org(
                 )
             except Exception:
                 row = None
+            if row is not None and row.get("user_deleted_at"):
+                return None
         if not row:
             if not session_matches:
                 return None
@@ -1435,24 +1545,33 @@ async def get_current_org(
 
     client = await get_postgres_client()
 
-    # Verify membership and get role (optionally include archived)
+    # Verify membership and get role (optionally include archived). The
+    # JOIN to ``users`` carries ``deleted_at`` so a soft-deleted account
+    # (Clerk ``user.deleted`` webhook — which does NOT rotate the legacy
+    # cookie ``token_version`` — or Eden erasure) fails closed here too.
     if include_archived:
         query = """
-            SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+            SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at,
+                   u.deleted_at AS user_deleted_at
             FROM org_members om
             JOIN organizations o ON o.id = om.org_id
+            JOIN users u ON u.id = om.user_id
             WHERE om.user_id = $1 AND om.org_id = $2
         """
         row = await client.fetchrow(query, user_id, org_id)
     else:
         query = """
-            SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at
+            SELECT om.role, o.name, o.slug, o.owner_id, o.archived_at,
+                   u.deleted_at AS user_deleted_at
             FROM org_members om
             JOIN organizations o ON o.id = om.org_id
+            JOIN users u ON u.id = om.user_id
             WHERE om.user_id = $1 AND om.org_id = $2 AND o.archived_at IS NULL
         """
         row = await client.fetchrow(query, user_id, org_id)
     if not row:
+        return None
+    if row.get("user_deleted_at"):
         return None
 
     # Update last_active_at on every authenticated org request

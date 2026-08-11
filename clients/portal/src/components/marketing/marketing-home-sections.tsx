@@ -2,7 +2,17 @@ import { MarketingKicker, MarketingRail } from "@/components/marketing/marketing
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
 import { INSTALL_SNIPPET } from "@/components/marketing/install-snippet";
-import { DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { DOCS_URL, DOCS_QUICKSTART_URL } from "@/lib/constants";
+import { HOME_FAQ } from "@/lib/seo";
+
+/** Integration surface — chips link to the matching docs reference. */
+const STACK = [
+  { label: "Python SDK", href: `${DOCS_URL}/reference/sdk-python` },
+  { label: "TypeScript SDK", href: `${DOCS_URL}/reference/sdk-typescript` },
+  { label: "OpenAI-compatible gateway", href: DOCS_QUICKSTART_URL },
+  { label: "OpenTelemetry ingest", href: DOCS_URL },
+  { label: "REST API", href: `${DOCS_URL}/reference/api` },
+] as const;
 
 /**
  * Below-fold — denser instrument metaphors, asymmetric layouts.
@@ -10,6 +20,27 @@ import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 export function MarketingHomeSections() {
   return (
     <>
+      {/* At-a-glance band — the three numbers that answer “why Eden”. */}
+      <section className="border-b border-[var(--line)] bg-[var(--bg)]">
+        <MarketingRail className="grid grid-cols-2 gap-px bg-[var(--line)] sm:grid-cols-4">
+          {[
+            { v: "≤5ms", k: "Gateway overhead p95" },
+            { v: "OTel + SDKs", k: "Ingest paths" },
+            { v: "Closed", k: "Observe → Improve loop" },
+            { v: "Free", k: "During public beta" },
+          ].map((row) => (
+            <div key={row.k} className="bg-[var(--bg)] px-5 py-6 sm:px-6 sm:py-8">
+              <p className="font-mono text-[1.375rem] font-semibold tabular-nums tracking-[-0.02em] text-[var(--accent)] sm:text-[1.75rem]">
+                {row.v}
+              </p>
+              <p className="mt-1 font-mono text-[0.625rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+                {row.k}
+              </p>
+            </div>
+          ))}
+        </MarketingRail>
+      </section>
+
       <section className="relative overflow-hidden border-b border-[var(--line)] py-16 sm:py-24">
         <div
           className="pointer-events-none absolute inset-0 eden-product-plane opacity-[0.12]"
@@ -209,6 +240,57 @@ export function MarketingHomeSections() {
                 <code>{INSTALL_SNIPPET}</code>
               </pre>
             </div>
+          </div>
+        </MarketingRail>
+      </section>
+
+      {/* Integration surface — works with what you already run. */}
+      <section className="border-b border-[var(--line)] py-12 sm:py-16">
+        <MarketingRail className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+            Works with your stack
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {STACK.map((item) => (
+              <li key={item.label}>
+                <a
+                  href={item.href}
+                  className="eden-stack-chip"
+                  rel="noopener noreferrer"
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </MarketingRail>
+      </section>
+
+      {/* FAQ — native details/summary, no JS. Copy stays in sync with
+          the FAQPage JSON-LD on the homepage via HOME_FAQ. */}
+      <section className="relative border-b border-[var(--line)] py-16 sm:py-24">
+        <MarketingRail className="max-w-3xl">
+          <MarketingKicker>FAQ</MarketingKicker>
+          <h2 className="mt-3 max-w-2xl text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
+            Frequently asked questions
+          </h2>
+          <div className="mt-8 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            {HOME_FAQ.map((item) => (
+              <details key={item.q} className="eden-faq-item">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 py-4 text-[0.9375rem] font-medium tracking-[-0.01em] text-[var(--text)] transition-colors duration-150 hover:text-[var(--accent)]">
+                  {item.q}
+                  <span
+                    className="eden-faq-chevron shrink-0 font-mono text-[0.9375rem] text-[var(--text-faint)]"
+                    aria-hidden
+                  >
+                    +
+                  </span>
+                </summary>
+                <p className="max-w-2xl pb-5 text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
+                  {item.a}
+                </p>
+              </details>
+            ))}
           </div>
         </MarketingRail>
       </section>

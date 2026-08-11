@@ -95,5 +95,5 @@ without admin role.
 
 ## What's next
 
-- [MCP in Cursor](/how-to/mcp-cursor) — triage and autofix from your IDE
+- [Connect any agent](/how-to/connect-any-agent) — capture from any stack
 - [Agent sessions](/how-to/agent-sessions) — group traces by user interaction

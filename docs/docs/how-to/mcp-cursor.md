@@ -3,8 +3,10 @@ id: mcp-cursor
 title: MCP in Cursor and Claude Code
 sidebar_label: MCP in Cursor (retired)
 sidebar_position: 9
+# Soft-retired page: draft keeps it out of the production build entirely
+# (Docusaurus rejects draft + unlisted together; draft is the right one
+# here — the page is kept for internal/dev reference only).
 draft: true
-unlisted: true
 ---
 
 # How-to — MCP in Cursor and Claude Code

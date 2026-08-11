@@ -1,10 +1,13 @@
-import type { Metadata } from "next";
-
 import { ThinMarketingDoc } from "@/components/marketing/thin-marketing-doc";
+import { marketingMetadata } from "@/lib/seo";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = { title: "Health · Eden" };
+export const metadata = marketingMetadata({
+  path: "/health",
+  title: "Health · Eden",
+  description: "Public marker that the Eden marketing site is reachable.",
+});
 
 export default function Page() {
   return (

@@ -600,15 +600,15 @@ class AnomalyDetector:
             return
 
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                await session.post(
-                    webhook_url,
-                    json=alert.to_dict(),
-                    timeout=aiohttp.ClientTimeout(total=10),
-                )
+            # Reuse the shared pooled client — a per-request aiohttp
+            # session paid a fresh TCP/TLS setup for every alert webhook
+            # (see eden.util.shared_http for the 15.6x measurement).
+            from eden.util.shared_http import shared_httpx_ctx
+
+            async with shared_httpx_ctx(timeout=10.0) as client:
+                await client.post(webhook_url, json=alert.to_dict())
         except Exception as exc:
-            logger.warning(f"Webhook dispatch failed: {exc}")
+            logger.warning("Webhook dispatch failed: %s", exc)
 
     async def _dispatch_pagerduty(self, alert: AnomalyAlert) -> bool:
         """Send alert to PagerDuty via the Events API v2 sender (FEAT-42).

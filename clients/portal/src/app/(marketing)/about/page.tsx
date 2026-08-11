@@ -1,16 +1,15 @@
-import type { Metadata } from "next";
-
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { DOCS_URL, SUPPORT_EMAIL } from "@/lib/constants";
+import { marketingMetadata } from "@/lib/seo";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = {
+export const metadata = marketingMetadata({
+  path: "/about",
   title: "About · Eden",
   description:
-    "Eden instruments AI agents so teams can catch drift and ship fixes.",
-  robots: { index: true, follow: true },
-};
+    "Eden instruments AI agents so teams can catch drift and ship fixes. Built for teams who run agents in production.",
+});
 
 export default function AboutPage() {
   return (

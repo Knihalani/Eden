@@ -1,16 +1,15 @@
-import type { Metadata } from "next";
-
 import { ContactForm } from "@/components/marketing/contact-form";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { SUPPORT_EMAIL } from "@/lib/constants";
+import { marketingMetadata } from "@/lib/seo";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = {
+export const metadata = marketingMetadata({
+  path: "/contact",
   title: "Contact · Eden",
-  description: "Sales, support, or security — reach Eden.",
-  robots: { index: true, follow: true },
-};
+  description: "Sales, support, or security — reach Eden. One inbox, real replies.",
+});
 
 export default function ContactPage() {
   return (
