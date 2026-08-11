@@ -4,7 +4,9 @@
  * ProductTour — spotlight overlay that introduces each portal surface.
  *
  * Escape / X / Skip always invoke onSkip (parent closes optimistically).
- * Finish step embeds TourGetStartedPanel (filled install snippets).
+ * Scrim clicks never dismiss the tour (only explicit exits do) — see
+ * ``dismissUnlessHole``. Finish step embeds TourGetStartedPanel (filled
+ * install snippets).
  */
 
 import {
@@ -118,6 +120,29 @@ function settingsModeFromSearch(search: string): string | null {
   return tab;
 }
 
+/**
+ * Is the current URL already the step's page (path + settings mode)?
+ * Mirrors the route-match logic in the step-navigation effect so the
+ * settle fast-path and the nav effect can never disagree about whether a
+ * step has "landed".
+ */
+export function pageMatchesCurrentRoute(
+  href: string,
+  pathname: string,
+  searchKey: string,
+): boolean {
+  const targetUrl = new URL(href, "http://eden.local");
+  const herePath = (pathname || "").split("?")[0] || "/";
+  const targetPath = targetUrl.pathname;
+  const pathMatches =
+    herePath === targetPath || herePath.startsWith(targetPath + "/");
+  const wantMode = settingsModeFromSearch(targetUrl.search);
+  const hereMode = settingsModeFromSearch(
+    searchKey ? `?${searchKey}` : "",
+  );
+  return pathMatches && (!wantMode || wantMode === hereMode);
+}
+
 export interface ProductTourProps {
   open: boolean;
   stepIndex: number;
@@ -212,17 +237,7 @@ export function ProductTour({
 
   useEffect(() => {
     if (!open || !step?.href) return;
-    const targetUrl = new URL(step.href, "http://eden.local");
-    const herePath = (pathname || "").split("?")[0] || "/";
-    const targetPath = targetUrl.pathname;
-    const pathMatches =
-      herePath === targetPath || herePath.startsWith(targetPath + "/");
-    const wantMode = settingsModeFromSearch(targetUrl.search);
-    const hereMode = settingsModeFromSearch(
-      searchKey ? `?${searchKey}` : "",
-    );
-    const modeMatches = !wantMode || wantMode === hereMode;
-    if (pathMatches && modeMatches) {
+    if (pageMatchesCurrentRoute(step.href, pathname, searchKey)) {
       // Search-only navigations (e.g. /settings → /settings?mode=keys) do
       // not change pathname; mark ready so the card is not stuck hidden.
       setReady(true);
@@ -257,6 +272,26 @@ export function ProductTour({
     const tick = () => {
       if (cancelled) return;
       if (step.kind === "nav" && step.targetId) {
+        if (narrow) {
+          // Mobile renders the sheet layout, and the sidebar (sole holder
+          // of ``data-tour-id`` targets) is hidden below md — no spotlight
+          // can ever measure, so settle as soon as the step's page has
+          // actually loaded (never render the card over the previous
+          // page) instead of burning the whole 2500ms settle budget on a
+          // black scrim + "Loading tour step…".
+          if (
+            step.href &&
+            !pageMatchesCurrentRoute(step.href, pathname, searchKey)
+          ) {
+            if (performance.now() - started < BUDGET_MS) {
+              requestAnimationFrame(tick);
+              return;
+            }
+          }
+          setHole(null);
+          setReady(true);
+          return;
+        }
         const targetId = step.targetId;
         const r = measureTarget(targetId);
         if (r) {
@@ -286,7 +321,7 @@ export function ProductTour({
       cancelled = true;
       window.clearTimeout(settleTimer);
     };
-  }, [open, step, pathname, stepIndex, searchKey]);
+  }, [open, step, pathname, stepIndex, searchKey, narrow]);
 
   useEffect(() => {
     if (!open) return;
@@ -420,28 +455,32 @@ export function ProductTour({
   const progressPct = ((stepIndex + 1) / PRODUCT_TOUR_TOTAL) * 100;
   const isSheet = placement.side === "sheet";
 
+  /**
+   * Scrim clicks never dismiss the tour. The card carries explicit exits
+   * (X, Skip tour, Esc, Done); an accidental outside click used to persist
+   * ``status: "skipped"`` here — pausing the tour with no way back in, the
+   * original "tour starts paused" bug. The only scrim interaction left is
+   * the deliberate punch-through: clicking the spotlighted element itself
+   * passes the click through the SVG mask to the real UI underneath.
+   */
   function dismissUnlessHole(e: ReactMouseEvent) {
-    if (hole) {
-      const x = e.clientX;
-      const y = e.clientY;
-      if (
-        x >= hole.left &&
-        x <= hole.left + hole.width &&
-        y >= hole.top &&
-        y <= hole.top + hole.height
-      ) {
-        // Punch through: SVG masks do not create real click holes.
-        const layer = e.currentTarget as HTMLElement;
-        layer.style.pointerEvents = "none";
-        const under = document.elementFromPoint(x, y) as HTMLElement | null;
-        layer.style.pointerEvents = "";
-        under?.click();
-        return;
-      }
+    if (!hole) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    if (
+      x < hole.left ||
+      x > hole.left + hole.width ||
+      y < hole.top ||
+      y > hole.top + hole.height
+    ) {
+      return;
     }
-    // Nav steps without a measured spotlight should not skip the whole tour.
-    if (step.kind === "nav") return;
-    skipRef.current();
+    // Punch through: SVG masks do not create real click holes.
+    const layer = e.currentTarget as HTMLElement;
+    layer.style.pointerEvents = "none";
+    const under = document.elementFromPoint(x, y) as HTMLElement | null;
+    layer.style.pointerEvents = "";
+    under?.click();
   }
 
   return createPortal(
@@ -463,6 +502,7 @@ export function ProductTour({
             : { "aria-label": "Product tour" })}
         >
           <motion.div
+            data-testid="tour-scrim"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

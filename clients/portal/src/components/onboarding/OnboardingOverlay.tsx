@@ -49,13 +49,14 @@ function OnboardingOverlayInner() {
   /** After Skip/Finish, ignore effect re-open until URL force flag clears. */
   const userClosedRef = useRef(false);
   /**
-   * A paused (``skipped``) tour auto-resumes on the next entry so
-   * onboarding opens by default. The ref makes it once per mount: after
-   * the user closes it again (Skip / X / Esc) it stays closed for the
-   * rest of this mount; a full page load (which remounts the shell and
-   * is a fresh entry) intentionally reopens the still-unfinished tour,
-   * matching the "opens by default" product intent. The banner remains
-   * the resume affordance between mounts.
+   * A started-but-unfinished tour (``active`` or paused ``skipped``)
+   * auto-resumes on the next entry so onboarding opens by default. The
+   * ref makes it once per mount: after the user closes it again (Skip /
+   * X / Esc) it stays closed for the rest of this mount; a full page
+   * load (which remounts the shell and is a fresh entry) intentionally
+   * reopens the still-unfinished tour, matching the "opens by default"
+   * product intent. The banner remains the resume affordance between
+   * mounts.
    */
   const autoResumedRef = useRef(false);
   /** Bootstrap Clerk metadata at most once per forced open. */
@@ -135,13 +136,18 @@ function OnboardingOverlayInner() {
       return;
     }
 
-    // Paused (skipped) tours auto-resume on entry — onboarding opens by
-    // default, matching the post-signup force-open, without needing
-    // ?onboarding=1 on every subsequent visit. Once per mount: a second
-    // Skip (which re-persists "skipped" and sets autoResumedRef) must
-    // not snap it back open; the banner is the resume affordance after
-    // that.
-    if (progressStatus === "skipped" && !autoResumedRef.current) {
+    // Started-but-unfinished tours (active or paused) auto-resume on
+    // entry — onboarding opens by default, matching the post-signup
+    // force-open, without needing ?onboarding=1 on every subsequent
+    // visit. Once per mount: a Skip (which re-persists "skipped" and
+    // sets autoResumedRef) must not snap it back open; the banner is the
+    // resume affordance after that. Never-started (null) stays
+    // banner-driven; only "done" retires the tour entirely.
+    if (
+      progressStatus != null &&
+      progressStatus !== "done" &&
+      !autoResumedRef.current
+    ) {
       autoResumedRef.current = true;
       userClosedRef.current = false;
       sessionOpenRef.current = true;

@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ProductTour } from "./ProductTour";
+import { ProductTour, pageMatchesCurrentRoute } from "./ProductTour";
 import { PRODUCT_TOUR_STEPS } from "@/lib/product-tour";
 
 // jsdom does not implement requestAnimationFrame; ProductTour's settle
@@ -224,4 +224,114 @@ describe("ProductTour settle window", () => {
     // loading tour from a frozen page.
     expect(screen.getByRole("status")).toHaveTextContent("Loading tour step…");
   }, SETTLE_WAITFOR_TIMEOUT_MS + 5000);
+});
+
+/**
+ * ``pageMatchesCurrentRoute`` gates the settle fast-path and the step
+ * navigation — the card may only settle on a step whose page is actually
+ * current, and both call sites share the helper so they can never drift
+ * apart (e.g. a mode-normalization change silently desyncing the
+ * narrow-screen fast-path from real navigation).
+ */
+describe("pageMatchesCurrentRoute", () => {
+  it("matches by pathname and settings mode", () => {
+    expect(
+      pageMatchesCurrentRoute("/settings?mode=keys", "/settings", "mode=keys"),
+    ).toBe(true);
+    expect(
+      pageMatchesCurrentRoute("/settings?mode=keys", "/settings", ""),
+    ).toBe(false);
+    expect(pageMatchesCurrentRoute("/traces", "/traces", "")).toBe(true);
+    expect(pageMatchesCurrentRoute("/home", "/traces", "")).toBe(false);
+  });
+
+  it("normalizes legacy modes and matches nested paths", () => {
+    // Legacy tab=api-keys is equivalent to mode=keys.
+    expect(
+      pageMatchesCurrentRoute(
+        "/settings?tab=api-keys",
+        "/settings",
+        "tab=api-keys",
+      ),
+    ).toBe(true);
+    // mode=api-keys normalizes to keys on both sides.
+    expect(
+      pageMatchesCurrentRoute(
+        "/settings?mode=api-keys",
+        "/settings",
+        "mode=api-keys",
+      ),
+    ).toBe(true);
+    // Steps on /home match any nested route under it.
+    expect(pageMatchesCurrentRoute("/home", "/home/issues", "")).toBe(true);
+  });
+
+  it("never matches when the path is unrelated", () => {
+    expect(pageMatchesCurrentRoute("/home", "/settings", "mode=keys")).toBe(
+      false,
+    );
+    expect(pageMatchesCurrentRoute("/traces", "/settings", "")).toBe(false);
+  });
+});
+
+/**
+ * Scrim clicks must never dismiss the tour — a stray outside click used to
+ * persist ``status: "skipped"`` and pause the tour with no way back in (the
+ * original "tour starts paused" bug). Only the explicit exits (X, Skip,
+ * Esc, Done) may close it; the one deliberate scrim interaction is the
+ * punch-through that clicks the spotlighted element inside the hole.
+ */
+describe("ProductTour scrim clicks", () => {
+  afterEach(() => {
+    mountedTargets.splice(0).forEach((el) => el.remove());
+  });
+
+  it("does not skip the tour on a scrim click on the welcome step", async () => {
+    // Welcome (index 0) has no spotlight hole — the whole scrim is a click
+    // surface, and none of it may dismiss the tour.
+    const onSkip = vi.fn();
+    render(
+      <ProductTour
+        open
+        stepIndex={0}
+        onStepChange={vi.fn()}
+        onSkip={onSkip}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Welcome to Eden");
+    fireEvent.click(screen.getByTestId("tour-scrim"));
+
+    expect(onSkip).not.toHaveBeenCalled();
+    expect(screen.getByText("Welcome to Eden")).toBeInTheDocument();
+  });
+
+  it("does not skip on a scrim click that misses the spotlight hole", async () => {
+    mountTourTarget("home");
+
+    const onSkip = vi.fn();
+    render(
+      <ProductTour
+        open
+        stepIndex={1}
+        onStepChange={vi.fn()}
+        onSkip={onSkip}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(hasSpotlightMask()).toBe(true), {
+      timeout: SETTLE_WAITFOR_TIMEOUT_MS,
+    });
+
+    // The fake target sits at ~100,100 (60x30 + PAD=10). A click far from
+    // the hole must be a no-op, not a dismissal.
+    fireEvent.click(screen.getByTestId("tour-scrim"), {
+      clientX: 700,
+      clientY: 700,
+    });
+
+    expect(onSkip).not.toHaveBeenCalled();
+  });
 });

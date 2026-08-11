@@ -15,8 +15,9 @@ import userEvent from "@testing-library/user-event";
  *     resumable pause, not a finish).
  *   - Only "done" retires the resume banner; "skipped" keeps it as the
  *     resume affordance.
- *   - A paused ("skipped") tour auto-resumes on the next portal entry
- *     (once per session) so onboarding opens by default.
+ *   - Any started-but-unfinished tour ("active" or paused "skipped")
+ *     auto-resumes on the next portal entry (once per session) so
+ *     onboarding opens by default.
  *   - Neither exit may let the effect loop re-open the tour afterwards.
  *
  * The seam is deliberately at the ProductTour boundary: ProductTour is stubbed
@@ -303,6 +304,25 @@ describe("tour dismissal registers separately from completion", () => {
     render(<OnboardingOverlay />);
     const tour = await screen.findByTestId("tour");
     expect(tour.dataset.step).toBe("3");
+  });
+
+  it("auto-resumes an in-progress (active) tour on plain entry too", async () => {
+    // "active" = the walkthrough was abandoned mid-step (e.g. browser back
+    // out of the tour without pressing Skip). It is unfinished just like
+    // "skipped", so it must also reopen by default — same once-per-mount
+    // semantics, seeded from the step where the user left off.
+    clerk.metadata = {
+      [EDEN_TOUR_META_KEY]: {
+        status: "active",
+        stepIndex: 2,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    };
+    nav.search = "";
+
+    render(<OnboardingOverlay />);
+    const tour = await screen.findByTestId("tour");
+    expect(tour.dataset.step).toBe("2");
   });
 
   it("only auto-resumes a paused tour once per session — a re-skip stays closed", async () => {
