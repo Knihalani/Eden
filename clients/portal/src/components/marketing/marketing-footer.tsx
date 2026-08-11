@@ -24,6 +24,7 @@ type FooterLink = {
 function productLinks(signedIn: boolean): FooterLink[] {
   if (signedIn) {
     return [
+      { href: "/why-eden", label: "Why Eden" },
       { href: "/pricing", label: "Pricing" },
       { href: MARKETING_APP_HREF, label: MARKETING_APP_LABEL },
       { href: "/about", label: "About" },
@@ -31,6 +32,7 @@ function productLinks(signedIn: boolean): FooterLink[] {
     ];
   }
   return [
+    { href: "/why-eden", label: "Why Eden" },
     { href: "/pricing", label: "Pricing" },
     { href: "/sign-up", label: "Sign up" },
     { href: "/sign-in", label: "Sign in" },

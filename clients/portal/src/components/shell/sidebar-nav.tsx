@@ -77,6 +77,7 @@ function NavLink({
       data-tour-id={item.id}
       data-active={active ? "true" : "false"}
       data-collapsed={collapsed ? "true" : "false"}
+      aria-current={active ? "page" : undefined}
       title={item.label}
       className={cn(
         "type-ui ds-nav-item",

@@ -20,10 +20,18 @@ Nothing here needs external services — every DB access is faked.
 from __future__ import annotations
 
 import asyncio
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+# Direct-run bootstrap: ``python bench/trace_pipeline_fetches.py`` — add
+# the repo root so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 # Resolve ``eden`` to the app package, not the SDK stub (see bench/common.py).
-import bench.common  # noqa: F401  (side-effect: sys.path fixup)
+import bench.common  # noqa: F401, E402  (side-effect: sys.path fixup)
 
 FETCH_COUNT = {"n": 0}
 INSERT_COUNT = {"n": 0}

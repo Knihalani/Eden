@@ -62,6 +62,7 @@ async def test_resolve_path_org_access_foreign_org_no_upsert(monkeypatch):
     client = MagicMock()
     client.fetchrow = AsyncMock(
         side_effect=[
+            {"id": "u1", "deleted_at": None},  # users lookup (deleted-account guard)
             {"id": "eden-other"},  # organizations lookup for path org
         ]
     )

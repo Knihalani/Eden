@@ -16,11 +16,19 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import sys
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock
 
-import bench.common  # noqa: F401  (side-effect: sys.path fixup)
-from eden.llmops.cost_ledger import (
+# Direct-run bootstrap: ``python bench/cost_ledger_batch.py`` — add the
+# repo root so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import bench.common  # noqa: F401, E402  (side-effect: sys.path fixup)
+from eden.llmops.cost_ledger import (  # noqa: E402
     CostEvent,
     flush_zero_cost_events,
     record_cost_event,

@@ -17,6 +17,14 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+# Direct-run bootstrap: ``python bench/startup.py`` puts ``bench/`` on
+# sys.path, not the repo root — add the root so the ``bench`` package
+# resolves (``_measure_subprocess`` imports ``bench.common``).
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 
 @dataclass

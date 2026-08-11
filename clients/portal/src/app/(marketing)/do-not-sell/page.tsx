@@ -1,10 +1,14 @@
-import type { Metadata } from "next";
-
 import { ThinMarketingDoc } from "@/components/marketing/thin-marketing-doc";
+import { marketingMetadata } from "@/lib/seo";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = { title: "Do Not Sell · Eden" };
+export const metadata = marketingMetadata({
+  path: "/do-not-sell",
+  title: "Do Not Sell · Eden",
+  description:
+    "Eden does not sell personal information. Your CCPA rights and how to request deletion or correction.",
+});
 
 export default function Page() {
   return (

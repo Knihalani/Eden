@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
   openGraph: {
     type: "website",
+    locale: "en_US",
     siteName: "Eden",
     title: "Eden — Observability and improvement for AI agents",
     description:

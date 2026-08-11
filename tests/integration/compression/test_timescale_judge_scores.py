@@ -25,12 +25,12 @@ async def _try_get_pool():
         password=settings.postgres_password,
     )
     try:
-        await asyncio.wait_for(client.initialize(), timeout=3.0)
+        await asyncio.wait_for(client.initialize(), timeout=10.0)
         # initialize() may complete without actually connecting
         # (lazy asyncpg pool). Force a real round-trip via SELECT 1
         # so the fixture skips cleanly when the DB is unreachable
         # rather than failing every test with a ConnectionError.
-        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=3.0)
+        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=10.0)
     except Exception:
         return None
     return client
@@ -90,6 +90,20 @@ async def test_judge_scores_chunk_exclusion(pg_client: Any) -> None:
         pytest.skip("TimescaleDB extension not installed on this DB")
     if not await _is_hypertable(pg_client, "judge_scores"):
         pytest.skip("Migration 035 may not have run on this DB")
+    # Chunk exclusion is only demonstrable with ≥2 chunks; a fresh/empty
+    # hypertable has none and a single chunk is scanned directly.
+    n_chunks = await pg_client.fetchval(
+        """
+        SELECT num_chunks
+          FROM timescaledb_information.hypertables
+         WHERE hypertable_name = 'judge_scores'
+        """
+    )
+    if not n_chunks or int(n_chunks) < 2:
+        pytest.skip(
+            f"judge_scores has {int(n_chunks or 0)} chunk(s); chunk exclusion "
+            "is not demonstrable on a fresh DB (needs ≥2 chunks)"
+        )
     plan = await pg_client.fetchval(
         """
         EXPLAIN SELECT 1 FROM judge_scores

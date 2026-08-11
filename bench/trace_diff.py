@@ -19,9 +19,17 @@ Run: ``uv run python -m bench.trace_diff``
 from __future__ import annotations
 
 import random
+import sys
 import time
+from pathlib import Path
 
-import bench.common  # noqa: F401  (sys.path fixup: src before sdk stub)
+# Direct-run bootstrap: ``python bench/trace_diff.py`` — add the repo
+# root so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import bench.common  # noqa: F401, E402  (sys.path fixup: src before sdk stub)
 
 _EVENT_TYPES = (
     "llm.call",

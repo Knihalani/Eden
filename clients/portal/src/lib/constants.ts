@@ -36,6 +36,14 @@ export const SALES_EMAIL = "kaiav@edenobservability.com";
 /** Canonical public site. */
 export const SITE_URL = "https://edenobservability.com";
 
+/**
+ * PWA browser-chrome color (theme-color meta / viewport). Must stay in
+ * sync with public/manifest.json's theme_color. Lives here rather than
+ * a CSS token because a meta tag cannot consume var(--*): Next.js
+ * renders it as a literal string at build time.
+ */
+export const THEME_COLOR = "#0A0A0A";
+
 /** Public Docusaurus docs site (hosted separately from the portal). */
 export const DOCS_URL = "https://docs.edenobservability.com";
 

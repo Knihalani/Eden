@@ -8,6 +8,7 @@ not available.
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -26,12 +27,12 @@ async def _try_get_pool():
         password=settings.postgres_password,
     )
     try:
-        await asyncio.wait_for(client.initialize(), timeout=3.0)
+        await asyncio.wait_for(client.initialize(), timeout=10.0)
         # initialize() may complete without actually connecting
         # (lazy asyncpg pool). Force a real round-trip via SELECT 1
         # so the fixture skips cleanly when the DB is unreachable
         # rather than failing every test with a ConnectionError.
-        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=3.0)
+        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=10.0)
     except Exception:
         return None
     return client
@@ -94,47 +95,85 @@ async def test_telemetry_events_is_hypertable(pg_client: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hypertable_chunk_interval_is_1_day(pg_client: Any) -> None:
-    """The chunk_time_interval on telemetry_events must be 1 day."""
+async def test_telemetry_events_chunk_interval_is_7_days(pg_client: Any) -> None:
+    """telemetry_events chunks must be 7 days wide (migration 166).
+
+    Migration 034 created 1-day chunks; migration 166 widened the
+    interval to 7 days (P3.4). The interval is only observable once
+    chunks exist, so a fresh/empty hypertable skips rather than fails.
+    """
     if not await _timescale_available(pg_client):
         pytest.skip("TimescaleDB extension not installed on this DB")
     if not await _is_hypertable(pg_client, "telemetry_events"):
         pytest.skip("Migration 034 may not have run on this DB")
     row = await pg_client.fetchrow(
         """
-        SELECT
-            config
-        FROM timescaledb_information.hypertables
-        WHERE hypertable_name = 'telemetry_events'
+        SELECT hypertable_name
+          FROM timescaledb_information.hypertables
+         WHERE hypertable_name = 'telemetry_events'
         """
     )
     assert row is not None
+    chunk = await pg_client.fetchrow(
+        """
+        SELECT range_end - range_start AS chunk_interval
+          FROM timescaledb_information.chunks
+         WHERE hypertable_name = 'telemetry_events'
+         LIMIT 1
+        """
+    )
+    if chunk is None:
+        pytest.skip("telemetry_events has no chunks yet; interval not observable")
+    interval = chunk["chunk_interval"]
+    assert interval == timedelta(days=7), (
+        f"telemetry_events chunk interval is {interval}, expected 7 days (migration 166)"
+    )
 
 
 @pytest.mark.asyncio
 async def test_compression_settings_applied(pg_client: Any) -> None:
-    """The compression segmentby / orderby settings must match the migration."""
+    """The compression segmentby / orderby settings must match the migration.
+
+    Columnstore compression is a TimescaleDB enterprise feature. On the
+    OSS "apache" build (the timescale-ha image and Neon free tiers)
+    ``ALTER TABLE ... SET (timescaledb.compress, ...)`` raises
+    ``feature_not_supported``, which migration 034 deliberately swallows
+    — so this assertion only runs where compression is actually enabled
+    and consults ``timescaledb_information.compression_settings`` (the
+    per-column source of truth), not the parent table's reloptions.
+    """
     if not await _timescale_available(pg_client):
         pytest.skip("TimescaleDB extension not installed on this DB")
     if not await _is_hypertable(pg_client, "telemetry_events"):
         pytest.skip("Migration 034 may not have run on this DB")
-    # Timescale stores compression settings in the attrelid options of
-    # the hypertable. The exact column names vary by version; we just
-    # assert the ``timescaledb.compress`` GUC is enabled.
-    row = await pg_client.fetchrow(
+    enabled = await pg_client.fetchval(
         """
-        SELECT
-            (SELECT reloptions FROM pg_class WHERE relname = 'telemetry_events') AS opts
+        SELECT compression_enabled
+          FROM timescaledb_information.hypertables
+         WHERE hypertable_name = 'telemetry_events'
         """
     )
-    assert row is not None
-    opts = row["opts"]
-    if opts is None:
-        pytest.skip("No reloptions on telemetry_events; migration 034 may not have run")
-    if isinstance(opts, str):
-        opts = [opts]
-    matches = [o for o in opts if "timescaledb" in o]
-    assert matches, f"No timescaledb options found: {opts}"
+    if not enabled:
+        pytest.skip(
+            "TimescaleDB apache build — columnstore compression disabled; "
+            "migration 034 guards this (see its feature_not_supported block)"
+        )
+    rows = await pg_client.fetch(
+        """
+        SELECT attname, segmentby_column_index, orderby_column_index, orderby_asc
+          FROM timescaledb_information.compression_settings
+         WHERE hypertable_name = 'telemetry_events'
+        """
+    )
+    assert rows, "compression enabled but compression_settings has no rows"
+    segmentby = {r["attname"] for r in rows if r["segmentby_column_index"]}
+    orderby = {r["attname"] for r in rows if r["orderby_column_index"]}
+    assert segmentby == {"tenant_id", "event_type", "name"}, (
+        f"segmentby columns {sorted(segmentby)} != [tenant_id, event_type, name] (migration 034)"
+    )
+    assert orderby == {"timestamp"}, f"orderby columns {sorted(orderby)} != [timestamp]"
+    ts_row = next(r for r in rows if r["orderby_column_index"])
+    assert not ts_row["orderby_asc"], "timestamp must be ordered DESC (migration 034)"
 
 
 @pytest.mark.asyncio
@@ -144,6 +183,21 @@ async def test_chunk_exclusion_in_explain(pg_client: Any) -> None:
         pytest.skip("TimescaleDB extension not installed on this DB")
     if not await _is_hypertable(pg_client, "telemetry_events"):
         pytest.skip("Migration 034 may not have run on this DB")
+    # Chunk exclusion is only demonstrable when the hypertable holds
+    # ≥2 chunks. A fresh/empty table has none, and a single chunk is
+    # scanned directly (no exclusion/Append to observe).
+    n_chunks = await pg_client.fetchval(
+        """
+        SELECT num_chunks
+          FROM timescaledb_information.hypertables
+         WHERE hypertable_name = 'telemetry_events'
+        """
+    )
+    if not n_chunks or int(n_chunks) < 2:
+        pytest.skip(
+            f"telemetry_events has {int(n_chunks or 0)} chunk(s); chunk exclusion "
+            "is not demonstrable on a fresh DB (needs ≥2 chunks)"
+        )
     # ``EXPLAIN`` output for hypertables includes a "Chunks excluded"
     # line when the WHERE clause filters on the time column.
     plan = await pg_client.fetchval(

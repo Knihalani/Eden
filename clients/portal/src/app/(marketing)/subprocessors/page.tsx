@@ -1,10 +1,14 @@
-import type { Metadata } from "next";
-
 import { ThinMarketingDoc } from "@/components/marketing/thin-marketing-doc";
+import { marketingMetadata } from "@/lib/seo";
 
 
 export const revalidate = 3600;
-export const metadata: Metadata = { title: "Subprocessors · Eden" };
+export const metadata = marketingMetadata({
+  path: "/subprocessors",
+  title: "Subprocessors · Eden",
+  description:
+    "Subprocessors Eden uses to run the platform — cloud hosting, database, and identity providers.",
+});
 
 export default function Page() {
   return (

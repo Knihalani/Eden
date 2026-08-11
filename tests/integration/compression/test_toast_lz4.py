@@ -46,12 +46,12 @@ async def _try_get_pool():
         password=settings.postgres_password,
     )
     try:
-        await asyncio.wait_for(client.initialize(), timeout=3.0)
+        await asyncio.wait_for(client.initialize(), timeout=10.0)
         # initialize() may complete without actually connecting
         # (lazy asyncpg pool). Force a real round-trip via SELECT 1
         # so the fixture skips cleanly when the DB is unreachable
         # rather than failing every test with a ConnectionError.
-        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=3.0)
+        await asyncio.wait_for(client.fetchval("SELECT 1"), timeout=10.0)
     except Exception:
         return None
     return client
@@ -103,12 +103,16 @@ async def test_column_compression_is_lz4(
     pg_client: Any, table: str, column: str
 ) -> None:
     """Each target column must have attcompression = 'l' (lz4)."""
+    # NOTE: asyncpg positional params — ``:t``/``:c`` (SQLAlchemy-style)
+    # raised ``PostgresSyntaxError: syntax error at or near ":"`` here
+    # and this test silently skipped in CI (no test DB role), so it had
+    # never actually executed until a real TimescaleDB was wired up.
     row = await pg_client.fetchrow(
         """
         SELECT attcompression::text AS compression
           FROM pg_attribute
-         WHERE attrelid = (quote_ident(:t)::regclass)
-           AND attname = :c
+         WHERE attrelid = (quote_ident($1)::regclass)
+           AND attname = $2
         """,
         table,
         column,

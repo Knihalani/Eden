@@ -44,10 +44,18 @@ const config = {
   organizationName: 'KaiavN',
   projectName: 'Eden',
 
-  // Inline client script that wires up the home-page install-snippet
-  // copy button. Vanilla JS, no framework. Runs once on DOMContentLoaded
-  // and again on any SPA route change (Docusaurus does soft navigations).
+  // Shared <meta> defaults for every docs page (title stays per-page).
+  // Injected via headTags — Docusaurus config has no top-level
+  // ``metadata`` field (it rejects unknown keys at build time).
+  // NOTE: no global ``description`` meta here on purpose — a site-wide
+  // headTag overrides per-page front-matter descriptions (verified in
+  // the built HTML: quickstart lost its own description). Pages without
+  // a description fall back to the site tagline instead.
   headTags: [
+    { tagName: 'meta', attributes: { property: 'og:type', content: 'website' } },
+    { tagName: 'meta', attributes: { property: 'og:site_name', content: 'Eden Docs' } },
+    { tagName: 'meta', attributes: { name: 'twitter:card', content: 'summary_large_image' } },
+
     {
       tagName: 'link',
       attributes: {
@@ -56,6 +64,45 @@ const config = {
         crossorigin: 'anonymous',
       },
     },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:image',
+        content: 'https://docs.edenobservability.com/img/og-image.svg',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:image',
+        content: 'https://docs.edenobservability.com/img/og-image.svg',
+      },
+    },
+    {
+      tagName: 'script',
+      attributes: { type: 'application/ld+json' },
+      innerHTML: JSON.stringify([
+        {
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: 'Eden Docs',
+          url: 'https://docs.edenobservability.com',
+          description:
+            'Documentation for Eden — observability and improvement for AI agents.',
+        },
+        {
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: 'Eden',
+          url: 'https://edenobservability.com',
+          logo: 'https://edenobservability.com/logo.png',
+        },
+      ]),
+    },
+
+    // Inline client script that wires up the home-page install-snippet
+    // copy button. Vanilla JS, no framework. Runs once on DOMContentLoaded
+    // and again on any SPA route change (Docusaurus does soft navigations).
     {
       tagName: 'script',
       attributes: { type: 'text/javascript' },
@@ -152,6 +199,14 @@ const config = {
         },
         blog: false,
         theme: { customCss: 'src/css/custom.css' },
+        // Explicit sitemap tuning — classic preset ships the plugin by
+        // default; pin lastmod so crawlers see a stable date instead of
+        // a fresh timestamp on every build.
+        sitemap: {
+          lastmod: 'date',
+          changefreq: 'weekly',
+          priority: 0.5,
+        },
       }),
     ],
   ],

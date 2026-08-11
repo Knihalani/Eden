@@ -1,8 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DeferredCookieConsent } from "@/components/deferred-cookie-consent";
 import { UnregisterServiceWorkers } from "@/components/unregister-service-workers";
+import { SITE_URL, THEME_COLOR } from "@/lib/constants";
 import "./globals.css";
+
+const PORTAL = process.env.NEXT_PUBLIC_PORTAL_URL || SITE_URL;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,14 +45,33 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
+  // PWA — the manifest ships in /public; wire it so iOS/Android
+  // install prompts and add-to-homescreen use our theme/icons.
+  manifest: "/manifest.json",
+  // iOS full-screen (add to home screen) presentation.
+  appleWebApp: {
+    capable: true,
+    title: "Eden",
+    statusBarStyle: "black-translucent",
+  },
+  // Never auto-link phone numbers (SEO + accidental tel: dials).
+  formatDetection: { telephone: false },
+  // Root canonical base — marketing layout overrides with PORTAL but
+  // every relative URL in OG/Twitter metadata needs an origin.
+  metadataBase: new URL(PORTAL),
 };
 
 // ui-audit prompt 16: viewportFit: "cover" is required for the
 // `env(safe-area-inset-*)` CSS values to resolve on iOS / Android.
-export const viewport = {
+// themeColor mirrors manifest.json so the browser chrome matches the
+// Signal Black brand on both platforms. THEME_COLOR (lib/constants.ts)
+// stays in sync with public/manifest.json's theme_color.
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover" as const,
+  viewportFit: "cover",
+  themeColor: THEME_COLOR,
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

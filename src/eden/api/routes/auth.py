@@ -33,6 +33,7 @@ from eden.api.utils.clerk_auth import (
     is_clerk_payload,
 )
 from eden.api.utils.clerk_client import (
+    ClerkUserNotFoundError,
     extract_user_profile,
 )
 from eden.api.utils.clerk_client import (
@@ -1036,6 +1037,17 @@ async def get_me(
             "/auth/me MISS user_id=%s — auto-provisioning",
             user["user_id"],
         )
+    # A soft-deleted Eden row means the Clerk account was deleted
+    # (``user.deleted`` webhook) or erased in Eden. ``get_current_user``
+    # already rejects these, but keep the invariant local to /auth/me
+    # too — the portal boot depends on this endpoint returning a
+    # definitive 401 so it can stop rendering the deleted account
+    # instead of flashing a half-loaded dashboard.
+    if db_user and db_user.get("deleted_at"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deleted",
+        )
     if not db_user:
         # Self-heal: webhook hasn't synced yet. Best-effort
         # auto-provision. Generated UUID PK + ``clerk_id`` +
@@ -1056,39 +1068,66 @@ async def get_me(
                 detail="User not found",
             )
 
+        # Existence gate: before provisioning a row from a session
+        # JWT, confirm the Clerk account still exists. A still-valid
+        # JWT can outlive account deletion — Clerk revokes sessions
+        # server-side on ``user.deleted``, but the browser holds a
+        # signed token until its next refresh — and without this gate
+        # /auth/me would re-create a zombie ``users`` row for the
+        # deleted account (the "deleted in Clerk but still lets me
+        # into Eden" bug). 404 from Clerk = definitely deleted → 401.
+        # Any other failure (timeout / 5xx) keeps the webhook-lag
+        # tolerance: proceed with JWT-only claims so a fresh signup
+        # is never blocked by a Clerk API blip.
+        clerk_profile = None
+        try:
+            clerk_profile = await clerk_get_user(clerk_id)
+        except ClerkUserNotFoundError as exc:
+            # Warning, not info: this is the "deleted Clerk user still
+            # holds a valid session JWT" signal. If it ever fires for
+            # a user Clerk says exists (Clerk API consistency blip on
+            # a brand-new account), the request_id in the surrounding
+            # access log makes it diagnosable.
+            logger.warning(
+                "auto-provision: Clerk user %s no longer exists; "
+                "rejecting session (JWT still valid)",
+                clerk_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account no longer exists. Please sign in again.",
+            ) from exc
+        except Exception as exc:
+            # Defense in depth: clerk_client should return None on
+            # failure, but never let a Clerk client blip 500 /auth/me.
+            logger.warning(
+                "auto-provision clerk_get_user failed for %s: %s",
+                clerk_id,
+                redact_all(str(exc)),
+            )
+            clerk_profile = None
+
         # The default Clerk session JWT carries ``sub`` but not
         # ``email`` / ``name`` / ``avatar_url`` — those have to be
         # either added to a JWT template in the Clerk dashboard or
         # fetched from the Backend API. We try the JWT first (free,
-        # no round-trip) and fall back to the Backend API on the
-        # rare signup where the JWT is sparse — the resulting row
+        # no round-trip) and fall back to the Backend API payload we
+        # already fetched for the existence gate — the resulting row
         # is the same shape either way.
         email = user.get("email") or ""
         name = (email.split("@", 1)[0] if email else "") or "Eden user"
         avatar_url = user.get("image_url") or user.get("avatar_url") or ""
-        if not email or not avatar_url:
-            try:
-                clerk_profile = await clerk_get_user(clerk_id)
-            except Exception as exc:
-                # Defense in depth: clerk_client should return None on
-                # failure, but never let a Clerk client blip 500 /auth/me.
-                logger.warning(
-                    "auto-provision clerk_get_user failed for %s: %s",
-                    clerk_id,
-                    redact_all(str(exc)),
+        if clerk_profile:
+            profile = extract_user_profile(clerk_profile)
+            if not email:
+                email = profile["email"]
+                name = (
+                    profile["name"]
+                    if profile["name"] and profile["name"] != email.split("@")[0]
+                    else name
                 )
-                clerk_profile = None
-            if clerk_profile:
-                profile = extract_user_profile(clerk_profile)
-                if not email:
-                    email = profile["email"]
-                    name = (
-                        profile["name"]
-                        if profile["name"] and profile["name"] != email.split("@")[0]
-                        else name
-                    )
-                if not avatar_url:
-                    avatar_url = profile["avatar_url"]
+            if not avatar_url:
+                avatar_url = profile["avatar_url"]
         # Last-resort: if the JWT AND the API both returned no email,
         # synthesize one from the Clerk id so the row still satisfies
         # the users.email NOT NULL constraint. The user can fix it

@@ -161,6 +161,7 @@ export function MobileBottomNav() {
                             href={item.href}
                             onClick={() => setMoreOpen(false)}
                             data-active={active ? "true" : "false"}
+                            aria-current={active ? "page" : undefined}
                             className={cn(
                               "type-ui flex items-center gap-2 rounded-[var(--radius)] px-2 py-2.5",
                               active
@@ -194,6 +195,7 @@ export function MobileBottomNav() {
               key={item.id}
               href={item.href}
               data-active={active ? "true" : "false"}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 type-meta",
                 active ? "text-[var(--accent)]" : "text-[var(--text-faint)]",

@@ -39,6 +39,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Direct-run bootstrap: ``python bench/run_all.py`` — add the repo root
+# so the ``bench`` package resolves (``python -m bench.run_all`` already
+# has cwd on sys.path, so this is a no-op there).
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 

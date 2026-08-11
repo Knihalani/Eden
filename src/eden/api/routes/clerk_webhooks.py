@@ -292,24 +292,52 @@ async def _deactivate_user(data: dict[str, Any]) -> None:
     webhook silently no-op'd. Soft-delete is irreversible through
     the API (audit log requirement) but the operator can clear
     ``deleted_at`` to restore the row if the Clerk user comes back.
+
+    Also rotates ``token_version`` so any legacy Eden-issued cookie
+    JWT is rejected on its next auth check (Clerk sessions are
+    rejected by ``get_current_user``'s ``deleted_at`` guard), and
+    drops the in-process id / last-seen caches so a resurrected
+    session cannot ride stale membership resolution.
     """
     clerk_id = data.get("id")
     if not clerk_id:
         return
     client = await get_postgres_client()
-    result = await client.execute(
-        "UPDATE users SET deleted_at = NOW() WHERE clerk_id::text = $1",
+    row = await client.fetchrow(
+        "UPDATE users SET deleted_at = NOW(), "
+        "token_version = COALESCE(token_version, 0) + 1 "
+        "WHERE clerk_id::text = $1 "
+        "RETURNING id",
         clerk_id,
     )
-    # ``result`` is the asyncpg status string ("UPDATE N") — log
-    # silently if no row matched so a future operator can spot a
-    # webhook delivery that targeted a clerk_id we don't have.
-    if result.endswith(" 0"):
+    # No row matched — log so a future operator can spot a webhook
+    # delivery that targeted a clerk_id we don't have (e.g. the user
+    # was never auto-provisioned). ``fetchrow`` returns None for the
+    # no-op case instead of a status string.
+    if row is None:
         logger.info(
             "_deactivate_user: no row matched clerk_id=%s; webhook "
             "delivery for a user that was never auto-provisioned",
             clerk_id,
         )
+        return
+    eden_id = str(row["id"])
+    try:
+        from eden.api.deps import (
+            _last_seen_bumped_at,
+            invalidate_user_id_cache,
+        )
+
+        invalidate_user_id_cache(clerk_id, eden_id)
+        _last_seen_bumped_at.pop(clerk_id, None)
+        _last_seen_bumped_at.pop(eden_id, None)
+    except Exception as exc:  # noqa: BLE001 — best-effort cache hygiene
+        logger.debug(
+            "_deactivate_user cache invalidation failed for %s: %s",
+            clerk_id,
+            redact_all(str(exc)),
+        )
+    invalidate_user_cache(clerk_id)
 
 
 async def _upsert_org(data: dict[str, Any]) -> None:

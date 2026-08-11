@@ -47,6 +47,8 @@ async def _funnel_clickhouse(org_id: str, steps: list[str], *, window_days: int)
         from eden.data_platform.analytics_engine import get_engine
         engine = get_engine()
     except Exception:
+        # ClickHouse optional — fall back to the Postgres path below.
+        logger.debug("clickhouse engine unavailable for funnels", exc_info=True)
         return None
     sql = f"""
         WITH events AS (

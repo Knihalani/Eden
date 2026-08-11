@@ -67,7 +67,7 @@ export function MarketingHomeHero() {
           <dl className="mt-10 grid max-w-sm grid-cols-3 gap-4 border-t border-[var(--line)] pt-6">
             {[
               { k: "Overhead", v: "≤5ms" },
-              { k: "Ingest", v: "OTel" },
+              { k: "Ingest", v: "OTel + SDKs" },
               { k: "Loop", v: "Closed" },
             ].map((row) => (
               <div key={row.k}>

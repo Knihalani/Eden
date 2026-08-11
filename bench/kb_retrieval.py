@@ -17,11 +17,18 @@ from __future__ import annotations
 
 import asyncio
 import random
+import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
-from bench.common import BenchResult
+# Direct-run bootstrap: ``python bench/kb_retrieval.py`` — add the repo
+# root so the ``bench`` package resolves.
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
+from bench.common import BenchResult  # noqa: E402
 
 # Tier latencies in ms. Real numbers will differ; these match the
 # §6.1 cost-optimization architecture doc.

@@ -19,6 +19,7 @@ class MonitoringDashboardService:
 
             return await get_postgres_client()
         except Exception:
+            logger.debug("postgres client unavailable for dashboards", exc_info=True)
             return None
 
     @staticmethod

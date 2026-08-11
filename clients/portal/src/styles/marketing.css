@@ -137,6 +137,59 @@
   mix-blend-mode: overlay;
 }
 
+/* Integration chips — mono pill, gold hairline on hover */
+.eden-stack-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 1.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-wider);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.eden-stack-chip:hover {
+  border-color: var(--line-accent);
+  color: var(--text);
+  background: var(--accent-muted);
+}
+
+/* FAQ — native <details> accordion (no JS). Chevron rotates on open;
+   the answer fades up once. */
+.eden-faq-item summary {
+  list-style: none;
+}
+
+.eden-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.eden-faq-item summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.eden-faq-chevron {
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.eden-faq-item[open] .eden-faq-chevron {
+  transform: rotate(45deg);
+}
+
+.eden-faq-item[open] > p {
+  animation: eden-fade-up 0.3s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .eden-hero-rise,
   .eden-hero-rise-delay,
