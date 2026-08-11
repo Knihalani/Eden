@@ -54,8 +54,14 @@ export function buildEdenTourProgress(
   };
 }
 
+/**
+ * Only ``done`` is a completed tour. ``skipped`` is a resumable pause —
+ * the banner stays reachable and the overlay auto-resumes it — so it must
+ * not be treated as complete anywhere that decides whether a user is
+ * still being onboarded.
+ */
 export function isTourComplete(progress: EdenTourProgress | null): boolean {
-  return progress?.status === "done" || progress?.status === "skipped";
+  return progress?.status === "done";
 }
 
 /**
