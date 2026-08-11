@@ -11,8 +11,12 @@ import userEvent from "@testing-library/user-event";
  * tour again:
  *
  *   - Finishing (Done on the finish step) must persist `status: "done"`.
- *   - Skipping (Esc / X / Skip) must persist `status: "skipped"`.
- *   - Both "done" and "skipped" must retire the resume banner entirely.
+ *   - Skipping (Esc / X / Skip) must persist `status: "skipped"` (a
+ *     resumable pause, not a finish).
+ *   - Only "done" retires the resume banner; "skipped" keeps it as the
+ *     resume affordance.
+ *   - A paused ("skipped") tour auto-resumes on the next portal entry
+ *     (once per session) so onboarding opens by default.
  *   - Neither exit may let the effect loop re-open the tour afterwards.
  *
  * The seam is deliberately at the ProductTour boundary: ProductTour is stubbed
@@ -285,6 +289,48 @@ describe("tour dismissal registers separately from completion", () => {
     const tour = await screen.findByTestId("tour");
     expect(tour.dataset.step).toBe("3");
   });
+
+  it("auto-resumes a paused tour on plain /home entry — no ?onboarding=1 needed", async () => {
+    clerk.metadata = {
+      [EDEN_TOUR_META_KEY]: {
+        status: "skipped",
+        stepIndex: 3,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    };
+    nav.search = ""; // ordinary sign-in lands here without the force flag
+
+    render(<OnboardingOverlay />);
+    const tour = await screen.findByTestId("tour");
+    expect(tour.dataset.step).toBe("3");
+  });
+
+  it("only auto-resumes a paused tour once per session — a re-skip stays closed", async () => {
+    const user = userEvent.setup();
+    clerk.metadata = {
+      [EDEN_TOUR_META_KEY]: {
+        status: "skipped",
+        stepIndex: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    };
+    nav.search = "";
+
+    const view = render(<OnboardingOverlay />);
+    const tour = await screen.findByTestId("tour");
+    expect(tour.dataset.step).toBe("1");
+
+    // Skip again → tour closes and stays closed for the session even
+    // though the persisted status is still "skipped".
+    await user.click(screen.getByText("skip"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("tour")).not.toBeInTheDocument(),
+    );
+    view.rerender(<OnboardingOverlay />);
+    await waitFor(() =>
+      expect(screen.queryByTestId("tour")).not.toBeInTheDocument(),
+    );
+  });
 });
 
 describe("banner reflects the persisted terminal status", () => {
@@ -300,7 +346,7 @@ describe("banner reflects the persisted terminal status", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("retires the resume banner after a skip", () => {
+  it("keeps the resume banner for a paused (skipped) tour", () => {
     clerk.metadata = {
       [EDEN_TOUR_META_KEY]: {
         status: "skipped",
@@ -308,7 +354,8 @@ describe("banner reflects the persisted terminal status", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
-    const { container } = render(<OnboardingBanner />);
-    expect(container).toBeEmptyDOMElement();
+    render(<OnboardingBanner />);
+    // Paused, not finished — the resume chip stays as the affordance.
+    expect(screen.getByText(/Tour paused/)).toBeInTheDocument();
   });
 });
