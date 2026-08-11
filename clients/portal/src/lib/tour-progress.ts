@@ -58,12 +58,20 @@ export function isTourComplete(progress: EdenTourProgress | null): boolean {
   return progress?.status === "done" || progress?.status === "skipped";
 }
 
-/** Banner only while the tour is still in progress (active / never started). */
+/**
+ * Banner while the tour is still in progress — including paused
+ * (``skipped``) tours.
+ *
+ * ``skipped`` is a resumable pause, not a finish: the user closed the
+ * walkthrough mid-way (Esc / X / outside-click on a non-nav step), and
+ * the overlay auto-resumes it on the next entry, but if they close it
+ * again the banner must stay reachable so they can get back in. Only
+ * ``done`` retires the chrome entirely.
+ */
 export function shouldShowTourBanner(
   progress: EdenTourProgress | null,
 ): boolean {
-  // No metadata yet → treat as not started (show once). After Finish or
-  // Skip the chrome must disappear entirely — not a dismissible Resume chip.
+  // No metadata yet → treat as not started (show once).
   if (!progress) return true;
-  return progress.status === "active";
+  return progress.status !== "done";
 }
