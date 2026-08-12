@@ -1,0 +1,34 @@
+# Eden Observability
+
+> Drop-in LLM observability for AI agents: traces, evals, and reviewable fix plans in one loop. OpenAI-compatible gateway and SDKs.
+
+Eden (edenobservability.com) helps teams see every agent run and fix what fails. Use this index to find product pages and documentation.
+
+## Product
+
+- [Home](https://edenobservability.com/): Product overview — LLM observability and improvement for AI agents
+- [Pricing](https://edenobservability.com/pricing): Plans and pricing
+- [Why Eden](https://edenobservability.com/why-eden): Product positioning and when to choose Eden
+- [About](https://edenobservability.com/about): Company and product background
+- [Changelog](https://edenobservability.com/changelog): Product release notes
+- [Security](https://edenobservability.com/security): Security posture and vulnerability disclosure
+
+## Comparisons
+
+- [Eden vs Langfuse](https://edenobservability.com/vs/langfuse): Comparison with Langfuse
+- [Eden vs Helicone](https://edenobservability.com/vs/helicone): Comparison with Helicone
+- [Eden vs Braintrust](https://edenobservability.com/vs/braintrust): Comparison with Braintrust
+
+## Docs
+
+- [Docs home](https://docs.edenobservability.com/): Documentation root
+- [Quickstart](https://docs.edenobservability.com/quickstart): Signup to first trace in minutes
+- [Deploy](https://docs.edenobservability.com/how-to/deploy): Point SDKs at production API
+- [Auto-instrument](https://docs.edenobservability.com/how-to/auto-instrument): Add instrumentation to an existing repo
+- [Security model](https://docs.edenobservability.com/explanation/security-model): Tenant isolation, PII redaction, and audit defaults
+- [Docs llms.txt](https://docs.edenobservability.com/llms.txt): Docs-focused LLM index
+
+## Sitemaps
+
+- [Marketing sitemap](https://edenobservability.com/sitemap.xml): Public marketing pages
+- [Docs sitemap](https://docs.edenobservability.com/sitemap.xml): Documentation pages
