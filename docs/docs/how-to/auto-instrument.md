@@ -1,11 +1,12 @@
 ---
 id: auto-instrument
-title: Instrument an existing repo
-sidebar_label: Instrument an existing repo
+title: Auto-instrument an existing repo
+description: Add Eden auto-instrumentation to an existing Python or TypeScript repo: configure the SDK, call instrument(), and confirm traces in the portal.
+sidebar_label: Auto-instrument an existing repo
 sidebar_position: 8
 ---
 
-# How-to — Instrument an existing repo
+# How-to — Auto-instrument an existing repo
 
 Eden does **not** open auto-integrate PRs against your GitHub repos.
 You add the SDK yourself (or with your own tooling). Typical path:

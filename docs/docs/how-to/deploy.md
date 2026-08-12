@@ -1,11 +1,12 @@
 ---
 id: deploy
-title: API endpoint
-sidebar_label: API endpoint
+title: Deploy — connect your app to Eden
+description: Connect your app to Eden's production API at api.edenobservability.com. Set SDK keys, skip EDEN_BASE_URL for prod, and verify with doctor or /live.
+sidebar_label: Deploy
 sidebar_position: 4
 ---
 
-# How-to — API endpoint
+# How-to — Deploy: connect your app to Eden
 
 Production API: **`https://api.edenobservability.com`**
 

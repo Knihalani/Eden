@@ -320,7 +320,7 @@ const config = {
             items: [
               { label: 'Auto-instrument OpenAI', to: '/tutorials/auto-instrument-openai' },
               { label: 'Set up auth', to: '/how-to/auth' },
-              { label: 'API endpoint', to: '/how-to/deploy' },
+              { label: 'Deploy — connect your app', to: '/how-to/deploy' },
               { label: 'PII policy', to: '/how-to/pii' },
             ],
           },
