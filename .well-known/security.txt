@@ -1,9 +1,0 @@
-# Public security contact. Per https://securitytxt.org/
-# Replace the email + URL with the real values when the public
-# security page goes live.
-
-Contact: mailto:security@eden.com
-Contact: https://eden.com/security
-Expires: 2027-12-31T23:59:59z
-Preferred-Languages: en
-Canonical: https://eden.com/.well-known/security.txt
