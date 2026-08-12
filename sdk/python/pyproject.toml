@@ -98,10 +98,10 @@ dev = [
 eden-doctor = "eden_sdk.doctor:main"
 
 [project.urls]
-Homepage = "https://eden.dev"
-Documentation = "https://docs.eden.dev/sdk/python"
-Repository = "https://github.com/eden-ai/eden"
-Issues = "https://github.com/eden-ai/eden/issues"
+Homepage = "https://edenobservability.com"
+Documentation = "https://docs.edenobservability.com"
+Repository = "https://github.com/KaiavN/Eden"
+Issues = "https://github.com/KaiavN/Eden/issues"
 
 [tool.setuptools]
 package-dir = { "" = "." }
