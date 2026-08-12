@@ -203,3 +203,104 @@ export function pricingProductJsonLd() {
     },
   };
 }
+
+export interface WebPageJsonLdOptions {
+  path: string;
+  name: string;
+  description: string;
+  /** Defaults to `WebPage`. Use `AboutPage` for `/about`. */
+  type?: "WebPage" | "AboutPage";
+}
+
+/** Generic WebPage / AboutPage node for marketing content routes. */
+export function webPageJsonLd(opts: WebPageJsonLdOptions) {
+  return {
+    "@context": "https://schema.org",
+    "@type": opts.type ?? "WebPage",
+    name: opts.name,
+    description: opts.description,
+    url: absoluteUrl(opts.path),
+    isPartOf: {
+      "@type": "WebSite",
+      name: "Eden",
+      url: BASE,
+    },
+    about: {
+      "@type": "SoftwareApplication",
+      name: "Eden",
+      url: BASE,
+    },
+  };
+}
+
+/**
+ * Why Eden capability rows — must stay in sync with the comparison table in
+ * `why-eden/page.tsx` (visible content ↔ ItemList parity).
+ */
+export const WHY_EDEN_COMPARISON: ReadonlyArray<{
+  name: string;
+  description: string;
+}> = [
+  {
+    name: "Capture traces & sessions",
+    description: "Gateway + SDKs — same starting line",
+  },
+  {
+    name: "Detect production failures",
+    description: "Detectors → Issues without a separate pager stack",
+  },
+  {
+    name: "Runtime self-heal",
+    description: "On by default for reversible actions — opt out anytime",
+  },
+  {
+    name: "Fix PRs with proof",
+    description: "Fix now queue with evidence tiers before you merge",
+  },
+  {
+    name: "Decision audit",
+    description: "Settings → Autonomy audit: allow / deny / budget",
+  },
+  {
+    name: "Dogfood",
+    description: "Eden runs on Eden — our agents are customers too",
+  },
+];
+
+/** `/why-eden` — comparison WebPage + capability ItemList. */
+export function whyEdenWebPageJsonLd() {
+  return webPageJsonLd({
+    path: "/why-eden",
+    name: "Why Eden — Closed-Loop LLM Observability vs Traces",
+    description:
+      "Traces-only tools show LLM traffic. Eden detects failures, heals when safe, and opens proven fix plans — closed-loop AI observability vs capture-only.",
+  });
+}
+
+export function whyEdenComparisonItemListJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "Eden vs traces-only tools",
+    description:
+      "Capability comparison: closed-loop LLM observability versus capture-only tracing tools.",
+    numberOfItems: WHY_EDEN_COMPARISON.length,
+    itemListElement: WHY_EDEN_COMPARISON.map((row, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: row.name,
+      description: row.description,
+    })),
+  };
+}
+
+/** `/about` — AboutPage describing the company / product. */
+export function aboutPageJsonLd() {
+  return webPageJsonLd({
+    type: "AboutPage",
+    path: "/about",
+    name: "About Eden — Observability & Improvement for AI Agents",
+    description:
+      "Eden instruments production AI agents so teams can catch drift, evaluate changes, and ship reviewable fixes. Observe, evaluate, improve in one loop.",
+  });
+}
