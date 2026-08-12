@@ -2,13 +2,11 @@
 // portal/api routes (login required, no SEO value).
 
 import type { MetadataRoute } from "next";
-import { SITE_URL } from "@/lib/constants";
 import { MARKETING_SITEMAP_ROUTES } from "@/lib/marketing-routes";
+import { absoluteSiteUrl } from "@/lib/site-origin";
 
-const PORTAL =
-  process.env.NEXT_PUBLIC_PORTAL_URL ||
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  SITE_URL;
+// Match sitemap.ts — static at build so robots cannot 500 on bad env.
+export const dynamic = "force-static";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -54,6 +52,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: `${PORTAL}/sitemap.xml`,
+    sitemap: absoluteSiteUrl("/sitemap.xml"),
   };
 }
