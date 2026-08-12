@@ -159,7 +159,10 @@ class PromotionLoop:
                 FROM telemetry_events
                 WHERE tenant_id = $1
                   AND event_type = 'agent.run'
-                  AND attributes->>'prompt_version' = $2
+                  AND COALESCE(
+                        attributes->>'prompt_version',
+                        attributes->>'eden.span.prompt_version'
+                      ) = $2
                   AND timestamp >= $3
                 """,
                 tenant_id, str(candidate_version), cutoff,
@@ -279,7 +282,9 @@ class PromotionLoop:
         )
         try:
             from eden.kb.prompt_versions.client import get_prompt_versions_client
-            pvc = await get_prompt_versions_client()
+            # The client factory is sync (returns the singleton) — awaiting
+            # it raised TypeError and the promote-path activate never ran.
+            pvc = get_prompt_versions_client()
             await pvc.activate_prompt(agent, candidate_version)
         except Exception as exc:
             logger.warning(f"activate_prompt in promotion loop failed: {exc}")

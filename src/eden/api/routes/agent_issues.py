@@ -303,6 +303,30 @@ async def resolve_issue(
                         )
         except Exception as exc:
             logger.debug("shadow feedback on resolve failed: %s", redact_all(str(exc)))
+        # Wave 3 (3.4): skill outcome — the flywheel drafts
+        # `issue-{issue_id}` skills on resolve; whether that skill helped is
+        # the issue's resolution state (resolved=success, ignored=failure).
+        try:
+            from eden.promotion.outcome_records import record_skill_outcome
+            from eden.storage.postgres import get_postgres_client
+
+            _pg = await get_postgres_client()
+            if _pg is not None and issue is not None:
+                _skill = await _pg.fetchrow(
+                    "SELECT id FROM skills WHERE name = $1 "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    f"issue-{issue.id}",
+                )
+                if _skill:
+                    await record_skill_outcome(
+                        org_id,
+                        str(_skill["id"]),
+                        issue_id=str(issue.id),
+                        outcome_success=(target == "resolved"),
+                        metric_delta={"status": target},
+                    )
+        except Exception as exc:
+            logger.debug("skill outcome on resolve failed: %s", redact_all(str(exc)))
     return _ok(
         "agent_issues",
         {

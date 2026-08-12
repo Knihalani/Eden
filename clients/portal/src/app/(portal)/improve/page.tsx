@@ -35,6 +35,7 @@ import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { LocalDraftBanner } from "@/components/shell/local-draft-banner";
 import { useLabToast } from "@/lab/lab-toast";
 import { NudgesPromotionsPanel } from "@/components/improve/nudges-promotions-panel";
+import { CanaryCockpit } from "@/components/improve/canary-cockpit";
 
 const improveFallback = <LoadingFallback label="Loading improve plans…" />;
 
@@ -513,6 +514,7 @@ function LabImproveInner() {
             onOpenPlan={openPlan}
           />
           <NudgesPromotionsPanel orgId={orgId} agentId={agentId} />
+          <CanaryCockpit orgId={orgId} />
         </>
       ) : (
         <>

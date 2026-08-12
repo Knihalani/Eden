@@ -995,16 +995,22 @@ async def _execute_rollback(
         after_state["note"] = "no active canary to roll back"
         after_state["failure_reason"] = "no_active_canary"
         return after_state
-    canary_id = canary.get("id")
+    # F-F (Wave 1, 2026-08-11): live canaries live in
+    # ``prompt_canary_experiments`` (+ ``prompt_version_assignments``),
+    # keyed by ``experiment_id`` (UUID). The legacy ``prompt_canaries``
+    # table this function used to target is dead — nothing writes it — so
+    # the rollback could never find a real canary. We now key on the live
+    # experiment_id and mirror :meth:`PromotionLoop._rollback` exactly.
+    canary_id = canary.get("experiment_id") or canary.get("id")
     if not canary_id:
-        after_state["error"] = "before_state.canary.id missing"
+        after_state["error"] = "before_state.canary.experiment_id missing"
         after_state["failure_reason"] = "canary_id_missing"
         return after_state
     try:
         # Verify the canary is still in a roll-backable state.
         current = await client.fetchrow(
-            "SELECT status FROM prompt_canaries "
-            "WHERE org_id = $1 AND id = $2",
+            "SELECT status FROM prompt_canary_experiments "
+            "WHERE tenant_id = $1 AND experiment_id = $2",
             org_id, canary_id,
         )
         if current is None:
@@ -1018,9 +1024,17 @@ async def _execute_rollback(
             )
             after_state["failure_reason"] = "canary_terminal_state"
             return after_state
+        # Mirror PromotionLoop._rollback: end the experiment's traffic
+        # assignment AND the experiment row so cockpit + PromotionLoop
+        # agree the canary is gone.
         await client.execute(
-            "UPDATE prompt_canaries SET status = 'rolled_back', "
-            "updated_at = NOW() WHERE org_id = $1 AND id = $2",
+            "UPDATE prompt_version_assignments SET status = 'rolled_back', "
+            "ended_at = NOW() WHERE experiment_id = $1",
+            canary_id,
+        )
+        await client.execute(
+            "UPDATE prompt_canary_experiments SET status = 'rolled_back', "
+            "ended_at = NOW() WHERE tenant_id = $1 AND experiment_id = $2",
             org_id, canary_id,
         )
         after_state["executed"] = True
@@ -1246,19 +1260,24 @@ async def _capture_before_state(
         if client is None:
             return out
         if action_type == "rollback":
+            # F-F (Wave 1, 2026-08-11): snapshot the live
+            # ``prompt_canary_experiments`` row (keyed by
+            # ``experiment_id``), not the dead legacy ``prompt_canaries``
+            # table — the rollback executor now reads this shape.
             try:
                 row = await client.fetchrow(
-                    "SELECT id, name, status, current_version, created_at "
-                    "FROM prompt_canaries "
-                    "WHERE org_id = $1 AND status = 'active' "
-                    "ORDER BY created_at DESC LIMIT 1",
+                    "SELECT experiment_id, agent, control_version, "
+                    "candidate_version, traffic_pct, status, started_at "
+                    "FROM prompt_canary_experiments "
+                    "WHERE tenant_id = $1 AND status = 'active' "
+                    "ORDER BY started_at DESC LIMIT 1",
                     org_id,
                 )
             except Exception:
                 row = None
             if row is not None:
                 d = dict(row)
-                d["created_at"] = _iso(d.get("created_at"))
+                d["started_at"] = _iso(d.get("started_at"))
                 out["canary"] = d
                 out["captured"] = True
             else:

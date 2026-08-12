@@ -147,6 +147,10 @@ export const queryKeys = {
       ["portal", "autonomyAudit", orgId] as const,
     autonomyBudget: (orgId: string | null | undefined) =>
       ["portal", "autonomyBudget", orgId] as const,
+    autonomyAgents: (orgId: string | null | undefined) =>
+      ["portal", "autonomyAgents", orgId] as const,
+    autonomyEarnings: (orgId: string | null | undefined) =>
+      ["portal", "autonomyEarnings", orgId] as const,
     evalDatasets: (orgId: string | null | undefined) =>
       ["portal", "evalDatasets", orgId] as const,
     evalPlaygrounds: (orgId: string | null | undefined) =>

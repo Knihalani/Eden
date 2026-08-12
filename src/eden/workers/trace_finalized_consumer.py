@@ -347,6 +347,11 @@ class TraceFinalizedConsumer:
             session_id=data.get("session_id") or None,
             user_id=data.get("user_id") or None,
             detection_profile=await _resolve_profile(org_id),
+            # Wave 3 (3.2): per-agent sensitivity — confirm-heavy agents
+            # detect more, dismiss-heavy agents detect less.
+            threshold_multiplier=await _resolve_agent_multiplier(
+                org_id, data.get("agent_id") or None
+            ),
         )
         # D1 — StatGate P0 rail before orchestrator LLM triage.
         try:
@@ -757,6 +762,22 @@ async def _resolve_profile(org_id: str) -> str:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("trace_finalized: resolve_profile failed: %s", exc)
         return "standard"
+
+
+async def _resolve_agent_multiplier(org_id: str, agent_id: str | None) -> float:
+    """Wave 3 (3.2): per-agent detection sensitivity for the scanner.
+
+    Confirm-heavy agents get <1.0 (more detections), dismiss-heavy agents
+    get >1.0 (fewer). Falls back to 1.0 (profile default sensitivity)."""
+    try:
+        from eden.issues.detection_settings import (
+            resolve_agent_threshold_multiplier,
+        )
+
+        return await resolve_agent_threshold_multiplier(org_id, agent_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("trace_finalized: agent multiplier failed: %s", exc)
+        return 1.0
 
 
 def _record_queue_lag(message_id: Any) -> None:

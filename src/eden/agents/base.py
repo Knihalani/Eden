@@ -7,7 +7,7 @@ from the prompt_versions table instead of using hardcoded constants.
 import contextlib
 import inspect
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from eden.kb.prompt_versions.client import get_prompt_versions_client
 
@@ -104,23 +104,76 @@ class PromptLoader:
             self._prompt_version = None
             self._prompt_loaded = False
 
-    async def a_load_prompt(self) -> None:
+    async def a_load_prompt(self, tenant_id: str | None = None) -> None:
         """Async variant of :meth:`_load_prompt`.
 
         Use this from async contexts (e.g. FastAPI handlers) when you
         want the KB-loaded prompt, not the class-level default.
+
+        Wave 2: when ``tenant_id`` is supplied, canary assignments for
+        ``(tenant_id, AGENT_NAME)`` are consulted first via
+        :func:`eden.agents.prompt_canary.pick_canary_version`. If the
+        roll lands on a candidate, that version's template is loaded;
+        otherwise the active (control) prompt is used — matching the
+        decision flow the canary module has always documented but never
+        wired.
         """
         if not self.AGENT_NAME:
             return
         try:
             client = get_prompt_versions_client()
-            prompt_data = await client.get_active_prompt(self.AGENT_NAME)
+            prompt_data = None
+            if tenant_id:
+                prompt_data = await self._resolve_with_canary(client, tenant_id)
+            if prompt_data is None:
+                prompt_data = await client.get_active_prompt(self.AGENT_NAME)
             if prompt_data:
                 self._system_prompt = prompt_data["system_prompt"]
                 self._prompt_version = prompt_data["version"]
                 self._prompt_loaded = True
         except Exception as e:  # pragma: no cover - best-effort
             logger.debug(f"a_load_prompt: KB unavailable for {self.AGENT_NAME}: {e}")
+
+    async def _resolve_with_canary(self, client: Any, tenant_id: str) -> dict | None:
+        """Wave 2: apply canary traffic split for ``(tenant_id, agent)``.
+
+        Returns the chosen candidate version dict (prompt text + version)
+        or ``None`` when no assignment wins the roll.
+        """
+        try:
+            from eden.agents.prompt_canary import pick_canary_version
+            from eden.storage.postgres import get_postgres_client
+
+            pg = await get_postgres_client()
+            if not pg:
+                return None
+            rows = await pg.fetch(
+                """
+                SELECT version, traffic_pct, experiment_id
+                  FROM prompt_version_assignments
+                 WHERE tenant_id = $1 AND agent = $2 AND status = 'active'
+                   AND (expires_at IS NULL OR expires_at > NOW())
+                """,
+                tenant_id,
+                self.AGENT_NAME,
+            )
+            assignments = [dict(r) for r in rows]
+            chosen = pick_canary_version(
+                assignments, tenant_id, self.AGENT_NAME
+            )
+            if chosen is None:
+                return None
+            loaded = await client.get_prompts_for_agent(
+                self.AGENT_NAME, version=int(chosen.get("version") or 0)
+            )
+            return dict(loaded) if loaded else None
+        except Exception as exc:  # pragma: no cover - best-effort
+            logger.debug(
+                "a_load_prompt: canary resolution failed for %s: %s",
+                self.AGENT_NAME,
+                exc,
+            )
+            return None
 
     @property
     def system_prompt(self) -> str:

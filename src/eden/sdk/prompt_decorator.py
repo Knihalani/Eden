@@ -12,13 +12,18 @@ The decorator:
 
 1. On first call, ensures a row exists in the ``prompts``
    table (idempotent on ``(org_id, name)``).
-2. On every call, records the call into
-   ``telemetry_events`` with the current ``prompt_version_id``
-   so the trace detail page can show the version that
-   generated it.
-3. When ``versioned=True``, every call increments the
-   template's run counter; the customer can call
-   :func:`bump_version` to create a new version.
+2. When ``versioned=True``, records a new ``prompt_versions``
+   row (a new version) for the template so the prompts UI can
+   track history.
+
+Wave 2 (drift fix): the original docstring claimed every call
+was recorded into ``telemetry_events`` with the current
+``prompt_version_id`` so trace detail could show the generating
+version. The code never did that — it only ensured the ``prompts``
+row and (optionally) minted a new ``prompt_versions`` row. Per-call
+stamping belongs on the SDK span emit path (``eden_sdk.trace``),
+where ``prompt_version`` now passes through to ``telemetry_events``
+attributes, so the docstring now matches what the code does.
 
 Ponytail: the decorator is best-effort — any DB error is
 logged + swallowed so the wrapped function still runs.
@@ -175,10 +180,28 @@ def prompt(
                         org, name, description=description
                     )
                     if pid and versioned:
-                        await _record_template_version(
+                        version_id = await _record_template_version(
                             org, pid,
                             template=template, model=model,
                         )
+                        # Wave 2: stamp the resolved version onto the
+                        # SDK's active span (if any) so it reaches
+                        # ``telemetry_events`` attributes — the trace
+                        # detail / canary per-version stats read it from
+                        # there. Best-effort; no span → skip.
+                        if version_id:
+                            try:
+                                from eden_sdk.trace import current_span
+
+                                span = current_span()
+                                if span is not None:
+                                    span.set_attribute(
+                                        "prompt_version", str(version_id)
+                                    )
+                            except Exception as exc:
+                                logger.debug(
+                                    "@prompt: span stamping failed: %s", exc
+                                )
                 except Exception as exc:
                     logger.debug("@prompt: async record failed: %s", exc)
             return await fn(*args, **kwargs)

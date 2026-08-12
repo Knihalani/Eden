@@ -181,9 +181,13 @@ function isTypingTarget(t: EventTarget | null) {
 export function useListKeyboard(options: {
   move: (delta: number) => void;
   onTab?: (tab: "trace" | "tree" | "signals" | "chat") => void;
+  /** Fired on `?` — page shortcut help overlay. */
+  onHelp?: () => void;
+  /** Fired on `/` — focus the list's search field. */
+  onSearch?: () => void;
   enabled?: boolean;
 }) {
-  const { move, onTab, enabled = true } = options;
+  const { move, onTab, onHelp, onSearch, enabled = true } = options;
 
   useEffect(() => {
     if (!enabled) return;
@@ -200,6 +204,19 @@ export function useListKeyboard(options: {
       if (e.key === "k" || e.key === "ArrowUp") {
         e.preventDefault();
         move(-1);
+        return;
+      }
+      // `?` is Shift+`/` in most layouts — a help affordance, not a
+      // character. `onSearch` is the `/`-focuses-search convention the
+      // keyboard docstring always promised (Wave 14 wires it on traces).
+      if (e.key === "?" && onHelp) {
+        e.preventDefault();
+        onHelp();
+        return;
+      }
+      if (e.key === "/" && onSearch) {
+        e.preventDefault();
+        onSearch();
         return;
       }
       if (onTab) {
@@ -222,5 +239,5 @@ export function useListKeyboard(options: {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, move, onTab]);
+  }, [enabled, move, onTab, onHelp, onSearch]);
 }

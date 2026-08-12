@@ -445,3 +445,90 @@ async def test_fetch_recent_judge_rows_no_metric_when_nothing_dropped(
 
     await e._fetch_recent_judge_rows()
     counter.inc.assert_not_called()
+
+
+# ── Wave 1 (F-A): the trigger SQL must match the live schema ──────
+
+
+@pytest.mark.asyncio
+async def test_agg_query_joins_on_trace_id_and_reads_top_level_agent_id(
+    monkeypatch,
+):
+    """F-A pinning test: the evolver trigger previously joined
+    ``te.id::text = js.trace_id`` and read
+    ``te.attributes->>'agent_id'`` — but ``telemetry_events`` has no
+    ``id`` column (PK is ``event_id``, migration 009) and ``agent_id``
+    is a top-level column never written into ``attributes``. Both
+    halves meant the SQL could never return an attributed row, so the
+    evolver always returned 0 degradations in production while tests
+    (which baked fake rows) stayed green.
+
+    This test asserts the *real* SQL sent to Postgres: capture it from
+    the fetch call and pin the corrected join + column read.
+    """
+    from eden.agents.evolution import components
+
+    captured: dict[str, Any] = {}
+
+    class _CapturingPg:
+        async def fetch(self, sql: str, *args):
+            captured["sql"] = sql
+            # Shape the return like the corrected query would: a row
+            # with top-level agent_id + the dropped counter.
+            return [
+                {
+                    **_judge_row(score=0.3, trace_id="tr_0", agent_id="planner"),
+                    "dropped_null_agent_id": 0,
+                }
+            ]
+
+    pg = _CapturingPg()
+    monkeypatch.setattr(components, "get_postgres_client", lambda: pg)
+    monkeypatch.setattr(components, "get_prompt_versions_client", lambda: AsyncMock())
+
+    e = JudgeScorePromptEvolver(llm_client=MagicMock())
+    rows = await e._fetch_recent_judge_rows()
+
+    sql = captured["sql"]
+    assert sql is not None
+    # 1. Join on the exact event when the judge recorded one
+    #    (``te.event_id = js.source_event_id`` — the judge runner writes
+    #    the source event id), falling back to the shared trace_id
+    #    namespace for legacy rows. Never the non-existent ``te.id``.
+    assert "te.event_id = js.source_event_id" in sql
+    assert "te.trace_id = js.trace_id" in sql
+    assert "te.id" not in sql
+    # 2. Read the top-level agent_id column, not a JSONB attribute.
+    assert "te.agent_id" in sql
+    assert "attributes->>'agent_id'" not in sql
+    # 3. The row that comes back is usable end-to-end.
+    assert rows and rows[0]["agent_id"] == "planner"
+
+
+@pytest.mark.asyncio
+async def test_run_flow_works_with_schema_shaped_rows(monkeypatch):
+    """F-A end-to-end: rows shaped exactly like the corrected query's
+    SELECT (top-level ``agent_id``) flow through ``run()`` to a real
+    variant. This fails if the SQL shape ever drifts from the schema
+    again (before the fix, production rows were empty because the SQL
+    was wrong — the schema-shaped fixture now exercises the real path).
+    """
+    rows = [
+        {
+            **_judge_row(score=0.2, trace_id=f"tr_{i}"),
+            "dropped_null_agent_id": 0,
+        }
+        for i in range(25)
+    ]
+    pg = _FakePostgres(rows=rows)
+    pv = _FakePromptVersions(active_prompts={
+        "planner": {"version": 2, "system_prompt": "You are a planner."}
+    })
+    llm = _patch_dependencies(monkeypatch, pv, pg, llm_content="REVISED v3")
+
+    e = JudgeScorePromptEvolver(llm_client=llm)
+    result = await e.run()
+
+    assert result["degradations_detected"] == 1
+    assert result["variants_generated"] == 1
+    assert pv.inserts[0]["version"] == 3

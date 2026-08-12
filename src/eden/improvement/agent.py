@@ -261,13 +261,30 @@ class ImprovementAgent:
                     "scoped_issue_id": issue_id,
                 }
 
-            gen = await self._rank_and_generate_issue_patches(
-                org_id,
-                watermark,
-                agent_id,
-                run_id=run_id,
-                max_generates=min(max_generates, max_code),
-            )
+            # F-H: an org without a linked repo can never approve a
+            # code_patch plan, so the code-patch lane must not even churn
+            # cheap-gate collection + ranking. Skip it outright and stamp
+            # ``repo_not_connected`` on the run so the cockpit shows
+            # "Connect GitHub" instead of a plan that never appears.
+            # Advisory / config / nudge / prompt lanes are repo-independent
+            # and still run.
+            code_lane_enabled = await _sweep_code_lane_enabled(org_id, agent_id)
+            if code_lane_enabled:
+                gen = await self._rank_and_generate_issue_patches(
+                    org_id,
+                    watermark,
+                    agent_id,
+                    run_id=run_id,
+                    max_generates=min(max_generates, max_code),
+                )
+            else:
+                gen = {
+                    "created": 0,
+                    "skipped": 0,
+                    "cost_usd": 0.0,
+                    "plan_ids": [],
+                    "repo_not_connected": True,
+                }
             issue_created_n = int(gen.get("created") or 0)
             issue_skipped_n = int(gen.get("skipped") or 0)
             llm_cost += float(gen.get("cost_usd") or 0)
@@ -279,6 +296,8 @@ class ImprovementAgent:
             }
             if "ev_capture" in gen and "sweep.ev_capture" not in ev_meta:
                 ev_meta["sweep.ev_capture"] = gen["ev_capture"]
+            if gen.get("repo_not_connected"):
+                ev_meta["sweep.repo_not_connected"] = True
 
             # M14 (§8.4): independent signal classes (traces / metrics /
             # repo / cost / prompt-nudge) via asyncio.gather with a
@@ -376,6 +395,7 @@ class ImprovementAgent:
                 "plan_ids": all_ids,
                 "code_patch_created": issue_created_n,
                 "advisory_created": len(created),
+                "repo_not_connected": not code_lane_enabled,
             }
         except Exception as exc:
             logger.warning("improvement.sweep failed org=%s: %s", org_id, exc)
@@ -1275,6 +1295,22 @@ class ImprovementAgent:
         except Exception as exc:
             logger.debug("sweep nudges: %s", exc)
         return out
+
+
+async def _sweep_code_lane_enabled(org_id: str, agent_id: str | None) -> bool:
+    """F-H: can this org/agent ever approve a code_patch plan?
+
+    True when a repo_connections row resolves for the org (per-agent
+    when scoped). The sweep still runs advisory/nudge/prompt lanes
+    without one — only the code-patch lane is gated.
+    """
+    try:
+        from eden.providers.factory import resolve_active_repo_id
+
+        return bool(await resolve_active_repo_id(org_id, agent_id=agent_id))
+    except Exception as exc:
+        logger.debug("sweep code lane gate failed: %s", exc)
+        return False
 
 
 async def _emit_sweep_completed(org_id: str, run_id: str, count: int) -> None:

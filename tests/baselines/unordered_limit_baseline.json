@@ -23,22 +23,22 @@
     },
     {
       "file": "src/eden/api/deps.py",
-      "line": 817,
+      "line": 833,
       "snippet": "SELECT id FROM users WHERE id::text = $1 OR clerk_id::text = $1 LIMIT 1"
     },
     {
       "file": "src/eden/api/deps.py",
-      "line": 863,
+      "line": 879,
       "snippet": "SELECT id FROM organizations"
     },
     {
       "file": "src/eden/api/deps.py",
-      "line": 972,
+      "line": 988,
       "snippet": "SELECT id FROM organizations"
     },
     {
       "file": "src/eden/api/deps.py",
-      "line": 1157,
+      "line": 1173,
       "snippet": "SELECT id FROM organizations"
     },
     {
@@ -78,7 +78,7 @@
     },
     {
       "file": "src/eden/api/routes/orgs.py",
-      "line": 787,
+      "line": 838,
       "snippet": "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users"
     },
     {
@@ -103,7 +103,7 @@
     },
     {
       "file": "src/eden/debugger/checkpoints.py",
-      "line": 271,
+      "line": 277,
       "snippet": "SELECT payload"
     },
     {

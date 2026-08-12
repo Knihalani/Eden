@@ -19,6 +19,7 @@ import { PlanEvidencePanel } from "./plan-evidence-panel";
 import { PlanStatusHistory } from "./plan-status-history";
 import { PlanEventLog } from "./plan-event-log";
 import { PlanImpactPreview } from "./plan-impact-preview";
+import { PlanPostMergeWatch } from "./post-merge-watch";
 
 export function PlanDetailEnrichment({
   orgId,
@@ -45,6 +46,7 @@ export function PlanDetailEnrichment({
       <PlanEvidencePanel plan={plan} raw={raw} />
       <PlanStatusHistory plan={plan} raw={raw} />
       <PlanEventLog orgId={orgId} planId={plan.id} isDraft={isDraft} />
+      <PlanPostMergeWatch orgId={orgId} planId={plan.id} isDraft={isDraft} />
       <PlanImpactPreview
         orgId={orgId}
         plan={plan}

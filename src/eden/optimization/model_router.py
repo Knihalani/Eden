@@ -136,7 +136,7 @@ class TaskClassifier:
         if _chat_tiers_share_model():
             heuristic_tier = self._heuristic_classify(task) or ModelTier.T2
             self._heuristic_hits += 1
-            return ClassificationResult(
+            result = ClassificationResult(
                 tier=heuristic_tier,
                 complexity=0.3 if heuristic_tier == ModelTier.T1 else 0.6,
                 novelty=0.2,
@@ -145,12 +145,14 @@ class TaskClassifier:
                 confidence=0.9,
                 heuristic_used=True,
             )
+            await self._record_routing(task, result)
+            return result
 
         # ── Fast heuristic path (no LLM call) ─────────────────────────────
         fast_tier = self._heuristic_classify(task)
         if fast_tier is not None:
             self._heuristic_hits += 1
-            return ClassificationResult(
+            result = ClassificationResult(
                 tier=fast_tier,
                 complexity=0.3 if fast_tier == ModelTier.T1 else 0.6,
                 novelty=0.2,
@@ -159,9 +161,38 @@ class TaskClassifier:
                 confidence=0.85,
                 heuristic_used=True,
             )
+            await self._record_routing(task, result)
+            return result
 
         # ── LLM-based classification for ambiguous cases ──────────────────
-        return await self._llm_classify(task)
+        result = await self._llm_classify(task)
+        await self._record_routing(task, result)
+        return result
+
+    async def _record_routing(
+        self, task: PipelineTask, result: ClassificationResult
+    ) -> None:
+        """Wave 3 (3.4): persist the routing decision for F41 evidence.
+
+        Records only when the task carries an org_id (tenant attribution)
+        and routing actually matters (tiers diverge) — when T1=T2=T3 share
+        one model there is no routing decision to evaluate. Best-effort:
+        a failed write never fails the classification.
+        """
+        if not task.org_id or _chat_tiers_share_model():
+            return
+        try:
+            from eden.promotion.outcome_records import record_routing_decision
+
+            await record_routing_decision(
+                task.org_id,
+                task.agent,
+                slot=task.slot,
+                tier=result.tier.value,
+                heuristic_used=result.heuristic_used,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _heuristic_classify(self, task: PipelineTask) -> ModelTier | None:
         """Fast heuristic classification without any LLM call."""

@@ -72,6 +72,15 @@ const T2 = makeTrace("t2", "Run two", "2026-07-27T00:01:00Z");
 // (same array reference) while only the URL changes.
 let mockTraces: TraceFixture[] = [T1];
 
+// Wave 14 — the refresh/freshness chrome reads `dataUpdatedAt` and
+// `isFetching` from the query result; a mutable epoch ms value lets the
+// tests drive the "updated Xs ago" label without faking timers.
+let mockUpdatedAt = 0;
+const refetchSpies: { traces: ReturnType<typeof vi.fn>; sessions: ReturnType<typeof vi.fn> } = {
+  traces: vi.fn(),
+  sessions: vi.fn(),
+};
+
 vi.mock("@/hooks/use-api-query", () => ({
   useOrgQuery: (key: readonly unknown[]) => {
     const resource = key[1];
@@ -81,7 +90,9 @@ vi.mock("@/hooks/use-api-query", () => ({
         isLoading: false,
         isError: false,
         error: null,
-        refetch: vi.fn(),
+        isFetching: false,
+        dataUpdatedAt: mockUpdatedAt,
+        refetch: refetchSpies.traces,
       };
     }
     if (resource === "sessions" || resource === "agents") {
@@ -90,7 +101,9 @@ vi.mock("@/hooks/use-api-query", () => ({
         isLoading: false,
         isError: false,
         error: null,
-        refetch: vi.fn(),
+        isFetching: false,
+        dataUpdatedAt: mockUpdatedAt,
+        refetch: refetchSpies.sessions,
       };
     }
     // traceDetail (and anything else) — no async detail payload needed
@@ -100,6 +113,8 @@ vi.mock("@/hooks/use-api-query", () => ({
       isLoading: false,
       isError: false,
       error: null,
+      isFetching: false,
+      dataUpdatedAt: 0,
       refetch: vi.fn(),
     };
   },
@@ -136,6 +151,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mockParams = { id: "t1" };
   mockTraces = [T1];
+  mockUpdatedAt = 0;
 });
 
 function activeAttr(name: RegExp): string | null {
@@ -258,5 +274,75 @@ describe("Wave 10 action-bar mounts", () => {
     expect(
       (screen.getByLabelText("Other run id") as HTMLInputElement).value,
     ).toBe("t1");
+  });
+});
+
+describe("Wave 14 refresh + freshness chrome", () => {
+  it("renders a refresh button that refetches both feeds", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    render(<TracesClient />);
+
+    const refresh = screen.getByRole("button", { name: "Refresh traces" });
+    expect(refresh).toBeTruthy();
+    fireEvent.click(refresh);
+    expect(refetchSpies.traces).toHaveBeenCalled();
+    expect(refetchSpies.sessions).toHaveBeenCalled();
+  });
+
+  it("shows an 'updated Xs ago' freshness label once data has loaded", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    // 3 minutes in the past → "3m ago".
+    mockUpdatedAt = Date.now() - 3 * 60 * 1000;
+    render(<TracesClient />);
+
+    expect(screen.getByText(/updated 3m ago/)).toBeTruthy();
+  });
+
+  it("omits the freshness label before the first fetch", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    mockUpdatedAt = 0;
+    render(<TracesClient />);
+    expect(screen.queryByText(/updated/)).toBeNull();
+  });
+});
+
+describe("Wave 14 keyboard shortcuts", () => {
+  it("opens the shortcut help overlay on `?`", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    render(<TracesClient />);
+
+    fireEvent.keyDown(window, { key: "?" });
+    expect(
+      screen.getByRole("dialog", { name: "Keyboard shortcuts" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Focus search")).toBeTruthy();
+  });
+
+  it("opens the shortcut help overlay from the header button", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    render(<TracesClient />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keyboard shortcuts" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Keyboard shortcuts" }),
+    ).toBeTruthy();
+  });
+
+  it("focuses the feed search field on `/`", () => {
+    mockParams = { id: "t1" };
+    mockTraces = [T1];
+    render(<TracesClient />);
+
+    fireEvent.keyDown(window, { key: "/" });
+    // The feed search input is the one labeled "Filter traces".
+    const input = screen.getByLabelText("Filter traces");
+    expect(document.activeElement).toBe(input);
   });
 });

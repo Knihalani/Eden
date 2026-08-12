@@ -872,6 +872,34 @@ def record_guardrail_bypass_if_detected(
         return False
     key = f"{source}:{org_id or 'unknown'}"
     _guardrail_bypass_counts[key] = _guardrail_bypass_counts.get(key, 0) + 1
+    # Wave 3 (3.4): a bypass means the guardrail that should have fired
+    # did NOT run — a real false-negative outcome for the evidence gate.
+    # Best-effort async write; skipped when no loop is running (the sync
+    # counter above still records the event either way).
+    try:
+        import asyncio
+
+        loop = asyncio.get_running_loop()
+        if loop and org_id:
+
+            async def _record() -> None:
+                try:
+                    from eden.promotion.outcome_records import (
+                        record_guardrail_outcome,
+                    )
+
+                    await record_guardrail_outcome(
+                        org_id,
+                        "trajectory_guardrail",
+                        outcome_success=False,
+                        metric_delta={"source": source, "event": "bypass_detected"},
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
+            loop.create_task(_record())
+    except RuntimeError:
+        pass
     logger.critical(
         "guardrails: evaluate_and_act bypass detected (source=%s org=%s) — "
         "response tagged feature=trajectory_guardrail. The real "

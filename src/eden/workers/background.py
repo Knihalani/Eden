@@ -108,6 +108,10 @@ def _leader_loops_from_worker_main() -> list[tuple[str, Any]]:
         ("eql_alert_watchdog", "_leader_eql_alert_watchdog"),
         ("artifact_demotion", "_leader_artifact_demotion"),
         ("maintenance", "_leader_maintenance"),
+        # Wave 1 (F-I): N23 recurring improvement sweep — previously
+        # unhosted; adopted into the fleet bundle with the other
+        # leader-gated loops (gated inside by improvement_schedule_enabled).
+        ("improvement_sweep", "_leader_improvement_sweep"),
         ("self_obs_probes", "_leader_self_obs_probes"),
     ]
     out: list[tuple[str, Any]] = []

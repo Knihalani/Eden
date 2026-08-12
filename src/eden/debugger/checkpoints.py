@@ -202,13 +202,19 @@ class CheckpointStore:
         # Audit 2026-07-02 S-11 — no more "org-stub". tenant_id is
         # always either the real org_id or the explicit "default".
         tenant_id = org_id or "default"
+        # F-B (Wave 1, 2026-08-11): the INSERT used to target an ``id``
+        # column — ``telemetry_events`` has no ``id`` column (PK is
+        # ``event_id``, migration 009), so the row was rejected by
+        # Postgres and every checkpoint silently failed to persist. Use
+        # ``event_id`` and stamp ``source_format='debugger_checkpoint'``
+        # (the docstring above always promised that provenance tag).
         await self._pg.execute(
             """
             INSERT INTO telemetry_events (
-                id, tenant_id, project_id, trace_id, realm,
-                event_type, timestamp, span_id, payload
+                event_id, tenant_id, project_id, trace_id, realm,
+                event_type, timestamp, span_id, source_format, payload
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, NOW(), $7, $8::jsonb
+                $1, $2, $3, $4, $5, $6, NOW(), $7, 'debugger_checkpoint', $8::jsonb
             )
             """,
             str(uuid.uuid4()),

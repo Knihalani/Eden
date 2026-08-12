@@ -537,6 +537,15 @@ async def mark_merged(
         except Exception:
             pass
         await emit_event(org_id, plan_id, "merged")
+        # Wave 4 (4.1): open the post-merge watch (1h/24h/7d) so the
+        # PostMergeMonitor comparator can catch production regressions.
+        # Best-effort — a watch failure never breaks the merge.
+        try:
+            from eden.improvement.post_merge_monitor import PostMergeMonitor
+
+            await PostMergeMonitor().schedule_for_plan(org_id, plan)
+        except Exception:
+            pass
     return plan
 
 

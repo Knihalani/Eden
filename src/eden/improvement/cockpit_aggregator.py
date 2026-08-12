@@ -1016,9 +1016,3 @@ def _plan_is_stale(plan: dict[str, Any], stale_days: int) -> bool:
         created = created.replace(tzinfo=UTC)
     return datetime.now(UTC) - created > timedelta(days=max(1, int(stale_days)))
 
-
-def is_fix_now_item(item: ImprovementItem | dict[str, Any]) -> bool:
-    """True when an item belongs on the Fix-now Slack notify path."""
-    if isinstance(item, ImprovementItem):
-        return item.column == COLUMN_FIX_NOW
-    return str(item.get("column") or "") == COLUMN_FIX_NOW
