@@ -1,5 +1,6 @@
 ---
-title: What's new
+title: Changelog
+description: Eden changelog: SDK, docs, and portal release notes—auto-instrumentation updates, Diátaxis docs structure, and observability platform changes.
 sidebar_label: What's new
 sidebar_position: 99
 ---
@@ -26,7 +27,7 @@ sidebar_position: 99
 - [Quickstart](/quickstart) — **Fill in** creates an API key into a runnable snippet (when signed in)
 - SDKs default to `https://api.edenobservability.com` (no `EDEN_BASE_URL` required)
 - Auto-instrumentation matrix: Pydantic AI, Bedrock, Gemini, Mastra, HTTP capture tiers
-- [API endpoint](/how-to/deploy) — connect your app; DNS for `api.edenobservability.com`
+- [Deploy — connect your app](/how-to/deploy) — point SDKs at `api.edenobservability.com`
 ### Portal
 
 - Settings hub for API keys, autonomy, and workspace (Eden MCP server soft-retired for free beta)

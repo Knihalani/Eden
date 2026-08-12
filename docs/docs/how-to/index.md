@@ -86,7 +86,7 @@ If you want to **learn** something, see
 <div class="eden-grid eden-grid--compact">
 
   <div class="eden-card eden-card--small">
-    <h4>API endpoint</h4>
+    <h4>Deploy — connect your app</h4>
     <p>SDKs default to api.edenobservability.com — keys, DNS, and connect tips.</p>
     <a href="/how-to/deploy">Read →</a>
   </div>
