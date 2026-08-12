@@ -161,7 +161,7 @@ export function softwareApplicationJsonLd() {
       price: "0",
       priceCurrency: "USD",
       availability: "https://schema.org/InStock",
-      url: absoluteUrl("/sign-up"),
+      url: absoluteUrl("/pricing"),
     },
   };
 }
@@ -193,7 +193,7 @@ export function pricingProductJsonLd() {
       price: "0",
       priceCurrency: "USD",
       availability: "https://schema.org/InStock",
-      url: absoluteUrl("/sign-up"),
+      url: absoluteUrl("/pricing"),
     },
   };
 }
