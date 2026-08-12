@@ -194,6 +194,12 @@ const config = {
             '**/eden-agent-cli-roadmap.md',
             '**/eden-agent-cli-spec.md',
             '**/aider-fork-strategy.md',
+            // Legacy archive note for the excluded design docs above.
+            // Docusaurus treats README.md as a category index, so keeping
+            // it beside reference/index.md (slug: /reference) registers a
+            // second permalink at /reference/ and duplicates both in the
+            // sitemap. Other Diátaxis folders only ship index.md.
+            'reference/README.md',
             'architecture/**',
           ],
         },
