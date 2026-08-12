@@ -40,9 +40,10 @@ depends_on: str | Sequence[str] | None = None
 #: table has zero non-migration code references. ``org_approval_policies``
 #: is intentionally absent — kept as the reserved N22 approval surface.
 _ORPHAN_TABLES: tuple[str, ...] = (
+    # Drop dependents before parents (no CASCADE — fail loud on surprise FKs).
     # org/SSO (replaced by org_sso_settings / sso_configurations / org_scim_config)
-    "org_sso_providers",
     "org_sso_sessions",
+    "org_sso_providers",
     "org_regions",
     # gateway — circuit breaker was never wired to this table
     "circuit_breaker_state",
@@ -51,23 +52,23 @@ _ORPHAN_TABLES: tuple[str, ...] = (
     "pr_dedupe_index",
     # retrieval tuner — relevance scores never written
     "retrieval_relevance_scores",
-    # env cards — full orphan family
-    "env_cards",
-    "env_card_versions",
-    "env_card_reviews",
+    # env cards — children before env_cards
     "env_card_ratings",
+    "env_card_reviews",
     "env_card_fork_lineage",
+    "env_card_versions",
+    "env_cards",
     # builder graphs
     "builder_graphs",
-    # insights chat (the shipped chat uses ai_conversations / ai_messages)
-    "ai_insights_chat_sessions",
+    # insights chat (shipped chat uses ai_conversations / ai_messages)
     "ai_insights_chat_messages",
+    "ai_insights_chat_sessions",
     # interview sessions
     "interview_sessions",
-    # specs (spec_templates / spec_approvals / spec_comments)
-    "spec_templates",
-    "spec_approvals",
+    # specs — comments/approvals before templates
     "spec_comments",
+    "spec_approvals",
+    "spec_templates",
 )
 
 
