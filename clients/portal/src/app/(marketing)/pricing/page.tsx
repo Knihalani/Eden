@@ -67,6 +67,29 @@ const TIERS = [
   },
 ] as const;
 
+const PRICING_FAQ = [
+  {
+    q: "Is Eden really free during public beta?",
+    a: `Yes — no credit card required. Free includes the full platform with a monthly credit cap (${FREE_TIER_CAP_SHORT}). Soft and hard limits enforce that cap; we do not invent unlimited free usage.`,
+  },
+  {
+    q: "What is included on Free?",
+    a: "Trace ingest and sessions, issues and detectors, evals and live A/B, organizations with up to three seats, and API keys. OpenAI-compatible gateway and SDK ingest are part of the same Free surface.",
+  },
+  {
+    q: "Can I buy Team or Enterprise today?",
+    a: "Not yet. Team and Enterprise are listed for roadmap visibility — higher limits, more seats, SSO/SCIM, audit and retention controls, and priority support. Email sales if those requirements matter for your timeline.",
+  },
+  {
+    q: "What happens when I hit the credit cap?",
+    a: "Free-tier soft and hard credit limits apply per month. Plan for the published cap rather than assuming burst unlimited ingest. Contact us if you are evaluating a larger production footprint.",
+  },
+  {
+    q: "Do you publish competitor pricing?",
+    a: "No. We describe Eden's Free-during-beta offer and roadmap tiers only. Fair product comparisons live on Why Eden and the /vs pages without invented competitor price sheets.",
+  },
+] as const;
+
 export default function PricingPage() {
   return (
     <main>
@@ -150,6 +173,67 @@ export default function PricingPage() {
             {SALES_EMAIL}
           </a>
         </p>
+
+        <section className="mt-16 max-w-3xl space-y-5">
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+            Included on Free
+          </p>
+          <h2 className="text-[1.35rem] font-semibold tracking-[-0.02em] text-[var(--text)] sm:text-[1.5rem]">
+            What you get during public beta
+          </h2>
+          <p className="text-[1rem] leading-relaxed text-[var(--text-secondary)]">
+            The Free tier is the full platform while we are in public beta —
+            not a feature-locked demo. Trace ingest and sessions, detectors and
+            issues, evals and live A/B, orgs with up to three seats, and API
+            keys are included. Usage is bounded by the monthly credit cap (
+            {FREE_TIER_CAP_SHORT}). Soft and hard limits enforce that cap in
+            product; we do not invent unlimited free usage for marketing.
+          </p>
+          <ul className="grid grid-cols-1 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-2">
+            {[
+              "OpenAI-compatible gateway + SDK ingest",
+              "Sessions, spans, detectors, issues",
+              "Evals, prompts, datasets, live A/B",
+              "Org membership (up to 3 seats) + API keys",
+              "PII filtering & retention controls in Settings",
+              "Human-gated Improve / fix plans",
+            ].map((item) => (
+              <li
+                key={item}
+                className="bg-[var(--bg)] px-5 py-4 text-[0.875rem] text-[var(--text-muted)]"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="mt-16 max-w-3xl">
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+            FAQ
+          </p>
+          <h2 className="mt-3 text-[1.35rem] font-semibold tracking-[-0.02em] text-[var(--text)] sm:text-[1.5rem]">
+            Pricing questions
+          </h2>
+          <div className="mt-8 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            {PRICING_FAQ.map((item) => (
+              <details key={item.q} className="eden-faq-item">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 py-4 text-[0.9375rem] font-medium tracking-[-0.01em] text-[var(--text)] transition-colors duration-150 hover:text-[var(--accent)]">
+                  {item.q}
+                  <span
+                    className="eden-faq-chevron shrink-0 font-mono text-[0.9375rem] text-[var(--text-faint)]"
+                    aria-hidden
+                  >
+                    +
+                  </span>
+                </summary>
+                <p className="max-w-2xl pb-5 text-[0.9375rem] leading-relaxed text-[var(--text-secondary)]">
+                  {item.a}
+                </p>
+              </details>
+            ))}
+          </div>
+        </section>
       </MarketingShell>
     </main>
   );

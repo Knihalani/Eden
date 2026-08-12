@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MarketingKicker, MarketingRail } from "@/components/marketing/marketing-primitives";
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
 import { InstallSnippetCopy } from "@/components/marketing/install-snippet-copy";
@@ -41,6 +42,43 @@ export function MarketingHomeSections() {
         </MarketingRail>
       </section>
 
+      {/* Problem → solution — why capture-only is not enough. */}
+      <section className="border-b border-[var(--line)] py-16 sm:py-24">
+        <MarketingRail className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
+          <div className="lg:col-span-5">
+            <MarketingKicker>Problem</MarketingKicker>
+            <h2 className="mt-3 max-w-md text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
+              Traces without a loop still leave you grepping
+            </h2>
+            <p className="mt-4 max-w-md text-[1rem] leading-relaxed text-[var(--text-secondary)]">
+              You instrumented the SDK. You have spans and spend. After a deploy
+              drifts, you still stitch dashboards to alerts to tickets to PRs —
+              detection, mitigation, and fix review live outside the product.
+            </p>
+          </div>
+          <div className="lg:col-span-7">
+            <MarketingKicker>Solution</MarketingKicker>
+            <h2 className="mt-3 max-w-xl text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
+              Observe, evaluate, improve in one surface
+            </h2>
+            <p className="mt-4 max-w-xl text-[1rem] leading-relaxed text-[var(--text-secondary)]">
+              Eden starts at the same ingest line — gateway, SDKs, or OpenTelemetry —
+              then closes the loop. Detectors open Issues. Evals and live A/B score
+              changes. The Improve queue proposes evidence-linked plans you review
+              before anything ships. Capture stays; the second half is the product.
+            </p>
+            <p className="mt-4">
+              <Link
+                href="/why-eden"
+                className="type-ui text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+              >
+                Why Eden vs traces-only →
+              </Link>
+            </p>
+          </div>
+        </MarketingRail>
+      </section>
+
       <section className="relative overflow-hidden border-b border-[var(--line)] py-16 sm:py-24">
         <div
           className="pointer-events-none absolute inset-0 eden-product-plane opacity-[0.12]"
@@ -53,8 +91,9 @@ export function MarketingHomeSections() {
               Traces that survive production
             </h2>
             <p className="mt-4 max-w-md text-[1rem] leading-relaxed text-[var(--text-secondary)]">
-              Sessions, spans, detectors, and issues — grouped so you can triage
-              failures without grepping logs.
+              Sessions group runs by user, agent, or deploy. Spans, detectors, and
+              issues stay attached to that context so you triage failures without
+              grepping logs or rebuilding alerts for every prompt version.
             </p>
           </div>
           <div className="lg:col-span-7">
@@ -144,7 +183,9 @@ export function MarketingHomeSections() {
             </h2>
             <p className="mt-4 max-w-md text-[1rem] leading-relaxed text-[var(--text-secondary)]">
               Version prompts, pin environments, and compare arms on the metrics
-              that matter before you ship.
+              that matter before you ship. Eval results sit next to the same
+              sessions and issues you already use for incident triage — not a
+              stranded scoring tool with a different identity model.
             </p>
           </div>
         </MarketingRail>
@@ -156,32 +197,34 @@ export function MarketingHomeSections() {
           aria-hidden
         />
         <MarketingRail className="relative">
-          <MarketingKicker>Improve</MarketingKicker>
+          <MarketingKicker>How it works</MarketingKicker>
           <h2 className="mt-3 max-w-2xl text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
             Close the loop from real failures
           </h2>
           <p className="mt-4 max-w-2xl text-[1rem] leading-relaxed text-[var(--text-secondary)]">
-            Plans from traces you already have. Approve, reject, or snooze —
-            then watch the next deploy with the same instruments.
+            Instrument once. Detectors open Issues from production traffic. When
+            it is safe, runtime self-heal can take reversible, budget-capped
+            actions (opt out in Settings). Fix plans cite failing spans and eval
+            deltas — you approve, reject, or snooze. Code patches stay human-gated.
           </p>
           <ol className="mt-10 grid grid-cols-1 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
             {[
               {
                 n: "01",
                 t: "Detect",
-                d: "Issue opens from a detector or manual triage.",
+                d: "Issue opens from a detector or manual triage — first/last seen, deduped fingerprint.",
                 accent: false,
               },
               {
                 n: "02",
                 t: "Propose",
-                d: "Plan cites the failing spans and eval delta.",
+                d: "Plan cites the failing spans and eval delta. Heal when reversible and in budget.",
                 accent: true,
               },
               {
                 n: "03",
                 t: "Ship",
-                d: "Human review — then re-observe the next run.",
+                d: "Human review before merge — then re-observe the next deploy with the same instruments.",
                 accent: false,
               },
             ].map((step) => (

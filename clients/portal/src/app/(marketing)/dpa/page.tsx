@@ -8,6 +8,7 @@ export const metadata = marketingMetadata({
   title: "DPA · Eden",
   description:
     "Eden Data Processing Agreement for enterprise customers — subprocessors, security measures, and residency.",
+  robots: { index: false, follow: true },
 });
 
 export default function Page() {

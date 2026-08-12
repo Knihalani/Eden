@@ -8,6 +8,7 @@ export const metadata = marketingMetadata({
   title: "Privacy · Eden",
   description:
     "How Eden collects, uses, and protects your data. Eden does not sell personal information.",
+  robots: { index: false, follow: true },
 });
 
 export default function Page() {

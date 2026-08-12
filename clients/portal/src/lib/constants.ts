@@ -15,6 +15,12 @@ export const PRODUCT_COPYRIGHT_YEAR = 2026;
 /** Support / contact — marketing, auth, error, and billing surfaces. */
 export const SUPPORT_EMAIL = "kaiav@edenobservability.com";
 
+/**
+ * Vulnerability disclosure inbox — must stay in sync with
+ * `public/.well-known/security.txt` and the marketing `/security` page.
+ */
+export const SECURITY_EMAIL = "security@edenobservability.com";
+
 /** Canonical OpenAI-compatible gateway base URL (production). */
 export const GATEWAY_URL = "https://api.edenobservability.com/gateway/v1";
 

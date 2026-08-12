@@ -7,6 +7,7 @@ export const metadata = marketingMetadata({
   path: "/terms",
   title: "Terms · Eden",
   description: "Terms of service for Eden accounts, the API, and edenobservability.com.",
+  robots: { index: false, follow: true },
 });
 
 export default function Page() {

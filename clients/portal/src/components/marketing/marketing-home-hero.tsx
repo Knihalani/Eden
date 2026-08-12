@@ -51,8 +51,9 @@ export function MarketingHomeHero() {
             Fix what fails.
           </h1>
           <p className="mt-5 max-w-md text-[1.0625rem] leading-relaxed text-[var(--text-secondary)]">
-            Drop-in observability for AI agents — traces, evals, and reviewable
-            improvements in one loop.
+            Drop-in observability for AI agents — capture every LLM and tool call,
+            detect failures, evaluate changes, and ship reviewable fixes in one
+            closed loop. Free during public beta.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <MarketingAuthCtas size="md" />
