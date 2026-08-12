@@ -2,12 +2,38 @@ import { describe, expect, it } from "vitest";
 import { SITE_URL } from "@/lib/constants";
 import {
   aboutPageJsonLd,
+  ORGANIZATION_SAME_AS,
+  organizationJsonLd,
   pricingProductJsonLd,
   softwareApplicationJsonLd,
   WHY_EDEN_COMPARISON,
   whyEdenComparisonItemListJsonLd,
   whyEdenWebPageJsonLd,
 } from "@/lib/seo";
+
+describe("Organization / entity sameAs graph", () => {
+  it("lists GitHub, PyPI, and npm — and invents no social profiles", () => {
+    expect([...ORGANIZATION_SAME_AS]).toEqual([
+      "https://github.com/KaiavN/Eden",
+      "https://pypi.org/project/eden-sdk/",
+      "https://www.npmjs.com/package/@eden-ai/sdk",
+    ]);
+    for (const url of ORGANIZATION_SAME_AS) {
+      expect(url).toMatch(/^https:\/\//);
+      expect(url.toLowerCase()).not.toMatch(
+        /twitter\.com|x\.com|linkedin\.com|discord\.(gg|com)/,
+      );
+    }
+  });
+
+  it("emits the same sameAs on Organization and SoftwareApplication", () => {
+    const org = organizationJsonLd();
+    const app = softwareApplicationJsonLd();
+    expect(org.sameAs).toEqual([...ORGANIZATION_SAME_AS]);
+    expect(app.sameAs).toEqual([...ORGANIZATION_SAME_AS]);
+    expect(app.codeRepository).toBe("https://github.com/KaiavN/Eden");
+  });
+});
 
 describe("SoftwareApplication / Offer JSON-LD", () => {
   it("points SoftwareApplication.url at the homepage, not /sign-up", () => {
