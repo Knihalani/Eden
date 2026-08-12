@@ -1,6 +1,6 @@
 ---
 title: Changelog
-description: Eden changelog: SDK, docs, and portal release notes—auto-instrumentation updates, Diátaxis docs structure, and observability platform changes.
+description: "Eden changelog: SDK, docs, and portal release notes—auto-instrumentation updates, Diátaxis docs structure, and observability platform changes."
 sidebar_label: What's new
 sidebar_position: 99
 ---

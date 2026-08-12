@@ -4,26 +4,36 @@
 
 Primary product site: https://edenobservability.com/ (see also https://edenobservability.com/llms.txt).
 
+## Raw markdown
+
+Every HTML doc page is also available as raw markdown: append `.md` to the
+permalink (Langfuse-style). Frontmatter is preserved. Examples:
+
+- https://docs.edenobservability.com/quickstart.md
+- https://docs.edenobservability.com/how-to/deploy.md
+- https://docs.edenobservability.com/how-to.md (section index; HTML is `/how-to`)
+- https://docs.edenobservability.com/index.md (docs home; HTML is `/`)
+
 ## Start here
 
-- [Docs home](https://docs.edenobservability.com/): Documentation overview
-- [Quickstart](https://docs.edenobservability.com/quickstart): Signup to first trace in minutes
-- [Deploy](https://docs.edenobservability.com/how-to/deploy): Connect your app to api.edenobservability.com
-- [Auto-instrument](https://docs.edenobservability.com/how-to/auto-instrument): Instrument an existing Python or TypeScript repo
-- [Security model](https://docs.edenobservability.com/explanation/security-model): Tenant isolation, PII redaction, audit defaults
+- [Docs home](https://docs.edenobservability.com/): Documentation overview ([markdown](https://docs.edenobservability.com/index.md))
+- [Quickstart](https://docs.edenobservability.com/quickstart): Signup to first trace in minutes ([markdown](https://docs.edenobservability.com/quickstart.md))
+- [Deploy](https://docs.edenobservability.com/how-to/deploy): Connect your app to api.edenobservability.com ([markdown](https://docs.edenobservability.com/how-to/deploy.md))
+- [Auto-instrument](https://docs.edenobservability.com/how-to/auto-instrument): Instrument an existing Python or TypeScript repo ([markdown](https://docs.edenobservability.com/how-to/auto-instrument.md))
+- [Security model](https://docs.edenobservability.com/explanation/security-model): Tenant isolation, PII redaction, audit defaults ([markdown](https://docs.edenobservability.com/explanation/security-model.md))
 
 ## How-to
 
-- [How-to index](https://docs.edenobservability.com/how-to/): Task-oriented guides
-- [Auth](https://docs.edenobservability.com/how-to/auth): Authentication
-- [API keys](https://docs.edenobservability.com/how-to/api-keys): Create and manage API keys
-- [Connect any agent](https://docs.edenobservability.com/how-to/connect-any-agent): Integration patterns for agents
+- [How-to index](https://docs.edenobservability.com/how-to/): Task-oriented guides ([markdown](https://docs.edenobservability.com/how-to.md))
+- [Auth](https://docs.edenobservability.com/how-to/auth): Authentication ([markdown](https://docs.edenobservability.com/how-to/auth.md))
+- [API keys](https://docs.edenobservability.com/how-to/api-keys): Create and manage API keys ([markdown](https://docs.edenobservability.com/how-to/api-keys.md))
+- [Connect any agent](https://docs.edenobservability.com/how-to/connect-any-agent): Integration patterns for agents ([markdown](https://docs.edenobservability.com/how-to/connect-any-agent.md))
 
 ## Reference & explanation
 
-- [Reference index](https://docs.edenobservability.com/reference/): SDKs, API, and configuration
-- [Explanation index](https://docs.edenobservability.com/explanation/): Architecture and design deep dives
-- [Tutorials](https://docs.edenobservability.com/tutorials/): Hands-on learning paths
+- [Reference index](https://docs.edenobservability.com/reference/): SDKs, API, and configuration ([markdown](https://docs.edenobservability.com/reference.md))
+- [Explanation index](https://docs.edenobservability.com/explanation/): Architecture and design deep dives ([markdown](https://docs.edenobservability.com/explanation.md))
+- [Tutorials](https://docs.edenobservability.com/tutorials/): Hands-on learning paths ([markdown](https://docs.edenobservability.com/tutorials.md))
 
 ## Sitemaps
 
