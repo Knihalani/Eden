@@ -3,13 +3,12 @@
 // routes that actually exist under (marketing).
 
 import type { MetadataRoute } from "next";
-import { SITE_URL } from "@/lib/constants";
 import { MARKETING_SITEMAP_ROUTES } from "@/lib/marketing-routes";
+import { absoluteSiteUrl } from "@/lib/site-origin";
 
-const PORTAL =
-  process.env.NEXT_PUBLIC_PORTAL_URL ||
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  SITE_URL;
+// Build-time static file — avoids request-time serverless flakes that
+// previously surfaced as intermittent HTTP 500s on /sitemap.xml.
+export const dynamic = "force-static";
 
 /**
  * Stable lastModified — the marketing surface changes rarely and a
@@ -41,7 +40,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return MARKETING_SITEMAP_ROUTES.map((path) => ({
     // Root renders canonical without a trailing slash — keep the <loc>
     // identical so crawlers never see two spellings of the homepage.
-    url: path === "/" ? PORTAL : `${PORTAL}${path}`,
+    url: absoluteSiteUrl(path),
     lastModified: LAST_MODIFIED,
     ...ROUTE_META[path],
   }));
