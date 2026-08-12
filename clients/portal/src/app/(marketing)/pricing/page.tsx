@@ -13,11 +13,9 @@ import { cn } from "@/lib/utils";
 export const revalidate = 3600;
 export const metadata = marketingMetadata({
   path: "/pricing",
-  title: "Pricing · Eden",
+  title: "Eden Pricing — Free LLM Observability in Public Beta",
   description:
-    "Free during public beta — no credit card. Team and Enterprise plans coming soon.",
-  ogTitle: "Pricing · Eden",
-  ogDescription: FREE_TIER_TAGLINE,
+    "Start free with Eden during public beta — no credit card. Full LLM observability: traces, issues, evals, and orgs. Team and Enterprise coming soon.",
   ogImage: "/og-pricing.png",
 });
 

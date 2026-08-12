@@ -15,9 +15,9 @@ export const revalidate = 3600;
 
 export const metadata = marketingMetadata({
   path: "/",
-  title: "Eden — Observability and improvement for AI agents",
+  title: "Eden — LLM Observability & Improvement for AI Agents",
   description:
-    "See every agent run. Fix what fails. Traces, evals, and reviewable changes in one loop. OpenAI-compatible gateway and drop-in SDKs.",
+    "Drop-in LLM observability for AI agents: traces, evals, and reviewable fix plans in one loop. OpenAI-compatible gateway and SDKs. See every run; fix what fails.",
 });
 
 export default function HomePage() {
