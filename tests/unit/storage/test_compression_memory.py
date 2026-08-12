@@ -39,20 +39,25 @@ def _rss_kb():
 
 class TestMemoryFootprint:
     def test_dict_resident_size_is_bounded(self):
-        """The trained dictionary's resident size is ~8 KB by design
-        (we trained with ``dict_size=8192``). Asserting < 32 KB
-        catches the regression where someone loads a 1 MB dict.
-        """
-        d = compression.get_dict()
-        size = len(d.as_bytes())
-        assert size < 32 * 1024, f"dict too large: {size} bytes"
-        assert size > 0, "dict is empty"
+        """Each write dictionary stays under 32 KB; total catalog under 128 KB."""
+        from eden.storage.zstd_registry import get_registry
 
-    def test_compressor_object_count_is_one(self):
-        """The process should have exactly one cached compressor."""
-        compress_jsonb({"k": "v" * 100})  # ensure cache is populated
-        from eden.storage.compression import _cached_compressor
-        assert _cached_compressor is not None
+        reg = get_registry()
+        reg.ensure_loaded()
+        total = 0
+        for entry in reg.write_entries():
+            size = len(entry.zdict.as_bytes())
+            assert size < 32 * 1024, f"{entry.name} too large: {size}"
+            total += size
+        assert total < 128 * 1024, f"catalog too large: {total}"
+        assert total > 0
+
+    def test_compressor_cache_populates(self):
+        """Adaptive multi-dict path caches at least one compressor."""
+        compress_jsonb({"k": "v" * 100}, column="request_body")
+        from eden.storage.compression import _compressors
+
+        assert len(_compressors) >= 1
 
     def test_worker_thread_local_objects_bounded(self):
         """``compress_many`` should create one compressor per worker

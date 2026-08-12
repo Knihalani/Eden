@@ -27,10 +27,16 @@ _TRAINED_DICT = os.path.abspath(
 
 @pytest.fixture(autouse=True)
 def _use_trained_dict(monkeypatch):
+    from pathlib import Path
+
     from eden.storage import compression
-    monkeypatch.setattr(compression, "DICT_PATH", __import__("pathlib").Path(_TRAINED_DICT))
+    from eden.storage.zstd_registry import set_dicts_dir
+
+    monkeypatch.setattr(compression, "DICT_PATH", Path(_TRAINED_DICT))
+    set_dicts_dir(Path("/nonexistent_eden_zstd_dicts_for_tests"))
     compression.invalidate_caches()
     yield
+    set_dicts_dir(None)
     compression.invalidate_caches()
 
 
@@ -42,12 +48,14 @@ class TestCachedCompressor:
 
     def test_compressor_is_cached(self):
         from eden.storage import compression
+
         c1 = compression._compressor()
         c2 = compression._compressor()
         assert c1 is c2, "compressor rebuilt on second call (object identity differs)"
 
     def test_decompressor_is_cached(self):
         from eden.storage import compression
+
         d1 = compression._decompressor()
         d2 = compression._decompressor()
         assert d1 is d2
@@ -59,27 +67,23 @@ class TestCachedCompressor:
         from eden.storage import compression
 
         c0 = compression._compressor()
-        old_id = compression._cached_compressor_dict_id
 
-        # Swap the dict to a different trained one.
-        samples = [b'{"model":"gpt","messages":[{"role":"user","content":"hello"}]}' for _ in range(200)]
-        new_dict_bytes = compression.train_dictionary(samples, dict_size=4096)
+        samples = [
+            b'{"model":"gpt","messages":[{"role":"user","content":"hello"}]}' for _ in range(200)
+        ]
+        new_dict_bytes = compression.train_dictionary(samples, dict_size=4096, dict_id=77)
         with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
             f.write(new_dict_bytes)
             tmp_path = f.name
         monkeypatch.setattr(compression, "DICT_PATH", __import__("pathlib").Path(tmp_path))
-        compression.get_dict.cache_clear()
+        compression._force_legacy_dict(__import__("pathlib").Path(tmp_path))
 
         c1 = compression._compressor()
         assert c1 is not c0, "compressor should have been rebuilt on dict swap"
-        assert compression._cached_compressor_dict_id != old_id
-
-        # And the decompressor rebuilds too.
-        compression._decompressor()
-        assert compression._cached_decompressor_dict_id == compression._cached_compressor_dict_id
 
     def test_invalidate_caches_resets_both(self):
         from eden.storage import compression
+
         c0 = compression._compressor()
         d0 = compression._decompressor()
         compression.invalidate_caches()

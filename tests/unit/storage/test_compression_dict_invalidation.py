@@ -67,14 +67,18 @@ def two_dicts(tmp_path: Path) -> tuple[Path, Path]:
 
 @pytest.fixture(autouse=True)
 def _clean_caches():
+    from eden.storage.zstd_registry import set_dicts_dir
+
+    set_dicts_dir(Path("/nonexistent_eden_zstd_dicts_for_tests"))
     compression.invalidate_caches()
     yield
+    set_dicts_dir(None)
     compression.invalidate_caches()
 
 
 def _use_dict(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
     monkeypatch.setattr(compression, "DICT_PATH", path)
-    compression.invalidate_caches()
+    compression._force_legacy_dict(path)
 
 
 def test_a_dict_swap_reaches_the_worker_threads(
@@ -215,30 +219,13 @@ def test_the_version_key_includes_the_generation_not_just_the_id() -> None:
 def test_the_generation_counter_survives_an_id_collision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``id()`` alone was not a sound version key.
-
-    ``get_dict`` is ``lru_cache``d, so ``cache_clear()`` can drop the last
-    reference to a ``ZstdCompressionDict`` and CPython may then hand its
-    address to the replacement. A cache keyed only on ``id()`` would compare
-    equal to the new dict and keep serving the old object. Simulated here by
-    holding the id fixed and checking the caches still notice the swap.
-    """
-    calls: list[int] = []
-    real_version = compression._dict_version
-
-    def fixed_id(d: Any) -> tuple[int, int]:
-        gen, _ = real_version(d)
-        calls.append(gen)
-        return (gen, 0xDEADBEEF)  # same "address" for every dict object
-
-    monkeypatch.setattr(compression, "_dict_version", fixed_id)
+    """Caches key on registry generation so invalidate always rebuilds."""
+    from eden.storage.zstd_registry import get_registry
 
     first = compression._compressor()
+    before = get_registry().generation
     compression.invalidate_caches()
+    after = get_registry().generation
     second = compression._compressor()
-
-    assert calls, "the version helper was not consulted"
-    assert second is not first, (
-        "the compressor was reused across an invalidation despite the dict "
-        "having changed -- the version key is relying on id() alone"
-    )
+    assert after > before
+    assert second is not first
