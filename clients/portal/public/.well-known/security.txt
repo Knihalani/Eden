@@ -1,0 +1,9 @@
+# Eden Observability — vulnerability disclosure (RFC 9116)
+# https://securitytxt.org/
+
+Contact: mailto:security@edenobservability.com
+Contact: https://edenobservability.com/security
+Expires: 2027-08-12T23:59:59.000Z
+Preferred-Languages: en
+Canonical: https://edenobservability.com/.well-known/security.txt
+Policy: https://edenobservability.com/security
