@@ -2457,6 +2457,14 @@ export const api = {
     });
   },
 
+  getAutonomyAgents: (orgId: string) =>
+    fetchApi<{
+      data: {
+        agents: AutonomyPolicy[];
+        count: number;
+      };
+    }>(`/orgs/${orgId}/settings/autonomy/agents`),
+
   getAutonomyAudit: (orgId: string, limit = 50) =>
     fetchApi<{
       data: {
@@ -2468,6 +2476,11 @@ export const api = {
   getAutonomyBudget: (orgId: string) =>
     fetchApi<{ data: Record<string, unknown> }>(
       `/orgs/${orgId}/settings/autonomy/budget`,
+    ),
+
+  getAutonomyEarnings: (orgId: string) =>
+    fetchApi<{ data: AutonomyEarnings }>(
+      `/orgs/${orgId}/settings/autonomy/earnings`,
     ),
 
   // ── Webhook dead-letter queue (D.13) ───────────────────────────
@@ -2960,6 +2973,8 @@ export type AutonomyPolicy = {
   auto_prompt_canary: boolean;
   auto_nudge_promote: boolean;
   auto_guardrail_promote: boolean;
+  /** Wave 6 — opted into the earned-autonomy program (clean-merge streak → T4). */
+  earned_autonomy_enabled: boolean;
   daily_maintenance_budget_usd: number;
   max_auto_rollbacks_per_day: number;
   compliance_profile: "standard" | "hipaa" | "soc2_strict";
@@ -2981,9 +2996,36 @@ export type AutonomyPolicyPatch = {
   auto_prompt_canary?: boolean;
   auto_nudge_promote?: boolean;
   auto_guardrail_promote?: boolean;
+  earned_autonomy_enabled?: boolean;
   daily_maintenance_budget_usd?: number;
   max_auto_rollbacks_per_day?: number;
   compliance_profile?: AutonomyPolicy["compliance_profile"];
+};
+
+/** Wave 6 — earned-autonomy ledger (per-org clean auto-merge streak). */
+export type AutonomyEarnings = {
+  streak: number;
+  threshold: number;
+  earned: boolean;
+  total_auto_merged: number;
+  in_flight: number;
+  unproven: number;
+  breaking_plan_id: string | null;
+  recent: Array<{
+    plan_id: string;
+    title: string | null;
+    agent_id: string | null;
+    merged_at: string | null;
+    manual: boolean;
+    status: "clean" | "in_flight" | "unproven" | "breaking";
+    window_summary: string;
+  }>;
+  policy: {
+    auto_code_patch_merge: boolean;
+    earned_autonomy_enabled: boolean;
+    compliance_profile: string;
+    effective_mode: string;
+  };
 };
 
 export type AutonomyAuditEntry = {
@@ -3087,6 +3129,22 @@ export type ImprovementPlanEvent = {
   created_at: string;
 };
 
+/** Wave 4 (4.3): ``post_merge_windows`` row (migration 170). */
+export type PostMergeWindow = {
+  id: string;
+  plan_id: string;
+  agent_id?: string | null;
+  window_hours: number;
+  status: "pending" | "ok" | "degrading";
+  opened_at: string;
+  closes_at: string;
+  pre_issue_rate?: number | null;
+  post_issue_rate?: number | null;
+  delta_pct?: number | null;
+  follow_up_plan_id?: string | null;
+  evaluated_at?: string | null;
+};
+
 export const improvePlansApi = {
   // M13: live cockpit dual queue (Fix now / Improve later).
   getQueue: (orgId: string, query?: string) =>
@@ -3105,6 +3163,11 @@ export const improvePlansApi = {
   getEvents: (orgId: string, planId: string) =>
     fetchApi<ImproveFeatureEnvelope<{ events: ImprovementPlanEvent[] }>>(
       `/orgs/${orgId}/improve/plans/${planId}/events`,
+    ),
+  // Wave 4 (4.3): post-merge watch windows (1h/24h/7d) for a merged plan.
+  getPostMergeWindows: (orgId: string, planId: string) =>
+    fetchApi<ImproveFeatureEnvelope<{ windows: PostMergeWindow[] }>>(
+      `/orgs/${orgId}/improve/plans/${planId}/post-merge-windows`,
     ),
   patchPlan: (
     orgId: string,
@@ -3264,6 +3327,51 @@ export const promotionsApi = {
   reject: (orgId: string, candidateId: string, reason?: string) =>
     fetchApi<NudgeFeatureEnvelope<{ rejected: boolean; reason: string }>>(
       `/orgs/${orgId}/promotions/${candidateId}/reject${reason ? `?reason=${encodeURIComponent(reason)}` : ""}`,
+      { method: "POST" },
+    ),
+};
+
+/** Wave 5 (5.1) — prompt canary experiment row (``prompt_canary_experiments``). */
+export type CanaryExperiment = {
+  experiment_id: string;
+  agent: string;
+  control_version?: number | null;
+  candidate_version: number;
+  traffic_pct: number;
+  started_at: string;
+  expires_at?: string | null;
+  status: string;
+  notes?: string | null;
+};
+
+export type CanaryPromoteResult = {
+  experiment_id: string;
+  agent: string;
+  candidate_version?: number;
+  status: string; // promoted | held | rolled_back
+  evidence_gate?: {
+    passed?: boolean;
+    recommendation?: string;
+    min_sample_size?: number;
+    explanation?: string;
+    metrics?: Record<string, unknown>;
+  };
+};
+
+/** Wave 5 (5.1) — prompt canary cockpit API (``src/eden/api/routes/prompt_canary.py``). */
+export const promptsApi = {
+  listCanaries: (orgId: string) =>
+    fetchApi<{ canaries: CanaryExperiment[] }>(
+      `/orgs/${orgId}/prompts/canaries`,
+    ),
+  promote: (orgId: string, agent: string, experimentId: string) =>
+    fetchApi<CanaryPromoteResult>(
+      `/orgs/${orgId}/prompts/${encodeURIComponent(agent)}/canary/${experimentId}/promote`,
+      { method: "POST" },
+    ),
+  rollback: (orgId: string, agent: string, experimentId: string) =>
+    fetchApi<CanaryPromoteResult>(
+      `/orgs/${orgId}/prompts/${encodeURIComponent(agent)}/canary/${experimentId}/rollback`,
       { method: "POST" },
     ),
 };

@@ -60,6 +60,9 @@ class AutonomyPatch(BaseModel):
     auto_prompt_canary: bool | None = None
     auto_nudge_promote: bool | None = None
     auto_guardrail_promote: bool | None = None
+    # Wave 6 — opt into the earned-autonomy program (org may then earn
+    # auto_code_patch_merge automatically on a clean-merge streak).
+    earned_autonomy_enabled: bool | None = None
     daily_maintenance_budget_usd: float | None = None
     max_auto_rollbacks_per_day: int | None = None
     auto_merge_max_per_week: int | None = None  # M15 (§9) canary volume cap
@@ -159,6 +162,46 @@ async def patch_autonomy(
     return _ok(data)
 
 
+@router.get("/agents")
+async def get_agents(
+    org_id: str = Depends(require_path_org_access),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Wave 5 (5.2) — per-agent policy rows for the settings matrix.
+
+    Lists every agent with an ``autonomy_policies`` override row and its
+    resolved policy (org default + override merged). The portal renders
+    one row per agent so mode / heal / budget can be scoped per agent.
+    """
+    rows: list[dict[str, Any]] = []
+    try:
+        from eden.closed_loop.autonomy_policy import resolve
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is not None:
+            fetched = await client.fetch(
+                """
+                SELECT DISTINCT agent_id
+                FROM autonomy_policies
+                WHERE org_id = $1 AND agent_id IS NOT NULL
+                ORDER BY agent_id ASC
+                """,
+                org_id,
+            )
+            for r in fetched or []:
+                aid = str(r["agent_id"])
+                policy = await resolve(org_id, aid)
+                data = policy.to_json()
+                data["effective_mode"] = policy.effective_mode()
+                data["agent_id"] = aid
+                data["has_override"] = True
+                rows.append(data)
+    except Exception as exc:
+        logger.debug("autonomy agents failed: %s", redact_all(str(exc)))
+    return _ok({"agents": rows, "count": len(rows)})
+
+
 @router.get("/budget")
 async def get_budget(
     org_id: str = Depends(require_path_org_access),
@@ -229,6 +272,32 @@ async def get_budget(
             "suppressed_count": len(suppressed),
         }
     )
+
+
+@router.get("/earnings")
+async def get_earnings(
+    org_id: str = Depends(require_path_org_access),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Wave 6 (6.2) — the earned-autonomy ledger.
+
+    Publishes the documented "5 consecutive clean auto-merges" metric:
+    the proven clean-merge streak (every post-merge watch window ok),
+    in-flight (still being watched) and breaking plans, plus the policy
+    posture that decides whether the streak is *grantable*.
+    """
+    from eden.closed_loop.autonomy_policy import resolve
+    from eden.improvement.earned_autonomy import clean_auto_merge_streak
+
+    status = await clean_auto_merge_streak(org_id)
+    policy = await resolve(org_id)
+    status["policy"] = {
+        "auto_code_patch_merge": bool(policy.auto_code_patch_merge),
+        "earned_autonomy_enabled": bool(policy.earned_autonomy_enabled),
+        "compliance_profile": policy.compliance_profile,
+        "effective_mode": policy.effective_mode(),
+    }
+    return _ok(status)
 
 
 @router.get("/audit")

@@ -738,6 +738,16 @@ async def approve_plan(
                 ) or updated
             except Exception as exc:  # noqa: BLE001
                 logger.debug("approve_plan: auto_merge merged stamp failed: %s", exc)
+            # Wave 3 (3.4): pr_merge evidence source — record the merge so
+            # the EvidenceGate can later read whether it was reverted.
+            try:
+                from eden.promotion.outcome_records import record_pr_merge
+
+                await record_pr_merge(
+                    org_id, plan_id, pr_number=int(info.number)
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("approve_plan: pr outcome record failed: %s", exc)
             try:
                 merged_plan = await plans_repo.mark_merged(org_id, plan_id)
                 if merged_plan is not None:
@@ -1206,9 +1216,35 @@ async def queue_verify_for_plan(
     am: dict[str, Any] = _raw_am if isinstance(_raw_am, dict) else {}
     # Explicit canary=True required (M15 harden — no default-True).
     canary = bool(am.get("merged")) and am.get("canary") is True
-    return await _queue_verify(
+    verify_id = await _queue_verify(
         org_id, plan, branch=branch, auto_merge_canary=canary
     )
+    # Wave 5 (5.3): the plan ledger gains the verify leg — the N01
+    # replay verify is part of the trustworthy loop trail (triage →
+    # approve → verify → merge → post-merge watch). Best-effort; an
+    # event failure never breaks verify scheduling.
+    plan_id = str(plan.get("id") or "")
+    if verify_id and plan_id:
+        try:
+            await plans_repo.emit_event(
+                org_id,
+                plan_id,
+                "verify_queued",
+                actor="eden:verify",
+                detail=(
+                    "post-merge replay verify queued"
+                    if am.get("merged")
+                    else "pre-merge replay verify queued"
+                ),
+                payload={
+                    "verification_id": verify_id,
+                    "branch": branch or plan.get("github_branch"),
+                    "post_merge": bool(am.get("merged")),
+                },
+            )
+        except Exception as exc:
+            logger.debug("approve: verify_queued event failed: %s", exc)
+    return verify_id
 
 
 async def _queue_verify(

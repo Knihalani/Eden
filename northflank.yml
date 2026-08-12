@@ -16,7 +16,6 @@
 # No eden-migrate job — keeps the 2-job quota; API lifespan runs Alembic before /ready.
 #
 # External / out-of-sandbox (free tiers elsewhere):
-#   • Qdrant         → Qdrant Cloud free (1 GB cluster) — set QDRANT_HOST
 #   • Redis          → Upstash free (10k cmds/day) — set REDIS_URL
 #   • Tinybird       → already used by Cat 18 — no change
 #
@@ -142,10 +141,11 @@ spec:
   #
   # RAM is deliberately UNCHANGED at 1024 MB. It is the binding
   # constraint and the dimension with real tail risk: the background
-  # fleet now runs in this process, and SANDBOX_MEMORY_MB below hands
-  # 256 MB to sandboxed execution on its own. 1024 MB leaves ~3.8x
-  # headroom over the measured baseline; 512 MB (the nf-compute-20 this
-  # file used to claim) would not survive one sandbox run.
+  # fleet now runs in this process, and the sandbox env block below
+  # hands 256 MB to sandboxed execution on its own. 1024 MB leaves
+  # ~3.8x headroom over the measured baseline; 512 MB (the
+  # nf-compute-20 this file used to claim) would not survive one
+  # sandbox run.
   #
   # Only CPU drops, 1.0 -> 0.5 vCPU, against a measured 0.216 vCPU boot
   # peak and ~0.003 idle — still 2.3x headroom on the worst observed
@@ -206,8 +206,6 @@ spec:
       value: "8000"
     - name: LOG_LEVEL
       value: INFO
-    - name: LOG_JSON
-      value: "true"
     # ⚠️  MUST STAY "0" until ENCRYPTION_KEY is confirmed to reach the
     # container. Set live to "1" on 2026-07-29 and the pod would not
     # boot: ``get_settings()`` raises
@@ -326,19 +324,6 @@ spec:
       value: "60"
     - name: POSTGRES_STATEMENT_TIMEOUT_MS
       value: "30000"
-    # ── Qdrant (external — Qdrant Cloud free tier) ──────────────
-    # Hostname only — NOT a full URL. qdrant.py builds https://{host}:{port}
-    # when QDRANT_HTTPS=true (required for Qdrant Cloud).
-    - name: QDRANT_HOST
-      value: 58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
-    - name: QDRANT_HTTPS
-      value: "true"
-    - name: QDRANT_PORT
-      value: "6333"
-    - name: QDRANT_COLLECTION_PREFIX
-      value: eden_
-    - name: QDRANT_API_KEY
-      valueFrom: { secretKeyRef: { group: qdrant-api-key, key: QDRANT_API_KEY } }
     # ── Redis (external — Upstash free tier) ────────────────────
     # Conserve commands: rate limits stay in-process (single replica),
     # redis-py health PINGs disabled. Set RATE_LIMIT_DISTRIBUTED=true
@@ -381,15 +366,6 @@ spec:
       value: MiniMax-M3
     - name: USE_MINIMAX
       value: "false"
-    # ── Sandbox limits (tight on free tier) ─────────────────────
-    - name: SANDBOX_MEMORY_MB
-      value: "256"
-    - name: SANDBOX_CPU_COUNT
-      value: "1"
-    - name: SANDBOX_SNAPSHOT_POOL_SIZE
-      value: "5"
-    - name: SANDBOX_MAX_CONCURRENT
-      value: "10"
     # ── Typesense (full-text search) — W9: enable when TYPESENSE_HOST
     # secret is provisioned. Set TYPESENSE_ENABLED=true and wire host/key
     # from Northflank secrets (do not use localhost).
@@ -414,8 +390,6 @@ spec:
     # ── Pipeline / observability defaults ───────────────────────
     - name: PIPELINE_TIMEOUT_SECONDS
       value: "300"
-    - name: PIPELINE_TIMEOUT_ENABLED
-      value: "true"
     - name: BRONZE_BATCH_SIZE
       value: "100"
     - name: BRONZE_FLUSH_INTERVAL_SECONDS
@@ -560,12 +534,26 @@ spec:
     # ── N23 recurring improvement agent (July 2026 bloat-cut ship) ──
     - name: IMPROVEMENT_AGENT_V1
       value: "true"
-    # cron_tick intentionally skips improvement sweeps (issue-driven
-    # closed loop only — see cron_tick.py ``improvement_sweeps``).
-    # Leaving this true advertised a schedule that never ran. Keep
-    # false until a worker Service hosts ``run_due_sweeps`` for real.
+    # Wave 1 (F-I, 2026-08-11): the worker now hosts ``run_due_sweeps``
+    # via the leader-gated ``improvement_sweep`` loop in workers/main.py
+    # (see _leader_improvement_sweep). The old comment said "keep false
+    # until a worker Service hosts run_due_sweeps for real" — it is
+    # hosted now, so the recurring weekly cron is live.
     - name: IMPROVEMENT_SCHEDULE_ENABLED
-      value: "false"
+      value: "true"
+    # Wave 2 (2.5, 2026-08-11): evolution loop stays OFF. The audit's
+    # F-A trigger (fixed Wave 1) and the prompt store (legacy
+    # ``prompt_versions`` dropped by migration 055 — Wave 2.4 compat
+    # shim re-points it at the live v2 schema) are fixed, but the
+    # judge-driven loop still cannot enroll canaries end-to-end: the
+    # judge evolver aggregates globally (no tenant filter in
+    # ``_AGG_QUERY``) and writes variants without an ``org_id``, so
+    # ``_auto_create_canary`` fails closed on "cannot resolve org_id"
+    # (prompt_canary_experiments is org-scoped). Turning the loop on
+    # now would spend LLM budget generating variants that never enroll.
+    # The issue-driven path (IssuePromptEvolver → create_version with
+    # real org_id → its own canary) works today. Re-enable only after
+    # org resolution is wired through judge evolution (Wave 3).
 
 # ─────────────────────────────────────────────────────────────────────
 # Job 1/2: eden-worker (long-running background work)
@@ -650,8 +638,6 @@ spec:
       value: "false"
     - name: LOG_LEVEL
       value: INFO
-    - name: LOG_JSON
-      value: "true"
     # Kept at "1" so this job still works if it is ever run manually for
     # a one-off drain, but the fleet's real home is now eden-api (see the
     # long note on that service's copy of this variable). Do NOT run this
@@ -714,14 +700,6 @@ spec:
       value: "0"
     - name: POSTGRES_MAX_INACTIVE_CONNECTION_LIFETIME
       value: "30"           # drop idle sockets well under Neon suspend (~300s)
-    - name: QDRANT_HOST
-      value: 58384b79-0261-480e-b61f-d86bbf1c0dad.us-east4-0.gcp.cloud.qdrant.io
-    - name: QDRANT_HTTPS
-      value: "true"
-    - name: QDRANT_PORT
-      value: "6333"
-    - name: QDRANT_API_KEY
-      valueFrom: { secretKeyRef: { group: qdrant-api-key, key: QDRANT_API_KEY } }
 
 
 

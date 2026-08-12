@@ -779,3 +779,26 @@ select.ds-input {
   animation: eden-skeleton-pulse 1.6s ease-in-out infinite;
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Route-change chrome: page entrance fade                            */
+/* ------------------------------------------------------------------ */
+/* Page entrance — a soft fade on route change. The wrapper is keyed by
+   pathname in AppShell, so a navigation remounts it and replays the
+   animation; search-param-only changes (`?id=`, `?view=`) do not touch
+   it, which keeps in-page selection from flashing. Reduced-motion is
+   clamped to a single 0.01ms iteration by globals.css. */
+@keyframes eden-route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eden-route-fade {
+  animation: eden-route-fade-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}

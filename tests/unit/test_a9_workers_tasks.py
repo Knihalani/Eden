@@ -218,7 +218,12 @@ def test_northflank_background_fleet_is_hosted_by_the_api_service():
 
 
 def test_background_bundle_adopts_the_worker_only_loops():
-    """Five loops had no home except the job. Losing them is invisible."""
+    """Six loops had no home except the job. Losing them is invisible.
+
+    ``improvement_sweep`` joined the bundle with the Wave 1 autonomy fix —
+    the recurring sweep had no hosted home (the autonomous-improvement job
+    was reaped like every other Job), so its presence here is pinned.
+    """
     from eden.workers.background import _leader_loops_from_worker_main
 
     names = {name for name, _ in _leader_loops_from_worker_main()}
@@ -228,6 +233,7 @@ def test_background_bundle_adopts_the_worker_only_loops():
         "artifact_demotion",
         "maintenance",
         "self_obs_probes",
+        "improvement_sweep",
     }, f"background bundle stopped hosting: {names}"
 
 

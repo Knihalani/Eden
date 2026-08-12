@@ -186,14 +186,31 @@ def test_prompt_version_outcome_metrics_uses_telemetry_events(monkeypatch):
     assert control == [0.0, 0.0, 1.0, 1.0]
 
 
-def test_metrics_from_outcomes_honest_empty_for_unwired_kinds(fake_pg):
-    """guardrail/model_routing/kb_skill/pr_merge each hit their own explicit
-    branch in _metrics_from_outcomes and return [] because no real outcome
-    source exists yet for them -- not because of a blanket "not nudge"
-    check. This test pins that per-kind (not generic) behavior."""
+def test_metrics_from_outcomes_wired_kinds_return_lists(fake_pg, monkeypatch):
+    """Wave 3 (3.4): guardrail/model_routing/kb_skill/pr_merge each dispatch
+    to a real outcome-table reader (migration 169) instead of returning the
+    old honest-empty []. Each reader is stubbed here to return data; the
+    reader SQL itself is pinned in test_outcome_records.py."""
     gate = EvidenceGate()
     org_id = str(uuid4())
-    for kind in ("guardrail", "model_routing", "kb_skill", "pr_merge"):
+
+    async def _fake(*args, **kwargs):
+        return [0.5, 0.5]
+
+    for kind, mod in (
+        ("guardrail", "guardrail_outcome_metrics"),
+        ("model_routing", "routing_decision_metrics"),
+        ("kb_skill", "skill_outcome_metrics"),
+        ("pr_merge", "pr_merge_outcome_metrics"),
+    ):
+        monkeypatch.setattr(
+            f"eden.promotion.outcome_records.{mod}", _fake
+        )
         candidate = {"kind": kind, "ref_id": str(uuid4()), "org_id": org_id}
         result = asyncio.run(gate._metrics_from_outcomes(candidate, applied=True))
-        assert result == []
+        assert result == [0.5, 0.5]
+
+    # Anything else is still an honest empty (no fabricated signal).
+    candidate = {"kind": "bogus_kind", "ref_id": str(uuid4()), "org_id": org_id}
+    result = asyncio.run(gate._metrics_from_outcomes(candidate, applied=True))
+    assert result == []

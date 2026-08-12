@@ -82,9 +82,15 @@ class AutoIssueScanner:
         session_id: str | None = None,
         user_id: str | None = None,
         detection_profile: str = "standard",
+        threshold_multiplier: float = 1.0,
         events: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         """Scan one trace and write any detected stumbles.
+
+        ``threshold_multiplier`` (Wave 3, 3.2) scales the fixed detector
+        thresholds per agent: <1.0 detects more (confirm-heavy agent),
+        >1.0 detects less (dismiss-heavy agent). Derived by
+        ``detection_settings.resolve_agent_threshold_multiplier``.
 
         Returns the list of ``StumbleWriter.create`` results (one per
         stumble written)."""
@@ -100,6 +106,12 @@ class AutoIssueScanner:
         if not events:
             return []
 
+        mult = float(threshold_multiplier or 1.0)
+        slow_ms = _SLOW_TRACE_MS_DEFAULT * mult
+        high_cost = _HIGH_COST_USD_DEFAULT * mult
+        loop_repeat = max(2, round(_LOOP_REPEAT_THRESHOLD * mult))
+        confusion_repeat = max(2, round(_CONFUSION_REPEAT_THRESHOLD * mult))
+
         # Cost guard: very large traces sample loop detection only.
         big_trace = len(events) > _MAX_SPANS
 
@@ -112,7 +124,8 @@ class AutoIssueScanner:
             )
         if "loop" in enabled:
             stumbles += self._detect_loops(
-                org_id, trace_id, agent_id, session_id, user_id, events
+                org_id, trace_id, agent_id, session_id, user_id, events,
+                repeat_threshold=loop_repeat,
             )
         if "task_failure" in enabled and not big_trace:
             stumbles += self._detect_task_failure(
@@ -120,7 +133,8 @@ class AutoIssueScanner:
             )
         if "slow_trace" in enabled:
             stumbles += self._detect_slow_trace(
-                org_id, trace_id, agent_id, session_id, user_id, events
+                org_id, trace_id, agent_id, session_id, user_id, events,
+                slow_ms=slow_ms,
             )
         if "hallucination" in enabled and not big_trace:
             stumbles += await self._detect_hallucination(
@@ -132,11 +146,13 @@ class AutoIssueScanner:
             )
         if "confusion_loop" in enabled:
             stumbles += self._detect_confusion_loop(
-                org_id, trace_id, agent_id, session_id, user_id, events
+                org_id, trace_id, agent_id, session_id, user_id, events,
+                repeat_threshold=confusion_repeat,
             )
         if "high_cost" in enabled:
             stumbles += self._detect_high_cost(
-                org_id, trace_id, agent_id, session_id, user_id, events
+                org_id, trace_id, agent_id, session_id, user_id, events,
+                high_cost_usd=high_cost,
             )
 
         detector_hits: dict[str, int] = {}
@@ -247,6 +263,8 @@ class AutoIssueScanner:
         session_id: str | None,
         user_id: str | None,
         events: list[dict[str, Any]],
+        *,
+        repeat_threshold: int = _LOOP_REPEAT_THRESHOLD,
     ) -> list[StumbleCreate]:
         # 1) explicit ETEC loop score from trace-quality attrs.
         best_score = 0.0
@@ -273,11 +291,11 @@ class AutoIssueScanner:
             counts[key] = counts.get(key, 0) + 1
         repeated = max(counts.items(), key=lambda kv: kv[1], default=(None, 0))
 
-        if best_score >= _ETEC_LOOP_THRESHOLD or repeated[1] >= _LOOP_REPEAT_THRESHOLD:
+        if best_score >= _ETEC_LOOP_THRESHOLD or repeated[1] >= repeat_threshold:
             detail: dict[str, Any] = {}
             if best_score >= _ETEC_LOOP_THRESHOLD:
                 detail["etec_loop_score"] = round(best_score, 4)
-            if repeated[0] is not None and repeated[1] >= _LOOP_REPEAT_THRESHOLD:
+            if repeated[0] is not None and repeated[1] >= repeat_threshold:
                 detail["repeated_step"] = repeated[0]
                 detail["repeat_count"] = repeated[1]
                 detail["loop_hash"] = repeated[0]
@@ -346,18 +364,20 @@ class AutoIssueScanner:
         session_id: str | None,
         user_id: str | None,
         events: list[dict[str, Any]],
+        *,
+        slow_ms: float = _SLOW_TRACE_MS_DEFAULT,
     ) -> list[StumbleCreate]:
-        # v1 heuristic: max span duration over a fixed threshold. The
-        # spec's "agent p99 × 2" needs the ClickHouse rollup (deferred);
-        # the threshold is a safe stand-in that never fires on healthy
-        # sub-30s traces.
+        # v1 heuristic: max span duration over a threshold. The spec's
+        # "agent p99 × 2" needs the ClickHouse rollup (deferred); the
+        # threshold is a safe stand-in that never fires on healthy
+        # sub-30s traces. ``slow_ms`` is per-agent scaled (Wave 3, 3.2).
         max_ms = 0.0
         for e in events:
             try:
                 max_ms = max(max_ms, float(e.get("duration_ms") or 0.0))
             except (TypeError, ValueError):
                 continue
-        if max_ms <= _SLOW_TRACE_MS_DEFAULT:
+        if max_ms <= slow_ms:
             return []
         return [
             StumbleCreate(
@@ -367,7 +387,7 @@ class AutoIssueScanner:
                 title="Slow trace",
                 detail={
                     "max_duration_ms": max_ms,
-                    "threshold_ms": _SLOW_TRACE_MS_DEFAULT,
+                    "threshold_ms": round(slow_ms, 2),
                     "heuristic": "fixed_threshold_v1",
                 },
                 detected_by="auto_scanner",
@@ -541,6 +561,8 @@ class AutoIssueScanner:
         session_id: str | None,
         user_id: str | None,
         events: list[dict[str, Any]],
+        *,
+        repeat_threshold: int = _CONFUSION_REPEAT_THRESHOLD,
     ) -> list[StumbleCreate]:
         questions: list[str] = []
         for e in events:
@@ -555,7 +577,7 @@ class AutoIssueScanner:
         counts: dict[str, int] = {}
         for q in questions:
             counts[q] = counts.get(q, 0) + 1
-        repeated = [q for q, n in counts.items() if n >= _CONFUSION_REPEAT_THRESHOLD]
+        repeated = [q for q, n in counts.items() if n >= repeat_threshold]
         if not repeated:
             return []
         return [
@@ -584,6 +606,8 @@ class AutoIssueScanner:
         session_id: str | None,
         user_id: str | None,
         events: list[dict[str, Any]],
+        *,
+        high_cost_usd: float = _HIGH_COST_USD_DEFAULT,
     ) -> list[StumbleCreate]:
         total = 0.0
         for e in events:
@@ -592,7 +616,7 @@ class AutoIssueScanner:
                     total += float(e.get(key) or (e.get("attributes") or {}).get(key) or 0.0)
                 except (TypeError, ValueError):
                     continue
-        if total <= _HIGH_COST_USD_DEFAULT:
+        if total <= high_cost_usd:
             return []
         return [
             StumbleCreate(
@@ -602,7 +626,7 @@ class AutoIssueScanner:
                 title="High-cost trace",
                 detail={
                     "total_cost_usd": round(total, 6),
-                    "threshold_usd": _HIGH_COST_USD_DEFAULT,
+                    "threshold_usd": round(high_cost_usd, 2),
                     "detector": "high_cost",
                 },
                 detected_by="auto_scanner",

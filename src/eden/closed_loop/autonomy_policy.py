@@ -85,6 +85,11 @@ class AutonomousMaintenancePolicy:
     auto_prompt_canary: bool = True
     auto_nudge_promote: bool = False
     auto_guardrail_promote: bool = False
+    # Wave 6 — earned-autonomy program opt-in. When an org opts in and
+    # proves ``earned_autonomy_min_streak`` consecutive clean auto-merges
+    # (post-merge watch all-ok), ``grant_if_earned`` flips
+    # ``auto_code_patch_merge`` on org-scoped + audits the grant.
+    earned_autonomy_enabled: bool = False
     daily_maintenance_budget_usd: float = 25.0
     max_auto_rollbacks_per_day: int = 3
     # M15 (§9): weekly canary auto-merge volume cap (org-overridable).
@@ -437,22 +442,48 @@ async def upsert_policy(
     client = await _pg()
     if client is not None:
         try:
-            await client.execute(
-                """
-                INSERT INTO autonomy_policies
-                    (id, org_id, agent_id, policy, compliance_profile, updated_at)
-                VALUES ($1::uuid, $2, $3, $4::jsonb, $5, NOW())
-                ON CONFLICT (org_id, agent_id) DO UPDATE
-                    SET policy = EXCLUDED.policy,
-                        compliance_profile = EXCLUDED.compliance_profile,
-                        updated_at = NOW()
-                """,
-                str(uuid.uuid4()),
-                org_id,
-                agent_id,
-                json.dumps(new_policy.to_json()),
-                new_policy.compliance_profile,
-            )
+            # Migration 086 back the uniqueness with *partial* indexes
+            # (``uq_autonomy_policies_org_agent`` WHERE agent_id IS NOT
+            # NULL, ``uq_autonomy_policies_org_default`` WHERE agent_id
+            # IS NULL). Plain ``ON CONFLICT (org_id, agent_id)`` cannot
+            # be inferred against partial indexes — every upsert silently
+            # failed to persist (caught by the Wave 6 real-DB smoke). The
+            # conflict target must carry the matching predicate.
+            if agent_id:
+                await client.execute(
+                    """
+                    INSERT INTO autonomy_policies
+                        (id, org_id, agent_id, policy, compliance_profile, updated_at)
+                    VALUES ($1::uuid, $2, $3, $4::jsonb, $5, NOW())
+                    ON CONFLICT (org_id, agent_id) WHERE agent_id IS NOT NULL
+                        DO UPDATE
+                        SET policy = EXCLUDED.policy,
+                            compliance_profile = EXCLUDED.compliance_profile,
+                            updated_at = NOW()
+                    """,
+                    str(uuid.uuid4()),
+                    org_id,
+                    agent_id,
+                    json.dumps(new_policy.to_json()),
+                    new_policy.compliance_profile,
+                )
+            else:
+                await client.execute(
+                    """
+                    INSERT INTO autonomy_policies
+                        (id, org_id, agent_id, policy, compliance_profile, updated_at)
+                    VALUES ($1::uuid, $2, NULL, $3::jsonb, $4, NOW())
+                    ON CONFLICT (org_id) WHERE agent_id IS NULL
+                        DO UPDATE
+                        SET policy = EXCLUDED.policy,
+                            compliance_profile = EXCLUDED.compliance_profile,
+                            updated_at = NOW()
+                    """,
+                    str(uuid.uuid4()),
+                    org_id,
+                    json.dumps(new_policy.to_json()),
+                    new_policy.compliance_profile,
+                )
         except Exception as exc:
             logger.warning("autonomy_policy: upsert failed: %s", exc)
 

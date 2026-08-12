@@ -396,17 +396,23 @@ class SoftIssueReviewer:
             )
             if dupe:
                 return False
+            # Wave 3 (3.1/3.3): write the queryable agent_id column
+            # (migration 168) in addition to the `[auto:agent]` description
+            # prefix — the per-agent threshold tuning (3.2) and the weekly
+            # promote sweep filter on the column, not the free-text prefix.
             await pg.execute(
                 """
                 INSERT INTO nl_signals
-                    (id, org_id, description, rule, enabled, created_by, cluster_id)
-                VALUES ($1, $2, $3, $4::jsonb, FALSE, NULL, $5)
+                    (id, org_id, description, rule, enabled, created_by,
+                     cluster_id, agent_id)
+                VALUES ($1, $2, $3, $4::jsonb, FALSE, NULL, $5, $6)
                 """,
                 str(uuid.uuid4()),
                 org_id,
                 f"[auto:{agent_id}] {description}",
                 json.dumps(rule.to_dict()),
                 cluster_id,
+                agent_id,
             )
             logger.info(
                 "soft_issue_review: shadow detector created org=%s agent=%s: %s",
@@ -450,10 +456,10 @@ class SoftIssueReviewer:
             rows = await pg.fetch(
                 """
                 SELECT id, org_id, description, rule, match_count, cluster_id,
-                       created_at, updated_at
+                       created_at, updated_at, agent_id
                 FROM (
                     SELECT id, org_id, description, rule, match_count,
-                           cluster_id, created_at, updated_at,
+                           cluster_id, created_at, updated_at, agent_id,
                            ROW_NUMBER() OVER (
                                PARTITION BY org_id ORDER BY created_at ASC
                            ) AS rn
@@ -486,10 +492,18 @@ class SoftIssueReviewer:
             )
             action = decision["action"]
             if action == "hold" or dry_run:
-                details.append({**decision, "id": str(r["id"]), "dry_run": dry_run})
+                details.append(
+                    {
+                        **decision,
+                        "id": str(r["id"]),
+                        "agent_id": str(r.get("agent_id") or "") or None,
+                        "dry_run": dry_run,
+                    }
+                )
                 continue
             sig_id = str(r["id"])
             org_id = str(r["org_id"])
+            agent_id = str(r.get("agent_id") or "") or None
             try:
                 if action == "promote":
                     await pg.execute(
@@ -523,11 +537,18 @@ class SoftIssueReviewer:
                     {
                         **decision,
                         "id": sig_id,
+                        "agent_id": agent_id,
                         "error": str(exc)[:160],
                     }
                 )
                 continue
-            details.append({**decision, "id": sig_id})
+            # Wave 3 (3.3): a promote/delete decision IS feedback for that
+            # agent — invalidate its cached threshold multiplier so the next
+            # trace's scan reflects the decision immediately instead of
+            # waiting out the 30s TTL.
+            if agent_id and action in ("promote", "delete"):
+                _invalidate_agent_multiplier(org_id, agent_id)
+            details.append({**decision, "id": sig_id, "agent_id": agent_id})
         return {
             "inspected": inspected,
             "promoted": promoted,
@@ -563,6 +584,23 @@ class SoftIssueReviewer:
             return bool(ok)
         except Exception:  # noqa: BLE001 — fail open, DB dedupe is the backstop
             return True
+
+
+def _invalidate_agent_multiplier(org_id: str, agent_id: str | None) -> None:
+    """Wave 3 (3.3): drop the cached per-agent threshold multiplier.
+
+    Thin wrapper over the public
+    :func:`eden.issues.detection_settings.invalidate_agent_multiplier` —
+    called after shadow-detector feedback lands (promote/delete decision
+    or an operator confirm/dismiss) so the very next trace scan for that
+    agent reads the new confirm/dismiss rates instead of the stale cache.
+    """
+    try:
+        from eden.issues.detection_settings import invalidate_agent_multiplier
+
+        invalidate_agent_multiplier(org_id, agent_id)
+    except Exception:  # noqa: BLE001 — invalidation is best-effort
+        pass
 
 
 def _parse_shadow_timestamp(value: Any) -> datetime | None:
@@ -711,7 +749,7 @@ async def record_shadow_feedback(
                 updated_at = NOW()
             WHERE id = $1 AND org_id = $2
             RETURNING id, org_id, description, rule, match_count, cluster_id,
-                      enabled
+                      enabled, agent_id
             """,
             signal_id,
             org_id,
@@ -720,6 +758,17 @@ async def record_shadow_feedback(
         )
         if dismiss and row is not None:
             await _maybe_auto_disable_on_dismiss(pg, dict(row))
+        # Wave 3 (3.3): operator confirm/dismiss is feedback — invalidate
+        # the agent's cached threshold multiplier so the next scan reacts.
+        if row is not None:
+            agent_id = str(row.get("agent_id") or "") or None
+            if agent_id is None:
+                # Pre-168 rows: fall back to parsing the `[auto:agent]`
+                # description prefix the column backfill already handled.
+                desc = str(row.get("description") or "")
+                m = re.match(r"^\[auto:([^\]]+)\]", desc)
+                agent_id = m.group(1) if m else None
+            _invalidate_agent_multiplier(org_id, agent_id)
         return True
     except Exception as exc:
         logger.debug("record_shadow_feedback failed: %s", exc)

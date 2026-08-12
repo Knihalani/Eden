@@ -298,12 +298,18 @@ def _map_attr_key(key: str) -> str:
     reaching the server under its own name.
 
     * ``force_trace`` → ``eden.force_trace`` (the one key rename).
+    * ``prompt_version`` → ``prompt_version`` (Wave 2: PromotionLoop
+      reads ``attributes->>'prompt_version'`` from ``telemetry_events``
+      to compute canary per-version stats; the old ``eden.span.``
+      prefix made that read return NULL forever).
     * Anything already namespaced under ``eden.`` passes through as-is.
     * Everything else keeps the ``eden.span.`` prefix (back-compat /
       namespacing against framework-internal keys like ``eden.args``).
     """
     if key == "force_trace":
         return "eden.force_trace"
+    if key == "prompt_version":
+        return "prompt_version"
     if key.startswith("eden."):
         return key
     return f"eden.span.{key}"

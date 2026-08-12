@@ -315,12 +315,23 @@ async def _run_forever() -> None:
     loops.append(("artifact_demotion", demotion_task))
 
     # 5. Multi-tenant maintenance — compaction/retention/signals/etc.
-    # Reuses cron_tick.run_maintenance_due; improvement sweeps stay off.
+    # Reuses cron_tick.run_maintenance_due; improvement sweeps are hosted
+    # by their own leader loop below (Wave 1, F-I).
     maint_task = asyncio.create_task(
         _supervise("maintenance", _leader_maintenance, stop),
         name="maintenance",
     )
     loops.append(("maintenance", maint_task))
+
+    # 5b. N23 recurring improvement sweep — leader-gated host for
+    # ``run_due_sweeps`` (was unhosted; see _leader_improvement_sweep).
+    # Gated by the ``improvement_schedule_enabled`` switch (prod default
+    # true once IMPROVEMENT_SCHEDULE_ENABLED is flipped).
+    improve_sweep_task = asyncio.create_task(
+        _supervise("improvement_sweep", _leader_improvement_sweep, stop),
+        name="improvement-sweep",
+    )
+    loops.append(("improvement_sweep", improve_sweep_task))
 
     # 6. Self-observability probe scan — leader-gated, pages on new
     # degraded/fail transitions (see eden.self_obs.scheduler).
@@ -694,11 +705,79 @@ async def _leader_artifact_demotion(stop: asyncio.Event) -> None:
     )
 
 
+async def _leader_improvement_sweep(stop: asyncio.Event) -> None:
+    """Leader-gated N23 recurring improvement sweep (Wave 1, F-I).
+
+    ``run_due_sweeps`` (the per-org weekly-cron machinery) used to have
+    zero hosts: ``cron_tick`` intentionally omitted it, ``main.py`` kept
+    it off, and northflank pinned ``IMPROVEMENT_SCHEDULE_ENABLED=false``
+    ("keep false until a worker Service hosts it for real"). This loop
+    is that host. It shares the fleet idle grid (like ``_leader_maintenance``)
+    and delegates all per-org gating to ``run_due_sweeps`` itself:
+    ``improvement_schedule_enabled_for_org`` + ``improvement_agent_enabled``
+    + ``is_due`` (cron match + watermark) are all checked inside. The
+    global ``improvement_schedule_enabled`` switch here short-circuits the
+    whole tick when the feature is off, so the per-org loop only spins
+    when the flag is live.
+    """
+    from eden.workers.leader import run_if_leader
+
+    async def _tick() -> None:
+        try:
+            from eden.config import get_settings
+
+            if not getattr(get_settings(), "improvement_schedule_enabled", False):
+                return
+        except Exception:
+            return
+        try:
+            from eden.improvement.schedule import run_due_sweeps
+
+            result = await run_due_sweeps(dry_run=False)
+            orgs = result.get("orgs") or []
+            swept = [o for o in orgs if "error" not in o]
+            errors = [o for o in orgs if "error" in o]
+            if swept:
+                logger.info(
+                    "worker: improvement_sweep swept %d org(s): %s",
+                    len(swept),
+                    [o.get("org_id") for o in swept][:8],
+                )
+            if errors:
+                logger.warning(
+                    "worker: improvement_sweep errors orgs=%s",
+                    [o.get("org_id") for o in errors],
+                )
+        except Exception as exc:
+            logger.error(
+                "worker: improvement_sweep tick failed: %s",
+                exc,
+                exc_info=True,
+            )
+            raise
+
+    logger.info(
+        "worker: improvement_sweep loop registered (interval=%.0fs)",
+        _idle_poll_period(),
+    )
+    await run_if_leader(
+        "improvement_sweep",
+        _tick,
+        # Shares the maintenance grid cadence; ``is_due`` inside
+        # ``run_due_sweeps`` gates the actual per-org fire (cron match +
+        # 1h watermark), so a frequent tick is cheap and never double-runs.
+        interval=_idle_poll_period(),
+        stop=stop,
+        align=True,
+    )
+
+
 async def _leader_maintenance(stop: asyncio.Event) -> None:
     """Leader-gated multi-tenant maintenance (was eden-cron).
 
     One warm process drains due work for all orgs — no cold-start job
-    and no per-user cron. Improvement sweeps stay off.
+    and no per-user cron. Improvement sweeps are hosted separately by
+    :func:`_leader_improvement_sweep` (Wave 1, F-I).
     """
     from eden.workers.leader import run_if_leader
 

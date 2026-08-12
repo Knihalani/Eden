@@ -49,8 +49,21 @@ def mock_postgres():
     """Mock PostgresClient used by the audit logger."""
     client = MagicMock()
     client.fetchval = AsyncMock(side_effect=_fetchval_dispatch)
+    # Wave 2 (2.4b): migration 055 dropped the legacy
+    # ``prompt_versions.quality_metrics`` column; org_id now lives in
+    # the v2 ``params`` jsonb (the compat shim writes it there). The
+    # evolver's org-resolution SELECT joins prompts + reads
+    # ``pv.params``, so the fixture returns that shape.
     client.fetchrow = AsyncMock(
-        return_value={"quality_metrics": json.dumps({"org_id": "00000000-0000-0000-0000-000000000aaa"})}
+        return_value={
+            "params": json.dumps(
+                {
+                    "quality_metrics": {
+                        "org_id": "00000000-0000-0000-0000-000000000aaa"
+                    }
+                }
+            )
+        }
     )
     client.execute = AsyncMock(return_value="INSERT 0 1")
     return client
@@ -59,19 +72,16 @@ def mock_postgres():
 async def _fetchval_dispatch(query: str, *args):
     """Return plausible values for the SELECTs the audit logger
     runs. Audit 2026-07-07: the canary-creation audit path now
-    resolves org_id from ``prompt_versions.quality_metrics``
-    (instead of the previous ``SELECT id FROM organizations
-    LIMIT 1`` cross-tenant leak) and the system-user from
-    ``users WHERE clerk_id = 'system'``.
+    resolves org_id from the prompt version row (instead of the
+    previous ``SELECT id FROM organizations LIMIT 1`` cross-tenant
+    leak) and the system-user from ``users WHERE clerk_id = 'system'``.
     """
     q = " ".join(query.split()).lower()
-    if "from prompt_versions" in q and "quality_metrics" in q:
-        # Audit 2026-07-07 — pre-fix the audit path used a
-        # LIMIT 1 query on the organizations table; the fix
-        # recovers org_id from the prompt_versions row's own
-        # quality_metrics JSONB. We pretend the row carries
-        # org_id so the test continues to exercise the audit
-        # path end-to-end.
+    if "from prompt_versions" in q and ("quality_metrics" in q or "pv.params" in q):
+        # Wave 2 (2.4b): the v2 org-resolution query reads
+        # ``pv.params->'quality_metrics'``. We pretend the row carries
+        # org_id so the test continues to exercise the audit path
+        # end-to-end.
         return json.dumps({"org_id": "00000000-0000-0000-0000-000000000aaa"})
     if "from users" in q and "clerk_id" in q:
         return "00000000-0000-0000-0000-000000000bbb"

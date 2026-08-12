@@ -1443,14 +1443,24 @@ export function SearchInput({
   placeholder,
   ariaLabel,
   className,
+  inputRef,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   ariaLabel: string;
   className?: string;
+  /**
+   * Optional external ref — lets a page-level `/` shortcut focus the
+   * field (the list shortcuts live above the feed, the input below it).
+   */
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalRef = useRef<HTMLInputElement>(null);
+  const mergedRef = (node: HTMLInputElement | null) => {
+    internalRef.current = node;
+    if (inputRef) inputRef.current = node;
+  };
   return (
     <div className={cn("relative min-w-0", className)}>
       <Search
@@ -1458,7 +1468,7 @@ export function SearchInput({
         aria-hidden
       />
       <input
-        ref={inputRef}
+        ref={mergedRef}
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -1471,7 +1481,7 @@ export function SearchInput({
           type="button"
           onClick={() => {
             onChange("");
-            inputRef.current?.focus();
+            internalRef.current?.focus();
           }}
           className="ds-btn ds-btn-ghost ds-btn-icon absolute right-1 top-1/2 !h-5 !w-5 -translate-y-1/2"
           aria-label={`Clear search`}

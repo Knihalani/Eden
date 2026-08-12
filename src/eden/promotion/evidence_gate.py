@@ -134,9 +134,10 @@ class EvidenceGate:
 
         FEAT-31: each PromotionKind gets its own real evidence source rather
         than being lumped into a blanket "not nudge -> no evidence" bucket.
-        Kinds that genuinely have no outcome instrumentation yet still
-        return [] here, but from their own explicit branch with a comment
-        on what's missing -- not as a side effect of a generic kind check.
+        Wave 3 (3.4): guardrail / model_routing / kb_skill / pr_merge each
+        read from their own outcome table (migration 169), so every declared
+        kind now has a real reader. Unknown kinds fall through to an honest
+        no-evidence [] rather than a fabricated signal.
         """
         kind = str(candidate.get("kind") or "")
         ref_id = str(candidate.get("ref_id") or "")
@@ -150,47 +151,52 @@ class EvidenceGate:
                 org_id, ref_id, applied=applied
             )
         if kind == "guardrail":
-            # No ground-truth correctness signal exists for guardrail
-            # decisions today. `guardrail_evaluations` and `intervention_log`
-            # (see src/eden/guardrails/intervention.py) only record the
-            # verdict a policy produced (allow/block/warn/redact), never
-            # whether that verdict was *correct* -- there's no
-            # false-positive flag, human-review/override table, or
-            # reversed-decision tracking anywhere in the schema. Wiring
-            # this up for real needs a `guardrail_outcomes`-style table
-            # (mirroring `nudge_outcomes.outcome_success`) fed by a
-            # reviewer/override action, not a fabricated proxy metric.
-            return []
+            # Wave 3 (3.4): guardrail_outcomes (migration 169) — fed by
+            # record_guardrail_outcome when a bypass is detected (the
+            # guardrail that should have fired didn't) or when the guardrail
+            # is promoted/demoted through this gate. ref_id = judge_id.
+            from eden.promotion.outcome_records import (
+                guardrail_outcome_metrics,
+            )
+
+            return await guardrail_outcome_metrics(
+                org_id, ref_id, applied=applied
+            )
         if kind == "model_routing":
-            # `model_routing` is declared as a PromotionKind (with its own
-            # _MIN_SAMPLES entry) but nothing in the codebase ever calls
-            # enqueue(kind="model_routing", ...), so there's no established
-            # ref_id convention either. ModelRouter (eden/optimization/
-            # model_router.py) tracks tier/fallback/quality-validation
-            # counters purely in-memory on the instance -- none of it is
-            # persisted. There's nothing to query yet; this needs a
-            # routing_decisions-style outcome table (and a producer) first.
-            return []
+            # Wave 3 (3.4): routing_decisions (migration 169) — fed by
+            # record_routing_decision in ModelRouter when a tiered route is
+            # attempted/fallen back (ref_id = agent name; the reader matches
+            # routing_decisions.agent).
+            from eden.promotion.outcome_records import (
+                routing_decision_metrics,
+            )
+
+            return await routing_decision_metrics(
+                org_id, ref_id, applied=applied
+            )
         if kind == "kb_skill":
-            # kb_skill candidates (ref_id = skills.id) are enqueued by
-            # KBFlywheelCoordinator (src/eden/kb/flywheel/coordinator.py),
-            # but the `skills` table only carries a static confidence_score/
-            # quality_metrics set once at draft time plus a human
-            # archivist_reviewed flag -- nothing records whether an applied
-            # skill actually helped or hurt downstream. A
-            # skill_applications/skill_outcomes table (an outcome_success
-            # boolean keyed by skill_id) is needed before this kind can be
-            # evidence-gated on real data.
-            return []
-        # kind == "pr_merge" (or anything else): pr_merge is declared as a
-        # PromotionKind and given its own _MIN_SAMPLES threshold, but
-        # nothing in the codebase ever enqueues a pr_merge candidate and
-        # there is no merge/revert outcome table to query (grepped the
-        # whole tree for "pr_merge" -- only hit is this file's own kind
-        # list). TODO(FEAT-31 follow-up): wire this up once a producer and
-        # a merge-outcome source (e.g. "was this PR reverted/hotfixed")
-        # exist; until then it stays an honest no-evidence [] rather than
-        # a fabricated signal.
+            # Wave 3 (3.4): skill_outcomes (migration 169) — fed by
+            # record_skill_outcome in the agent-issues skill apply path
+            # (ref_id = skills.id).
+            from eden.promotion.outcome_records import (
+                skill_outcome_metrics,
+            )
+
+            return await skill_outcome_metrics(
+                org_id, ref_id, applied=applied
+            )
+        if kind == "pr_merge":
+            # Wave 3 (3.4): pr_outcomes (migration 169) — fed by
+            # record_pr_merge from the PR merge/revert paths.
+            from eden.promotion.outcome_records import (
+                pr_merge_outcome_metrics,
+            )
+
+            return await pr_merge_outcome_metrics(
+                org_id, ref_id, applied=applied
+            )
+        # Anything else: no per-kind outcome instrumentation yet. Stays an
+        # honest no-evidence [] rather than a fabricated signal.
         return []
 
     async def _nudge_outcome_metrics(

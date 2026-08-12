@@ -697,6 +697,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/improve/plans/{plan_id}/post-merge-windows": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/improve/queue": [
       "200:application/json",
       "422:application/json"
@@ -1365,6 +1369,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/prompts/canaries": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/prompts/{agent}/canary": [
       "200:application/json",
       "422:application/json"
@@ -1481,11 +1489,19 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/settings/autonomy/agents": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/settings/autonomy/audit": [
       "200:application/json",
       "422:application/json"
     ],
     "GET /orgs/{org_id}/settings/autonomy/budget": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/settings/autonomy/earnings": [
       "200:application/json",
       "422:application/json"
     ],
@@ -3564,7 +3580,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 907,
+  "route_count": 911,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3748,6 +3764,7 @@
     "GET /orgs/{org_id}/improve/plans",
     "GET /orgs/{org_id}/improve/plans/{plan_id}",
     "GET /orgs/{org_id}/improve/plans/{plan_id}/events",
+    "GET /orgs/{org_id}/improve/plans/{plan_id}/post-merge-windows",
     "GET /orgs/{org_id}/improve/queue",
     "GET /orgs/{org_id}/improve/runs",
     "GET /orgs/{org_id}/improve/runs/{run_id}",
@@ -3917,6 +3934,7 @@
     "GET /orgs/{org_id}/promotions",
     "GET /orgs/{org_id}/promotions/{candidate_id}",
     "GET /orgs/{org_id}/prompts",
+    "GET /orgs/{org_id}/prompts/canaries",
     "GET /orgs/{org_id}/prompts/{agent}/canary",
     "GET /orgs/{org_id}/prompts/{name}",
     "GET /orgs/{org_id}/prompts/{name}/environments",
@@ -3946,8 +3964,10 @@
     "GET /orgs/{org_id}/sessions",
     "GET /orgs/{org_id}/sessions/{session_id}/timeline",
     "GET /orgs/{org_id}/settings/autonomy",
+    "GET /orgs/{org_id}/settings/autonomy/agents",
     "GET /orgs/{org_id}/settings/autonomy/audit",
     "GET /orgs/{org_id}/settings/autonomy/budget",
+    "GET /orgs/{org_id}/settings/autonomy/earnings",
     "GET /orgs/{org_id}/settings/detection",
     "GET /orgs/{org_id}/shares",
     "GET /orgs/{org_id}/sidebar-prefs",

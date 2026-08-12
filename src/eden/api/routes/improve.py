@@ -136,6 +136,59 @@ async def get_plan(
         raise HTTPException(status_code=404, detail="plan not found")
     return _ok("improvement_plans", {"plan": plan})
 
+@router.get("/plans/{plan_id}/post-merge-windows")
+async def get_plan_post_merge_windows(
+    org_id: str = Depends(require_path_org_access),
+    plan_id: str = Path(...),
+) -> dict[str, Any]:
+    """Wave 4 (4.3) — post-merge watch windows for a plan.
+
+    Returns the 1h/24h/7d ``post_merge_windows`` rows (oldest first). An
+    empty list means the plan predates the watch (or has no merged PR).
+    """
+    await _require_agent_v1_async(org_id)
+    plan = await plans_repo.get_plan(org_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="plan not found")
+    windows = await _list_post_merge_windows(org_id, plan_id)
+    return _ok("improvement_plans", {"windows": windows})
+
+
+async def _list_post_merge_windows(org_id: str, plan_id: str) -> list[dict[str, Any]]:
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return []
+        rows = await client.fetch(
+            """
+            SELECT id, plan_id, agent_id, window_hours, status,
+                   opened_at, closes_at, pre_issue_rate, post_issue_rate,
+                   delta_pct, follow_up_plan_id, evaluated_at
+            FROM post_merge_windows
+            WHERE org_id = $1 AND plan_id = $2
+            ORDER BY window_hours ASC
+            """,
+            org_id,
+            plan_id,
+        )
+        out: list[dict[str, Any]] = []
+        for r in rows or []:
+            d = dict(r)
+            d["id"] = str(d["id"])
+            d["plan_id"] = str(d["plan_id"])
+            if d.get("follow_up_plan_id"):
+                d["follow_up_plan_id"] = str(d["follow_up_plan_id"])
+            out.append(d)
+        return out
+    except Exception as exc:
+        logger.warning(
+            "improve: post-merge windows read failed: %s", redact_all(str(exc))
+        )
+        return []
+
+
 @router.get("/plans/{plan_id}/events")
 async def get_plan_events(
     org_id: str = Depends(require_path_org_access),

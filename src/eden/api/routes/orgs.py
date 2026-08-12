@@ -601,6 +601,23 @@ async def create_org(
     except Exception as exc:  # noqa: BLE001
         logger.info("N22 autonomy policy seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
 
+    # Wave 6 (6.1) — the dogfood org runs the full loop: prompt canaries
+    # (the evolution loop was held back pending Wave 3's per-agent
+    # wiring) plus the earned-autonomy program, so it can prove 5 clean
+    # auto-merges and have T4 granted automatically.
+    try:
+        import os as _os
+
+        dogfood_org = (
+            _os.environ.get("EDEN_ORG_ID")
+            or _os.environ.get("EDEN_DEFAULT_ORG")
+            or ""
+        ).strip()
+        if dogfood_org and dogfood_org == str(org_id):
+            await _maybe_seed_dogfood(client, org_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("dogfood seed skipped for org=%s: %s", org_id, redact_all(str(exc)))
+
     return {
         "org_id": org_id,
         "name": name,
@@ -610,6 +627,40 @@ async def create_org(
         "org_degraded": degraded,
         "is_personal": bool(is_personal) if personal_col else False,
     }
+
+
+async def _maybe_seed_dogfood(client: Any, org_id: str) -> None:
+    """Wave 6 (6.1) — flip the dogfood org onto the full loop.
+
+    Enables the evolution (prompt-canary) lane in ``organizations.settings``
+    and the earned-autonomy opt-in on the org-default policy row. Only
+    runs for the org named by ``EDEN_ORG_ID`` / ``EDEN_DEFAULT_ORG`` —
+    the same env the SDK bootstrap reads — so every other org keeps the
+    conservative defaults.
+    """
+    await client.execute(
+        """
+        UPDATE organizations
+        SET settings = COALESCE(settings, '{}'::jsonb)
+              || '{"evolution_loop_enabled": true}'::jsonb
+        WHERE id = $1
+        """,
+        org_id,
+    )
+    await client.execute(
+        """
+        UPDATE autonomy_policies
+        SET policy = policy
+              || '{"earned_autonomy_enabled": true}'::jsonb,
+            updated_at = NOW()
+        WHERE org_id = $1 AND agent_id IS NULL
+        """,
+        org_id,
+    )
+    logger.info(
+        "dogfood org=%s: evolution loop + earned autonomy enabled",
+        org_id,
+    )
 
 
 @router.get("", response_model=list[dict])

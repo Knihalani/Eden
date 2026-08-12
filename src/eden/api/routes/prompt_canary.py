@@ -38,6 +38,34 @@ class CanaryPromoteRequest(BaseModel):
     pass  # No body; the experiment_id is in the path
 
 
+@router.get("/canaries")
+async def list_org_canaries(
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Wave 5 (5.1) — org-wide canary experiments across agents.
+
+    The per-agent ``GET /{agent}/canary`` route drives one agent's tab;
+    the canary cockpit needs every experiment in the org (agent, control
+    vs candidate, traffic %, elapsed, status) on one surface.
+    """
+    client = await get_postgres_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    rows = await client.fetch(
+        """
+        SELECT experiment_id, agent, control_version, candidate_version,
+               traffic_pct, started_at, expires_at, status, notes
+        FROM prompt_canary_experiments
+        WHERE tenant_id = $1
+        ORDER BY started_at DESC
+        LIMIT 100
+        """,
+        org_id,
+    )
+    return {"canaries": [dict(r) for r in rows or []]}
+
+
 @router.post("/{agent}/canary")
 async def create_canary(
     org_id: str = Depends(require_path_org_access),
@@ -252,7 +280,10 @@ async def promote_canary(
         # Activate the prompt version (if not already)
         try:
             from eden.kb.prompt_versions.client import get_prompt_versions_client
-            pvc = await get_prompt_versions_client()
+            # v2-schema shim: the factory is sync (``_maybe_await`` compat
+            # resolved in Wave 2) — awaiting it raised TypeError that the
+            # broad except below swallowed, silently skipping activation.
+            pvc = get_prompt_versions_client()
             await pvc.activate_prompt(agent, candidate_version)
         except Exception as exc:
             logger.warning(f"activate_prompt during promote failed: {exc}")

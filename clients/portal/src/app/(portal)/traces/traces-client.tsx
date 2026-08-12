@@ -19,9 +19,11 @@ import {
   ChevronRight,
   Copy,
   GitBranch,
+  HelpCircle,
   MoreHorizontal,
   PanelLeftClose,
   Radar,
+  RefreshCw,
   SearchX,
 } from "lucide-react";
 import {
@@ -86,6 +88,7 @@ import {
 import { cn } from "@/lib/utils";
 import { dynamicWithRetry } from "@/lib/dynamic-with-retry";
 import { SavedViewsMenu } from "@/components/portal/saved-views-menu";
+import { ShortcutHelp } from "@/lab/shortcut-help";
 import {
   FIRST_EVENT_WAIT,
   U20_FILTER_EMPTY_COPY,
@@ -175,6 +178,44 @@ function parseTab(value: string | null): DetailTab {
     return value;
   }
   return "trace";
+}
+
+/**
+ * Wave 14 — "updated Xs ago" freshness label for the feed header.
+ *
+ * Owns its own 15s tick so the relative label stays honest without
+ * re-rendering the whole page on a timer. Previously the `now` state
+ * lived in the page root, which re-rendered the entire virtualised
+ * feed + all detail panels every 15s (Wave 14 perf regression).
+ */
+function FeedFreshness({
+  updatedAt,
+  refreshing,
+}: {
+  updatedAt: number;
+  refreshing: boolean;
+}) {
+  // Tick counter only — the relative label recomputes against real
+  // `Date.now()` on every render (formatRelativeTime reads the clock
+  // internally), so the state value itself is never read.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (updatedAt <= 0) return null;
+  return (
+    <span
+      className="ml-1.5 inline-flex items-center gap-1"
+      title={formatAbsoluteTime(new Date(updatedAt))}
+    >
+      <RefreshCw
+        className={cn("h-3 w-3", refreshing ? "animate-spin" : "")}
+        aria-hidden
+      />
+      updated {formatRelativeTime(new Date(updatedAt))}
+    </span>
+  );
 }
 
 /** Flat row model for the virtualised feed (sessions / grouped / flat runs). */
@@ -393,6 +434,23 @@ function LabTracesInner() {
   // outside the provider (unconditional hook call).
   const { pushToast } = useLabToastSafe();
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  // Wave 14 — keyboard-shortcut help (`?` toggles) + `/` focuses search.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Wave 14 — last-fetched freshness. RQ stamps `dataUpdatedAt` in epoch
+  // ms; we render a relative label off the newer of the two feeds. The
+  // ticking interval lives inside `FeedFreshness` so it re-renders only
+  // the label — the old `setNow` here re-rendered the whole page
+  // (virtualised feed + detail panels) every 15s on a timer.
+  const tracesUpdatedAt = tracesQuery.dataUpdatedAt ?? 0;
+  const sessionsUpdatedAt = sessionsQuery.dataUpdatedAt ?? 0;
+  const lastUpdatedAt = Math.max(tracesUpdatedAt, sessionsUpdatedAt);
+  const refreshing = tracesQuery.isFetching || sessionsQuery.isFetching;
+
+  const refreshFeed = useCallback(() => {
+    void tracesQuery.refetch();
+    void sessionsQuery.refetch();
+  }, [tracesQuery, sessionsQuery]);
 
   useEffect(() => {
     setHubViewState(parseHubView(paramView));
@@ -815,6 +873,20 @@ function LabTracesInner() {
             }
           }
         : undefined,
+    onHelp: () => setHelpOpen(true),
+    onSearch: () => {
+      // `/` focuses the feed search. When the feed is collapsed on a
+      // phone, reveal it first — the input isn't mounted while hidden.
+      if (isLgUp === false) setListOpen(true);
+      // Focus directly when the feed is already visible (desktop / open
+      // list). Only defer through rAF when we just revealed the list so
+      // the input exists before we focus it.
+      if (isLgUp === false || !listOpen) {
+        window.requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else {
+        searchInputRef.current?.focus();
+      }
+    },
   });
 
   // ---- Virtualised feed -------------------------------------------
@@ -1032,24 +1104,42 @@ function LabTracesInner() {
     );
   }
 
-  if (tracesQuery.isLoading || sessionsQuery.isLoading) {
+  // Gate the page on the *active view's* feed only. The runs feed needs
+  // traces; the sessions feed needs sessions. Waiting on both made the
+  // page hold a full loading panel until the slowest of the two arrived
+  // — "stuff loading at different times" — even when the visible feed
+  // was already ready. The inactive feed's data (session links on runs
+  // view, the run inspector on sessions view) streams in afterwards and
+  // re-renders in place.
+  const feedLoading =
+    hubView === "sessions" ? sessionsQuery.isLoading : tracesQuery.isLoading;
+  const feedError =
+    hubView === "sessions" ? sessionsQuery.isError : tracesQuery.isError;
+
+  if (feedLoading) {
     return (
       <div className="ds-page">
         <PageHeader title="Traces" />
-        <QueryLoadingPanel label="Loading traces…" />
+        <QueryLoadingPanel
+          label={
+            hubView === "sessions" ? "Loading sessions…" : "Loading traces…"
+          }
+        />
       </div>
     );
   }
 
-  if (tracesQuery.isError || sessionsQuery.isError) {
+  if (feedError) {
     return (
       <div className="ds-page">
         <PageHeader title="Traces" />
         <QueryErrorPanel
-          error={tracesQuery.error ?? sessionsQuery.error}
+          error={
+            hubView === "sessions" ? sessionsQuery.error : tracesQuery.error
+          }
           onRetry={() => {
-            void tracesQuery.refetch();
-            void sessionsQuery.refetch();
+            if (hubView === "sessions") void sessionsQuery.refetch();
+            else void tracesQuery.refetch();
           }}
         />
       </div>
@@ -1065,12 +1155,35 @@ function LabTracesInner() {
             {scopeAgent ? scopeAgent.name : "All agents"} · {feedCount}
             {feedCount !== feedTotal ? ` of ${feedTotal}` : ""}{" "}
             {hubView === "sessions" ? "sessions" : "runs"}
+            <FeedFreshness updatedAt={lastUpdatedAt} refreshing={refreshing} />
           </span>
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <SavedViewsMenu />
             <HubViewToggle value={hubView} onChange={setHubView} />
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-icon"
+              onClick={refreshFeed}
+              disabled={refreshing}
+              aria-label="Refresh traces"
+              title="Refresh traces"
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", refreshing && "animate-spin")}
+                aria-hidden
+              />
+            </button>
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-icon"
+              onClick={() => setHelpOpen(true)}
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+            >
+              <HelpCircle className="h-4 w-4" aria-hidden />
+            </button>
             {!listOpen ? (
               <ListRevealButton
                 label="Feed"
@@ -1134,6 +1247,7 @@ function LabTracesInner() {
               ariaLabel={
                 hubView === "sessions" ? "Filter sessions" : "Filter traces"
               }
+              inputRef={searchInputRef}
             />
             <FilterChips
               value={severityFilter}
@@ -1822,6 +1936,17 @@ function LabTracesInner() {
           prefillTraceId={diffPrefill}
         />
       ) : null}
+      <ShortcutHelp
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        shortcuts={[
+          { keys: "j / k", label: "Move through runs" },
+          { keys: "s / t / r / c", label: "Switch tab (Signals / Transcript / Tree / Chat)" },
+          { keys: "/", label: "Focus search" },
+          { keys: "Enter", label: "Open selected run" },
+          { keys: "Esc", label: "Close panels" },
+        ]}
+      />
     </div>
   );
 }

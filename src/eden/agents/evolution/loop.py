@@ -29,17 +29,34 @@ async def _enroll_pending_canaries() -> int:
     pg = await get_postgres_client()
     if not pg:
         return 0
+    # Wave 2: migration 055 dropped the legacy agent-keyed
+    # ``prompt_versions`` columns (``agent`` / ``quality_metrics``).
+    # Read the v2 schema: agent name lives on ``prompts``, quality
+    # metrics live in ``prompt_versions.params`` jsonb under the
+    # ``quality_metrics`` key (see
+    # ``eden.kb.prompt_versions.client`` — the compat shim).
+    #
+    # Scope to the sentinel system org so judge-evolved agent prompts
+    # (written by the compat shim) are scanned — not per-tenant
+    # ``prompts`` rows (IssuePromptEvolver variants also set
+    # ``ab_test_active`` in params but are org-scoped and enroll their
+    # own canaries at creation time).
+    from eden.kb.prompt_versions.client import SYSTEM_ORG_ID
+
     try:
         rows = await pg.fetch(
             """
-            SELECT agent, version,
-                   COALESCE((quality_metrics->>'ab_test_round')::int, 1) AS ab_round
-            FROM prompt_versions
-            WHERE COALESCE((quality_metrics->>'ab_test_active')::boolean, false) = true
-              AND COALESCE(quality_metrics->>'canary_status', '') = ''
-            ORDER BY created_at DESC
+            SELECT p.name AS agent, pv.version AS version,
+                   COALESCE((pv.params->'quality_metrics'->>'ab_test_round')::int, 1) AS ab_round
+            FROM prompt_versions pv
+            JOIN prompts p ON p.id = pv.prompt_id
+            WHERE pv.org_id = $1
+              AND COALESCE((pv.params->'quality_metrics'->>'ab_test_active')::boolean, false) = true
+              AND COALESCE(pv.params->'quality_metrics'->>'canary_status', '') = ''
+            ORDER BY pv.created_at DESC
             LIMIT 20
-            """
+            """,
+            SYSTEM_ORG_ID,
         )
     except Exception as exc:
         logger.debug("evolution_loop: pending canary query failed: %s", exc)

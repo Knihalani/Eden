@@ -199,6 +199,23 @@ async def handle_regression(
                 await record_plan_outcome(org_id, plan, "reverted")
             except Exception as exc:  # noqa: BLE001
                 logger.warning("guardian: KG reverted outcome failed: %s", exc)
+            # Wave 3 (3.4): pr_merge evidence — flipping the merged PR's
+            # outcome to failure is the real "this merge was wrong" signal
+            # the EvidenceGate reads for the pr_merge PromotionKind.
+            try:
+                from eden.promotion.outcome_records import mark_pr_reverted
+
+                await mark_pr_reverted(
+                    org_id,
+                    plan_id,
+                    pr_number=(
+                        int(plan["pr_number"])
+                        if plan.get("pr_number") is not None
+                        else None
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("guardian: pr outcome revert failed: %s", exc)
 
         # Slack regression alert — deep link to the issue.
         try:

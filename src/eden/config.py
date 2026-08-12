@@ -272,10 +272,10 @@ def _build_settings_class():
         # populate debugger_llm_cache automatically. Set to false to
         # disable the prefix-cache upsert path without touching the
         # CheckpointStore audit trail (which is always written).
+        debugger_checkpoint_ingest_v1: bool = True
         # ``debugger_checkpoint_backfill_v1``: default False — gates the
         # scripts/backfill_checkpoints.py one-shot script. Enable
         # explicitly before running the backfill job.
-        debugger_checkpoint_ingest_v1: bool = True
         debugger_checkpoint_backfill_v1: bool = False
         # ``debugger_live_rerun_v1``: default False. When enabled, the
         # debugger ``/rerun`` endpoint honours ``live=true`` by actually
@@ -478,10 +478,6 @@ def _build_settings_class():
         circuit_breaker_threshold: int = 5
         circuit_breaker_timeout: int = 60
 
-        # LangGraph
-        checkpoint_enabled: bool = True
-        interrupt_before_archivist: bool = True
-        interrupt_before_human_review: bool = True
 
         # JWT Authentication — accept JWT_SECRET and EDEN_JWT_SECRET
         # (docs/boot error mention both; without AliasChoices only the
@@ -933,8 +929,6 @@ def _build_settings_class():
         # N14 — explicit worker / hot-path toggles (default on; worker
         # still also requires ``trace_quality_enabled`` + compute_async).
         trace_quality_worker_enabled: bool = True
-        trace_quality_hot_path_enabled: bool = True
-        traceloop_auto_apply: bool = False  # per-action kill-switch default
         stat_gate_min_n: int = 30
         stat_gate_min_effect: float = 0.2
         # N01 regression gate: how skipped cases (no constraints / no
@@ -1209,7 +1203,6 @@ def _build_settings_class():
         # Enhancement-tracking bounds (no-drop invariant + compute budget).
         enhancements_per_component_max: int = 5
         enhancements_compute_budget_seconds: int = 14400  # 4 CPU-hours
-        enhancements_no_drop_invariant_enforced: bool = True
 
         # ── Closed-loop error diagnosis feature flags ───────────────────
         # The issues surface (F28/F29 stumbles+issues + routes) is on by
@@ -1449,6 +1442,13 @@ def _build_settings_class():
         verify_delay_seconds_auto_merge: int = 600
         verify_quiet_window_minutes_auto_merge: int = 10
 
+        # ── Wave 6 — earned autonomy (T4 dogfood program) ────────────
+        # Consecutive proven-clean auto-merges (every post-merge watch
+        # window ``ok``) an org needs to *earn* ``auto_code_patch_merge``
+        # — see ``improvement/earned_autonomy.py``. The grant also
+        # requires the org's ``earned_autonomy_enabled`` policy opt-in.
+        earned_autonomy_min_streak: int = 5
+
         @property
         def verify_poll_interval_seconds(self) -> float:
             """Deprecated alias (M3, D7) — this used to be a dead field
@@ -1468,7 +1468,6 @@ def _build_settings_class():
         ledger_v1: bool = True
         artifacts_inrun_v1: bool = False
         improvement_loop_preview: bool = False
-        zero_label_onboarding_v1: bool = False
         inject_budget_soft_tokens: int = 800
         inject_budget_hard_tokens: int = 1200
         max_promoted_artifacts: int = 8
@@ -1482,7 +1481,6 @@ def _build_settings_class():
         signal_investigator_llm_v1: bool = False
         fleet_health_v1: bool = True
         compliance_pack_export_v1: bool = True
-        issue_experiments_v1: bool = True
         # In-process code evaluators use exec() without a real sandbox —
         # keep OFF until subprocess/container isolation ships.
         code_evaluators_exec_enabled: bool = Field(
@@ -1504,9 +1502,6 @@ def _build_settings_class():
 
         # ── Phase 7 Wave 8 (F06/F65/N10) ───────────────────────────────
         signal_clusters_v1: bool = True
-        signal_backfill_v1: bool = True
-        deep_search_to_signal_v1: bool = True
-        f65_topics_v1: bool = True
 
         # ── Settings the code reads but this class never declared ───────
         #

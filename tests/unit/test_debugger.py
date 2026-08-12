@@ -178,6 +178,42 @@ class TestCheckpointStore:
         assert any("insert into telemetry_events" in c[0] for c in pg.calls)
 
     @pytest.mark.asyncio
+    async def test_save_uses_event_id_and_stamps_source_format(self) -> None:
+        """F-B pinning test (Wave 1).
+
+        The INSERT used to target an ``id`` column — ``telemetry_events``
+        has no ``id`` column (PK is ``event_id``, migration 009) — so
+        Postgres rejected every checkpoint and the debugger's
+        replay-verify backbone silently persisted nothing. This test
+        captures the raw SQL and pins the corrected column + the
+        ``source_format='debugger_checkpoint'`` provenance tag the
+        docstring always promised.
+        """
+        raw_calls: list[str] = []
+
+        class _RawPg:
+            async def execute(self, query: str, *args: Any) -> str:
+                raw_calls.append(query)
+                return "INSERT 0 1"
+
+        store = CheckpointStore(_RawPg())
+        await store.save(_checkpoint(1))
+
+        assert raw_calls, "save() never executed SQL"
+        sql = raw_calls[0]
+        # 1. The real column is event_id — the dead ``id`` column must
+        #    never appear in the column list.
+        assert "event_id" in sql
+        # No bare ``id`` column token: "id" appears inside event_id and
+        # span_id, so assert the INSERT column list has no standalone id.
+        insert_cols = sql.split("(")[1].split(")")[0]
+        cols = [c.strip().lower() for c in insert_cols.split(",")]
+        assert "id" not in cols
+        assert "event_id" in cols
+        # 2. source_format is stamped 'debugger_checkpoint'.
+        assert "debugger_checkpoint" in sql
+
+    @pytest.mark.asyncio
     async def test_list_for_trace_returns_in_step_order(self) -> None:
         pg = FakePg()
         store = CheckpointStore(pg)

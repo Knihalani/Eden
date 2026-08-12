@@ -31,6 +31,9 @@ ADOPTED = {
     "eql_alert_watchdog",
     "artifact_demotion",
     "maintenance",
+    # Wave 1 (F-I): the N23 recurring improvement sweep is adopted with
+    # the rest of the leader-gated loops (was unhosted in prod).
+    "improvement_sweep",
     "self_obs_probes",
 }
 

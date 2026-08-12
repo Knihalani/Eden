@@ -77,6 +77,14 @@ settings = _SettingsProxy()
 # ``telemetry_events`` so we can attribute each score to an agent.
 # The JOIN is left-side: judge rows without a matching
 # telemetry event are dropped (their ``agent_id`` would be NULL).
+#
+# Wave 1 (F-A fix, 2026-08-11): the join used to be
+# ``te.id::text = js.trace_id`` and read ``te.attributes->>'agent_id'``
+# — but ``telemetry_events`` has no ``id`` column (PK is ``event_id``,
+# migration 009) and ``agent_id`` is a **top-level column**, never
+# written into ``attributes``. The old SQL could never match, so the
+# evolver always returned 0 degradations. Both halves are corrected:
+# join on the shared ``trace_id`` namespace and read ``te.agent_id``.
 _AGG_QUERY = """
     WITH joined AS (
         SELECT
@@ -87,10 +95,11 @@ _AGG_QUERY = """
             js.span_id,
             js.model,
             js.scored_at,
-            te.attributes->>'agent_id' AS agent_id
+            te.agent_id AS agent_id
         FROM judge_scores js
         LEFT JOIN telemetry_events te
-          ON te.id::text = js.trace_id
+          ON te.event_id = js.source_event_id
+          OR (js.source_event_id IS NULL AND te.trace_id = js.trace_id)
         WHERE js.scored_at >= NOW() - INTERVAL '24 hours'
     )
     SELECT
@@ -492,26 +501,38 @@ class PromptEvolvers(EvolutionComponent):
 
         resolved_org = org_id
         if not resolved_org:
+            # Wave 2: migration 055 dropped the legacy ``prompt_versions``
+            # columns. The org id (when present) lives in the v2
+            # ``params`` jsonb under ``quality_metrics`` — read via the
+            # prompts join, same shape the compat shim writes.
             try:
                 row = await pg.fetchrow(
-                    "SELECT quality_metrics FROM prompt_versions "
-                    "WHERE agent = $1 AND version = $2",
+                    "SELECT pv.params FROM prompt_versions pv "
+                    "JOIN prompts p ON p.id = pv.prompt_id "
+                    "WHERE p.name = $1 AND pv.version = $2",
                     agent,
                     int(version),
                 )
             except Exception:
                 row = None
             if row:
-                qm = row.get("quality_metrics")
-                if isinstance(qm, dict):
-                    resolved_org = qm.get("org_id")
-                elif isinstance(qm, str):
+                raw_params = row.get("params")
+                if isinstance(raw_params, str):
                     try:
-                        qm_parsed = json.loads(qm)
-                        if isinstance(qm_parsed, dict):
-                            resolved_org = qm_parsed.get("org_id")
+                        raw_params = json.loads(raw_params)
                     except (TypeError, ValueError):
-                        resolved_org = None
+                        raw_params = None
+                if isinstance(raw_params, dict):
+                    qm = raw_params.get("quality_metrics")
+                    if isinstance(qm, dict):
+                        resolved_org = qm.get("org_id")
+                    elif isinstance(qm, str):
+                        try:
+                            qm_parsed = json.loads(qm)
+                            if isinstance(qm_parsed, dict):
+                                resolved_org = qm_parsed.get("org_id")
+                        except (TypeError, ValueError):
+                            resolved_org = None
         if not resolved_org:
             logger.warning(
                 "PromptEvolvers: cannot resolve org_id for %s v%s; "

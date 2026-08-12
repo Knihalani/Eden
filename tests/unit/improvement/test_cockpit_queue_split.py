@@ -14,7 +14,6 @@ from eden.improvement.cockpit_aggregator import (
     ImprovementCockpitAggregator,
     _plan_is_stale,
     _queue_column_for_plan,
-    is_fix_now_item,
 )
 
 
@@ -111,9 +110,12 @@ async def test_from_improvement_plans_splits_queues() -> None:
     assert by_id["p3"].payload.get("stale") is True
     assert by_id["p4"].column == COLUMN_FIX_NOW
     assert by_id["p5"].column == COLUMN_IMPROVE_LATER
-    assert is_fix_now_item(by_id["p1"]) is True
-    assert is_fix_now_item(by_id["p2"]) is False
-    assert is_fix_now_item(by_id["p4"]) is True
+    # Fix-now membership is the column itself (``_queue_column_for_plan``
+    # already pinned above) — the is_fix_now_item helper was removed in
+    # Wave 7.4 as dead code with no caller.
+    assert by_id["p1"].column == COLUMN_FIX_NOW
+    assert by_id["p2"].column == COLUMN_IMPROVE_LATER
+    assert by_id["p4"].column == COLUMN_FIX_NOW
 
 
 @pytest.mark.asyncio

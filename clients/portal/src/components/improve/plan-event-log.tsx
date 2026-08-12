@@ -24,6 +24,11 @@ const EVENT_LABELS: Record<string, string> = {
   pr_opened: "PR opened",
   merged: "Merged",
   closed: "Closed",
+  // Wave 5 (5.3) — the post-merge watch + N01 replay verify legs of the
+  // trustworthy loop trail (emitted by PostMergeMonitor + approve flow).
+  verify_queued: "Replay verify queued",
+  post_merge_ok: "Post-merge watch: ok",
+  post_merge_degrading: "Post-merge watch: degrading",
 };
 
 const EVENT_TONE: Record<string, "ok" | "fail" | "neutral"> = {
@@ -34,6 +39,9 @@ const EVENT_TONE: Record<string, "ok" | "fail" | "neutral"> = {
   pr_opened: "ok",
   merged: "ok",
   closed: "fail",
+  verify_queued: "neutral",
+  post_merge_ok: "ok",
+  post_merge_degrading: "fail",
 };
 
 function eventDetail(e: ImprovementPlanEvent): string | null {
@@ -47,6 +55,21 @@ function eventDetail(e: ImprovementPlanEvent): string | null {
   }
   if (typeof payload.snoozed_until === "string") {
     parts.push(`until ${payload.snoozed_until}`);
+  }
+  if (typeof payload.verification_id === "string") {
+    parts.push(`verify ${payload.verification_id.slice(0, 8)}`);
+  }
+  if (typeof payload.delta_pct === "number") {
+    const pre = payload.pre_issue_rate as number | undefined;
+    const post = payload.post_issue_rate as number | undefined;
+    const rates =
+      typeof pre === "number" && typeof post === "number"
+        ? ` ${post.toFixed(3)}/h vs ${pre.toFixed(3)}/h baseline`
+        : "";
+    parts.push(`${payload.delta_pct >= 0 ? "+" : ""}${payload.delta_pct.toFixed(1)}%${rates}`);
+  }
+  if (typeof payload.follow_up_plan_id === "string") {
+    parts.push(`follow-up filed`);
   }
   return parts.filter(Boolean).join(" — ") || null;
 }

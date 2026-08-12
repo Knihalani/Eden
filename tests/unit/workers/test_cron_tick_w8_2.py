@@ -94,7 +94,10 @@ async def test_retention_daily_isolates_failures():
 
 @pytest.mark.asyncio
 async def test_improvement_sweeps_skipped_issue_driven_only():
-    """Sweeps stay off — drafts come from identified issues only."""
+    """The maintenance tick stays issue-driven/closed-loop only — the
+    N23 recurring sweep is hosted by the worker's leader-gated
+    ``improvement_sweep`` loop (Wave 1, F-I), not by this cron tick.
+    """
     with (
         patch.object(
             cron_tick, "_once_per_window", AsyncMock(return_value=True)
@@ -105,7 +108,7 @@ async def test_improvement_sweeps_skipped_issue_driven_only():
         out = await cron_tick._tick(dry_run=True)
 
     assert out["improvement_sweeps"]["skipped"] is True
-    assert "issue_driven" in out["improvement_sweeps"]["reason"]
+    assert "hosted_by_worker" in out["improvement_sweeps"]["reason"]
 
 
 @pytest.mark.asyncio

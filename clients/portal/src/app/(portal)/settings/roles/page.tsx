@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader, Panel, StatusChip } from "@/components/ds/primitives";
-import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
+import {
+  InlineLoading,
+  QueryErrorPanel,
+  QueryLoadingPanel,
+} from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { EmptyState } from "@/lab/lab-ui";
 import { useOrg } from "@/hooks/use-org";
@@ -499,7 +503,7 @@ function PermissionPicker({
   disabled?: boolean;
 }) {
   if (grouped.size === 0) {
-    return <p className="type-meta text-[var(--text-faint)]">Loading permission catalogue…</p>;
+    return <InlineLoading label="Loading permission catalogue" />;
   }
   return (
     <div className="flex max-h-64 flex-col gap-3 overflow-y-auto rounded-md border border-[var(--line)] p-3">

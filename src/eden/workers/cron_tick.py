@@ -149,6 +149,15 @@ async def _run_daily(now: datetime, *, dry_run: bool) -> dict[str, object]:
     return out
 
 
+async def _run_post_merge_monitor(*, dry_run: bool) -> dict[str, object]:
+    """Wave 4 (4.2): close due post-merge watch windows."""
+    from eden.improvement.post_merge_monitor import PostMergeMonitor
+
+    if dry_run:
+        return {"skipped": True, "reason": "dry_run"}
+    return await PostMergeMonitor().run_due()
+
+
 async def _run_mcp_rollup(*, dry_run: bool) -> dict[str, object]:
     if dry_run:
         return {"skipped": True}
@@ -509,6 +518,14 @@ async def run_maintenance_due(
                     _run_classifier_retrain(),
                     claim=mcp_key,
                 )
+            # Wave 4 (4.2): close due post-merge watch windows. Shares the
+            # 15-min slot — the 1h window needs checking at least hourly
+            # and the scan is a cheap indexed lookup.
+            _queue(
+                "post_merge_monitor",
+                _run_post_merge_monitor(dry_run=dry_run),
+                claim=mcp_key,
+            )
         else:
             out["mcp_rollup"] = {"skipped": True, "reason": "already_ran_this_slot"}
             out["classifier_retrain"] = {
@@ -516,10 +533,13 @@ async def run_maintenance_due(
                 "reason": "already_ran_this_slot",
             }
 
-    # improvement_sweeps intentionally omitted — issue-driven drafts only.
+    # improvement_sweeps intentionally omitted here — the N23 recurring
+    # sweep is hosted by the worker's leader-gated ``improvement_sweep``
+    # loop (Wave 1, F-I; see workers/main.py ``_leader_improvement_sweep``).
+    # This maintenance tick stays issue-driven/closed-loop only.
     out["improvement_sweeps"] = {
         "skipped": True,
-        "reason": "issue_driven_only_use_closed_loop",
+        "reason": "hosted_by_worker_improvement_sweep_loop",
     }
 
     if not dry_run:

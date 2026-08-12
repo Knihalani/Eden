@@ -138,38 +138,33 @@ async def accuracy(sample_size: int = 20) -> dict:
 
 
 async def retrieval_quality() -> dict:
-    """Run the canonical query set and score top-5 hit rate.
+    """Score top-5 hit rate over retrieval logs.
 
-    Uses the ``retrieval_relevance_scores`` table when available to
-    compute the top-5 hit rate and MRR over the most recent 30
-    days. Falls back to a placeholder if no relevance data exists.
+    The ``retrieval_relevance_scores`` table was dropped in Wave 7.1 as
+    dead schema (nothing ever wrote to it), so there is no relevance
+    data to score — return the placeholder so the audit output stays
+    honest rather than pretending to have numbers.
     """
     try:
         from eden.storage.postgres import get_postgres_client
+
         client = await get_postgres_client()
-        rows = await client.fetch(
+        row = await client.fetchrow(
             """
-            SELECT
-                COUNT(*)::int AS total,
-                COUNT(*) FILTER (WHERE relevant)::int AS top5_hits,
-                AVG(relevance_score) FILTER (WHERE relevant) AS avg_score
-            FROM retrieval_relevance_scores rrs
-            JOIN retrieval_logs rl ON rl.id = rrs.retrieval_log_id
-            WHERE rl.created_at >= NOW() - INTERVAL '30 days'
-              AND rrs.rank <= 5
+            SELECT COUNT(*)::int AS total
+            FROM retrieval_logs
+            WHERE created_at >= NOW() - INTERVAL '30 days'
             """
         )
-        row = rows[0] if rows else None
-        total = int(row["total"]) if row and row["total"] else 0
-        hits = int(row["top5_hits"]) if row and row["top5_hits"] else 0
+        total = int((row or {}).get("total") or 0)
         return {
             "queries_run": total,
-            "top5_hit_rate": round(100.0 * hits / max(total, 1), 1),
-            "mrr": None,  # MRR not derivable from this query; left for a follow-up
+            "top5_hit_rate": None,
+            "mrr": None,
             "note": (
-                "Top-5 hit rate over the last 30 days from retrieval_relevance_scores."
-                if total > 0
-                else "No retrieval_relevance_scores in the last 30 days; run the RetrievalTuner benchmark."
+                "No relevance scores (retrieval_relevance_scores dropped "
+                "in Wave 7.1 — dead schema); run the RetrievalTuner "
+                "benchmark to repopulate."
             ),
         }
     except Exception as exc:  # noqa: BLE001

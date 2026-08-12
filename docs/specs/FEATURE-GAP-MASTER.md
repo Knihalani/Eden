@@ -83,7 +83,7 @@ Eden wins on **production agent maintenance & improvement** (operator-led **and*
 | **N21** | **Runtime remediation** (rollback/cache/reweight) | **P0** | [n21](features/n21-autonomous-self-heal-remediation.md) |
 | N20 | Autonomous code fix (PR from diagnosis) | P0 | [n20](features/n20-autonomous-code-modification.md) — **superseded inbox by N23** |
 | N22 | Safety bounds (how far Eden may auto-fix) | P0 | [n22](features/n22-autonomy-policy-engine.md) |
-| **N23** | **Recurring agentic improvement agent** (Cat 23 replacement) | **P0** | [n23](features/n23-recurring-improvement-agent.md) — spec only |
+| **N23** | **Recurring agentic improvement agent** (Cat 23 replacement) | **P0** | [n23](features/n23-recurring-improvement-agent.md) — **SHIPPED v0** (Wave 7) |
 
 See [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md) — incident playbooks for outages, quality drops, deploy regressions.
 
@@ -109,9 +109,9 @@ See [`AUTONOMOUS-MAINTENANCE.md`](AUTONOMOUS-MAINTENANCE.md) — incident playbo
 | F33 | Issue-linked experiments | P1 | [f33](features/f33-issue-linked-experiments.md) |
 | F34 | Trained signal classifiers | P2 | [f34](features/f34-trained-signal-classifiers.md) |
 | F35 | Default signal library | P1 | [f35](features/f35-default-signal-library.md) |
-| F39 | Runtime nudge injection | P0 | [f39](features/f39-runtime-nudge-injection.md) — **PARTIAL** (`NudgeEngine` wired) |
+| F39 | Runtime nudge injection | P0 | [f39](features/f39-runtime-nudge-injection.md) — **SHIPPED** (`NudgeEngine` → `nudge_outcomes` → demotion/EvidenceGate fully wired) |
 | F40 | The Book (agent memory) | P1 | [f40](features/f40-the-book-agent-memory.md) |
-| F41 | Evidence-gated promotion | P0 | [f41](features/f41-evidence-gated-promotion.md) — **PARTIAL** (StatGate only; `EvidenceGate` greenfield) |
+| F41 | Evidence-gated promotion | P0 | [f41](features/f41-evidence-gated-promotion.md) — **SHIPPED** (`EvidenceGate` + Bayesian path; matches GA checklist DONE) |
 | F42 | Behavioral drift pinpoint | P1 | [f42](features/f42-behavioral-drift-pinpoint.md) |
 | F44 | Auto production eval slices | P1 | [f44](features/f44-auto-production-eval-slices.md) |
 | F46 | Closed-loop orchestrator | P0 | [f46](features/f46-closed-loop-orchestrator.md) |
