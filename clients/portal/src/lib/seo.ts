@@ -43,9 +43,15 @@ export interface MarketingSeoOptions {
   ogDescription?: string;
   /** Defaults to `/og.png`. */
   ogImage?: string;
+  /**
+   * Robots directive. Defaults to index+follow for money/content pages.
+   * Pass `{ index: false, follow: true }` for thin legal/utility pages
+   * that should stay linked (footer) but not compete for crawl budget.
+   */
+  robots?: Metadata["robots"];
 }
 
-/** Standard indexable metadata for public marketing pages. */
+/** Standard metadata for public marketing pages. */
 export function marketingMetadata(opts: MarketingSeoOptions): Metadata {
   const { path, title, description } = opts;
   const ogTitle = opts.ogTitle ?? title;
@@ -54,7 +60,7 @@ export function marketingMetadata(opts: MarketingSeoOptions): Metadata {
   return {
     title,
     description,
-    robots: { index: true, follow: true },
+    robots: opts.robots ?? { index: true, follow: true },
     alternates: { canonical: path },
     openGraph: {
       type: "website",

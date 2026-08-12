@@ -8,6 +8,7 @@ export const metadata = marketingMetadata({
   title: "Do Not Sell · Eden",
   description:
     "Eden does not sell personal information. Your CCPA rights and how to request deletion or correction.",
+  robots: { index: false, follow: true },
 });
 
 export default function Page() {
