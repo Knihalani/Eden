@@ -16,7 +16,7 @@ export const dynamic = "force-static";
  * byte-stable so crawlers don't re-crawl on every deploy. Bump when a
  * page's content materially changes.
  */
-const LAST_MODIFIED = new Date("2026-08-11T00:00:00Z");
+const LAST_MODIFIED = new Date("2026-08-12T00:00:00Z");
 
 type SitemapOverrides = Partial<Omit<MetadataRoute.Sitemap[number], "url">>;
 
@@ -24,6 +24,9 @@ const ROUTE_META: Partial<Record<(typeof MARKETING_SITEMAP_ROUTES)[number], Site
   "/": { changeFrequency: "monthly", priority: 1 },
   "/pricing": { changeFrequency: "monthly", priority: 0.9 },
   "/why-eden": { changeFrequency: "monthly", priority: 0.8 },
+  "/vs/langfuse": { changeFrequency: "monthly", priority: 0.75 },
+  "/vs/helicone": { changeFrequency: "monthly", priority: 0.75 },
+  "/vs/braintrust": { changeFrequency: "monthly", priority: 0.75 },
   "/about": { changeFrequency: "yearly", priority: 0.7 },
   "/contact": { changeFrequency: "yearly", priority: 0.6 },
   "/changelog": { changeFrequency: "weekly", priority: 0.6 },
