@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { SITE_URL } from "@/lib/constants";
 import {
+  aboutPageJsonLd,
   pricingProductJsonLd,
   softwareApplicationJsonLd,
+  WHY_EDEN_COMPARISON,
+  whyEdenComparisonItemListJsonLd,
+  whyEdenWebPageJsonLd,
 } from "@/lib/seo";
 
 describe("SoftwareApplication / Offer JSON-LD", () => {
@@ -29,5 +33,36 @@ describe("SoftwareApplication / Offer JSON-LD", () => {
     ]) {
       expect(offer.url).toMatch(/^https:\/\//);
     }
+  });
+});
+
+describe("Why Eden / About JSON-LD", () => {
+  it("emits WebPage for /why-eden with absolute canonical URL", () => {
+    const ld = whyEdenWebPageJsonLd();
+    expect(ld["@type"]).toBe("WebPage");
+    expect(ld.url).toBe(`${SITE_URL}/why-eden`);
+    expect(ld.url).toMatch(/^https:\/\//);
+    expect(ld.isPartOf.url).toBe(SITE_URL);
+  });
+
+  it("emits comparison ItemList matching WHY_EDEN_COMPARISON", () => {
+    const ld = whyEdenComparisonItemListJsonLd();
+    expect(ld["@type"]).toBe("ItemList");
+    expect(ld.numberOfItems).toBe(WHY_EDEN_COMPARISON.length);
+    expect(ld.itemListElement).toHaveLength(WHY_EDEN_COMPARISON.length);
+    expect(ld.itemListElement[0]).toMatchObject({
+      "@type": "ListItem",
+      position: 1,
+      name: WHY_EDEN_COMPARISON[0].name,
+      description: WHY_EDEN_COMPARISON[0].description,
+    });
+  });
+
+  it("emits AboutPage for /about with absolute canonical URL", () => {
+    const ld = aboutPageJsonLd();
+    expect(ld["@type"]).toBe("AboutPage");
+    expect(ld.url).toBe(`${SITE_URL}/about`);
+    expect(ld.url).toMatch(/^https:\/\//);
+    expect(ld.about.name).toBe("Eden");
   });
 });
