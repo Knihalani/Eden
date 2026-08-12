@@ -2,8 +2,13 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
+import { JsonLd } from "@/components/seo/json-ld";
 import { DOCS_URL, DOCS_QUICKSTART_URL, SUPPORT_EMAIL } from "@/lib/constants";
-import { marketingMetadata } from "@/lib/seo";
+import {
+  aboutPageJsonLd,
+  marketingMetadata,
+  organizationJsonLd,
+} from "@/lib/seo";
 
 export const revalidate = 3600;
 export const metadata = marketingMetadata({
@@ -27,6 +32,8 @@ function SectionKicker({ children }: { children: ReactNode }) {
 export default function AboutPage() {
   return (
     <main>
+      {/* Structured data — Organization + AboutPage. sameAs graph left for item 23. */}
+      <JsonLd data={[organizationJsonLd(), aboutPageJsonLd()]} />
       <MarketingShell
         kicker="About"
         title="Built for teams who run agents in production."
