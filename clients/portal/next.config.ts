@@ -76,6 +76,13 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // RFC 9116 lives at /.well-known/security.txt; keep the legacy
+      // root path as a permanent redirect for scanners that still probe it.
+      {
+        source: "/security.txt",
+        destination: "/.well-known/security.txt",
+        permanent: true,
+      },
       // Lab → product cutover (preserve bookmarks)
       { source: "/lab", destination: "/home", permanent: false },
       { source: "/lab/home", destination: "/home", permanent: false },
