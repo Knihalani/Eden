@@ -202,10 +202,15 @@ const config = {
         // Explicit sitemap tuning — classic preset ships the plugin by
         // default; pin lastmod so crawlers see a stable date instead of
         // a fresh timestamp on every build.
+        //
+        // Exclude the custom React 404 page (`src/pages/404.js` → `/404`).
+        // Docusaurus only auto-skips `404.html`; the soft-404 route would
+        // otherwise ship in sitemap.xml with HTTP 200 + self-canonical.
         sitemap: {
           lastmod: 'date',
           changefreq: 'weekly',
           priority: 0.5,
+          ignorePatterns: ['/404'],
         },
       }),
     ],
