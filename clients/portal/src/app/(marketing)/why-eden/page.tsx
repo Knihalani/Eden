@@ -6,9 +6,9 @@ import { marketingMetadata } from "@/lib/seo";
 export const revalidate = 3600;
 export const metadata = marketingMetadata({
   path: "/why-eden",
-  title: "Why Eden · closed-loop vs traces-only",
+  title: "Why Eden — Closed-Loop LLM Observability vs Traces",
   description:
-    "Why Eden is the closed-loop option: observe, heal by default, prove fixes — not just capture traces.",
+    "Traces-only tools show LLM traffic. Eden detects failures, heals when safe, and opens proven fix plans — closed-loop AI observability vs capture-only.",
 });
 
 const ROWS = [
