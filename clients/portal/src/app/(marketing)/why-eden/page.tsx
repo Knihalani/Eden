@@ -2,8 +2,14 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { MarketingPrimaryCta } from "@/components/marketing/marketing-auth-ctas";
+import { JsonLd } from "@/components/seo/json-ld";
 import { DOCS_URL } from "@/lib/constants";
-import { marketingMetadata } from "@/lib/seo";
+import {
+  marketingMetadata,
+  WHY_EDEN_COMPARISON,
+  whyEdenComparisonItemListJsonLd,
+  whyEdenWebPageJsonLd,
+} from "@/lib/seo";
 
 export const revalidate = 3600;
 export const metadata = marketingMetadata({
@@ -13,38 +19,21 @@ export const metadata = marketingMetadata({
     "Traces-only tools show LLM traffic. Eden detects failures, heals when safe, and opens proven fix plans — closed-loop AI observability vs capture-only.",
 });
 
-const ROWS = [
-  {
-    capability: "Capture traces & sessions",
-    others: "Core product",
-    eden: "Gateway + SDKs — same starting line",
-  },
-  {
-    capability: "Detect production failures",
-    others: "Dashboards / alerts you wire yourself",
-    eden: "Detectors → Issues without a separate pager stack",
-  },
-  {
-    capability: "Runtime self-heal",
-    others: "Not in product",
-    eden: "On by default for reversible actions — opt out anytime",
-  },
-  {
-    capability: "Fix PRs with proof",
-    others: "Export to your IDE",
-    eden: "Fix now queue with evidence tiers before you merge",
-  },
-  {
-    capability: "Decision audit",
-    others: "Log archaeology",
-    eden: "Settings → Autonomy audit: allow / deny / budget",
-  },
-  {
-    capability: "Dogfood",
-    others: "Your app only",
-    eden: "Eden runs on Eden — our agents are customers too",
-  },
-] as const;
+/** Traces-only column copy — Eden column + capability names live in WHY_EDEN_COMPARISON. */
+const OTHERS_BY_CAPABILITY: Record<string, string> = {
+  "Capture traces & sessions": "Core product",
+  "Detect production failures": "Dashboards / alerts you wire yourself",
+  "Runtime self-heal": "Not in product",
+  "Fix PRs with proof": "Export to your IDE",
+  "Decision audit": "Log archaeology",
+  Dogfood: "Your app only",
+};
+
+const ROWS = WHY_EDEN_COMPARISON.map((row) => ({
+  capability: row.name,
+  others: OTHERS_BY_CAPABILITY[row.name] ?? "",
+  eden: row.description,
+}));
 
 const LOOP_STEPS = [
   {
@@ -83,6 +72,10 @@ function SectionKicker({ children }: { children: ReactNode }) {
 export default function WhyEdenPage() {
   return (
     <main>
+      {/* Structured data — WebPage + comparison ItemList (parity with table). */}
+      <JsonLd
+        data={[whyEdenWebPageJsonLd(), whyEdenComparisonItemListJsonLd()]}
+      />
       <MarketingShell
         kicker="Why Eden"
         title="Traces are table stakes. Closed loop is the product."
