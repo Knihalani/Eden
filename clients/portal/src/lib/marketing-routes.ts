@@ -7,8 +7,7 @@
  * crawl budget focuses on money/vs/content pages. Those routes also
  * set `robots: { index: false, follow: true }` via marketingMetadata.
  *
- * /changelog is intentionally still listed — item 18 rebuilds it;
- * leave the stub indexable until then rather than inventing content.
+ * /changelog is the canonical product changelog (seeded release notes).
  */
 
 export const MARKETING_SITEMAP_ROUTES = [

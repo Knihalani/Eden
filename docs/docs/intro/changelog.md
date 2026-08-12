@@ -7,6 +7,14 @@ sidebar_position: 99
 
 # What's new
 
+:::note Product changelog
+The public, indexable product changelog lives on the marketing site:
+**[edenobservability.com/changelog](https://edenobservability.com/changelog)**
+(SDK 0.4.2 → 0.3.2, portal wave notes, and v1.7 highlights). This docs
+page remains the engineering “What’s new” log with deeper Diátaxis and
+platform detail.
+:::
+
 ## SDK 0.3.2 — July 2026
 
 ### SDKs
