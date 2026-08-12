@@ -15,7 +15,7 @@ SDKs for production workloads.
 > only if a future program expands Go scope (SOTA W6 banners Go/Rust as
 > out of GA).
 
-Minimum-viable Go SDK for the [Eden](https://github.com/eden-ai/eden)
+Minimum-viable Go SDK for the [Eden](https://github.com/KaiavN/Eden)
 observability platform. Designed to be imported into any Go service that
 calls OpenAI or Anthropic, with one goal: report every LLM call to
 Eden's `/orgs/{org_id}/ingest/{format}` endpoint with no measurable
