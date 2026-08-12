@@ -1,6 +1,6 @@
 # @eden-ai/sdk
 
-Eden TypeScript runtime SDK — observability for OpenAI, Anthropic, Vercel AI, LangChain, and more with fire-and-forget telemetry to the [Eden](https://eden.dev) gateway.
+Eden TypeScript runtime SDK — observability for OpenAI, Anthropic, Vercel AI, LangChain, and more with fire-and-forget telemetry to the [Eden](https://edenobservability.com) gateway.
 
 **Auto-instrumentation:** call `instrument()` once after `configure()`. By default it prototype-patches OpenAI, Anthropic, Groq, LangChain, Gemini, and Mistral (check `patched` / `patchedAsync` for what applied). Vercel AI, Cohere, Bedrock, Mastra, and LlamaIndex still need the returned `wrap*` factories.
 
