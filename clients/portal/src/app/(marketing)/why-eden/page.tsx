@@ -301,6 +301,52 @@ export default function WhyEdenPage() {
                 </li>
               ))}
             </ul>
+            <ul className="grid grid-cols-1 gap-px overflow-hidden border border-[var(--line)] bg-[var(--line)] sm:grid-cols-3">
+              {[
+                {
+                  href: "/ai-agent-observability",
+                  t: "AI agent observability",
+                  d: "Category page: why traces aren't enough for agents.",
+                },
+                {
+                  href: "/llm-observability-tools",
+                  t: "LLM observability tools",
+                  d: "Roundup across traces, evals, gateways, closed-loop.",
+                },
+                {
+                  href: "/openai-compatible-gateway",
+                  t: "OpenAI-compatible gateway",
+                  d: "Gateway vs SDK and ≤5ms overhead claims.",
+                },
+                {
+                  href: "/opentelemetry-llm-tracing",
+                  t: "OpenTelemetry LLM tracing",
+                  d: "OTel as a first-class ingest path.",
+                },
+                {
+                  href: "/langfuse-alternatives",
+                  t: "Langfuse alternatives",
+                  d: "Criteria-first shortlist; complements the vs page.",
+                },
+                {
+                  href: "/helicone-alternatives",
+                  t: "Helicone alternatives",
+                  d: "Proxy-first buyers evaluating closed loop.",
+                },
+              ].map((item) => (
+                <li key={item.href} className="bg-[var(--bg)] p-5">
+                  <Link
+                    href={item.href}
+                    className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--accent)] hover:text-[var(--accent-hover)]"
+                  >
+                    {item.t}
+                  </Link>
+                  <p className="mt-2 text-[0.875rem] text-[var(--text-muted)]">
+                    {item.d}
+                  </p>
+                </li>
+              ))}
+            </ul>
           </section>
 
           <section className="space-y-5">

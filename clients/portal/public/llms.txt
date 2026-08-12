@@ -13,6 +13,15 @@ Eden (edenobservability.com) helps teams see every agent run and fix what fails.
 - [Changelog](https://edenobservability.com/changelog): Product release notes
 - [Security](https://edenobservability.com/security): Security posture and vulnerability disclosure
 
+## Intent guides
+
+- [AI agent observability](https://edenobservability.com/ai-agent-observability): What agent observability is and why traces alone are not enough
+- [OpenAI-compatible gateway](https://edenobservability.com/openai-compatible-gateway): Gateway positioning, overhead, gateway vs SDK
+- [OpenTelemetry LLM tracing](https://edenobservability.com/opentelemetry-llm-tracing): OTel ingest for LLM and agent apps
+- [LLM observability tools](https://edenobservability.com/llm-observability-tools): Roundup by category — traces, evals, gateways, closed-loop
+- [Langfuse alternatives](https://edenobservability.com/langfuse-alternatives): Evaluation criteria and shortlist (complements vs Langfuse)
+- [Helicone alternatives](https://edenobservability.com/helicone-alternatives): Proxy-first buyer guide (complements vs Helicone)
+
 ## Comparisons
 
 - [Eden vs Langfuse](https://edenobservability.com/vs/langfuse): Comparison with Langfuse
