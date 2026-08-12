@@ -32,11 +32,6 @@ const ROUTE_META: Partial<Record<(typeof MARKETING_SITEMAP_ROUTES)[number], Site
   "/changelog": { changeFrequency: "weekly", priority: 0.6 },
   "/status": { changeFrequency: "hourly", priority: 0.5 },
   "/security": { changeFrequency: "yearly", priority: 0.6 },
-  "/privacy": { changeFrequency: "yearly", priority: 0.4 },
-  "/terms": { changeFrequency: "yearly", priority: 0.4 },
-  "/dpa": { changeFrequency: "yearly", priority: 0.4 },
-  "/subprocessors": { changeFrequency: "yearly", priority: 0.4 },
-  "/do-not-sell": { changeFrequency: "yearly", priority: 0.4 },
 };
 
 export default function sitemap(): MetadataRoute.Sitemap {

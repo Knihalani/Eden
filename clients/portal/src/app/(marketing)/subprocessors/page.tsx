@@ -8,6 +8,7 @@ export const metadata = marketingMetadata({
   title: "Subprocessors · Eden",
   description:
     "Subprocessors Eden uses to run the platform — cloud hosting, database, and identity providers.",
+  robots: { index: false, follow: true },
 });
 
 export default function Page() {
