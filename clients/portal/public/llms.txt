@@ -22,11 +22,11 @@ Eden (edenobservability.com) helps teams see every agent run and fix what fails.
 ## Docs
 
 - [Docs home](https://docs.edenobservability.com/): Documentation root
-- [Quickstart](https://docs.edenobservability.com/quickstart): Signup to first trace in minutes
-- [Deploy](https://docs.edenobservability.com/how-to/deploy): Point SDKs at production API
-- [Auto-instrument](https://docs.edenobservability.com/how-to/auto-instrument): Add instrumentation to an existing repo
-- [Security model](https://docs.edenobservability.com/explanation/security-model): Tenant isolation, PII redaction, and audit defaults
-- [Docs llms.txt](https://docs.edenobservability.com/llms.txt): Docs-focused LLM index
+- [Quickstart](https://docs.edenobservability.com/quickstart): Signup to first trace in minutes ([markdown](https://docs.edenobservability.com/quickstart.md))
+- [Deploy](https://docs.edenobservability.com/how-to/deploy): Point SDKs at production API ([markdown](https://docs.edenobservability.com/how-to/deploy.md))
+- [Auto-instrument](https://docs.edenobservability.com/how-to/auto-instrument): Add instrumentation to an existing repo ([markdown](https://docs.edenobservability.com/how-to/auto-instrument.md))
+- [Security model](https://docs.edenobservability.com/explanation/security-model): Tenant isolation, PII redaction, and audit defaults ([markdown](https://docs.edenobservability.com/explanation/security-model.md))
+- [Docs llms.txt](https://docs.edenobservability.com/llms.txt): Docs-focused LLM index (each HTML doc also has a `.md` sibling)
 
 ## Sitemaps
 

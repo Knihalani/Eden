@@ -1,7 +1,7 @@
 ---
 id: configuration
 title: Configuration
-description: Eden configuration for app developers: required API key and org id, optional base URL and debug settings, plus what the hosted platform manages.
+description: "Eden configuration for app developers: required API key and org id, optional base URL and debug settings, plus what the hosted platform manages."
 sidebar_label: Configuration
 sidebar_position: 2
 ---

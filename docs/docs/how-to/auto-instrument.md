@@ -1,7 +1,7 @@
 ---
 id: auto-instrument
 title: Auto-instrument an existing repo
-description: Add Eden auto-instrumentation to an existing Python or TypeScript repo: configure the SDK, call instrument(), and confirm traces in the portal.
+description: "Add Eden auto-instrumentation to an existing Python or TypeScript repo: configure the SDK, call instrument(), and confirm traces in the portal."
 sidebar_label: Auto-instrument an existing repo
 sidebar_position: 8
 ---

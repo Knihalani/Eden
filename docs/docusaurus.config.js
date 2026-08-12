@@ -32,6 +32,34 @@ function remarkEscapeBareLt() {
   };
 }
 
+// Shared with plugins/markdown-endpoints — keep HTML routes and raw
+// `.md` siblings in lockstep (only publish developer-facing docs).
+const docsExclude = [
+  // Patterns are matched against the path RELATIVE to the
+  // `path` setting above (which is ``docs``), so the
+  // prefix is ``observability/`` not ``docs/observability/``.
+  // F76 (2026-07-08): the previous ``docs/observability/**``
+  // pattern didn't match anything — cat23-redteam-report.md
+  // was being included in the build, where its bare
+  // ``<10s`` table cell tripped MDX's JSX parser.
+  'observability/**',
+  'operations/**',
+  '**/gap-roadmap.md',
+  '**/judge-v2-plan.md',
+  '**/40-dataset-spreadsheet.md',
+  '**/41-prompt-management-playground.md',
+  '**/eden-agent-cli-roadmap.md',
+  '**/eden-agent-cli-spec.md',
+  '**/aider-fork-strategy.md',
+  // Legacy archive note for the excluded design docs above.
+  // Docusaurus treats README.md as a category index, so keeping
+  // it beside reference/index.md (slug: /reference) registers a
+  // second permalink at /reference/ and duplicates both in the
+  // sitemap. Other Diátaxis folders only ship index.md.
+  'reference/README.md',
+  'architecture/**',
+];
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Eden Docs',
@@ -177,31 +205,7 @@ const config = {
           routeBasePath: '/',
           sidebarPath: 'sidebars.js',
           remarkPlugins: [remarkEscapeBareLt],
-          exclude: [
-            // Patterns are matched against the path RELATIVE to the
-            // `path` setting above (which is ``docs``), so the
-            // prefix is ``observability/`` not ``docs/observability/``.
-            // F76 (2026-07-08): the previous ``docs/observability/**``
-            // pattern didn't match anything — cat23-redteam-report.md
-            // was being included in the build, where its bare
-            // ``<10s`` table cell tripped MDX's JSX parser.
-            'observability/**',
-            'operations/**',
-            '**/gap-roadmap.md',
-            '**/judge-v2-plan.md',
-            '**/40-dataset-spreadsheet.md',
-            '**/41-prompt-management-playground.md',
-            '**/eden-agent-cli-roadmap.md',
-            '**/eden-agent-cli-spec.md',
-            '**/aider-fork-strategy.md',
-            // Legacy archive note for the excluded design docs above.
-            // Docusaurus treats README.md as a category index, so keeping
-            // it beside reference/index.md (slug: /reference) registers a
-            // second permalink at /reference/ and duplicates both in the
-            // sitemap. Other Diátaxis folders only ship index.md.
-            'reference/README.md',
-            'architecture/**',
-          ],
+          exclude: docsExclude,
         },
         blog: false,
         theme: { customCss: 'src/css/custom.css' },
@@ -219,6 +223,15 @@ const config = {
           ignorePatterns: ['/404'],
         },
       }),
+    ],
+  ],
+
+  // Raw markdown siblings for agent-friendly discovery (permalink + `.md`).
+  // See plugins/markdown-endpoints.js for URL convention.
+  plugins: [
+    [
+      require.resolve('./plugins/markdown-endpoints'),
+      { docsPath: 'docs', exclude: docsExclude },
     ],
   ],
 
