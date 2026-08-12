@@ -5,7 +5,7 @@
 ## One-command deploy
 
 ```bash
-helm repo add eden https://charts.eden.com  # when the chart is published
+helm repo add eden https://charts.edenobservability.com  # when the chart is published
 helm install eden eden/eden \
   --set image.tag=0.1.0 \
   --set ingress.enabled=true \

@@ -1,5 +1,7 @@
 # Eden
 
+**Website:** [edenobservability.com](https://edenobservability.com) · **Docs:** [docs.edenobservability.com](https://docs.edenobservability.com) · **Repo:** [github.com/KaiavN/Eden](https://github.com/KaiavN/Eden)
+
 **Eden is the observability + improvement platform for AI agents and LLM apps.** Delivered as two pillars:
 
 1. **Observability** — SDKs for Python and TypeScript (Python: one import patches your installed LLM libraries in place, zero other code changes; TypeScript: wrap each client instance in one line, e.g. `wrapOpenAI(client)`, or capture everything at the fetch layer with `instrument()`) and an **OpenAI-compatible HTTP gateway** that proxies every request to whichever upstream model you configure (OpenAI, Anthropic, Bedrock, self-hosted).
@@ -232,4 +234,5 @@ cd sdk/ts-ai && bun run test:bun        # bun test tests/
 
 ## Documentation
 
-See the published docs quickstart at [docs/docs/quickstart.mdx](./docs/docs/quickstart.mdx).
+- Published docs: [docs.edenobservability.com](https://docs.edenobservability.com)
+- Quickstart (in-repo source): [docs/docs/quickstart.mdx](./docs/docs/quickstart.mdx)
