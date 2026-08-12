@@ -100,7 +100,7 @@ so the gateway does not return HTTP 415.
 You can also construct a `Config` directly:
 
 ```rust
-let cfg = Config::new("https://api.eden.dev", "org_abc", "sk_xxx")?
+let cfg = Config::new("https://api.edenobservability.com", "org_abc", "sk_xxx")?
     .with_timeout(60);
 let client = Client::new(cfg)?;
 ```
