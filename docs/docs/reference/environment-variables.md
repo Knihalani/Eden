@@ -1,6 +1,7 @@
 ---
 id: environment-variables
 title: Environment variables
+description: Eden environment variables reference for SDKs and the hosted platform—API keys, org id, sampling, portal proxy, and operator-only settings.
 sidebar_label: Environment variables
 sidebar_position: 3
 ---
