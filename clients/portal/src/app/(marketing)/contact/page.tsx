@@ -102,11 +102,11 @@ export default function ContactPage() {
               </Link>{" "}
               (and in{" "}
               <a
-                href={`${DOCS_URL}/operations/security`}
+                href={`${DOCS_URL}/explanation/security-model`}
                 className={linkClass}
                 rel="noopener noreferrer"
               >
-                docs · Security
+                docs · Security model
               </a>
               ).
             </p>

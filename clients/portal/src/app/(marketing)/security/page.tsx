@@ -16,7 +16,6 @@ export const metadata = marketingMetadata({
     "How Eden protects trace data: Clerk auth, org-scoped RBAC, PII redaction, TLS, and private vulnerability disclosure. No invented certifications.",
 });
 
-const DOCS_SECURITY = `${DOCS_URL}/operations/security`;
 const DOCS_SECURITY_MODEL = `${DOCS_URL}/explanation/security-model`;
 
 const linkClass =
@@ -88,26 +87,18 @@ export default function SecurityPage() {
             </h2>
             <div className="space-y-4 text-[1rem] leading-relaxed text-[var(--text-secondary)]">
               <p>
-                For the full public overview — encryption, tenant isolation,
-                testing posture, and disclosure — read{" "}
-                <a
-                  href={DOCS_SECURITY}
-                  className={linkClass}
-                  rel="noopener noreferrer"
-                >
-                  docs · Eden security
-                </a>
-                . The{" "}
+                For the public security model — tenant isolation, Clerk org
+                mapping, API key scoping, PII patterns, encryption, and auth
+                modes — read{" "}
                 <a
                   href={DOCS_SECURITY_MODEL}
                   className={linkClass}
                   rel="noopener noreferrer"
                 >
-                  security model
-                </a>{" "}
-                explanation covers Postgres RLS, Clerk org mapping, API key
-                scoping, PII patterns, and auth modes in more detail than this
-                marketing page.
+                  docs · Security model
+                </a>
+                . Claims on this page stay limited to what the product and that
+                doc already describe; we do not invent certifications here.
               </p>
               <p>
                 Related legal summaries:{" "}
