@@ -1661,9 +1661,13 @@ class TelemetryCollector:
         # (~0.5 ms each) and shared the loop's default
         # ThreadPoolExecutor (unbounded). The new path has one
         # dispatch per event and the worker pool is fixed-size.
-        from eden.storage.compression import compress_many
+        from eden.storage.compression import TELEMETRY_ZSTD_FIELDS, compress_many
 
-        compressed = await asyncio.to_thread(compress_many, self._compress_fields(event))
+        compressed = await asyncio.to_thread(
+            compress_many,
+            self._compress_fields(event),
+            columns=list(TELEMETRY_ZSTD_FIELDS),
+        )
         await self._dedupe_event(event)
         return self._build_postgres_row(event, compressed)
 
@@ -1725,11 +1729,12 @@ class TelemetryCollector:
             # event's request/response messages. The two are independent
             # (compression never touches ``trace_messages``), so they run
             # concurrently rather than one after the other.
-            from eden.storage.compression import compress_many
+            from eden.storage.compression import TELEMETRY_ZSTD_FIELDS, compress_many
 
             flat_fields = [f for event in events for f in self._compress_fields(event)]
+            flat_columns = list(TELEMETRY_ZSTD_FIELDS) * len(events)
             compress_task = asyncio.create_task(
-                asyncio.to_thread(compress_many, flat_fields)
+                asyncio.to_thread(compress_many, flat_fields, columns=flat_columns)
             )
             try:
                 await self._dedupe_batch_messages(events)

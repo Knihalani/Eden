@@ -23,8 +23,12 @@ PAYLOAD: dict[str, Any] = {
 
 @pytest.fixture(autouse=True)
 def _clean_caches():
+    from eden.storage.zstd_registry import set_dicts_dir
+
+    set_dicts_dir(Path("/nonexistent_eden_zstd_dicts_for_tests"))
     compression.invalidate_caches()
     yield
+    set_dicts_dir(None)
     compression.invalidate_caches()
 
 
@@ -45,12 +49,12 @@ def test_decompress_many_returns_none_for_foreign_dict_frame(
     dict_b = _train("beta", tmp_path, "b.bin")
 
     monkeypatch.setattr(compression, "DICT_PATH", dict_a)
-    compression.invalidate_caches()
+    compression._force_legacy_dict(dict_a)
     under_a = compression.compress_jsonb(PAYLOAD)
     assert under_a is not None
 
     monkeypatch.setattr(compression, "DICT_PATH", dict_b)
-    compression.invalidate_caches()
+    compression._force_legacy_dict(dict_b)
 
     # Pre-fix this raised ZstdError and aborted the whole batch.
     out = compression.decompress_many([under_a, None, compression.compress_jsonb(PAYLOAD)])
@@ -73,10 +77,10 @@ def test_raw_decompressor_still_raises_for_incompatible_dicts(
     dict_b = _train("beta", tmp_path, "b.bin")
 
     monkeypatch.setattr(compression, "DICT_PATH", dict_a)
-    compression.invalidate_caches()
+    compression._force_legacy_dict(dict_a)
     under_a = compression.compress_jsonb(PAYLOAD)
 
     monkeypatch.setattr(compression, "DICT_PATH", dict_b)
-    compression.invalidate_caches()
+    compression._force_legacy_dict(dict_b)
     with pytest.raises(zstd.ZstdError):
         compression._decompressor().decompress(under_a)

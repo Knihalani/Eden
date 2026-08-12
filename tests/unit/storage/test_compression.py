@@ -306,4 +306,4 @@ class TestCompressionRatio:
 
     def test_dict_size_constant_exported(self):
         """DEFAULT_DICT_SIZE is a public constant callers may inspect."""
-        assert DEFAULT_DICT_SIZE == 8192
+        assert DEFAULT_DICT_SIZE == 16_384

@@ -132,13 +132,14 @@ ARG EDEN_GIT_SHA=unknown
 ENV EDEN_GIT_SHA=${EDEN_GIT_SHA}
 RUN printf '%s\n' "$EDEN_GIT_SHA" > /app/.eden-git-sha && chown eden:eden /app/.eden-git-sha || true
 
-# Copy the pre-trained zstd dictionary (Phase 3 of the Postgres +
-# Compression plan). ``eden.storage.compression`` looks for the file at
-# ``$EDEN_ZSTD_DICT_PATH`` (default ``/app/var/zstd_dict.bin``). If the
-# file is missing the service falls back to an empty dict — round-trip
-# still works, just without the ratio win. Generate the file via
-# ``scripts/train_zstd_dict.py``.
+# Copy the pre-trained zstd dictionaries (Postgres BYTEA compression).
+# ``eden.storage.compression`` loads the multi-dict catalog at
+# ``/app/var/zstd_dicts/`` (column-specific dicts with stable dict_ids;
+# ``archive/`` keeps prior versions decompressible). ``zstd_dict.bin``
+# remains as the legacy single-dict fallback / general mirror.
+# Retrain: ``scripts/train_zstd_dicts.py --from-prod-weighted``.
 COPY --chown=eden:eden var/zstd_dict.bin ./var/zstd_dict.bin
+COPY --chown=eden:eden var/zstd_dicts/ ./var/zstd_dicts/
 
 # Switch to non-root user
 USER eden

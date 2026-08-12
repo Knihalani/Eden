@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "write": {
+    "request_body": "request_body",
+    "response_body": "response_body",
+    "reasoning": "response_body",
+    "tool_calls_full": "structured",
+    "tool_results": "structured",
+    "payload": "structured",
+    "metrics": "structured",
+    "attributes": "structured",
+    "_default": "general"
+  },
+  "dicts": {
+    "general": {
+      "file": "general.bin",
+      "dict_id": 1
+    },
+    "request_body": {
+      "file": "request_body.bin",
+      "dict_id": 2
+    },
+    "response_body": {
+      "file": "response_body.bin",
+      "dict_id": 3
+    },
+    "structured": {
+      "file": "structured.bin",
+      "dict_id": 4
+    }
+  }
+}
