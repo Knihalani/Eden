@@ -44,6 +44,8 @@ function productLinks(signedIn: boolean): FooterLink[] {
 const RESOURCE_LINKS: FooterLink[] = [
   { href: DOCS_URL, label: "Documentation", external: true },
   { href: DOCS_QUICKSTART_URL, label: "Quickstart", external: true },
+  { href: "/llm-observability-tools", label: "LLM observability tools" },
+  { href: "/ai-agent-observability", label: "AI agent observability" },
   { href: "/changelog", label: "Changelog" },
   { href: "/status", label: "Status" },
   { href: "/security", label: "Security" },

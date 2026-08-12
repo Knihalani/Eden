@@ -10,8 +10,8 @@ import { HOME_FAQ } from "@/lib/seo";
 const STACK = [
   { label: "Python SDK", href: `${DOCS_URL}/reference/sdk-python` },
   { label: "TypeScript SDK", href: `${DOCS_URL}/reference/sdk-typescript` },
-  { label: "OpenAI-compatible gateway", href: DOCS_QUICKSTART_URL },
-  { label: "OpenTelemetry ingest", href: DOCS_URL },
+  { label: "OpenAI-compatible gateway", href: "/openai-compatible-gateway" },
+  { label: "OpenTelemetry ingest", href: "/opentelemetry-llm-tracing" },
   { label: "REST API", href: `${DOCS_URL}/reference/api` },
 ] as const;
 
@@ -67,12 +67,24 @@ export function MarketingHomeSections() {
               changes. The Improve queue proposes evidence-linked plans you review
               before anything ships. Capture stays; the second half is the product.
             </p>
-            <p className="mt-4">
+            <p className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5 sm:gap-y-2">
               <Link
                 href="/why-eden"
                 className="type-ui text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
               >
                 Why Eden vs traces-only →
+              </Link>
+              <Link
+                href="/ai-agent-observability"
+                className="type-ui text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+              >
+                AI agent observability →
+              </Link>
+              <Link
+                href="/llm-observability-tools"
+                className="type-ui text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+              >
+                LLM observability tools →
               </Link>
             </p>
           </div>
@@ -296,13 +308,19 @@ export function MarketingHomeSections() {
           <ul className="flex flex-wrap gap-2">
             {STACK.map((item) => (
               <li key={item.label}>
-                <a
-                  href={item.href}
-                  className="eden-stack-chip"
-                  rel="noopener noreferrer"
-                >
-                  {item.label}
-                </a>
+                {item.href.startsWith("http") ? (
+                  <a
+                    href={item.href}
+                    className="eden-stack-chip"
+                    rel="noopener noreferrer"
+                  >
+                    {item.label}
+                  </a>
+                ) : (
+                  <Link href={item.href} className="eden-stack-chip">
+                    {item.label}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
