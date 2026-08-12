@@ -68,14 +68,14 @@ const config = {
       tagName: 'meta',
       attributes: {
         property: 'og:image',
-        content: 'https://docs.edenobservability.com/img/og-image.svg',
+        content: 'https://docs.edenobservability.com/img/og.png',
       },
     },
     {
       tagName: 'meta',
       attributes: {
         name: 'twitter:image',
-        content: 'https://docs.edenobservability.com/img/og-image.svg',
+        content: 'https://docs.edenobservability.com/img/og.png',
       },
     },
     {
