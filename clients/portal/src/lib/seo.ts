@@ -84,6 +84,18 @@ export function marketingMetadata(opts: MarketingSeoOptions): Metadata {
 /* JSON-LD structured data                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Public entity-graph URLs for Organization / SoftwareApplication
+ * `sameAs`. Only real profiles that exist today — no invented
+ * Twitter / LinkedIn / Discord. Keep in sync with docs
+ * `docusaurus.config.js` Organization JSON-LD.
+ */
+export const ORGANIZATION_SAME_AS = [
+  "https://github.com/KaiavN/Eden",
+  "https://pypi.org/project/eden-sdk/",
+  "https://www.npmjs.com/package/@eden-ai/sdk",
+] as const;
+
 export interface FaqEntry {
   q: string;
   a: string;
@@ -130,7 +142,7 @@ export function organizationJsonLd() {
     logo: absoluteUrl("/logo.png"),
     description:
       "Observability and improvement for AI agents — traces, evals, and reviewable fixes.",
-    sameAs: ["https://github.com/KaiavN/Eden"],
+    sameAs: [...ORGANIZATION_SAME_AS],
     contactPoint: {
       "@type": "ContactPoint",
       email: SUPPORT_EMAIL,
@@ -161,6 +173,8 @@ export function softwareApplicationJsonLd() {
     url: BASE,
     description:
       "Drop-in observability, evaluation, and improvement for LLM applications and AI agents. OpenAI-compatible gateway, deterministic judge scores, and a human-in-the-loop fix review flow.",
+    sameAs: [...ORGANIZATION_SAME_AS],
+    codeRepository: "https://github.com/KaiavN/Eden",
     offers: {
       "@type": "Offer",
       name: "Free during public beta",

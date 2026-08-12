@@ -32,7 +32,7 @@ function SectionKicker({ children }: { children: ReactNode }) {
 export default function AboutPage() {
   return (
     <main>
-      {/* Structured data — Organization + AboutPage. sameAs graph left for item 23. */}
+      {/* Structured data — Organization + AboutPage */}
       <JsonLd data={[organizationJsonLd(), aboutPageJsonLd()]} />
       <MarketingShell
         kicker="About"

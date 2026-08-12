@@ -124,6 +124,12 @@ const config = {
           name: 'Eden',
           url: 'https://edenobservability.com',
           logo: 'https://edenobservability.com/logo.png',
+          // Keep in sync with clients/portal/src/lib/seo.ts ORGANIZATION_SAME_AS.
+          sameAs: [
+            'https://github.com/KaiavN/Eden',
+            'https://pypi.org/project/eden-sdk/',
+            'https://www.npmjs.com/package/@eden-ai/sdk',
+          ],
         },
       ]),
     },
