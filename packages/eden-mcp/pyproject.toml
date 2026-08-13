@@ -1,0 +1,42 @@
+[project]
+name = "eden-mcp"
+version = "0.2.0"
+description = "Eden MCP server — coding-agent tools, resources, and prompts over Eden APIs"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Eden Team" }]
+requires-python = ">=3.12"
+
+# Thin dependency: only httpx (for the HTTP client in the tool layer).
+# The platform package (FastAPI, SQLAlchemy, etc.) is NOT required here;
+# the HTTP transport that needs it lives in the main `eden` package.
+# For uvx / standalone installs the stdio transport is fully functional
+# with only httpx present.
+dependencies = [
+    "httpx>=0.27,<1",
+]
+
+[project.optional-dependencies]
+# Install the full Eden platform if you want the hosted HTTP transport,
+# real bearer verification, or the local Postgres fallbacks.
+platform = [
+    "eden>=0.1.0",
+]
+
+[project.scripts]
+# `uvx eden-mcp` or `eden-mcp` after `pip install eden-mcp`
+eden-mcp = "eden_mcp.__main__:main"
+
+[project.urls]
+Homepage = "https://eden.ai"
+Source = "https://github.com/eden-ai/eden"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eden_mcp"]
+
+[tool.hatch.version]
+path = "src/eden_mcp/__init__.py"

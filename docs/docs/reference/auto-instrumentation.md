@@ -7,7 +7,9 @@ sidebar_position: 6
 
 # Auto-instrumentation matrix
 
-Python's `eden.instrument()` is a true one-liner across 13 frameworks.
+Python's `eden.instrument()` is a true one-liner across **13 frameworks**
+(the `mastra` entry is a no-op stub — Mastra is TypeScript-only; use the
+TypeScript SDK for Mastra projects).
 TypeScript's `instrument()` prototype-patches the frameworks listed below
 (OpenAI, Anthropic, Groq, LangChain, Gemini, Mistral); others still need
 `wrap*()` — see the TS matrix. The tables list every framework the SDKs
@@ -36,6 +38,7 @@ See [Connect any agent](/how-to/connect-any-agent) for the full decision tree.
 | `crewai` | Default `step_callback` + `task_callback` on `Crew` | step thought/tool/result, task name/outcome |
 | `autogen` | Global reply hook on `ConversableAgent` | speaker, recipient, message contents |
 | `pydantic_ai` | Patch `Agent.run` / `run_sync` | agent name, input/output, duration, `source_format: pydantic-ai` |
+| `langgraph` | Patch `CompiledGraph.invoke` / `stream` / `ainvoke` / `astream` | `graph.node_start` + `graph.node_end` spans with node name and state keys |
 | `bedrock` | boto3 `bedrock-runtime` API call wrap | model, request/response, tokens, latency |
 | `gemini` | `google.generativeai` `generate_content` wrap | model, prompt, response, tokens, latency |
 | `groq` | Patch `chat.completions.create` | model, prompt, response, tokens; streaming metrics |
@@ -64,6 +67,7 @@ what applied in your process. Pass `autoPatch: false` to opt out.
 | `anthropic` | Yes — `Messages.prototype.create` | `wrapAnthropic` | model, messages, response, tokens, cache tokens |
 | `groq` | Yes — `Chat.Completions.prototype.create` | `wrapGroq` | model, prompt, response, tokens; streaming metrics |
 | `langchain` | Yes — `BaseChatModel` invoke/call/stream/batch | `wrapLangChain` | invoke/call/stream/batch on any chat model |
+| `langgraph` | No — instance-level `CompiledGraph` API | `wrapLangGraph` | `graph.node_start` + `graph.node_end` spans per node, state keys |
 | `gemini` | Yes — `GenerativeModel.generateContent` / `@google/genai` Models | `wrapGemini` | model, prompt, response, tokens |
 | `mistral` | Yes — `Chat.complete` / `.stream` (when installed) | `wrapMistral` | model, response, tokens; streaming metrics |
 | `ai` (Vercel AI) | **No** — ESM namespace exports are immutable | `wrapVercelAI` | model, prompt/response from `generateText` / `streamText` |

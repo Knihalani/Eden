@@ -58,13 +58,18 @@ interface UseObservabilityStreamOptions {
   maxEvents?: number;
   enabled?: boolean;
   onError?: (err: Event) => void;
+  /** Called when a ``notification:new`` SSE event arrives on this org's
+   *  stream. Use this to trigger a notifications refresh without opening
+   *  a second EventSource connection. */
+  onNotification?: (data: unknown) => void;
 }
 
 export function useObservabilityStream({
   orgId,
   maxEvents = 100,
   enabled = true,
-  onError }: UseObservabilityStreamOptions) {
+  onError,
+  onNotification }: UseObservabilityStreamOptions) {
   const [events, setEvents] = React.useState<LiveTrace[]>([]);
   const [connected, setConnected] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
@@ -86,6 +91,9 @@ export function useObservabilityStream({
   // parent passes a fresh closure. Same pattern as usePolling.
   const onErrorRef = React.useRef(onError);
   onErrorRef.current = onError;
+  // Same pattern for onNotification — keep connect() stable.
+  const onNotificationRef = React.useRef(onNotification);
+  onNotificationRef.current = onNotification;
 
   const connect = React.useCallback(() => {
     if (typeof window === "undefined" || !enabled) return;
@@ -133,6 +141,18 @@ export function useObservabilityStream({
 
     source.addEventListener("ping", () => {
       // Keep-alive; do nothing.
+    });
+
+    // notification:new — backend publishes this when a portal
+    // notification row is inserted. The payload is opaque; callers
+    // use the onNotification callback to trigger a refresh.
+    source.addEventListener("notification:new", (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data) as unknown;
+        onNotificationRef.current?.(data);
+      } catch (_err) {
+        // ignore malformed event
+      }
     });
 
     // Named SSE ``event: error`` from the backend (e.g. redis_unavailable,

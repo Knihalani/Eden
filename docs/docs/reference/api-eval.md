@@ -19,61 +19,61 @@ regression alerts. The portal's **Eval** tab wraps these endpoints.
 | **Dataset** | A versioned collection of `(input, expected_output)` pairs. Used to drive batch evals. |
 | **Run** | An execution of an eval against a dataset. Used to compare prompt versions. |
 
-## `POST /v1/judges`
+## Run judges — `POST /orgs/{org_id}/observability/judges/run`
 
-Create a judge.
+Trigger the server-side judge registry to score a trace.
+Judges (hallucination, correctness, groundedness, etc.) are
+registered at deploy time via `builtin_v9.py`; this endpoint
+runs whichever judges match the requested trace.
 
-### Request — deterministic judge
+> **Note:** There is no CRUD API to create or delete judges via HTTP.
+> Deterministic scorers (regex, schema checks) live in the
+> Playground / CI eval harness (`POST /orgs/{org_id}/playground/…`),
+> not in this endpoint. Custom judges are added server-side by
+> extending the judge registry.
 
-```json
-{
-  "name": "no_pii_in_response",
-  "kind": "deterministic",
-  "rule": {
-    "type": "regex_absent",
-    "pattern": "\\b\\d{3}-\\d{2}-\\d{4}\\b",
-    "fields": ["response"]
-  },
-  "threshold": { "pass": 1.0 },
-  "scope": { "source_format": ["openai", "anthropic"] }
-}
-```
-
-### Request — LLM judge
+### Request
 
 ```json
 {
-  "name": "is_helpful",
-  "kind": "llm",
-  "prompt_template": "rubrics/is_helpful.md",
-  "model": "gpt-4o",
-  "rubric": {
-    "scale": [0, 1, 2, 3, 4, 5],
-    "criteria": [
-      "Does the response answer the user's question directly?",
-      "Is the response free of hallucinations?"
-    ]
-  },
-  "threshold": { "pass": 4.0, "warn": 3.0 },
-  "cooldown_seconds": 60
+  "trace_id": "trc_xyz",
+  "judge_names": ["hallucination", "correctness"],
+  "sync": true
 }
 ```
+
+`judge_names` is optional — omit it to run all registered judges.
+When `sync` is `false` the call is coerced to sync in v1 (an
+`X-Judges-Sync-Coerced: true` response header is set).
 
 ### Response
 
 ```json
 {
-  "data": {
-    "judge_id": "judge_abc",
-    "version": 1,
-    "created_at": "2026-06-19T10:30:00Z"
-  }
+  "judge_runs": [
+    {
+      "judge_name": "hallucination",
+      "judge_version": "v9",
+      "trace_id": "trc_xyz",
+      "score": 0.96,
+      "rationale": "No hallucinated claims detected.",
+      "model": "qwen-3.5-4b",
+      "scored_at": "2026-06-19T10:30:00Z",
+      "latency_ms": 188
+    }
+  ],
+  "count": 1
 }
 ```
 
-## `GET /v1/judges`
+## List judge scores — `GET /orgs/{org_id}/observability/judges`
 
-List judges. Filter by `name`, `kind`, `enabled`.
+List `judge_scores` rows for the org, optionally filtered by
+`trace_id` and/or `judge_name`. Paginated via `limit` / `offset`.
+
+## Get one score — `GET /orgs/{org_id}/observability/judges/{judge_run_id}`
+
+Fetch a single `judge_score` row by its id.
 
 ## `POST /v1/evals`
 

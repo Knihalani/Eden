@@ -3,9 +3,8 @@
 Covers G1 (lifespan wiring), G2 (Settings fields), and G10
 (quality worker no longer no-ops when the settings exist).
 
-* Settings — the ``trace_quality_*`` / ``stat_gate_*`` /
-  ``quality_pipeline_*`` / ``enhancements_*`` fields now exist and are
-  env-driven.
+* Settings — the ``trace_quality_*`` / ``quality_pipeline_*`` fields
+  now exist and are env-driven.
 * ``install_all()`` — idempotent (safe to call once per process, and a
   second call must not raise).
 * ``start_worker()`` — no longer exits early on missing Settings attrs;
@@ -26,14 +25,11 @@ def test_settings_have_trace_quality_fields() -> None:
     assert s.trace_quality_enabled is True
     assert s.trace_quality_compute_async is True
     assert s.trace_quality_worker_enabled is True
-    assert s.stat_gate_min_n == 30
-    assert isinstance(s.stat_gate_min_effect, float)
     assert s.quality_pipeline_workers == 8
     assert s.quality_pipeline_watermark_poll_ms == 1000
     assert s.quality_pipeline_batch_size == 100
     assert s.detector_keep_rate_loop == 1.0
     assert s.detector_keep_rate_error == 1.0
-    assert s.enhancements_per_component_max == 5
     # Kill-switch mirror: read-only True, mutating False.
     assert s.default_action_applied_flag["emit_drift_alert"] is True
     assert s.default_action_applied_flag["block_user"] is False

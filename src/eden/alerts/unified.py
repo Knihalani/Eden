@@ -456,6 +456,21 @@ async def _dispatch_in_app(
             json.dumps(payload),
             timestamp,
         )
+    # Push a real-time notification:new event so open portal tabs refresh
+    # immediately without waiting for the 5-minute fallback poll.
+    try:
+        from eden.api.routes.observability_stream import publish_notification_event
+
+        await publish_notification_event(
+            org_id,
+            {
+                "type": f"alert:{_severity_str(request.severity)}",
+                "alert_id": alert_id,
+            },
+        )
+    except Exception as exc:
+        logger.debug("unified alert: sse notification publish skipped: %s", exc)
+
     return DestinationDispatchResult(
         kind=dest.kind,
         status="sent",

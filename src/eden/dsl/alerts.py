@@ -20,7 +20,7 @@ demand; :meth:`AlertAsCode.fire_due` is the cron watchdog
 that evaluates every due rule and persists firings to
 ``eql_alert_firings``.
 
-FEAT-44: severity derives from ``eden.alerting.types.AlertSeverity``;
+FEAT-44: severity derives from ``eden.alerts.types.AlertSeverity``;
 notification delivery still flows through ``AlertTriageJudge`` →
 ``send_nl_incident_email`` (adapter debt — see
 ``eden.alerts.unified.destinations_from_nl_rule_channels``).
@@ -34,7 +34,7 @@ import uuid as _uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from eden.alerting.types import AlertSeverity
+from eden.alerts.types import AlertSeverity
 from eden.storage.empty_cooldown import make_empty_cooldown
 
 from ._common import (

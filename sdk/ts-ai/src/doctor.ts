@@ -150,6 +150,24 @@ export async function runDoctor(opts: {
     detail: { droppedTotal, sampledOut },
   });
 
+  // S10 sampling posture nudge: warn when the SDK has sent >10k events on
+  // the default "full" profile so operators know when to switch to "balanced".
+  // "balanced" keeps all P0/P1 signals (errors + slow spans) and downsamples
+  // routine traces to ~15%, cutting ingest cost 5–10×.
+  const sentTotal = client.sent;
+  const samplingProfile = client.samplingProfile;
+  const samplingNudgeOk = !(sentTotal > 10_000 && samplingProfile === "full");
+  checks.push({
+    name: "samplingNudge",
+    ok: samplingNudgeOk,
+    message: samplingNudgeOk
+      ? `samplingProfile="${samplingProfile}" (${sentTotal} events sent)`
+      : `High volume (${sentTotal} events) with samplingProfile="full" — ` +
+        `consider configure({ samplingProfile: "balanced" }) or ` +
+        `EDEN_SAMPLING_PROFILE=balanced to reduce ingest cost 5–10×`,
+    detail: { sentTotal, samplingProfile },
+  });
+
   if (emitTestEvent && cfg.orgId && !cfg.disabled) {
     const eventId = `doctor_${randomId()}`;
     const sent0 = client.sent;

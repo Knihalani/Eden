@@ -42,9 +42,9 @@ _MIGRATIONS_DIR = (
 class TestMigration040Syntax:
     @staticmethod
     def _load_migration():
-        path = _MIGRATIONS_DIR / "040_trace_archive_index.py"
+        path = _MIGRATIONS_DIR / "000_squash_001_160.py"
         spec = importlib.util.spec_from_file_location(
-            "trace_archive_index", path
+            "migration_squash", path
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -52,12 +52,12 @@ class TestMigration040Syntax:
 
     def test_revision_chain(self):
         m = self._load_migration()
-        assert m.revision == "040"
-        assert m.down_revision == "039"
+        assert m.revision == "160_signal_definitions_org_enabled_created"
+        assert m.down_revision is None
 
     def test_index_columns(self):
         """The trace_archive_index table has the 5 expected columns."""
-        text = (_MIGRATIONS_DIR / "040_trace_archive_index.py").read_text()
+        text = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         for col in (
             "trace_id",
             "org_id",
@@ -68,7 +68,7 @@ class TestMigration040Syntax:
             assert col in text, f"trace_archive_index missing column {col}"
 
     def test_indexes_created(self):
-        text = (_MIGRATIONS_DIR / "040_trace_archive_index.py").read_text()
+        text = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         assert "idx_trace_archive_org_archived" in text
         assert "idx_trace_archive_archived_brin" in text
 

@@ -172,6 +172,8 @@ def test_detect_installed_frameworks_returns_full_map() -> None:
         "groq",
         "cohere",
         "mistral",
+        # LangGraph instrumentation (OOM plan 4.5 / W2-12).
+        "langgraph",
     }
     assert set(result.keys()) == expected
     # All values must be booleans.

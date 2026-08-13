@@ -166,6 +166,31 @@ def run_doctor(*, emit_test_event: bool = True, timeout_s: float = 5.0) -> Docto
         )
     )
 
+    # S10 sampling posture nudge: warn when the SDK has sent >10k events on
+    # the default "full" profile so operators know when to switch to "balanced".
+    # "balanced" keeps all P0/P1 signals (errors + slow spans) and downsamples
+    # routine traces to ~15%, cutting ingest cost 5–10×.
+    _nudge_client = get_default_client()
+    sent_total = _nudge_client.sent
+    sampling_profile = getattr(cfg, "sampling_profile", "full") or "full"
+    sampling_nudge_ok = not (sent_total > 10_000 and sampling_profile == "full")
+    if sampling_nudge_ok:
+        sampling_msg = f'sampling_profile="{sampling_profile}" ({sent_total} events sent)'
+    else:
+        sampling_msg = (
+            f'High volume ({sent_total} events) with sampling_profile="full" — '
+            f'consider eden.configure(sampling_profile="balanced") or '
+            f'EDEN_SAMPLING_PROFILE=balanced to reduce ingest cost 5–10×'
+        )
+    checks.append(
+        DoctorCheck(
+            "sampling_nudge",
+            sampling_nudge_ok,
+            sampling_msg,
+            {"sent_total": sent_total, "sampling_profile": sampling_profile},
+        )
+    )
+
     if emit_test_event and cfg.org_id and cfg.enabled:
         event_id = f"doctor_{uuid.uuid4().hex[:12]}"
         payload = {

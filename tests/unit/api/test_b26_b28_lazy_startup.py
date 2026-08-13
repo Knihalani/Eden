@@ -87,7 +87,9 @@ def test_b26_app_import_skips_deferred_intelligence_routers():
         "  'flag': bool(getattr(app.state, '_b26_deferred_mounted', False)),"
         "}"
     )
-    assert out["deferred_count"] >= 20
+    # W3-6: 21 individual intelligence_ wrappers collapsed into 6 domain-grouped
+    # routers. The deferred_count reflects the consolidated count (>= 6).
+    assert out["deferred_count"] >= 6
     assert out["loaded"] == [], f"eager-loaded deferred routers: {out['loaded']}"
     assert out["flag"] is False
 
@@ -136,7 +138,10 @@ def test_b26_mount_deferred_routers_loads_and_is_idempotent():
         "out = {'n1': n1, 'n2': n2, 'loaded_intel': loaded_intel, "
         "'loaded_tier2': loaded_tier2, 'routes': len(app.routes)}"
     )
-    assert out["loaded_intel"] >= 20
+    # W3-6: 21 individual intelligence_ wrappers → 6 domain-grouped routers.
+    # Each grouped module imports 3-6 original sub-modules, so the total
+    # route surface is unchanged; only the deferred-entry count differs.
+    assert out["loaded_intel"] >= 6
     assert out["loaded_tier2"] >= 90
     # Every deferred entry (both tiers) mounted exactly once; sso may be
     # skipped when sso_enabled is off, hence >=.

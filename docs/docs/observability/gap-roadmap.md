@@ -500,7 +500,7 @@ Braintrust's full product (re-emphasised):
 
 * **Loop AI agent** for NL queries over production data
 * **Auto dataset generation** from production failures
-* Native SDK support for 13+ frameworks
+* Native SDK support for 12 frameworks (the `mastra` instrumentation is a no-op stub)
 
 Lunary contributions:
 

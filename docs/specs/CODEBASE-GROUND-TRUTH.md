@@ -177,7 +177,7 @@ Use this doc when writing implementation steps. Specs MUST NOT assume modules ex
 | **F06 Signal clusterer** | **SHIPPED** — `src/eden/signals/clusterer.py`; cosine grouping; 7d quiet auto-resolve |
 | **F06 Signal backfill** | **SHIPPED** — `src/eden/signals/backfill.py`; `signal_backfill_jobs`; 100 traces/min; cron drain |
 | **F06 Investigator API** | **SHIPPED** — `api/routes/signal_investigator.py` events/clusters/backfill |
-| **F65 Topics** | **SHIPPED** — `src/eden/topics/service.py`, `api/routes/topics.py`; portal `/insights/topics` |
+| **F65 Topics** | **SHIPPED (backend only)** — `src/eden/topics/service.py`, `api/routes/topics.py`; **no portal UI** — `/insights/topics` route does not exist; HDBSCAN clustering available via API only |
 | **F71 Slack interactive** | **SHIPPED** — `integrations/slack/interactive.py`; `/integrations/slack/{commands,interactions}` |
 | **N10 Search→signal** | **SHIPPED (backend)** — `search/deep_to_signal.py` preview + backfill; portal `SpanSearchBar` save button **UNVERIFIABLE** (0 repo matches) |
 

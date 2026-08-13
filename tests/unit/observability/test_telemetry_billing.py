@@ -6,14 +6,12 @@ The collector's ``_route`` step is mocked so the test exercises only
 the new billing hook — no Postgres writes beyond what the mocked
 ``track_events_batch`` records.
 
-Phase 3 (ingest hot-path batching): ``_emit_billing_events`` now calls
-``UsageService.track_events_batch`` ONCE per ingest batch (a single
-``executemany``) instead of ``track_event`` once per billable event.
-These tests assert on the batched call; ``UsageService.track_event``
-itself is unit-tested separately in
-``tests/unit/services/test_usage_service_batch.py`` and stays the
-single-row entry point for non-batch callers (job/storage/sandbox
-metering).
+3.2 (OOM plan): ``_emit_billing_events`` now buffers rows in
+``_billing_buffer`` and flushes via ``_flush_billing_buffer()`` (size
+threshold) or the 30s timer loop.  Tests call
+``await collector._flush_billing_buffer()`` explicitly to drain without
+waiting for the timer.  ``UsageService.track_event`` is unit-tested
+separately in ``tests/unit/services/test_usage_service_batch.py``.
 """
 from __future__ import annotations
 
@@ -47,11 +45,16 @@ def _make_event(
 
 
 def _collector() -> TelemetryCollector:
+    import asyncio as _asyncio
     collector = TelemetryCollector.__new__(TelemetryCollector)
     collector._dedup_cache = {}
     collector._dedup_max_size = 1000
     collector._tenant_event_counts = {"org_test": 0}
     collector.MAX_EVENTS_PER_TENANT = 1000
+    # 3.2 billing buffer attrs (not initialised by __new__):
+    collector._billing_buffer = []
+    collector._billing_buffer_lock = _asyncio.Lock()
+    collector._billing_flush_task = None
     return collector
 
 
@@ -87,11 +90,13 @@ async def test_emits_billing_for_llm_completion_with_tokens():
             payload={"model": "gpt-4o", "model_normalized": "gpt-4o"},
         )
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()
 
     mock_batch.assert_awaited_once()
     (batch,) = mock_batch.await_args.args
-    assert len(batch) == 1
-    entry = batch[0]
+    llm_rows = [r for r in batch if r["event_type"] == "llm_call"]
+    assert len(llm_rows) == 1
+    entry = llm_rows[0]
     assert entry["org_id"] == "org_test"
     assert entry["event_type"] == "llm_call"
     assert entry["resource"] == "gpt-4o"
@@ -129,6 +134,7 @@ async def test_emits_billing_includes_cache_tokens():
             payload={"model_normalized": "claude-3-5-sonnet"},
         )
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()
 
     mock_batch.assert_awaited_once()
     (batch,) = mock_batch.await_args.args
@@ -143,7 +149,8 @@ async def test_emits_billing_includes_cache_tokens():
 @pytest.mark.asyncio
 async def test_no_billing_for_event_without_tokens():
     """A LLM event with no token counts (e.g. error before usage
-    was populated) MUST NOT trigger a zero-cost usage_events row."""
+    was populated) MUST NOT trigger a zero-cost llm_call usage_events row.
+    span_ingest/trace_ingest meter rows are expected per the merged semantics."""
     collector = _collector()
     mock_service, mock_batch = _mock_usage_service()
 
@@ -157,14 +164,20 @@ async def test_no_billing_for_event_without_tokens():
             metrics={},  # provider did not populate usage
         )
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()
 
-    mock_batch.assert_not_awaited()
+    # span_ingest/trace_ingest meter rows are flushed even for no-token events.
+    # The key invariant is that NO llm_call row appears.
+    (batch,) = mock_batch.await_args.args
+    llm_rows = [r for r in batch if r["event_type"] == "llm_call"]
+    assert not llm_rows, f"no llm_call row expected for event without tokens, got {llm_rows}"
 
 
 @pytest.mark.asyncio
 async def test_no_billing_for_non_llm_event_types():
     """Span starts, agent runs, tool calls — none of these are
-    LLM calls; they must not be billed here."""
+    LLM calls; they must not produce llm_call billing rows.
+    span_ingest/trace_ingest meter rows are expected per the merged semantics."""
     collector = _collector()
     mock_service, mock_batch = _mock_usage_service()
 
@@ -178,8 +191,13 @@ async def test_no_billing_for_non_llm_event_types():
             metrics={"input_tokens": 100, "output_tokens": 50},  # bogus
         )
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()
 
-    mock_batch.assert_not_awaited()
+    # span_ingest/trace_ingest meter rows are flushed for all events.
+    # The key invariant is that NO llm_call row appears for non-LLM events.
+    (batch,) = mock_batch.await_args.args
+    llm_rows = [r for r in batch if r["event_type"] == "llm_call"]
+    assert not llm_rows, f"no llm_call row expected for non-LLM event type, got {llm_rows}"
 
 
 @pytest.mark.asyncio
@@ -202,6 +220,7 @@ async def test_uses_model_normalized_when_present():
             },
         )
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()
 
     (batch,) = mock_batch.await_args.args
     assert batch[0]["resource"] == "gpt-4o"
@@ -230,11 +249,13 @@ async def test_multiple_billable_events_share_one_batch_call():
             for i in range(5)
         ]
         await collector._emit_billing_events(events)
+        await collector._flush_billing_buffer()
 
     mock_batch.assert_awaited_once()
     (batch,) = mock_batch.await_args.args
-    assert len(batch) == 5
-    assert {entry["metadata"]["event_id"] for entry in batch} == {
+    llm_rows = [r for r in batch if r["event_type"] == "llm_call"]
+    assert len(llm_rows) == 5
+    assert {entry["metadata"]["event_id"] for entry in llm_rows} == {
         f"evt_{i}" for i in range(5)
     }
 
@@ -252,6 +273,7 @@ async def test_billing_swallows_usage_service_import_error():
     with patch.dict("sys.modules", {"eden.services.usage_service": None}):
         # No exception expected:
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()  # import fails; must be swallowed
 
 
 @pytest.mark.asyncio
@@ -274,3 +296,4 @@ async def test_billing_swallows_batch_write_failure():
         )
         # No exception expected:
         await collector._emit_billing_events([event])
+        await collector._flush_billing_buffer()  # write fails; must be swallowed

@@ -17,16 +17,25 @@ import { MergePlanDialog } from "@/components/improve/merge-plan-dialog";
 import { RevertPlanDialog } from "@/components/improve/revert-plan-dialog";
 import { formatSmartTime } from "@/lib/format";
 
+/** OOM 9.4a: snooze duration options (hours). */
+const SNOOZE_OPTIONS: { label: string; hours: number }[] = [
+  { label: "1 day", hours: 24 },
+  { label: "7 days", hours: 168 },
+  { label: "30 days", hours: 720 },
+];
+
 export function ImprovePlanView({
   plan,
   hasPlans = true,
   onStatus,
   onMerge,
   onRevert,
+  onSnooze,
+  onIterate,
   onBack,
 }: {
   plan: ImprovePlanFixture | null;
-  /** False when the queue is empty — avoid “No plan selected” for zero work. */
+  /** False when the queue is empty — avoid "No plan selected" for zero work. */
   hasPlans?: boolean;
   onStatus: (
     id: string,
@@ -35,6 +44,10 @@ export function ImprovePlanView({
   ) => void | Promise<void>;
   onMerge?: (id: string) => void | Promise<void>;
   onRevert?: (id: string) => void | Promise<void>;
+  /** OOM 9.4a: snooze the plan for the given number of hours. */
+  onSnooze?: (id: string, hours: number) => void | Promise<void>;
+  /** OOM 9.4b: request-changes → guardian follow-up iteration. */
+  onIterate?: (id: string, feedback: string) => void | Promise<void>;
   onBack: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
@@ -43,6 +56,9 @@ export function ImprovePlanView({
   const [mergeBusy, setMergeBusy] = useState(false);
   const [reverting, setReverting] = useState(false);
   const [revertBusy, setRevertBusy] = useState(false);
+  const [iterating, setIterating] = useState(false);
+  const [iterateFeedback, setIterateFeedback] = useState("");
+  const [iterateBusy, setIterateBusy] = useState(false);
   if (!plan) {
     if (!hasPlans) {
       return (
@@ -108,6 +124,20 @@ export function ImprovePlanView({
     Boolean(plan.prUrl) &&
     !plan.parentPlanId &&
     Boolean(onRevert);
+  /** OOM 9.4a: can snooze any non-synthesized, non-done/blocked plan. */
+  const canSnooze =
+    !isSynthesized &&
+    Boolean(onSnooze) &&
+    (plan.status === "needs_you" ||
+      plan.status === "in_progress" ||
+      plan.status === "verify");
+  /** OOM 9.4b: can request changes when the PR is open (verify = pr_opened). */
+  const canIterate =
+    !isSynthesized &&
+    Boolean(onIterate) &&
+    plan.kind === "code_patch" &&
+    (plan.status === "verify" || plan.status === "needs_you" || plan.status === "in_progress") &&
+    Boolean(plan.prUrl || plan.status !== "verify");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -117,6 +147,12 @@ export function ImprovePlanView({
             <ImproveStatusChip status={plan.status} />
             <ImproveKindChip kind={plan.kind} />
             <AutonomyTierChip tierApplied={plan.autonomyTierRequired} />
+            {/* OOM 9.4a: snoozed_until chip — shows expiry when plan is snoozed. */}
+            {plan.snoozedUntil ? (
+              <span className="type-meta rounded border border-[var(--line)] px-1.5 py-0.5 text-[0.7rem] text-[var(--text-muted)]">
+                Snoozed until {formatSmartTime(plan.snoozedUntil)}
+              </span>
+            ) : null}
           </div>
           <h2 className="type-ui mt-2 text-[var(--text)]">{plan.title}</h2>
           <p className="type-meta mt-1">
@@ -144,6 +180,39 @@ export function ImprovePlanView({
               onClick={() => setRejecting(true)}
             >
               Reject
+            </button>
+          ) : null}
+          {/* OOM 9.4a: snooze dropdown for non-done / non-blocked plans. */}
+          {canSnooze ? (
+            <div className="relative">
+              <details className="group">
+                <summary className="ds-btn ds-btn-ghost ds-btn-sm list-none cursor-pointer">
+                  Snooze ▾
+                </summary>
+                <div className="absolute right-0 top-full z-10 mt-1 min-w-[8rem] rounded border border-[var(--line)] bg-[var(--surface)] py-1 shadow-md">
+                  {SNOOZE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.hours}
+                      type="button"
+                      className="block w-full px-3 py-1.5 text-left text-sm hover:bg-[var(--hover)]"
+                      onClick={() => void onSnooze!(plan.id, opt.hours)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            </div>
+          ) : null}
+          {/* OOM 9.4b: request-changes / iterate on open-PR plans. */}
+          {canIterate && !iterating ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
+              title="Request changes — guardian drafts a follow-up iteration"
+              onClick={() => setIterating(true)}
+            >
+              Request changes
             </button>
           ) : null}
           {canRevert ? (
@@ -198,6 +267,51 @@ export function ImprovePlanView({
           ) : null}
         </div>
       </div>
+      {/* OOM 9.4b: inline feedback form for request-changes. */}
+      {iterating ? (
+        <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--line)] bg-[var(--surface-raised)] px-4 py-3 sm:px-6">
+          <p className="type-meta font-medium">
+            Describe the changes you want the guardian to address:
+          </p>
+          <textarea
+            className="ds-input min-h-[5rem] w-full resize-y text-sm"
+            placeholder="e.g. The fix broke the timeout handling in retries — please address that edge case."
+            value={iterateFeedback}
+            onChange={(e) => setIterateFeedback(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+              disabled={iterateBusy || !iterateFeedback.trim()}
+              onClick={async () => {
+                setIterateBusy(true);
+                try {
+                  await onIterate!(plan.id, iterateFeedback.trim());
+                  setIterating(false);
+                  setIterateFeedback("");
+                } finally {
+                  setIterateBusy(false);
+                }
+              }}
+            >
+              {iterateBusy ? "Creating…" : "Create follow-up"}
+            </button>
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
+              disabled={iterateBusy}
+              onClick={() => {
+                setIterating(false);
+                setIterateFeedback("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-8 px-4 py-5 sm:px-6">

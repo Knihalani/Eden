@@ -2,7 +2,16 @@
 
 Tracks every cost at 5 dimensions: tenant, user, job, model, pipeline node.
 Provides real-time budget enforcement with soft/hard limits.
+
+OOM W2-11 (B5/B10) — lazy redis import
+---------------------------------------
+``eden.storage.redis`` pulls in ``redis.asyncio`` (~62ms).  It is only
+needed inside ``record_cost`` (async, called at request time), so the
+import is deferred there.  ``from __future__ import annotations`` keeps
+type stubs working without a module-level import.
 """
+
+from __future__ import annotations
 
 import logging
 import time
@@ -10,7 +19,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from eden.config import get_settings
-from eden.storage.redis import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +85,7 @@ class CostTracker:
         self._total_tracked_cents += event.total_cost_cents
 
         # Update real-time counters in Redis (best-effort, non-blocking cache).
+        from eden.storage.redis import get_redis_client
         client = await get_redis_client()
         if client is not None:
             try:

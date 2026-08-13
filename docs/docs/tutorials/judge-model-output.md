@@ -22,22 +22,32 @@ in [Auto-instrument OpenAI](/tutorials/auto-instrument-openai):
 
 ## Step 1 — Open the Eval tab
 
-Portal → **Eval** → **Judges** → **New judge**.
+Portal → **Eval** → **Runs** → **New run**.
 
-## Step 2 — Create a deterministic judge
+## Step 2 — Configure a deterministic scorer
 
-Fill in:
+Deterministic checks (regex absence, JSON validation, etc.) are
+configured as **scorers** on a dataset eval run or in your CI config.
+There is no persistent "create a deterministic judge" flow in the portal.
 
-| Field | Value |
-|-------|-------|
-| Name | `no_pii` |
-| Kind | `deterministic` |
-| Rule type | `regex_absent` |
-| Pattern | `\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z\|a-z]{2,}\b` |
-| Fields to check | `response` |
-| Pass threshold | `1.0` (must always pass) |
+Add a scorer to your eval run config:
 
-Save. The judge is now active on every new trace.
+```json
+{
+  "scorers": [
+    {
+      "type": "regex_absent",
+      "pattern": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b",
+      "fields": ["response"],
+      "name": "no_pii"
+    }
+  ]
+}
+```
+
+The scorer runs against every item in your dataset. Results appear in
+the Eval run report — no separate "judge score" rows are written for
+deterministic scorers.
 
 ## Step 3 — Create an LLM judge
 

@@ -556,6 +556,11 @@ async def create_org(
                     "improvement_schedule_cron": "0 3 * * 0",
                     "evolution_loop_enabled": False,
                     "evolver_auto_canary_pct": 5,
+                    # W3-1 (1.4) — new orgs default to balanced tail sampling
+                    # (15% keep for non-signal traffic; P0/P1 signals always
+                    # kept by IntelligenceAwareSamplingPolicy). Existing orgs
+                    # are untouched — this only fires on create_org.
+                    "sampling_profile_override": "balanced",
                 }
             ),
         )
@@ -642,7 +647,7 @@ async def _maybe_seed_dogfood(client: Any, org_id: str) -> None:
         """
         UPDATE organizations
         SET settings = COALESCE(settings, '{}'::jsonb)
-              || '{"evolution_loop_enabled": true}'::jsonb
+              || '{"evolution_loop_enabled": true, "sampling_profile_override": "balanced"}'::jsonb
         WHERE id = $1
         """,
         org_id,
@@ -658,7 +663,7 @@ async def _maybe_seed_dogfood(client: Any, org_id: str) -> None:
         org_id,
     )
     logger.info(
-        "dogfood org=%s: evolution loop + earned autonomy enabled",
+        "dogfood org=%s: evolution loop + earned autonomy + balanced sampling enabled",
         org_id,
     )
 
@@ -835,7 +840,7 @@ async def send_invite(
 
     # Check if user already a member
     existing_member = await client.fetchrow(
-        "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER($2) LIMIT 1)",
+        "SELECT id FROM org_members WHERE org_id = $1 AND user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER($2) LIMIT 1) -- lint:unordered-limit-ok",
         eden_org_id,
         email,
     )  # Audit 2026-06-22 B1.8 — case-insensitive email lookup

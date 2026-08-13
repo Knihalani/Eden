@@ -102,14 +102,14 @@ class TestB15Repetition:
 
         path = (
             Path(__file__).parent.parent.parent
-            / "src/eden/db_migrations/versions/074_hook_repetition_closed_loop.py"
+            / "src/eden/db_migrations/versions/000_squash_001_160.py"
         )
         assert path.exists(), (
-            f"B-15 regression: migration {path} not found"
+            f"B-15 regression: squash migration {path} not found"
         )
         source = path.read_text()
         assert "repetition_count" in source, (
-            "B-15 regression: migration 074 missing repetition_count"
+            "B-15 regression: squash missing repetition_count"
         )
         assert (
             "ALTER TABLE closed_loop_actions" in source

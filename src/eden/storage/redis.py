@@ -288,6 +288,23 @@ async def close_redis_client() -> None:
 # ============================================================================
 
 
+# ---------------------------------------------------------------------------
+# Lua script: atomically GET + PTTL in a single round-trip.
+#
+# Returns {1, value, pttl_ms} on hit, or {0} on miss (key not found).
+# Using an integer flag instead of Lua false avoids the ipairs-truncation
+# behaviour present in Redis 2.x–6.x where false/nil terminates array
+# serialisation and would silently drop the pttl element.
+# ---------------------------------------------------------------------------
+_LUA_GET_PTTL = """\
+local v = redis.call('get', KEYS[1])
+if not v then
+    return {0}
+end
+return {1, v, redis.call('pttl', KEYS[1])}
+"""
+
+
 class Cache:
     """Async Redis-backed cache with TTL, key namespacing, and an L0 layer.
 
@@ -343,7 +360,7 @@ class Cache:
         self._stats = {"l0_hits": 0, "l0_misses": 0, "redis_hits": 0, "redis_misses": 0}
 
     def _key(self, key: str) -> str:
-        return f"{self.prefix}:{key}"
+        return f"{self.prefix}:{key}" if self.prefix else key
 
     def _l0_get(self, key: str) -> Any | None:
         """Return the value if present + not expired, else ``None``.
@@ -385,31 +402,56 @@ class Cache:
         client = await get_redis_client()
         if client is None:
             return None
+
+        # ── Atomic GET+PTTL via Lua (single round-trip) ──────────────────
+        # Populate L0 with the key's *actual* remaining TTL, not a blanket
+        # ``default_ttl``. A value written with a short custom TTL (e.g.
+        # ``set(key, value, ttl=5)``) must not be re-cached in L0 for up
+        # to ``default_ttl`` just because a miss happened to land near the
+        # real expiry — that made the staleness window effectively unbounded
+        # relative to the intended TTL.
+        #
+        # The Lua script returns {1, value, pttl_ms} on hit or {0} on miss.
+        # On any exception (NoScriptError, fakeredis without eval, …) we
+        # fall back to the two-command GET+PTTL path so nothing breaks.
+        raw: Any = None
+        pttl_ms: int | None = None
         try:
-            raw = await client.get(self._key(key))
-        except Exception as e:
-            logger.warning("Cache get soft-failed for %s: %s", key, e)
-            return None
-        if raw is None:
-            self._stats["redis_misses"] += 1
-            return None
-        self._stats["redis_hits"] += 1
+            result = await client.eval(_LUA_GET_PTTL, 1, self._key(key))
+            if result[0] == 0:
+                # Key not found in Redis.
+                self._stats["redis_misses"] += 1
+                return None
+            raw = result[1]
+            pttl_ms = int(result[2])
+            self._stats["redis_hits"] += 1
+        except Exception as lua_exc:
+            # Graceful fallback: two separate commands.
+            logger.debug(
+                "Cache.get Lua eval fell back to GET+PTTL for %s (%s: %s)",
+                key,
+                type(lua_exc).__name__,
+                lua_exc,
+            )
+            try:
+                raw = await client.get(self._key(key))
+            except Exception as e:
+                logger.warning("Cache get soft-failed for %s: %s", key, e)
+                return None
+            if raw is None:
+                self._stats["redis_misses"] += 1
+                return None
+            self._stats["redis_hits"] += 1
+            try:
+                pttl_ms = await client.pttl(self._key(key))
+            except Exception as e:
+                logger.warning("Cache pttl soft-failed for %s: %s", key, e)
+                pttl_ms = None
+
         try:
             value = _jsonx_loads(raw)
         except json.JSONDecodeError:
             value = raw
-
-        # Populate L0 with the key's *actual* remaining TTL, not a
-        # blanket ``default_ttl``. A value written with a short custom
-        # TTL (e.g. ``set(key, value, ttl=5)``) must not be re-cached
-        # in L0 for up to ``default_ttl`` just because a miss happened
-        # to land near the real expiry — that made the staleness
-        # window effectively unbounded relative to the intended TTL.
-        try:
-            pttl_ms = await client.pttl(self._key(key))
-        except Exception as e:
-            logger.warning("Cache pttl soft-failed for %s: %s", key, e)
-            pttl_ms = None
 
         if pttl_ms is not None and pttl_ms == -2:
             # Key vanished between GET and PTTL (expired/deleted just
@@ -547,18 +589,29 @@ def cached(
     key_func: Callable[..., str] | None = None,
     prefix: str = "func",
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
-    """Decorator to cache async function results in Redis.
+    """Decorator to cache async function results via the L0+Redis Cache.
+
+    Results are stored in a per-decorator in-process L0 LRU layer AND
+    in Redis, so repeated calls within the same process skip Redis
+    entirely after the first population.
+
+    The Redis key namespace is preserved from the original implementation:
+    ``{prefix}:{func.__name__}:{sha256_of_args}`` for the auto-key path,
+    or the raw string returned by ``key_func`` for the custom-key path.
 
     Args:
         ttl: Cache TTL in seconds.
         key_func: Optional function to generate a cache key from arguments.
-        prefix: Key prefix for namespacing.
+        prefix: Key prefix for namespacing (auto-key path only).
 
     Example:
         @cached(ttl=60)
         async def expensive_lookup(query: str):
             ...
     """
+    # One Cache per decorator call; prefix="" so _key() returns the key
+    # verbatim, preserving the existing Redis key namespace exactly.
+    _store: Cache = Cache(prefix="", default_ttl=ttl)
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(func)
@@ -572,25 +625,16 @@ def cached(
                 ).hexdigest()[:32]
                 cache_key = f"{prefix}:{func.__name__}:{sig}"
 
-            client = await get_redis_client()
-            if client is not None:
-                try:
-                    raw = await client.get(cache_key)
-                    if raw is not None:
-                        return _jsonx_loads(raw)
-                except Exception:
-                    pass  # Fall through to function call
+            # L0 → Redis (via Cache.get which now uses a single Lua call)
+            cached_val = await _store.get(cache_key)
+            if cached_val is not None:
+                return cached_val
 
             result = await func(*args, **kwargs)
 
-            if client is not None:
-                with contextlib.suppress(Exception):
-                    await client.set(
-                        cache_key,
-                        _jsonx_dumps(result) if not isinstance(result, (str, bytes)) else result,
-                        ex=ttl,
-                    )
-                    # Cache write is best-effort
+            # Best-effort write to both L0 and Redis.
+            with contextlib.suppress(Exception):
+                await _store.set(cache_key, result, ttl=ttl)
 
             return result
 

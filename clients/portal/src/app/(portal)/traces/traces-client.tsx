@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
@@ -93,6 +94,7 @@ import {
   FIRST_EVENT_WAIT,
   U20_FILTER_EMPTY_COPY,
 } from "@/lib/portal-polish";
+import { useObservabilityStream } from "@/hooks/use-observability-stream";
 
 const panelFallback = (
   <div
@@ -164,8 +166,16 @@ const SessionRetentionPanel = dynamic(
   { ssr: false, loading: () => panelFallback },
 );
 
-type DetailTab = "trace" | "tree" | "signals" | "chat" | "rca";
-type SeverityFilter = "all" | "error" | "warn" | "ok";
+const AgentsPanel = dynamic(
+  () =>
+    import("./traces-detail-panels").then((m) => ({
+      default: m.AgentsPanel,
+    })),
+  { loading: () => panelFallback },
+);
+
+type DetailTab = "trace" | "tree" | "signals" | "chat" | "rca" | "agents";
+type SeverityFilter = "all" | "error" | "warn" | "ok" | "starred";
 
 function parseTab(value: string | null): DetailTab {
   if (
@@ -173,7 +183,8 @@ function parseTab(value: string | null): DetailTab {
     value === "signals" ||
     value === "trace" ||
     value === "tree" ||
-    value === "rca"
+    value === "rca" ||
+    value === "agents"
   ) {
     return value;
   }
@@ -251,6 +262,7 @@ function LabTracesInner() {
   const patchQuery = useQueryPatch();
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
   const tracesQuery = useOrgQuery(
     queryKeys.portal.traces(orgId, agentId === "all" ? null : agentId),
     orgId,
@@ -278,6 +290,25 @@ function LabTracesInner() {
   const traces = tracesQuery.data ?? [];
   const sessions = sessionsQuery.data ?? [];
   void agentsQuery.data;
+
+  // SSE live-tail: invalidate the traces cache on every incoming trace
+  // event so the list refreshes without waiting for the 10-s empty poll.
+  // The stream is enabled only when we have an orgId; onError is omitted
+  // so terminal stream errors fail silently and the poll fallback takes
+  // over (no banner noise from a Redis blip).
+  const { events: _streamEvents } = useObservabilityStream({
+    orgId: orgId ?? "",
+    enabled: Boolean(orgId),
+  });
+  const _prevStreamLenRef = useRef(0);
+  useEffect(() => {
+    if (_streamEvents.length > _prevStreamLenRef.current) {
+      _prevStreamLenRef.current = _streamEvents.length;
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.portal.traces(orgId),
+      });
+    }
+  }, [_streamEvents, queryClient, orgId]);
 
   // Subscribe to issues so Open issue / Ask issueId re-render when the
   // catalog sibling finishes — reading catalogIssues() alone does not.
@@ -434,6 +465,35 @@ function LabTracesInner() {
   // outside the provider (unconditional hook call).
   const { pushToast } = useLabToastSafe();
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  // W4-6 bookmarks: optimistic overrides applied before the next traces refetch.
+  // Map<traceId, bookmarked> — entries shadow the server-provided isBookmarked.
+  const [overrideBookmarks, setOverrideBookmarks] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
+  const toggleBookmark = useCallback(
+    (traceId: string, next: boolean) => {
+      if (!orgId) return;
+      // Optimistic update first.
+      setOverrideBookmarks((prev) => new Map(prev).set(traceId, next));
+      const call = next
+        ? portalApi.bookmarkTrace(orgId, traceId)
+        : portalApi.unbookmarkTrace(orgId, traceId);
+      call.then(() => {
+        // Invalidate so the next list fetch reflects the server state.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.portal.traces(orgId),
+        });
+      }).catch(() => {
+        // Revert optimistic update on failure.
+        setOverrideBookmarks((prev) => {
+          const next2 = new Map(prev);
+          next2.delete(traceId);
+          return next2;
+        });
+      });
+    },
+    [orgId, queryClient],
+  );
   // Wave 14 — keyboard-shortcut help (`?` toggles) + `/` focuses search.
   const [helpOpen, setHelpOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -711,6 +771,9 @@ function LabTracesInner() {
       if (severityFilter === "error" && t.severity !== "error") return false;
       if (severityFilter === "warn" && t.severity !== "warn") return false;
       if (severityFilter === "ok" && t.severity !== "none") return false;
+      // W4-6 bookmarks: client-side filter using isBookmarked from portal API.
+      if (severityFilter === "starred" && !overrideBookmarks.has(t.id) && !t.isBookmarked) return false;
+      if (severityFilter === "starred" && overrideBookmarks.get(t.id) === false) return false;
       if (!q) return true;
       const agent = agentForTrace(t);
       return (
@@ -1013,6 +1076,15 @@ function LabTracesInner() {
   const signalCount =
     selected?.signals.count ?? (selected?.severity === "none" ? 0 : 1);
 
+  // Show "Agents" tab only when ≥2 distinct agent IDs appear in the trace.
+  const isMultiAgent = useMemo(() => {
+    if (!selected) return false;
+    const ids = new Set<string>([selected.agentId]);
+    for (const id of selected.participants ?? []) ids.add(id);
+    for (const s of selected.steps) if (s.agentId) ids.add(s.agentId);
+    return ids.size >= 2;
+  }, [selected]);
+
   // Wave 10 — the chronologically-previous run of the SAME agent, for a
   // one-click "compare to previous run" (the default regression-debugging
   // motion: is this run worse than the last one like it?). ``scopedTraces``
@@ -1037,6 +1109,7 @@ function LabTracesInner() {
         error: scopedSessions.filter((s) => s.outcome === "error").length,
         warn: scopedSessions.filter((s) => s.outcome === "mixed").length,
         ok: scopedSessions.filter((s) => s.outcome === "ok").length,
+        starred: 0, // Sessions do not support bookmarks.
       };
     }
     return {
@@ -1044,6 +1117,10 @@ function LabTracesInner() {
       error: scopedTraces.filter((t) => t.severity === "error").length,
       warn: scopedTraces.filter((t) => t.severity === "warn").length,
       ok: scopedTraces.filter((t) => t.severity === "none").length,
+      // W4-6 bookmarks: merge server isBookmarked with optimistic overrides.
+      starred: scopedTraces.filter((t) =>
+        overrideBookmarks.has(t.id) ? overrideBookmarks.get(t.id) === true : Boolean(t.isBookmarked)
+      ).length,
     };
   }, [hubView, scopedTraces, scopedSessions]);
 
@@ -1249,7 +1326,7 @@ function LabTracesInner() {
               }
               inputRef={searchInputRef}
             />
-            <FilterChips
+            <FilterChips<SeverityFilter>
               value={severityFilter}
               onChange={setSeverityFilter}
               scroll
@@ -1258,6 +1335,9 @@ function LabTracesInner() {
                 { id: "error", label: "Failed", count: severityCounts.error },
                 { id: "warn", label: "Warning", count: severityCounts.warn },
                 { id: "ok", label: "OK", count: severityCounts.ok },
+                ...(hubView === "runs"
+                  ? [{ id: "starred" as const, label: "Starred", count: severityCounts.starred ?? 0 }]
+                  : []),
               ]}
             />
           </div>
@@ -1361,6 +1441,12 @@ function LabTracesInner() {
                           active={row.trace.id === selected?.id}
                           showAgent={row.showAgent}
                           onSelect={selectTrace}
+                          isBookmarked={
+                            overrideBookmarks.has(row.trace.id)
+                              ? overrideBookmarks.get(row.trace.id)
+                              : Boolean(row.trace.isBookmarked)
+                          }
+                          onToggleBookmark={toggleBookmark}
                         />
                       )}
                     </li>
@@ -1690,6 +1776,17 @@ function LabTracesInner() {
                     </button>
                   </Fragment>
                 ))}
+                {isMultiAgent ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === "agents"}
+                    onClick={() => setDetailTab("agents")}
+                    className="ds-tab"
+                  >
+                    Agents
+                  </button>
+                ) : null}
                 {tab === "trace" ? (
                   <div className="ml-auto flex items-center gap-1">
                     <span className="type-label mr-1 hidden sm:inline">
@@ -1894,6 +1991,11 @@ function LabTracesInner() {
                         issue={issue}
                       />
                     )}
+                  </div>
+                ) : null}
+                {tab === "agents" ? (
+                  <div className="min-h-0 h-full overflow-hidden">
+                    <AgentsPanel trace={selected} />
                   </div>
                 ) : null}
               </div>

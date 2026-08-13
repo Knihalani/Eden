@@ -22,6 +22,9 @@ def _broken_client() -> AsyncMock:
     client.incrby = AsyncMock(side_effect=ConnectionError("redis blip"))
     client.expire = AsyncMock(side_effect=ConnectionError("redis blip"))
     client.mget = AsyncMock(side_effect=ConnectionError("redis blip"))
+    # eval must also raise so Cache.get() falls through to the GET fallback
+    # (which raises too) and ultimately soft-fails to None.
+    client.eval = AsyncMock(side_effect=ConnectionError("redis blip"))
     return client
 
 

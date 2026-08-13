@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -20,7 +19,7 @@ func TestTraceConfiguresAndFires(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		mu.Lock()
-		lastBody, _ = io.ReadAll(r.Body)
+		lastBody = readTestBody(t, r)
 		mu.Unlock()
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -197,7 +196,7 @@ func TestTraceFuncDurationIsMeasured(t *testing.T) {
 	var mu sync.Mutex
 	var lastEvent Event
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body := readTestBody(t, r)
 		var ev Event
 		_ = json.Unmarshal(body, &ev)
 		mu.Lock()

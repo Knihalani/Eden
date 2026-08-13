@@ -1754,6 +1754,33 @@ async def list_portal_traces(
                 steps=[],
             )
         )
+
+    # W4-6 trace bookmarks: annotate each row with whether the requesting
+    # user has starred it. Secondary query on the narrow bookmarks table
+    # (expected: low tens of rows per user) — fast and non-blocking.
+    # Fails silently (pre-migration 172 or unavailable) so existing callers
+    # always get a valid response.
+    if items:
+        from eden.api.utils.clerk_auth import extract_user_id as _extract_uid
+
+        _bm_user_id = _extract_uid(_user) or None
+        if _bm_user_id:
+            try:
+                _trace_ids = [item.id for item in items]
+                _bm_rows = await client.fetch(
+                    "SELECT trace_id FROM trace_bookmarks "
+                    "WHERE org_id = $1 AND user_id = $2 AND trace_id = ANY($3::text[])",
+                    org_id,
+                    _bm_user_id,
+                    _trace_ids,
+                )
+                _bookmarked = {bm["trace_id"] for bm in _bm_rows}
+                for item in items:
+                    if item.id in _bookmarked:
+                        item.isBookmarked = True
+            except Exception as _bm_exc:  # noqa: BLE001 — degraded, not fatal
+                logger.debug("portal traces: bookmark lookup failed: %s", _bm_exc)
+
     return items
 
 
@@ -3505,14 +3532,18 @@ async def list_portal_experiments(
 async def list_portal_improve_plans(
     org_id: str = Depends(require_path_org_access),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     _user: dict = Depends(get_current_user),
 ) -> list[ImprovePlanCard]:
-    """Improve plans with statuses mapped to portal ImproveStatus."""
+    """Improve plans with statuses mapped to portal ImproveStatus.
+
+    OOM P7: supports ``limit`` + ``offset`` for infinite-scroll pagination.
+    """
     await _require_pg("Improve plans")
     try:
         from eden.improvement import plans_repo
 
-        plans = await plans_repo.list_plans(org_id, limit=limit)
+        plans = await plans_repo.list_plans(org_id, limit=limit, offset=offset)
     except Exception as exc:  # noqa: BLE001
         logger.warning("portal improve plans: unavailable: %s", redact_all(str(exc)))
         raise HTTPException(
@@ -3600,6 +3631,7 @@ async def list_portal_improve_plans(
                 ),
                 evScore=ev_score,
                 autonomyTierRequired=autonomy_tier,
+                snoozedUntil=(str(p["snoozed_until"]) if p.get("snoozed_until") else None),
             )
         )
     return out

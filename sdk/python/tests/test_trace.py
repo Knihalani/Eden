@@ -261,3 +261,174 @@ def test_set_status_error_no_error_arg() -> None:
         span.set_status("error")
     assert span.outcome == "error"
     assert span.attributes["eden.status"] == "error"
+
+
+# ── S3/S4/S11 correctness regression suite ───────────────────────────
+#
+# These tests prove that the S3 (deferred capture), S4 (single config
+# fetch), and S11 (fast ID generation) changes produce IDENTICAL emitted
+# payloads to the pre-optimisation behaviour for representative inputs.
+# They also verify the fast path (None input/output) stamps the same
+# capture metadata as the old path did.
+
+
+def _capture_enqueued_payloads(monkeypatch) -> list[dict]:
+    """Replace EdenClient.enqueue to record payload dicts without sending."""
+    import eden_sdk.client as client_mod
+
+    captured: list[dict] = []
+    monkeypatch.setattr(
+        client_mod.EdenClient,
+        "enqueue",
+        lambda self, event, **kw: captured.append(dict(event.payload)),
+    )
+    return captured
+
+
+def test_s3_none_input_output_stamps_correct_capture_metadata(monkeypatch):
+    """Fast path (both values None) stamps eden.truncated=false and
+    eden.original_bytes=0 — identical to what stamp_capture_attributes
+    produced for two None CaptureResults before the optimisation."""
+    from eden_sdk.capture import CAPTURE_MODE_ATTR, ORIGINAL_BYTES_ATTR, TRUNCATED_ATTR
+
+    eden.configure(org_id="o", api_key="k", dry_run=True)
+    payloads = _capture_enqueued_payloads(monkeypatch)
+
+    with eden.trace("no-io"):
+        pass
+
+    assert len(payloads) == 1
+    attrs = payloads[0]["attributes"]
+    assert attrs[TRUNCATED_ATTR] == "false"
+    assert attrs[ORIGINAL_BYTES_ATTR] == "0"
+    assert attrs[CAPTURE_MODE_ATTR] == "bounded"
+
+
+def test_s3_nested_dict_input_output_emitted_unchanged(monkeypatch):
+    """Non-None input/output still go through capture_value() and
+    arrive at the sender unchanged (no truncation for small payloads)."""
+    eden.configure(org_id="o", api_key="k", dry_run=True, capture_mode="bounded")
+    payloads = _capture_enqueued_payloads(monkeypatch)
+
+    nested = {"outer": {"inner": "value"}, "list": [1, 2, 3]}
+    with eden.trace("dict-io") as span:
+        span.set_input(nested)
+        span.set_output({"result": True})
+
+    assert len(payloads) == 1
+    assert payloads[0]["input"] == nested
+    assert payloads[0]["output"] == {"result": True}
+    attrs = payloads[0]["attributes"]
+    from eden_sdk.capture import TRUNCATED_ATTR
+    assert attrs[TRUNCATED_ATTR] == "false"
+
+
+def test_s3_long_string_over_truncation_limit_is_truncated(monkeypatch):
+    """A string exceeding DEFAULT_MAX_STRING_BYTES (8 KiB) must be
+    truncated in bounded mode — same behaviour as before the optimisation."""
+    from eden_sdk.capture import DEFAULT_MAX_STRING_BYTES, TRUNCATED_ATTR
+
+    eden.configure(org_id="o", api_key="k", dry_run=True, capture_mode="bounded")
+    payloads = _capture_enqueued_payloads(monkeypatch)
+
+    long_str = "x" * (DEFAULT_MAX_STRING_BYTES * 3)
+    with eden.trace("long-str") as span:
+        span.set_input({"text": long_str})
+        span.set_output("short")
+
+    assert len(payloads) == 1
+    # Truncated value must be shorter than the original.
+    assert len(payloads[0]["input"]["text"]) < len(long_str)
+    # Truncation metadata must be stamped.
+    assert payloads[0]["attributes"][TRUNCATED_ATTR] == "true"
+
+
+def test_s3_non_serialisable_object_in_input_does_not_raise(monkeypatch):
+    """A non-JSON-serialisable object in set_input should not crash
+    the span — capture_value walks and converts via _truncate_walk."""
+    eden.configure(org_id="o", api_key="k", dry_run=True, capture_mode="bounded")
+    payloads = _capture_enqueued_payloads(monkeypatch)
+
+    class _Custom:
+        def __repr__(self) -> str:
+            return "<custom>"
+
+    with eden.trace("non-serial") as span:
+        # Wrap in a dict so _truncate_walk handles the string representation.
+        span.set_input({"obj": repr(_Custom())})
+
+    assert len(payloads) == 1
+    # The string repr was stored and passed through unchanged (it's short).
+    assert payloads[0]["input"]["obj"] == "<custom>"
+
+
+def test_s3_error_path_keeps_full_input_output(monkeypatch):
+    """On an error span the full (non-truncated) input/output must be
+    retained regardless of capture_mode=bounded."""
+    from eden_sdk.capture import TRUNCATED_ATTR, DEFAULT_MAX_STRING_BYTES
+
+    eden.configure(org_id="o", api_key="k", dry_run=True, capture_mode="bounded")
+    payloads = _capture_enqueued_payloads(monkeypatch)
+
+    long_str = "y" * (DEFAULT_MAX_STRING_BYTES * 3)
+    try:
+        with eden.trace("err-full") as span:
+            span.set_input({"text": long_str})
+            raise RuntimeError("boom")
+    except RuntimeError:
+        pass
+
+    assert len(payloads) == 1
+    # Error bypass: full value must be kept.
+    assert payloads[0]["input"]["text"] == long_str
+    assert payloads[0]["attributes"][TRUNCATED_ATTR] == "false"
+    assert payloads[0]["outcome"] == "error"
+
+
+def test_s4_single_cfg_fetch_agent_id_in_payload(monkeypatch):
+    """agent_id must be populated from the config — even when threaded
+    through a single get_config() call rather than a local re-fetch."""
+    eden.configure(org_id="o", api_key="k", dry_run=True, agent_id="my-bot")
+    payloads = _capture_enqueued_payloads(monkeypatch)
+
+    with eden.trace("agent-check"):
+        pass
+
+    assert len(payloads) == 1
+    assert payloads[0]["agent_id"] == "my-bot"
+
+
+def test_s11_span_id_is_16_hex_chars() -> None:
+    """Span IDs generated by the fast thread-local PRNG must still be
+    16 lower-case hex characters (64-bit) as before."""
+    from eden_sdk.trace import Span
+
+    ids = {Span().span_id for _ in range(100)}
+    assert all(len(sid) == 16 for sid in ids)
+    assert all(c in "0123456789abcdef" for sid in ids for c in sid)
+    # Must be unique (extremely unlikely collision in 100 samples).
+    assert len(ids) == 100
+
+
+def test_s11_trace_id_is_32_hex_chars() -> None:
+    """Trace IDs generated by the fast PRNG must be 32 lower-case hex
+    characters (128-bit), matching the format of the old uuid4().hex."""
+    from eden_sdk.trace import TraceContext
+
+    ids = {TraceContext().trace_id for _ in range(100)}
+    assert all(len(tid) == 32 for tid in ids)
+    assert all(c in "0123456789abcdef" for tid in ids for c in tid)
+    assert len(ids) == 100
+
+
+def test_s11_span_and_trace_ids_are_unique_across_spans() -> None:
+    """Thread-local PRNG must not produce collisions across sequential spans."""
+    eden.configure(org_id="o", api_key="k", dry_run=True)
+    span_ids: list[str] = []
+    trace_ids: list[str] = []
+    for _ in range(500):
+        with eden.trace("id-check") as span:
+            span_ids.append(span.span_id)
+            trace_ids.append(span.trace_id)
+    assert len(set(span_ids)) == 500, "Span IDs must be unique"
+    assert len(set(trace_ids)) == 500, "Trace IDs must be unique (each root trace)"

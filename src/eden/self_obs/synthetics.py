@@ -234,19 +234,54 @@ async def probe_detect_to_issue(
         return {"status": "fail", "error": str(exc)}
 
 
+async def probe_email_config(org_id: str) -> dict[str, Any]:  # noqa: ARG001
+    """Warn when SENDKIT_API_KEY is absent in a production-like environment.
+
+    Production-like is defined as: DATABASE_URL is set (i.e. not a pure
+    local/CI run with no Postgres).  CI / dev boxes that deliberately run
+    without a mailer key should not generate false-positive warnings.
+    OOM W2-7 (O5).
+    """
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        api_key = (getattr(settings, "sendkit_api_key", None) or "").strip()
+        db_url = (getattr(settings, "database_url", None) or "").strip()
+        prod_like = bool(db_url)
+
+        if api_key:
+            return {"status": "ok", "note": "sendkit_api_key configured"}
+
+        if prod_like:
+            logger.warning(
+                "synthetics: probe_email_config — sendkit_api_key is empty "
+                "in a production-like environment; alert emails will be skipped"
+            )
+            return {
+                "status": "degraded",
+                "note": "sendkit_api_key not set — alert emails silenced",
+            }
+        # Dev / CI without a DB: soft ok, no log noise
+        return {"status": "ok", "note": "sendkit_api_key unset (dev/CI — no DB configured)"}
+    except Exception as exc:
+        return {"status": "fail", "error": str(exc)}
+
+
 _PROBE_FNS = {
     "sign_in_home": probe_sign_in_home,
     "traces_list": probe_traces_list,
     "issues_list": probe_issues_list,
     "gateway_health": probe_gateway_health,
     "detect_to_issue": probe_detect_to_issue,
+    "email_config": probe_email_config,
 }
 
 # ``sign_in_home`` hits a fixed portal URL and ``gateway_health`` hits
 # a fixed API ``/ready`` URL (or a settings flag) — neither result
 # depends on ``org_id`` at all. Everything else in ``_PROBE_FNS``
 # queries Postgres scoped by ``org_id`` and genuinely differs per org.
-_ORG_INDEPENDENT_PROBES: tuple[str, ...] = ("sign_in_home", "gateway_health")
+_ORG_INDEPENDENT_PROBES: tuple[str, ...] = ("sign_in_home", "gateway_health", "email_config")
 
 #: Sentinel org for results that are identical across every org.
 #:

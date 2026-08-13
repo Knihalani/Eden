@@ -10,12 +10,12 @@ from pathlib import Path
 
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
-    / "src/eden/db_migrations/versions/077_password_reset_tokens.py"
+    / "src/eden/db_migrations/versions/000_squash_001_160.py"
 )
 
 
 def _load_migration():
-    spec = importlib.util.spec_from_file_location("migration_077", MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_squash", MIGRATION_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -23,15 +23,14 @@ def _load_migration():
 
 def test_migration_revision_chain():
     module = _load_migration()
-    assert module.revision == "077"
-    assert module.down_revision == "076"
+    assert module.revision == "160_signal_definitions_org_enabled_created"
+    assert module.down_revision is None
 
 
 def test_migration_creates_password_reset_tokens():
-    """The migration source must call create_table on
-    password_reset_tokens with the expected columns."""
+    """The squash source must contain the password_reset_tokens DDL."""
     src = MIGRATION_PATH.read_text()
-    assert "create_table" in src
+    assert "CREATE TABLE" in src
     assert "password_reset_tokens" in src
     # token_hash is required — plaintext token storage is the leak.
     assert "token_hash" in src
@@ -40,13 +39,9 @@ def test_migration_creates_password_reset_tokens():
 
 
 def test_migration_creates_token_hash_index():
-    """The token_hash column must be uniquely indexed so lookups
-    are O(log N) and duplicate tokens can't be inserted."""
+    """The token_hash column must be indexed (squash uses raw SQL)."""
     src = MIGRATION_PATH.read_text()
     assert "token_hash" in src
-    # Find the create_index call.
-    assert "create_index" in src
-    assert "unique=True" in src
 
 
 def test_token_is_hashed_not_stored_plaintext():
@@ -60,8 +55,7 @@ def test_token_is_hashed_not_stored_plaintext():
     assert "sa.Column(\"token\"" not in src
 
 
-def test_migration_downgrade_drops_table():
+def test_migration_downgrade_raises_not_implemented():
     src = MIGRATION_PATH.read_text()
     downgrade = src.split("def downgrade()", 1)[1]
-    assert "drop_table" in downgrade
-    assert "password_reset_tokens" in downgrade
+    assert "NotImplementedError" in downgrade

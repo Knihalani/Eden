@@ -1,4 +1,8 @@
-"""Unit tests for N23 approve flow."""
+"""Unit tests for N23 approve flow.
+
+W2-8 (§9.1): judge-score delta section contract tests are in
+test_pr_evidence_body.py (render path) and here (approve_plan integration).
+"""
 
 from __future__ import annotations
 
@@ -509,6 +513,184 @@ async def test_approve_regenerates_on_static_fail_then_opens_pr() -> None:
     regen.assert_awaited_once()
     mock_provider.create_pr.assert_awaited_once()
     assert mock_provider.create_pr.await_args.args[0].files[0].content == "x = 2\n"
+
+
+@pytest.mark.asyncio
+async def test_approve_plan_pr_body_carries_judge_score_section() -> None:
+    """W2-8 (§9.1): approve_plan stamps judge scores and the PR body always
+    contains the judge-score section (real scores or fallback).
+    """
+    plan = {
+        "id": "plan-judge-1",
+        "status": "draft",
+        "plan_kind": "code_patch",
+        "agent_id": "agent-x",
+        "title": "Fix foo",
+        "summary": "summary text",
+        "diff_unified": _SAMPLE_DIFF,
+        "evidence": {"issue_id": "iss-1"},
+    }
+    pr_info = PullRequestInfo(
+        number=99,
+        title="[Eden] Fix foo",
+        body="",
+        branch="eden/improve-plan-judge-1",
+        base="main",
+        url="https://github.com/org/repo/pull/99",
+        state="open",
+        created_at=datetime.now(UTC),
+    )
+    mock_provider = MagicMock()
+    mock_provider.create_pr = AsyncMock(return_value=pr_info)
+    mock_repo = _mock_repo_provider(default_branch="main")
+
+    # Judge score deltas returned from the DB-backed fetch (mocked).
+    _judge_deltas = [
+        {"judge": "quality", "before": 0.70, "after": 0.80, "delta": 0.10},
+    ]
+
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
+        ),
+        patch(
+            "eden.providers.factory.get_repo_provider_for_org",
+            AsyncMock(return_value=mock_repo),
+        ),
+        patch(
+            "eden.providers.factory.active_repo_connection",
+            AsyncMock(return_value={"default_branch": "main"}),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_pr_opened",
+            AsyncMock(return_value={**plan, "status": "pr_opened"}),
+        ),
+        patch("eden.improvement.approve._audit_approve", AsyncMock()),
+        patch("eden.improvement.approve._n06_ledger", AsyncMock()),
+        # Mock fetch_judge_score_deltas to return real scores.
+        patch(
+            "eden.improvement.approve.fetch_judge_score_deltas",
+            AsyncMock(return_value=_judge_deltas),
+        ),
+        # _merge_plan_evidence: return a plan with judge_score_deltas injected.
+        patch(
+            "eden.improvement.approve._merge_plan_evidence",
+            AsyncMock(
+                return_value={
+                    **plan,
+                    "evidence": {
+                        **plan["evidence"],
+                        "judge_score_deltas": _judge_deltas,
+                    },
+                }
+            ),
+        ),
+    ):
+        result = await approve_plan(
+            "org-1", "plan-judge-1", approved_by="user-1", provider=mock_provider
+        )
+
+    assert result["status"] == "pr_opened"
+    # The PR body must carry the judge-score section.
+    req = mock_provider.create_pr.await_args.args[0]
+    assert "| Judge | Before | After | Delta |" in req.body
+    assert "quality" in req.body
+    assert "no judge baseline yet" not in req.body
+
+
+@pytest.mark.asyncio
+async def test_approve_plan_pr_body_judge_fallback_when_no_scores() -> None:
+    """W2-8 (§9.1): when fetch_judge_score_deltas returns [], the PR body
+    still carries the judge section with the fallback row.
+    """
+    plan = {
+        "id": "plan-judge-2",
+        "status": "draft",
+        "plan_kind": "code_patch",
+        "agent_id": "agent-y",
+        "title": "Fix bar",
+        "summary": "summary text",
+        "diff_unified": _SAMPLE_DIFF,
+        "evidence": {"issue_id": "iss-2"},
+    }
+    pr_info = PullRequestInfo(
+        number=100,
+        title="[Eden] Fix bar",
+        body="",
+        branch="eden/improve-plan-judge-2",
+        base="main",
+        url="https://github.com/org/repo/pull/100",
+        state="open",
+        created_at=datetime.now(UTC),
+    )
+    mock_provider = MagicMock()
+    mock_provider.create_pr = AsyncMock(return_value=pr_info)
+    mock_repo = _mock_repo_provider(default_branch="main")
+
+    with (
+        patch(
+            "eden.improvement.approve.plans_repo.get_plan",
+            AsyncMock(return_value=plan),
+        ),
+        patch(
+            "eden.improvement.approve._n22_blocked",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.approve._resolve_repo_id",
+            AsyncMock(return_value="repo-conn-1"),
+        ),
+        patch(
+            "eden.providers.factory.get_repo_provider_for_org",
+            AsyncMock(return_value=mock_repo),
+        ),
+        patch(
+            "eden.providers.factory.active_repo_connection",
+            AsyncMock(return_value={"default_branch": "main"}),
+        ),
+        patch(
+            "eden.improvement.approve.plans_repo.mark_pr_opened",
+            AsyncMock(return_value={**plan, "status": "pr_opened"}),
+        ),
+        patch("eden.improvement.approve._audit_approve", AsyncMock()),
+        patch("eden.improvement.approve._n06_ledger", AsyncMock()),
+        # No scores returned.
+        patch(
+            "eden.improvement.approve.fetch_judge_score_deltas",
+            AsyncMock(return_value=[]),
+        ),
+        # _merge_plan_evidence: return plan with empty judge_score_deltas.
+        patch(
+            "eden.improvement.approve._merge_plan_evidence",
+            AsyncMock(
+                return_value={
+                    **plan,
+                    "evidence": {
+                        **plan["evidence"],
+                        "judge_score_deltas": [],
+                    },
+                }
+            ),
+        ),
+    ):
+        result = await approve_plan(
+            "org-1", "plan-judge-2", approved_by="user-1", provider=mock_provider
+        )
+
+    assert result["status"] == "pr_opened"
+    req = mock_provider.create_pr.await_args.args[0]
+    # Fallback section must be present.
+    assert "| Judge | Before | After | Delta |" in req.body
+    assert "no judge baseline yet" in req.body
 
 
 @pytest.mark.asyncio

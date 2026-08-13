@@ -126,18 +126,19 @@ class TestBackfillScriptTargets:
 
     @staticmethod
     def _migration_columns():
-        """Read the 6 new BYTEA column names from migration 038.
+        """Read the 6 new BYTEA column names from the squash (migration 038 section).
 
-        Parses the ``new_columns = [...]`` list literal at the top
-        of the upgrade() body — this is the source of truth. The
-        SQL DDL is an f-string (``{col}`` interpolated at runtime)
-        so we can't regex against the rendered SQL.
+        Parses the ``new_columns = [...]`` list literal in the 038 section of
+        the squash — this is the source of truth.
         """
-        m038 = _MIGRATIONS_DIR / "038_zstd_extended_payloads.py"
-        text = m038.read_text()
-        # Extract the new_columns list literal.
-        m = re.search(r"new_columns\s*=\s*\[(.*?)\]", text, re.DOTALL)
-        assert m is not None, "migration 038 missing new_columns list"
+        squash = _MIGRATIONS_DIR / "000_squash_001_160.py"
+        text = squash.read_text()
+        # Find migration 038's section specifically.
+        section_start = text.find("# --- 038_zstd_extended_payloads.py")
+        section_end = text.find("# --- 039_", section_start)
+        section = text[section_start:section_end]
+        m = re.search(r"new_columns\s*=\s*\[(.*?)\]", section, re.DOTALL)
+        assert m is not None, "squash migration 038 section missing new_columns list"
         body = m.group(1)
         cols = re.findall(r'"(\w+_zstd)"', body)
         assert len(cols) == 6, f"expected 6 columns, got {len(cols)}: {cols}"
@@ -166,45 +167,32 @@ _MIGRATIONS_DIR = (
 
 
 class TestMigrationSQLSyntax:
-    """Light syntax checks on migration 038/039 — no DB connection."""
+    """Light syntax checks on the squash (covers migrations 038/039)."""
 
-    def _load_migration(self, filename: str):
-        """Load a migration module by filename (the alembic versions
-        dir doesn't auto-import every file)."""
+    def _load_squash(self):
+        """Load the squash migration module."""
         import importlib.util
         from pathlib import Path
 
-        path = _MIGRATIONS_DIR / filename
-        spec = importlib.util.spec_from_file_location(filename[:-3], path)
+        path = _MIGRATIONS_DIR / "000_squash_001_160.py"
+        spec = importlib.util.spec_from_file_location("migration_squash", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
 
     def test_migration_038_has_upgrade_and_downgrade(self):
-        m = self._load_migration("038_zstd_extended_payloads.py")
+        m = self._load_squash()
         assert callable(m.upgrade)
         assert callable(m.downgrade)
-        assert m.revision == "038"
-        assert m.down_revision == "037"
+        assert m.revision == "160_signal_definitions_org_enabled_created"
+        assert m.down_revision is None
 
     def test_migration_039_is_no_op_drop_pattern(self):
-        m = self._load_migration("039_zstd_extended_drop.py")
-        assert callable(m.upgrade)
-        assert m.revision == "039"
-        assert m.down_revision == "038"
-        # upgrade is intentionally empty (deferred drop, like 033).
-        # The body must contain ``pass`` and no live ALTER/DROP statements
-        # (the DROP COLUMN references in docstring comments are fine).
-        body = inspect.getsource(m.upgrade)
-        assert "pass" in body, "upgrade() must contain pass"
-        # Strip comments (lines starting with #) before checking.
-        body_no_comments = "\n".join(
-            line for line in body.splitlines() if not line.strip().startswith("#")
-        )
-        assert "DROP COLUMN" not in body_no_comments, (
-            "DROP COLUMN lives in scripts/drop_extended_original_columns.sql, "
-            "not in the migration upgrade() (mirrors migration 033)"
-        )
+        # Migration 039 was a deferred-drop no-op; now absorbed into the squash.
+        # Verify the squash contains the 039 _DROPPABLE_COLUMNS section.
+        squash = _MIGRATIONS_DIR / "000_squash_001_160.py"
+        text = squash.read_text()
+        assert "_DROPPABLE_COLUMNS" in text, "squash must include 039 drop-column list"
 
     def test_drop_sql_covers_all_six_columns(self):
         """The drop SQL must reference all 6 columns."""

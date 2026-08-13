@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from eden.alerting.types import AlertSeverity
+from eden.alerts.types import AlertSeverity
 from eden.dsl import alerts as dsl_alerts
 from eden.dsl.alerts import _FIREABLE_SEVERITIES
 

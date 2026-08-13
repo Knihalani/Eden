@@ -38,6 +38,18 @@ class CanaryPromoteRequest(BaseModel):
     pass  # No body; the experiment_id is in the path
 
 
+class CanaryUpdateRequest(BaseModel):
+    """Body for PATCH …/canary/{experiment_id} — update traffic split.
+
+    Capped at 50 %: anything higher should use the promote endpoint
+    (evidence-gate gated). Minimum 1 % so the candidate receives at
+    least some traffic. Movements above 5 % trigger the regression
+    gate (N01) consistent with canary creation.
+    """
+
+    traffic_pct: int = Field(..., ge=1, le=50)
+
+
 @router.get("/canaries")
 async def list_org_canaries(
     org_id: str = Depends(require_path_org_access),
@@ -411,4 +423,87 @@ async def rollback_canary(
         "experiment_id": experiment_id,
         "agent": agent,
         "status": "rolled_back",
+    }
+
+
+@router.patch("/{agent}/canary/{experiment_id}")
+async def update_canary_split(
+    org_id: str = Depends(require_path_org_access),
+    agent: str = Path(...),
+    experiment_id: str = Path(...),
+    body: CanaryUpdateRequest = ...,
+    user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Adjust the traffic-split % of an active canary experiment.
+
+    Bounded to 1–50 %: the upper cap prevents accidentally switching
+    the majority of traffic without going through the evidence-gated
+    promote flow. Movements above 5 % still require a regression suite
+    pass (N01), identical to canary creation.
+
+    W3-9 (9.8): traffic-split UI on /prompts calls this endpoint.
+    """
+    from eden.evaluation.regression_runner import RegressionRunner
+
+    await RegressionRunner().require_pass_for_canary(
+        org_id, agent_id=agent, traffic_pct=body.traffic_pct
+    )
+    client = await get_postgres_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT experiment_id FROM prompt_canary_experiments
+            WHERE experiment_id = $1 AND tenant_id = $2 AND agent = $3 AND status = 'active'
+            """,
+            experiment_id,
+            org_id,
+            agent,
+        )
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="Active experiment not found",
+            )
+        await client.execute(
+            """
+            UPDATE prompt_canary_experiments
+            SET traffic_pct = $1
+            WHERE experiment_id = $2 AND tenant_id = $3
+            """,
+            body.traffic_pct,
+            experiment_id,
+            org_id,
+        )
+        await client.execute(
+            """
+            UPDATE prompt_version_assignments
+            SET traffic_pct = $1
+            WHERE experiment_id = $2 AND tenant_id = $3 AND status = 'active'
+            """,
+            body.traffic_pct,
+            experiment_id,
+            org_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "invalid input syntax for type uuid" in msg:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid organization id",
+            ) from exc
+        logger.warning("canary split update failed: %s", redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail=safe_detail(exc, fallback="Failed to update canary split"),
+        ) from exc
+
+    return {
+        "experiment_id": experiment_id,
+        "agent": agent,
+        "traffic_pct": body.traffic_pct,
+        "status": "active",
     }

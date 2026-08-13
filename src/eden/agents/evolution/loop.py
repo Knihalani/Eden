@@ -80,7 +80,7 @@ async def run_evolution_pass() -> dict[str, Any]:
     from eden.agents.evolution.components import JudgeScorePromptEvolver
     from eden.llm.client import OpenRouterClient
     from eden.llmops.cost_ledger import cost_context
-    from eden.llmops.evolution_spend import EvolutionSpendBudget
+    from eden.llmops.evolution_spend import EvolutionSpendBudget, LaneDailyBudget
     from eden.llmops.feature_kills import is_feature_enabled
     from eden.llmops.promotion import get_promotion_loop
 
@@ -91,28 +91,51 @@ async def run_evolution_pass() -> dict[str, Any]:
         "spend_skipped": False,
     }
 
-    # Preflight: evolution spend cap (platform-wide ops budget).
+    # Preflight 1: OOM W3-5 system-wide evolution lane daily cap.
+    # Fail-open: Redis down → log WARNING and continue to per-org gate.
+    _lane_budget_ok = True
+    try:
+        _lane_allowed, _lane_spent, _lane_cap = await LaneDailyBudget("evolution").check()
+        if not _lane_allowed:
+            logger.warning(
+                "evolution_loop: system lane budget exceeded "
+                "(spent=%.4f cap=%.4f) — skipping evolver",
+                _lane_spent,
+                _lane_cap,
+            )
+            _lane_budget_ok = False
+            summary["spend_skipped"] = True
+            summary["evolver"] = {
+                "skipped": "evolution_lane_budget_exceeded",
+                "lane_spent_usd": _lane_spent,
+                "lane_cap_usd": _lane_cap,
+            }
+    except Exception as exc:
+        logger.debug("evolution_loop: lane budget check failed (fail-open): %s", exc)
+
+    # Preflight 2: per-org evolution spend cap (platform-wide ops budget).
     # When over cap, skip LLM evolver; canary enroll + promotion still run.
     ops_org = "eden-ops"
-    try:
-        if not await is_feature_enabled(ops_org, "evolution"):
-            summary["spend_skipped"] = True
-            summary["evolver"] = {"skipped": "feature_kill"}
-        else:
-            budget = EvolutionSpendBudget(ops_org)
-            if not await budget.may_spend(0.05):
+    if _lane_budget_ok:
+        try:
+            if not await is_feature_enabled(ops_org, "evolution"):
                 summary["spend_skipped"] = True
-                summary["evolver"] = {
-                    "skipped": "evolution_spend_cap",
-                    **(await budget.status()),
-                }
+                summary["evolver"] = {"skipped": "feature_kill"}
             else:
-                with cost_context(ops_org, "evolution"):
-                    llm = OpenRouterClient()
-                    evolver = JudgeScorePromptEvolver(llm_client=llm)
-                    summary["evolver"] = await evolver.run()
-    except Exception as exc:
-        logger.warning("evolution_loop: JudgeScorePromptEvolver failed: %s", exc)
+                budget = EvolutionSpendBudget(ops_org)
+                if not await budget.may_spend(0.05):
+                    summary["spend_skipped"] = True
+                    summary["evolver"] = {
+                        "skipped": "evolution_spend_cap",
+                        **(await budget.status()),
+                    }
+                else:
+                    with cost_context(ops_org, "evolution"):
+                        llm = OpenRouterClient()
+                        evolver = JudgeScorePromptEvolver(llm_client=llm)
+                        summary["evolver"] = await evolver.run()
+        except Exception as exc:
+            logger.warning("evolution_loop: JudgeScorePromptEvolver failed: %s", exc)
 
     try:
         summary["canaries_enrolled"] = await _enroll_pending_canaries()
@@ -129,7 +152,7 @@ async def run_evolution_pass() -> dict[str, Any]:
 
 async def _loop_body(settings: Settings) -> None:
     assert _stop_event is not None
-    interval = float(getattr(settings, "evolution_loop_interval_seconds", 300))
+    interval = float(getattr(settings, "evolution_loop_interval_seconds", 1800))  # OOM W3-5
     while not _stop_event.is_set():
         try:
             result = await run_evolution_pass()

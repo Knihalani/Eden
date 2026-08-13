@@ -207,7 +207,12 @@ class RubricSynthesiser:
         )
 
         # ── 3. Call the LLM ───────────────────────────────────────
-        rubric_prompt = await _call_synthesis_llm(prompt)
+        # OOM W4-3 (L12): when rubric_synthesis_batch_v1 is enabled, route
+        # through the Anthropic Batch API (50% discount) instead of the
+        # real-time OpenRouter path.  Defaults to False (no behaviour change).
+        rubric_prompt = await _call_synthesis_llm_with_batch_fallback(
+            prompt, org_id=org_id
+        )
         if not rubric_prompt:
             # The LLM call failed (or returned empty). The audit
             # log is intentionally NOT written — the customer
@@ -426,6 +431,84 @@ def self_slot() -> str:
     """Module-level indirection so tests can monkeypatch the
     LLM slot without importing :class:`RubricSynthesiser`."""
     return RubricSynthesiser.MODEL_SLOT
+
+
+async def _call_synthesis_llm_with_batch_fallback(
+    prompt: str, *, org_id: str
+) -> str | None:
+    """Call the synthesis LLM, optionally via the Anthropic Batch API.
+
+    OOM W4-3 (L12) — reference integration for the Batch API offline lane.
+
+    When ``settings.rubric_synthesis_batch_v1 = True`` **and**
+    ``settings.anthropic_api_key`` is non-empty, the synthesis LLM call is
+    routed through the Anthropic Messages Batch API (50% cost discount).
+    Otherwise falls back to the normal real-time :func:`_call_synthesis_llm`
+    path so default behaviour is unchanged.
+
+    Args:
+        prompt: The fully-composed synthesis prompt.
+        org_id: Used only for logging; not sent to the API.
+
+    Returns:
+        The synthesised rubric text, or ``None`` on any failure.
+    """
+    try:
+        from eden.config import get_settings
+
+        settings = get_settings()
+        use_batch = (
+            getattr(settings, "rubric_synthesis_batch_v1", False)
+            and bool((getattr(settings, "anthropic_api_key", "") or "").strip())
+        )
+    except Exception:
+        use_batch = False
+
+    if not use_batch:
+        # Default path — no behaviour change.
+        return await _call_synthesis_llm(prompt)
+
+    # Batch API path — OOM W4-3 reference integration.
+    try:
+        from eden.llm.batch_client import AnthropicBatchClient, BatchRequest
+
+        client = AnthropicBatchClient()
+        # Use the same model slot/class as the real-time path.  The batch
+        # API only accepts native Anthropic model IDs (not OpenRouter slugs).
+        # Default to claude-haiku-4-5; operators can override via env.
+        from eden.config import get_settings as _gs
+
+        _batch_model = (
+            getattr(_gs(), "judges_model_override", "")
+            or "claude-haiku-4-5"
+        )
+        req = BatchRequest(
+            custom_id=f"rubric_synthesis_{org_id}",
+            model=_batch_model,
+            max_tokens=RUBRIC_TOKEN_CAP + 256,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        results = await client.run([req], poll_interval=5.0, max_polls=60)
+        for row in results:
+            if row.get("custom_id") == f"rubric_synthesis_{org_id}":
+                content = (row.get("content") or "").strip()
+                if content:
+                    logger.debug(
+                        "metric_studio.synthesiser: batch synthesis ok "
+                        "(%d chars, org=%s)", len(content), org_id
+                    )
+                    return content
+        logger.debug(
+            "metric_studio.synthesiser: batch returned no content for org=%s", org_id
+        )
+        return None
+    except Exception as exc:
+        logger.warning(
+            "metric_studio.synthesiser: batch call failed (%s), "
+            "falling back to real-time path", exc
+        )
+        # Graceful degradation: fall back to real-time path on any batch error.
+        return await _call_synthesis_llm(prompt)
 
 
 async def _fetch_rubric_row(

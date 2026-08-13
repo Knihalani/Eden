@@ -2,6 +2,7 @@
 
 Sends only high-signal events:
 - P0/P1 issue created
+- first-ever issue detected per org (any severity, OOM W2-7)
 - verify failed
 - human escalation
 - NL real_incident (confidence >= 0.7)
@@ -11,6 +12,14 @@ Uses Redis SETNX dedupe + hourly org cap from Settings
 (``issue_alert_dedup_minutes``, ``issue_alert_max_per_hour``).
 From-address is always ``alerts@edenobservability.com`` via
 ``EmailService(purpose="alert")``.
+
+OOM W2-7 (finding O5): first-detection email
+  State lives in ``organizations.settings`` JSONB:
+    ``first_detection_email_sent``     – durable "already sent" flag
+    ``first_detection_email_opt_out``  – set by the tour opt-out checkbox
+  A 24-hour Redis burst-dedupe (``eden:alert_email:first_detection:{org_id}``)
+  prevents a flood when many issues arrive simultaneously before the durable
+  flag is written.
 """
 
 from __future__ import annotations
@@ -103,6 +112,110 @@ async def _org_alert_recipients(org_id: str) -> list[str]:
     return merged
 
 
+# ---------------------------------------------------------------------------
+# OOM W2-7 — org-level notification-prefs helpers (first-detection email)
+# ---------------------------------------------------------------------------
+
+async def _get_org_setting(org_id: str, key: str) -> Any:
+    """Read a single key from ``organizations.settings`` JSONB (best-effort)."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return None
+        row = await client.fetchrow(
+            "SELECT settings FROM organizations WHERE id = $1",
+            org_id,
+        )
+        settings = _parse_org_settings(row["settings"] if row else None)
+        return settings.get(key)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("alert_email: org setting read failed key=%s: %s", key, exc)
+        return None
+
+
+async def _set_org_setting(org_id: str, key: str, value: Any) -> None:
+    """Atomically merge ``{key: value}`` into ``organizations.settings`` JSONB."""
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return
+        await client.execute(
+            "UPDATE organizations "
+            "SET settings = COALESCE(settings, '{}'::jsonb) || $1::jsonb "
+            "WHERE id = $2",
+            json.dumps({key: value}),
+            org_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("alert_email: org setting write failed key=%s: %s", key, exc)
+
+
+async def _should_send_first_detection_email(org_id: str) -> bool:
+    """True when the org should receive its first-detection email.
+
+    Returns False when the org has opted out (``first_detection_email_opt_out``
+    is truthy in org settings) or has already received one
+    (``first_detection_email_sent`` is truthy).  Fails open so a Postgres
+    outage does not permanently silence new-org notifications.
+    """
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return True  # fail-open
+        row = await client.fetchrow(
+            "SELECT settings FROM organizations WHERE id = $1",
+            org_id,
+        )
+        settings = _parse_org_settings(row["settings"] if row else None)
+        if settings.get("first_detection_email_opt_out", False):
+            return False
+        if settings.get("first_detection_email_sent", False):
+            return False
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "alert_email: first-detection eligibility check failed: %s", exc
+        )
+        return True  # fail-open
+
+
+async def _allow_first_detection_send(org_id: str) -> bool:
+    """24-hour Redis burst-dedupe for the first-detection email.
+
+    Uses SETNX with a 24-hour TTL so a burst of simultaneous low-severity
+    issues for the same org only triggers one send while the durable
+    ``first_detection_email_sent`` flag is being persisted.  Fails open
+    if Redis is unavailable.
+    """
+    try:
+        from eden.storage.redis import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is None:
+            return True
+        key = f"eden:alert_email:first_detection:{org_id}"  # OOM W2-7
+        ok = await redis.set(key, "1", nx=True, ex=86400)  # 24 h
+        return bool(ok)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(
+            "alert_email: first-detection redis dedupe skipped: %s", exc
+        )
+        return True  # fail-open
+
+
+async def _mark_first_detection_sent(org_id: str) -> None:
+    """Durably record that the first-detection email was sent (OOM W2-7)."""
+    await _set_org_setting(org_id, "first_detection_email_sent", True)
+
+
+# ---------------------------------------------------------------------------
+
 async def _allow_send(org_id: str, dedupe_key: str) -> bool:
     """Redis dedupe + hourly rate cap. Fail-open if Redis unavailable."""
     settings = get_settings()
@@ -144,12 +257,37 @@ async def send_issue_alert_email(
     sev = (severity or "").upper()
     kind = (event_kind or "").lower()
 
-    # Sparse policy: only P0/P1 for issue_created; always allow verify/human.
-    if kind in ("issue_created", "created") and sev not in ("P0", "P1", "CRITICAL", "HIGH"):
+    # OOM W2-7: guard early — log explicitly when the key is absent so the
+    # silence is visible in logs rather than swallowed inside EmailService.
+    _api_key = (getattr(get_settings(), "sendkit_api_key", None) or "").strip()
+    if not _api_key:
+        logger.info(  # OOM W2-7
+            "alert_email: send skipped org=%s event=%s — sendkit_api_key not configured",
+            org_id,
+            kind,
+        )
+        return
+
+    is_issue_created = kind in ("issue_created", "created")
+    is_high_severity = sev in ("P0", "P1", "CRITICAL", "HIGH")
+
+    # OOM W2-7: first-detection path — send once per org for any severity,
+    # bypassing the normal P0/P1-only gate.
+    _first_detection = False
+    if is_issue_created and not is_high_severity:
+        if not await _should_send_first_detection_email(org_id):
+            return  # already sent or opted out
+        if not await _allow_first_detection_send(org_id):
+            return  # 24-hour burst-dedupe
+        await _mark_first_detection_sent(org_id)
+        _first_detection = True
+
+    # Sparse policy: only P0/P1 for non-first-detection issue_created.
+    if is_issue_created and not is_high_severity and not _first_detection:
         return
 
     dedupe = f"{kind}:{issue_id or 'none'}:{sev}"
-    if not await _allow_send(org_id, dedupe):
+    if not _first_detection and not await _allow_send(org_id, dedupe):
         return
 
     recipients = await _org_alert_recipients(org_id)
@@ -158,11 +296,20 @@ async def send_issue_alert_email(
         return
 
     subject_title = title or f"Eden {kind.replace('_', ' ')}"
-    subject = f"[Eden {sev or 'ALERT'}] {subject_title}"
+    if _first_detection:  # OOM W2-7
+        subject = f"[Eden] First issue detected in your project — {subject_title}"
+    else:
+        subject = f"[Eden {sev or 'ALERT'}] {subject_title}"
     body_lines = [
         f"<p><strong>Event:</strong> {kind}</p>",
         f"<p><strong>Org:</strong> {org_id}</p>",
     ]
+    if _first_detection:  # OOM W2-7
+        body_lines.insert(
+            0,
+            "<p><strong>Eden detected an issue in your project for the first time."
+            "</strong> You will receive future alerts only for P0/P1 severity issues.</p>",
+        )
     if issue_id:
         body_lines.append(f"<p><strong>Issue:</strong> {issue_id}</p>")
     if severity:

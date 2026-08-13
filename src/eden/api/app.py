@@ -127,8 +127,11 @@ from eden.api.routes import (
     observability,
 )
 from eden.config import get_settings
-from eden.kb import health_check as kb_health_check
-from eden.kb import initialize_kb
+# OOM W2-11 B5: eden.kb is imported lazily inside the callers below.
+# Moving these two module-level imports inside their only call sites
+# (lifespan for initialize_kb, /health handler for kb_health_check)
+# saves ~20ms and removes an eager dependency on the kb package from
+# the app import path, keeping the cold-import diet clean.
 from eden.observability.metrics_endpoint import router as metrics_endpoint_router
 
 logger = logging.getLogger(__name__)
@@ -145,27 +148,15 @@ _ledger_flusher_task: asyncio.Task | None = None
 # so cold ``import eden.api.app`` does not pay for them. OpenAPI is complete
 # once lifespan has run (uvicorn always does before accepting traffic).
 _DEFERRED_INTELLIGENCE_ROUTERS: tuple[str, ...] = (
-    "intelligence_agents",
-    "intelligence_apm_depth",
-    "intelligence_autonomous",
-    "intelligence_closed_loop",
-    "intelligence_columnar",
-    "intelligence_cost",
-    "intelligence_dsl",
-    "intelligence_eval",
-    "intelligence_experiments",
-    "intelligence_governance",
-    "intelligence_guardrails",
-    "intelligence_memory",
-    "intelligence_metric_studio",
-    "intelligence_outcomes",
-    "intelligence_predictive",
-    "intelligence_rca",
-    "intelligence_replay",
-    "intelligence_retrieval",
-    "intelligence_time_travel",
-    "intelligence_tools",
-    "intelligence_user",
+    # W3-6: 21 thin wrappers collapsed into 6 domain-grouped routers (A4).
+    # Each grouped module combines the sub-routers via include_router so the
+    # public API surface (paths, methods, schemas) is unchanged.
+    "intelligence_observability",   # apm_depth, rca, replay
+    "intelligence_debug",           # time_travel, dsl, memory
+    "intelligence_data",            # retrieval, columnar, outcomes, cost
+    "intelligence_quality",         # eval, governance
+    "intelligence_behavior",        # user, guardrails, autonomous, closed_loop, agents, tools
+    "intelligence_mlops",           # experiments, predictive, metric_studio
 )
 
 
@@ -241,6 +232,7 @@ _DEFERRED_ROUTERS: tuple[tuple[str, str], ...] = (
     ("eden.api.routes.presigned_feedback", "auth_router"),  # feedback/presigned-token
     ("eden.api.routes.presigned_feedback", "public_router"),  # /api/v1/feedback/tokens/{token_id}
     ("eden.api.routes.onboarding", "router"),  # /v1/internal/onboarding/{org_id}/* (D.14)
+    ("eden.api.routes.onboarding_seed", "router"),  # /v1/internal/onboarding/{org_id}/seed-demo (§6.1)
     ("eden.api.routes.sql_query", "router"),  # /orgs/{org_id}/sql (Phase M read-only SQL)
     ("eden.api.routes.compliance", "router"),  # /api/v1/me/* + dsar + subprocessors (GDPR/CCPA)
     ("eden.api.routes.qa_generator", "router"),  # /orgs/{org_id}/synthetic (Phase J)
@@ -288,6 +280,9 @@ _DEFERRED_ROUTERS: tuple[tuple[str, str], ...] = (
     ("eden.api.routes.websocket", "router"),  # /ws/jobs/{job_id}/{trace,logs}
     ("eden.api.routes.observability_stream", "router"),  # SSE live-tail (Phase 7.2)
     ("eden.api.routes.insights", "router"),  # /orgs/{org_id}/insights (Phase 6.3)
+    # W4-4: definitions_router MUST precede router so literal /definitions
+    # paths are evaluated before the parameterised /{judge_run_id} catch-all.
+    ("eden.api.routes.judges", "definitions_router"),  # /orgs/{org_id}/observability/judges/definitions CRUD
     ("eden.api.routes.judges", "router"),  # observability/judges (Phase 7.1b)
     ("eden.api.routes.replay", "router"),  # /orgs/{org_id}/alerts/... replay/ack
     ("eden.api.routes.media", "router"),  # /orgs/{org_id}/media/{blob_id} (7.2a)
@@ -505,7 +500,7 @@ class HealthResponse(BaseModel):
 #: hang loses everything after it" into "one hang loses only itself".
 #:
 #: Second, eight ``close_*`` functions existed with no caller anywhere
-#: (typesense, trace_store, kafka consumer + producer, ksql, edge_fanout, hilt,
+#: (typesense, trace_store, kafka consumer + producer, edge_fanout, hilt,
 #: alert_processor). Each leaked its transports on every pod restart while that
 #: subsystem was in use. All of them guard on their singleton being ``None``, so
 #: registering them costs nothing when the subsystem never started.
@@ -601,11 +596,6 @@ def _shutdown_steps(
 
         await close_kafka_producer()
 
-    async def _ksql() -> None:
-        from eden.realtime.ksql_cep import close_ksql_client
-
-        await close_ksql_client()
-
     async def _edge_fanout() -> None:
         from eden.realtime.edge_fanout import close_edge_fanout
 
@@ -679,7 +669,6 @@ def _shutdown_steps(
         ("typesense_client", _typesense, _SHUTDOWN_TIMEOUT_CLIENT),
         ("kafka_consumer", _kafka_consumer, _SHUTDOWN_TIMEOUT_CLIENT),
         ("kafka_producer", _kafka_producer, _SHUTDOWN_TIMEOUT_CLIENT),
-        ("ksql_client", _ksql, _SHUTDOWN_TIMEOUT_CLIENT),
         ("edge_fanout", _edge_fanout, _SHUTDOWN_TIMEOUT_CLIENT),
         ("hilt_controller", _hilt, _SHUTDOWN_TIMEOUT_CLIENT),
         ("alert_processor", _alert_processor, _SHUTDOWN_TIMEOUT_CLIENT),
@@ -822,6 +811,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Initialize Knowledge Base
     try:
+        from eden.kb import initialize_kb
         await initialize_kb()
         logger.info("Knowledge Base initialized")
     except Exception as e:
@@ -1449,6 +1439,7 @@ async def health_check() -> HealthResponse | JSONResponse:
     from fastapi.responses import JSONResponse
 
     from eden.api.startup_checks import health_probe_http_status
+    from eden.kb import health_check as kb_health_check
 
     kb_health = await kb_health_check()
 

@@ -12,6 +12,7 @@ from eden.observability.ingestion.checkpoint_hook import (
     extract_llm_payload,
     is_llm_event,
     maybe_persist_checkpoint,
+    maybe_persist_checkpoints_batch,
 )
 
 
@@ -79,3 +80,77 @@ async def test_maybe_persist_skips_non_llm() -> None:
         payload={},
     )
     assert await maybe_persist_checkpoint(event, pg=AsyncMock()) is False
+
+
+# ── maybe_persist_checkpoints_batch (3.2) ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_batch_writes_two_executemany_calls() -> None:
+    """One qualifying LLM event → exactly 2 ``pg.executemany`` calls
+    (telemetry_events + debugger_llm_cache)."""
+    event = SimpleNamespace(
+        event_type="llm.completion",
+        trace_id="tr-batch",
+        tenant_id="org_b",
+        sequence=0,
+        payload={
+            "messages": [{"role": "user", "content": "hi"}],
+            "response": {"content": "ok"},
+            "model": "gpt-4o",
+        },
+    )
+    fake_pg = AsyncMock()
+    fake_pg.executemany = AsyncMock()
+
+    with patch(
+        "eden.observability.ingestion.checkpoint_hook._resolve_step_number",
+        new=AsyncMock(return_value=1),
+    ), patch("eden.debugger.cache.llm_input_hash", return_value="h"):
+        await maybe_persist_checkpoints_batch([event], pg=fake_pg)
+
+    assert fake_pg.executemany.await_count == 2, (
+        f"expected 2 executemany calls, got {fake_pg.executemany.await_count}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_skips_non_llm_event() -> None:
+    """Non-LLM events produce no executemany calls."""
+    event = SimpleNamespace(
+        event_type="tool.call",
+        trace_id="tr-1",
+        tenant_id="org_b",
+        sequence=0,
+        payload={},
+    )
+    fake_pg = AsyncMock()
+    fake_pg.executemany = AsyncMock()
+
+    await maybe_persist_checkpoints_batch([event], pg=fake_pg)
+
+    fake_pg.executemany.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_batch_is_best_effort_on_pg_error() -> None:
+    """Propagated pg.executemany error must not escape the function."""
+    event = SimpleNamespace(
+        event_type="llm.completion",
+        trace_id="tr-1",
+        tenant_id="org_b",
+        sequence=0,
+        payload={
+            "messages": [],
+            "response": {},
+        },
+    )
+    fake_pg = AsyncMock()
+    fake_pg.executemany = AsyncMock(side_effect=RuntimeError("db gone"))
+
+    with patch(
+        "eden.observability.ingestion.checkpoint_hook._resolve_step_number",
+        new=AsyncMock(return_value=0),
+    ):
+        # Must not raise.
+        await maybe_persist_checkpoints_batch([event], pg=fake_pg)

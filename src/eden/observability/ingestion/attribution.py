@@ -53,6 +53,10 @@ class Attribution:
     api_key_id: str | None = None
     auth_method: str = "api_key"
     client_ip: str | None = None
+    #: The raw ``Content-Type`` header value from the ingest request.
+    #: Propagated so decoders can branch on wire encoding (e.g. JSON vs
+    #: protobuf) without needing to inspect the body heuristically.
+    content_type: str | None = None
 
     def with_source_format(self, source_format: str) -> Attribution:
         """Return a copy with the source format overridden. Useful when
@@ -66,4 +70,5 @@ class Attribution:
             api_key_id=self.api_key_id,
             auth_method=self.auth_method,
             client_ip=self.client_ip,
+            content_type=self.content_type,
         )

@@ -98,8 +98,10 @@ _acquire_failures: dict[str, int] = {}
 #: carry the distinction out of the container.
 _work_failures: dict[str, str] = {}
 
-#: Lock names currently held via the Postgres fallback, so the renew and
-#: release paths know which backend owns them.
+#: Lock names currently held via Postgres, so the renew and release paths
+#: know which backend owns them. Postgres is now the primary election
+#: backend; this dict tracks the common case. Redis entries are absent
+#: (popped when Redis wins the fallback path).
 _pg_fallback_held: dict[str, str] = {}
 
 
@@ -111,21 +113,44 @@ def leader_pg_fallback_locks() -> dict[str, str]:
 async def _acquire_with_fallback(
     lock: Lock, lock_name: str, identity: str, ttl: int
 ) -> tuple[bool, str]:
-    """Acquire via Redis, falling back to Postgres when Redis cannot write.
+    """Acquire via Postgres (primary), falling back to Redis when Postgres is unavailable.
 
-    Returns ``(acquired, backend)``. ``backend`` is ``"redis"``,
-    ``"postgres"`` or ``"none"``.
+    Returns ``(acquired, backend)``. ``backend`` is ``"postgres"``,
+    ``"redis"`` or ``"none"``.
 
-    Redis remains the primary — it is cheaper and the whole fleet has been
-    tuned around it. But a lock refused while *nobody holds it* is not
-    contention: it means the write was accepted and discarded, which is
-    what a provider does past a plan limit. Treating that as "someone else
-    is leader" is what kept every background loop down for 7.4 days. When
-    we see it, elect through Postgres instead, which has no such cap and
-    was healthy the entire time.
+    Postgres is the primary election backend: a single Neon statement per
+    tick, no Upstash command-budget impact, and proven to survive a Redis
+    quota outage (2026-07-29 incident, 7.4 days down). Redis is the
+    fallback for when Postgres itself is unreachable (no client, connection
+    error, table ensure failed).
+
+    When Postgres returns False (another holder has a live lease), we stay a
+    follower and do NOT try Redis — the single-holder guarantee is provided
+    by the DB's atomic INSERT … ON CONFLICT; consulting a second backend
+    after a DB refusal would risk split-brain leadership.
+
+    Redis fallback: mirrors the old primary logic — try acquire, check the
+    holder on refusal, and stay follower only when a real peer is listed.
+    Refused-with-no-holder means Redis is not accepting writes and is treated
+    the same as Postgres unavailable: not contention.
     """
     from eden.storage import pg_lease
 
+    # Primary: try Postgres first.
+    pg_result = await pg_lease.acquire(lock_name, identity, ttl)
+    if pg_result is True:
+        _pg_fallback_held[lock_name] = identity
+        return True, "postgres"
+    if pg_result is False:
+        # Another holder owns a live lease. Do NOT fall back to Redis — that
+        # would let two processes each win on different backends (split-brain).
+        return False, "none"
+
+    # pg_result is None → Postgres is unavailable; fall back to Redis.
+    logger.warning(
+        "leader: %s Postgres unavailable — falling back to Redis for leader election",
+        lock_name,
+    )
     try:
         acquired = await asyncio.wait_for(
             lock.acquire(token=identity), timeout=_ACQUIRE_TIMEOUT_SECONDS
@@ -140,24 +165,20 @@ async def _acquire_with_fallback(
         _pg_fallback_held.pop(lock_name, None)
         return True, "redis"
 
-    # Refused. Is anyone actually holding it?
+    # Redis refused. Check whether a real peer holds it.
     holder = None
     try:
         holder = await asyncio.wait_for(lock.holder(), timeout=5.0)
     except Exception:
         holder = None
     if holder:
-        return False, "none"  # genuine contention; stay a follower
+        return False, "none"  # genuine Redis contention; stay a follower
 
+    # Redis also refused with no holder — both backends are unavailable.
     logger.warning(
-        "leader: %s refused with no holder — Redis is not accepting writes; "
-        "electing through Postgres instead",
+        "leader: %s both Postgres and Redis unavailable; cannot elect leader",
         lock_name,
     )
-    if await pg_lease.acquire(lock_name, identity, ttl):
-        _pg_fallback_held[lock_name] = identity
-        logger.info("leader: %s acquired via Postgres fallback", lock_name)
-        return True, "postgres"
     return False, "none"
 
 
@@ -402,15 +423,17 @@ async def run_if_leader(
         lock = Lock(lock_name, ttl=lock_ttl, prefix="eden:leader")
         # Bounded, because an unbounded acquire is a single point of
         # permanent silence for the whole background fleet (observed in
-        # production 2026-07-29), and fallback-aware because Redis being
-        # unable to accept writes must not mean "nobody may be leader".
+        # production 2026-07-29). Postgres is the primary; Redis is the
+        # fallback only when Postgres is unreachable.
         identity = f"{socket.gethostname()}:{os.getpid()}"
         acquired, backend = await _acquire_with_fallback(
             lock, lock_name, identity, lock_ttl
         )
         if acquired and backend == "postgres":
-            # The Redis extender below would be renewing a lock we do not
-            # hold; the Postgres lease is renewed on its own cadence.
+            # Postgres is the primary backend. Skip the Redis extender below
+            # (we hold no Redis lock). The Postgres lease expires after ttl
+            # seconds; for short-lived work calls (< ttl) releasing at the
+            # end of each tick is sufficient renewal.
             _acquire_failures.pop(lock_name, None)
             _tick_counts.setdefault(lock_name, [0, 0])[1] += 1
             try:
@@ -420,7 +443,7 @@ async def run_if_leader(
                     f"{type(exc).__name__}: {str(exc)[:180]}"
                 )
                 logger.error(
-                    "leader: work %s failed (pg fallback): %s",
+                    "leader: work %s failed (pg primary): %s",
                     lock_name,
                     exc,
                     exc_info=True,

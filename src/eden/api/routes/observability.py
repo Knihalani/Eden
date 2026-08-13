@@ -302,6 +302,11 @@ class TraceListResponse(BaseModel):
     offset: int
 
 
+class BookmarkResponse(BaseModel):
+    bookmarked: bool
+    trace_id: str
+
+
 class ExportFormatRequest(BaseModel):
     format_type: str = Field(default="jsonl", pattern="^(jsonl|json|csv)$")
 
@@ -455,6 +460,8 @@ async def _list_traces_from_summaries(
     realm: str | None,
     agent_id: str | None,
     outcome: str | None,
+    bookmarked: bool,
+    user_id: str | None,
     limit: int,
     offset: int,
 ) -> tuple[list[Any] | None, int | None]:
@@ -507,6 +514,14 @@ async def _list_traces_from_summaries(
     if outcome:
         where += f" AND outcome = ${len(args) + 1}"
         args.append(outcome)
+    # W4-6: bookmarked filter — join against trace_bookmarks for this user.
+    if bookmarked and user_id:
+        where += (
+            f" AND trace_id IN ("
+            f"SELECT trace_id FROM trace_bookmarks "
+            f"WHERE org_id = $1 AND user_id = ${len(args) + 1})"
+        )
+        args.append(user_id)
     try:
         if not await _trace_summaries_known(client):
             return None, None
@@ -558,6 +573,13 @@ async def list_traces(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     days: int = Query(7, ge=1, le=90),
+    bookmarked: bool = Query(
+        False,
+        description=(
+            "W4-6: when true, return only traces the authenticated user "
+            "has starred. Requires trace_bookmarks table (migration 172)."
+        ),
+    ),
     user: dict = Depends(get_current_user),
 ) -> TraceListResponse:
     """List traces for an organization with optional filters.
@@ -592,6 +614,10 @@ async def list_traces(
             detail="Traces temporarily unavailable",
             headers={"Retry-After": "5"},
         )
+
+    from eden.api.utils.clerk_auth import extract_user_id
+
+    _user_id: str | None = extract_user_id(user) or None
 
     batch_ids = [t for t in (trace_ids or []) if t][:100]
     if batch_ids:
@@ -628,6 +654,14 @@ async def list_traces(
             f"WHERE tenant_id = $1 AND outcome = ${len(args) + 1})"
         )
         args.append(outcome)
+    # W4-6: bookmarked filter on the legacy path.
+    if bookmarked and _user_id:
+        where += (
+            f" AND trace_id IN ("
+            f"SELECT trace_id FROM trace_bookmarks "
+            f"WHERE org_id = $1 AND user_id = ${len(args) + 1})"
+        )
+        args.append(_user_id)
 
     # Wave 6 — materialized read path. When ``trace_summaries_read_v1`` is
     # on and the table exists, serve the page from one indexed row per
@@ -650,6 +684,8 @@ async def list_traces(
                 realm=realm,
                 agent_id=agent_id,
                 outcome=outcome,
+                bookmarked=bookmarked,
+                user_id=_user_id,
                 limit=limit,
                 offset=offset,
             )
@@ -975,6 +1011,98 @@ async def trace_diff_route(
             detail="One or both traces not found",
         )
     return result
+
+
+@router.put("/traces/{trace_id}/bookmark", response_model=BookmarkResponse)
+async def bookmark_trace(
+    org_id: str = Depends(require_path_org_access),
+    trace_id: str = Path(..., description="Trace ID to bookmark"),
+    user: dict = Depends(get_current_user),
+) -> BookmarkResponse:
+    """Star a trace for the authenticated user (W4-6 trace bookmarks).
+
+    Idempotent: re-starring an already-starred trace is a no-op (ON
+    CONFLICT DO NOTHING). Returns 503 when the trace_bookmarks table is
+    absent (pre-migration 172).
+    """
+    from eden.api.utils.clerk_auth import extract_user_id
+    from eden.storage import postgres as _pg_module
+
+    user_id = extract_user_id(user) or ""
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Cannot resolve user id from token")
+
+    client = await _pg_module.get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Bookmark storage temporarily unavailable",
+            headers={"Retry-After": "5"},
+        )
+    try:
+        await client.execute(
+            """
+            INSERT INTO trace_bookmarks (org_id, trace_id, user_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (org_id, trace_id, user_id) DO NOTHING
+            """,
+            org_id,
+            trace_id,
+            user_id,
+        )
+    except Exception as exc:
+        logger.warning("bookmark_trace: insert failed org=%s trace=%s: %s", org_id, trace_id, redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save bookmark; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
+    return BookmarkResponse(bookmarked=True, trace_id=trace_id)
+
+
+@router.delete("/traces/{trace_id}/bookmark", response_model=BookmarkResponse)
+async def unbookmark_trace(
+    org_id: str = Depends(require_path_org_access),
+    trace_id: str = Path(..., description="Trace ID to un-bookmark"),
+    user: dict = Depends(get_current_user),
+) -> BookmarkResponse:
+    """Remove a star from a trace for the authenticated user (W4-6 trace bookmarks).
+
+    Idempotent: un-starring a trace that was not bookmarked is a no-op.
+    Returns 503 when the trace_bookmarks table is absent (pre-migration 172).
+    """
+    from eden.api.utils.clerk_auth import extract_user_id
+    from eden.storage import postgres as _pg_module
+
+    user_id = extract_user_id(user) or ""
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Cannot resolve user id from token")
+
+    client = await _pg_module.get_postgres_client()
+    if client is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Bookmark storage temporarily unavailable",
+            headers={"Retry-After": "5"},
+        )
+    try:
+        await client.execute(
+            """
+            DELETE FROM trace_bookmarks
+            WHERE org_id = $1 AND trace_id = $2 AND user_id = $3
+            """,
+            org_id,
+            trace_id,
+            user_id,
+        )
+    except Exception as exc:
+        logger.warning("unbookmark_trace: delete failed org=%s trace=%s: %s", org_id, trace_id, redact_all(str(exc)))
+        raise HTTPException(
+            status_code=503,
+            detail="Could not remove bookmark; please retry",
+            headers={"Retry-After": "5"},
+        ) from exc
+    return BookmarkResponse(bookmarked=False, trace_id=trace_id)
 
 
 @router.post("/traces/{trace_id}/export", response_model=TraceExportResponse)

@@ -170,7 +170,7 @@ underlying `RightToBeForgottenService` pass:
   **Settings** in the portal as an account danger-zone action. Any
   signed-in user can erase their own account.
 - **Admin-triggered** — `POST /orgs/{org_id}/intelligence/governance/rtbf`,
-  gated **off by default** behind the `rtbf_fanout_v1` feature flag.
+  controlled by the `rtbf_fanout_v1` feature flag (enabled as of wave 2026-08-12).
 
 ```bash
 curl -X DELETE https://api.edenobservability.com/auth/users/me \

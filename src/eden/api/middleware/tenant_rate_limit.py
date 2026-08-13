@@ -151,7 +151,7 @@ class TenantRateLimitMiddleware:
         if self._redis is not None:
             return self._redis
         settings = _get_settings()
-        if not getattr(settings, "rate_limit_distributed", False):
+        if not getattr(settings, "tenant_rate_limit_distributed", False):
             self._redis = False  # sentinel: memory-only mode
             return None
         redis_url = getattr(settings, "redis_url", "")
@@ -603,10 +603,10 @@ class TenantRateLimitMiddleware:
         reset_ts = int(time.time() + window)
         retry_after = 0
 
-        # Prefer in-memory buckets unless RATE_LIMIT_DISTRIBUTED=true.
-        # Per-request Redis Lua was the dominant Upstash Free burn.
-        # Single get_settings() hop (same source as rate_limit_enabled).
-        use_redis = bool(getattr(get_settings(), "rate_limit_distributed", False))
+        # Prefer in-memory buckets unless TENANT_RATE_LIMIT_DISTRIBUTED=true.
+        # Per-request Redis Lua was the dominant Upstash Free burn (OOM 2.3).
+        # Single-replica deploy → distributed limiting adds nothing; default off.
+        use_redis = bool(getattr(get_settings(), "tenant_rate_limit_distributed", False))
         if use_redis:
             try:
                 allowed, remaining, reset_ts, retry_after = await self._check_redis(

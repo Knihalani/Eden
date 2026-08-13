@@ -234,6 +234,7 @@ async def list_plans(
     plan_kind: str | None = None,
     agent_id: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     client = await get_postgres_client()
     if client is None:
@@ -250,10 +251,11 @@ async def list_plans(
         args.append(agent_id)
         clauses.append(f"agent_id = ${len(args)}")
     args.append(limit)
+    args.append(offset)
     sql = (
         "SELECT * FROM improvement_plans WHERE "
         + " AND ".join(clauses)
-        + f" ORDER BY created_at DESC LIMIT ${len(args)}"
+        + f" ORDER BY created_at DESC LIMIT ${len(args) - 1} OFFSET ${len(args)}"
     )
     rows = await client.fetch(sql, *args)
     return [_row(r) for r in rows]

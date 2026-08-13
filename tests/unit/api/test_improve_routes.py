@@ -147,3 +147,84 @@ def test_revert_plan_route(client: TestClient) -> None:
         resp = client.post("/orgs/org_1/improve/plans/plan_1/revert")
     assert resp.status_code == 200
     assert resp.json()["data"]["revert_plan_id"] == "plan_2"
+
+
+def test_iterate_plan_route(client: TestClient) -> None:
+    """OOM 9.4b: POST /plans/{id}/iterate → guardian follow-up."""
+    follow_up_plan = {
+        "id": "plan_follow_1",
+        "plan_kind": "advisory",
+        "title": "Follow-up: fix retry timeout",
+        "status": "draft",
+    }
+    with patch.object(
+        improve_routes,
+        "require_org_admin",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        improve_routes,
+        "_require_agent_v1_async",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        improve_routes.plans_repo,
+        "get_plan",
+        new=AsyncMock(
+            return_value={
+                "id": "plan_1",
+                "status": "pr_opened",
+                "plan_kind": "code_patch",
+                "source_ref": "issue:iss_1",
+                "evidence": {},
+                "triage_snapshot": {},
+            }
+        ),
+    ), patch(
+        "eden.improvement.guardian.request_follow_up",
+        new=AsyncMock(return_value=follow_up_plan),
+    ):
+        resp = client.post(
+            "/orgs/org_1/improve/plans/plan_1/iterate",
+            json={"feedback": "Please fix the edge case in retry logic."},
+        )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["parent_plan_id"] == "plan_1"
+    assert data["follow_up_plan"]["id"] == "plan_follow_1"
+
+
+def test_iterate_plan_invalid_status(client: TestClient) -> None:
+    """OOM 9.4b: iterate on a done/merged plan → 409."""
+    with patch.object(
+        improve_routes,
+        "require_org_admin",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        improve_routes,
+        "_require_agent_v1_async",
+        new=AsyncMock(return_value=None),
+    ), patch.object(
+        improve_routes.plans_repo,
+        "get_plan",
+        new=AsyncMock(
+            return_value={
+                "id": "plan_done",
+                "status": "merged",
+                "plan_kind": "code_patch",
+            }
+        ),
+    ):
+        resp = client.post(
+            "/orgs/org_1/improve/plans/plan_done/iterate",
+            json={"feedback": "too late"},
+        )
+    assert resp.status_code == 409
+
+
+def test_plans_repo_offset_kwarg() -> None:
+    """OOM P7: plans_repo.list_plans now accepts offset for pagination."""
+    import inspect
+    from eden.improvement import plans_repo
+
+    sig = inspect.signature(plans_repo.list_plans)
+    assert "offset" in sig.parameters, "list_plans must expose an offset kwarg"
+    assert sig.parameters["offset"].default == 0

@@ -100,6 +100,66 @@ async def test_budget_ok_fails_closed_when_backend_raises() -> None:
         assert await ann._budget_ok(ORG) is False
 
 
+# ── OOM W3-5: annotator system lane cap ─────────────────────────────
+
+
+async def test_budget_ok_false_when_annotator_lane_exceeded() -> None:
+    """OOM W3-5: system-wide annotator lane cap exceeded → _budget_ok returns False."""
+    with (
+        patch(
+            "eden.llmops.feature_kills.is_feature_enabled",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "eden.closed_loop.autonomy_policy.check_budget",
+            new=AsyncMock(return_value=(True, 1.0, 25.0)),
+        ),
+        patch(
+            "eden.llmops.evolution_spend.LaneDailyBudget.check",
+            new=AsyncMock(return_value=(False, 5.5, 5.0)),
+        ),
+    ):
+        assert await ann._budget_ok(ORG) is False
+
+
+async def test_budget_ok_true_when_all_three_gates_pass() -> None:
+    """OOM W3-5: feature + org budget + lane cap all pass → True."""
+    with (
+        patch(
+            "eden.llmops.feature_kills.is_feature_enabled",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "eden.closed_loop.autonomy_policy.check_budget",
+            new=AsyncMock(return_value=(True, 1.0, 25.0)),
+        ),
+        patch(
+            "eden.llmops.evolution_spend.LaneDailyBudget.check",
+            new=AsyncMock(return_value=(True, 0.5, 5.0)),
+        ),
+    ):
+        assert await ann._budget_ok(ORG) is True
+
+
+async def test_budget_ok_fail_open_when_lane_check_raises() -> None:
+    """OOM W3-5: if lane check raises, fail-open → budget_ok still returns True."""
+    with (
+        patch(
+            "eden.llmops.feature_kills.is_feature_enabled",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "eden.closed_loop.autonomy_policy.check_budget",
+            new=AsyncMock(return_value=(True, 1.0, 25.0)),
+        ),
+        patch(
+            "eden.llmops.evolution_spend.LaneDailyBudget.check",
+            new=AsyncMock(side_effect=RuntimeError("redis down")),
+        ),
+    ):
+        assert await ann._budget_ok(ORG) is True
+
+
 # ── the gates actually prevent the LLM call ─────────────────────────
 
 _EVENTS = [{"event_type": "llm.call", "name": "step", "payload": {"x": 1}}]

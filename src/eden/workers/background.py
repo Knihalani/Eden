@@ -2,8 +2,9 @@
 
 When ``EDEN_RUN_BACKGROUND_WORKERS`` is enabled, the API lifespan starts
 the in-process loops that would otherwise live only on ``eden-worker``.
-A single Redis leader lock ensures only one API replica runs the
-singleton background tasks at a time.
+A Postgres-backed leader lease (primary) — with Redis as fallback when
+Postgres is unreachable — ensures only one API replica runs the singleton
+background tasks at a time.
 """
 
 from __future__ import annotations
@@ -276,9 +277,9 @@ class BackgroundWorkers:
                     _BUNDLE_LOCK_NAME, "acquired" if acquired else "refused"
                 )
             if acquired and backend == "postgres":
-                # Redis cannot accept writes; the lease lives in Postgres.
-                # Run the bundle and renew the lease on the tick cadence
-                # rather than through the Redis extender.
+                # Postgres is the primary election backend. The lease lives
+                # in eden_leader_leases; renew on the tick cadence rather
+                # than through the Redis extender (we hold no Redis lock).
                 from eden.storage import pg_lease
 
                 self._held = ("postgres", identity)

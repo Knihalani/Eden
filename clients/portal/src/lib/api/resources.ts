@@ -98,6 +98,34 @@ export type InsightsOverviewResponse = {
 };
 
 /** Matches BE ``alerts/repo.py`` ``nl_alert_rules`` row shape. */
+// ── F57 dashboard types ──────────────────────────────────────────────
+export interface DashboardRow {
+  id: string;
+  org_id: string;
+  name: string;
+  is_home: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DashboardWidget {
+  id: string;
+  dashboard_id: string;
+  org_id: string;
+  widget_type: string;
+  title: string;
+  query: string;
+  config: {
+    chart_type?: "stat" | "line" | "bar";
+    agent_id?: string;
+    time_range?: string;
+    [key: string]: unknown;
+  };
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface NlAlertRule {
   id: string;
   name: string;
@@ -2947,6 +2975,22 @@ export const agentIssuesApi = {
       body: JSON.stringify(body),
       noDedup: true,
     }),
+  /**
+   * 9.3 issue→debugger glue: resolve the first occurrence trace_id + span_id.
+   * The portal uses these to build a ``/debugger?traceId=&spanId=`` deep-link.
+   */
+  debugContext: (orgId: string, issueId: string) =>
+    fetchApi<{
+      status: string;
+      data: {
+        issue_id: string;
+        trace_id: string | null;
+        span_id: string | null;
+        has_trace: boolean;
+      };
+    }>(`/orgs/${orgId}/agent-issues/${issueId}/debug-context`, {
+      headers: { "X-Org-Id": orgId },
+    }),
 };
 
 /** Matches BE ``StumbleCreateRequest`` (agent_issues routes). */
@@ -3227,6 +3271,17 @@ export const improvePlansApi = {
       `/orgs/${orgId}/improve/plans/${planId}/snooze`,
       { method: "POST", body: JSON.stringify({ snoozed_until: snoozedUntil }) },
     ),
+  /** OOM 9.4b: request-changes → guardian follow-up iteration. */
+  iteratePlan: (orgId: string, planId: string, feedback: string) =>
+    fetchApi<
+      ImproveFeatureEnvelope<{
+        follow_up_plan: ImprovementPlan;
+        parent_plan_id: string;
+      }>
+    >(`/orgs/${orgId}/improve/plans/${planId}/iterate`, {
+      method: "POST",
+      body: JSON.stringify({ feedback }),
+    }),
 };
 (api as unknown as Record<string, unknown>).improvePlansApi = improvePlansApi;
 
@@ -3373,6 +3428,17 @@ export const promptsApi = {
     fetchApi<CanaryPromoteResult>(
       `/orgs/${orgId}/prompts/${encodeURIComponent(agent)}/canary/${experimentId}/rollback`,
       { method: "POST" },
+    ),
+  /** W3-9 (9.8): adjust traffic-split % of an active canary (1–50, capped). */
+  updateSplit: (
+    orgId: string,
+    agent: string,
+    experimentId: string,
+    trafficPct: number,
+  ) =>
+    fetchApi<{ experiment_id: string; agent: string; traffic_pct: number; status: string }>(
+      `/orgs/${orgId}/prompts/${encodeURIComponent(agent)}/canary/${experimentId}`,
+      { method: "PATCH", body: JSON.stringify({ traffic_pct: trafficPct }) },
     ),
 };
 
@@ -4938,6 +5004,65 @@ const wave6Api = {
     fetchApi<{ data: { dashboard: Record<string, unknown> } }>(
       `/orgs/${orgId}/dashboards/home`,
       { headers: { "X-Org-Id": orgId } },
+    ),
+  listDashboards: (orgId: string) =>
+    fetchApi<{ data: { dashboards: DashboardRow[] } }>(
+      `/orgs/${orgId}/dashboards`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  createDashboard: (orgId: string, body: { name: string; is_home?: boolean }) =>
+    fetchApi<{ data: { dashboard: DashboardRow } }>(
+      `/orgs/${orgId}/dashboards`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "X-Org-Id": orgId },
+      },
+    ),
+  getDashboard: (orgId: string, dashboardId: string) =>
+    fetchApi<{ data: { dashboard: DashboardRow & { widgets: DashboardWidget[] } } }>(
+      `/orgs/${orgId}/dashboards/${dashboardId}`,
+      { headers: { "X-Org-Id": orgId } },
+    ),
+  upsertWidget: (
+    orgId: string,
+    dashboardId: string,
+    body: {
+      widget_type?: string;
+      title?: string;
+      query?: string;
+      config?: Record<string, unknown>;
+      position?: number;
+      widget_id?: string | null;
+    },
+  ) =>
+    fetchApi<{ data: { widget: DashboardWidget } }>(
+      `/orgs/${orgId}/dashboards/${dashboardId}/widgets`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "X-Org-Id": orgId },
+      },
+    ),
+  deleteWidget: (orgId: string, dashboardId: string, widgetId: string) =>
+    fetchApi(
+      `/orgs/${orgId}/dashboards/${dashboardId}/widgets/${widgetId}`,
+      {
+        method: "DELETE",
+        headers: { "X-Org-Id": orgId },
+      },
+    ),
+  executeWidgetQuery: (
+    orgId: string,
+    body: { query: string; agent_id?: string },
+  ) =>
+    fetchApi<{ data: { result: Record<string, unknown> } }>(
+      `/orgs/${orgId}/dashboards/widgets/execute`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "X-Org-Id": orgId },
+      },
     ),
   costKpi: (orgId: string, params?: { window_hours?: number; agent_id?: string }) => {
     const q = new URLSearchParams();

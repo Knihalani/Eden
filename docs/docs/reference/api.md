@@ -155,7 +155,7 @@ eden.configure(api_key=..., org_id=..., api_version="1.7.0")
 | [Ingestion](/reference/api-ingestion) | `POST /orgs/{org}/ingest/openai`, `POST /orgs/{org}/ingest/anthropic`, `POST /orgs/{org}/ingest/custom`, `POST /orgs/{org}/ingest/app` |
 | [Traces](/reference/api-traces) | `GET /v1/traces`, `GET /v1/traces/{trace_id}/tree`, `GET /v1/traces/{trace_id}/timeline`, `POST /v1/traces/{trace_id}/export` |
 | [Agents](/reference/api-agents) | `GET /orgs/{org}/agents`, `POST /orgs/{org}/agents/register`, `GET /orgs/{org}/agents/{id}` |
-| [Evaluations](/reference/api-eval) | `POST /v1/evals`, `GET /v1/evals/{eval_id}`, `POST /v1/judges`, `POST /v1/datasets` |
+| [Evaluations](/reference/api-eval) | `POST /orgs/{org}/observability/judges/run`, `GET /orgs/{org}/observability/judges`, `POST /v1/evals`, `POST /v1/datasets` |
 | [Cost](/reference/api-cost) | `GET /v1/budgets`, `POST /v1/budgets/{org}/alerts`, `GET /v1/cost/summary` |
 | [Org](/reference/api-organization) | `GET /orgs/{org}`, `POST /orgs/{org}/members`, `GET /orgs/{org}/api-keys` |
 | [Errors](/reference/api-error-codes) | Standard error codes |

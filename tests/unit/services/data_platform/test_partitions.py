@@ -35,9 +35,9 @@ _MIGRATIONS_DIR = (
 class TestMigration042Syntax:
     @staticmethod
     def _load_migration():
-        path = _MIGRATIONS_DIR / "042_usage_events_partitions.py"
+        path = _MIGRATIONS_DIR / "000_squash_001_160.py"
         spec = importlib.util.spec_from_file_location(
-            "usage_events_partitions", path
+            "migration_squash", path
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -45,27 +45,24 @@ class TestMigration042Syntax:
 
     def test_revision_chain(self):
         m = self._load_migration()
-        assert m.revision == "042"
-        assert m.down_revision == "041"
+        assert m.revision == "160_signal_definitions_org_enabled_created"
+        assert m.down_revision is None
 
     def test_partitions_by_created_at(self):
-        """The migration converts usage_events to a TimescaleDB
-        hypertable partitioned by ``created_at``. Mirrors the
-        pattern from migration 034 (telemetry_events)."""
-        body = (_MIGRATIONS_DIR / "042_usage_events_partitions.py").read_text()
+        """The squash upgrade contains the usage_events hypertable DDL
+        from migration 042."""
+        body = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         assert "create_hypertable" in body
         assert "'created_at'" in body
 
     def test_monthly_chunks(self):
-        body = (_MIGRATIONS_DIR / "042_usage_events_partitions.py").read_text()
+        body = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         # Monthly chunks match the original Phase B5 plan.
         assert "1 month" in body
 
     def test_schema_cleanup(self):
-        """The migration drops the dead weight (misplaced trigger,
-        RLS policy) that blocked the original native-PG
-        partition approach."""
-        body = (_MIGRATIONS_DIR / "042_usage_events_partitions.py").read_text()
+        """The squash contains the trigger/policy cleanup from migration 042."""
+        body = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         assert "usage_events_updated_at" in body
         assert "tenant_isolation_usage_events" in body
 

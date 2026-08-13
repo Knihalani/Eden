@@ -632,6 +632,18 @@ async def _notify_budget_alert(
     except Exception as exc:
         logger.debug("budget_service: in-app notify skipped: %s", exc)
 
+    # Push a real-time hint so the portal refreshes its notification list
+    # immediately instead of waiting for the 5-minute fallback poll.
+    try:
+        from eden.api.routes.observability_stream import publish_notification_event
+
+        await publish_notification_event(
+            org_id,
+            {"type": "budget_alert", "threshold_pct": threshold_pct},
+        )
+    except Exception as exc:
+        logger.debug("budget_service: sse notification publish skipped: %s", exc)
+
     # Sparse email: only hard-limit (100%). Soft 80% stays in-app only.
     if int(threshold_pct) >= 100:
         try:

@@ -2,17 +2,28 @@
 
 L1: Exact-match cache (Redis) — SHA256 key on normalized prompt+model+temp
 L2: Semantic cache (pgvector, N4) — embedding similarity search
+
+OOM W2-11 (B5/B10) — lazy imports
+------------------------------------
+``eden.storage.redis`` pulls in ``redis.asyncio`` (~95ms) and
+``eden.llm.client`` pulls OpenAI + tokenizer machinery (~24ms).  Neither is
+needed until the first cache call, so both are imported inside the methods
+that use them.  ``from __future__ import annotations`` makes the annotation
+strings lazy so the type-checker stubs survive without a module-level import.
 """
+
+from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import time
 from datetime import UTC
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from eden.llm.client import LLMResponse
-from eden.storage.redis import get_redis_client
+if TYPE_CHECKING:
+    from eden.llm.client import LLMResponse
+
 from eden.util.stable_hash import stable_seed
 
 
@@ -85,6 +96,7 @@ class ExactMatchCache:
         is best-effort (telemetry must never break a cache call).
         """
         key = self._make_key(prompt, model, temperature, max_tokens, system_prompt)
+        from eden.storage.redis import get_redis_client
         client = await get_redis_client()
         if client is None:
             self._misses += 1
@@ -98,7 +110,7 @@ class ExactMatchCache:
                 return None
 
             data = json.loads(raw)
-            from eden.llm.client import UsageStats
+            from eden.llm.client import LLMResponse, UsageStats
 
             response = LLMResponse(
                 content=data["content"],
@@ -138,6 +150,7 @@ class ExactMatchCache:
     ) -> bool:
         """Cache a response."""
         key = self._make_key(prompt, model, temperature, max_tokens, system_prompt)
+        from eden.storage.redis import get_redis_client
         client = await get_redis_client()
         if client is None:
             return False
@@ -168,6 +181,7 @@ class ExactMatchCache:
         Uses SCAN (not KEYS) so invalidation does not block Redis or
         burn Upstash quota on a full keyspace walk.
         """
+        from eden.storage.redis import get_redis_client
         client = await get_redis_client()
         if client is None:
             return 0
@@ -396,7 +410,7 @@ class SemanticCache:
             for hit in results.results:
                 cached_prompt = hit.payload.get("prompt", "")
                 if self._is_equivalent(self._normalize(prompt), self._normalize(cached_prompt)):
-                    from eden.llm.client import UsageStats
+                    from eden.llm.client import LLMResponse, UsageStats
 
                     response = LLMResponse(
                         content=hit.payload["response"],

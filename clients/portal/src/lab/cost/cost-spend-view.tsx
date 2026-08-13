@@ -16,6 +16,11 @@ import {
 import { AgentLink, EmptyState } from "@/lab/lab-ui";
 import { BudgetChip } from "@/lab/cost/cost-chrome";
 import { cn } from "@/lib/utils";
+import {
+  type SamplingStatsPayload,
+  type PlanLimitsPayload,
+} from "@/lib/api/budget";
+import { PlanUsageMeter } from "@/lab/cost/plan-usage-meter";
 
 export function CostSpendView({
   agentId,
@@ -29,6 +34,8 @@ export function CostSpendView({
   onGoDrivers,
   canEditBudget = false,
   onEditBudget,
+  samplingStats = null,
+  planLimits = null,
 }: {
   agentId: string;
   agents: AgentFixture[];
@@ -43,6 +50,14 @@ export function CostSpendView({
   /** Org-owner check (``billing:edit``) — gates the "Edit budget" entry point. */
   canEditBudget?: boolean;
   onEditBudget?: () => void;
+  /**
+   * W3-1 (1.4): tail-sampling rollout observability counters.
+   * Only shown when the org is on a non-full profile (balanced/aggressive).
+   * Null = not yet loaded or endpoint unavailable (soft-fail).
+   */
+  samplingStats?: SamplingStatsPayload | null;
+  /** W3-4: plan limits + current-period usage for the usage meter. */
+  planLimits?: PlanLimitsPayload | null;
 }) {
   const agents = useMemo(() => {
     const sorted = [...agentsProp].sort((a, b) => {
@@ -92,6 +107,12 @@ export function CostSpendView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/* W3-4: plan usage meter — renders nothing when planLimits is null */}
+      {agentId === "all" ? (
+        <div className="shrink-0 px-4 pt-4 sm:px-6">
+          <PlanUsageMeter planLimits={planLimits} />
+        </div>
+      ) : null}
       {/* First viewport: one job — Spend. Runs is secondary context only. */}
       <div className="grid shrink-0 gap-px border-b border-[var(--line)] bg-[var(--line)] sm:grid-cols-2">
         <Kpi
@@ -250,6 +271,42 @@ export function CostSpendView({
           </ul>
         )}
       </section>
+
+      {/* W3-1 (1.4): tail-sampling observability — only shown when sampling is active. */}
+      {samplingStats && samplingStats.profile !== "full" ? (
+        <section className="border-b border-[var(--line)] px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="type-label">
+              Tail sampling
+              <span className="type-sep mx-1.5">·</span>
+              <span className="type-meta font-mono">{samplingStats.profile}</span>
+              <span className="type-sep mx-1.5">·</span>
+              <span className="type-meta">
+                {samplingStats.keep_rate_pct}% kept for non-signal traffic
+              </span>
+            </p>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-6">
+            <div>
+              <p className="type-meta text-[var(--text-muted)]">Sampled out · 24h</p>
+              <p className="type-ui mt-0.5">
+                {samplingStats.sampled_out_24h.toLocaleString()} traces
+              </p>
+            </div>
+            <div>
+              <p className="type-meta text-[var(--text-muted)]">Saved storage cost · 24h</p>
+              <p className="type-ui mt-0.5">
+                {samplingStats.sampled_out_cost_usd_24h > 0
+                  ? `${formatUsd(samplingStats.sampled_out_cost_usd_24h, 4)} not stored`
+                  : "—"}
+              </p>
+            </div>
+          </div>
+          <p className="type-meta mt-2 text-[var(--text-muted)]">
+            P0/P1 signals (errors, loops, slow, high-cost) are always kept regardless of profile.
+          </p>
+        </section>
+      ) : null}
 
       <section className="px-4 py-4 sm:px-6">
         <p className="type-label mb-3">Costliest runs</p>

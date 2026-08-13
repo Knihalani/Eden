@@ -841,7 +841,7 @@ Postgres instance to confirm the exact session-timezone-dependent behavior).
 
 **Source:** `features/09-sdk-dx.md` — auto-instrumentation comparison section.
 
-**Description:** Python's `eden.instrument()` does genuine class-level monkey-patching across 13 frameworks (a real one-liner). TypeScript has no equivalent: instrumentation is per-instance `Proxy`-based `wrap*()` factories the caller must manually apply to every client instance they create — no mechanism patches a framework's exported class/prototype once at import time the way Python does. Fix: implement prototype-level (or Node loader-hook-based, e.g. `import-in-the-middle`) auto-instrumentation for at least the top few frameworks, matching the Python UX.
+**Description:** Python's `eden.instrument()` does genuine class-level monkey-patching across 12 frameworks (the `mastra` entry is a no-op stub) (a real one-liner). TypeScript has no equivalent: instrumentation is per-instance `Proxy`-based `wrap*()` factories the caller must manually apply to every client instance they create — no mechanism patches a framework's exported class/prototype once at import time the way Python does. Fix: implement prototype-level (or Node loader-hook-based, e.g. `import-in-the-middle`) auto-instrumentation for at least the top few frameworks, matching the Python UX.
 
 **Why it matters:** TS/Node users get a materially worse onboarding experience than Python users for the exact same product promise ("one line of code") — a direct DX/adoption gap in a core acquisition funnel (SDK install → first trace).
 

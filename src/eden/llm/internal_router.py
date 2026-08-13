@@ -14,8 +14,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from eden.llm.client import LLMResponse
-from eden.optimization.model_router import TIER_MODELS, ModelRouter, ModelTier, PipelineTask
+# W4-1: TIER_MODELS, ModelRouter, ModelTier, PipelineTask now live in
+# eden.llm.client.  Import from there directly (no cross-package hop).
+from eden.llm.client import (
+    LLMResponse,
+    TIER_MODELS,
+    ModelRouter,
+    ModelTier,
+    PipelineTask,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +51,7 @@ def build_task(
     expected_min_length: int = 50,
     requires_quality_check: bool = True,
     org_id: str | None = None,
+    model_override: str = "",  # OOM W4-3
 ) -> PipelineTask:
     """Construct a :class:`PipelineTask` for routing."""
     return PipelineTask(
@@ -55,6 +63,7 @@ def build_task(
         expected_min_length=expected_min_length,
         requires_quality_check=requires_quality_check,
         org_id=org_id,
+        model_override=model_override,  # OOM W4-3
     )
 
 
@@ -77,6 +86,9 @@ def route_sync(
     from eden.llmops.cost_ledger import cost_context
 
     r = router or get_router(llm_client)
+    # OOM W4-3: pop model_override so it sets the task field rather than
+    # leaking into llm_client.call kwargs (which has no model_override param).
+    _model_override: str = kwargs.pop("model_override", "") or ""
     task = build_task(
         agent,
         slot=slot,
@@ -85,6 +97,7 @@ def route_sync(
         expected_min_length=expected_min_length,
         requires_quality_check=kwargs.pop("requires_quality_check", True),
         org_id=org_id,
+        model_override=_model_override,
     )
     with cost_context(org_id, feature, agent_id=agent):
         return r.route(task, prompt, system_prompt=system_prompt, **kwargs)

@@ -38,6 +38,11 @@ TREND_RECENT_DAYS = 7
 TREND_BASELINE_DAYS = 21
 TREND_FLAT_THRESHOLD = 0.25
 
+# OOM-7.4 W1-8 — batch all cluster labels into one LLM call per run.
+# Caps how many clusters are packed into a single prompt; larger runs are
+# chunked into multiple calls (still far cheaper than N individual calls).
+BATCH_LABEL_MAX = 40
+
 
 def compute_cluster_trend(
     recent_count: int,
@@ -162,6 +167,32 @@ class PatternsClusterer:
         settings = get_settings()
         if not getattr(settings, "patterns_clusterer_enabled", True):
             return {"tenants_processed": 0, "patterns_created": 0}
+
+        # OOM W3-5 — system-wide clusterer lane daily cap before touching any
+        # tenant.  Fail-open: if Redis is down we log a warning and continue.
+        try:
+            from eden.llmops.evolution_spend import LaneDailyBudget
+
+            allowed, lane_spent, lane_cap = await LaneDailyBudget("clusterer").check()
+            if not allowed:
+                logger.warning(
+                    "patterns_clusterer: system lane budget exceeded "
+                    "(spent=%.4f cap=%.4f) — skipping run",
+                    lane_spent,
+                    lane_cap,
+                )
+                return {
+                    "tenants_processed": 0,
+                    "patterns_created": 0,
+                    "skipped": True,
+                    "reason": "lane_budget_exceeded",
+                    "lane_spent_usd": lane_spent,
+                    "lane_cap_usd": lane_cap,
+                }
+        except Exception as exc:
+            logger.debug(
+                "patterns_clusterer: lane budget check failed (fail-open): %s", exc
+            )
 
         # For now, run per-tenant. A production deployment would
         # shard across workers by tenant_id range.
@@ -319,15 +350,26 @@ class PatternsClusterer:
             cluster_traces.setdefault(int(lbl), []).append(trace_ids[i])
             cluster_times.setdefault(int(lbl), []).append(timestamps[i])
 
-        created = 0
+        # 5a) Deduplicate within each cluster and collect samples for batch labeling
+        cluster_deduped: dict[int, tuple[list[str], list[str]]] = {}
+        cluster_samples_for_batch: list[tuple[int, list[str]]] = []
         for cluster_id, items in cluster_topics.items():
             traces = cluster_traces[cluster_id]
             dedup_topics, dedup_traces = dedupe_cluster_members(items, traces)
             if not dedup_topics:
                 continue
+            cluster_deduped[cluster_id] = (dedup_topics, dedup_traces)
+            cluster_samples_for_batch.append((cluster_id, dedup_topics[:5]))
+
+        # 5b) Batch-label all clusters in one LLM call (chunked at BATCH_LABEL_MAX).
+        # Falls back to per-cluster calls on parse failure or count mismatch.
+        batch_labels = await self._batch_label_clusters(cluster_samples_for_batch)
+
+        # 5c) Persist each cluster with its label
+        created = 0
+        for cluster_id, (dedup_topics, dedup_traces) in cluster_deduped.items():
+            label = batch_labels.get(cluster_id, "general queries")
             sample = dedup_topics[:5]
-            # LLM label
-            label = await self._label_cluster(sample)
             # Coherence = mean intra-cluster cosine similarity
             coherence = _coherence(vectors, [i for i, l in enumerate(labels) if l == cluster_id])
             recent_count, baseline_count = _count_window_events(
@@ -477,6 +519,107 @@ class PatternsClusterer:
         except Exception as exc:
             logger.debug(f"LLM label failed: {exc}")
             return "general queries"
+
+    async def _batch_label_clusters(
+        self,
+        cluster_samples: list[tuple[int, list[str]]],
+    ) -> dict[int, str]:
+        """Label multiple clusters in one LLM call, chunked at :data:`BATCH_LABEL_MAX`.
+
+        Falls back to per-cluster :meth:`_label_cluster` calls on JSON parse
+        failure or count mismatch.  Returns a dict mapping cluster_id → label.
+        """
+        if not cluster_samples:
+            return {}
+        results: dict[int, str] = {}
+        for chunk_start in range(0, len(cluster_samples), BATCH_LABEL_MAX):
+            chunk = cluster_samples[chunk_start : chunk_start + BATCH_LABEL_MAX]
+            chunk_result = await self._batch_label_chunk(chunk)
+            results.update(chunk_result)
+        return results
+
+    async def _batch_label_chunk(
+        self,
+        chunk: list[tuple[int, list[str]]],
+    ) -> dict[int, str]:
+        """Label one chunk (≤ :data:`BATCH_LABEL_MAX` clusters) in a single LLM call.
+
+        On any failure the entire chunk is relabelled via individual
+        :meth:`_label_cluster` calls so no cluster loses its label.
+        """
+        if not chunk:
+            return {}
+
+        # No LLM — delegate each cluster to the heuristic path.
+        if not self.llm_client:
+            result: dict[int, str] = {}
+            for cid, samples in chunk:
+                result[cid] = await self._label_cluster(samples)
+            return result
+
+        # Build a multi-cluster prompt asking for a JSON array of labels.
+        parts: list[str] = [
+            "You are given several clusters of user queries. "
+            "Give a concise 2-5 word topic label for EACH cluster. "
+            "Return ONLY a JSON array of strings — one label per cluster, "
+            "in the same order. No extra text.\n"
+            'Example: ["password reset", "billing inquiry", "api setup"]'
+        ]
+        for idx, (_cid, samples) in enumerate(chunk):
+            parts.append(f"\nCluster {idx + 1}:")
+            for s in samples[:5]:
+                parts.append(f"- {s[:200]}")
+        prompt = "\n".join(parts)
+
+        try:
+            raw = await self.llm_client.complete(prompt, max_tokens=20 * len(chunk))
+            raw = str(raw).strip()
+
+            # Extract the first JSON array found (model may add preamble/markdown).
+            match = re.search(r"\[.*?\]", raw, re.DOTALL)
+            if not match:
+                raise ValueError(f"no JSON array in LLM response: {raw!r}")
+            labels_parsed: list[Any] = json.loads(match.group(0))
+            if not isinstance(labels_parsed, list):
+                raise TypeError(f"expected list, got {type(labels_parsed)}")
+
+            # Normalise labels the same way _label_cluster does.
+            clean: list[str] = [
+                str(lbl).strip().strip('"').strip("'") or "general queries"
+                for lbl in labels_parsed
+            ]
+
+            if len(clean) == len(chunk):
+                # Happy path — one label per cluster, index-aligned.
+                return {cid: clean[idx] for idx, (cid, _) in enumerate(chunk)}
+
+            # Count mismatch: use what we have, fall back for the remainder.
+            logger.warning(
+                "PatternsClusterer: batch label count mismatch — "
+                "expected %d labels, got %d; falling back for the remaining %d cluster(s)",
+                len(chunk),
+                len(clean),
+                max(0, len(chunk) - len(clean)),
+            )
+            result = {}
+            for idx, (cid, samples) in enumerate(chunk):
+                if idx < len(clean):
+                    result[cid] = clean[idx]
+                else:
+                    result[cid] = await self._label_cluster(samples)
+            return result
+
+        except Exception as exc:
+            logger.warning(
+                "PatternsClusterer: batch label failed (%s); "
+                "falling back to per-cluster calls for %d cluster(s)",
+                exc,
+                len(chunk),
+            )
+            result = {}
+            for cid, samples in chunk:
+                result[cid] = await self._label_cluster(samples)
+            return result
 
     async def _emit_coverage_gaps(
         self,

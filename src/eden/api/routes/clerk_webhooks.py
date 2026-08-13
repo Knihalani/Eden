@@ -455,6 +455,27 @@ async def _upsert_org(data: dict[str, Any]) -> None:
             eden_owner_id,
         )
 
+    # Fire demo-data seeding fire-and-forget.  We resolve the Eden org_id
+    # fresh so the newly-inserted row (if any) is visible.  Seeding must
+    # never prevent the webhook from answering 2xx — any error is swallowed
+    # inside _fire_demo_seed.
+    try:
+        eden_org_row = await client.fetchrow(
+            "SELECT id FROM organizations WHERE clerk_org_id = $1 OR id::text = $1 LIMIT 1 -- lint:unordered-limit-ok",
+            clerk_id,
+        )
+        if eden_org_row:
+            eden_org_id_for_seed = str(eden_org_row["id"])
+            from eden.api.routes.onboarding_seed import _fire_and_forget_seed
+
+            await _fire_and_forget_seed(eden_org_id_for_seed)
+    except Exception as _seed_exc:  # pragma: no cover — never fail the webhook
+        logger.warning(
+            "_upsert_org: demo seed scheduling failed for clerk_org=%s: %s",
+            clerk_id,
+            _seed_exc,
+        )
+
 
 async def _upsert_membership(data: dict[str, Any]) -> None:
     """Sync a Clerk ``organizationMembership`` payload to
@@ -507,7 +528,7 @@ async def _upsert_membership(data: dict[str, Any]) -> None:
         """
         SELECT id FROM organizations
         WHERE clerk_org_id::text = $1 OR id::text = $1
-        LIMIT 1
+        LIMIT 1 -- lint:unordered-limit-ok
         """,
         clerk_org_id,
     )
@@ -582,7 +603,7 @@ async def _delete_membership(data: dict[str, Any]) -> None:
         JOIN users u ON u.id = om.user_id
         WHERE (o.clerk_org_id = $1 OR o.id::text = $1)
           AND u.clerk_id = $2
-        LIMIT 1
+        LIMIT 1 -- lint:unordered-limit-ok
         """,
         clerk_org_id,
         clerk_user_id,

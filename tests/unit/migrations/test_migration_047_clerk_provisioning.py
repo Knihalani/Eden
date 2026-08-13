@@ -26,7 +26,7 @@ MIGRATION_PATH = (
     / "eden"
     / "db_migrations"
     / "versions"
-    / "047_clerk_user_provisioning.py"
+    / "000_squash_001_160.py"
 )
 
 
@@ -43,9 +43,9 @@ def test_migration_file_exists_and_nonempty():
 
 
 def test_migration_revision_and_down_revision(migration_source: str):
-    """Migration must chain off 046 (latest applied) and be a unique id."""
-    assert 'revision = "047"' in migration_source
-    assert 'down_revision = "046"' in migration_source
+    """Squash carries the 160 revision id; this is the base of the chain."""
+    assert "160_signal_definitions_org_enabled_created" in migration_source
+    assert "down_revision: str | None = None" in migration_source
 
 
 def test_migration_drops_not_null_on_password_hash(migration_source: str):
@@ -68,28 +68,9 @@ def test_migration_creates_partial_index_on_clerk_id(migration_source: str):
     assert "WHERE clerk_id IS NOT NULL" in migration_source
 
 
-def test_migration_downgrade_drops_index_and_column(migration_source: str):
-    """downgrade() must clean up after itself; otherwise a stale index
-    sits around blocking a fresh upgrade with different column types."""
-    # Find the downgrade function body
+def test_migration_downgrade_raises_not_implemented(migration_source: str):
+    """The squash boundary downgrade() must raise NotImplementedError — it
+    cannot be applied piecemeal; a DB backup is required to go back."""
     downgrade_start = migration_source.index("def downgrade()")
     downgrade_body = migration_source[downgrade_start:]
-    assert "DROP INDEX IF EXISTS idx_users_clerk_id" in downgrade_body
-    assert "ALTER TABLE users DROP COLUMN IF EXISTS clerk_id" in downgrade_body
-
-
-def test_migration_downgrade_refuses_if_clerk_rows_present(migration_source: str):
-    """downgrade() must raise if any row references clerk_id (loud
-    failure beats silent data loss)."""
-    downgrade_start = migration_source.index("def downgrade()")
-    downgrade_body = migration_source[downgrade_start:]
-    assert "Refusing to drop clerk_id" in downgrade_body
-    assert "RuntimeError" in downgrade_body
-
-
-def test_migration_downgrade_reapplies_not_null(migration_source: str):
-    """After dropping clerk_id, no rows have NULL password_hash (the
-    guard above ensured that), so we can safely SET NOT NULL again."""
-    downgrade_start = migration_source.index("def downgrade()")
-    downgrade_body = migration_source[downgrade_start:]
-    assert "ALTER COLUMN password_hash SET NOT NULL" in downgrade_body
+    assert "NotImplementedError" in downgrade_body

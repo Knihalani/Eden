@@ -53,6 +53,8 @@ export type ImprovePlanFixture = {
   evScore?: number | null;
   /** Autonomy tier governing autonomous execution (FEAT-156). */
   autonomyTierRequired?: string | null;
+  /** OOM 9.4a: ISO timestamp when a snooze expires. Truthy = currently snoozed. */
+  snoozedUntil?: string | null;
   /** Primary next action */
   primaryAction: "try_evals" | "recompare" | "open_trace" | "open_issue";
 };

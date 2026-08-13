@@ -1,15 +1,28 @@
 """Request coalescing and deduplication for LLM calls.
 
 When multiple identical or near-identical requests arrive within a short window,
-only one actual LLM call is made and all waiters receive the same response."""
+only one actual LLM call is made and all waiters receive the same response.
+
+OOM W2-11 (B5/B10) — lazy llm.client import
+---------------------------------------------
+``LLMResponse`` is used only as a return-type annotation in ``execute``.
+With ``from __future__ import annotations`` all annotations become strings
+at runtime, so no runtime import is needed; the TYPE_CHECKING guard keeps
+mypy / pyright happy without paying the ~9ms eden.llm.client import cost
+at package import time.
+"""
+
+from __future__ import annotations
 
 import asyncio
 import hashlib
 import logging
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from eden.llm.client import LLMResponse
+if TYPE_CHECKING:
+    from eden.llm.client import LLMResponse
 
 logger = logging.getLogger(__name__)
 

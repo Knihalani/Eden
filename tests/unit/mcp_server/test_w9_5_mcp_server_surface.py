@@ -150,12 +150,12 @@ async def test_call_tool_sanitizes_unexpected_exception() -> None:
 def _http_app() -> TestClient:
     """Mount the MCP HTTP router with its feature flag enabled.
 
-    ``/v1/mcp`` is gated behind ``mcp_http_transport_v1`` (default False) since
-    the 2026-07 remediation, so without this the router 404s and every
-    transport assertion below would be testing the gate rather than the
-    transport. The flag is set on the object ``eden.api.deps.get_settings()``
-    returns — ``deps`` binds ``get_settings`` at import, so patching
-    ``eden.config.get_settings`` does not reach the dependency.
+    ``/v1/mcp`` requires ``mcp_http_transport_v1`` (default True since plan 6.3
+    / 2026-08-12). We set it explicitly here so the test is correct regardless
+    of the default, and to document the dependency. The flag is set on the
+    object ``eden.api.deps.get_settings()`` returns — ``deps`` binds
+    ``get_settings`` at import, so patching ``eden.config.get_settings``
+    does not reach the dependency.
     """
     import eden.api.deps as deps
 

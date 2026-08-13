@@ -42,6 +42,7 @@ export { wrapOpenAI, wrapXai } from "./instrumentations/openai.js";
 export { wrapAnthropic } from "./instrumentations/anthropic.js";
 export { wrapVercelAI } from "./instrumentations/vercel-ai.js";
 export { wrapLangChain } from "./instrumentations/langchain.js";
+export { wrapLangGraph } from "./instrumentations/langgraph.js";
 export { wrapMastra } from "./instrumentations/mastra.js";
 export { wrapGroq } from "./instrumentations/groq.js";
 export { wrapCohere, extractCohereUsage } from "./instrumentations/cohere.js";

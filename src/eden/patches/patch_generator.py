@@ -865,7 +865,11 @@ class PatchGenerator:
             _load_style(), _load_pr_patterns(), _load_kg()
         )
 
-        system_prompt, prompt = _build_patch_prompt(
+        # OOM W4-3 (L5): keep the static prompt byte-identical across critic
+        # retries so provider-level and in-process cache hits are possible.
+        # _static_prompt is NEVER mutated after this point; feedback sections
+        # accumulate in _dynamic_sections and are appended only at call time.
+        system_prompt, _static_prompt = _build_patch_prompt(
             repo_id=repo_id,
             rca_id=rca_id,
             trace_id=trace_id,
@@ -876,12 +880,21 @@ class PatchGenerator:
             test_plan=test_plan or [],
             rca_summary=rca_summary,
         )
+        _dynamic_sections: list[str] = []
         if (static_feedback or "").strip():
-            prompt = (
-                prompt
-                + "\n\n## Static preverify feedback (must address)\n"
+            _dynamic_sections.append(
+                "\n\n## Static preverify feedback (must address)\n"
                 + static_feedback.strip()
             )
+
+        # Phase 3b: read size + dedup settings once. The scheduler
+        # also reads these but we read here so the per-call path
+        # works without the scheduler in the loop.
+        from eden.config import get_settings
+        from eden.improvement.sweep_budget import try_consume_llm_call
+        from eden.patches._common import DEFAULT_POLICY
+
+        settings = get_settings()
 
         # Lazy import — see module-level __getattr__.
         from eden.optimization.model_router import PipelineTask
@@ -893,16 +906,10 @@ class PatchGenerator:
             expected_min_length=100,
             requires_quality_check=True,
             org_id=org_id,
+            # OOM W4-3 (L4): route to a caching-capable model when configured.
+            # Default empty = normal DeepSeek routing via ModelRouter.
+            model_override=settings.patch_gen_model_override,  # OOM W4-3
         )
-
-        # Phase 3b: read size + dedup settings once. The scheduler
-        # also reads these but we read here so the per-call path
-        # works without the scheduler in the loop.
-        from eden.config import get_settings
-        from eden.improvement.sweep_budget import try_consume_llm_call
-        from eden.patches._common import DEFAULT_POLICY
-
-        settings = get_settings()
         soft_cap = settings.patch_max_diff_lines_soft
         hard_cap = settings.patch_max_diff_lines_hard
         dedup_threshold = settings.patch_similarity_threshold
@@ -964,6 +971,11 @@ class PatchGenerator:
                     },
                 )
             try:
+                # OOM W4-3 (L5): build the prompt fresh each attempt so the
+                # static prefix (_static_prompt) is byte-identical across
+                # attempts — enabling provider/in-process cache hits on the
+                # prefix — while feedback sections are appended as a suffix.
+                prompt = _static_prompt + "".join(_dynamic_sections)
                 response = await self._router.aroute(
                     task,
                     prompt,
@@ -1053,9 +1065,11 @@ class PatchGenerator:
                     "critic_error",
                     "injection_suspected",
                 ):
-                    prompt = (
-                        prompt
-                        + "\n\n## Critic feedback (must address)\n"
+                    # OOM W4-3 (L5): append to _dynamic_sections rather than
+                    # mutating prompt directly — _static_prompt stays unchanged
+                    # so provider cache sees byte-identical prefix on retry.
+                    _dynamic_sections.append(
+                        "\n\n## Critic feedback (must address)\n"
                         + str(critic_verdict.get("reason", ""))
                     )
                     continue
@@ -1083,9 +1097,9 @@ class PatchGenerator:
             if static_preverify.get("status") == "failed":
                 feedback = str(static_preverify.get("feedback") or "")
                 if attempt == 0 and feedback:
-                    prompt = (
-                        prompt
-                        + "\n\n## Static preverify feedback (must address)\n"
+                    # OOM W4-3 (L5): same pattern — append to _dynamic_sections.
+                    _dynamic_sections.append(
+                        "\n\n## Static preverify feedback (must address)\n"
                         + feedback
                     )
                     continue

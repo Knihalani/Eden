@@ -35,7 +35,14 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from eden.api.middleware.security_headers import apply_security_headers
 from eden.api.utils.auth import decode_access_token
-from eden.services.usage_service import UsageService
+# OOM W2-11 follow-up (startup): ``eden.services.usage_service`` pulls in
+# httpx (~125ms cumulative) — defer to first use inside
+# ``_get_usage_service``; the annotation-only uses below are satisfied by
+# the TYPE_CHECKING import.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from eden.services.usage_service import UsageService
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +177,8 @@ class QuotaEnforcementMiddleware:
 
     async def _get_usage_service(self) -> UsageService:
         if self._usage_service is None:
+            from eden.services.usage_service import UsageService
+
             self._usage_service = UsageService()
         return self._usage_service
 

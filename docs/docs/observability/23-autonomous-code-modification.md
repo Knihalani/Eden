@@ -1,23 +1,22 @@
 ---
 title: "23 — Autonomous Code Modification & Self-Healing Codebase (v1.6)"
-status: STUB surface shipped (v0, 2026-06-12) — Gate 1 (read-only connectivity) target weeks 25-26
-last_updated: 2026-06-12
-version: 1.0
+status: CUT in Phase 1B (2026-07-15) — src/eden/code_change/ package deleted
+last_updated: 2026-08-12
+version: 1.1
 ---
 
 # 23 — Autonomous Code Modification & Self-Healing Codebase (v1.6)
 
-> **Status:** 🟡 **STUB surface shipped** (2026-06-12). The
-> 21 service classes + the 8 core + 4 approval + 3
-> auto-approval + 4 inbox/persona/style/quality tables + the
-> 19+ route surface + the new `CodeChangeHook` are all wired.
-> The real end-to-end ship is gated on the 4 hard gates
-> (read-only → attribution → sandbox → end-to-end) detailed
-> in the v1.6 ship plan below. **No 2026 observability
-> competitor ships a self-healing codebase loop driven by
-> telemetry.** Adjacent 2026 work — Meta Chameleon, SWE-agent
-> Princeton, Devin, Harness.io, Codeball AI, Ellipsis, Aider
-> — is not "observability-driven".
+> **Status:** 🔴 **Package cut** (2026-07-15). The `src/eden/code_change/`
+> package (62 files, 46 API handlers, 19 tables' service layer) was
+> removed in the Phase 1B bloat cut. The DB tables are preserved but
+> the service layer is gone. Salvaged primitives (`issue_patch_trigger`,
+> `patch_generator`, `pr_creator`, `issue_fix_chat`) live under
+> `src/eden/patches/` and are used by the N23 recurring improvement
+> agent. A full Cat 23 ship is not yet scheduled.
+>
+> The remainder of this document is the original design spec kept for
+> reference. It does **not** describe currently available functionality.
 
 ## Table of Contents
 

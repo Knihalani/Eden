@@ -46,7 +46,7 @@ The platform ships:
 
 - **Two production SDKs** — Python (`eden-sdk`) and TypeScript
   (`@eden-ai/sdk`). Python's `eden.instrument()` is a true one-liner
-  across 13+ frameworks; TypeScript uses `instrument()` (prototype patch
+  across 13 frameworks (the `mastra` entry is a no-op stub — Mastra is TypeScript-only; use the TypeScript SDK for Mastra projects); TypeScript uses `instrument()` (prototype patch
   for OpenAI/Anthropic) plus per-instance `wrap*()` for the rest until
   full parity ships. Fire-and-forget; producer p99 overhead budgeted ≤ 5 ms.
 - **Open ingestion** — OpenAI, Anthropic, Bedrock, Gemini, LangChain,

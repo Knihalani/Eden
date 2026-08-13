@@ -44,7 +44,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/hooks/use-org";
 import { queryKeys } from "@/lib/query-keys";
-import { portalApi } from "@/lib/api/portal";
+import { fixtureExportApi, portalApi } from "@/lib/api/portal";
 import { agentIssuesApi } from "@/lib/api/resources";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import {
@@ -56,6 +56,7 @@ import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { U20_EMPTY_COPY, U20_FILTER_EMPTY_COPY } from "@/lib/portal-polish";
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
+import { debuggerListHref } from "@/lib/debugger-url";
 import {
   rankTierForIssue,
   rankTierLabel,
@@ -197,6 +198,31 @@ function IssueDetail({
     ? (paramTab as DetailTab)
     : "overview";
   const [tab, setTab] = useState<DetailTab>(initialTab);
+  const [exportingFixture, setExportingFixture] = useState(false);
+  // Use org from context so IssueDetail doesn't need orgId as a prop.
+  const { currentOrg } = useOrg();
+
+  async function handleExportFixture() {
+    if (!currentOrg?.id || exportingFixture) return;
+    setExportingFixture(true);
+    try {
+      const res = await fixtureExportApi.exportIssue(currentOrg.id, issue.id);
+      const fixture = res?.data?.fixture ?? res?.data ?? res;
+      const blob = new Blob([JSON.stringify(fixture, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `eden-fixture-${issue.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Silently fail — user can retry.
+    } finally {
+      setExportingFixture(false);
+    }
+  }
 
   useEffect(() => {
     setTab(initialTab);
@@ -335,6 +361,15 @@ function IssueDetail({
               Signal
             </Link>
           ) : null}
+          <button
+            type="button"
+            className="ds-btn ds-btn-ghost ds-btn-sm"
+            onClick={() => { void handleExportFixture(); }}
+            disabled={exportingFixture || !currentOrg?.id}
+            aria-label="Export failure fixture as JSON"
+          >
+            {exportingFixture ? "Exporting…" : "Export fixture"}
+          </button>
         </div>
       </header>
 
@@ -443,6 +478,11 @@ function IssueDetail({
               <ul className="overflow-hidden rounded-[var(--radius)] shadow-[0_0_0_1px_var(--line)]">
                 {runs.map((trace) => {
                   const errStep = trace.steps.find((s) => s.status === "error");
+                  const debugHref = debuggerListHref({
+                    traceId: trace.id,
+                    spanId: errStep?.spanId,
+                    agentId: issue.agentId,
+                  });
                   return (
                     <li
                       key={trace.id}
@@ -454,7 +494,7 @@ function IssueDetail({
                           tab: "signals",
                           agent: issue.agentId,
                         })}
-                        className="block px-4 py-4 transition-colors hover:bg-[var(--accent-muted)]"
+                        className="block px-4 pt-4 pb-2 transition-colors hover:bg-[var(--accent-muted)]"
                       >
                         <div className="flex items-start gap-3">
                           <SeverityBadge severity={trace.severity} />
@@ -479,6 +519,16 @@ function IssueDetail({
                           </div>
                         </div>
                       </Link>
+                      {/* 9.3: Debug deep-link — opens debugger seeded at the failing span */}
+                      <div className="flex gap-2 px-4 pb-3">
+                        <Link
+                          href={debugHref}
+                          className="ds-btn ds-btn-ghost ds-btn-sm"
+                          title={errStep ? `Debug from span ${errStep.spanId ?? ""}` : "Open in debugger"}
+                        >
+                          Debug
+                        </Link>
+                      </div>
                     </li>
                   );
                 })}
@@ -514,8 +564,18 @@ function IssueDetail({
               </p>
             </section>
             <div className="flex flex-wrap gap-2">
+              {/* 9.3: Improve deep-link scoped to the first occurrence’s failing span */}
               <Link
-                href={`/improve?issue=${issue.id}&agent=${issue.agentId}`}
+                href={(() => {
+                  const firstTrace = runs[0];
+                  const firstErrSpanId = firstTrace?.steps.find(
+                    (s) => s.status === "error",
+                  )?.spanId;
+                  const base = `/improve?issue=${issue.id}&agent=${issue.agentId}`;
+                  const traceParam = firstTrace ? `&traceId=${firstTrace.id}` : "";
+                  const spanParam = firstErrSpanId ? `&spanId=${firstErrSpanId}` : "";
+                  return `${base}${traceParam}${spanParam}`;
+                })()}
                 className="ds-btn ds-btn-primary ds-btn-sm"
               >
                 Improve
@@ -531,16 +591,29 @@ function IssueDetail({
                 Ask AI
               </Link>
               {runs[0] ? (
-                <Link
-                  href={hrefFor("/traces", {
-                    id: runs[0].id,
-                    tab: "signals",
-                    agent: issue.agentId,
-                  })}
-                  className="ds-btn ds-btn-ghost ds-btn-sm"
-                >
-                  Run
-                </Link>
+                <>
+                  <Link
+                    href={hrefFor("/traces", {
+                      id: runs[0].id,
+                      tab: "signals",
+                      agent: issue.agentId,
+                    })}
+                    className="ds-btn ds-btn-ghost ds-btn-sm"
+                  >
+                    Run
+                  </Link>
+                  {/* 9.3: Debug deep-link — seeded at the first occurrence’s failing span */}
+                  <Link
+                    href={debuggerListHref({
+                      traceId: runs[0].id,
+                      spanId: runs[0].steps.find((s) => s.status === "error")?.spanId,
+                      agentId: issue.agentId,
+                    })}
+                    className="ds-btn ds-btn-ghost ds-btn-sm"
+                  >
+                    Debug
+                  </Link>
+                </>
               ) : null}
               {agent ? (
                 <Link

@@ -4,6 +4,30 @@ All notable changes to the Eden TypeScript SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.2 — 2026-08-10
+
+Versioned in lockstep with `eden-sdk` (Python) 0.4.2.
+
+### Added
+- `compressJsonBody()` — zstd-when-available / gzip-1 fallback
+  compression on the `client.ts` ingest send path (matches the Python
+  `_wire_compress.py` N2 improvement). Requests now send
+  `Content-Encoding: zstd` when the `zstandard`-equivalent is
+  available in the runtime; falls back to gzip for compatibility.
+- `prototype-instrument.ts` — new module exposing
+  `patchAllPrototypes()` / `patchAllPrototypesAsync()` and per-framework
+  helpers (`patchLangChainPrototype`, `patchGeminiPrototype`,
+  `patchMistralPrototype`, `patchOpenAIPrototype`, `patchAnthropicPrototype`,
+  `patchGroqPrototype`, `patchVercelAIPrototype`). These perform
+  synchronous CJS require-time and async ESM dynamic-import patching
+  and are wired into `instrument()` automatically.
+- `http-capture.ts` now joins the active trace via `currentTrace()?.traceId`
+  and compresses its request body with `compressJsonBody`.
+- `instrument()` response now includes `patchedAsync` — the result
+  of the async ESM prototype pass — in addition to the existing
+  `patched` (sync CJS pass), so callers can distinguish which
+  import styles were intercepted.
+
 ## 0.4.1 — 2026-08-03
 
 ### Fixed

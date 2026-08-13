@@ -17,12 +17,15 @@ package eden
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -94,6 +97,21 @@ type Config struct {
 	// FlushInterval is the max time to hold a non-empty batch.
 	// Default 250ms. Zero disables the timer (size-only flush).
 	FlushInterval time.Duration
+
+	// DisableCompression disables gzip compression of request bodies.
+	// Compression is on by default at gzip BestSpeed (level 1);
+	// set this to true to send plain JSON instead.
+	DisableCompression bool
+
+	// MaxRetries is the number of additional HTTP attempts after an
+	// initial failure (transport error, 429, or 5xx). Default 3.
+	// Set to a negative value to disable retries entirely.
+	MaxRetries int
+
+	// RetryBase is the base delay for exponential back-off between
+	// retry attempts. Default 500ms. Retry-After headers on 429/503
+	// responses override this for that specific wait.
+	RetryBase time.Duration
 }
 
 // ConfigFromEnv builds a Config from environment variables. Missing
@@ -119,6 +137,10 @@ type queuedEvent struct {
 	ev     Event
 }
 
+// bufPool recycles bytes.Buffer values across concurrent IngestBatch
+// calls to reduce per-flush allocations.
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+
 // EdenClient is the HTTP sender. Use NewClient to construct one; it is
 // safe for concurrent use.
 type EdenClient struct {
@@ -129,6 +151,12 @@ type EdenClient struct {
 	// stopCh closes when the flush loop should exit.
 	stopCh chan struct{}
 	wg     sync.WaitGroup
+
+	// sleepFn replaces time.Sleep in the retry back-off path.
+	// nil → ctx-aware real sleep. Set in tests to avoid actual delays
+	// while still exercising the retry logic. Set before the first
+	// concurrent use of the client.
+	sleepFn func(time.Duration)
 }
 
 // NewClient builds a Client with the given Config. Any unset
@@ -148,6 +176,12 @@ func NewClient(cfg Config) *EdenClient {
 	}
 	if cfg.FlushInterval == 0 {
 		cfg.FlushInterval = 250 * time.Millisecond
+	}
+	if cfg.MaxRetries == 0 {
+		cfg.MaxRetries = 3
+	}
+	if cfg.RetryBase == 0 {
+		cfg.RetryBase = 500 * time.Millisecond
 	}
 	c := &EdenClient{cfg: cfg, stopCh: make(chan struct{})}
 	c.wg.Add(1)
@@ -201,6 +235,11 @@ func (c *EdenClient) Ingest(ctx context.Context, format Format, ev Event) (int, 
 }
 
 // IngestBatch posts a JSON array of events to the format endpoint.
+// Request bodies are gzip-compressed at BestSpeed unless
+// DisableCompression is set. Failed requests are retried up to
+// MaxRetries times with exponential back-off; 429/503 Retry-After
+// headers are honoured. Non-retryable 4xx responses are dropped with
+// a Warn-level log message.
 func (c *EdenClient) IngestBatch(ctx context.Context, format Format, events []Event) (int, error) {
 	if !c.IsConfigured() {
 		return 0, ErrNotConfigured
@@ -208,43 +247,209 @@ func (c *EdenClient) IngestBatch(ctx context.Context, format Format, events []Ev
 	if len(events) == 0 {
 		return 200, nil
 	}
-	var body []byte
-	var err error
-	if len(events) == 1 {
-		body, err = json.Marshal(events[0])
-	} else {
-		body, err = json.Marshal(events)
-	}
+
+	// ── S12: encode JSON (streaming) and optionally gzip-compress. ──
+	bodyBytes, contentEncoding, err := c.encodeBody(events)
 	if err != nil {
-		return 0, fmt.Errorf("eden: marshal event: %w", err)
+		return 0, err
 	}
+
 	pathFormat := ResolveIngestPath(string(format))
 	url := strings.TrimRight(c.cfg.BaseURL, "/") +
 		"/orgs/" + c.cfg.OrgID + "/ingest/" + pathFormat
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return 0, fmt.Errorf("eden: build request: %w", err)
+	// ── S7: retry loop. ──
+	// maxAttempts = initial attempt + up to MaxRetries retries.
+	// A negative MaxRetries value disables retries (1 attempt total).
+	maxAttempts := 1
+	if c.cfg.MaxRetries > 0 {
+		maxAttempts = 1 + c.cfg.MaxRetries
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Org-Id", c.cfg.OrgID)
-	req.Header.Set("X-Org-Api-Key", c.cfg.APIKey)
-	req.Header.Set("X-Project-Id", c.cfg.ProjectID)
-	req.Header.Set("User-Agent", "eden-go/0.1.0")
 
-	resp, err := c.cfg.HTTPClient.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("eden: http do: %w", err)
-	}
-	defer resp.Body.Close()
-	// drain body so the connection can be reused
-	_, _ = io.Copy(io.Discard, resp.Body)
+	var (
+		lastStatus int
+		lastErr    error
+	)
 
-	if c.cfg.Debug {
-		fmt.Fprintf(os.Stderr, "[eden] %s %s -> %d (%d bytes)\n",
-			http.MethodPost, url, resp.StatusCode, len(body))
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
+			bytes.NewReader(bodyBytes))
+		if err != nil {
+			return 0, fmt.Errorf("eden: build request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", c.cfg.OrgID)
+		req.Header.Set("X-Org-Api-Key", c.cfg.APIKey)
+		req.Header.Set("X-Project-Id", c.cfg.ProjectID)
+		req.Header.Set("User-Agent", "eden-go/0.1.0")
+		if contentEncoding != "" {
+			req.Header.Set("Content-Encoding", contentEncoding)
+		}
+
+		resp, doErr := c.cfg.HTTPClient.Do(req)
+		if doErr != nil {
+			// Transport error: schedule a retry if attempts remain.
+			lastErr = fmt.Errorf("eden: http do: %w", doErr)
+			lastStatus = 0
+			if attempt < maxAttempts-1 {
+				if c.cfg.Debug {
+					fmt.Fprintf(os.Stderr,
+						"[eden] debug: attempt %d/%d transport error, retrying: %v\n",
+						attempt+1, maxAttempts, doErr)
+				}
+				c.doSleep(ctx, retryBackoff(c.cfg.RetryBase, attempt, nil))
+			}
+			continue
+		}
+
+		// Drain body so the connection can be reused.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+
+		lastStatus = resp.StatusCode
+		lastErr = nil
+
+		if c.cfg.Debug {
+			fmt.Fprintf(os.Stderr,
+				"[eden] debug: attempt %d/%d POST %s -> %d (%d bytes)\n",
+				attempt+1, maxAttempts, url, resp.StatusCode, len(bodyBytes))
+		}
+
+		// Success.
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return resp.StatusCode, nil
+		}
+
+		// Non-retryable 4xx: warn unconditionally and drop the batch.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
+			fmt.Fprintf(os.Stderr,
+				"[eden] WARN: dropping batch of %d event(s): non-retryable HTTP %d from %s\n",
+				len(events), resp.StatusCode, url)
+			return resp.StatusCode, nil
+		}
+
+		// Retryable (429 or 5xx): back off then loop.
+		if attempt < maxAttempts-1 {
+			delay := retryBackoff(c.cfg.RetryBase, attempt, resp)
+			if c.cfg.Debug {
+				fmt.Fprintf(os.Stderr,
+					"[eden] debug: attempt %d/%d status %d, retrying in %v\n",
+					attempt+1, maxAttempts, resp.StatusCode, delay)
+			}
+			c.doSleep(ctx, delay)
+		}
 	}
-	return resp.StatusCode, nil
+
+	// All attempts exhausted.
+	if lastErr != nil {
+		return 0, lastErr
+	}
+	return lastStatus, nil
+}
+
+// encodeBody serialises events to JSON using a streaming encoder and
+// optionally gzip-compresses the result into a pooled buffer. The
+// encoded bytes are copied out of the pool buffer before it is
+// returned, so the buffer is available for the next concurrent call
+// immediately after this function returns.
+func (c *EdenClient) encodeBody(events []Event) (body []byte, contentEncoding string, err error) {
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+
+	if !c.cfg.DisableCompression {
+		// S1: stream JSON directly into a gzip writer — no intermediate copy.
+		gw, gzErr := gzip.NewWriterLevel(buf, gzip.BestSpeed)
+		if gzErr != nil {
+			return nil, "", fmt.Errorf("eden: gzip init: %w", gzErr)
+		}
+		enc := json.NewEncoder(gw)
+		if len(events) == 1 {
+			err = enc.Encode(events[0])
+		} else {
+			err = enc.Encode(events)
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("eden: json encode: %w", err)
+		}
+		if err = gw.Close(); err != nil {
+			return nil, "", fmt.Errorf("eden: gzip close: %w", err)
+		}
+		contentEncoding = "gzip"
+	} else {
+		enc := json.NewEncoder(buf)
+		if len(events) == 1 {
+			err = enc.Encode(events[0])
+		} else {
+			err = enc.Encode(events)
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("eden: json encode: %w", err)
+		}
+	}
+
+	// Copy bytes out of the pooled buffer so it can be reused
+	// concurrently while the caller's retry loop is in flight.
+	out := make([]byte, buf.Len())
+	copy(out, buf.Bytes())
+	return out, contentEncoding, nil
+}
+
+// retryBackoff returns the delay to wait before the next attempt.
+// If resp carries a Retry-After header (integer seconds or HTTP-date),
+// that value takes precedence. Otherwise the delay is:
+//
+//	base << attempt  +  jitter(0 .. base)
+//
+// capped at 30 seconds to prevent runaway waits on misconfigured
+// MaxRetries values.
+func retryBackoff(base time.Duration, attempt int, resp *http.Response) time.Duration {
+	if resp != nil {
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			// Integer seconds form (most common).
+			if secs, err := strconv.Atoi(ra); err == nil && secs >= 0 {
+				return time.Duration(secs) * time.Second
+			}
+			// HTTP-date form.
+			if t, err := http.ParseTime(ra); err == nil {
+				if d := time.Until(t); d > 0 {
+					return d
+				}
+				return 0
+			}
+		}
+	}
+	// Exponential back-off with full jitter.
+	shift := uint(attempt)
+	if shift > 30 {
+		shift = 30 // guard against overflow
+	}
+	backoff := base << shift
+	const maxBackoff = 30 * time.Second
+	if backoff > maxBackoff {
+		backoff = maxBackoff
+	}
+	jitter := time.Duration(rand.Int63n(int64(base) + 1))
+	return backoff + jitter
+}
+
+// doSleep sleeps for d, respecting context cancellation. In tests,
+// sleepFn can be replaced with a no-op (or a duration recorder) to
+// avoid real waits without removing the retry logic from the path.
+func (c *EdenClient) doSleep(ctx context.Context, d time.Duration) {
+	if c.sleepFn != nil {
+		c.sleepFn(d)
+		return
+	}
+	if d <= 0 {
+		return
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 // Flush drains the in-memory queue, posting one JSON array per format.
