@@ -1,6 +1,6 @@
-"""Phase 7.1b — Judges API.
+"""Phase 7.1b — Judges API + W4-4 deterministic judges CRUD.
 
-Endpoints:
+Score-running endpoints (Phase 7.1b):
 
   POST /orgs/{org_id}/observability/judges/run
       Body: {trace_id, judge_names?, sync?}
@@ -15,6 +15,24 @@ Endpoints:
   GET /orgs/{org_id}/observability/judges/{judge_run_id}
       Action: fetch one judge_score by id.
 
+Deterministic judge CRUD (W4-4, plan 9.10):
+
+  POST /orgs/{org_id}/observability/judges/definitions
+      Admin-gated. Create a deterministic judge backed by the
+      playground scorer registry (exact_match, regex, json_valid, …).
+
+  GET /orgs/{org_id}/observability/judges/definitions
+      List the org's deterministic judges.
+
+  GET /orgs/{org_id}/observability/judges/definitions/{judge_id}
+      Get a single deterministic judge.
+
+  DELETE /orgs/{org_id}/observability/judges/definitions/{judge_id}
+      Admin-gated. Soft-delete (archive) a judge.
+
+  POST /orgs/{org_id}/observability/judges/definitions/{judge_id}/execute
+      Run a deterministic judge against a sample payload (no LLM call).
+
 There is no async judge tailer yet. Every run executes inline and
 returns the scores directly, regardless of the requested ``sync``
 value — a ``sync=false`` request is coerced to sync (see
@@ -25,12 +43,14 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
+from pydantic import BaseModel, Field
 
 from eden.api.deps import (
     _try_resolve_token_payload,
     get_current_user,
     require_judges_run,
+    require_org_admin,
     require_path_org_access,
 )
 from eden.llmops.judges.base import JudgeScore
@@ -291,4 +311,175 @@ async def get_judge_score(
         scored_at=row["scored_at"],
         latency_ms=row["latency_ms"] or 0.0,
         metadata={"source_event_id": row["source_event_id"]},
+    )
+
+
+# ── W4-4: Deterministic judge CRUD ────────────────────────────────
+#
+# Plan 9.10: a deterministic judge is a registered metric entry with
+# kind="deterministic" and an executable scorer binding. Backed by
+# the metric_studio CustomMetricRegistry store (organizations.settings
+# JSONB — no new table). Admin-gated writes; org-scoped reads.
+#
+# ROUTING NOTE: These routes live on ``definitions_router`` — a separate
+# APIRouter with prefix ``/orgs/{org_id}/observability/judges/definitions``.
+# This is intentional: the parent ``router`` has a parameterised catch-all
+# ``GET /{judge_run_id}`` that would shadow any literal ``/definitions``
+# path added to the same router unless the literal was registered first.
+# Keeping definitions on their own router lets ``app.py`` register them
+# before the parent router so they're always evaluated first.
+
+definitions_router = APIRouter(
+    prefix="/orgs/{org_id}/observability/judges/definitions",
+    tags=["judges-definitions"],
+    dependencies=[
+        Depends(require_path_org_access),
+    ],
+)
+
+
+class CreateDeterministicJudgeRequest(BaseModel):
+    """Body for POST /definitions."""
+
+    name: str = Field(
+        ...,
+        description="Human-readable name for the judge (e.g. 'No-secrets check')",
+    )
+    scorer_type: str = Field(
+        ...,
+        description=(
+            "Deterministic scorer type: exact_match | contains | icontains | "
+            "regex | json_valid | levenshtein_ratio"
+        ),
+    )
+    scorer_config: dict = Field(
+        default_factory=dict,
+        description=(
+            "Scorer-specific params. For regex: {\"pattern\": \"<re>\"}. "
+            "For contains/icontains: {\"value\": \"<needle>\"}."
+        ),
+    )
+
+
+class ExecuteDeterministicJudgeRequest(BaseModel):
+    """Body for POST /definitions/{judge_id}/execute."""
+
+    output: str = Field(..., description="The model response text to evaluate")
+    expected: str | None = Field(
+        None,
+        description="Reference value (required for exact_match, contains, levenshtein_ratio)",
+    )
+    input_text: str | None = Field(
+        None,
+        description="Original task / prompt text (context only, not scored)",
+    )
+
+
+@definitions_router.post("")
+async def create_deterministic_judge(
+    org_id: str = Depends(require_path_org_access),
+    body: CreateDeterministicJudgeRequest = Body(...),
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+) -> dict:
+    """Create a deterministic judge backed by the scorer registry.
+
+    Admin-only. The judge is stored in the org's custom-metrics
+    feature store with ``kind: deterministic``. It can be executed
+    inline via ``POST /definitions/{judge_id}/execute`` — no LLM
+    call is made.
+    """
+    from eden.metric_studio.deterministic_judge_registry import (
+        DeterministicJudgeRegistry,
+    )
+
+    created_by = (user or {}).get("email") or (user or {}).get("user_id") or ""
+    return await DeterministicJudgeRegistry().create(
+        org_id,
+        name=body.name,
+        scorer_type=body.scorer_type,
+        scorer_config=body.scorer_config,
+        created_by=created_by,
+    )
+
+
+@definitions_router.get("")
+async def list_deterministic_judges(
+    org_id: str = Depends(require_path_org_access),
+    include_archived: bool = Query(
+        False, description="Include archived (soft-deleted) judges"
+    ),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """List all deterministic judges for the org.
+
+    Archived judges are excluded by default. Set
+    ``?include_archived=true`` to include them.
+    """
+    from eden.metric_studio.deterministic_judge_registry import (
+        DeterministicJudgeRegistry,
+    )
+
+    return await DeterministicJudgeRegistry().list(
+        org_id, include_archived=include_archived
+    )
+
+
+@definitions_router.get("/{judge_id}")
+async def get_deterministic_judge(
+    org_id: str = Depends(require_path_org_access),
+    judge_id: str = Path(..., description="The deterministic judge id"),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Fetch a single deterministic judge by id."""
+    from eden.metric_studio.deterministic_judge_registry import (
+        DeterministicJudgeRegistry,
+    )
+
+    return await DeterministicJudgeRegistry().get(org_id, judge_id)
+
+
+@definitions_router.delete("/{judge_id}")
+async def delete_deterministic_judge(
+    org_id: str = Depends(require_path_org_access),
+    judge_id: str = Path(..., description="The deterministic judge id"),
+    user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_org_admin),
+) -> dict:
+    """Soft-delete (archive) a deterministic judge.
+
+    Admin-only. The entry is preserved in the store for audit
+    purposes but is excluded from the default :func:`list_deterministic_judges`
+    response.
+    """
+    from eden.metric_studio.deterministic_judge_registry import (
+        DeterministicJudgeRegistry,
+    )
+
+    return await DeterministicJudgeRegistry().delete(org_id, judge_id)
+
+
+@definitions_router.post("/{judge_id}/execute")
+async def execute_deterministic_judge(
+    org_id: str = Depends(require_path_org_access),
+    judge_id: str = Path(..., description="The deterministic judge id"),
+    body: ExecuteDeterministicJudgeRequest = Body(...),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Run a deterministic judge against a sample payload.
+
+    Executes the registered scorer function in-process — no LLM call,
+    no network I/O beyond loading the judge definition. Returns the
+    score immediately.
+    """
+    from eden.metric_studio.deterministic_judge_registry import (
+        DeterministicJudgeRegistry,
+    )
+
+    return await DeterministicJudgeRegistry().execute(
+        org_id,
+        judge_id,
+        output=body.output,
+        expected=body.expected,
+        input_text=body.input_text,
     )

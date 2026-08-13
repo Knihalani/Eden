@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -14,6 +15,26 @@ import (
 	eden "github.com/eden-ai/eden-go"
 	openaipkg "github.com/sashabaranov/go-openai"
 )
+
+// readRequestBody decompresses a gzip-encoded request body when
+// Content-Encoding is "gzip", otherwise reads it as-is.
+func readRequestBody(t *testing.T, r *http.Request) []byte {
+	t.Helper()
+	if r.Header.Get("Content-Encoding") == "gzip" {
+		gr, err := gzip.NewReader(r.Body)
+		if err != nil {
+			t.Fatalf("gzip.NewReader: %v", err)
+		}
+		defer gr.Close()
+		b, err := io.ReadAll(gr)
+		if err != nil {
+			t.Fatalf("read gzip body: %v", err)
+		}
+		return b
+	}
+	b, _ := io.ReadAll(r.Body)
+	return b
+}
 
 func TestWrapAndInner(t *testing.T) {
 	inner := openaipkg.NewClient("sk-test")
@@ -33,7 +54,7 @@ func TestCreateChatCompletionReportsEvent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		mu.Lock()
-		lastBody, _ = io.ReadAll(r.Body)
+		lastBody = readRequestBody(t, r)
 		mu.Unlock()
 		w.WriteHeader(http.StatusAccepted)
 	}))
@@ -115,7 +136,7 @@ func TestCreateChatCompletionReportsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
 		mu.Lock()
-		lastBody, _ = io.ReadAll(r.Body)
+		lastBody = readRequestBody(t, r)
 		mu.Unlock()
 		w.WriteHeader(http.StatusAccepted)
 	}))

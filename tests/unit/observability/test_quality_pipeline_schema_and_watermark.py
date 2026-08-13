@@ -30,7 +30,7 @@ def _declared_telemetry_event_columns() -> set[str]:
     Parses the ``CREATE TABLE`` in 009 plus every later
     ``ALTER TABLE telemetry_events ADD COLUMN``.
     """
-    create_sql = (_MIGRATIONS / "009_telemetry_events.py").read_text()
+    create_sql = (_MIGRATIONS / "000_squash_001_160.py").read_text()
     body = re.search(
         r"CREATE TABLE IF NOT EXISTS telemetry_events\s*\((.*?)\n\s*\)\s*\"\"\"",
         create_sql,

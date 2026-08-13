@@ -35,6 +35,7 @@ export const LAB_SURFACES: LabSurface[] = [
   { id: "gateway", label: "Gateway", href: "/gateway", status: "ready" },
   { id: "agent", label: "Assistant", href: "/agent", status: "ready" },
   { id: "debugger", label: "Debugger", href: "/debugger", status: "ready" },
+  { id: "dashboards", label: "Dashboards", href: "/dashboards", status: "ready" },
   { id: "settings", label: "Settings", href: "/settings", status: "ready" },
 ];
 

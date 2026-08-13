@@ -96,6 +96,7 @@ dev = [
 
 [project.scripts]
 eden-doctor = "eden_sdk.doctor:main"
+eden-debugger = "eden_sdk.replay:main"
 
 [project.urls]
 Homepage = "https://edenobservability.com"

@@ -191,6 +191,29 @@ class SoftIssueReviewer:
                 "limit_usd": limit,
             }
 
+        # OOM W3-5 — system-wide soft_issue lane daily cap (fail-open).
+        try:
+            from eden.llmops.evolution_spend import LaneDailyBudget
+
+            lane_allowed, lane_spent, lane_cap = await LaneDailyBudget("soft_issue").check()
+            if not lane_allowed:
+                logger.warning(
+                    "soft_issue_review: system lane budget exceeded "
+                    "(spent=%.4f cap=%.4f) — skipping org=%s",
+                    lane_spent,
+                    lane_cap,
+                    org_id,
+                )
+                return {
+                    "org_id": org_id,
+                    "skipped": True,
+                    "reason": "lane_budget_exceeded",
+                    "lane_spent_usd": lane_spent,
+                    "lane_cap_usd": lane_cap,
+                }
+        except Exception as exc:
+            logger.debug("soft_issue_review: lane budget check failed (fail-open): %s", exc)
+
         agents = await self._hot_agents(pg, org_id)
         if not agents:
             return {"org_id": org_id, "skipped": True, "reason": "no_hot_agents"}

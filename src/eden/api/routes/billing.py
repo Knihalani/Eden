@@ -64,6 +64,11 @@ def _is_stripe_client_error(exc: BaseException) -> bool:
 # 503 until this flips. The constants they reference (PLAN_DEFINITIONS,
 # handle_subscription_event) are preserved so the surface can come
 # back online by setting this flag + wiring Stripe keys.
+#
+# OOM W3-4: ``billing_enabled`` in :class:`~eden.config.Settings` is the
+# canonical runtime switch; this module-level bool is kept for backward
+# compat with tests that monkeypatch it directly.  At runtime the
+# ``_require_paid_plans_enabled`` gate checks EITHER.
 PAID_PLANS_ENABLED = False
 
 
@@ -269,10 +274,14 @@ async def check_limit(
 
 
 def _require_paid_plans_enabled() -> None:
-    """Gate paid-plan endpoints. Raises 503 until :data:`PAID_PLANS_ENABLED`
-    flips to True (and Stripe keys are wired).
+    """Gate paid-plan endpoints. Raises 503 while billing is disabled.
+
+    OOM W3-4: checks ``get_settings().billing_enabled`` (the canonical
+    config flag, default False) OR the module-level ``PAID_PLANS_ENABLED``
+    sentinel (kept for test backward compat via monkeypatch).
     """
-    if not PAID_PLANS_ENABLED:
+    _cfg_enabled = bool(getattr(get_settings(), "billing_enabled", False))
+    if not PAID_PLANS_ENABLED and not _cfg_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Paid plans are not available yet. Eden is currently free-only.",
@@ -607,6 +616,93 @@ async def cancel_subscription(org_id: str = Depends(require_path_org_access), us
 
 
 # ============================================================================
+# Stripe Customer Portal  (OOM W3-4)
+# ============================================================================
+
+class _PortalRequest(BaseModel):
+    """Body for ``POST /billing/portal``.
+
+    ``return_url`` is the page Stripe redirects back to after the customer
+    closes the hosted billing-management UI.
+    """
+
+    return_url: str
+
+
+@router.post("/portal", response_model=dict)
+async def create_portal_session(
+    request: _PortalRequest,
+    org_id: str = Depends(require_path_org_access),
+    _user: dict = Depends(get_current_user),
+    _check_billing_edit: dict = Depends(require_org_permission_dep("billing:edit")),
+) -> dict:
+    """Create a Stripe customer-portal session and return its URL.
+
+    OOM W3-4: behind ``billing_enabled`` / ``PAID_PLANS_ENABLED`` gate.
+    Returns ``{"portal_url": "<short-lived Stripe URL>"}`` on success.
+    The portal handles card management, plan changes, and invoice history
+    without any custom Eden UI.
+    """
+    _require_paid_plans_enabled()
+
+    stripe_api_key = getattr(get_settings(), "stripe_secret_key", None) or ""
+    if not stripe_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe is not configured. Please set STRIPE_SECRET_KEY.",
+        )
+
+    try:
+        import stripe
+        stripe.api_key = stripe_api_key
+
+        client = await get_postgres_client()
+        org = await client.fetchrow(
+            "SELECT settings FROM organizations WHERE id = $1",
+            org_id,
+        )
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found.",
+            )
+
+        settings_data = _get_settings_data(org.get("settings")) if org.get("settings") else {}
+        stripe_customer_id: str | None = settings_data.get("stripe_customer_id")
+        if not stripe_customer_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No Stripe customer found for this organization. Subscribe to a plan first.",
+            )
+
+        session = await _stripe_call(
+            stripe.billing_portal.Session.create,
+            customer=stripe_customer_id,
+            return_url=request.return_url,
+        )
+        return {"portal_url": session.url}
+
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe SDK not installed. Run: pip install stripe",
+        ) from None
+    except Exception as e:
+        if _is_stripe_client_error(e):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=safe_detail(e, fallback="Invalid Stripe request"),
+            ) from e
+        logger.error("Stripe portal error for org %s: %s", org_id, redact_all(str(e)))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=safe_detail(e, fallback="Failed to create portal session"),
+        ) from e
+
+
+# ============================================================================
 # Stripe Webhook Handler
 # ============================================================================
 
@@ -906,3 +1002,93 @@ async def get_payment_method(
             "Stripe payment-method lookup failed for org %s: %s", org_id, redact_all(str(exc)),
         )
         return None
+
+
+# ---------------------------------------------------------------------------
+# W3-1 (1.4) — tail-sampling rollout observability
+# ---------------------------------------------------------------------------
+
+class _SamplingStatsResponse(BaseModel):
+    """W3-1: sampling profile + kept/sampled counters for the cost page."""
+
+    profile: str
+    """Active sampling profile for this org (``full`` | ``balanced`` | ``aggressive``)."""
+    sampled_out_24h: int
+    """Traces dropped by the sampling gate in the last 24 hours."""
+    sampled_out_cost_usd_24h: float
+    """Estimated cost (USD) of traces that were sampled out in the last 24h.
+    This is the cost NOT stored — useful for confirming the rollout is saving
+    storage budget.
+    """
+    keep_rate_pct: float
+    """Configured probabilistic keep rate for non-signal traces (0–100)."""
+
+
+@router.get("/sampling-stats", response_model=_SamplingStatsResponse)
+async def get_sampling_stats(
+    org_id: str = Depends(require_path_org_access),
+    client: Any = Depends(get_postgres_client),
+) -> _SamplingStatsResponse:
+    """W3-1 (1.4): surface tail-sampling counters for the rollout cost page.
+
+    Returns the org's active sampling profile, the count of traces dropped in
+    the last 24 h, and their aggregate cost — so operators can confirm the
+    ``balanced`` rollout is working without digging into raw DB tables.
+
+    ``trace_sampling_summaries`` is populated by the N16 ingest gate
+    (``observability/sampling/apply.py``) whenever a trace is sampled out.
+    Missing table → ``sampled_out_*`` return 0 (best-effort; never 500).
+    """
+    # Resolve per-org profile from org settings (same path as the ingest gate).
+    profile = "full"
+    try:
+        row = await client.fetchrow(
+            "SELECT settings FROM organizations WHERE id = $1",
+            org_id,
+        )
+        if row:
+            org_settings: dict[str, Any] = row.get("settings") or {}
+            if isinstance(org_settings, str):
+                try:
+                    org_settings = json.loads(org_settings)
+                except (ValueError, TypeError):
+                    org_settings = {}
+            raw_profile = org_settings.get("sampling_profile_override")
+            if isinstance(raw_profile, str):
+                raw_profile = raw_profile.strip().lower()
+                if raw_profile in ("full", "balanced", "aggressive"):
+                    profile = raw_profile
+    except Exception as exc:  # noqa: BLE001 — never 500 the cost page
+        logger.debug("sampling-stats: failed to resolve profile for org=%s: %s", org_id, redact_all(str(exc)))
+
+    # Keep rate per profile (mirrors policy.py PROFILE_KEEP_RATES).
+    _KEEP_RATES: dict[str, float] = {"full": 1.0, "balanced": 0.15, "aggressive": 0.05}
+    keep_rate_pct = round(_KEEP_RATES.get(profile, 1.0) * 100, 1)
+
+    # Query sampled-out counters from the summaries table (best-effort).
+    sampled_out_24h = 0
+    sampled_out_cost_usd_24h = 0.0
+    try:
+        stats_row = await client.fetchrow(
+            """
+            SELECT
+                COUNT(*)                          AS sampled_out_count,
+                COALESCE(SUM(cost_usd), 0)        AS sampled_out_cost_usd
+            FROM trace_sampling_summaries
+            WHERE org_id = $1
+              AND dropped_at >= NOW() - INTERVAL '24 hours'
+            """,
+            org_id,
+        )
+        if stats_row:
+            sampled_out_24h = int(stats_row["sampled_out_count"] or 0)
+            sampled_out_cost_usd_24h = float(stats_row["sampled_out_cost_usd"] or 0.0)
+    except Exception as exc:  # noqa: BLE001 — table may not exist on older pods
+        logger.debug("sampling-stats: summaries query failed for org=%s: %s", org_id, redact_all(str(exc)))
+
+    return _SamplingStatsResponse(
+        profile=profile,
+        sampled_out_24h=sampled_out_24h,
+        sampled_out_cost_usd_24h=sampled_out_cost_usd_24h,
+        keep_rate_pct=keep_rate_pct,
+    )

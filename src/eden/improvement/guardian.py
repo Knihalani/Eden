@@ -605,4 +605,46 @@ async def _draft_follow_up(
     )
 
 
-__all__ = ["handle_regression"]
+async def request_follow_up(
+    org_id: str,
+    plan: dict[str, Any],
+    *,
+    feedback: str,
+) -> dict[str, Any] | None:
+    """Portal-triggered follow-up iteration on an open fix PR.
+
+    Creates a new guardian follow-up draft with the user's feedback as
+    the verify_detail context. The new plan is linked to the original
+    via ``parent_plan_id``.
+
+    Called by ``POST /plans/{plan_id}/iterate`` in the improve API route.
+    Uses the same ``_draft_follow_up`` machinery as post-merge regression
+    handling so the generated plan is a real ``code_patch`` (or degrades
+    to advisory on PatchGenerator failure).
+    """
+    # Extract the canonical issue_id from source_ref or evidence.
+    issue_id = ""
+    source_ref = str(plan.get("source_ref") or "")
+    if source_ref.startswith("issue:"):
+        issue_id = source_ref.split(":", 1)[1]
+    if not issue_id:
+        ev = plan.get("evidence") or {}
+        if isinstance(ev, dict):
+            issue_id = str(ev.get("issue_id") or "").strip()
+    if not issue_id:
+        # Synthetic fallback so _draft_follow_up can set source_ref
+        # without crashing on plans not directly tied to an issue.
+        issue_id = f"plan:{plan.get('id', 'unknown')}"
+
+    return await _draft_follow_up(
+        org_id,
+        plan,
+        issue_id=issue_id,
+        verify_detail={
+            "feedback": feedback,
+            "triggered_by": "portal_request_changes",
+        },
+    )
+
+
+__all__ = ["handle_regression", "request_follow_up"]

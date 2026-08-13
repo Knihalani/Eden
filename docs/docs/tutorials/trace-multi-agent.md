@@ -126,8 +126,10 @@ the answer was unusually short or unusually long.
 
 ## Step 6 — Read the agent graph
 
-Open the **Agent Graph** tab (it's in the trace detail page). It
-shows the call sequence as a node-and-edge diagram:
+The trace detail page renders the call sequence as a node-and-edge
+diagram (the **Agent Graph** panel soft-lands in an upcoming release;
+in current builds the same information is available in the span
+timeline):
 
 ```
 [research-agent]

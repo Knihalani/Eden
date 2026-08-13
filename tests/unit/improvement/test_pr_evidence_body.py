@@ -5,6 +5,10 @@ tier badge, static/replay/sandbox statuses (incl. the M8
 ``synthesized: true`` marker), failure signature, example traces,
 issue link — and degrade to em-dashes for anything absent. It must
 stay compact: humans review it at merge time.
+
+W2-8 (§9.1): judge-score delta section is always present — real scores
+when judge_score_deltas is stamped in evidence, 'no judge baseline yet'
+fallback otherwise.  Contract: 100% of PR bodies carry the section.
 """
 
 from __future__ import annotations
@@ -93,14 +97,16 @@ class TestSynthesizedAnnotation:
 
 
 class TestCompactness:
-    def test_body_stays_under_forty_lines(self) -> None:
+    def test_body_stays_under_fifty_lines(self) -> None:
+        # W2-8: expanded from 40 to 50 to accommodate the judge-score delta
+        # section (adds ~5 lines for the no-baseline fallback).
         plan = _full_evidence_plan()
         plan["evidence"]["suppress_reasons"] = ["late_review"]
         plan["evidence"]["ci_ingestion"] = "unavailable"
         body = render_pr_evidence_body(
             plan, plan_id="plan-1", summary="s", static_status="passed"
         )
-        assert len(body.splitlines()) <= 40
+        assert len(body.splitlines()) <= 50
 
     def test_long_values_truncated_and_pipes_escaped(self) -> None:
         plan = _full_evidence_plan()
@@ -131,6 +137,86 @@ class TestGracefulAbsence:
         plan = {"evidence": {"ci_ingestion": "unavailable"}}
         body = render_pr_evidence_body(plan, plan_id="plan-1", summary="s")
         assert "checks:read" in body
+
+
+class TestJudgeScoreDeltaSection:
+    """W2-8 (§9.1) contract: judge-score section ALWAYS appears in PR body."""
+
+    def test_judge_section_present_with_scores(self) -> None:
+        """When judge_score_deltas is stamped, PR body contains the table."""
+        plan = _full_evidence_plan()
+        plan["evidence"]["judge_score_deltas"] = [
+            {"judge": "quality", "before": 0.72, "after": 0.85, "delta": 0.13},
+            {"judge": "relevance", "before": 0.60, "after": 0.58, "delta": -0.02},
+        ]
+        body = render_pr_evidence_body(plan, plan_id="plan-1", summary="Fix foo")
+        # Table header must be present.
+        assert "| Judge | Before | After | Delta |" in body
+        # Real judge rows must be present.
+        assert "quality" in body
+        assert "0.720" in body and "0.850" in body and "+0.130" in body
+        assert "relevance" in body and "-0.020" in body
+        # One-line interpretation present.
+        assert "judge(s) improved" in body or "degraded" in body or "mixed signal" in body
+        # Fallback row must NOT appear when real scores exist.
+        assert "no judge baseline yet" not in body
+
+    def test_judge_section_fallback_when_no_scores(self) -> None:
+        """When no judge_score_deltas, PR body contains the 'no judge baseline yet' row."""
+        plan = _full_evidence_plan()
+        # Ensure no judge_score_deltas key is present.
+        plan["evidence"].pop("judge_score_deltas", None)
+        body = render_pr_evidence_body(plan, plan_id="plan-1", summary="Fix foo")
+        assert "| Judge | Before | After | Delta |" in body
+        assert "no judge baseline yet" in body
+        assert "code-patch lane" in body
+
+    def test_judge_section_fallback_when_empty_list(self) -> None:
+        """Empty judge_score_deltas list also triggers the fallback row."""
+        plan = _full_evidence_plan()
+        plan["evidence"]["judge_score_deltas"] = []
+        body = render_pr_evidence_body(plan, plan_id="plan-1", summary="Fix foo")
+        assert "| Judge | Before | After | Delta |" in body
+        assert "no judge baseline yet" in body
+
+    def test_judge_section_always_present_on_empty_evidence(self) -> None:
+        """Even on an empty-evidence plan the judge section appears."""
+        body = render_pr_evidence_body({}, plan_id="plan-1", summary="Fix foo")
+        assert "| Judge | Before | After | Delta |" in body
+        assert "no judge baseline yet" in body
+
+    def test_judge_only_improving_interpretation(self) -> None:
+        plan = _full_evidence_plan()
+        plan["evidence"]["judge_score_deltas"] = [
+            {"judge": "safety", "before": 0.80, "after": 0.90, "delta": 0.10},
+        ]
+        body = render_pr_evidence_body(plan, plan_id="plan-1", summary="s")
+        assert "improved" in body
+        assert "degraded" not in body.lower().split("improved")[0]  # before the word
+
+    def test_judge_only_degrading_interpretation(self) -> None:
+        plan = _full_evidence_plan()
+        plan["evidence"]["judge_score_deltas"] = [
+            {"judge": "safety", "before": 0.90, "after": 0.80, "delta": -0.10},
+        ]
+        body = render_pr_evidence_body(plan, plan_id="plan-1", summary="s")
+        assert "degraded" in body
+
+    def test_judge_section_does_not_break_compactness(self) -> None:
+        """Full judge table with 5 judges still stays under 50 lines."""
+        plan = _full_evidence_plan()
+        plan["evidence"]["suppress_reasons"] = ["late_review"]
+        plan["evidence"]["ci_ingestion"] = "unavailable"
+        plan["evidence"]["judge_score_deltas"] = [
+            {"judge": f"judge_{i}", "before": 0.7, "after": 0.75, "delta": 0.05}
+            for i in range(5)
+        ]
+        body = render_pr_evidence_body(
+            plan, plan_id="plan-1", summary="s", static_status="passed"
+        )
+        # Relaxed to 50 for the judge section; original 40-line contract was
+        # pre-W2-8 and must expand to accommodate the new table.
+        assert len(body.splitlines()) <= 50
 
 
 class TestTierHonesty:

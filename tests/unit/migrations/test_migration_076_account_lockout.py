@@ -16,12 +16,12 @@ from pathlib import Path
 
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
-    / "src/eden/db_migrations/versions/076_account_lockout.py"
+    / "src/eden/db_migrations/versions/000_squash_001_160.py"
 )
 
 
 def _load_migration():
-    spec = importlib.util.spec_from_file_location("migration_076", MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_squash", MIGRATION_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -29,8 +29,8 @@ def _load_migration():
 
 def test_migration_revision_chain():
     module = _load_migration()
-    assert module.revision == "076"
-    assert module.down_revision == "075"
+    assert module.revision == "160_signal_definitions_org_enabled_created"
+    assert module.down_revision is None
 
 
 def test_migration_has_upgrade_and_downgrade():
@@ -47,11 +47,8 @@ def test_migration_adds_expected_columns():
     assert "last_failed_login_at" in src
 
 
-def test_migration_downgrade_drops_columns():
+def test_migration_downgrade_raises_not_implemented():
     src = MIGRATION_PATH.read_text()
-    # The downgrade function should drop all three columns it added.
-    assert "drop_column" in src
+    # The squash boundary downgrade raises NotImplementedError — roll back via DB backup.
     downgrade_body = src.split("def downgrade()", 1)[1]
-    assert "failed_login_count" in downgrade_body
-    assert "locked_until" in downgrade_body
-    assert "last_failed_login_at" in downgrade_body
+    assert "NotImplementedError" in downgrade_body

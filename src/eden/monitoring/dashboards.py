@@ -178,6 +178,33 @@ class MonitoringDashboardService:
             )
             return []
 
+    async def get_dashboard(
+        self, org_id: str, dashboard_id: str
+    ) -> dict[str, Any] | None:
+        """Return a single dashboard row with its widgets, or None."""
+        client = await self._client()
+        if client is None:
+            return None
+        try:
+            row = await client.fetchrow(
+                "SELECT * FROM monitoring_dashboards WHERE org_id = $1 AND id = $2::uuid",
+                org_id,
+                dashboard_id,
+            )
+            if not row:
+                return None
+            dash = dict(row)
+            dash["widgets"] = await self.list_widgets(org_id, dashboard_id)
+            return dash
+        except Exception as exc:
+            logger.warning(
+                "get_dashboard failed org=%s dashboard=%s: %s",
+                org_id,
+                dashboard_id,
+                exc,
+            )
+            return None
+
     async def upsert_widget(
         self,
         org_id: str,
@@ -217,6 +244,32 @@ class MonitoringDashboardService:
             position,
         )
         return {"id": wid, "title": title, "query": query}
+
+    async def delete_widget(
+        self, org_id: str, dashboard_id: str, widget_id: str
+    ) -> bool:
+        """Delete a widget; returns True on success, False when not found/unavailable."""
+        client = await self._client()
+        if client is None:
+            return False
+        try:
+            result = await client.execute(
+                "DELETE FROM dashboard_widgets "
+                "WHERE org_id = $1 AND dashboard_id = $2::uuid AND id = $3::uuid",
+                org_id,
+                dashboard_id,
+                widget_id,
+            )
+            return result != "DELETE 0"
+        except Exception as exc:
+            logger.warning(
+                "delete_widget failed org=%s dashboard=%s widget=%s: %s",
+                org_id,
+                dashboard_id,
+                widget_id,
+                exc,
+            )
+            return False
 
     async def execute_widget_query(
         self, org_id: str, query: str, *, agent_id: str | None = None

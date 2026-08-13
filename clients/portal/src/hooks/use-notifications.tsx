@@ -12,6 +12,8 @@ import { useUser } from "@clerk/nextjs";
 import { api } from "@/lib/api/resources";
 import { ApiError } from "@/lib/api/core";
 import { usePolling } from "@/hooks/use-polling";
+import { useOrg } from "@/hooks/use-org";
+import { useObservabilityStream } from "@/hooks/use-observability-stream";
 
 export interface Notification {
   id: string;
@@ -51,11 +53,17 @@ const NotificationsContext = createContext<NotificationsContextType | null>(
   null,
 );
 
-const POLL_INTERVAL_ACTIVE_MS = 30_000;
+// Poll interval demoted to a 5-minute fallback now that the SSE stream
+// delivers notification:new events in real time. The active/idle
+// distinction is kept for when SSE is unavailable (Redis down, reconnect
+// cap hit, etc.) so the UI doesn't go silent for more than 5 minutes.
+const POLL_INTERVAL_ACTIVE_MS = 300_000; // 5-minute fallback
 const POLL_INTERVAL_IDLE_MS = 300_000;
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { isSignedIn, isLoaded } = useUser();
+  const { currentOrg } = useOrg();
+  const orgId = currentOrg?.id ?? "";
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -97,10 +105,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // SSE live push: when the backend publishes a ``notification:new``
+  // event, refresh immediately instead of waiting for the 5-min poll.
+  // Shares the org's observability stream connection (no extra socket).
+  // onNotification is stable (callback ref inside the hook) so this
+  // call-site reference to ``refresh`` doesn't invalidate the stream.
+  useObservabilityStream({
+    orgId,
+    enabled: Boolean(isLoaded && isSignedIn && orgId),
+    onNotification: () => { void refresh(); },
+  });
+
   usePolling({
     fetch: refresh,
-    intervalMs: unreadCount > 0 ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_IDLE_MS,
-    deps: [unreadCount, isSignedIn],
+    intervalMs: POLL_INTERVAL_ACTIVE_MS,
+    deps: [isSignedIn],
     enabled: Boolean(isLoaded && isSignedIn),
   });
 

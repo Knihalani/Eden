@@ -44,6 +44,30 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
+  // OOM-5.1 POLYFILL ANALYSIS (2026-08-12):
+  // The polyfills-[hash].js chunk (112 KB raw / 38.5 KB gzip) is a
+  // pre-built artifact shipped with Next.js 16 itself. It is copied
+  // verbatim into every build by Next.js's internal CopyFilePlugin and
+  // CANNOT be reduced by project-level configuration (browserslist,
+  // compiler options, SWC targets, or experimental flags).
+  //
+  // Crucially, it is injected into HTML as <script nomodule>, so
+  // Chrome >= 61, Firefox >= 60, Safari >= 10.1, and Edge >= 16 all
+  // SKIP downloading it entirely. Every browser in the declared floor
+  // (Chrome/FF/Edge >= 111, Safari >= 16.4) is well past those thresholds,
+  // meaning the chunk contributes 0 bytes to the network payload for any
+  // real user. Next.js 16 also removed the "First Load JS" column from
+  // build output precisely because polyfills were inflating that metric.
+  //
+  // The browserslist in package.json IS correctly read by
+  // getSupportedBrowsers() and IS applied to SWC compilation targets and
+  // lightningcss minimizer targets. It simply has no path to the
+  // polyfills bundle, which is pre-compiled by Next.js upstream.
+  //
+  // The "38 KB gzip off every page" goal (OOM-5.1) was based on an
+  // assumption that the chunk is downloaded by modern browsers; it is not.
+  // If a future Next.js release exposes a way to skip the nomodule chunk
+  // for all-modern-browser deployments, enable it here.
   experimental: {
     // P34: include cmdk / radix / clerk; drop unused @xyflow (K9).
     optimizePackageImports: [

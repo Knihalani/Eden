@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from eden.api.deps import require_feature_flag
 from eden.mcp_server.errors import McpError
+from eden.mcp_server.prompts import get_prompt, list_prompts
+from eden.mcp_server.resources import list_resource_templates, read_resource
 from eden.mcp_server.server import call_tool, list_tools
 from eden.mcp_server.verify import verify_mcp_bearer
 
@@ -85,7 +87,12 @@ async def _handle_rpc(
     if method == "initialize":
         result: Any = {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}, "streamableHttp": True},
+            "capabilities": {
+                "tools": {},
+                "resources": {"subscribe": False, "listChanged": False},
+                "prompts": {"listChanged": False},
+                "streamableHttp": True,
+            },
             "serverInfo": {
                 "name": "eden-mcp-server",
                 "version": "0.2.0",
@@ -140,6 +147,40 @@ async def _handle_rpc(
             "structuredContent": out if isinstance(out, dict) else {"value": out},
             "isError": isinstance(out, dict) and out.get("status") == "error",
         }
+    elif method == "resources/list":
+        result = {"resourceTemplates": list_resource_templates(), "resources": []}
+    elif method == "resources/read":
+        # Resources/read follows tools/call auth pattern — requires a bearer key.
+        try:
+            auth = await verify_mcp_bearer(
+                api_key=api_key,
+                org_id_header=org_id,
+                base_url=_default_base_url(),
+            )
+        except McpError as exc:
+            return _rpc_error(
+                mid,
+                code=-32001,
+                message=exc.message,
+                http_status=exc.http_status,
+            )
+        from eden.mcp_server.client import HttpEdenClient
+
+        client = HttpEdenClient(auth)
+        uri = params.get("uri") or ""
+        out = await read_resource(uri, client=client, auth=auth)
+        if out.get("status") == "error":
+            return _rpc_error(mid, code=-32002, message=out.get("error", "resource read failed"))
+        result = out
+    elif method == "prompts/list":
+        result = {"prompts": list_prompts()}
+    elif method == "prompts/get":
+        name = params.get("name") or ""
+        arguments = params.get("arguments") or {}
+        out = get_prompt(name, arguments)
+        if out.get("status") == "error":
+            return _rpc_error(mid, code=-32002, message=out.get("error", "prompt not found"))
+        result = out
     else:
         return _rpc_error(
             mid, code=-32601, message=f"Method not found: {method}"

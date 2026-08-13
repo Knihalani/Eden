@@ -257,8 +257,18 @@ export const portalApi = {
   evalExperiments: (orgId: string) =>
     fetchApi<ExperimentFixture[]>(portalPath(orgId, "evals/experiments")),
 
-  improvePlans: (orgId: string) =>
-    fetchApi<ImprovePlanFixture[]>(portalPath(orgId, "improve/plans")),
+  improvePlans: (
+    orgId: string,
+    params?: { limit?: number; offset?: number },
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return fetchApi<ImprovePlanFixture[]>(
+      portalPath(orgId, `improve/plans${qs ? `?${qs}` : ""}`),
+    );
+  },
 
   compareExperiments: (orgId: string) =>
     fetchApi<AbExperimentFixture[]>(portalPath(orgId, "compare/experiments")),
@@ -328,6 +338,26 @@ export const portalApi = {
       },
       body: JSON.stringify({ trace_a: traceA, trace_b: traceB }),
     }),
+
+  /**
+   * W4-6 trace bookmarks — star a trace for the authenticated user.
+   * Idempotent: re-starring is a no-op.
+   */
+  bookmarkTrace: (orgId: string, traceId: string) =>
+    fetchApi<{ bookmarked: boolean; trace_id: string }>(
+      `/orgs/${orgId}/observability/traces/${encodeURIComponent(traceId)}/bookmark`,
+      { method: "PUT", headers: { "X-Org-Id": orgId } },
+    ),
+
+  /**
+   * W4-6 trace bookmarks — remove a star from a trace.
+   * Idempotent: un-starring a non-bookmarked trace is a no-op.
+   */
+  unbookmarkTrace: (orgId: string, traceId: string) =>
+    fetchApi<{ bookmarked: boolean; trace_id: string }>(
+      `/orgs/${orgId}/observability/traces/${encodeURIComponent(traceId)}/bookmark`,
+      { method: "DELETE", headers: { "X-Org-Id": orgId } },
+    ),
 };
 
 /** One aligned row in a trace diff (Wave 9). */
@@ -644,6 +674,47 @@ export const ledgerApi = {
       `/orgs/${orgId}/agents/${encodeURIComponent(agentId)}/ledger/config`,
       { method: "PATCH", body: JSON.stringify(body) },
     ),
+};
+
+/**
+ * Fixture export helpers — used by trace-detail and issue-detail
+ * "Export fixture" buttons (OOM plan §9.2 / W2-9).
+ */
+export const fixtureExportApi = {
+  /**
+   * Export a trace as a JSON file.
+   * ``POST /orgs/{orgId}/observability/traces/{traceId}/export``
+   * with ``{ "format_type": "json" }``.
+   * Returns the trace tree serialised as a JSON string in ``data``.
+   */
+  exportTrace: (orgId: string, traceId: string) =>
+    fetchApi<{ trace_id: string; format: string; data: string }>(
+      `/orgs/${orgId}/observability/traces/${encodeURIComponent(traceId)}/export`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Org-Id": orgId,
+        },
+        body: JSON.stringify({ format_type: "json" }),
+      },
+    ),
+
+  /**
+   * Export the failure fixture for an agent issue.
+   * ``POST /orgs/{orgId}/agent-issues/{issueId}/export-fixture``.
+   * The fixture bundle (``eden-failure-fixture-v1``) is nested at
+   * ``response.data.fixture`` in the standard ok-envelope.
+   */
+  exportIssue: (orgId: string, issueId: string) =>
+    fetchApi<{
+      status: string;
+      feature: string;
+      data: { status: string; fixture?: Record<string, unknown> };
+    }>(`/orgs/${orgId}/agent-issues/${encodeURIComponent(issueId)}/export-fixture`, {
+      method: "POST",
+      headers: { "X-Org-Id": orgId },
+    }),
 };
 
 /** Assistant live chat (SSE). */

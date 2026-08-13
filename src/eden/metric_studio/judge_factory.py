@@ -624,7 +624,12 @@ async def _score_rubric(
         output_block=output_block,
     )
     try:
+        from eden.config import get_settings
         from eden.llm.internal_router import route_sync
+
+        # OOM W4-3 (L4): route to a caching-capable model when configured.
+        # Default empty = normal fast-slot routing via ModelRouter.
+        _judges_override = (get_settings().judges_model_override or "").strip()
 
         t0 = time.monotonic()
         resp = route_sync(
@@ -635,6 +640,7 @@ async def _score_rubric(
             output_type="json",
             requires_quality_check=False,
             description="Metric studio rubric judge test",
+            **({"model_override": _judges_override} if _judges_override else {}),
         )
     except Exception as exc:
         return None, "", "n/a", 0.0, f"llm_error:{type(exc).__name__}"

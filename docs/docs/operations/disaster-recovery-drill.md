@@ -12,9 +12,10 @@ backup, with no human intervention, in under 60 minutes.
 
 ## Pre-requisites
 
-- Access to a staging environment that mirrors production
-  (the `docker/docker-compose.yml` + the `streaming` / `grpc` /
-  `edge` profiles).
+- Access to a **local dev/eval environment** (the
+  `docker/docker-compose.yml` stack is for local testing only —
+  it is **not** a production mirror). For a true staging environment
+  use a Northflank preview deployment.
 - A backup in `${BACKUP_S3_BUCKET}` or local
   `${BACKUP_LOCAL_DIR}/eden-{date}.sql.gz` that is less than 24h old.
 - The `eden_restore_test` database does NOT exist (we'll create it).

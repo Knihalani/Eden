@@ -188,14 +188,16 @@ enrichment (Downward API + SA JWT), Pyroscope continuous profiling.
 Tables: same as Cat 7, but the v1.4 surface adds the
 Pyroscope-side `trace_step_profile_links`.
 
-### Cat 23 — Autonomous Code Modification (STUB surface)
+### Cat 23 — Autonomous Code Modification (cut in Phase 1B)
 
-Patch proposals, sandbox validation, two-stage opt-in. STUB only —
-real end-to-end ship is gated on the 4 hard gates and the SLM
-Initiative. See the [Code change service](/reference/configuration)
-docs for the opt-in flags.
-
-Tables: 19 tables in `code_change` schema.
+The original `src/eden/code_change/` stub package (62 files, 46 API
+handlers, 19 tables) was removed in the Phase 1B bloat cut
+(2026-07-15). The legacy DB tables are preserved but the service
+layer is gone. Salvaged primitives (`patches/issue_patch_trigger.py`,
+`patches/patch_generator.py`, `patches/pr_creator.py`) live in
+`src/eden/patches/` and power the N23 recurring improvement agent
+(see the roadmap). A full autonomous code-modification surface is
+planned but not yet scheduled.
 
 ## Closed-loop hooks
 
@@ -221,8 +223,8 @@ Slack channels) — see [Reference → Webhooks](/reference/webhooks).
 
 - Cat 17 — Streaming Intelligence (planned v1.7.x)
 - Cat 16 — Code Generation Eval (planned v1.8)
-- The full Cat 23 real ship (planned v1.6 Phase 6, 8 weeks,
-  gated on the SLM Initiative)
+- Cat 23 autonomous code-modification service (stub was cut in Phase 1B;
+  see Cat 23 entry above)
 
 Read the per-category write-ups in `docs/docs/observability/` for
 the implementation details (internal docs, excluded from the

@@ -214,7 +214,8 @@ class TestCompleteness:
             "trace_store",
             "kafka_consumer",
             "kafka_producer",
-            "ksql_client",
+            # "ksql_client" removed 2026-08-12 (OOM W1-9 / A3): the dead
+            # ksqlDB integration was deleted along with its shutdown entry.
             "edge_fanout",
             "hilt_controller",
             "alert_processor",

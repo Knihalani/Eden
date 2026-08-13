@@ -16,18 +16,70 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-import secrets
+import os
+import random
+import threading
 import time
-import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
-from eden_sdk.capture import capture_value, limits_from_config, stamp_capture_attributes
+from eden_sdk.capture import (
+    CAPTURE_MODE_ATTR,
+    ORIGINAL_BYTES_ATTR,
+    TRUNCATED_ATTR,
+    capture_value,
+    limits_from_config,
+    stamp_capture_attributes,
+)
 from eden_sdk.client import TraceEvent, get_default_client
-from eden_sdk.config import get_config
+from eden_sdk.config import EdenConfig, get_config
+
+# ── S11: fast span / trace ID generation ─────────────────────────────
+#
+# secrets.token_hex(8) makes an os.urandom() system call on every span
+# (~2.8 µs).  uuid4() also calls os.urandom(16) (~7 µs).  A
+# thread-local PRNG seeded ONCE from os.urandom() is ~10× faster and
+# provides sufficient (64-bit for spans, 128-bit for traces) randomness
+# for within-session correlation IDs.  Neither field is security-
+# sensitive — they exist only for tracing correlation.
+#
+# Snapshot semantics: each new thread gets a fresh seed from os.urandom,
+# so IDs are unpredictable across thread restarts.  Reuse of a seeded
+# PRNG state within a thread means IDs are deterministic for a given
+# seed, which is acceptable for observability identifiers.
+
+_id_tls = threading.local()
+
+
+def _tls_rng() -> random.Random:
+    """Return (or initialise) the per-thread PRNG.
+
+    Fork-safe: the seeded generator is tagged with the pid that created
+    it, so a forked child (gunicorn prefork, ``multiprocessing``) reseeds
+    instead of replaying the parent's ID stream — duplicate span/trace
+    ids across processes would corrupt trace assembly server-side.
+    """
+    try:
+        if _id_tls.pid == os.getpid():
+            return _id_tls.rng
+    except AttributeError:
+        pass
+    _id_tls.rng = rng = random.Random(int.from_bytes(os.urandom(8), "big"))
+    _id_tls.pid = os.getpid()
+    return rng
+
+
+def _make_span_id() -> str:
+    """Return a 16-hex-char span ID using the thread-local PRNG."""
+    return _tls_rng().getrandbits(64).to_bytes(8, "big").hex()
+
+
+def _make_trace_id() -> str:
+    """Return a 32-hex-char trace ID (128-bit) using the thread-local PRNG."""
+    return _tls_rng().getrandbits(128).to_bytes(16, "big").hex()
 
 logger = logging.getLogger("eden_sdk.trace")
 
@@ -64,7 +116,7 @@ class Span:
     this — the dataclass is just for users that drive the SDK by hand.
     """
 
-    span_id: str = field(default_factory=lambda: secrets.token_hex(8))
+    span_id: str = field(default_factory=_make_span_id)
     name: str = "span"
     start: float = field(default_factory=time.perf_counter)
     end: float | None = None
@@ -158,7 +210,7 @@ class Span:
 class TraceContext:
     """A logical trace — groups a tree of spans under one ``trace_id``."""
 
-    trace_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    trace_id: str = field(default_factory=_make_trace_id)
     name: str = "trace"
     start: float = field(default_factory=time.perf_counter)
     attributes: dict[str, Any] = field(default_factory=dict)
@@ -201,7 +253,7 @@ def trace(
     elif parent is not None:
         new_trace_id = parent.trace_id
     else:
-        new_trace_id = uuid.uuid4().hex
+        new_trace_id = _make_trace_id()
     ctx = TraceContext(
         trace_id=new_trace_id,
         name=name,
@@ -223,25 +275,26 @@ def trace(
     span.trace_token = trace_token  # type: ignore[attr-defined]
     span.span_token = span_token  # type: ignore[attr-defined]
 
+    # S4: Short-circuit the live check when neither cfg.live nor stream=True
+    # is set — avoids a module import + env-var read on every no-live span.
     live_on = False
-    try:
-        from eden_sdk.live import emit_span_live, live_mode_enabled
+    if cfg.live or stream is True:
+        try:
+            from eden_sdk.live import emit_span_live, live_mode_enabled
 
-        live_on = live_mode_enabled(stream=stream) or bool(
-            getattr(cfg, "live", False)
-        )
-        if live_on:
-            emit_span_live(
-                session_id=new_trace_id,
-                event_type="span_start",
-                span_id=span.span_id,
-                name=name,
-                trace_id=new_trace_id,
-                parent_id=span.parent_span_id,
-                stream=True,
-            )
-    except Exception:
-        live_on = False
+            live_on = live_mode_enabled(stream=stream) or cfg.live
+            if live_on:
+                emit_span_live(
+                    session_id=new_trace_id,
+                    event_type="span_start",
+                    span_id=span.span_id,
+                    name=name,
+                    trace_id=new_trace_id,
+                    parent_id=span.parent_span_id,
+                    stream=True,
+                )
+        except Exception:
+            live_on = False
 
     try:
         yield span
@@ -253,7 +306,8 @@ def trace(
             span.finish()
     finally:
         # Always emit a framework event for the trace, even on errors.
-        _emit_trace_event(span, ctx)
+        # S4: pass cfg so _emit_trace_event doesn't call get_config() again.
+        _emit_trace_event(span, ctx, cfg)
         if live_on:
             try:
                 from eden_sdk.live import emit_span_live, get_live_publisher
@@ -315,11 +369,12 @@ def _map_attr_key(key: str) -> str:
     return f"eden.span.{key}"
 
 
-def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
-    """Build and enqueue a framework-format event for a closed span."""
-    from eden_sdk.config import get_config as _gc
+def _emit_trace_event(span: Span, ctx: TraceContext, cfg: EdenConfig) -> None:
+    """Build and enqueue a framework-format event for a closed span.
 
-    cfg = _gc()
+    ``cfg`` is threaded in from :func:`trace` (S4: avoids a second
+    ``get_config()`` lock acquisition on every span).
+    """
     if not cfg.enabled:
         return
     duration_ms = span.duration_ms
@@ -348,35 +403,45 @@ def _emit_trace_event(span: Span, ctx: TraceContext) -> None:
     pending_outcome = raw_attrs.pop("eden._pending_outcome", None)
     final_outcome = pending_outcome or span.outcome
 
-    # Bounded capture applies at emission time (not when set_input/
-    # set_output was called) so the error/slow bypass sees the span's
-    # FINAL outcome and duration regardless of call order — a span
-    # that calls set_input() before it knows it will error still gets
-    # the full-fidelity keep.
-    limits = limits_from_config(get_config())
-    has_error = bool(span.error) or final_outcome == "error"
-    input_result = capture_value(
-        input_val, has_error=has_error, duration_ms=duration_ms, limits=limits
-    )
-    output_result = capture_value(
-        output_val, has_error=has_error, duration_ms=duration_ms, limits=limits
-    )
-    input_val = input_result.value
-    output_val = output_result.value
-
     attributes: dict[str, Any] = {
         **{f"eden.span.{k}": str(v) for k, v in raw_attrs.items()},
         "eden.span_id": span.span_id,
         "eden.trace_name": ctx.name,
     }
-    stamp_capture_attributes(attributes, input_result, output_result)
+
+    # S3: Bounded capture applies at emission time (not when set_input/
+    # set_output was called) so the error/slow bypass sees the span's
+    # FINAL outcome and duration regardless of call order.
+    #
+    # Fast path: when both values are absent (the common case for simple
+    # spans) we skip CaptureLimits construction and capture_value() calls
+    # entirely — they would return None/0 immediately. Stamp attribute
+    # defaults inline instead.
+    if input_val is None and output_val is None:
+        attributes[TRUNCATED_ATTR] = "false"
+        attributes[ORIGINAL_BYTES_ATTR] = "0"
+        attributes[CAPTURE_MODE_ATTR] = cfg.capture_mode
+    else:
+        # S3/S4: limits built from the already-fetched cfg; no second
+        # get_config() call needed.
+        limits = limits_from_config(cfg)
+        has_error = bool(span.error) or final_outcome == "error"
+        input_result = capture_value(
+            input_val, has_error=has_error, duration_ms=duration_ms, limits=limits
+        )
+        output_result = capture_value(
+            output_val, has_error=has_error, duration_ms=duration_ms, limits=limits
+        )
+        input_val = input_result.value
+        output_val = output_result.value
+        stamp_capture_attributes(attributes, input_result, output_result)
 
     payload: dict[str, Any] = {
         "event_id": f"eden_span_{span.span_id}",
         "trace_id": ctx.trace_id,
         "name": span.name,
         "event_type": "agent.run",
-        "agent_id": (getattr(get_config(), "agent_id", None) or ctx.name),
+        "agent_id": (cfg.agent_id or ctx.name),
         "agent_version": None,
         "duration_ms": duration_ms,
         "outcome": final_outcome,

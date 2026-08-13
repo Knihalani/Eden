@@ -210,116 +210,68 @@ def test_create_pool_honours_configured_statement_cache_size():
 
 
 def test_down_revision_chain_continues():
-    """Migration 043 chains correctly off 042."""
-    import importlib
+    """Squash is the chain base (covers migration 043)."""
+    import importlib.util
+    from pathlib import Path
 
-    m = importlib.import_module(
-        "eden.db_migrations.versions.043_neon_cost_indexes"
+    versions_dir = (
+        Path(__file__).resolve().parents[3]
+        / "src" / "eden" / "db_migrations" / "versions"
     )
-    assert m.revision == "043"
-    assert m.down_revision == "042"
+    path = versions_dir / "000_squash_001_160.py"
+    spec = importlib.util.spec_from_file_location("migration_squash", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.revision == "160_signal_definitions_org_enabled_created"
+    assert mod.down_revision is None
 
 
 def test_migration_uses_create_index_if_not_exists():
-    """Migration must be idempotent (CREATE INDEX IF NOT EXISTS)."""
-    import importlib
+    """Squash upgrade contains idempotent index creation from migration 043."""
+    from pathlib import Path
 
-    m = importlib.import_module(
-        "eden.db_migrations.versions.043_neon_cost_indexes"
+    versions_dir = (
+        Path(__file__).resolve().parents[3]
+        / "src" / "eden" / "db_migrations" / "versions"
     )
-
-    src = m.upgrade.__code__.co_consts
-    assert any(
-        isinstance(c, str) and "CREATE INDEX IF NOT EXISTS" in c
-        for c in src
-    )
-    # The downgrade path drops the three indexes it creates.
-    down_src = m.downgrade.__code__.co_consts
-    for idx in (
+    text = (versions_dir / "000_squash_001_160.py").read_text()
+    assert "CREATE INDEX IF NOT EXISTS" in text
+    # The squash must include the 043 indexes.
+    for idx_name in (
         "idx_telemetry_events_tenant_created_at",
         "idx_notifications_user_created_at",
         "idx_notifications_user_unread",
     ):
-        assert any(
-            isinstance(c, str) and idx in c for c in down_src
-        ), f"downgrade() must drop {idx}"
+        assert idx_name in text, f"squash missing index {idx_name}"
 
 
 def test_migration_044_chains_off_043_and_drops_redundant_indexes():
-    """Migration 044 chains off 043, creates the new composite indexes,
-    drops the now-redundant single-column indexes, and tunes autovacuum.
-    """
-    import importlib
+    """Squash contains migration 044's composite-index DDL and redundant-drop list."""
+    from pathlib import Path
 
-    m = importlib.import_module(
-        "eden.db_migrations.versions.044_neon_cost_indexes_2"
+    versions_dir = (
+        Path(__file__).resolve().parents[3]
+        / "src" / "eden" / "db_migrations" / "versions"
     )
-    assert m.revision == "044"
-    assert m.down_revision == "043"
-
-    # The composite-index column lists are interpolated at call time
-    # via f-strings, so they don't appear in co_consts. Check the
-    # module-level _INDEXES tuple directly — that's what the runtime
-    # actually consumes.
-    declared_indexes = {
-        (table, columns): where
-        for (table, columns, where, _comment) in m._INDEXES
-    }
-    assert ("jobs", "(user_id, created_at DESC)") in declared_indexes
-    assert ("jobs", "(org_id, created_at DESC)") in declared_indexes
-    assert ("jobs", "(status, created_at DESC)") in declared_indexes
-    # And the partial-index WHERE clause is present for the worker-poll
-    # entry.
-    assert declared_indexes[("jobs", "(status, created_at DESC)")] == (
-        "WHERE status IN ('pending', 'running')"
-    )
-
-    up_src = m.upgrade.__code__.co_consts
-    assert any(
-        isinstance(c, str) and "CREATE INDEX IF NOT EXISTS" in c
-        for c in up_src
-    ), "upgrade() must use CREATE INDEX IF NOT EXISTS"
-    # _REDUNDANT_DROPS is the module-level tuple of (table, idx_name)
-    # pairs the upgrade drops. Verify the two single-column jobs
-    # indexes we want gone are in it.
-    dropped = {idx for _tbl, idx in m._REDUNDANT_DROPS}
-    assert {"idx_jobs_user_id", "idx_jobs_org_id"} <= dropped
-    # Autovacuum tuning — table names interpolated at runtime, just
-    # confirm the ALTER TABLE template literal exists.
-    assert any(
-        isinstance(c, str) and "ALTER TABLE " in c
-        for c in up_src
-    ), "upgrade() must use the ALTER TABLE template"
-
-    # Autovacuum values are also runtime-interpolated; check the
-    # module-level _AUTOVACUUM table directly.
-    tuned_tables = {row[0] for row in m._AUTOVACUUM}
-    assert {"telemetry_events", "judge_scores", "silver_events", "jobs"} <= (
-        tuned_tables
-    )
-    # All tune values are below the Postgres defaults (0.2 / 0.1).
-    for _tbl, vac, ana, _comment in m._AUTOVACUUM:
-        assert vac < 0.2
-        assert ana < 0.1
+    text = (versions_dir / "000_squash_001_160.py").read_text()
+    # The squash must contain the 044 indexes.
+    assert "CREATE INDEX IF NOT EXISTS" in text
+    # _REDUNDANT_DROPS includes idx_jobs_user_id and idx_jobs_org_id.
+    assert "idx_jobs_user_id" in text
+    assert "idx_jobs_org_id" in text
+    # _AUTOVACUUM content present in the upgrade body.
+    assert "_AUTOVACUUM" in text
+    assert "telemetry_events" in text
 
 
 def test_migration_044_downgrade_restores_dropped_indexes():
-    """Downgrade must recreate the dropped single-column indexes so a
-    rollback leaves the schema in a state compatible with 043."""
-    import importlib
+    """Squash downgrade raises NotImplementedError (squash boundary)."""
+    from pathlib import Path
 
-    m = importlib.import_module(
-        "eden.db_migrations.versions.044_neon_cost_indexes_2"
+    versions_dir = (
+        Path(__file__).resolve().parents[3]
+        / "src" / "eden" / "db_migrations" / "versions"
     )
-    down_src = m.downgrade.__code__.co_consts
-    # Both halves of the col mapping dict are interpolated into the
-    # CREATE statement at call time; spot-check the column names + the
-    # literal CREATE INDEX IF NOT EXISTS template.
-    assert any(
-        isinstance(c, str) and "CREATE INDEX IF NOT EXISTS" in c
-        for c in down_src
-    ), "downgrade() must restore dropped indexes"
-    for col in ("user_id", "org_id"):
-        assert any(
-            isinstance(c, str) and col in c for c in down_src
-        ), f"downgrade() must reference column {col}"
+    text = (versions_dir / "000_squash_001_160.py").read_text()
+    downgrade_body = text.split("def downgrade()", 1)[1]
+    assert "NotImplementedError" in downgrade_body

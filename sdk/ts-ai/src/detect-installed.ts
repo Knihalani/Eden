@@ -9,6 +9,7 @@ export interface AutoInstrumentResult {
   anthropic: boolean;
   vercelAi: boolean;
   langchain: boolean;
+  langgraph: boolean;
   mastra: boolean;
   bedrock: boolean;
   gemini: boolean;
@@ -66,6 +67,7 @@ export function detectInstalledFrameworks(
     anthropic: false,
     vercelAi: false,
     langchain: false,
+    langgraph: false,
     mastra: false,
     bedrock: false,
     gemini: false,
@@ -91,6 +93,11 @@ export function detectInstalledFrameworks(
   }
   try {
     if (_safeRequire("@langchain/core")) result.langchain = true;
+  } catch {
+    // not installed
+  }
+  try {
+    if (_safeRequire("@langchain/langgraph")) result.langgraph = true;
   } catch {
     // not installed
   }

@@ -238,8 +238,11 @@ async def _event_stream(
             backfilled = await _replay_since(org_id, last_event_id)
             for ev_seq, ev in backfilled:
                 events_sent += 1
+                # Route by _sse_event_type so non-trace events (e.g.
+                # notification:new) get the right SSE event name.
+                sse_type = ev.pop("_sse_event_type", "trace")
                 yield _format_sse(
-                    "trace", json.dumps(ev, default=str), event_id=str(ev_seq)
+                    sse_type, json.dumps(ev, default=str), event_id=str(ev_seq)
                 )
 
         while True:
@@ -308,8 +311,12 @@ async def _event_stream(
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
             events_sent += 1
+            # Route by _sse_event_type so non-trace events (e.g.
+            # notification:new) get the right SSE event name. Pop
+            # the field so it is not forwarded to the client.
+            sse_type = payload.pop("_sse_event_type", "trace")
             yield _format_sse(
-                "trace",
+                sse_type,
                 json.dumps(payload, default=str),
                 event_id=str(redis_seq),
             )
@@ -499,3 +506,20 @@ async def publish_trace_event(org_id: str, payload: dict[str, Any]) -> None:
             _sse_maint_at[org_id] = now + _SSE_MAINT_REFRESH_S
     except Exception as exc:
         logger.debug(f"publish_trace_event failed: {exc}")
+
+
+async def publish_notification_event(org_id: str, payload: dict[str, Any]) -> None:
+    """Publish a ``notification:new`` SSE event to the per-tenant stream.
+
+    Reuses ``publish_trace_event`` so the same Redis channel, ZSET replay
+    buffer, and NUMSUB skip-when-idle logic apply.  The
+    ``_sse_event_type`` field is stripped by ``_event_stream`` before the
+    message reaches the client so it is not part of the public API
+    contract.
+
+    Called from notification-insert sites (budget_service, alert dispatch,
+    etc.) to push a real-time hint to the portal so it can refresh the
+    notifications list without waiting for the 5-minute fallback poll.
+    """
+    enriched = {**payload, "_sse_event_type": "notification:new"}
+    await publish_trace_event(org_id, enriched)

@@ -1,0 +1,73 @@
+name: doc-drift (changelog freshness + flag-drift)
+
+# Two fast checks that catch the two most common doc-vs-code drift patterns:
+#
+#   1. changelog-freshness — compares eden_sdk.__version__ (and the TS
+#      package.json version) against the newest heading in each SDK
+#      CHANGELOG.md; fails if there's a mismatch so a version bump is
+#      never shipped without a changelog entry.
+#
+#   2. flag-drift — greps docs/ for claim patterns that assert a
+#      feature is live when its config.py default is False; fails on
+#      any hit so flag-off features don't accidentally get advertised
+#      as production-ready.
+#
+# Both checks are fast (no DB, no network) and run on every PR that
+# touches docs/ or SDK source files. The scripts live in scripts/ and
+# can also be run locally:
+#
+#   python scripts/check_changelog_freshness.py
+#   python scripts/doc_flag_drift.py
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "sdk/python/**"
+      - "sdk/ts-ai/**"
+      - "src/eden/config.py"
+      - "scripts/check_changelog_freshness.py"
+      - "scripts/doc_flag_drift.py"
+      - ".github/workflows/doc-drift.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "sdk/python/**"
+      - "sdk/ts-ai/**"
+      - "src/eden/config.py"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: doc-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changelog-freshness:
+    name: Changelog matches SDK version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check changelog freshness
+        run: python scripts/check_changelog_freshness.py
+
+  flag-drift:
+    name: Docs don't claim default-off flags are live
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check flag drift
+        run: python scripts/doc_flag_drift.py

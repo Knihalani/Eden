@@ -1,6 +1,7 @@
 import { HydrationBoundary, type DehydratedState } from "@tanstack/react-query";
 import { dehydrateTraces } from "@/lib/portal-dehydrate";
 import { resolvePortalPrefetchAuth } from "@/lib/portal-ssr";
+import { DemoBanner } from "@/components/onboarding/DemoBanner";
 import TracesClient from "./traces-client";
 
 export const metadata = {
@@ -29,11 +30,19 @@ export default async function TracesPage() {
     }
   }
   if (!dehydratedState) {
-    return <TracesClient />;
+    return (
+      <>
+        <DemoBanner />
+        <TracesClient />
+      </>
+    );
   }
   return (
-    <HydrationBoundary state={dehydratedState}>
-      <TracesClient />
-    </HydrationBoundary>
+    <>
+      <DemoBanner />
+      <HydrationBoundary state={dehydratedState}>
+        <TracesClient />
+      </HydrationBoundary>
+    </>
   );
 }

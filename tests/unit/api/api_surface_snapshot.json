@@ -45,6 +45,10 @@
       "204:empty",
       "422:application/json"
     ],
+    "DELETE /orgs/{org_id}/dashboards/{dashboard_id}/widgets/{widget_id}": [
+      "204:empty",
+      "422:application/json"
+    ],
     "DELETE /orgs/{org_id}/data-platform/gdpr/tenant": [
       "200:application/json",
       "422:application/json"
@@ -74,6 +78,14 @@
       "422:application/json"
     ],
     "DELETE /orgs/{org_id}/nl-alert-rules/{rule_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/observability/judges/definitions/{judge_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "DELETE /orgs/{org_id}/observability/traces/{trace_id}/bookmark": [
       "200:application/json",
       "422:application/json"
     ],
@@ -258,6 +270,10 @@
       "422:application/json"
     ],
     "GET /orgs/{org_id}/agent-issues/{issue_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/debug-context": [
       "200:application/json",
       "422:application/json"
     ],
@@ -465,6 +481,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "GET /orgs/{org_id}/billing/sampling-stats": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "GET /orgs/{org_id}/browser-sessions/{session_id}": [
       "200:application/json",
       "422:application/json"
@@ -518,6 +538,10 @@
       "422:application/json"
     ],
     "GET /orgs/{org_id}/dashboards/home": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/dashboards/{dashboard_id}": [
       "200:application/json",
       "422:application/json"
     ],
@@ -1134,6 +1158,14 @@
       "422:application/json"
     ],
     "GET /orgs/{org_id}/observability/judges": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/judges/definitions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "GET /orgs/{org_id}/observability/judges/definitions/{judge_id}": [
       "200:application/json",
       "422:application/json"
     ],
@@ -1842,6 +1874,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "PATCH /orgs/{org_id}/prompts/{agent}/canary/{experiment_id}": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "PATCH /orgs/{org_id}/prompts/{name}": [
       "200:application/json",
       "422:application/json"
@@ -2169,6 +2205,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/billing/portal": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/billing/subscribe": [
       "200:application/json",
       "422:application/json"
@@ -2362,6 +2402,10 @@
       "422:application/json"
     ],
     "POST /orgs/{org_id}/improve/plans/{plan_id}/approve": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/iterate": [
       "200:application/json",
       "422:application/json"
     ],
@@ -3101,6 +3145,14 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /orgs/{org_id}/observability/judges/definitions": [
+      "200:application/json",
+      "422:application/json"
+    ],
+    "POST /orgs/{org_id}/observability/judges/definitions/{judge_id}/execute": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /orgs/{org_id}/observability/judges/run": [
       "200:application/json",
       "422:application/json"
@@ -3500,6 +3552,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "POST /v1/internal/onboarding/{org_id}/seed-demo": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "POST /v1/llmops/stat_gate/evaluate": [
       "200:application/json",
       "422:application/json"
@@ -3547,6 +3603,10 @@
       "200:application/json",
       "422:application/json"
     ],
+    "PUT /orgs/{org_id}/observability/traces/{trace_id}/bookmark": [
+      "200:application/json",
+      "422:application/json"
+    ],
     "PUT /orgs/{org_id}/pii-policy": [
       "200:application/json",
       "422:application/json"
@@ -3580,7 +3640,7 @@
     "application/json",
     "text/plain"
   ],
-  "route_count": 911,
+  "route_count": 926,
   "routes": [
     "DELETE /api/v1/me",
     "DELETE /api/v1/orgs/{org_id}/data",
@@ -3593,6 +3653,7 @@
     "DELETE /orgs/{org_id}/api-keys/{key_id}",
     "DELETE /orgs/{org_id}/automations/{automation_id}",
     "DELETE /orgs/{org_id}/cost-overrides/{override_id}",
+    "DELETE /orgs/{org_id}/dashboards/{dashboard_id}/widgets/{widget_id}",
     "DELETE /orgs/{org_id}/data-platform/gdpr/tenant",
     "DELETE /orgs/{org_id}/datasets/{dataset_id}",
     "DELETE /orgs/{org_id}/datasets/{dataset_id}/rows/{row_id}",
@@ -3603,6 +3664,8 @@
     "DELETE /orgs/{org_id}/intelligence/code-change/{path:path}",
     "DELETE /orgs/{org_id}/members/{user_id}",
     "DELETE /orgs/{org_id}/nl-alert-rules/{rule_id}",
+    "DELETE /orgs/{org_id}/observability/judges/definitions/{judge_id}",
+    "DELETE /orgs/{org_id}/observability/traces/{trace_id}/bookmark",
     "DELETE /orgs/{org_id}/references/{ref_id}",
     "DELETE /orgs/{org_id}/roles/{role_id}",
     "DELETE /orgs/{org_id}/roles/{role_id}/assignments/{assignment_id}",
@@ -3655,6 +3718,7 @@
     "GET /orgs/{org_id}/admin/synthetics/last",
     "GET /orgs/{org_id}/agent-issues",
     "GET /orgs/{org_id}/agent-issues/{issue_id}",
+    "GET /orgs/{org_id}/agent-issues/{issue_id}/debug-context",
     "GET /orgs/{org_id}/agent-issues/{issue_id}/experiments",
     "GET /orgs/{org_id}/agent-issues/{issue_id}/experiments/{link_id}/report",
     "GET /orgs/{org_id}/agent-issues/{issue_id}/regression-cases",
@@ -3706,6 +3770,7 @@
     "GET /orgs/{org_id}/billing/invoices",
     "GET /orgs/{org_id}/billing/payment-method",
     "GET /orgs/{org_id}/billing/plans",
+    "GET /orgs/{org_id}/billing/sampling-stats",
     "GET /orgs/{org_id}/browser-sessions/{session_id}",
     "GET /orgs/{org_id}/budget",
     "GET /orgs/{org_id}/budget/actions",
@@ -3720,6 +3785,7 @@
     "GET /orgs/{org_id}/cost-overrides",
     "GET /orgs/{org_id}/dashboards",
     "GET /orgs/{org_id}/dashboards/home",
+    "GET /orgs/{org_id}/dashboards/{dashboard_id}",
     "GET /orgs/{org_id}/data-platform/etl/report/latest",
     "GET /orgs/{org_id}/data-platform/gdpr/export",
     "GET /orgs/{org_id}/data-platform/lineage/dataset/{dataset_name}",
@@ -3876,6 +3942,8 @@
     "GET /orgs/{org_id}/nudges",
     "GET /orgs/{org_id}/observability/heatmaps/{metric_name}",
     "GET /orgs/{org_id}/observability/judges",
+    "GET /orgs/{org_id}/observability/judges/definitions",
+    "GET /orgs/{org_id}/observability/judges/definitions/{judge_id}",
     "GET /orgs/{org_id}/observability/judges/{judge_run_id}",
     "GET /orgs/{org_id}/observability/mcp/auth-failures",
     "GET /orgs/{org_id}/observability/mcp/graph",
@@ -4056,6 +4124,7 @@
     "PATCH /orgs/{org_id}/online-scoring/rules/{rule_id}",
     "PATCH /orgs/{org_id}/playgrounds/{playground_id}",
     "PATCH /orgs/{org_id}/production-eval/policies",
+    "PATCH /orgs/{org_id}/prompts/{agent}/canary/{experiment_id}",
     "PATCH /orgs/{org_id}/prompts/{name}",
     "PATCH /orgs/{org_id}/saved-searches/{search_id}",
     "PATCH /orgs/{org_id}/scim/v2/Users/{scim_user_id}",
@@ -4138,6 +4207,7 @@
     "POST /orgs/{org_id}/automations",
     "POST /orgs/{org_id}/automations/{automation_id}/toggle",
     "POST /orgs/{org_id}/billing/cancel",
+    "POST /orgs/{org_id}/billing/portal",
     "POST /orgs/{org_id}/billing/subscribe",
     "POST /orgs/{org_id}/billing/webhook",
     "POST /orgs/{org_id}/browser-sessions",
@@ -4187,6 +4257,7 @@
     "POST /orgs/{org_id}/improve/items/{item_ref:path}/approve",
     "POST /orgs/{org_id}/improve/items/{item_ref:path}/snooze",
     "POST /orgs/{org_id}/improve/plans/{plan_id}/approve",
+    "POST /orgs/{org_id}/improve/plans/{plan_id}/iterate",
     "POST /orgs/{org_id}/improve/plans/{plan_id}/merge",
     "POST /orgs/{org_id}/improve/plans/{plan_id}/reject",
     "POST /orgs/{org_id}/improve/plans/{plan_id}/revert",
@@ -4373,6 +4444,8 @@
     "POST /orgs/{org_id}/nudges",
     "POST /orgs/{org_id}/nudges/{nudge_id}/archive",
     "POST /orgs/{org_id}/nudges/{nudge_id}/promote",
+    "POST /orgs/{org_id}/observability/judges/definitions",
+    "POST /orgs/{org_id}/observability/judges/definitions/{judge_id}/execute",
     "POST /orgs/{org_id}/observability/judges/run",
     "POST /orgs/{org_id}/observability/telemetry/ingest",
     "POST /orgs/{org_id}/observability/telemetry/ingest/batch",
@@ -4472,6 +4545,7 @@
     "POST /v1/internal/onboarding/{org_id}/advance",
     "POST /v1/internal/onboarding/{org_id}/enable_cat",
     "POST /v1/internal/onboarding/{org_id}/milestone",
+    "POST /v1/internal/onboarding/{org_id}/seed-demo",
     "POST /v1/llmops/stat_gate/evaluate",
     "POST /v1/mcp",
     "POST /v1/mcp/",
@@ -4486,6 +4560,7 @@
     "PUT /orgs/{org_id}/improve/schedule",
     "PUT /orgs/{org_id}/intelligence/code-change",
     "PUT /orgs/{org_id}/intelligence/code-change/{path:path}",
+    "PUT /orgs/{org_id}/observability/traces/{trace_id}/bookmark",
     "PUT /orgs/{org_id}/pii-policy",
     "PUT /orgs/{org_id}/prompts/{name}/pins/{env}",
     "PUT /orgs/{org_id}/retention-policy",
@@ -4494,7 +4569,7 @@
     "PUT /orgs/{org_id}/sidebar-prefs",
     "PUT /orgs/{org_id}/slack/routes"
   ],
-  "schema_count": 556,
+  "schema_count": 563,
   "schemas": [
     "APIEnvelope",
     "APIMeta",
@@ -4558,6 +4633,7 @@
     "Body_upload_my_avatar_auth_users_me_avatar_post",
     "Body_upload_reference_orgs__org_id__references_post",
     "BookConfigRequest",
+    "BookmarkResponse",
     "BooleanCategoricalRequest",
     "BudgetStatusResponse",
     "BulkRegenerateRequest",
@@ -4569,6 +4645,7 @@
     "CacheSetRequest",
     "CacheStatsResponse",
     "CanaryCreateRequest",
+    "CanaryUpdateRequest",
     "CapacityRequest",
     "ChainVerifyEntry",
     "ChainVerifyResponse",
@@ -4614,6 +4691,7 @@
     "CreateDatasetItemRequest",
     "CreateDatasetRequest",
     "CreateDebugSessionRequest",
+    "CreateDeterministicJudgeRequest",
     "CreateNotificationRequest",
     "CreateOrgBody",
     "CreatePlaygroundRequest",
@@ -4664,6 +4742,7 @@
     "EnsurePartitionRequest",
     "EvaluateRequest",
     "ExampleSpec",
+    "ExecuteDeterministicJudgeRequest",
     "ExperimentCreate",
     "ExperimentRunCreate",
     "ExperimentSummary",
@@ -4724,6 +4803,7 @@
     "IssueTokenRequest",
     "IssueTokenResponse",
     "ItemResponse",
+    "IterateRequest",
     "JudgeListResponse",
     "JudgeRunRequest",
     "JudgeRunResponse",
@@ -4997,8 +5077,10 @@
     "_PaymentMethodResponse",
     "_PermissionAssignRequest",
     "_PermissionAssignmentResponse",
+    "_PortalRequest",
     "_ProfileUpdate",
     "_ResetPasswordRequest",
+    "_SamplingStatsResponse",
     "_StoreErasureStatus",
     "_VerifyEmailRequest",
     "eden__api__portal_contracts__TraceListItem",

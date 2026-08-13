@@ -392,6 +392,22 @@ TELEMETRY_INSERT_SQL = """
                 ON CONFLICT (event_id, timestamp) DO NOTHING
                 """
 
+# ── 3.1 Agent-registration touch cooldown ────────────────────────────────────
+# Skip UPSERTs for (org_id, agent_id) pairs seen within the last 5 minutes —
+# identical to the pattern used for Redis stream EXPIRE (``_step_expire_at``).
+# Module-level so the state persists across ``ingest_one`` / ``ingest_batch``
+# calls on the same collector singleton.
+_AGENT_TOUCH_COOLDOWN_S: float = 300.0   # 5 min → 5–50× fewer UPSERTs
+_AGENT_TOUCH_CACHE_MAX: int = 10_000     # prune when dict exceeds this
+_agent_touch_cache: dict[tuple[str, str], float] = {}
+
+# ── 3.3 Compression offload threshold ────────────────────────────────────────
+# Mirror of ``_GZIP_OFFLOAD_BYTES`` in ingestion/providers.py: if the total
+# number of fields handed to ``compress_many`` is small, the asyncio.to_thread
+# dispatch overhead (~30–100 µs) exceeds the actual work (~16 µs), so call
+# synchronously instead.
+_COMPRESS_OFFLOAD_FIELDS: int = 4
+
 
 class TelemetryCollector:
     """Central telemetry ingestion and routing engine.
@@ -431,6 +447,11 @@ class TelemetryCollector:
     # so N dropped events never spawn N flush tasks (the batch path still
     # flushes once per batch, which is the primary drain).
     SAMPLING_FLUSH_COOLDOWN_S = 2.0
+    # 3.2 Billing buffer — accumulate rows across ingest batches and flush
+    # every BILLING_FLUSH_INTERVAL_S or when the buffer exceeds BILLING_FLUSH_MAX_ROWS.
+    # Mirrors the CH telemetry buffer (``CH_FLUSH_INTERVAL_S`` / ``CH_TELEMETRY_BATCH_SIZE``).
+    BILLING_FLUSH_INTERVAL_S = 30.0
+    BILLING_FLUSH_MAX_ROWS = 500
 
     def __init__(self) -> None:
         self._redis: Any = None
@@ -453,6 +474,10 @@ class TelemetryCollector:
         self._stream_expire_at = BoundedExpiryCache(resolve_max_entries())
         self._bg_tasks: set[asyncio.Task[Any]] = set()
         self._last_sampling_flush = 0.0
+        # 3.2 Billing buffer — drained by timer loop or size threshold
+        self._billing_buffer: list[dict[str, Any]] = []
+        self._billing_buffer_lock = asyncio.Lock()
+        self._billing_flush_task: asyncio.Task[None] | None = None
 
     # ── Sink accessors ────────────────────────────────────────────────────
 
@@ -850,30 +875,30 @@ class TelemetryCollector:
     async def _persist_checkpoints_batch(self, events: list[TelemetryEvent]) -> None:
         """F03 best-effort debugger checkpoints for a batch, in ONE task.
 
-        Same semantics as the old per-event ``_spawn_bg(maybe_persist_checkpoint(ev))``
-        fan-out (each event still gets its own best-effort persist; a failure
-        in one never fails ingest or aborts the loop), but collapses N task
-        creations into one.
+        3.2: Delegates to :func:`maybe_persist_checkpoints_batch` which
+        evaluates qualifying events in Python and issues at most 2 Neon
+        round-trips for the whole batch:
+          1. ``executemany`` → ``telemetry_events`` (audit trail)
+          2. ``executemany`` → ``debugger_llm_cache`` (prefix-cache reuse)
+        Down from N × 2 ``execute`` calls for a N-event batch.
         """
         try:
             from eden.observability.ingestion.checkpoint_hook import (
-                maybe_persist_checkpoint,
+                maybe_persist_checkpoints_batch,
             )
-        except Exception:  # pragma: no cover — hook always importable
-            return
-        for ev in events:
-            try:
-                await maybe_persist_checkpoint(ev)
-            except Exception:  # noqa: BLE001 — never fail ingest for debugger
-                continue
+            await maybe_persist_checkpoints_batch(events)
+        except Exception:  # noqa: BLE001 — never fail ingest for debugger
+            pass
 
     async def _emit_billing_events(self, events: list[TelemetryEvent]) -> None:
-        """Record a ``usage_events`` row for every LLM completion event.
+        """Buffer billing rows for every LLM completion event.
 
-        Mirrors what :func:`eden.services.usage_service.UsageService.track_event`
-        accepts: a single quantity + USD cost for the event. We compute
-        the cost on the server from the token counts the SDK already
-        shipped so the SDK never has to ship a pricing model.
+        3.2: Rows are accumulated in ``self._billing_buffer`` and flushed
+        to :class:`~eden.services.usage_service.UsageService` either when
+        the buffer reaches ``BILLING_FLUSH_MAX_ROWS`` or by the periodic
+        ``_billing_flush_loop`` (every ``BILLING_FLUSH_INTERVAL_S`` s).
+        This decouples Neon round-trips from ingest-batch boundaries so
+        many small batches share one ``track_events_batch`` call.
 
         Only ``llm.completion`` / ``llm_completion`` /
         ``llm_completion_stream`` event types carry billing signal —
@@ -881,18 +906,6 @@ class TelemetryCollector:
         skipped here and rolled up via other surfaces (job_start,
         storage_mb, …).
         """
-        # Local imports so the collector doesn't pull in usage_service
-        # at module load (avoids circular imports in some test setups).
-        try:
-            from eden.services.usage_service import UsageService
-        except Exception:  # pragma: no cover — usage service unavailable
-            return
-
-        try:
-            service = UsageService()
-        except Exception:
-            return
-
         # Event types that carry a billable LLM call. Anything that
         # the SDK's auto-instrumentation emits AND any of the
         # server-side decoder normalizations (openai.chat_completion,
@@ -980,17 +993,57 @@ class TelemetryCollector:
                     "correlation_id": event.event_id,
                 }
             )
-        if pending:
-            # Phase 3 (ingest hot-path batching): one ``executemany`` for
-            # the whole batch's billable events instead of N single-row
-            # INSERTs (was N ``track_event`` calls fanned out via
-            # ``asyncio.gather``). ``track_event`` itself stays untouched
-            # for its other callers (job/storage/sandbox metering, which
-            # aren't batch-shaped).
-            try:
-                await service.track_events_batch(pending)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(f"billing roll-up batch failed ({len(pending)} events): {exc}")
+        # OOM W3-4 — span/trace ingest meter.  Count all accepted spans per
+        # org (regardless of event type) so the billing/cost page can show
+        # "X spans ingested this month" against the plan limit without
+        # querying the heavy telemetry_events table on every page load.
+        # One ``span_ingest`` row per org per flush; unique trace_ids in this
+        # batch are counted separately as ``trace_ingest`` rows.
+        span_by_org: dict[str, int] = {}
+        trace_by_org: dict[str, set[str]] = {}
+        for ev in events:
+            if not ev.tenant_id:
+                continue
+            span_by_org[ev.tenant_id] = span_by_org.get(ev.tenant_id, 0) + 1
+            if ev.trace_id:
+                trace_by_org.setdefault(ev.tenant_id, set()).add(ev.trace_id)
+        for org_id_meter, n_spans in span_by_org.items():
+            pending.append(
+                {
+                    "org_id": org_id_meter,
+                    "event_type": "span_ingest",
+                    "resource": "spans",
+                    "quantity": float(n_spans),
+                    "unit": "spans",
+                    "cost_usd": None,
+                }
+            )
+        for org_id_meter, trace_ids in trace_by_org.items():
+            pending.append(
+                {
+                    "org_id": org_id_meter,
+                    "event_type": "trace_ingest",
+                    "resource": "traces",
+                    "quantity": float(len(trace_ids)),
+                    "unit": "traces",
+                    "cost_usd": None,
+                }
+            )
+
+        if not pending:
+            return
+
+        # 3.2 Buffer rows; flush inline only when the threshold is hit.
+        # The timer loop drains the rest every BILLING_FLUSH_INTERVAL_S.
+        batch_to_flush: list[dict[str, Any]] | None = None
+        async with self._billing_buffer_lock:
+            self._billing_buffer.extend(pending)
+            if len(self._billing_buffer) >= self.BILLING_FLUSH_MAX_ROWS:
+                batch_to_flush = self._billing_buffer
+                self._billing_buffer = []
+        self._ensure_billing_flush_loop()
+        if batch_to_flush:
+            await self._do_billing_flush(batch_to_flush)
 
     def _sampling_flush_due(self) -> bool:
         """Cooldown gate for the single-event sampling-summary flush."""
@@ -999,6 +1052,50 @@ class TelemetryCollector:
             return False
         self._last_sampling_flush = now
         return True
+
+    # ── 3.2 Billing buffer flush ──────────────────────────────────────────
+
+    def _ensure_billing_flush_loop(self) -> None:
+        """Start the ≤30s billing flush loop once per collector."""
+        if self._billing_flush_task is not None and not self._billing_flush_task.done():
+            return
+        try:
+            self._billing_flush_task = asyncio.create_task(self._billing_flush_loop())
+        except RuntimeError:
+            self._billing_flush_task = None
+
+    async def _billing_flush_loop(self) -> None:
+        """Periodically drain the billing buffer into UsageService."""
+        while True:
+            await asyncio.sleep(self.BILLING_FLUSH_INTERVAL_S)
+            try:
+                await self._flush_billing_buffer()
+            except Exception as exc:
+                logger.debug("billing timer flush failed: %s", exc)
+
+    async def _flush_billing_buffer(self) -> None:
+        """Drain any buffered billing rows to UsageService (best-effort)."""
+        async with self._billing_buffer_lock:
+            if not self._billing_buffer:
+                return
+            batch = self._billing_buffer
+            self._billing_buffer = []
+        await self._do_billing_flush(batch)
+
+    async def _do_billing_flush(self, batch: list[dict[str, Any]]) -> None:
+        """Call ``track_events_batch`` for *batch*; swallow all errors."""
+        try:
+            from eden.services.usage_service import UsageService
+        except Exception:  # pragma: no cover — usage service unavailable
+            return
+        try:
+            service = UsageService()
+        except Exception:
+            return
+        try:
+            await service.track_events_batch(batch)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("billing flush failed (%d rows): %s", len(batch), exc)
 
     def _spawn_bg(self, coro: Any) -> None:
         """Fire-and-forget a coroutine; keep a strong ref until done.
@@ -1042,6 +1139,11 @@ class TelemetryCollector:
         IDs appear in the fleet list without a separate register call,
         and repo / Improve / autonomous flows can key off the same id.
         Best-effort — never fail ingest.
+
+        3.1 Touch cooldown: (org_id, agent_id) pairs seen within the last
+        ``_AGENT_TOUCH_COOLDOWN_S`` seconds are skipped so high-frequency
+        ingest streams do not hammer ``agent_registrations`` with
+        unconditional UPSERTs on every batch (5–50× reduction in practice).
         """
         pairs: dict[tuple[str, str], str] = {}
         for event in events:
@@ -1060,13 +1162,38 @@ class TelemetryCollector:
             pairs[(tenant_id, agent_id)] = name
         if not pairs:
             return
+
+        # 3.1 Cooldown gate — filter out recently-touched pairs.
+        now = time.monotonic()
+        global _agent_touch_cache
+        # Opportunistically prune expired entries when the dict is large,
+        # so the cache does not grow unboundedly on a diverse agent fleet.
+        if len(_agent_touch_cache) > _AGENT_TOUCH_CACHE_MAX:
+            expired_keys = [
+                k for k, ts in _agent_touch_cache.items()
+                if now - ts >= _AGENT_TOUCH_COOLDOWN_S
+            ]
+            for k in expired_keys:
+                del _agent_touch_cache[k]
+
+        pairs_to_upsert = {
+            k: v for k, v in pairs.items()
+            if now - _agent_touch_cache.get(k, 0.0) >= _AGENT_TOUCH_COOLDOWN_S
+        }
+        if not pairs_to_upsert:
+            logger.debug(
+                "telemetry: agent_registrations touch cooldown skipped %d pair(s)",
+                len(pairs),
+            )
+            return
+
         try:
             pg = await self._get_postgres()
             if pg is None:
                 return
             rows = [
                 (org_id, agent_id, name)
-                for (org_id, agent_id), name in pairs.items()
+                for (org_id, agent_id), name in pairs_to_upsert.items()
             ]
             await pg.executemany(
                 """
@@ -1084,6 +1211,9 @@ class TelemetryCollector:
                 """,
                 rows,
             )
+            # Update cache only on success so transient failures are retried.
+            for k in pairs_to_upsert:
+                _agent_touch_cache[k] = now
         except Exception as exc:  # noqa: BLE001
             logger.debug(
                 "telemetry: agent_registrations touch skipped: %s",
@@ -1663,11 +1793,20 @@ class TelemetryCollector:
         # dispatch per event and the worker pool is fixed-size.
         from eden.storage.compression import TELEMETRY_ZSTD_FIELDS, compress_many
 
-        compressed = await asyncio.to_thread(
-            compress_many,
-            self._compress_fields(event),
-            columns=list(TELEMETRY_ZSTD_FIELDS),
-        )
+        fields_to_compress = self._compress_fields(event)
+        # 3.3: skip thread dispatch for small field counts (see
+        # _COMPRESS_OFFLOAD_FIELDS). Count only non-empty fields —
+        # ``_compress_fields`` always returns a fixed 8-slot list, and
+        # ``compress_many`` does no work for the empty slots, so the
+        # truthy count is what predicts the actual compression cost.
+        if sum(1 for f in fields_to_compress if f) < _COMPRESS_OFFLOAD_FIELDS:
+            compressed = compress_many(fields_to_compress, columns=list(TELEMETRY_ZSTD_FIELDS))
+        else:
+            compressed = await asyncio.to_thread(
+                compress_many,
+                fields_to_compress,
+                columns=list(TELEMETRY_ZSTD_FIELDS),
+            )
         await self._dedupe_event(event)
         return self._build_postgres_row(event, compressed)
 
@@ -1733,15 +1872,24 @@ class TelemetryCollector:
 
             flat_fields = [f for event in events for f in self._compress_fields(event)]
             flat_columns = list(TELEMETRY_ZSTD_FIELDS) * len(events)
-            compress_task = asyncio.create_task(
-                asyncio.to_thread(compress_many, flat_fields, columns=flat_columns)
-            )
-            try:
+            # 3.3: skip the asyncio.to_thread dispatch for tiny batches —
+            # thread scheduling overhead (~30–100 µs) exceeds compress_many
+            # work (~16 µs) when the non-empty field count is below the
+            # threshold (every event contributes 8 slots, most empty for
+            # small events, and compress_many skips empty slots).
+            if sum(1 for f in flat_fields if f) < _COMPRESS_OFFLOAD_FIELDS:
+                flat_compressed = compress_many(flat_fields, columns=flat_columns)
                 await self._dedupe_batch_messages(events)
-                flat_compressed = await compress_task
-            except BaseException:
-                compress_task.cancel()
-                raise
+            else:
+                compress_task = asyncio.create_task(
+                    asyncio.to_thread(compress_many, flat_fields, columns=flat_columns)
+                )
+                try:
+                    await self._dedupe_batch_messages(events)
+                    flat_compressed = await compress_task
+                except BaseException:
+                    compress_task.cancel()
+                    raise
 
             rows = [
                 self._build_postgres_row(
@@ -3002,8 +3150,11 @@ async def get_telemetry_collector() -> TelemetryCollector:
 
 
 async def close_telemetry_collector() -> None:
-    """Close the telemetry collector, flushing any buffered ClickHouse rows."""
+    """Close the telemetry collector, flushing all in-memory buffers."""
     global _telemetry_collector
     if _telemetry_collector is not None:
         await _telemetry_collector._flush_clickhouse_buffer()
+        # 3.2: drain billing buffer so rows accumulated since the last timer
+        # tick are not silently lost on shutdown.
+        await _telemetry_collector._flush_billing_buffer()
     _telemetry_collector = None

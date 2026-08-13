@@ -1,5 +1,5 @@
 """FEAT-44: dsl.alerts's severity sets now derive from the shared
-AlertSeverity enum (eden.alerting.types, re-exporting
+AlertSeverity enum (eden.alerts.types, re-exporting
 eden.realtime.alert_stream.AlertSeverity) instead of a hand-duplicated
 frozenset of string literals. Confirms the migration didn't change any
 runtime membership behavior.
@@ -7,7 +7,7 @@ runtime membership behavior.
 
 from __future__ import annotations
 
-from eden.alerting.types import AlertSeverity
+from eden.alerts.types import AlertSeverity
 from eden.dsl.alerts import _FIREABLE_SEVERITIES, _VALID_SEVERITIES
 
 

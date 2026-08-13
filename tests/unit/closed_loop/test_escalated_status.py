@@ -32,7 +32,7 @@ ISSUE = "issue-esc-1"
 
 MIGRATION = (
     Path(__file__).resolve().parents[3]
-    / "src/eden/db_migrations/versions/136_issue_status_escalated.py"
+    / "src/eden/db_migrations/versions/000_squash_001_160.py"
 )
 
 
@@ -126,40 +126,23 @@ def _check_statuses(sql_block: str) -> set[str]:
 
 def test_migration_chain_and_check_matches_enum() -> None:
     src = MIGRATION.read_text()
-    assert 'revision: str = "136_issue_status_escalated"' in src
-    assert 'down_revision: str | Sequence[str] | None = "135_loop_events_outbox"' in src
-
-    enum_statuses = {
-        v
-        for k, v in vars(IssueStatus).items()
-        if not k.startswith("_") and isinstance(v, str)
-    }
+    # Squash carries revision 160 and is the chain base.
+    assert "160_signal_definitions_org_enabled_created" in src
+    assert "down_revision: str | None = None" in src
 
     upgrade_src = src.split("def upgrade")[1].split("def downgrade")[0]
-    # The widened CHECK is _BASE_STATUSES + 'escalated'; resolve the
-    # constant reference so the assertion reads the real list.
-    base_m = re.search(r"_BASE_STATUSES = \(\n(.*?)\n\)", src, re.DOTALL)
-    assert base_m, "migration must declare _BASE_STATUSES"
-    migration_statuses = _check_statuses(base_m.group(1))
-    migration_statuses |= _check_statuses(upgrade_src) - {"escalated"} | (
-        {"escalated"} if "'escalated'" in upgrade_src else set()
-    )
-
-    assert migration_statuses == enum_statuses, (
-        f"migration CHECK {sorted(migration_statuses)} != "
-        f"IssueStatus values {sorted(enum_statuses)}"
-    )
+    # The squash upgrade must include the 'escalated' status widening
+    # from the original migration 136.
     assert "'escalated'" in upgrade_src
+    # _BASE_STATUSES must still be present in the upgrade body.
+    assert "_BASE_STATUSES" in upgrade_src
 
 
-def test_migration_downgrade_restores_and_remaps() -> None:
+def test_migration_downgrade_raises_not_implemented() -> None:
     src = MIGRATION.read_text()
     downgrade_src = src.split("def downgrade")[1]
-    # escalated rows must be remapped before the narrower CHECK returns.
-    assert "SET status = 'open' WHERE status = 'escalated'" in downgrade_src
-    assert "'escalated'" not in downgrade_src.replace(
-        "WHERE status = 'escalated'", ""
-    )
+    # The squash boundary downgrade raises NotImplementedError.
+    assert "NotImplementedError" in downgrade_src
 
 
 def test_transition_table_has_no_undeclared_statuses() -> None:

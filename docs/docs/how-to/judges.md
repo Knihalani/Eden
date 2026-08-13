@@ -17,41 +17,88 @@ A regression-safe eval pipeline has four pieces:
 4. **Regression alerts** — fire when an eval run's mean score
    drops.
 
-## 1. Deterministic judges
+## 1. Deterministic scorers
 
-These run on every trace in real time. They're free (no LLM call)
-and instant. Use them for things you can express as a regex or
-schema.
+Deterministic checks (regex, schema, exact-match) can be used in
+two ways:
 
-### Built-in judges
+1. **Inline in Playground / CI** — specify a scorer in your task or
+   eval config and it runs at evaluation time, no API call needed.
+2. **Persistent judge definitions (W4-4)** — register a named
+   deterministic judge via the API and reuse it across runs. The
+   judge is stored in the metric-studio registry and can be executed
+   on demand.
 
-| Judge | Rule |
-|-------|------|
-| `no_pii` | Regex absence on email/phone/SSN/CC |
-| `json_valid` | The response parses as JSON |
-| `max_length` | Response length ≤ N tokens |
-| `has_tool_call` | Response contains a tool call |
-| `no_refusal` | Response doesn't contain a refusal phrase |
+### Persistent deterministic judges (API)
 
-### Custom
+Create a named deterministic judge backed by the scorer registry:
 
-Portal → **Eval** → **Judges** → **New judge** → Kind:
-`deterministic`.
+```bash
+curl -X POST \
+  "https://api.edenobservability.com/orgs/{org_id}/observability/judges/definitions" \
+  -H "Authorization: Bearer sk_eden_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "No-secrets check",
+    "scorer_type": "regex",
+    "scorer_config": { "pattern": "sk_(live|test)_[A-Za-z0-9]{20,}" }
+  }'
+```
+
+This returns a `judge_id` (e.g. `djudge_abc123`). Use it to:
+
+- **Execute** against a payload:
+  ```bash
+  curl -X POST \
+    ".../judges/definitions/djudge_abc123/execute" \
+    -d '{ "output": "Here is your key: sk_live_..." }'
+  # → { "score": true, "detail": null }
+  ```
+- **List** all judges: `GET .../judges/definitions`
+- **Get** one judge: `GET .../judges/definitions/{judge_id}`
+- **Delete** (archive) a judge: `DELETE .../judges/definitions/{judge_id}`
+  (admin only)
+
+Writes (`POST`, `DELETE`) require an org admin token.
+
+| Route | Method | Auth |
+|---|---|---|
+| `/orgs/{org_id}/observability/judges/definitions` | POST | Admin |
+| `/orgs/{org_id}/observability/judges/definitions` | GET | Member |
+| `/orgs/{org_id}/observability/judges/definitions/{judge_id}` | GET | Member |
+| `/orgs/{org_id}/observability/judges/definitions/{judge_id}` | DELETE | Admin |
+| `/orgs/{org_id}/observability/judges/definitions/{judge_id}/execute` | POST | Member |
+
+### Built-in scorers (Playground / CI)
+
+| Scorer type | What it checks |
+|-------------|----------------|
+| `regex_absent` | Pattern must be absent from the response |
+| `regex_present` | Pattern must be present |
+| `exact_match` | Response equals expected value |
+| `contains` | Response contains a substring |
+| `json_valid` | Response parses as valid JSON |
+| `llm_judge` | Rubric-based LLM scoring (delegates to the judge registry) |
+
+### Using scorers in a CI eval run
 
 ```json
 {
-  "name": "no_internal_secrets",
-  "kind": "deterministic",
-  "rule": {
-    "type": "regex_absent",
-    "pattern": "sk_(live|test)_[A-Za-z0-9]{20,}",
-    "fields": ["response", "attributes"]
-  },
-  "threshold": { "pass": 1.0 }
+  "dataset_id": "ds_abc",
+  "scorers": [
+    {
+      "type": "regex_absent",
+      "pattern": "sk_(live|test)_[A-Za-z0-9]{20,}",
+      "fields": ["response"]
+    },
+    { "type": "json_valid" },
+    { "type": "llm_judge", "axis": "correctness" }
+  ]
 }
 ```
 
-Save. Runs on every trace immediately.
+Results land in the Playground run or CI report — no persistent
+judge score rows are written for deterministic scorers.
 
 ## 2. LLM judges
 
@@ -78,7 +125,7 @@ Reply with JSON: {"helpfulness": N, "accuracy": N, "conciseness": N, "tone": N, 
 
 ### Configure
 
-Portal → **Eval** → **Judges** → **New judge** → Kind: `llm`.
+Configure in your Playground task or CI eval config with `type: llm_judge`:
 
 ```json
 {
@@ -170,10 +217,10 @@ Portal → **Eval** → **Alerts** → **New alert**.
 
 A typical pipeline:
 
-1. **Real-time:** deterministic judges run on every trace → block
-   PII / secrets in production immediately.
-2. **Sampled:** LLM judges run on 1-in-N traces → store scores in
-   `judge_scores`.
+1. **CI / Playground:** deterministic scorers run on every eval dataset
+   row → catch PII / secrets before promotion.
+2. **Sampled:** LLM judges run on 1-in-N live traces → scores stored
+   in `judge_scores`.
 3. **Nightly:** golden dataset runs against the current prompt
    version → emit a daily eval summary.
 4. **On PR:** dataset runs in CI against the PR's prompt version →

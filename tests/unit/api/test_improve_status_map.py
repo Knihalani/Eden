@@ -19,3 +19,8 @@ def test_known_statuses() -> None:
     assert _map_improve_status("merged") == "done"
     assert _map_improve_status("rejected") == "blocked"
     assert _map_improve_status(None) == "needs_you"
+
+
+def test_snoozed_maps_to_blocked() -> None:
+    """OOM 9.4a: snoozed plans surface as 'blocked' in the portal."""
+    assert _map_improve_status("snoozed") == "blocked"

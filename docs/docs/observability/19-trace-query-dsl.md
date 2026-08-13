@@ -321,7 +321,7 @@ full-text search layer backed by Typesense.
 | 6th collector sink | `src/eden/observability/telemetry_collector.py` | `_route_typesense` indexes every span on ingest. No-op when Typesense is disabled or unreachable. |
 | `GET /spans/search` | `src/eden/api/routes/observability.py` | Full search endpoint: `q`, `agent`, `tool`, `outcome`, `event_type`, `from_ts`, `to_ts`, pagination. |
 | `GET /spans/search/suggest` | same | Cmd-K autocomplete: top-5 hits, narrow facet set, \<50ms budget. |
-| Docker service | `docker/docker-compose.yml` | `typesense:27.1` image, persistent volume, healthcheck, port 8108. **Required: TYPESENSE_API_KEY env var (no fallback)**. |
+| Docker service (dev/eval only) | `docker/docker-compose.yml` | `typesense:27.1` image, persistent volume, healthcheck, port 8108. **Required: TYPESENSE_API_KEY env var (no fallback)**. Not for production — use a dedicated Typesense host in prod. |
 | Settings | `src/eden/config.py` | `typesense_host`, `typesense_port`, `typesense_api_key`, `typesense_collection`, `typesense_enabled`. |
 
 ### Schema

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api/resources";
 import { DOCS_QUICKSTART_URL } from "@/lib/constants";
 import {
   QUICKSTART_LANGS,
@@ -114,6 +115,9 @@ export function TourGetStartedPanel() {
   const queryClient = useQueryClient();
   const [lang, setLang] = useState<QuickstartLang>("python");
   const [fill, setFill] = useState<FillState>({ status: "loading" });
+  // OOM W2-7: opt-in is the default — unchecking writes first_detection_email_opt_out=true.
+  const [emailOptIn, setEmailOptIn] = useState(true);
+  const emailCheckId = useId();
 
   useEffect(() => {
     let cancelled = false;
@@ -231,6 +235,20 @@ export function TourGetStartedPanel() {
   const onLang = useCallback((next: QuickstartLang) => {
     setLang(next);
   }, []);
+
+  // OOM W2-7: persist opt-out to org settings when the user unchecks the box.
+  const onEmailOptInChange = useCallback(
+    (checked: boolean) => {
+      setEmailOptIn(checked);
+      const orgId = currentOrg?.id;
+      if (!orgId) return;
+      // Fail-silent — this is a preference, not a critical write.
+      void api.updateOrgSettings(orgId, {
+        first_detection_email_opt_out: !checked,
+      });
+    },
+    [currentOrg?.id],
+  );
 
   return (
     <div className="space-y-4">
@@ -372,6 +390,23 @@ export function TourGetStartedPanel() {
         </li>
         <li>3. Open Traces — your hello-world event should appear</li>
       </ol>
+
+      {/* OOM W2-7: first-detection email opt-out. Default ON (checked). */}
+      {currentOrg?.id ? (
+        <label
+          htmlFor={emailCheckId}
+          className="flex cursor-pointer items-center gap-2 text-[0.75rem] text-[var(--text-secondary)]"
+        >
+          <input
+            id={emailCheckId}
+            type="checkbox"
+            checked={emailOptIn}
+            onChange={(e) => onEmailOptInChange(e.target.checked)}
+            className="h-3.5 w-3.5 accent-[var(--accent)]"
+          />
+          Email me when Eden finds the first issue
+        </label>
+      ) : null}
 
       <a
         href={DOCS_QUICKSTART_URL}

@@ -277,9 +277,10 @@ def test_migration_111_chains_from_110() -> None:
     from pathlib import Path
 
     mig = Path(__file__).resolve().parents[3] / (
-        "src/eden/db_migrations/versions/111_w27_live_labels.py"
+        "src/eden/db_migrations/versions/000_squash_001_160.py"
     )
     text = mig.read_text()
-    assert 'down_revision: str = "110_w26_drop_issue_fix_sessions"' in text
+    # Squash is the chain base; verify it contains content from migration 111.
+    assert "160_signal_definitions_org_enabled_created" in text
     assert "tool_call_calibrators" in text
     assert "live_trace_sessions" in text

@@ -104,8 +104,6 @@ spec:
         - name: POSTGRES_USER
         - name: POSTGRES_PASSWORD
         - name: POSTGRES_SSLMODE
-        - name: POSTGRES_CHANNEL_BINDING
-        - name: POSTGRES_ENDPOINT_ID
 
 # ─────────────────────────────────────────────────────────────────────
 # Service 1/2: eden-api (FastAPI)
@@ -256,10 +254,6 @@ spec:
     # kept) or ``aggressive`` (~5%).
     - name: EDEN_SAMPLING_PROFILE
       value: full
-    - name: SENTRY_ENVIRONMENT
-      value: production
-    - name: SENTRY_TRACES_SAMPLE_RATE
-      value: "0.1"
     # ── CORS — set this to your Vercel portal URL after first deploy ──
     # Comma-separated, no wildcards. Examples:
     #   https://eden-portal.vercel.app,https://edenobservability.com
@@ -302,15 +296,6 @@ spec:
       valueFrom: { secretKeyRef: { group: postgres-password, key: POSTGRES_PASSWORD } }
     - name: POSTGRES_SSLMODE
       valueFrom: { secretKeyRef: { group: postgres-sslmode, key: POSTGRES-SSLMODE } }
-    # NOT in the confirmed live-group mapping (2026-07-31 reconciliation) —
-    # left pointing at the fictional "eden-required" group on purpose so
-    # the drift checker keeps flagging it instead of silently resolving to
-    # a guessed group. Confirm the real group id before touching this.
-    - name: POSTGRES_CHANNEL_BINDING
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING, optional: true } }
-    # See POSTGRES_CHANNEL_BINDING note above — same unmapped status.
-    - name: POSTGRES_ENDPOINT_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID, optional: true } }
     - name: POSTGRES_POOL_SIZE
       value: "10"            # 512 MB container — cap pool aggressively
     - name: POSTGRES_MIN_POOL_SIZE
@@ -362,8 +347,6 @@ spec:
       value: https://openrouter.ai/api/v1
     - name: MINIMAX_BASE_URL
       value: https://api.minimax.io/v1
-    - name: MINIMAX_MODEL
-      value: MiniMax-M3
     - name: USE_MINIMAX
       value: "false"
     # ── Typesense (full-text search) — W9: enable when TYPESENSE_HOST
@@ -407,20 +390,10 @@ spec:
       value: "50000"
     - name: MAX_TOKENS_CRITIC
       value: "30000"
-    - name: MAX_TOKENS_REFINER
-      value: "25000"
     - name: MAX_TOKENS_FACT_CHECKER
       value: "25000"
     - name: MAX_TOKENS_EXECUTOR
       value: "15000"
-    - name: MAX_TOKENS_CODE_QUALITY
-      value: "10000"
-    - name: MAX_TOKENS_VERIFIER
-      value: "10000"
-    - name: MAX_TOKENS_TESTER
-      value: "10000"
-    - name: MAX_TOKENS_ARCHIVIST
-      value: "60000"
     # ── Secrets (from the secretGroup above) ────────────────────
     - name: JWT_SECRET
       valueFrom:
@@ -541,6 +514,36 @@ spec:
     # hosted now, so the recurring weekly cron is live.
     - name: IMPROVEMENT_SCHEDULE_ENABLED
       value: "true"
+    # ── In-process LLM cache (Wave 0 / plan 1.2) ────────────────
+    # Enable the already-built LRU cache for zero-temperature LLM calls.
+    # Keyed on (model, prompt, temperature); only fires at temp=0 so
+    # non-deterministic generations are never served stale. The whole
+    # background fleet lives in this process, so one cache covers all
+    # loops. Hit counter: eden_llm_inprocess_cache_hits_total on /metrics.
+    # Rollback: unset or set to "0".
+    - name: EDEN_LLM_INPROCESS_CACHE
+      value: "1"
+    - name: EDEN_LLM_INPROCESS_CACHE_MAX
+      value: "1024"
+    # ── Materialized trace read path (Wave 0 / plan 1.1b) ───────
+    # Serve GET /observability/traces from trace_summaries (migration 167)
+    # instead of re-aggregating telemetry_events per page load.
+    # Measured 418x faster at 20k traces / ~10x portal page load.
+    # Prerequisite: run scripts/backfill_trace_summaries.py for history.
+    # Env var name: field trace_summaries_read_v1 → TRACE_SUMMARIES_READ_V1
+    # (pydantic-settings, no env_prefix, case_insensitive).
+    # Rollback: set to "false" or unset.
+    - name: TRACE_SUMMARIES_READ_V1
+      value: "true"
+    # ── Plaintext/zstd dual-write off (OOM Wave 2 / plan 1.3b) ──
+    # Stop writing the 5 plaintext JSONB span-body columns; readers all
+    # prefer the *_zstd columns (check_zstd_drop_prerequisites gates (a)
+    # and (b) PASS, backfill pending=0 on 2026-08-12). 6–15x Neon
+    # bytes/row. The migration-033 column DROP stays deferred until the
+    # script's 30-day gate (c) passes (~2026-08-21) + 2-week burn-in.
+    # Rollback: set to "true" or unset (dual-write resumes instantly).
+    - name: TELEMETRY_PLAINTEXT_JSONB_WRITE_ENABLED
+      value: "false"
     # Wave 2 (2.5, 2026-08-11): evolution loop stays OFF. The audit's
     # F-A trigger (fixed Wave 1) and the prompt store (legacy
     # ``prompt_versions`` dropped by migration 055 — Wave 2.4 compat
@@ -662,8 +665,6 @@ spec:
     # trigger a run if the API service is ever unable to carry the fleet.
     - name: EDEN_RUN_BACKGROUND_WORKERS
       value: "0"
-    - name: SENTRY_ENVIRONMENT
-      value: northflank-staging-worker
     - name: POSTGRES_HOST
       valueFrom: { secretKeyRef: { group: postgres-host, key: POSTGRES-HOST } }
     - name: POSTGRES_PORT
@@ -676,15 +677,6 @@ spec:
       valueFrom: { secretKeyRef: { group: postgres-password, key: POSTGRES_PASSWORD } }
     - name: POSTGRES_SSLMODE
       valueFrom: { secretKeyRef: { group: postgres-sslmode, key: POSTGRES-SSLMODE } }
-    # NOT in the confirmed live-group mapping (2026-07-31 reconciliation) —
-    # left pointing at the fictional "eden-required" group on purpose so
-    # the drift checker keeps flagging it instead of silently resolving to
-    # a guessed group. Confirm the real group id before touching this.
-    - name: POSTGRES_CHANNEL_BINDING
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_CHANNEL_BINDING, optional: true } }
-    # See POSTGRES_CHANNEL_BINDING note above — same unmapped status.
-    - name: POSTGRES_ENDPOINT_ID
-      valueFrom: { secretKeyRef: { group: eden-required, key: POSTGRES_ENDPOINT_ID, optional: true } }
     # Pool must cover the largest sidecar's own concurrency plus
     # headroom for the 5 leader-gated loops this process hosts, not
     # just "a worker" — quality_pipeline runs up to 8 concurrent
@@ -807,8 +799,6 @@ spec:
       value: INFO
     - name: LOG_JSON
       value: "true"
-    - name: SENTRY_ENVIRONMENT
-      value: northflank-staging-cron
 
 
 # ─────────────────────────────────────────────────────────────────────

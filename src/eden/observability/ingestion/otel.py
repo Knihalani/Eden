@@ -1,4 +1,4 @@
-"""OTel OTLP/HTTP-JSON trace decoder.
+"""OTel OTLP/HTTP decoder — JSON and protobuf.
 
 Maps OpenTelemetry Protocol trace exports to ``TelemetryEvent`` using
 the OTel GenAI semantic conventions
@@ -6,7 +6,7 @@ the OTel GenAI semantic conventions
 
 Two on-the-wire shapes are accepted:
 
-1. **OTLP/HTTP JSON** (the standard HTTP/JSON encoding of OTLP)::
+1. **OTLP/HTTP JSON** (``Content-Type: application/json``)::
 
        {
          "resourceSpans": [{
@@ -18,11 +18,17 @@ Two on-the-wire shapes are accepted:
          }]
        }
 
-2. **OTLP/HTTP protobuf** (``Content-Type: application/x-protobuf``).
-   The route layer does not decode protobuf directly — the request body
-   for protobuf submissions is rejected with 415 and a pointer to use
-   the JSON encoding or the gRPC receiver. The gRPC receiver lives
-   outside the FastAPI process (see ``otel_grpc.py``, separate work).
+2. **OTLP/HTTP protobuf** (``Content-Type: application/x-protobuf`` or
+   ``application/x-otel-protobuf``). The binary body is parsed as an
+   ``ExportTraceServiceRequest`` using the ``opentelemetry-proto``
+   package, then converted to the same camelCase dict shape as OTLP/JSON
+   via ``google.protobuf.json_format.MessageToDict``.  Byte fields
+   (``traceId``, ``spanId``, ``parentSpanId``) are re-encoded from the
+   protobuf base64 representation to the lowercase hex strings that the
+   OTLP/JSON spec requires.
+
+   The gRPC receiver (unary OTLP/gRPC) lives outside the FastAPI process
+   (see ``otel_grpc.py``, separate work).
 
 Span fields consumed:
   - ``traceId`` / ``spanId`` / ``parentSpanId``
@@ -37,6 +43,7 @@ Span fields consumed:
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import logging
 from datetime import UTC
@@ -49,6 +56,18 @@ from eden.observability.ingestion.normalizer import normalize_many
 from eden.observability.telemetry_collector import TelemetryEvent
 
 logger = logging.getLogger(__name__)
+
+# ── Protobuf content-type routing ────────────────────────────────────
+# The OTLP/HTTP spec defines two binary media types for protobuf:
+#   application/x-protobuf        — used by most SDKs by default
+#   application/x-otel-protobuf   — older / vendor convention
+# Both are dispatched to the protobuf decode branch; everything else
+# (including no Content-Type) falls through to the JSON branch.
+
+_PROTO_CONTENT_TYPES = frozenset({
+    "application/x-protobuf",
+    "application/x-otel-protobuf",
+})
 
 
 # ── OTLP AnyValue decoder ────────────────────────────────────────────
@@ -550,6 +569,116 @@ def _first_finish_reason(value: Any) -> str | None:
     return str(value)
 
 
+# ── Protobuf helpers ─────────────────────────────────────────────────
+
+
+def _b64_to_hex(value: Any) -> str | Any:
+    """Convert a base64-encoded bytes field from ``MessageToDict`` to the
+    lowercase hex string that OTLP/JSON requires for trace/span IDs.
+
+    ``MessageToDict`` encodes ``bytes`` proto fields as standard base64.
+    The OTLP/JSON specification instead uses lowercase hex strings for
+    ``traceId``, ``spanId``, and ``parentSpanId``.  Return the input
+    unchanged when it is not a non-empty string (e.g. ``None`` or already
+    absent from the dict).
+    """
+    if not isinstance(value, str) or not value:
+        return value
+    try:
+        # base64 → raw bytes → hex
+        return base64.b64decode(value).hex()
+    except Exception:
+        # If decoding fails the value is likely already hex or arbitrary;
+        # return as-is so downstream code can store whatever arrived.
+        return value
+
+
+def _convert_span_bytes_to_hex(span: dict[str, Any]) -> None:
+    """Convert ``traceId``, ``spanId``, and ``parentSpanId`` in a span dict
+    from protobuf base64 to OTLP/JSON lowercase hex, in-place."""
+    for field in ("traceId", "spanId", "parentSpanId"):
+        if field in span:
+            span[field] = _b64_to_hex(span[field])
+
+
+def _walk_resource_spans_hex(resource_spans: list[Any]) -> None:
+    """Walk resourceSpans → scopeSpans → spans and convert ID byte fields."""
+    for rs in resource_spans or []:
+        if not isinstance(rs, dict):
+            continue
+        for ss in rs.get("scopeSpans") or []:
+            if not isinstance(ss, dict):
+                continue
+            for span in ss.get("spans") or []:
+                if isinstance(span, dict):
+                    _convert_span_bytes_to_hex(span)
+
+
+def _parse_protobuf_body(body: bytes) -> dict[str, Any]:
+    """Parse an OTLP/HTTP protobuf body (``ExportTraceServiceRequest``) and
+    return a dict shaped like the OTLP/JSON wire format so the rest of
+    ``OtelDecoder.decode()`` can process it without changes.
+
+    Raises ``SchemaInvalidError`` when:
+    - ``opentelemetry-proto`` is not installed (should not happen in
+      production — it is a declared ``[project.dependencies]`` entry).
+    - The bytes cannot be parsed as ``ExportTraceServiceRequest``.
+    - The subsequent ``MessageToDict`` conversion fails.
+
+    The acceptable ``Content-Type`` values are listed in the error message
+    so callers know to send ``application/x-protobuf`` or
+    ``application/x-otel-protobuf``.
+    """
+    try:
+        from google.protobuf.json_format import MessageToDict
+        from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+            ExportTraceServiceRequest,
+        )
+    except ImportError as exc:
+        raise SchemaInvalidError(
+            "The opentelemetry-proto package is not installed; "
+            "send Content-Type: application/json for OTLP/HTTP JSON encoding "
+            "or ensure opentelemetry-proto is in the server dependencies.",
+            problems=["proto_package_missing"],
+        ) from exc
+
+    try:
+        msg = ExportTraceServiceRequest.FromString(body)
+    except Exception as exc:
+        raise SchemaInvalidError(
+            f"OTel body is not a valid protobuf ExportTraceServiceRequest: {exc}. "
+            "Expected Content-Type: application/x-protobuf or "
+            "application/x-otel-protobuf; use application/json for JSON encoding.",
+            problems=[f"proto_decode_error: {exc}"],
+        ) from exc
+
+    try:
+        # MessageToDict preserves camelCase field names (matching OTLP/JSON)
+        # when preserving_proto_field_name=False (the default).
+        # ``always_print_fields_with_no_presence=False`` (default) omits
+        # zero-value fields so the dict stays sparse, matching what a real
+        # OTLP/JSON client sends.  (Earlier protobuf versions called this
+        # ``including_default_value_fields``; the current name is used here.)
+        d: dict[str, Any] = MessageToDict(
+            msg,
+            preserving_proto_field_name=False,
+            float_precision=None,
+            use_integers_for_enums=False,
+        )
+    except Exception as exc:
+        raise SchemaInvalidError(
+            f"OTel protobuf-to-dict conversion failed: {exc}",
+            problems=[f"proto_to_dict_error: {exc}"],
+        ) from exc
+
+    # ``MessageToDict`` encodes proto ``bytes`` fields as base64; OTLP/JSON
+    # uses lowercase hex for traceId / spanId / parentSpanId.  Fix up these
+    # fields so the downstream ``_span_to_raw_dict`` stores consistent IDs.
+    _walk_resource_spans_hex(d.get("resourceSpans") or [])
+
+    return d
+
+
 # ── Decoder ──────────────────────────────────────────────────────────
 
 
@@ -572,13 +701,20 @@ class OtelDecoder:
     async def decode(
         self, body: bytes, attribution: Attribution
     ) -> list[TelemetryEvent]:
-        try:
-            payload = loads_body(body)
-        except (ValueError, UnicodeDecodeError) as exc:
-            raise SchemaInvalidError(
-                f"OTel body is not valid JSON: {exc}",
-                problems=[f"json_decode_error: {exc}"],
-            ) from exc
+        # ── content-type routing: protobuf vs JSON ───────────────────
+        ct = (attribution.content_type or "").lower().split(";")[0].strip()
+        if ct in _PROTO_CONTENT_TYPES:
+            payload = _parse_protobuf_body(body)
+        else:
+            try:
+                payload = loads_body(body)
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise SchemaInvalidError(
+                    f"OTel body is not valid JSON: {exc}. "
+                    "Send Content-Type: application/json for OTLP/HTTP JSON, "
+                    "or application/x-protobuf for OTLP/HTTP protobuf.",
+                    problems=[f"json_decode_error: {exc}"],
+                ) from exc
 
         if not isinstance(payload, dict):
             raise SchemaInvalidError(

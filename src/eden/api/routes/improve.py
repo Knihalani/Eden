@@ -98,6 +98,11 @@ class ManualRunRequest(BaseModel):
     agent_id: str | None = None
     issue_id: str | None = None
 
+class IterateRequest(BaseModel):
+    """OOM 9.4b: user feedback for a portal-triggered guardian follow-up."""
+
+    feedback: str = Field(default="", max_length=4000)
+
 @router.get("/queue")
 async def get_queue(
     org_id: str = Depends(require_path_org_access),
@@ -370,6 +375,46 @@ async def revert_plan_route(
     if status == "error":
         raise HTTPException(status_code=503, detail=result)
     return _ok("improvement_plans", result)
+
+@router.post("/plans/{plan_id}/iterate")
+async def iterate_plan_route(
+    org_id: str = Depends(require_path_org_access),
+    plan_id: str = Path(...),
+    body: IterateRequest = Body(default_factory=IterateRequest),
+    payload: dict | None = Depends(_try_resolve_token_payload),
+) -> dict[str, Any]:
+    """OOM 9.4b — portal "Request changes" on an open-PR plan.
+
+    Creates a new guardian follow-up draft linked to this plan via
+    ``parent_plan_id``.  Requires admin access + improvement_agent_v1.
+    Accepts any plan in draft / pending_review / pr_opened state.
+    """
+    await require_org_admin(org_id, payload)
+    await _require_agent_v1_async(org_id)
+    plan = await plans_repo.get_plan(org_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="plan not found")
+    allowed_states = {"draft", "pending_review", "pr_opened"}
+    if plan.get("status") not in allowed_states:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"plan status '{plan.get('status')}' does not support iteration; "
+                f"expected one of: {', '.join(sorted(allowed_states))}"
+            ),
+        )
+    from eden.improvement.guardian import request_follow_up
+
+    follow_up = await request_follow_up(org_id, plan, feedback=body.feedback)
+    if follow_up is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Guardian follow-up draft failed; retry later",
+        )
+    return _ok(
+        "improvement_plans",
+        {"follow_up_plan": follow_up, "parent_plan_id": plan_id},
+    )
 
 @router.get("/runs")
 async def list_runs(

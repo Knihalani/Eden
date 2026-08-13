@@ -52,6 +52,14 @@ logger = logging.getLogger(__name__)
 
 # ── 1. InvestigationAgent ───────────────────────────────────────────
 
+# OOM-IMPROVEMENT-PLAN-2026-08-12 §7.3 / W1-7 (L10): cap the context blob
+# injected into every investigation prompt.  Large incidents used to push
+# unbounded JSON in here, causing a 33× LLM token spike.  8 000 chars keeps
+# the blob well within a single cache block while still holding the
+# structurally important top-level keys for the vast majority of incidents.
+_CONTEXT_BLOB_MAX_CHARS: int = 8_000
+
+
 _INVESTIGATION_SYSTEM_PROMPT = (
     "You are an SRE assistant for an LLM-observability platform. "
     "Given the trigger context below, produce a JSON object with "
@@ -139,9 +147,14 @@ class InvestigationAgent:
         # instructions embedded in traces / stumble details.
         from eden.prompt_safety import wrap_untrusted_data
 
-        context_blob = wrap_untrusted_data(
-            json.dumps(ctx.get("context", {}), default=str)
-        )
+        _raw_ctx = json.dumps(ctx.get("context", {}), default=str)
+        if len(_raw_ctx) > _CONTEXT_BLOB_MAX_CHARS:
+            _excess = len(_raw_ctx) - _CONTEXT_BLOB_MAX_CHARS
+            _raw_ctx = (
+                _raw_ctx[:_CONTEXT_BLOB_MAX_CHARS]
+                + f"…[truncated {_excess} chars]"
+            )
+        context_blob = wrap_untrusted_data(_raw_ctx)
         prompt_parts = [
             f"Trigger: {trigger}\n",
             f"Context:\n{context_blob}\n",
@@ -154,7 +167,42 @@ class InvestigationAgent:
         )
         prompt = "".join(prompt_parts)
 
-        # 3. Call the LLM. Falls back to a heuristic envelope
+        # 3. OOM W3-5 — system-wide investigation lane daily cap.
+        #    Fail-open: Redis down → log WARNING and continue.
+        try:
+            from eden.llmops.evolution_spend import LaneDailyBudget
+
+            _lane_allowed, _lane_spent, _lane_cap = await LaneDailyBudget(
+                "investigation"
+            ).check()
+            if not _lane_allowed:
+                logger.warning(
+                    "investigation: system lane budget exceeded "
+                    "(spent=%.4f cap=%.4f) — skipping LLM call for org=%s trigger=%s",
+                    _lane_spent,
+                    _lane_cap,
+                    org_id,
+                    trigger,
+                )
+                return _not_implemented_envelope(
+                    self.name,
+                    "lane_budget_exceeded",
+                    data={
+                        "trigger": trigger,
+                        "findings": [],
+                        "proposed_remediations": [],
+                        "skipped": True,
+                        "reason": "lane_budget_exceeded",
+                        "lane_spent_usd": _lane_spent,
+                        "lane_cap_usd": _lane_cap,
+                    },
+                )
+        except Exception as exc:
+            logger.debug(
+                "investigation: lane budget check failed (fail-open): %s", exc
+            )
+
+        # 4. Call the LLM. Falls back to a heuristic envelope
         #    on any failure.
         # M14 (§8.2): ``slot`` is caller-pinned (TriageAgent passes
         # ``slot="fast"``) so triage classification cannot silently

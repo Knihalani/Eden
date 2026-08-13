@@ -336,7 +336,7 @@ async def _run_ingest_batching(n: int, per_call_overhead_s: float) -> dict[str, 
 
     events = [_make_event(i) for i in range(n)]
 
-    def _fake_compress_many(fields):
+    def _fake_compress_many(fields, *, columns=None):
         time.sleep(per_call_overhead_s)
         return [None] * len(fields)
 

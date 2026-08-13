@@ -124,6 +124,12 @@ let _zstdOverride: ZstdCompressSync | null | undefined;
  * fallback; a function replaces the compressor; ``undefined`` (default)
  * restores the live ``globalThis.Bun`` probe. Not part of the public
  * SDK surface.
+ *
+ * When this override is active (any value including ``null``), the
+ * Node-side zstd paths (``node:zlib`` / ``@nicolo-ribaudo/zstd-wasm``)
+ * are also skipped so this one hook controls the full zstd decision —
+ * existing tests that call ``_setZstdProbeForTests(null)`` to force gzip
+ * continue to work unchanged.
  */
 export function _setZstdProbeForTests(
   fn: ZstdCompressSync | null | undefined,
@@ -142,6 +148,78 @@ function _resolveZstd(): ZstdCompressSync | null {
 }
 
 /**
+ * Cached result of the Node-side zstd probe.
+ * ``undefined`` = not yet probed; ``null`` = probed, unavailable; function = available.
+ * The cache is needed because the probe does async dynamic imports.
+ */
+let _nodeZstdFn: ZstdCompressSync | null | undefined;
+
+/** Test-only override for the Node-side zstd probe. */
+let _nodeZstdOverride: ZstdCompressSync | null | undefined;
+
+/**
+ * Test hook for the Node-side zstd paths (``node:zlib.zstdCompressSync``
+ * and ``@nicolo-ribaudo/zstd-wasm``). Not part of the public SDK surface.
+ *
+ *   fn = null      → force Node zstd unavailable (fall to gzip)
+ *   fn = function  → use this function as the Node zstd compressor
+ *   fn = undefined → clear override and reset the probe cache (live probe)
+ */
+export function _setNodeZstdProbeForTests(
+  fn: ZstdCompressSync | null | undefined,
+): void {
+  _nodeZstdOverride = fn;
+  _nodeZstdFn = undefined; // reset cache so live probe re-runs if needed
+}
+
+/**
+ * Probe for a Node-native zstd compressor. Result is cached after the
+ * first probe so dynamic imports run at most once per process lifetime.
+ *
+ * Priority:
+ *   1. ``node:zlib.zstdCompressSync`` — available on Node ≥ 22.15 / ≥ 23.8.
+ *   2. ``@nicolo-ribaudo/zstd-wasm``  — optional dependency (may not be installed).
+ *
+ * Never throws — any missing module or failed initialisation returns ``null``.
+ */
+async function _probeNodeZstd(): Promise<ZstdCompressSync | null> {
+  if (_nodeZstdOverride !== undefined) return _nodeZstdOverride;
+  if (_nodeZstdFn !== undefined) return _nodeZstdFn; // cache hit
+
+  // 1. node:zlib native zstd (Node ≥ 22.15 / ≥ 23.8).
+  // The import is resolved from the module cache once zlib is already loaded
+  // for gzip, so there is no extra I/O cost on those runtimes.
+  try {
+    const zlib = await import("node:zlib");
+    const fn = (zlib as unknown as { zstdCompressSync?: ZstdCompressSync })
+      .zstdCompressSync;
+    if (typeof fn === "function") {
+      _nodeZstdFn = (data: Uint8Array): Uint8Array => fn(data);
+      return _nodeZstdFn;
+    }
+  } catch { /* node:zlib unavailable in this runtime */ }
+
+  // 2. @nicolo-ribaudo/zstd-wasm (optional dependency).
+  // Cast to string so TypeScript does not try to statically resolve this
+  // optional package (which may not be installed) at compile time.
+  try {
+    const pkgName = "@nicolo-ribaudo/zstd-wasm" as string;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const wasm = await import(pkgName);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const compress: unknown = wasm?.compress ?? wasm?.default?.compress;
+    if (typeof compress === "function") {
+      const compressFn = compress as (data: Uint8Array) => Uint8Array;
+      _nodeZstdFn = (data: Uint8Array): Uint8Array => compressFn(data);
+      return _nodeZstdFn;
+    }
+  } catch { /* not installed or initialisation failed */ }
+
+  _nodeZstdFn = null;
+  return null;
+}
+
+/**
  * Compress a JSON-serializable body for the wire.
  *
  * Returns ``{ body, encoding }`` — callers must send ``encoding`` as
@@ -150,6 +228,12 @@ function _resolveZstd(): ZstdCompressSync | null {
  * as ``"identity"`` so a broken compressor can never kill telemetry
  * (mirrors ``_wire_compress.compress_wire`` in the Python SDK).
  *
+ * Compression priority:
+ *   1. Bun native ``Bun.zstdCompressSync`` (or test override).
+ *   2. Node native ``node:zlib.zstdCompressSync`` (Node ≥ 22.15 / ≥ 23.8).
+ *   3. ``@nicolo-ribaudo/zstd-wasm`` optional dependency.
+ *   4. ``node:zlib`` gzip level 1 (universal fallback).
+ *
  * Exported so other ingest-shaped call sites (e.g. ``session.ts``'s
  * agent-session lifecycle notify) reuse the same cached compressors.
  */
@@ -157,14 +241,39 @@ export async function compressJsonBody(
   body: unknown,
 ): Promise<{ body: Buffer; encoding: WireEncoding }> {
   const raw = Buffer.from(JSON.stringify(body), "utf8");
+
+  // 1. Bun native zstd (or test override via _setZstdProbeForTests).
   const zstd = _resolveZstd();
   if (zstd !== null) {
     try {
       return { body: Buffer.from(zstd(raw)), encoding: "zstd" };
     } catch {
-      // Fall through to gzip — a broken runtime zstd must not block telemetry.
+      // Compressor threw — fall through to the next path.
     }
   }
+
+  // 2 & 3. Node-native zstd (node:zlib.zstdCompressSync or @nicolo-ribaudo/zstd-wasm).
+  //
+  // Gating rule: try Node paths when (a) no Bun-path override is active (production
+  // path), OR (b) a Node-path override is explicitly set via _setNodeZstdProbeForTests
+  // — this allows tests to exercise the Node path independently of the Bun override.
+  // Existing tests that call only _setZstdProbeForTests(null) (no node override) keep
+  // their "skip everything, fall to gzip" semantics because the condition evaluates
+  // false: `!true || false = false`.
+  const hasBunOverride = _zstdOverride !== undefined;
+  const hasNodeOverride = _nodeZstdOverride !== undefined;
+  if (!hasBunOverride || hasNodeOverride) {
+    const nodeZstd = await _probeNodeZstd();
+    if (nodeZstd !== null) {
+      try {
+        return { body: Buffer.from(nodeZstd(raw)), encoding: "zstd" };
+      } catch {
+        // Node zstd threw — fall through to gzip.
+      }
+    }
+  }
+
+  // 4. gzip level-1 fallback (fast; ~3–4× smaller than identity).
   if (_gzipSync === null) {
     const zlib = await import("node:zlib");
     _gzipSync = zlib.gzipSync;
@@ -746,6 +855,16 @@ export class EdenSDK {
   /** Returns the resolved config (read-only snapshot). */
   getConfig(): Readonly<ResolvedConfig> {
     return this.config;
+  }
+
+  /**
+   * Returns the active client-side sampling profile (``"full"`` /
+   * ``"balanced"`` / ``"aggressive"``). Used by `runDoctor` to warn
+   * when high-volume traffic is running with the default ``"full"``
+   * profile. Mirrors ``cfg.sampling_profile`` in the Python SDK.
+   */
+  get samplingProfile(): string {
+    return this.sampler.profile;
   }
 
   /**

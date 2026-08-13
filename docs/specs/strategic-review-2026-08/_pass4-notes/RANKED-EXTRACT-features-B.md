@@ -16,7 +16,7 @@ Raw extraction of distinct, actionable items from pass-4 feature-review docs 09â
 
 ### B09-2. Build real one-liner auto-instrumentation for the TypeScript SDK
 **Citation:** `features/09-sdk-dx.md` â€” auto-instrumentation comparison section.
-**Description:** Python's `eden.instrument()` does genuine class-level monkey-patching across 13 frameworks (a real one-liner). TypeScript has no equivalent: instrumentation is per-instance `Proxy`-based `wrap*()` factories that the caller must manually apply to every client instance they create. There is no mechanism that patches a framework's exported class/prototype once at import time the way Python does. Fix: implement prototype-level (or Node loader-hook-based, e.g. `import-in-the-middle`) auto-instrumentation for at least the top few frameworks, matching the Python UX.
+**Description:** Python's `eden.instrument()` does genuine class-level monkey-patching across 12 frameworks (the `mastra` entry is a no-op stub) (a real one-liner). TypeScript has no equivalent: instrumentation is per-instance `Proxy`-based `wrap*()` factories that the caller must manually apply to every client instance they create. There is no mechanism that patches a framework's exported class/prototype once at import time the way Python does. Fix: implement prototype-level (or Node loader-hook-based, e.g. `import-in-the-middle`) auto-instrumentation for at least the top few frameworks, matching the Python UX.
 **Why it matters:** TS/Node users get a materially worse onboarding experience than Python users for the exact same product promise ("one line of code"); this is a direct DX/adoption gap in a core acquisition funnel (SDK install â†’ first trace).
 **Severity:** High
 **Effort:** Large
@@ -64,7 +64,7 @@ Raw extraction of distinct, actionable items from pass-4 feature-review docs 09â
 
 ### B09-8. Extend Python monkey-patch auto-instrumentation coverage / keep it current
 **Citation:** `features/09-sdk-dx.md` â€” Python auto-instrumentation, 13-framework list.
-**Description:** Python's `eden.instrument()` currently covers 13 frameworks via class-level monkey-patching. The doc implies this list needs to be treated as a living target (new frameworks/SDKs emerge frequently in the LLM app space) rather than a one-time build. Fix: establish a lightweight process/checklist for adding new framework support as they gain adoption, so Python's advantage over TS doesn't quietly erode as the ecosystem shifts.
+**Description:** Python's `eden.instrument()` currently covers 12 real frameworks via class-level monkey-patching (the 13th entry, `mastra`, is a no-op stub). The doc implies this list needs to be treated as a living target (new frameworks/SDKs emerge frequently in the LLM app space) rather than a one-time build. Fix: establish a lightweight process/checklist for adding new framework support as they gain adoption, so Python's advantage over TS doesn't quietly erode as the ecosystem shifts.
 **Why it matters:** Auto-instrumentation coverage is a moving target; a framework list that goes stale silently degrades the "just works" promise for any user on a newer/less-common stack.
 **Severity:** Low
 **Effort:** Medium

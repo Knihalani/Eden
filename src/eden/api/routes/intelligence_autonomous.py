@@ -11,9 +11,10 @@ ship surface is:
 * ``NLReportGenerator`` — NL → report
 
 The removed services (``ReportGenerator``,
-``RecommendationEngine``, ``NLQueryEngine``,
-``AutoDashboardBuilder``) return a stable 501 envelope
-so deep-linked portal pages resolve gracefully.
+``RecommendationEngine``, ``NLQueryEngine``) are not
+wired to routes in this file; ``AutoDashboardBuilder``
+is also unwired — use the manual widget builder UI
+instead (W3-10). No 501-returning stubs remain here.
 
 The destructive ``/heal`` route remains gated by
 ``require_org_admin`` AND the ``autonomous_actions_v0``

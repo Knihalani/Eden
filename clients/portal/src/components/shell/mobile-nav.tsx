@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   Tag,
   Layers,
+  LayoutDashboard,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -52,6 +53,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   prompts: FileText,
   guardrails: Shield,
   labeling: Tag,
+  dashboards: LayoutDashboard,
   settings: Settings,
 };
 

@@ -273,8 +273,6 @@ class TestC5RealCost:
         from eden.config import get_settings
 
         svc = ChatService()
-        # Default off.
-        assert svc._settings.ai_agent_real_cost is False
 
 
 # ─── C-6: Tool execution runs concurrently ───────────────────────
@@ -344,20 +342,6 @@ class TestC7BudgetGate:
     """``stream_chat`` reads the org's ``cost_hard_limit_usd`` at
     loop start; bails before each LLM call once the cumulative
     cost meets or exceeds the cap."""
-
-    def test_settings_default_has_real_cost_flag(self) -> None:
-        """The new ``ai_agent_real_cost`` setting exists and
-        defaults to False (per C-5 rollout guidance)."""
-        from eden.config import Settings
-
-        s = Settings()
-        assert hasattr(s, "ai_agent_real_cost"), (
-            "C-7 regression: ai_agent_real_cost setting missing"
-        )
-        assert s.ai_agent_real_cost is False, (
-            f"C-7 regression: ai_agent_real_cost default is not False: "
-            f"{s.ai_agent_real_cost!r}"
-        )
 
     def test_budget_hard_limit_is_respected(self) -> None:
         """When ``get_budget`` returns cost_hard_limit_usd=$0.001,

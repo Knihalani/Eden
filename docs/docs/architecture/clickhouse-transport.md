@@ -97,7 +97,9 @@ Configured via `eden.config.Settings`:
 
 The Docker Compose stack at `docker/docker-compose.yml` ships a
 `clickhouse` service on `8123:8123` (HTTP) and `9000:9000` (native,
-unused by Eden today). The default `CLICKHOUSE_URL` points at it.
+unused by Eden today) **for local development and evaluation only**.
+The default `CLICKHOUSE_URL` points at it. Production deployments use
+a managed ClickHouse host (see `docs/deploy/`).
 
 ## Related code
 

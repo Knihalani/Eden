@@ -81,10 +81,10 @@ def _sample_rate() -> float:
     try:
         from eden.config import get_settings
 
-        raw = getattr(get_settings(), "trace_annotator_sample_rate", 0.1)
-        rate = float(0.1 if raw is None else raw)
+        raw = getattr(get_settings(), "trace_annotator_sample_rate", 0.02)
+        rate = float(0.02 if raw is None else raw)
     except Exception:
-        rate = 0.1
+        rate = 0.02
     return min(1.0, max(0.0, rate))
 
 
@@ -108,12 +108,16 @@ def sampled_in(trace_id: str, rate: float | None = None) -> bool:
 
 
 async def _budget_ok(org_id: str) -> bool:
-    """Org kill switch + daily maintenance budget.
+    """Org kill switch + daily maintenance budget + system lane cap.
 
-    Mirrors the gate in :mod:`eden.evaluation.online.scorer_cascade` so
-    annotator spend is subject to the same ceiling as the other
-    best-effort LLM lanes. Fails CLOSED -- this call is optional, so an
-    unreachable budget backend must not become a licence to spend.
+    Checks three gates in order (cheapest first):
+    1. Feature kill switch (org-level opt-out).
+    2. Per-org daily maintenance budget via autonomy_policy (Redis).
+    3. OOM W3-5 system-wide annotator lane daily cap (LaneDailyBudget).
+
+    Fails CLOSED for (1) and (2) because an unreachable budget backend
+    must not be a licence to spend.  Gate (3) is fail-open per the OOM
+    W3-5 spec: if Redis is down the lane continues and a WARNING is logged.
     """
     try:
         from eden.llmops.feature_kills import is_feature_enabled
@@ -135,13 +139,29 @@ async def _budget_ok(org_id: str) -> bool:
         logger.debug("annotator: budget check failed: %s", exc)
         return False
 
+    # OOM W3-5 — system-wide annotator lane daily cap (fail-open).
+    try:
+        from eden.llmops.evolution_spend import LaneDailyBudget
+
+        allowed, spent, cap = await LaneDailyBudget("annotator").check()
+        if not allowed:
+            logger.warning(
+                "annotator: system lane budget exceeded "
+                "(spent=%.4f cap=%.4f) — skipping LLM call",
+                spent,
+                cap,
+            )
+            return False
+    except Exception as exc:
+        logger.debug("annotator: lane budget check failed (fail-open): %s", exc)
+
     return True
 
 
-def compact_events(events: list[dict[str, Any]], *, max_chars: int = 3500) -> str:
+def compact_events(events: list[dict[str, Any]], *, max_chars: int = 1000) -> str:
     """Compress trajectory into a short prompt body."""
     lines: list[str] = []
-    for ev in events[:80]:
+    for ev in events[:25]:
         et = str(ev.get("event_type") or ev.get("type") or "")
         name = str(ev.get("name") or ev.get("span_name") or "")
         attrs = ev.get("attributes") or ev.get("data") or {}

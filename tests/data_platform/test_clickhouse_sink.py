@@ -459,13 +459,25 @@ class TestApplyTtlMigrationsTinybirdGuard:
 
 
 class TestUnreadTelemetryMirrorFields:
-    """Phase 1 overhaul: stop writing metrics/tags into telemetry_events_ch.
+    """Phase 1 overhaul / OOM plan §3.4 (D5): stop writing unread fields
+    into telemetry_events_ch.
 
-    No SELECT anywhere in this codebase (nor the deployed
-    ``telemetry_events_query_api.pipe``) reads either column back from
-    ClickHouse/Tinybird — Postgres holds the real JSON. Preferred over an
-    ``ALTER TABLE ... DROP COLUMN`` per the task: the columns stay in both
-    schemas, only the writer stops populating them.
+    Two categories are stripped via ``_TELEMETRY_ANALYTICS_STRIP_FIELDS``:
+
+    1. Schema-present but unread: ``metrics`` / ``tags`` — in the
+       ``.datasource`` schema, but no pipe or Python query reads them.
+
+    2. Full-span body blobs absent from the mirror schema: ``request_body``
+       / ``response_body`` / ``reasoning`` / ``tool_calls_full`` / etc.
+       (the "input_text"/"output_text" payload bodies per the OOM plan).
+       Tinybird's Events API previously accepted these as unknown fields and
+       silently discarded them, but they were still serialised and sent,
+       inflating every analytical batch by ~2×.
+
+    Postgres holds the real JSON for all of these. Preferred over
+    ``ALTER TABLE ... DROP COLUMN``: the schema columns stay, only the
+    writer stops populating them (blob columns were never in the Tinybird
+    schema at all).
     """
 
     @staticmethod
@@ -495,6 +507,99 @@ class TestUnreadTelemetryMirrorFields:
         assert '"event_id"' in body
         assert '"metrics"' not in body
         assert '"tags"' not in body
+
+    @pytest.mark.asyncio
+    async def test_span_blob_columns_stripped_for_telemetry_events_ch(self) -> None:
+        """OOM plan §3.4 / D5: full-span body blobs must not reach the wire.
+
+        ``request_body`` / ``response_body`` (the "input_text" / "output_text"
+        payload bodies) and the other blob columns are not in the Tinybird
+        ``telemetry_events_ch.datasource`` schema.  Before this fix they were
+        still serialised into the NDJSON body and sent — Tinybird silently
+        dropped them but the wire overhead remained (~2× per batch).
+        Metrics columns (event_id, outcome, model, duration_ms, etc.) must
+        be preserved.
+        """
+        sink = ClickHouseSink(
+            ClickHouseConfig(url="https://api.us-east.tinybird.co", tinybird_token="tok")
+        )
+        session, _ = self._tinybird_events_session()
+        row: dict = {
+            "event_id": "e2",
+            "tenant_id": "org-1",
+            "outcome": "success",
+            "model": "deepseek",
+            "duration_ms": 123.4,
+            # Full-span body blobs — must be stripped.
+            "request_body": '{"messages":[{"role":"user","content":"hello"}]}',
+            "response_body": '{"choices":[{"message":{"role":"assistant","content":"hi"}}]}',
+            "reasoning": '{"tokens":5}',
+            "tool_calls_full": "[{}]",
+            "tool_results": "[{}]",
+            "images": "[]",
+            "audio": "[]",
+            "logprobs": "null",
+            "citations": "[]",
+        }
+        with patch.object(sink, "_get_session", AsyncMock(return_value=session)):
+            await sink._insert_json("telemetry_events_ch", [row])
+        _, kwargs = session.post.call_args
+        body = kwargs["data"]
+        # Metrics / identity columns must survive.
+        assert '"event_id"' in body
+        assert '"outcome"' in body
+        assert '"model"' in body
+        assert '"duration_ms"' in body
+        # Full-span body blobs must be absent from the wire payload.
+        for blob_col in (
+            "request_body",
+            "response_body",
+            "reasoning",
+            "tool_calls_full",
+            "tool_results",
+            "images",
+            "audio",
+            "logprobs",
+            "citations",
+        ):
+            assert f'"{blob_col}"' not in body, (
+                f"blob column '{blob_col}' was serialised into the Tinybird "
+                f"payload but should have been stripped (OOM plan §3.4)"
+            )
+
+    @pytest.mark.asyncio
+    async def test_span_blob_columns_stripped_for_local_clickhouse(self) -> None:
+        """Blob-column stripping also applies on the local ClickHouse path.
+
+        The stripping happens in ``_insert_json`` before the
+        Tinybird-vs-ClickHouse branch, so it protects both backends.  On
+        local ClickHouse the INSERT goes via the query-string + body form;
+        ``input_format_skip_unknown_fields=1`` would have hidden missing
+        blob columns anyway, but stripping them saves serialisation work.
+        """
+        sink = ClickHouseSink(ClickHouseConfig(url="http://localhost:8123"))
+        sink._initialized = True
+
+        resp = MagicMock()
+        resp.status = 200
+        resp.text = AsyncMock(return_value="")
+        resp.__aenter__ = AsyncMock(return_value=resp)
+        resp.__aexit__ = AsyncMock(return_value=False)
+        session = MagicMock()
+        session.post = MagicMock(return_value=resp)
+
+        row: dict = {
+            "event_id": "e3",
+            "request_body": '{"big": "payload"}',
+            "response_body": '{"choices": []}',
+        }
+        with patch.object(sink, "_get_session", AsyncMock(return_value=session)):
+            await sink._insert_json("telemetry_events_ch", [row])
+        _, kwargs = session.post.call_args
+        body = kwargs["data"]
+        assert '"event_id"' in body
+        assert '"request_body"' not in body
+        assert '"response_body"' not in body
 
     @pytest.mark.asyncio
     async def test_other_tables_keep_their_fields(self) -> None:

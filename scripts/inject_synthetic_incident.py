@@ -41,30 +41,27 @@ import sys
 import time
 from typing import Any
 
+# The core _detail_for logic lives in the importable module so the
+# onboarding seed route can reuse it without importing this script.
+# The script re-exports the same constants for backwards-compat.
+from eden.onboarding.demo_seed import (  # noqa: F401 — re-exported for callers
+    DEMO_AGENT_ID_PREFIX,
+    DEMO_DETECTED_BY,
+    _detail_for as _demo_detail_for,
+)
+
 AGENT_ID = "synthetic-incident-agent"
 BUGGY_FILE = "agent/checkout.py"
 
 
 def _detail_for(scenario: str, seed: str) -> tuple[str, str, dict[str, Any]]:
     """Return (kind, title, detail) whose error signature embeds ``seed``
-    so every stumble in the batch lands on one stable fingerprint."""
-    if scenario == "deploy-regression":
-        return (
-            "statgate_p0",
-            f"StatGate P0 regression ({seed})",
-            {"check": seed, "deploy_marker": seed},
-        )
-    # code-bug and regression share the fingerprint on purpose: the
-    # regression scenario re-fires the same incident post-merge.
-    return (
-        "tool_error",
-        f"checkout crashes with ZeroDivisionError ({seed})",
-        {
-            "tool_name": "checkout",
-            "error": f"ZeroDivisionError in {BUGGY_FILE} [{seed}]",
-            "file": BUGGY_FILE,
-        },
-    )
+    so every stumble in the batch lands on one stable fingerprint.
+
+    Thin shim — delegates to :func:`eden.onboarding.demo_seed._detail_for`
+    with the legacy signature so existing callers are unaffected.
+    """
+    return _demo_detail_for(scenario, seed, seed)
 
 
 async def inject(scenario: str, org_id: str, seed: str, count: int) -> int:

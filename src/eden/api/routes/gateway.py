@@ -127,6 +127,7 @@ from eden.api.utils.redact import redact_all  # noqa: E402
 from eden.api.utils.safe_error import redact_upstream_error, safe_detail  # noqa: E402
 from eden.config import get_settings  # noqa: E402
 from eden.data_platform.pii import PIIPolicy  # noqa: E402
+from eden.llm.client import CircuitBreaker, CircuitOpenError  # noqa: E402
 from eden.llmops.ai_gateway import AIGateway, ModelRequest  # noqa: E402
 from eden.llmops.gateway_optimizations import (  # noqa: E402
     OptimizationFlags,
@@ -210,6 +211,39 @@ router = APIRouter(prefix="/gateway/v1", tags=["gateway"])
 
 _async_client: AsyncOpenAI | None = None
 _gateway: AIGateway | None = None
+
+# Per-provider circuit breaker for the HTTP gateway path.
+# Keyed by provider label (e.g. "openrouter", "openai", "anthropic").
+# Thresholds are tuned via GATEWAY_BREAKER_THRESHOLD / GATEWAY_BREAKER_TIMEOUT
+# env vars; defaults mirror the internal OpenRouterClient settings.
+_provider_breaker: CircuitBreaker | None = None
+
+
+def _get_provider_breaker() -> CircuitBreaker:
+    """Return the process-shared per-provider circuit breaker.
+
+    Lazily constructed so tests can patch ``_provider_breaker`` before
+    first access.  Threshold / timeout are read from env vars at
+    construction time so they can be lowered in tests without touching
+    Settings.
+
+    * ``GATEWAY_BREAKER_THRESHOLD`` — consecutive 5xx failures before a
+      provider circuit opens (default 5, matching OpenRouterClient).
+    * ``GATEWAY_BREAKER_TIMEOUT`` — seconds the circuit stays open before
+      a half-open probe is allowed (default 60).
+    """
+    global _provider_breaker
+    if _provider_breaker is None:
+        import os as _os
+        threshold = int(_os.getenv("GATEWAY_BREAKER_THRESHOLD", "5"))
+        timeout = int(_os.getenv("GATEWAY_BREAKER_TIMEOUT", "60"))
+        _provider_breaker = CircuitBreaker(
+            failure_threshold=threshold,
+            recovery_timeout=timeout,
+        )
+    return _provider_breaker
+
+
 # Lazy shared SemanticCache for the gateway singleton. Built once per
 # process by :func:`_get_semantic_cache`; ``None`` until first use (or
 # forever, when disabled / construction fails).
@@ -1779,6 +1813,24 @@ async def _chat_completions_unary(
             return JSONResponse(content=shaped, headers=_opt_response_headers())
         tags.append("exact_cache:miss")
 
+    # W3-11: circuit-breaker pre-flight check on the live gateway path.
+    # The breaker is per-provider (keyed by the resolved ``provider`` label
+    # from ``_resolve_upstream``).  When OPEN it fast-fails with 503 so
+    # clients can back off immediately without waiting for a TCP timeout.
+    _breaker = _get_provider_breaker()
+    _breaker_key = provider or "default"
+    if _breaker.is_open(_breaker_key):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "circuit_open",
+                "message": (
+                    f"Upstream provider '{_breaker_key}' is temporarily unavailable "
+                    "(circuit breaker open). Retry after a short back-off."
+                ),
+            },
+        )
+
     try:
         if flags.coalesce and cache_key:
             shaped, was_coalesced = await get_gateway_coalescer().execute(
@@ -1789,7 +1841,15 @@ async def _chat_completions_unary(
                 tags.append("coalesce:hit")
         else:
             shaped = await _call_upstream()
+        # Record success so half-open probes can close the circuit.
+        _breaker.record_success(_breaker_key)
     except _get_openai_api_error() as exc:
+        # Trip the breaker only for 5xx (provider-side) errors; 4xx errors
+        # (bad request, auth failure) are client errors and should not
+        # count against provider health.
+        _status = getattr(exc, "status_code", None) or 502
+        if _status >= 500:
+            _breaker.record_failure(_breaker_key)
         _emit_gateway_telemetry_bg(
             org_id=org_id,
             auth_ctx=auth_ctx,
@@ -1804,12 +1864,14 @@ async def _chat_completions_unary(
             user_label=user_label,
         )
         # Map OpenAI's HTTP status to ours when known
-        status = getattr(exc, "status_code", None) or 502
         raise HTTPException(
-            status_code=status,
+            status_code=_status,
             detail=_redact_upstream_error(exc),
         ) from exc
     except Exception as exc:  # noqa: BLE001
+        # Non-OpenAI exceptions (network error, timeout, etc.) also
+        # indicate provider-side trouble — trip the breaker.
+        _breaker.record_failure(_breaker_key)
         _emit_gateway_telemetry_bg(
             org_id=org_id,
             auth_ctx=auth_ctx,
@@ -1905,6 +1967,21 @@ async def _chat_completions_stream(
     if client is None:
         client = get_async_openai_client()
 
+    # W3-11: circuit-breaker pre-flight for the stream path.
+    _stream_breaker = _get_provider_breaker()
+    _stream_breaker_key = provider or "default"
+    if _stream_breaker.is_open(_stream_breaker_key):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "circuit_open",
+                "message": (
+                    f"Upstream provider '{_stream_breaker_key}' is temporarily unavailable "
+                    "(circuit breaker open). Retry after a short back-off."
+                ),
+            },
+        )
+
     async def event_source() -> AsyncIterator[bytes]:
         total_input = 0
         total_output = 0
@@ -1931,9 +2008,14 @@ async def _chat_completions_stream(
                     continue
                 yield sse_format(payload)
             yield sse_done()
+            # Stream completed successfully — close the circuit if half-open.
+            _stream_breaker.record_success(_stream_breaker_key)
         except _get_openai_api_error() as exc:
             outcome = "failure"
             error_type = type(exc).__name__
+            # Trip the breaker only for 5xx (provider-side) errors.
+            if (getattr(exc, "status_code", None) or 502) >= 500:
+                _stream_breaker.record_failure(_stream_breaker_key)
             # P39 audit (2026-07-06): the SDK ``message`` attribute can
             # carry the provider URL, a prefix of the API key, and the
             # model name. Surface a fixed safe string instead; clients
@@ -1953,6 +2035,8 @@ async def _chat_completions_stream(
         except Exception as exc:  # noqa: BLE001
             outcome = "failure"
             error_type = type(exc).__name__
+            # Non-OpenAI network/timeout errors also indicate provider trouble.
+            _stream_breaker.record_failure(_stream_breaker_key)
             logger.exception(
                 "gateway chat.completions stream raised: %s",
                 redact_all(str(exc)),

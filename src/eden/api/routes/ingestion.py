@@ -264,6 +264,7 @@ async def _ingest_handler(
         # ``api_key_id`` for overrides / gateway-shaped auth dicts.
         api_key_id=auth_ctx.get("api_key_id") or auth_ctx.get("key_id"),
         auth_method=auth_ctx.get("auth_method", "api_key"),
+        content_type=content_type,
     )
 
     # Decode — gunzip first (SDKs send Content-Encoding: gzip).

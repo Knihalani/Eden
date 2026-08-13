@@ -2,6 +2,11 @@
 
 M15 (§9): when auto-merge eligibility passes, open a non-draft PR and
 merge (canary ladder); otherwise the existing draft-PR path is unchanged.
+
+W2-8 (§9.1): judge-score deltas are computed at approve/PR-open time
+and stamped into both the PR body and the plan evidence block so every
+guardian PR carries eval evidence.  Code-patch lane only — prompt-version
+judge stamping is absent from judge_scores (no per-version column).
 """
 
 from __future__ import annotations
@@ -18,6 +23,174 @@ from eden.patches.diff_materializer import (
 from eden.providers import PRCreateRequest, PRProvider
 
 logger = logging.getLogger(__name__)
+
+# W2-8: windows for the judge-score delta computation.
+# Baseline = [NOW - 14d, NOW - 7d]; canary/replay = [NOW - 7d, NOW].
+_JUDGE_BASELINE_LOOKBACK = "14 days"
+_JUDGE_RECENT_WINDOW = "7 days"
+
+
+async def fetch_judge_score_deltas(
+    org_id: str,
+    agent_id: str | None,
+) -> list[dict[str, Any]]:
+    """W2-8 (§9.1): per-judge score delta — baseline vs canary/replay window.
+
+    Baseline window: [NOW - 14d, NOW - 7d].
+    Recent window  : [NOW - 7d,  NOW].
+
+    Uses the ``judge_scores`` table filtered by ``tenant_id`` + ``agent_id``
+    (same query pattern as ``agents/agent_intel/_common.py``).  Returns ``[]``
+    when Postgres is unavailable, ``agent_id`` is missing, or no scores exist
+    in either window — the render path handles the empty case with the
+    'no judge baseline yet' fallback so the PR body section always appears.
+
+    Prompt-lane note: ``judge_scores`` has no ``prompt_version`` column, so
+    per-version stamping is absent — code-patch lane only for now.
+    """
+    if not agent_id:
+        return []
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+        if client is None:
+            return []
+
+        rows_before = await client.fetch(
+            """
+            SELECT judge_name, AVG(score)::float8 AS avg_score, COUNT(*)::int AS n
+              FROM judge_scores
+             WHERE tenant_id = $1
+               AND agent_id   = $2
+               AND created_at >= NOW() - $3::interval
+               AND created_at <  NOW() - $4::interval
+               AND score IS NOT NULL
+             GROUP BY judge_name
+             ORDER BY judge_name
+            """,
+            org_id,
+            agent_id,
+            _JUDGE_BASELINE_LOOKBACK,
+            _JUDGE_RECENT_WINDOW,
+        )
+        rows_after = await client.fetch(
+            """
+            SELECT judge_name, AVG(score)::float8 AS avg_score, COUNT(*)::int AS n
+              FROM judge_scores
+             WHERE tenant_id = $1
+               AND agent_id  = $2
+               AND created_at >= NOW() - $3::interval
+               AND score IS NOT NULL
+             GROUP BY judge_name
+             ORDER BY judge_name
+            """,
+            org_id,
+            agent_id,
+            _JUDGE_RECENT_WINDOW,
+        )
+    except Exception as exc:
+        logger.debug("approve: fetch_judge_score_deltas failed: %s", exc)
+        return []
+
+    def _as_dict(r: Any) -> dict[str, Any]:
+        return dict(r) if not isinstance(r, dict) else r
+
+    before: dict[str, float] = {}
+    for r in rows_before or []:
+        d = _as_dict(r)
+        jname = str(d.get("judge_name") or "").strip()
+        val = d.get("avg_score")
+        if jname and val is not None:
+            before[jname] = float(val)
+
+    after: dict[str, float] = {}
+    for r in rows_after or []:
+        d = _as_dict(r)
+        jname = str(d.get("judge_name") or "").strip()
+        val = d.get("avg_score")
+        if jname and val is not None:
+            after[jname] = float(val)
+
+    all_judges = sorted(set(before) | set(after))
+    result: list[dict[str, Any]] = []
+    for judge in all_judges:
+        b = before.get(judge)
+        a = after.get(judge)
+        delta: float | None = (a - b) if (a is not None and b is not None) else None
+        result.append(
+            {
+                "judge": judge,
+                "before": round(b, 3) if b is not None else None,
+                "after": round(a, 3) if a is not None else None,
+                "delta": round(delta, 3) if delta is not None else None,
+            }
+        )
+    return result
+
+
+def _render_judge_score_section(deltas: list[dict[str, Any]] | None) -> list[str]:
+    """W2-8 (§9.1): render the judge-score delta table.
+
+    Returns a list of markdown lines.  Contract: ALWAYS returns at least the
+    table header + one row (either real scores or the 'no judge baseline yet'
+    fallback) + a one-line interpretation.  The PR body section therefore
+    appears on 100% of guardian PRs.
+
+    Prompt-version lane note: ``judge_scores`` carries no per-version column,
+    so this always uses the code-patch (agent-level baseline) lane.
+    """
+    prompt_lane_note = (
+        "code-patch lane; prompt-version judge stamping absent"
+    )
+
+    if not deltas:
+        return [
+            "| Judge | Before | After | Delta |",
+            "| --- | --- | --- | --- |",
+            "| _no judge baseline yet_ | — | — | — |",
+            "",
+            f"_Judge scores: no baseline data for this agent ({prompt_lane_note})._",
+        ]
+
+    rows = [
+        "| Judge | Before | After | Delta |",
+        "| --- | --- | --- | --- |",
+    ]
+    for d in deltas:
+        judge_cell = _md_cell(d.get("judge") or "")
+        b = d.get("before")
+        a = d.get("after")
+        delta = d.get("delta")
+        before_cell = _md_cell(f"{b:.3f}" if b is not None else "")
+        after_cell = _md_cell(f"{a:.3f}" if a is not None else "")
+        if delta is not None:
+            delta_cell = _md_cell(f"+{delta:.3f}" if delta >= 0 else f"{delta:.3f}")
+        else:
+            delta_cell = "—"
+        rows.append(f"| {judge_cell} | {before_cell} | {after_cell} | {delta_cell} |")
+
+    # One-line interpretation.
+    improving = [d for d in deltas if (d.get("delta") or 0) > 0]
+    degrading = [d for d in deltas if (d.get("delta") or 0) < 0]
+    if improving and not degrading:
+        interp = f"{len(improving)} judge(s) improved; no regressions detected."
+    elif degrading and not improving:
+        interp = (
+            f"{len(degrading)} judge(s) degraded; review scores before merging."
+        )
+    elif improving and degrading:
+        interp = (
+            f"{len(improving)} improved, {len(degrading)} degraded — mixed signal."
+        )
+    else:
+        interp = "Scores unchanged or insufficient data for delta."
+
+    rows.append("")
+    rows.append(
+        f"_Judge scores: 14-day baseline vs 7-day canary window ({prompt_lane_note}). {interp}_"
+    )
+    return rows
 
 
 class ApproveBlockedError(Exception):
@@ -232,6 +405,15 @@ def render_pr_evidence_body(
     if str(evidence.get("ci_ingestion") or "") == "unavailable":
         rows.append(("Customer CI", "unavailable (App lacks `checks:read`)"))
 
+    # W2-8 (§9.1): judge-score delta section — always present (fallback when
+    # no baseline data exists).  Read from stamped evidence so the same data
+    # appears in the plan-detail evidence block and the PR body.
+    judge_deltas_raw = evidence.get("judge_score_deltas")
+    judge_deltas: list[dict[str, Any]] | None = (
+        list(judge_deltas_raw) if isinstance(judge_deltas_raw, list) else None
+    )
+    judge_section = _render_judge_score_section(judge_deltas)
+
     lines = [
         summary,
         "",
@@ -240,6 +422,8 @@ def render_pr_evidence_body(
         "| Check | Result |",
         "| --- | --- |",
         *[f"| {label} | {value} |" for label, value in rows],
+        "",
+        *judge_section,
         "",
         f"_Evidence recorded on plan `{plan_id}`; merging schedules the "
         "post-merge regression verify._",
@@ -564,6 +748,21 @@ async def approve_plan(
     branch = f"eden/improve-{plan_id[:12]}"
     title = f"[Eden] {plan.get('title', 'Improvement plan')[:120]}"
     body = plan.get("summary") or f"Eden improvement plan `{plan_id}`"
+
+    # W2-8 (§9.1): stamp judge-score deltas into plan evidence so both the
+    # PR body and the plan-detail evidence block (backend response) carry the
+    # section.  Best-effort: a failure here must never block PR open.
+    try:
+        judge_deltas = await fetch_judge_score_deltas(org_id, plan_agent_id)
+        # Always stamp, even when empty — [] triggers the fallback section.
+        jsd_plan = await _merge_plan_evidence(
+            org_id, plan_id, {"judge_score_deltas": judge_deltas}
+        )
+        if jsd_plan is not None:
+            plan = jsd_plan
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("approve_plan: judge score delta stamp failed: %s", exc)
+
     # M9 (§4.3): the human merges with proof in view — render the plan
     # evidence table into the PR body (flagged; falls back to summary).
     try:

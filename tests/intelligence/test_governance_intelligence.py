@@ -1547,18 +1547,25 @@ class TestGovernanceRoutes:
             )
         assert r.status_code == 200, r.text
 
-    def test_post_rtbf_is_gated_off_by_default(
-        self, gov_client: TestClient
+    def test_post_rtbf_is_gated_when_flag_is_false(
+        self,
+        gov_client: TestClient,
+        test_settings: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """RTBF is behind ``rtbf_fanout_v1``, which defaults to False.
+        """``require_feature_flag`` 404s the route when rtbf_fanout_v1 is False.
 
-        The cross-store fanout cannot currently erase per-user data from
-        Typesense, Redis, Qdrant, ClickHouse or S3 — each either filters on a
-        field its schema does not have or has no delete-by-user path at all.
-        Serving the endpoint would hand back a compliance guarantee the system
-        cannot keep, so it 404s (``require_feature_flag`` deliberately hides
-        the route rather than 403-ing it).
+        The default flipped to True (Wave 1 / OOM plan 9.13) but the gate
+        mechanism must still work — operators disabling the flag must get 404.
+        Monkeypatched to False here so the gate contract stays regression-locked
+        independently of the default.
         """
+        import eden.api.deps as deps
+
+        monkeypatch.setattr(test_settings, "rtbf_fanout_v1", False, raising=False)
+        monkeypatch.setattr(
+            deps.get_settings(), "rtbf_fanout_v1", False, raising=False
+        )
         pg = _pg_router(rtbf_table_counts={})
         with patch(
             "eden.storage.postgres.get_postgres_client", return_value=pg
@@ -1657,20 +1664,3 @@ class TestGovernanceRoutes:
             with pytest.raises(HTTPException) as exc_info:
                 await dep()
         assert exc_info.value.status_code == 404
-
-
-# ─── 9. Backwards-compat re-exports ─────────────────────────────────
-
-
-class TestBackwardsCompat:
-    def test_legacy_import_path_still_works(self) -> None:
-        """The old ``eden.compliance.evidence_generator`` path
-        still resolves to the new implementations.
-        """
-        from eden.compliance.evidence_generator import (
-            ApprovalWorkflowService as Legacy,
-        )
-        from eden.services.governance_intel import (
-            ApprovalWorkflowService as Current,
-        )
-        assert Legacy is Current

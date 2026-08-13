@@ -34,7 +34,6 @@ first.
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
@@ -202,17 +201,47 @@ def _truncate_walk(value: Any, max_bytes: int) -> tuple[Any, bool, int]:
 
 
 def _approx_bytes(value: Any) -> int:
-    """Cheap, non-recursive size estimate for the "keep full" paths.
+    """Structural byte-count estimate — no JSON encoding.
 
-    Used when we already know we're not going to truncate (``full``
-    mode, or an error/slow bypass) — a JSON-dump-and-measure is far
-    cheaper than walking + rebuilding the whole structure just to
-    report a size nobody will use to reconstruct the payload.
+    S3 fix: the previous implementation called ``json.dumps()`` to
+    measure size, which was a full serialisation round-trip on the
+    producer thread.  The sender thread will serialise the value again
+    (``_fast_dumps_bytes``), so the old approach was double-encoding.
+
+    This version walks the structure counting string bytes directly,
+    with no intermediate JSON string.  The result is an approximation
+    (no escaping overhead, int/float sizes are rough), but the attribute
+    is informational-only so accuracy is not critical.
     """
     try:
-        return len(json.dumps(value, default=str).encode("utf-8"))
+        return _size_walk(value)
     except Exception:  # noqa: BLE001 — size reporting must never raise
         return 0
+
+
+def _size_walk(v: Any) -> int:
+    """Recursive structural byte counter (no JSON, no string copies)."""
+    if v is None:
+        return 4  # "null"
+    if isinstance(v, bool):
+        return 5  # "false" is the longer literal
+    if isinstance(v, str):
+        return len(v.encode("utf-8")) + 2  # +2 for JSON quotes
+    if isinstance(v, (int, float)):
+        return len(repr(v))
+    if isinstance(v, dict):
+        if not v:
+            return 2  # "{}"
+        total = 2
+        for k, val in v.items():
+            total += _size_walk(k) + 1 + _size_walk(val) + 1  # "k":v,
+        return total
+    if isinstance(v, (list, tuple)):
+        if not v:
+            return 2  # "[]"
+        return 2 + sum(_size_walk(item) + 1 for item in v)  # [item,...]
+    # Non-standard type — rough estimate via str()
+    return len(str(v))
 
 
 @dataclass(frozen=True)

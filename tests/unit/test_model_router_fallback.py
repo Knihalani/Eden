@@ -182,9 +182,9 @@ class TestS21ModelRouterFallbackChain:
         """
         from pathlib import Path
 
-        src = Path(
-            "src/eden/optimization/model_router.py"
-        ).read_text()
+        # model_router.py is now a thin shim; the real routing logic with
+        # the S-21 default-arg fix lives in the LLM client.
+        src = Path("src/eden/llm/client.py").read_text()
         has_default_binding = (
             "lambda m=model:" in src
             or "def _call_routed(m: str = model)" in src
@@ -199,11 +199,18 @@ class TestS21ModelRouterFallbackChain:
         bad_pattern_lines = []
         in_run_in_executor = False
         for ln, line in enumerate(src.splitlines(), 1):
-            if "run_in_executor" in line:
+            # Skip comment-only lines so that doc-strings / inline comments that
+            # merely *mention* run_in_executor don't confuse the state machine.
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            # Only actual call-sites (``run_in_executor(``) trigger the window,
+            # not comments that say "NOT run_in_executor".
+            if "run_in_executor(" in line:
                 in_run_in_executor = True
             if in_run_in_executor and "lambda:" in line and "m=model" not in line:
                 bad_pattern_lines.append((ln, line.strip()))
-            if in_run_in_executor and ")" in line and "run_in_executor" not in line:
+            if in_run_in_executor and ")" in line and "run_in_executor(" not in line:
                 in_run_in_executor = False
         assert not bad_pattern_lines, (
             f"S-21 regression: bare 'lambda:' found inside "

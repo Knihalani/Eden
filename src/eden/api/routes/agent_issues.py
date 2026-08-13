@@ -202,6 +202,65 @@ async def get_issue(
     return _ok("agent_issues", {"issue": _issue_dict(issue)})
 
 
+# ── 9.3 issue → debugger deep-link glue ──────────────────────────
+
+
+async def _first_stumble_trace(
+    org_id: str,
+    stumble_ids: list[str],
+) -> tuple[str | None, str | None]:
+    """Return (trace_id, span_id) from the first stumble that has a trace.
+
+    Iterates the issue's ``example_stumble_ids`` until it finds one with a
+    non-null ``trace_id``.  Fail-soft: returns ``(None, None)`` when no
+    stumble is found or none carries a trace reference yet.
+    """
+    for stumble_id in stumble_ids or []:
+        stumble = await _repo.get_stumble(org_id, stumble_id)
+        if stumble and stumble.get("trace_id"):
+            raw_span = stumble.get("span_id")
+            return str(stumble["trace_id"]), (str(raw_span) if raw_span else None)
+    return None, None
+
+
+@router.get("/agent-issues/{issue_id}/debug-context")
+async def get_issue_debug_context(
+    org_id: str = Depends(require_path_org_access),
+    issue_id: str = Path(...),
+) -> dict[str, Any]:
+    """Resolve issue → (trace_id, span_id) for the first occurrence.
+
+    9.3 glue: the portal uses this to build a debugger deep-link with
+    the failing checkpoint preselected. Best-effort — returns
+    ``has_trace: false`` when no stumble has an associated trace yet.
+
+    URL built by the portal::
+
+        /debugger?traceId=<trace_id>&spanId=<span_id>&mode=replay&agent=<agent_id>
+    """
+    await _require_postgres()
+    issue = await _repo.get_issue(org_id, issue_id)
+    if issue is None:
+        return {
+            "status": "not_found",
+            "feature": "issue_debug_context",
+            "live": True,
+            "data": {},
+        }
+    trace_id, span_id = await _first_stumble_trace(
+        org_id, issue.example_stumble_ids
+    )
+    return _ok(
+        "issue_debug_context",
+        {
+            "issue_id": issue_id,
+            "trace_id": trace_id,
+            "span_id": span_id,
+            "has_trace": trace_id is not None,
+        },
+    )
+
+
 @router.post("/agent-issues/{issue_id}/resolve")
 async def resolve_issue(
     org_id: str = Depends(require_path_org_access),

@@ -73,6 +73,7 @@ export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/prompts",
   "/guardrails",
   "/labeling",
+  "/dashboards",
   "/artifacts",
   "/ledger",
   "/unavailable",

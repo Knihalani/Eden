@@ -27,7 +27,7 @@ from eden.services.soft_issue_review import (
 def _settings(**over):
     base = {
         "soft_issue_review_enabled": True,
-        "soft_issue_review_traces_per_org": 50,
+        "soft_issue_review_traces_per_org": 20,
     }
     base.update(over)
     return SimpleNamespace(**base)
@@ -320,3 +320,84 @@ class TestShadowHoldExpiry:
         )
         assert d["action"] == "delete"
         assert d["precision"] is None
+
+
+# ── OOM W3-5: soft_issue system lane cap ────────────────────────────
+
+
+class TestSoftIssueLaneBudget:
+    """Pins the OOM W3-5 lane budget gate in SoftIssueReviewer._review_org()."""
+
+    def _pg_stub(self, orgs=None):
+        pg = MagicMock()
+        if orgs is None:
+            orgs = [{"org_id": "org-lane-test"}]
+        pg.fetch = AsyncMock(return_value=orgs)
+        return pg
+
+    @pytest.mark.asyncio
+    async def test_review_org_skips_when_lane_budget_exceeded(self) -> None:
+        reviewer = SoftIssueReviewer()
+        pg = self._pg_stub()
+        with (
+            patch.object(soft_issue_review, "get_settings", return_value=_settings()),
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=pg),
+            ),
+            patch(
+                "eden.llmops.evolution_spend.LaneDailyBudget.check",
+                new=AsyncMock(return_value=(False, 5.5, 5.0)),
+            ),
+            patch.object(reviewer, "_claim_org", AsyncMock(return_value=True)),
+        ):
+            result = await reviewer._review_org(pg, "org-lane-test")
+
+        assert result["skipped"] is True
+        assert result["reason"] == "lane_budget_exceeded"
+        assert result["lane_spent_usd"] == pytest.approx(5.5)
+        assert result["lane_cap_usd"] == pytest.approx(5.0)
+
+    @pytest.mark.asyncio
+    async def test_review_org_continues_when_lane_budget_ok(self) -> None:
+        reviewer = SoftIssueReviewer()
+        pg = self._pg_stub(orgs=[])  # empty traces → no_hot_agents short-circuit
+        with (
+            patch.object(soft_issue_review, "get_settings", return_value=_settings()),
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=pg),
+            ),
+            patch(
+                "eden.llmops.evolution_spend.LaneDailyBudget.check",
+                new=AsyncMock(return_value=(True, 0.5, 5.0)),
+            ),
+            patch.object(reviewer, "_claim_org", AsyncMock(return_value=True)),
+            patch.object(reviewer, "_hot_agents", AsyncMock(return_value=[])),
+        ):
+            result = await reviewer._review_org(pg, "org-lane-test")
+
+        # Not a lane-cap skip
+        assert result.get("reason") != "lane_budget_exceeded"
+
+    @pytest.mark.asyncio
+    async def test_review_org_fail_open_when_lane_check_raises(self) -> None:
+        reviewer = SoftIssueReviewer()
+        pg = self._pg_stub(orgs=[])
+        with (
+            patch.object(soft_issue_review, "get_settings", return_value=_settings()),
+            patch(
+                "eden.storage.postgres.get_postgres_client",
+                AsyncMock(return_value=pg),
+            ),
+            patch(
+                "eden.llmops.evolution_spend.LaneDailyBudget.check",
+                new=AsyncMock(side_effect=RuntimeError("redis down")),
+            ),
+            patch.object(reviewer, "_claim_org", AsyncMock(return_value=True)),
+            patch.object(reviewer, "_hot_agents", AsyncMock(return_value=[])),
+        ):
+            result = await reviewer._review_org(pg, "org-lane-test")
+
+        # Must NOT be a lane-cap skip — fail-open
+        assert result.get("reason") != "lane_budget_exceeded"

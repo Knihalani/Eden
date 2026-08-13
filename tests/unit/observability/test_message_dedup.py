@@ -35,33 +35,30 @@ _MIGRATIONS_DIR = (
 class TestMigration041Syntax:
     @staticmethod
     def _load_migration():
-        path = _MIGRATIONS_DIR / "041_trace_messages.py"
-        spec = importlib.util.spec_from_file_location("trace_messages", path)
+        path = _MIGRATIONS_DIR / "000_squash_001_160.py"
+        spec = importlib.util.spec_from_file_location("migration_squash", path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
 
     def test_revision_chain(self):
         m = self._load_migration()
-        assert m.revision == "041"
-        assert m.down_revision == "040"
+        assert m.revision == "160_signal_definitions_org_enabled_created"
+        assert m.down_revision is None
 
     def test_idempotent_create(self):
-        """The upgrade must use IF NOT EXISTS so re-runs are safe
-        on databases that already have the table from the legacy
-        raw-SQL file."""
-        self._load_migration()
-        body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
+        """The squash upgrade must contain the IF NOT EXISTS guard for
+        trace_messages from the original migration 041."""
+        body = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         assert "CREATE TABLE IF NOT EXISTS trace_messages" in body
 
     def test_indexes_created(self):
-        self._load_migration()
-        body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
+        body = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         assert "idx_trace_messages_trace_id" in body
         assert "idx_trace_messages_content_gin" in body
 
     def test_primary_key(self):
-        body = (_MIGRATIONS_DIR / "041_trace_messages.py").read_text()
+        body = (_MIGRATIONS_DIR / "000_squash_001_160.py").read_text()
         # The PK is on (trace_id, msg_hash) — trace-scoped dedup.
         assert "PRIMARY KEY (trace_id, msg_hash)" in body
 

@@ -5,7 +5,7 @@ signals into a deterministic playbook + suggested_actions list for
 :class:`ClosedLoopOrchestrator` and :class:`TriageAgent`.
 
 FEAT-44: remediation ``category`` is orthogonal to notification routing.
-Shared severity/destination types live in ``eden.alerting.types`` and
+Shared severity/destination types live in ``eden.alerts.types`` and
 ``eden.alerts.unified`` for when per-category paging is added.
 """
 

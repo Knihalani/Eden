@@ -98,6 +98,7 @@ export const BREADCRUMB_LABELS: Record<string, BreadcrumbLabel> = {
   compare: { label: "Live A/B", category: "evaluate" },
   gateway: { label: "Gateway", category: "improve" },
   cost: { label: "Cost", category: "improve" },
+  dashboards: { label: "Dashboards", category: "improve" },
 };
 
 export interface Breadcrumb {

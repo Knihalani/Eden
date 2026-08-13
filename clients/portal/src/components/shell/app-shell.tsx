@@ -14,7 +14,7 @@ import {
   PortalStatusBanners,
 } from "@/components/shell/portal-auth-chrome";
 import { PortalCatalogSync } from "@/components/providers/portal-catalog-sync";
-import { OnboardingBanner } from "@/components/onboarding/OnboardingBanner";
+import { useTourProgress } from "@/hooks/use-tour-progress";
 import { ConfirmProvider } from "@/hooks/use-confirm";
 import { NotificationsBell } from "@/components/shell/notifications-bell";
 import { openCommandPalette } from "@/lib/palette";
@@ -25,6 +25,17 @@ import { Search } from "lucide-react";
 const AlertsModal = dynamic(
   () =>
     import("@/lab/alerts-panel").then((m) => ({ default: m.AlertsModal })),
+  { ssr: false },
+);
+
+/** Onboarding banner — only needed while the personal tour is incomplete.
+ *  Lazy-loaded so the chunk is not in the initial bundle for users whose
+ *  tour is already done (P8). */
+const OnboardingBanner = dynamic(
+  () =>
+    import("@/components/onboarding/OnboardingBanner").then((m) => ({
+      default: m.OnboardingBanner,
+    })),
   { ssr: false },
 );
 
@@ -72,6 +83,11 @@ function RouteFade({ children }: { children: React.ReactNode }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const mainRef = useRef<HTMLElement | null>(null);
   useRouteScrollReset(mainRef);
+  // Gate banner rendering so the lazy chunk is never requested for
+  // users whose tour is already complete (P8). Defaults to true while
+  // Clerk hasn't loaded yet (progress is null → shouldShowTourBanner
+  // returns true), so it stays conservative on first render.
+  const { showBanner } = useTourProgress();
 
   return (
     <SidebarProvider>
@@ -95,7 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <NotificationsBell />
                   </div>
                   <PortalStatusBanners />
-                  <OnboardingBanner />
+                  {showBanner ? <OnboardingBanner /> : null}
                   <main
                     ref={mainRef}
                     id="eden-main-content"

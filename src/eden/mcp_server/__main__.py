@@ -1,7 +1,9 @@
 """``python -m eden.mcp_server`` — stdio JSON-RPC tool loop.
 
 Implements a minimal MCP-compatible subset:
-``initialize``, ``tools/list``, ``tools/call``, ``ping``.
+``initialize``, ``tools/list``, ``tools/call``, ``ping``,
+``resources/list``, ``resources/read``,
+``prompts/list``, ``prompts/get``.
 """
 
 from __future__ import annotations
@@ -11,6 +13,8 @@ import json
 import sys
 from typing import Any
 
+from eden.mcp_server.prompts import get_prompt, list_prompts
+from eden.mcp_server.resources import list_resource_templates, read_resource
 from eden.mcp_server.server import call_tool, list_tools
 
 
@@ -22,8 +26,12 @@ async def _handle(msg: dict[str, Any]) -> dict[str, Any]:
     if method == "initialize":
         result: Any = {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "eden-mcp-server", "version": "0.1.0"},
+            "capabilities": {
+                "tools": {},
+                "resources": {"subscribe": False, "listChanged": False},
+                "prompts": {"listChanged": False},
+            },
+            "serverInfo": {"name": "eden-mcp-server", "version": "0.2.0"},
         }
     elif method == "notifications/initialized":
         return {}
@@ -40,6 +48,37 @@ async def _handle(msg: dict[str, Any]) -> dict[str, Any]:
             "content": [{"type": "text", "text": text}],
             "isError": out.get("status") == "error",
         }
+    elif method == "resources/list":
+        result = {"resourceTemplates": list_resource_templates(), "resources": []}
+    elif method == "resources/read":
+        uri = params.get("uri") or ""
+        # stdio transport has no bearer; use a minimal unauthenticated auth ctx.
+        from eden.mcp_server.auth import resolve_auth
+        from eden.mcp_server.client import HttpEdenClient
+
+        auth = resolve_auth()
+        client = HttpEdenClient(auth)
+        out = await read_resource(uri, client=client, auth=auth)
+        if out.get("status") == "error":
+            return {
+                "jsonrpc": "2.0",
+                "id": mid,
+                "error": {"code": -32002, "message": out.get("error", "resource read failed")},
+            }
+        result = out
+    elif method == "prompts/list":
+        result = {"prompts": list_prompts()}
+    elif method == "prompts/get":
+        name = params.get("name") or ""
+        arguments = params.get("arguments") or {}
+        out = get_prompt(name, arguments)
+        if out.get("status") == "error":
+            return {
+                "jsonrpc": "2.0",
+                "id": mid,
+                "error": {"code": -32002, "message": out.get("error", "prompt not found")},
+            }
+        result = out
     else:
         return {
             "jsonrpc": "2.0",

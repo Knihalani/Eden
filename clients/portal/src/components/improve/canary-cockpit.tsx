@@ -39,16 +39,28 @@ function elapsedSince(iso: string | null | undefined): string | null {
   return `${Math.round(hours / 24)}d`;
 }
 
+/** Traffic-split bounds per backend ``CanaryUpdateRequest`` (ge=1, le=50). */
+const SPLIT_MIN = 1;
+const SPLIT_MAX = 50;
+const SPLIT_STEP = 5;
+
 function ExperimentCard({
   exp,
   busy,
   disabled,
+  splitPct,
+  onSplitPctChange,
+  onSplitUpdate,
   onPromote,
   onRollback,
 }: {
   exp: CanaryExperiment;
   busy: boolean;
   disabled: boolean;
+  /** Draft traffic-split % controlled by the parent. */
+  splitPct: number;
+  onSplitPctChange: (pct: number) => void;
+  onSplitUpdate: () => void;
   onPromote: () => void;
   onRollback: () => void;
 }) {
@@ -69,6 +81,12 @@ function ExperimentCard({
             {exp.traffic_pct}% traffic
           </span>
         ) : null}
+        {/* W3-9: show if split was locally adjusted but not yet submitted */}
+        {active && splitPct !== exp.traffic_pct ? (
+          <span className="type-meta text-[var(--text-faint)]">
+            → {splitPct}% pending
+          </span>
+        ) : null}
         {elapsed ? (
           <span className="type-meta text-[var(--text-faint)]">
             {exp.status === "active" ? `running ${elapsed}` : `${elapsed} ago`}
@@ -79,7 +97,33 @@ function ExperimentCard({
         <p className="type-meta mt-0.5">{exp.notes}</p>
       ) : null}
       {active ? (
-        <div className="mt-1.5 flex gap-1.5">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          {/* W3-9: traffic-split slider (1–50 %, step 5). Promote handles >50. */}
+          <label className="flex items-center gap-1.5">
+            <span className="type-meta text-[var(--text-faint)]">Split %</span>
+            <input
+              type="range"
+              min={SPLIT_MIN}
+              max={SPLIT_MAX}
+              step={SPLIT_STEP}
+              value={splitPct}
+              onChange={(e) => onSplitPctChange(Number(e.target.value))}
+              disabled={busy || disabled}
+              aria-label={`Traffic split for ${exp.agent}`}
+              className="w-24 accent-[var(--accent)]"
+            />
+            <span className="type-ui w-8 tabular-nums">{splitPct}%</span>
+          </label>
+          {splitPct !== exp.traffic_pct ? (
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
+              disabled={busy || disabled}
+              onClick={onSplitUpdate}
+            >
+              Set split
+            </button>
+          ) : null}
           <button
             type="button"
             className="ds-btn ds-btn-ghost ds-btn-sm"
@@ -106,6 +150,9 @@ export function CanaryCockpit({ orgId }: { orgId: string | null }) {
   const { pushToast } = useLabToast();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [heldReports, setHeldReports] = useState<Record<string, string>>({});
+  /** W3-9: draft traffic-split values, keyed by experiment_id. Initialised
+   *  from exp.traffic_pct on first render; cleared after a successful update. */
+  const [pendingSplits, setPendingSplits] = useState<Record<string, number>>({});
 
   const canariesQuery = useOrgQuery(
     queryKey("promptCanaries", orgId, null),
@@ -116,6 +163,35 @@ export function CanaryCockpit({ orgId }: { orgId: string | null }) {
 
   if (!orgId) return null;
   const canaries = canariesQuery.data?.canaries ?? [];
+
+  /** W3-9: adjust the traffic-split % without promoting. */
+  async function runSplitUpdate(exp: CanaryExperiment) {
+    if (!orgId) return;
+    const pct = pendingSplits[exp.experiment_id] ?? exp.traffic_pct;
+    setBusyId(exp.experiment_id);
+    try {
+      await promptsApi.updateSplit(orgId, exp.agent, exp.experiment_id, pct);
+      setPendingSplits((prev) => {
+        const next = { ...prev };
+        delete next[exp.experiment_id];
+        return next;
+      });
+      canariesQuery.refetch();
+      pushToast({
+        title: "Traffic split updated",
+        body: `${exp.agent} canary is now at ${pct}% traffic.`,
+        tone: "ok",
+      });
+    } catch (err) {
+      pushToast({
+        title: "Couldn't update split",
+        body: err instanceof Error ? err.message : String(err),
+        tone: "fail",
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function runAction(
     exp: CanaryExperiment,
@@ -198,6 +274,14 @@ export function CanaryCockpit({ orgId }: { orgId: string | null }) {
                   exp={exp}
                   busy={busyId === exp.experiment_id}
                   disabled={Boolean(busyId)}
+                  splitPct={pendingSplits[exp.experiment_id] ?? exp.traffic_pct}
+                  onSplitPctChange={(pct) =>
+                    setPendingSplits((prev) => ({
+                      ...prev,
+                      [exp.experiment_id]: pct,
+                    }))
+                  }
+                  onSplitUpdate={() => void runSplitUpdate(exp)}
                   onPromote={() => void runAction(exp, "promote")}
                   onRollback={() => void runAction(exp, "rollback")}
                 />

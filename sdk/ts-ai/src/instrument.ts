@@ -16,6 +16,7 @@ import { wrapAnthropic } from "./instrumentations/anthropic.js";
 import { wrapCohere } from "./instrumentations/cohere.js";
 import { wrapGroq } from "./instrumentations/groq.js";
 import { wrapLangChain } from "./instrumentations/langchain.js";
+import { wrapLangGraph } from "./instrumentations/langgraph.js";
 import { wrapLlamaIndex } from "./instrumentations/llamaindex.js";
 import { wrapMastra } from "./instrumentations/mastra.js";
 import { wrapMistral } from "./instrumentations/mistral.js";
@@ -91,6 +92,7 @@ export interface InstrumentResult {
   wrapAnthropic: typeof wrapAnthropic;
   wrapVercelAI: typeof wrapVercelAI;
   wrapLangChain: typeof wrapLangChain;
+  wrapLangGraph: typeof wrapLangGraph;
   wrapMastra: typeof wrapMastra;
   wrapBedrock: typeof wrapBedrock;
   wrapGemini: typeof wrapGemini;
@@ -130,6 +132,7 @@ export function instrument(opts: InstrumentOptions = {}): InstrumentResult {
     wrapAnthropic,
     wrapVercelAI,
     wrapLangChain,
+    wrapLangGraph,
     wrapMastra,
     wrapBedrock,
     wrapGemini,

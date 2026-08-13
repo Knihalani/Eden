@@ -75,16 +75,23 @@ async def _ensure_table(client: Any) -> bool:
         return False
 
 
-async def acquire(lock_name: str, holder: str, ttl_seconds: int) -> bool:
+async def acquire(lock_name: str, holder: str, ttl_seconds: int) -> bool | None:
     """Take ``lock_name`` for ``holder`` if free or expired.
 
     One atomic statement: the ``WHERE`` on the conflict target means a
     live lease held by someone else simply does not update, and
     ``RETURNING`` tells us who owns it now.
+
+    Returns:
+        True  — we hold the lease.
+        False — another process holds a live lease (genuine contention).
+        None  — Postgres is unavailable (no client, table ensure failed,
+                or the statement raised); callers should fall back to an
+                alternative backend rather than treating this as contention.
     """
     client = await _client()
     if client is None or not await _ensure_table(client):
-        return False
+        return None
     try:
         row = await client.fetchrow(
             f"""
@@ -103,10 +110,11 @@ async def acquire(lock_name: str, holder: str, ttl_seconds: int) -> bool:
         )
     except Exception as exc:
         logger.warning("pg_lease: acquire %s failed: %s", lock_name, exc)
-        return False
-    # Defensive: a row without the expected column must mean "not leader",
-    # never an exception. This is the fallback path — it exists because the
-    # primary is already broken, so it has no business raising.
+        return None
+    # Defensive: a row without the expected column means "not leader",
+    # never an exception. The DB responded, so treat this as a refusal
+    # (False) rather than unavailability (None) to avoid promoting an
+    # unexpected schema state into "try another backend".
     try:
         return bool(row is not None and row["holder"] == holder)
     except (KeyError, IndexError, TypeError):

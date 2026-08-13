@@ -328,6 +328,18 @@ async def create_dashboard(
     )
     return _ok("f57", {"dashboard": rec})
 
+@router.get("/dashboards/{dashboard_id}")
+async def get_dashboard(
+    org_id: str = Depends(require_path_org_access),
+    dashboard_id: str = Path(...),
+) -> dict[str, Any]:
+    dash = await MonitoringDashboardService().get_dashboard(
+        await _resolved_org(org_id), dashboard_id
+    )
+    if dash is None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    return _ok("f57", {"dashboard": dash})
+
 @router.post("/dashboards/{dashboard_id}/widgets")
 async def upsert_widget(
     org_id: str = Depends(require_path_org_access),
@@ -338,6 +350,18 @@ async def upsert_widget(
         await _resolved_org(org_id), dashboard_id, **body.model_dump()
     )
     return _ok("f57", {"widget": rec})
+
+@router.delete("/dashboards/{dashboard_id}/widgets/{widget_id}", status_code=204)
+async def delete_widget(
+    org_id: str = Depends(require_path_org_access),
+    dashboard_id: str = Path(...),
+    widget_id: str = Path(...),
+) -> None:
+    ok = await MonitoringDashboardService().delete_widget(
+        await _resolved_org(org_id), dashboard_id, widget_id
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Widget not found")
 
 @router.post("/dashboards/widgets/execute")
 async def execute_widget_query(

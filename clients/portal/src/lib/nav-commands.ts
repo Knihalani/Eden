@@ -28,6 +28,7 @@ import {
   Shield,
   Tag,
   Layers,
+  LayoutDashboard,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -76,6 +77,7 @@ const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   prompts: FileText,
   guardrails: Shield,
   labeling: Tag,
+  dashboards: LayoutDashboard,
   settings: Settings2,
 };
 

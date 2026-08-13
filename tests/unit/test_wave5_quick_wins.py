@@ -297,23 +297,29 @@ class TestStrategyStoreOnConflict:
             "get_strategy must use ON CONFLICT (collection, org_id)"
         )
 
+    # Migration 094 was folded into the 001–160 squash (OOM W3-7,
+    # 2026-08-13). The invariants it pinned — retrieval_strategy_state
+    # exists with tenant isolation (org_id) and the (collection, org_id)
+    # uniqueness the ON CONFLICT above relies on — are asserted against
+    # the squashed baseline instead of the deleted per-revision file.
+    _SQUASH = "src/eden/db_migrations/versions/000_squash_001_160.py"
+
     def test_migration_094_exists(self) -> None:
         import pathlib
 
-        path = pathlib.Path(
-            "src/eden/db_migrations/versions/094_strategy_store_org_id.py"
-        )
-        assert path.exists(), "Migration 094 must exist"
+        path = pathlib.Path(self._SQUASH)
+        assert path.exists(), "squashed baseline migration must exist"
         src = path.read_text()
-        assert 'revision: str = "094"' in src
-        assert 'down_revision' in src and '"093"' in src
+        assert "retrieval_strategy_state" in src, (
+            "094's retrieval_strategy_state DDL must survive the squash"
+        )
 
     def test_org_id_column_added_in_migration(self) -> None:
         import pathlib
+        import re
 
-        path = pathlib.Path(
-            "src/eden/db_migrations/versions/094_strategy_store_org_id.py"
-        )
-        src = path.read_text()
-        assert "org_id" in src
-        assert "UNIQUE" in src
+        src = pathlib.Path(self._SQUASH).read_text()
+        block = re.search(r"retrieval_strategy_state[\s\S]{0,1500}", src)
+        assert block, "retrieval_strategy_state DDL missing from squash"
+        assert "org_id" in block.group(0)
+        assert "UNIQUE" in block.group(0)

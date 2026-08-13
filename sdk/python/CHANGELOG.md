@@ -4,6 +4,24 @@ All notable changes to the Eden Python SDK are documented here. The
 format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 0.4.2 — 2026-08-10
+
+### Added
+- `_fast_json.py` — optional orjson fast path for the SDK send hot
+  path. When `orjson` is installed (`pip install eden-sdk[fast]`) JSON
+  serialisation is ~6.7× faster than the stdlib on typical ingest
+  payloads. Falls back to a stdlib path that produces identical bytes
+  (same datetime/NaN handling). Pinned by `tests/test_fast_json.py`.
+- `_wire_compress.py` — optional zstd compression (`Content-Encoding:
+  zstd`) when the `zstandard` package is installed (`eden-sdk[fast]`).
+  Measured 3.8× throughput improvement over gzip-1 at the same
+  payload ratio. Falls back to gzip-1 so slim installs are fully
+  compatible with older gateways.
+- `configure()` now accepts `agent_id` as a process-wide default.
+  When set, every trace and event is stamped with `X-Eden-Agent-Id`
+  automatically. Equivalent to setting `EDEN_AGENT_ID` in the
+  environment.
+
 ## 0.4.1 — 2026-08-03
 
 ### Fixed

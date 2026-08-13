@@ -18,6 +18,12 @@ import pytest
 from eden.api.routes import portal as portal_mod
 
 
+
+def _main_calls(fake):
+    """Trace-list queries only — W4-6 added a trace_bookmarks enrichment
+    query per list_portal_traces call, which shifts positional indexing."""
+    return [c for c in fake.fetch_calls if "trace_bookmarks" not in c[0]]
+
 def test_list_portal_traces_accepts_agent_id_param():
     sig = inspect.signature(portal_mod.list_portal_traces)
     assert "agent_id" in sig.parameters
@@ -106,5 +112,5 @@ async def test_agent_id_param_scopes_traces_server_side():
     assert [t.id for t in scoped] == ["t-agent-a"]
     assert {t.id for t in unscoped} == {"t-agent-a", "t-agent-b"}
     # Args: org_id, window_secs, limit, agent_id, participant_agent_id (FEAT-147).
-    assert fake.fetch_calls[0][1][-2:] == ("agent-a", None)
-    assert fake.fetch_calls[1][1][-2:] == (None, None)
+    assert _main_calls(fake)[0][1][-2:] == ("agent-a", None)
+    assert _main_calls(fake)[1][1][-2:] == (None, None)

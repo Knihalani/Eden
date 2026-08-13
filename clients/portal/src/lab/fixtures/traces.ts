@@ -43,6 +43,8 @@ export type TraceFixture = {
   sessionId?: string;
   signals: { title: string; body: string; count?: number };
   steps: TranscriptStep[];
+  /** W4-6 bookmarks: true when the authenticated user has starred this trace. */
+  isBookmarked?: boolean;
 };
 
 export const TRACE_LIST: TraceFixture[] = [];

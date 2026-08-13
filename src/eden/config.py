@@ -311,13 +311,6 @@ def _build_settings_class():
         # to when an org hasn't set its own. Defaults are conservative
         # — a fresh deploy should not be able to fan out 1000 patches in a
         # flood even if every other gate is open.
-        #
-        # ``max_cost_per_user_per_day`` — hard cap on total LLM spend the
-        # autonomous PR pipeline can rack up per org per day. The scheduler
-        # circuit-breaks when the SUM(cost_usd) of generated proposed_patches
-        # in the last 24h exceeds this. $50/day covers ~150 T2 patches at
-        # $0.30 each (per the Phase 3b cost table in the plan).
-        max_cost_per_user_per_day: float = 50.0
         # Minimum fingerprint / stumble count before N20 enqueues an
         # improvement_plan. Spec floor is 5×; env may raise but not lower.
         patch_cluster_min_size: int = 5
@@ -339,7 +332,6 @@ def _build_settings_class():
         # is hit. Distinct from the auto-approval rate limiter (which is
         # post-generation); these caps stop generation itself.
         patch_max_per_day: int = 10
-        patch_max_per_week: int = 30
         # Rank-then-generate sweep caps (N23). Max PatchGenerator invokes
         # per sweep is stricter than the inbox code_patch lane (also 3).
         patch_max_generates_per_sweep: int = 3
@@ -365,10 +357,22 @@ def _build_settings_class():
         patch_similarity_lookback_days: int = 14
         patch_rejection_memory_wontfix_days: int = 30
         patch_rejection_memory_user_fixed_days: int = 90
-        # Cron scheduler cadence — the eden-cron Northflank job ticks
-        # every 5 min but the heavy Cat 23 evaluator runs at this cadence.
-        # Default 15 min matches the Phase 3b plan ("15-min cron tick").
-        scheduler_tick_seconds: int = 900
+
+        # OOM W4-3: caching-model routing overrides (L4/L5, L12).
+        # Empty string = no override; routing falls through to ModelRouter tier
+        # selection as before (default — no behaviour change). Set to a
+        # Claude model (e.g. "claude-haiku-4-5") only after quality evals
+        # confirm the model matches DeepSeek output quality for that lane.
+        # patch_gen: the PatchGenerator generate() call (T2/reasoning slot).
+        # judges: the metric_studio rubric judge route_sync call (fast slot).
+        patch_gen_model_override: str = ""  # OOM W4-3
+        judges_model_override: str = ""  # OOM W4-3
+        # OOM W4-3 L12: Anthropic Batch API for offline lanes (50% discount).
+        # Requires ANTHROPIC_API_KEY in the environment.  Empty key = disabled.
+        # rubric_synthesis_batch_v1 gates the reference integration in
+        # RubricSynthesiser.from_examples (offline CLHF/rubric-synthesis lane).
+        anthropic_api_key: str = ""  # OOM W4-3
+        rubric_synthesis_batch_v1: bool = False  # OOM W4-3
 
         # Phase C — unified AI agent (Cat 14 real + global panel).
         # The agent uses the internal chat SSOT (all ModelRouter tiers
@@ -379,13 +383,6 @@ def _build_settings_class():
         # conversations live before a separate retention job prunes them.
         ai_agent_enabled: bool = True
         ai_agent_max_turns: int = 10
-        ai_agent_t3_model: str = ""  # blank → use ModelTier.T3 default
-        ai_agent_stream_chunk_ms: int = 50  # SSE chunk flush cadence
-        ai_agent_retention_days: int = 90
-        # DL-15: when True, the ChatService uses the OpenRouter
-        # ``usage.cost`` field for budget tracking instead of the
-        # per-token estimate. Off by default per C-5 rollout guidance.
-        ai_agent_real_cost: bool = False
         # W20 / F70 — in-product ChatSidebar copilot (features.f70).
         # OFF by default; set FEATURES_F70=true to enable.
         features_f70: bool = False
@@ -430,8 +427,6 @@ def _build_settings_class():
         # INFO so WARNING/ERROR/CRITICAL are always captured.
         eden_log_level: str = "INFO"
         eden_log_project: str = "default"
-        eden_log_agent_id: str = ""  # optional cross-ref to an agent
-        eden_log_realm: str = "production"  # "production" | "environment"
 
         # OpenRouter
         openrouter_api_key: str = ""
@@ -443,38 +438,16 @@ def _build_settings_class():
         use_minimax: bool = False
         minimax_api_key: str = ""
         minimax_base_url: str = "https://api.minimax.io/v1"
-        minimax_model: str = "MiniMax-M3"
 
         # Token budgets per agent
         max_tokens_planner: int = 50000
         max_tokens_critic: int = 30000
-        max_tokens_refiner: int = 25000
         max_tokens_fact_checker: int = 25000
         max_tokens_executor: int = 15000
-        max_tokens_optimizer: int = 15000
-        max_tokens_code_quality: int = 10000
-        max_tokens_verifier: int = 10000
-        max_tokens_tester: int = 10000
-        max_tokens_adversarial_tester: int = 15000
-        max_tokens_archivist: int = 60000
 
-        # Max turns per agent
-        max_turns_planner: int = 8
-        max_turns_critic: int = 6
-        max_turns_refiner: int = 5
-        max_turns_fact_checker: int = 4
-        max_turns_executor: int = 6
-        max_turns_optimizer: int = 4
-        max_turns_code_quality: int = 4
-        max_turns_verifier: int = 3
-        max_turns_tester: int = 5
-        max_turns_adversarial_tester: int = 5
-        max_turns_archivist: int = 20
 
         # Retry configuration
         max_retries: int = 3
-        retry_min_wait: int = 1
-        retry_max_wait: int = 60
         circuit_breaker_threshold: int = 5
         circuit_breaker_timeout: int = 60
 
@@ -566,19 +539,20 @@ def _build_settings_class():
 
         # Sentry error tracking (optional — no-op when DSN empty).
         sentry_dsn: str = ""
-        sentry_environment: str = "development"
-        sentry_traces_sample_rate: float = 0.0
 
         # Stripe
         stripe_secret_key: str = ""
         stripe_webhook_secret: str = ""
+        # Master switch for Stripe-backed billing routes.  Default OFF — flip
+        # to True in prod env once Stripe keys are wired and e2e tested.
+        # All subscribe/cancel/portal/invoices endpoints 503 while False.
+        billing_enabled: bool = False  # OOM W3-4
 
         # Email (SendKit) — API key via SENDKIT_API_KEY / sendkit_api_key.
         # Alerts from alerts@; invites/exports from info@.
         sendkit_api_key: str = ""
         email_from_alerts: str = "alerts@edenobservability.com"
         email_from_info: str = "info@edenobservability.com"
-        email_from_name: str = "Eden"
 
         # Postgres (Neon) — SSL config for the cutover
         # When ``postgres_sslmode`` is empty (the dev default), the
@@ -593,16 +567,11 @@ def _build_settings_class():
         # for PgBouncer pools, Neon endpoints with non-standard SSL, etc.
         database_url: str = ""
         postgres_sslmode: str = ""
-        postgres_channel_binding: str = ""
-        postgres_endpoint_id: str = ""
 
         # Portal
         portal_base_url: str = "https://portal.example.com"
         app_url: str = "https://portal.example.com"
 
-        # Chain configuration
-        chain_enabled_experts: list[str] = []  # Environment: EDEN_CHAIN_ENABLED_EXPERTS
-        chain_disabled_optional: list[str] = []  # Environment: EDEN_CHAIN_DISABLED_OPTIONAL
 
         # ── Phase 7.0 multi-format ingestion layer ─────────────────────────
         # Master switch for the /orgs/{org_id}/ingest/{format} POST endpoints
@@ -611,7 +580,6 @@ def _build_settings_class():
         ingestion_pii_pre_mask: bool = True
         ingestion_max_body_bytes: int = 5 * 1024 * 1024  # 5 MiB
         ingestion_per_tenant_rpm: int = 600
-        ingestion_per_api_key_rpm: int = 300
         ingestion_allowed_formats: list[str] = [
             "otel",
             "helicone",
@@ -656,7 +624,6 @@ def _build_settings_class():
         # empty, the platform falls back to AWS S3 (legacy) using the
         # AWS_* env vars.
         bronze_s3_bucket: str = ""
-        eden_storage_backend: str = ""  # "" = AWS S3, "impossible_cloud" = Impossible Cloud
         eden_storage_endpoint: str = ""  # S3 endpoint URL (empty for AWS)
         eden_storage_access_key: str = ""
         eden_storage_secret_key: str = ""
@@ -680,7 +647,7 @@ def _build_settings_class():
 
         # ── Promotion loop (Phase 7.1b follow-up) ───────────────────────
         evolution_loop_enabled: bool = False
-        evolution_loop_interval_seconds: int = 300
+        evolution_loop_interval_seconds: int = 1800  # OOM W3-5: 300→1800s (6× reduction)
         promotion_loop_enabled: bool = True
         # Used by ``eden.llmops.promotion.PromotionLoop`` to decide
         # whether the canary's stats are significant enough to
@@ -688,8 +655,6 @@ def _build_settings_class():
         promotion_min_calls: int = 30
         promotion_min_success_rate_lift: float = 0.05
         promotion_max_latency_ratio: float = 1.10
-        promotion_max_judge_regression: float = 0.05
-        promotion_confidence_band: float = 0.02
         promotion_lookback_minutes: int = 60
 
         # ── Insights detector loop (Phase 7.1b follow-up) ──────────────
@@ -739,7 +704,6 @@ def _build_settings_class():
 
         # Paths
         project_root: Path = Path(__file__).parent.parent.parent
-        seed_data_dir: Path = Path("./seed")
         migrations_dir: Path = Path("./migrations")
 
         # ── AI Insights chat sidebar (Phase 8 / Batch B4) ─────────────────
@@ -784,6 +748,12 @@ def _build_settings_class():
         # exhausting that quota. Set RATE_LIMIT_DISTRIBUTED=true only when
         # running multiple API replicas that must share counters.
         rate_limit_distributed: bool = False
+        # When False (default), TenantRateLimitMiddleware uses in-process
+        # TokenBuckets only — no Redis round-trips.  Set
+        # TENANT_RATE_LIMIT_DISTRIBUTED=true only on multi-replica deployments
+        # that must share per-tenant counters.  The current deploy is
+        # single-replica so this stays off (OOM plan 2.3 / W1-2).
+        tenant_rate_limit_distributed: bool = False
         # IdempotencyMiddleware — when enabled, mutating ``/v1/*``
         # requests that carry an ``Idempotency-Key`` header are
         # deduped (Redis + Postgres). Requests without the header
@@ -929,8 +899,6 @@ def _build_settings_class():
         # N14 — explicit worker / hot-path toggles (default on; worker
         # still also requires ``trace_quality_enabled`` + compute_async).
         trace_quality_worker_enabled: bool = True
-        stat_gate_min_n: int = 30
-        stat_gate_min_effect: float = 0.2
         # N01 regression gate: how skipped cases (no constraints / no
         # trace to verify) count toward the promotion gate. Errors
         # (telemetry unavailable) ALWAYS fail the gate — fail closed.
@@ -1200,9 +1168,6 @@ def _build_settings_class():
             "apply_policy_change": False,
         }
 
-        # Enhancement-tracking bounds (no-drop invariant + compute budget).
-        enhancements_per_component_max: int = 5
-        enhancements_compute_budget_seconds: int = 14400  # 4 CPU-hours
 
         # ── Closed-loop error diagnosis feature flags ───────────────────
         # The issues surface (F28/F29 stumbles+issues + routes) is on by
@@ -1240,7 +1205,6 @@ def _build_settings_class():
         # it no longer checks this flag, since storing a model is a safe,
         # idempotent upsert with no customer-facing effect on its own.
         tool_call_inference_v1: bool = False
-        tool_call_min_labels: int = 5
         # N11 live in-flight trace streaming (Redis pub/sub). Defaults on
         # for Wave 27 so portal/SDK/MCP surfaces are exercisable; flip off
         # via env for rollback.
@@ -1256,20 +1220,22 @@ def _build_settings_class():
         agent_sessions_v1: bool = True
         debug_sessions_v1: bool = True
         browser_recording_v1: bool = True
-        # RTBF cross-store fanout. OFF until every store has a genuinely
-        # per-user erasure path. Today Typesense filters on a field absent
-        # from its schema, Redis scans a key pattern nothing matches, and
-        # Qdrant/ClickHouse have no delete-by-user at all — so a "completed"
-        # erasure erases almost nothing. Set RTBF_FANOUT_V1=true only once
-        # those are real. See services/governance_intel/rtbf_fanout.py.
-        rtbf_fanout_v1: bool = False
-        # MCP Streamable-HTTP transport at /v1/mcp. OFF by default: until the
-        # 2026-07 remediation it accepted any non-empty bearer string as full
-        # mcp:read+debug+fix against any org named in X-Org-Id, and several
-        # tools fell through to local Postgres fallbacks that bypass the API's
-        # authorization entirely. Enable only after reviewing which API keys
-        # carry MCP scopes. Cursor/stdio is unaffected by this flag.
-        mcp_http_transport_v1: bool = False
+        # RTBF cross-store fanout. ON by default (Wave 1 / OOM plan 9.13).
+        # Typesense: active delete_by_user erasure. Redis/pgvector/S3: honestly
+        # report ``unsupported`` (no user_id in key/column namespace) rather than
+        # a false ``ok``. ClickHouse/Tinybird: tenant-scoped purge via
+        # delete_tenant_rows. blob_refs: best-effort org ref-count release.
+        # No Qdrant leg — pgvector replaced it (N4). Primary Postgres erasure
+        # is in gdpr.py and is unaffected by this flag.
+        # See services/governance_intel/rtbf_fanout.py.
+        rtbf_fanout_v1: bool = True  # Wave 1 / plan 9.13 — 2026-08-12
+        # MCP Streamable-HTTP transport at /v1/mcp. Flipped ON per plan 6.3
+        # (2026-08-12): the 2026-07 remediation fixed the auth hole (bearer
+        # now verified against org_api_keys with SHA-256; org comes from the
+        # verified row, not attacker-supplied headers). Resources + Prompts
+        # capabilities also shipped in this wave. Cursor/stdio is unaffected
+        # by this flag; rollback = set mcp_http_transport_v1=False in env.
+        mcp_http_transport_v1: bool = True
         # Triage budget (F30) — optional max LLM spend per org per day.
         # Positive default enforces a daily cap; orgs may override via
         # ``code_change_policy.max_triage_cost_usd_per_day`` (incl. 0 = unlimited).
@@ -1473,6 +1439,16 @@ def _build_settings_class():
         max_promoted_artifacts: int = 8
         max_evolution_ops_usd_per_org_day: float = 2.0
         min_lift_per_100_tokens: float = 0.5
+
+        # OOM W3-5 — per-lane daily internal-LLM budget caps.
+        # 0.0 = unlimited (disabled).  Enforced in LaneDailyBudget (evolution_spend.py).
+        # Caps are system-wide (not per-org) to bound platform ops cost.
+        annotator_daily_budget_usd: float = 5.0  # OOM W3-5
+        soft_issue_daily_budget_usd: float = 5.0  # OOM W3-5
+        clusterer_daily_budget_usd: float = 3.0  # OOM W3-5
+        judges_daily_budget_usd: float = 10.0  # OOM W3-5
+        evolution_daily_budget_usd: float = 2.0  # OOM W3-5
+        investigation_daily_budget_usd: float = 10.0  # OOM W3-5
 
         # ── WS4 enterprise feature flags ────────────────────────────────
         # Sampling reuses Layer A judge_scores when present ($0 path).

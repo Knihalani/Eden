@@ -90,6 +90,8 @@ export const traceFixtureSchema = z.object({
     count: z.number().optional(),
   }),
   steps: z.array(transcriptStepSchema),
+  /** W4-6 bookmarks — optional so pre-172 API responses stay valid. */
+  isBookmarked: z.boolean().optional(),
 });
 
 export const traceFixtureListSchema = z.array(traceFixtureSchema);

@@ -21,6 +21,7 @@ export type NavIcon =
   | "prompts"
   | "guardrails"
   | "labeling"
+  | "dashboards"
   | "settings";
 
 export type NavItem = {
@@ -78,6 +79,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: "guardrails", label: "Guardrails", href: "/guardrails", icon: "guardrails" },
       { id: "cost", label: "Cost", href: "/cost", icon: "cost" },
       { id: "gateway", label: "Gateway", href: "/gateway", icon: "gateway" },
+      { id: "dashboards", label: "Dashboards", href: "/dashboards", icon: "dashboards" },
     ],
   },
   {

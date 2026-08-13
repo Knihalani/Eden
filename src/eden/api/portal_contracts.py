@@ -126,6 +126,8 @@ class TraceListItem(BaseModel):
     sessionId: str | None = None
     signals: TraceSignalSummary = Field(default_factory=TraceSignalSummary)
     steps: list[TranscriptStep] = Field(default_factory=list)
+    # W4-6 trace bookmarks: true when the requesting user has starred this trace.
+    isBookmarked: bool = False
 
 
 # ── Sessions (SessionFixture) ─────────────────────────────────────
@@ -473,6 +475,8 @@ class ImprovePlanCard(BaseModel):
     evScore: float | None = None
     # FEAT-156: autonomy tier governing autonomous execution for this plan.
     autonomyTierRequired: str | None = None
+    # OOM P7: ISO timestamp when the snooze expires (None = not snoozed).
+    snoozedUntil: str | None = None
 
 
 class AbExperimentCard(BaseModel):

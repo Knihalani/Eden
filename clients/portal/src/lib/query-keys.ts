@@ -111,6 +111,9 @@ export const queryKeys = {
       ["portal", "alertEvents", orgId] as const,
     costDrivers: (orgId: string | null | undefined) =>
       ["portal", "costDrivers", orgId] as const,
+    /** W3-1 (1.4): tail-sampling rollout observability counters. */
+    samplingStats: (orgId: string | null | undefined) =>
+      ["portal", "samplingStats", orgId] as const,
     workspace: (orgId: string | null | undefined) =>
       ["portal", "workspace", orgId] as const,
     keys: (orgId: string | null | undefined) =>
@@ -167,6 +170,11 @@ export const queryKeys = {
       ["portal", "evalExperiments", orgId] as const,
     improvePlans: (orgId: string | null | undefined) =>
       ["portal", "improvePlans", orgId] as const,
+    // OOM P7: paginated / infinite-scroll key for the /improve page plan list.
+    // Separate from improvePlans so it coexists with the catalog-sync's
+    // non-paginated useOrgQuery on the same legacy key.
+    improvePlansPages: (orgId: string | null | undefined) =>
+      ["portal", "improvePlansPages", orgId] as const,
     // M13: live Fix now / Improve later cockpit queue.
     improveQueue: (orgId: string | null | undefined) =>
       ["portal", "improveQueue", orgId] as const,
@@ -184,6 +192,9 @@ export const queryKeys = {
       ["portal", "debuggerSessions", orgId] as const,
     assistantThreads: (orgId: string | null | undefined) =>
       ["portal", "assistantThreads", orgId] as const,
+    /** W3-4: plan limits + current-period usage meter. */
+    planLimits: (orgId: string | null | undefined) =>
+      ["portal", "planLimits", orgId] as const,
   },
   promptsV2: {
     all: ["promptsV2"] as const,
@@ -241,6 +252,14 @@ export const queryKeys = {
     ) => ["labeling", "pop", orgId, userId, strategy ?? "fifo"] as const,
     board: (orgId: string | null | undefined, queueId: string | null | undefined) =>
       ["labeling", "board", orgId, queueId] as const,
+  },
+  /** F57 custom dashboards. */
+  dashboards: {
+    all: ["dashboards"] as const,
+    list: (orgId: string | null | undefined) => ["dashboards", "list", orgId] as const,
+    detail: (orgId: string | null | undefined, dashboardId: string | null | undefined) =>
+      ["dashboards", "detail", orgId, dashboardId] as const,
+    home: (orgId: string | null | undefined) => ["dashboards", "home", orgId] as const,
   },
 } as const;
 

@@ -661,6 +661,61 @@ class WebhookDeliveryService:
                 )
         return scheduled
 
+    # ─── outbound event fan-out ─────────────────────────────
+
+    async def enqueue_event(
+        self,
+        org_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> int:
+        """Insert one ``webhook_deliveries`` row per active webhook
+        subscription that matches *event_type* for *org_id*.
+
+        Called by internal event sources (e.g. ``PromotionHook``) to
+        fan out an event to all subscriber URLs.  Delivery is handled
+        by the worker's drain loop (``process_pending_deliveries``).
+
+        Returns the number of delivery rows inserted (0 when no
+        subscriptions match).  Best-effort: any DB error is logged
+        at WARNING and swallowed so the caller is never broken.
+        """
+        try:
+            pg = await get_postgres_client()
+            rows = await pg.fetch(
+                "SELECT id FROM webhooks "
+                "WHERE org_id = $1::uuid "
+                "  AND active = true "
+                "  AND $2 = ANY(events)",
+                org_id,
+                event_type,
+            )
+            if not rows:
+                return 0
+            payload_json = json.dumps(payload, default=str)
+            count = 0
+            for row in rows:
+                await pg.execute(
+                    "INSERT INTO webhook_deliveries "
+                    "  (webhook_id, event_type, payload, status) "
+                    "VALUES ($1, $2, $3::jsonb, 'pending')",
+                    row["id"],
+                    event_type,
+                    payload_json,
+                )
+                count += 1
+            if count:
+                _clear_outbox_empty_cooldown()
+                await _signal_outbox_pending()
+            return count
+        except Exception as exc:
+            logger.warning(
+                "webhook_delivery.enqueue_event(%s, %s): %s",
+                org_id,
+                event_type,
+                exc,
+            )
+            return 0
 
     # ─── shutdown / lifecycle ───────────────────────────────
 

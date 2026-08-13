@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.evaluation._base import _BaseEvalRunner
 from eden.experiments.compare import aggregate_grades, grade_datapoint
 from eden.playground.llm_handler import LLMHandler, make_playground_handler
 from eden.playground.scorers import aggregate_score, run_scorers
@@ -51,27 +52,23 @@ class OfflineExperiment:
         }
 
 
-class OfflineExperimentRunner:
-    """Run immutable dataset × config experiments."""
+class OfflineExperimentRunner(_BaseEvalRunner):
+    """Run immutable dataset × config experiments.
+
+    Delegates DB-client acquisition to :class:`~eden.evaluation._base._BaseEvalRunner`
+    so both runner surfaces share a single, canonical ``_client()`` implementation.
+    Pass ``memory_only=True`` to suppress all Postgres access in unit tests.
+    """
 
     def __init__(
         self,
         pg: Any | None = None,
         *,
+        memory_only: bool = False,
         llm_handler: LLMHandler | None = None,
     ) -> None:
-        self._pg = pg
+        super().__init__(pg=pg, memory_only=memory_only)
         self._llm_handler = llm_handler
-
-    async def _client(self) -> Any | None:
-        if self._pg is not None:
-            return self._pg
-        try:
-            from eden.storage.postgres import get_postgres_client
-
-            return await get_postgres_client()
-        except Exception:
-            return None
 
     def _playground(self, org_id: str) -> Playground:
         if self._llm_handler is not None:

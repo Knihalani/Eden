@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from eden.evaluation._base import _BaseEvalRunner
 from eden.evaluation.regression_builder import RegressionCase, RegressionCaseBuilder
 
 logger = logging.getLogger(__name__)
@@ -88,25 +89,12 @@ def _skip_policy() -> str:
     return policy if policy in ("allow", "block") else "allow"
 
 
-class RegressionRunner:
+class RegressionRunner(_BaseEvalRunner):
     """Run regression eval cases against expected constraints."""
 
     def __init__(self, pg: Any | None = None, *, memory_only: bool = False) -> None:
-        self._pg = pg
-        self._memory_only = memory_only
+        super().__init__(pg=pg, memory_only=memory_only)
         self._builder = RegressionCaseBuilder(pg=pg)
-
-    async def _client(self) -> Any | None:
-        if self._memory_only:
-            return None
-        if self._pg is not None:
-            return self._pg
-        try:
-            from eden.storage.postgres import get_postgres_client
-
-            return await get_postgres_client()
-        except Exception:
-            return None
 
     async def run_suite(
         self,
@@ -453,6 +441,7 @@ class RegressionRunner:
 
 
 __all__ = [
+    "_BaseEvalRunner",
     "RegressionRunner",
     "RegressionRunResult",
     "TelemetryUnavailableError",

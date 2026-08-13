@@ -173,11 +173,17 @@ export const RunListButton = memo(function RunListButton({
   active,
   onSelect,
   showAgent = false,
+  isBookmarked,
+  onToggleBookmark,
 }: {
   trace: TraceFixture;
   active: boolean;
   onSelect: (id: string) => void;
   showAgent?: boolean;
+  /** W4-6 bookmarks — controlled star state for this row. */
+  isBookmarked?: boolean;
+  /** W4-6 bookmarks — called with (traceId, nextBookmarked) when the star is clicked. */
+  onToggleBookmark?: (traceId: string, next: boolean) => void;
 }) {
   const agent = showAgent ? agentForTrace(trace) : undefined;
   const handleClick = useCallback(
@@ -210,6 +216,25 @@ export const RunListButton = memo(function RunListButton({
         <span className="type-value !text-[0.6875rem]">
           {formatDuration(trace.durationMs)}
         </span>
+        {onToggleBookmark ? (
+          <button
+            type="button"
+            className={cn(
+              "flex h-4 w-4 items-center justify-center rounded text-[0.8rem] leading-none transition-colors",
+              isBookmarked
+                ? "text-[var(--accent)]"
+                : "text-[var(--text-muted)] hover:text-[var(--accent)]",
+            )}
+            aria-label={isBookmarked ? "Remove star" : "Star this trace"}
+            title={isBookmarked ? "Remove star" : "Star this trace"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleBookmark(trace.id, !isBookmarked);
+            }}
+          >
+            {isBookmarked ? "★" : "☆"}
+          </button>
+        ) : null}
       </div>
     </button>
   );

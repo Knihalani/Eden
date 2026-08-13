@@ -195,7 +195,7 @@ def instrument(*frameworks: str) -> None:
         ``"openai"``, ``"anthropic"``, ``"langchain"``, ``"llama_index"``,
         ``"crewai"``, ``"autogen"``, ``"mastra"``, ``"pydantic_ai"``,
         ``"bedrock"``, ``"gemini"``, ``"groq"``, ``"cohere"``,
-        ``"mistral"``. Hyphenated aliases
+        ``"mistral"``, ``"langgraph"``. Hyphenated aliases
         (``"pydantic-ai"``, ``"llama-index"``) and OpenAI-compat
         provider ids (``"ollama"``, ``"vllm"``, …) are accepted.
         Pass ``"http_capture"`` to enable universal httpx patching.
@@ -340,6 +340,7 @@ _FRAMEWORK_DETECTORS: dict[str, tuple[str, ...]] = {
     "groq": ("groq",),
     "cohere": ("cohere",),
     "mistral": ("mistralai",),
+    "langgraph": ("langgraph",),
 }
 
 def _detect_one(module_names: tuple[str, ...]) -> bool:

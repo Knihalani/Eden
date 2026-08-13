@@ -93,15 +93,50 @@ async def _acquire_guard() -> bool:
     """Best-effort cross-process guard for the sidecar bundle.
 
     Returns True once this process holds the guard (starting a
-    background renewal task); False when another process already
-    holds it, or Redis stays unavailable across all retry attempts —
-    in either case the caller must not start the sidecars.
+    background renewal task); False when another process already holds it,
+    or both Postgres and Redis are unavailable — in either case the caller
+    must not start the sidecars.
+
+    Postgres is tried first (primary): one atomic statement, no Upstash
+    command-budget impact, and proven resilient through the July 2026
+    Redis quota outage. Redis is the fallback only when Postgres is
+    unreachable (None from pg_lease.acquire).
     """
     global _guard_lock, _guard_extender, _guard_extender_stop, _guard_pg_holder
     if _guard_lock is not None or _guard_pg_holder is not None:
         return True  # already held by this process
 
     guard_ttl, guard_renew = _guard_ttl_and_renew()
+    identity = f"{socket.gethostname()}:{os.getpid()}"
+
+    # Primary: try Postgres first.
+    from eden.storage import pg_lease
+
+    pg_result = await pg_lease.acquire(_GUARD_NAME, identity, guard_ttl)
+    if pg_result is True:
+        _guard_pg_holder = identity
+        _guard_extender_stop = asyncio.Event()
+        _guard_extender = asyncio.create_task(
+            _renew_pg_guard(identity, guard_ttl, guard_renew, _guard_extender_stop),
+            name="sidecar-guard-pg-renew",
+        )
+        logger.info(
+            "sidecars: guard acquired via Postgres; quality/closed-loop sidecars start here"
+        )
+        return True
+    if pg_result is False:
+        # Another process holds a live lease — genuine contention.
+        # Do NOT fall back to Redis; that would risk two processes each
+        # winning on different backends (split-brain consumers).
+        logger.warning(
+            "sidecars: guard refused by Postgres — another process hosts the bundle"
+        )
+        return False
+
+    # pg_result is None → Postgres unavailable; fall back to Redis.
+    logger.warning(
+        "sidecars: Postgres unavailable for guard — falling back to Redis"
+    )
 
     for attempt in range(1, _GUARD_ACQUIRE_ATTEMPTS + 1):
         lock = Lock(_GUARD_NAME, ttl=guard_ttl, prefix="eden:leader")
@@ -125,17 +160,16 @@ async def _acquire_guard() -> bool:
                 ),
                 name="sidecar-guard-extend",
             )
+            logger.warning(
+                "sidecars: guard acquired via Redis fallback; quality/closed-loop sidecars start here"
+            )
             return True
 
         if attempt < _GUARD_ACQUIRE_ATTEMPTS:
             await asyncio.sleep(_GUARD_RETRY_DELAY_SECONDS)
 
-    # Redis could not give us the guard. Before giving up, check whether
-    # anyone actually holds it: SET NX cannot fail on a key that does not
-    # exist, so refused-and-unheld means the write was discarded, not that
-    # a peer is hosting the sidecars. That is what a provider does past a
-    # plan limit, and treating it as contention is what kept the quality
-    # pipeline and the trace_finalized consumer (annotation) down.
+    # Redis also refused. Check whether a real peer holds it — refused-with-
+    # no-holder means write-discard (quota exceeded), not contention.
     holder = None
     try:
         probe = Lock(_GUARD_NAME, ttl=guard_ttl, prefix="eden:leader")
@@ -143,29 +177,19 @@ async def _acquire_guard() -> bool:
     except Exception:
         holder = None
 
-    if holder is None:
-        from eden.storage import pg_lease
-
-        identity = f"{socket.gethostname()}:{os.getpid()}"
-        if await pg_lease.acquire(_GUARD_NAME, identity, guard_ttl):
-            _guard_pg_holder = identity
-            _guard_extender_stop = asyncio.Event()
-            _guard_extender = asyncio.create_task(
-                _renew_pg_guard(identity, guard_ttl, guard_renew, _guard_extender_stop),
-                name="sidecar-guard-pg-renew",
-            )
-            logger.warning(
-                "sidecars: guard acquired via Postgres — Redis is not "
-                "accepting writes; quality/closed-loop sidecars start here"
-            )
-            return True
-
-    logger.warning(
-        "sidecars: guard not acquired after %d attempts (another process "
-        "already hosts quality/closed-loop sidecars, or Redis is down) — "
-        "skipping sidecar start in this process",
-        _GUARD_ACQUIRE_ATTEMPTS,
-    )
+    if holder is not None:
+        logger.warning(
+            "sidecars: guard not acquired after %d attempts — another process "
+            "hosts quality/closed-loop sidecars (Redis holder: %s)",
+            _GUARD_ACQUIRE_ATTEMPTS,
+            holder,
+        )
+    else:
+        logger.warning(
+            "sidecars: guard not acquired after %d attempts — both Postgres "
+            "and Redis unavailable; skipping sidecar start in this process",
+            _GUARD_ACQUIRE_ATTEMPTS,
+        )
     return False
 
 
@@ -380,7 +404,10 @@ def _reset_state_for_tests() -> None:
     stops the bundle once per lifetime.
     """
     global _guard_lock, _guard_extender, _guard_extender_stop, _started
+    global _guard_pg_holder, _guard_retry_task
     _guard_lock = None
     _guard_extender = None
     _guard_extender_stop = None
     _started = False
+    _guard_pg_holder = None
+    _guard_retry_task = None

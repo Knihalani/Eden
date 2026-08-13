@@ -581,6 +581,39 @@ class ClickHouseSink:
     #: (empty string) instead of a second, unread copy of the JSON blob.
     _UNREAD_TELEMETRY_MIRROR_FIELDS: frozenset[str] = frozenset({"metrics", "tags"})
 
+    #: Combined set of ``telemetry_events_ch`` fields stripped from every
+    #: analytical insert (Tinybird / local ClickHouse mirror).  The set is
+    #: the union of two categories:
+    #:
+    #: * ``_UNREAD_TELEMETRY_MIRROR_FIELDS`` — columns that *are* in the
+    #:   mirror schema (metrics, tags) but no pipe or query reads them.
+    #:
+    #: * Full-span body columns absent from the mirror schema entirely —
+    #:   ``request_body`` / ``response_body`` / ``reasoning`` / etc.  These
+    #:   are the "input_text" / "output_text" payload bodies described in
+    #:   OOM plan §3.4 / D5.  Tinybird's ``telemetry_events_ch.datasource``
+    #:   has no column for any of them; they were accepted silently by the
+    #:   Events API (unknown-field pass-through) but still serialised and
+    #:   sent over the wire, inflating every analytical batch by ~2×.
+    #:
+    #: Stripping here (inside ``_insert_json``) rather than at the callers
+    #: keeps the *original* row dicts intact so ``_fallback_to_postgres``
+    #: still queues the full payload — Postgres is the durable source of
+    #: truth for all of these fields.
+    _TELEMETRY_ANALYTICS_STRIP_FIELDS: frozenset[str] = _UNREAD_TELEMETRY_MIRROR_FIELDS | frozenset(
+        (
+            "request_body",
+            "response_body",
+            "reasoning",
+            "tool_calls_full",
+            "tool_results",
+            "images",
+            "audio",
+            "logprobs",
+            "citations",
+        )
+    )
+
     #: Payload blobs that no ClickHouse query reads. Postgres holds these
     #: zstd-compressed as the source of truth.
     _UNREAD_BLOB_COLUMNS: tuple[str, ...] = (
@@ -1106,18 +1139,20 @@ class ClickHouseSink:
                 await self._insert_json(table, rows[i : i + self.BATCH_SIZE])
             return
 
-        # Strip the unread telemetry_events_ch fields here rather than at
-        # the caller — a fresh dict per row, so the *original* rows (with
-        # ``metrics``/``tags`` intact) are what ``insert()`` hands to
-        # ``_fallback_to_postgres`` on failure; the Postgres fallback queue
-        # should keep the full payload even though the columnar mirror
-        # doesn't.
+        # Strip fields that the analytical mirror never reads.  Uses the
+        # combined ``_TELEMETRY_ANALYTICS_STRIP_FIELDS`` set so that both
+        # the schema-present-but-unread columns (metrics, tags) *and* the
+        # full-span body blobs (request_body / response_body / etc. — the
+        # "input_text"/"output_text" bodies in OOM plan §3.4) are omitted
+        # from the wire payload. Fresh dicts per row keep the *original*
+        # rows (with blobs intact) available for ``_fallback_to_postgres``;
+        # Postgres remains the durable source of truth for all of these.
         if (
             table.split(".")[-1] == "telemetry_events_ch"
-            and self._UNREAD_TELEMETRY_MIRROR_FIELDS
+            and self._TELEMETRY_ANALYTICS_STRIP_FIELDS
         ):
             rows = [
-                {k: v for k, v in r.items() if k not in self._UNREAD_TELEMETRY_MIRROR_FIELDS}
+                {k: v for k, v in r.items() if k not in self._TELEMETRY_ANALYTICS_STRIP_FIELDS}
                 for r in rows
             ]
 

@@ -4,6 +4,9 @@ Both are thin read routes added for the portal surfaces:
 ``GET /orgs/{org_id}/prompts/canaries`` (org-wide canary experiments for
 the cockpit) and ``GET /orgs/{org_id}/settings/autonomy/agents``
 (per-agent policy rows for the settings matrix).
+
+W3-9 (9.8): also tests the PATCH split-update route added for the
+traffic-split control on /prompts.
 """
 
 from __future__ import annotations
@@ -114,3 +117,98 @@ async def test_get_autonomy_agents_empty() -> None:
 
     assert out["data"]["count"] == 0
     assert out["data"]["agents"] == []
+
+
+# ── W3-9 (9.8): PATCH traffic-split update ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_canary_split_success() -> None:
+    """PATCH …/canary/{id} updates traffic_pct on both tables and returns the
+    new value. The regression gate is bypassed via mock (≤5% needs no pass)."""
+    from eden.api.routes.prompt_canary import CanaryUpdateRequest, update_canary_split
+
+    client = AsyncMock()
+    # fetchrow: experiment exists and is active
+    client.fetchrow = AsyncMock(return_value={"experiment_id": "exp-1"})
+    client.execute = AsyncMock()
+
+    with (
+        patch(
+            "eden.api.routes.prompt_canary.get_postgres_client",
+            AsyncMock(return_value=client),
+        ),
+        patch(
+            "eden.evaluation.regression_runner.RegressionRunner.require_pass_for_canary",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        out = await update_canary_split(
+            org_id="org-1",
+            agent="planner",
+            experiment_id="exp-1",
+            body=CanaryUpdateRequest(traffic_pct=10),
+            user={},
+        )
+
+    assert out["traffic_pct"] == 10
+    assert out["status"] == "active"
+    assert out["experiment_id"] == "exp-1"
+    assert out["agent"] == "planner"
+    # Both tables must have been updated
+    assert client.execute.await_count == 2
+    # Tenant scope enforced on the lookup
+    assert client.fetchrow.await_args.args[2] == "org-1"
+
+
+@pytest.mark.asyncio
+async def test_update_canary_split_not_found() -> None:
+    """PATCH returns 404 when no active experiment matches the given id."""
+    from fastapi import HTTPException
+
+    from eden.api.routes.prompt_canary import CanaryUpdateRequest, update_canary_split
+
+    client = AsyncMock()
+    client.fetchrow = AsyncMock(return_value=None)  # no active row
+
+    with (
+        patch(
+            "eden.api.routes.prompt_canary.get_postgres_client",
+            AsyncMock(return_value=client),
+        ),
+        patch(
+            "eden.evaluation.regression_runner.RegressionRunner.require_pass_for_canary",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        try:
+            await update_canary_split(
+                org_id="org-1",
+                agent="planner",
+                experiment_id="exp-missing",
+                body=CanaryUpdateRequest(traffic_pct=5),
+                user={},
+            )
+            raise AssertionError("Expected HTTPException")
+        except HTTPException as exc:
+            assert exc.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_canary_split_bounds() -> None:
+    """CanaryUpdateRequest rejects traffic_pct outside [1, 50]."""
+    from pydantic import ValidationError
+
+    from eden.api.routes.prompt_canary import CanaryUpdateRequest
+
+    import pytest as _pytest
+
+    with _pytest.raises(ValidationError):
+        CanaryUpdateRequest(traffic_pct=0)
+
+    with _pytest.raises(ValidationError):
+        CanaryUpdateRequest(traffic_pct=51)
+
+    # Boundary values must be valid
+    assert CanaryUpdateRequest(traffic_pct=1).traffic_pct == 1
+    assert CanaryUpdateRequest(traffic_pct=50).traffic_pct == 50

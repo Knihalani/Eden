@@ -24,7 +24,7 @@ MIGRATION_PATH = (
     / "eden"
     / "db_migrations"
     / "versions"
-    / "149_promotion_candidates_ref_id_text.py"
+    / "000_squash_001_160.py"
 )
 
 
@@ -41,22 +41,9 @@ def test_migration_file_exists_and_nonempty():
 
 
 def test_migration_revision_and_down_revision(migration_source: str):
-    """149 must chain off 148 (the head at the time this was written) and
-    carry a unique, self-describing revision id (repo convention:
-    ``NNN_description``, not a bare number)."""
-    assert 'revision: str = "149_promotion_candidates_ref_id_text"' in migration_source
-    assert 'down_revision: str | Sequence[str] | None = "148_agent_identity_aliases"' in migration_source
-
-
-def test_migration_is_not_reusing_a_claimed_number():
-    """149 must not collide with any other revision id already on disk."""
-    versions_dir = MIGRATION_PATH.parent
-    others = [
-        f
-        for f in versions_dir.glob("149_*.py")
-        if f.name != MIGRATION_PATH.name
-    ]
-    assert not others, f"revision 149 is claimed by more than one file: {others}"
+    """Squash carries the 160 revision id and is the chain base (down_revision=None)."""
+    assert "160_signal_definitions_org_enabled_created" in migration_source
+    assert "down_revision: str | None = None" in migration_source
 
 
 def test_migration_widens_ref_id_to_text(migration_source: str):

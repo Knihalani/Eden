@@ -16,8 +16,10 @@ Metrics emitted (Prometheus, fail-silent when library absent):
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+import uuid
 from typing import Any
 
 from eden.observability.bounded_expiry_cache import (
@@ -297,4 +299,170 @@ async def maybe_persist_checkpoint(
         metrics.errors.inc()
         return False
     finally:
+        metrics.duration.observe(time.monotonic() - t0)
+
+
+async def maybe_persist_checkpoints_batch(
+    events: list[Any],
+    *,
+    pg: Any | None = None,
+    redis: Any | None = None,
+) -> None:
+    """Batch variant: evaluate + persist qualifying checkpoints in ≤2 Neon round-trips.
+
+    3.2: Unlike the per-event :func:`maybe_persist_checkpoint` (which issues
+    2 ``execute`` calls per qualifying event), this function:
+
+      1. Evaluates all thresholds (feature flag, event type, trace_id) in Python.
+      2. Issues ONE ``executemany`` → ``telemetry_events`` for qualifying checkpoints.
+      3. Issues ONE ``executemany`` → ``debugger_llm_cache`` for cache rows.
+
+    Best-effort — never raises into the ingest hot path.
+    """
+    metrics = _Metrics.get()
+    t0 = time.monotonic()
+    try:
+        # ── Feature flag (once per batch) ────────────────────────────────
+        try:
+            _gs = get_settings
+            if _gs is not None and not _gs().debugger_checkpoint_ingest_v1:
+                metrics.total.labels(status="skip").inc(len(events))
+                return
+        except Exception:
+            pass  # proceed if config is unavailable
+
+        if pg is None:
+            try:
+                from eden.storage.postgres import get_postgres_client
+                pg = await get_postgres_client()
+            except Exception as exc:
+                logger.debug("checkpoint_hook batch: pg unavailable: %s", exc)
+                return
+
+        redis_client = redis
+        if redis_client is None:
+            try:
+                from eden.storage.redis import get_redis_client
+                redis_client = await get_redis_client()
+            except Exception:
+                pass  # Redis is optional (step numbers fall back to sequence)
+
+        # ── Evaluate qualifications in Python; build row data ─────────────
+        checkpoint_rows: list[tuple[Any, ...]] = []
+        cache_rows: list[tuple[Any, ...]] = []
+
+        for event in events:
+            ev_t0 = time.monotonic()
+            try:
+                event_type = getattr(event, "event_type", None) or ""
+                if not is_llm_event(str(event_type)):
+                    metrics.total.labels(status="skip").inc()
+                    continue
+                trace_id = getattr(event, "trace_id", None) or ""
+                if not trace_id:
+                    metrics.total.labels(status="skip").inc()
+                    continue
+                tenant_id = getattr(event, "tenant_id", None) or "default"
+                payload = getattr(event, "payload", None) or {}
+                if not isinstance(payload, dict):
+                    payload = {}
+                fields = extract_llm_payload(payload)
+
+                step_number = await _resolve_step_number(
+                    trace_id=str(trace_id),
+                    payload_step=fields["step_number"],
+                    sequence=getattr(event, "sequence", None),
+                    redis=redis_client,
+                )
+
+                cp_payload = json.dumps(
+                    {
+                        "step_number": int(step_number),
+                        "input_messages": list(fields["input_messages"]),
+                        "tool_calls": list(fields["tool_calls"]),
+                        "tool_results": list(fields["tool_results"]),
+                        "response": dict(fields["response"]),
+                        "started_at": fields["started_at"],
+                        "ended_at": fields["ended_at"],
+                        "duration_ms": float(fields["duration_ms"]),
+                        "source": "live",
+                    },
+                    default=str,
+                )
+                checkpoint_rows.append((
+                    str(uuid.uuid4()),   # event_id
+                    str(tenant_id),      # tenant_id
+                    "default",           # project_id
+                    str(trace_id),       # trace_id
+                    "production",        # realm
+                    "debugger.checkpoint",  # event_type
+                    f"step-{step_number}",  # span_id
+                    cp_payload,          # payload (jsonb)
+                ))
+
+                try:
+                    from eden.debugger.cache import llm_input_hash
+                    ih = llm_input_hash(list(fields["input_messages"]))
+                    cache_rows.append((
+                        str(tenant_id),
+                        str(trace_id),
+                        int(step_number),
+                        ih,
+                        json.dumps(dict(fields["response"]), default=str),
+                        fields["model"] or None,
+                    ))
+                except Exception as cache_exc:
+                    logger.debug(
+                        "checkpoint_hook batch: cache row build skipped: %s", cache_exc
+                    )
+
+                metrics.total.labels(status="ok").inc()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("checkpoint_hook batch: event skipped: %s", exc)
+                metrics.total.labels(status="error").inc()
+                metrics.errors.inc()
+            finally:
+                metrics.duration.observe(time.monotonic() - ev_t0)
+
+        # ── Persist in batch: ≤2 Neon round-trips for the whole batch ─────
+        if checkpoint_rows:
+            try:
+                await pg.executemany(
+                    """
+                    INSERT INTO telemetry_events (
+                        event_id, tenant_id, project_id, trace_id, realm,
+                        event_type, timestamp, span_id, source_format, payload
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, NOW(), $7,
+                        'debugger_checkpoint', $8::jsonb
+                    )
+                    """,
+                    checkpoint_rows,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "checkpoint_hook batch: executemany checkpoints failed: %s", exc
+                )
+
+        if cache_rows:
+            try:
+                await pg.executemany(
+                    """
+                    INSERT INTO debugger_llm_cache
+                        (org_id, source_trace_id, step_number, input_hash, response, model)
+                    VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                    ON CONFLICT (org_id, source_trace_id, step_number, input_hash)
+                        DO NOTHING
+                    """,
+                    cache_rows,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "checkpoint_hook batch: executemany cache failed: %s", exc
+                )
+
+    except Exception as exc:  # noqa: BLE001 — never break ingest
+        logger.debug("checkpoint_hook batch: outer error: %s", exc)
+    finally:
+        # Top-level duration covers the whole batch evaluation + persist pass.
         metrics.duration.observe(time.monotonic() - t0)

@@ -246,6 +246,28 @@ class PromotionHook:
             logger.debug(
                 "promotion_hook.degrade_on_judge failed org=%s: %s", org_id, exc
             )
+        # Emit outbound webhook so external subscribers receive the event.
+        # Import is deferred to avoid a hard boot-time dependency on the
+        # delivery service (which needs Postgres + Redis).
+        try:
+            from eden.services.webhook_delivery import get_webhook_delivery_service
+
+            await get_webhook_delivery_service().enqueue_event(
+                org_id,
+                "judge.regression",
+                {
+                    "event_type": "judge.regression",
+                    "org_id": org_id,
+                    "judge_name": judge_name,
+                    "current_score": float(score),
+                    "trace_id": trace_id,
+                },
+            )
+        except Exception as exc:
+            logger.debug(
+                "promotion_hook.on_judge_regression: webhook enqueue failed: %s",
+                exc,
+            )
         logger.debug(
             "promotion_hook.on_judge_regression org=%s judge=%s "
             "trace=%s score=%.3f action_id=%s",
@@ -267,6 +289,7 @@ class PromotionHook:
             SELECT experiment_id, agent
             FROM prompt_canary_experiments
             WHERE tenant_id = $1 AND status = 'active'
+            ORDER BY experiment_id
             LIMIT 20
             """,
             org_id,
@@ -1477,8 +1500,29 @@ class OnboardingMilestoneHook:
     async def on_first_10_traces(
         self, org_id: str, *, trace_count: int
     ) -> dict[str, Any] | None:
-        """Cat 1 trace counter → advance to 'wait'."""
-        return await self._record(org_id, "first_10_traces")
+        """Cat 1 trace counter → advance to 'wait'.
+
+        Also triggers a best-effort purge of demo-seeded rows so the
+        new org's feed shows only their real traffic (§6.1 O1).
+        """
+        result = await self._record(org_id, "first_10_traces")
+        # Best-effort — never let the purge break the milestone record.
+        try:
+            from eden.onboarding.demo_seed import purge_demo_data
+
+            purge_result = await purge_demo_data(org_id)
+            logger.info(
+                "onboarding_milestone: demo purge on first_10_traces org=%s %s",
+                org_id,
+                purge_result,
+            )
+        except Exception as _purge_exc:
+            logger.warning(
+                "onboarding_milestone: demo purge failed org=%s: %s",
+                org_id,
+                _purge_exc,
+            )
+        return result
 
     async def on_first_judge_score(
         self, org_id: str, *, judge_name: str, score: float
