@@ -282,6 +282,111 @@ async def find_open_by_fingerprint(org_id: str, source_fingerprint: str) -> dict
     return _row(row) if row else None
 
 
+async def find_worked_help_miss_change(
+    org_id: str,
+    source_fingerprint: str,
+    *,
+    except_agent_id: str | None = None,
+) -> dict[str, Any] | None:
+    """A prior HelpMiss change that already dropped leftover. Reuse it."""
+    if not org_id or not source_fingerprint:
+        return None
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    args: list[Any] = [org_id, source_fingerprint, ["approved", "merged", "verified", "applied"]]
+    agent_clause = ""
+    if except_agent_id:
+        args.append(except_agent_id)
+        agent_clause = f"AND agent_id IS DISTINCT FROM ${len(args)}"
+    try:
+        row = await client.fetchrow(
+            f"""
+            SELECT * FROM improvement_plans
+            WHERE org_id = $1 AND source_fingerprint = $2
+              AND status = ANY($3::text[])
+              {agent_clause}
+              AND COALESCE(evidence->>'help_miss','') IN ('true','True','1')
+            ORDER BY approved_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            """,
+            *args,
+        )
+    except Exception:
+        return None
+    if row is None:
+        return None
+    plan = _row(row)
+    ev = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    leftover_status = str(ev.get("leftover_status") or "").lower()
+    if leftover_status in {"degrading", "did not work", "block"}:
+        return None
+    instruction = str(ev.get("instruction") or "").strip()
+    meta = ev.get("approve_metadata") if isinstance(ev.get("approve_metadata"), dict) else {}
+    if not instruction:
+        instruction = str(meta.get("instruction") or "").strip()
+    if not instruction:
+        return None
+    return {
+        "plan_id": plan.get("id"),
+        "instruction": instruction,
+        "target_file": ev.get("target_file") or meta.get("target_file"),
+        "fix_kind": ev.get("fix_kind"),
+        "reused_from_agent": plan.get("agent_id"),
+    }
+
+
+async def pending_help_miss_change(
+    org_id: str, agent_id: str | None
+) -> dict[str, Any] | None:
+    """Visible pending leftover change for the agent page."""
+    if not org_id or not agent_id:
+        return None
+    client = await get_postgres_client()
+    if client is None:
+        return None
+    try:
+        row = await client.fetchrow(
+        """
+        SELECT * FROM improvement_plans
+        WHERE org_id = $1 AND agent_id = $2
+          AND COALESCE(evidence->>'help_miss','') IN ('true','True','1')
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        org_id,
+        agent_id,
+        )
+    except Exception:
+        return None
+    if row is None:
+        return None
+    plan = _row(row)
+    ev = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
+    status = str(plan.get("status") or "draft")
+    leftover_status = str(ev.get("leftover_status") or "")
+    meta = ev.get("approve_metadata") if isinstance(ev.get("approve_metadata"), dict) else {}
+    apply_kind = str(ev.get("apply_kind") or meta.get("apply_kind") or "")
+    shown = "draft"
+    if leftover_status.lower() in {"degrading", "block"}:
+        shown = "did not work"
+    elif leftover_status.lower() in {"ok", "watching"}:
+        shown = "watching"
+    elif status in {"approved", "pr_opened", "applied", "merged"}:
+        shown = "waiting" if apply_kind == "code_pr" else "in"
+        if leftover_status:
+            shown = "watching"
+    elif status == "pending_review":
+        shown = "waiting"
+    return {
+        "plan_id": plan.get("id"),
+        "status": shown,
+        "instruction": str(ev.get("instruction") or plan.get("summary") or ""),
+        "target_file": ev.get("target_file"),
+        "apply_kind": apply_kind or ev.get("fix_kind"),
+    }
+
+
 async def find_open_fingerprints(org_id: str, fingerprints: list[str]) -> set[str]:
     """Return fingerprints that already have an open plan (batch dedup check)."""
     fps = [fp for fp in fingerprints if fp]

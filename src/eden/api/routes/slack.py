@@ -589,6 +589,18 @@ async def slack_events(request: Request) -> JSONResponse:
             )
         return JSONResponse({"ok": True})
 
+    if event.get("type") in {"member_left_channel", "channel_left"}:
+        org_id = await slack_store.get_org_id_for_team(team_id)
+        if org_id:
+            asyncio.create_task(
+                _stop_channel_on_kick(
+                    org_id,
+                    channel_id=str(event.get("channel") or ""),
+                    leaving_user=str(event.get("user") or ""),
+                )
+            )
+        return JSONResponse({"ok": True})
+
     if is_dm(event):
         return JSONResponse({"ok": True})
     if event.get("type") != "message":
@@ -630,6 +642,23 @@ async def slack_interactions(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
     asyncio.create_task(_handle_slack_interaction(payload))
     return JSONResponse({"ok": True})
+
+
+async def _stop_channel_on_kick(
+    org_id: str,
+    *,
+    channel_id: str,
+    leaving_user: str,
+) -> None:
+    """Kick the bot, or leave a channel: stop listen and delete that buffer."""
+    if not org_id or not channel_id:
+        return
+    install = await slack_store.get_install(org_id)
+    bot = str((install or {}).get("bot_user_id") or "")
+    # A named leaver is a kick only when we know it is the bot.
+    if leaving_user and (not bot or leaving_user != bot):
+        return
+    await slack_store.stop_watch_channel(org_id, channel_id)
 
 
 async def _handle_slack_interaction(payload: dict[str, Any]) -> None:

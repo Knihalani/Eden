@@ -28,6 +28,8 @@ export function SetupClient() {
   const [ySlackId, setYSlackId] = useState("");
   const [watchIds, setWatchIds] = useState<string[]>([]);
   const [notifyId, setNotifyId] = useState("");
+  const [linearProjectId, setLinearProjectId] = useState("");
+  const [jiraProjectKey, setJiraProjectKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,6 +87,8 @@ export function SetupClient() {
           sentence: sentence.trim(),
           y_slack_user_id: ySlackId.trim() || null,
           y_person: yUser?.name || null,
+          linear_project_id: linearProjectId.trim() || null,
+          jira_project_key: jiraProjectKey.trim() || null,
         }),
       });
       if (slackConnected && (watchIds.length || notifyId)) {
@@ -208,6 +212,33 @@ export function SetupClient() {
             />
           </div>
         )}
+
+        <label className="block text-sm">
+          <span className="type-label">Linear team or project id (optional)</span>
+          <input
+            className="ds-input mt-1 w-full"
+            value={linearProjectId}
+            onChange={(e) => setLinearProjectId(e.target.value)}
+            placeholder="team or project id"
+            aria-label="Linear project"
+          />
+        </label>
+        <label className="block text-sm">
+          <span className="type-label">Jira project key (optional)</span>
+          <input
+            className="ds-input mt-1 w-full"
+            value={jiraProjectKey}
+            onChange={(e) => setJiraProjectKey(e.target.value)}
+            placeholder="ENG"
+            aria-label="Jira project"
+          />
+        </label>
+        {orgId ? (
+          <p className="type-meta">
+            Leftover webhook (Linear / Jira POST extra_work here):{" "}
+            <code>/orgs/{orgId}/ingest/webhook</code>
+          </p>
+        ) : null}
 
         <p className="type-meta">{INVITE_EDEN_COPY}</p>
 

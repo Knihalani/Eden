@@ -10,7 +10,6 @@ import pytest
 from eden.integrations.slack import store as slack_store
 from eden.integrations.slack.store import is_forbidden_channel_id
 
-
 CANNOT_TELL = "We cannot tell if it helped."
 LISTENING = "Listening. No leftover work yet. That is unknown, not helped."
 INVITE = (
@@ -248,3 +247,60 @@ async def test_help_status_listening_when_zero_leftover() -> None:
     ):
         out = await help_status(org_id="org-1", agent_id="agent-9")
     assert out["data"]["install_bar"]["copy"] == LISTENING
+
+
+@pytest.mark.asyncio
+async def test_stop_watch_channel_deletes_mapping_and_buffer() -> None:
+    pg = MagicMock()
+    pg.execute = AsyncMock(side_effect=["DELETE 1", "DELETE 2"])
+    with patch.object(slack_store, "_pg", AsyncMock(return_value=pg)):
+        out = await slack_store.stop_watch_channel("org-1", "C-watch")
+    assert out["unmapped"] == 1
+    assert out["buffer_deleted"] == 2
+    sqls = " ".join(call.args[0] for call in pg.execute.await_args_list)
+    assert "agent_slack_channels" in sqls
+    assert "extra_work_candidates" in sqls
+
+
+@pytest.mark.asyncio
+async def test_kick_stops_only_when_the_bot_left() -> None:
+    from eden.api.routes import slack as slack_routes
+
+    stop = AsyncMock()
+    with (
+        patch.object(
+            slack_store,
+            "get_install",
+            AsyncMock(return_value={"bot_user_id": "U-bot"}),
+        ),
+        patch.object(slack_store, "stop_watch_channel", stop),
+    ):
+        await slack_routes._stop_channel_on_kick(
+            "org-1", channel_id="C-watch", leaving_user="U-human"
+        )
+        stop.assert_not_awaited()
+        await slack_routes._stop_channel_on_kick(
+            "org-1", channel_id="C-watch", leaving_user="U-bot"
+        )
+        stop.assert_awaited_once_with("org-1", "C-watch")
+        stop.reset_mock()
+        await slack_routes._stop_channel_on_kick(
+            "org-1", channel_id="C-watch", leaving_user=""
+        )
+        stop.assert_awaited_once_with("org-1", "C-watch")
+        stop.reset_mock()
+        with patch.object(slack_store, "get_install", AsyncMock(return_value={})):
+            await slack_routes._stop_channel_on_kick(
+                "org-1", channel_id="C-watch", leaving_user="U-human"
+            )
+        stop.assert_not_awaited()
+
+
+def test_manifest_has_history_and_events_not_im_history() -> None:
+    text = Path("integrations/slack/manifest.json").read_text()
+    assert "channels:history" in text
+    assert "groups:history" in text
+    assert "member_left_channel" in text
+    assert "im:history" not in text
+    assert "/integrations/slack/events" in text
+    assert "/integrations/slack/interactions" in text

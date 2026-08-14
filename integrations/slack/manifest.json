@@ -1,7 +1,7 @@
 {
   "display_information": {
     "name": "Eden",
-    "description": "Eden Soft Autonomy — issue, fix-PR, and approval alerts",
+    "description": "Eden leftover listen — leftover hits on picked channels, change cards in the notify channel",
     "background_color": "#0a0a0a"
   },
   "features": {
@@ -16,10 +16,30 @@
       "http://localhost:8000/integrations/slack/callback"
     ],
     "scopes": {
-      "bot": ["chat:write", "channels:read", "groups:read"]
+      "bot": [
+        "chat:write",
+        "channels:read",
+        "groups:read",
+        "channels:history",
+        "groups:history",
+        "users:read"
+      ]
     }
   },
   "settings": {
+    "event_subscriptions": {
+      "request_url": "https://api.edenobservability.com/integrations/slack/events",
+      "bot_events": [
+        "message.channels",
+        "message.groups",
+        "member_joined_channel",
+        "member_left_channel"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://api.edenobservability.com/integrations/slack/interactions"
+    },
     "org_deploy_enabled": false,
     "socket_mode_enabled": false,
     "token_rotation_enabled": false

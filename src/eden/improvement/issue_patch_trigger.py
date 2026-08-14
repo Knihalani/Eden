@@ -1214,6 +1214,13 @@ async def propose_prompt_canary_for_help_miss(
             "plan_id": existing.get("id"),
             "issue_id": getattr(issue, "id", None),
         }
+    reused = await plans_repo.find_worked_help_miss_change(
+        org_id,
+        fingerprint,
+        except_agent_id=getattr(issue, "agent_id", None),
+    )
+    if reused and reused.get("instruction"):
+        instruction = str(reused["instruction"])
     issue_id = str(getattr(issue, "id", "") or "")
     agent_id = getattr(issue, "agent_id", None)
     collected: list[dict[str, Any]] = []
@@ -1255,6 +1262,8 @@ async def propose_prompt_canary_for_help_miss(
     target_file = await resolve_help_miss_file(
         org_id, draft["leftovers"], agent_id=agent_id
     )
+    if reused and reused.get("target_file"):
+        target_file = str(reused["target_file"])
     if target_file:
         draft["fix_kind"] = FIX_KIND_CODE
         draft["summary"] = draft["summary"].replace(
@@ -1282,6 +1291,7 @@ async def propose_prompt_canary_for_help_miss(
             "instruction": draft["instruction"],
             "fix_kind": draft["fix_kind"],
             "target_file": target_file,
+            "reused_plan_id": (reused or {}).get("plan_id") if reused else None,
         },
         status="draft",
     )
@@ -1298,4 +1308,5 @@ async def propose_prompt_canary_for_help_miss(
         "fix_kind": draft["fix_kind"],
         "target_file": target_file,
         "instruction": draft["instruction"],
+        "reused": bool(reused),
     }
