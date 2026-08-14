@@ -533,12 +533,73 @@ async def notify_help_miss(
         session_id=session_id,
     )
 
+
+
+async def notify_help_miss_applied(
+    org_id: str,
+    *,
+    agent_id: str,
+    plan_id: str,
+    apply_kind: str,
+    pr_url: str | None = None,
+    pr_error: str | None = None,
+) -> dict[str, Any]:
+    """Slack 2 after Do it. Posts to the picked agent channel, never a DM."""
+    change_url = _deep_link(f"/improve?plan={plan_id}")
+    if apply_kind == "code_pr" and pr_url:
+        body = (
+            "Change is in. Watching leftover work on invited channels.\n\n"
+            f"File PR: {pr_url}\n"
+            "Merge the PR for the file to go live in the repo."
+        )
+    elif pr_error:
+        body = (
+            f"Change is in Eden. The file PR failed: {pr_error}\n\n"
+            "Watching leftover work on invited channels."
+        )
+    else:
+        body = (
+            "Change is in Eden.\n\n"
+            "Watching leftover work on invited channels."
+        )
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": _safe_text("Change is in")[:150],
+            },
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": _safe_text(body)[:2900]},
+        },
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Open in Eden"[:75]},
+                    "url": change_url,
+                }
+            ],
+        },
+    ]
+    return await _send(
+        org_id,
+        agent_id=agent_id or None,
+        dedupe_key=f"helpmiss_applied:{plan_id}",
+        text="Change is in",
+        blocks=blocks,
+    )
+
 __all__ = [
     "notify_issue_detected",
     "notify_needs_approval",
     "notify_nl_incident",
     "notify_pr_opened",
     "notify_help_miss",
+    "notify_help_miss_applied",
     "notify_regression",
     "send_test_message",
 ]
