@@ -58,22 +58,38 @@ export class AgentSession {
     });
   }
 
-  async completeSession(
-    success = true,
-    failureReason?: string,
-    flush = true,
-  ): Promise<void> {
+  async complete(opts: {
+    success?: boolean;
+    failureReason?: string;
+    flush?: boolean;
+    outcome?: "helped" | "not_helped" | "unknown";
+    source?: "person" | "product" | "agent";
+    reason?: string;
+    explicit?: boolean;
+    slack?: { channel?: string; ts?: string };
+  } = {}): Promise<void> {
     if (this.ended) return;
     this.ended = true;
-    await notifySession(this.orgId, "end", {
+    const success = opts.success ?? true;
+    const payload: Record<string, unknown> = {
       sessionId: this.sessionId,
       success,
-      failureReason,
+      failureReason: opts.failureReason,
       traceIds: this.traceIds,
       metadata: this.metadata,
       costUsd: this.costUsd,
-    });
-    if (flush) {
+    };
+    if (opts.outcome && (opts.source === "person" || opts.source === "product")) {
+      payload.outcome = opts.outcome;
+      payload.source = opts.source;
+      if (opts.reason !== undefined) payload.reason = opts.reason;
+      if (opts.explicit !== undefined) payload.explicit = opts.explicit;
+    }
+    if (opts.slack?.channel && opts.slack.ts) {
+      payload.slack = { channel: opts.slack.channel, ts: opts.slack.ts };
+    }
+    await notifySession(this.orgId, "end", payload);
+    if (opts.flush ?? true) {
       try {
         await getDefaultClient().flush();
       } catch {
@@ -81,6 +97,14 @@ export class AgentSession {
       }
     }
     if (_current === this) _current = null;
+  }
+
+  async completeSession(
+    success = true,
+    failureReason?: string,
+    flush = true,
+  ): Promise<void> {
+    await this.complete({ success, failureReason, flush });
   }
 }
 
@@ -162,6 +186,13 @@ async function notifySession(
         cost_usd: payload.costUsd,
         trace_ids: payload.traceIds,
       };
+      if (payload.outcome) {
+        body.outcome = payload.outcome;
+        body.source = payload.source;
+        if (payload.reason !== undefined) body.reason = payload.reason;
+        if (payload.explicit !== undefined) body.explicit = payload.explicit;
+      }
+      if (payload.slack) body.slack = payload.slack;
     }
     // Compress like the main ingest path (``client.ts``'s
     // ``compressJsonBody``, N2 zstd-when-available / gzip fallback) — the

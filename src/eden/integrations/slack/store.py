@@ -275,6 +275,22 @@ async def clear_channel(org_id: str, *, agent_id: str | None = None) -> bool:
 
 
 
+def needs_reconsent(install: dict[str, Any] | None) -> bool:
+    """True when history scopes are missing or not yet consented."""
+    from eden.integrations.slack.oauth import HISTORY_SCOPES
+
+    if not install:
+        return True
+    scopes = {
+        s.strip()
+        for s in str(install.get("granted_scopes") or "").split(",")
+        if s.strip()
+    }
+    if not all(s in scopes for s in HISTORY_SCOPES):
+        return True
+    return not install.get("history_consented_at")
+
+
 async def get_org_id_for_team(team_id: str) -> str | None:
     """Resolve an active install's org_id from Slack team_id."""
     client = await _pg()
@@ -469,6 +485,326 @@ async def insert_candidate(
         return None
 
 
+
+# store.py append — Path B pointers + help rollup helpers
+
+_POINTERS: list[dict[str, Any]] = []
+_OUTCOMES: list[dict[str, Any]] = []
+_CONTRACTS: dict[tuple[str, str], dict[str, Any]] = {}
+_HELPED: dict[tuple[str, str], str] = {}
+
+
+def parse_permalink_ts(value: str) -> str | None:
+    """``p135854651500008`` -> ``1358546515.000008``. None if no ts."""
+    import re
+
+    if not value:
+        return None
+    raw = str(value).strip()
+    m = re.search(r"p(\d{10})(\d+)", raw)
+    if m:
+        return f"{m.group(1)}.{m.group(2).rjust(6, "0")[:6]}"
+    if re.fullmatch(r"\d+\.\d+", raw):
+        return raw
+    return None
+
+
+async def save_pointer(
+    org_id: str,
+    *,
+    channel_id: str,
+    ts: str,
+    agent_id: str | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Persist chat.postMessage channel+ts for Path B. No ts -> no join."""
+    if not channel_id or not ts:
+        return None
+    pointer = {
+        "org_id": org_id,
+        "channel_id": str(channel_id),
+        "ts": str(ts),
+        "agent_id": agent_id,
+        "session_id": session_id,
+    }
+    _POINTERS.append(pointer)
+    if session_id:
+        client = await _pg()
+        if client is not None:
+            try:
+                await client.execute(
+                    """
+                    UPDATE agent_sessions
+                    SET metadata = coalesce(metadata, '{}'::jsonb)
+                        || $3::jsonb
+                    WHERE org_id = $1 AND id = $2::uuid
+                    """,
+                    org_id,
+                    session_id,
+                    json.dumps({"slack": {"channel": channel_id, "ts": ts}}),
+                )
+            except Exception as exc:
+                logger.debug("slack_store: save_pointer session failed: %s", exc)
+    return pointer
+
+
+def get_pointers(
+    org_id: str, *, session_id: str | None = None, agent_id: str | None = None
+) -> list[dict[str, Any]]:
+    rows = [p for p in _POINTERS if p.get("org_id") == org_id]
+    if session_id:
+        rows = [p for p in rows if p.get("session_id") == session_id]
+    if agent_id:
+        rows = [p for p in rows if p.get("agent_id") == agent_id]
+    return list(rows)
+
+
+async def upsert_help_contract(
+    org_id: str,
+    *,
+    agent_id: str,
+    sentence: str,
+    created_by: str,
+    x_job: str | None = None,
+    x_keywords: list[str] | None = None,
+    y_person: str | None = None,
+    y_slack_user_id: str | None = None,
+) -> dict[str, Any]:
+    """Write a new current contract; supersede the previous row."""
+    row = {
+        "id": str(uuid.uuid4()),
+        "org_id": org_id,
+        "agent_id": agent_id,
+        "sentence": sentence,
+        "x_job": x_job,
+        "x_keywords": list(x_keywords or []),
+        "y_person": y_person,
+        "y_slack_user_id": y_slack_user_id,
+        "created_by": created_by,
+        "superseded_at": None,
+    }
+    _CONTRACTS[(org_id, agent_id)] = row
+    client = await _pg()
+    if client is None:
+        return row
+    try:
+        await client.execute(
+            """
+            UPDATE help_contracts
+            SET superseded_at = NOW()
+            WHERE org_id = $1 AND agent_id = $2 AND superseded_at IS NULL
+            """,
+            org_id,
+            agent_id,
+        )
+        await client.execute(
+            """
+            INSERT INTO help_contracts (
+                id, org_id, agent_id, sentence, x_job, x_keywords,
+                y_person, y_slack_user_id, created_by
+            ) VALUES (
+                $1::uuid, $2, $3, $4, $5, $6::text[], $7, $8, $9
+            )
+            """,
+            row["id"],
+            org_id,
+            agent_id,
+            sentence,
+            x_job,
+            row["x_keywords"],
+            y_person,
+            y_slack_user_id,
+            created_by,
+        )
+    except Exception as exc:
+        logger.debug("slack_store: upsert_help_contract failed: %s", exc)
+    return row
+
+
+async def insert_session_outcome(
+    org_id: str,
+    *,
+    agent_id: str,
+    value: str,
+    source: str,
+    channel: str,
+    explicit: bool,
+    session_id: str | None = None,
+    help_contract_id: str | None = None,
+    trace_id: str | None = None,
+    user_id: str | None = None,
+    reason: str | None = None,
+    confidence: str = "high",
+    observed_at: str | None = None,
+    canary_arm: str | None = None,
+) -> dict[str, Any]:
+    from datetime import UTC, datetime
+
+    row = {
+        "id": str(uuid.uuid4()),
+        "org_id": org_id,
+        "session_id": session_id,
+        "agent_id": agent_id,
+        "help_contract_id": help_contract_id,
+        "trace_id": trace_id,
+        "user_id": user_id,
+        "value": value,
+        "source": source,
+        "channel": channel,
+        "explicit": explicit,
+        "reason": reason,
+        "confidence": confidence,
+        "observed_at": observed_at or datetime.now(UTC).isoformat(),
+        "canary_arm": canary_arm,
+    }
+    _OUTCOMES.append(row)
+    client = await _pg()
+    if client is None:
+        return row
+    try:
+        await client.execute(
+            """
+            INSERT INTO session_outcomes (
+                id, org_id, session_id, agent_id, help_contract_id, trace_id,
+                user_id, value, source, channel, explicit, reason,
+                confidence, observed_at, canary_arm
+            ) VALUES (
+                $1::uuid, $2, $3, $4, $5::uuid, $6, $7, $8, $9, $10, $11,
+                $12, $13, $14::timestamptz, $15
+            )
+            """,
+            row["id"],
+            org_id,
+            session_id,
+            agent_id,
+            help_contract_id,
+            trace_id,
+            user_id,
+            value,
+            source,
+            channel,
+            explicit,
+            reason,
+            confidence,
+            row["observed_at"],
+            canary_arm,
+        )
+    except Exception as exc:
+        logger.debug("slack_store: insert_session_outcome failed: %s", exc)
+    return row
+
+
+async def list_leftover_events(
+    org_id: str, *, agent_id: str | None = None, limit: int = 50
+) -> list[dict[str, Any]]:
+    """Ambient / pointer hits for the leftover list. No fake sessions."""
+    client = await _pg()
+    if client is None:
+        return []
+    try:
+        if agent_id:
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, session_id, agent_id, user_id, surface,
+                       kind, path, join_key, snippet, confidence, polarity,
+                       observed_at
+                FROM extra_work_events
+                WHERE org_id = $1 AND agent_id = $2
+                  AND polarity = 'extra_work'
+                ORDER BY observed_at DESC
+                LIMIT $3
+                """,
+                org_id,
+                agent_id,
+                limit,
+            )
+        else:
+            rows = await client.fetch(
+                """
+                SELECT id, org_id, session_id, agent_id, user_id, surface,
+                       kind, path, join_key, snippet, confidence, polarity,
+                       observed_at
+                FROM extra_work_events
+                WHERE org_id = $1 AND polarity = 'extra_work'
+                ORDER BY observed_at DESC
+                LIMIT $2
+                """,
+                org_id,
+                limit,
+            )
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        logger.debug("slack_store: list_leftover_events failed: %s", exc)
+        return []
+
+
+async def help_counts(org_id: str, *, agent_id: str | None = None) -> dict[str, int]:
+    client = await _pg()
+    out = {"helped": 0, "not_helped": 0, "unknown": 0, "leftover_7d": 0}
+    if client is None:
+        return out
+    try:
+        agent_filter = "AND agent_id = $2" if agent_id else ""
+        args: list[Any] = [org_id]
+        if agent_id:
+            args.append(agent_id)
+        rows = await client.fetch(
+            f"""
+            SELECT helped, count(*) AS n
+            FROM session_summaries
+            WHERE org_id = $1 {agent_filter}
+            GROUP BY helped
+            """,
+            *args,
+        )
+        for r in rows:
+            key = str(r["helped"] or "unknown")
+            if key in out:
+                out[key] = int(r["n"])
+        leftover = await client.fetchval(
+            f"""
+            SELECT count(*) FROM extra_work_events
+            WHERE org_id = $1 {agent_filter}
+              AND polarity = 'extra_work'
+              AND observed_at >= NOW() - INTERVAL '7 days'
+            """,
+            *args,
+        )
+        out["leftover_7d"] = int(leftover or 0)
+    except Exception as exc:
+        logger.debug("slack_store: help_counts failed: %s", exc)
+    return out
+
+
+async def set_session_helped(org_id: str, session_id: str, value: str) -> None:
+    if value not in ("helped", "not_helped", "unknown"):
+        return
+    _HELPED[(org_id, session_id)] = value
+    client = await _pg()
+    if client is None:
+        return
+    try:
+        await client.execute(
+            """
+            UPDATE session_summaries
+            SET helped = $3
+            WHERE org_id = $1 AND session_id = $2
+            """,
+            org_id,
+            session_id,
+            value,
+        )
+    except Exception as exc:
+        logger.debug("slack_store: set_session_helped failed: %s", exc)
+
+
+def memory_outcomes(org_id: str, session_id: str | None = None) -> list[dict[str, Any]]:
+    rows = [r for r in _OUTCOMES if r.get("org_id") == org_id]
+    if session_id:
+        rows = [r for r in rows if r.get("session_id") == session_id]
+    return list(rows)
+
+
 __all__ = [
     "clear_channel",
     "event_id_seen",
@@ -478,10 +814,20 @@ __all__ = [
     "get_current_help_contract",
     "get_install",
     "get_org_id_for_team",
+    "get_pointers",
+    "help_counts",
     "insert_candidate",
     "insert_extra_work_event",
+    "insert_session_outcome",
     "list_channels",
+    "list_leftover_events",
+    "memory_outcomes",
+    "needs_reconsent",
+    "parse_permalink_ts",
     "revoke_install",
+    "save_pointer",
     "set_channel",
+    "set_session_helped",
+    "upsert_help_contract",
     "upsert_install",
 ]

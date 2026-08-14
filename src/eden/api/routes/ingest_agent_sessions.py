@@ -76,6 +76,13 @@ class SessionStartRequest(BaseModel):
 class SessionEndRequest(BaseModel):
     success: bool = True
     failure_reason: str | None = None
+    outcome: str | None = None
+    source: str | None = None
+    reason: str | None = None
+    explicit: bool | None = None
+    slack: dict[str, str] | None = None
+    slack_channel: str | None = None
+    slack_ts: str | None = None
     cost_usd: float | None = None
     trace_ids: list[str] | None = None
 
@@ -133,11 +140,26 @@ async def end_session(
     try:
         if body.trace_ids:
             await _svc.attach_traces(org_id, session_id, body.trace_ids)
+        from eden.services.session_contract import pointer_from_payload
+
+        pointer = pointer_from_payload(
+            {
+                "slack": body.slack,
+                "slack_channel": body.slack_channel,
+                "slack_ts": body.slack_ts,
+            }
+        )
         session = await _svc.complete(
             org_id,
             session_id,
             success=body.success,
             failure_reason=body.failure_reason,
+            outcome=body.outcome,
+            source=body.source,
+            reason=body.reason,
+            explicit=body.explicit,
+            slack_channel=pointer[0],
+            slack_ts=pointer[1],
         )
     except HTTPException:
         raise

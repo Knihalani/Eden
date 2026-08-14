@@ -59,6 +59,7 @@ import { AgentHealthStrip } from "@/components/agents/agent-health-strip";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
 import { formatRelativeTime } from "@/lib/format";
+import { HelpInstallBar } from "./help-panel";
 
 const ConnectRepoButton = dynamic(
   () =>
@@ -980,6 +981,7 @@ function LabAgentsInner() {
 
   return (
     <div className="ds-page">
+      <HelpInstallBar agentId={selectedId} />
       <PageHeader
         title="Agents"
         meta={

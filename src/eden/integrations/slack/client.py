@@ -111,4 +111,50 @@ class SlackClient:
             return body
 
 
+
+    async def conversations_replies(
+        self,
+        *,
+        channel: str,
+        ts: str,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Pull a pointer thread. Extra-work reader — not conversations.history."""
+        if not channel or not ts:
+            return []
+        out: list[dict[str, Any]] = []
+        async with _shared_httpx() as client:
+            cursor = ""
+            for _ in range(5):
+                params: dict[str, Any] = {
+                    "channel": channel,
+                    "ts": ts,
+                    "limit": min(limit, 200),
+                }
+                if cursor:
+                    params["cursor"] = cursor
+                r = await client.get(
+                    f"{SLACK_API_BASE}/conversations.replies",
+                    headers=self._headers(),
+                    params=params,
+                )
+                if r.status_code != 200:
+                    raise SlackAPIError(
+                        "conversations.replies failed", status_code=r.status_code
+                    )
+                body = r.json()
+                if not body.get("ok"):
+                    raise SlackAPIError(
+                        "conversations.replies rejected",
+                        error=str(body.get("error") or "unknown"),
+                    )
+                out.extend(list(body.get("messages") or []))
+                cursor = str(
+                    (body.get("response_metadata") or {}).get("next_cursor") or ""
+                )
+                if not cursor or len(out) >= limit:
+                    break
+        return out[:limit]
+
+
 __all__ = ["SlackClient"]

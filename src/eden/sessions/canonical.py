@@ -30,7 +30,8 @@ CANONICAL_TABLE: Final[str] = "session_summaries"
 TABLE_ROLES: Final[dict[str, str]] = {
     "session_summaries": (
         "Canonical read model for product/session metrics — rolled up "
-        "from telemetry_events + agent_stumbles per trace.finalized."
+        "from telemetry_events + agent_stumbles per trace.finalized. "
+        "helped is a derived ExtraWorkEvent rollup — not outcome."
     ),
     "agent_sessions": (
         "Ingest-side lifecycle record for one SDK-driven agent run "

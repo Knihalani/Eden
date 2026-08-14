@@ -524,7 +524,8 @@ function LabImproveInner() {
   ) {
     return (
       <div className="ds-page">
-        <PageHeader title="Improve" />
+        <p className="type-meta mb-2">Change plane — not the home. Home is /agents. Did it actually help?</p>
+      <PageHeader title="Improve" />
         <QueryLoadingPanel
           label={
             mode === "queue" && !plansQuery.isLoading

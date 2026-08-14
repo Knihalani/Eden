@@ -78,6 +78,36 @@ describe("session F23", () => {
     }
   });
 
+  it("complete rejects agent source and still ends", async () => {
+    const s = new AgentSession({ orgId: "test-org", sessionId: "sess-out" });
+    await s.complete({
+      success: true,
+      outcome: "helped",
+      source: "agent",
+      slack: { channel: "C1", ts: "1.2" },
+    });
+    const end = posts.find((p) => String(p.url).includes("/end"));
+    expect(end).toBeTruthy();
+    const body = end?.body as Record<string, unknown>;
+    expect(body.success).toBe(true);
+    expect(body.outcome).toBeUndefined();
+    expect(body.slack).toEqual({ channel: "C1", ts: "1.2" });
+  });
+
+  it("complete person outcome is fire-and-forget and not copied from success", async () => {
+    const s = new AgentSession({ orgId: "test-org", sessionId: "sess-ok" });
+    await s.complete({
+      success: false,
+      outcome: "helped",
+      source: "person",
+    });
+    const end = posts.find((p) => String(p.url).includes("/end"));
+    const body = end?.body as Record<string, unknown>;
+    expect(body.success).toBe(false);
+    expect(body.outcome).toBe("helped");
+    expect(body.source).toBe("person");
+  });
+
   it("addCost accumulates", async () => {
     const s = new AgentSession({ orgId: "o", sessionId: "x" });
     s.addCost(0.02);
