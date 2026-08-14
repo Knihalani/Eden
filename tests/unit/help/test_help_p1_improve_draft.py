@@ -325,3 +325,90 @@ async def test_list_help_miss_leftovers_query_filters_group() -> None:
     assert args[2] == ["human_did_agents_job"]
     assert args[3] == "c1"
     assert args[4] == 3
+
+def test_classify_code_change_from_trace_or_path() -> None:
+    from eden.improvement.issue_patch_trigger import (
+        FIX_KIND_CODE,
+        FIX_KIND_INSTRUCTION,
+        classify_help_miss_fix,
+    )
+
+    assert (
+        classify_help_miss_fix(
+            [{"snippet": "rewrote the reply", "trace_id": "tr-1"}]
+        )
+        == FIX_KIND_CODE
+    )
+    assert (
+        classify_help_miss_fix(
+            [{"snippet": "I'll just do it", "path": "src/refunds.py"}]
+        )
+        == FIX_KIND_CODE
+    )
+    assert (
+        classify_help_miss_fix([{"snippet": "I'll just do the refund myself"}])
+        == FIX_KIND_INSTRUCTION
+    )
+
+
+def test_draft_labels_instruction_replace_when_never_attempted() -> None:
+    leftovers = [
+        {"snippet": "I'll just do the refund myself"},
+        {"snippet": "handling the refund in #ops"},
+    ]
+    draft = build_help_miss_improve_draft(leftovers)
+    assert draft is not None
+    assert draft["fix_kind"] == "instruction_replace"
+    assert "This is an instruction replace." in draft["summary"]
+    assert "This is a code change." not in draft["summary"]
+    assert "this job was never attempted" in draft["summary"].lower()
+
+
+def test_draft_labels_code_change_when_trace_present() -> None:
+    leftovers = [
+        {
+            "snippet": "rewrote the reply",
+            "session_id": "sess-1",
+            "trace_id": "tr-1",
+        }
+    ]
+    draft = build_help_miss_improve_draft(leftovers)
+    assert draft is not None
+    assert draft["fix_kind"] == "code_change"
+    assert "This is a code change." in draft["summary"]
+    assert "This is an instruction replace." not in draft["summary"]
+
+
+@pytest.mark.asyncio
+async def test_propose_persists_fix_kind_on_evidence() -> None:
+    leftovers = [
+        {
+            "snippet": "rewrote the reply",
+            "session_id": "sess-1",
+            "trace_id": "tr-9",
+        }
+    ]
+    created = {"id": "plan-4", "plan_kind": "prompt_update", "status": "draft"}
+    with (
+        patch(
+            "eden.improvement.plans_repo.find_open_by_fingerprint",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.plans_repo.create_plan",
+            AsyncMock(return_value=created),
+        ) as create,
+        patch(
+            "eden.integrations.slack.store.list_help_miss_leftovers",
+            AsyncMock(return_value=[]),
+        ),
+    ):
+        out = await propose_prompt_canary_for_help_miss(
+            "org",
+            _issue(),
+            reason="rewrote",
+            leftovers=leftovers,
+        )
+    assert out["status"] == "drafted"
+    assert out["fix_kind"] == "code_change"
+    assert create.await_args.kwargs["evidence"]["fix_kind"] == "code_change"
