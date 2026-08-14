@@ -84,6 +84,11 @@ DEFAULT_PUBLIC_PREFIXES: tuple[str, ...] = (
     # (``/integrations/github/authorize``) re-gate with
     # ``integrations:write`` permission at the route layer.
     "/integrations/github",
+    # Slack App — public so Events + Interactivity (Slack-signed, no
+    # JWT) and the OAuth callback (browser lands with no Eden auth)
+    # can be reached. ``configured`` is a boolean only. ``authorize``
+    # re-gates with ``integrations:write`` at the route layer.
+    "/integrations/slack",
     # Cross-origin ingestion — uses X-Org-Api-Key
     "/v1/ingest",
     "/gateway",
