@@ -4,13 +4,17 @@ Stage 4 (cloud LLM / embedding) is OFF this slice. Persist an
 ``extra_work_events`` row ONLY on fire. Unmapped / no-contract /
 no-keyword / thanks / bots store nothing. Uncertain is not produced
 without embeddings, so ``extra_work_candidates`` is unused here.
+This slice does not write ``session_summaries.helped``.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
+
+from eden.integrations.slack import store as slack_store
 
 STAGE0_SUBTYPES = frozenset(
     {
@@ -26,8 +30,15 @@ STAGE0_SUBTYPES = frozenset(
     }
 )
 
+#: message.channels / message.groups. DMs (im) are never consumed.
+LISTEN_CHANNEL_TYPES = frozenset({"channel", "group"})
+
 _THANKS_RE = re.compile(
     r"^\s*(?:thanks|thank you|lgtm|shipped|✅|👍|:\+1:)[\s!.]*$",
+    re.IGNORECASE,
+)
+_THANKS_TOKEN_RE = re.compile(
+    r"\bthanks\b|\bthank you\b|\blgtm\b|\bshipped\b|✅|👍|:\+1:",
     re.IGNORECASE,
 )
 _EMOJI_TOKEN_RE = re.compile(r":[a-z0-9_+-]+:", re.IGNORECASE)
@@ -53,8 +64,6 @@ _STOPWORDS = frozenset(
     }
 )
 
-LISTEN_CHANNEL_TYPES = frozenset({"channel", "group", "mpim"})
-
 
 @dataclass(frozen=True)
 class AmbientDecision:
@@ -70,6 +79,13 @@ class AmbientDecision:
     surface: str = ""
 
 
+def is_dm(event: dict[str, Any]) -> bool:
+    """True for Slack DMs (``message.im``). Never indexed this slice."""
+    if str(event.get("channel_type") or "") == "im":
+        return True
+    return str(event.get("channel") or "").startswith("D")
+
+
 def is_emoji_only(text: str) -> bool:
     stripped = _EMOJI_TOKEN_RE.sub("", text)
     stripped = _EMOJI_GLYPH_RE.sub("", stripped)
@@ -77,11 +93,26 @@ def is_emoji_only(text: str) -> bool:
 
 
 def is_thanks(text: str) -> bool:
-    return bool(_THANKS_RE.match(text or ""))
+    """Allow-list acknowledgements — not extra work, also not helped.
+
+    Case-insensitive word match: the message is thanks if it is only
+    allow-list tokens (thanks / thank you / lgtm / shipped / ✅ / 👍 / :+1:)
+    plus whitespace/punctuation.
+    """
+    raw = text or ""
+    if _THANKS_RE.match(raw):
+        return True
+    if not _THANKS_TOKEN_RE.search(raw):
+        return False
+    remainder = _THANKS_TOKEN_RE.sub(" ", raw)
+    remainder = re.sub(r"[\s!.?,]+", "", remainder)
+    return not remainder
 
 
 def derive_keywords(contract: dict[str, Any]) -> list[str]:
-    existing = [str(k).strip() for k in (contract.get("x_keywords") or []) if str(k).strip()]
+    existing = [
+        str(k).strip() for k in (contract.get("x_keywords") or []) if str(k).strip()
+    ]
     if existing:
         return existing
     blob = f"{contract.get('sentence') or ''} {contract.get('x_job') or ''}"
@@ -159,14 +190,80 @@ def classify(
     )
 
 
+def _observed_at(ts: str) -> str:
+    try:
+        return datetime.fromtimestamp(float(ts), tz=UTC).isoformat()
+    except (TypeError, ValueError):
+        return datetime.now(UTC).isoformat()
+
+
+async def process_message(
+    *,
+    org_id: str,
+    event_id: str,
+    event: dict[str, Any],
+) -> AmbientDecision:
+    """Stages 0–3 + persist-on-fire. No Slack Web API calls."""
+    if event_id and await slack_store.event_id_seen(org_id, event_id):
+        return AmbientDecision(action="drop", reason="duplicate_event_id")
+
+    reason = stage0_drop(event)
+    if reason:
+        return AmbientDecision(action="drop", reason=reason)
+
+    channel_id = str(event.get("channel") or "")
+    mapping = await slack_store.get_agent_for_channel(org_id, channel_id)
+    if not mapping or not mapping.get("agent_id"):
+        return AmbientDecision(action="drop", reason="stage1_unmapped")
+
+    agent_id = str(mapping["agent_id"])
+    contract = await slack_store.get_current_help_contract(org_id, agent_id)
+    decision = classify(event=event, contract=contract)
+    if decision.action != "fire" or not contract:
+        return decision
+
+    message_ts = str(event.get("ts") or "")
+    thread_ts = str(event.get("thread_ts") or "") or None
+    await slack_store.insert_extra_work_event(
+        org_id,
+        agent_id=agent_id,
+        event_id=event_id or None,
+        user_id=str(event.get("user") or "") or None,
+        help_contract_id=str(contract.get("id") or "") or None,
+        surface=decision.surface,
+        kind=decision.kind,
+        path=decision.path,
+        join_key={
+            "system": "slack",
+            "slack_channel_id": channel_id,
+            "slack_message_ts": message_ts,
+            "slack_thread_ts": thread_ts,
+        },
+        snippet=decision.snippet,
+        confidence=decision.confidence,
+        polarity=decision.polarity,
+        raw={
+            "event_id": event_id,
+            "ts": message_ts,
+            "kind": decision.kind,
+            "stage": 3,
+        },
+        observed_at=_observed_at(message_ts),
+        session_id=None,
+    )
+    return decision
+
+
 __all__ = [
     "AmbientDecision",
     "LISTEN_CHANNEL_TYPES",
     "STAGE0_SUBTYPES",
     "classify",
     "derive_keywords",
+    "is_dm",
     "is_emoji_only",
     "is_thanks",
     "keyword_hits",
+    "process_message",
     "stage0_drop",
 ]
