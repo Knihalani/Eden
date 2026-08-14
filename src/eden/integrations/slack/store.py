@@ -428,6 +428,14 @@ async def insert_extra_work_event(
     canary_arm: str | None = None,
 ) -> dict[str, Any] | None:
     """Insert a fired ExtraWorkEvent. Unique (org_id, event_id) is idempotent."""
+    if canary_arm is None:
+        try:
+            from eden.agents.prompt_canary import resolve_canary_arm
+
+            canary_arm = await resolve_canary_arm(org_id, agent_id, session_id)
+        except Exception as exc:
+            logger.debug("slack_store: resolve_canary_arm failed: %s", exc)
+            canary_arm = None
     client = await _pg()
     if client is None:
         return None
@@ -444,7 +452,9 @@ async def insert_extra_work_event(
             )
             ON CONFLICT (org_id, event_id) WHERE event_id IS NOT NULL
             DO NOTHING
-            RETURNING id, org_id, agent_id, event_id, kind, confidence
+            RETURNING id, org_id, agent_id, event_id, kind, confidence,
+                      polarity, help_contract_id, session_id, snippet,
+                      path, canary_arm, user_id
             """,
             org_id,
             session_id,
@@ -465,7 +475,23 @@ async def insert_extra_work_event(
             observed_at,
             canary_arm,
         )
-        return dict(row) if row else None
+        if row is None:
+            return None
+        result = dict(row)
+        result.setdefault("polarity", polarity)
+        result.setdefault("path", path)
+        result.setdefault("snippet", snippet)
+        result.setdefault("session_id", session_id)
+        result.setdefault("help_contract_id", help_contract_id)
+        result.setdefault("user_id", user_id)
+        result.setdefault("canary_arm", canary_arm)
+        try:
+            from eden.issues.issue_promoter import promote_from_extra_work
+
+            await promote_from_extra_work(result)
+        except Exception as exc:
+            logger.debug("slack_store: help_miss promote failed: %s", exc)
+        return result
     except Exception as exc:
         logger.warning("slack_store: insert_extra_work_event failed: %s", exc)
         return None

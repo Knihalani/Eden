@@ -1013,3 +1013,56 @@ async def propose_patch_for_action(org_id: str, action: dict[str, Any]) -> dict[
     # the audit flagged. Arm the per-run ceiling before any LLM work.
     with llm_budget_scope(_default_run_llm_budget()):
         return await propose_plan_for_issue(org_id, str(issue_id))
+
+
+async def propose_prompt_canary_for_help_miss(
+    org_id: str,
+    issue: Any,
+    *,
+    reason: str | None = None,
+    help_contract_id: str | None = None,
+) -> dict[str, Any]:
+    """Draft a prompt_update plan for a HelpMiss group. Human approve. No code patch."""
+    fingerprint = getattr(issue, "fingerprint", None) or ""
+    if not fingerprint:
+        return {"status": "suppressed", "reason": "missing_fingerprint"}
+    existing = await plans_repo.find_open_by_fingerprint(org_id, fingerprint)
+    if existing is not None:
+        return {
+            "status": "suppressed",
+            "reason": "duplicate_open_plan",
+            "plan_id": existing.get("id"),
+            "issue_id": getattr(issue, "id", None),
+        }
+    issue_id = str(getattr(issue, "id", "") or "")
+    agent_id = getattr(issue, "agent_id", None)
+    title = getattr(issue, "title", None) or f"{agent_id or 'agent'} did not help"
+    plan = await plans_repo.create_plan(
+        org_id,
+        plan_kind="prompt_update",
+        title=title,
+        agent_id=agent_id,
+        summary=(
+            f"Prompt canary aimed at HelpMiss reason={reason or 'took_over'}. "
+            "Human approve. Eden does not land the change."
+        ),
+        source_ref=f"help_miss:{issue_id}" if issue_id else "help_miss",
+        source_fingerprint=fingerprint,
+        evidence={
+            "issue_id": issue_id,
+            "fingerprint": fingerprint,
+            "reason": reason,
+            "help_contract_id": help_contract_id,
+            "help_miss": True,
+        },
+        status="draft",
+    )
+    if plan is None:
+        return {"status": "error", "reason": "create_plan_failed", "issue_id": issue_id}
+    return {
+        "status": "drafted",
+        "plan_id": plan.get("id"),
+        "plan_kind": "prompt_update",
+        "issue_id": issue_id,
+        "plan": plan,
+    }
