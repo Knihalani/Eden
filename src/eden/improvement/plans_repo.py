@@ -319,7 +319,7 @@ async def find_worked_help_miss_change(
     plan = _row(row)
     ev = plan.get("evidence") if isinstance(plan.get("evidence"), dict) else {}
     leftover_status = str(ev.get("leftover_status") or "").lower()
-    if leftover_status in {"degrading", "did not work", "block"}:
+    if leftover_status not in {"ok", "ship", "watching"}:
         return None
     instruction = str(ev.get("instruction") or "").strip()
     meta = ev.get("approve_metadata") if isinstance(ev.get("approve_metadata"), dict) else {}
@@ -351,11 +351,25 @@ async def pending_help_miss_change(
         SELECT * FROM improvement_plans
         WHERE org_id = $1 AND agent_id = $2
           AND COALESCE(evidence->>'help_miss','') IN ('true','True','1')
+          AND (
+            status = ANY($3::text[])
+            OR lower(COALESCE(evidence->>'leftover_status',''))
+               IN ('degrading','block')
+          )
         ORDER BY created_at DESC
         LIMIT 1
         """,
         org_id,
         agent_id,
+        [
+            "draft",
+            "pending_review",
+            "approved",
+            "pr_opened",
+            "applied",
+            "merged",
+            "verified",
+        ],
         )
     except Exception:
         return None

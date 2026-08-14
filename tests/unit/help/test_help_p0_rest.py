@@ -334,6 +334,7 @@ def test_loud_install_bar_copy() -> None:
     routes = Path("src/eden/api/routes/agent_sessions.py").read_text()
     assert "We cannot tell if it helped." in routes
     assert "Listening. No leftover work yet. That is unknown, not helped." in routes
+    assert "!copy" in panel
 
 
 @pytest.mark.asyncio

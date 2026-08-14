@@ -331,9 +331,9 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
             );
           })}
         </ul>
-      ) : (
+      ) : !copy ? (
         <p className="type-meta">{LISTENING_BANNER}</p>
-      )}
+      ) : null}
     </section>
   );
 }
