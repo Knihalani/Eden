@@ -290,6 +290,88 @@ class EvidenceGate:
             logger.debug("evidence_gate: prompt_version outcomes metrics failed: %s", exc)
             return []
 
+    def _leftover_kwargs_from_evidence(
+        self, evidence: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Read leftover n / rates from promotion_candidates.evidence.
+
+        Cached ``leftover_control`` / ``leftover_treatment`` lists are
+        leftover extra-work indicators (1=extra_work, 0=resolved without
+        extra-work) — not stumble rates. Stumble lists in ``control`` /
+        ``treatment`` are not leftover n.
+        """
+        from eden.issues.statgate_p0_rail import leftover_rates
+
+        if not isinstance(evidence, dict):
+            return None
+        if "leftover_n_control" in evidence or "leftover_n_treatment" in evidence:
+            rates = leftover_rates(
+                extra_work_control=int(evidence.get("leftover_extra_control") or 0),
+                extra_work_treatment=int(
+                    evidence.get("leftover_extra_treatment") or 0
+                ),
+                n_control=int(evidence.get("leftover_n_control") or 0),
+                n_treatment=int(evidence.get("leftover_n_treatment") or 0),
+                unknown_n=int(evidence.get("leftover_unknown_n") or 0),
+            )
+            rates["listen_silent"] = bool(evidence.get("listen_silent"))
+            rates["mapped_channel"] = bool(evidence.get("mapped_channel", True))
+            return rates
+        left_c = evidence.get("leftover_control")
+        left_t = evidence.get("leftover_treatment")
+        if isinstance(left_c, list) and isinstance(left_t, list):
+            rates = leftover_rates(
+                extra_work_control=sum(1 for x in left_c if x),
+                extra_work_treatment=sum(1 for x in left_t if x),
+                n_control=len(left_c),
+                n_treatment=len(left_t),
+                unknown_n=int(evidence.get("leftover_unknown_n") or 0),
+            )
+            rates["listen_silent"] = bool(evidence.get("listen_silent"))
+            rates["mapped_channel"] = bool(evidence.get("mapped_channel", True))
+            return rates
+        return None
+
+    def _evaluate_leftover_report(
+        self, candidate: dict[str, Any], leftover: dict[str, Any]
+    ) -> EvidenceReport:
+        from eden.issues.statgate_p0_rail import (
+            LEFTOVER_MIN_N,
+            leftover_work_verdict,
+        )
+
+        verdict, detail = leftover_work_verdict(**leftover)
+        passed = verdict == "SHIP"
+        if verdict == "SHIP":
+            rec: Recommendation = "promote"
+            explanation = "leftover extra-work fell vs control"
+        elif verdict == "BLOCK":
+            rec = "reject"
+            explanation = "treatment extra-work worse than control"
+        else:
+            rec = "hold"
+            reason = str(detail.get("reason") or "leftover")
+            if reason == "thin_n":
+                explanation = (
+                    f"insufficient leftover extra-work samples "
+                    f"(need {LEFTOVER_MIN_N} resolved per arm)"
+                )
+            elif reason == "listen_silent":
+                explanation = "listen silent — leftover verify inconclusive"
+            elif reason == "unknown_share":
+                explanation = "unknown_share above leftover ceiling"
+            else:
+                explanation = "leftover extra-work did not fall vs control"
+        return EvidenceReport(
+            candidate_id=UUID(str(candidate["id"])),
+            passed=passed,
+            min_sample_size=LEFTOVER_MIN_N,
+            metrics=detail,
+            recommendation=rec,
+            gate_verdict=verdict,
+            explanation=explanation,
+        )
+
     async def evaluate(self, org_id: str, candidate_id: str) -> EvidenceReport:
         candidate = await self.get_candidate(org_id, candidate_id)
         if candidate is None:
@@ -302,6 +384,26 @@ class EvidenceGate:
 
         kind = str(candidate.get("kind") or "nudge")
         min_n = _MIN_SAMPLES.get(kind, 30)
+        evidence = candidate.get("evidence") or {}
+        if isinstance(evidence, str):
+            evidence = json.loads(evidence)
+        leftover = self._leftover_kwargs_from_evidence(evidence)
+        # prompt_version canary: leftover n is required. Stumble-quiet
+        # / eval scores cannot promote when leftover n is missing.
+        if kind == "prompt_version" or leftover is not None:
+            if leftover is None:
+                leftover = {
+                    "n_control": 0,
+                    "n_treatment": 0,
+                    "extra_work_rate_control": 0.0,
+                    "extra_work_rate_treatment": 0.0,
+                    "unknown_share": 0.0,
+                    "listen_silent": bool(evidence.get("listen_silent")),
+                    "mapped_channel": bool(evidence.get("mapped_channel", True)),
+                }
+            report = self._evaluate_leftover_report(candidate, leftover)
+            await self._persist_report(org_id, candidate_id, report)
+            return report
         control = await self._baseline_metrics(candidate)
         treatment = await self._treatment_metrics(candidate)
 
@@ -690,6 +792,9 @@ class EvidenceGate:
         report = await self.evaluate(org_id, candidate_id)
         kind = "nudge"
         try:
+            candidate_early = await self.get_candidate(org_id, candidate_id)
+            if candidate_early and str(candidate_early.get("kind") or "") == "prompt_version":
+                return report
             from eden.experiments._common import _prob_treatment_better
 
             candidate = await self.get_candidate(org_id, candidate_id)
