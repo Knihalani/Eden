@@ -621,13 +621,72 @@ async def notify_help_miss_applied(
         blocks=blocks,
     )
 
+
+def leftover_result_copy(
+    verdict: str,
+    *,
+    reason: str = "",
+    apply_kind: str = "",
+) -> str:
+    """One next-week line. Silence is not a win."""
+    if verdict == "SHIP":
+        return "Leftover went down — the change worked."
+    if verdict == "BLOCK":
+        if apply_kind == "instruction_replace":
+            return "This job still needs a person."
+        return "Leftover did not go down — the change failed."
+    if reason == "extra_work_unchanged":
+        if apply_kind == "instruction_replace":
+            return "This job still needs a person."
+        return "Leftover did not go down — the change failed."
+    return "We cannot tell."
+
+
+async def notify_help_miss_result(
+    org_id: str,
+    *,
+    agent_id: str,
+    plan_id: str,
+    verdict: str,
+    reason: str = "",
+    apply_kind: str = "",
+) -> dict[str, Any]:
+    """Slack 3: leftover next week. Posts to the notify channel, never a DM."""
+    line = leftover_result_copy(verdict, reason=reason, apply_kind=apply_kind)
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": _safe_text(line)[:150]},
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": _safe_text(
+                    "Leftover on the same watch channels is the check. "
+                    "Silence is not a win."
+                )[:2900],
+            },
+        },
+    ]
+    return await _send(
+        org_id,
+        agent_id=agent_id or None,
+        dedupe_key=f"helpmiss_result:{plan_id}",
+        text=line,
+        blocks=blocks,
+    )
+
+
 __all__ = [
+    "leftover_result_copy",
     "notify_issue_detected",
     "notify_needs_approval",
     "notify_nl_incident",
     "notify_pr_opened",
     "notify_help_miss",
     "notify_help_miss_applied",
+    "notify_help_miss_result",
     "notify_regression",
     "send_test_message",
 ]

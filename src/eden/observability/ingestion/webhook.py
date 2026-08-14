@@ -111,9 +111,21 @@ async def persist_extra_work_item(item: dict, org_id: str) -> dict | None:
     from eden.integrations.slack import store as slack_store
 
     agent_id = str(item.get("agent_id") or "").strip()
+    surface = str(item.get("surface") or "webhook").strip().lower()
+    join_key = (
+        dict(item["join_key"])
+        if isinstance(item.get("join_key"), dict)
+        else {"system": surface}
+    )
+    if not agent_id:
+        agent_id = (
+            await slack_store.agent_id_for_assignment(
+                org_id, surface=surface, join_key=join_key
+            )
+            or ""
+        )
     if not agent_id:
         return None
-    surface = str(item.get("surface") or "webhook").strip().lower()
     if surface not in _EXTRA_WORK_SURFACES:
         return None
     raw_kind = str(item.get("kind") or "").strip().lower()
@@ -122,11 +134,6 @@ async def persist_extra_work_item(item: dict, org_id: str) -> dict | None:
         return None
     if kind not in _EXTRA_WORK_KINDS:
         return None
-    join_key = (
-        dict(item["join_key"])
-        if isinstance(item.get("join_key"), dict)
-        else {"system": surface}
-    )
     if not str(join_key.get("system") or "").strip():
         join_key["system"] = surface
     if surface in _ASSIGNMENT_SURFACES and not str(

@@ -465,8 +465,8 @@ async def get_current_help_contract(
         row = await client.fetchrow(
             """
             SELECT id, org_id, agent_id, sentence, x_job, x_keywords,
-                   y_person, y_slack_user_id, created_by, created_at,
-                   updated_at, superseded_at
+                   y_person, y_slack_user_id, linear_project_id, jira_project_key,
+                   created_by, created_at, updated_at, superseded_at
             FROM help_contracts
             WHERE org_id = $1 AND agent_id = $2 AND superseded_at IS NULL
             LIMIT 1
@@ -665,6 +665,33 @@ async def delete_candidates_for_org(org_id: str) -> int:
         return 0
 
 
+async def stop_watch_channel(org_id: str, channel_id: str) -> dict[str, int]:
+    """Kick: unmap this channel and delete its 7-day maybe-buffer. Not a scrape."""
+    out = {"unmapped": 0, "buffer_deleted": 0}
+    cid = (channel_id or "").strip()
+    if not org_id or not cid:
+        return out
+    client = await _pg()
+    if client is None:
+        return out
+    try:
+        status = await client.execute(
+            "DELETE FROM agent_slack_channels WHERE org_id = $1 AND channel_id = $2",
+            org_id,
+            cid,
+        )
+        out["unmapped"] = _exec_rowcount(status)
+        status = await client.execute(
+            "DELETE FROM extra_work_candidates WHERE org_id = $1 AND channel_id = $2",
+            org_id,
+            cid,
+        )
+        out["buffer_deleted"] = _exec_rowcount(status)
+    except Exception as exc:
+        logger.debug("slack_store: stop_watch_channel failed: %s", exc)
+    return out
+
+
 # store.py append — Path B pointers + help rollup helpers
 
 _POINTERS: list[dict[str, Any]] = []
@@ -752,6 +779,8 @@ async def upsert_help_contract(
     x_keywords: list[str] | None = None,
     y_person: str | None = None,
     y_slack_user_id: str | None = None,
+    linear_project_id: str | None = None,
+    jira_project_key: str | None = None,
 ) -> dict[str, Any]:
     """Write a new current contract; supersede the previous row."""
     row = {
@@ -763,6 +792,8 @@ async def upsert_help_contract(
         "x_keywords": list(x_keywords or []),
         "y_person": y_person,
         "y_slack_user_id": y_slack_user_id,
+        "linear_project_id": (linear_project_id or "").strip() or None,
+        "jira_project_key": (jira_project_key or "").strip() or None,
         "created_by": created_by,
         "superseded_at": None,
     }
@@ -784,9 +815,10 @@ async def upsert_help_contract(
             """
             INSERT INTO help_contracts (
                 id, org_id, agent_id, sentence, x_job, x_keywords,
-                y_person, y_slack_user_id, created_by
+                y_person, y_slack_user_id, linear_project_id, jira_project_key,
+                created_by
             ) VALUES (
-                $1::uuid, $2, $3, $4, $5, $6::text[], $7, $8, $9
+                $1::uuid, $2, $3, $4, $5, $6::text[], $7, $8, $9, $10, $11
             )
             """,
             row["id"],
@@ -797,11 +829,66 @@ async def upsert_help_contract(
             row["x_keywords"],
             y_person,
             y_slack_user_id,
+            row["linear_project_id"],
+            row["jira_project_key"],
             created_by,
         )
     except Exception as exc:
         logger.debug("slack_store: upsert_help_contract failed: %s", exc)
     return row
+
+
+async def agent_id_for_assignment(
+    org_id: str,
+    *,
+    surface: str,
+    join_key: dict[str, Any],
+) -> str | None:
+    """Match a Linear/Jira leftover to the agent that picked that project."""
+    if not org_id:
+        return None
+    surface_name = (surface or "").strip().lower()
+    project = str(
+        join_key.get("project_id")
+        or join_key.get("team_id")
+        or join_key.get("project_key")
+        or ""
+    ).strip()
+    if not project:
+        return None
+    client = await _pg()
+    if client is None:
+        for mem in _CONTRACTS.values():
+            if mem.get("org_id") != org_id:
+                continue
+            if surface_name == "linear" and str(mem.get("linear_project_id") or "") == project:
+                return str(mem.get("agent_id") or "") or None
+            if surface_name == "jira" and str(mem.get("jira_project_key") or "") == project:
+                return str(mem.get("agent_id") or "") or None
+        return None
+    column = (
+        "linear_project_id"
+        if surface_name == "linear"
+        else "jira_project_key"
+        if surface_name == "jira"
+        else ""
+    )
+    if not column:
+        return None
+    try:
+        found = await client.fetchrow(
+            f"""
+            SELECT agent_id FROM help_contracts
+            WHERE org_id = $1 AND superseded_at IS NULL AND {column} = $2
+            LIMIT 1
+            """,
+            org_id,
+            project,
+        )
+        return str(found["agent_id"]) if found and found.get("agent_id") else None
+    except Exception as extra:
+        logger.debug("slack_store: agent_id_for_assignment failed: %s", extra)
+        return None
 
 
 async def insert_session_outcome(
@@ -1241,6 +1328,8 @@ __all__ = [
     "get_pointers",
     "help_counts",
     "delete_candidates_for_org",
+    "stop_watch_channel",
+    "agent_id_for_assignment",
     "expire_candidates",
     "insert_candidate",
     "insert_extra_work_event",

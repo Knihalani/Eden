@@ -374,6 +374,7 @@ async def test_post_merge_issue_rate_quiet_extra_work_unchanged_not_ok() -> None
             monitor, "_leftover_window_stats", AsyncMock(return_value=post_stats)
         ),
         patch("eden.improvement.plans_repo.emit_event", AsyncMock()) as emit,
+        patch("eden.services.slack_notify.notify_help_miss_result", AsyncMock()) as posted,
     ):
         summary = await monitor.run_due()
     assert summary["ok"] == 0
@@ -381,3 +382,23 @@ async def test_post_merge_issue_rate_quiet_extra_work_unchanged_not_ok() -> None
     update = client.execute.await_args.args
     assert update[3] == "pending"
     emit.assert_not_awaited()
+    posted.assert_awaited()
+
+
+def test_leftover_result_copy_never_calls_quiet_a_win() -> None:
+    from eden.services.slack_notify import leftover_result_copy
+
+    assert leftover_result_copy("SHIP") == "Leftover went down — the change worked."
+    assert leftover_result_copy("BLOCK") == "Leftover did not go down — the change failed."
+    assert leftover_result_copy("BLOCK", apply_kind="instruction_replace") == (
+        "This job still needs a person."
+    )
+    assert leftover_result_copy("INCONCLUSIVE") == "We cannot tell."
+    assert leftover_result_copy("INCONCLUSIVE", reason="extra_work_unchanged") == (
+        "Leftover did not go down — the change failed."
+    )
+    assert leftover_result_copy(
+        "INCONCLUSIVE",
+        reason="extra_work_unchanged",
+        apply_kind="instruction_replace",
+    ) == "This job still needs a person."

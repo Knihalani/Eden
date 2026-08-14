@@ -138,6 +138,9 @@ describe("agent setup page", () => {
     expect(container.querySelector('input[name="target_path"]')).toBeNull();
     expect(screen.getByLabelText("Notify Slack channel")).toBeInTheDocument();
     expect(screen.getByLabelText("Y Slack user")).toBeInTheDocument();
+    expect(screen.getByLabelText("Linear project")).toBeInTheDocument();
+    expect(screen.getByLabelText("Jira project")).toBeInTheDocument();
+    expect(container.textContent).toMatch(/\/orgs\/org_1\/ingest\/webhook/);
     expect(screen.getByText(INVITE_EDEN_COPY)).toBeInTheDocument();
   });
 });
