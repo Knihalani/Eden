@@ -57,7 +57,7 @@ export function ProductSurfaceMock({
   className?: string;
 }) {
   const auth = variant === "auth";
-  const spans = auth ? SPANS.slice(0, 6) : SPANS;
+  const spans = SPANS.slice(0, 6);
 
   return (
     <div
@@ -78,7 +78,7 @@ export function ProductSurfaceMock({
       {/* Title bar */}
       <div className="relative flex items-center justify-between gap-3 border-b border-[var(--line)] px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <span className="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
+          <span className="font-mono text-[0.75rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
             Observe
           </span>
           <nav className="hidden items-center gap-1 sm:flex">
@@ -86,7 +86,7 @@ export function ProductSurfaceMock({
               <span
                 key={tab}
                 className={cn(
-                  "px-2 py-1 font-mono text-[0.625rem] uppercase tracking-[0.12em]",
+                  "px-2 py-1 font-mono text-[0.75rem] uppercase tracking-[0.12em]",
                   i === 0
                     ? "border border-[var(--line-accent)] bg-[var(--accent-muted)] text-[var(--accent)]"
                     : "text-[var(--text-faint)]",
@@ -97,7 +97,7 @@ export function ProductSurfaceMock({
             ))}
           </nav>
         </div>
-        <span className="inline-flex items-center gap-1.5 font-mono text-[0.625rem] uppercase tracking-[0.16em] text-[var(--success)]">
+        <span className="inline-flex items-center gap-1.5 font-mono text-[0.75rem] uppercase tracking-[0.16em] text-[var(--success)]">
           <span className="eden-live-dot size-1.5 rounded-full bg-[var(--success)]" />
           Live
         </span>
@@ -105,19 +105,19 @@ export function ProductSurfaceMock({
 
       {/* Meta strip */}
       <div className="relative flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--accent)_4%,transparent)] px-3 py-2 sm:px-4">
-        <span className="font-mono text-[0.625rem] text-[var(--text-secondary)]">
+        <span className="font-mono text-[0.75rem] text-[var(--text-secondary)]">
           tr_8f2a91c4
         </span>
-        <span className="font-mono text-[0.625rem] text-[var(--text-faint)]">
+        <span className="font-mono text-[0.75rem] text-[var(--text-faint)]">
           1.24s
         </span>
-        <span className="font-mono text-[0.625rem] text-[var(--text-faint)]">
+        <span className="font-mono text-[0.75rem] text-[var(--text-faint)]">
           2,418 tok
         </span>
-        <span className="font-mono text-[0.625rem] text-[var(--text-faint)]">
+        <span className="font-mono text-[0.75rem] text-[var(--text-faint)]">
           $0.014
         </span>
-        <span className="ml-auto font-mono text-[0.625rem] text-[var(--error)]">
+        <span className="ml-auto font-mono text-[0.75rem] text-[var(--error)]">
           ISS-1842 · drift
         </span>
       </div>
@@ -139,7 +139,7 @@ export function ProductSurfaceMock({
               >
                 <span
                   className={cn(
-                    "w-[6.5rem] shrink-0 truncate font-mono text-[0.6875rem] sm:w-36",
+                    "w-[6.5rem] shrink-0 truncate font-mono text-[0.8125rem] sm:w-36",
                     toneText(span.tone),
                   )}
                 >
@@ -159,7 +159,7 @@ export function ProductSurfaceMock({
                     }}
                   />
                 </div>
-                <span className="w-11 shrink-0 text-right font-mono text-[0.625rem] tabular-nums text-[var(--text-faint)]">
+                <span className="w-11 shrink-0 text-right font-mono text-[0.75rem] tabular-nums text-[var(--text-faint)]">
                   {span.ms}
                 </span>
               </li>
@@ -187,7 +187,7 @@ export function ProductSurfaceMock({
               <p className="mt-2 text-[1.375rem] font-semibold tabular-nums tracking-[-0.03em] text-[var(--accent)]">
                 0.91
               </p>
-              <p className="mt-1 font-mono text-[0.625rem] text-[var(--text-faint)]">
+              <p className="mt-1 font-mono text-[0.75rem] text-[var(--text-faint)]">
                 treatment · +0.07
               </p>
             </div>
@@ -222,7 +222,7 @@ export function ProductSurfaceMock({
           {[...EVENTS, ...EVENTS].map((ev, i) => (
             <span
               key={`${ev.t}-${i}`}
-              className="inline-flex items-center gap-2 font-mono text-[0.625rem]"
+              className="inline-flex items-center gap-2 font-mono text-[0.75rem]"
             >
               <span className="text-[var(--text-disabled)]">{ev.t}</span>
               <span className={toneText(ev.tone)}>{ev.msg}</span>

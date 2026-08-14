@@ -11,7 +11,7 @@ export function MarketingKicker({
   return (
     <p
       className={cn(
-        "font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-faint)]",
+        "font-mono text-[0.625rem] uppercase tracking-[0.18em] text-[var(--text-muted)]",
         className,
       )}
     >

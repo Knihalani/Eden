@@ -270,8 +270,7 @@ const config = {
         disableSwitch: true,
         respectPrefersColorScheme: false,
       },
-      // No Algolia keys in-repo — local search plugin not wired.
-      // Navbar shows a Find: ⌘/Ctrl+F affordance (see custom.css).
+      // No Algolia keys in-repo — do not show a fake FIND search control.
       docs: {
         sidebar: {
           hideable: true,
@@ -303,7 +302,7 @@ const config = {
           },
           {
             href: 'https://edenobservability.com',
-            label: 'Portal',
+            label: 'Eden',
             position: 'right',
             className: 'navbar-portal',
           },
@@ -324,7 +323,7 @@ const config = {
           {
             title: 'Product',
             items: [
-              { label: 'Portal', href: 'https://edenobservability.com' },
+              { label: 'Eden', href: 'https://edenobservability.com' },
               { label: 'Pricing', href: 'https://edenobservability.com/pricing' },
               { label: 'Security', href: 'https://edenobservability.com/security' },
               { label: 'Contact', href: 'https://edenobservability.com/contact' },
