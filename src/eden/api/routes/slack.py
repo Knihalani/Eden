@@ -15,7 +15,7 @@ Routes:
     back to the portal settings page.
 * ``POST /integrations/slack/events``
     Public (Slack signs the body) — Events API receiver. Ack + Stages
-    0–3 keyword ambient listen. DMs (``message.im``) are ignored.
+    0–3 keyword + optional on-box embed ambient listen. DMs (``message.im``) are ignored.
 * ``GET  /orgs/{org_id}/slack/install``
     Member — the org's active install (team name/id, no token).
 * ``DELETE /orgs/{org_id}/slack/install``
