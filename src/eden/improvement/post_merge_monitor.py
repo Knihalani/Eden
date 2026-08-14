@@ -63,7 +63,7 @@ class PostMergeMonitor:
             return 0
 
         pre_rate = await self._pre_merge_issue_rate(org_id, agent_id)
-        leftover_snap = await self._pre_merge_leftover(org_id, agent_id)
+        leftover_snap = await self._pre_merge_leftover(org_id, agent_id, plan=plan)
         opened = 0
         for hours in _WINDOWS_HOURS:
             try:
@@ -126,14 +126,22 @@ class PostMergeMonitor:
             logger.debug("post_merge: baseline rate failed: %s", exc)
             return 0.0
 
-    async def _pre_merge_leftover(self, org_id: str, agent_id: str) -> str:
+    async def _pre_merge_leftover(
+        self,
+        org_id: str,
+        agent_id: str,
+        *,
+        plan: dict[str, Any] | None = None,
+    ) -> str:
         """Snapshot extra-work into evidence JSONB. No new column."""
         import json
 
         stats = await self._leftover_window_stats(
             None, org_id, agent_id, lookback_hours=_BASELINE_LOOKBACK_HOURS
         )
-        return json.dumps({"leftover_pre": stats})
+        return json.dumps(
+            {"leftover_pre": stats, "apply_kind": _apply_kind_from(plan)}
+        )
 
     async def _leftover_window_stats(
         self,
@@ -243,7 +251,7 @@ class PostMergeMonitor:
             rows = await client.fetch(
                 """
                 SELECT id, org_id, plan_id, agent_id, window_hours,
-                       opened_at, closes_at, pre_issue_rate
+                       opened_at, closes_at, pre_issue_rate, evidence
                 FROM post_merge_windows
                 WHERE status = 'pending' AND closes_at <= now()
                 ORDER BY closes_at ASC
@@ -433,16 +441,16 @@ class PostMergeMonitor:
         try:
             from eden.services.slack_notify import notify_help_miss_result
 
-            apply_kind = ""
-            if isinstance(pre_ev, dict):
-                meta = (
-                    pre_ev.get("approve_metadata")
-                    or pre_ev.get("help_miss_apply")
-                    or {}
-                )
-                if isinstance(meta, dict):
-                    apply_kind = str(meta.get("apply_kind") or "")
-                apply_kind = apply_kind or str(pre_ev.get("apply_kind") or "")
+            apply_kind = _apply_kind_from(
+                pre_ev if isinstance(pre_ev, dict) else None
+            )
+            if not apply_kind:
+                try:
+                    from eden.improvement.plans_repo import get_plan
+
+                    apply_kind = _apply_kind_from(await get_plan(org_id, plan_id))
+                except Exception:
+                    apply_kind = ""
             await notify_help_miss_result(
                 org_id,
                 agent_id=str(agent_id or ""),
@@ -561,6 +569,25 @@ class PostMergeMonitor:
             )
         except Exception:  # noqa: BLE001
             return _DEFAULT_THRESHOLD_PCT
+
+
+def _apply_kind_from(blob: dict[str, Any] | None) -> str:
+    """Window evidence, plan row, or plan.evidence — same apply_kind."""
+    if not isinstance(blob, dict):
+        return ""
+    ev = blob.get("evidence") if isinstance(blob.get("evidence"), dict) else blob
+    if not isinstance(ev, dict):
+        return ""
+    kind = str(ev.get("apply_kind") or "").strip()
+    if kind:
+        return kind
+    for key in ("approve_metadata", "help_miss_apply"):
+        meta = ev.get(key)
+        if isinstance(meta, dict):
+            kind = str(meta.get("apply_kind") or "").strip()
+            if kind:
+                return kind
+    return ""
 
 
 def _json_evidence(

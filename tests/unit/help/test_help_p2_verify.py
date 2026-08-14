@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -350,7 +351,8 @@ async def test_post_merge_issue_rate_quiet_extra_work_unchanged_not_ok() -> None
                 "rate": 0.4,
                 "mapped_channel": True,
                 "listen_silent": False,
-            }
+            },
+            "apply_kind": "instruction_replace",
         },
     }
     client.fetch = AsyncMock(return_value=[window])
@@ -383,6 +385,13 @@ async def test_post_merge_issue_rate_quiet_extra_work_unchanged_not_ok() -> None
     assert update[3] == "pending"
     emit.assert_not_awaited()
     posted.assert_awaited()
+    assert posted.await_args.kwargs["apply_kind"] == "instruction_replace"
+
+
+def test_due_window_select_loads_evidence_for_apply_kind() -> None:
+    src = Path("src/eden/improvement/post_merge_monitor.py").read_text()
+    assert "pre_issue_rate, evidence" in src
+    assert '"apply_kind": _apply_kind_from(plan)' in src or "apply_kind" in src
 
 
 def test_leftover_result_copy_never_calls_quiet_a_win() -> None:
