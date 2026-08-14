@@ -946,6 +946,7 @@ function LabIssuesInner() {
                 ariaLabel="Search issues"
               />
             </div>
+            {scopedIssues.length > 0 ? (
             <div className="space-y-2">
               <p className="type-label">Severity</p>
               <FilterChips
@@ -958,6 +959,8 @@ function LabIssuesInner() {
                 ]}
               />
             </div>
+            ) : null}
+            {scopedIssues.length > 0 ? (
             <div className="space-y-2">
               <p className="type-label">Sort</p>
               <FilterChips
@@ -969,7 +972,8 @@ function LabIssuesInner() {
                 ]}
               />
             </div>
-            {sortMode === "rank" ? (
+            ) : null}
+            {scopedIssues.length > 0 && sortMode === "rank" ? (
               <div className="space-y-2">
                 <p className="type-label">Rank tier</p>
                 <FilterChips
@@ -1019,6 +1023,26 @@ function LabIssuesInner() {
                   query.trim() || severityFilter !== "all" || agent
                     ? U20_FILTER_EMPTY_COPY.issues
                     : U20_EMPTY_COPY.issues
+                }
+                action={
+                  query.trim() || severityFilter !== "all" || agent || rankTierFilter !== "all" ? (
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-ghost ds-btn-sm"
+                      onClick={() => {
+                        setQuery("");
+                        setSeverityFilter("all");
+                        setAgentId("all");
+                        setRankTierFilter("all");
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  ) : (
+                    <Link href="/traces" className="ds-btn ds-btn-primary ds-btn-sm">
+                      Open traces
+                    </Link>
+                  )
                 }
               />
             ) : (

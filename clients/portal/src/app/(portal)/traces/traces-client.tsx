@@ -1357,14 +1357,18 @@ function LabTracesInner() {
             {feedRows.length === 0 ? (
               <EmptyState
                 icon={
-                  query || scopeAgent
+                  query || scopeAgent || severityFilter !== "all"
                     ? SearchX
                     : hubView === "sessions"
                       ? Radar
                       : GitBranch
                 }
                 title={
-                  hubView === "sessions"
+                  severityFilter === "error" && !query && !scopeAgent
+                    ? hubView === "sessions"
+                      ? "No failed sessions"
+                      : "No failed traces"
+                    : hubView === "sessions"
                     ? query
                       ? `No matches for “${query}”`
                       : scopeAgent
@@ -1377,12 +1381,24 @@ function LabTracesInner() {
                         : FIRST_EVENT_WAIT.title
                 }
                 body={
-                  query || scopeAgent
+                  query || scopeAgent || severityFilter !== "all"
                     ? U20_FILTER_EMPTY_COPY.traces
                     : FIRST_EVENT_WAIT.description
                 }
                 action={
-                  query || scopeAgent ? undefined : (
+                  query || scopeAgent || severityFilter !== "all" ? (
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-ghost ds-btn-sm"
+                      onClick={() => {
+                        setQuery("");
+                        setSeverityFilter("all");
+                        setAgentId("all");
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  ) : (
                     <FirstEventWaitAction
                       onCheck={async () => {
                         const [traces] = await Promise.all([

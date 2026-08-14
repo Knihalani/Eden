@@ -6,6 +6,7 @@ import { Download, Info, Sparkles } from "lucide-react";
 import { PageHeader, StatusChip } from "@/components/ds/primitives";
 import { EmptyState } from "@/lab/lab-ui";
 import { useOrg } from "@/hooks/use-org";
+import { keepPreviousData } from "@tanstack/react-query";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { topicsApi, type TopicCluster } from "@/lib/api/resources";
@@ -81,7 +82,7 @@ function TopicsInner() {
     queryKeys.portal.topics(orgId, facet),
     orgId,
     () => topicsApi.list(orgId!, facet),
-    SHELL_QUERY,
+    { ...SHELL_QUERY, placeholderData: keepPreviousData },
   );
 
   const generate = useOrgMutation(
@@ -183,9 +184,9 @@ function TopicsInner() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-        {topicsQuery.isLoading ? (
+        {topicsQuery.isLoading && !topicsQuery.data ? (
           <QueryLoadingPanel label="Loading topics…" />
-        ) : topicsQuery.isError ? (
+        ) : topicsQuery.isError && !topicsQuery.data ? (
           <QueryErrorPanel
             error={topicsQuery.error}
             onRetry={() => void topicsQuery.refetch()}

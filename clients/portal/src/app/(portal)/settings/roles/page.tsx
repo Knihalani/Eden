@@ -221,7 +221,7 @@ export default function SettingsRolesPage() {
     <div className="ds-page">
       <PageHeader
         title="Roles"
-        meta="Custom roles let you grant a scoped permission set to specific members."
+        meta="Custom roles and built-in access"
         actions={
           <div className="flex items-center gap-2">
             {nav}
@@ -294,10 +294,31 @@ export default function SettingsRolesPage() {
           </Panel>
         )}
 
+        <Panel>
+          <div className="p-4 sm:p-5">
+            <h2 className="type-ui text-[var(--text)]">Built-in roles</h2>
+            <ul className="mt-3 space-y-2" aria-label="Built-in roles">
+              {(
+                [
+                  ["Owner", "Full workspace control, including billing and deletion."],
+                  ["Admin", "Manage members, keys, and settings. Cannot delete the workspace."],
+                  ["Member", "Use traces, evals, and improve. Cannot change billing."],
+                  ["Viewer", "Read-only access to traces, issues, and settings."],
+                ] as const
+              ).map(([name, summary]) => (
+                <li key={name} className="border-b border-[var(--line)] pb-2 last:border-b-0 last:pb-0">
+                  <p className="type-ui text-[var(--text)]">{name}</p>
+                  <p className="type-meta mt-0.5">{summary}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Panel>
+
         {roles.length === 0 && !creating ? (
           <EmptyState
             title="No custom roles yet"
-            body="Create a role to grant a scoped permission set beyond the built-in owner/admin/member/viewer roles."
+            body="Create a role to grant a scoped permission set beyond the built-in roles above."
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr]">

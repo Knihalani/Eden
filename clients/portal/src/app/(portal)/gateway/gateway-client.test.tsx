@@ -27,6 +27,10 @@ vi.mock("@/hooks/use-org", () => ({
   useOrg: () => ({ currentOrg: { id: "org_1" } }),
 }));
 
+vi.mock("@/lab/lab-toast", () => ({
+  useLabToast: () => ({ pushToast: vi.fn() }),
+}));
+
 type OverviewData = {
   total_cost_usd: number;
   events: number;

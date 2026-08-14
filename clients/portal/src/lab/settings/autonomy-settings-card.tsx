@@ -236,7 +236,7 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
                     `mode:${m.value}`,
                     { maintenance_mode: m.value },
                     undefined,
-                    { okTitle: `Mode: ${m.label}` },
+                    { okTitle: `Autonomy set to ${m.label}` },
                   );
                 }
               }}
@@ -393,15 +393,19 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
               {earnings?.streak ?? 0} of {earnings?.threshold ?? 5}{" "}
               clean auto-merges
             </span>
-            {earnings?.earned ? (
+            {earningsQuery.isLoading ? (
+              <span className="type-meta text-[var(--text-faint)]">Loading</span>
+            ) : earningsQuery.isError ? (
+              <span className="type-meta text-[var(--text-faint)]">
+                Earned autonomy unavailable
+              </span>
+            ) : earnings?.earned ? (
               <span className="type-ui text-[var(--text)]">T4 earned</span>
             ) : (
               <span className="type-meta text-[var(--text-faint)]">
                 {earnings?.in_flight
                   ? `${earnings.in_flight} in flight`
-                  : earnings
-                    ? "no merges judged yet"
-                    : "…"}
+                  : "no merges judged yet"}
               </span>
             )}
           </div>
@@ -428,7 +432,7 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
               if (policy) void toggleEarnedAutonomy(policy);
             }}
           >
-            {policyQuery.isLoading
+            {policyQuery.isLoading && !policy
               ? "Loading…"
               : earnedOn
                 ? "Program on"
