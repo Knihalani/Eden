@@ -412,3 +412,45 @@ async def test_propose_persists_fix_kind_on_evidence() -> None:
     assert out["status"] == "drafted"
     assert out["fix_kind"] == "code_change"
     assert create.await_args.kwargs["evidence"]["fix_kind"] == "code_change"
+
+
+@pytest.mark.asyncio
+async def test_propose_reuses_worked_change_not_a_new_essay() -> None:
+    leftovers = [{"snippet": "I'll just do the refund myself"}]
+    created = {"id": "plan-reuse", "plan_kind": "prompt_update", "status": "draft"}
+    with (
+        patch(
+            "eden.improvement.plans_repo.find_open_by_fingerprint",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.plans_repo.find_worked_help_miss_change",
+            AsyncMock(
+                return_value={
+                    "plan_id": "old-plan",
+                    "instruction": "Issue refunds under $50 without asking.",
+                    "target_file": None,
+                }
+            ),
+        ),
+        patch(
+            "eden.improvement.plans_repo.create_plan",
+            AsyncMock(return_value=created),
+        ) as create,
+        patch(
+            "eden.integrations.slack.store.list_help_miss_leftovers",
+            AsyncMock(return_value=[]),
+        ),
+    ):
+        out = await propose_prompt_canary_for_help_miss(
+            "org",
+            _issue(),
+            reason="took_over",
+            leftovers=leftovers,
+        )
+    assert out["status"] == "drafted"
+    assert out["reused"] is True
+    assert create.await_args.kwargs["evidence"]["instruction"] == (
+        "Issue refunds under $50 without asking."
+    )
+    assert create.await_args.kwargs["evidence"]["reused_plan_id"] == "old-plan"

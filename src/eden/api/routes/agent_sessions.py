@@ -111,6 +111,8 @@ class HelpContractIn(BaseModel):
     x_keywords: list[str] | None = None
     y_person: str | None = None
     y_slack_user_id: str | None = None
+    linear_project_id: str | None = None
+    jira_project_key: str | None = None
 
 
 @router.get("/help-status")
@@ -133,6 +135,14 @@ async def help_status(
         org_id, agent_id=agent_id, limit=20
     )
     counts = await slack_store.help_counts(org_id, agent_id=agent_id)
+    pending = None
+    if agent_id:
+        try:
+            from eden.improvement.plans_repo import pending_help_miss_change
+
+            pending = await pending_help_miss_change(org_id, agent_id)
+        except Exception:
+            pending = None
     invited = bool(install)
     history = bool(install and not slack_store.needs_reconsent(install))
     if not invited or not mapped:
@@ -159,6 +169,7 @@ async def help_status(
             "history_consented": history,
             "leftover": leftover,
             "counts": counts,
+            "pending_change": pending,
             "unknown_reason": reason,
             "install_bar": {"loud": bool(copy), "copy": copy},
         },
@@ -181,6 +192,8 @@ async def put_help_contract(
         x_keywords=body.x_keywords,
         y_person=body.y_person,
         y_slack_user_id=body.y_slack_user_id,
+        linear_project_id=body.linear_project_id,
+        jira_project_key=body.jira_project_key,
     )
     return _ok("help_contract", {"contract": row})
 

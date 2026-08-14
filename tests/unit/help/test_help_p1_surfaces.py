@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -205,3 +205,44 @@ async def test_unknown_surface_does_not_persist() -> None:
     )
     assert events == []
     assert captured.get("called") is None
+
+
+@pytest.mark.asyncio
+async def test_linear_project_pick_resolves_agent_without_vendor_app() -> None:
+    captured: dict = {}
+
+    async def fake_insert(org_id, **kwargs):
+        captured.update(kwargs)
+        captured["called"] = True
+        return {"id": "e1", **kwargs}
+
+    with (
+        patch(
+            "eden.integrations.slack.store.agent_id_for_assignment",
+            AsyncMock(return_value="ag-linear"),
+        ),
+        patch(
+            "eden.integrations.slack.store.insert_extra_work_event",
+            fake_insert,
+        ),
+    ):
+        events = await WebhookDecoder().decode(
+            json.dumps(
+                {
+                    "event_type": "extra_work",
+                    "surface": "linear",
+                    "kind": "human_comment",
+                    "join_key": {
+                        "system": "linear",
+                        "object_id": "ENG-123",
+                        "team_id": "team-ops",
+                    },
+                    "snippet": "I'll just do the refund myself",
+                }
+            ).encode(),
+            _attr(),
+        )
+    assert events == []
+    assert captured["called"] is True
+    assert captured["agent_id"] == "ag-linear"
+    assert captured["surface"] == "linear"

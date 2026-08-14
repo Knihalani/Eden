@@ -16,8 +16,6 @@ import {
 } from "./help-copy";
 import { SlackNotifyPicker, SlackWatchPicker } from "./slack-channel-picker";
 
-const LOUD_BAR =
-  "If they will not invite Eden to the channels where leftover work shows up, and will not map those channels to a HelpContract, you cannot close the loop. Traces alone are not enough. Thumbs alone are not enough. A Slack install that only pages out is not enough. The team must not have to tag anything. Do not sign the design-partner week.";
 const FAIL_LOUD = CANNOT_TELL_BANNER;
 const NO_HISTORY = CANNOT_TELL_BANNER;
 const NO_CONTRACT = CANNOT_TELL_BANNER;
@@ -43,6 +41,13 @@ export type HelpStatus = {
     leftover_7d: number;
     by_surface?: Record<string, number>;
   };
+  pending_change?: {
+    plan_id?: string;
+    status?: string;
+    instruction?: string;
+    target_file?: string | null;
+    apply_kind?: string | null;
+  } | null;
   unknown_reason: "invite" | "map" | "no extra work seen" | "no_contract" | null;
   install_bar: { loud: boolean; copy: string };
 };
@@ -117,7 +122,7 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
     if (!ySlackId && data.contract.y_slack_user_id) setYSlackId(data.contract.y_slack_user_id);
   }, [data?.contract]);
   const copy = useMemo(() => {
-    if (!data) return `${LOUD_BAR} ${FAIL_LOUD}`;
+    if (!data) return FAIL_LOUD;
     if (!data.invited || !data.mapped_channels?.length) {
       return data.install_bar?.copy || FAIL_LOUD;
     }
@@ -135,7 +140,10 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
     by_surface: {},
   };
   const leftoverSurfaces = Object.entries(counts.by_surface || {})
-    .map(([surface, n]) => `${n} ${surface}`)
+    .map(([surface, n]) => {
+      const label = surface === "slack" ? "Slack" : surface === "linear" ? "Linear" : surface === "jira" ? "Jira" : surface;
+      return `${label}: ${n} leftover ticket${n === 1 ? "" : "s"}`;
+    })
     .join(" · ");
 
   const channelsQuery = useOrgQuery(
@@ -222,17 +230,29 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
 
   return (
     <section className="mb-4 space-y-3 rounded-lg border border-[var(--line)] bg-[var(--bg-inset)] p-3">
-      <p className="type-label">Did it actually help?</p>
+      {data?.pending_change?.instruction ? (
+        <div
+          data-testid="pending-change"
+          className="rounded-md border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm"
+        >
+          <p className="type-label">
+            Pending change · {data.pending_change.status || "draft"}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap">{data.pending_change.instruction}</p>
+          {data.pending_change.target_file ? (
+            <p className="type-meta mt-1">{data.pending_change.target_file}</p>
+          ) : null}
+        </div>
+      ) : null}
       {copy ? (
         <p className="rounded-md border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-3 py-2 text-sm">
           {copy}
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2 type-meta">
-        {leftoverSurfaces ? <span>{leftoverSurfaces}</span> : null}
-        <span>{leftoverSurfaces ? "· " : ""}{counts.helped} helped</span>
-        <span>· {counts.not_helped} didn’t</span>
-        <span>· {counts.unknown} unknown</span>
+        {leftoverSurfaces ? (
+          <span data-testid="leftover-tickets">{leftoverSurfaces}</span>
+        ) : null}
       </div>
       {agentId ? (
         <div className="flex flex-wrap items-end gap-2">
