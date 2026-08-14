@@ -124,9 +124,10 @@ def _due_window(*, hours: int = 24, pre_rate: float = 0.3) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_run_due_closes_clean_window_ok() -> None:
+    """Issue-rate quiet is not a leftover SHIP. Thin leftover n stays pending."""
     client = _mock_client()
     client.fetch = AsyncMock(return_value=[_due_window(hours=24, pre_rate=0.3)])
-    client.fetchval = AsyncMock(return_value=1)  # 1 issue in window → ok
+    client.fetchval = AsyncMock(return_value=1)  # 1 issue in window
 
     monitor = PostMergeMonitor()
     with (
@@ -143,18 +144,16 @@ async def test_run_due_closes_clean_window_ok() -> None:
 
     assert summary == {
         "inspected": 1,
-        "ok": 1,
+        "ok": 0,
         "degrading": 0,
         "follow_ups": 0,
         "earned_grants": 0,  # Wave 6 — no streak re-eval grants here
     }
-    # UPDATE sets ok + evaluated_at + evidence, no follow-up.
+    # Leftover n missing → pending, not a clean ship. No ok event.
     update = client.execute.await_args.args
-    assert update[3] == "ok"
+    assert update[3] == "pending"
     assert update[6] is None
-    # Event trail records the clean window.
-    event_args = emit.await_args.args
-    assert event_args[2] == "post_merge_ok"
+    emit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

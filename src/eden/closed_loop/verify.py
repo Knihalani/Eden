@@ -515,6 +515,177 @@ def _recent_only(
     return out
 
 
+async def collect_leftover_canary_input(
+    org_id: str,
+    agent_id: str,
+    *,
+    listen_kicked: bool = False,
+) -> dict[str, Any]:
+    """Load extra-work vs control on the mapped channel for one agent.
+
+    Returns kwargs for :func:`leftover_work_verdict`. Missing listen /
+    unmapped channel is listen-silent (INCONCLUSIVE), not a negative.
+    """
+    from eden.issues.statgate_p0_rail import leftover_rates
+
+    empty = leftover_rates(
+        extra_work_control=0,
+        extra_work_treatment=0,
+        n_control=0,
+        n_treatment=0,
+        unknown_n=0,
+    )
+    empty.update(listen_silent=True, mapped_channel=False)
+    if listen_kicked or not org_id or not agent_id:
+        return empty
+
+    listen_silent = False
+    mapped_channel = False
+    channel_id = ""
+    try:
+        from eden.integrations.slack import store as slack_store
+
+        install = await slack_store.get_install(org_id)
+        if install is None or install.get("revoked_at"):
+            listen_silent = True
+        elif slack_store.needs_reconsent(install):
+            listen_silent = True
+    except Exception as exc:
+        logger.debug("verify: leftover install lookup failed: %s", exc)
+        listen_silent = True
+
+    client = await _pg()
+    if client is None:
+        empty["listen_silent"] = True
+        return empty
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT channel_id FROM agent_slack_channels
+            WHERE org_id = $1 AND agent_id = $2 AND agent_id IS NOT NULL
+            LIMIT 1
+            """,
+            org_id,
+            agent_id,
+        )
+        if row and row.get("channel_id"):
+            mapped_channel = True
+            channel_id = str(row["channel_id"])
+    except Exception as exc:
+        logger.debug("verify: leftover channel map failed: %s", exc)
+
+    extra = {"control": 0, "treatment": 0}
+    ambient = {"control": 0, "treatment": 0}
+    helped = {"control": 0, "treatment": 0}
+    not_helped = {"control": 0, "treatment": 0}
+    unknown = {"control": 0, "treatment": 0}
+    if mapped_channel and channel_id:
+        try:
+            rows = await client.fetch(
+                """
+                SELECT canary_arm,
+                       count(*) FILTER (
+                         WHERE polarity = 'extra_work'
+                           AND confidence IN ('high', 'medium')
+                       )::int AS extra_n,
+                       count(*) FILTER (
+                         WHERE polarity = 'extra_work'
+                           AND confidence IN ('high', 'medium')
+                           AND session_id IS NULL
+                       )::int AS ambient_n
+                FROM extra_work_events
+                WHERE org_id = $1 AND agent_id = $2
+                  AND canary_arm IN ('control', 'treatment')
+                  AND join_key->>'slack_channel_id' = $3
+                GROUP BY canary_arm
+                """,
+                org_id,
+                agent_id,
+                channel_id,
+            )
+            for r in rows or []:
+                arm = str(r["canary_arm"])
+                extra[arm] = int(r["extra_n"] or 0)
+                ambient[arm] = int(r["ambient_n"] or 0)
+        except Exception as exc:
+            logger.debug("verify: leftover extra_work query failed: %s", exc)
+        try:
+            rows = await client.fetch(
+                """
+                SELECT arm, helped, count(*)::int AS n
+                FROM (
+                    SELECT COALESCE(
+                             so.canary_arm,
+                             ew.canary_arm
+                           ) AS arm,
+                           ss.helped
+                    FROM session_summaries ss
+                    LEFT JOIN LATERAL (
+                        SELECT canary_arm FROM session_outcomes
+                        WHERE org_id = ss.org_id AND session_id = ss.session_id
+                          AND canary_arm IN ('control', 'treatment')
+                        ORDER BY observed_at DESC LIMIT 1
+                    ) so ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT canary_arm FROM extra_work_events
+                        WHERE org_id = ss.org_id AND session_id = ss.session_id
+                          AND canary_arm IN ('control', 'treatment')
+                        ORDER BY observed_at DESC LIMIT 1
+                    ) ew ON TRUE
+                    WHERE ss.org_id = $1 AND ss.agent_id = $2
+                ) t
+                WHERE arm IN ('control', 'treatment')
+                GROUP BY arm, helped
+                """,
+                org_id,
+                agent_id,
+            )
+            for r in rows or []:
+                arm = str(r["arm"])
+                val = str(r["helped"] or "unknown")
+                n = int(r["n"] or 0)
+                if val == "helped":
+                    helped[arm] += n
+                elif val == "not_helped":
+                    not_helped[arm] += n
+                else:
+                    unknown[arm] += n
+        except Exception as exc:
+            logger.debug("verify: leftover session query failed: %s", exc)
+
+    n_control = helped["control"] + not_helped["control"] + ambient["control"]
+    n_treatment = (
+        helped["treatment"] + not_helped["treatment"] + ambient["treatment"]
+    )
+    unknown_n = unknown["control"] + unknown["treatment"]
+    out = leftover_rates(
+        extra_work_control=extra["control"],
+        extra_work_treatment=extra["treatment"],
+        n_control=n_control,
+        n_treatment=n_treatment,
+        unknown_n=unknown_n,
+    )
+    out["listen_silent"] = bool(listen_silent or not mapped_channel)
+    out["mapped_channel"] = bool(mapped_channel)
+    return out
+
+
+async def _verify_help_miss(
+    org_id: str, issue: Any
+) -> tuple[bool | None, dict[str, Any]]:
+    """Leftover-work vs control is the only SHIP check for help_miss."""
+    from eden.issues.statgate_p0_rail import leftover_work_verdict
+
+    agent_id = str(getattr(issue, "agent_id", None) or "")
+    payload = await collect_leftover_canary_input(org_id, agent_id)
+    verdict, detail = leftover_work_verdict(**payload)
+    if verdict == "SHIP":
+        return True, detail
+    if verdict == "INCONCLUSIVE":
+        return None, detail
+    return False, detail
+
+
 async def _verify_issue(
     org_id: str, issue_id: str, fingerprint: str, ref: str = ""
 ) -> tuple[bool | None, dict[str, Any]]:
@@ -534,11 +705,18 @@ async def _verify_issue(
     repo = IssuesRepo()
     window = _quiet_window_minutes(ref)
     issue = None
+    try:
+        issue = await repo.get_issue(org_id, issue_id)
+    except Exception:
+        issue = None
+    if issue is not None and getattr(issue, "kind", None) == "help_miss":
+        return await _verify_help_miss(org_id, issue)
     # M3 (D6): an empty fingerprint must never auto-pass — re-derive it
     # from the issue row, and fail the verification when still empty.
     if not fingerprint:
         try:
-            issue = await repo.get_issue(org_id, issue_id)
+            if issue is None:
+                issue = await repo.get_issue(org_id, issue_id)
             fingerprint = (issue.fingerprint if issue else "") or ""
         except Exception:
             fingerprint = ""
