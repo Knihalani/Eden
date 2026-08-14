@@ -845,6 +845,48 @@ async def list_leftover_events(
         return []
 
 
+async def list_help_miss_leftovers(
+    org_id: str,
+    *,
+    agent_id: str,
+    help_contract_id: str | None = None,
+    kinds: list[str] | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Up to three ExtraWorkEvent hits for one HelpMiss group."""
+    if not org_id or not agent_id or not kinds:
+        return []
+    client = await _pg()
+    if client is None:
+        return []
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id, org_id, session_id, agent_id, help_contract_id,
+                   trace_id, surface, kind, path, snippet, confidence,
+                   polarity, observed_at
+            FROM extra_work_events
+            WHERE org_id = $1 AND agent_id = $2
+              AND polarity = 'extra_work'
+              AND confidence IN ('high', 'medium')
+              AND snippet IS NOT NULL AND btrim(snippet) <> ''
+              AND kind = ANY($3::text[])
+              AND coalesce(help_contract_id::text, '') = $4
+            ORDER BY observed_at DESC
+            LIMIT $5
+            """,
+            org_id,
+            agent_id,
+            list(kinds),
+            (help_contract_id or "").strip(),
+            max(1, int(limit or 3)),
+        )
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        logger.debug("slack_store: list_help_miss_leftovers failed: %s", exc)
+        return []
+
+
 async def help_counts(org_id: str, *, agent_id: str | None = None) -> dict[str, Any]:
     client = await _pg()
     out: dict[str, Any] = {
@@ -1112,6 +1154,7 @@ __all__ = [
     "list_due_pointers",
     "list_due_pointers_from_sessions",
     "list_leftover_events",
+    "list_help_miss_leftovers",
     "leftover_by_surface",
     "mark_pointer_closed",
     "memory_outcomes",
