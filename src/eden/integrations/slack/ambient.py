@@ -500,6 +500,7 @@ async def close_due_pointer_windows() -> dict[str, object]:
 
     from eden.integrations.slack import store as slack_store
 
+    expired = await slack_store.expire_candidates()
     memory = slack_store.list_due_pointers()
     durable = await slack_store.list_due_pointers_from_sessions()
     seen: set[tuple[str, str, str]] = set()
@@ -528,15 +529,19 @@ async def close_due_pointer_windows() -> dict[str, object]:
             contract = await slack_store.get_current_help_contract(org_id, agent_id)
             if contract:
                 y_id = str(contract.get("y_slack_user_id") or "") or None
-        rows = await close_pointer_windows(
-            org_id,
-            token=token,
-            pointers=pointers,
-            y_slack_user_id=y_id,
-            bot_user_id=bot_user_id,
-        )
-        fired += len(rows)
         for p in pointers:
+            try:
+                rows = await close_pointer_windows(
+                    org_id,
+                    token=token,
+                    pointers=[p],
+                    y_slack_user_id=y_id,
+                    bot_user_id=bot_user_id,
+                )
+            except Exception:
+                # Failed conversations.replies is not "leftover was checked".
+                continue
+            fired += len(rows)
             await slack_store.mark_pointer_closed(
                 org_id,
                 session_id=p.get("session_id"),
@@ -544,7 +549,12 @@ async def close_due_pointer_windows() -> dict[str, object]:
                 ts=str(p.get("ts") or ""),
             )
             closed += 1
-    return {"closed": closed, "fired": fired, "orgs": len(by_org)}
+    return {
+        "closed": closed,
+        "fired": fired,
+        "orgs": len(by_org),
+        "candidates_expired": expired,
+    }
 
 
 async def backfill_on_invite(
@@ -562,6 +572,10 @@ async def backfill_on_invite(
 
     if not org_id or not channel_id:
         return {"skipped": True, "reason": "missing_ids"}
+    mapping = await slack_store.get_agent_for_channel(org_id, channel_id)
+    if not mapping or not mapping.get("agent_id"):
+        # Invite-first is fine; do not read or process history until mapped.
+        return {"skipped": True, "reason": "unmapped"}
     if event_id and event_id in _INVITE_EVENTS_SEEN:
         return {"skipped": True, "reason": "event_seen"}
     if (org_id, channel_id) in _BACKFILLED_CHANNELS or await slack_store.is_channel_backfilled(org_id, channel_id):

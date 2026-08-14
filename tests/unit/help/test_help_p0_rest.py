@@ -495,8 +495,11 @@ async def test_invite_backfill_runs_stage_pipeline_once() -> None:
         return None
 
     with (
+        patch("eden.integrations.slack.store.get_agent_for_channel", AsyncMock(return_value={"agent_id": "ag"})),
         patch("eden.integrations.slack.store.get_install", AsyncMock(return_value={"bot_user_id": "BOT"})),
         patch("eden.integrations.slack.store.get_bot_token", AsyncMock(return_value="xoxb")),
+        patch("eden.integrations.slack.store.is_channel_backfilled", AsyncMock(return_value=False)),
+        patch("eden.integrations.slack.store.mark_channel_backfilled", AsyncMock()),
         patch("eden.integrations.slack.client.SlackClient", return_value=_C()),
         patch.object(amb, "process_message", fake_process),
     ):
@@ -545,6 +548,7 @@ async def test_close_due_zero_extra_work_unknown() -> None:
         patch("eden.integrations.slack.store.get_install", AsyncMock(return_value={"bot_user_id": "BOT"})),
         patch("eden.integrations.slack.store.get_current_help_contract", AsyncMock(return_value=None)),
         patch("eden.integrations.slack.store.list_due_pointers_from_sessions", AsyncMock(return_value=[])),
+        patch("eden.integrations.slack.store.expire_candidates", AsyncMock(return_value=0)),
         patch("eden.integrations.slack.client.SlackClient", return_value=_C()),
         patch("eden.integrations.slack.store.insert_extra_work_event", fake_insert),
     ):
@@ -562,3 +566,123 @@ def test_portal_unknown_reason_mapping() -> None:
     assert 'unknownReason = "no extra work seen"' in mapping
     assert "_annotate_session_help" in mapping
     assert "s.success = success_map.get" in mapping
+
+@pytest.mark.asyncio
+async def test_upsert_help_contract_persists_keywords_and_y() -> None:
+    from eden.integrations.slack import store as slack_store
+
+    slack_store._CONTRACTS.clear()
+    with patch("eden.integrations.slack.store._pg", AsyncMock(return_value=None)):
+        row = await slack_store.upsert_help_contract(
+            "org1",
+            agent_id="ag",
+            sentence="This is supposed to take refunds off Y.",
+            created_by="portal",
+            x_keywords=["refund", "checkout"],
+            y_slack_user_id="U0123ABC",
+        )
+    assert row["sentence"] == "This is supposed to take refunds off Y."
+    assert row["x_keywords"] == ["refund", "checkout"]
+    assert row["y_slack_user_id"] == "U0123ABC"
+    stored = slack_store._CONTRACTS[("org1", "ag")]
+    assert stored["x_keywords"] == ["refund", "checkout"]
+    assert stored["y_slack_user_id"] == "U0123ABC"
+
+
+@pytest.mark.asyncio
+async def test_expire_candidates_deletes_past_ttl() -> None:
+    from eden.integrations.slack import store as slack_store
+
+    client = AsyncMock()
+    client.execute = AsyncMock(return_value="DELETE 2")
+    with patch("eden.integrations.slack.store._pg", AsyncMock(return_value=client)):
+        n = await slack_store.expire_candidates()
+    assert n == 2
+    sql = client.execute.await_args.args[0]
+    assert "DELETE FROM extra_work_candidates" in sql
+    assert "expires_at < NOW()" in sql
+
+
+@pytest.mark.asyncio
+async def test_backfill_skips_unmapped_without_history_or_process() -> None:
+    from eden.integrations.slack import ambient as amb
+
+    amb._BACKFILLED_CHANNELS.clear()
+    amb._INVITE_EVENTS_SEEN.clear()
+    processed: list = []
+    history_calls: list = []
+
+    class _C:
+        async def conversations_history(self, **kwargs):
+            history_calls.append(kwargs)
+            return [{"ts": "1.0", "user": "U-Y", "text": "refund stuck"}]
+
+    async def fake_process(**kwargs):
+        processed.append(kwargs)
+
+    with (
+        patch("eden.integrations.slack.store.get_agent_for_channel", AsyncMock(return_value=None)),
+        patch("eden.integrations.slack.store.get_install", AsyncMock(return_value={"bot_user_id": "BOT"})),
+        patch("eden.integrations.slack.store.get_bot_token", AsyncMock(return_value="xoxb")),
+        patch("eden.integrations.slack.client.SlackClient", return_value=_C()),
+        patch.object(amb, "process_message", fake_process),
+    ):
+        out = await amb.backfill_on_invite(
+            "org1", channel_id="C1", joining_user="BOT", event_id="Ev-unmap"
+        )
+    assert out.get("skipped") is True
+    assert out.get("reason") == "unmapped"
+    assert processed == []
+    assert history_calls == []
+    assert ("org1", "C1") not in amb._BACKFILLED_CHANNELS
+
+
+@pytest.mark.asyncio
+async def test_failed_replies_does_not_mark_pointer_closed() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from eden.integrations.slack import ambient as amb
+    from eden.integrations.slack import store as slack_store
+    from eden.integrations.slack.oauth import SlackAPIError
+
+    slack_store._POINTERS.clear()
+    slack_store._POINTERS.append(
+        {
+            "org_id": "org1",
+            "channel_id": "C1",
+            "ts": "1.0",
+            "agent_id": "ag",
+            "session_id": "s1",
+            "opened_at": (datetime.now(UTC) - timedelta(minutes=45)).isoformat(),
+            "window_closed_at": None,
+        }
+    )
+
+    class _C:
+        async def conversations_replies(self, **kwargs):
+            raise SlackAPIError("conversations.replies failed", status_code=500)
+
+    with (
+        patch("eden.integrations.slack.store.get_bot_token", AsyncMock(return_value="xoxb")),
+        patch("eden.integrations.slack.store.get_install", AsyncMock(return_value={"bot_user_id": "BOT"})),
+        patch("eden.integrations.slack.store.get_current_help_contract", AsyncMock(return_value=None)),
+        patch("eden.integrations.slack.store.list_due_pointers_from_sessions", AsyncMock(return_value=[])),
+        patch("eden.integrations.slack.store.expire_candidates", AsyncMock(return_value=0)),
+        patch("eden.integrations.slack.client.SlackClient", return_value=_C()),
+    ):
+        out = await amb.close_due_pointer_windows()
+    assert out["closed"] == 0
+    assert out["fired"] == 0
+    assert slack_store._POINTERS[0]["window_closed_at"] is None
+
+
+def test_stage4_off_no_llm_on_every_message() -> None:
+    ambient = Path("src/eden/integrations/slack/ambient.py").read_text()
+    assert "Stage 4" in ambient
+    assert "OFF this slice" in ambient
+    assert "import openai" not in ambient
+    assert "import anthropic" not in ambient
+    assert "chat.completions" not in ambient
+    assert "extra_work_candidates" in ambient
+    assert "unused here" in ambient
+
