@@ -40,6 +40,70 @@ from eden.observability.telemetry_collector import TelemetryEvent
 logger = logging.getLogger(__name__)
 
 
+# ExtraWorkEvent.surface enum (spec 4.2). Do not invent vendor surfaces.
+_EXTRA_WORK_SURFACES = frozenset(
+    {"slack", "linear", "jira", "github", "intercom", "zendesk", "webhook"}
+)
+_ASSIGNMENT_SURFACES = frozenset(
+    {"linear", "jira", "github", "intercom", "zendesk"}
+)
+_EXTRA_WORK_KINDS = frozenset(
+    {
+        "human_did_agents_job",
+        "thread_takeover",
+        "ill_just_do_it",
+        "rewrite_new_message",
+        "cleanup_thread",
+        "mention_intended_owner",
+        "explicit_negative",
+        "escalate",
+        "reassigned",
+        "reopened",
+        "human_comment",
+        "customer_posted",
+        "ticket_still_open",
+    }
+)
+# Not ExtraWorkEvent kinds. Intercom assumed resolution / Zendesk session-ended.
+_UNKNOWN_NOT_EXTRA_WORK_KINDS = frozenset(
+    {"assumed_resolution", "session_ended", "silence"}
+)
+
+
+def _truthy_flag(value: object) -> bool:
+    if value is True or value == 1:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {"true", "1", "yes"}:
+        return True
+    return False
+
+
+def _is_unknown_not_extra_work(
+    item: dict, surface: str, kind: str, *, raw_kind: str = ""
+) -> bool:
+    """Assumed resolution / silence / Session ended alone are unknown, not a hit."""
+    if kind in _UNKNOWN_NOT_EXTRA_WORK_KINDS or raw_kind in _UNKNOWN_NOT_EXTRA_WORK_KINDS:
+        return True
+    if _truthy_flag(item.get("assumed_resolution")):
+        return True
+    if _truthy_flag(item.get("session_ended")):
+        return True
+    if _truthy_flag(item.get("silence")):
+        return True
+    snippet = str(item.get("snippet") or "").strip()
+    # "Session ended" alone is unknown. An explicit extra-work kind still fires.
+    if surface == "zendesk" and snippet.lower() == "session ended":
+        if raw_kind not in {
+            "escalate",
+            "reopened",
+            "human_comment",
+            "human_did_agents_job",
+            "ticket_still_open",
+        }:
+            return True
+    return False
+
+
 async def persist_extra_work_item(item: dict, org_id: str) -> dict | None:
     """Customer POST event_type=extra_work. Never maps span outcome to help."""
     from datetime import UTC, datetime
@@ -49,13 +113,26 @@ async def persist_extra_work_item(item: dict, org_id: str) -> dict | None:
     agent_id = str(item.get("agent_id") or "").strip()
     if not agent_id:
         return None
-    surface = str(item.get("surface") or "webhook")
-    kind = str(item.get("kind") or "human_did_agents_job")
-    join_key = item.get("join_key") if isinstance(item.get("join_key"), dict) else {
-        "system": surface
-    }
-    if "system" not in join_key:
-        join_key = {**join_key, "system": surface}
+    surface = str(item.get("surface") or "webhook").strip().lower()
+    if surface not in _EXTRA_WORK_SURFACES:
+        return None
+    raw_kind = str(item.get("kind") or "").strip().lower()
+    kind = raw_kind or "human_did_agents_job"
+    if _is_unknown_not_extra_work(item, surface, kind, raw_kind=raw_kind):
+        return None
+    if kind not in _EXTRA_WORK_KINDS:
+        return None
+    join_key = (
+        dict(item["join_key"])
+        if isinstance(item.get("join_key"), dict)
+        else {"system": surface}
+    )
+    if not str(join_key.get("system") or "").strip():
+        join_key["system"] = surface
+    if surface in _ASSIGNMENT_SURFACES and not str(
+        join_key.get("object_id") or ""
+    ).strip():
+        return None
     snippet = item.get("snippet")
     observed = str(item.get("observed_at") or datetime.now(UTC).isoformat())
     session_id = item.get("session_id")
