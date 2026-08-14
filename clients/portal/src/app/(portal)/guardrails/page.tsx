@@ -9,6 +9,7 @@ import {
   type GuardrailStatus,
 } from "@/lab/fixtures/guardrails";
 import { PageHeader } from "@/components/ds/primitives";
+import { NameCreateDialog } from "@/components/ds/name-create-dialog";
 import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
 import {
   parseGuardrailKindFilter,
@@ -17,6 +18,8 @@ import {
 import dynamic from "next/dynamic";
 import { patchPortalCatalog } from "@/lib/portal-catalog";
 import { useOrg } from "@/hooks/use-org";
+import { useLabToast } from "@/lab/lab-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
 import { portalApi } from "@/lib/api/portal";
@@ -53,6 +56,9 @@ function LabGuardrailsInner() {
   const paramStatus = searchParams.get("status");
 
   const { currentOrg } = useOrg();
+  const { pushToast } = useLabToast();
+  const queryClient = useQueryClient();
+  const [nameOpen, setNameOpen] = useState(false);
   const orgId = currentOrg?.id ?? null;
   const agentsQuery = useOrgQuery(
     queryKeys.portal.agents(orgId),
@@ -219,6 +225,7 @@ function LabGuardrailsInner() {
               statusFilter={statusFilter}
               onStatusFilter={changeStatus}
               onSelect={selectPolicy}
+              onAddPolicy={() => setNameOpen(true)}
               counts={scopeCounts}
             />
           </div>
@@ -226,6 +233,35 @@ function LabGuardrailsInner() {
             <GuardrailsDetailView policy={policy} />
           </div>
         </div>
+      <NameCreateDialog
+        open={nameOpen}
+        title="New policy"
+        placeholder="Policy name"
+        confirmLabel="Add policy"
+        onCancel={() => setNameOpen(false)}
+        onConfirm={(name) => {
+          if (!orgId) return;
+          setNameOpen(false);
+          void (async () => {
+            try {
+              await portalApi.createGuardrailPolicy(orgId, { name });
+              await queryClient.invalidateQueries({
+                queryKey: queryKeys.portal.guardrailPolicies(orgId),
+              });
+              pushToast({ title: "Policy added", body: name, tone: "ok" });
+            } catch (err) {
+              pushToast({
+                title: "Could not add policy",
+                body:
+                  err instanceof Error
+                    ? err.message
+                    : "Open a failing trace to attach a policy.",
+                tone: "fail",
+              });
+            }
+          })();
+        }}
+      />
     </div>
   );
 }

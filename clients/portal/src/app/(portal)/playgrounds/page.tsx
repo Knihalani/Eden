@@ -11,7 +11,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader, Panel } from "@/components/ds/primitives";
+import { NameCreateDialog } from "@/components/ds/name-create-dialog";
 import { useOrg } from "@/hooks/use-org";
+import { useConfirm } from "@/hooks/use-confirm";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { queryKeys } from "@/lib/query-keys";
@@ -48,7 +50,9 @@ export default function PlaygroundsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const confirm = useConfirm();
   const [creating, setCreating] = useState(false);
+  const [nameOpen, setNameOpen] = useState(false);
 
   const listQuery = useOrgQuery(
     queryKeys.portal.playgrounds(orgId),
@@ -57,12 +61,13 @@ export default function PlaygroundsPage() {
     SHELL_QUERY,
   );
 
-  async function createBlank() {
+  async function createNamed(name: string) {
     if (!orgId || creating) return;
     setCreating(true);
+    setNameOpen(false);
     try {
       const res = await playgroundApi.create(orgId, {
-        name: "Untitled playground",
+        name,
         config: serializePlaygroundConfig({
           tasks: [defaultTask()],
           rows: [{ input: "" }],
@@ -79,6 +84,27 @@ export default function PlaygroundsPage() {
       pushToast({
         title: "Could not create playground",
         body: e instanceof Error ? e.message : "Create failed.",
+        tone: "fail",
+      });
+    }
+  }
+
+  async function deletePlayground(p: PersistedPlayground) {
+    if (!orgId) return;
+    const ok = await confirm(
+      `Delete playground “${p.name}”? This cannot be undone.`,
+    );
+    if (!ok) return;
+    try {
+      await playgroundApi.delete(orgId, p.id);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.portal.playgrounds(orgId),
+      });
+      pushToast({ title: "Playground deleted", body: p.name, tone: "ok" });
+    } catch (e) {
+      pushToast({
+        title: "Could not delete playground",
+        body: e instanceof Error ? e.message : "Delete failed.",
         tone: "fail",
       });
     }
@@ -111,7 +137,7 @@ export default function PlaygroundsPage() {
             type="button"
             className="ds-btn ds-btn-primary ds-btn-sm"
             disabled={creating}
-            onClick={() => void createBlank()}
+            onClick={() => setNameOpen(true)}
           >
             {creating ? "Creating…" : "New playground"}
           </button>
@@ -141,7 +167,7 @@ export default function PlaygroundsPage() {
                   type="button"
                   className="ds-btn ds-btn-primary ds-btn-sm"
                   disabled={creating}
-                  onClick={() => void createBlank()}
+                  onClick={() => setNameOpen(true)}
                 >
                   Create playground
                 </button>
@@ -154,10 +180,10 @@ export default function PlaygroundsPage() {
               {playgrounds.map((p) => {
                 const cost = lastRunCost(p.config);
                 return (
-                  <li key={p.id}>
+                  <li key={p.id} className="flex items-stretch">
                     <Link
                       href={`/playgrounds/${p.id}`}
-                      className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-[var(--bg-hover)] sm:px-5"
+                      className="flex min-w-0 flex-1 items-center gap-4 px-4 py-3 transition-colors hover:bg-[var(--bg-hover)] sm:px-5"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="type-ui truncate text-[var(--text)]">
@@ -174,6 +200,14 @@ export default function PlaygroundsPage() {
                         <span className="type-meta ml-1">last run</span>
                       </span>
                     </Link>
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-ghost ds-btn-sm m-2 shrink-0"
+                      aria-label={`Delete ${p.name}`}
+                      onClick={() => void deletePlayground(p)}
+                    >
+                      Delete
+                    </button>
                   </li>
                 );
               })}
@@ -181,6 +215,13 @@ export default function PlaygroundsPage() {
           </Panel>
         )}
       </div>
+      <NameCreateDialog
+        open={nameOpen}
+        title="New playground"
+        placeholder="Playground name"
+        onCancel={() => setNameOpen(false)}
+        onConfirm={(name) => void createNamed(name)}
+      />
     </div>
   );
 }

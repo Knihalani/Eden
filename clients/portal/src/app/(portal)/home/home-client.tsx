@@ -557,8 +557,9 @@ export default function HomeClient() {
             action={
               zeroData ? (
                 <FirstEventWaitAction
-                  onCheck={() => {
-                    void tracesQuery.refetch();
+                  onCheck={async () => {
+                    const res = await tracesQuery.refetch();
+                    return res.data ?? [];
                   }}
                   checking={tracesQuery.isFetching}
                 />

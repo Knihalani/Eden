@@ -1,5 +1,6 @@
 "use client";
 
+import { isTypingTarget } from "@/lib/is-typing-target";
 import {
   createContext,
   useCallback,
@@ -75,16 +76,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.tagName === "SELECT" ||
-          t.isContentEditable)
-      ) {
-        return;
-      }
+      if (isTypingTarget(e.target)) return;
       e.preventDefault();
       toggle();
     }

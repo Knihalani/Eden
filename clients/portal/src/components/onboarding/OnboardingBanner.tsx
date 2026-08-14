@@ -14,11 +14,12 @@ import { ChevronRight, X } from "lucide-react";
 import { useOrg } from "@/hooks/use-org";
 import { useTourProgress } from "@/hooks/use-tour-progress";
 import { formatOnboardingProgress } from "@/lib/onboarding-progress";
-import { shouldShowTourBanner } from "@/lib/tour-progress";
+import {
+  markTourBannerDismissed,
+  shouldShowTourBanner,
+} from "@/lib/tour-progress";
 import { PRODUCT_TOUR_STEPS } from "@/lib/product-tour";
 import { Button } from "@/components/ui/button";
-
-const SESSION_KEY = "eden:onboarding:banner-dismissed";
 
 export function OnboardingBanner({
   collapsed = false,
@@ -27,10 +28,7 @@ export function OnboardingBanner({
 }) {
   const { currentOrg, loading: orgLoading, orgSyncing } = useOrg();
   const { isLoaded, progress } = useTourProgress();
-  const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.sessionStorage.getItem(SESSION_KEY) === "1";
-  });
+  const [dismissed, setDismissed] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
@@ -65,9 +63,7 @@ export function OnboardingBanner({
   const emphasizeApiKey = stepId === "welcome" || stepId === "api-keys";
 
   function dismiss() {
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(SESSION_KEY, "1");
-    }
+    markTourBannerDismissed();
     setDismissed(true);
   }
 
