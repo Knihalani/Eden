@@ -298,17 +298,94 @@ def _first(rows: list[Any], key: str) -> str | None:
     return None
 
 
+# Spec §4.3 rank 6. Distinguished from native product by channel/reason.
+_COMPETITOR_CHANNELS = frozenset({"langfuse", "helicone"})
+_COMPETITOR_REASONS = frozenset({"langfuse_boolean", "helicone_rating"})
+
+
+def is_competitor_thumb(record: dict[str, Any]) -> bool:
+    """True for mapped Langfuse BOOLEAN / Helicone {rating: bool}."""
+    return (
+        record.get("channel") in _COMPETITOR_CHANNELS
+        or record.get("reason") in _COMPETITOR_REASONS
+    )
+
+
+def coerce_competitor_bool(value: Any) -> bool | None:
+    """Accept only BOOLEAN-shaped values. Reject numeric scores / star ratings."""
+    if isinstance(value, bool):
+        return value
+    if type(value) is int and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes"}:
+            return True
+        if lowered in {"false", "0", "no"}:
+            return False
+    return None
+
+
+async def record_competitor_boolean(
+    org_id: str,
+    *,
+    session_id: str,
+    channel: str,
+    reason: str,
+    rating: bool,
+    agent_id: str = "",
+    trace_id: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Persist a joinable competitor thumb. Not ExtraWorkEvent. No poller."""
+    sid = (session_id or "").strip()
+    if not sid or channel not in _COMPETITOR_CHANNELS:
+        return None
+    from eden.integrations.slack import store as slack_store
+
+    value = "helped" if rating else "not_helped"
+    for row in slack_store.memory_outcomes(org_id, sid):
+        if (
+            row.get("channel") == channel
+            and row.get("reason") == reason
+            and row.get("value") == value
+        ):
+            return row
+    try:
+        row = await slack_store.insert_session_outcome(
+            org_id,
+            agent_id=agent_id or "",
+            value=value,
+            source="product",
+            channel=channel,
+            explicit=True,
+            session_id=sid,
+            trace_id=trace_id,
+            user_id=user_id,
+            reason=reason,
+            confidence="medium",
+        )
+        await recompute_session_helped(org_id, sid)
+        return row
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("record_competitor_boolean failed: %s", exc)
+        return None
+
+
 def derive_helped(records: list[dict[str, Any]]) -> str:
     """SessionOutcome.value from ExtraWorkEvent[] + explicit person/product.
 
     Precedence §4.3. Agent-declared success is never an input.
     Low extra-work does not write the resolved value.
+    Competitor BOOLEAN is rank 6 (after extra-work and native product).
     Zero records -> unknown.
     """
     if not records:
         return "unknown"
 
     def _is(rec: dict[str, Any], *, source: str, value: str, explicit: bool = True) -> bool:
+        if is_competitor_thumb(rec):
+            return False
         return (
             rec.get("source") == source
             and rec.get("value") == value
@@ -330,6 +407,11 @@ def derive_helped(records: list[dict[str, Any]]) -> str:
         return "not_helped"
     if any(_is(r, source="product", value="helped") for r in records):
         return "helped"
+    competitor = [r for r in records if is_competitor_thumb(r)]
+    if any(r.get("value") == "not_helped" for r in competitor):
+        return "not_helped"
+    if any(r.get("value") == "helped" for r in competitor):
+        return "helped"
     return "unknown"
 
 
@@ -349,7 +431,8 @@ async def recompute_session_helped(org_id: str, session_id: str) -> str:
         try:
             rows = await client.fetch(
                 """
-                SELECT value, source, explicit, confidence, NULL::text AS polarity
+                SELECT value, source, explicit, confidence, channel, reason,
+                       NULL::text AS polarity
                 FROM session_outcomes
                 WHERE org_id = $1 AND session_id = $2
                 """,
@@ -373,4 +456,4 @@ async def recompute_session_helped(org_id: str, session_id: str) -> str:
     await slack_store.set_session_helped(org_id, session_id, value)
     return value
 
-__all__ = ["SessionRollupIndexer", "derive_helped", "derive_outcome", "recompute_session_helped"]
+__all__ = ["SessionRollupIndexer", "coerce_competitor_bool", "derive_helped", "derive_outcome", "is_competitor_thumb", "recompute_session_helped", "record_competitor_boolean"]

@@ -119,7 +119,69 @@ class HeliconeDecoder:
                 raw, attribution.with_source_format(self.source_format)
             )
             events.append(event)
+            try:
+                await _maybe_map_helicone_rating(item, attribution)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("helicone rating map failed: %s", exc)
         return events
+
+
+
+def _helicone_joinable_session_id(item: dict[str, Any]) -> str | None:
+    """Helicone rating joins on session_id. request_id fallback is not joinable."""
+    properties = item.get("properties") if isinstance(item.get("properties"), dict) else {}
+    raw = (
+        item.get("session_id")
+        or item.get("sessionId")
+        or properties.get("session_id")
+        or properties.get("sessionId")
+    )
+    sid = str(raw or "").strip()
+    return sid or None
+
+
+def _helicone_rating_value(item: dict[str, Any]) -> Any:
+    properties = item.get("properties") if isinstance(item.get("properties"), dict) else {}
+    feedback = item.get("feedback") if isinstance(item.get("feedback"), dict) else {}
+    if "rating" in item:
+        return item.get("rating")
+    if "rating" in properties:
+        return properties.get("rating")
+    if "rating" in feedback:
+        return feedback.get("rating")
+    return None
+
+
+async def _maybe_map_helicone_rating(item: dict[str, Any], attribution: Attribution) -> None:
+    """Map joinable {rating: bool} to SessionOutcome. No poller. No score clone."""
+    from eden.sessions.rollup import coerce_competitor_bool, record_competitor_boolean
+
+    rating = coerce_competitor_bool(_helicone_rating_value(item))
+    if rating is None:
+        return
+    session_id = _helicone_joinable_session_id(item)
+    if not session_id:
+        return
+    properties = item.get("properties") if isinstance(item.get("properties"), dict) else {}
+    agent_id = str(
+        item.get("agent_id")
+        or item.get("agentId")
+        or properties.get("agent_id")
+        or properties.get("agentId")
+        or ""
+    )
+    user_id = str(item.get("user_id") or item.get("userId") or "") or None
+    trace_id = str(item.get("request_id") or item.get("requestId") or session_id) or None
+    await record_competitor_boolean(
+        attribution.tenant_id,
+        session_id=session_id,
+        channel="helicone",
+        reason="helicone_rating",
+        rating=rating,
+        agent_id=agent_id,
+        trace_id=trace_id,
+        user_id=user_id,
+    )
 
 
 def _helicone_log_to_raw(item: dict[str, Any]) -> dict[str, Any]:
