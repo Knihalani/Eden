@@ -22,6 +22,7 @@ import { useLabToast } from "@/lab/lab-toast";
 import { useOrg } from "@/hooks/use-org";
 import { useTourProgress } from "@/hooks/use-tour-progress";
 import { PRODUCT_TOUR_TOTAL } from "@/lib/product-tour";
+import { markTourDismissedLocally } from "@/lib/tour-progress";
 import {
   CHROME_BANNER_ATTR,
   ERROR_STATE_ATTR,
@@ -49,14 +50,8 @@ function OnboardingOverlayInner() {
   /** After Skip/Finish, ignore effect re-open until URL force flag clears. */
   const userClosedRef = useRef(false);
   /**
-   * A started-but-unfinished tour (``active`` or paused ``skipped``)
-   * auto-resumes on the next entry so onboarding opens by default. The
-   * ref makes it once per mount: after the user closes it again (Skip /
-   * X / Esc) it stays closed for the rest of this mount; a full page
-   * load (which remounts the shell and is a fresh entry) intentionally
-   * reopens the still-unfinished tour, matching the "opens by default"
-   * product intent. The banner remains the resume affordance between
-   * mounts.
+   * Only an in-progress ``active`` tour auto-resumes (mid-walkthrough
+   * reload). ``skipped`` is a dismiss and must not hijack routes.
    */
   const autoResumedRef = useRef(false);
   /** Bootstrap Clerk metadata at most once per forced open. */
@@ -136,18 +131,9 @@ function OnboardingOverlayInner() {
       return;
     }
 
-    // Started-but-unfinished tours (active or paused) auto-resume on
-    // entry — onboarding opens by default, matching the post-signup
-    // force-open, without needing ?onboarding=1 on every subsequent
-    // visit. Once per mount: a Skip (which re-persists "skipped" and
-    // sets autoResumedRef) must not snap it back open; the banner is the
-    // resume affordance after that. Never-started (null) stays
-    // banner-driven; only "done" retires the tour entirely.
-    if (
-      progressStatus != null &&
-      progressStatus !== "done" &&
-      !autoResumedRef.current
-    ) {
+    // Only an in-progress walkthrough auto-resumes. Skip/X persist
+    // "skipped" and must not reopen or router.push tour hrefs.
+    if (progressStatus === "active" && !autoResumedRef.current) {
       autoResumedRef.current = true;
       userClosedRef.current = false;
       sessionOpenRef.current = true;
@@ -255,6 +241,7 @@ function OnboardingOverlayInner() {
   }
 
   async function handleSkip() {
+    markTourDismissedLocally();
     userClosedRef.current = true;
     // Any manual close disables this session's auto-resume — a user who
     // just skipped (even via a force-opened tour) must not get the tour
@@ -282,6 +269,7 @@ function OnboardingOverlayInner() {
   }
 
   async function handleFinish() {
+    markTourDismissedLocally();
     userClosedRef.current = true;
     sessionOpenRef.current = false;
     seededStepRef.current = false;

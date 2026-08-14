@@ -9,6 +9,9 @@ import { PRODUCT_TOUR_TOTAL } from "@/lib/product-tour";
 
 export const EDEN_TOUR_META_KEY = "edenTour" as const;
 
+/** Browser-local dismiss so Skip/X sticks even if a Clerk write blips. */
+export const TOUR_DISMISSED_STORAGE_KEY = "eden.tour.dismissed";
+
 export type EdenTourStatus = "active" | "done" | "skipped";
 
 export interface EdenTourProgress {
@@ -54,30 +57,41 @@ export function buildEdenTourProgress(
   };
 }
 
-/**
- * Only ``done`` is a completed tour. ``skipped`` is a resumable pause —
- * the banner stays reachable and the overlay auto-resumes it — so it must
- * not be treated as complete anywhere that decides whether a user is
- * still being onboarded.
- */
-export function isTourComplete(progress: EdenTourProgress | null): boolean {
-  return progress?.status === "done";
+export function markTourDismissedLocally(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TOUR_DISMISSED_STORAGE_KEY, "1");
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+export function isTourDismissedLocally(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(TOUR_DISMISSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Banner while the tour is still in progress — including paused
- * (``skipped``) tours.
- *
- * ``skipped`` is a resumable pause, not a finish: the user closed the
- * walkthrough mid-way (Esc / X / outside-click on a non-nav step), and
- * the overlay auto-resumes it on the next entry, but if they close it
- * again the banner must stay reachable so they can get back in. Only
- * ``done`` retires the chrome entirely.
+ * Skip/X and Finish both retire auto-open. ``skipped`` is a dismiss, not
+ * a pause that resurrects the overlay on the next route.
+ */
+export function isTourComplete(progress: EdenTourProgress | null): boolean {
+  if (isTourDismissedLocally()) return true;
+  return progress?.status === "done" || progress?.status === "skipped";
+}
+
+/**
+ * Banner only while the tour is actively in progress.
+ * ``skipped`` and ``done`` stay quiet — Resume is opt-in via ?tour=1.
  */
 export function shouldShowTourBanner(
   progress: EdenTourProgress | null,
 ): boolean {
-  // No metadata yet → treat as not started (show once).
+  if (isTourDismissedLocally()) return false;
   if (!progress) return true;
-  return progress.status !== "done";
+  return progress.status === "active";
 }

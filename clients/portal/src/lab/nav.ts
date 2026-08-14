@@ -102,9 +102,26 @@ export const NAV_SECTIONS: NavSection[] = [
 /** Flat list for callers that still iterate PRIMARY_NAV. */
 export const PRIMARY_NAV: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
 
-/** Exact leaf active — never light up two siblings at once. */
+/** Exact leaf active — path only, ignore query. */
 export function isNavActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const path = (pathname.split("?")[0] || "").replace(/\/$/, "") || "/";
+  const leaf = (href.split("?")[0] || "").replace(/\/$/, "") || "/";
+  if (leaf === "/") return path === "/";
+  return path === leaf || path.startsWith(`${leaf}/`);
+}
+
+/** True only for the longest matching nav href (one active leaf). */
+export function isExclusiveNavActive(
+  pathname: string,
+  href: string,
+  allHrefs: readonly string[],
+): boolean {
+  if (!isNavActive(pathname, href)) return false;
+  const leaf = (href.split("?")[0] || "").replace(/\/$/, "") || "/";
+  return !allHrefs.some((other) => {
+    const o = (other.split("?")[0] || "").replace(/\/$/, "") || "/";
+    return o !== leaf && o.length > leaf.length && isNavActive(pathname, other);
+  });
 }
 
 /** Milestone under review — IA + soft-land (Phase A). */

@@ -179,7 +179,7 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
   }
 
   const policy = policyQuery.data;
-  const mode = policy?.effective_mode ?? policy?.maintenance_mode ?? "assisted";
+  const mode = policy?.effective_mode ?? policy?.maintenance_mode ?? "observe";
   const compliance = policy?.compliance_profile ?? "standard";
   const budget = policy?.budget ?? null;
   const healOn = Boolean(policy?.auto_runtime_heal);
@@ -209,7 +209,7 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
               <>
                 <span className="mx-1.5 text-[var(--text-faint)]">·</span>
                 ${budget.spent_usd.toFixed(2)} of ${budget.limit_usd.toFixed(2)}{" "}
-                budget today
+                autonomy daily cap
               </>
             ) : null}
           </p>

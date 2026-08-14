@@ -217,9 +217,9 @@ function LabAgentInner() {
       setActiveId(base[0]!.id);
       return;
     }
-    const t = newEmptyThread();
-    setThreads([t]);
-    setActiveId(t.id);
+    // Do not invent a thread (or a phantom "hi") on visit.
+    setThreads([]);
+    setActiveId("");
   }, [
     orgId,
     threadsQuery.isLoading,
@@ -491,8 +491,21 @@ function LabAgentInner() {
         }
 
         if (!gotContent) {
-          textSoFar = "No response from the assistant.";
-          upsert();
+          pushToast({
+            title: "No response from the assistant",
+            body: "Nothing was saved to this chat. Send again when you are ready.",
+            tone: "fail",
+          });
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    messages: t.messages.filter((m) => m.id !== assistantId),
+                  }
+                : t,
+            ),
+          );
         }
       } catch (err) {
         if (controller.signal.aborted) {
