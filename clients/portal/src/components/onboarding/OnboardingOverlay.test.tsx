@@ -277,7 +277,7 @@ describe("tour dismissal registers separately from completion", () => {
     expect(lastWrite()).toMatchObject({ status: "skipped", stepIndex: 2 });
   });
 
-  it("seeds the overlay from a skipped step rather than restarting at 0", async () => {
+  it("does not auto-open a skipped (dismissed) tour", async () => {
     clerk.metadata = {
       [EDEN_TOUR_META_KEY]: {
         status: "skipped",
@@ -285,13 +285,13 @@ describe("tour dismissal registers separately from completion", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
+    nav.search = "";
 
     render(<OnboardingOverlay />);
-    const tour = await screen.findByTestId("tour");
-    expect(tour.dataset.step).toBe("3");
+    expect(screen.queryByTestId("tour")).not.toBeInTheDocument();
   });
 
-  it("auto-resumes a paused tour on plain /home entry — no ?onboarding=1 needed", async () => {
+  it("does not hijack /home after Skip — skipped stays closed without ?tour=1", async () => {
     clerk.metadata = {
       [EDEN_TOUR_META_KEY]: {
         status: "skipped",
@@ -299,11 +299,11 @@ describe("tour dismissal registers separately from completion", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
-    nav.search = ""; // ordinary sign-in lands here without the force flag
+    nav.search = "";
 
     render(<OnboardingOverlay />);
-    const tour = await screen.findByTestId("tour");
-    expect(tour.dataset.step).toBe("3");
+    expect(screen.queryByTestId("tour")).not.toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
   it("auto-resumes an in-progress (active) tour on plain entry too", async () => {
@@ -325,8 +325,7 @@ describe("tour dismissal registers separately from completion", () => {
     expect(tour.dataset.step).toBe("2");
   });
 
-  it("only auto-resumes a paused tour once per session — a re-skip stays closed", async () => {
-    const user = userEvent.setup();
+  it("keeps a skipped tour closed across remounts without a force flag", async () => {
     clerk.metadata = {
       [EDEN_TOUR_META_KEY]: {
         status: "skipped",
@@ -337,19 +336,9 @@ describe("tour dismissal registers separately from completion", () => {
     nav.search = "";
 
     const view = render(<OnboardingOverlay />);
-    const tour = await screen.findByTestId("tour");
-    expect(tour.dataset.step).toBe("1");
-
-    // Skip again → tour closes and stays closed for the session even
-    // though the persisted status is still "skipped".
-    await user.click(screen.getByText("skip"));
-    await waitFor(() =>
-      expect(screen.queryByTestId("tour")).not.toBeInTheDocument(),
-    );
+    expect(screen.queryByTestId("tour")).not.toBeInTheDocument();
     view.rerender(<OnboardingOverlay />);
-    await waitFor(() =>
-      expect(screen.queryByTestId("tour")).not.toBeInTheDocument(),
-    );
+    expect(screen.queryByTestId("tour")).not.toBeInTheDocument();
   });
 });
 
@@ -366,7 +355,7 @@ describe("banner reflects the persisted terminal status", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("keeps the resume banner for a paused (skipped) tour", () => {
+  it("retires the resume banner after Skip so it does not nag every route", () => {
     clerk.metadata = {
       [EDEN_TOUR_META_KEY]: {
         status: "skipped",
@@ -374,8 +363,7 @@ describe("banner reflects the persisted terminal status", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     };
-    render(<OnboardingBanner />);
-    // Paused, not finished — the resume chip stays as the affordance.
-    expect(screen.getByText(/Tour paused/)).toBeInTheDocument();
+    const { container } = render(<OnboardingBanner />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

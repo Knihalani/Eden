@@ -184,19 +184,9 @@ export function TourGetStartedPanel() {
           }
           return;
         }
-        const data = await mintQuickstartKey(orgId);
-        // Tour visits Settings before mint with an empty keys cache
-        // (staleTime 120s, no refetchOnMount) — invalidate so Overview
-        // / API keys show the Quickstart row immediately.
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.portal.keys(orgId),
-        });
+        // Never auto-mint. Point at Settings or wait for an explicit click.
         if (!cancelled) {
-          setFill({
-            status: "ready",
-            apiKey: data.apiKey,
-            orgId: data.orgId,
-          });
+          setFill({ status: "already_minted", orgId });
         }
       } catch (err) {
         if (!cancelled) {
@@ -265,7 +255,7 @@ export function TourGetStartedPanel() {
 
       {fill.status === "loading" ? (
         <p className="font-mono text-[0.6875rem] text-[var(--text-faint)]">
-          Creating Quickstart key…
+          Checking workspace…
         </p>
       ) : null}
 
@@ -286,15 +276,49 @@ export function TourGetStartedPanel() {
       {fill.status === "already_minted" ? (
         <div className="border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2.5 text-left">
           <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
-            Quickstart key was already minted this session (shown once). Open
-            Settings to copy or rotate it.
+            No key is created until you ask. Open Settings to copy an existing
+            key, or create one here.
           </p>
-          <Link
-            href="/settings?mode=keys"
-            className="mt-2 inline-block font-mono text-[0.6875rem] text-[var(--accent)] hover:text-[var(--accent-hover)]"
-          >
-            Settings → API keys →
-          </Link>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="ds-btn ds-btn-secondary ds-btn-sm"
+              onClick={() => {
+                const orgId = currentOrg?.id;
+                if (!orgId) return;
+                setFill({ status: "loading" });
+                void mintQuickstartKey(orgId)
+                  .then((data) => {
+                    void queryClient.invalidateQueries({
+                      queryKey: queryKeys.portal.keys(orgId),
+                    });
+                    setFill({
+                      status: "ready",
+                      apiKey: data.apiKey,
+                      orgId: data.orgId,
+                    });
+                  })
+                  .catch((err) =>
+                    setFill({
+                      status: "error",
+                      message:
+                        err instanceof Error
+                          ? err.message
+                          : "Could not create a Quickstart key.",
+                      orgId,
+                    }),
+                  );
+              }}
+            >
+              Create Quickstart key
+            </button>
+            <Link
+              href="/settings?mode=keys"
+              className="font-mono text-[0.6875rem] text-[var(--accent)] hover:text-[var(--accent-hover)]"
+            >
+              Settings → API keys →
+            </Link>
+          </div>
         </div>
       ) : null}
 
@@ -316,7 +340,7 @@ export function TourGetStartedPanel() {
         <p className="font-mono text-[0.625rem] text-[var(--text-faint)]">
           org <span className="text-[var(--text-secondary)]">{fill.orgId}</span>
           {" · "}
-          key minted for this tour (shown once)
+          key shown once — copy it now
         </p>
       ) : null}
 

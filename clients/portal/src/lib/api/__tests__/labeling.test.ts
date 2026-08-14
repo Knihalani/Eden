@@ -206,3 +206,14 @@ describe("labelingApi", () => {
     expect(String(url)).toContain("limit=100");
   });
 });
+
+describe("labelingApi listItems clamps limit (R011)", () => {
+  it("sends limit=100 when the caller asks for 200", async () => {
+    const labelingApi = await importLabelingApi();
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { items: [], total: 0 }));
+    await labelingApi.listItems("org-1", { limit: 200 });
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("limit=100");
+    expect(String(url)).not.toContain("limit=200");
+  });
+});

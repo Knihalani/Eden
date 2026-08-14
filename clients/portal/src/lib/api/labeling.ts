@@ -7,6 +7,13 @@
  */
 import { fetchApi } from "@/lib/api/core";
 
+export const LABELING_LIST_LIMIT = 100;
+
+export function clampLabelingLimit(limit?: number): number {
+  if (limit == null || !Number.isFinite(limit)) return LABELING_LIST_LIMIT;
+  return Math.min(Math.max(1, Math.floor(limit)), LABELING_LIST_LIMIT);
+}
+
 function labelingPath(orgId: string, suffix: string): string {
   return `/orgs/${orgId}/labeling/${suffix.replace(/^\//, "")}`;
 }
@@ -182,7 +189,7 @@ export const labelingApi = {
   /** `GET /items` — org-wide item list with annotation counts (the "Unassigned items" panel source). */
   listItems: (orgId: string, params?: { limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
-    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.limit != null) q.set("limit", String(clampLabelingLimit(params.limit)));
     if (params?.offset != null) q.set("offset", String(params.offset));
     const qs = q.toString();
     return fetchApi<LabelingItemsListResponse>(

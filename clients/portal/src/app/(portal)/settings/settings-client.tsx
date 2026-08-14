@@ -145,7 +145,7 @@ function LabSettingsInner() {
       // Workspace health cards need key counts too — don't wait for
       // the keys tab or Settings shows "0 keys" / "ingest blocked"
       // while a Quickstart key already exists.
-      enabled: loadMode === "keys" || loadMode === "workspace",
+      enabled: Boolean(orgId),
     },
   );
   const membersQuery = useOrgQuery(
@@ -154,7 +154,7 @@ function LabSettingsInner() {
     () => portalApi.members(orgId!),
     {
       ...SETTINGS_QUERY,
-      enabled: loadMode === "members" || loadMode === "workspace",
+      enabled: Boolean(orgId),
     },
   );
   const auditEventsQuery = useOrgQuery(
@@ -165,7 +165,7 @@ function LabSettingsInner() {
       ...SETTINGS_QUERY,
       // Workspace overview renders an Audit health card — without these
       // enabled it painted "Clean / Verified" off empty defaults.
-      enabled: loadMode === "audit" || loadMode === "workspace",
+      enabled: Boolean(orgId),
     },
   );
   const auditPacksQuery = useOrgQuery(
@@ -174,7 +174,7 @@ function LabSettingsInner() {
     () => portalApi.auditPacks(orgId!),
     {
       ...SETTINGS_QUERY,
-      enabled: loadMode === "audit" || loadMode === "workspace",
+      enabled: Boolean(orgId),
     },
   );
 
@@ -698,9 +698,9 @@ function LabSettingsInner() {
       <span className="type-meta">
         {workspace.planLabel}
         <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-        {liveKeys.length} keys
+        {keysQuery.isLoading && keysQuery.data == null ? "—" : `${liveKeys.length} keys`}
         <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-        {counts.active} members
+        {membersQuery.isLoading && membersQuery.data == null ? "—" : `${counts.active} members`}
       </span>
     ),
     [workspace.planLabel, liveKeys.length, counts.active],

@@ -507,7 +507,7 @@ export function ProductTour({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="absolute inset-0"
+            className="absolute inset-0 z-0"
             onClick={dismissUnlessHole}
           >
             {hole && !narrow ? (
@@ -570,7 +570,7 @@ export function ProductTour({
                     }
               }
               className={cn(
-                "pointer-events-auto z-[81] flex flex-col overflow-hidden border border-[var(--border-default)]",
+                "pointer-events-auto z-[110] flex flex-col overflow-hidden border border-[var(--border-default)]",
                 "bg-[var(--bg-primary)] shadow-[0_24px_64px_rgba(0,0,0,0.55)]",
                 isSheet
                   ? "absolute inset-x-0 bottom-0 max-h-[92dvh] rounded-t-2xl border-b-0 pb-[env(safe-area-inset-bottom)]"
