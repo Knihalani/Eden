@@ -88,6 +88,10 @@ def test_default_deny_startswith_tuple_correctness():
     assert _is_public("/auth/login/")  # exactly equal to a prefix
     assert _is_public("/auth/login/")  # ditto
     assert _is_public("/webhooks/clerk")
+    assert _is_public("/integrations/github/webhook")
+    assert _is_public("/integrations/slack/events")
+    assert _is_public("/integrations/slack/interactions")
+    assert _is_public("/integrations/slack/callback")
     assert _is_public("/v1/ingest")
     assert _is_public("/v1/internal/whatever")
     assert _is_public("/v1/internal")
