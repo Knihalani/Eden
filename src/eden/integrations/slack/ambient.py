@@ -254,6 +254,236 @@ async def process_message(
     return decision
 
 
+
+_MENTION_RE = re.compile(r"<@(U[A-Z0-9]+)>")
+_PERMALINK_RE = re.compile(r"p(\d{10})(\d+)")
+
+
+def parse_permalink_ts(value: str) -> str | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    m = _PERMALINK_RE.search(raw)
+    if m:
+        return f"{m.group(1)}.{m.group(2).rjust(6, "0")[:6]}"
+    if re.fullmatch(r"\d+\.\d+", raw):
+        return raw
+    return None
+
+
+def classify_pointer_message(
+    *,
+    message: dict[str, Any],
+    y_slack_user_id: str | None = None,
+    bot_user_id: str | None = None,
+    bot_ts: str | None = None,
+    bot_permalink: str | None = None,
+) -> AmbientDecision | None:
+    """P0 pointer detectors on one joined-thread message. No LLM."""
+    if not isinstance(message, dict):
+        return None
+    user = str(message.get("user") or "")
+    if bot_user_id and user == bot_user_id:
+        return None
+    if message.get("bot_id") or message.get("subtype") in {
+        "bot_message",
+        "message_changed",
+        "channel_join",
+    }:
+        return None
+    text = str(message.get("text") or "")
+    ts = str(message.get("ts") or "")
+    # 1. explicit_negative from feedback_buttons
+    for block in message.get("blocks") or []:
+        for el in (block.get("elements") or []) if isinstance(block, dict) else []:
+            if not isinstance(el, dict):
+                continue
+            action = str(el.get("action_id") or el.get("value") or "").lower()
+            if el.get("type") == "feedback_buttons" or "thumbsdown" in action or action in {
+                "negative",
+                "feedback_negative",
+            }:
+                selected = str(el.get("selected") or el.get("value") or "").lower()
+                if selected in {"negative", "thumbsdown", "false", "1"}:
+                    return AmbientDecision(
+                        action="fire",
+                        reason="explicit_negative",
+                        kind="explicit_negative",
+                        confidence="high",
+                        snippet=text[:280],
+                        polarity="extra_work",
+                        path="pointer_thread",
+                        surface="slack",
+                    )
+    if "feedback_negative" in text.lower() or text.strip() == ":-1:":
+        return AmbientDecision(
+            action="fire",
+            reason="explicit_negative",
+            kind="explicit_negative",
+            confidence="high",
+            snippet=text[:280],
+            polarity="extra_work",
+            path="pointer_thread",
+            surface="slack",
+        )
+    # 2. mention intended owner
+    if y_slack_user_id:
+        for uid in _MENTION_RE.findall(text):
+            if uid == y_slack_user_id:
+                return AmbientDecision(
+                    action="fire",
+                    reason="mention_intended_owner",
+                    y_weighted=True,
+                    kind="mention_intended_owner",
+                    confidence="medium",
+                    snippet=text[:280],
+                    polarity="extra_work",
+                    path="pointer_thread",
+                    surface="slack",
+                )
+    # 3. cleanup_thread — new top-level containing the bot permalink
+    thread_ts = str(message.get("thread_ts") or "")
+    is_top = not thread_ts or thread_ts == ts
+    if is_top and bot_permalink and bot_permalink in text:
+        return AmbientDecision(
+            action="fire",
+            reason="cleanup_thread",
+            kind="cleanup_thread",
+            confidence="medium",
+            snippet=text[:280],
+            polarity="extra_work",
+            path="pointer_thread",
+            surface="slack",
+        )
+    parsed = parse_permalink_ts(text)
+    if is_top and bot_ts and parsed and parsed == bot_ts:
+            return AmbientDecision(
+                action="fire",
+                reason="cleanup_thread",
+                kind="cleanup_thread",
+                confidence="medium",
+                snippet=text[:280],
+                polarity="extra_work",
+                path="pointer_thread",
+                surface="slack",
+            )
+    # 4. human in-thread not thanks
+    if is_thanks(text):
+        return AmbientDecision(
+            action="drop",
+            reason="thanks",
+            path="pointer_thread",
+            surface="slack",
+        )
+    if text.strip():
+        return AmbientDecision(
+            action="buffer",
+            reason="thread_takeover_low",
+            kind="thread_takeover",
+            confidence="low",
+            snippet=text[:280],
+            polarity="unscored",
+            path="pointer_thread",
+            surface="slack",
+        )
+    return None
+
+
+def classify_pointer_replies(
+    *,
+    replies: list[dict[str, Any]],
+    y_slack_user_id: str | None = None,
+    bot_user_id: str | None = None,
+    bot_ts: str | None = None,
+    bot_permalink: str | None = None,
+) -> list[AmbientDecision]:
+    """Window-close reader. Zero leftover -> caller leaves unknown."""
+    hits: list[AmbientDecision] = []
+    for msg in replies:
+        # skip the original bot post
+        if bot_ts and str(msg.get("ts") or "") == bot_ts:
+            continue
+        decision = classify_pointer_message(
+            message=msg,
+            y_slack_user_id=y_slack_user_id,
+            bot_user_id=bot_user_id,
+            bot_ts=bot_ts,
+            bot_permalink=bot_permalink,
+        )
+        if decision is not None:
+            hits.append(decision)
+    return hits
+
+
+
+async def close_pointer_windows(
+    org_id: str,
+    *,
+    token: str,
+    pointers: list[dict[str, Any]],
+    y_slack_user_id: str | None = None,
+    bot_user_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """conversations.replies at window close. Zero leftover -> unknown (no write)."""
+    from datetime import UTC, datetime
+
+    from eden.integrations.slack import store as slack_store
+    from eden.integrations.slack.client import SlackClient
+
+    if not token or not pointers:
+        return []
+    client = SlackClient(token)
+    fired: list[dict[str, Any]] = []
+    for pointer in pointers:
+        channel_id = str(pointer.get("channel_id") or "")
+        ts = str(pointer.get("ts") or "")
+        session_id = pointer.get("session_id")
+        agent_id = str(pointer.get("agent_id") or "")
+        if not channel_id or not ts or not session_id or not agent_id:
+            continue
+        replies = await client.conversations_replies(channel=channel_id, ts=ts)
+        hits = classify_pointer_replies(
+            replies=replies,
+            y_slack_user_id=y_slack_user_id,
+            bot_user_id=bot_user_id,
+            bot_ts=ts,
+        )
+        for decision in hits:
+            if decision.action != "fire":
+                continue
+            row = await slack_store.insert_extra_work_event(
+                org_id,
+                agent_id=agent_id,
+                event_id=None,
+                user_id=None,
+                help_contract_id=None,
+                surface="slack",
+                kind=decision.kind,
+                path="pointer_thread",
+                join_key={
+                    "system": "slack",
+                    "slack_channel_id": channel_id,
+                    "slack_thread_ts": ts,
+                },
+                snippet=decision.snippet,
+                confidence=decision.confidence,
+                polarity=decision.polarity,
+                raw={"kind": decision.kind, "stage": "pointer"},
+                observed_at=datetime.now(UTC).isoformat(),
+                session_id=str(session_id),
+            )
+            if row:
+                fired.append(row)
+        if any(d.action == "fire" for d in hits):
+            try:
+                from eden.sessions.rollup import recompute_session_helped
+
+                await recompute_session_helped(org_id, str(session_id))
+            except Exception:
+                pass
+    return fired
+
+
 __all__ = [
     "AmbientDecision",
     "LISTEN_CHANNEL_TYPES",
@@ -266,4 +496,8 @@ __all__ = [
     "keyword_hits",
     "process_message",
     "stage0_drop",
+    "classify_pointer_message",
+    "classify_pointer_replies",
+    "close_pointer_windows",
+    "parse_permalink_ts",
 ]

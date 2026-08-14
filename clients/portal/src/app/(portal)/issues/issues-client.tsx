@@ -892,6 +892,7 @@ function LabIssuesInner() {
     return (
       <div className="ds-page">
         <PageHeader title="Issues" />
+        <p className="type-meta mb-2">Pair a miss with its trace when a session exists. Home is /agents.</p>
         <QueryLoadingPanel label="Loading issues…" />
       </div>
     );

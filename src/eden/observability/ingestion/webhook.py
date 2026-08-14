@@ -40,6 +40,57 @@ from eden.observability.telemetry_collector import TelemetryEvent
 logger = logging.getLogger(__name__)
 
 
+async def persist_extra_work_item(item: dict, org_id: str) -> dict | None:
+    """Customer POST event_type=extra_work. Never maps span outcome to help."""
+    from datetime import UTC, datetime
+
+    from eden.integrations.slack import store as slack_store
+
+    agent_id = str(item.get("agent_id") or "").strip()
+    if not agent_id:
+        return None
+    surface = str(item.get("surface") or "webhook")
+    kind = str(item.get("kind") or "human_did_agents_job")
+    join_key = item.get("join_key") if isinstance(item.get("join_key"), dict) else {
+        "system": surface
+    }
+    if "system" not in join_key:
+        join_key = {**join_key, "system": surface}
+    snippet = item.get("snippet")
+    observed = str(item.get("observed_at") or datetime.now(UTC).isoformat())
+    session_id = item.get("session_id")
+    if session_id in ("", None):
+        session_id = None
+    row = await slack_store.insert_extra_work_event(
+        org_id,
+        agent_id=agent_id,
+        event_id=str(item.get("event_id") or "") or None,
+        user_id=str(item.get("user_id") or "") or None,
+        help_contract_id=str(item.get("help_contract_id") or "") or None,
+        surface=surface,
+        kind=kind,
+        path="customer_webhook",
+        join_key=join_key,
+        snippet=str(snippet)[:280] if snippet else None,
+        confidence="high",
+        polarity="extra_work",
+        raw={"event_type": "extra_work", "kind": kind},
+        observed_at=observed,
+        session_id=session_id,
+        trace_id=str(item.get("trace_id") or "") or None,
+    )
+    if session_id:
+        try:
+            from eden.sessions.rollup import recompute_session_helped
+
+            await recompute_session_helped(org_id, str(session_id))
+        except Exception:
+            pass
+    return row
+
+
+
+
 # Hard cap mirrors ``settings.ingestion_max_body_bytes``. We also enforce
 # a hard ceiling here so direct calls to the decoder (e.g. from tests)
 # can't bypass the limit.
@@ -121,6 +172,12 @@ class WebhookDecoder:
 
         events: list[TelemetryEvent] = []
         for item in items:
+            if str(item.get("event_type") or "") == "extra_work":
+                try:
+                    await persist_extra_work_item(item, attribution.tenant_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("webhook extra_work persist failed: %s", exc)
+                continue
             # Per-item source_format override wins; default to "webhook".
             fmt = str(item.get("source_format") or self.source_format)
             event_attribution = attribution.with_source_format(fmt)
