@@ -328,17 +328,91 @@ async def test_resolve_canary_arm_reuses_session_arm() -> None:
         assert await resolve_canary_arm("org", "agent-a", session_id="sess-1") == "control"
 
 
-@pytest.mark.asyncio
-async def test_propose_prompt_canary_draft_not_code_patch() -> None:
-    from eden.improvement.issue_patch_trigger import propose_prompt_canary_for_help_miss
-
-    issue = SimpleNamespace(
+def _help_miss_issue() -> SimpleNamespace:
+    return SimpleNamespace(
         id="i1",
         fingerprint="fp1",
         agent_id="agent-a",
         title="agent-a didn't help (took_over)",
         kind=HELP_MISS_KIND,
     )
+
+
+def test_help_miss_draft_from_leftovers_never_attempted() -> None:
+    from eden.improvement.issue_patch_trigger import (
+        _NEVER_ATTEMPTED,
+        build_help_miss_improve_draft,
+        instruction_is_generic,
+    )
+
+    leftovers = [
+        {"snippet": "I'll just process the refund myself", "kind": "human_did_agents_job"},
+        {"snippet": "taking ENG-123, the bot never ran", "kind": "ill_just_do_it"},
+        {"snippet": "I'll handle the chargeback", "kind": "human_did_agents_job"},
+        {"snippet": "fourth leftover is dropped", "kind": "human_did_agents_job"},
+    ]
+    draft = build_help_miss_improve_draft(leftovers)
+    assert draft is not None
+    assert draft["never_attempted"] is True
+    assert draft["summary"].splitlines()[0] == _NEVER_ATTEMPTED
+    assert "I'll just process the refund myself" in draft["summary"]
+    assert "taking ENG-123, the bot never ran" in draft["summary"]
+    assert "I'll handle the chargeback" in draft["summary"]
+    assert "fourth leftover is dropped" not in draft["summary"]
+    assert len(draft["leftovers"]) == 3
+    assert "Prompt canary aimed at" not in draft["summary"]
+    assert not instruction_is_generic(draft["summary"])
+
+
+def test_help_miss_draft_includes_paired_traces() -> None:
+    from eden.improvement.issue_patch_trigger import build_help_miss_improve_draft
+
+    leftovers = [
+        {
+            "snippet": "I'll just process the refund myself",
+            "session_id": "sess-1",
+            "trace_id": "tr-1",
+            "kind": "thread_takeover",
+        },
+        {"snippet": "rewrote the reply in-thread", "session_id": "sess-2", "kind": "rewrite_new_message"},
+    ]
+    draft = build_help_miss_improve_draft(leftovers)
+    assert draft is not None
+    assert draft["never_attempted"] is False
+    assert "this job was never attempted" not in draft["summary"]
+    assert "I'll just process the refund myself" in draft["summary"]
+    assert "session sess-1" in draft["summary"]
+    assert "trace tr-1" in draft["summary"]
+    assert "rewrote the reply in-thread" in draft["summary"]
+
+
+def test_help_miss_draft_generic_or_empty_is_none() -> None:
+    from eden.improvement.issue_patch_trigger import (
+        build_help_miss_improve_draft,
+        instruction_is_generic,
+    )
+
+    assert build_help_miss_improve_draft([]) is None
+    assert build_help_miss_improve_draft([{"snippet": "   "}]) is None
+    leftovers = [{"snippet": "I'll just process the refund myself"}]
+    assert build_help_miss_improve_draft(leftovers, instruction="be more helpful") is None
+    assert build_help_miss_improve_draft(leftovers, instruction="Follow the instructions") is None
+    assert build_help_miss_improve_draft(leftovers, instruction="be careful") is None
+    assert instruction_is_generic(
+        "Prompt canary aimed at HelpMiss reason=took_over. Human approve."
+    )
+
+
+@pytest.mark.asyncio
+async def test_propose_prompt_canary_draft_not_code_patch() -> None:
+    from eden.improvement.issue_patch_trigger import propose_prompt_canary_for_help_miss
+
+    issue = _help_miss_issue()
+    leftovers = [
+        {"snippet": "I'll just process the refund myself", "kind": "human_did_agents_job"},
+        {"snippet": "taking ENG-123, the bot never ran", "kind": "ill_just_do_it"},
+        {"snippet": "I'll handle the chargeback", "kind": "human_did_agents_job"},
+    ]
     created = {"id": "plan-1", "plan_kind": "prompt_update", "status": "draft"}
     with (
         patch(
@@ -351,10 +425,15 @@ async def test_propose_prompt_canary_draft_not_code_patch() -> None:
         ) as create,
     ):
         out = await propose_prompt_canary_for_help_miss(
-            "org", issue, reason="took_over", help_contract_id="c1"
+            "org",
+            issue,
+            reason="took_over",
+            help_contract_id="c1",
+            leftovers=leftovers,
         )
     assert out["status"] == "drafted"
     assert out["plan_kind"] == "prompt_update"
+    assert out["never_attempted"] is True
     kwargs = create.await_args.kwargs
     assert kwargs["plan_kind"] == "prompt_update"
     assert kwargs["status"] == "draft"
@@ -362,14 +441,75 @@ async def test_propose_prompt_canary_draft_not_code_patch() -> None:
     assert kwargs["source_ref"] == "help_miss:i1"
     assert kwargs["evidence"]["help_miss"] is True
     assert kwargs["evidence"]["reason"] == "took_over"
+    assert kwargs["evidence"]["never_attempted"] is True
+    shown = kwargs["evidence"]["leftovers"]
+    assert [item["snippet"] for item in shown] == [
+        "I'll just process the refund myself",
+        "taking ENG-123, the bot never ran",
+        "I'll handle the chargeback",
+    ]
+    assert "this job was never attempted" in kwargs["summary"]
+    assert "I'll just process the refund myself" in kwargs["summary"]
+    assert "Prompt canary aimed at" not in kwargs["summary"]
 
     with patch(
         "eden.improvement.plans_repo.find_open_by_fingerprint",
         AsyncMock(return_value={"id": "plan-1"}),
     ):
-        again = await propose_prompt_canary_for_help_miss("org", issue, reason="took_over")
+        again = await propose_prompt_canary_for_help_miss(
+            "org", issue, reason="took_over", leftovers=leftovers
+        )
     assert again["status"] == "suppressed"
     assert again["reason"] == "duplicate_open_plan"
+
+
+@pytest.mark.asyncio
+async def test_propose_prompt_canary_no_leftovers_is_no_draft() -> None:
+    from eden.improvement.issue_patch_trigger import propose_prompt_canary_for_help_miss
+
+    issue = _help_miss_issue()
+    with (
+        patch(
+            "eden.improvement.plans_repo.find_open_by_fingerprint",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.plans_repo.create_plan",
+            AsyncMock(side_effect=AssertionError("must not invent a draft")),
+        ),
+    ):
+        out = await propose_prompt_canary_for_help_miss(
+            "org", issue, reason="took_over", leftovers=[]
+        )
+    assert out["status"] == "suppressed"
+    assert out["reason"] == "no_leftovers"
+
+
+@pytest.mark.asyncio
+async def test_propose_prompt_canary_generic_instruction_is_no_draft() -> None:
+    from eden.improvement.issue_patch_trigger import propose_prompt_canary_for_help_miss
+
+    issue = _help_miss_issue()
+    leftovers = [{"snippet": "I'll just process the refund myself"}]
+    with (
+        patch(
+            "eden.improvement.plans_repo.find_open_by_fingerprint",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "eden.improvement.plans_repo.create_plan",
+            AsyncMock(side_effect=AssertionError("must not offer a generic draft")),
+        ),
+    ):
+        out = await propose_prompt_canary_for_help_miss(
+            "org",
+            issue,
+            reason="took_over",
+            leftovers=leftovers,
+            instruction="be more helpful",
+        )
+    assert out["status"] == "suppressed"
+    assert out["reason"] == "generic_draft"
 
 
 @pytest.mark.asyncio
