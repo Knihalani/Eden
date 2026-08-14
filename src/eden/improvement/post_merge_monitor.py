@@ -198,9 +198,7 @@ class PostMergeMonitor:
                 from eden.integrations.slack import store as slack_store
 
                 install = await slack_store.get_install(org_id)
-                if install is None or install.get("revoked_at"):
-                    listen_silent = True
-                elif slack_store.needs_reconsent(install):
+                if install is None or install.get("revoked_at") or slack_store.needs_reconsent(install):
                     listen_silent = True
                 ch = await client.fetchrow(
                     """
@@ -429,6 +427,32 @@ class PostMergeMonitor:
         except Exception as exc:  # noqa: BLE001
             logger.debug("post_merge: window update failed: %s", exc)
             return status, follow_up_id
+
+        # Leftover next-week result posts even when inconclusive.
+        # Silence is not a win.
+        try:
+            from eden.services.slack_notify import notify_help_miss_result
+
+            apply_kind = ""
+            if isinstance(pre_ev, dict):
+                meta = (
+                    pre_ev.get("approve_metadata")
+                    or pre_ev.get("help_miss_apply")
+                    or {}
+                )
+                if isinstance(meta, dict):
+                    apply_kind = str(meta.get("apply_kind") or "")
+                apply_kind = apply_kind or str(pre_ev.get("apply_kind") or "")
+            await notify_help_miss_result(
+                org_id,
+                agent_id=str(agent_id or ""),
+                plan_id=str(plan_id),
+                verdict=leftover_verdict,
+                reason=str(leftover_detail.get("reason") or ""),
+                apply_kind=apply_kind,
+            )
+        except Exception as extra:  # noqa: BLE001
+            logger.debug("post_merge: leftover result notify failed: %s", extra)
 
         # Append-only event trail (FEAT-30) + portal surfacing.
         # Pending/inconclusive leftover is not a clean ship — do not emit ok.

@@ -72,6 +72,9 @@ spec:
         - name: GITHUB_APP_PRIVATE_KEY
         - name: GITHUB_APP_WEBHOOK_SECRET
         - name: GITHUB_APP_CALLBACK_URL
+        - name: SLACK_CLIENT_ID
+        - name: SLACK_CLIENT_SECRET
+        - name: SLACK_SIGNING_SECRET
         # SendKit transactional + sparse alert email (never commit the key).
         - name: SENDKIT_API_KEY
         - name: REDIS_URL
@@ -494,6 +497,24 @@ spec:
         secretKeyRef:
           group: github-app-callback-url
           key: GITHUB_APP_CALLBACK_URL
+    - name: SLACK_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: SLACK_CLIENT_ID
+          optional: true
+    - name: SLACK_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: SLACK_CLIENT_SECRET
+          optional: true
+    - name: SLACK_SIGNING_SECRET
+      valueFrom:
+        secretKeyRef:
+          group: eden-required
+          key: SLACK_SIGNING_SECRET
+          optional: true
     - name: SENDKIT_API_KEY
       valueFrom:
         secretKeyRef:

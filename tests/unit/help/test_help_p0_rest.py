@@ -327,8 +327,9 @@ def test_conversations_replies_not_history() -> None:
 def test_loud_install_bar_copy() -> None:
     panel = Path("clients/portal/src/app/(portal)/agents/help-panel.tsx").read_text()
     copy = Path("clients/portal/src/app/(portal)/agents/help-copy.ts").read_text()
-    assert "Do not sign the design-partner week" in panel
     assert "We cannot tell if it helped." in copy
+    assert "CANNOT_TELL_BANNER" in panel
+    assert "Do not sign the design-partner week" not in panel
     assert "no extra work seen" in panel
     routes = Path("src/eden/api/routes/agent_sessions.py").read_text()
     assert "We cannot tell if it helped." in routes
@@ -445,7 +446,9 @@ def test_channel_picker_bound_on_agents() -> None:
     assert "x_keywords" in panel
     assert "y_slack_user_id" in panel
     assert "Y Slack user id" in panel
-    assert "Do not sign the design-partner week" in panel
+    assert "data-testid=\"pending-change\"" in panel
+    assert "leftover ticket" in panel
+    assert "Do not sign the design-partner week" not in panel
     picker = Path("clients/portal/src/app/(portal)/agents/slack-channel-picker.tsx").read_text()
     assert "Notify Slack channel" in picker
 
