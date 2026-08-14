@@ -95,8 +95,11 @@ else:
     config = Config(ini_path)
 
 # Interpret the config file for Python logging only when it exists.
+# Keep Eden/uvicorn loggers: the default disable_existing_loggers=True
+# swallowed startup tracebacks so a failed upgrade looked like a silent
+# uvicorn exit 3 (Slack Event Subscriptions never reached the new API).
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 config.set_main_option("sqlalchemy.url", url)
 

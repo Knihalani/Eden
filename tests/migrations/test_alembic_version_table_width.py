@@ -77,6 +77,18 @@ def _revision_ids() -> list[str]:
 class TestWithoutADatabase:
     """Everything provable without a server."""
 
+    def test_fileconfig_keeps_eden_loggers(self) -> None:
+        """Alembic's default fileConfig silences uvicorn/eden loggers.
+
+        That made a reserved-word failure in 173 look like a silent
+        uvicorn exit 3, so Event Subscriptions never reached the new API.
+        """
+        src = ENV_PY.read_text(encoding="utf-8")
+        assert (
+            "fileConfig(config.config_file_name, disable_existing_loggers=False)"
+            in src
+        )
+
     def test_the_cli_gets_far_enough_to_attempt_a_connection(self) -> None:
         """Defect (1): ``env.py`` bound the SDK's ``eden`` package.
 

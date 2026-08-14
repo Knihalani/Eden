@@ -26,7 +26,6 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 from uuid import UUID
 import logging
-import numpy as np
 
 # ---------------------------------------------------------------------------
 # Alembic revision identifiers

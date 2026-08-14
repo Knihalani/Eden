@@ -101,7 +101,7 @@ def upgrade() -> None:
             path             VARCHAR(32) NOT NULL,
             join_key         JSONB NOT NULL,
             snippet          VARCHAR(280),
-            window           JSONB,
+            "window"         JSONB,
             confidence       VARCHAR(16) NOT NULL,
             polarity         VARCHAR(32) NOT NULL,
             raw              JSONB NOT NULL DEFAULT '{}',
