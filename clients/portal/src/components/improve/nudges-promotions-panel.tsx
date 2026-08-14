@@ -128,7 +128,7 @@ export function NudgesPromotionsPanel({
     >
       <h3 className="type-ui">Nudges &amp; promotions</h3>
       <p className="type-meta mt-0.5">
-        F39 runtime nudges and their shadow → promoted lifecycle
+        Runtime nudges and their shadow → promoted lifecycle
         (evidence-gate outcomes below).
       </p>
       {nudgesQuery.isLoading || promotionsQuery.isLoading ? (

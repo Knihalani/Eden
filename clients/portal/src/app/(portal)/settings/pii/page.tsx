@@ -48,7 +48,6 @@ const CREDENTIAL_CATEGORIES = new Set([
 const MODES = [
   { id: "off", label: "Off", hint: "Never mask — raw values pass through." },
   { id: "redact", label: "Redact", hint: "Mask per the active category set (default)." },
-  { id: "fail_closed", label: "Fail closed", hint: "Redact, and raise on credential detection." },
 ] as const;
 
 type PiiPolicy = Awaited<ReturnType<typeof api.getPiiPolicy>>;
@@ -79,9 +78,10 @@ export default function SettingsPiiPage() {
   useEffect(() => {
     if (!policyQuery.data) return;
     const p = policyQuery.data as PiiPolicy;
-    setMode(p.mode);
+    const nextMode = p.mode === "fail_closed" ? "redact" : p.mode;
+    setMode(nextMode);
     setEnabledCategories(new Set(p.enabled_categories));
-    setFailClosed(p.fail_closed_on_credentials);
+    setFailClosed(p.mode === "fail_closed" || p.fail_closed_on_credentials);
     setExtraKeys(p.redact_keys_extra.join(", "));
     setNotes(p.notes ?? "");
     setDirty(false);

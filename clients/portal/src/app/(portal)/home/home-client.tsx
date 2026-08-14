@@ -250,10 +250,21 @@ export default function HomeClient() {
     },
   );
 
+  const keysQuery = useOrgQuery(
+    queryKeys.portal.keys(orgId),
+    orgId,
+    () => portalApi.keys(orgId!),
+    {
+      ...SHELL_QUERY,
+      enabled: Boolean(orgId),
+    },
+  );
   const agentsLoaded = agentsQuery.data !== undefined;
   const agents = agentsQuery.data ?? [];
   const traces = tracesQuery.data ?? [];
   const zeroData = traces.length === 0;
+  const keysKnown = keysQuery.data !== undefined;
+  const hasActiveKey = (keysQuery.data ?? []).some((k) => k.status === "active");
 
   // Delay soft-poll arm so usePolling's immediate tick does not
   // duplicate the cold traces GET the moment empty data settles.
@@ -425,7 +436,7 @@ export default function HomeClient() {
               ? `${openIssuesCount} open issues`
               : snap.failures.length
                 ? "failing runs"
-                : "none"
+                : "last 24h"
           }
           tone={snap.failures.length ? "error" : "default"}
           hintTone={openIssuesCount > 0 ? "error" : "default"}
@@ -442,15 +453,15 @@ export default function HomeClient() {
           value={
             liveTiles.ready && liveTiles.traces?.value != null
               ? String(Math.round(Number(liveTiles.traces.value)))
-              : traces.length
-                ? String(traces.length)
-                : "—"
+              : tracesQuery.isLoading && traces.length === 0
+                ? "—"
+                : String(traces.length)
           }
           hint={
-            liveTiles.ready
-              ? "last 24h"
-              : traces.length
-                ? "recent runs"
+            tracesQuery.isLoading && traces.length === 0 && !liveTiles.ready
+              ? "Loading"
+              : traces.length || liveTiles.ready
+                ? "last 24h"
                 : "no runs yet"
           }
           tone="default"
@@ -465,8 +476,8 @@ export default function HomeClient() {
                 ? `${snap.errored} in error`
                 : snap.live
                   ? `${snap.live} active in 24h`
-                  : "none active in 24h"
-              : "loading…"
+                  : "last 24h"
+              : "Loading"
           }
           tone="default"
           hintTone={agentsLoaded && snap.errored ? "error" : "default"}
@@ -475,17 +486,19 @@ export default function HomeClient() {
         <Kpi
           label="Spend"
           value={
-            liveTiles.ready && liveTiles.cost?.value != null
-              ? formatUsd(Number(liveTiles.cost.value))
+            liveTiles.ready
+              ? formatUsd(Number(liveTiles.cost?.value ?? 0))
               : "—"
           }
           tone="default"
           hint={
-            liveTiles.ready && liveTiles.cost?.delta_pct != null
-              ? `${liveTiles.cost.delta_pct > 0 ? "+" : ""}${liveTiles.cost.delta_pct}% vs prior 24h`
-              : liveTiles.cacheSavings?.value
-                ? `${formatUsd(Number(liveTiles.cacheSavings.value))} saved by cache`
-                : "last 24h"
+            !liveTiles.ready
+              ? "Loading"
+              : liveTiles.cost?.delta_pct != null
+                ? `${liveTiles.cost.delta_pct > 0 ? "+" : ""}${liveTiles.cost.delta_pct}% vs prior 24h`
+                : liveTiles.cacheSavings?.value
+                  ? `${formatUsd(Number(liveTiles.cacheSavings.value))} saved by cache`
+                  : "last 24h"
           }
           hintTone={
             liveTiles.cost?.delta_pct != null && liveTiles.cost.delta_pct > 20
@@ -607,12 +620,21 @@ export default function HomeClient() {
       >
         {zeroData ? (
           <>
-            <Link
-              href="/settings?mode=keys"
-              className="ds-btn ds-btn-primary ds-btn-sm"
-            >
-              Create API key
-            </Link>
+            {keysKnown && !hasActiveKey ? (
+              <Link
+                href="/settings?mode=keys"
+                className="ds-btn ds-btn-primary ds-btn-sm"
+              >
+                Create API key
+              </Link>
+            ) : (
+              <Link
+                href="/settings?mode=keys"
+                className="ds-btn ds-btn-outline ds-btn-sm"
+              >
+                API keys
+              </Link>
+            )}
             <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
               Traces
             </Link>

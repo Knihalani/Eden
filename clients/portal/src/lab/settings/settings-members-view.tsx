@@ -15,6 +15,7 @@ import {
   MemberStatusChip,
 } from "@/lab/settings/settings-chrome";
 import { cn } from "@/lib/utils";
+import { formatAbsoluteTime, formatSmartTime } from "@/lib/format";
 
 /** Basic ``local@domain.tld`` shape — stronger than a bare ``includes("@")``. */
 const INVITE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -227,7 +228,9 @@ export function SettingsMembersView({
                   <p className="type-meta">
                     {m.email}
                     <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-                    {m.lastActive}
+                    <span title={formatAbsoluteTime(m.lastActive)}>
+                      {formatSmartTime(m.lastActive)}
+                    </span>
                   </p>
                 </div>
                 <span className="type-meta shrink-0 text-[var(--accent)]">
@@ -328,7 +331,10 @@ function MemberDialog({
 
         <div className="space-y-4 px-5 py-4">
           <p className="type-meta">
-            Last active {member.lastActive}
+            Last active{" "}
+            <span title={formatAbsoluteTime(member.lastActive)}>
+              {formatSmartTime(member.lastActive)}
+            </span>
             <span className="mx-1.5 text-[var(--text-faint)]">·</span>
             {member.role === "owner"
               ? "Full workspace control"

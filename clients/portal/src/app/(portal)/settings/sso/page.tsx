@@ -181,8 +181,8 @@ export default function SettingsSsoPage() {
             >
               Clerk dashboard
             </a>{" "}
-            — not here. Providers you add on this screen call Eden&apos;s native{" "}
-            <code>sso.py</code> API and only affect self-hosted deployments that
+            — not here. Providers you add on this screen use Eden&apos;s native{" "}
+            SSO path and only affect self-hosted deployments that
             do not use Clerk; they do not drive Clerk login traffic.
           </p>
           <p className="mt-2">
