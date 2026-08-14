@@ -2049,6 +2049,9 @@ def _session_summary_to_rollup(summary: dict[str, Any]) -> SessionRollup:
         endedAt=_iso(summary.get("session_end")) or None,
         turnCount=turn_count,
         outcome=outcome,
+        helped=str(summary.get("helped") or "unknown"),
+        unknownReason=None,
+        success=None,
         durationMs=duration_ms,
         totalTokens=total_tokens,
         costUsd=cost_usd,
@@ -2057,6 +2060,70 @@ def _session_summary_to_rollup(summary: dict[str, Any]) -> SessionRollup:
         relatedIssueIds=related,
         traceIds=trace_ids[:40],
     )
+
+
+async def _annotate_session_help(org_id: str, rollups: list[SessionRollup]) -> None:
+    """Fill unknownReason + agent success. Never copy success into helped."""
+    if not rollups:
+        return
+    from eden.integrations.slack import store as slack_store
+
+    install = await slack_store.get_install(org_id)
+    channels = await slack_store.list_channels(org_id)
+    mapped = {str(c.get("agent_id")) for c in channels if c.get("agent_id")}
+    invited = bool(install)
+    success_map = await _agent_session_success(org_id, [s.id for s in rollups if s.id])
+    for s in rollups:
+        s.success = success_map.get(s.id)
+        if s.helped in ("helped", "not_helped"):
+            s.unknownReason = None
+            continue
+        if not invited:
+            s.unknownReason = "invite"
+        elif s.agentId not in mapped:
+            s.unknownReason = "map"
+        else:
+            s.unknownReason = "no extra work seen"
+
+
+async def _agent_session_success(
+    org_id: str, session_ids: list[str]
+) -> dict[str, bool | None]:
+    out: dict[str, bool | None] = {}
+    if not session_ids:
+        return out
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception:
+        return out
+    if client is None:
+        return out
+    uuids: list[str] = []
+    for sid in session_ids:
+        try:
+            uuid.UUID(str(sid))
+            uuids.append(str(sid))
+        except (TypeError, ValueError):
+            continue
+    if not uuids:
+        return out
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id::text AS id, success
+            FROM agent_sessions
+            WHERE org_id = $1 AND id = ANY($2::uuid[])
+            """,
+            org_id,
+            uuids,
+        )
+        for r in rows:
+            out[str(r["id"])] = r["success"]
+    except Exception as exc:
+        logger.debug("portal sessions: success lookup failed: %s", exc)
+    return out
 
 
 @router.get("/sessions", response_model=list[SessionRollup])
@@ -2095,6 +2162,7 @@ async def list_portal_sessions(
     for s in out:
         merged = list(dict.fromkeys([*s.relatedIssueIds, *related.get(s.id, [])]))
         s.relatedIssueIds = merged[:10]
+    await _annotate_session_help(org_id, out)
     return out
 
 

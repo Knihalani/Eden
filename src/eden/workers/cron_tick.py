@@ -575,6 +575,20 @@ async def run_maintenance_due(
                 "reason": "already_ran_this_slot",
             }
 
+    if not dry_run and now.minute % 15 < 5:
+        ptr_key = _slot_key("pointer_close", now, minutes=15)
+        if await _once_per_window(ptr_key, ttl_seconds=14 * 60):
+            _queue(
+                "pointer_window_close",
+                _safe_step("pointer_window_close", _run_pointer_window_close()),
+                claim=ptr_key,
+            )
+        else:
+            out["pointer_window_close"] = {
+                "skipped": True,
+                "reason": "already_ran_this_slot",
+            }
+
     if not dry_run and now.minute % 10 < 5:
         sig_key = _slot_key("signal", now, minutes=10)
         if await _once_per_window(sig_key, ttl_seconds=9 * 60):
@@ -648,6 +662,13 @@ async def _run_clickhouse_fallback_drain() -> dict[str, object]:
     from eden.data_platform.clickhouse_fallback_drain import run_once
 
     return await run_once()
+
+
+async def _run_pointer_window_close() -> dict[str, object]:
+    """Path B window-close on the existing maintenance worker."""
+    from eden.integrations.slack.ambient import close_due_pointer_windows
+
+    return await close_due_pointer_windows()
 
 
 async def _run_signal_backfill() -> dict[str, object]:

@@ -176,25 +176,36 @@ class AgentSession(AbstractContextManager["AgentSession"]):
         success: bool = True,
         failure_reason: str | None = None,
         flush: bool = True,
+        outcome: str | None = None,
+        source: str | None = None,
+        reason: str | None = None,
+        explicit: bool | None = None,
+        slack: dict[str, str] | None = None,
     ) -> None:
         if self._ended:
             return
         self._ended = True
-        _notify_session(
-            "end",
-            {
-                "session_id": self.session_id,
-                "org_id": self.org_id,
-                "agent_id": self.agent_id,
-                "user_id": self.user_id,
-                "success": success,
-                "failure_reason": failure_reason,
-                "trace_ids": list(self.trace_ids),
-                "metadata": dict(self.metadata),
-                "cost_usd": self.cost_usd,
-            },
-            wait=True,
-        )
+        payload: dict[str, Any] = {
+            "session_id": self.session_id,
+            "org_id": self.org_id,
+            "agent_id": self.agent_id,
+            "user_id": self.user_id,
+            "success": success,
+            "failure_reason": failure_reason,
+            "trace_ids": list(self.trace_ids),
+            "metadata": dict(self.metadata),
+            "cost_usd": self.cost_usd,
+        }
+        if outcome is not None and source in ("person", "product"):
+            payload["outcome"] = outcome
+            payload["source"] = source
+            if reason is not None:
+                payload["reason"] = reason
+            if explicit is not None:
+                payload["explicit"] = explicit
+        if isinstance(slack, dict) and slack.get("channel") and slack.get("ts"):
+            payload["slack"] = {"channel": slack["channel"], "ts": slack["ts"]}
+        _notify_session("end", payload, wait=True)
         if flush:
             try:
                 get_default_client().flush(timeout=2.0)
@@ -330,6 +341,15 @@ def _notify_session(
                     "cost_usd": payload.get("cost_usd"),
                     "trace_ids": payload.get("trace_ids"),
                 }
+                if payload.get("outcome") is not None:
+                    body["outcome"] = payload.get("outcome")
+                    body["source"] = payload.get("source")
+                    if payload.get("reason") is not None:
+                        body["reason"] = payload.get("reason")
+                    if payload.get("explicit") is not None:
+                        body["explicit"] = payload.get("explicit")
+                if payload.get("slack"):
+                    body["slack"] = payload.get("slack")
             headers = cfg.auth_headers()
             headers.setdefault("Content-Type", "application/json")
             # Gzip like the main ingest path (``client.py``'s

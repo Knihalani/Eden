@@ -38,11 +38,21 @@ logger = logging.getLogger(__name__)
 SLACK_API_BASE = "https://slack.com/api"
 SLACK_AUTHORIZE_BASE = "https://slack.com/oauth/v2/authorize"
 
-#: Bot scopes Eden requests at install time. ``chat.postMessage`` is the
-#: core; ``channels:read``+``groups:read`` let the portal render the
-#: channel picker; ``incoming-webhook`` is NOT used (bot token posts
-#: directly).
-BOT_SCOPES = ("chat:write", "channels:read", "groups:read")
+#: Bot scopes Eden requests at install time. ``chat:write`` is the
+#: notify core; ``channels:read``+``groups:read`` let the portal render
+#: the channel picker. History scopes enable ambient listen after
+#: ``/invite @Eden``; ``mpim:history`` is optional for later (P0 has no
+#: consumer). Notify still works without history. Do not request
+#: ``im:history`` (DMs stay off).
+BOT_SCOPES = (
+    "chat:write",
+    "channels:read",
+    "groups:read",
+    "channels:history",
+    "groups:history",
+    "mpim:history",
+)
+HISTORY_SCOPES = ("channels:history", "groups:history", "mpim:history")
 
 #: Slack rejects signatures on requests older than 5 minutes.
 _SIGNATURE_MAX_AGE_S = 60 * 5
@@ -228,6 +238,7 @@ def verify_slack_signature(
 
 __all__ = [
     "BOT_SCOPES",
+    "HISTORY_SCOPES",
     "SLACK_API_BASE",
     "SlackAPIError",
     "SlackConfigError",
