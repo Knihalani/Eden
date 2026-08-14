@@ -63,6 +63,7 @@ class PostMergeMonitor:
             return 0
 
         pre_rate = await self._pre_merge_issue_rate(org_id, agent_id)
+        leftover_snap = await self._pre_merge_leftover(org_id, agent_id)
         opened = 0
         for hours in _WINDOWS_HOURS:
             try:
@@ -75,9 +76,9 @@ class PostMergeMonitor:
                     """
                     INSERT INTO post_merge_windows
                         (org_id, plan_id, agent_id, window_hours,
-                         opened_at, closes_at, pre_issue_rate)
+                         opened_at, closes_at, pre_issue_rate, evidence)
                     VALUES ($1, $2, $3, $4, now(),
-                            now() + make_interval(hours => $5), $6)
+                            now() + make_interval(hours => $5), $6, $7::jsonb)
                     ON CONFLICT (org_id, plan_id, window_hours) DO NOTHING
                     RETURNING id
                     """,
@@ -87,6 +88,7 @@ class PostMergeMonitor:
                     hours,
                     hours,
                     pre_rate,
+                    leftover_snap,
                 )
                 opened += len(rows or [])
             except Exception as exc:  # noqa: BLE001
@@ -123,6 +125,108 @@ class PostMergeMonitor:
         except Exception as exc:  # noqa: BLE001
             logger.debug("post_merge: baseline rate failed: %s", exc)
             return 0.0
+
+    async def _pre_merge_leftover(self, org_id: str, agent_id: str) -> str:
+        """Snapshot extra-work into evidence JSONB. No new column."""
+        import json
+
+        stats = await self._leftover_window_stats(
+            None, org_id, agent_id, lookback_hours=_BASELINE_LOOKBACK_HOURS
+        )
+        return json.dumps({"leftover_pre": stats})
+
+    async def _leftover_window_stats(
+        self,
+        client: Any | None,
+        org_id: str,
+        agent_id: str,
+        *,
+        opened_at: Any = None,
+        closes_at: Any = None,
+        lookback_hours: int | None = None,
+    ) -> dict[str, Any]:
+        """Extra-work counts on the mapped channel. fetchrow so existing
+        issue-rate tests (fetchval) are unaffected when this returns None."""
+        empty = {
+            "extra_work_n": 0,
+            "resolved_n": 0,
+            "unknown_n": 0,
+            "rate": 0.0,
+            "mapped_channel": False,
+            "listen_silent": True,
+        }
+        try:
+            if client is None:
+                from eden.storage.postgres import get_postgres_client
+
+                client = await get_postgres_client()
+            if client is None:
+                return empty
+            row = await client.fetchrow(
+                """
+                SELECT
+                    count(*) FILTER (
+                      WHERE polarity = 'extra_work'
+                        AND confidence IN ('high', 'medium')
+                    )::int AS extra_n,
+                    count(*) FILTER (
+                      WHERE polarity = 'extra_work'
+                        AND confidence IN ('high', 'medium')
+                        AND session_id IS NULL
+                    )::int AS ambient_n
+                FROM extra_work_events
+                WHERE org_id = $1 AND agent_id = $2
+                  AND (
+                    ($3::timestamptz IS NOT NULL
+                     AND observed_at >= $3 AND observed_at < $4)
+                    OR ($3::timestamptz IS NULL
+                        AND observed_at >= now()
+                            - make_interval(hours => $5))
+                  )
+                """,
+                org_id,
+                agent_id,
+                opened_at,
+                closes_at,
+                int(lookback_hours or _BASELINE_LOOKBACK_HOURS),
+            )
+            extra_n = int((row or {}).get("extra_n") or 0) if row else 0
+            ambient_n = int((row or {}).get("ambient_n") or 0) if row else 0
+            mapped = False
+            listen_silent = False
+            try:
+                from eden.integrations.slack import store as slack_store
+
+                install = await slack_store.get_install(org_id)
+                if install is None or install.get("revoked_at"):
+                    listen_silent = True
+                elif slack_store.needs_reconsent(install):
+                    listen_silent = True
+                ch = await client.fetchrow(
+                    """
+                    SELECT channel_id FROM agent_slack_channels
+                    WHERE org_id = $1 AND agent_id = $2
+                      AND agent_id IS NOT NULL
+                    LIMIT 1
+                    """,
+                    org_id,
+                    agent_id,
+                )
+                mapped = bool(ch and ch.get("channel_id"))
+            except Exception:
+                listen_silent = True
+            resolved_n = max(extra_n, ambient_n)
+            return {
+                "extra_work_n": extra_n,
+                "resolved_n": resolved_n,
+                "unknown_n": 0,
+                "rate": extra_n / max(resolved_n, 1),
+                "mapped_channel": mapped,
+                "listen_silent": listen_silent or not mapped,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("post_merge: leftover stats failed: %s", exc)
+            return empty
 
     # ── comparator ──────────────────────────────────────────────────
 
@@ -228,7 +332,7 @@ class PostMergeMonitor:
 
         if pre_rate > 0:
             delta_pct = (post_rate - pre_rate) / pre_rate * 100.0
-            degrading = (
+            issue_degrading = (
                 post_count >= _MIN_POST_ISSUES and delta_pct >= threshold
             )
         else:
@@ -238,8 +342,55 @@ class PostMergeMonitor:
             # without a baseline, so the verdict rides on the count floor
             # alone and the portal shows no misleading %.
             delta_pct = None
-            degrading = post_count >= _MIN_POST_ISSUES
-        status = "degrading" if degrading else "ok"
+            issue_degrading = post_count >= _MIN_POST_ISSUES
+
+        leftover_post = await self._leftover_window_stats(
+            client,
+            org_id,
+            agent_id,
+            opened_at=window.get("opened_at"),
+            closes_at=window.get("closes_at"),
+        )
+        pre_ev = window.get("evidence") or {}
+        if isinstance(pre_ev, str):
+            import json as _json
+
+            try:
+                pre_ev = _json.loads(pre_ev)
+            except Exception:
+                pre_ev = {}
+        pre_left = (pre_ev or {}).get("leftover_pre") or {}
+        from eden.issues.statgate_p0_rail import leftover_work_verdict
+
+        leftover_verdict, leftover_detail = leftover_work_verdict(
+            n_control=int(pre_left.get("resolved_n") or 0),
+            n_treatment=int(leftover_post.get("resolved_n") or 0),
+            extra_work_rate_control=float(pre_left.get("rate") or 0.0),
+            extra_work_rate_treatment=float(leftover_post.get("rate") or 0.0),
+            unknown_share=float(leftover_post.get("unknown_n") or 0)
+            / max(
+                int(leftover_post.get("resolved_n") or 0)
+                + int(leftover_post.get("unknown_n") or 0),
+                1,
+            ),
+            listen_silent=bool(
+                leftover_post.get("listen_silent")
+                or pre_left.get("listen_silent")
+            ),
+            mapped_channel=bool(leftover_post.get("mapped_channel")),
+        )
+        # Leftover-work is the only SHIP/ok check. Issue-rate quiet
+        # cannot mark ok. Issue-rate regression still degrades (hygiene).
+        leftover_block = leftover_verdict == "BLOCK"
+        leftover_ship = leftover_verdict == "SHIP"
+        degrading = issue_degrading or leftover_block
+        if leftover_ship and not issue_degrading:
+            status = "ok"
+        elif degrading:
+            status = "degrading"
+        else:
+            # thin n / listen silent / extra-work unchanged: not a ship
+            status = "pending"
         # None-safe: no baseline means delta is undefined (not 0%).
         delta_out = delta_pct if delta_pct is None else round(delta_pct, 2)
 
@@ -265,13 +416,24 @@ class PostMergeMonitor:
                 post_rate,
                 delta_out,
                 follow_up_id,
-                _json_evidence(window, post_count, pre_rate, post_rate, delta_pct),
+                _json_evidence(
+                    window,
+                    post_count,
+                    pre_rate,
+                    post_rate,
+                    delta_pct,
+                    leftover=leftover_detail,
+                    leftover_status=status,
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("post_merge: window update failed: %s", exc)
             return status, follow_up_id
 
         # Append-only event trail (FEAT-30) + portal surfacing.
+        # Pending/inconclusive leftover is not a clean ship — do not emit ok.
+        if status == "pending":
+            return status, follow_up_id
         try:
             from eden.improvement.plans_repo import emit_event
 
@@ -383,18 +545,23 @@ def _json_evidence(
     pre_rate: float,
     post_rate: float,
     delta_pct: float | None,
+    leftover: dict[str, Any] | None = None,
+    leftover_status: str | None = None,
 ) -> str:
     import json
 
-    return json.dumps(
-        {
-            "post_issue_count": post_count,
-            "post_issue_rate": post_rate,
-            "pre_issue_rate": pre_rate,
-            "delta_pct": delta_pct if delta_pct is None else round(delta_pct, 2),
-            "window_hours": window.get("window_hours"),
-        }
-    )
+    payload: dict[str, Any] = {
+        "post_issue_count": post_count,
+        "post_issue_rate": post_rate,
+        "pre_issue_rate": pre_rate,
+        "delta_pct": delta_pct if delta_pct is None else round(delta_pct, 2),
+        "window_hours": window.get("window_hours"),
+    }
+    if leftover:
+        payload["leftover"] = leftover
+    if leftover_status == "pending":
+        payload["reason"] = "inconclusive"
+    return json.dumps(payload)
 
 
 __all__ = ["PostMergeMonitor"]
