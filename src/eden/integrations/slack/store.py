@@ -539,7 +539,7 @@ async def insert_extra_work_event(
             """
             INSERT INTO extra_work_events (
                 org_id, session_id, agent_id, user_id, help_contract_id,
-                trace_id, surface, kind, path, join_key, snippet, window,
+                trace_id, surface, kind, path, join_key, snippet, "window",
                 confidence, polarity, raw, event_id, observed_at, canary_arm
             ) VALUES (
                 $1, $2, $3, $4, $5::uuid, $6, $7, $8, $9, $10::jsonb,
