@@ -31,6 +31,7 @@ import {
 import { CHROME_BANNER_ATTR } from "@/lib/overlay-defer";
 import { dropOrgScopedQueries } from "@/lib/portal-query";
 import { cn } from "@/lib/utils";
+import { openCommandPalette } from "@/lib/palette";
 import type { Organization } from "@/lib/types";
 
 /** Marks ``<html>`` so the product tour defers while chrome banners show. */
@@ -318,6 +319,17 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           >
             Settings
           </Link>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8125rem] text-[var(--text)] hover:bg-[var(--bg-elevated)]"
+            onClick={() => {
+              setOpen(false);
+              openCommandPalette();
+            }}
+          >
+            Command palette
+          </button>
           <button
             type="button"
             role="menuitem"

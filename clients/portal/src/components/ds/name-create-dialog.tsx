@@ -27,11 +27,18 @@ export function NameCreateDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
 
+  const triggerRef = useRef<Element | null>(null);
+
   useEffect(() => {
     if (!open) return;
+    triggerRef.current = document.activeElement;
     setName("");
     const t = window.setTimeout(() => inputRef.current?.focus(), 0);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      const el = triggerRef.current;
+      if (el instanceof HTMLElement) el.focus();
+    };
   }, [open]);
 
   useEffect(() => {

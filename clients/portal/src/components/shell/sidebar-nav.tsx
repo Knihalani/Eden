@@ -181,7 +181,10 @@ export function SidebarNav() {
             <AlertsBell />
             <button
               type="button"
-              onClick={toggle}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle();
+              }}
               className="ds-btn ds-btn-ghost ds-btn-icon shrink-0"
               title="Collapse"
               aria-label="Collapse navigation"

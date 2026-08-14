@@ -182,6 +182,9 @@ export function EvalsCompareView({
               onChange={(e) => onDatasetChange(e.target.value)}
               aria-label="Dataset"
             >
+              {datasets.length === 0 ? (
+                <option value="">No datasets</option>
+              ) : null}
               {datasets.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -193,7 +196,7 @@ export function EvalsCompareView({
         <EmptyState
           compact
           title="No completed runs"
-          body="Compare needs finished eval runs. Create a dataset from a failing trace, or try a prompt draft first."
+          body="Comparison needs finished eval runs. Create a dataset from a failing trace, or try a prompt draft first."
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <button

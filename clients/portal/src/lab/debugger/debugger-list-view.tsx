@@ -90,7 +90,7 @@ export function DebuggerListView({
                 Clear filters
               </button>
             ) : (
-              <Link href="/traces" className="ds-btn ds-btn-primary ds-btn-sm">
+              <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
                 Open traces
               </Link>
             )

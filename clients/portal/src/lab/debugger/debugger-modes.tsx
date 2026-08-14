@@ -112,7 +112,7 @@ export function DebuggerReplayView({
         title="No source trace"
         body={U20_EMPTY_COPY.debugger}
         action={
-          <Link href="/traces" className="ds-btn ds-btn-primary ds-btn-sm">
+          <Link href="/traces" className="ds-btn ds-btn-outline ds-btn-sm">
             Open traces
           </Link>
         }

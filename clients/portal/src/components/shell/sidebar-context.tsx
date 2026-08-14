@@ -38,8 +38,10 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   // Server and first client paint always match (expanded default).
   // Stored preference is applied in useLayoutEffect before paint — no hydration mismatch,
   // and animate stays false so the restore never plays a close animation.
-  const [collapsed, setCollapsedState] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [collapsed, setCollapsedState] = useState(() =>
+    typeof window === "undefined" ? false : readBool("eden.nav.collapsed", false),
+  );
+  const [ready, setReady] = useState(typeof window !== "undefined");
   const [animate, setAnimate] = useState(false);
 
   useLayoutEffect(() => {

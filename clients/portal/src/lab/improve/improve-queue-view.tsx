@@ -194,13 +194,13 @@ export function ImproveQueueView({
       <AutonomyRoiBanner />
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--line)] px-4 py-3 sm:px-6">
           <SearchInput
             value={query}
             onChange={setQuery}
             placeholder="Search plans, ids…"
             ariaLabel="Search improve plans"
-            className="min-w-[10rem] flex-1 sm:max-w-xs"
+            className="w-full"
           />
           <FilterChips
             value={status}
