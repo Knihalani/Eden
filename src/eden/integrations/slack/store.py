@@ -183,6 +183,15 @@ async def revoke_install(org_id: str, *, team_id: str | None = None) -> bool:
 # ── agent_slack_channels ────────────────────────────────────────────
 
 
+def is_forbidden_channel_id(channel_id: str) -> bool:
+    """DMs (D…) and user ids (U… / W…) are not pickable channels."""
+    cid = (channel_id or "").strip()
+    if not cid:
+        return True
+    return cid[0] in {"D", "U", "W"}
+
+
+
 async def set_channel(
     org_id: str,
     *,
@@ -191,20 +200,40 @@ async def set_channel(
     channel_name: str = "",
     set_by_user_id: str | None = None,
 ) -> bool:
-    """Bind an agent (or the org default, agent_id=None) to a channel."""
+    """Bind an agent (or the org default) as the notify channel."""
+    if is_forbidden_channel_id(channel_id):
+        logger.warning("slack_store: set_channel refused non-channel %s", channel_id)
+        return False
     client = await _pg()
     if client is None:
         return False
     try:
+        if agent_id:
+            await client.execute(
+                """
+                UPDATE agent_slack_channels SET is_notify = false, updated_at = NOW()
+                WHERE org_id = $1 AND agent_id = $2 AND is_notify
+                """,
+                org_id,
+                agent_id,
+            )
+        else:
+            await client.execute(
+                """
+                UPDATE agent_slack_channels SET is_notify = false, updated_at = NOW()
+                WHERE org_id = $1 AND agent_id IS NULL AND is_notify
+                """,
+                org_id,
+            )
         await client.execute(
             """
             INSERT INTO agent_slack_channels
-                (id, org_id, agent_id, channel_id, channel_name, set_by_user_id)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6)
-            ON CONFLICT (org_id, (COALESCE(agent_id, ''))) DO UPDATE SET
-                channel_id = EXCLUDED.channel_id,
+                (id, org_id, agent_id, channel_id, channel_name, set_by_user_id, is_notify)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, true)
+            ON CONFLICT (org_id, (COALESCE(agent_id, '')), channel_id) DO UPDATE SET
                 channel_name = EXCLUDED.channel_name,
                 set_by_user_id = EXCLUDED.set_by_user_id,
+                is_notify = true,
                 updated_at = NOW()
             """,
             str(uuid.uuid4()),
@@ -220,6 +249,69 @@ async def set_channel(
         return False
 
 
+
+async def save_agent_channels(
+    org_id: str,
+    *,
+    agent_id: str,
+    watch: list[dict[str, Any]],
+    notify_channel_id: str | None,
+    notify_channel_name: str = "",
+    set_by_user_id: str | None = None,
+) -> bool:
+    """Replace watch rows and the notify row for one agent.
+
+    Notify may be one of the watch channels. DMs and user ids are dropped.
+    """
+    if not agent_id:
+        return False
+    client = await _pg()
+    if client is None:
+        return False
+    cleaned: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw in watch:
+        cid = str(raw.get("channel_id") or "").strip()
+        name = str(raw.get("channel_name") or "").strip()
+        if not cid or is_forbidden_channel_id(cid) or cid in seen:
+            continue
+        seen.add(cid)
+        cleaned.append((cid, name))
+    notify_id = (notify_channel_id or "").strip() or None
+    if notify_id and is_forbidden_channel_id(notify_id):
+        logger.warning("slack_store: notify refused non-channel %s", notify_id)
+        notify_id = None
+    if notify_id and notify_id not in seen:
+        cleaned.append((notify_id, (notify_channel_name or "").strip()))
+        seen.add(notify_id)
+    try:
+        await client.execute(
+            "DELETE FROM agent_slack_channels WHERE org_id = $1 AND agent_id = $2",
+            org_id,
+            agent_id,
+        )
+        for cid, name in cleaned:
+            await client.execute(
+                """
+                INSERT INTO agent_slack_channels
+                    (id, org_id, agent_id, channel_id, channel_name,
+                     set_by_user_id, is_notify)
+                VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+                """,
+                str(uuid.uuid4()),
+                org_id,
+                agent_id,
+                cid,
+                name,
+                set_by_user_id,
+                bool(notify_id and cid == notify_id),
+            )
+        return True
+    except Exception as exc:
+        logger.warning("slack_store: save_agent_channels failed: %s", exc)
+        return False
+
+
 async def get_channel(org_id: str, *, agent_id: str | None = None) -> dict[str, Any] | None:
     """Resolve the channel for an agent: agent row beats the org default
     (agent_id IS NULL). Returns ``{channel_id, channel_name}`` or None."""
@@ -232,6 +324,8 @@ async def get_channel(org_id: str, *, agent_id: str | None = None) -> dict[str, 
                 """
                 SELECT channel_id, channel_name FROM agent_slack_channels
                 WHERE org_id = $1 AND agent_id = $2
+                ORDER BY CASE WHEN is_notify THEN 0 ELSE 1 END, updated_at DESC
+                LIMIT 1
                 """,
                 org_id,
                 agent_id,
@@ -259,10 +353,11 @@ async def list_channels(org_id: str) -> list[dict[str, Any]]:
     try:
         rows = await client.fetch(
             """
-            SELECT agent_id, channel_id, channel_name, updated_at
+            SELECT agent_id, channel_id, channel_name, updated_at,
+                   COALESCE(is_notify, false) AS is_notify
             FROM agent_slack_channels
             WHERE org_id = $1
-            ORDER BY updated_at DESC
+            ORDER BY is_notify DESC, updated_at DESC
             """,
             org_id,
         )
@@ -1163,6 +1258,8 @@ __all__ = [
     "parse_permalink_ts",
     "revoke_install",
     "save_pointer",
+    "save_agent_channels",
+    "is_forbidden_channel_id",
     "set_channel",
     "set_session_helped",
     "upsert_help_contract",
