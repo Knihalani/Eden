@@ -170,6 +170,10 @@ async def revoke_install(org_id: str, *, team_id: str | None = None) -> bool:
                 "WHERE org_id = $1 AND revoked_at IS NULL",
                 org_id,
             )
+        await client.execute(
+            "DELETE FROM extra_work_candidates WHERE org_id = $1",
+            org_id,
+        )
         return True
     except Exception as exc:
         logger.debug("slack_store: revoke failed: %s", exc)
@@ -501,6 +505,43 @@ async def insert_candidate(
         logger.debug("slack_store: insert_candidate failed: %s", exc)
         return None
 
+
+def _exec_rowcount(status: object) -> int:
+    parts = str(status or "").split()
+    if parts and parts[-1].isdigit():
+        return int(parts[-1])
+    return 0
+
+
+async def expire_candidates() -> int:
+    """Delete extra_work_candidates past the 7-day TTL. Not a chat index."""
+    client = await _pg()
+    if client is None:
+        return 0
+    try:
+        status = await client.execute(
+            "DELETE FROM extra_work_candidates WHERE expires_at < NOW()"
+        )
+        return _exec_rowcount(status)
+    except Exception as exc:
+        logger.debug("slack_store: expire_candidates failed: %s", exc)
+        return 0
+
+
+async def delete_candidates_for_org(org_id: str) -> int:
+    """Disconnect / kick: drop the encrypted buffer for the workspace."""
+    client = await _pg()
+    if client is None or not org_id:
+        return 0
+    try:
+        status = await client.execute(
+            "DELETE FROM extra_work_candidates WHERE org_id = $1",
+            org_id,
+        )
+        return _exec_rowcount(status)
+    except Exception as exc:
+        logger.debug("slack_store: delete_candidates_for_org failed: %s", exc)
+        return 0
 
 
 # store.py append — Path B pointers + help rollup helpers
@@ -999,6 +1040,8 @@ __all__ = [
     "get_org_id_for_team",
     "get_pointers",
     "help_counts",
+    "delete_candidates_for_org",
+    "expire_candidates",
     "insert_candidate",
     "insert_extra_work_event",
     "insert_session_outcome",
