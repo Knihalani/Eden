@@ -65,6 +65,8 @@ import {
 } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
+import { useConfirm } from "@/hooks/use-confirm";
+import { NameCreateDialog } from "@/components/ds/name-create-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 
 const viewFallback = <LoadingFallback label="Loading evals…" />;
@@ -208,6 +210,8 @@ function LabEvalsInner() {
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const confirm = useConfirm();
+  const [datasetNameOpen, setDatasetNameOpen] = useState(false);
   const [mode, setMode] = useState<EvalsMode>(() =>
     parseEvalsMode(paramTab, paramMode),
   );
@@ -438,48 +442,37 @@ function LabEvalsInner() {
     });
   }, [datasetRowsQuery.data, rowsDatasetId, liveDatasets]);
 
-  const createDataset = useCallback(() => {
-    if (!orgId) {
-      pushToast({ title: "Not available", tone: "fail" });
-      return;
-    }
-    const tempId = `ds_local_${Date.now().toString(36)}`;
-    const draft = mapCreatedDataset(
-      { id: tempId, name: "Untitled dataset" },
-      agentId,
-    );
-    setExtraDatasets((prev) => [draft, ...prev]);
-    setDatasetId(tempId);
-    setRenamingDatasetId(tempId);
-    setMode("datasets");
-    patchQuery({ mode: "datasets", id: tempId, from: null });
-
-    void (async () => {
-      try {
-        const created = await datasetsApi.create(orgId, {
-          name: "Untitled dataset",
-        });
-        const mapped = mapCreatedDataset(created, agentId);
-        setExtraDatasets((prev) =>
-          prev.map((d) => (d.id === tempId ? mapped : d)),
-        );
-        setDatasetId(mapped.id);
-        setRenamingDatasetId(mapped.id);
-        patchQuery({ mode: "datasets", id: mapped.id, from: null });
-      } catch (err) {
-        setExtraDatasets((prev) => prev.filter((d) => d.id !== tempId));
-        setDatasetId("");
-        setRenamingDatasetId(null);
-        pushToast({
-          title: "Create dataset failed",
-          body: errMessage(err),
-          tone: "fail",
-        });
-      } finally {
-        await invalidateEvals("datasets");
+  const createDataset = useCallback(
+    (name: string) => {
+      if (!orgId) {
+        pushToast({ title: "Not available", tone: "fail" });
+        return;
       }
-    })();
-  }, [agentId, invalidateEvals, orgId, patchQuery, pushToast]);
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setDatasetNameOpen(false);
+      void (async () => {
+        try {
+          const created = await datasetsApi.create(orgId, { name: trimmed });
+          const mapped = mapCreatedDataset(created, agentId);
+          setExtraDatasets((prev) => [mapped, ...prev]);
+          setDatasetId(mapped.id);
+          setRenamingDatasetId(null);
+          setMode("datasets");
+          patchQuery({ mode: "datasets", id: mapped.id, from: null });
+        } catch (err) {
+          pushToast({
+            title: "Create dataset failed",
+            body: errMessage(err),
+            tone: "fail",
+          });
+        } finally {
+          await invalidateEvals("datasets");
+        }
+      })();
+    },
+    [agentId, invalidateEvals, orgId, patchQuery, pushToast],
+  );
 
   const renameDataset = useCallback(
     (id: string, name: string) => {
@@ -512,6 +505,20 @@ function LabEvalsInner() {
   );
 
   const deleteDataset = useCallback(
+    (id: string) => {
+      const target = allDatasets.find((d) => d.id === id);
+      void (async () => {
+        const ok = await confirm(
+          `Delete dataset “${target?.name ?? "this dataset"}”? This cannot be undone.`,
+        );
+        if (!ok) return;
+        applyDeleteDataset(id);
+      })();
+    },
+    [allDatasets, confirm],
+  );
+
+  const applyDeleteDataset = useCallback(
     (id: string) => {
       setExtraDatasets((prev) => prev.filter((d) => d.id !== id));
       setHiddenDatasetIds((prev) =>
@@ -1250,7 +1257,13 @@ function LabEvalsInner() {
     (dsId: string) => {
       const ds = allDatasets.find((d) => d.id === dsId);
       const cases = casesFor(dsId);
-      if (!ds || cases.length === 0) return;
+      if (!ds || cases.length === 0) {
+        pushToast({
+          title: "Add at least one case before running",
+          tone: "fail",
+        });
+        return;
+      }
       if (!orgId) {
         pushToast({ title: "Not available", tone: "fail" });
         return;
@@ -1652,7 +1665,7 @@ function LabEvalsInner() {
           onCompareLatest={compareLatest}
           onRunExperiment={runExperiment}
           onOpenRun={openRun}
-          onCreateDataset={createDataset}
+          onCreateDataset={() => setDatasetNameOpen(true)}
           onAddCase={addCase}
           onRenameDataset={renameDataset}
           onDeleteDataset={deleteDataset}
@@ -1679,6 +1692,14 @@ function LabEvalsInner() {
           onPromote={promotePlayground}
         />
       ) : null}
+
+      <NameCreateDialog
+        open={datasetNameOpen}
+        title="New dataset"
+        placeholder="Dataset name"
+        onCancel={() => setDatasetNameOpen(false)}
+        onConfirm={createDataset}
+      />
     </div>
   );
 }

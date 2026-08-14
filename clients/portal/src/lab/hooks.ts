@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { isTypingTarget } from "@/lib/is-typing-target";
 
 function readLocalBool(key: string, fallback: boolean) {
   try {
@@ -165,16 +166,6 @@ export function useDismissedSet(storageKey: string) {
   );
 
   return { dismissed, dismiss, dismissMany, restore };
-}
-
-function isTypingTarget(t: EventTarget | null) {
-  if (!(t instanceof HTMLElement)) return false;
-  return (
-    t.tagName === "INPUT" ||
-    t.tagName === "TEXTAREA" ||
-    t.tagName === "SELECT" ||
-    t.isContentEditable
-  );
 }
 
 /** j/k and arrow keys for list navigation. Optional tab shortcuts. */

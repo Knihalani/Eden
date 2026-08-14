@@ -251,8 +251,6 @@ function LabSignalsInner() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
   const [toggleBusyId, setToggleBusyId] = useState<string | null>(null);
-  const createParam = searchParams.get("create");
-  const promptParam = searchParams.get("prompt");
   const listScrollRef = useRef<HTMLDivElement | null>(null);
 
   const openAlertRuleAuthoring = useCallback(
@@ -279,11 +277,8 @@ function LabSignalsInner() {
     setSelectedId(paramId);
   }, [paramId]);
 
-  useEffect(() => {
-    if (createParam !== "1" && !promptParam) return;
-    openAlertRuleAuthoring(promptParam);
-    patchQuery({ create: null, prompt: null });
-  }, [createParam, promptParam, openAlertRuleAuthoring, patchQuery]);
+  // R027: leave ?create=1 for NlAlertRulesView to consume. Clearing it
+  // here raced the dialog open and made the empty-state CTA a no-op.
 
   const enabledCount = catalog.filter((s) => s.enabled).length;
   const hits24h = catalog.reduce((sum, s) => sum + s.hits24h, 0);

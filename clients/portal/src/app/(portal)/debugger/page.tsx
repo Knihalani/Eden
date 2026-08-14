@@ -304,6 +304,7 @@ function LabDebuggerListInner() {
         onAgentChange={setAgentId}
         onSelect={onSelect}
         onNew={onNew}
+        canCreate={catalogTraces().length > 0}
       />
     </div>
   );

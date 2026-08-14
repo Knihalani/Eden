@@ -18,6 +18,7 @@
  */
 
 import * as React from "react";
+import { isTypingTarget } from "@/lib/is-typing-target";
 
 export interface ShortcutMap {
   j?: () => void;
@@ -37,14 +38,6 @@ export interface ShortcutMap {
   [key: string]: (() => void) | undefined;
 }
 
-function isTextInput(target: EventTarget | null): boolean {
-  if (!target || !(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if (target.isContentEditable) return true;
-  return false;
-}
-
 /**
  * Document-level shortcuts. Modifier chords (⌘K / Ctrl+K, etc.) are ignored
  * so AppShell `CommandPalette` owns the palette — never steal filter focus via ⌘K.
@@ -53,7 +46,7 @@ export function useKeyboardShortcuts(map: ShortcutMap, enabled: boolean = true):
   React.useEffect(() => {
     if (!enabled) return;
     const handler = (e: KeyboardEvent) => {
-      if (isTextInput(e.target)) return;
+      if (isTypingTarget(e.target)) return;
       // Don't trigger with modifier keys — ⌘K / Ctrl+K stay on CommandPalette.
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key;

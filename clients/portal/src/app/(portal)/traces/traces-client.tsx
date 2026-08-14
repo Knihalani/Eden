@@ -1384,9 +1384,12 @@ function LabTracesInner() {
                 action={
                   query || scopeAgent ? undefined : (
                     <FirstEventWaitAction
-                      onCheck={() => {
-                        void tracesQuery.refetch();
-                        void sessionsQuery.refetch();
+                      onCheck={async () => {
+                        const [traces] = await Promise.all([
+                          tracesQuery.refetch(),
+                          sessionsQuery.refetch(),
+                        ]);
+                        return traces.data ?? [];
                       }}
                       checking={
                         tracesQuery.isFetching || sessionsQuery.isFetching

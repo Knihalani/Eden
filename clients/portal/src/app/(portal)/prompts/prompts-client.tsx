@@ -38,6 +38,7 @@ import {
 } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
+import { NameCreateDialog } from "@/components/ds/name-create-dialog";
 import { CanaryCockpit } from "@/components/improve/canary-cockpit";
 
 const promptsFallback = <LoadingFallback label="Loading prompts…" />;
@@ -71,6 +72,7 @@ function PromptsInner() {
   const orgId = currentOrg?.id ?? null;
   const queryClient = useQueryClient();
   const { pushToast } = useLabToast();
+  const [nameOpen, setNameOpen] = useState(false);
 
   const listQuery = useOrgQuery(
     queryKeys.promptsV2.list(orgId),
@@ -350,27 +352,32 @@ function PromptsInner() {
     }
   }, [prompt, orgId, invalidateDetail, invalidateList, patchQuery, pushToast]);
 
-  const handleNew = useCallback(async () => {
-    if (!orgId) return;
-    const name = `new-prompt-${Date.now().toString(36)}`;
-    try {
-      const res = await promptsV2Api.create(orgId, { name });
-      await invalidateList();
-      const createdName = res.data?.name ?? name;
-      setPromptId(createdName);
-      setVersionId(null);
-      setDraftBody("");
-      setTab("editor");
-      setNotice("Draft created — edit and save");
-      patchQuery({ id: createdName, tab: null, version: null });
-    } catch (err) {
-      pushToast({
-        title: "Create failed",
-        body: err instanceof Error ? err.message : "Try again.",
-        tone: "fail",
-      });
-    }
-  }, [orgId, invalidateList, patchQuery, pushToast]);
+  const handleNew = useCallback(
+    async (name: string) => {
+      if (!orgId) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setNameOpen(false);
+      try {
+        const res = await promptsV2Api.create(orgId, { name: trimmed });
+        await invalidateList();
+        const createdName = res.data?.name ?? trimmed;
+        setPromptId(createdName);
+        setVersionId(null);
+        setDraftBody("");
+        setTab("editor");
+        setNotice("Draft created — edit and save");
+        patchQuery({ id: createdName, tab: null, version: null });
+      } catch (err) {
+        pushToast({
+          title: "Create failed",
+          body: err instanceof Error ? err.message : "Try again.",
+          tone: "fail",
+        });
+      }
+    },
+    [orgId, invalidateList, patchQuery, pushToast],
+  );
 
   const liveCount = scoped.filter((p) => p.status === "live").length;
   const detailLoading =
@@ -429,7 +436,7 @@ function PromptsInner() {
             statusFilter={statusFilter}
             onStatusFilter={changeStatus}
             onSelect={selectPrompt}
-            onNew={handleNew}
+            onNew={() => setNameOpen(true)}
             counts={scopeCounts}
           />
         </div>
@@ -463,6 +470,13 @@ function PromptsInner() {
       </div>
       {/* W3-9 (9.8): canary cockpit with traffic-split controls on /prompts. */}
       <CanaryCockpit orgId={orgId} />
+      <NameCreateDialog
+        open={nameOpen}
+        title="New prompt"
+        placeholder="Prompt name"
+        onCancel={() => setNameOpen(false)}
+        onConfirm={(name) => void handleNew(name)}
+      />
     </div>
   );
 }

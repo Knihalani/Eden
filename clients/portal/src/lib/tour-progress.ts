@@ -12,6 +12,9 @@ export const EDEN_TOUR_META_KEY = "edenTour" as const;
 /** Browser-local dismiss so Skip/X sticks even if a Clerk write blips. */
 export const TOUR_DISMISSED_STORAGE_KEY = "eden.tour.dismissed";
 
+/** Banner X — persist across tabs/reloads (R030). */
+export const TOUR_BANNER_DISMISSED_STORAGE_KEY = "eden.tour.banner-dismissed";
+
 export type EdenTourStatus = "active" | "done" | "skipped";
 
 export interface EdenTourProgress {
@@ -75,6 +78,24 @@ export function isTourDismissedLocally(): boolean {
   }
 }
 
+export function markTourBannerDismissed(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TOUR_BANNER_DISMISSED_STORAGE_KEY, "1");
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+export function isTourBannerDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(TOUR_BANNER_DISMISSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Skip/X and Finish both retire auto-open. ``skipped`` is a dismiss, not
  * a pause that resurrects the overlay on the next route.
@@ -92,6 +113,7 @@ export function shouldShowTourBanner(
   progress: EdenTourProgress | null,
 ): boolean {
   if (isTourDismissedLocally()) return false;
+  if (isTourBannerDismissed()) return false;
   if (!progress) return true;
   return progress.status === "active";
 }
