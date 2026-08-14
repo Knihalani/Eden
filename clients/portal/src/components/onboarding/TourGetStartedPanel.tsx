@@ -276,13 +276,19 @@ export function TourGetStartedPanel() {
       {fill.status === "already_minted" ? (
         <div className="border border-[var(--line)] bg-[var(--bg-elevated)] px-3 py-2.5 text-left">
           <p className="text-[0.75rem] leading-relaxed text-[var(--text-secondary)]">
-            No key is created until you ask. Open Settings to copy an existing
-            key, or create one here.
+            A key is never minted until you ask. If one already exists, copy it
+            from Settings. Otherwise create a Quickstart key here.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
+            <Link
+              href="/settings?mode=keys"
+              className="ds-btn ds-btn-primary ds-btn-sm"
+            >
+              Open existing key
+            </Link>
             <button
               type="button"
-              className="ds-btn ds-btn-secondary ds-btn-sm"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
               onClick={() => {
                 const orgId = currentOrg?.id;
                 if (!orgId) return;
@@ -312,12 +318,7 @@ export function TourGetStartedPanel() {
             >
               Create Quickstart key
             </button>
-            <Link
-              href="/settings?mode=keys"
-              className="font-mono text-[0.6875rem] text-[var(--accent)] hover:text-[var(--accent-hover)]"
-            >
-              Settings → API keys →
-            </Link>
+
           </div>
         </div>
       ) : null}

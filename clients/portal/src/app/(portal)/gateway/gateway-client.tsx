@@ -21,6 +21,7 @@ import {
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import { downloadCsv } from "@/lib/export";
+import { useLabToast } from "@/lab/lab-toast";
 import { cn } from "@/lib/utils";
 
 const chartFallback = (
@@ -187,6 +188,7 @@ function BreakdownTable({
 
 export default function GatewayClient() {
   const { currentOrg } = useOrg();
+  const { pushToast } = useLabToast();
   const orgId = currentOrg?.id ?? null;
   const [windowIdx, setWindowIdx] = useState(0);
   const activeWindow = WINDOW_OPTIONS[windowIdx] ?? WINDOW_OPTIONS[0];
@@ -267,9 +269,12 @@ export default function GatewayClient() {
   const hardError = overview.isError && !overview.data;
 
   const exportAllCsv = () => {
-    if (!data) return;
+    if (!data) {
+      pushToast({ title: "Nothing to export yet", tone: "default" });
+      return;
+    }
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadCsv(`eden-gateway-${activeWindow.label}-${stamp}.csv`, [
+    const rows = [
       ...byModel.map((r) => ({
         dimension: "model",
         name: r.key,
@@ -298,7 +303,12 @@ export default function GatewayClient() {
         tokens: r.tokens,
         events: r.events,
       })),
-    ]);
+    ];
+    if (rows.length === 0) {
+      pushToast({ title: "Nothing to export yet", tone: "default" });
+      return;
+    }
+    downloadCsv(`eden-gateway-${activeWindow.label}-${stamp}.csv`, rows);
   };
 
 

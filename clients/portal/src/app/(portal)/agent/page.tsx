@@ -16,6 +16,7 @@ import {
   type AgentMessagePart,
   type AgentThread,
 } from "@/lab/fixtures/agent-chat";
+import { shouldCreateThreadOnVisit } from "@/lib/assistant-boot";
 import {
   AgentModeNav,
   parseAgentView,
@@ -188,10 +189,11 @@ function LabAgentInner() {
       agentId: paramAgent,
     });
     const base = (threadsQuery.data ?? []).filter((x) => x.id !== "thr_empty");
-    const wantsHandoff =
-      pins.length > 0 ||
-      Boolean(paramPrompt) ||
-      paramThread === "thr_empty";
+    const wantsHandoff = shouldCreateThreadOnVisit({
+      hasHandoffPins: pins.length > 0,
+      hasPrompt: Boolean(paramPrompt),
+      threadParam: paramThread,
+    });
     if (wantsHandoff && (!paramThread || paramThread === "thr_empty")) {
       const t = newEmptyThread();
       t.pins = [...pins];

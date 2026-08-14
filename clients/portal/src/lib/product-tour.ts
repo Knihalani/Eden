@@ -60,7 +60,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "finish",
     href: "/home",
     title: "Get started",
-    body: "Create a Quickstart key if you need one, copy a snippet, run doctor, then watch Traces for your first event.",
+    body: "If a key already exists, copy a snippet from Settings. Otherwise create one, run doctor, then watch Traces for your first event.",
   },
 ];
 
