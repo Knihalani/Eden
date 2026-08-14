@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ds/primitives";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery, useOrgMutation } from "@/hooks/use-api-query";
 import { queryKeys } from "@/lib/query-keys";
-import { labelingApi } from "@/lib/api/labeling";
+import { LABELING_LIST_LIMIT, labelingApi } from "@/lib/api/labeling";
 import { SHELL_QUERY } from "@/lib/portal-query";
 import {
   LoadingFallback,
@@ -40,9 +40,9 @@ function LabelingInner() {
     SHELL_QUERY,
   );
   const itemsQuery = useOrgQuery(
-    queryKeys.labeling.items(orgId, { limit: 200 }),
+    queryKeys.labeling.items(orgId, { limit: LABELING_LIST_LIMIT }),
     orgId,
-    () => labelingApi.listItems(orgId!, { limit: 200 }),
+    () => labelingApi.listItems(orgId!, { limit: LABELING_LIST_LIMIT }),
     SHELL_QUERY,
   );
   // Agreement is best-effort — if the report fails to compute (e.g. no
@@ -59,7 +59,7 @@ function LabelingInner() {
     (itemIds: string[]) => labelingApi.skipBulk(orgId!, { item_ids: itemIds }),
     {
       invalidateKeys: orgId
-        ? [queryKeys.labeling.items(orgId, { limit: 200 }), queryKeys.labeling.agreement(orgId)]
+        ? [queryKeys.labeling.items(orgId, { limit: LABELING_LIST_LIMIT }), queryKeys.labeling.agreement(orgId)]
         : undefined,
       onSuccess: (_data, itemIds) => {
         pushToast({

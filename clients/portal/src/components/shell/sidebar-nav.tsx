@@ -28,7 +28,8 @@ import {
 } from "lucide-react";
 import {
   NAV_SECTIONS,
-  isNavActive,
+  isExclusiveNavActive,
+  PRIMARY_NAV,
   type NavIcon,
   type NavItem,
 } from "@/lab/nav";
@@ -72,7 +73,11 @@ function NavLink({
   collapsed: boolean;
 }) {
   const Icon = ICONS[item.icon];
-  const active = isNavActive(pathname, item.href);
+  const active = isExclusiveNavActive(
+    pathname,
+    item.href,
+    PRIMARY_NAV.map((i) => i.href),
+  );
   return (
     <Link
       href={item.href}

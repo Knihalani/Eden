@@ -29,11 +29,13 @@ import {
 import {
   NAV_SECTIONS,
   PRIMARY_NAV,
+  isExclusiveNavActive,
   isNavActive,
   type NavIcon,
   type NavItem,
 } from "@/lab/nav";
 import { cn } from "@/lib/utils";
+import { useClerk } from "@clerk/nextjs";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   home: Home,
@@ -70,6 +72,7 @@ const FOCUSABLE =
 
 export function MobileBottomNav() {
   const pathname = usePathname() ?? "";
+  const { signOut } = useClerk();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = MORE_ITEMS.some((i) => isNavActive(pathname, i.href));
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -156,7 +159,11 @@ export function MobileBottomNav() {
                   <ul className="flex flex-col gap-0.5">
                     {items.map((item) => {
                       const Icon = ICONS[item.icon];
-                      const active = isNavActive(pathname, item.href);
+                      const active = isExclusiveNavActive(
+                        pathname,
+                        item.href,
+                        PRIMARY_NAV.map((i) => i.href),
+                      );
                       return (
                         <li key={item.id}>
                           <Link
@@ -181,6 +188,18 @@ export function MobileBottomNav() {
                 </div>
               );
             })}
+            <div className="mt-3 border-t border-[var(--line)] pt-3">
+              <button
+                type="button"
+                className="type-ui flex w-full items-center justify-center rounded-[var(--radius)] px-2 py-2.5 text-[var(--text)]"
+                onClick={() => {
+                  setMoreOpen(false);
+                  void signOut({ redirectUrl: "/" });
+                }}
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -191,7 +210,11 @@ export function MobileBottomNav() {
       >
         {BOTTOM_ITEMS.map((item) => {
           const Icon = ICONS[item.icon];
-          const active = isNavActive(pathname, item.href);
+          const active = isExclusiveNavActive(
+            pathname,
+            item.href,
+            PRIMARY_NAV.map((i) => i.href),
+          );
           return (
             <Link
               key={item.id}

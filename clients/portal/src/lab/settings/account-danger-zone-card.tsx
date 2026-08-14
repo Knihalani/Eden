@@ -82,8 +82,7 @@ function ErasureStatusList({ statuses }: { statuses: StoreErasureStatus[] }) {
  * ``eden.services.compliance_jobs.erase_user_account``), which runs a
  * RightToBeForgottenService pass (Postgres anonymisation +
  * cross-store fanout) per org the caller belongs to, then anonymises
- * the account itself and rotates the session token. Coverage is partial
- * and self-reported per store — not a certified GDPR-compliant guarantee.
+ * the account itself and rotates the session token. Coverage is listed per store after confirm.
  * Irreversible, so this requires the caller to type the confirmation
  * phrase before the destructive button becomes clickable.
  */
@@ -137,11 +136,10 @@ export function AccountDangerZoneCard() {
     <section className="border-b border-[var(--line)] px-4 py-5 sm:px-6">
       <p className="type-label mb-1 !text-[var(--error)]">Danger zone</p>
       <p className="type-meta mb-4 max-w-xl">
-        Deleting your account starts a partial erasure request: your profile
-        is anonymised, API sessions are revoked, and data you own is scrubbed
-        across every workspace you belong to — with per-store status reported
-        honestly (some secondary stores are not fully covered yet). This cannot
-        be undone and is not a certified GDPR-compliant guarantee.
+        Deleting your account anonymises your profile, revokes API sessions,
+        and scrubs data you own in every workspace you belong to. Coverage is
+        listed per store after you confirm — some secondary stores are still
+        partial. This cannot be undone.
       </p>
 
       {erasureResult ? (
