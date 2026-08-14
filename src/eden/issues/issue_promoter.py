@@ -296,7 +296,16 @@ class IssuePromoter:
 
         if issue is None:
             return None
-        if issue.was_created:
+        proposed: dict[str, Any] | None = None
+        if issue.was_created or issue.was_regressed:
+            proposed = await self._propose_help_miss_plan(
+                issue,
+                reason=reason,
+                help_contract_id=help_contract_id,
+                snippet=snippet,
+                session_id=session_id,
+            )
+        if issue.was_created and proposed and proposed.get("status") == "drafted":
             await self._notify_help_miss(
                 issue,
                 reason=reason,
@@ -304,14 +313,7 @@ class IssuePromoter:
                 snippet=snippet,
                 path=path,
                 help_contract_id=help_contract_id,
-            )
-        if issue.was_created or issue.was_regressed:
-            await self._propose_help_miss_plan(
-                issue,
-                reason=reason,
-                help_contract_id=help_contract_id,
-                snippet=snippet,
-                session_id=session_id,
+                proposed=proposed,
             )
         return issue
 
@@ -442,8 +444,10 @@ class IssuePromoter:
         snippet: str | None,
         path: str,
         help_contract_id: str | None,
+        proposed: dict[str, Any] | None = None,
     ) -> None:
         try:
+            from eden.integrations.slack import store as slack_store
             from eden.services.slack_notify import notify_help_miss
 
             person = {
@@ -452,14 +456,29 @@ class IssuePromoter:
                 "ticket_still_open": "ticket still open",
                 "thumbs_down": "said it didn\u2019t help",
             }.get(reason, "still did X")
+            sentence = ""
+            try:
+                contract = await slack_store.get_current_help_contract(
+                    issue.org_id, issue.agent_id or ""
+                )
+                if isinstance(contract, dict):
+                    sentence = str(contract.get("sentence") or "")
+            except Exception:
+                sentence = ""
+            leftovers = (proposed or {}).get("leftovers") or []
+            instruction = str((proposed or {}).get("instruction") or "")
+            plan_id = str((proposed or {}).get("plan_id") or "") or None
             await notify_help_miss(
                 issue.org_id,
                 agent_id=issue.agent_id or "",
                 fingerprint=issue.fingerprint,
-                sentence="",
+                sentence=sentence,
                 path=path,
                 person=person,
                 snippet=snippet or "",
+                leftovers=leftovers if isinstance(leftovers, list) else [],
+                instruction=instruction,
+                plan_id=plan_id,
                 session_id=session_id,
             )
         except Exception as exc:
@@ -473,13 +492,13 @@ class IssuePromoter:
         help_contract_id: str | None,
         snippet: str | None = None,
         session_id: str | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         try:
             from eden.improvement.issue_patch_trigger import (
                 propose_prompt_canary_for_help_miss,
             )
 
-            await propose_prompt_canary_for_help_miss(
+            return await propose_prompt_canary_for_help_miss(
                 issue.org_id,
                 issue,
                 reason=reason,
@@ -489,6 +508,7 @@ class IssuePromoter:
             )
         except Exception as exc:
             logger.debug("issue_promoter: help_miss plan failed: %s", exc)
+            return None
 
 
 def _as_str(value: Any) -> str | None:
