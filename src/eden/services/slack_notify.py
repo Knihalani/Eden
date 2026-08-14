@@ -4,7 +4,8 @@ Turns Eden events into Slack messages with per-agent channel routing:
 
 * Issue detected (P0/P1) → the agent's channel (or org default)
 * Fix PR opened → the agent's channel, with a deep link to the portal
-  Improve plan (Approve happens in the portal, never in Slack)
+  Improve plan (HelpMiss leftover cards can Approve in Slack; other
+  alerts still deep-link to the portal)
 * Plan needs approval → the agent's channel, deep link to the plan
 * Post-merge regression → the agent's channel, deep link to the issue
 
@@ -469,42 +470,64 @@ async def notify_help_miss(
     path: str = "ambient",
     person: str = "still did X",
     snippet: str = "",
+    leftovers: list[Any] | None = None,
+    instruction: str = "",
+    plan_id: str | None = None,
     session_id: str | None = None,
     helped_n: int = 0,
     not_helped_n: int = 0,
     unknown_n: int = 0,
     leftover_n: int = 0,
 ) -> dict[str, Any]:
-    """HelpMiss card. Dedup helpmiss:{agent_id}:{fingerprint}. No Approve-in-Slack."""
-    where = "ambient hit" if path == "ambient" else "thread takeover"
-    channel_bit = f"#{channel_name}" if channel_name else "mapped channel"
-    session_url = _deep_link(f"/traces?view=sessions&session={session_id}") if session_id else ""
-    change_url = _deep_link("/improve")
-    snippet_line = f'"{(snippet or "")[:280]}"' if snippet else ""
+    """HelpMiss card: leftover plus the change. Approve applies only the shown change."""
+    del helped_n, not_helped_n, unknown_n, leftover_n, path, channel_name
+    snippets: list[str] = []
+    for raw in leftovers or []:
+        if isinstance(raw, dict):
+            text = str(raw.get("snippet") or "").strip()
+            if text:
+                snippets.append(text[:280])
+        if len(snippets) >= 3:
+            break
+    if snippet.strip() and snippet.strip() not in snippets:
+        snippets.insert(0, snippet.strip()[:280])
+        snippets = snippets[:3]
+    leftover_lines = "\n".join(f'• "{item}"' for item in snippets) or "• (leftover hit)"
+    change = (instruction or "").strip()
     body = (
-        f"*Job:* {sentence or '(no HelpContract)'}\n"
-        f"*Where:* {channel_bit}  ·  {where}\n"
-        f"*Person:* {person}\n"
-        + (f"*Snippet:* {snippet_line}\n" if snippet_line else "")
-        + f"*Counts:* {helped_n} helped · {not_helped_n} didn’t · {unknown_n} unknown · {leftover_n} ambient leftover (7d)"
+        f"*Job:* {sentence or 'this job'}\n"
+        f"*People still did:*\n{leftover_lines}\n"
+        + (f"*Change:* {change}" if change else "*Change:* (none — not posted)")
     )
-    elements = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "Review change"[:75]},
-            "url": change_url,
-        }
-    ]
-    if session_url:
+    elements: list[dict[str, Any]] = []
+    if plan_id:
+        elements.append(
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Approve"[:75]},
+                "action_id": "help_miss_approve",
+                "value": str(plan_id)[:2000],
+                "style": "primary",
+            }
+        )
+        change_url = _deep_link(f"/improve?plan={plan_id}")
+        elements.append(
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Review change"[:75]},
+                "url": change_url,
+            }
+        )
+    if session_id:
         elements.insert(
-            0,
+            0 if not plan_id else len(elements),
             {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Open session"[:75]},
-                "url": session_url,
+                "url": _deep_link(f"/traces?view=sessions&session={session_id}"),
             },
         )
-    blocks = [
+    blocks: list[dict[str, Any]] = [
         {
             "type": "header",
             "text": {"type": "plain_text", "text": _safe_text(f"{agent_id} didn’t help")[:150]},
@@ -513,17 +536,22 @@ async def notify_help_miss(
             "type": "section",
             "text": {"type": "mrkdwn", "text": _safe_text(body)[:2900]},
         },
-        {"type": "actions", "elements": elements},
+    ]
+    if elements:
+        blocks.append({"type": "actions", "elements": elements[:5]})
+    blocks.append(
         {
             "type": "context",
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": _safe_text("Did it actually help? — leftover work, not a second pager")[:2900],
+                    "text": _safe_text(
+                        "Approve applies only the shown change. A person merges the PR."
+                    )[:2900],
                 }
             ],
         },
-    ]
+    )
     return await _send(
         org_id,
         agent_id=agent_id,

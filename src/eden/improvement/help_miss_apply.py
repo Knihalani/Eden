@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from eden.improvement.issue_patch_trigger import (
@@ -31,15 +32,45 @@ _CODE_EXTS = (
 )
 
 
-def _looks_like_file_path(path: str | None) -> bool:
+_PATH_IN_TEXT = re.compile(
+    r"(?:`(?P<tick>[^`]+)`|(?P<bare>(?:[\w.-]+/)+[\w.-]+))",
+    re.ASCII,
+)
+
+
+def _looks_like_file_path(path: str | None, *, require_ext: bool = False) -> bool:
     """True when leftover.path is a source file, not a detector label."""
-    raw = str(path or "").strip()
+    raw = str(path or "").strip().strip("`")
     if not raw or raw.lower() in _DETECTOR_PATHS:
         return False
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return False
+    lower = raw.lower()
+    has_ext = any(lower.endswith(ext) for ext in _CODE_EXTS)
+    if require_ext:
+        return has_ext
     if "/" in raw or "\\" in raw:
         return True
-    lower = raw.lower()
-    return any(lower.endswith(ext) for ext in _CODE_EXTS)
+    return has_ext
+
+
+def paths_from_leftover_text(leftovers: list[Any] | None) -> list[str]:
+    """File paths mentioned in leftover snippets. Do not ask which file."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for raw in leftovers or []:
+        if not isinstance(raw, dict):
+            continue
+        snippet = str(raw.get("snippet") or "")
+        for match in _PATH_IN_TEXT.finditer(snippet):
+            candidate = (match.group("tick") or match.group("bare") or "").strip()
+            if not _looks_like_file_path(candidate, require_ext=True):
+                continue
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            found.append(candidate)
+    return found
 
 
 def resolve_help_miss_target_file(leftovers: list[Any] | None) -> str | None:
@@ -50,7 +81,8 @@ def resolve_help_miss_target_file(leftovers: list[Any] | None) -> str | None:
         path = str(raw.get("path") or "").strip()
         if _looks_like_file_path(path):
             return path
-    return None
+    text_paths = paths_from_leftover_text(leftovers)
+    return text_paths[0] if text_paths else None
 
 
 def existing_help_miss_pr_url(plan: dict[str, Any] | None) -> str | None:
@@ -115,10 +147,11 @@ def choose_help_miss_apply(
         return {"status": "refused", "reason": "generic_draft"}
     leftovers = ev.get("leftovers") if isinstance(ev.get("leftovers"), list) else []
     fix_kind = str(ev.get("fix_kind") or classify_help_miss_fix(leftovers) or "")
+    stored = str(ev.get("target_file") or "").strip() or None
     target = (
         resolved_file
         if resolved_file is not None
-        else resolve_help_miss_target_file(leftovers)
+        else stored or resolve_help_miss_target_file(leftovers)
     )
     has_diff = bool(str((plan or {}).get("diff_unified") or "").strip())
     existing_pr = existing_help_miss_pr_url(plan)
@@ -145,10 +178,42 @@ async def resolve_help_miss_file(
     *,
     agent_id: str | None = None,
 ) -> str | None:
-    """File from leftover.path or leftover.trace_id via the existing linker."""
-    found = resolve_help_miss_target_file(leftovers)
-    if found:
-        return found
+    """File from leftover text plus the matching run. Do not ask which file."""
+    path_field = None
+    for raw in leftovers or []:
+        if not isinstance(raw, dict):
+            continue
+        path = str(raw.get("path") or "").strip()
+        if _looks_like_file_path(path):
+            path_field = path
+            break
+    text_paths = paths_from_leftover_text(leftovers)
+    linked_paths = await _linked_paths_from_matching_run(
+        org_id, leftovers, agent_id=agent_id
+    )
+    if text_paths and linked_paths:
+        linked_set = set(linked_paths)
+        for candidate in text_paths:
+            if candidate in linked_set:
+                return candidate
+            for linked in linked_paths:
+                if candidate.endswith(linked) or linked.endswith(candidate):
+                    return linked
+    if path_field:
+        return path_field
+    if text_paths:
+        return text_paths[0]
+    if linked_paths:
+        return linked_paths[0]
+    return None
+
+
+async def _linked_paths_from_matching_run(
+    org_id: str,
+    leftovers: list[Any] | None,
+    *,
+    agent_id: str | None = None,
+) -> list[str]:
     trace_id = None
     for raw in leftovers or []:
         if not isinstance(raw, dict):
@@ -158,12 +223,12 @@ async def resolve_help_miss_file(
             trace_id = tid
             break
     if not trace_id:
-        return None
+        return []
     from eden.improvement.issue_patch_trigger import _linked_files, _resolve_repo_id
 
     repo_id = await _resolve_repo_id(org_id, agent_id=agent_id)
     if not repo_id:
-        return None
+        return []
     ctx = {
         "rca_summary": "",
         "agent_id": agent_id,
@@ -179,12 +244,16 @@ async def resolve_help_miss_file(
         )
     except Exception as exc:
         logger.debug("help_miss apply: linker failed: %s", exc)
-        return None
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
     for item in linked or []:
         path = str((item or {}).get("path") or "").strip()
-        if path:
-            return path
-    return None
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
 
 
 async def approve_help_miss_plan(
@@ -200,11 +269,11 @@ async def approve_help_miss_plan(
     _raw_ev = plan.get("evidence")
     evidence: dict[str, Any] = _raw_ev if isinstance(_raw_ev, dict) else {}
     leftovers = evidence.get("leftovers") if isinstance(evidence.get("leftovers"), list) else []
-    resolved = None
-    if str(evidence.get("fix_kind") or "") == FIX_KIND_CODE:
-        resolved = await resolve_help_miss_file(
-            org_id, leftovers, agent_id=plan.get("agent_id")
-        )
+    resolved = await resolve_help_miss_file(
+        org_id, leftovers, agent_id=plan.get("agent_id")
+    )
+    if not resolved:
+        resolved = str(evidence.get("target_file") or "").strip() or None
     choice = choose_help_miss_apply(
         evidence, plan=plan, resolved_file=resolved
     )
