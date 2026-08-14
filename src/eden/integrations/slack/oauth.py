@@ -52,6 +52,7 @@ BOT_SCOPES = (
     "groups:history",
     "mpim:history",
 )
+HISTORY_SCOPES = ("channels:history", "groups:history", "mpim:history")
 
 #: Slack rejects signatures on requests older than 5 minutes.
 _SIGNATURE_MAX_AGE_S = 60 * 5
@@ -237,6 +238,7 @@ def verify_slack_signature(
 
 __all__ = [
     "BOT_SCOPES",
+    "HISTORY_SCOPES",
     "SLACK_API_BASE",
     "SlackAPIError",
     "SlackConfigError",

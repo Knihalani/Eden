@@ -134,7 +134,7 @@ async def help_status(
     invited = bool(install)
     history = bool(install and not slack_store.needs_reconsent(install))
     if not invited or not mapped:
-        reason = "not_invited" if not invited else "unmapped"
+        reason = "invite" if not invited else "map"
         copy = (
             "If they will not invite Eden to the channels where leftover work "
             "shows up, and will not map those channels to a HelpContract, you "
@@ -149,10 +149,10 @@ async def help_status(
         reason = "no_contract"
         copy = "We can see it run. We cannot tell if it helped, because nobody wrote what help means."
     elif not history:
-        reason = "not_invited"
+        reason = "invite"
         copy = "We can page this channel. We cannot see whether a person still did the work in it."
     elif counts.get("leftover_7d", 0) == 0:
-        reason = "no_extra_work_seen"
+        reason = "no extra work seen"
         copy = ""
     else:
         reason = None

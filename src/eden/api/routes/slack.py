@@ -41,6 +41,7 @@ Security notes:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -103,6 +104,9 @@ class InstallOut(BaseModel):
     team_name: str
     bot_user_id: str = ""
     installed_at: str = ""
+    granted_scopes: str = ""
+    needs_reconsent: bool = False
+    history_consented_at: str = ""
 
 
 class ChannelOut(BaseModel):
@@ -270,6 +274,7 @@ async def slack_callback(
         bot_token=bot_token,
         bot_user_id=str(payload.get("bot_user_id") or ""),
         installed_by_user_id=None,
+        granted_scopes=str(payload.get("scope") or ""),
     )
     # Consume the state so it can't be replayed.
     existing = await pg.fetchrow(
@@ -311,6 +316,9 @@ async def get_slack_install(
         team_name=str(row.get("team_name") or ""),
         bot_user_id=str(row.get("bot_user_id") or ""),
         installed_at=str(row.get("installed_at") or ""),
+        granted_scopes=str(row.get("granted_scopes") or ""),
+        needs_reconsent=slack_store.needs_reconsent(row),
+        history_consented_at=str(row.get("history_consented_at") or ""),
     )
 
 
@@ -375,6 +383,14 @@ async def set_slack_route(
     )
     if not ok:
         raise HTTPException(503, "Could not persist the channel binding.")
+    from eden.integrations.slack.ambient import backfill_on_invite
+
+    asyncio.create_task(
+        backfill_on_invite(
+            str(org["org_id"]),
+            channel_id=req.channel_id.strip(),
+        )
+    )
     return RouteOut(
         agent_id=(req.agent_id or "").strip() or None,
         channel_id=req.channel_id.strip(),
@@ -463,6 +479,26 @@ async def slack_events(request: Request) -> JSONResponse:
 
     event = payload.get("event") or {}
     if not isinstance(event, dict):
+        return JSONResponse({"ok": True})
+
+    team_id = str(
+        payload.get("team_id") or (payload.get("team") or {}).get("id") or ""
+    )
+    event_id = str(payload.get("event_id") or "")
+
+    if event.get("type") == "member_joined_channel":
+        org_id = await slack_store.get_org_id_for_team(team_id)
+        if org_id:
+            from eden.integrations.slack.ambient import backfill_on_invite
+
+            asyncio.create_task(
+                backfill_on_invite(
+                    org_id,
+                    channel_id=str(event.get("channel") or ""),
+                    joining_user=str(event.get("user") or ""),
+                    event_id=event_id,
+                )
+            )
         return JSONResponse({"ok": True})
 
     if is_dm(event):

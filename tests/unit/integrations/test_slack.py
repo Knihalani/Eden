@@ -167,6 +167,7 @@ class TestStore:
 
         class _PG:
             async def fetchrow(self, sql, *args):
+                captured["sql"] = sql
                 captured["args"] = args
                 return {
                     "id": args[0],
@@ -189,6 +190,8 @@ class TestStore:
         token_arg = captured["args"][4]
         assert token_arg != "xoxb-secret-token"
         assert "xoxb" not in token_arg  # encrypted at rest
+        assert "granted_scopes" in captured["sql"]
+        assert "history_consented_at" in captured["sql"]
 
     @pytest.mark.asyncio
     async def test_get_bot_token_decrypts(self) -> None:

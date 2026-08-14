@@ -42,8 +42,14 @@ async def upsert_install(
     bot_token: str,
     bot_user_id: str = "",
     installed_by_user_id: str | None = None,
+    granted_scopes: str = "",
 ) -> dict[str, Any] | None:
     """Persist a Slack workspace install. Token is encrypted at rest."""
+    from eden.integrations.slack.oauth import HISTORY_SCOPES
+
+    scopes = (granted_scopes or "").strip()
+    scope_set = {s.strip() for s in scopes.split(",") if s.strip()}
+    history_ok = all(s in scope_set for s in HISTORY_SCOPES)
     client = await _pg()
     if client is None:
         return None
@@ -52,16 +58,24 @@ async def upsert_install(
             """
             INSERT INTO org_slack_installs
                 (id, org_id, team_id, team_name, bot_token_enc,
-                 bot_user_id, installed_by_user_id)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+                 bot_user_id, installed_by_user_id, granted_scopes,
+                 history_consented_at)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8,
+                    CASE WHEN $9 THEN NOW() ELSE NULL END)
             ON CONFLICT (org_id, team_id) DO UPDATE SET
                 team_name = EXCLUDED.team_name,
                 bot_token_enc = EXCLUDED.bot_token_enc,
                 bot_user_id = EXCLUDED.bot_user_id,
+                granted_scopes = EXCLUDED.granted_scopes,
+                history_consented_at = COALESCE(
+                    EXCLUDED.history_consented_at,
+                    org_slack_installs.history_consented_at
+                ),
                 revoked_at = NULL,
                 updated_at = NOW()
             RETURNING id, org_id, team_id, team_name, bot_user_id,
-                      installed_at, revoked_at
+                      installed_at, revoked_at, granted_scopes,
+                      history_consented_at
             """,
             str(uuid.uuid4()),
             org_id,
@@ -70,6 +84,8 @@ async def upsert_install(
             encrypt_value(bot_token),
             bot_user_id,
             installed_by_user_id,
+            scopes,
+            history_ok,
         )
         return dict(row) if row else None
     except Exception as exc:
@@ -86,7 +102,8 @@ async def get_install(org_id: str) -> dict[str, Any] | None:
         row = await client.fetchrow(
             """
             SELECT id, org_id, team_id, team_name, bot_user_id,
-                   installed_at, revoked_at
+                   installed_at, revoked_at, granted_scopes,
+                   history_consented_at
             FROM org_slack_installs
             WHERE org_id = $1 AND revoked_at IS NULL
             ORDER BY installed_at DESC
@@ -520,12 +537,16 @@ async def save_pointer(
     """Persist chat.postMessage channel+ts for Path B. No ts -> no join."""
     if not channel_id or not ts:
         return None
+    from datetime import UTC, datetime
+
     pointer = {
         "org_id": org_id,
         "channel_id": str(channel_id),
         "ts": str(ts),
         "agent_id": agent_id,
         "session_id": session_id,
+        "opened_at": datetime.now(UTC).isoformat(),
+        "window_closed_at": None,
     }
     _POINTERS.append(pointer)
     if session_id:
@@ -805,8 +826,170 @@ def memory_outcomes(org_id: str, session_id: str | None = None) -> list[dict[str
     return list(rows)
 
 
+#: Spec §4.2.2 same-thread default. No existing constant in-tree.
+POINTER_WINDOW_SECONDS = 30 * 60
+
+
+def list_due_pointers(*, now_iso: str | None = None) -> list[dict[str, Any]]:
+    """In-memory Path B pointers whose 30-min window has closed."""
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    if now_iso:
+        try:
+            now = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    due: list[dict[str, Any]] = []
+    for p in _POINTERS:
+        if p.get("window_closed_at"):
+            continue
+        opened = p.get("opened_at")
+        try:
+            opened_dt = (
+                datetime.fromisoformat(str(opened).replace("Z", "+00:00"))
+                if opened
+                else now
+            )
+        except ValueError:
+            opened_dt = now
+        if now - opened_dt >= timedelta(seconds=POINTER_WINDOW_SECONDS):
+            due.append(p)
+    return due
+
+
+async def list_due_pointers_from_sessions() -> list[dict[str, Any]]:
+    """Durable Path B pointers on agent_sessions.metadata.slack."""
+    client = await _pg()
+    if client is None:
+        return []
+    try:
+        rows = await client.fetch(
+            """
+            SELECT id::text AS session_id, org_id, agent_id, metadata,
+                   ended_at, started_at
+            FROM agent_sessions
+            WHERE metadata -> 'slack' ? 'ts'
+              AND metadata -> 'slack' ? 'channel'
+              AND COALESCE(metadata -> 'slack' ->> 'window_closed_at', '') = ''
+              AND COALESCE(ended_at, started_at)
+                    <= NOW() - make_interval(secs => $1)
+            LIMIT 200
+            """,
+            POINTER_WINDOW_SECONDS,
+        )
+    except Exception as exc:
+        logger.debug("slack_store: list_due_pointers_from_sessions failed: %s", exc)
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        slack = (r.get("metadata") or {}).get("slack") or {}
+        if not isinstance(slack, dict):
+            continue
+        channel = str(slack.get("channel") or slack.get("channel_id") or "")
+        ts = str(slack.get("ts") or "")
+        if not channel or not ts:
+            continue
+        out.append(
+            {
+                "org_id": str(r.get("org_id") or ""),
+                "channel_id": channel,
+                "ts": ts,
+                "agent_id": r.get("agent_id"),
+                "session_id": r.get("session_id"),
+            }
+        )
+    return out
+
+
+async def mark_pointer_closed(
+    org_id: str, *, session_id: str | None, channel_id: str, ts: str
+) -> None:
+    from datetime import UTC, datetime
+
+    closed = datetime.now(UTC).isoformat()
+    for p in _POINTERS:
+        if (
+            p.get("org_id") == org_id
+            and p.get("channel_id") == channel_id
+            and p.get("ts") == ts
+        ):
+            p["window_closed_at"] = closed
+    if not session_id:
+        return
+    client = await _pg()
+    if client is None:
+        return
+    try:
+        await client.execute(
+            """
+            UPDATE agent_sessions
+            SET metadata = jsonb_set(
+                coalesce(metadata, '{}'::jsonb),
+                '{slack,window_closed_at}',
+                to_jsonb($3::text),
+                true
+            )
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            org_id,
+            session_id,
+            closed,
+        )
+    except Exception as exc:
+        logger.debug("slack_store: mark_pointer_closed failed: %s", exc)
+
+
+_BACKFILLED: set[tuple[str, str]] = set()
+
+
+async def is_channel_backfilled(org_id: str, channel_id: str) -> bool:
+    if (org_id, channel_id) in _BACKFILLED:
+        return True
+    client = await _pg()
+    if client is None:
+        return False
+    try:
+        found = await client.fetchval(
+            """
+            SELECT 1 FROM agent_slack_channels
+            WHERE org_id = $1 AND channel_id = $2
+              AND history_backfilled_at IS NOT NULL
+            LIMIT 1
+            """,
+            org_id,
+            channel_id,
+        )
+        return bool(found)
+    except Exception as exc:
+        logger.debug("slack_store: is_channel_backfilled failed: %s", exc)
+        return False
+
+
+async def mark_channel_backfilled(org_id: str, channel_id: str) -> None:
+    _BACKFILLED.add((org_id, channel_id))
+    client = await _pg()
+    if client is None:
+        return
+    try:
+        await client.execute(
+            """
+            UPDATE agent_slack_channels
+            SET history_backfilled_at = NOW()
+            WHERE org_id = $1 AND channel_id = $2
+              AND history_backfilled_at IS NULL
+            """,
+            org_id,
+            channel_id,
+        )
+    except Exception as exc:
+        logger.debug("slack_store: mark_channel_backfilled failed: %s", exc)
+
+
 __all__ = [
     "clear_channel",
+    "is_channel_backfilled",
+    "mark_channel_backfilled",
     "event_id_seen",
     "get_agent_for_channel",
     "get_bot_token",
@@ -820,9 +1003,13 @@ __all__ = [
     "insert_extra_work_event",
     "insert_session_outcome",
     "list_channels",
+    "list_due_pointers",
+    "list_due_pointers_from_sessions",
     "list_leftover_events",
+    "mark_pointer_closed",
     "memory_outcomes",
     "needs_reconsent",
+    "POINTER_WINDOW_SECONDS",
     "parse_permalink_ts",
     "revoke_install",
     "save_pointer",

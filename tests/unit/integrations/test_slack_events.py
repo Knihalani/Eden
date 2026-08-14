@@ -303,7 +303,7 @@ class TestMigrationDoesNotRetaskOutcome:
         assert "outcome =" not in sql
         assert "helped VARCHAR(16)" in sql
         assert "DEFAULT 'unknown'" in sql
-        # Do not invent Slack reconsent columns this slice.
+        # Reconsent columns live in 174, not 173.
         assert "granted_scopes" not in sql
         assert "history_consented_at" not in sql
 

@@ -156,5 +156,50 @@ class SlackClient:
                     break
         return out[:limit]
 
+    async def conversations_history(
+        self,
+        *,
+        channel: str,
+        oldest: str,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """One-time invite backfill only. Not the extra-work reader."""
+        if not channel or not oldest:
+            return []
+        out: list[dict[str, Any]] = []
+        async with _shared_httpx() as client:
+            cursor = ""
+            for _ in range(5):
+                params: dict[str, Any] = {
+                    "channel": channel,
+                    "oldest": oldest,
+                    "limit": min(limit, 200),
+                    "inclusive": "true",
+                }
+                if cursor:
+                    params["cursor"] = cursor
+                r = await client.get(
+                    f"{SLACK_API_BASE}/conversations.history",
+                    headers=self._headers(),
+                    params=params,
+                )
+                if r.status_code != 200:
+                    raise SlackAPIError(
+                        "conversations.history failed", status_code=r.status_code
+                    )
+                body = r.json()
+                if not body.get("ok"):
+                    raise SlackAPIError(
+                        "conversations.history rejected",
+                        error=str(body.get("error") or "unknown"),
+                    )
+                out.extend(list(body.get("messages") or []))
+                cursor = str(
+                    (body.get("response_metadata") or {}).get("next_cursor") or ""
+                )
+                if not cursor or len(out) >= limit:
+                    break
+        return out[:limit]
+
 
 __all__ = ["SlackClient"]

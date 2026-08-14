@@ -1230,7 +1230,7 @@ function LabTracesInner() {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <HelpChip value="helped" />
           <HelpChip value="not_helped" />
-          <HelpChip value="unknown" unknownReason="no_extra_work_seen" />
+          <HelpChip value="unknown" unknownReason="no extra work seen" />
         </div>
       ) : null}
       <PageHeader
