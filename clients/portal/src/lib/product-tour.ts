@@ -29,7 +29,7 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     kind: "welcome",
     href: "/home",
     title: "Welcome to Eden",
-    body: "Capture LLM calls, analyse failures, and ship reviewable fixes. This walkthrough is optional — skip anytime.",
+    body: "Capture LLM calls, analyze failures, and ship reviewable fixes. This walkthrough is optional — skip anytime.",
   },
   {
     id: "home",
@@ -53,14 +53,14 @@ export const PRODUCT_TOUR_STEPS: TourStep[] = [
     targetId: "api-keys",
     href: "/settings?mode=keys",
     title: "API keys",
-    body: "Org API keys live under Settings → API keys. Continue to mint a Quickstart key and fill install snippets.",
+    body: "Org API keys live under Settings → API keys. Create a key only if you need one — nothing is minted until you ask.",
   },
   {
     id: "get-started",
     kind: "finish",
     href: "/home",
     title: "Get started",
-    body: "Mint a Quickstart key, copy a filled snippet, run doctor, then watch Traces for your first event.",
+    body: "Create a Quickstart key if you need one, copy a snippet, run doctor, then watch Traces for your first event.",
   },
 ];
 

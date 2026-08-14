@@ -335,7 +335,19 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
 
 /** Compact user + org controls for the sidebar footer. */
 export function SidebarAuthFooter({ collapsed }: { collapsed: boolean }) {
-  const { isSignedIn } = useClerkAuth();
+  const { isSignedIn, isLoaded } = useClerkAuth();
+  if (!isLoaded) {
+    return (
+      <div
+        className={
+          collapsed ? "shrink-0 border-t border-[var(--line)] px-1 py-2" : "shrink-0 border-t border-[var(--line)] px-2.5 py-2"
+        }
+        aria-hidden
+      >
+        <div className="eden-skeleton-pulse h-7 rounded-[var(--radius)] bg-[var(--bg-elevated)]" />
+      </div>
+    );
+  }
   if (!isSignedIn) {
     return (
       <div
@@ -387,6 +399,7 @@ export function PortalStatusBanners() {
   const { setActive } = useOrganizationList();
   const { refreshUserWithRetry } = useAuth();
   const { pushToast } = useLabToast();
+  const { isLoaded: clerkLoaded, isSignedIn } = useClerkAuth();
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const autoCreateAttemptedRef = useRef(false);
@@ -442,11 +455,19 @@ export function PortalStatusBanners() {
 
   const loadingBanner =
     loading && !currentOrg && organizations.length === 0 && !authError;
-  const sessionBanner = Boolean(authError && authErrorKind === "session");
+  const sessionBanner = Boolean(
+    clerkLoaded && authError && authErrorKind === "session",
+  );
   const serverBanner = Boolean(authError && authErrorKind === "server");
   const syncBanner = Boolean(orgSyncing);
   const emptyBanner =
-    !loading && !currentOrg && organizations.length === 0 && !authError;
+    clerkLoaded &&
+    isSignedIn &&
+    !loading &&
+    !orgSyncing &&
+    !currentOrg &&
+    organizations.length === 0 &&
+    !authError;
   const showChromeBanner =
     loadingBanner ||
     sessionBanner ||
