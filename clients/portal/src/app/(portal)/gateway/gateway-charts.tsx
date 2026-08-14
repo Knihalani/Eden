@@ -1,5 +1,7 @@
 "use client";
 
+import { formatUsd } from "@/lib/format";
+
 /**
  * Recharts islands for Gateway — code-split off the KPI strip so first
  * paint does not pull the vendor chart graph (~370KB).
@@ -42,12 +44,7 @@ const tipStyle = {
   fontSize: 12,
 };
 
-function formatUsd(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(Number(n))) return "—";
-  const v = Number(n);
-  if (Math.abs(v) < 0.01 && v !== 0) return `$${v.toFixed(4)}`;
-  return `$${v.toFixed(2)}`;
-}
+
 
 function formatTokens(n: number | null | undefined): string {
   const v = Number(n) || 0;

@@ -41,6 +41,7 @@ import {
 } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { useLabToast } from "@/lab/lab-toast";
+import { formatPlanLabel, plural } from "@/lib/ui-copy";
 
 const settingsFallback = <LoadingFallback label="Loading settings…" />;
 
@@ -192,19 +193,11 @@ function LabSettingsInner() {
   const isLoading =
     orgSyncing ||
     (Boolean(orgId) &&
-      (loadMode === "keys"
-        ? workspaceQuery.isLoading || keysQuery.isLoading
-        : loadMode === "members"
-          ? workspaceQuery.isLoading || membersQuery.isLoading
-          : loadMode === "audit"
-            ? workspaceQuery.isLoading ||
-              auditEventsQuery.isLoading ||
-              auditPacksQuery.isLoading
-            : workspaceQuery.isLoading ||
-              keysQuery.isLoading ||
-              membersQuery.isLoading ||
-              auditEventsQuery.isLoading ||
-              auditPacksQuery.isLoading));
+      (workspaceQuery.isLoading ||
+        keysQuery.isLoading ||
+        membersQuery.isLoading ||
+        (loadMode === "audit" &&
+          (auditEventsQuery.isLoading || auditPacksQuery.isLoading))));
   const isError =
     loadMode === "keys"
       ? workspaceQuery.isError || keysQuery.isError
@@ -693,17 +686,26 @@ function LabSettingsInner() {
 
   const counts = memberCounts(members);
   const liveKeys = activeKeys(keys);
+  const keysReady = keysQuery.data != null;
+  const membersReady = membersQuery.data != null;
+  const headerMemberCount = !membersReady
+    ? null
+    : counts.active > 0
+      ? counts.active
+      : currentOrg
+        ? 1
+        : 0;
   const meta = useMemo(
     () => (
       <span className="type-meta">
-        {workspace.planLabel}
+        {formatPlanLabel(workspace.planLabel)}
         <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-        {keysQuery.isLoading && keysQuery.data == null ? "—" : `${liveKeys.length} keys`}
+        {keysReady ? plural(liveKeys.length, "key") : "—"}
         <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-        {membersQuery.isLoading && membersQuery.data == null ? "—" : `${counts.active} members`}
+        {headerMemberCount == null ? "—" : plural(headerMemberCount, "member")}
       </span>
     ),
-    [workspace.planLabel, liveKeys.length, counts.active],
+    [workspace.planLabel, keysReady, liveKeys.length, headerMemberCount],
   );
 
   // Render-only guard: distinguishes "no workspace selected" from "this

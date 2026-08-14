@@ -40,6 +40,9 @@ vi.mock("@/hooks/use-api-query", () => ({
     if (resource === "agents") {
       return { data: mockAgents, isLoading: false, isError: false, error: null, refetch: vi.fn(), isFetching: false };
     }
+    if (resource === "keys") {
+      return { data: [{ id: "k1", status: "active" }], isLoading: false, isError: false, error: null, refetch: vi.fn(), isFetching: false };
+    }
     if (resource === "costKpi") {
       return { data: undefined, isError: false, error: null, refetch: vi.fn(), isFetching: false };
     }
@@ -142,10 +145,10 @@ describe("HomeClient (Wave 10 dashboard clarity)", () => {
     mockAgents = [];
     render(<HomeClient />);
 
-    // Traces KPI: live tiles are undefined in this harness → "recent runs".
-    expect(screen.getByText("recent runs")).toBeTruthy();
-    // Failures KPI hint is "none" when nothing is failing.
-    expect(screen.getByText("none")).toBeTruthy();
+    // Traces / Failures KPI: known data uses "last 24h" (R063).
+    expect(screen.getAllByText("last 24h").length).toBeGreaterThan(0);
+    expect(screen.queryByText("none")).toBeNull();
+    expect(screen.queryByText("Create API key")).toBeNull();
   });
 
   it("shows a See-all link when Needs attention exceeds 3", () => {
@@ -159,5 +162,14 @@ describe("HomeClient (Wave 10 dashboard clarity)", () => {
     ).toBeTruthy();
     // The header notes the truncation explicitly.
     expect(screen.getByText(/showing 3 of 4/)).toBeTruthy();
+  });
+  it("does not nag Create API key when a key exists and traces are empty (R050)", () => {
+    mockTraces = [];
+    mockIssues = [];
+    mockAgents = [];
+    render(<HomeClient />);
+    expect(screen.queryByText("Create API key")).toBeNull();
+    expect(screen.getByText("API keys")).toBeTruthy();
+  
   });
 });

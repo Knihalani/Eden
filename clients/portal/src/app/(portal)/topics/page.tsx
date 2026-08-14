@@ -193,7 +193,7 @@ function TopicsInner() {
         ) : topics.length === 0 ? (
           <EmptyState
             title="No topic clusters yet"
-            body="Run Generate clusters to run the HDBSCAN clusterer over recent traces and surface recurring request patterns."
+            body="Generate clusters from recent traces to surface recurring request patterns."
           />
         ) : (
           <div className="grid min-h-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

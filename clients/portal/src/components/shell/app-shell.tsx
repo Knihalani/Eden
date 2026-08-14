@@ -20,6 +20,7 @@ import { NotificationsBell } from "@/components/shell/notifications-bell";
 import { openCommandPalette } from "@/lib/palette";
 import { useRouteScrollReset } from "@/hooks/use-route-scroll-reset";
 import { Search } from "lucide-react";
+import { PortalDocumentTitle } from "@/components/shell/portal-document-title";
 
 /** Alerts modal pulls heavy graphs — load after first paint. */
 const AlertsModal = dynamic(
@@ -125,6 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       subscribe. Outside BootGate it raced dehydrate and
                       started duplicate client GETs on cold Home.
                     */}
+                    <PortalDocumentTitle />
                     <PortalBootGate>
                       <RouteFade>
                         {children}

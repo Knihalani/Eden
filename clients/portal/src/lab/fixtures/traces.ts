@@ -68,16 +68,7 @@ export function formatTokens(n: number): string {
   return String(n);
 }
 
-export function formatUsd(n: number | null | undefined, digits = 2): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  // Sub-cent LLM costs (MiniMax etc.) used to render as "$0.000" /
-  // "$0.00" and looked like billing was broken.
-  if (n > 0 && n < 10 ** -digits) {
-    const needed = Math.min(6, Math.max(digits, Math.ceil(-Math.log10(n))));
-    return `$${n.toFixed(needed)}`;
-  }
-  return `$${n.toFixed(digits)}`;
-}
+export { formatUsd } from "@/lib/format";
 
 /** Prefer the largest known cost; null when every candidate is unknown. */
 export function preferKnownCostUsd(

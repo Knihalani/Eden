@@ -440,7 +440,23 @@ function SamplesBody({
   treatmentLabel: string;
 }) {
   if (samples.length === 0) {
-    return <EmptyState title="No examples" compact />;
+    return (
+      <EmptyState
+        title="No examples"
+        compact
+        body="Run an eval or open a playground to collect side-by-side samples."
+        action={
+          <span className="flex flex-wrap gap-2">
+            <a href="/evals" className="ds-btn ds-btn-primary ds-btn-sm">
+              Open evals
+            </a>
+            <a href="/playgrounds" className="ds-btn ds-btn-ghost ds-btn-sm">
+              Open playground
+            </a>
+          </span>
+        }
+      />
+    );
   }
 
   return (

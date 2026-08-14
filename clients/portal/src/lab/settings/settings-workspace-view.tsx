@@ -24,6 +24,7 @@ import { SlackSettingsCard } from "@/lab/settings/slack-settings-card";
 import { AccountDangerZoneCard } from "@/lab/settings/account-danger-zone-card";
 import { useLabToast } from "@/lab/lab-toast";
 import { formatSmartTime } from "@/lib/format";
+import { formatPlanMeta } from "@/lib/ui-copy";
 
 export function SettingsWorkspaceView({
   workspace,
@@ -142,7 +143,7 @@ export function SettingsWorkspaceView({
             <p className="type-meta mt-2">
               {workspace.slug}
               <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-              {workspace.planLabel} plan
+              {formatPlanMeta(workspace.planLabel)}
               <span className="mx-1.5 text-[var(--text-faint)]">·</span>
               since {formatSmartTime(workspace.createdAt)}
             </p>
