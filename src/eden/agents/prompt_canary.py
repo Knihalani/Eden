@@ -191,3 +191,98 @@ async def resolve_canary_arm(
         except (TypeError, ValueError):
             pass
     return "control"
+
+
+async def arm_help_miss_canary(
+    org_id: str,
+    agent_id: str,
+    *,
+    candidate_version: int,
+    control_version: int = 0,
+    traffic_pct: int = 5,
+) -> dict[str, Any] | None:
+    """Idempotent canary for a HelpMiss instruction pin. Reuse if already armed."""
+    if not org_id or not agent_id:
+        return None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception:
+        return None
+    if client is None:
+        return None
+    try:
+        existing = await client.fetchrow(
+            """
+            SELECT experiment_id, candidate_version, control_version, traffic_pct
+              FROM prompt_canary_experiments
+             WHERE tenant_id = $1 AND agent = $2
+               AND candidate_version = $3 AND status = 'active'
+             ORDER BY started_at DESC
+             LIMIT 1
+            """,
+            org_id,
+            agent_id,
+            int(candidate_version),
+        )
+    except Exception as exc:
+        logger.debug("arm_help_miss_canary: lookup failed: %s", exc)
+        existing = None
+    if existing:
+        return {
+            "experiment_id": str(existing["experiment_id"]),
+            "candidate_version": int(existing["candidate_version"]),
+            "control_version": int(existing["control_version"] or 0),
+            "traffic_pct": int(existing["traffic_pct"] or traffic_pct),
+            "status": "active",
+            "reused": True,
+        }
+    from uuid import uuid4
+
+    experiment_id = str(uuid4())
+    pct = max(0, min(100, int(traffic_pct)))
+    try:
+        await client.execute(
+            """
+            INSERT INTO prompt_canary_experiments (
+                experiment_id, tenant_id, agent, control_version,
+                candidate_version, traffic_pct, status, notes
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'active', $7)
+            """,
+            experiment_id,
+            org_id,
+            agent_id,
+            int(control_version),
+            int(candidate_version),
+            pct,
+            "help_miss instruction pin",
+        )
+        await client.execute(
+            """
+            INSERT INTO prompt_version_assignments (
+                assignment_id, tenant_id, agent, version, traffic_pct,
+                experiment_id, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'active')
+            ON CONFLICT (tenant_id, agent, version, experiment_id)
+            DO UPDATE SET traffic_pct = $5
+            """,
+            str(uuid4()),
+            org_id,
+            agent_id,
+            int(candidate_version),
+            pct,
+            experiment_id,
+        )
+    except Exception as exc:
+        logger.debug("arm_help_miss_canary: insert failed: %s", exc)
+        return None
+    return {
+        "experiment_id": experiment_id,
+        "candidate_version": int(candidate_version),
+        "control_version": int(control_version),
+        "traffic_pct": pct,
+        "status": "active",
+        "reused": False,
+    }
+
