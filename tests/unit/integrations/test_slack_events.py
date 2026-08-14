@@ -1,4 +1,4 @@
-"""P0 Slack Events API + ambient Stages 0–3 (keywords only)."""
+"""P0 Slack Events API + ambient Stages 0–3 (keywords + optional on-box embed)."""
 
 from __future__ import annotations
 
@@ -113,8 +113,10 @@ async def _call(req: _Req, store_mocks: dict | None = None):
         ),
         "get_current_help_contract": AsyncMock(return_value=dict(CONTRACT)),
         "insert_extra_work_event": AsyncMock(return_value={"id": "e1"}),
+        "insert_candidate": AsyncMock(return_value={"id": "c1"}),
     }
     defaults.update(store)
+    cosine_fn = defaults.pop("_stage3_cosine", lambda *a, **k: None)
     with (
         patch("eden.config.get_settings", return_value=_settings()),
         patch.object(store_mod, "get_org_id_for_team", defaults["get_org_id_for_team"]),
@@ -130,7 +132,17 @@ async def _call(req: _Req, store_mocks: dict | None = None):
             "insert_extra_work_event",
             defaults["insert_extra_work_event"],
         ),
+        patch.object(
+            store_mod,
+            "insert_candidate",
+            defaults["insert_candidate"],
+        ),
+        patch(
+            "eden.integrations.slack.ambient._stage3_cosine",
+            cosine_fn,
+        ),
     ):
+        defaults["_stage3_cosine"] = cosine_fn
         return await slack_routes.slack_events(req), defaults
 
 
@@ -315,3 +327,105 @@ def test_signature_helper_still_pinned() -> None:
     assert verify_slack_signature(
         body=body, timestamp=ts, signature=sig, secret="signing-1"
     )
+
+# ── Stage 3 on-box embed (P1.4) ─────────────────────────────────────
+
+
+class TestStage3Embed:
+    def test_keyword_related_y_fires_medium(self) -> None:
+        d = classify(
+            event={"text": "I will do the refund myself", "user": "U-Y"},
+            contract=CONTRACT,
+            cosine=0.72,
+        )
+        assert d.action == "fire"
+        assert d.kind == "human_did_agents_job"
+        assert d.confidence == "medium"
+        assert d.reason == "stage3_keyword_embed"
+        assert d.cosine == 0.72
+
+    def test_keyword_unrelated_drops(self) -> None:
+        d = classify(
+            event={"text": "refund stuck on checkout", "user": "U-Y"},
+            contract=CONTRACT,
+            cosine=0.10,
+        )
+        assert d.action == "drop"
+        assert d.reason == "stage3_unrelated"
+        assert d.kind == ""
+
+    def test_keyword_mid_buffers(self) -> None:
+        d = classify(
+            event={"text": "refund stuck on checkout", "user": "U-Y"},
+            contract=CONTRACT,
+            cosine=0.40,
+        )
+        assert d.action == "buffer"
+        assert d.reason == "stage3_uncertain"
+        assert d.kind == ""
+
+    def test_no_keyword_related_buffers_not_fire(self) -> None:
+        d = classify(
+            event={"text": "I will just handle the money-back myself", "user": "U-Y"},
+            contract=CONTRACT,
+            cosine=0.81,
+        )
+        assert d.action == "buffer"
+        assert d.reason == "stage3_uncertain"
+
+    def test_embed_unavailable_keywords_only_fire(self) -> None:
+        d = classify(
+            event={"text": "I will do the refund myself", "user": "U-Y"},
+            contract=CONTRACT,
+            cosine=None,
+        )
+        assert d.action == "fire"
+        assert d.reason == "stage3_keyword"
+        assert d.confidence == "medium"
+
+    def test_no_cloud_llm_imports_in_ambient(self) -> None:
+        from pathlib import Path
+
+        src = Path("src/eden/integrations/slack/ambient.py").read_text()
+        lowered = src.lower()
+        assert "openai" not in lowered
+        assert "anthropic" not in lowered
+        assert "openrouter" not in lowered
+        assert "real_embeddings" in src
+        assert "Stage 4 (cloud LLM) stays OFF" in src or "Stage 4 (LLM) stays off" in src
+
+    @pytest.mark.asyncio
+    async def test_mid_cosine_inserts_candidate_not_event(self) -> None:
+        req = _signed_req(_message_envelope(text="refund stuck", event_id="Ev-mid"))
+        _, mocks = await _call(
+            req,
+            {"_stage3_cosine": lambda *a, **k: 0.40},
+        )
+        mocks["insert_candidate"].assert_awaited()
+        mocks["insert_extra_work_event"].assert_not_awaited()
+        payload = mocks["insert_candidate"].await_args.kwargs["payload"]
+        assert payload["stage"] == 3
+        assert payload["reason"] == "stage3_uncertain"
+
+    @pytest.mark.asyncio
+    async def test_related_keyword_still_inserts_event(self) -> None:
+        req = _signed_req(_message_envelope(text="I handled the refund", user="U-Y"))
+        _, mocks = await _call(
+            req,
+            {"_stage3_cosine": lambda *a, **k: 0.66},
+        )
+        mocks["insert_extra_work_event"].assert_awaited()
+        mocks["insert_candidate"].assert_not_awaited()
+        kwargs = mocks["insert_extra_work_event"].await_args.kwargs
+        assert kwargs["kind"] == "human_did_agents_job"
+        assert kwargs["confidence"] == "medium"
+
+    @pytest.mark.asyncio
+    async def test_embed_raises_falls_back_to_keywords(self) -> None:
+        def _boom(*a, **k):
+            raise RuntimeError("no gpu")
+
+        req = _signed_req(_message_envelope(text="I handled the refund", user="U-Y"))
+        _, mocks = await _call(req, {"_stage3_cosine": _boom})
+        mocks["insert_extra_work_event"].assert_awaited()
+        mocks["insert_candidate"].assert_not_awaited()

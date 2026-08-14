@@ -679,10 +679,10 @@ async def test_failed_replies_does_not_mark_pointer_closed() -> None:
 def test_stage4_off_no_llm_on_every_message() -> None:
     ambient = Path("src/eden/integrations/slack/ambient.py").read_text()
     assert "Stage 4" in ambient
-    assert "OFF this slice" in ambient
+    assert "stays OFF" in ambient or "stays off" in ambient
     assert "import openai" not in ambient
     assert "import anthropic" not in ambient
     assert "chat.completions" not in ambient
     assert "extra_work_candidates" in ambient
-    assert "unused here" in ambient
+    assert "real_embeddings" in ambient
 
