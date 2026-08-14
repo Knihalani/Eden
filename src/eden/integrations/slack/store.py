@@ -782,8 +782,27 @@ async def insert_session_outcome(
     return row
 
 
+# ExtraWorkEvent.surface enum (spec 4.2). Same 7 names as webhook persist.
+_EXTRA_WORK_SURFACES = frozenset(
+    {"slack", "linear", "jira", "github", "intercom", "zendesk", "webhook"}
+)
+
+
+def leftover_by_surface(events: list[dict[str, Any]]) -> dict[str, int]:
+    """Integer leftover counts per fired surface. No rate, no zero-fill."""
+    counts: dict[str, int] = {}
+    for ev in events:
+        if str(ev.get("polarity") or "") != "extra_work":
+            continue
+        surface = str(ev.get("surface") or "").strip().lower()
+        if surface not in _EXTRA_WORK_SURFACES:
+            continue
+        counts[surface] = counts.get(surface, 0) + 1
+    return {k: v for k, v in counts.items() if v > 0}
+
+
 async def list_leftover_events(
-    org_id: str, *, agent_id: str | None = None, limit: int = 50
+    org_id: str, *, agent_id: str | None = None, limit: int = 20
 ) -> list[dict[str, Any]]:
     """Ambient / pointer hits for the leftover list. No fake sessions."""
     client = await _pg()
@@ -826,9 +845,15 @@ async def list_leftover_events(
         return []
 
 
-async def help_counts(org_id: str, *, agent_id: str | None = None) -> dict[str, int]:
+async def help_counts(org_id: str, *, agent_id: str | None = None) -> dict[str, Any]:
     client = await _pg()
-    out = {"helped": 0, "not_helped": 0, "unknown": 0, "leftover_7d": 0}
+    out: dict[str, Any] = {
+        "helped": 0,
+        "not_helped": 0,
+        "unknown": 0,
+        "leftover_7d": 0,
+        "by_surface": {},
+    }
     if client is None:
         return out
     try:
@@ -847,18 +872,30 @@ async def help_counts(org_id: str, *, agent_id: str | None = None) -> dict[str, 
         )
         for r in rows:
             key = str(r["helped"] or "unknown")
-            if key in out:
+            if key in ("helped", "not_helped", "unknown"):
                 out[key] = int(r["n"])
-        leftover = await client.fetchval(
+        surface_rows = await client.fetch(
             f"""
-            SELECT count(*) FROM extra_work_events
+            SELECT surface, count(*) AS n
+            FROM extra_work_events
             WHERE org_id = $1 {agent_filter}
               AND polarity = 'extra_work'
               AND observed_at >= NOW() - INTERVAL '7 days'
+            GROUP BY surface
             """,
             *args,
         )
-        out["leftover_7d"] = int(leftover or 0)
+        by_surface: dict[str, int] = {}
+        for r in surface_rows:
+            n = int(r["n"] or 0)
+            if n <= 0:
+                continue
+            surface = str(r["surface"] or "").strip().lower()
+            if surface not in _EXTRA_WORK_SURFACES:
+                continue
+            by_surface[surface] = by_surface.get(surface, 0) + n
+        out["by_surface"] = by_surface
+        out["leftover_7d"] = sum(by_surface.values())
     except Exception as exc:
         logger.debug("slack_store: help_counts failed: %s", exc)
     return out
@@ -1075,6 +1112,7 @@ __all__ = [
     "list_due_pointers",
     "list_due_pointers_from_sessions",
     "list_leftover_events",
+    "leftover_by_surface",
     "mark_pointer_closed",
     "memory_outcomes",
     "needs_reconsent",
