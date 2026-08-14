@@ -615,6 +615,29 @@ async def approve_plan(
         hermetic_status = hermetic.get("status")
 
     plan_kind = plan.get("plan_kind") or "code_patch"
+    if evidence.get("help_miss") and plan_kind != "code_patch":
+        from eden.improvement.help_miss_apply import (
+            approve_help_miss_plan,
+            choose_help_miss_apply,
+        )
+
+        choice = choose_help_miss_apply(evidence, plan=plan)
+        if choice.get("status") == "refused":
+            return {
+                "plan_id": plan_id,
+                "status": "refused",
+                "reason": choice.get("reason") or "generic_draft",
+                "message": (
+                    "Generic or empty instruction — stay on draft. "
+                    "No pin, no PR."
+                ),
+            }
+        if choice.get("apply_kind") == "code_pr" and choice.get("can_open_pr"):
+            plan_kind = "code_patch"
+        else:
+            return await approve_help_miss_plan(
+                org_id, plan_id, plan, approved_by=approved_by
+            )
     if plan_kind != "code_patch":
         return await _approve_non_code(org_id, plan_id, plan, approved_by=approved_by)
 
