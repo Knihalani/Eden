@@ -54,6 +54,15 @@ class TestSlackOAuth:
         assert "client_id=cid-1" in url
         assert "state=st-1" in url
         assert "chat%3Awrite" in url or "chat:write" in url
+        assert "channels%3Ahistory" in url or "channels:history" in url
+        assert "groups%3Ahistory" in url or "groups:history" in url
+        assert "mpim%3Ahistory" in url or "mpim:history" in url
+        from eden.integrations.slack.oauth import BOT_SCOPES
+
+        assert "im:history" not in BOT_SCOPES
+        scopes = url.split("scope=", 1)[-1].split("&", 1)[0]
+        assert "mpim" in scopes
+        assert ",im%3Ahistory" not in "," + scopes and not scopes.startswith("im%3Ahistory")
         assert "redirect_uri=https%3A%2F%2Fapi.eden.test" in url
 
     def test_unconfigured_raises(self) -> None:

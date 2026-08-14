@@ -41,11 +41,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import UTC
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from starlette.responses import RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 from eden.api.deps import (
     get_current_user,
@@ -59,8 +60,10 @@ from eden.integrations.slack import (
     SlackConfigError,
     SlackOAuthClient,
     is_configured,
+    verify_slack_signature,
 )
 from eden.integrations.slack import store as slack_store
+from eden.integrations.slack.ambient import LISTEN_CHANNEL_TYPES, classify
 from eden.integrations.slack.client import SlackClient
 from eden.storage.postgres import get_postgres_client
 
@@ -94,6 +97,9 @@ class InstallOut(BaseModel):
     team_name: str
     bot_user_id: str = ""
     installed_at: str = ""
+    granted_scopes: str = ""
+    needs_reconsent: bool = False
+    history_consented_at: str = ""
 
 
 class ChannelOut(BaseModel):
@@ -261,6 +267,7 @@ async def slack_callback(
         bot_token=bot_token,
         bot_user_id=str(payload.get("bot_user_id") or ""),
         installed_by_user_id=None,
+        granted_scopes=str(payload.get("scope") or ""),
     )
     # Consume the state so it can't be replayed.
     existing = await pg.fetchrow(
@@ -302,6 +309,9 @@ async def get_slack_install(
         team_name=str(row.get("team_name") or ""),
         bot_user_id=str(row.get("bot_user_id") or ""),
         installed_at=str(row.get("installed_at") or ""),
+        granted_scopes=str(row.get("granted_scopes") or ""),
+        needs_reconsent=slack_store.needs_reconsent(row),
+        history_consented_at=str(row.get("history_consented_at") or ""),
     )
 
 
@@ -406,6 +416,123 @@ async def send_slack_test(
             502, f"Test message not sent: {result.get('reason') or 'unknown'}"
         )
     return result
+
+
+
+def _slack_header(request: Request, name: str) -> str:
+    return (
+        request.headers.get(name)
+        or request.headers.get(name.lower())
+        or ""
+    )
+
+
+@public_router.post("/events")
+async def slack_events(request: Request) -> JSONResponse:
+    """Slack Events API receiver.
+
+    Ack within 3s. Signature over the raw body. ``event_id`` idempotency.
+    Subscribes conceptually to ``message.channels`` / ``message.groups``.
+    Never handles ``message.im``. Stage 4 is off — keywords only.
+    """
+    from datetime import datetime
+
+    from eden.config import get_settings
+
+    if not is_configured():
+        raise HTTPException(503, "Slack App is not configured on this Eden instance.")
+    body = await request.body()
+    settings = get_settings()
+    secret = (getattr(settings, "slack_signing_secret", "") or "").strip()
+    if not secret:
+        raise HTTPException(503, "Slack signing secret is not configured.")
+    ts = _slack_header(request, "X-Slack-Request-Timestamp")
+    sig = _slack_header(request, "X-Slack-Signature")
+    if not verify_slack_signature(
+        body=body, timestamp=ts, signature=sig, secret=secret
+    ):
+        raise HTTPException(401, "invalid slack signature")
+
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(400, "invalid json") from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "invalid json")
+
+    if payload.get("type") == "url_verification":
+        return JSONResponse({"challenge": payload.get("challenge") or ""})
+
+    if payload.get("type") != "event_callback":
+        return JSONResponse({"ok": True})
+
+    event = payload.get("event") or {}
+    if not isinstance(event, dict):
+        return JSONResponse({"ok": True})
+
+    # DMs off — never persist message.im
+    channel_type = str(event.get("channel_type") or "")
+    if channel_type == "im" or str(event.get("channel") or "").startswith("D"):
+        return JSONResponse({"ok": True})
+
+    if event.get("type") != "message":
+        return JSONResponse({"ok": True})
+    if channel_type and channel_type not in LISTEN_CHANNEL_TYPES:
+        return JSONResponse({"ok": True})
+
+    team_id = str(payload.get("team_id") or (payload.get("team") or {}).get("id") or "")
+    org_id = await slack_store.get_org_id_for_team(team_id)
+    if not org_id:
+        return JSONResponse({"ok": True})
+
+    event_id = str(payload.get("event_id") or "")
+    if event_id and await slack_store.event_id_seen(org_id, event_id):
+        return JSONResponse({"ok": True})
+
+    channel_id = str(event.get("channel") or "")
+    mapping = await slack_store.get_agent_for_channel(org_id, channel_id)
+    if not mapping or not mapping.get("agent_id"):
+        # Stage 1: unmapped (or org-default with no agent) — store nothing
+        return JSONResponse({"ok": True})
+
+    agent_id = str(mapping["agent_id"])
+    contract = await slack_store.get_current_help_contract(org_id, agent_id)
+    decision = classify(event=event, contract=contract)
+    if decision.action != "fire" or not contract:
+        return JSONResponse({"ok": True})
+
+    message_ts = str(event.get("ts") or "")
+    thread_ts = str(event.get("thread_ts") or message_ts)
+    observed = datetime.now(UTC).isoformat()
+    await slack_store.insert_extra_work_event(
+        org_id,
+        agent_id=agent_id,
+        event_id=event_id or None,
+        user_id=str(event.get("user") or "") or None,
+        help_contract_id=str(contract.get("id") or "") or None,
+        surface=decision.surface,
+        kind=decision.kind,
+        path=decision.path,
+        join_key={
+            "system": "slack",
+            "slack_channel_id": channel_id,
+            "slack_message_ts": message_ts,
+            "slack_thread_ts": thread_ts,
+        },
+        snippet=decision.snippet,
+        confidence=decision.confidence,
+        polarity=decision.polarity,
+        raw={
+            "event_id": event_id,
+            "ts": message_ts,
+            "kind": decision.kind,
+            "stage": 3,
+        },
+        observed_at=observed,
+        session_id=None,
+    )
+    return JSONResponse({"ok": True})
 
 
 __all__ = ["org_router", "public_router"]

@@ -41,8 +41,14 @@ async def upsert_install(
     bot_token: str,
     bot_user_id: str = "",
     installed_by_user_id: str | None = None,
+    granted_scopes: str = "",
 ) -> dict[str, Any] | None:
     """Persist a Slack workspace install. Token is encrypted at rest."""
+    from eden.integrations.slack.oauth import HISTORY_SCOPES
+
+    scopes = (granted_scopes or "").strip()
+    scope_set = {s.strip() for s in scopes.split(",") if s.strip()}
+    history_ok = all(s in scope_set for s in HISTORY_SCOPES)
     client = await _pg()
     if client is None:
         return None
@@ -51,16 +57,24 @@ async def upsert_install(
             """
             INSERT INTO org_slack_installs
                 (id, org_id, team_id, team_name, bot_token_enc,
-                 bot_user_id, installed_by_user_id)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+                 bot_user_id, installed_by_user_id, granted_scopes,
+                 history_consented_at)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8,
+                    CASE WHEN $9 THEN NOW() ELSE NULL END)
             ON CONFLICT (org_id, team_id) DO UPDATE SET
                 team_name = EXCLUDED.team_name,
                 bot_token_enc = EXCLUDED.bot_token_enc,
                 bot_user_id = EXCLUDED.bot_user_id,
+                granted_scopes = EXCLUDED.granted_scopes,
+                history_consented_at = COALESCE(
+                    EXCLUDED.history_consented_at,
+                    org_slack_installs.history_consented_at
+                ),
                 revoked_at = NULL,
                 updated_at = NOW()
             RETURNING id, org_id, team_id, team_name, bot_user_id,
-                      installed_at, revoked_at
+                      installed_at, revoked_at, granted_scopes,
+                      history_consented_at
             """,
             str(uuid.uuid4()),
             org_id,
@@ -69,6 +83,8 @@ async def upsert_install(
             encrypt_value(bot_token),
             bot_user_id,
             installed_by_user_id,
+            scopes,
+            history_ok,
         )
         return dict(row) if row else None
     except Exception as exc:
@@ -85,7 +101,8 @@ async def get_install(org_id: str) -> dict[str, Any] | None:
         row = await client.fetchrow(
             """
             SELECT id, org_id, team_id, team_name, bot_user_id,
-                   installed_at, revoked_at
+                   installed_at, revoked_at, granted_scopes,
+                   history_consented_at
             FROM org_slack_installs
             WHERE org_id = $1 AND revoked_at IS NULL
             ORDER BY installed_at DESC
@@ -273,12 +290,233 @@ async def clear_channel(org_id: str, *, agent_id: str | None = None) -> bool:
         return False
 
 
+
+def needs_reconsent(install: dict[str, Any] | None) -> bool:
+    """True when the install is missing history scopes (re-consent)."""
+    from eden.integrations.slack.oauth import HISTORY_SCOPES
+
+    if not install:
+        return True
+    scopes = {
+        s.strip()
+        for s in str(install.get("granted_scopes") or "").split(",")
+        if s.strip()
+    }
+    if not all(s in scopes for s in HISTORY_SCOPES):
+        return True
+    return not install.get("history_consented_at")
+
+
+async def get_org_id_for_team(team_id: str) -> str | None:
+    """Resolve an active install's org_id from Slack team_id."""
+    client = await _pg()
+    if client is None or not team_id:
+        return None
+    try:
+        row = await client.fetchval(
+            """
+            SELECT org_id FROM org_slack_installs
+            WHERE team_id = $1 AND revoked_at IS NULL
+            ORDER BY installed_at DESC
+            LIMIT 1
+            """,
+            team_id,
+        )
+        return str(row) if row else None
+    except Exception as exc:
+        logger.debug("slack_store: get_org_id_for_team failed: %s", exc)
+        return None
+
+
+async def get_agent_for_channel(
+    org_id: str, channel_id: str
+) -> dict[str, Any] | None:
+    """Reverse map: channel → agent. Prefer a named agent over org default."""
+    client = await _pg()
+    if client is None or not channel_id:
+        return None
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT agent_id, channel_id, channel_name
+            FROM agent_slack_channels
+            WHERE org_id = $1 AND channel_id = $2
+            ORDER BY (agent_id IS NULL) ASC, updated_at DESC
+            LIMIT 1
+            """,
+            org_id,
+            channel_id,
+        )
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.debug("slack_store: get_agent_for_channel failed: %s", exc)
+        return None
+
+
+async def get_current_help_contract(
+    org_id: str, agent_id: str
+) -> dict[str, Any] | None:
+    """Current (not superseded) help contract for (org, agent)."""
+    client = await _pg()
+    if client is None or not agent_id:
+        return None
+    try:
+        row = await client.fetchrow(
+            """
+            SELECT id, org_id, agent_id, sentence, x_job, x_keywords,
+                   y_person, y_slack_user_id, created_by, created_at,
+                   updated_at, superseded_at
+            FROM help_contracts
+            WHERE org_id = $1 AND agent_id = $2 AND superseded_at IS NULL
+            LIMIT 1
+            """,
+            org_id,
+            agent_id,
+        )
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.debug("slack_store: get_current_help_contract failed: %s", exc)
+        return None
+
+
+async def event_id_seen(org_id: str, event_id: str) -> bool:
+    """True if this Slack event_id was already persisted for the org."""
+    client = await _pg()
+    if client is None or not event_id:
+        return False
+    try:
+        found = await client.fetchval(
+            """
+            SELECT 1 FROM extra_work_events
+            WHERE org_id = $1 AND event_id = $2
+            LIMIT 1
+            """,
+            org_id,
+            event_id,
+        )
+        return bool(found)
+    except Exception as exc:
+        logger.debug("slack_store: event_id_seen failed: %s", exc)
+        return False
+
+
+async def insert_extra_work_event(
+    org_id: str,
+    *,
+    agent_id: str,
+    event_id: str | None,
+    user_id: str | None,
+    help_contract_id: str | None,
+    surface: str,
+    kind: str,
+    path: str,
+    join_key: dict[str, Any],
+    snippet: str | None,
+    confidence: str,
+    polarity: str,
+    raw: dict[str, Any],
+    observed_at: str,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    window: dict[str, Any] | None = None,
+    canary_arm: str | None = None,
+) -> dict[str, Any] | None:
+    """Insert a fired ExtraWorkEvent. Unique (org_id, event_id) is idempotent."""
+    import json as _json
+
+    client = await _pg()
+    if client is None:
+        return None
+    try:
+        row = await client.fetchrow(
+            """
+            INSERT INTO extra_work_events (
+                org_id, session_id, agent_id, user_id, help_contract_id,
+                trace_id, surface, kind, path, join_key, snippet, window,
+                confidence, polarity, raw, event_id, observed_at, canary_arm
+            ) VALUES (
+                $1, $2, $3, $4, $5::uuid, $6, $7, $8, $9, $10::jsonb,
+                $11, $12::jsonb, $13, $14, $15::jsonb, $16, $17::timestamptz, $18
+            )
+            ON CONFLICT (org_id, event_id) WHERE event_id IS NOT NULL
+            DO NOTHING
+            RETURNING id, org_id, agent_id, event_id, kind, confidence
+            """,
+            org_id,
+            session_id,
+            agent_id,
+            user_id,
+            help_contract_id,
+            trace_id,
+            surface,
+            kind,
+            path,
+            _json.dumps(join_key),
+            (snippet or "")[:280] or None,
+            _json.dumps(window) if window is not None else None,
+            confidence,
+            polarity,
+            _json.dumps(raw),
+            event_id,
+            observed_at,
+            canary_arm,
+        )
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.warning("slack_store: insert_extra_work_event failed: %s", exc)
+        return None
+
+
+async def insert_candidate(
+    org_id: str,
+    *,
+    channel_id: str,
+    payload: dict[str, Any],
+    agent_id: str | None = None,
+    help_contract_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Encrypted 7-day candidate. Unused while Stage 4 is off."""
+    import json as _json
+
+    client = await _pg()
+    if client is None:
+        return None
+    try:
+        row = await client.fetchrow(
+            """
+            INSERT INTO extra_work_candidates (
+                org_id, agent_id, help_contract_id, channel_id,
+                payload_enc, expires_at
+            ) VALUES (
+                $1, $2, $3::uuid, $4, $5, NOW() + INTERVAL '7 days'
+            )
+            RETURNING id, org_id, expires_at
+            """,
+            org_id,
+            agent_id,
+            help_contract_id,
+            channel_id,
+            encrypt_value(_json.dumps(payload, separators=(",", ":"))),
+        )
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.debug("slack_store: insert_candidate failed: %s", exc)
+        return None
+
+
 __all__ = [
     "clear_channel",
+    "event_id_seen",
+    "get_agent_for_channel",
     "get_bot_token",
     "get_channel",
+    "get_current_help_contract",
     "get_install",
+    "get_org_id_for_team",
+    "insert_candidate",
+    "insert_extra_work_event",
     "list_channels",
+    "needs_reconsent",
     "revoke_install",
     "set_channel",
     "upsert_install",
