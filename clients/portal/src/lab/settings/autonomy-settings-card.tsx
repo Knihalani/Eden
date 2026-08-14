@@ -208,8 +208,8 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
             {budget ? (
               <>
                 <span className="mx-1.5 text-[var(--text-faint)]">·</span>
-                ${budget.spent_usd.toFixed(2)} of ${budget.limit_usd.toFixed(2)}{" "}
-                autonomy daily cap
+                Daily cap ${budget.limit_usd.toFixed(2)} · $
+                {Number(budget.spent_usd || 0).toFixed(2)} used
               </>
             ) : null}
           </p>
@@ -225,7 +225,7 @@ export function AutonomySettingsCard({ canEdit = true }: { canEdit?: boolean }) 
               key={m.value}
               type="button"
               className={cn(
-                "ds-tab flex-col items-start !h-auto !min-h-0 gap-0.5 py-2 text-left",
+                "ds-tab !flex !flex-col !items-start !h-auto !min-h-0 gap-1 py-2 text-left",
                 mode === m.value && "text-[var(--text)]",
               )}
               disabled={!canEdit || saving !== null}

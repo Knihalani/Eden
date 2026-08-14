@@ -44,7 +44,7 @@ export function AuditChainTrustSignal({
   if (query.isLoading) {
     return (
       <span className={className}>
-        <StatusChip tone="neutral">chain verifying…</StatusChip>
+        <StatusChip tone="neutral">Checking audit log…</StatusChip>
       </span>
     );
   }
@@ -52,7 +52,7 @@ export function AuditChainTrustSignal({
   if (query.isError || !query.data) {
     return (
       <span className={className} title="Could not verify audit chain">
-        <StatusChip tone="neutral">chain: unavailable</StatusChip>
+        <StatusChip tone="neutral">Audit log unavailable</StatusChip>
       </span>
     );
   }
@@ -65,7 +65,7 @@ export function AuditChainTrustSignal({
         className={className}
         title="No chained audit ledger rows yet"
       >
-        <StatusChip tone="neutral">chain: no rows</StatusChip>
+        <StatusChip tone="neutral">No audit events yet</StatusChip>
       </span>
     );
   }
@@ -79,7 +79,7 @@ export function AuditChainTrustSignal({
       }`}
     >
       <StatusChip tone={verified ? "ok" : "fail"}>
-        {verified ? "chain verified: ✓" : `chain broken: ${broken_rows}`}
+        {verified ? "Audit log verified" : `Audit log broken · ${broken_rows}`}
       </StatusChip>
     </span>
   );

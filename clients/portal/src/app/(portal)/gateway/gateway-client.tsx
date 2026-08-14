@@ -8,6 +8,7 @@ import {
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { PageHeader } from "@/components/ds/primitives";
+import { formatUsd } from "@/lib/format";
 import { MetricCell } from "@/lab/lab-metric-cell";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
@@ -49,12 +50,6 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 
-function formatUsd(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(Number(n))) return "—";
-  const v = Number(n);
-  if (Math.abs(v) < 0.01 && v !== 0) return `$${v.toFixed(4)}`;
-  return `$${v.toFixed(2)}`;
-}
 
 function formatTokens(n: number | null | undefined): string {
   const v = Number(n) || 0;
@@ -470,7 +465,7 @@ export default function GatewayClient() {
                 hint={
                   registry.filter((m) => m.enabled).length
                     ? `${registry.filter((m) => m.enabled).length} enabled`
-                    : "Add via gateway models API"
+                    : "No models yet"
                 }
               />
               {cacheView ? (
