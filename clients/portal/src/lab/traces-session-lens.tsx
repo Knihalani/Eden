@@ -24,6 +24,7 @@ import {
 import { measureVirtualRow, VIRTUAL_SCROLL_ATTR } from "@/lab/virtual-list";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { HelpChip } from "@/app/(portal)/agents/help-panel";
 
 export type HubView = "runs" | "sessions";
 
@@ -105,6 +106,11 @@ export const SessionListButton = memo(function SessionListButton({
       }
       className="lab-run-row"
     >
+      <HelpChip
+        value={session.helped || "unknown"}
+        unknownReason={session.unknownReason}
+        success={session.success}
+      />
       <SessionOutcomeBadge outcome={session.outcome} />
       <div className="min-w-0 flex-1">
         <p className="type-ui truncate text-[var(--text)]">
@@ -527,6 +533,11 @@ export function SessionReader({
                   <ChevronLeft className="h-4 w-4" />
                 </button>
               ) : null}
+              <HelpChip
+                value={session.helped || "unknown"}
+                unknownReason={session.unknownReason}
+                success={session.success}
+              />
               <SessionOutcomeBadge outcome={session.outcome} />
               <h2 className="type-ui min-w-0 truncate text-[var(--text)]">
                 {session.diagnosis ?? session.id}

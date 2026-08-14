@@ -389,3 +389,13 @@ async def test_close_pointer_mention_y_fires() -> None:
     assert captured[0]["kind"] == "mention_intended_owner"
     assert captured[0]["path"] == "pointer_thread"
     assert captured[0]["session_id"] == "s1"
+
+
+def test_session_rollup_has_helped_not_outcome() -> None:
+    contracts = Path("src/eden/api/portal_contracts.py").read_text()
+    assert "helped: Literal" in contracts
+    assert 'SessionOutcome = Literal["ok", "error", "mixed"]' in contracts
+    lens = Path("clients/portal/src/lab/traces-session-lens.tsx").read_text()
+    assert "HelpChip" in lens
+    mapping = Path("src/eden/api/routes/portal.py").read_text()
+    assert 'helped=str(summary.get("helped")' in mapping
