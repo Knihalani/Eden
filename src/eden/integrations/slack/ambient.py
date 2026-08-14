@@ -484,6 +484,126 @@ async def close_pointer_windows(
     return fired
 
 
+
+#: Spec default; no existing constant in-tree.
+INVITE_BACKFILL_HOURS = 24
+_INVITE_EVENTS_SEEN: set[str] = set()
+_BACKFILLED_CHANNELS: set[tuple[str, str]] = set()
+
+
+async def close_due_pointer_windows() -> dict[str, object]:
+    """Scheduled Path B close. Reused by ``run_maintenance_due``.
+
+    conversations.replies only. Zero leftover -> unknown (no helped write).
+    """
+    from collections import defaultdict
+
+    from eden.integrations.slack import store as slack_store
+
+    memory = slack_store.list_due_pointers()
+    durable = await slack_store.list_due_pointers_from_sessions()
+    seen: set[tuple[str, str, str]] = set()
+    by_org: dict[str, list[dict]] = defaultdict(list)
+    for p in [*memory, *durable]:
+        key = (
+            str(p.get("org_id") or ""),
+            str(p.get("channel_id") or ""),
+            str(p.get("ts") or ""),
+        )
+        if not all(key) or key in seen:
+            continue
+        seen.add(key)
+        by_org[key[0]].append(p)
+    closed = 0
+    fired = 0
+    for org_id, pointers in by_org.items():
+        token = await slack_store.get_bot_token(org_id)
+        if not token:
+            continue
+        install = await slack_store.get_install(org_id)
+        bot_user_id = str((install or {}).get("bot_user_id") or "") or None
+        y_id = None
+        agent_id = next((str(p.get("agent_id") or "") for p in pointers if p.get("agent_id")), "")
+        if agent_id:
+            contract = await slack_store.get_current_help_contract(org_id, agent_id)
+            if contract:
+                y_id = str(contract.get("y_slack_user_id") or "") or None
+        rows = await close_pointer_windows(
+            org_id,
+            token=token,
+            pointers=pointers,
+            y_slack_user_id=y_id,
+            bot_user_id=bot_user_id,
+        )
+        fired += len(rows)
+        for p in pointers:
+            await slack_store.mark_pointer_closed(
+                org_id,
+                session_id=p.get("session_id"),
+                channel_id=str(p.get("channel_id") or ""),
+                ts=str(p.get("ts") or ""),
+            )
+            closed += 1
+    return {"closed": closed, "fired": fired, "orgs": len(by_org)}
+
+
+async def backfill_on_invite(
+    org_id: str,
+    *,
+    channel_id: str,
+    joining_user: str = "",
+    event_id: str = "",
+) -> dict[str, object]:
+    """One-time conversations.history on invite. Same Stage 0–3. Then stop."""
+    import time
+
+    from eden.integrations.slack import store as slack_store
+    from eden.integrations.slack.client import SlackClient
+
+    if not org_id or not channel_id:
+        return {"skipped": True, "reason": "missing_ids"}
+    if event_id and event_id in _INVITE_EVENTS_SEEN:
+        return {"skipped": True, "reason": "event_seen"}
+    if (org_id, channel_id) in _BACKFILLED_CHANNELS or await slack_store.is_channel_backfilled(org_id, channel_id):
+        return {"skipped": True, "reason": "already_backfilled"}
+    install = await slack_store.get_install(org_id)
+    bot = str((install or {}).get("bot_user_id") or "")
+    if joining_user and bot and joining_user != bot:
+        return {"skipped": True, "reason": "not_bot_join"}
+    token = await slack_store.get_bot_token(org_id)
+    if not token:
+        return {"skipped": True, "reason": "no_token"}
+    if event_id:
+        _INVITE_EVENTS_SEEN.add(event_id)
+    _BACKFILLED_CHANNELS.add((org_id, channel_id))
+    await slack_store.mark_channel_backfilled(org_id, channel_id)
+    oldest = str(time.time() - INVITE_BACKFILL_HOURS * 3600)
+    try:
+        messages = await SlackClient(token).conversations_history(
+            channel=channel_id, oldest=oldest
+        )
+    except Exception as exc:
+        return {"errors": [str(exc)]}
+    processed = 0
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        ev = dict(msg)
+        ev["channel"] = channel_id
+        ts = str(msg.get("ts") or "")
+        await process_message(
+            org_id=org_id,
+            event_id=f"backfill:{channel_id}:{ts}" if ts else "",
+            event=ev,
+        )
+        processed += 1
+    return {
+        "backfilled": processed,
+        "channel_id": channel_id,
+        "hours": INVITE_BACKFILL_HOURS,
+    }
+
+
 __all__ = [
     "AmbientDecision",
     "LISTEN_CHANNEL_TYPES",
@@ -499,5 +619,8 @@ __all__ = [
     "classify_pointer_message",
     "classify_pointer_replies",
     "close_pointer_windows",
+    "close_due_pointer_windows",
+    "backfill_on_invite",
     "parse_permalink_ts",
+    "INVITE_BACKFILL_HOURS",
 ]

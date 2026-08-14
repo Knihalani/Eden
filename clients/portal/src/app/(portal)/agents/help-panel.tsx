@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { fetchApi } from "@/lib/api/core";
+import { slackApi } from "@/lib/api/resources";
+import { queryKeys } from "@/lib/query-keys";
 import { SHELL_QUERY } from "@/lib/portal-query";
 
 const LOUD_BAR =
@@ -18,7 +21,7 @@ const NO_MAP =
   "We can page. We cannot see leftover work — invite Eden and map this channel.";
 
 export type HelpStatus = {
-  contract: { sentence?: string; y_person?: string | null; y_slack_user_id?: string | null } | null;
+  contract: { sentence?: string; x_keywords?: string[]; y_person?: string | null; y_slack_user_id?: string | null } | null;
   mapped_channels: { channel_id: string; channel_name?: string }[];
   invited: boolean;
   history_consented: boolean;
@@ -30,7 +33,7 @@ export type HelpStatus = {
     path?: string;
   }[];
   counts: { helped: number; not_helped: number; unknown: number; leftover_7d: number };
-  unknown_reason: "not_invited" | "unmapped" | "no_extra_work_seen" | "no_contract" | null;
+  unknown_reason: "invite" | "map" | "no extra work seen" | "no_contract" | null;
   install_bar: { loud: boolean; copy: string };
 };
 
@@ -49,16 +52,21 @@ export function HelpChip({
       ? "Helped"
       : v === "not_helped"
         ? "Didn’t help"
-        : unknownReason === "not_invited"
-          ? "Unknown · not invited"
-          : unknownReason === "unmapped"
-            ? "Unknown · unmapped"
-            : unknownReason === "no_extra_work_seen"
+        : unknownReason === "invite" || unknownReason === "not_invited"
+          ? "Unknown · invite"
+          : unknownReason === "map" || unknownReason === "unmapped"
+            ? "Unknown · map"
+            : unknownReason === "no extra work seen" || unknownReason === "no_extra_work_seen"
               ? "Unknown · no extra work seen"
               : "Unknown";
+  const tone = v === "helped" ? "helped" : v === "not_helped" ? "not-helped" : "unknown";
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      <span className="type-meta rounded-full border border-[var(--line)] px-2 py-0.5">
+      <span
+        data-helped={v}
+        data-help-tone={tone}
+        className="type-meta rounded-full border border-[var(--line)] px-2 py-0.5"
+      >
         {label}
       </span>
       {success != null ? (
@@ -73,6 +81,7 @@ export function HelpChip({
 export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
   const { currentOrg } = useOrg();
   const orgId = currentOrg?.id ?? null;
+  const queryClient = useQueryClient();
   const q = useOrgQuery(
     ["help-status", orgId, agentId || "none"] as const,
     orgId,
@@ -86,6 +95,14 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
   );
   const data = q.data?.data;
   const [sentence, setSentence] = useState("");
+  const [keywords, setKeywords] = useState("");
+  const [ySlackId, setYSlackId] = useState("");
+  useEffect(() => {
+    if (!data?.contract) return;
+    if (!sentence && data.contract.sentence) setSentence(data.contract.sentence);
+    if (!keywords && data.contract.x_keywords?.length) setKeywords(data.contract.x_keywords.join(", "));
+    if (!ySlackId && data.contract.y_slack_user_id) setYSlackId(data.contract.y_slack_user_id);
+  }, [data?.contract]);
   const copy = useMemo(() => {
     if (!data) return `${LOUD_BAR} ${FAIL_LOUD}`;
     if (!data.invited || !data.mapped_channels?.length) {
@@ -99,14 +116,50 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
   const leftover = data?.leftover || [];
   const counts = data?.counts || { helped: 0, not_helped: 0, unknown: 0, leftover_7d: 0 };
 
+  const channelsQuery = useOrgQuery(
+    queryKeys.portal.slackChannels(orgId),
+    orgId,
+    () => slackApi.channels(orgId!),
+    { ...SHELL_QUERY, enabled: Boolean(orgId && data?.invited) },
+  );
+  const routesQuery = useOrgQuery(
+    queryKeys.portal.slackRoutes(orgId),
+    orgId,
+    () => slackApi.routes(orgId!),
+    { ...SHELL_QUERY, enabled: Boolean(orgId && data?.invited) },
+  );
+  const channels = channelsQuery.data ?? [];
+  const mappedForAgent = (routesQuery.data ?? []).find(
+    (r) => r.agent_id === agentId,
+  );
+
   async function saveContract() {
     if (!orgId || !agentId || sentence.trim().length < 8) return;
     await fetchApi(`/orgs/${orgId}/agent-sessions/help-contract`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Org-Id": orgId },
-      body: JSON.stringify({ agent_id: agentId, sentence: sentence.trim() }),
+      body: JSON.stringify({
+        agent_id: agentId,
+        sentence: sentence.trim(),
+        x_keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean),
+        y_slack_user_id: ySlackId.trim() || null,
+      }),
     });
     void q.refetch();
+  }
+
+  async function mapChannel(channelId: string) {
+    if (!orgId || !agentId || !channelId) return;
+    const ch = channels.find((c) => c.id === channelId);
+    await slackApi.setRoute(orgId, {
+      agent_id: agentId,
+      channel_id: channelId,
+      channel_name: ch?.name ?? "",
+    });
+    await Promise.all([
+      q.refetch(),
+      queryClient.invalidateQueries({ queryKey: queryKeys.portal.slackRoutes(orgId) }),
+    ]);
   }
 
   return (
@@ -137,8 +190,57 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
             />
           </label>
           <button type="button" className="ds-btn ds-btn-outline ds-btn-sm" onClick={() => void saveContract()}>
-            Save sentence
+            Save contract
           </button>
+          <label className="min-w-[12rem] text-sm">
+            X keywords (comma-separated)
+            <input
+              className="ds-input mt-1 w-full"
+              placeholder={(data?.contract?.x_keywords || []).join(", ") || "refund, checkout"}
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+            />
+          </label>
+          <label className="min-w-[12rem] text-sm">
+            Y Slack user id
+            <input
+              className="ds-input mt-1 w-full"
+              placeholder={data?.contract?.y_slack_user_id || "U0123ABC"}
+              value={ySlackId}
+              onChange={(e) => setYSlackId(e.target.value)}
+            />
+          </label>
+        </div>
+      ) : null}
+      {agentId ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-[16rem] text-sm">
+            Map a Slack channel (unmapped is a Stage 1 drop)
+            <select
+              className="ds-input mt-1 w-full"
+              aria-label="Map Slack channel"
+              value={mappedForAgent?.channel_id ?? ""}
+              onChange={(e) => {
+                if (e.target.value) void mapChannel(e.target.value);
+              }}
+            >
+              <option value="">
+                {mappedForAgent ? "Keep current" : "Choose a channel…"}
+              </option>
+              {channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #
+                  {c.name}
+                  {c.is_member ? "" : " · invite Eden"}
+                </option>
+              ))}
+            </select>
+          </label>
+          {mappedForAgent ? (
+            <p className="type-meta">Mapped #{mappedForAgent.channel_name || mappedForAgent.channel_id}</p>
+          ) : (
+            <p className="type-meta">Unmapped — leftover work in this channel is dropped.</p>
+          )}
         </div>
       ) : null}
       {leftover.length ? (

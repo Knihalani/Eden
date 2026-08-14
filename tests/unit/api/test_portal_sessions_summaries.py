@@ -50,6 +50,8 @@ def test_session_summary_to_rollup_projects_n12_fields() -> None:
     assert rollup.costUsd == 0.42
     assert rollup.traceIds == ["t1", "t2"]
     assert rollup.diagnosis == "2 turns completed"
+    assert rollup.helped == "unknown"
+    assert rollup.success is None
 
 
 @pytest.mark.asyncio
@@ -80,6 +82,7 @@ async def test_list_portal_sessions_calls_list_sessions() -> None:
         patch.object(portal_mod, "_require_pg", new=AsyncMock()),
         patch("eden.sessions.list_sessions", list_mock),
         patch.object(portal_mod, "_related_issue_ids_by_session", related_mock),
+        patch.object(portal_mod, "_annotate_session_help", new=AsyncMock()),
     ):
         rows = await portal_mod.list_portal_sessions(org_id="org-1", limit=50, _user={})
 

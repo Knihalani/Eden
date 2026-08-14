@@ -34,7 +34,7 @@ _SUMMARY_COLUMNS = (
     "total_cost_usd, total_input_tokens, total_output_tokens, "
     "total_latency_ms, session_start, session_end, had_stumble, "
     "stumble_count, stumble_turn_indices, issue_count, "
-    "linked_issue_id::text AS linked_issue_id, outcome, updated_at"
+    "linked_issue_id::text AS linked_issue_id, outcome, helped, updated_at"
 )
 
 # Timeline reads are paginated (unlike the rollup's full-session
@@ -118,6 +118,7 @@ def _summary_dict(row: Any) -> dict[str, Any]:
         "issue_count": int(row["issue_count"] or 0),
         "linked_issue_id": row["linked_issue_id"],
         "outcome": _effective_outcome(row["outcome"], row["session_end"]),
+        "helped": str(row["helped"] or "unknown") if "helped" in row.keys() else "unknown",
         "updated_at": _iso(row["updated_at"]),
     }
 

@@ -399,3 +399,166 @@ def test_session_rollup_has_helped_not_outcome() -> None:
     assert "HelpChip" in lens
     mapping = Path("src/eden/api/routes/portal.py").read_text()
     assert 'helped=str(summary.get("helped")' in mapping
+
+
+
+def test_reconsent_columns_and_history_scopes() -> None:
+    from eden.integrations.slack.oauth import BOT_SCOPES, HISTORY_SCOPES
+    from eden.integrations.slack.store import needs_reconsent
+
+    assert HISTORY_SCOPES == ("channels:history", "groups:history", "mpim:history")
+    assert set(HISTORY_SCOPES).issubset(set(BOT_SCOPES))
+    assert "im:history" not in BOT_SCOPES
+    sql173 = Path("src/eden/db_migrations/versions/173_help_extra_work.py").read_text()
+    assert "granted_scopes" not in sql173
+    assert "history_consented_at" not in sql173
+    sql174 = Path("src/eden/db_migrations/versions/174_help_windows_backfill.py").read_text()
+    assert "granted_scopes" in sql174
+    assert "history_consented_at" in sql174
+    assert "history_backfilled_at" in sql174
+    assert needs_reconsent(None) is True
+    assert needs_reconsent({"granted_scopes": "chat:write", "history_consented_at": None}) is True
+    assert needs_reconsent({
+        "granted_scopes": "chat:write,channels:history,groups:history,mpim:history",
+        "history_consented_at": None,
+    }) is True
+    assert needs_reconsent({
+        "granted_scopes": "chat:write,channels:history,groups:history,mpim:history",
+        "history_consented_at": "2026-08-14T00:00:00Z",
+    }) is False
+
+
+def test_channel_picker_bound_on_agents() -> None:
+    panel = Path("clients/portal/src/app/(portal)/agents/help-panel.tsx").read_text()
+    assert "slackApi.setRoute" in panel
+    assert "Map a Slack channel" in panel
+    assert "x_keywords" in panel
+    assert "y_slack_user_id" in panel
+    assert "Y Slack user id" in panel
+    assert "Stage 1 drop" in panel
+    assert "Do not sign the design-partner week" in panel
+
+
+def test_help_chip_unknown_not_styled_helped() -> None:
+    panel = Path("clients/portal/src/app/(portal)/agents/help-panel.tsx").read_text()
+    assert 'data-help-tone={tone}' in panel
+    assert "Unknown · invite" in panel
+    assert "Unknown · map" in panel
+    assert 'unknownReason === "no extra work seen"' in panel
+    assert "Unknown · no extra work seen" in panel
+    lens = Path("clients/portal/src/lab/traces-session-lens.tsx").read_text()
+    assert "HelpChip" in lens
+    assert "data-severity={" in lens
+    assert "session.helped" not in lens.split("data-severity")[1][:200]
+
+
+def test_pointer_worker_reuses_maintenance() -> None:
+    cron = Path("src/eden/workers/cron_tick.py").read_text()
+    assert "_run_pointer_window_close" in cron
+    assert "pointer_window_close" in cron
+    ambient = Path("src/eden/integrations/slack/ambient.py").read_text()
+    assert "async def close_due_pointer_windows" in ambient
+    assert "conversations_replies" in ambient
+    client = Path("src/eden/integrations/slack/client.py").read_text()
+    assert "async def conversations_replies" in client
+    # history exists only for invite backfill
+    assert "async def conversations_history" in client
+
+
+def test_invite_backfill_constant_and_stop() -> None:
+    ambient = Path("src/eden/integrations/slack/ambient.py").read_text()
+    assert "INVITE_BACKFILL_HOURS = 24" in ambient
+    assert "async def backfill_on_invite" in ambient
+    assert "conversations_history" in ambient
+    routes = Path("src/eden/api/routes/slack.py").read_text()
+    assert "member_joined_channel" in routes
+    assert "backfill_on_invite" in routes
+
+
+@pytest.mark.asyncio
+async def test_invite_backfill_runs_stage_pipeline_once() -> None:
+    from eden.integrations.slack import ambient as amb
+
+    amb._BACKFILLED_CHANNELS.clear()
+    amb._INVITE_EVENTS_SEEN.clear()
+    processed = []
+
+    class _C:
+        async def conversations_history(self, **kwargs):
+            assert "oldest" in kwargs
+            return [
+                {"ts": "1.0", "user": "U-Y", "text": "refund stuck", "channel": "C1"},
+            ]
+
+    async def fake_process(**kwargs):
+        processed.append(kwargs)
+        return None
+
+    with (
+        patch("eden.integrations.slack.store.get_install", AsyncMock(return_value={"bot_user_id": "BOT"})),
+        patch("eden.integrations.slack.store.get_bot_token", AsyncMock(return_value="xoxb")),
+        patch("eden.integrations.slack.client.SlackClient", return_value=_C()),
+        patch.object(amb, "process_message", fake_process),
+    ):
+        first = await amb.backfill_on_invite(
+            "org1", channel_id="C1", joining_user="BOT", event_id="Ev-inv"
+        )
+        second = await amb.backfill_on_invite(
+            "org1", channel_id="C1", joining_user="BOT", event_id="Ev-inv"
+        )
+    assert first.get("backfilled") == 1
+    assert second.get("skipped") is True
+    assert processed[0]["event_id"].startswith("backfill:C1:")
+
+
+@pytest.mark.asyncio
+async def test_close_due_zero_extra_work_unknown() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from eden.integrations.slack import ambient as amb
+    from eden.integrations.slack import store as slack_store
+
+    slack_store._POINTERS.clear()
+    slack_store._POINTERS.append(
+        {
+            "org_id": "org1",
+            "channel_id": "C1",
+            "ts": "1.0",
+            "agent_id": "ag",
+            "session_id": "s1",
+            "opened_at": (datetime.now(UTC) - timedelta(minutes=45)).isoformat(),
+            "window_closed_at": None,
+        }
+    )
+    captured = []
+
+    class _C:
+        async def conversations_replies(self, **kwargs):
+            return [{"ts": "1.0", "user": "BOT", "text": "hi"}]
+
+    async def fake_insert(*a, **k):
+        captured.append(k)
+        return {"id": "x"}
+
+    with (
+        patch("eden.integrations.slack.store.get_bot_token", AsyncMock(return_value="xoxb")),
+        patch("eden.integrations.slack.store.get_install", AsyncMock(return_value={"bot_user_id": "BOT"})),
+        patch("eden.integrations.slack.store.get_current_help_contract", AsyncMock(return_value=None)),
+        patch("eden.integrations.slack.store.list_due_pointers_from_sessions", AsyncMock(return_value=[])),
+        patch("eden.integrations.slack.client.SlackClient", return_value=_C()),
+        patch("eden.integrations.slack.store.insert_extra_work_event", fake_insert),
+    ):
+        out = await amb.close_due_pointer_windows()
+    assert captured == []
+    assert out["closed"] == 1
+    assert out["fired"] == 0
+    assert slack_store._POINTERS[0]["window_closed_at"]
+
+
+def test_portal_unknown_reason_mapping() -> None:
+    mapping = Path("src/eden/api/routes/portal.py").read_text()
+    assert 'unknownReason = "invite"' in mapping
+    assert 'unknownReason = "map"' in mapping
+    assert 'unknownReason = "no extra work seen"' in mapping
+    assert "_annotate_session_help" in mapping
+    assert "s.success = success_map.get" in mapping
