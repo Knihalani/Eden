@@ -46,6 +46,7 @@ export function SettingsKeysView({
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"list" | "detail">("list");
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -80,9 +81,10 @@ export function SettingsKeysView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-      <div className="flex min-h-0 flex-1 flex-col border-b border-[var(--line)] lg:border-b-0 lg:border-r">
+      <div className={cn("min-h-0 flex-1 flex-col border-b border-[var(--line)] lg:flex lg:border-b-0 lg:border-r", mobilePane === "detail" ? "hidden" : "flex")}>
         <div className="shrink-0 space-y-3 border-b border-[var(--line)] px-4 py-3 sm:px-6">
           <FilterChips
+            ariaLabel="API key status"
             value={filter}
             onChange={setFilter}
             options={[
@@ -122,6 +124,7 @@ export function SettingsKeysView({
                   setScopes(DEFAULT_SCOPES);
                   setFilter("all");
                   onSelect(created.id);
+                  setMobilePane("detail");
                   pushToast({
                     title: "API key created",
                     body: "Copy the secret now — it won’t show again.",
@@ -193,6 +196,7 @@ export function SettingsKeysView({
                       setConfirmRevoke(false);
                       setCopied(false);
                       onSelect(k.id);
+                      setMobilePane("detail");
                     }}
                     className={cn(
                       "flex w-full flex-col gap-1.5 border-b border-[var(--line)] px-4 py-3 text-left transition-colors hover:bg-[var(--bg-hover)] sm:px-6",
@@ -229,9 +233,16 @@ export function SettingsKeysView({
         )}
       </div>
 
-      <div className="flex min-h-[14rem] w-full shrink-0 flex-col lg:w-[26rem] lg:min-h-0">
+      <div className={cn("min-h-[14rem] w-full shrink-0 flex-col lg:flex lg:w-[26rem] lg:min-h-0", mobilePane === "list" ? "hidden" : "flex")}>
         {selected ? (
           <div className="flex h-full flex-col border-t border-[var(--line)] bg-[var(--bg-inset)] px-4 py-4 sm:px-6 lg:border-t-0">
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm mb-3 self-start lg:hidden"
+              onClick={() => setMobilePane("list")}
+            >
+              Back to keys
+            </button>
             <div className="flex flex-wrap items-center gap-2">
               <KeyStatusChip status={selected.status} />
               <span className="type-mono !text-[0.6875rem]">

@@ -133,9 +133,9 @@ export function kindLabel(kind: GuardrailKind): string {
 }
 
 export function statusLabel(status: GuardrailStatus): string {
-  if (status === "active") return "active";
-  if (status === "shadow") return "shadow";
-  return "off";
+  if (status === "active") return "Active";
+  if (status === "shadow") return "Shadow";
+  return "Off";
 }
 
 export function actionLabel(action: GuardrailAction): string {

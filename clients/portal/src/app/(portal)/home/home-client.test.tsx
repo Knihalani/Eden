@@ -163,6 +163,17 @@ describe("HomeClient (Wave 10 dashboard clarity)", () => {
     // The header notes the truncation explicitly.
     expect(screen.getByText(/showing 3 of 4/)).toBeTruthy();
   });
+  it("renders all four KPIs including Spend (R100)", () => {
+    mockTraces = [];
+    mockIssues = [];
+    mockAgents = [];
+    render(<HomeClient />);
+    expect(screen.getByRole("link", { name: /Failures:/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Traces:/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Agents:/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Spend:/ })).toBeTruthy();
+  });
+
   it("does not nag Create API key when a key exists and traces are empty (R050)", () => {
     mockTraces = [];
     mockIssues = [];

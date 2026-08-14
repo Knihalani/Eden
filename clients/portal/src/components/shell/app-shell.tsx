@@ -97,6 +97,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <NotificationsProvider>
             <AlertsProvider>
               <div className="flex h-dvh overflow-hidden bg-[var(--bg)] text-[var(--text)]" data-eden-portal-shell>
+                <a
+                  href="#eden-main-content"
+                  className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[200] focus:bg-[var(--bg-elevated)] focus:px-3 focus:py-2 focus:text-[var(--text)]"
+                >
+                  Skip to main content
+                </a>
                 <SidebarNav />
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)]">
                   <div className="flex h-[var(--header-h)] shrink-0 items-center justify-end gap-1 border-b border-[var(--line)] bg-[var(--bg-sidebar)] px-2 md:hidden">

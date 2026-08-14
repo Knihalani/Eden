@@ -198,7 +198,7 @@ export default function SettingsSsoPage() {
                 {canEdit ? (
                   <button
                     type="button"
-                    className="ds-btn ds-btn-ghost ds-btn-sm"
+                    className="ds-btn ds-btn-ghost ds-btn-sm shrink-0"
                     onClick={() => setCreating(true)}
                   >
                     Add native provider
@@ -213,7 +213,7 @@ export default function SettingsSsoPage() {
           <div>
             <button
               type="button"
-              className="ds-btn ds-btn-ghost ds-btn-sm"
+              className="ds-btn ds-btn-ghost ds-btn-sm shrink-0"
               onClick={() => setCreating(true)}
             >
               Add native provider
