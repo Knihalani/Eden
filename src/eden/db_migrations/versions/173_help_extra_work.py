@@ -54,14 +54,6 @@ def _rls(table: str, policy: str) -> None:
 
 def upgrade() -> None:
     op.execute(
-        "ALTER TABLE org_slack_installs "
-        "ADD COLUMN IF NOT EXISTS granted_scopes TEXT NOT NULL DEFAULT ''"
-    )
-    op.execute(
-        "ALTER TABLE org_slack_installs "
-        "ADD COLUMN IF NOT EXISTS history_consented_at TIMESTAMPTZ"
-    )
-    op.execute(
         "CREATE INDEX IF NOT EXISTS agent_slack_channels_org_channel_idx "
         "ON agent_slack_channels (org_id, channel_id)"
     )

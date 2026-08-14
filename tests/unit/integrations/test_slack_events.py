@@ -102,7 +102,7 @@ def _message_envelope(
 
 async def _call(req: _Req, store_mocks: dict | None = None):
     from eden.api.routes import slack as slack_routes
-    from eden.integrations.slack import oauth as slack_oauth
+    from eden.integrations.slack import store as store_mod
 
     store = store_mocks or {}
     defaults = {
@@ -116,19 +116,17 @@ async def _call(req: _Req, store_mocks: dict | None = None):
     }
     defaults.update(store)
     with (
-        patch.object(slack_oauth, "get_settings", return_value=_settings()),
-        patch.object(slack_routes, "is_configured", return_value=True),
         patch("eden.config.get_settings", return_value=_settings()),
-        patch.object(slack_routes.slack_store, "get_org_id_for_team", defaults["get_org_id_for_team"]),
-        patch.object(slack_routes.slack_store, "event_id_seen", defaults["event_id_seen"]),
-        patch.object(slack_routes.slack_store, "get_agent_for_channel", defaults["get_agent_for_channel"]),
+        patch.object(store_mod, "get_org_id_for_team", defaults["get_org_id_for_team"]),
+        patch.object(store_mod, "event_id_seen", defaults["event_id_seen"]),
+        patch.object(store_mod, "get_agent_for_channel", defaults["get_agent_for_channel"]),
         patch.object(
-            slack_routes.slack_store,
+            store_mod,
             "get_current_help_contract",
             defaults["get_current_help_contract"],
         ),
         patch.object(
-            slack_routes.slack_store,
+            store_mod,
             "insert_extra_work_event",
             defaults["insert_extra_work_event"],
         ),
@@ -209,15 +207,9 @@ class TestSlackEventsRoute:
         from fastapi import HTTPException
 
         from eden.api.routes import slack as slack_routes
-        from eden.integrations.slack import oauth as slack_oauth
 
         req = _signed_req({"type": "url_verification", "challenge": "x"}, secret="wrong")
-        # resign with wrong secret already; still need configured path
-        with (
-            patch.object(slack_oauth, "get_settings", return_value=_settings()),
-            patch.object(slack_routes, "is_configured", return_value=True),
-            patch("eden.config.get_settings", return_value=_settings()),
-        ):
+        with patch("eden.config.get_settings", return_value=_settings()):
             with pytest.raises(HTTPException) as ei:
                 await slack_routes.slack_events(req)
         assert ei.value.status_code == 401
@@ -310,6 +302,10 @@ class TestMigrationDoesNotRetaskOutcome:
         assert "DROP COLUMN outcome" not in sql
         assert "outcome =" not in sql
         assert "helped VARCHAR(16)" in sql
+        assert "DEFAULT 'unknown'" in sql
+        # Do not invent Slack reconsent columns this slice.
+        assert "granted_scopes" not in sql
+        assert "history_consented_at" not in sql
 
 
 def test_signature_helper_still_pinned() -> None:
