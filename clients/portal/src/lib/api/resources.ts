@@ -3872,6 +3872,12 @@ export interface SlackRoute {
   agent_id: string | null;
   channel_id: string;
   channel_name: string;
+  is_notify?: boolean;
+}
+
+export interface SlackUser {
+  id: string;
+  name: string;
 }
 
 export const slackApi = {
@@ -3921,6 +3927,28 @@ export const slackApi = {
       method: "POST",
       headers: { "X-Org-Id": orgId },
       body: JSON.stringify({ agent_id: agentId }),
+    }),
+  users: (orgId: string) =>
+    fetchApi<SlackUser[]>(`/orgs/${orgId}/slack/users`, {
+      headers: { "X-Org-Id": orgId },
+    }),
+  setup: (
+    orgId: string,
+    body: {
+      agent_id: string;
+      watch_channels: { channel_id: string; channel_name?: string }[];
+      notify_channel_id: string | null;
+      notify_channel_name?: string;
+    },
+  ) =>
+    fetchApi<{
+      status: string;
+      notify: { channel_id: string; channel_name?: string } | null;
+      watch: { channel_id: string; channel_name: string }[];
+    }>(`/orgs/${orgId}/slack/setup`, {
+      method: "PUT",
+      headers: { "X-Org-Id": orgId },
+      body: JSON.stringify(body),
     }),
 };
 (api as unknown as Record<string, unknown>).slackApi = slackApi;

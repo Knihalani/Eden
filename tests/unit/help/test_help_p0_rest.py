@@ -319,11 +319,13 @@ def test_conversations_replies_not_history() -> None:
 
 def test_loud_install_bar_copy() -> None:
     panel = Path("clients/portal/src/app/(portal)/agents/help-panel.tsx").read_text()
+    copy = Path("clients/portal/src/app/(portal)/agents/help-copy.ts").read_text()
     assert "Do not sign the design-partner week" in panel
-    assert "We can see this agent run. We cannot tell if it helped" in panel
+    assert "We cannot tell if it helped." in copy
     assert "no extra work seen" in panel
     routes = Path("src/eden/api/routes/agent_sessions.py").read_text()
-    assert "Do not sign the design-partner week" in routes
+    assert "We cannot tell if it helped." in routes
+    assert "Listening. No leftover work yet. That is unknown, not helped." in routes
 
 
 @pytest.mark.asyncio
@@ -431,12 +433,14 @@ def test_reconsent_columns_and_history_scopes() -> None:
 def test_channel_picker_bound_on_agents() -> None:
     panel = Path("clients/portal/src/app/(portal)/agents/help-panel.tsx").read_text()
     assert "slackApi.setRoute" in panel
-    assert "Map a Slack channel" in panel
+    assert "SlackWatchPicker" in panel
+    assert "SlackNotifyPicker" in panel
     assert "x_keywords" in panel
     assert "y_slack_user_id" in panel
     assert "Y Slack user id" in panel
-    assert "Stage 1 drop" in panel
     assert "Do not sign the design-partner week" in panel
+    picker = Path("clients/portal/src/app/(portal)/agents/slack-channel-picker.tsx").read_text()
+    assert "Notify Slack channel" in picker
 
 
 def test_help_chip_unknown_not_styled_helped() -> None:
