@@ -31,8 +31,15 @@ export type HelpStatus = {
     observed_at?: string;
     session_id?: string | null;
     path?: string;
+    surface?: string;
   }[];
-  counts: { helped: number; not_helped: number; unknown: number; leftover_7d: number };
+  counts: {
+    helped: number;
+    not_helped: number;
+    unknown: number;
+    leftover_7d: number;
+    by_surface?: Record<string, number>;
+  };
   unknown_reason: "invite" | "map" | "no extra work seen" | "no_contract" | null;
   install_bar: { loud: boolean; copy: string };
 };
@@ -114,7 +121,16 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
     return "";
   }, [data]);
   const leftover = data?.leftover || [];
-  const counts = data?.counts || { helped: 0, not_helped: 0, unknown: 0, leftover_7d: 0 };
+  const counts = data?.counts || {
+    helped: 0,
+    not_helped: 0,
+    unknown: 0,
+    leftover_7d: 0,
+    by_surface: {},
+  };
+  const leftoverSurfaces = Object.entries(counts.by_surface || {})
+    .map(([surface, n]) => `${n} ${surface}`)
+    .join(" · ");
 
   const channelsQuery = useOrgQuery(
     queryKeys.portal.slackChannels(orgId),
@@ -171,8 +187,8 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2 type-meta">
-        <span>{counts.leftover_7d} ambient leftover (7d)</span>
-        <span>· {counts.helped} helped</span>
+        {leftoverSurfaces ? <span>{leftoverSurfaces}</span> : null}
+        <span>{leftoverSurfaces ? "· " : ""}{counts.helped} helped</span>
         <span>· {counts.not_helped} didn’t</span>
         <span>· {counts.unknown} unknown</span>
       </div>
@@ -251,6 +267,7 @@ export function HelpInstallBar({ agentId }: { agentId?: string | null }) {
             return (
               <li key={`${ch}-${ts}-${i}`}>
                 Y still did X in #{ch} at {ts}
+                {hit.surface ? ` · ${hit.surface}` : ""}
                 {hit.snippet ? ` — “${hit.snippet}”` : ""}
                 {!hit.session_id ? " · no similar session" : ""}
               </li>
