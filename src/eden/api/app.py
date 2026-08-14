@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import sys
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -743,6 +744,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         await asyncio.to_thread(run_alembic_upgrade_head)
     except Exception as exc:
+        print(f"Alembic upgrade failed at startup: {exc}", file=sys.stderr, flush=True)
         logger.error("Alembic upgrade failed at startup: %s", exc)
         if settings.eden_production or settings.strict_startup_checks:
             raise

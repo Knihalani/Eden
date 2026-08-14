@@ -315,6 +315,10 @@ class TestMigrationDoesNotRetaskOutcome:
         assert "outcome =" not in sql
         assert "helped VARCHAR(16)" in sql
         assert "DEFAULT 'unknown'" in sql
+        # Postgres reserved word — unquoted `window` aborts upgrade head
+        # (uvicorn exit 3) and the Slack events URL never goes live.
+        assert '"window"' in sql
+        assert "            window           JSONB" not in sql
         # Reconsent columns live in 174, not 173.
         assert "granted_scopes" not in sql
         assert "history_consented_at" not in sql
