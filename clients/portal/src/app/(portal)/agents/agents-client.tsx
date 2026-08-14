@@ -991,9 +991,14 @@ function LabAgentsInner() {
           </span>
         }
         actions={
-          !fleetOpen ? (
-            <ListRevealButton label="Fleet" onClick={() => setFleetOpen(true)} />
-          ) : undefined
+          <span className="flex items-center gap-2">
+            <Link href="/agents/new" className="ds-btn ds-btn-primary ds-btn-sm">
+              New agent
+            </Link>
+            {!fleetOpen ? (
+              <ListRevealButton label="Fleet" onClick={() => setFleetOpen(true)} />
+            ) : null}
+          </span>
         }
       />
 
@@ -1004,9 +1009,14 @@ function LabAgentsInner() {
             title="No agents yet"
             body={U20_EMPTY_COPY.agents}
             action={
-              <Link href="/settings?mode=keys" className="ds-btn ds-btn-primary ds-btn-sm">
-                API keys
-              </Link>
+              <span className="flex flex-wrap gap-2">
+                <Link href="/agents/new" className="ds-btn ds-btn-primary ds-btn-sm">
+                  New agent
+                </Link>
+                <Link href="/settings?mode=keys" className="ds-btn ds-btn-outline ds-btn-sm">
+                  API keys
+                </Link>
+              </span>
             }
           />
         </div>

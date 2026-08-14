@@ -31,6 +31,10 @@ Routes:
     Owner/admin — clear a binding.
 * ``POST /orgs/{org_id}/slack/test``
     Owner/admin — post a test message to the resolved channel.
+* ``GET  /orgs/{org_id}/slack/users``
+    Owner/admin — workspace members for the Y picker (after Slack is connected).
+* ``PUT  /orgs/{org_id}/slack/setup``
+    Owner/admin — persist watch channels + one notify channel for an agent.
 
 Security notes:
 * Bot tokens are Fernet-encrypted at rest (``org_slack_installs``).
@@ -120,6 +124,7 @@ class RouteOut(BaseModel):
     agent_id: str | None = None
     channel_id: str
     channel_name: str = ""
+    is_notify: bool = False
 
 
 class SetRouteRequest(BaseModel):
@@ -134,6 +139,23 @@ class ClearRouteRequest(BaseModel):
 
 class TestMessageRequest(BaseModel):
     agent_id: str | None = Field(default=None, max_length=128)
+
+
+class SlackUserOut(BaseModel):
+    id: str
+    name: str = ""
+
+
+class WatchChannelIn(BaseModel):
+    channel_id: str = Field(min_length=1, max_length=64)
+    channel_name: str = Field(default="", max_length=128)
+
+
+class SetupChannelsRequest(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=128)
+    watch_channels: list[WatchChannelIn] = Field(default_factory=list)
+    notify_channel_id: str | None = Field(default=None, max_length=64)
+    notify_channel_name: str = Field(default="", max_length=128)
 
 
 def _portal_settings_url(**params: str) -> str:
@@ -361,6 +383,7 @@ async def get_slack_routes(
             agent_id=r.get("agent_id"),
             channel_id=str(r.get("channel_id") or ""),
             channel_name=str(r.get("channel_name") or ""),
+            is_notify=bool(r.get("is_notify")),
         )
         for r in rows
     ]
@@ -374,6 +397,8 @@ async def set_slack_route(
     org: dict = Depends(require_org_permission_dep("integrations:write")),
 ) -> RouteOut:
     """Bind an agent (or the org default) to a Slack channel."""
+    if slack_store.is_forbidden_channel_id(req.channel_id):
+        raise HTTPException(400, "Notify channel must be a Slack channel, not a DM or user.")
     ok = await slack_store.set_channel(
         str(org["org_id"]),
         agent_id=(req.agent_id or "").strip() or None,
@@ -409,6 +434,62 @@ async def clear_slack_route(
         str(org["org_id"]), agent_id=(req.agent_id or "").strip() or None
     )
     return {"status": "cleared"}
+
+
+
+@org_router.get("/slack/users", response_model=list[SlackUserOut])
+async def list_slack_users(
+    org_id: str = Depends(require_path_org_access),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
+) -> list[SlackUserOut]:
+    """Workspace members for the Y picker (after Slack is connected)."""
+    token = await slack_store.get_bot_token(str(org["org_id"]))
+    if not token:
+        raise HTTPException(404, "Slack is not connected for this org.")
+    try:
+        users = await SlackClient(token).list_users()
+    except SlackAPIError as exc:
+        raise HTTPException(502, f"Slack API error: {exc.error or exc}") from exc
+    return [SlackUserOut(**u) for u in users]
+
+
+@org_router.put("/slack/setup")
+async def save_slack_setup(
+    req: SetupChannelsRequest,
+    org_id: str = Depends(require_path_org_access),
+    user: dict = Depends(get_current_user),
+    org: dict = Depends(require_org_permission_dep("integrations:write")),
+) -> dict[str, Any]:
+    """Persist watch channels + the notify channel for one agent (setup page)."""
+    oid = str(org["org_id"])
+    notify_id = (req.notify_channel_id or "").strip() or None
+    if notify_id and slack_store.is_forbidden_channel_id(notify_id):
+        raise HTTPException(400, "Notify channel must be a Slack channel, not a DM or user.")
+    watch = []
+    for ch in req.watch_channels:
+        cid = ch.channel_id.strip()
+        if slack_store.is_forbidden_channel_id(cid):
+            continue
+        watch.append({"channel_id": cid, "channel_name": ch.channel_name.strip()})
+    ok = await slack_store.save_agent_channels(
+        oid,
+        agent_id=req.agent_id.strip(),
+        watch=watch,
+        notify_channel_id=notify_id,
+        notify_channel_name=req.notify_channel_name.strip(),
+        set_by_user_id=str(user.get("user_id") or "") or None,
+    )
+    if not ok:
+        raise HTTPException(503, "Could not persist watch / notify channels.")
+    resolved = await slack_store.get_channel(oid, agent_id=req.agent_id.strip())
+    return {
+        "status": "ok",
+        "notify": resolved,
+        "watch": [
+            {"channel_id": c["channel_id"], "channel_name": c["channel_name"]}
+            for c in watch
+        ],
+    }
 
 
 @org_router.post("/slack/test")

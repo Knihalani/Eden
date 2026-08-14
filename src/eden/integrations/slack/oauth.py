@@ -51,6 +51,7 @@ BOT_SCOPES = (
     "channels:history",
     "groups:history",
     "mpim:history",
+    "users:read",
 )
 HISTORY_SCOPES = ("channels:history", "groups:history", "mpim:history")
 
