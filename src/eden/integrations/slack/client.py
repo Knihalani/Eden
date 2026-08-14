@@ -201,5 +201,46 @@ class SlackClient:
                     break
         return out[:limit]
 
+    async def list_users(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Workspace members for the Y picker. Bots and deleted users omitted."""
+        out: list[dict[str, Any]] = []
+        async with _shared_httpx() as client:
+            cursor = ""
+            for _ in range(5):
+                params: dict[str, Any] = {"limit": min(limit, 200)}
+                if cursor:
+                    params["cursor"] = cursor
+                r = await client.get(
+                    f"{SLACK_API_BASE}/users.list",
+                    headers=self._headers(),
+                    params=params,
+                )
+                if r.status_code != 200:
+                    raise SlackAPIError("users.list failed", status_code=r.status_code)
+                body = r.json()
+                if not body.get("ok"):
+                    raise SlackAPIError(
+                        "users.list rejected",
+                        error=str(body.get("error") or "unknown"),
+                    )
+                for u in body.get("members") or []:
+                    if u.get("deleted") or u.get("is_bot") or u.get("id") == "USLACKBOT":
+                        continue
+                    profile = u.get("profile") or {}
+                    name = (
+                        str(profile.get("display_name") or "").strip()
+                        or str(profile.get("real_name") or "").strip()
+                        or str(u.get("name") or "").strip()
+                    )
+                    uid = str(u.get("id") or "")
+                    if not uid:
+                        continue
+                    out.append({"id": uid, "name": name or uid})
+                cursor = str((body.get("response_metadata") or {}).get("next_cursor") or "")
+                if not cursor or len(out) >= limit:
+                    break
+        return out[:limit]
+
+
 
 __all__ = ["SlackClient"]
