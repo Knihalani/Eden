@@ -306,7 +306,13 @@ class IssuePromoter:
                 help_contract_id=help_contract_id,
             )
         if issue.was_created or issue.was_regressed:
-            await self._propose_help_miss_plan(issue, reason=reason, help_contract_id=help_contract_id)
+            await self._propose_help_miss_plan(
+                issue,
+                reason=reason,
+                help_contract_id=help_contract_id,
+                snippet=snippet,
+                session_id=session_id,
+            )
         return issue
 
     async def _insert_help_miss(
@@ -465,6 +471,8 @@ class IssuePromoter:
         *,
         reason: str,
         help_contract_id: str | None,
+        snippet: str | None = None,
+        session_id: str | None = None,
     ) -> None:
         try:
             from eden.improvement.issue_patch_trigger import (
@@ -476,6 +484,8 @@ class IssuePromoter:
                 issue,
                 reason=reason,
                 help_contract_id=help_contract_id,
+                snippet=snippet,
+                session_id=session_id,
             )
         except Exception as exc:
             logger.debug("issue_promoter: help_miss plan failed: %s", exc)
