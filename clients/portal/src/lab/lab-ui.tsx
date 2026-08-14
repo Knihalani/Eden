@@ -99,7 +99,7 @@ export function AgentStatusBadge({
   const tone =
     status === "live" ? "live" : status === "error" ? "fail" : "neutral";
   const label =
-    status === "live" ? "active" : status === "error" ? "error" : "idle";
+    status === "live" ? "Active" : status === "error" ? "Error" : "Idle";
   return <StatusChip tone={tone}>{label}</StatusChip>;
 }
 
@@ -1384,18 +1384,22 @@ export function FilterChips<T extends string>({
   onChange,
   options,
   scroll = false,
+  ariaLabel,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { id: T; label: string; count?: number }[];
   /** Keep chips on one row with horizontal scroll instead of wrapping. */
   scroll?: boolean;
+  /** Distinguishes multiple All/count tablists for SR (R110). */
+  ariaLabel?: string;
 }) {
   const showCounts = options.some((o) => (o.count ?? 0) > 0);
   return (
     <div
       className={scroll ? "lab-filter-scroll" : "flex flex-wrap gap-1.5"}
       role="tablist"
+      aria-label={ariaLabel}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >

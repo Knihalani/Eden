@@ -13,6 +13,8 @@ describe("CookieConsent (R031)", () => {
     render(<CookieConsent />);
     const dialog = screen.getByRole("dialog", { name: "Cookie preferences" });
     expect(dialog.className).toContain("z-[130]");
+    expect(dialog.className).toContain("max-w-sm");
+    expect(dialog.className).not.toContain("inset-x-0");
     expect(screen.getByRole("button", { name: "Decline" })).toBeEnabled();
   });
 });

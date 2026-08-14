@@ -135,7 +135,7 @@ export function SettingsModeNav({
     <div
       role="tablist"
       aria-label="Settings mode"
-      className="flex min-w-0 max-w-full flex-wrap gap-1 overflow-x-auto"
+      className="flex min-w-0 max-w-full flex-nowrap gap-1 overflow-x-auto"
     >
       {SETTINGS_TABS.map(({ id, label }) => {
         const selected = value === id;

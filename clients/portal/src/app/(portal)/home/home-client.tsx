@@ -68,7 +68,7 @@ function Kpi({
       href={href}
       aria-label={`${label}: ${value}. ${hint}`}
       className={cn(
-        "group relative min-w-0 flex-1 basis-[8rem] border-b border-[var(--line)] px-5 py-5 transition-colors hover:bg-[var(--accent-muted)] sm:border-b-0 sm:border-r sm:last:border-r-0",
+        "group relative min-w-0 border-b border-r border-[var(--line)] px-4 py-4 transition-colors hover:bg-[var(--accent-muted)] sm:px-5 sm:py-5 sm:border-b-0 sm:[&:nth-child(2n)]:border-r last:border-r-0 sm:last:border-r-0",
         className,
       )}
     >
@@ -427,7 +427,7 @@ export default function HomeClient() {
       <AutonomyRoiBanner />
 
       {/* First viewport: KPIs — live cost/traces when available */}
-      <div className="flex flex-wrap border-b border-[var(--line)]">
+      <div className="grid grid-cols-2 overflow-x-hidden border-b border-[var(--line)] sm:grid-cols-4">
         <Kpi
           label="Failures"
           value={String(snap.failures.length)}
@@ -506,7 +506,6 @@ export default function HomeClient() {
               : "default"
           }
           href="/cost"
-          className="hidden sm:block"
         />
       </div>
 

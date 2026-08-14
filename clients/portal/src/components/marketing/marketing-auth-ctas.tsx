@@ -26,7 +26,7 @@ export function MarketingAuthCtas({
       <div className={cn("flex items-center gap-2", className)}>
         <Link
           href={MARKETING_APP_HREF}
-          className={cn("ds-btn ds-btn-primary", btn, size === "md" && "px-5")}
+          className={cn("ds-btn ds-btn-primary", btn, size === "md" && "min-h-11 px-5")}
         >
           {MARKETING_APP_LABEL}
         </Link>
@@ -41,7 +41,7 @@ export function MarketingAuthCtas({
           "ds-btn",
           size === "sm" ? "ds-btn-ghost" : "ds-btn-outline",
           btn,
-          size === "md" && "px-5",
+          size === "md" && "min-h-11 px-5",
         )}
       >
         Sign in

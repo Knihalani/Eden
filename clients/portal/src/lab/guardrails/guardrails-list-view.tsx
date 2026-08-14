@@ -117,12 +117,14 @@ export function GuardrailsListView({
 
       <div className="space-y-2 border-b border-[var(--line)] px-4 py-2 sm:px-5">
         <FilterChips
+          ariaLabel="Policy kind"
           value={kindFilter}
           onChange={onKindFilter}
           options={kindOptions}
           scroll
         />
         <FilterChips
+          ariaLabel="Policy status"
           value={statusFilter}
           onChange={onStatusFilter}
           options={statusOptions}
