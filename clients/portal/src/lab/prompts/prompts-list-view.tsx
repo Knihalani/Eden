@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Search } from "lucide-react";
 import {
   agentLabel,
   formatFailRate,
@@ -10,7 +9,7 @@ import {
   type PromptStatus,
 } from "@/lab/fixtures/prompts";
 import { PromptStatusChip } from "@/lab/prompts/prompts-chrome";
-import { AgentScopeFilter, EmptyState, FilterChips } from "@/lab/lab-ui";
+import { AgentScopeFilter, EmptyState, FilterChips, SearchInput } from "@/lab/lab-ui";
 import { cn } from "@/lib/utils";
 
 export function PromptsListView({
@@ -64,33 +63,28 @@ export function PromptsListView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:px-5">
-        <label className="relative min-w-[8rem] flex-1">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-secondary)]"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search prompts…"
-            className="ds-input w-full !py-1.5 !pl-8"
-            aria-label="Search prompts"
-          />
-        </label>
+        <SearchInput
+          value={query}
+          onChange={onQueryChange}
+          placeholder="Search prompts…"
+          ariaLabel="Search prompts"
+          className="min-w-[8rem] flex-1"
+        />
         <AgentScopeFilter
           value={agentId}
           onChange={onAgentChange}
           counts={counts}
         />
-        <button
-          type="button"
-          className="ds-btn ds-btn-primary ds-btn-sm"
-          disabled={creating}
-          onClick={() => void handleNew()}
-        >
-          {creating ? "Creating…" : "New"}
-        </button>
+        {filtered.length > 0 || q || statusFilter !== "all" ? (
+          <button
+            type="button"
+            className="ds-btn ds-btn-primary ds-btn-sm"
+            disabled={creating}
+            onClick={() => void handleNew()}
+          >
+            {creating ? "Creating…" : "New prompt"}
+          </button>
+        ) : null}
       </div>
 
       <div className="border-b border-[var(--line)] px-4 py-2 sm:px-5">

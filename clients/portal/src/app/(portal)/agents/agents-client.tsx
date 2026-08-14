@@ -997,6 +997,20 @@ function LabAgentsInner() {
         }
       />
 
+      {ordered.length === 0 ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <EmptyState
+            icon={Bot}
+            title="No agents yet"
+            body={U20_EMPTY_COPY.agents}
+            action={
+              <Link href="/settings?mode=keys" className="ds-btn ds-btn-primary ds-btn-sm">
+                API keys
+              </Link>
+            }
+          />
+        </div>
+      ) : (
       <div className="flex min-h-0 min-w-0 flex-1">
         <aside
           className={cn(
@@ -1126,6 +1140,7 @@ function LabAgentsInner() {
           />
         </div>
       </div>
+      )}
     </div>
   );
 }

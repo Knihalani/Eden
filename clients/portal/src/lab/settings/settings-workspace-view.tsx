@@ -319,7 +319,9 @@ export function SettingsWorkspaceView({
         </div>
       </section>
 
-      <AccountDangerZoneCard />
+      <div data-testid="danger-zone" className="border-t border-[var(--line)] pt-2">
+        <AccountDangerZoneCard />
+      </div>
     </div>
   );
 }

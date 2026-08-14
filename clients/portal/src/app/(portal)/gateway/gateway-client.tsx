@@ -115,7 +115,7 @@ function BreakdownTable({
   return (
     <section className="min-w-0">
       <div className="mb-3 flex items-center justify-between gap-2 px-1">
-        <h2 className="type-ui">{title}</h2>
+        {title ? <h2 className="type-ui">{title}</h2> : null}
         {onExport && rows.length > 0 ? (
           <button
             type="button"
@@ -448,7 +448,9 @@ export default function GatewayClient() {
           <summary className="cursor-pointer list-none px-4 py-3 type-ui marker:content-none [&::-webkit-details-marker]:hidden">
             <span className="flex items-center justify-between gap-2">
               Breakdown &amp; models
-              <span className="type-meta group-open:hidden">Show</span>
+              <span className="type-meta group-open:hidden">
+                Show {registry.length + byModel.length}
+              </span>
               <span className="type-meta hidden group-open:inline">Hide</span>
             </span>
           </summary>

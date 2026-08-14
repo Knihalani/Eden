@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   budgetStatusFromSpend,
@@ -340,7 +341,18 @@ function LabCostInner() {
     <div className="ds-page">
       <PageHeader
         title="Cost"
-        meta={meta}
+        meta={
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <Link href="/settings" className="type-meta text-[var(--text-muted)] hover:text-[var(--text)]">
+              Settings
+            </Link>
+            <span className="type-meta text-[var(--text-faint)]" aria-hidden>
+              /
+            </span>
+            <span className="type-meta">Plan &amp; budget</span>
+            {meta}
+          </span>
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5">

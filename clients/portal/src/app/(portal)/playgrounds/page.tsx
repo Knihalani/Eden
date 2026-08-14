@@ -169,7 +169,7 @@ export default function PlaygroundsPage() {
                   disabled={creating}
                   onClick={() => setNameOpen(true)}
                 >
-                  Create playground
+                  New playground
                 </button>
               </div>
             }

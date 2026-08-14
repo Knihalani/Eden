@@ -140,13 +140,23 @@ describe("CommandPalette (Wave 10 live search)", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("defaults the highlight to Home when the query is empty", async () => {
+    openPalette();
+    const input = screen.getByPlaceholderText(/Go to a run/);
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith("/home");
+    });
+  });
+
   it("navigates the result list with ArrowDown/ArrowUp and Enter runs the highlighted item", async () => {
     openPalette();
-    await screen.findByText("planning");
     const input = screen.getByPlaceholderText(/Go to a run/);
+    fireEvent.change(input, { target: { value: "tr_" } });
+    await screen.findByText("planning");
 
-    // Both live runs match; the first (index 0) is "planning".
-    fireEvent.keyDown(input, { key: "ArrowDown" }); // → summarize (idx 1)
+    // Live matches rank first while typing; ArrowDown → summarize.
+    fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith(
@@ -179,17 +189,12 @@ describe("CommandPalette (Wave 13 interaction layer)", () => {
     agents.mockResolvedValue([]);
   });
 
-  it("shows a loading skeleton while live data is still resolving, WITHOUT hiding the static commands", () => {
-    // Never resolve — the palette should say "Loading runs…" instead of
-    // pretending there is no data yet, but jump-to-page must keep working
-    // (static nav commands never depend on the live fetch).
+  it("does not show a skeleton row on top of static commands while idle", () => {
     traces.mockReturnValue(new Promise(() => undefined));
     issues.mockReturnValue(new Promise(() => undefined));
     agents.mockReturnValue(new Promise(() => undefined));
     openPalette();
-    expect(screen.getByRole("status")).toBeTruthy();
-    expect(screen.getByText("Loading runs…")).toBeTruthy();
-    // Static navigation group is still listed beneath the hint.
+    expect(screen.queryByText("Loading runs…")).toBeNull();
     expect(screen.getByText("Observe")).toBeTruthy();
   });
 
