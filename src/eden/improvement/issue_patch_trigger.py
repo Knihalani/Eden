@@ -1096,11 +1096,18 @@ def normalize_help_miss_leftovers(
 
 
 def classify_help_miss_fix(leftovers: list[Any] | None) -> str:
-    """Code change when traces + leftover can point at a file. Else instruction replace."""
+    """Code change when leftover text or a matching run can point at a file."""
+    from eden.improvement.help_miss_apply import (
+        _looks_like_file_path,
+        paths_from_leftover_text,
+    )
+
+    if paths_from_leftover_text(leftovers):
+        return FIX_KIND_CODE
     for raw in leftovers or []:
         if not isinstance(raw, dict):
             continue
-        if str(raw.get("path") or "").strip():
+        if _looks_like_file_path(str(raw.get("path") or "")):
             return FIX_KIND_CODE
         if str(raw.get("trace_id") or "").strip():
             return FIX_KIND_CODE
@@ -1243,6 +1250,18 @@ async def propose_prompt_canary_for_help_miss(
             "issue_id": issue_id or None,
             "leftovers": cleaned,
         }
+    from eden.improvement.help_miss_apply import resolve_help_miss_file
+
+    target_file = await resolve_help_miss_file(
+        org_id, draft["leftovers"], agent_id=agent_id
+    )
+    if target_file:
+        draft["fix_kind"] = FIX_KIND_CODE
+        draft["summary"] = draft["summary"].replace(
+            _FIX_KIND_LINE[FIX_KIND_INSTRUCTION],
+            _FIX_KIND_LINE[FIX_KIND_CODE],
+            1,
+        )
     title = getattr(issue, "title", None) or f"{agent_id or 'agent'} did not help"
     plan = await plans_repo.create_plan(
         org_id,
@@ -1262,6 +1281,7 @@ async def propose_prompt_canary_for_help_miss(
             "never_attempted": draft["never_attempted"],
             "instruction": draft["instruction"],
             "fix_kind": draft["fix_kind"],
+            "target_file": target_file,
         },
         status="draft",
     )
@@ -1276,4 +1296,6 @@ async def propose_prompt_canary_for_help_miss(
         "leftovers": draft["leftovers"],
         "never_attempted": draft["never_attempted"],
         "fix_kind": draft["fix_kind"],
+        "target_file": target_file,
+        "instruction": draft["instruction"],
     }

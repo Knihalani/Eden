@@ -35,6 +35,12 @@ def test_resolve_file_from_leftover_path() -> None:
         )
         is None
     )
+    assert (
+        resolve_help_miss_target_file(
+            [{"snippet": "I'll patch `src/refunds.py` myself"}]
+        )
+        == "src/refunds.py"
+    )
 
 
 def test_choose_code_pr_when_path_or_diff() -> None:
@@ -470,4 +476,63 @@ def test_apply_module_never_mentions_agents_md_write() -> None:
     assert "code_change_enabled" not in text
     pin_src = inspect.getsource(approve_help_miss_plan)
     assert "AGENTS.md" not in pin_src
+
+
+@pytest.mark.asyncio
+async def test_resolve_file_prefers_snippet_path_in_matching_run() -> None:
+    from eden.improvement.help_miss_apply import resolve_help_miss_file
+
+    leftovers = [
+        {
+            "snippet": "I'll fix src/refunds.py then close the ticket",
+            "trace_id": "tr-9",
+        }
+    ]
+    with (
+        patch(
+            "eden.improvement.issue_patch_trigger._resolve_repo_id",
+            AsyncMock(return_value="repo-1"),
+        ),
+        patch(
+            "eden.improvement.issue_patch_trigger._linked_files",
+            AsyncMock(
+                return_value=[
+                    {"path": "src/other.py"},
+                    {"path": "src/refunds.py"},
+                ]
+            ),
+        ),
+    ):
+        found = await resolve_help_miss_file("org", leftovers, agent_id="agent-a")
+    assert found == "src/refunds.py"
+
+
+@pytest.mark.asyncio
+async def test_slack_approve_applies_shown_change_only() -> None:
+    from eden.api.routes import slack as slack_routes
+
+    payload = {
+        "type": "block_actions",
+        "team": {"id": "T1"},
+        "user": {"id": "U99"},
+        "actions": [
+            {"action_id": "help_miss_approve", "value": "plan-1"},
+        ],
+    }
+    with (
+        patch.object(slack_routes.slack_store, "get_org_id_for_team", AsyncMock(return_value="org")),
+        patch(
+            "eden.improvement.plans_repo.get_plan",
+            AsyncMock(return_value={"id": "plan-1", "evidence": {"help_miss": True}}),
+        ),
+        patch(
+            "eden.improvement.approve.approve_plan",
+            AsyncMock(return_value={"status": "applied"}),
+        ) as approve,
+    ):
+        await slack_routes._handle_slack_interaction(payload)
+    approve.assert_awaited_once()
+    assert approve.await_args.args[0] == "org"
+    assert approve.await_args.args[1] == "plan-1"
+    assert approve.await_args.kwargs["approved_by"] == "U99"
 

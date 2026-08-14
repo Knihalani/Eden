@@ -172,7 +172,7 @@ async def test_upsert_help_miss_notifies_only_on_create() -> None:
     )
     promoter = IssuePromoter()
     notify = AsyncMock()
-    propose = AsyncMock()
+    propose = AsyncMock(return_value={"status": "drafted", "plan_id": "p1"})
     with (
         patch.object(promoter, "_repo") as repo,
         patch.object(promoter, "_insert_help_miss", AsyncMock(return_value=created)),
