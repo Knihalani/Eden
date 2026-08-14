@@ -505,7 +505,7 @@ async def insert_candidate(
     agent_id: str | None = None,
     help_contract_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Encrypted 7-day candidate. Unused while Stage 4 is off."""
+    """Encrypted 7-day candidate. Stage-3 uncertain while Stage 4 is off."""
     client = await _pg()
     if client is None:
         return None

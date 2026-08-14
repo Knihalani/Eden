@@ -1,9 +1,11 @@
-"""Ambient Slack listen pipeline — Stages 0–3 (keywords only).
+"""Ambient Slack listen pipeline — Stages 0–3.
 
-Stage 4 (cloud LLM / embedding) is OFF this slice. Persist an
-``extra_work_events`` row ONLY on fire. Unmapped / no-contract /
-no-keyword / thanks / bots store nothing. Uncertain is not produced
-without embeddings, so ``extra_work_candidates`` is unused here.
+Keywords are required. Optional on-box embedding (in-tree BGE-small)
+upgrades Stage 3 when ``sentence-transformers`` is importable; otherwise
+P0 keywords-only. Stage 4 (cloud LLM) stays OFF. Persist
+``extra_work_events`` ONLY on fire. Stage-3 uncertain → encrypted
+7-day ``extra_work_candidates`` buffer, then delete. Unmapped /
+no-contract / no-keyword / thanks / bots store nothing.
 This slice does not write ``session_summaries.helped``.
 """
 
@@ -67,7 +69,7 @@ _STOPWORDS = frozenset(
 
 @dataclass(frozen=True)
 class AmbientDecision:
-    action: str  # drop | fire
+    action: str  # drop | fire | buffer
     reason: str
     y_weighted: bool = False
     keywords_hit: tuple[str, ...] = field(default_factory=tuple)
@@ -77,6 +79,7 @@ class AmbientDecision:
     polarity: str = ""
     path: str = ""
     surface: str = ""
+    cosine: float | None = None
 
 
 def is_dm(event: dict[str, Any]) -> bool:
@@ -136,6 +139,46 @@ def keyword_hits(text: str, keywords: list[str]) -> list[str]:
     return hits
 
 
+# UNKNOWN-UNTIL-CODE. Small local BGE-small cosine bands. CPU only; no GPU gate.
+STAGE3_RELATED_COSINE = 0.50
+STAGE3_UNRELATED_COSINE = 0.30
+
+
+def _contract_embed_text(contract: dict[str, Any]) -> str:
+    parts = [
+        str(contract.get("sentence") or "").strip(),
+        str(contract.get("x_job") or "").strip(),
+        " ".join(
+            str(k).strip()
+            for k in (contract.get("x_keywords") or [])
+            if str(k).strip()
+        ),
+    ]
+    return " ".join(p for p in parts if p)
+
+
+def _stage3_cosine(text: str, contract: dict[str, Any]) -> float | None:
+    """On-box contract-vs-message cosine, or None if the local model is down.
+
+    Reuses the in-tree BGE-small singleton. Never hash-fallback. Never a
+    vendor / cloud embedding API. Stage 4 (LLM) stays off.
+    """
+    blob = _contract_embed_text(contract)
+    if not blob or not (text or "").strip():
+        return None
+    try:
+        from supplementaries.phase_3_loops.real_embeddings import (
+            HAS_SENTENCE_TRANSFORMERS,
+            get_singleton,
+        )
+
+        if not HAS_SENTENCE_TRANSFORMERS:
+            return None
+        return float(get_singleton().cosine_pair(blob, text))
+    except Exception:
+        return None
+
+
 def stage0_drop(event: dict[str, Any]) -> str | None:
     """Return a drop reason or None if the event survives Stage 0."""
     if event.get("bot_id") or event.get("subtype") in STAGE0_SUBTYPES:
@@ -154,8 +197,13 @@ def classify(
     *,
     event: dict[str, Any],
     contract: dict[str, Any] | None,
+    cosine: float | None = None,
 ) -> AmbientDecision:
-    """Stages 0 + 2 + 3. Stage 1 (channel map) is the caller's job."""
+    """Stages 0 + 2 + 3. Stage 1 (channel map) is the caller's job.
+
+    ``cosine`` is the on-box contract-vs-message similarity, or None
+    when the local embedder is unavailable (P0 keywords-only).
+    """
     reason = stage0_drop(event)
     if reason:
         return AmbientDecision(action="drop", reason=reason)
@@ -169,24 +217,61 @@ def classify(
 
     text = str(event.get("text") or "")
     hits = keyword_hits(text, keywords)
-    if not hits:
-        return AmbientDecision(action="drop", reason="stage3_unrelated")
-
     speaker = str(event.get("user") or "")
     y_id = str(contract.get("y_slack_user_id") or "")
     y_weighted = bool(y_id) and speaker == y_id
     snippet = text[:280]
+
+    if cosine is None:
+        if not hits:
+            return AmbientDecision(action="drop", reason="stage3_unrelated")
+        return AmbientDecision(
+            action="fire",
+            reason="stage3_keyword",
+            y_weighted=y_weighted,
+            keywords_hit=tuple(hits),
+            kind="human_did_agents_job",
+            confidence="medium" if y_weighted else "low",
+            snippet=snippet,
+            polarity="extra_work",
+            path="ambient",
+            surface="slack",
+        )
+
+    related = cosine >= STAGE3_RELATED_COSINE
+    clearly_unrelated = cosine < STAGE3_UNRELATED_COSINE
+
+    if hits and related:
+        return AmbientDecision(
+            action="fire",
+            reason="stage3_keyword_embed",
+            y_weighted=y_weighted,
+            keywords_hit=tuple(hits),
+            kind="human_did_agents_job",
+            confidence="medium" if y_weighted else "low",
+            snippet=snippet,
+            polarity="extra_work",
+            path="ambient",
+            surface="slack",
+            cosine=cosine,
+        )
+    if clearly_unrelated:
+        return AmbientDecision(
+            action="drop",
+            reason="stage3_unrelated",
+            keywords_hit=tuple(hits),
+            snippet=snippet,
+            cosine=cosine,
+        )
     return AmbientDecision(
-        action="fire",
-        reason="stage3_keyword",
+        action="buffer",
+        reason="stage3_uncertain",
         y_weighted=y_weighted,
         keywords_hit=tuple(hits),
-        kind="human_did_agents_job",
-        confidence="medium" if y_weighted else "low",
         snippet=snippet,
-        polarity="extra_work",
         path="ambient",
         surface="slack",
+        cosine=cosine,
     )
 
 
@@ -218,11 +303,32 @@ async def process_message(
 
     agent_id = str(mapping["agent_id"])
     contract = await slack_store.get_current_help_contract(org_id, agent_id)
-    decision = classify(event=event, contract=contract)
+    try:
+        cosine = _stage3_cosine(str(event.get("text") or ""), contract) if contract else None
+    except Exception:
+        cosine = None
+    decision = classify(event=event, contract=contract, cosine=cosine)
+    message_ts = str(event.get("ts") or "")
+    if decision.action == "buffer" and contract:
+        await slack_store.insert_candidate(
+            org_id,
+            channel_id=channel_id,
+            payload={
+                "event_id": event_id,
+                "ts": message_ts,
+                "snippet": decision.snippet,
+                "cosine": decision.cosine,
+                "keywords_hit": list(decision.keywords_hit),
+                "stage": 3,
+                "reason": decision.reason,
+            },
+            agent_id=agent_id,
+            help_contract_id=str(contract.get("id") or "") or None,
+        )
+        return decision
     if decision.action != "fire" or not contract:
         return decision
 
-    message_ts = str(event.get("ts") or "")
     thread_ts = str(event.get("thread_ts") or "") or None
     await slack_store.insert_extra_work_event(
         org_id,
@@ -622,6 +728,8 @@ __all__ = [
     "AmbientDecision",
     "LISTEN_CHANNEL_TYPES",
     "STAGE0_SUBTYPES",
+    "STAGE3_RELATED_COSINE",
+    "STAGE3_UNRELATED_COSINE",
     "classify",
     "derive_keywords",
     "is_dm",
