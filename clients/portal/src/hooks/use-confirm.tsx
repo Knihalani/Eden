@@ -27,6 +27,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [request, setRequest] = useState<ConfirmRequest | null>(null);
   const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<Element | null>(null);
 
   const confirm = useCallback((message: string) => {
     return new Promise<boolean>((resolve) => {
@@ -43,6 +44,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!request) return;
+    triggerRef.current = document.activeElement;
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -51,7 +53,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const el = triggerRef.current;
+      if (el instanceof HTMLElement) el.focus();
+    };
   }, [request, close]);
 
   return (

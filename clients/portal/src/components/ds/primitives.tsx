@@ -17,9 +17,15 @@ export function PageHeader({
       data-chrome-band="identity"
     >
       <h1>{title}</h1>
-      {meta}
+      {typeof meta === "string" || typeof meta === "number" ? (
+        <p className="type-meta min-w-0 truncate">{meta}</p>
+      ) : (
+        meta
+      )}
       {actions ? (
-        <div className="ml-auto flex items-center gap-2">{actions}</div>
+        <div className="ds-page-header-actions ml-auto flex min-w-0 max-w-full items-center gap-2 overflow-x-auto">
+          {actions}
+        </div>
       ) : null}
     </header>
   );

@@ -147,21 +147,8 @@ export default function SettingsSsoPage() {
     <div className="ds-page">
       <PageHeader
         title="SSO"
-        meta="Native Eden OIDC/SAML providers for self-hosted deployments (see warning below). Clerk-hosted SSO is configured in the Clerk dashboard."
-        actions={
-          <div className="flex items-center gap-2">
-            {nav}
-            {canEdit && (
-              <button
-                type="button"
-                className="ds-btn ds-btn-primary ds-btn-sm"
-                onClick={() => setCreating((v) => !v)}
-              >
-                + Add provider
-              </button>
-            )}
-          </div>
-        }
+        meta="Native SSO for self-hosted orgs"
+        actions={nav}
       />
 
       <div className="flex flex-col gap-4 px-5 py-5 sm:px-6">
@@ -193,6 +180,46 @@ export default function SettingsSsoPage() {
             for the authoritative setup guide.
           </p>
         </div>
+
+        {providers.length === 0 && !creating ? (
+          <EmptyState
+            title="Configure SSO in Clerk"
+            body="Hosted workspaces authenticate through Clerk. Native providers on this screen only affect self-hosted deployments."
+            action={
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <a
+                  className="ds-btn ds-btn-primary ds-btn-sm"
+                  href="https://dashboard.clerk.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Manage in Clerk
+                </a>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn-ghost ds-btn-sm"
+                    onClick={() => setCreating(true)}
+                  >
+                    Add native provider
+                  </button>
+                ) : null}
+              </div>
+            }
+          />
+        ) : null}
+
+        {providers.length > 0 && canEdit && !creating ? (
+          <div>
+            <button
+              type="button"
+              className="ds-btn ds-btn-ghost ds-btn-sm"
+              onClick={() => setCreating(true)}
+            >
+              Add native provider
+            </button>
+          </div>
+        ) : null}
 
         {creating && (
           <Panel>

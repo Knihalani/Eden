@@ -371,7 +371,7 @@ export function TourGetStartedPanel() {
             disabled={fill.status !== "ready"}
           />
         </div>
-        <pre className="max-h-48 overflow-auto p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text-secondary)]">
+        <pre className="max-h-48 overflow-x-auto overflow-y-hidden p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text-secondary)]">
           <code>{snippet}</code>
         </pre>
       </div>

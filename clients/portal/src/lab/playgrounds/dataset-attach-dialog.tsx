@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Panel } from "@/components/ds/primitives";
 import { useOrgQuery } from "@/hooks/use-api-query";
@@ -28,6 +29,23 @@ export function DatasetAttachDialog({
   );
 
   const datasets = listQuery.data?.datasets ?? [];
+  const triggerRef = useRef<Element | null>(null);
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const el = triggerRef.current;
+      if (el instanceof HTMLElement) el.focus();
+    };
+  }, [onClose]);
 
   return (
     <div

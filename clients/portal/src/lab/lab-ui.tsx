@@ -1391,10 +1391,13 @@ export function FilterChips<T extends string>({
   /** Keep chips on one row with horizontal scroll instead of wrapping. */
   scroll?: boolean;
 }) {
+  const showCounts = options.some((o) => (o.count ?? 0) > 0);
   return (
     <div
       className={scroll ? "lab-filter-scroll" : "flex flex-wrap gap-1.5"}
       role="tablist"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
     >
       {options.map((opt) => (
         <button
@@ -1402,11 +1405,14 @@ export function FilterChips<T extends string>({
           type="button"
           role="tab"
           aria-selected={value === opt.id}
-          onClick={() => onChange(opt.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange(opt.id);
+          }}
           className="ds-tab"
         >
           {opt.label}
-          {opt.count != null ? (
+          {opt.count != null && showCounts ? (
             <span className="ml-1.5 type-value !text-[0.625rem] opacity-80">
               {opt.count}
             </span>
@@ -1499,7 +1505,7 @@ export function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        className="ds-input w-full pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+        className="ds-input w-full pl-9 pr-8 [&::-webkit-search-cancel-button]:hidden"
       />
       {value ? (
         <button

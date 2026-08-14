@@ -206,9 +206,9 @@ export function CommandPalette() {
   }, [q, liveTraces]);
 
   const filtered = useMemo(() => {
-    const out: NavCommand[] = [];
+    const live: NavCommand[] = [];
     if (liveTraces.length) {
-      out.push(
+      live.push(
         ...liveTraces.map<NavCommand>(({ t }) => ({
           href: `/traces?id=${encodeURIComponent(t.id)}&agent=${encodeURIComponent(t.agentId)}`,
           label: t.name,
@@ -219,9 +219,9 @@ export function CommandPalette() {
         })),
       );
     }
-    if (directJump) out.push(directJump);
+    if (directJump) live.push(directJump);
     if (liveIssues.length) {
-      out.push(
+      live.push(
         ...liveIssues.map<NavCommand>(({ i }) => ({
           href: `/issues?id=${encodeURIComponent(i.id)}&agent=${encodeURIComponent(i.agentId)}`,
           label: i.title,
@@ -233,7 +233,7 @@ export function CommandPalette() {
       );
     }
     if (liveAgents.length) {
-      out.push(
+      live.push(
         ...liveAgents.map<NavCommand>(({ a }) => ({
           href: `/agents?id=${encodeURIComponent(a.id)}`,
           label: a.name,
@@ -244,10 +244,11 @@ export function CommandPalette() {
         })),
       );
     }
-    // Static nav + actions + settings merge beneath the live groups.
-    out.push(...staticFiltered);
-    return out;
-  }, [liveTraces, liveIssues, liveAgents, directJump, staticFiltered]);
+    // Idle palette: Home / static nav first so default highlight is Home.
+    // Typing: live matches rank above static.
+    if (!query.trim()) return [...staticFiltered, ...live];
+    return [...live, ...staticFiltered];
+  }, [liveTraces, liveIssues, liveAgents, directJump, staticFiltered, query]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -414,20 +415,10 @@ export function CommandPalette() {
             inside `role=listbox` would violate ARIA nesting) and never
             replaces the static commands — jump-to-page works even while
             the live fetch is in flight or failed. */}
-        {livePending && !query ? (
-          <div
-            role="status"
-            className="border-b border-[var(--line)] px-4 py-3"
-          >
-            <div className="flex items-center gap-2.5 rounded-[var(--radius)] px-2.5 py-2">
-              <span className="eden-skeleton-pulse h-3.5 w-3.5 shrink-0 rounded bg-[var(--line)]" />
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <div className="eden-skeleton-pulse h-3 w-1/2 rounded bg-[var(--line)]" />
-                <div className="eden-skeleton-pulse h-2.5 w-2/3 rounded bg-[var(--line)]" />
-              </div>
-            </div>
-            <span className="sr-only">Loading runs…</span>
-          </div>
+        {livePending && query.trim() && staticFiltered.length === 0 ? (
+          <p role="status" className="border-b border-[var(--line)] px-4 py-2 type-meta">
+            Loading runs…
+          </p>
         ) : null}
 
         <ul

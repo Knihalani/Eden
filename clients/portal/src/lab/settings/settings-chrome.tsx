@@ -97,20 +97,30 @@ export function parseAuditTab(tab: string | null): AuditTab {
   return "events";
 }
 
+export function settingsModeHref(id: SettingsMode): string {
+  if (id === "workspace") return "/settings";
+  if (
+    id === "roles" ||
+    id === "sso" ||
+    id === "pii" ||
+    id === "scim"
+  ) {
+    return `/settings/${id}`;
+  }
+  return `/settings?mode=${id}`;
+}
+
 const SETTINGS_TABS: ReadonlyArray<{
   id: SettingsMode;
   label: string;
-  /** Present for tabs that are real ``/settings/{id}`` routes instead of
-   *  an in-page mode switch on ``/settings``. */
-  href?: string;
 }> = [
   { id: "workspace", label: "Overview" },
   { id: "keys", label: "API keys" },
   { id: "members", label: "Members" },
-  { id: "roles", label: "Roles", href: "/settings/roles" },
-  { id: "sso", label: "SSO", href: "/settings/sso" },
-  { id: "pii", label: "PII policy", href: "/settings/pii" },
-  { id: "scim", label: "SCIM", href: "/settings/scim" },
+  { id: "roles", label: "Roles" },
+  { id: "sso", label: "SSO" },
+  { id: "pii", label: "PII policy" },
+  { id: "scim", label: "SCIM" },
   { id: "audit", label: "Audit" },
 ];
 
@@ -119,35 +129,31 @@ export function SettingsModeNav({
   onChange,
 }: {
   value: SettingsMode;
-  onChange: (next: SettingsMode) => void;
+  onChange?: (next: SettingsMode) => void;
 }) {
   return (
-    <div role="tablist" aria-label="Settings mode" className="flex gap-1">
-      {SETTINGS_TABS.map(({ id, label, href }) =>
-        href ? (
+    <div
+      role="tablist"
+      aria-label="Settings mode"
+      className="flex min-w-0 max-w-full flex-wrap gap-1 overflow-x-auto"
+    >
+      {SETTINGS_TABS.map(({ id, label }) => {
+        const selected = value === id;
+        return (
           <Link
             key={id}
-            href={href}
+            href={settingsModeHref(id)}
             role="tab"
-            aria-selected={value === id}
+            aria-selected={selected}
+            data-active={selected ? "true" : undefined}
             className="ds-tab"
+            data-tour-id={id === "keys" ? "api-keys" : undefined}
+            onClick={() => onChange?.(id)}
           >
             {label}
           </Link>
-        ) : (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={value === id}
-            className="ds-tab"
-            data-tour-id={id === "keys" ? "api-keys" : undefined}
-            onClick={() => onChange(id)}
-          >
-            {label}
-          </button>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }

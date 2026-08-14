@@ -111,7 +111,7 @@ export default function SettingsScimPage() {
     <div className="ds-page">
       <PageHeader
         title="SCIM"
-        meta="Native Eden SCIM tokens for self-hosted deployments. Clerk-hosted orgs provision via Clerk — see Settings → SSO."
+        meta="Native SCIM for self-hosted orgs"
         actions={nav}
       />
 
@@ -123,11 +123,21 @@ export default function SettingsScimPage() {
         {providers.length === 0 ? (
           <EmptyState
             title="No SSO providers configured"
-            body="SCIM tokens are issued per provider — add an SSO provider first."
+            body="Hosted workspaces provision SCIM in Clerk. Native tokens here are for self-hosted SSO providers only."
             action={
-              <Link href="/settings/sso" className="ds-btn ds-btn-primary ds-btn-sm">
-                Go to SSO
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <a
+                  className="ds-btn ds-btn-primary ds-btn-sm"
+                  href="https://dashboard.clerk.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Manage in Clerk
+                </a>
+                <Link href="/settings/sso" className="ds-btn ds-btn-ghost ds-btn-sm">
+                  Go to SSO
+                </Link>
+              </div>
             }
           />
         ) : (
