@@ -1028,6 +1028,12 @@ _HELP_MISS_INSTRUCTION = (
 )
 _NEVER_ATTEMPTED = "this job was never attempted"
 _MAX_HELP_MISS_LEFTOVERS = 3
+FIX_KIND_CODE = "code_change"
+FIX_KIND_INSTRUCTION = "instruction_replace"
+_FIX_KIND_LINE = {
+    FIX_KIND_CODE: "This is a code change.",
+    FIX_KIND_INSTRUCTION: "This is an instruction replace.",
+}
 
 
 def kinds_for_help_miss_reason(reason: str | None) -> list[str]:
@@ -1089,6 +1095,18 @@ def normalize_help_miss_leftovers(
     return cleaned
 
 
+def classify_help_miss_fix(leftovers: list[Any] | None) -> str:
+    """Code change when traces + leftover can point at a file. Else instruction replace."""
+    for raw in leftovers or []:
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("path") or "").strip():
+            return FIX_KIND_CODE
+        if str(raw.get("trace_id") or "").strip():
+            return FIX_KIND_CODE
+    return FIX_KIND_INSTRUCTION
+
+
 def build_help_miss_improve_draft(
     leftovers: list[Any] | None,
     *,
@@ -1102,6 +1120,7 @@ def build_help_miss_improve_draft(
     if instruction_is_generic(instruction_text):
         return None
     any_session = any(item.get("session_id") for item in cleaned)
+    fix_kind = classify_help_miss_fix(cleaned)
     lines: list[str] = []
     if not any_session:
         lines.append(_NEVER_ATTEMPTED)
@@ -1109,6 +1128,7 @@ def build_help_miss_improve_draft(
         lines.append(
             "A person still did the work this agent was supposed to take off them."
         )
+    lines.append(_FIX_KIND_LINE[fix_kind])
     lines.append("")
     lines.append(instruction_text)
     lines.append("")
@@ -1131,6 +1151,7 @@ def build_help_miss_improve_draft(
         "leftovers": cleaned,
         "never_attempted": not any_session,
         "instruction": instruction_text,
+        "fix_kind": fix_kind,
     }
 
 
@@ -1240,6 +1261,7 @@ async def propose_prompt_canary_for_help_miss(
             "leftovers": draft["leftovers"],
             "never_attempted": draft["never_attempted"],
             "instruction": draft["instruction"],
+            "fix_kind": draft["fix_kind"],
         },
         status="draft",
     )
@@ -1253,4 +1275,5 @@ async def propose_prompt_canary_for_help_miss(
         "plan": plan,
         "leftovers": draft["leftovers"],
         "never_attempted": draft["never_attempted"],
+        "fix_kind": draft["fix_kind"],
     }
