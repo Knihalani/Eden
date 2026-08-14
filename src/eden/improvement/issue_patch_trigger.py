@@ -1015,14 +1015,166 @@ async def propose_patch_for_action(org_id: str, action: dict[str, Any]) -> dict[
         return await propose_plan_for_issue(org_id, str(issue_id))
 
 
+_GENERIC_DRAFT_PHRASES = (
+    "be more helpful",
+    "follow the instructions",
+    "be careful",
+    "prompt canary aimed at",
+    "eden does not land the change",
+)
+_HELP_MISS_INSTRUCTION = (
+    "Do the job yourself when you see this leftover work. "
+    "Do not leave it for the human."
+)
+_NEVER_ATTEMPTED = "this job was never attempted"
+_MAX_HELP_MISS_LEFTOVERS = 3
+
+
+def kinds_for_help_miss_reason(reason: str | None) -> list[str]:
+    """ExtraWorkEvent.kind values that fingerprint to this HelpMiss reason."""
+    from eden.issues.fingerprint import HELP_MISS_REASON_BY_KIND
+
+    if not reason:
+        return []
+    return [kind for kind, mapped in HELP_MISS_REASON_BY_KIND.items() if mapped == reason]
+
+
+def instruction_is_generic(instruction: str | None) -> bool:
+    """True when the draft is a style platitude, not a leftover-backed change."""
+    import re
+
+    text = (instruction or "").strip()
+    if not text:
+        return True
+    stripped = re.sub(r'"[^"]*"', " ", text)
+    stripped = re.sub(r"\s+", " ", stripped).strip().lower()
+    if not stripped:
+        return True
+    return any(phrase in stripped for phrase in _GENERIC_DRAFT_PHRASES)
+
+
+def _leftover_snippet(item: dict[str, Any]) -> str:
+    return str(item.get("snippet") or "").strip()[:280]
+
+
+def normalize_help_miss_leftovers(
+    leftovers: list[Any] | None,
+) -> list[dict[str, Any]]:
+    """Keep up to three ExtraWorkEvent leftovers that have a snippet."""
+    cleaned: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in leftovers or []:
+        if not isinstance(raw, dict):
+            continue
+        snippet = _leftover_snippet(raw)
+        if not snippet:
+            continue
+        session_id = str(raw.get("session_id") or "").strip()
+        trace_id = str(raw.get("trace_id") or "").strip()
+        key = (snippet, session_id, trace_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(
+            {
+                "snippet": snippet,
+                "session_id": session_id or None,
+                "trace_id": trace_id or None,
+                "kind": raw.get("kind"),
+                "path": raw.get("path"),
+            }
+        )
+        if len(cleaned) >= _MAX_HELP_MISS_LEFTOVERS:
+            break
+    return cleaned
+
+
+def build_help_miss_improve_draft(
+    leftovers: list[Any] | None,
+    *,
+    instruction: str | None = None,
+) -> dict[str, Any] | None:
+    """Deterministic Improve draft from leftover snippets. None = do not offer."""
+    cleaned = normalize_help_miss_leftovers(leftovers)
+    if not cleaned:
+        return None
+    instruction_text = (instruction or _HELP_MISS_INSTRUCTION).strip()
+    if instruction_is_generic(instruction_text):
+        return None
+    any_session = any(item.get("session_id") for item in cleaned)
+    lines: list[str] = []
+    if not any_session:
+        lines.append(_NEVER_ATTEMPTED)
+    else:
+        lines.append(
+            "A person still did the work this agent was supposed to take off them."
+        )
+    lines.append("")
+    lines.append(instruction_text)
+    lines.append("")
+    lines.append("Leftovers that caused this draft:")
+    for index, item in enumerate(cleaned, 1):
+        suffix = ""
+        if item.get("session_id"):
+            bits = [f"session {item['session_id']}"]
+            if item.get("trace_id"):
+                bits.append(f"trace {item['trace_id']}")
+            suffix = f" ({', '.join(bits)})"
+        elif any_session:
+            suffix = f" — {_NEVER_ATTEMPTED}"
+        lines.append(f'{index}. "{item["snippet"]}"{suffix}')
+    summary = "\n".join(lines)
+    if instruction_is_generic(summary):
+        return None
+    return {
+        "summary": summary,
+        "leftovers": cleaned,
+        "never_attempted": not any_session,
+        "instruction": instruction_text,
+    }
+
+
+async def _fetch_help_miss_leftovers(
+    org_id: str,
+    *,
+    agent_id: str | None,
+    help_contract_id: str | None,
+    reason: str | None,
+) -> list[dict[str, Any]]:
+    if not agent_id:
+        return []
+    kinds = kinds_for_help_miss_reason(reason)
+    if not kinds:
+        return []
+    try:
+        from eden.integrations.slack.store import list_help_miss_leftovers
+
+        rows = await list_help_miss_leftovers(
+            org_id,
+            agent_id=agent_id,
+            help_contract_id=help_contract_id,
+            kinds=kinds,
+            limit=_MAX_HELP_MISS_LEFTOVERS,
+        )
+    except Exception as exc:
+        logger.debug("issue_patch_trigger: list_help_miss_leftovers failed: %s", exc)
+        return []
+    return [row for row in (rows or []) if isinstance(row, dict)]
+
+
 async def propose_prompt_canary_for_help_miss(
     org_id: str,
     issue: Any,
     *,
     reason: str | None = None,
     help_contract_id: str | None = None,
+    leftovers: list[dict[str, Any]] | None = None,
+    snippet: str | None = None,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    instruction: str | None = None,
 ) -> dict[str, Any]:
-    """Draft a prompt_update plan for a HelpMiss group. Human approve. No code patch."""
+    """Draft a prompt_update plan from ExtraWorkEvent leftovers. Human approve."""
     fingerprint = getattr(issue, "fingerprint", None) or ""
     if not fingerprint:
         return {"status": "suppressed", "reason": "missing_fingerprint"}
@@ -1036,16 +1188,47 @@ async def propose_prompt_canary_for_help_miss(
         }
     issue_id = str(getattr(issue, "id", "") or "")
     agent_id = getattr(issue, "agent_id", None)
+    collected: list[dict[str, Any]] = []
+    if leftovers is not None:
+        collected.extend(item for item in leftovers if isinstance(item, dict))
+    else:
+        if snippet and str(snippet).strip():
+            collected.append(
+                {
+                    "snippet": str(snippet).strip(),
+                    "session_id": session_id,
+                    "trace_id": trace_id,
+                }
+            )
+        fetched = await _fetch_help_miss_leftovers(
+            org_id,
+            agent_id=agent_id,
+            help_contract_id=help_contract_id,
+            reason=reason,
+        )
+        collected.extend(fetched)
+    cleaned = normalize_help_miss_leftovers(collected)
+    if not cleaned:
+        return {
+            "status": "suppressed",
+            "reason": "no_leftovers",
+            "issue_id": issue_id or None,
+        }
+    draft = build_help_miss_improve_draft(cleaned, instruction=instruction)
+    if draft is None:
+        return {
+            "status": "suppressed",
+            "reason": "generic_draft",
+            "issue_id": issue_id or None,
+            "leftovers": cleaned,
+        }
     title = getattr(issue, "title", None) or f"{agent_id or 'agent'} did not help"
     plan = await plans_repo.create_plan(
         org_id,
         plan_kind="prompt_update",
         title=title,
         agent_id=agent_id,
-        summary=(
-            f"Prompt canary aimed at HelpMiss reason={reason or 'took_over'}. "
-            "Human approve. Eden does not land the change."
-        ),
+        summary=draft["summary"],
         source_ref=f"help_miss:{issue_id}" if issue_id else "help_miss",
         source_fingerprint=fingerprint,
         evidence={
@@ -1054,6 +1237,9 @@ async def propose_prompt_canary_for_help_miss(
             "reason": reason,
             "help_contract_id": help_contract_id,
             "help_miss": True,
+            "leftovers": draft["leftovers"],
+            "never_attempted": draft["never_attempted"],
+            "instruction": draft["instruction"],
         },
         status="draft",
     )
@@ -1065,4 +1251,6 @@ async def propose_prompt_canary_for_help_miss(
         "plan_kind": "prompt_update",
         "issue_id": issue_id,
         "plan": plan,
+        "leftovers": draft["leftovers"],
+        "never_attempted": draft["never_attempted"],
     }
