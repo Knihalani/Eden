@@ -93,3 +93,101 @@ def pick_canary_version(
         if roll < cumulative:
             return row
     return sorted_rows[-1]  # floating point edge case
+
+async def resolve_canary_arm(
+    org_id: str,
+    agent_id: str,
+    session_id: str | None = None,
+) -> str | None:
+    """Tag ExtraWorkEvent / SessionOutcome with control | treatment | None.
+
+    Reuse a session's existing arm when present. Otherwise inherit the
+    live canary only if exactly one active experiment exists on the
+    agent. Multiple experiments stay None (UNKNOWN-UNTIL-CODE).
+    """
+    if not org_id or not agent_id:
+        return None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception:
+        return None
+    if client is None:
+        return None
+
+    sid = (session_id or "").strip() or None
+    if sid:
+        try:
+            row = await client.fetchrow(
+                """
+                SELECT canary_arm FROM extra_work_events
+                WHERE org_id = $1 AND session_id = $2
+                  AND canary_arm IN ('control', 'treatment')
+                ORDER BY observed_at DESC
+                LIMIT 1
+                """,
+                org_id,
+                sid,
+            )
+            if row and row["canary_arm"]:
+                return str(row["canary_arm"])
+            row = await client.fetchrow(
+                """
+                SELECT canary_arm FROM session_outcomes
+                WHERE org_id = $1 AND session_id = $2
+                  AND canary_arm IN ('control', 'treatment')
+                ORDER BY observed_at DESC
+                LIMIT 1
+                """,
+                org_id,
+                sid,
+            )
+            if row and row["canary_arm"]:
+                return str(row["canary_arm"])
+        except Exception as exc:
+            logger.debug("resolve_canary_arm: session lookup failed: %s", exc)
+
+    try:
+        experiments = await client.fetch(
+            """
+            SELECT experiment_id, control_version, candidate_version
+              FROM prompt_canary_experiments
+             WHERE tenant_id = $1 AND agent = $2 AND status = 'active'
+            """,
+            org_id,
+            agent_id,
+        )
+    except Exception as exc:
+        logger.debug("resolve_canary_arm: experiment lookup failed: %s", exc)
+        return None
+    if len(experiments) != 1:
+        return None
+
+    exp = dict(experiments[0])
+    try:
+        rows = await client.fetch(
+            """
+            SELECT version, traffic_pct, experiment_id
+              FROM prompt_version_assignments
+             WHERE tenant_id = $1 AND agent = $2 AND status = 'active'
+               AND (expires_at IS NULL OR expires_at > NOW())
+               AND experiment_id = $3
+            """,
+            org_id,
+            agent_id,
+            exp["experiment_id"],
+        )
+    except Exception as exc:
+        logger.debug("resolve_canary_arm: assignment lookup failed: %s", exc)
+        return None
+    assignments = [dict(r) for r in rows]
+    chosen = pick_canary_version(assignments, org_id, agent_id)
+    candidate = exp.get("candidate_version")
+    if chosen is not None and candidate is not None:
+        try:
+            if int(chosen.get("version") or -1) == int(candidate):
+                return "treatment"
+        except (TypeError, ValueError):
+            pass
+    return "control"
