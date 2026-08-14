@@ -37,6 +37,9 @@ class StumbleKind(StrEnum):
 
 STUMBLE_KINDS: frozenset[str] = frozenset(k.value for k in StumbleKind)
 
+# Outcome miss grouped on agent_issues. Not a stumble / detector kind.
+HELP_MISS_KIND = "help_miss"
+
 # F29 open/resolved/ignored/regressed + F46 orchestration states.
 # ``acknowledged`` is the portal "In progress" triage value (also mapped
 # from triaged/fix_pending/verifying/learning/regressed/escalated on read).
@@ -70,6 +73,7 @@ _DEFAULT_SEVERITY: dict[str, Severity] = {
     StumbleKind.TIMEOUT.value: "p2",
     StumbleKind.SELF_DIAGNOSTIC.value: "p2",
     StumbleKind.CUSTOM.value: "p3",
+    HELP_MISS_KIND: "p1",
 }
 
 

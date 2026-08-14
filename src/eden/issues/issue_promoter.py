@@ -25,6 +25,8 @@ from eden.issues.repo import IssuesRepo
 
 logger = logging.getLogger(__name__)
 
+HELP_MISS_KIND = "help_miss"
+
 _EXAMPLE_CAP = 20
 _USER_CAP = 10_000
 
@@ -244,3 +246,279 @@ class IssuePromoter:
             )
         except Exception as exc:  # pragma: no cover - hook optional
             logger.debug("issue_promoter: on_issue_created failed: %s", exc)
+
+    async def upsert_help_miss(
+        self,
+        org_id: str,
+        *,
+        agent_id: str,
+        fingerprint: str,
+        reason: str,
+        help_contract_id: str | None = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        snippet: str | None = None,
+        path: str = "ambient",
+        title: str | None = None,
+    ) -> Issue | None:
+        """Upsert agent_issues kind=help_miss. No agent_stumbles row."""
+        client = await self._repo._client()
+        if client is None:
+            return None
+        title = title or f"{agent_id} didn\u2019t help ({reason})"
+        severity = "p1"
+        issue: Issue | None = None
+        try:
+            async with client.acquire() as conn, conn.transaction():
+                row = await conn.fetchrow(
+                    "SELECT * FROM agent_issues "
+                    "WHERE org_id = $1 AND fingerprint = $2 FOR UPDATE",
+                    org_id,
+                    fingerprint,
+                )
+                if row is None:
+                    issue = await self._insert_help_miss(
+                        conn,
+                        org_id=org_id,
+                        agent_id=agent_id,
+                        fingerprint=fingerprint,
+                        title=title,
+                        severity=severity,
+                        user_id=user_id,
+                    )
+                else:
+                    issue = await self._update_help_miss(
+                        conn, dict(row), user_id=user_id, severity=severity
+                    )
+        except Exception as exc:
+            logger.warning("issue_promoter: help_miss upsert failed: %s", exc)
+            return None
+
+        if issue is None:
+            return None
+        if issue.was_created:
+            await self._notify_help_miss(
+                issue,
+                reason=reason,
+                session_id=session_id,
+                snippet=snippet,
+                path=path,
+                help_contract_id=help_contract_id,
+            )
+        if issue.was_created or issue.was_regressed:
+            await self._propose_help_miss_plan(issue, reason=reason, help_contract_id=help_contract_id)
+        return issue
+
+    async def _insert_help_miss(
+        self,
+        conn: Any,
+        *,
+        org_id: str,
+        agent_id: str,
+        fingerprint: str,
+        title: str,
+        severity: str,
+        user_id: str | None,
+    ) -> Issue:
+        iid = str(uuid.uuid4())
+        affected = [user_id] if user_id else []
+        await conn.execute(
+            """
+            INSERT INTO agent_issues
+                (id, org_id, fingerprint, kind, title, status, severity,
+                 agent_id, stumble_count, user_count, repetition_count,
+                 affected_user_ids, example_stumble_ids)
+            VALUES ($1::uuid, $2, $3, $4, $5, 'open', $6, $7, 1, $8, 1,
+                    $9::text[], '{}'::uuid[])
+            """,
+            iid,
+            org_id,
+            fingerprint,
+            HELP_MISS_KIND,
+            title,
+            severity,
+            agent_id,
+            max(1, len(affected)),
+            affected,
+        )
+        return Issue(
+            id=iid,
+            org_id=org_id,
+            fingerprint=fingerprint,
+            kind=HELP_MISS_KIND,
+            title=title,
+            status="open",
+            severity=severity,  # type: ignore[arg-type]
+            stumble_count=1,
+            user_count=max(1, len(affected)),
+            agent_id=agent_id,
+            affected_user_ids=affected,
+            example_stumble_ids=[],
+            was_created=True,
+        )
+
+    async def _update_help_miss(
+        self,
+        conn: Any,
+        existing: dict[str, Any],
+        *,
+        user_id: str | None,
+        severity: str,
+    ) -> Issue:
+        status = existing["status"]
+        repetition = int(existing["repetition_count"])
+        was_regressed = False
+        if status in ("resolved", "ignored"):
+            status = "regressed"
+            was_regressed = True
+            repetition += 1
+
+        affected = list(existing["affected_user_ids"] or [])
+        if user_id and user_id not in affected and len(affected) < _USER_CAP:
+            affected.append(user_id)
+
+        stumble_count = int(existing["stumble_count"]) + 1
+        user_count = max(int(existing["user_count"]), len(affected) or 1)
+        escalated = _severity_from_blast_radius(
+            severity,
+            user_count=user_count,
+            stumble_count=stumble_count,
+            repetition_count=repetition,
+        )
+        new_severity = _more_severe(existing["severity"], escalated)
+        examples = [str(x) for x in (existing["example_stumble_ids"] or [])]
+
+        await conn.execute(
+            """
+            UPDATE agent_issues
+            SET stumble_count = stumble_count + 1,
+                last_seen = NOW(),
+                status = $3,
+                repetition_count = $4,
+                severity = $5,
+                user_count = $6,
+                affected_user_ids = $7::text[],
+                updated_at = NOW()
+            WHERE org_id = $1 AND id = $2::uuid
+            """,
+            existing["org_id"],
+            str(existing["id"]),
+            status,
+            repetition,
+            new_severity,
+            user_count,
+            affected,
+        )
+        return Issue(
+            id=str(existing["id"]),
+            org_id=existing["org_id"],
+            fingerprint=existing["fingerprint"],
+            kind=existing.get("kind") or HELP_MISS_KIND,
+            title=existing["title"],
+            status=status,
+            severity=new_severity,  # type: ignore[arg-type]
+            stumble_count=stumble_count,
+            user_count=user_count,
+            repetition_count=repetition,
+            agent_id=existing.get("agent_id"),
+            affected_user_ids=affected,
+            example_stumble_ids=examples,
+            was_created=False,
+            was_regressed=was_regressed,
+        )
+
+    async def _notify_help_miss(
+        self,
+        issue: Issue,
+        *,
+        reason: str,
+        session_id: str | None,
+        snippet: str | None,
+        path: str,
+        help_contract_id: str | None,
+    ) -> None:
+        try:
+            from eden.services.slack_notify import notify_help_miss
+
+            person = {
+                "took_over": "still did X",
+                "rewrote": "rewrote it",
+                "ticket_still_open": "ticket still open",
+                "thumbs_down": "said it didn\u2019t help",
+            }.get(reason, "still did X")
+            await notify_help_miss(
+                issue.org_id,
+                agent_id=issue.agent_id or "",
+                fingerprint=issue.fingerprint,
+                sentence="",
+                path=path,
+                person=person,
+                snippet=snippet or "",
+                session_id=session_id,
+            )
+        except Exception as exc:
+            logger.debug("issue_promoter: notify_help_miss failed: %s", exc)
+
+    async def _propose_help_miss_plan(
+        self,
+        issue: Issue,
+        *,
+        reason: str,
+        help_contract_id: str | None,
+    ) -> None:
+        try:
+            from eden.improvement.issue_patch_trigger import (
+                propose_prompt_canary_for_help_miss,
+            )
+
+            await propose_prompt_canary_for_help_miss(
+                issue.org_id,
+                issue,
+                reason=reason,
+                help_contract_id=help_contract_id,
+            )
+        except Exception as exc:
+            logger.debug("issue_promoter: help_miss plan failed: %s", exc)
+
+
+def _as_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+async def promote_from_extra_work(event: dict[str, Any]) -> Issue | None:
+    """ExtraWorkEvent hit → HelpMiss. Does not write agent_stumbles."""
+    from eden.issues.fingerprint import (
+        compute_help_miss_fingerprint,
+        help_miss_reason_for_kind,
+    )
+
+    polarity = str(event.get("polarity") or "")
+    confidence = str(event.get("confidence") or "")
+    if polarity != "extra_work" or confidence not in {"high", "medium"}:
+        return None
+    reason = help_miss_reason_for_kind(event.get("kind"))
+    if not reason:
+        return None
+    org_id = _as_str(event.get("org_id"))
+    agent_id = _as_str(event.get("agent_id"))
+    if not org_id or not agent_id:
+        return None
+    help_contract_id = _as_str(event.get("help_contract_id"))
+    fingerprint = compute_help_miss_fingerprint(
+        org_id, agent_id, help_contract_id, reason
+    )
+    return await IssuePromoter().upsert_help_miss(
+        org_id,
+        agent_id=agent_id,
+        fingerprint=fingerprint,
+        reason=reason,
+        help_contract_id=help_contract_id,
+        session_id=_as_str(event.get("session_id")),
+        user_id=_as_str(event.get("user_id")),
+        snippet=_as_str(event.get("snippet")),
+        path=_as_str(event.get("path")) or "ambient",
+    )
+
