@@ -13,6 +13,9 @@ Routes:
     Public (Slack redirects here) — verifies state, exchanges the code,
     persists ``org_slack_installs`` (bot token encrypted), redirects
     back to the portal settings page.
+* ``POST /integrations/slack/events``
+    Public (Slack signs the body) — Events API receiver. Ack + Stages
+    0–3 keyword ambient listen. DMs (``message.im``) are ignored.
 * ``GET  /orgs/{org_id}/slack/install``
     Member — the org's active install (team name/id, no token).
 * ``DELETE /orgs/{org_id}/slack/install``
@@ -38,6 +41,7 @@ Security notes:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -45,7 +49,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from starlette.responses import RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 from eden.api.deps import (
     get_current_user,
@@ -59,8 +63,14 @@ from eden.integrations.slack import (
     SlackConfigError,
     SlackOAuthClient,
     is_configured,
+    verify_slack_signature,
 )
 from eden.integrations.slack import store as slack_store
+from eden.integrations.slack.ambient import (
+    LISTEN_CHANNEL_TYPES,
+    is_dm,
+    process_message,
+)
 from eden.integrations.slack.client import SlackClient
 from eden.storage.postgres import get_postgres_client
 
@@ -94,6 +104,9 @@ class InstallOut(BaseModel):
     team_name: str
     bot_user_id: str = ""
     installed_at: str = ""
+    granted_scopes: str = ""
+    needs_reconsent: bool = False
+    history_consented_at: str = ""
 
 
 class ChannelOut(BaseModel):
@@ -261,6 +274,7 @@ async def slack_callback(
         bot_token=bot_token,
         bot_user_id=str(payload.get("bot_user_id") or ""),
         installed_by_user_id=None,
+        granted_scopes=str(payload.get("scope") or ""),
     )
     # Consume the state so it can't be replayed.
     existing = await pg.fetchrow(
@@ -302,6 +316,9 @@ async def get_slack_install(
         team_name=str(row.get("team_name") or ""),
         bot_user_id=str(row.get("bot_user_id") or ""),
         installed_at=str(row.get("installed_at") or ""),
+        granted_scopes=str(row.get("granted_scopes") or ""),
+        needs_reconsent=slack_store.needs_reconsent(row),
+        history_consented_at=str(row.get("history_consented_at") or ""),
     )
 
 
@@ -366,6 +383,14 @@ async def set_slack_route(
     )
     if not ok:
         raise HTTPException(503, "Could not persist the channel binding.")
+    from eden.integrations.slack.ambient import backfill_on_invite
+
+    asyncio.create_task(
+        backfill_on_invite(
+            str(org["org_id"]),
+            channel_id=req.channel_id.strip(),
+        )
+    )
     return RouteOut(
         agent_id=(req.agent_id or "").strip() or None,
         channel_id=req.channel_id.strip(),
@@ -406,6 +431,97 @@ async def send_slack_test(
             502, f"Test message not sent: {result.get('reason') or 'unknown'}"
         )
     return result
+
+
+
+def _slack_header(request: Request, name: str) -> str:
+    return (
+        request.headers.get(name)
+        or request.headers.get(name.lower())
+        or ""
+    )
+
+
+@public_router.post("/events")
+async def slack_events(request: Request) -> JSONResponse:
+    """Slack Events API receiver.
+
+    Unauthenticated — Slack signs the raw body. Ack HTTP 200 within 3s.
+    Cheap Stages 0–3 run inline (no ``conversations.history``). Persist
+    ExtraWorkEvent only on fire. DMs (``message.im``) are ignored.
+    """
+    from eden.config import get_settings
+
+    body = await request.body()
+    secret = (getattr(get_settings(), "slack_signing_secret", "") or "").strip()
+    if not secret:
+        raise HTTPException(503, "Slack signing secret is not configured.")
+    ts = _slack_header(request, "X-Slack-Request-Timestamp")
+    sig = _slack_header(request, "X-Slack-Signature")
+    if not verify_slack_signature(
+        body=body, timestamp=ts, signature=sig, secret=secret
+    ):
+        raise HTTPException(401, "Invalid Slack signature.")
+
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JSONResponse({"ok": True})
+
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": True})
+
+    if payload.get("type") == "url_verification":
+        return JSONResponse({"challenge": payload.get("challenge") or ""})
+
+    if payload.get("type") != "event_callback":
+        return JSONResponse({"ok": True})
+
+    event = payload.get("event") or {}
+    if not isinstance(event, dict):
+        return JSONResponse({"ok": True})
+
+    team_id = str(
+        payload.get("team_id") or (payload.get("team") or {}).get("id") or ""
+    )
+    event_id = str(payload.get("event_id") or "")
+
+    if event.get("type") == "member_joined_channel":
+        org_id = await slack_store.get_org_id_for_team(team_id)
+        if org_id:
+            from eden.integrations.slack.ambient import backfill_on_invite
+
+            asyncio.create_task(
+                backfill_on_invite(
+                    org_id,
+                    channel_id=str(event.get("channel") or ""),
+                    joining_user=str(event.get("user") or ""),
+                    event_id=event_id,
+                )
+            )
+        return JSONResponse({"ok": True})
+
+    if is_dm(event):
+        return JSONResponse({"ok": True})
+    if event.get("type") != "message":
+        return JSONResponse({"ok": True})
+    channel_type = str(event.get("channel_type") or "")
+    if channel_type and channel_type not in LISTEN_CHANNEL_TYPES:
+        return JSONResponse({"ok": True})
+
+    team_id = str(
+        payload.get("team_id") or (payload.get("team") or {}).get("id") or ""
+    )
+    org_id = await slack_store.get_org_id_for_team(team_id)
+    if not org_id:
+        return JSONResponse({"ok": True})
+
+    await process_message(
+        org_id=org_id,
+        event_id=str(payload.get("event_id") or ""),
+        event=event,
+    )
+    return JSONResponse({"ok": True})
 
 
 __all__ = ["org_router", "public_router"]

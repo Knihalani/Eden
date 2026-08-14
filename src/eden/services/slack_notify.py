@@ -134,6 +134,7 @@ async def _send(
     dedupe_key: str,
     text: str,
     blocks: list[dict[str, Any]],
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """Resolve channel + token, rate-limit, post. Never raises."""
     if not await _allow_send(org_id, dedupe_key):
@@ -149,12 +150,25 @@ async def _send(
         token = await slack_store.get_bot_token(org_id)
         if not token:
             return {"status": "not_connected"}
+        channel_id = str(channel["channel_id"])
         resp = await SlackClient(token).post_message(
-            channel=str(channel["channel_id"]),
+            channel=channel_id,
             text=text,
             blocks=blocks,
         )
-        return {"status": "sent", "ts": str(resp.get("ts") or "")}
+        ts = str(resp.get("ts") or "")
+        if ts:
+            try:
+                await slack_store.save_pointer(
+                    org_id,
+                    channel_id=channel_id,
+                    ts=ts,
+                    agent_id=agent_id,
+                    session_id=session_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("slack_notify: pointer persist skipped: %s", exc)
+        return {"status": "sent", "ts": ts, "channel": channel_id}
     except Exception as exc:  # noqa: BLE001
         logger.warning("slack_notify: send failed org=%s: %s", org_id, exc)
         return {"status": "error", "reason": str(exc)[:200]}
@@ -444,11 +458,87 @@ async def notify_nl_incident(
     )
 
 
+
+async def notify_help_miss(
+    org_id: str,
+    *,
+    agent_id: str,
+    fingerprint: str,
+    sentence: str = "",
+    channel_name: str = "",
+    path: str = "ambient",
+    person: str = "still did X",
+    snippet: str = "",
+    session_id: str | None = None,
+    helped_n: int = 0,
+    not_helped_n: int = 0,
+    unknown_n: int = 0,
+    leftover_n: int = 0,
+) -> dict[str, Any]:
+    """HelpMiss card. Dedup helpmiss:{agent_id}:{fingerprint}. No Approve-in-Slack."""
+    where = "ambient hit" if path == "ambient" else "thread takeover"
+    channel_bit = f"#{channel_name}" if channel_name else "mapped channel"
+    session_url = _deep_link(f"/traces?view=sessions&session={session_id}") if session_id else ""
+    change_url = _deep_link("/improve")
+    snippet_line = f'"{(snippet or "")[:280]}"' if snippet else ""
+    body = (
+        f"*Job:* {sentence or '(no HelpContract)'}\n"
+        f"*Where:* {channel_bit}  ·  {where}\n"
+        f"*Person:* {person}\n"
+        + (f"*Snippet:* {snippet_line}\n" if snippet_line else "")
+        + f"*Counts:* {helped_n} helped · {not_helped_n} didn’t · {unknown_n} unknown · {leftover_n} ambient leftover (7d)"
+    )
+    elements = [
+        {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Review change"[:75]},
+            "url": change_url,
+        }
+    ]
+    if session_url:
+        elements.insert(
+            0,
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Open session"[:75]},
+                "url": session_url,
+            },
+        )
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": _safe_text(f"{agent_id} didn’t help")[:150]},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": _safe_text(body)[:2900]},
+        },
+        {"type": "actions", "elements": elements},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": _safe_text("Did it actually help? — leftover work, not a second pager")[:2900],
+                }
+            ],
+        },
+    ]
+    return await _send(
+        org_id,
+        agent_id=agent_id,
+        dedupe_key=f"helpmiss:{agent_id}:{fingerprint}",
+        text=f"{agent_id} didn’t help",
+        blocks=blocks,
+        session_id=session_id,
+    )
+
 __all__ = [
     "notify_issue_detected",
     "notify_needs_approval",
     "notify_nl_incident",
     "notify_pr_opened",
+    "notify_help_miss",
     "notify_regression",
     "send_test_message",
 ]

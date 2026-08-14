@@ -296,3 +296,81 @@ def _first(rows: list[Any], key: str) -> str | None:
         if row[key]:
             return str(row[key])
     return None
+
+
+def derive_helped(records: list[dict[str, Any]]) -> str:
+    """SessionOutcome.value from ExtraWorkEvent[] + explicit person/product.
+
+    Precedence §4.3. Agent-declared success is never an input.
+    Low extra-work does not write the resolved value.
+    Zero records -> unknown.
+    """
+    if not records:
+        return "unknown"
+
+    def _is(rec: dict[str, Any], *, source: str, value: str, explicit: bool = True) -> bool:
+        return (
+            rec.get("source") == source
+            and rec.get("value") == value
+            and bool(rec.get("explicit")) == explicit
+        )
+
+    if any(_is(r, source="person", value="not_helped") for r in records):
+        return "not_helped"
+    if any(_is(r, source="person", value="helped") for r in records):
+        return "helped"
+    if any(_is(r, source="product", value="not_helped") for r in records):
+        return "not_helped"
+    extra = any(
+        r.get("polarity") == "extra_work"
+        and r.get("confidence") in ("high", "medium")
+        for r in records
+    )
+    if extra:
+        return "not_helped"
+    if any(_is(r, source="product", value="helped") for r in records):
+        return "helped"
+    return "unknown"
+
+
+async def recompute_session_helped(org_id: str, session_id: str) -> str:
+    """Rewrite session_summaries.helped from outcomes + extra-work. Not outcome."""
+    from eden.integrations.slack import store as slack_store
+
+    records: list[dict[str, Any]] = list(slack_store.memory_outcomes(org_id, session_id))
+    client = None
+    try:
+        from eden.storage.postgres import get_postgres_client
+
+        client = await get_postgres_client()
+    except Exception:
+        client = None
+    if client is not None:
+        try:
+            rows = await client.fetch(
+                """
+                SELECT value, source, explicit, confidence, NULL::text AS polarity
+                FROM session_outcomes
+                WHERE org_id = $1 AND session_id = $2
+                """,
+                org_id,
+                session_id,
+            )
+            records.extend(dict(r) for r in rows)
+            extra = await client.fetch(
+                """
+                SELECT polarity, confidence, kind
+                FROM extra_work_events
+                WHERE org_id = $1 AND session_id = $2
+                """,
+                org_id,
+                session_id,
+            )
+            records.extend(dict(r) for r in extra)
+        except Exception as exc:
+            logger.debug("recompute_session_helped read failed: %s", exc)
+    value = derive_helped(records)
+    await slack_store.set_session_helped(org_id, session_id, value)
+    return value
+
+__all__ = ["SessionRollupIndexer", "derive_helped", "derive_outcome", "recompute_session_helped"]

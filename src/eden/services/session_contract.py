@@ -28,6 +28,12 @@ SESSION_CONTRACT: dict[str, Any] = {
         "attach_trace": "POST /orgs/{org_id}/agent-sessions/{session_id}/traces",
         "identify": "POST /orgs/{org_id}/agent-sessions/{session_id}/identify",
     },
+    "optional_help_fields": {
+        "outcome": "helped | not_helped | unknown — never copied from success",
+        "source": "person | product; missing or agent rejects outcome",
+        "slack.channel": "optional Path B pointer",
+        "slack.ts": "optional Path B pointer; required with channel",
+    },
     "failure_semantics": {
         "success_false": "Emits task_failure stumble for F20 detection",
         "trace_ids": "Ordered turn list for N12 timeline UI",
@@ -52,4 +58,36 @@ def validate_session_payload(payload: dict[str, Any]) -> list[str]:
     return errors
 
 
-__all__ = ["CONTRACT_VERSION", "SESSION_CONTRACT", "validate_session_payload"]
+
+HELP_OUTCOMES = ("helped", "not_helped", "unknown")
+HELP_SOURCES = ("person", "product")
+
+
+def accepted_outcome(outcome: Any, source: Any) -> str | None:
+    """Return outcome if legal. source missing or agent -> reject outcome."""
+    if source in (None, "", "agent"):
+        return None
+    if str(source) not in HELP_SOURCES:
+        return None
+    if outcome not in HELP_OUTCOMES:
+        return None
+    return str(outcome)
+
+
+def pointer_from_payload(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Optional slack.channel + slack.ts. Missing ts -> no Path B join."""
+    slack = payload.get("slack")
+    if not isinstance(slack, dict):
+        channel = payload.get("slack_channel") or payload.get("channel")
+        ts = payload.get("slack_ts") or payload.get("ts")
+    else:
+        channel = slack.get("channel")
+        ts = slack.get("ts")
+    channel_s = str(channel).strip() if channel else ""
+    ts_s = str(ts).strip() if ts else ""
+    if not channel_s or not ts_s:
+        return None, None
+    return channel_s, ts_s
+
+
+__all__ = ["CONTRACT_VERSION", "SESSION_CONTRACT", "accepted_outcome", "pointer_from_payload", "validate_session_payload"]

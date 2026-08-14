@@ -47,7 +47,7 @@ export function isRemovedPortalPath(pathname: string | null | undefined): boolea
   );
 }
 
-/** Live product leaves (auth.protect). */
+/** Live product leaves (auth.protect). No /help route in P0. */
 export const LIVE_PORTAL_PREFIXES: readonly string[] = [
   "/rebuild",
   "/lab", // stale URLs — still protected while redirecting

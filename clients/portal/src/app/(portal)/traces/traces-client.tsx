@@ -42,6 +42,7 @@ import {
   type SessionFixture,
 } from "@/lab/fixtures/sessions";
 import { PageHeader } from "@/components/ds/primitives";
+import { HelpChip } from "./help-chip";
 import { useOrg } from "@/hooks/use-org";
 import { useOrgQuery } from "@/hooks/use-api-query";
 import { usePolling } from "@/hooks/use-polling";
@@ -1225,6 +1226,13 @@ function LabTracesInner() {
 
   return (
     <div className="ds-page">
+      {hubView === "sessions" ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <HelpChip value="helped" />
+          <HelpChip value="not_helped" />
+          <HelpChip value="unknown" unknownReason="no extra work seen" />
+        </div>
+      ) : null}
       <PageHeader
         title="Traces"
         meta={

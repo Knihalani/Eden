@@ -23,6 +23,11 @@ export type SessionFixture = {
   endedAt?: string;
   turnCount: number;
   outcome: SessionOutcome;
+  /** Derived help rollup — never copied from agent success / outcome. */
+  helped?: "helped" | "not_helped" | "unknown";
+  unknownReason?: string | null;
+  /** Agent-declared success — secondary chip only. */
+  success?: boolean | null;
   /** Wall-clock across the thread (sum of turn durations in lab fixtures). */
   durationMs: number;
   totalTokens: number;

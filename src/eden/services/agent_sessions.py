@@ -229,6 +229,12 @@ class AgentSessionService:
         *,
         success: bool,
         failure_reason: str | None = None,
+        outcome: str | None = None,
+        source: str | None = None,
+        reason: str | None = None,
+        explicit: bool | None = None,
+        slack_channel: str | None = None,
+        slack_ts: str | None = None,
     ) -> AgentSession | None:
         session = await self.get(org_id, session_id)
         if session is None:
@@ -242,17 +248,88 @@ class AgentSessionService:
                 failure_reason=failure_reason,
                 ended_at=datetime.now(UTC).isoformat(),
             )
+            if slack_channel and slack_ts:
+                session.metadata = {"slack": {"channel": slack_channel, "ts": slack_ts}}
             await self._persist(session)
+            await self._record_help(
+                session,
+                outcome=outcome,
+                source=source,
+                reason=reason,
+                explicit=explicit,
+                slack_channel=slack_channel,
+                slack_ts=slack_ts,
+            )
             if not success:
                 await self._emit_task_failure(org_id, session)
             return session
         session.success = success
         session.failure_reason = failure_reason
         session.ended_at = datetime.now(UTC).isoformat()
+        if slack_channel and slack_ts:
+            session.metadata = dict(session.metadata or {})
+            session.metadata["slack"] = {"channel": slack_channel, "ts": slack_ts}
         await self._persist(session)
+        await self._record_help(
+            session,
+            outcome=outcome,
+            source=source,
+            reason=reason,
+            explicit=explicit,
+            slack_channel=slack_channel,
+            slack_ts=slack_ts,
+        )
         if not success:
             await self._emit_task_failure(org_id, session)
         return session
+
+
+    async def _record_help(
+        self,
+        session: AgentSession,
+        *,
+        outcome: str | None,
+        source: str | None,
+        reason: str | None,
+        explicit: bool | None,
+        slack_channel: str | None,
+        slack_ts: str | None,
+    ) -> None:
+        from eden.integrations.slack import store as slack_store
+        from eden.services.session_contract import accepted_outcome
+
+        if slack_channel and slack_ts:
+            try:
+                await slack_store.save_pointer(
+                    session.org_id,
+                    channel_id=slack_channel,
+                    ts=slack_ts,
+                    agent_id=session.agent_id,
+                    session_id=session.id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("agent_session: pointer persist failed: %s", exc)
+        accepted = accepted_outcome(outcome, source)
+        if accepted is None:
+            return
+        # Never copy agent success into SessionOutcome.value.
+        try:
+            await slack_store.insert_session_outcome(
+                session.org_id,
+                agent_id=session.agent_id or "",
+                value=accepted,
+                source=str(source),
+                channel="sdk",
+                explicit=True if explicit is None else bool(explicit),
+                session_id=session.id,
+                reason=reason,
+                confidence="high",
+            )
+            from eden.sessions.rollup import recompute_session_helped
+
+            await recompute_session_helped(session.org_id, session.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("agent_session: help outcome persist failed: %s", exc)
 
     async def _emit_task_failure(
         self, org_id: str, session: AgentSession

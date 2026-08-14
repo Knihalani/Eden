@@ -3856,6 +3856,9 @@ export interface SlackInstall {
   team_name: string;
   bot_user_id: string;
   installed_at: string;
+  granted_scopes?: string;
+  needs_reconsent?: boolean;
+  history_consented_at?: string;
 }
 
 export interface SlackChannel {

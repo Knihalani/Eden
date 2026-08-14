@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import time
+from urllib.parse import parse_qs, unquote, urlparse
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -53,7 +54,14 @@ class TestSlackOAuth:
         assert url.startswith("https://slack.com/oauth/v2/authorize?")
         assert "client_id=cid-1" in url
         assert "state=st-1" in url
-        assert "chat%3Awrite" in url or "chat:write" in url
+        scopes = set(
+            unquote(parse_qs(urlparse(url).query)["scope"][0]).split(",")
+        )
+        assert "chat:write" in scopes
+        assert "channels:history" in scopes
+        assert "groups:history" in scopes
+        assert "mpim:history" in scopes
+        assert "im:history" not in scopes
         assert "redirect_uri=https%3A%2F%2Fapi.eden.test" in url
 
     def test_unconfigured_raises(self) -> None:
@@ -159,6 +167,7 @@ class TestStore:
 
         class _PG:
             async def fetchrow(self, sql, *args):
+                captured["sql"] = sql
                 captured["args"] = args
                 return {
                     "id": args[0],
@@ -181,6 +190,8 @@ class TestStore:
         token_arg = captured["args"][4]
         assert token_arg != "xoxb-secret-token"
         assert "xoxb" not in token_arg  # encrypted at rest
+        assert "granted_scopes" in captured["sql"]
+        assert "history_consented_at" in captured["sql"]
 
     @pytest.mark.asyncio
     async def test_get_bot_token_decrypts(self) -> None:
@@ -242,6 +253,45 @@ class TestStore:
         with patch.object(store, "_pg", AsyncMock(return_value=_PG())):
             out = await store.get_channel("org-1", agent_id="agent-unknown")
         assert out is not None and out["channel_id"] == "C-org"
+
+    @pytest.mark.asyncio
+    async def test_get_org_id_for_team_active_install(self) -> None:
+        from eden.integrations.slack import store
+
+        captured: dict = {}
+
+        class _PG:
+            async def fetchval(self, sql, *args):
+                captured["sql"] = sql
+                captured["args"] = args
+                return "org-1"
+
+        with patch.object(store, "_pg", AsyncMock(return_value=_PG())):
+            out = await store.get_org_id_for_team("T1")
+        assert out == "org-1"
+        assert "revoked_at IS NULL" in captured["sql"]
+        assert captured["args"] == ("T1",)
+
+    @pytest.mark.asyncio
+    async def test_get_agent_for_channel_skips_org_default(self) -> None:
+        from eden.integrations.slack import store
+
+        captured: dict = {}
+
+        class _PG:
+            async def fetchrow(self, sql, *args):
+                captured["sql"] = sql
+                return {
+                    "agent_id": "agent-9",
+                    "channel_id": "C1",
+                    "channel_name": "ops",
+                }
+
+        with patch.object(store, "_pg", AsyncMock(return_value=_PG())):
+            out = await store.get_agent_for_channel("org-1", "C1")
+        assert out is not None and out["agent_id"] == "agent-9"
+        assert "agent_id IS NOT NULL" in captured["sql"]
+        assert "channel_id = $2" in captured["sql"]
 
 
 # ── Dispatcher ──────────────────────────────────────────────────────
