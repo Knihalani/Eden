@@ -143,6 +143,9 @@ class SessionRollup(BaseModel):
     endedAt: str | None = None
     turnCount: int = 0
     outcome: SessionOutcome = "mixed"
+    helped: Literal["helped", "not_helped", "unknown"] = "unknown"
+    unknownReason: str | None = None
+    success: bool | None = None
     durationMs: int = 0
     totalTokens: int = 0
     costUsd: float | None = None
