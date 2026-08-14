@@ -129,7 +129,9 @@ async def help_status(
         if agent_id
         else None
     )
-    leftover = await slack_store.list_leftover_events(org_id, agent_id=agent_id)
+    leftover = await slack_store.list_leftover_events(
+        org_id, agent_id=agent_id, limit=20
+    )
     counts = await slack_store.help_counts(org_id, agent_id=agent_id)
     invited = bool(install)
     history = bool(install and not slack_store.needs_reconsent(install))
