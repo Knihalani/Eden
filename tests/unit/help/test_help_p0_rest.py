@@ -103,7 +103,7 @@ def test_pointer_classifiers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_notify_help_miss_dedup_and_no_approve() -> None:
+async def test_notify_help_miss_dedup_and_approve_shows_change() -> None:
     from eden.services import slack_notify
 
     captured: dict = {}
@@ -121,15 +121,22 @@ async def test_notify_help_miss_dedup_and_no_approve() -> None:
             sentence="take refunds off Y",
             channel_name="ops",
             snippet="I'll just do it",
+            leftovers=[{"snippet": "I'll just do it"}, {"snippet": "handling the refund"}],
+            instruction="Issue refunds under $50 without asking.",
+            plan_id="plan-1",
             session_id="sess-1",
         )
     assert result["status"] == "sent"
     assert captured["dedupe_key"] == "helpmiss:agent-a:fp1"
     blob = json.dumps(captured["blocks"])
-    assert "Approve" not in blob
+    assert "Approve" in blob
+    assert "help_miss_approve" in blob
     assert "didn’t help" in blob or "didn't help" in blob or "didn" in blob
+    assert "Issue refunds under $50 without asking." in blob
+    assert "I'll just do it" in blob
     assert "Review change" in blob
     assert "Open session" in blob
+    assert "%" not in captured["blocks"][1]["text"]["text"]
 
 
 @pytest.mark.asyncio

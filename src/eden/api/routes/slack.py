@@ -16,6 +16,8 @@ Routes:
 * ``POST /integrations/slack/events``
     Public (Slack signs the body) — Events API receiver. Ack + Stages
     0–3 keyword + optional on-box embed ambient listen. DMs (``message.im``) are ignored.
+* ``POST /integrations/slack/interactions``
+    Public (Slack signs the body) — Approve on a leftover-change card.
 * ``GET  /orgs/{org_id}/slack/install``
     Member — the org's active install (team name/id, no token).
 * ``DELETE /orgs/{org_id}/slack/install``
@@ -50,6 +52,7 @@ import json
 import logging
 import re
 from typing import Any
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -523,17 +526,9 @@ def _slack_header(request: Request, name: str) -> str:
     )
 
 
-@public_router.post("/events")
-async def slack_events(request: Request) -> JSONResponse:
-    """Slack Events API receiver.
-
-    Unauthenticated — Slack signs the raw body. Ack HTTP 200 within 3s.
-    Cheap Stages 0–3 run inline (no ``conversations.history``). Persist
-    ExtraWorkEvent only on fire. DMs (``message.im``) are ignored.
-    """
+def _require_slack_signature(request: Request, body: bytes) -> None:
     from eden.config import get_settings
 
-    body = await request.body()
     secret = (getattr(get_settings(), "slack_signing_secret", "") or "").strip()
     if not secret:
         raise HTTPException(503, "Slack signing secret is not configured.")
@@ -543,6 +538,18 @@ async def slack_events(request: Request) -> JSONResponse:
         body=body, timestamp=ts, signature=sig, secret=secret
     ):
         raise HTTPException(401, "Invalid Slack signature.")
+
+
+@public_router.post("/events")
+async def slack_events(request: Request) -> JSONResponse:
+    """Slack Events API receiver.
+
+    Unauthenticated — Slack signs the raw body. Ack HTTP 200 within 3s.
+    Cheap Stages 0–3 run inline (no ``conversations.history``). Persist
+    ExtraWorkEvent only on fire. DMs (``message.im``) are ignored.
+    """
+    body = await request.body()
+    _require_slack_signature(request, body)
 
     try:
         payload = json.loads(body.decode("utf-8") or "{}")
@@ -603,6 +610,59 @@ async def slack_events(request: Request) -> JSONResponse:
         event=event,
     )
     return JSONResponse({"ok": True})
+
+
+@public_router.post("/interactions")
+async def slack_interactions(request: Request) -> JSONResponse:
+    """Slack interactivity: Approve on a leftover-change card.
+
+    Applies only the shown change. Does not merge the customer PR.
+    """
+    body = await request.body()
+    _require_slack_signature(request, body)
+    try:
+        form = parse_qs(body.decode("utf-8") or "", keep_blank_values=True)
+        raw = (form.get("payload") or [""])[0]
+        payload = json.loads(raw or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return JSONResponse({"ok": True})
+    if not isinstance(payload, dict):
+        return JSONResponse({"ok": True})
+    asyncio.create_task(_handle_slack_interaction(payload))
+    return JSONResponse({"ok": True})
+
+
+async def _handle_slack_interaction(payload: dict[str, Any]) -> None:
+    if payload.get("type") != "block_actions":
+        return
+    actions = payload.get("actions") if isinstance(payload.get("actions"), list) else []
+    plan_id = ""
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        if str(action.get("action_id") or "") != "help_miss_approve":
+            continue
+        plan_id = str(action.get("value") or "").strip()
+        break
+    if not plan_id:
+        return
+    team = payload.get("team") if isinstance(payload.get("team"), dict) else {}
+    team_id = str(team.get("id") or "")
+    org_id = await slack_store.get_org_id_for_team(team_id)
+    if not org_id:
+        return
+    user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
+    approved_by = str(user.get("id") or user.get("username") or "slack")
+    try:
+        from eden.improvement.approve import approve_plan
+        from eden.improvement.plans_repo import get_plan
+
+        plan = await get_plan(org_id, plan_id)
+        if not plan:
+            return
+        await approve_plan(org_id, plan_id, approved_by=approved_by)
+    except Exception as exc:
+        logger.warning("slack interactions: help_miss approve failed: %s", exc)
 
 
 __all__ = ["org_router", "public_router"]
