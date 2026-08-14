@@ -189,7 +189,7 @@ export default function SettingsPiiPage() {
                     }
                   >
                     <span className="type-ui">{m.label}</span>
-                    <span className="type-meta font-normal">{m.hint}</span>
+                    <span className={mode === m.id ? "type-meta font-normal text-[var(--accent-fg)]" : "type-meta font-normal"}>{m.hint}</span>
                   </button>
                 ))}
               </div>

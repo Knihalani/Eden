@@ -444,8 +444,20 @@ function LabTracesInner() {
   // `selectSession` / `?session=`.
   const justSelectedSessionIdRef = useRef<string | null>(null);
   const [tab, setTab] = useState<DetailTab>(() => parseTab(paramTab));
-  const [query, setQuery] = useState("");
-  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>(() => {
+    const raw = searchParams.get("severity");
+    return raw === "error" || raw === "warn" || raw === "ok" || raw === "starred"
+      ? raw
+      : "all";
+  });
+  useEffect(() => {
+    patchQuery({
+      q: query || null,
+      severity: severityFilter === "all" ? null : severityFilter,
+    });
+  }, [query, severityFilter, patchQuery]);
+
   const [signalsDismissed, setSignalsDismissed] = useState(false);
   const [focusStepId, setFocusStepId] = useState<string | null>(paramSpan);
   const [copied, setCopied] = useState(false);
@@ -1262,7 +1274,7 @@ function LabTracesInner() {
             </button>
             <button
               type="button"
-              className="ds-btn ds-btn-ghost ds-btn-icon"
+              className="ds-btn ds-btn-ghost ds-btn-icon shrink-0"
               onClick={() => setHelpOpen(true)}
               aria-label="Keyboard shortcuts"
               title="Keyboard shortcuts (?)"

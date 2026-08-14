@@ -67,6 +67,10 @@ export function MarketingHomeSections() {
               changes. The Improve queue proposes evidence-linked plans you review
               before anything ships. Capture stays; the second half is the product.
             </p>
+            <p className="mt-3 max-w-xl text-[0.875rem] leading-relaxed text-[var(--text-muted)]">
+              Same words as the product: detectors, issues, evals, and improve plans
+              — not a separate docs jargon set.
+            </p>
             <p className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5 sm:gap-y-2">
               <Link
                 href="/why-eden"
@@ -327,6 +331,23 @@ export function MarketingHomeSections() {
         </MarketingRail>
       </section>
 
+      <section className="border-b border-[var(--line)]">
+        <MarketingRail className="flex flex-wrap items-center gap-x-6 gap-y-2 py-5">
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+            Trust
+          </p>
+          <Link href="/status" className="type-ui text-[var(--text-secondary)] hover:text-[var(--accent)]">
+            Status
+          </Link>
+          <Link href="/security" className="type-ui text-[var(--text-secondary)] hover:text-[var(--accent)]">
+            Security
+          </Link>
+          <Link href="/dpa" className="type-ui text-[var(--text-secondary)] hover:text-[var(--accent)]">
+            DPA
+          </Link>
+        </MarketingRail>
+      </section>
+
       {/* FAQ — native details/summary, no JS. Copy stays in sync with
           the FAQPage JSON-LD on the homepage via HOME_FAQ. */}
       <section className="relative border-b border-[var(--line)] py-16 sm:py-24">
@@ -335,11 +356,14 @@ export function MarketingHomeSections() {
           <h2 className="mt-3 max-w-2xl text-[1.5rem] font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-[1.85rem]">
             Frequently asked questions
           </h2>
-          <div className="mt-8 divide-y divide-[var(--line)] border-y border-[var(--line)]">
-            {HOME_FAQ.map((item) => (
-              <details key={item.q} className="eden-faq-item">
-                <summary className="flex cursor-pointer items-center justify-between gap-4 py-4 text-[0.9375rem] font-medium tracking-[-0.01em] text-[var(--text)] transition-colors duration-150 hover:text-[var(--accent)]">
-                  {item.q}
+          <div className="mt-8 space-y-3">
+            {HOME_FAQ.map((item, i) => (
+              <details key={item.q} className="eden-faq-item border border-[var(--line)] bg-[var(--bg)] px-4">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 py-5 text-[0.9375rem] font-medium tracking-[-0.01em] text-[var(--text)] transition-colors duration-150 hover:text-[var(--accent)]">
+                  <span className="flex min-w-0 items-baseline gap-3">
+                    <span className="font-mono text-[0.6875rem] text-[var(--text-muted)]">{String(i + 1).padStart(2, "0")}</span>
+                    <span>{item.q}</span>
+                  </span>
                   <span
                     className="eden-faq-chevron shrink-0 font-mono text-[0.9375rem] text-[var(--text-faint)]"
                     aria-hidden

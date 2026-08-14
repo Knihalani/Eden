@@ -1,4 +1,3 @@
-import { EdenLogo } from "@/components/ds/eden-logo";
 import { DOCS_URL } from "@/lib/constants";
 import { MarketingAuthCtas } from "@/components/marketing/marketing-auth-ctas";
 import { MarketingRail } from "@/components/marketing/marketing-primitives";
@@ -36,13 +35,7 @@ export function MarketingHomeHero() {
 
       <MarketingRail className="relative grid grid-cols-1 items-stretch gap-10 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12 lg:py-20">
         <div className="eden-hero-rise flex flex-col justify-center lg:col-span-5">
-          <div className="flex items-center gap-3.5">
-            <EdenLogo size={44} priority />
-            <span className="text-[clamp(1.75rem,4vw,2.25rem)] font-semibold tracking-[-0.045em] text-[var(--text)]">
-              eden
-            </span>
-          </div>
-          <p className="mt-6 font-mono text-[0.625rem] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+          <p className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-[var(--text-muted)]">
             Observe · Evaluate · Improve
           </p>
           <h1 className="mt-5 max-w-[14ch] text-[clamp(2.5rem,5.8vw,3.85rem)] font-semibold leading-[1.02] tracking-[-0.042em] text-[var(--text)]">
@@ -59,28 +52,13 @@ export function MarketingHomeHero() {
             <MarketingAuthCtas size="md" />
             <a
               href={DOCS_URL}
-              className="type-ui px-1 text-[var(--text-muted)] transition-colors duration-150 hover:text-[var(--accent)]"
+              className="type-ui inline-flex min-h-11 items-center px-2 text-[var(--text-muted)] transition-colors duration-150 hover:text-[var(--accent)]"
               rel="noopener noreferrer"
             >
               Docs →
             </a>
           </div>
-          <dl className="mt-10 grid max-w-sm grid-cols-3 gap-4 border-t border-[var(--line)] pt-6">
-            {[
-              { k: "Overhead", v: "≤5ms" },
-              { k: "Ingest", v: "OTel + SDKs" },
-              { k: "Loop", v: "Closed" },
-            ].map((row) => (
-              <div key={row.k}>
-                <dt className="font-mono text-[0.5625rem] uppercase tracking-[0.16em] text-[var(--text-faint)]">
-                  {row.k}
-                </dt>
-                <dd className="mt-1.5 font-mono text-[0.8125rem] text-[var(--text-secondary)]">
-                  {row.v}
-                </dd>
-              </div>
-            ))}
-          </dl>
+
         </div>
 
         <div className="eden-hero-rise-delay relative lg:col-span-7">

@@ -74,11 +74,11 @@
 }
 
 .eden-hero-rise {
-  animation: eden-hero-rise 0.6s cubic-bezier(0.33, 1, 0.68, 1) both;
+  animation: eden-hero-rise 0.2s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 .eden-hero-rise-delay {
-  animation: eden-hero-rise 0.7s cubic-bezier(0.33, 1, 0.68, 1) 0.14s both;
+  animation: eden-hero-rise 0.2s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 .eden-auth-ambient {

@@ -164,7 +164,12 @@ export default function PricingPage() {
             </div>
           ))}
         </div>
-        <p className="mt-8 type-meta text-[var(--text-faint)]">
+        <p className="mt-8 type-meta text-[var(--text-muted)]">
+          A credit is a unit of billed gateway and ingest usage — the free monthly
+          cap is {FREE_TIER_CAP_SHORT} (100 credits ≈ $1 of Eden cost). We do not
+          treat one trace as one credit.
+        </p>
+        <p className="mt-3 type-meta text-[var(--text-muted)]">
           Free is open during public beta. Questions about Team or Enterprise →{" "}
           <a
             href={`mailto:${SALES_EMAIL}`}
