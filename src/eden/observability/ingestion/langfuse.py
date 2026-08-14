@@ -136,6 +136,10 @@ class LangfuseDecoder:
         for trace in traces:
             if not isinstance(trace, dict):
                 continue
+            try:
+                await _maybe_map_langfuse_boolean(trace, attribution)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("langfuse boolean map failed: %s", exc)
             str(trace.get("id") or trace.get("traceId") or "")
             scores = trace.get("scores") or []
             trace_scores: list[dict[str, Any]] = []
@@ -184,6 +188,61 @@ class LangfuseDecoder:
                 problems=["no_observations"],
             )
         return events
+
+
+
+def _langfuse_joinable_session_id(trace: dict[str, Any], score: dict[str, Any] | None = None) -> str | None:
+    """Langfuse BOOLEAN joins on sessionId. Do not invent a session from trace id."""
+    raw = None
+    if score:
+        raw = score.get("sessionId") or score.get("session_id")
+    if raw in (None, ""):
+        raw = trace.get("sessionId") or trace.get("session_id")
+    sid = str(raw or "").strip()
+    return sid or None
+
+
+def _is_langfuse_boolean_score(score: dict[str, Any]) -> bool:
+    data_type = str(score.get("dataType") or score.get("data_type") or "").strip().upper()
+    return data_type == "BOOLEAN"
+
+
+async def _maybe_map_langfuse_boolean(trace: dict[str, Any], attribution: Attribution) -> None:
+    """Map joinable BOOLEAN scores to SessionOutcome. Do not clone numeric scoring."""
+    from eden.sessions.rollup import coerce_competitor_bool, record_competitor_boolean
+
+    scores = [s for s in (trace.get("scores") or []) if isinstance(s, dict)]
+    mapped: set[tuple[str, bool]] = set()
+    for score in scores:
+        if not _is_langfuse_boolean_score(score):
+            continue
+        rating = coerce_competitor_bool(score.get("value"))
+        if rating is None:
+            continue
+        session_id = _langfuse_joinable_session_id(trace, score)
+        if not session_id or (session_id, rating) in mapped:
+            continue
+        mapped.add((session_id, rating))
+        metadata = trace.get("metadata") if isinstance(trace.get("metadata"), dict) else {}
+        agent_id = str(
+            trace.get("agent_id")
+            or trace.get("agentId")
+            or metadata.get("agent_id")
+            or metadata.get("agentId")
+            or ""
+        )
+        user_id = str(trace.get("userId") or trace.get("user_id") or "") or None
+        trace_id = str(trace.get("id") or trace.get("traceId") or "") or None
+        await record_competitor_boolean(
+            attribution.tenant_id,
+            session_id=session_id,
+            channel="langfuse",
+            reason="langfuse_boolean",
+            rating=rating,
+            agent_id=agent_id,
+            trace_id=trace_id,
+            user_id=user_id,
+        )
 
 
 def _trace_to_raw(
