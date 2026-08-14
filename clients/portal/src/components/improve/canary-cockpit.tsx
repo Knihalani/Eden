@@ -253,7 +253,7 @@ export function CanaryCockpit({ orgId }: { orgId: string | null }) {
       <p className="type-meta mt-0.5">
         Version experiments split live traffic between a control and a
         candidate prompt. Promote flips the winner to 100% — the evidence
-        gate (W25) holds the flip until it passes.
+        gate holds the flip until it passes.
       </p>
       {canariesQuery.isLoading ? (
         <p className="type-meta mt-2">Loading canaries…</p>

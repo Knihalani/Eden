@@ -20,6 +20,7 @@ import {
   type AbSampleGrade,
   type AbStatus,
 } from "@/lab/fixtures/compare";
+import { isPhantomAbExperiment } from "@/lib/ui-copy";
 import { PageHeader } from "@/components/ds/primitives";
 import { useAgentScope, useQueryPatch } from "@/lab/agent-scope";
 import {
@@ -93,7 +94,10 @@ function LabCompareInner() {
     SHELL_QUERY,
   );
   const experiments = useMemo(
-    () => normalizeAbExperiments(experimentsQuery.data),
+    () =>
+      normalizeAbExperiments(experimentsQuery.data).filter(
+        (e) => !isPhantomAbExperiment(e),
+      ),
     [experimentsQuery.data],
   );
 
@@ -283,14 +287,15 @@ function LabCompareInner() {
     scoped.find((e) => e.id === experimentId) ?? scoped[0] ?? null;
 
   const scopeCounts = useMemo(() => {
+    const agents = agentsQuery.data ?? [];
     const map: Record<string, number> = {
-      all: experiments.length,
+      all: agents.length,
     };
-    for (const a of agentsQuery.data ?? []) {
-      map[a.id] = experiments.filter((e) => e.agentId === a.id).length;
+    for (const a of agents) {
+      map[a.id] = 1;
     }
     return map;
-  }, [experiments, agentsQuery.data]);
+  }, [agentsQuery.data]);
 
   const selectExperiment = useCallback(
     (id: string) => {

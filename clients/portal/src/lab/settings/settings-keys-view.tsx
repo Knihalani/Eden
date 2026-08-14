@@ -10,6 +10,7 @@ import { EmptyState, FilterChips } from "@/lab/lab-ui";
 import { useLabToast } from "@/lab/lab-toast";
 import { KeyStatusChip } from "@/lab/settings/settings-chrome";
 import { formatSmartTime } from "@/lib/format";
+import { displayActor } from "@/lib/ui-copy";
 import { cn } from "@/lib/utils";
 
 type KeyFilter = "all" | "active" | "revoked";
@@ -63,6 +64,11 @@ export function SettingsKeysView({
     active: keys.filter((k) => k.status === "active").length,
     revoked: keys.filter((k) => k.status === "revoked").length,
   };
+  const duplicateNames = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const k of keys) seen.set(k.name, (seen.get(k.name) ?? 0) + 1);
+    return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([name]) => name));
+  }, [keys]);
 
   function toggleScope(scope: KeyScope) {
     setScopes((prev) =>
@@ -197,6 +203,11 @@ export function SettingsKeysView({
                       <KeyStatusChip status={k.status} />
                       <span className="type-ui min-w-0 flex-1 truncate text-[var(--text)]">
                         {k.name}
+                        {duplicateNames.has(k.name) ? (
+                          <span className="type-meta ml-1.5 font-normal">
+                            {formatSmartTime(k.createdAt)}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="type-mono !text-[0.6875rem]">
                         {k.prefix}…
@@ -230,7 +241,7 @@ export function SettingsKeysView({
             <h2 className="type-ui mt-3 text-[var(--text)]">{selected.name}</h2>
             <p className="type-meta mt-1">
               Created {formatSmartTime(selected.createdAt)} by{" "}
-              {selected.createdBy}
+              {displayActor(selected.createdBy)}
             </p>
 
             {selected.secret ? (
@@ -296,6 +307,24 @@ export function SettingsKeysView({
             </dl>
 
             <div className="mt-auto flex flex-wrap gap-2 pt-4">
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-sm"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(selected.prefix);
+                    pushToast({ title: "Prefix copied", tone: "ok" });
+                  } catch {
+                    pushToast({
+                      title: "Copy failed",
+                      body: "Select the prefix and copy manually.",
+                      tone: "fail",
+                    });
+                  }
+                }}
+              >
+                Copy prefix
+              </button>
               {selected.status === "active" ? (
                 confirmRevoke ? (
                   <>

@@ -111,11 +111,24 @@ export function formatInt(n: number | null | undefined): string {
  * for the locale's symbol + grouping. Uses Intl.NumberFormat so
  * negatives show in accounting style, decimals are clamped to 2.
  */
+export function formatUsd(
+  amount: number | null | undefined,
+  digits = 2,
+): string {
+  if (amount == null || !Number.isFinite(amount)) return "—";
+  if (amount > 0 && amount < 10 ** -digits) {
+    const needed = Math.min(6, Math.max(digits, Math.ceil(-Math.log10(amount))));
+    return `$${amount.toFixed(needed)}`;
+  }
+  return `$${amount.toFixed(digits)}`;
+}
+
 export function formatCurrency(
   amount: number | null | undefined,
   currency: string = "USD",
 ): string {
   if (amount == null) return "—";
+  if (currency === "USD") return formatUsd(amount);
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,

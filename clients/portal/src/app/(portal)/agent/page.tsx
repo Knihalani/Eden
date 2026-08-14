@@ -683,7 +683,7 @@ function LabAgentInner() {
         title="Assistant"
         meta={
           <span className="type-meta">
-            Product assistant · t3 · not the agent fleet
+            Ask Eden · not the agent fleet
           </span>
         }
         actions={
