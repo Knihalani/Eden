@@ -4814,6 +4814,12 @@ const playgroundApi = {
         noDedup: true,
       },
     ),
+  delete: (orgId: string, playgroundId: string) =>
+    fetchApi<void>(`/orgs/${orgId}/playgrounds/${playgroundId}`, {
+      method: "DELETE",
+      headers: { "X-Org-Id": orgId },
+      noDedup: true,
+    }),
   fromSpan: (
     orgId: string,
     body: {

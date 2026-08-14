@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { FIRST_EVENT_WAIT } from "@/lib/portal-polish";
+import { countEventRows } from "@/lib/named-object";
+import { useLabToast } from "@/lab/lab-toast";
 
 /**
  * Shared CTA block for first-run empty states (Home + Traces).
@@ -13,12 +16,45 @@ export function FirstEventWaitAction({
   showTracesLink = true,
   primaryCreateKey = true,
 }: {
-  onCheck: () => void;
+  onCheck: () => void | Promise<unknown>;
   checking?: boolean;
   /** Home already links Traces in the primary bar — can hide here. */
   showTracesLink?: boolean;
   primaryCreateKey?: boolean;
 }) {
+  const { pushToast } = useLabToast();
+  const [busy, setBusy] = useState(false);
+  const pending = Boolean(checking || busy);
+
+  async function handleCheck() {
+    if (pending) return;
+    setBusy(true);
+    try {
+      const result = await onCheck();
+      const n = countEventRows(result);
+      if (n > 0) {
+        pushToast({
+          title: n === 1 ? "1 event found" : `${n} events found`,
+          tone: "ok",
+        });
+      } else {
+        pushToast({
+          title: "No events yet",
+          body: FIRST_EVENT_WAIT.doctorHint,
+          tone: "default",
+        });
+      }
+    } catch (err) {
+      pushToast({
+        title: "Could not check for events",
+        body: err instanceof Error ? err.message : "Try again.",
+        tone: "fail",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -35,10 +71,10 @@ export function FirstEventWaitAction({
         <button
           type="button"
           className="ds-btn ds-btn-outline ds-btn-sm"
-          onClick={onCheck}
-          disabled={checking}
+          onClick={() => void handleCheck()}
+          disabled={pending}
         >
-          {checking ? "Checking…" : FIRST_EVENT_WAIT.checkCta}
+          {pending ? "Checking…" : FIRST_EVENT_WAIT.checkCta}
         </button>
         {showTracesLink ? (
           <Link href="/traces" className="ds-btn ds-btn-ghost ds-btn-sm">

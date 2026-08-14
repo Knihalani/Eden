@@ -21,6 +21,7 @@ import {
   Shield,
   Settings,
   MoreHorizontal,
+  X,
   Tag,
   Layers,
   LayoutDashboard,
@@ -144,8 +145,19 @@ export function MobileBottomNav() {
           />
           <div
             ref={sheetRef}
-            className="absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] mx-3 max-h-[60dvh] overflow-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--bg-elevated)] p-3 shadow-lg"
+            className="pointer-events-auto absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] mx-3 max-h-[60dvh] overflow-auto rounded-[var(--radius-lg)] border border-[var(--line)] bg-[var(--bg-elevated)] p-3 shadow-lg"
           >
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="type-ui text-[var(--text)]">More</p>
+              <button
+                type="button"
+                className="ds-btn ds-btn-ghost ds-btn-sm pointer-events-auto min-h-11 min-w-11 !px-0"
+                aria-label="Close more navigation"
+                onClick={() => setMoreOpen(false)}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
             {NAV_SECTIONS.map((section) => {
               const items = section.items.filter((i) => !BOTTOM_IDS.has(i.id));
               if (items.length === 0) return null;

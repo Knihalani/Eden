@@ -4,13 +4,17 @@ import {
   shouldShowTourBanner,
   markTourDismissedLocally,
   isTourDismissedLocally,
+  markTourBannerDismissed,
+  isTourBannerDismissed,
   TOUR_DISMISSED_STORAGE_KEY,
+  TOUR_BANNER_DISMISSED_STORAGE_KEY,
   parseEdenTourProgress,
 } from "@/lib/tour-progress";
 
 describe("tour dismiss contract (R001/R013)", () => {
   afterEach(() => {
     window.localStorage.removeItem(TOUR_DISMISSED_STORAGE_KEY);
+    window.localStorage.removeItem(TOUR_BANNER_DISMISSED_STORAGE_KEY);
   });
 
   it("treats skipped as complete so the overlay does not resurrect", () => {
@@ -45,3 +49,15 @@ describe("tour dismiss contract (R001/R013)", () => {
     expect(shouldShowTourBanner(active)).toBe(false);
   });
 });
+
+  it("banner dismiss sticks across a remount (R030)", () => {
+    const active = parseEdenTourProgress({
+      status: "active",
+      stepIndex: 0,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(shouldShowTourBanner(active)).toBe(true);
+    markTourBannerDismissed();
+    expect(isTourBannerDismissed()).toBe(true);
+    expect(shouldShowTourBanner(active)).toBe(false);
+  });

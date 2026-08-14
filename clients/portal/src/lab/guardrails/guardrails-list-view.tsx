@@ -34,6 +34,7 @@ export function GuardrailsListView({
   statusFilter,
   onStatusFilter,
   onSelect,
+  onAddPolicy,
   counts,
 }: {
   policies: GuardrailPolicyFixture[];
@@ -47,6 +48,7 @@ export function GuardrailsListView({
   statusFilter: GuardrailStatus | "all";
   onStatusFilter: (v: GuardrailStatus | "all") => void;
   onSelect: (id: string) => void;
+  onAddPolicy?: () => void;
   counts?: Record<string, number>;
 }) {
   const q = query.trim().toLowerCase();
@@ -102,6 +104,15 @@ export function GuardrailsListView({
           onChange={onAgentChange}
           counts={counts}
         />
+        {onAddPolicy ? (
+          <button
+            type="button"
+            className="ds-btn ds-btn-primary ds-btn-sm ml-auto"
+            onClick={onAddPolicy}
+          >
+            Add policy
+          </button>
+        ) : null}
       </div>
 
       <div className="space-y-2 border-b border-[var(--line)] px-4 py-2 sm:px-5">
@@ -154,12 +165,23 @@ export function GuardrailsListView({
                 Clear
               </button>
             ) : (
-              <Link
-                href="/traces"
-                className="ds-btn ds-btn-primary ds-btn-sm"
-              >
-                Review traces
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {onAddPolicy ? (
+                  <button
+                    type="button"
+                    className="ds-btn ds-btn-primary ds-btn-sm"
+                    onClick={onAddPolicy}
+                  >
+                    Add policy
+                  </button>
+                ) : null}
+                <Link
+                  href="/traces"
+                  className="ds-btn ds-btn-ghost ds-btn-sm"
+                >
+                  Review traces
+                </Link>
+              </div>
             )
           }
         />

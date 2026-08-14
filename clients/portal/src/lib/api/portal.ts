@@ -318,6 +318,19 @@ export const portalApi = {
       ),
     ),
 
+  createGuardrailPolicy: (
+    orgId: string,
+    body: { name: string; kind?: string; action?: string },
+  ) =>
+    fetchApi<GuardrailPolicyCardRow>(portalPath(orgId, "guardrails/policies"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Org-Id": orgId,
+      },
+      body: JSON.stringify(body),
+    }),
+
   debuggerSessions: (orgId: string) =>
     fetchApi<DebuggerSessionFixture[]>(portalPath(orgId, "debugger/sessions")),
 

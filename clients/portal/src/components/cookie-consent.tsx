@@ -55,7 +55,7 @@ export function CookieConsent() {
       role="dialog"
       aria-live="polite"
       aria-label="Cookie preferences"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--line)] bg-[var(--bg-elevated)] p-4"
+      className="fixed inset-x-0 bottom-0 z-[130] border-t border-[var(--line)] bg-[var(--bg-elevated)] p-4"
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="type-body">

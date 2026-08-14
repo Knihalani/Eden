@@ -24,6 +24,13 @@ import {
 import { QueryErrorPanel, QueryLoadingPanel } from "@/components/shell/query-error-panel";
 import { NoWorkspaceGuard } from "@/components/shell/workspace-guard";
 import { cn } from "@/lib/utils";
+import {
+  CATCH_ALL_EQL_MESSAGE,
+  isCatchAllEql,
+  isUsableObjectName,
+  parseAlertIntervalMinutes,
+  sanitizeCompileWarnings,
+} from "@/lib/named-object";
 import { SignalsModeToggle } from "./automations-panel";
 import { SuppressionRulesSection } from "./suppression-rules-section";
 
@@ -285,8 +292,16 @@ function RuleDialog({
       const result = await nlAlertRulesApi.compile(orgId, {
         nl_text: nlText.trim(),
       });
-      setCompiled(result);
-      if (!name.trim()) setName(result.suggested_name || nlText.trim().slice(0, 60));
+      const cleaned = {
+        ...result,
+        warnings: sanitizeCompileWarnings(result.warnings),
+      };
+      setCompiled(cleaned);
+      if (isCatchAllEql(cleaned.eql)) {
+        setError(CATCH_ALL_EQL_MESSAGE);
+        return;
+      }
+      if (!name.trim()) setName(cleaned.suggested_name || nlText.trim().slice(0, 60));
       setPhase("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Compile failed. Try again.");
@@ -297,15 +312,20 @@ function RuleDialog({
 
   async function save() {
     if (!compiled) return;
-    if (!name.trim()) {
+    if (isCatchAllEql(compiled.eql)) {
+      setError(CATCH_ALL_EQL_MESSAGE);
+      return;
+    }
+    if (!isUsableObjectName(name)) {
       setError("Name is required.");
       return;
     }
-    const intervalSeconds = Number(intervalMinutes) * 60;
-    if (mode === "create" && (!Number.isFinite(intervalSeconds) || intervalSeconds < 60)) {
+    const minutes = parseAlertIntervalMinutes(intervalMinutes);
+    if (minutes == null) {
       setError("Check interval must be at least 1 minute.");
       return;
     }
+    const intervalSeconds = minutes * 60;
     setSaving(true);
     setError(null);
     try {
@@ -493,7 +513,13 @@ function RuleDialog({
           <button
             type="button"
             className="ds-btn ds-btn-primary ds-btn-sm"
-            disabled={!compiled || saving}
+            disabled={
+              !compiled ||
+              saving ||
+              !isUsableObjectName(name) ||
+              parseAlertIntervalMinutes(intervalMinutes) == null ||
+              isCatchAllEql(compiled.eql)
+            }
             onClick={() => void save()}
           >
             {saving ? "Saving…" : "Save"}

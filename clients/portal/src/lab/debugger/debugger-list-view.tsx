@@ -23,6 +23,7 @@ export function DebuggerListView({
   onAgentChange,
   onSelect,
   onNew,
+  canCreate = true,
 }: {
   sessions: DebuggerSessionFixture[];
   activeId?: string | null;
@@ -32,6 +33,7 @@ export function DebuggerListView({
   onAgentChange: (id: string) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
+  canCreate?: boolean;
 }) {
   const q = query.trim().toLowerCase();
   const filtered = sessions.filter((s) => {
@@ -60,6 +62,8 @@ export function DebuggerListView({
           type="button"
           className="ds-btn ds-btn-primary ds-btn-sm"
           onClick={onNew}
+          disabled={!canCreate}
+          title={canCreate ? undefined : "Ingest a trace before opening the debugger"}
         >
           New session
         </button>

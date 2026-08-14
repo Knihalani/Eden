@@ -251,6 +251,7 @@ export default function SettingsSsoPage() {
                     <input
                       className="ds-input flex-1"
                       type="password"
+                      autoComplete="new-password"
                       placeholder="Client secret"
                       value={clientSecret}
                       onChange={(e) => setClientSecret(e.target.value)}
