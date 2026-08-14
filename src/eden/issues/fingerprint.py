@@ -110,3 +110,41 @@ def compute_fingerprint(
     agent_key = _fingerprint_agent_key(agent_id, trace_id)
     raw = f"{kind}|{agent_key}|{error_signature}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+HELP_MISS_REASON_BY_KIND: dict[str, str] = {
+    "human_did_agents_job": "took_over",
+    "thread_takeover": "took_over",
+    "ill_just_do_it": "took_over",
+    "escalate": "took_over",
+    "reassigned": "took_over",
+    "mention_intended_owner": "took_over",
+    "cleanup_thread": "took_over",
+    "human_comment": "took_over",
+    "rewrite_new_message": "rewrote",
+    "reopened": "ticket_still_open",
+    "ticket_still_open": "ticket_still_open",
+    "explicit_negative": "thumbs_down",
+}
+
+
+def help_miss_reason_for_kind(kind: str | None) -> str | None:
+    """Map ExtraWorkEvent.kind to HelpMiss reason. Unlisted kinds are None."""
+    if not kind:
+        return None
+    return HELP_MISS_REASON_BY_KIND.get(str(kind))
+
+
+def compute_help_miss_fingerprint(
+    org_id: str,
+    agent_id: str,
+    help_contract_id: str | None,
+    reason: str,
+) -> str:
+    """32-char outcome fingerprint.
+
+    Inputs only: org_id, agent_id, help_contract_id, reason.
+    Not span text, not Slack text, not snippet.
+    """
+    contract = (help_contract_id or "").strip() or "-"
+    raw = f"{org_id}|{agent_id}|{contract}|{reason}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
