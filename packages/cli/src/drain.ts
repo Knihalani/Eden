@@ -104,6 +104,7 @@ export async function drain(): Promise<void> {
         knockPath,
         JSON.stringify({
           message: json.knock.message || json.knock,
+          tool_id: json.knock.tool_id,
           shown: typeof prev.shown === "number" ? prev.shown : 0,
         }),
       );

@@ -44,7 +44,7 @@ async function seedBundle(d: EdenDb) {
     "runs",
   ]);
   if (existing) {
-    await d.run(`UPDATE tool SET steps = ?, state = 'on', when_to_use = ?, seen = ?, required_k = 2 WHERE id = ?`, [
+    await d.run(`UPDATE tool SET steps = ?, when_to_use = ?, seen = ?, required_k = 2 WHERE id = ?`, [
       JSON.stringify(steps),
       when,
       seen,
@@ -53,8 +53,8 @@ async function seedBundle(d: EdenDb) {
     return;
   }
   await d.run(
-    `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
-     VALUES (?, 'ws_local', 'fetch_issue_bundle', ?, 'on', ?, ?, 'seed_bundle', 2)`,
+    `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k, published)
+     VALUES (?, 'ws_local', 'fetch_issue_bundle', ?, 'on', ?, ?, 'seed_bundle', 2, 0)`,
     [crypto.randomUUID(), when, JSON.stringify(steps), seen],
   );
 }
@@ -188,7 +188,7 @@ export async function handleFetch(req: Request): Promise<Response> {
         seen: JSON.parse(t.seen || "[]") as string[],
         required_k: Number(t.required_k) || 2,
       })),
-      knock: knock ? { message: `draft ${knock.tool_id}` } : null,
+      knock: knock ? { message: `draft ${knock.tool_id}`, tool_id: knock.tool_id } : null,
     });
   }
 
@@ -219,8 +219,8 @@ export async function handleFetch(req: Request): Promise<Response> {
     if (!wsId) return new Response("unauthorized", { status: 401 });
     const body = (await req.json()) as { name: string; issue?: string; issues?: string };
     const tool = await d.get<{ id: string; name: string; steps: string }>(
-      `SELECT id, name, steps FROM tool WHERE name = ? AND state = 'on'`,
-      [body.name],
+      `SELECT id, name, steps FROM tool WHERE name = ? AND state = 'on' AND workspace_id = ?`,
+      [body.name, wsId],
     );
     if (!tool) return new Response("not found", { status: 404 });
     const receipt = await playTool(d, tool, {
