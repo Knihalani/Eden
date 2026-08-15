@@ -1,0 +1,47 @@
+{
+  "task": "Fetch issue 12 bundle (issue, comments, pull, reviews, commit status, workflow runs) and write one summary line.",
+  "origin": "http://127.0.0.1:8000",
+  "same_answer": "Cannot deploy widget 12 | 12 | Fix deploy for 12 | 6 | pending | failure",
+  "without": {
+    "session_id": "5e523cee-9cd5-43e5-913a-a824a5c11209",
+    "wall_ms": 25281,
+    "duration_ms": 23863,
+    "num_turns": 3,
+    "tool_calls": 2,
+    "tool_names": { "Bash": 2 },
+    "cost_usd": 0.355965,
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 20014,
+    "cache_read_input_tokens": 38080,
+    "output_tokens": 1353,
+    "thinking_tokens": 354
+  },
+  "with_eden": {
+    "session_id": "95076d8d-8cd4-41bd-8278-8a2f4e853567",
+    "wall_ms": 14137,
+    "duration_ms": 12729,
+    "num_turns": 3,
+    "tool_calls": 2,
+    "tool_names": { "mcp__eden__fetch_issue_bundle": 1, "Bash": 1 },
+    "cost_usd": 0.5849805,
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 43135,
+    "cache_read_input_tokens": 24833,
+    "output_tokens": 418,
+    "thinking_tokens": 50,
+    "eden_playback": {
+      "steps": 6,
+      "server_ms": 1,
+      "raw_bytes": 16383,
+      "densified_bytes": 15424,
+      "note": "uses_count on fetch_issue_bundle includes earlier /v1/play curls; Claude session added 1 MCP call"
+    }
+  },
+  "delta": {
+    "duration_ms_ratio": 0.53,
+    "output_tokens_ratio": 0.31,
+    "thinking_tokens_ratio": 0.14,
+    "wall_ms_ratio": 0.56,
+    "first_call_cost_higher_because": "MCP tool schema cache-write (43k vs 20k). Later calls would cache-read that schema."
+  }
+}
