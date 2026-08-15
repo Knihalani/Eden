@@ -5,6 +5,7 @@ import {
   fingerprintIsland,
   heuristicName,
   mergeConstantFlip,
+  parameterizeUrl,
   requiredK,
   type ToolEvent,
 } from "@eden/core";
@@ -89,7 +90,8 @@ export async function ingest(
     );
     if (count === 1) {
       const id = crypto.randomUUID();
-      const name = heuristicName(storedSteps);
+      const compiled = stepsToCompiled(storedSteps);
+      const name = await uniqueToolName(db, workspaceId, heuristicName(storedSteps));
       await db.run(
         `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
          VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
@@ -97,23 +99,27 @@ export async function ingest(
           id,
           workspaceId,
           name,
-          `Use when repeating ${name.replaceAll("_", " ")}`,
-          JSON.stringify(stepsToCompiled(storedSteps)),
+          whenToUse(name),
+          JSON.stringify(compiled),
           JSON.stringify(storedSteps.map((s) => s.name)),
           fp,
           requiredK(storedSteps),
         ],
       );
+      await maybeAutoOn(db, id, compiled);
       drafts++;
     }
     if (count === 2) {
       const tool = await db.get<{ id: string }>(`SELECT id FROM tool WHERE fingerprint = ?`, [fp]);
       if (tool) {
-        await db.run(`UPDATE tool SET steps = ?, seen = ? WHERE id = ?`, [
-          JSON.stringify(stepsToCompiled(storedSteps)),
+        const compiled = stepsToCompiled(storedSteps);
+        await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
+          JSON.stringify(compiled),
           JSON.stringify(storedSteps.map((s) => s.name)),
+          whenToUse(heuristicName(storedSteps)),
           tool.id,
         ]);
+        await maybeAutoOn(db, tool.id, compiled);
         await db.run(`INSERT INTO knock (id, workspace_id, tool_id, attempt, resolution) VALUES (?, ?, ?, 1, NULL)`, [
           crypto.randomUUID(),
           workspaceId,
@@ -125,13 +131,85 @@ export async function ingest(
   return { drafts, islands: islands.length };
 }
 
+async function uniqueToolName(db: EdenDb, workspaceId: string, base: string): Promise<string> {
+  let name = base.slice(0, 48);
+  let n = 2;
+  while (await db.get(`SELECT 1 as ok FROM tool WHERE workspace_id = ? AND name = ?`, [workspaceId, name])) {
+    name = `${base.slice(0, 44)}_${n++}`;
+  }
+  return name;
+}
+
+function whenToUse(name: string): string {
+  if (name.startsWith("github_pr_bundle")) return "issues: csv of PR numbers. table: number | title | reviews | status | files";
+  if (name.startsWith("github_pr_files")) return "issues: csv of PRs. table: number | files";
+  if (name.startsWith("github_issue_bundle")) return "issues: csv. table: number | title | comments";
+  return `One call with all ids for ${name.replaceAll("_", " ")}.`;
+}
+
+async function maybeAutoOn(
+  db: EdenDb,
+  toolId: string,
+  compiled: Array<{ url?: string }>,
+): Promise<void> {
+  if (process.env.EDEN_AUTO_APPROVE !== "1") return;
+  if (!compiled.some((s) => Boolean(s.url))) return;
+  await db.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ?`, [toolId]);
+}
+
 function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
-  return steps.map((s, i) => ({
-    id: `s${i + 1}`,
-    kind: s.kind,
-    name: s.name,
-    commute: s.commute,
-    url: compileStepUrl(s),
-    command: s.cli_family,
-  }));
+  const seen = new Set<string>();
+  const compiled: Array<{
+    id: string;
+    kind: string;
+    name: string;
+    commute: boolean;
+    url?: string;
+    command?: string;
+    bind?: Record<string, string>;
+  }> = [];
+  for (const s of steps) {
+    const url = compileStepUrl(s);
+    const key = url ? parameterizeUrl(url) : s.name;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    compiled.push({
+      id: `s${compiled.length + 1}`,
+      kind: s.kind,
+      name: s.name,
+      commute: s.commute,
+      url,
+      command: s.cli_family,
+    });
+  }
+  if (heuristicName(steps).startsWith("github_pr_bundle") && !compiled.some((s) => /\/files/.test(s.url || ""))) {
+    const pull = compiled.find((s) => /\/pulls\/\{issue\}$/.test(s.url || ""));
+    if (pull?.url) {
+      compiled.push({
+        id: `s${compiled.length + 1}`,
+        kind: "cloud_http",
+        name: "gh.api",
+        commute: true,
+        url: `${pull.url}/files`,
+        command: "gh.api",
+      });
+    }
+  }
+  compiled.sort((a, b) => rankPlaybackUrl(a.url || "") - rankPlaybackUrl(b.url || ""));
+  for (let i = 0; i < compiled.length; i++) compiled[i].id = `s${i + 1}`;
+  for (let i = 0; i < compiled.length; i++) {
+    const url = compiled[i].url || "";
+    if (!url.includes("{sha}")) continue;
+    const prior = compiled.find((s, j) => j < i && /\/(pulls|issues)\/\{issue\}$/.test(s.url || ""));
+    if (prior) compiled[i].bind = { sha: `{{${prior.id}.head.sha}}` };
+  }
+  return compiled.map(({ bind, ...rest }) => (bind ? { ...rest, bind } : rest));
+}
+
+function rankPlaybackUrl(url: string): number {
+  if (/\/(pulls|issues)\/\{issue\}$/.test(url)) return 1;
+  if (/\/reviews/.test(url)) return 2;
+  if (/\/status|\/check-runs/.test(url)) return 3;
+  if (/\/files/.test(url)) return 4;
+  return 5;
 }

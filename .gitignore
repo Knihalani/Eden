@@ -33,4 +33,7 @@ archived/**/__pycache__/
 backups/
 .deploy-sha
 packages/.tmp-eden-test/
+apps/site/scripts/bench-horizon-results.iter-*.json
+apps/site/scripts/bench-horizon-results.before*.json
+apps/site/scripts/pocs/
 

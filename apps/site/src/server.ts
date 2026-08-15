@@ -11,7 +11,7 @@ const PORT = Number(process.env.PORT || 8787);
 let dbPromise: Promise<EdenDb> | null = null;
 
 function db(): Promise<EdenDb> {
-  if (!dbPromise) dbPromise = openDb().then(async (d) => {
+  if (!dbPromise) dbPromise = openDb(process.env.EDEN_DB || undefined).then(async (d) => {
     await seedBundle(d);
     return d;
   });
@@ -19,6 +19,7 @@ function db(): Promise<EdenDb> {
 }
 
 async function seedBundle(d: EdenDb) {
+  if (process.env.EDEN_SKIP_SEED === "1") return;
   const existing = await d.get<{ id: string }>(`SELECT id FROM tool WHERE name = 'fetch_issue_bundle'`);
   const steps = [
     { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}" },
@@ -63,6 +64,9 @@ function html(title: string, body: string) {
 }
 
 export async function handleFetch(req: Request): Promise<Response> {
+  if (process.env.VERCEL && process.env.EDEN_DEV !== "1") {
+    delete process.env.EDEN_AUTO_APPROVE;
+  }
   const d = await db();
   const url = new URL(req.url);
   const origin = process.env.EDEN_PUBLIC_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${url.port || PORT}`);
@@ -72,7 +76,10 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   if (url.pathname === "/health") return Response.json({ ok: true });
 
+  const wsId = await workspaceForKey(d, req.headers.get("authorization"));
+
   if (url.pathname === "/dashboard" || url.pathname === "/") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
     const usage = (await d.get<{
       runs: number;
       server_ms: number;
@@ -80,14 +87,15 @@ export async function handleFetch(req: Request): Promise<Response> {
       raw_bytes: number;
       densified_bytes: number;
     }>(
-      `SELECT COUNT(*) as runs, COALESCE(SUM(server_ms),0) as server_ms, COALESCE(SUM(steps_attempted),0) as steps,
-              COALESCE(SUM(raw_bytes),0) as raw_bytes, COALESCE(SUM(densified_bytes),0) as densified_bytes
-       FROM tool_run`,
+      `SELECT COUNT(*) as runs, COALESCE(SUM(r.server_ms),0) as server_ms, COALESCE(SUM(r.steps_attempted),0) as steps,
+              COALESCE(SUM(r.raw_bytes),0) as raw_bytes, COALESCE(SUM(r.densified_bytes),0) as densified_bytes
+       FROM tool_run r JOIN tool t ON t.id = r.tool_id WHERE t.workspace_id = ?`,
+      [wsId],
     )) || { runs: 0, server_ms: 0, steps: 0, raw_bytes: 0, densified_bytes: 0 };
-    const drafts = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE state = 'draft'`)) || { c: 0 };
-    const on = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE state = 'on'`)) || { c: 0 };
+    const drafts = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'draft'`, [wsId])) || { c: 0 };
+    const on = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId])) || { c: 0 };
     const lines = [
-      `<p class="muted">Eden is watching the agent work. Same stretch twice → a draft in Workshop.</p>`,
+      `<p class="muted">Eden is watching the agent work. Same stretch twice → a draft in Workshop. Approve only here — a key never turns a tool On.</p>`,
       `<div class="row">Drafts waiting <strong>${drafts.c}</strong></div>`,
       `<div class="row">Tools on <strong>${on.c}</strong></div>`,
     ];
@@ -100,20 +108,23 @@ export async function handleFetch(req: Request): Promise<Response> {
   }
 
   if (url.pathname === "/workshop") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
     const tools = await d.all<{ id: string; name: string; state: string; uses_count: number }>(
-      `SELECT id, name, state, uses_count FROM tool ORDER BY CASE state WHEN 'draft' THEN 0 WHEN 'on' THEN 1 ELSE 2 END, name`,
+      `SELECT id, name, state, uses_count FROM tool WHERE workspace_id = ? ORDER BY CASE state WHEN 'draft' THEN 0 WHEN 'on' THEN 1 ELSE 2 END, name`,
+      [wsId],
     );
     const rows = tools
       .map((t) => `<div class="row"><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a> · ${escapeHtml(t.state)} · ${t.uses_count} uses</div>`)
       .join("");
-    return html("Workshop", `<h1>Workshop</h1>${rows || `<p class="muted">No drafts yet.</p>`}`);
+    return html("Workshop", `<h1>Workshop</h1><p class="muted">Approve only on this page. A key never turns a tool On.</p>${rows || `<p class="muted">No drafts yet.</p>`}`);
   }
 
   const ws = url.pathname.match(/^\/workshop\/([^/]+)$/);
   if (ws && req.method === "GET") {
-    const t = await d.get<{ id: string; name: string; when_to_use: string; state: string; steps: string }>(
-      `SELECT id, name, when_to_use, state, steps FROM tool WHERE id = ?`,
-      [ws[1]],
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const t = await d.get<{ id: string; name: string; when_to_use: string; state: string; steps: string; published?: number }>(
+      `SELECT id, name, when_to_use, state, steps, published FROM tool WHERE id = ? AND workspace_id = ?`,
+      [ws[1], wsId],
     );
     if (!t) return new Response("not found", { status: 404 });
     const steps = JSON.parse(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
@@ -121,7 +132,10 @@ export async function handleFetch(req: Request): Promise<Response> {
     const approve =
       t.state !== "on"
         ? `<form method="post" action="/v1/tools/${t.id}/approve"><button>Approve</button></form>`
-        : `<p class="muted">On. Agents can call <code>${escapeHtml(t.name)}</code>.</p>`;
+        : t.published
+          ? `<p class="muted">Published on MCP as <code>${escapeHtml(t.name)}</code>.</p>`
+          : `<p class="muted">On for this workspace. Publish to list it on MCP.</p>
+             <form method="post" action="/v1/tools/${t.id}/approve"><button>Publish to MCP</button></form>`;
     return html(`Tool ${t.name}`, `<h1>${escapeHtml(t.name)}</h1><p class="muted">${escapeHtml(t.when_to_use)}</p>${list}${approve}`);
   }
 
@@ -129,7 +143,27 @@ export async function handleFetch(req: Request): Promise<Response> {
     return Response.json({ api_key: "eden_dev", base_url: origin });
   }
 
-  const wsId = await workspaceForKey(d, req.headers.get("authorization"));
+  if (url.pathname === "/v1/tools") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const tools = await d.all<{
+      id: string;
+      name: string;
+      state: string;
+      when_to_use: string;
+      seen: string;
+      steps: string;
+    }>(`SELECT id, name, state, when_to_use, seen, steps FROM tool WHERE workspace_id = ? ORDER BY name`, [wsId]);
+    return Response.json({
+      tools: tools.map((t) => ({
+        id: t.id,
+        name: t.name,
+        state: t.state,
+        when_to_use: t.when_to_use,
+        seen: JSON.parse(t.seen || "[]"),
+        has_playback: JSON.parse(t.steps || "[]").some((s: { url?: string }) => Boolean(s.url)),
+      })),
+    });
+  }
 
   if (url.pathname === "/v1/ingest" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
@@ -175,19 +209,25 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   const approve = url.pathname.match(/^\/v1\/tools\/([^/]+)\/approve$/);
   if (approve && req.method === "POST") {
-    await d.run(`UPDATE tool SET state = 'on' WHERE id = ?`, [approve[1]]);
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    await d.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ? AND workspace_id = ?`, [approve[1], wsId]);
     if (req.headers.get("accept")?.includes("json")) return Response.json({ ok: true });
     return Response.redirect(`${origin}/workshop/${approve[1]}`, 303);
   }
 
   if (url.pathname === "/v1/play" && req.method === "POST") {
-    const body = (await req.json()) as { name: string; issue?: string };
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const body = (await req.json()) as { name: string; issue?: string; issues?: string };
     const tool = await d.get<{ id: string; name: string; steps: string }>(
       `SELECT id, name, steps FROM tool WHERE name = ? AND state = 'on'`,
       [body.name],
     );
     if (!tool) return new Response("not found", { status: 404 });
-    const receipt = await playTool(d, tool, { issue: body.issue || "12", origin });
+    const receipt = await playTool(d, tool, {
+      issue: body.issue || "",
+      issues: body.issues || body.issue || "",
+      origin,
+    });
     return Response.json(receipt);
   }
 

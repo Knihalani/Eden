@@ -2,14 +2,21 @@ import type { CompiledStep } from "./types";
 
 export type DagNode = CompiledStep & { deps: string[] };
 
+function priorStepRefs(step: CompiledStep): string[] {
+  const blobs = [...Object.values(step.bind ?? {}), step.url, step.command, JSON.stringify(step.body ?? null)];
+  const ids: string[] = [];
+  for (const raw of blobs) {
+    if (!raw) continue;
+    const re = /\{\{(\w+)\./g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(String(raw)))) ids.push(m[1]);
+  }
+  return [...new Set(ids)];
+}
+
 export function buildDag(steps: CompiledStep[]): DagNode[] {
   return steps.map((step, i) => {
-    const deps: string[] = [];
-    const bindVals = Object.values(step.bind ?? {});
-    for (const raw of bindVals) {
-      const m = String(raw).match(/^\{\{([^.]+)\./);
-      if (m) deps.push(m[1]);
-    }
+    const deps: string[] = priorStepRefs(step);
     if (deps.length === 0 && i > 0 && !step.commute) {
       const prev = steps[i - 1];
       if (!prev.commute) deps.push(prev.id);

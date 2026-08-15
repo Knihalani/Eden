@@ -47,5 +47,6 @@ export type Receipt = {
   cache_hits: number;
   result: unknown;
   facts?: unknown;
+  table?: string;
   failed_step?: number;
 };
