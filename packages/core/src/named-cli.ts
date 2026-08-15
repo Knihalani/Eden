@@ -1,0 +1,118 @@
+export type ParsedCli = {
+  family: string;
+  subcommand: string;
+  flags: string[];
+  positionals: string[];
+  rewrite_host?: string;
+};
+
+const NAMED: Record<string, { subs: string[]; rewrite?: string }> = {
+  gh: { subs: ["api", "pr", "issue", "repo", "run", "auth"], rewrite: "api.github.com" },
+  git: { subs: ["status", "diff", "push", "fetch", "checkout", "log", "branch", "remote"] },
+  pnpm: { subs: ["test", "lint", "build", "install"] },
+  npm: { subs: ["test", "lint", "build", "install"] },
+  yarn: { subs: ["test", "lint", "build"] },
+  curl: { subs: [], rewrite: "curl" },
+};
+
+const GENERIC = new Set([
+  "ls",
+  "cat",
+  "cd",
+  "pwd",
+  "echo",
+  "head",
+  "tail",
+  "true",
+  "false",
+  "sleep",
+  "which",
+  "env",
+]);
+
+export function parseNamedCli(command: string): ParsedCli | null {
+  const parts = tokenize(command);
+  if (parts.length === 0) return null;
+  const bin = parts[0].replace(/.*\//, "");
+  if (GENERIC.has(bin)) return null;
+  if (bin === "curl") {
+    const url = parts.find((p) => /^https?:\/\//.test(p));
+    let host: string | undefined;
+    try {
+      if (url) host = new URL(url).host;
+    } catch {
+      host = undefined;
+    }
+    const flags = parts.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]);
+    return { family: "curl", subcommand: "get", flags: unique(flags), positionals: [], rewrite_host: host };
+  }
+  const spec = NAMED[bin];
+  if (!spec) return null;
+  const rest = parts.slice(1).filter((p) => p !== "--");
+  const flags = rest.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]);
+  const positionals = rest.filter((p) => !p.startsWith("-"));
+  if (bin === "git") {
+    const sub = positionals[0];
+    if (!sub || spec.subs.includes(sub) === false) {
+      if (sub === "commit") return null;
+      return null;
+    }
+    return { family: "git", subcommand: sub, flags: unique(flags), positionals: positionals.slice(1) };
+  }
+  if (bin === "gh") {
+    if (positionals[0] === "api") {
+      return {
+        family: "gh",
+        subcommand: "api",
+        flags: unique(flags),
+        positionals: positionals.slice(1),
+        rewrite_host: spec.rewrite,
+      };
+    }
+    const sub = positionals.slice(0, 2).join(".") || "api";
+    return {
+      family: "gh",
+      subcommand: sub,
+      flags: unique(flags),
+      positionals: positionals.slice(2),
+      rewrite_host: spec.rewrite,
+    };
+  }
+  const sub = positionals[0] || "run";
+  if (spec.subs.length && !spec.subs.includes(sub)) return null;
+  return { family: bin, subcommand: sub, flags: unique(flags), positionals: positionals.slice(1) };
+}
+
+function unique(xs: string[]): string[] {
+  return [...new Set(xs)].sort();
+}
+
+function tokenize(command: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else cur += c;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    if (/\s/.test(c)) {
+      if (cur) out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+export function familyId(parsed: ParsedCli): string {
+  return `${parsed.family}.${parsed.subcommand}`;
+}

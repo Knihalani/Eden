@@ -1,84 +1,33 @@
-# Vercel reads this — NOT .gitignore. Anything listed here is excluded
-# from the deployment archive. Source code stays; build/IDE/runtime
-# caches go.
-
-# Git internals
-.git/
-.gitignore.*
-*.git
-
-# Node / TS / Next.js build artifacts (Vercel reinstalls + rebuilds)
-node_modules/
-.next/
-.turbo/
-.parcel-cache/
-dist/
-out/
-build/
-.npm/
-.eslintcache
-*.tsbuildinfo
-bun.lockb
-
-# Python venvs + caches (backend source still uploads, just not venvs)
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-.venv/
-.venv-test/
-venv/
-ENV/
-env/
-*.egg-info/
-*.egg
-
-# Sub-projects not deployed to Vercel
-docs/
-sdk/
-eden-sandbox/
-supplementaries/
-migrations/
-tests/
-# Root CLI/scripts folder only — do NOT use bare `tools/` (that also
-# excludes clients/portal/src/app/(portal)/tools/).
-/tools/
-docker/
-helm/
-var/
-scripts/
-prompts/
-golden_datasets/
-tinybird/
-
-bench/
-examples/
-northflank.yml
-alembic.ini
-mypy.ini
-ruff.toml
-pyproject.toml
-uv.lock
-.claude/
-.eden/
-.codegraph/
-.aider*
-
-# Local AI tooling caches (not source of truth)
-.aider*
-.codegraph/
-.eden/
-
-# Editor / OS / secrets
+archived
+node_modules
+.next
+.git
+.venv
+.venv-test
+.env
+.env.*
+!.env.example
+.eden-local
+.coverage*
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.loki
+.cursor
+.omc
+.local
+.forge
+.agents
+.audit-r001-r020
+.audit-r021-r040
+.audit-r041-r067
+.audit-r068-r099
+.audit-r100-r129
+__pycache__
+*.pyc
 .DS_Store
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-*.sublime-*
-*.pem
-*.log
+.neon
+*.db
+*.db-wal
+*.db-shm
+apps/site/.next

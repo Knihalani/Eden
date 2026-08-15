@@ -1,0 +1,11 @@
+{
+  "name": "eden",
+  "private": true,
+  "packageManager": "bun@1.3.13",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "test": "bun test packages/core packages/cli apps/site",
+    "dev": "bun run --cwd apps/site dev",
+    "cli": "bun run packages/cli/src/cli.ts"
+  }
+}
