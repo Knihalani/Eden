@@ -590,6 +590,7 @@ describe("plan + mcp ranking", () => {
     const listed = selectMcpTools([
       { name: "github_pr_files", uses_count: 9 },
       { name: "github_pr_bundle", uses_count: 2 },
+      { name: "fetch_issue_bundle", uses_count: 4 },
     ]);
     expect(listed.map((t) => t.name)).toEqual(["github_pr_bundle"]);
   });
@@ -613,9 +614,9 @@ describe("plan + mcp ranking", () => {
     expect(listed.map((t) => t.name)).toEqual(["a", "b"]);
   });
 
-  test("shortenWhenToUse caps at 80 chars", () => {
+  test("shortenWhenToUse caps at MCP_DESC_CHARS", () => {
     const s = shortenWhenToUse("x".repeat(200));
-    expect(s.length).toBe(80);
+    expect(s.length).toBe(60);
     expect(s.endsWith("…")).toBe(true);
   });
 });

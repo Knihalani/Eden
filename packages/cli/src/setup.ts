@@ -11,7 +11,18 @@ function claudeSettingsDir(scope: "user" | "project"): string {
 export function hookCommand(cliPath: string, hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
   const hookd = `http://127.0.0.1:${hookdPort}/hook`;
   const bunHook = `bun "${cliPath}" hook`;
-  return `curl -sS --max-time 8 -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook} || echo '{}'`;
+  return `curl -sS --max-time 2 -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook} || echo '{}'`;
+}
+
+export function installedHooks(hookCmd: string) {
+  const bash = [{ matcher: "Bash", hooks: [{ type: "command", command: hookCmd }] }];
+  const all = [{ hooks: [{ type: "command", command: hookCmd }] }];
+  return {
+    PreToolUse: bash,
+    PostToolUse: bash,
+    Stop: all,
+    SessionStart: all,
+  };
 }
 
 export async function setup(args: string[]): Promise<void> {
@@ -44,12 +55,7 @@ export async function setup(args: string[]): Promise<void> {
   const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) : {};
   settings.hooks = {
     ...(settings.hooks || {}),
-    PreToolUse: [{ hooks: [{ type: "command", command: hookCmd }] }],
-    PostToolUse: [{ hooks: [{ type: "command", command: hookCmd }] }],
-    PostToolUseFailure: [{ hooks: [{ type: "command", command: hookCmd }] }],
-    Stop: [{ hooks: [{ type: "command", command: hookCmd }] }],
-    SessionStart: [{ hooks: [{ type: "command", command: hookCmd }] }],
-    UserPromptSubmit: [{ hooks: [{ type: "command", command: hookCmd }] }],
+    ...installedHooks(hookCmd),
   };
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 

@@ -20,7 +20,13 @@ export async function runHookd(): Promise<void> {
         return Response.json({});
       }
       try {
-        return Response.json(await respondToHook(input));
+        const out = await Promise.race([
+          respondToHook(input),
+          new Promise<Record<string, never>>((_, reject) => {
+            setTimeout(() => reject(new Error("hookd timeout")), 1500);
+          }),
+        ]);
+        return Response.json(out);
       } catch {
         return Response.json({});
       }

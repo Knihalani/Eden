@@ -195,14 +195,14 @@ export async function runFulfillPlan(
 }
 
 export const MCP_LIST_LIMIT = 3;
-export const MCP_DESC_CHARS = 80;
+export const MCP_DESC_CHARS = 60;
 
 export function selectMcpTools<T extends { name: string; uses_count?: number | null }>(tools: T[], limit = MCP_LIST_LIMIT): T[] {
   let ranked = [...tools].sort(
     (a, b) => (Number(b.uses_count) || 0) - (Number(a.uses_count) || 0) || a.name.localeCompare(b.name),
   );
   if (ranked.some((t) => t.name.startsWith("github_pr_bundle"))) {
-    ranked = ranked.filter((t) => !t.name.startsWith("github_pr_files"));
+    ranked = ranked.filter((t) => !t.name.startsWith("github_pr_files") && t.name !== "fetch_issue_bundle");
   }
   if (ranked.length <= limit) return ranked;
   const used = ranked.filter((t) => Number(t.uses_count) > 0);
