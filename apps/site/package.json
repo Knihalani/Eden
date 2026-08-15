@@ -1,0 +1,23 @@
+{
+  "name": "@eden/site",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/local.ts",
+    "start": "bun run src/local.ts",
+    "build": "next build"
+  },
+  "dependencies": {
+    "@eden/core": "workspace:*",
+    "@neondatabase/serverless": "^1.0.2",
+    "next": "^15.5.9",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "5.9.2"
+  }
+}
