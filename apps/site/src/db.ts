@@ -11,7 +11,7 @@ const SQLITE_STATEMENTS = [
       fingerprint TEXT PRIMARY KEY, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT
     )`,
   `CREATE TABLE IF NOT EXISTS tool (
-      id TEXT PRIMARY KEY, workspace_id TEXT, name TEXT, when_to_use TEXT, state TEXT, steps TEXT, seen TEXT, fingerprint TEXT, uses_count INTEGER DEFAULT 0, cheap_check TEXT, required_k INTEGER DEFAULT 2
+      id TEXT PRIMARY KEY, workspace_id TEXT, name TEXT, when_to_use TEXT, state TEXT, steps TEXT, seen TEXT, fingerprint TEXT, uses_count INTEGER DEFAULT 0, cheap_check TEXT, required_k INTEGER DEFAULT 2, published INTEGER DEFAULT 0
     )`,
   `CREATE TABLE IF NOT EXISTS knock (
       id TEXT PRIMARY KEY, workspace_id TEXT, tool_id TEXT, attempt INTEGER, resolution TEXT
@@ -104,6 +104,7 @@ async function migrate(db: EdenDb, neon: boolean) {
     await db.exec(`ALTER TABLE wrap_cache ALTER COLUMN created_at TYPE BIGINT`).catch(() => undefined);
   }
   await db.exec(`ALTER TABLE tool ADD COLUMN required_k INTEGER DEFAULT 2`).catch(() => undefined);
+  await db.exec(`ALTER TABLE tool ADD COLUMN published INTEGER DEFAULT 0`).catch(() => undefined);
 }
 
 async function seed(db: EdenDb) {
@@ -125,5 +126,7 @@ export async function workspaceForKey(db: EdenDb, auth: string | null): Promise<
     token,
     token,
   ]);
-  return row?.workspace_id || (token.startsWith("eden_") ? "ws_local" : null);
+  if (row?.workspace_id) return row.workspace_id;
+  if (process.env.VERCEL && process.env.EDEN_DEV !== "1") return null;
+  return token.startsWith("eden_") ? "ws_local" : null;
 }

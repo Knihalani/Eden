@@ -1,7 +1,22 @@
 import type { EdenDb } from "./db";
+import { compactReceipt, selectMcpTools, shortenWhenToUse } from "@eden/core";
 import { playTool } from "./playback";
 
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+
+function schemaFor(_steps: Array<{ url?: string; bind?: Record<string, string> }>) {
+  return {
+    type: "object",
+    properties: {
+      issues: { type: "string", description: "csv of PR numbers" },
+    },
+    required: [] as string[],
+  };
+}
+
+function listPublishedOnly(): boolean {
+  return process.env.EDEN_LIST_MCP !== "1";
+}
 
 export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, origin: string): Promise<unknown> {
   const { method, id, params } = body;
@@ -21,31 +36,30 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   }
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
   if (method === "tools/list") {
+    const published = listPublishedOnly();
     const tools = await db.all<{
       id: string;
       name: string;
       when_to_use: string;
       steps: string;
-    }>(`SELECT id, name, when_to_use, steps FROM tool WHERE workspace_id = ? AND state = 'on'`, [workspaceId]);
+      uses_count: number | null;
+    }>(
+      published
+        ? `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on' AND published = 1`
+        : `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on'`,
+      [workspaceId],
+    );
+    const listed = selectMcpTools(tools);
     return {
       jsonrpc: "2.0",
       id,
       result: {
-        tools: tools.map((t) => {
-          const steps = JSON.parse(t.steps || "[]") as Array<{ url?: string }>;
-          const params = new Set<string>();
-          for (const s of steps) {
-            for (const m of String(s.url || "").matchAll(/\{(\w+)\}/g)) {
-              if (m[1] !== "origin") params.add(m[1]);
-            }
-          }
-          const properties: Record<string, { type: string }> = {};
-          for (const p of params) properties[p] = { type: "string" };
-          if (!Object.keys(properties).length) properties.args = { type: "string" };
+        tools: listed.map((t) => {
+          const steps = JSON.parse(t.steps || "[]") as Array<{ url?: string; bind?: Record<string, string> }>;
           return {
             name: t.name,
-            description: (t.when_to_use || t.name).slice(0, 160),
-            inputSchema: { type: "object", properties },
+            description: shortenWhenToUse(t.when_to_use || t.name),
+            inputSchema: schemaFor(steps),
           };
         }),
       },
@@ -53,7 +67,10 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   }
   if (method === "tools/call") {
     const name = String(params?.name || "");
-    const args = (params?.arguments || {}) as Record<string, string>;
+    const args = { ...((params?.arguments || {}) as Record<string, string>) };
+    if (!args.issue && (args.pr || args.number)) args.issue = args.pr || args.number;
+    if (!args.issues && args.issue) args.issues = args.issue;
+    if (!args.issue && args.issues) args.issue = String(args.issues).split(/[,\s]+/)[0];
     const tool = await db.get<{ id: string; name: string; steps: string }>(
       `SELECT id, name, steps FROM tool WHERE workspace_id = ? AND name = ? AND state = 'on'`,
       [workspaceId, name],
@@ -62,14 +79,12 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
       return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool ${name}` } };
     }
     const receipt = await playTool(db, tool, { ...args, origin });
-    const text =
-      typeof receipt.facts === "string" ? receipt.facts : JSON.stringify(receipt.facts ?? receipt.result);
-    const trailer = `Eden ${receipt.steps_ok}/${receipt.steps_attempted} · ${receipt.raw_bytes}→${receipt.densified_bytes}B · ${receipt.server_ms}ms`;
+    const text = receipt.table || compactReceipt(receipt.facts);
     return {
       jsonrpc: "2.0",
       id,
       result: {
-        content: [{ type: "text", text: `${trailer}\n${text}` }],
+        content: [{ type: "text", text }],
       },
     };
   }

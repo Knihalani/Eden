@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { writeFileSync } from "node:fs";
-import { familyId, matchPrefix, parseNamedCli } from "@eden/core";
+import { existsSync, writeFileSync } from "node:fs";
+import { familyId, parseNamedCli, rewriteBash, compactStdout, compactReadOutput } from "@eden/core";
 import {
   appendJsonl,
   edenHome,
@@ -11,17 +11,17 @@ import {
   readJson,
 } from "./home";
 
-type HookIn = {
+export type HookIn = {
   hook_event_name?: string;
   session_id?: string;
   cwd?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
-  tool_response?: unknown;
   permissionDecision?: string;
+  tool_response?: unknown;
+  tool_output?: unknown;
+  response?: unknown;
 };
-
-type LiveTool = { name: string; seen: string[]; required_k: number };
 
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
@@ -42,55 +42,122 @@ function cliFamily(name: string, args: Record<string, unknown>): string {
   return name;
 }
 
-function fireDrain(): void {
-  const cli = join(import.meta.dir, "cli.ts");
-  Bun.spawn(["bun", cli, "drain"], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
+function spawnDrainProc() {
+  const exe = process.execPath || "";
+  return /(?:^|\/)eden$/.test(exe)
+    ? Bun.spawn([exe, "drain"], { stdout: "ignore", stderr: "ignore", stdin: "ignore" })
+    : Bun.spawn(["bun", join(import.meta.dir, "cli.ts"), "drain"], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
 }
 
-export async function runHook(): Promise<void> {
-  const raw = await readStdin();
-  let input: HookIn = {};
+function spawnDrain(): void {
   try {
-    input = JSON.parse(raw || "{}");
+    spawnDrainProc().unref();
   } catch {
-    process.stdout.write("{}\n");
-    return;
+    /* server may be down */
   }
+}
+
+async function drainNow(): Promise<void> {
+  try {
+    const proc = spawnDrainProc();
+    await proc.exited;
+  } catch {
+    /* server may be down */
+  }
+}
+
+function stdoutFromResponse(raw: unknown): { stdout: string; stderr: string; interrupted: boolean; isImage: boolean } | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") return { stdout: raw, stderr: "", interrupted: false, isImage: false };
+  if (typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.stdout === "string" || typeof o.stderr === "string") {
+    return {
+      stdout: String(o.stdout ?? ""),
+      stderr: String(o.stderr ?? ""),
+      interrupted: Boolean(o.interrupted),
+      isImage: Boolean(o.isImage),
+    };
+  }
+  if (typeof o.content === "string") {
+    return { stdout: o.content, stderr: "", interrupted: false, isImage: false };
+  }
+  if (Array.isArray(o.content)) {
+    const text = o.content
+      .map((c) => {
+        if (typeof c === "string") return c;
+        if (c && typeof c === "object" && "text" in c) return String((c as { text: unknown }).text ?? "");
+        return "";
+      })
+      .join("");
+    if (text) return { stdout: text, stderr: "", interrupted: false, isImage: false };
+  }
+  if (o.file && typeof o.file === "object") {
+    const f = o.file as Record<string, unknown>;
+    if (typeof f.content === "string") return { stdout: f.content, stderr: "", interrupted: false, isImage: false };
+  }
+  return null;
+}
+
+function bashOutput(stdout: string, stderr: string, interrupted = false) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PostToolUse",
+      updatedToolOutput: {
+        stdout,
+        stderr,
+        interrupted,
+        isImage: false,
+      },
+    },
+  };
+}
+
+export async function respondToHook(input: HookIn): Promise<Record<string, unknown>> {
+  try {
+    return await respondToHookInner(input);
+  } catch {
+    return {};
+  }
+}
+
+async function respondToHookInner(input: HookIn): Promise<Record<string, unknown>> {
   const event = input.hook_event_name || "PreToolUse";
   const runId = input.session_id || "unknown";
   ensureHome();
 
   if (event === "PreToolUse") {
-    const live = readJson<LiveTool[]>(liveToolsPath(), []);
     const statePath = eventsPath(runId) + ".seen";
     const seen = readJson<string[]>(statePath, []);
     const incoming = cliFamily(input.tool_name || "", input.tool_input || {});
-    const decision = matchPrefix(live, seen, incoming);
     seen.push(incoming);
     writeFileSync(statePath, JSON.stringify(seen));
-    if (decision.action === "deny") {
-      const already = readJson<{ steered?: boolean }>(eventsPath(runId) + ".steer", {});
-      if (already.steered) {
-        process.stdout.write("{}\n");
-        return;
-      }
-      writeFileSync(eventsPath(runId) + ".steer", JSON.stringify({ steered: true }));
-      process.stdout.write(
-        JSON.stringify({
-          decision: "deny",
-          reason: decision.reason,
+
+    const name = input.tool_name || "";
+    if (name === "Bash" || name === "bash") {
+      const original = String((input.tool_input as { command?: string } | undefined)?.command ?? "");
+      appendJsonl(eventsPath(runId), {
+        event_id: crypto.randomUUID(),
+        hook: event,
+        seq: seen.length,
+        name,
+        args: input.tool_input || {},
+        command: original,
+        ok: true,
+        ts: Date.now(),
+      });
+      const rewritten = rewriteBash(original);
+      if (rewritten.changed) {
+        return {
           hookSpecificOutput: {
             hookEventName: "PreToolUse",
-            permissionDecision: "deny",
-            permissionDecisionReason: decision.reason,
+            permissionDecision: "allow",
+            updatedInput: { ...input.tool_input, command: rewritten.command },
           },
-          systemMessage: `Eden: call ${decision.tool} instead of this stretch.`,
-        }) + "\n",
-      );
-      return;
+        };
+      }
     }
-    process.stdout.write("{}\n");
-    return;
+    return {};
   }
 
   if (event === "PostToolUse" || event === "PostToolUseFailure") {
@@ -106,8 +173,25 @@ export async function runHook(): Promise<void> {
       ok: event !== "PostToolUseFailure",
       ts: Date.now(),
     });
-    process.stdout.write("{}\n");
-    return;
+    if (event === "PostToolUseFailure") return {};
+    const extracted = stdoutFromResponse(input.tool_response ?? input.tool_output ?? input.response);
+    if (!extracted) return {};
+    const name = input.tool_name || "";
+    if (name === "Read") {
+      const filePath = String((input.tool_input as { file_path?: string } | undefined)?.file_path ?? "");
+      const packed = compactReadOutput(filePath, extracted.stdout);
+      if (packed.stdout === extracted.stdout) return {};
+      return bashOutput(packed.stdout, extracted.stderr, extracted.interrupted);
+    }
+    if (name === "Bash" || name === "bash") {
+      const command = String((input.tool_input as { command?: string } | undefined)?.command ?? "");
+      const packed = compactStdout(command, extracted.stdout);
+      if (packed.stdout === extracted.stdout) return {};
+      return bashOutput(packed.stdout, extracted.stderr, extracted.interrupted);
+    }
+    const packed = compactStdout(name, extracted.stdout);
+    if (packed.stdout === extracted.stdout) return {};
+    return bashOutput(packed.stdout, extracted.stderr, extracted.interrupted);
   }
 
   if (event === "Stop" || event === "UserPromptSubmit") {
@@ -117,26 +201,42 @@ export async function runHook(): Promise<void> {
       flushed: false,
       ts: Date.now(),
     });
-    if (event === "Stop") fireDrain();
-    process.stdout.write("{}\n");
-    return;
+    if (event === "Stop") spawnDrain();
+    return {};
   }
 
   if (event === "SessionStart") {
+    try {
+      if (existsSync(outboxPath()) || existsSync(liveToolsPath())) await drainNow();
+    } catch {
+      /* server may be down */
+    }
     const knockPath = join(edenHome(), "knock.json");
     const knock = readJson<{ message?: string; shown?: number }>(knockPath, {});
-    let msg: string | undefined;
     const shown = knock.shown ?? 0;
-    if (knock.message && shown < 2) {
-      msg = `Eden: a draft tool is ready. Run \`eden open\` or \`eden reject\`.\n${knock.message}`;
+    if (knock.message && shown < 2 && process.env.EDEN_KNOCK !== "0") {
       writeFileSync(knockPath, JSON.stringify({ ...knock, shown: shown + 1 }));
+      return {
+        systemMessage: `Eden: a draft tool is ready. Run \`eden open\` or \`eden reject\`.\n${knock.message}`,
+      };
     }
-    fireDrain();
-    process.stdout.write(JSON.stringify(msg ? { systemMessage: msg } : {}) + "\n");
-    return;
+    return {};
   }
 
-  process.stdout.write("{}\n");
+  return {};
+}
+
+export async function runHook(): Promise<void> {
+  const raw = await readStdin();
+  let input: HookIn = {};
+  try {
+    input = JSON.parse(raw || "{}");
+  } catch {
+    process.stdout.write("{}\n");
+    return;
+  }
+  const out = await respondToHook(input);
+  process.stdout.write(JSON.stringify(out) + "\n");
 }
 
 if (import.meta.main) {

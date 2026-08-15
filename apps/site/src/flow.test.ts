@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { openDb } from "./db";
 import { ingest } from "./cluster";
 import { playTool } from "./playback";
+import { handleForge } from "./forge";
 import type { ToolEvent } from "@eden/core";
 
 function ev(i: number, command: string): ToolEvent {
@@ -59,6 +60,70 @@ describe("ingest → draft → approve → play", () => {
     const knocks = await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM knock`);
     expect(knocks?.c).toBe(0);
   });
+
+  test("compiled gh pull+status binds sha from the pull", async () => {
+    const db = await openDb(`/tmp/eden-bind-sha-${Date.now()}.db`);
+    const island = [
+      ev(1, "gh api repos/KaiavN/Eden/pulls/12"),
+      ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews"),
+      ev(3, "gh api repos/KaiavN/Eden/commits/abc123def/status"),
+    ];
+    await ingest(db, "ws_local", "bindsha", island, true);
+    const tool = await db.get<{ steps: string }>(`SELECT steps FROM tool LIMIT 1`);
+    const steps = JSON.parse(tool!.steps) as Array<{ url?: string; bind?: Record<string, string> }>;
+    expect(steps[2].url).toContain("/commits/{sha}/status");
+    expect(steps[2].bind?.sha).toBe("{{s1.head.sha}}");
+    expect(steps.some((s) => /\/files$/.test(s.url || ""))).toBe(true);
+  });
+
+  test("EDEN_AUTO_APPROVE turns a playable draft On", async () => {
+    process.env.EDEN_AUTO_APPROVE = "1";
+    const db = await openDb(`/tmp/eden-auto-on-${Date.now()}.db`);
+    const island = [
+      ev(1, "gh api repos/KaiavN/Eden/pulls/12"),
+      ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews"),
+      ev(3, "gh api repos/KaiavN/Eden/commits/abc123def/status"),
+    ];
+    await ingest(db, "ws_local", "auto", island, true);
+    const tool = await db.get<{ name: string; state: string; published: number }>(
+      `SELECT name, state, published FROM tool LIMIT 1`,
+    );
+    delete process.env.EDEN_AUTO_APPROVE;
+    expect(tool?.name).toBe("github_pr_bundle");
+    expect(tool?.state).toBe("on");
+    expect(tool?.published).toBe(1);
+  });
+
+  test("playTool issues[] returns one table for two forge PRs", async () => {
+    const db = await openDb(`/tmp/eden-batch-${Date.now()}.db`);
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES (?, 'ws_local', 'github_pr_bundle', 'x', 'on', ?, '[]', 'fp-batch')`,
+      [
+        crypto.randomUUID(),
+        JSON.stringify([
+          { id: "s1", kind: "cloud_http", name: "pull", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}" },
+          { id: "s2", kind: "cloud_http", name: "reviews", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}/reviews" },
+          {
+            id: "s3",
+            kind: "cloud_http",
+            name: "status",
+            commute: true,
+            url: "http://127.0.0.1/forge/repos/acme/app/commits/{sha}/status",
+            bind: { sha: "{{s1.head.sha}}" },
+          },
+        ]),
+      ],
+    );
+    const tool = await db.get<{ id: string; name: string; steps: string }>(
+      `SELECT id, name, steps FROM tool WHERE name = 'github_pr_bundle'`,
+    );
+    const receipt = await playTool(db, tool!, { issues: "12,13" });
+    expect(receipt.ok).toBe(true);
+    expect(receipt.table).toContain("Fix deploy for 12");
+    expect(receipt.table).toContain("Fix deploy for 13");
+    expect(receipt.table!.split("\n").length).toBe(2);
+  });
 });
 
 describe("playback densify + cache + parallel", () => {
@@ -75,6 +140,38 @@ describe("playback densify + cache + parallel", () => {
     expect(receipt.steps_attempted).toBe(6);
     expect(receipt.densified_bytes).toBeLessThan(receipt.raw_bytes);
     expect(receipt.facts).toBeTruthy();
+  });
+});
+
+describe("forge routing", () => {
+  test("does not intercept real GitHub API hosts", () => {
+    expect(handleForge(new URL("https://api.github.com/repos/KaiavN/Eden/pulls/168"))).toBeNull();
+    expect(handleForge(new URL("http://127.0.0.1:8791/forge/repos/acme/app/pulls/12"))).not.toBeNull();
+  });
+});
+
+describe("approve is workspace-gated", () => {
+  test("Vercel production rejects unauthenticated approve", async () => {
+    const prev = {
+      VERCEL: process.env.VERCEL,
+      EDEN_DEV: process.env.EDEN_DEV,
+      EDEN_DB: process.env.EDEN_DB,
+      EDEN_AUTO_APPROVE: process.env.EDEN_AUTO_APPROVE,
+    };
+    process.env.VERCEL = "1";
+    process.env.EDEN_DEV = "0";
+    process.env.EDEN_DB = `/tmp/eden-approve-${Date.now()}.db`;
+    delete process.env.EDEN_AUTO_APPROVE;
+    try {
+      const { handleFetch } = await import("./server");
+      const res = await handleFetch(new Request("http://127.0.0.1/v1/tools/nope/approve", { method: "POST" }));
+      expect(res.status).toBe(401);
+    } finally {
+      process.env.VERCEL = prev.VERCEL;
+      process.env.EDEN_DEV = prev.EDEN_DEV;
+      process.env.EDEN_DB = prev.EDEN_DB;
+      process.env.EDEN_AUTO_APPROVE = prev.EDEN_AUTO_APPROVE;
+    }
   });
 });
 
@@ -115,5 +212,56 @@ describe("runner fail-closed", () => {
     const receipt = await playTool(db, tool!, { origin: "http://127.0.0.1" });
     expect(receipt.ok).toBe(false);
     expect(receipt.steps_ok).toBe(0);
+  });
+});
+
+describe("wrap cache", () => {
+  test("failed play is not cached as ok", async () => {
+    const db = await openDb(`/tmp/eden-wrap-cache-${Date.now()}.db`);
+    const id = crypto.randomUUID();
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES (?, 'ws_local', 'local_only', 'x', 'on', ?, '[]', 'fp')`,
+      [id, JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }])],
+    );
+    const { wrapPlay } = await import("./wrap");
+    const tool = { id, name: "local_only", steps: JSON.stringify([{ id: "s1", kind: "runner", name: "git.status" }]), seen: "[]" };
+    const a = await wrapPlay(db, tool, {}, "http://127.0.0.1", "run-fail");
+    const b = await wrapPlay(db, tool, {}, "http://127.0.0.1", "run-fail");
+    expect(a.ok).toBe(false);
+    expect(b.ok).toBe(false);
+    const cached = await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM wrap_cache`);
+    expect(cached?.c).toBe(0);
+  });
+});
+
+describe("playback bind", () => {
+  test("step.bind and {{s1.field}} fill the next URL", async () => {
+    const db = await openDb(`/tmp/eden-bind-${Date.now()}.db`);
+    const origin = "http://127.0.0.1:8787";
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES (?, 'ws_local', 'bound', 'x', 'on', ?, '[]', 'fp')`,
+      [
+        crypto.randomUUID(),
+        JSON.stringify([
+          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}" },
+          {
+            id: "s2",
+            kind: "cloud_http",
+            name: "comments",
+            commute: true,
+            url: "{origin}/forge/repos/acme/app/issues/{{s1.number}}/comments",
+            bind: { issue: "{{s1.number}}" },
+          },
+        ]),
+      ],
+    );
+    const tool = await db.get<{ id: string; name: string; steps: string }>(
+      `SELECT id, name, steps FROM tool WHERE name = 'bound'`,
+    );
+    const receipt = await playTool(db, tool!, { issue: "12", origin });
+    expect(receipt.ok).toBe(true);
+    expect(receipt.steps_ok).toBe(2);
   });
 });

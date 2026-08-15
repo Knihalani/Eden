@@ -8,6 +8,12 @@ function claudeSettingsDir(scope: "user" | "project"): string {
   return join(process.cwd(), ".claude");
 }
 
+export function hookCommand(cliPath: string, hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
+  const hookd = `http://127.0.0.1:${hookdPort}/hook`;
+  const bunHook = `bun "${cliPath}" hook`;
+  return `curl -sS --max-time 8 -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook} || echo '{}'`;
+}
+
 export async function setup(args: string[]): Promise<void> {
   const sessionIdx = args.indexOf("--session");
   const token = sessionIdx >= 0 ? args[sessionIdx + 1] : process.env.EDEN_SETUP_TOKEN;
@@ -28,7 +34,7 @@ export async function setup(args: string[]): Promise<void> {
   writeConfig({ api_key: apiKey, base_url: base });
 
   const cliPath = join(import.meta.dir, "cli.ts");
-  const hookCmd = `bun "${cliPath}" hook`;
+  const hookCmd = hookCommand(cliPath);
   const headersCmd = `bun "${cliPath}" mcp-headers`;
 
   const userClaude = claudeSettingsDir("user");
@@ -69,4 +75,5 @@ export async function setup(args: string[]): Promise<void> {
   console.log(`  key stored in ${join(edenHome(), "config.json")}`);
   console.log(`  hooks → ${settingsPath}`);
   console.log(`  mcp   → ${mcpPath}`);
+  console.log(`  run \`eden hookd\` (or \`bun "${cliPath}" hookd\`) so Pre/Post/Stop stay warm.`);
 }

@@ -71,9 +71,21 @@ export function forgeRuns(n: string) {
   };
 }
 
+export function forgeFiles(n: string) {
+  const count = (Number(n) % 7) + 3;
+  return Array.from({ length: count }, (_, i) => ({
+    filename: `src/f${i}-${n}.ts`,
+    status: "modified",
+    additions: i + 1,
+    deletions: 0,
+  }));
+}
+
 export function handleForge(url: URL): Response | null {
   const p = url.pathname;
+  if (!p.startsWith("/forge/") && !p.includes("/forge/")) return null;
   const n = p.match(/\/(\d+)(?:\/|$)/)?.[1] || url.searchParams.get("pr") || "1";
+  if (p.includes("/files")) return json(forgeFiles(n));
   if (p.includes("/comments")) return json(forgeComments(n));
   if (p.includes("/reviews")) return json(forgeReviews(n));
   if (p.includes("/status")) return json(forgeStatus());
