@@ -141,7 +141,7 @@ async function uniqueToolName(db: EdenDb, workspaceId: string, base: string): Pr
 }
 
 function whenToUse(name: string): string {
-  if (name.startsWith("github_pr_bundle")) return "issues: csv of PR numbers. table: number | title | reviews | status | files";
+  if (name.startsWith("github_pr_bundle")) return "issues csv. table: n | title | reviews:int | CI | files:int";
   if (name.startsWith("github_pr_files")) return "issues: csv of PRs. table: number | files";
   if (name.startsWith("github_issue_bundle")) return "issues: csv. table: number | title | comments";
   return `One call with all ids for ${name.replaceAll("_", " ")}.`;

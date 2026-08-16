@@ -52,7 +52,9 @@ export function parseNamedCli(command: string): ParsedCli | null {
   const positionals = rest.filter((p) => !p.startsWith("-"));
   if (bin === "git") return null;
   if (bin === "gh") {
-    if (positionals[0] === "api") {
+    const verb = positionals[0];
+    if (!verb || !spec.subs.includes(verb)) return null;
+    if (verb === "api") {
       return {
         family: "gh",
         subcommand: "api",
