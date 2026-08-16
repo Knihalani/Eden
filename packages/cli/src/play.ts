@@ -1,5 +1,15 @@
 import { readConfig, ensureHome } from "./home";
-import { compactReceipt, parseIssueList, writePrefetch, extractGhRepo, runFulfillPlan, planFromBash } from "@eden/core";
+import {
+  bundleJson,
+  compactReceipt,
+  parseIssueList,
+  prRowsFromFacts,
+  writePrefetch,
+  extractGhRepo,
+  runFulfillPlan,
+  planFromBash,
+  type TypedPrRow,
+} from "@eden/core";
 
 export async function playCli(args: string[]): Promise<void> {
   ensureHome();
@@ -19,8 +29,17 @@ export async function playCli(args: string[]): Promise<void> {
     headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({ name, issues, issue: String(issues || "").split(/[,\s]+/)[0] }),
   });
-  const json = (await res.json()) as { table?: string; facts?: unknown; ok?: boolean };
-  const text = json.table || compactReceipt(json.facts) || JSON.stringify(json.facts ?? json);
+  const json = (await res.json()) as {
+    table?: string;
+    facts?: unknown;
+    ok?: boolean;
+    rows?: TypedPrRow[];
+  };
+  const issueIds = parseIssueList(issues);
+  const rows = json.rows?.length ? json.rows : prRowsFromFacts(json.facts, issueIds);
+  const text = rows.length
+    ? bundleJson(rows)
+    : json.table || compactReceipt(json.facts) || JSON.stringify(json.facts ?? json);
   process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
   if (!res.ok || json.ok === false) process.exit(1);
 }

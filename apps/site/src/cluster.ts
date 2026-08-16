@@ -4,6 +4,7 @@ import {
   cutIslands,
   fingerprintIsland,
   heuristicName,
+  isCompilableToolName,
   mergeConstantFlip,
   parameterizeUrl,
   requiredK,
@@ -91,6 +92,7 @@ export async function ingest(
     if (count === 1) {
       const compiled = stepsToCompiled(storedSteps);
       const base = heuristicName(storedSteps);
+      if (!isCompilableToolName(base)) continue;
       const prior =
         base.startsWith("github_pr_bundle")
           ? await db.get<{ id: string; steps: string }>(
@@ -161,7 +163,7 @@ async function uniqueToolName(db: EdenDb, workspaceId: string, base: string): Pr
 }
 
 function whenToUse(name: string): string {
-  if (name.startsWith("github_pr_bundle")) return "issues csv. table: n | title | reviews:int | CI | files:int";
+  if (name.startsWith("github_pr_bundle")) return "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]";
   if (name.startsWith("github_pr_files")) return "issues: csv of PRs. table: number | files";
   if (name.startsWith("github_issue_bundle")) return "issues: csv. table: number | title | comments";
   return `One call with all ids for ${name.replaceAll("_", " ")}.`;
@@ -202,19 +204,7 @@ function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
       command: s.cli_family,
     });
   }
-  if (heuristicName(steps).startsWith("github_pr_bundle") && !compiled.some((s) => /\/files/.test(s.url || ""))) {
-    const pull = compiled.find((s) => /\/pulls\/\{issue\}$/.test(s.url || ""));
-    if (pull?.url) {
-      compiled.push({
-        id: `s${compiled.length + 1}`,
-        kind: "cloud_http",
-        name: "gh.api",
-        commute: true,
-        url: `${pull.url}/files`,
-        command: "gh.api",
-      });
-    }
-  }
+  if (heuristicName(steps).startsWith("github_pr")) ensurePrBundleSteps(compiled);
   compiled.sort((a, b) => rankPlaybackUrl(a.url || "") - rankPlaybackUrl(b.url || ""));
   for (let i = 0; i < compiled.length; i++) compiled[i].id = `s${i + 1}`;
   for (let i = 0; i < compiled.length; i++) {
@@ -224,6 +214,41 @@ function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
     if (prior) compiled[i].bind = { sha: `{{${prior.id}.head.sha}}` };
   }
   return compiled.map(({ bind, ...rest }) => (bind ? { ...rest, bind } : rest));
+}
+
+function githubRepoOrigin(url: string): string | undefined {
+  const m = url.match(/^(https?:\/\/[^/]+\/(?:forge\/)?repos\/[^/]+\/[^/]+)/);
+  return m?.[1];
+}
+
+function ensurePrBundleSteps(
+  compiled: Array<{
+    id: string;
+    kind: string;
+    name: string;
+    commute: boolean;
+    url?: string;
+    command?: string;
+    bind?: Record<string, string>;
+  }>,
+): void {
+  const origin = compiled.map((s) => githubRepoOrigin(s.url || "")).find(Boolean);
+  if (!origin) return;
+  const add = (url: string) => {
+    if (compiled.some((s) => s.url === url)) return;
+    compiled.push({
+      id: `s${compiled.length + 1}`,
+      kind: "cloud_http",
+      name: "gh.api",
+      commute: true,
+      url,
+      command: "gh.api",
+    });
+  };
+  add(`${origin}/pulls/{issue}`);
+  add(`${origin}/pulls/{issue}/reviews`);
+  add(`${origin}/commits/{sha}/status`);
+  add(`${origin}/pulls/{issue}/files`);
 }
 
 function rankPlaybackUrl(url: string): number {

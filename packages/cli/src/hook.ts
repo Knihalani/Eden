@@ -42,6 +42,35 @@ function cliFamily(name: string, args: Record<string, unknown>): string {
   return name;
 }
 
+function liveTools(): Array<{ name?: string }> {
+  const raw = readJson<unknown>(liveToolsPath(), []);
+  if (Array.isArray(raw)) return raw as Array<{ name?: string }>;
+  if (raw && typeof raw === "object" && Array.isArray((raw as { tools?: unknown }).tools)) {
+    return (raw as { tools: Array<{ name?: string }> }).tools;
+  }
+  return [];
+}
+
+function liveBundleName(): string | null {
+  const name = liveTools().find((t) => String(t.name || "").startsWith("github_pr_bundle"))?.name;
+  return name && /^[A-Za-z0-9_]+$/.test(name) ? name : null;
+}
+
+function playBin(name: string, issues: string[]): string {
+  const ids = issues.filter((n) => /^\d+$/.test(n)).join(",");
+  const exe = process.execPath || "";
+  if (/(?:^|\/)eden$/.test(exe)) return `${JSON.stringify(exe)} play ${name} --issues ${ids}`;
+  return `bun ${JSON.stringify(join(import.meta.dir, "cli.ts"))} play ${name} --issues ${ids}`;
+}
+
+function playRewriteOpts(): { playFor: (kind: "bundle" | "files", issues: string[]) => string | null } | undefined {
+  const bundle = liveBundleName();
+  if (!bundle) return undefined;
+  return {
+    playFor: (kind, issues) => (kind === "bundle" ? playBin(bundle, issues) : null),
+  };
+}
+
 function spawnDrainProc() {
   const exe = process.execPath || "";
   return /(?:^|\/)eden$/.test(exe)
@@ -146,7 +175,7 @@ async function respondToHookInner(input: HookIn): Promise<Record<string, unknown
         ok: true,
         ts: Date.now(),
       });
-      const rewritten = rewriteBash(original);
+      const rewritten = rewriteBash(original, playRewriteOpts());
       if (rewritten.changed) {
         return {
           hookSpecificOutput: {

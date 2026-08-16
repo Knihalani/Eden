@@ -6,6 +6,8 @@ import {
   issuesFromParams,
   layers,
   modelFacing,
+  prRowFromFacts,
+  prRowsFromFacts,
   receiptTableLine,
   resolveTemplate,
   type CompiledStep,
@@ -144,6 +146,10 @@ async function playOne(
     facts: facing.facts,
     failed_step: failed,
     table: receiptTableLine(params.issue || "", facing.facts),
+    rows: (() => {
+      const row = prRowFromFacts(facing.facts, params.issue);
+      return row ? [row] : [];
+    })(),
   };
   await db.run(
     `INSERT INTO tool_run (id, tool_id, steps_attempted, steps_ok, server_ms, runner_ms, raw_bytes, densified_bytes, billable_ms, cache_hits, receipt)
@@ -178,6 +184,7 @@ export async function playTool(
   const t0 = Date.now();
   const receipts = await Promise.all(issues.map((issue) => playOne(db, tool, { ...params, issue })));
   const table = receipts.map((r, i) => r.table || receiptTableLine(issues[i], r.facts)).join("\n");
+  const rows = receipts.flatMap((r, i) => r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [issues[i]]));
   return {
     ok: receipts.every((r) => r.ok),
     steps_ok: receipts.reduce((a, r) => a + r.steps_ok, 0),
@@ -191,5 +198,6 @@ export async function playTool(
     result: table,
     facts: { rows: receipts.map((r) => r.facts) },
     table,
+    rows,
   };
 }

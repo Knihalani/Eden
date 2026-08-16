@@ -145,7 +145,15 @@ export function rewriteBash(
       const play = opts.playFor("files", ids);
       if (play) cmds.push(play);
     }
-    if (cmds.length) return { command: cmds.join("\n"), changed: true, kind: "play" };
+    if (cmds.length) {
+      const playCmd = cmds.join(" ; ");
+      const loopRe = /for\s+\w+\s+in\s+[\d\s]+[;\n]\s*do\b[\s\S]*?\bdone\b/;
+      if (loopRe.test(trimmed)) {
+        const next = trimmed.replace(loopRe, playCmd);
+        return { command: next, changed: true, kind: "play" };
+      }
+      return { command: playCmd, changed: true, kind: "play" };
+    }
   }
 
   if (opts?.fulfillBin) {

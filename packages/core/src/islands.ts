@@ -249,12 +249,17 @@ export function requiredK(steps: IslandStep[]): number {
 export function heuristicName(steps: IslandStep[]): string {
   const cloud = steps.filter((s) => s.kind === "cloud_http" || s.kind === "cloud_oauth");
   const urls = cloud.map((s) => s.source_url || "").join(" ");
-  if (/\/pulls\//.test(urls) && /\/reviews/.test(urls)) return "github_pr_bundle";
-  if (/\/pulls\/[^ ]*\/files/.test(urls)) return "github_pr_files";
+  if (/\/pulls\//.test(urls)) return "github_pr_bundle";
   if (/\/issues\//.test(urls) && /\/comments/.test(urls)) return "github_issue_bundle";
-  if (/\/pulls\//.test(urls)) return "github_pr";
   if (/\/issues\//.test(urls)) return "github_issue";
   if (/\/commits\/.*\/status/.test(urls)) return "github_commit_status";
   const names = cloud.map((s) => s.name.replace(/[^a-zA-Z0-9]+/g, "_")).slice(0, 3);
   return names.join("_").slice(0, 48) || "compiled_tool";
+}
+
+/** Concatenated gh.api noise is not a product tool. */
+export function isCompilableToolName(name: string): boolean {
+  if (!name || name === "compiled_tool") return false;
+  if (/^gh_api(_gh_api)*$/.test(name)) return false;
+  return true;
 }

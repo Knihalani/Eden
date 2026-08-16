@@ -1,3 +1,5 @@
+import type { TypedPrRow } from "./plan";
+
 export type StepKind = "cloud_http" | "cloud_oauth" | "runner";
 
 export type ToolEvent = {
@@ -48,5 +50,6 @@ export type Receipt = {
   result: unknown;
   facts?: unknown;
   table?: string;
+  rows?: TypedPrRow[];
   failed_step?: number;
 };

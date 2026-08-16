@@ -115,6 +115,30 @@ describe("ingest → draft → approve → play", () => {
     expect(tool?.published).toBe(1);
   });
 
+  test("pull-only stretch compiles a full github_pr_bundle", async () => {
+    process.env.EDEN_AUTO_APPROVE = "1";
+    const db = await openDb(`/tmp/eden-pull-only-${Date.now()}.db`);
+    await ingest(
+      db,
+      "ws_local",
+      "pull-only",
+      [
+        ev(1, "gh api repos/KaiavN/Eden/pulls/12"),
+        ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews"),
+      ],
+      true,
+    );
+    delete process.env.EDEN_AUTO_APPROVE;
+    const tool = await db.get<{ name: string; steps: string }>(`SELECT name, steps FROM tool LIMIT 1`);
+    expect(tool?.name).toBe("github_pr_bundle");
+    const steps = JSON.parse(tool!.steps) as Array<{ url?: string; bind?: Record<string, string> }>;
+    expect(steps.some((s) => /\/pulls\/\{issue\}$/.test(s.url || ""))).toBe(true);
+    expect(steps.some((s) => /\/reviews/.test(s.url || ""))).toBe(true);
+    expect(steps.some((s) => /\/status/.test(s.url || ""))).toBe(true);
+    expect(steps.some((s) => /\/files/.test(s.url || ""))).toBe(true);
+    expect(steps.find((s) => /\/status/.test(s.url || ""))?.bind?.sha).toBe("{{s1.head.sha}}");
+  });
+
   test("playTool issues[] returns one table for two forge PRs", async () => {
     const db = await openDb(`/tmp/eden-batch-${Date.now()}.db`);
     await db.run(
@@ -144,6 +168,9 @@ describe("ingest → draft → approve → play", () => {
     expect(receipt.table).toContain("Fix deploy for 12");
     expect(receipt.table).toContain("Fix deploy for 13");
     expect(receipt.table!.split("\n").length).toBe(2);
+    expect(receipt.rows?.map((r) => r.number)).toEqual([12, 13]);
+    expect(receipt.rows?.every((r) => typeof r.reviews === "number")).toBe(true);
+    expect(receipt.rows?.every((r) => /^(success|failure|pending|error)$/.test(r.status))).toBe(true);
   });
 });
 
