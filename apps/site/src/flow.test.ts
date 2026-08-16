@@ -76,6 +76,27 @@ describe("ingest → draft → approve → play", () => {
     expect(steps.some((s) => /\/files$/.test(s.url || ""))).toBe(true);
   });
 
+  test("second github_pr_bundle fingerprint updates the first tool", async () => {
+    process.env.EDEN_AUTO_APPROVE = "1";
+    const db = await openDb(`/tmp/eden-bundle-merge-${Date.now()}.db`);
+    const a = [
+      ev(1, "gh api repos/KaiavN/Eden/pulls/12"),
+      ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews"),
+      ev(3, "gh api repos/KaiavN/Eden/commits/abc123def/status"),
+    ];
+    const b = [
+      ev(1, "gh api repos/KaiavN/Eden/pulls/99"),
+      ev(2, "gh api repos/KaiavN/Eden/pulls/99/reviews"),
+      ev(3, "gh api repos/KaiavN/Eden/commits/ffffffffffffffff/status"),
+      ev(4, "gh api repos/KaiavN/Eden/pulls/99/files"),
+    ];
+    await ingest(db, "ws_local", "run-a", a, true);
+    await ingest(db, "ws_local", "run-b", b, true);
+    delete process.env.EDEN_AUTO_APPROVE;
+    const tools = await db.all<{ name: string }>(`SELECT name FROM tool WHERE name LIKE 'github_pr_bundle%'`);
+    expect(tools.map((t) => t.name)).toEqual(["github_pr_bundle"]);
+  });
+
   test("EDEN_AUTO_APPROVE turns a playable draft On", async () => {
     process.env.EDEN_AUTO_APPROVE = "1";
     const db = await openDb(`/tmp/eden-auto-on-${Date.now()}.db`);

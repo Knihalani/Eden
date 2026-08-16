@@ -89,25 +89,45 @@ export async function ingest(
       [fp, workspaceId, count, JSON.stringify(storedSteps), count >= 2 ? "knock" : "draft"],
     );
     if (count === 1) {
-      const id = crypto.randomUUID();
       const compiled = stepsToCompiled(storedSteps);
-      const name = await uniqueToolName(db, workspaceId, heuristicName(storedSteps));
-      await db.run(
-        `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
-         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
-        [
-          id,
-          workspaceId,
-          name,
-          whenToUse(name),
-          JSON.stringify(compiled),
+      const base = heuristicName(storedSteps);
+      const prior =
+        base.startsWith("github_pr_bundle")
+          ? await db.get<{ id: string; steps: string }>(
+              `SELECT id, steps FROM tool WHERE workspace_id = ? AND (name = 'github_pr_bundle' OR name LIKE 'github_pr_bundle_%') LIMIT 1`,
+              [workspaceId],
+            )
+          : undefined;
+      if (prior) {
+        const prev = JSON.parse(prior.steps || "[]") as Array<{ url?: string }>;
+        const next = compiled.length >= prev.length ? compiled : prev;
+        await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
+          JSON.stringify(next),
           JSON.stringify(storedSteps.map((s) => s.name)),
-          fp,
-          requiredK(storedSteps),
-        ],
-      );
-      await maybeAutoOn(db, id, compiled);
-      drafts++;
+          whenToUse(base),
+          prior.id,
+        ]);
+        await maybeAutoOn(db, prior.id, compiled);
+      } else {
+        const id = crypto.randomUUID();
+        const name = await uniqueToolName(db, workspaceId, base);
+        await db.run(
+          `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
+           VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+          [
+            id,
+            workspaceId,
+            name,
+            whenToUse(name),
+            JSON.stringify(compiled),
+            JSON.stringify(storedSteps.map((s) => s.name)),
+            fp,
+            requiredK(storedSteps),
+          ],
+        );
+        await maybeAutoOn(db, id, compiled);
+        drafts++;
+      }
     }
     if (count === 2) {
       const tool = await db.get<{ id: string }>(`SELECT id FROM tool WHERE fingerprint = ?`, [fp]);
