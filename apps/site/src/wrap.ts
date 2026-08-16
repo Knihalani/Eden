@@ -60,7 +60,7 @@ export async function wrapPlay(
     }
   }
   const receipt = await playTool(db, tool, { ...args, origin });
-  const facts = receipt.table || receipt.facts;
+  const facts = receipt.rows?.length ? receipt.rows : receipt.table || receipt.facts;
   if (cacheKey && receipt.ok) {
     recentPlays.set(cacheKey, { facts, ok: true, at: Date.now() });
     await db.run(

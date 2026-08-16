@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { isCompilableToolName } from "./islands";
 
 export function parseIssueList(raw: string | undefined | null): string[] {
   if (!raw) return [];
@@ -197,18 +198,24 @@ export async function runFulfillPlan(
 export const MCP_LIST_LIMIT = 3;
 export const MCP_DESC_CHARS = 60;
 
+function isHiddenWhenBundle(name: string): boolean {
+  if (name.startsWith("github_pr_bundle")) return false;
+  return name.startsWith("github_pr") || name.startsWith("github_commit_status") || name === "fetch_issue_bundle";
+}
+
 export function selectMcpTools<T extends { name: string; uses_count?: number | null }>(tools: T[], limit = MCP_LIST_LIMIT): T[] {
   let ranked = [...tools].sort(
     (a, b) => (Number(b.uses_count) || 0) - (Number(a.uses_count) || 0) || a.name.localeCompare(b.name),
   );
   if (ranked.some((t) => t.name.startsWith("github_pr_bundle"))) {
-    ranked = ranked.filter((t) => !t.name.startsWith("github_pr_files") && t.name !== "fetch_issue_bundle");
+    ranked = ranked.filter((t) => !isHiddenWhenBundle(t.name));
     const bundles = ranked.filter((t) => t.name.startsWith("github_pr_bundle"));
     if (bundles.length > 1) {
       const keep = bundles[0].name;
       ranked = ranked.filter((t) => !t.name.startsWith("github_pr_bundle") || t.name === keep);
     }
   }
+  ranked = ranked.filter((t) => isCompilableToolName(t.name));
   if (ranked.length <= limit) return ranked;
   const used = ranked.filter((t) => Number(t.uses_count) > 0);
   if (used.length) return used.slice(0, limit);

@@ -1,5 +1,5 @@
 import type { EdenDb } from "./db";
-import { compactReceipt, selectMcpTools, shortenWhenToUse } from "@eden/core";
+import { bundleJson, compactReceipt, prRowsFromFacts, selectMcpTools, shortenWhenToUse } from "@eden/core";
 import { playTool } from "./playback";
 
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
@@ -8,7 +8,7 @@ function schemaFor(_steps: Array<{ url?: string; bind?: Record<string, string> }
   return {
     type: "object",
     properties: {
-      issues: { type: "string", description: "csv of PR numbers" },
+      issues: { type: "string", description: "csv of PR numbers. returns JSON [{number,title,reviews,status,files}]" },
     },
     required: [] as string[],
   };
@@ -79,7 +79,8 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
       return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool ${name}` } };
     }
     const receipt = await playTool(db, tool, { ...args, origin });
-    const text = receipt.table || compactReceipt(receipt.facts);
+    const rows = receipt.rows?.length ? receipt.rows : prRowsFromFacts(receipt.facts, String(args.issues || args.issue || "").split(/[,\s]+/).filter(Boolean));
+    const text = rows.length ? bundleJson(rows).trimEnd() : receipt.table || compactReceipt(receipt.facts);
     return {
       jsonrpc: "2.0",
       id,

@@ -1,8 +1,14 @@
+import type { TypedPrRow } from "./plan";
+
+/** Combined CI from GitHub commit status — never PR `open`/`closed`. */
+export const CI_STATE = /^(success|failure|pending|error)$/;
+
 const FACT_KEYS = [
   "title",
   "name",
   "state",
   "status",
+  "combined_state",
   "conclusion",
   "number",
   "id",
@@ -52,62 +58,101 @@ export function modelFacing(value: unknown, maxChars = 2500): { text: string; fa
   };
 }
 
-/** One-line receipt when a PR/issue bundle is recognizable. */
-export function compactReceipt(facts: unknown): string {
-  if (!isPlainObject(facts)) return JSON.stringify(facts ?? null);
+function countish(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (Array.isArray(v)) return v.length;
+  if (isPlainObject(v) && typeof v.n === "number") return v.n;
+  return undefined;
+}
+
+function ciState(v: unknown): string | undefined {
+  if (typeof v === "string" && CI_STATE.test(v)) return v;
+  if (!isPlainObject(v)) return undefined;
+  const s = v.state ?? v.combined_state;
+  return typeof s === "string" && CI_STATE.test(s) ? s : undefined;
+}
+
+/** Typed PR row the agent can write straight to prs.json. CI state never uses PR `open`. */
+export function prRowFromFacts(facts: unknown, fallbackNumber?: string): TypedPrRow | null {
+  if (!isPlainObject(facts)) return null;
   const nested = isPlainObject(facts.s1);
   const s1 = nested ? facts.s1 : facts;
   const s2 = nested ? facts.s2 : facts.reviews;
   const s3 = nested && isPlainObject(facts.s3) ? facts.s3 : undefined;
   const s4 = nested ? facts.s4 : facts.files;
-  if (!isPlainObject(s1)) {
-    const json = JSON.stringify(facts);
-    return json.length > 1200 ? json.slice(0, 1200) : json;
-  }
-  const number = typeof s1.number === "number" ? s1.number : undefined;
+  if (!isPlainObject(s1)) return null;
+  const number =
+    typeof s1.number === "number"
+      ? s1.number
+      : fallbackNumber && /^\d+$/.test(fallbackNumber)
+        ? Number(fallbackNumber)
+        : undefined;
   const title = typeof s1.title === "string" ? s1.title : undefined;
-  const reviews =
-    isPlainObject(s2) && typeof s2.n === "number"
-      ? s2.n
-      : Array.isArray(s2)
-        ? s2.length
-        : typeof s2 === "number"
-          ? s2
-          : undefined;
-  const CI = /^(success|failure|pending|error)$/;
+  const reviews = countish(s2);
   const values = Object.values(facts).filter(isPlainObject);
-  const statusObj = values.find((v) => typeof v.state === "string" && CI.test(v.state) && typeof v.title !== "string");
-  const state =
-    (statusObj && typeof statusObj.state === "string" ? statusObj.state : undefined) ??
-    (s3 && typeof s3.state === "string" && CI.test(s3.state) ? s3.state : undefined) ??
-    (typeof s1.state === "string" && CI.test(s1.state) ? s1.state : undefined);
-  const files =
-    isPlainObject(s4) && typeof s4.n === "number"
-      ? s4.n
-      : Array.isArray(s4)
-        ? s4.length
-        : typeof s4 === "number"
-          ? s4
-          : typeof s1.n === "number" && !title
-            ? s1.n
-            : undefined;
+  const statusObj = values.find((v) => ciState(v) && typeof v.title !== "string");
+  const status =
+    ciState(statusObj) ??
+    ciState(s3) ??
+    ciState(s1.state) ??
+    ciState(s1) ??
+    (typeof s1.status === "string" && CI_STATE.test(s1.status) ? s1.status : undefined);
+  const files = countish(s4);
   const sha =
     typeof s1.sha === "string"
       ? s1.sha
       : isPlainObject(s1.head) && typeof s1.head.sha === "string"
         ? s1.head.sha
         : undefined;
-  if (title && state != null) {
-    const bits: unknown[] = [number, title, reviews ?? "?", state];
-    if (files != null) bits.push(files);
-    if (sha) bits.push(sha);
-    return bits.filter((b) => b !== undefined).join(" | ");
+  if (number == null || !title || !status) return null;
+  const row: TypedPrRow = { number, title, reviews: reviews ?? 0, status };
+  if (files != null) row.files = files;
+  if (sha) row.sha = sha;
+  return row;
+}
+
+export function prRowsFromFacts(facts: unknown, issues?: string[]): TypedPrRow[] {
+  if (isPlainObject(facts) && Array.isArray(facts.rows)) {
+    return facts.rows
+      .map((f, i) => prRowFromFacts(f, issues?.[i]))
+      .filter((r): r is TypedPrRow => r !== null);
   }
-  if (title && number != null) {
-    const bits: unknown[] = [number, title, reviews ?? state ?? ""];
-    return bits.filter((b) => b !== undefined && b !== "").join(" | ");
+  const one = prRowFromFacts(facts, issues?.[0]);
+  return one ? [one] : [];
+}
+
+export function bundleJson(rows: TypedPrRow[]): string {
+  return `${JSON.stringify(
+    rows.map((r) => {
+      const out: Record<string, unknown> = {
+        number: r.number,
+        title: r.title,
+        reviews: r.reviews,
+        status: r.status,
+      };
+      if (r.files != null) out.files = r.files;
+      return out;
+    }),
+  )}\n`;
+}
+
+/** One-line receipt when a PR/issue bundle is recognizable. */
+export function compactReceipt(facts: unknown): string {
+  const row = prRowFromFacts(facts);
+  if (row) {
+    const bits: Array<string | number> = [row.number, row.title, row.reviews, row.status];
+    if (row.files != null) bits.push(row.files);
+    if (row.sha) bits.push(row.sha);
+    return bits.join(" | ");
   }
-  if (number != null && files != null) return `${number} | ${files}`;
+  if (!isPlainObject(facts)) return JSON.stringify(facts ?? null);
+  const s1 = isPlainObject(facts.s1) ? facts.s1 : facts;
+  if (isPlainObject(s1) && typeof s1.number === "number" && typeof s1.n === "number" && typeof s1.title !== "string") {
+    return `${s1.number} | ${s1.n}`;
+  }
+  if (isPlainObject(s1) && typeof s1.number === "number" && typeof s1.title === "string") {
+    return [s1.number, s1.title, countish(facts.s2) ?? ""].filter((b) => b !== "").join(" | ");
+  }
   const json = JSON.stringify(facts);
   return json.length > 1200 ? json.slice(0, 1200) : json;
 }

@@ -51,6 +51,8 @@ describe("always-better hook", () => {
 
   test("rewrites a for-loop via updatedInput", async () => {
     process.env.EDEN_HOME = home;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(home, "live-tools.json"), "[]");
     const cmd =
       "for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n; gh api repos/KaiavN/Eden/pulls/$n/reviews; done";
     const out = await respondToHook({
@@ -68,6 +70,32 @@ describe("always-better hook", () => {
     expect(updated).toContain("gh api");
     expect(updated).toContain("cat ");
     expect(updated).not.toContain("fulfill");
+    expect(updated).not.toContain(" play ");
+  });
+
+  test("rewrites a live-bundle loop to play, never deny, never fulfill", async () => {
+    process.env.EDEN_HOME = home;
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(
+      join(home, "live-tools.json"),
+      JSON.stringify([{ name: "github_pr_bundle", seen: ["gh.api"], required_k: 1 }]),
+    );
+    const cmd =
+      "for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n; gh api repos/KaiavN/Eden/pulls/$n/reviews; done";
+    const out = await respondToHook({
+      hook_event_name: "PreToolUse",
+      session_id: "play-loop",
+      tool_name: "Bash",
+      tool_input: { command: cmd },
+    });
+    const updated = (out as { hookSpecificOutput?: { updatedInput?: { command?: string } } }).hookSpecificOutput
+      ?.updatedInput?.command;
+    const decision = (out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput
+      ?.permissionDecision;
+    expect(decision === "deny").toBe(false);
+    expect(updated).toContain("play github_pr_bundle --issues 170,169");
+    expect(updated).not.toContain("fulfill");
+    expect(updated).not.toContain("wait");
   });
 
   test("PostToolUse leaves gh api JSON intact and densifies bun test", async () => {

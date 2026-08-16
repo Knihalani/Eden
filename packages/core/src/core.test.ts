@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { densifyPayload, densifyValue, undensifyValue, cellsEqual } from "../src/densify";
-import { modelFacing } from "../src/compact";
+import { modelFacing, prRowFromFacts, bundleJson, CI_STATE } from "../src/compact";
 import { parseNamedCli, extractNamedCliCalls } from "../src/named-cli";
 import { parameterizeUrl, compileStepUrl, resolveTemplate, githubRestFromCli } from "../src/urls";
 import {
   cutIslands,
   fingerprintIsland,
   heuristicName,
+  isCompilableToolName,
   mergeConstantFlip,
   requiredK,
   type ToolEvent,
@@ -287,6 +288,22 @@ describe("islands", () => {
     expect(requiredK(islands[0])).toBe(1);
   });
 
+  test("heuristicName for pull-only is github_pr_bundle", () => {
+    expect(
+      heuristicName([
+        {
+          name: "gh.api",
+          arg_keys: [],
+          constants: {},
+          param_keys: ["issue"],
+          kind: "cloud_http",
+          commute: true,
+          source_url: "https://api.github.com/repos/KaiavN/Eden/pulls/12",
+        },
+      ]),
+    ).toBe("github_pr_bundle");
+  });
+
   test("heuristicName for pull+reviews+status is github_pr_bundle", () => {
     const islands = cutIslands([
       ev({ name: "Bash", command: "gh api repos/KaiavN/Eden/pulls/12", args: { command: "gh api repos/KaiavN/Eden/pulls/12" } }),
@@ -455,6 +472,14 @@ describe("fulfill wrap", () => {
     expect(r.command).toBe("eden play github_pr_bundle --issues 170,169");
   });
 
+  test("playFor does not rewrite redirected loops", () => {
+    const r = rewriteBash("for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > raw/$n.json; done", {
+      playFor: () => "eden play github_pr_bundle --issues 170,169",
+    });
+    expect(r.kind).not.toBe("play");
+    expect(r.command).not.toContain("eden play");
+  });
+
   test("compactStdout leaves gh api JSON intact and shrinks bun test", () => {
     const fat = JSON.stringify({
       number: 170,
@@ -602,6 +627,20 @@ describe("plan + mcp ranking", () => {
     expect(listed.map((t) => t.name)).toEqual(["github_pr_bundle"]);
   });
 
+  test("selectMcpTools hides github_pr and gh_api noise when a bundle exists", () => {
+    const listed = selectMcpTools([
+      { name: "github_pr", uses_count: 9 },
+      { name: "gh_api_gh_api", uses_count: 8 },
+      { name: "github_pr_bundle", uses_count: 2 },
+    ]);
+    expect(listed.map((t) => t.name)).toEqual(["github_pr_bundle"]);
+  });
+
+  test("isCompilableToolName rejects concatenated gh.api names", () => {
+    expect(isCompilableToolName("gh_api_gh_api")).toBe(false);
+    expect(isCompilableToolName("github_pr_bundle")).toBe(true);
+  });
+
   test("selectMcpTools hides github_pr_files when a bundle exists", () => {
     const listed = selectMcpTools([
       { name: "github_pr_files", uses_count: 9 },
@@ -634,5 +673,42 @@ describe("plan + mcp ranking", () => {
     const s = shortenWhenToUse("x".repeat(200));
     expect(s.length).toBe(60);
     expect(s.endsWith("…")).toBe(true);
+  });
+});
+
+describe("canonical PR receipt", () => {
+  test("prRowFromFacts uses CI state not PR open", () => {
+    const row = prRowFromFacts({
+      s1: { number: 170, title: "fix boot", state: "open", sha: "abc" },
+      s2: { n: 2 },
+      s3: { state: "failure", total_count: 3 },
+      s4: { n: 4 },
+    });
+    expect(row).toEqual({ number: 170, title: "fix boot", reviews: 2, status: "failure", files: 4, sha: "abc" });
+    expect(CI_STATE.test(row!.status)).toBe(true);
+    expect(row!.status).not.toBe("open");
+  });
+
+  test("prRowFromFacts reads combined_state", () => {
+    const row = prRowFromFacts({
+      s1: { number: 12, title: "Cannot deploy widget 12" },
+      s2: { n: 0 },
+      s3: { combined_state: "success" },
+    });
+    expect(row?.status).toBe("success");
+    expect(row?.reviews).toBe(0);
+  });
+
+  test("bundleJson is a JSON array the agent can write to prs.json", () => {
+    const text = bundleJson([
+      { number: 170, title: "fix boot", reviews: 2, status: "failure", files: 4 },
+      { number: 169, title: "docs", reviews: 0, status: "success" },
+    ]);
+    const parsed = JSON.parse(text) as Array<{ number: number; status: string; files?: number }>;
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].files).toBe(4);
+    expect(parsed[1].files).toBeUndefined();
+    expect(text).not.toContain(" | ");
+    expect(text).not.toContain("\n  ");
   });
 });
