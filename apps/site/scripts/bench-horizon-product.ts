@@ -118,13 +118,13 @@ function taskPrompts(work: string) {
   const t1 = `You are a product analyst. Work only in ${work}. Do not modify any other repo. Do not read .env or secrets. Do not write code or tests.
 
 For EACH of these GitHub PRs in ${REPO}, fetch with separate \`gh api\` REST calls (pull JSON, reviews list, combined commit status). PRs: ${PRS_LEARN.join(", ")}.
-Write decisions/prs.json as an array of {number, title, reviews, status}.
+Write decisions/prs.json as an array of {number, title, reviews, status} where reviews is an integer count and status is the combined CI state string (success|failure|pending|error), not a nested object.
 Write memo.md summarizing what you found. Then stop.`;
 
   const t2 = `Continue the analysis in ${work}. Do not modify any other repo. Do not write a coding CLI.
 
 Fetch PRs ${PRS_MORE.join(", ")} the same way (pull + reviews + status) AND also \`gh api repos/${REPO}/pulls/{n}/files\` for every PR in ${PRS_ALL.join(", ")} (re-fetch the earlier ones too).
-decisions/prs.json becomes {number, title, reviews, status, files}.
+decisions/prs.json becomes {number, title, reviews, status, files} with reviews and files as integers and status as the combined CI state string.
 Write rank.md ranking those PRs. If Eden MCP offers github_pr_bundle or similar, use it instead of repeating gh api for title/reviews/status. Then stop.`;
 
   const t3 = `Finish the analysis in ${work}. Do not modify any other repo.
@@ -153,10 +153,29 @@ async function ingestSession(runId: string, stdout: string) {
   return events.length;
 }
 
+function reviewCount(row: { reviews?: unknown }): number | null {
+  if (typeof row.reviews === "number" && Number.isFinite(row.reviews)) return row.reviews;
+  if (Array.isArray(row.reviews)) return row.reviews.length;
+  if (row.reviews && typeof row.reviews === "object" && "n" in row.reviews && typeof (row.reviews as { n: unknown }).n === "number") {
+    return (row.reviews as { n: number }).n;
+  }
+  return null;
+}
+
+function statusState(row: { status?: unknown }): string {
+  if (typeof row.status === "string") return row.status;
+  if (row.status && typeof row.status === "object") {
+    const s = row.status as { combined_state?: unknown; state?: unknown };
+    const v = s.combined_state ?? s.state;
+    if (typeof v === "string") return v;
+  }
+  return "";
+}
+
 function scoreProduct(work: string, gold: Record<number, Awaited<ReturnType<typeof goldPr>>>, phase: 1 | 2 | 3) {
   const expectN = phase === 1 ? PRS_LEARN : PRS_ALL;
   const prsPath = join(work, "decisions/prs.json");
-  let rows: Array<{ number?: number; title?: string; reviews?: number; status?: string; files?: number }> = [];
+  let rows: Array<{ number?: number; title?: string; reviews?: unknown; status?: unknown; files?: unknown }> = [];
   if (existsSync(prsPath)) {
     try {
       const parsed = JSON.parse(readFileSync(prsPath, "utf8"));
@@ -173,8 +192,8 @@ function scoreProduct(work: string, gold: Record<number, Awaited<ReturnType<type
     const g = gold[n];
     if (!row || !g) continue;
     if (String(row.title || "").includes(g.title.slice(0, 20))) titleHits++;
-    if (Number(row.reviews) === g.review_count) reviewHits++;
-    if (String(row.status || "") === g.status_state) statusHits++;
+    if (reviewCount(row) === g.review_count) reviewHits++;
+    if (statusState(row) === g.status_state) statusHits++;
   }
   const memo = existsSync(join(work, "memo.md")) ? readFileSync(join(work, "memo.md"), "utf8") : "";
   const rank = phase >= 2 && existsSync(join(work, "rank.md")) ? readFileSync(join(work, "rank.md"), "utf8") : "";

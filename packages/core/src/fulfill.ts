@@ -88,11 +88,13 @@ export function rewriteForLoop(command: string): string | null {
     `_e=/tmp/eden-par-$$`,
     `mkdir -p "$_e"`,
     `for ${varName} in ${ids.join(" ")}; do`,
-    `  ( ${inner} ) > "$_e/$${varName}" 2>&1 &`,
+    `  ( ${inner}; echo $? > "$_e/$${varName}.ec" ) > "$_e/$${varName}" 2>&1 &`,
     `done`,
     `wait`,
-    `for ${varName} in ${ids.join(" ")}; do cat "$_e/$${varName}"; done`,
+    `_fail=0`,
+    `for ${varName} in ${ids.join(" ")}; do cat "$_e/$${varName}"; [ "$(cat "$_e/$${varName}.ec" 2>/dev/null)" = 0 ] || _fail=1; done`,
     `rm -rf "$_e"`,
+    `[ "$_fail" = 0 ]`,
   ].join("\n");
   return command.replace(m[0], () => loop);
 }
@@ -112,10 +114,12 @@ function parallelizeSequentialGh(command: string): string | null {
   return [
     `_e=/tmp/eden-par-$$`,
     `mkdir -p "$_e"`,
-    ...gh.map((l, i) => `( ${l} ) > "$_e/${i}" 2>&1 &`),
+    ...gh.map((l, i) => `( ${l}; echo $? > "$_e/${i}.ec" ) > "$_e/${i}" 2>&1 &`),
     `wait`,
-    `cat ${gh.map((_, i) => `"$_e/${i}"`).join(" ")}`,
+    `_fail=0`,
+    ...gh.map((_, i) => `cat "$_e/${i}"; [ "$(cat "$_e/${i}.ec" 2>/dev/null)" = 0 ] || _fail=1`),
     `rm -rf "$_e"`,
+    `[ "$_fail" = 0 ]`,
   ].join("\n");
 }
 

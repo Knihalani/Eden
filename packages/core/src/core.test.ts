@@ -133,6 +133,11 @@ describe("named cli", () => {
     expect(parseNamedCli(`git commit -m "wip"`)).toBeNull();
   });
 
+  test("gh pipeline noise is not a named cli", () => {
+    expect(parseNamedCli("gh 2>&1 | cat")).toBeNull();
+    expect(parseNamedCli("gh api repos/KaiavN/Eden/pulls/170")).not.toBeNull();
+  });
+
   test("extractNamedCliCalls unwraps for-loop gh api templates", () => {
     const cmd =
       "for n in 170 169; do\n" +
@@ -408,6 +413,8 @@ describe("fulfill wrap", () => {
     expect(r.command).toContain("gh api repos/KaiavN/Eden/pulls/$n");
     expect(r.command).toContain("170 169 168");
     expect(r.command).toContain("cat ");
+    expect(r.command).toContain(".ec");
+    expect(r.command).toContain("[ \"$_fail\" = 0 ]");
     expect(r.command).not.toContain("fulfill");
     expect(r.command).not.toContain("suffix-must-survive");
     const wrapped = "echo start; " + cmd + "; echo suffix-must-survive";
@@ -584,6 +591,15 @@ describe("plan + mcp ranking", () => {
 
   test("typedTable uses integers not English", () => {
     expect(typedTable([{ number: 1, title: "a", reviews: 0, status: "pending" }])).toBe("1 | a | 0 | pending");
+  });
+
+  test("selectMcpTools keeps one github_pr_bundle", () => {
+    const listed = selectMcpTools([
+      { name: "github_pr_bundle_3", uses_count: 1 },
+      { name: "github_pr_bundle", uses_count: 4 },
+      { name: "github_pr_bundle_2", uses_count: 2 },
+    ]);
+    expect(listed.map((t) => t.name)).toEqual(["github_pr_bundle"]);
   });
 
   test("selectMcpTools hides github_pr_files when a bundle exists", () => {

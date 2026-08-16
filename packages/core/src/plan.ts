@@ -203,6 +203,11 @@ export function selectMcpTools<T extends { name: string; uses_count?: number | n
   );
   if (ranked.some((t) => t.name.startsWith("github_pr_bundle"))) {
     ranked = ranked.filter((t) => !t.name.startsWith("github_pr_files") && t.name !== "fetch_issue_bundle");
+    const bundles = ranked.filter((t) => t.name.startsWith("github_pr_bundle"));
+    if (bundles.length > 1) {
+      const keep = bundles[0].name;
+      ranked = ranked.filter((t) => !t.name.startsWith("github_pr_bundle") || t.name === keep);
+    }
   }
   if (ranked.length <= limit) return ranked;
   const used = ranked.filter((t) => Number(t.uses_count) > 0);

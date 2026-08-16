@@ -81,11 +81,13 @@ for (const job of jobs) {
   }
 }
 
+const fair_wins = rows.filter((r) => r.protocol === "fair" && r.win_all).length;
+const hard_wins = rows.filter((r) => r.protocol === "hard" && r.win_all).length;
 const summary = {
-  ok: true,
+  ok: fair_wins === N && hard_wins === N,
   n: N,
-  fair_wins: rows.filter((r) => r.protocol === "fair" && r.win_all).length,
-  hard_wins: rows.filter((r) => r.protocol === "hard" && r.win_all).length,
+  fair_wins,
+  hard_wins,
   rows,
 };
 writeFileSync(join(DEST, "summary.json"), JSON.stringify(summary, null, 2));
