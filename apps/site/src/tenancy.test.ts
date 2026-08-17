@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ToolEvent } from "@eden/core";
 import { openDb, type EdenDb } from "./db";
 import { ingest } from "./cluster";
+import { handleFetch } from "./server";
 
 /**
  * Fingerprints are derived from URL *shape*, so two tenants hitting the same
@@ -103,5 +104,62 @@ describe("cluster rows are per workspace", () => {
     const tools = await db.all<{ workspace_id: string }>(`SELECT workspace_id FROM tool`);
     expect(tools.length).toBeGreaterThanOrEqual(2);
     expect(new Set(tools.map((t) => t.workspace_id))).toEqual(new Set(["ws_a", "ws_b"]));
+  });
+});
+
+describe("state-changing routes refuse cross-origin drive-bys", () => {
+  const saved: Record<string, string | undefined> = {};
+  let dbFile: string;
+
+  beforeEach(() => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED"]) saved[k] = process.env[k];
+    dbFile = join(tmpdir(), `eden-csrf-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    process.env.EDEN_DB = dbFile;
+    process.env.EDEN_SKIP_SEED = "1";
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    rmSync(dbFile, { force: true });
+  });
+
+  const write = (headers: Record<string, string> = {}) =>
+    new Request("http://127.0.0.1:8787/v1/ingest", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify({ run_id: "r1", events: [], stretch_end: false }),
+    });
+
+  test("refuses a POST from another origin", async () => {
+    // No cookie means no SameSite boundary, and workspaceForKey grants ws_local
+    // to a request with no Authorization at all — so a cross-origin form POST
+    // could approve a tool or poison the workspace.
+    const res = await handleFetch(write({ origin: "https://evil.example" }));
+    expect(res.status).toBe(403);
+  });
+
+  test("refuses a cross-site fetch even without an Origin header", async () => {
+    const res = await handleFetch(write({ "sec-fetch-site": "cross-site" }));
+    expect(res.status).toBe(403);
+  });
+
+  test("allows the workshop's own same-origin form", async () => {
+    const res = await handleFetch(write({ origin: "http://127.0.0.1:8787", "sec-fetch-site": "same-origin" }));
+    expect(res.status).not.toBe(403);
+  });
+
+  test("allows a CLI caller, which sends no Origin", async () => {
+    const res = await handleFetch(write());
+    expect(res.status).not.toBe(403);
+  });
+
+  test("never blocks a read", async () => {
+    const res = await handleFetch(
+      new Request("http://127.0.0.1:8787/health", { headers: { origin: "https://evil.example" } }),
+    );
+    expect(res.status).toBe(200);
   });
 });
