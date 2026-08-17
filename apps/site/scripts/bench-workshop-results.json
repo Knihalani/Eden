@@ -1,0 +1,347 @@
+{
+  "protocol": {
+    "seed": "none",
+    "auto_approve": true,
+    "domains": [
+      "shop orders",
+      "shop customers",
+      "shop tickets",
+      "local-file control"
+    ],
+    "persist": "Eden DB + live-tools across 4 sequential sessions",
+    "note": "Gold is the local /shop mock. No GitHub PR catalog. Eden compiles from traces."
+  },
+  "scored": [
+    {
+      "id": "t1-orders",
+      "without": {
+        "arm": "without",
+        "task": "t1-orders",
+        "wall_ms": 17513,
+        "duration_ms": 15843,
+        "tool_calls": 5,
+        "tool_names": {
+          "Bash": 4,
+          "Write": 1
+        },
+        "cost_usd": 0.46402099999999996,
+        "output_tokens": 1093,
+        "result_text": "Wrote `data/orders.json` with all three orders.\n\n| id | title | total | status | items |\n|----|-------|-------|--------|-------|\n| 11 | Order 11 | 115 | open | 2 |\n| 12 | Order 12 | 125 | paid | 2 |\n| 13 | Order 13 | 135 | open | 2 |\n\nOne judgment call: each order returned 2 line items with quantities `[2, 1]`. I read \"item count\" as the number of line items (2), not the sum of quantities (3). If you meant total quantity, all three should be 3 instead.",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 4
+      },
+      "with": {
+        "arm": "with",
+        "task": "t1-orders",
+        "wall_ms": 13621,
+        "duration_ms": 12562,
+        "tool_calls": 3,
+        "tool_names": {
+          "Bash": 2,
+          "Write": 1
+        },
+        "cost_usd": 0.13435550000000002,
+        "output_tokens": 806,
+        "result_text": "Wrote `data/orders.json` with all three orders:\n\n| id | title | total | status | items |\n|----|-------|-------|--------|-------|\n| 11 | Order 11 | 115 | open | 2 |\n| 12 | Order 12 | 125 | paid | 2 |\n| 13 | Order 13 | 135 | open | 2 |\n\nThe items endpoint returns `{\"n\": ..., \"sample\": [...]}` — I used `n` as the item count (the `sample` array happened to have the same length, but `n` is the authoritative count).",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 2
+      },
+      "quality": {
+        "without": {
+          "orderHits": 12,
+          "orderMax": 12,
+          "customerHits": 0,
+          "customerMax": 0,
+          "ticketHits": 0,
+          "ticketMax": 0,
+          "report": false,
+          "controlHits": 0,
+          "quality": 12,
+          "qualityMax": 12
+        },
+        "with": {
+          "orderHits": 12,
+          "orderMax": 12,
+          "customerHits": 0,
+          "customerMax": 0,
+          "ticketHits": 0,
+          "ticketMax": 0,
+          "report": false,
+          "controlHits": 0,
+          "quality": 12,
+          "qualityMax": 12
+        }
+      },
+      "tools_after": []
+    },
+    {
+      "id": "t2-customers",
+      "without": {
+        "arm": "without",
+        "task": "t2-customers",
+        "wall_ms": 47994,
+        "duration_ms": 47101,
+        "tool_calls": 8,
+        "tool_names": {
+          "Bash": 7,
+          "Read": 1
+        },
+        "cost_usd": 0.251214,
+        "output_tokens": 3425,
+        "result_text": "Done. Both files written in `/tmp/eden-workshop/without/data/`; nothing outside that desk was touched.\n\n**`data/orders.json`** — covers all five ids 11–15. I regenerated the whole file from the API rather than appending, so 11–13 were re-fetched and confirmed to match what was already on disk. `items` is the length of the `/items` array (2 for every order).\n\n| id | title | total | status | items |\n|----|-------|-------|--------|-------|\n| 11 | Order 11 | 115 | open | 2 |\n| 12 | Order 12 | 125 | paid | 2 |\n| 13 | Order 13 | 135 | open | 2 |\n| 14 | Order 14 | 145 | paid | 2 |\n| 15 | Order 15 | 155 | open | 2 |\n\n**`data/customers.json`** — `orders` is the integer count from `/customers/{id}/ord",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 7
+      },
+      "with": {
+        "arm": "with",
+        "task": "t2-customers",
+        "wall_ms": 51917,
+        "duration_ms": 50947,
+        "tool_calls": 9,
+        "tool_names": {
+          "Bash": 5,
+          "Read": 2,
+          "Write": 2
+        },
+        "cost_usd": 0.2830315,
+        "output_tokens": 3519,
+        "result_text": "Done. Both files written in `/tmp/eden-workshop/with`; nothing else touched.\n\n**`data/orders.json`** — covers all ids 11–15. Orders 14 and 15 were fetched the same way as the existing rows (order JSON + `/items`), keeping the same field shape (`id, title, total, status, items`):\n- 14 — \"Order 14\", total 145, paid, items 2\n- 15 — \"Order 15\", total 155, open, items 2\n\nI also re-fetched 11–13 to confirm they still match what was already on disk. They do, so those rows are unchanged.\n\n**`data/customers.json`** (new):\n```json\n[{\"id\": 21, \"name\": \"Customer 21\", \"email\": \"c21@example.com\", \"orders\": 2},\n {\"id\": 22, \"name\": \"Customer 22\", \"email\": \"c22@example.com\", \"orders\": 2}]\n```\n\nTwo notes on h",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 5
+      },
+      "quality": {
+        "without": {
+          "orderHits": 20,
+          "orderMax": 20,
+          "customerHits": 6,
+          "customerMax": 6,
+          "ticketHits": 0,
+          "ticketMax": 0,
+          "report": false,
+          "controlHits": 0,
+          "quality": 26,
+          "qualityMax": 26
+        },
+        "with": {
+          "orderHits": 20,
+          "orderMax": 20,
+          "customerHits": 6,
+          "customerMax": 6,
+          "ticketHits": 0,
+          "ticketMax": 0,
+          "report": false,
+          "controlHits": 0,
+          "quality": 26,
+          "qualityMax": 26
+        }
+      },
+      "tools_after": [
+        {
+          "id": "725366ff-78a9-48bc-aac9-ed4178f6af4e",
+          "name": "shop_orders",
+          "state": "on",
+          "when_to_use": "ids csv → JSON rows from shop orders. Prefer this over repeating the same curl/CLI loop.",
+          "seen": [
+            "curl.get",
+            "curl.get"
+          ],
+          "has_playback": true
+        }
+      ]
+    },
+    {
+      "id": "t3-tickets",
+      "without": {
+        "arm": "without",
+        "task": "t3-tickets",
+        "wall_ms": 23082,
+        "duration_ms": 22253,
+        "tool_calls": 8,
+        "tool_names": {
+          "Bash": 3,
+          "Read": 3,
+          "Write": 2
+        },
+        "cost_usd": 0.18400350000000001,
+        "output_tokens": 1466,
+        "result_text": "Done. Two files written under `/tmp/eden-workshop/without`; nothing else touched.\n\n**`data/tickets.json`** — fetched all three tickets and their comment lists (all HTTP 200):\n\n| id | title | state | comments |\n|----|-------|-------|----------|\n| 31 | Ticket 31 | open | 2 |\n| 32 | Ticket 32 | open | 3 |\n| 33 | Ticket 33 | closed | 1 |\n\n**`REPORT.md`** — three sections listing ids with titles/names: orders 11–15 from `data/orders.json`, customers 21–22 from `data/customers.json`, tickets 31–33 from the fetch above.\n\nNo Eden MCP tools were available in this session, so the fetches went through `curl` as specified.",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 3
+      },
+      "with": {
+        "arm": "with",
+        "task": "t3-tickets",
+        "wall_ms": 26165,
+        "duration_ms": 25175,
+        "tool_calls": 7,
+        "tool_names": {
+          "Bash": 2,
+          "Read": 3,
+          "Write": 2
+        },
+        "cost_usd": 0.4942050000000001,
+        "output_tokens": 1730,
+        "result_text": "Done. Both files written in `/private/tmp/eden-workshop/with`, nothing else touched.\n\n**`data/tickets.json`** — fetched from the API:\n\n| id | title | state | comments |\n| --- | --- | --- | --- |\n| 31 | Ticket 31 | open | 2 |\n| 32 | Ticket 32 | open | 3 |\n| 33 | Ticket 33 | closed | 1 |\n\n**`REPORT.md`** — three sections (orders, customers, tickets) with each id and its title/name. Orders and customers came from the existing `data/orders.json` and `data/customers.json`; no refetch was needed.\n\nTwo notes:\n\n- The `mcp__eden__shop_orders` tool only covers orders, and the orders data was already on disk, so it wasn't needed. There's no Eden tool for tickets or ticket comments, so those went over c",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 2
+      },
+      "quality": {
+        "without": {
+          "orderHits": 20,
+          "orderMax": 20,
+          "customerHits": 6,
+          "customerMax": 6,
+          "ticketHits": 9,
+          "ticketMax": 9,
+          "report": true,
+          "controlHits": 0,
+          "quality": 36,
+          "qualityMax": 36
+        },
+        "with": {
+          "orderHits": 20,
+          "orderMax": 20,
+          "customerHits": 6,
+          "customerMax": 6,
+          "ticketHits": 9,
+          "ticketMax": 9,
+          "report": true,
+          "controlHits": 0,
+          "quality": 36,
+          "qualityMax": 36
+        }
+      },
+      "tools_after": [
+        {
+          "id": "725366ff-78a9-48bc-aac9-ed4178f6af4e",
+          "name": "shop_orders",
+          "state": "on",
+          "when_to_use": "ids csv → JSON rows from shop orders. Prefer this over repeating the same curl/CLI loop.",
+          "seen": [
+            "curl.get",
+            "curl.get"
+          ],
+          "has_playback": true
+        }
+      ]
+    },
+    {
+      "id": "t4-control",
+      "without": {
+        "arm": "without",
+        "task": "t4-control",
+        "wall_ms": 18407,
+        "duration_ms": 17604,
+        "tool_calls": 2,
+        "tool_names": {
+          "Read": 1,
+          "Write": 1
+        },
+        "cost_usd": 0.09419050000000001,
+        "output_tokens": 1103,
+        "result_text": "**Wrote `3` to ANSWER.txt.**\n\nMatching lines (substring, case-insensitive):\n- L1 `the flag**ship** launch is Tuesday`\n- L3 `do not miss the **ship**ment window`\n- L5 `owner**ship** of the **ship** is shared`\n\nOne ambiguity worth flagging: the file looks deliberately built around substring traps. If you meant *ship* as a standalone word (word-boundary match), the answer is **1** — only line 5 qualifies. I went with the substring reading since \"contain the word ship (case-insensitive)\" maps to a plain `grep -ic ship`. Say the word and I'll change it to 1.",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 0
+      },
+      "with": {
+        "arm": "with",
+        "task": "t4-control",
+        "wall_ms": 10714,
+        "duration_ms": 9539,
+        "tool_calls": 3,
+        "tool_names": {
+          "Read": 1,
+          "Bash": 1,
+          "Write": 1
+        },
+        "cost_usd": 0.089198,
+        "output_tokens": 388,
+        "result_text": "3 lines contain \"ship\" (flagship, shipment, ownership/ship). Written to `ANSWER.txt`.",
+        "is_error": false,
+        "mcp_calls": 0,
+        "bash_calls": 1
+      },
+      "quality": {
+        "without": {
+          "orderHits": 20,
+          "orderMax": 20,
+          "customerHits": 6,
+          "customerMax": 6,
+          "ticketHits": 9,
+          "ticketMax": 9,
+          "report": true,
+          "controlHits": 1,
+          "quality": 37,
+          "qualityMax": 37
+        },
+        "with": {
+          "orderHits": 20,
+          "orderMax": 20,
+          "customerHits": 6,
+          "customerMax": 6,
+          "ticketHits": 9,
+          "ticketMax": 9,
+          "report": true,
+          "controlHits": 1,
+          "quality": 37,
+          "qualityMax": 37
+        }
+      },
+      "tools_after": [
+        {
+          "id": "725366ff-78a9-48bc-aac9-ed4178f6af4e",
+          "name": "shop_orders",
+          "state": "on",
+          "when_to_use": "ids csv → JSON rows from shop orders. Prefer this over repeating the same curl/CLI loop.",
+          "seen": [
+            "curl.get",
+            "curl.get"
+          ],
+          "has_playback": true
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "without": {
+      "wall_ms": 106996,
+      "cost_usd": 0.9934289999999999,
+      "tool_calls": 23,
+      "mcp_calls": 0,
+      "bash_calls": 14,
+      "output_tokens": 7087,
+      "quality": 111,
+      "qualityMax": 111
+    },
+    "with": {
+      "wall_ms": 102417,
+      "cost_usd": 1.0007900000000003,
+      "tool_calls": 22,
+      "mcp_calls": 0,
+      "bash_calls": 10,
+      "output_tokens": 6443,
+      "quality": 111,
+      "qualityMax": 111
+    }
+  },
+  "compiled": [
+    {
+      "id": "725366ff-78a9-48bc-aac9-ed4178f6af4e",
+      "name": "shop_orders",
+      "state": "on",
+      "when_to_use": "ids csv → JSON rows from shop orders. Prefer this over repeating the same curl/CLI loop.",
+      "seen": [
+        "curl.get",
+        "curl.get"
+      ],
+      "has_playback": true
+    }
+  ]
+}

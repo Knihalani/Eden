@@ -1,5 +1,7 @@
 import { handleFetch } from "../../server";
 
+/** Frozen workshop plane (8787). Product UI is apps/web. */
+
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

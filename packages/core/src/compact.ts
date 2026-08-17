@@ -25,11 +25,39 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function rollupCheckConclusions(rows: unknown[]): string | undefined {
+  const conclusions: string[] = [];
+  const statuses: string[] = [];
+  for (const row of rows) {
+    if (!isPlainObject(row)) continue;
+    if (typeof row.conclusion === "string") conclusions.push(row.conclusion);
+    if (typeof row.status === "string") statuses.push(row.status);
+  }
+  if (!conclusions.length && !statuses.length) return undefined;
+  if (conclusions.some((c) => /^(failure|cancelled|timed_out|startup_failure|error)$/.test(c))) return "failure";
+  if (statuses.some((s) => /^(queued|in_progress|pending)$/.test(s))) return "pending";
+  if (conclusions.some((c) => c === "action_required")) return "pending";
+  if (conclusions.length && conclusions.every((c) => /^(success|skipped|neutral)$/.test(c))) return "success";
+  return undefined;
+}
+
+const SKIP_SCALAR = /^(body|html_url|url|avatar_url|node_id|diff|patch|content|readme|description)$/i;
+
+function pickScalar(k: string, v: unknown): unknown {
+  if (SKIP_SCALAR.test(k)) return undefined;
+  if (typeof v === "number" || typeof v === "boolean") return v;
+  if (typeof v === "string" && v.length > 0 && v.length < 160) return v;
+  return undefined;
+}
+
 function pickFacts(value: unknown, depth = 0): unknown {
   if (depth > 4) return undefined;
   if (Array.isArray(value)) {
     const facts = value.slice(0, 3).map((row) => pickFacts(row, depth + 1));
-    return { n: value.length, sample: facts };
+    const out: Record<string, unknown> = { n: value.length, sample: facts };
+    const rolled = rollupCheckConclusions(value);
+    if (rolled) out.state = rolled;
+    return out;
   }
   if (!isPlainObject(value)) return value;
   const out: Record<string, unknown> = {};
@@ -37,7 +65,10 @@ function pickFacts(value: unknown, depth = 0): unknown {
     if (k in value && !isPlainObject(value[k]) && !Array.isArray(value[k])) out[k] = value[k];
   }
   for (const [k, v] of Object.entries(value)) {
-    if (Array.isArray(v)) out[k] = { n: v.length };
+    if (k in out) continue;
+    const scalar = pickScalar(k, v);
+    if (scalar !== undefined) out[k] = scalar;
+    else if (Array.isArray(v)) out[k] = pickFacts(v, depth + 1);
     else if (isPlainObject(v) && depth < 2) {
       const nested = pickFacts(v, depth + 1);
       if (nested && typeof nested === "object" && Object.keys(nested as object).length) out[k] = nested;
@@ -69,7 +100,9 @@ function ciState(v: unknown): string | undefined {
   if (typeof v === "string" && CI_STATE.test(v)) return v;
   if (!isPlainObject(v)) return undefined;
   const s = v.state ?? v.combined_state;
-  return typeof s === "string" && CI_STATE.test(s) ? s : undefined;
+  if (typeof s === "string" && CI_STATE.test(s)) return s;
+  if (isPlainObject(v.check_runs)) return ciState(v.check_runs);
+  return undefined;
 }
 
 /** Typed PR row the agent can write straight to prs.json. CI state never uses PR `open`. */
@@ -134,6 +167,39 @@ export function bundleJson(rows: TypedPrRow[]): string {
       return out;
     }),
   )}\n`;
+}
+
+export function compactRowFromFacts(facts: unknown, fallbackId?: string): Record<string, unknown> | null {
+  const pr = prRowFromFacts(facts, fallbackId);
+  if (pr) {
+    const out: Record<string, unknown> = {
+      number: pr.number,
+      title: pr.title,
+      reviews: pr.reviews,
+      status: pr.status,
+    };
+    if (pr.files != null) out.files = pr.files;
+    return out;
+  }
+  if (!isPlainObject(facts)) return null;
+  const s1 = isPlainObject(facts.s1) ? facts.s1 : facts;
+  if (!isPlainObject(s1)) return null;
+  const row: Record<string, unknown> = {};
+  const rawId = s1.id ?? s1.number ?? fallbackId;
+  if (rawId != null && rawId !== "") {
+    row.id = typeof rawId === "string" && /^\d+$/.test(rawId) ? Number(rawId) : rawId;
+  }
+  if (typeof s1.title === "string") row.title = s1.title;
+  else if (typeof s1.name === "string") row.name = s1.name;
+  for (const k of ["status", "state", "total", "email"]) {
+    if (s1[k] != null && (typeof s1[k] === "string" || typeof s1[k] === "number")) row[k] = s1[k];
+  }
+  if (isPlainObject(facts.s2) && typeof facts.s2.n === "number") row.count = facts.s2.n;
+  return Object.keys(row).length ? row : null;
+}
+
+export function receiptJson(rows: Array<Record<string, unknown>>): string {
+  return `${JSON.stringify(rows)}\n`;
 }
 
 /** One-line receipt when a PR/issue bundle is recognizable. */

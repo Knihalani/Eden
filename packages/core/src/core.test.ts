@@ -10,8 +10,8 @@ import {
   isCompilableToolName,
   mergeConstantFlip,
   requiredK,
-  type ToolEvent,
 } from "../src/islands";
+import type { ToolEvent } from "../src/types";
 import { billableMs, buildDag, layers } from "../src/dag";
 import { matchPrefix } from "../src/steer";
 import { rewriteBash, compactStdout, compactReadOutput } from "../src/fulfill";
@@ -149,7 +149,7 @@ describe("named cli", () => {
     const calls = extractNamedCliCalls(cmd);
     expect(calls.length).toBe(3);
     const islands = cutIslands([ev({ name: "Bash", command: cmd, args: { command: cmd } })]);
-    expect(heuristicName(islands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
     const quoted =
       `mkdir -p .raw && for n in 170 169 168; do ` +
       `gh api "repos/KaiavN/Eden/pulls/$n" > ".raw/pull-$n.json"; ` +
@@ -159,7 +159,7 @@ describe("named cli", () => {
     const qCalls = extractNamedCliCalls(quoted);
     expect(qCalls.length).toBe(3);
     const qIslands = cutIslands([ev({ name: "Bash", command: quoted, args: { command: quoted } })]);
-    expect(heuristicName(qIslands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(qIslands[0]!)).toBe("github_pr_bundle");
   });
 });
 
@@ -175,9 +175,9 @@ describe("islands", () => {
     ];
     const islands = cutIslands(events);
     expect(islands.length).toBe(1);
-    expect(islands[0].length).toBe(3);
-    expect(islands[0].every((s) => s.kind === "cloud_http")).toBe(true);
-    expect(islands[0][2].source_url).toContain("api.github.com/repos/acme/app/commits");
+    expect(islands[0]!.length).toBe(3);
+    expect(islands[0]!.every((s) => s.kind === "cloud_http")).toBe(true);
+    expect(islands[0]![2]!.source_url).toContain("api.github.com/repos/acme/app/commits");
   });
 
   test("gh pr view with --repo gets a REST source_url", () => {
@@ -193,8 +193,8 @@ describe("islands", () => {
         args: { command: "gh api repos/KaiavN/Eden/pulls/170/reviews" },
       }),
     ]);
-    expect(islands[0][0].source_url).toBe("https://api.github.com/repos/KaiavN/Eden/pulls/170");
-    expect(islands[0][1].source_url).toContain("/pulls/170/reviews");
+    expect(islands[0]![0]!.source_url).toBe("https://api.github.com/repos/KaiavN/Eden/pulls/170");
+    expect(islands[0]![1]!.source_url).toContain("/pulls/170/reviews");
   });
 
   test("product SDK verbs form an island", () => {
@@ -205,8 +205,8 @@ describe("islands", () => {
     ];
     const islands = cutIslands(events);
     expect(islands.length).toBe(1);
-    expect(islands[0].length).toBe(3);
-    expect(islands[0].every((s) => s.kind === "cloud_http")).toBe(true);
+    expect(islands[0]!.length).toBe(3);
+    expect(islands[0]!.every((s) => s.kind === "cloud_http")).toBe(true);
   });
 
   test("pure ls island does not knock", () => {
@@ -240,7 +240,7 @@ describe("islands", () => {
       }),
     ]);
     expect(islands.flat().every((s) => !String(s.name).includes("auth"))).toBe(true);
-    expect(heuristicName(islands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
   });
 
   test("git log is not compiled into a GitHub island", () => {
@@ -251,7 +251,7 @@ describe("islands", () => {
     ]);
     expect(islands.length).toBeGreaterThan(0);
     expect(islands.flat().every((s) => s.name !== "git.log")).toBe(true);
-    expect(heuristicName(islands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
   });
 
   test("constant-flip becomes params and same fingerprint names", () => {
@@ -264,7 +264,7 @@ describe("islands", () => {
       ev({ name: "Bash", command: "curl https://example.com/b", args: { command: "curl https://example.com/b" } }),
     ]);
     expect(a.length).toBe(1);
-    const merged = mergeConstantFlip(a[0], b[0]);
+    const merged = mergeConstantFlip(a[0]!, b[0]!);
     expect(merged).not.toBeNull();
   });
 
@@ -277,7 +277,7 @@ describe("islands", () => {
       ev({ name: "Bash", command: "curl https://api.github.com/b", args: { command: "curl https://api.github.com/b" } }),
       ev({ name: "Bash", command: "curl https://api.github.com/a", args: { command: "curl https://api.github.com/a" } }),
     ]);
-    expect(fingerprintIsland(a[0])).toBe(fingerprintIsland(b[0]));
+    expect(fingerprintIsland(a[0]!)).toBe(fingerprintIsland(b[0]!));
   });
 
   test("required_k is 1 when first is a named gh verb", () => {
@@ -285,7 +285,7 @@ describe("islands", () => {
       ev({ name: "Bash", command: "gh pr view 1", args: { command: "gh pr view 1" } }),
       ev({ name: "Bash", command: "curl https://api.github.com/x", args: { command: "curl https://api.github.com/x" } }),
     ]);
-    expect(requiredK(islands[0])).toBe(1);
+    expect(requiredK(islands[0]!)).toBe(1);
   });
 
   test("heuristicName for pull-only is github_pr_bundle", () => {
@@ -318,7 +318,7 @@ describe("islands", () => {
         args: { command: "gh api repos/KaiavN/Eden/commits/abc123def/status" },
       }),
     ]);
-    expect(heuristicName(islands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
   });
 
   test("probe + loop does not duplicate parameterized pull URLs", () => {
@@ -334,10 +334,10 @@ describe("islands", () => {
         },
       }),
     ]);
-    const urls = islands[0].map((s) => s.source_url).filter(Boolean);
+    const urls = islands[0]!.map((s) => s.source_url).filter(Boolean);
     const parameterized = urls.map((u) => u!.replace(/\/pulls\/\d+/g, "/pulls/{issue}"));
     expect(new Set(parameterized).size).toBe(parameterized.length);
-    expect(heuristicName(islands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
   });
 
   test("heuristicName prefers bundle when files and reviews are both present", () => {
@@ -354,7 +354,7 @@ describe("islands", () => {
         args: { command: "gh api repos/KaiavN/Eden/pulls/12/files" },
       }),
     ]);
-    expect(heuristicName(islands[0])).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
   });
 });
 
@@ -366,7 +366,7 @@ describe("dag + billing", () => {
     ];
     const l = layers(buildDag(steps));
     expect(l.length).toBe(1);
-    expect(l[0].length).toBe(2);
+    expect(l[0]!.length).toBe(2);
   });
 
   test("write stays after data edge", () => {
@@ -376,8 +376,8 @@ describe("dag + billing", () => {
     ];
     const l = layers(buildDag(steps));
     expect(l.length).toBe(2);
-    expect(l[0][0].id).toBe("s1");
-    expect(l[1][0].id).toBe("s2");
+    expect(l[0]![0]!.id).toBe("s1");
+    expect(l[1]![0]!.id).toBe("s2");
   });
 
   test("url {{s1.field}} is a data edge even without bind", () => {
@@ -387,7 +387,7 @@ describe("dag + billing", () => {
     ];
     const l = layers(buildDag(steps));
     expect(l.length).toBe(2);
-    expect(l[1][0].id).toBe("s2");
+    expect(l[1]![0]!.id).toBe("s2");
   });
 
   test("billable_ms uses densified bytes", () => {
@@ -472,12 +472,22 @@ describe("fulfill wrap", () => {
     expect(r.command).toBe("eden play github_pr_bundle --issues 170,169");
   });
 
-  test("playFor does not rewrite redirected loops", () => {
+  test("playFor rewrites GraphQL PR loops once a live tool exists", () => {
+    const cmd =
+      "for n in 170 169; do gh api graphql -f query='query { repository { pullRequest(number: '$n') { title } } }'; done";
+    const r = rewriteBash(cmd, {
+      playFor: (kind, issues) => (kind === "bundle" ? `eden play github_pr_bundle --issues ${issues.join(",")}` : null),
+    });
+    expect(r.kind).toBe("play");
+    expect(r.command).toContain("eden play github_pr_bundle --issues 170,169");
+  });
+
+  test("playFor rewrites redirected loops once a live tool exists", () => {
     const r = rewriteBash("for n in 170 169; do gh api repos/KaiavN/Eden/pulls/$n > raw/$n.json; done", {
       playFor: () => "eden play github_pr_bundle --issues 170,169",
     });
-    expect(r.kind).not.toBe("play");
-    expect(r.command).not.toContain("eden play");
+    expect(r.kind).toBe("play");
+    expect(r.command).toContain("eden play github_pr_bundle --issues 170,169");
   });
 
   test("compactStdout leaves gh api JSON intact and shrinks bun test", () => {
@@ -607,8 +617,8 @@ describe("plan + mcp ranking", () => {
       const n = Number(path.split("/").pop());
       return { number: n, title: `PR ${n}`, head: { sha: `sha${n}` } };
     });
-    expect(rows[0].reviews).toBe(1);
-    expect(rows[0].files).toBe(1);
+    expect(rows[0]!.reviews).toBe(1);
+    expect(rows[0]!.files).toBe(1);
     expect(table).toContain("170 | PR 170 | 1 | success | 1");
     expect(JSON.parse(readFileSync(`${dir}/pull-170.json`, "utf8")).head.sha).toBe("sha170");
     expect(JSON.parse(readFileSync(`${dir}/reviews-169.json`, "utf8"))).toHaveLength(1);
@@ -650,15 +660,17 @@ describe("plan + mcp ranking", () => {
     expect(listed.map((t) => t.name)).toEqual(["github_pr_bundle"]);
   });
 
-  test("selectMcpTools ranks by uses and evicts unused when more than 3", () => {
+  test("selectMcpTools ranks by uses and evicts unused when over the list cap", () => {
     const listed = selectMcpTools([
       { name: "zero_a", uses_count: 0 },
       { name: "hot", uses_count: 9 },
       { name: "zero_b", uses_count: 0 },
       { name: "warm", uses_count: 2 },
       { name: "zero_c", uses_count: 0 },
+      { name: "mid", uses_count: 1 },
+      { name: "zero_d", uses_count: 0 },
     ]);
-    expect(listed.map((t) => t.name)).toEqual(["hot", "warm"]);
+    expect(listed.map((t) => t.name)).toEqual(["hot", "warm", "mid"]);
   });
 
   test("selectMcpTools keeps a small unused set", () => {
@@ -671,7 +683,7 @@ describe("plan + mcp ranking", () => {
 
   test("shortenWhenToUse caps at MCP_DESC_CHARS", () => {
     const s = shortenWhenToUse("x".repeat(200));
-    expect(s.length).toBe(60);
+    expect(s.length).toBe(140);
     expect(s.endsWith("…")).toBe(true);
   });
 });
@@ -699,6 +711,23 @@ describe("canonical PR receipt", () => {
     expect(row?.reviews).toBe(0);
   });
 
+  test("prRowFromFacts rolls check-runs conclusions up to CI state", () => {
+    const { facts } = modelFacing({
+      s1: { number: 12, title: "Cannot deploy widget 12" },
+      s2: [],
+      s3: {
+        total_count: 3,
+        check_runs: [
+          { name: "test", conclusion: "success", status: "completed" },
+          { name: "deploy", conclusion: "failure", status: "completed" },
+        ],
+      },
+    });
+    const row = prRowFromFacts(facts, "12");
+    expect(row?.status).toBe("failure");
+    expect(row?.title).toContain("Cannot deploy");
+  });
+
   test("bundleJson is a JSON array the agent can write to prs.json", () => {
     const text = bundleJson([
       { number: 170, title: "fix boot", reviews: 2, status: "failure", files: 4 },
@@ -706,9 +735,101 @@ describe("canonical PR receipt", () => {
     ]);
     const parsed = JSON.parse(text) as Array<{ number: number; status: string; files?: number }>;
     expect(parsed).toHaveLength(2);
-    expect(parsed[0].files).toBe(4);
-    expect(parsed[1].files).toBeUndefined();
+    expect(parsed[0]!.files).toBe(4);
+    expect(parsed[1]!.files).toBeUndefined();
     expect(text).not.toContain(" | ");
     expect(text).not.toContain("\n  ");
+  });
+});
+
+describe("any-workflow compile", () => {
+  test("parameterizeUrl templates generic REST ids and keeps GitHub issue params", () => {
+    expect(parameterizeUrl("http://127.0.0.1:8801/shop/orders/11/items")).toBe(
+      "http://127.0.0.1:8801/shop/orders/{id}/items",
+    );
+    expect(parameterizeUrl("https://jsonplaceholder.typicode.com/posts/1/comments")).toBe(
+      "https://jsonplaceholder.typicode.com/posts/{id}/comments",
+    );
+    expect(parameterizeUrl("https://api.github.com/repos/acme/app/issues/12/comments")).toBe(
+      "https://api.github.com/repos/acme/app/issues/{issue}/comments",
+    );
+  });
+
+  test("curl order+items island names from the path not curl_get_curl_get", () => {
+    const islands = cutIslands([
+      ev({
+        name: "Bash",
+        command: "curl http://127.0.0.1:8801/shop/orders/11",
+        args: { command: "curl http://127.0.0.1:8801/shop/orders/11" },
+      }),
+      ev({
+        name: "Bash",
+        command: "curl http://127.0.0.1:8801/shop/orders/11/items",
+        args: { command: "curl http://127.0.0.1:8801/shop/orders/11/items" },
+      }),
+    ]);
+    expect(islands.length).toBe(1);
+    expect(heuristicName(islands[0]!)).toBe("shop_orders");
+    expect(isCompilableToolName(heuristicName(islands[0]!))).toBe(true);
+    expect(isCompilableToolName("curl_get_curl_get")).toBe(false);
+  });
+
+  test("same API shape different ids share a fingerprint", () => {
+    const a = cutIslands([
+      ev({ name: "Bash", command: "curl http://x.test/posts/1", args: { command: "curl http://x.test/posts/1" } }),
+      ev({
+        name: "Bash",
+        command: "curl http://x.test/posts/1/comments",
+        args: { command: "curl http://x.test/posts/1/comments" },
+      }),
+    ]);
+    const b = cutIslands([
+      ev({ name: "Bash", command: "curl http://x.test/posts/9", args: { command: "curl http://x.test/posts/9" } }),
+      ev({
+        name: "Bash",
+        command: "curl http://x.test/posts/9/comments",
+        args: { command: "curl http://x.test/posts/9/comments" },
+      }),
+    ]);
+    expect(fingerprintIsland(a[0]!)).toBe(fingerprintIsland(b[0]!));
+  });
+
+  test("different REST resources do not share a fingerprint", () => {
+    const posts = cutIslands([
+      ev({ name: "Bash", command: "curl http://x.test/posts/1", args: { command: "curl http://x.test/posts/1" } }),
+      ev({
+        name: "Bash",
+        command: "curl http://x.test/posts/1/comments",
+        args: { command: "curl http://x.test/posts/1/comments" },
+      }),
+    ]);
+    const users = cutIslands([
+      ev({ name: "Bash", command: "curl http://x.test/users/1", args: { command: "curl http://x.test/users/1" } }),
+      ev({
+        name: "Bash",
+        command: "curl http://x.test/users/1/todos",
+        args: { command: "curl http://x.test/users/1/todos" },
+      }),
+    ]);
+    expect(fingerprintIsland(posts[0]!)).not.toBe(fingerprintIsland(users[0]!));
+    expect(heuristicName(posts[0]!)).toBe("x_posts");
+    expect(heuristicName(users[0]!)).toBe("x_users");
+  });
+
+  test("playFor rewrites a curl loop when the callback matches", () => {
+    const cmd = "for n in 11 12; do curl http://127.0.0.1:8801/shop/orders/$n; curl http://127.0.0.1:8801/shop/orders/$n/items; done";
+    const r = rewriteBash(cmd, {
+      playFor: (_kind, issues) => `eden play shop_orders --ids ${issues.join(",")}`,
+    });
+    expect(r.kind).toBe("play");
+    expect(r.command).toBe("eden play shop_orders --ids 11,12");
+  });
+
+  test("curl for-loops parallelize when no live tool exists", () => {
+    const r = rewriteBash("for n in 11 12; do curl http://127.0.0.1:8801/shop/orders/$n; done");
+    expect(r.changed).toBe(true);
+    expect(r.kind).toBe("parallel");
+    expect(r.command).toContain("wait");
+    expect(r.command).toContain("curl ");
   });
 });

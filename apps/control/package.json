@@ -1,0 +1,20 @@
+{
+  "name": "@eden/control",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/local.ts",
+    "start": "bun run src/local.ts",
+    "demo": "bun run src/demo.ts"
+  },
+  "dependencies": {
+    "@eden/ir": "workspace:*",
+    "@eden/runtime": "workspace:*",
+    "@eden/compile": "workspace:*",
+    "@eden/shadow": "workspace:*",
+    "@eden/wrap": "workspace:*"
+  }
+}

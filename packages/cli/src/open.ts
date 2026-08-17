@@ -1,10 +1,10 @@
 import { existsSync, unlinkSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readConfig, edenHome } from "./home";
+import { readConfig, edenHome, resolveApiKey, sitePlaneUrl } from "./home";
 
 export async function openTool(): Promise<void> {
   const cfg = readConfig();
-  const base = cfg?.base_url || "http://127.0.0.1:8787";
+  const base = sitePlaneUrl(cfg?.base_url);
   const knockPath = join(edenHome(), "knock.json");
   const knock = existsSync(knockPath) ? (JSON.parse(readFileSync(knockPath, "utf8")) as { tool_id?: string }) : {};
   const url = knock.tool_id ? `${base}/workshop/${knock.tool_id}` : `${base}/workshop`;
@@ -14,8 +14,8 @@ export async function openTool(): Promise<void> {
 
 export async function rejectTool(): Promise<void> {
   const cfg = readConfig();
-  const base = cfg?.base_url || "http://127.0.0.1:8787";
-  const key = cfg?.api_key || "eden_dev";
+  const base = sitePlaneUrl(cfg?.base_url);
+  const key = resolveApiKey();
   await fetch(`${base}/v1/knock/reject`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}` },

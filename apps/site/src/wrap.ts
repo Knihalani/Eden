@@ -41,12 +41,12 @@ export async function wrapPlay(
   origin: string,
   runId?: string,
 ): Promise<{ action: "play"; facts: unknown; ok: boolean; server_ms: number }> {
-  const issues = String(args.issues || args.issue || args.pr || args.number || "");
+  const issues = String(args.issues || args.ids || args.issue || args.id || args.pr || args.number || "");
   const cacheId = `${tool.id}:${issues}`;
   const cacheKey = runId ? `${runId}:${cacheId}` : "";
   if (cacheKey) {
     const hit = recentPlays.get(cacheKey);
-    if (hit && Date.now() - hit.at < 120_000) {
+    if (hit && Date.now() - hit.at < 30 * 60_000) {
       return { action: "play", facts: hit.facts, ok: hit.ok, server_ms: 0 };
     }
     const row = await db.get<{ facts: string }>(
@@ -54,9 +54,13 @@ export async function wrapPlay(
       [runId, cacheId],
     );
     if (row?.facts) {
-      const facts = JSON.parse(row.facts);
-      recentPlays.set(cacheKey, { facts, ok: true, at: Date.now() });
-      return { action: "play", facts, ok: true, server_ms: 0 };
+      try {
+        const facts = JSON.parse(row.facts);
+        recentPlays.set(cacheKey, { facts, ok: true, at: Date.now() });
+        return { action: "play", facts, ok: true, server_ms: 0 };
+      } catch {
+        /* ignore corrupt cache */
+      }
     }
   }
   const receipt = await playTool(db, tool, { ...args, origin });

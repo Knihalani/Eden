@@ -1,17 +1,32 @@
 import type { EdenDb } from "./db";
-import { bundleJson, compactReceipt, prRowsFromFacts, selectMcpTools, shortenWhenToUse } from "@eden/core";
-import { playTool } from "./playback";
+import {
+  bundleJson,
+  compactReceipt,
+  compactRowFromFacts,
+  prRowsFromFacts,
+  receiptJson,
+  selectMcpTools,
+  shortenWhenToUse,
+  templateKeys,
+} from "@eden/core";
+import { playTool, warmWorkspaceBundle } from "./playback";
 
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
 
-function schemaFor(_steps: Array<{ url?: string; bind?: Record<string, string> }>) {
-  return {
-    type: "object",
-    properties: {
-      issues: { type: "string", description: "csv of PR numbers. returns JSON [{number,title,reviews,status,files}]" },
-    },
-    required: [] as string[],
+function schemaFor(steps: Array<{ url?: string; bind?: Record<string, string> }>) {
+  const keys = templateKeys(steps.map((s) => s.url || ""));
+  const properties: Record<string, { type: string; description: string }> = {};
+  if (keys.includes("issue") || keys.includes("run_id")) {
+    properties.issues = {
+      type: "string",
+      description: "csv of ids. returns JSON array of compact rows",
+    };
+  }
+  properties.ids = {
+    type: "string",
+    description: "csv of ids. returns JSON array of compact rows",
   };
+  return { type: "object", properties, required: [] as string[] };
 }
 
 function listPublishedOnly(): boolean {
@@ -21,6 +36,7 @@ function listPublishedOnly(): boolean {
 export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, origin: string): Promise<unknown> {
   const { method, id, params } = body;
   if (method === "initialize") {
+    void warmWorkspaceBundle(db, workspaceId, origin);
     return {
       jsonrpc: "2.0",
       id,
@@ -50,12 +66,18 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
       [workspaceId],
     );
     const listed = selectMcpTools(tools);
+    void warmWorkspaceBundle(db, workspaceId, origin);
     return {
       jsonrpc: "2.0",
       id,
       result: {
         tools: listed.map((t) => {
-          const steps = JSON.parse(t.steps || "[]") as Array<{ url?: string; bind?: Record<string, string> }>;
+          let steps: Array<{ url?: string; bind?: Record<string, string> }> = [];
+          try {
+            steps = JSON.parse(t.steps || "[]") as Array<{ url?: string; bind?: Record<string, string> }>;
+          } catch {
+            steps = [];
+          }
           return {
             name: t.name,
             description: shortenWhenToUse(t.when_to_use || t.name),
@@ -68,7 +90,9 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   if (method === "tools/call") {
     const name = String(params?.name || "");
     const args = { ...((params?.arguments || {}) as Record<string, string>) };
-    if (!args.issue && (args.pr || args.number)) args.issue = args.pr || args.number;
+    if (!args.issue && (args.pr || args.number || args.id)) args.issue = args.pr || args.number || args.id;
+    if (!args.ids && args.issues) args.ids = args.issues;
+    if (!args.issues && args.ids) args.issues = args.ids;
     if (!args.issues && args.issue) args.issues = args.issue;
     if (!args.issue && args.issues) args.issue = String(args.issues).split(/[,\s]+/)[0];
     const tool = await db.get<{ id: string; name: string; steps: string }>(
@@ -79,8 +103,34 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
       return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool ${name}` } };
     }
     const receipt = await playTool(db, tool, { ...args, origin });
-    const rows = receipt.rows?.length ? receipt.rows : prRowsFromFacts(receipt.facts, String(args.issues || args.issue || "").split(/[,\s]+/).filter(Boolean));
-    const text = rows.length ? bundleJson(rows).trimEnd() : receipt.table || compactReceipt(receipt.facts);
+    const ids = String(args.issues || args.ids || args.issue || "")
+      .split(/[,\s]+/)
+      .filter(Boolean);
+    const prRows = receipt.rows?.length
+      ? receipt.rows
+      : prRowsFromFacts(receipt.facts, ids);
+    const generic =
+      prRows.length
+        ? null
+        : ids.length
+          ? ids
+              .map((n, i) => {
+                const facts =
+                  receipt.facts && typeof receipt.facts === "object" && Array.isArray((receipt.facts as { rows?: unknown }).rows)
+                    ? (receipt.facts as { rows: unknown[] }).rows[i]
+                    : receipt.facts;
+                return compactRowFromFacts(facts, n);
+              })
+              .filter((r): r is Record<string, unknown> => r !== null)
+          : (() => {
+              const row = compactRowFromFacts(receipt.facts, args.issue);
+              return row ? [row] : [];
+            })();
+    const text = prRows.length
+      ? bundleJson(prRows).trimEnd()
+      : generic?.length
+        ? receiptJson(generic).trimEnd()
+        : receipt.table || compactReceipt(receipt.facts);
     return {
       jsonrpc: "2.0",
       id,

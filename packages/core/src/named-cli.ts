@@ -32,7 +32,7 @@ const GENERIC = new Set([
 export function parseNamedCli(command: string): ParsedCli | null {
   const parts = tokenize(command);
   if (parts.length === 0) return null;
-  const bin = parts[0].replace(/.*\//, "");
+  const bin = parts[0]!.replace(/.*\//, "");
   if (GENERIC.has(bin)) return null;
   if (bin === "curl") {
     const url = parts.find((p) => /^https?:\/\//.test(p));
@@ -42,13 +42,13 @@ export function parseNamedCli(command: string): ParsedCli | null {
     } catch {
       host = undefined;
     }
-    const flags = parts.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]);
+    const flags = parts.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]!);
     return { family: "curl", subcommand: "get", flags: unique(flags), positionals: [], rewrite_host: host };
   }
   const spec = NAMED[bin];
   if (!spec) return null;
   const rest = parts.slice(1).filter((p) => p !== "--");
-  const flags = rest.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]);
+  const flags = rest.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]!);
   const positionals = rest.filter((p) => !p.startsWith("-"));
   if (bin === "git") return null;
   if (bin === "gh") {
@@ -91,7 +91,7 @@ function tokenize(command: string): string[] {
   let cur = "";
   let quote: string | null = null;
   for (let i = 0; i < command.length; i++) {
-    const c = command[i];
+    const c = command[i]!;
     if (quote) {
       if (c === quote) quote = null;
       else cur += c;

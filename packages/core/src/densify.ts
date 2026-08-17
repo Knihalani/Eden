@@ -26,7 +26,7 @@ function sortKeys(obj: Record<string, unknown>): Record<string, unknown> {
 
 function uniformKeys(arr: Record<string, unknown>[]): string[] | null {
   if (arr.length < 2) return null;
-  const keys = Object.keys(arr[0]).sort();
+  const keys = Object.keys(arr[0]!).sort();
   if (keys.length === 0) return null;
   for (const row of arr) {
     const k = Object.keys(row).sort();

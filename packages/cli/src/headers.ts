@@ -1,8 +1,16 @@
-import { readConfig } from "./home";
+import { resolveApiKey } from "./home";
 
 export function mcpHeaders(): void {
-  const cfg = readConfig();
-  const key = cfg?.api_key || process.env.EDEN_API_KEY || "eden_dev";
+  let key: string | undefined;
+  try {
+    key = resolveApiKey(process.argv.slice(2));
+  } catch {
+    key = undefined;
+  }
+  if (!key) {
+    process.stdout.write("{}\n");
+    return;
+  }
   process.stdout.write(JSON.stringify({ Authorization: `Bearer ${key}` }) + "\n");
 }
 

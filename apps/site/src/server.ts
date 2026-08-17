@@ -20,7 +20,7 @@ function db(): Promise<EdenDb> {
 
 async function seedBundle(d: EdenDb) {
   if (process.env.EDEN_SKIP_SEED === "1") return;
-  const existing = await d.get<{ id: string }>(`SELECT id FROM tool WHERE name = 'fetch_issue_bundle'`);
+  const existing = await d.get<{ id: string }>(`SELECT id FROM tool WHERE name = 'fetch_issue_bundle' AND workspace_id = 'ws_local'`);
   const steps = [
     { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}" },
     { id: "s2", kind: "cloud_http", name: "comments", commute: true, url: "{origin}/forge/repos/acme/app/issues/{issue}/comments" },
@@ -61,6 +61,14 @@ async function seedBundle(d: EdenDb) {
 
 function html(title: string, body: string) {
   return new Response(layout(title, body), { headers: { "content-type": "text/html; charset=utf-8" } });
+}
+
+async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { ok: false; res: Response }> {
+  try {
+    return { ok: true, value: await req.json() };
+  } catch {
+    return { ok: false, res: Response.json({ error: "invalid json" }, { status: 400 }) };
+  }
 }
 
 export async function handleFetch(req: Request): Promise<Response> {
@@ -140,6 +148,7 @@ export async function handleFetch(req: Request): Promise<Response> {
   }
 
   if (url.pathname === "/v1/setup" && req.method === "POST") {
+    if (process.env.VERCEL && process.env.EDEN_DEV !== "1") return new Response("unauthorized", { status: 401 });
     return Response.json({ api_key: "eden_dev", base_url: origin });
   }
 
@@ -167,15 +176,17 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   if (url.pathname === "/v1/ingest" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const body = (await req.json()) as { run_id: string; events: ToolEvent[]; stretch_end?: boolean };
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as { run_id: string; events: ToolEvent[]; stretch_end?: boolean };
     const result = await ingest(d, wsId, body.run_id, body.events || [], Boolean(body.stretch_end));
     return Response.json(result, { status: 202 });
   }
 
   if (url.pathname === "/v1/live-tools") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const tools = await d.all<{ name: string; seen: string; required_k: number | null }>(
-      `SELECT name, seen, required_k FROM tool WHERE workspace_id = ? AND state = 'on'`,
+    const tools = await d.all<{ name: string; seen: string; required_k: number | null; steps: string }>(
+      `SELECT name, seen, required_k, steps FROM tool WHERE workspace_id = ? AND state = 'on'`,
       [wsId],
     );
     const knock = await d.get<{ tool_id: string }>(
@@ -187,6 +198,7 @@ export async function handleFetch(req: Request): Promise<Response> {
         name: t.name,
         seen: JSON.parse(t.seen || "[]") as string[],
         required_k: Number(t.required_k) || 2,
+        urls: (JSON.parse(t.steps || "[]") as Array<{ url?: string }>).map((s) => s.url).filter(Boolean) as string[],
       })),
       knock: knock ? { message: `draft ${knock.tool_id}`, tool_id: knock.tool_id } : null,
     });
@@ -217,7 +229,9 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   if (url.pathname === "/v1/play" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const body = (await req.json()) as { name: string; issue?: string; issues?: string };
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as { name: string; issue?: string; issues?: string; ids?: string };
     const tool = await d.get<{ id: string; name: string; steps: string }>(
       `SELECT id, name, steps FROM tool WHERE name = ? AND state = 'on' AND workspace_id = ?`,
       [body.name, wsId],
@@ -225,7 +239,8 @@ export async function handleFetch(req: Request): Promise<Response> {
     if (!tool) return new Response("not found", { status: 404 });
     const receipt = await playTool(d, tool, {
       issue: body.issue || "",
-      issues: body.issues || body.issue || "",
+      issues: body.issues || body.ids || body.issue || "",
+      ids: body.ids || body.issues || body.issue || "",
       origin,
     });
     return Response.json(receipt);
@@ -233,7 +248,9 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   if (url.pathname === "/v1/wrap" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const body = (await req.json()) as { name: string; args?: Record<string, string>; run_id?: string };
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as { name: string; args?: Record<string, string>; run_id?: string };
     const tool = await findOnTool(d, wsId, body.name);
     if (!tool || !toolHasPlayback(tool)) return Response.json({ action: "original" });
     return Response.json(await wrapPlay(d, tool, body.args || {}, origin, body.run_id));
@@ -242,7 +259,9 @@ export async function handleFetch(req: Request): Promise<Response> {
   if (url.pathname === "/mcp") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
     if (req.method === "GET") return new Response("ok", { headers: { "content-type": "text/event-stream" } });
-    const rpc = (await req.json()) as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const rpc = parsed.value as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
     const out = await handleMcp(d, wsId, rpc, origin);
     if (out === null) return new Response(null, { status: 202 });
     return Response.json(out);

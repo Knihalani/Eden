@@ -23,7 +23,7 @@ export type Rewrite = {
 };
 
 export function jqForGhPath(path: string): string | null {
-  const p = path.split("?")[0].replace(/\/$/, "");
+  const p = path.split("?")[0]!.replace(/\/$/, "");
   if (/\/graphql$/.test(p)) return null;
   if (/\/(files|comments)$/.test(p) || /\/reviews$/.test(p)) return "length";
   if (/\/status$/.test(p) || /\/check-runs$/.test(p) || /\/check-suites$/.test(p)) {
@@ -71,15 +71,15 @@ function maybeInnerParallel(body: string): string {
   return parts.map((p) => `( ${p} ) &`).join(" ") + " wait";
 }
 
-/** Parallelize independent GitHub GETs without interleaving stdout. */
+/** Parallelize independent cloud GETs without interleaving stdout. */
 export function rewriteForLoop(command: string): string | null {
   const m = command.match(/for\s+([A-Za-z_]\w*)\s+in\s+([\d\s]+)[;\n]\s*do\b([\s\S]*?)\bdone\b/);
   if (!m) return null;
-  const varName = m[1];
-  const ids = m[2].trim().split(/\s+/).filter((n) => /^\d+$/.test(n));
-  const body = m[3];
+  const varName = m[1]!;
+  const ids = m[2]!.trim().split(/\s+/).filter((n) => /^\d+$/.test(n));
+  const body = m[3]!;
   if (ids.length < 2) return null;
-  if (!/\bgh\s+api\b/.test(body) && !/\bcurl\s+.*api\.github\.com/.test(body)) return null;
+  if (!/\bgh\s+api\b/.test(body) && !/\bcurl\b/.test(body)) return null;
   if (isMutatingGh(body)) return null;
   if (/&/.test(body)) return null;
   const trimmedBody = body.trim().replace(/;\s*$/, "");
@@ -126,7 +126,7 @@ function parallelizeSequentialGh(command: string): string | null {
 export function rewriteBash(
   command: string,
   opts?: {
-    playFor?: (kind: "bundle" | "files", issues: string[]) => string | null;
+    playFor?: (kind: "bundle" | "files", issues: string[], body?: string) => string | null;
     fulfillBin?: string;
   },
 ): Rewrite {
@@ -135,14 +135,16 @@ export function rewriteBash(
 
   const ids = extractLoopIds(trimmed);
   const body = trimmed.match(/for\s+\w+\s+in\s+[\d\s]+[;\n]\s*do\b([\s\S]*?)\bdone\b/)?.[1] || trimmed;
-  if (opts?.playFor && ids.length >= 2 && /\bgh\s+api\b/.test(body) && !/>/.test(body)) {
+  if (opts?.playFor && ids.length >= 2 && (/\bgh\s+api\b/.test(body) || /\bcurl\b/.test(body))) {
     const cmds: string[] = [];
-    if (/\/reviews|\/status|\/pulls\//.test(body)) {
-      const play = opts.playFor("bundle", ids);
+    const ghPr = /\/reviews|\/status|\/pulls\/|\/check-runs|pullRequest|reviewThreads|statusCheckRollup/.test(body);
+    const curl = /\bcurl\b/.test(body);
+    if (ghPr || curl || /\bgh\s+api\b/.test(body)) {
+      const play = opts.playFor("bundle", ids, body);
       if (play) cmds.push(play);
     }
-    if (/\/files/.test(body)) {
-      const play = opts.playFor("files", ids);
+    if (/\/files/.test(body) && ghPr) {
+      const play = opts.playFor("files", ids, body);
       if (play) cmds.push(play);
     }
     if (cmds.length) {
@@ -224,7 +226,7 @@ export function readPrefetch(ghPath: string): string | null {
 
 export function vaultPointer(id: string, preview: string, bytes: number): string {
   const head = preview.replace(/\s+/g, " ").slice(0, 160);
-  return `${head}\n(truncated ${bytes}B)`;
+  return `${head}\n(truncated ${bytes}B · eden recall ${id})`;
 }
 
 function tryJson(text: string): unknown | undefined {
@@ -344,7 +346,8 @@ export function compactStdout(command: string, stdout: string, maxBytes = TOKEN_
 
   const mini = minifyCli(stripped);
   if (mini.length <= maxBytes) return { stdout: mini, vaulted: false };
-  return { stdout: mini.slice(0, maxBytes), vaulted: false };
+  const id = putVault(mini);
+  return { stdout: vaultPointer(id, mini, mini.length), vaulted: true };
 }
 
 export function compactReadOutput(filePath: string, content: string, maxBytes = TOKEN_SLA_BYTES): { stdout: string; vaulted: boolean } {
@@ -355,9 +358,10 @@ export function compactReadOutput(filePath: string, content: string, maxBytes = 
   if (content.length <= maxBytes * 4) return { stdout: content, vaulted: false };
   const lines = content.split("\n");
   const head = lines.slice(0, 40).join("\n");
+  const id = putVault(content);
   return {
-    stdout: `${head}\n… ${lines.length} lines, ${content.length}B`,
-    vaulted: false,
+    stdout: `${head}\n… ${lines.length} lines, ${content.length}B · eden recall ${id}`,
+    vaulted: true,
   };
 }
 
@@ -369,6 +373,8 @@ export function receiptTableLine(issue: string, facts: unknown): string {
 }
 
 export function issuesFromParams(params: Record<string, string>): string[] {
-  const listed = parseIssueList(params.issues || params.issue || params.pr || params.number);
+  const listed = parseIssueList(
+    params.issues || params.ids || params.issue || params.id || params.pr || params.number,
+  );
   return listed;
 }

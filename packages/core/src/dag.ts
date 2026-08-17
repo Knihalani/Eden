@@ -9,7 +9,7 @@ function priorStepRefs(step: CompiledStep): string[] {
     if (!raw) continue;
     const re = /\{\{(\w+)\./g;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(String(raw)))) ids.push(m[1]);
+    while ((m = re.exec(String(raw)))) ids.push(m[1]!);
   }
   return [...new Set(ids)];
 }
@@ -18,7 +18,7 @@ export function buildDag(steps: CompiledStep[]): DagNode[] {
   return steps.map((step, i) => {
     const deps: string[] = priorStepRefs(step);
     if (deps.length === 0 && i > 0 && !step.commute) {
-      const prev = steps[i - 1];
+      const prev = steps[i - 1]!;
       if (!prev.commute) deps.push(prev.id);
     }
     return { ...step, deps };
@@ -32,9 +32,7 @@ export function layers(nodes: DagNode[]): DagNode[][] {
   while (remaining.length) {
     const ready = remaining.filter((n) => n.deps.every((d) => done.has(d)));
     if (ready.length === 0) {
-      out.push([remaining.shift()!]);
-      done.add(out[out.length - 1][0].id);
-      continue;
+      throw new Error(`unresolvable step deps: ${remaining.map((n) => n.id).join(",")}`);
     }
     out.push(ready);
     for (const n of ready) {

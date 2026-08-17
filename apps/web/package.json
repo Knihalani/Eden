@@ -1,0 +1,22 @@
+{
+  "name": "@eden/web",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --bun next dev --turbo --port 8788 --hostname 127.0.0.1",
+    "build": "bun --bun next build",
+    "start": "bun --bun next start --port 8788 --hostname 127.0.0.1"
+  },
+  "dependencies": {
+    "@eden/control": "workspace:*",
+    "next": "^15.5.9",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "5.9.2"
+  }
+}

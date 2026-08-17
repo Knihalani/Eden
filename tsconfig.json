@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "packages/ir/src",
+    "packages/compile/src",
+    "packages/runtime/src",
+    "packages/shadow/src",
+    "packages/wrap/src",
+    "packages/core/src",
+    "packages/cli/src",
+    "packages/sdk-js/src",
+    "apps/control/src"
+  ],
+  "exclude": ["**/node_modules", "**/.next", "**/dist"]
+}

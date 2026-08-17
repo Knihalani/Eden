@@ -1,26 +1,16 @@
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { existsSync, writeFileSync } from "node:fs";
-import { familyId, parseNamedCli, rewriteBash, compactStdout, compactReadOutput } from "@eden/core";
-import {
-  appendJsonl,
-  edenHome,
-  ensureHome,
-  eventsPath,
-  liveToolsPath,
-  outboxPath,
-  readJson,
-} from "./home";
+import { edenHome, ensureHome, appendJsonl, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl } from "./home";
+import { redact, isStretchEnd, inDistribution } from "@eden/ir";
+import type { StretchProgram } from "@eden/ir";
 
 export type HookIn = {
   hook_event_name?: string;
   session_id?: string;
-  cwd?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
-  permissionDecision?: string;
   tool_response?: unknown;
   tool_output?: unknown;
-  response?: unknown;
 };
 
 function readStdin(): Promise<string> {
@@ -32,242 +22,121 @@ function readStdin(): Promise<string> {
   });
 }
 
-function cliFamily(name: string, args: Record<string, unknown>): string {
-  if (name === "Bash" || name === "bash") {
-    const parsed = parseNamedCli(String(args.command ?? ""));
-    if (parsed) return familyId(parsed);
-    const cmd = String(args.command ?? "");
-    return cmd.trim().split(/\s+/)[0]?.replace(/.*\//, "") || "Bash";
-  }
-  return name;
-}
-
-function liveTools(): Array<{ name?: string }> {
-  const raw = readJson<unknown>(liveToolsPath(), []);
-  if (Array.isArray(raw)) return raw as Array<{ name?: string }>;
-  if (raw && typeof raw === "object" && Array.isArray((raw as { tools?: unknown }).tools)) {
-    return (raw as { tools: Array<{ name?: string }> }).tools;
-  }
-  return [];
-}
-
-function liveBundleName(): string | null {
-  const name = liveTools().find((t) => String(t.name || "").startsWith("github_pr_bundle"))?.name;
-  return name && /^[A-Za-z0-9_]+$/.test(name) ? name : null;
-}
-
-function playBin(name: string, issues: string[]): string {
-  const ids = issues.filter((n) => /^\d+$/.test(n)).join(",");
-  const exe = process.execPath || "";
-  if (/(?:^|\/)eden$/.test(exe)) return `${JSON.stringify(exe)} play ${name} --issues ${ids}`;
-  return `bun ${JSON.stringify(join(import.meta.dir, "cli.ts"))} play ${name} --issues ${ids}`;
-}
-
-function playRewriteOpts(): { playFor: (kind: "bundle" | "files", issues: string[]) => string | null } | undefined {
-  const bundle = liveBundleName();
-  if (!bundle) return undefined;
-  return {
-    playFor: (kind, issues) => (kind === "bundle" ? playBin(bundle, issues) : null),
-  };
-}
-
-function spawnDrainProc() {
-  const exe = process.execPath || "";
-  return /(?:^|\/)eden$/.test(exe)
-    ? Bun.spawn([exe, "drain"], { stdout: "ignore", stderr: "ignore", stdin: "ignore" })
-    : Bun.spawn(["bun", join(import.meta.dir, "cli.ts"), "drain"], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
-}
-
-function spawnDrain(): void {
-  try {
-    spawnDrainProc().unref();
-  } catch {
-    /* server may be down */
-  }
-}
-
-async function drainNow(): Promise<void> {
-  try {
-    const proc = spawnDrainProc();
-    await proc.exited;
-  } catch {
-    /* server may be down */
-  }
-}
-
-function stdoutFromResponse(raw: unknown): { stdout: string; stderr: string; interrupted: boolean; isImage: boolean } | null {
-  if (raw == null) return null;
-  if (typeof raw === "string") return { stdout: raw, stderr: "", interrupted: false, isImage: false };
-  if (typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  if (typeof o.stdout === "string" || typeof o.stderr === "string") {
-    return {
-      stdout: String(o.stdout ?? ""),
-      stderr: String(o.stderr ?? ""),
-      interrupted: Boolean(o.interrupted),
-      isImage: Boolean(o.isImage),
-    };
-  }
-  if (typeof o.content === "string") {
-    return { stdout: o.content, stderr: "", interrupted: false, isImage: false };
-  }
-  if (Array.isArray(o.content)) {
-    const text = o.content
-      .map((c) => {
-        if (typeof c === "string") return c;
-        if (c && typeof c === "object" && "text" in c) return String((c as { text: unknown }).text ?? "");
-        return "";
-      })
-      .join("");
-    if (text) return { stdout: text, stderr: "", interrupted: false, isImage: false };
-  }
-  if (o.file && typeof o.file === "object") {
-    const f = o.file as Record<string, unknown>;
-    if (typeof f.content === "string") return { stdout: f.content, stderr: "", interrupted: false, isImage: false };
-  }
-  return null;
-}
-
-function bashOutput(stdout: string, stderr: string, interrupted = false) {
-  return {
-    hookSpecificOutput: {
-      hookEventName: "PostToolUse",
-      updatedToolOutput: {
-        stdout,
-        stderr,
-        interrupted,
-        isImage: false,
-      },
-    },
-  };
-}
-
-export async function respondToHook(input: HookIn): Promise<Record<string, unknown>> {
-  try {
-    return await respondToHookInner(input);
-  } catch {
-    return {};
-  }
-}
-
-async function respondToHookInner(input: HookIn): Promise<Record<string, unknown>> {
-  const event = input.hook_event_name || "PreToolUse";
-  const runId = input.session_id || "unknown";
-  ensureHome();
-
-  if (event === "PreToolUse") {
-    const statePath = eventsPath(runId) + ".seen";
-    const seen = readJson<string[]>(statePath, []);
-    const incoming = cliFamily(input.tool_name || "", input.tool_input || {});
-    seen.push(incoming);
-    writeFileSync(statePath, JSON.stringify(seen));
-
-    const name = input.tool_name || "";
-    if (name === "Bash" || name === "bash") {
-      const original = String((input.tool_input as { command?: string } | undefined)?.command ?? "");
-      appendJsonl(eventsPath(runId), {
-        event_id: crypto.randomUUID(),
-        hook: event,
-        seq: seen.length,
-        name,
-        args: input.tool_input || {},
-        command: original,
-        ok: true,
-        ts: Date.now(),
-      });
-      const rewritten = rewriteBash(original, playRewriteOpts());
-      if (rewritten.changed) {
-        return {
-          hookSpecificOutput: {
-            hookEventName: "PreToolUse",
-            permissionDecision: "allow",
-            updatedInput: { ...input.tool_input, command: rewritten.command },
-          },
-        };
-      }
-    }
-    return {};
-  }
-
-  if (event === "PostToolUse" || event === "PostToolUseFailure") {
-    const statePath = eventsPath(runId) + ".seen";
-    const seen = readJson<string[]>(statePath, []);
-    appendJsonl(eventsPath(runId), {
-      event_id: crypto.randomUUID(),
-      hook: event,
-      seq: seen.length,
-      name: input.tool_name,
-      args: input.tool_input || {},
-      command: (input.tool_input as { command?: string })?.command,
-      ok: event !== "PostToolUseFailure",
-      ts: Date.now(),
-    });
-    if (event === "PostToolUseFailure") return {};
-    const extracted = stdoutFromResponse(input.tool_response ?? input.tool_output ?? input.response);
-    if (!extracted) return {};
-    const name = input.tool_name || "";
-    if (name === "Read") {
-      const filePath = String((input.tool_input as { file_path?: string } | undefined)?.file_path ?? "");
-      const packed = compactReadOutput(filePath, extracted.stdout);
-      if (packed.stdout === extracted.stdout) return {};
-      return bashOutput(packed.stdout, extracted.stderr, extracted.interrupted);
-    }
-    if (name === "Bash" || name === "bash") {
-      const command = String((input.tool_input as { command?: string } | undefined)?.command ?? "");
-      const packed = compactStdout(command, extracted.stdout);
-      if (packed.stdout === extracted.stdout) return {};
-      return bashOutput(packed.stdout, extracted.stderr, extracted.interrupted);
-    }
-    const packed = compactStdout(name, extracted.stdout);
-    if (packed.stdout === extracted.stdout) return {};
-    return bashOutput(packed.stdout, extracted.stderr, extracted.interrupted);
-  }
-
-  if (event === "Stop" || event === "UserPromptSubmit") {
-    appendJsonl(outboxPath(), {
-      run_id: runId,
-      kind: event === "Stop" ? "stretch_end" : "turn_split",
-      flushed: false,
-      ts: Date.now(),
-    });
-    if (event === "Stop") spawnDrain();
-    return {};
-  }
-
-  if (event === "SessionStart") {
-    try {
-      if (existsSync(outboxPath()) || existsSync(liveToolsPath())) await drainNow();
-    } catch {
-      /* server may be down */
-    }
-    const knockPath = join(edenHome(), "knock.json");
-    const knock = readJson<{ message?: string; shown?: number }>(knockPath, {});
-    const shown = knock.shown ?? 0;
-    if (knock.message && shown < 2 && process.env.EDEN_KNOCK !== "0") {
-      writeFileSync(knockPath, JSON.stringify({ ...knock, shown: shown + 1 }));
-      return {
-        systemMessage: `Eden: a draft tool is ready. Run \`eden open\` or \`eden reject\`.\n${knock.message}`,
-      };
-    }
-    return {};
-  }
-
-  return {};
-}
-
 export async function runHook(): Promise<void> {
   const raw = await readStdin();
-  let input: HookIn = {};
+  let body: HookIn = {};
   try {
-    input = JSON.parse(raw || "{}");
+    body = JSON.parse(raw || "{}") as HookIn;
   } catch {
-    process.stdout.write("{}\n");
-    return;
+    body = {};
   }
-  const out = await respondToHook(input);
-  process.stdout.write(JSON.stringify(out) + "\n");
+  const out = respondToHook(body);
+  process.stdout.write(JSON.stringify(out));
 }
 
-if (import.meta.main) {
-  await runHook();
+function readJsonl(path: string): Array<Record<string, unknown>> {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((x): x is Record<string, unknown> => !!x);
+}
+
+function flushSession(session: string, events: Array<Record<string, unknown>>): void {
+  const cfg = readConfig();
+  if (!cfg || events.length < 2) return;
+  const path = join(edenHome(), "runs", `${session}.jsonl`);
+  const flushedIds = events.map((e) => String(e.id ?? ""));
+  const first = events[0]!;
+  const t0 = Number(first.ts ?? Date.now());
+  const t1 = Number(events.at(-1)?.ts ?? t0);
+  const islandish = events.filter((e) => /draft|reply|generate|summarize|compose|llm/i.test(String(e.name))).length;
+  const naiveLlm = Math.max(islandish, events.length);
+  void fetch(`${wrapPlaneUrl(cfg.base_url)}/v1/traces`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${cfg.api_key}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      id: crypto.randomUUID(),
+      events,
+      input: first.args ?? {},
+      llmCalls: naiveLlm,
+      duration_ms: Math.max(0, t1 - t0),
+      cost_cents: naiveLlm,
+      complete: true,
+    }),
+  })
+    .then((r) => {
+      if (r.ok) withFileLock(`${path}.lock`, () => applyFlushTruncate(path, flushedIds));
+    })
+    .catch(() => undefined);
+}
+
+export function applyFlushTruncate(path: string, flushedIds: string[]): void {
+  const drop = new Set(flushedIds.filter(Boolean));
+  const current = readJsonl(path);
+  const rest = drop.size ? current.filter((e) => !drop.has(String(e.id ?? ""))) : [];
+  writeFileSync(path, rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "");
+}
+
+export function respondToHook(body: HookIn): Record<string, unknown> {
+  ensureHome();
+  const session = body.session_id || "local";
+  const name = body.tool_name;
+  if (body.hook_event_name === "PostToolUse" && name) {
+    const event = redact({
+      id: crypto.randomUUID(),
+      name,
+      args: body.tool_input ?? {},
+      result: body.tool_response ?? body.tool_output,
+      ok: (body as { is_error?: boolean }).is_error !== true,
+      ts: Date.now(),
+    }) as Record<string, unknown>;
+    const path = join(edenHome(), "runs", `${session}.jsonl`);
+    withFileLock(`${path}.lock`, () => appendJsonl(path, event));
+    const events = readJsonl(path);
+    if (events.length >= 2 && isStretchEnd(name)) {
+      flushSession(session, events);
+    }
+  }
+  if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
+    withFileLock(`${outboxPath()}.lock`, () =>
+      appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
+    );
+    const path = join(edenHome(), "runs", `${session}.jsonl`);
+    const events = readJsonl(path);
+    if (events.length >= 2) flushSession(session, events);
+  }
+  const live = readJson<
+    Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>
+  >(join(edenHome(), "live-tools.json"), []);
+  if (body.hook_event_name === "PreToolUse" && name) {
+    if (live.some((t) => t.name === name)) return { ok: true };
+    const hits = live
+      .filter((t) => (t.sequence ?? [])[0] === name)
+      .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
+    const hit = hits[0];
+    if (hit) {
+      if (hit.envelope?.inputs) {
+        const probe = {
+          contract: { envelope: hit.envelope, allowExact: false, witnesses: 1, minLlmReduction: 2 },
+        } as StretchProgram;
+        if (!inDistribution(probe, body.tool_input ?? {})) return { ok: true };
+      }
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: `Use the Eden compiled tool ${hit.name} via MCP instead of ${name}.`,
+        },
+      };
+    }
+  }
+  return { ok: true };
 }
