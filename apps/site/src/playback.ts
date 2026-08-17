@@ -63,10 +63,16 @@ async function playOne(
   } catch {
     throw new Error("corrupt tool steps");
   }
+  // Server-pinned values are applied *after* the caller's, not before. Spread
+  // the other way round, an MCP caller could pass {owner, repo} of its choosing
+  // and redirect a request that carries the server's GITHUB_TOKEN at any
+  // repository — or, with the right template, any api.github.com path.
+  const pinnedOwner = process.env.EDEN_GH_OWNER;
+  const pinnedRepo = process.env.EDEN_GH_REPO;
   params = {
-    owner: process.env.EDEN_GH_OWNER || "",
-    repo: process.env.EDEN_GH_REPO || "",
     ...params,
+    ...(pinnedOwner ? { owner: pinnedOwner } : { owner: String(params.owner ?? "") }),
+    ...(pinnedRepo ? { repo: pinnedRepo } : { repo: String(params.repo ?? "") }),
     issue: params.issue || params.id || params.pr || params.number || "",
     id: params.id || params.issue || params.pr || params.number || "",
   };
