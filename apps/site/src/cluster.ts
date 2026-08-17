@@ -93,12 +93,24 @@ export async function ingest(
       const prev = parseJson(existing.steps, null as unknown[] | null);
       storedSteps = (Array.isArray(prev) ? mergeConstantFlip(prev as typeof steps, steps) : null) || steps;
     }
-    const count = (existing?.count || 0) + 1;
+    // The conflict target is scoped, so one tenant's ingest can no longer land
+    // in another's row. The count is incremented in SQL rather than
+    // read-modify-written: two concurrent ingests both read N and both wrote
+    // N+1, and because the knock below tests the count exactly, a single lost
+    // update left the cluster stuck as a draft forever.
     await db.run(
-      `INSERT INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(fingerprint) DO UPDATE SET count = excluded.count, steps = excluded.steps`,
-      [fp, workspaceId, count, JSON.stringify(storedSteps), count >= 2 ? "knock" : "draft"],
+      `INSERT INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES (?, ?, 1, ?, 'draft')
+       ON CONFLICT(workspace_id, fingerprint) DO UPDATE SET
+         count = cluster.count + 1,
+         steps = excluded.steps,
+         status = CASE WHEN cluster.count + 1 >= 2 THEN 'knock' ELSE 'draft' END`,
+      [fp, workspaceId, JSON.stringify(storedSteps)],
     );
+    const after = await db.get<{ count: number }>(
+      `SELECT count FROM cluster WHERE fingerprint = ? AND workspace_id = ?`,
+      [fp, workspaceId],
+    );
+    const count = Number(after?.count ?? (existing?.count || 0) + 1);
     if (count === 1) {
       const compiled = stepsToCompiled(storedSteps);
       const base = heuristicName(storedSteps);
@@ -138,9 +150,19 @@ export async function ingest(
         drafts++;
       }
     }
-    if (count === 2) {
+    // `>= 2`, not `=== 2`: if the count ever skips past 2 — a concurrent
+    // ingest, a replayed batch — an exact test means the knock is never created
+    // and the tool stays a draft permanently. The insert below is guarded by
+    // the absence of an existing knock, so a later ingest cannot duplicate it.
+    if (count >= 2) {
       const tool = await db.get<{ id: string }>(`SELECT id FROM tool WHERE fingerprint = ? AND workspace_id = ?`, [fp, workspaceId]);
-      if (tool) {
+      const already = tool
+        ? await db.get<{ id: string }>(`SELECT id FROM knock WHERE tool_id = ? AND workspace_id = ?`, [
+            tool.id,
+            workspaceId,
+          ])
+        : undefined;
+      if (tool && !already) {
         const compiled = stepsToCompiled(storedSteps);
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
           JSON.stringify(compiled),

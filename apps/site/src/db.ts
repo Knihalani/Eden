@@ -9,8 +9,15 @@ const SQLITE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS stretch (
       id TEXT PRIMARY KEY, workspace_id TEXT, run_id TEXT, fingerprint TEXT, steps TEXT, island_index INTEGER
     )`,
+  // Keyed by (workspace_id, fingerprint), not fingerprint alone. Fingerprints
+  // are derived from URL *shape*, so two tenants calling the same public API
+  // produce the same one by construction — and with a global key the second
+  // tenant's upsert landed in the first's row, resetting its count so it never
+  // reached the knock threshold and feeding its recorded steps into the other
+  // tenant's compiled tool.
   `CREATE TABLE IF NOT EXISTS cluster (
-      fingerprint TEXT PRIMARY KEY, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT
+      fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT,
+      PRIMARY KEY (workspace_id, fingerprint)
     )`,
   `CREATE TABLE IF NOT EXISTS tool (
       id TEXT PRIMARY KEY, workspace_id TEXT, name TEXT, when_to_use TEXT, state TEXT, steps TEXT, seen TEXT, fingerprint TEXT, uses_count INTEGER DEFAULT 0, cheap_check TEXT, required_k INTEGER DEFAULT 2, published INTEGER DEFAULT 0
@@ -110,6 +117,46 @@ export async function openDb(path?: string): Promise<EdenDb> {
   return db;
 }
 
+/**
+ * Rebuilds `cluster` when it still carries the old fingerprint-only key.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
+ * a database created before the composite key keeps the global one — and the
+ * `ON CONFLICT (workspace_id, fingerprint)` upsert has no matching constraint
+ * to target. Copies rows across, keeping the highest count per pair.
+ */
+async function migrateClusterKey(db: EdenDb, neon: boolean): Promise<void> {
+  try {
+    if (neon) {
+      const row = await db.get<{ n: number | string }>(
+        `SELECT count(*) AS n
+           FROM information_schema.table_constraints c
+           JOIN information_schema.key_column_usage k ON k.constraint_name = c.constraint_name
+          WHERE c.table_name = 'cluster' AND c.constraint_type = 'PRIMARY KEY' AND k.column_name = 'workspace_id'`,
+      );
+      if (Number(row?.n ?? 0) > 0) return;
+    } else {
+      const row = await db.get<{ sql: string }>(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cluster'`,
+      );
+      if (!row?.sql || /PRIMARY KEY\s*\(\s*workspace_id/i.test(row.sql)) return;
+    }
+    await db.exec(`CREATE TABLE IF NOT EXISTS cluster_v2 (
+        fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT,
+        PRIMARY KEY (workspace_id, fingerprint)
+      )`);
+    await db.exec(
+      `INSERT INTO cluster_v2 (fingerprint, workspace_id, count, steps, status)
+         SELECT fingerprint, workspace_id, count, steps, status FROM cluster`,
+    );
+    await db.exec(`DROP TABLE cluster`);
+    await db.exec(`ALTER TABLE cluster_v2 RENAME TO cluster`);
+  } catch {
+    // A failed migration must not stop the server booting. The upsert below
+    // still works against the old key; it just keeps the old collision.
+  }
+}
+
 async function migrate(db: EdenDb, neon: boolean) {
   if (neon) {
     await db.exec(`ALTER TABLE result_cache ALTER COLUMN expires_at TYPE BIGINT`).catch(() => undefined);
@@ -117,6 +164,7 @@ async function migrate(db: EdenDb, neon: boolean) {
   }
   await db.exec(`ALTER TABLE tool ADD COLUMN required_k INTEGER DEFAULT 2`).catch(() => undefined);
   await db.exec(`ALTER TABLE tool ADD COLUMN published INTEGER DEFAULT 0`).catch(() => undefined);
+  await migrateClusterKey(db, neon);
 }
 
 /** The `hash` column stores this, never the token itself. */
