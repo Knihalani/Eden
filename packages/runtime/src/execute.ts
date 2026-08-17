@@ -2,14 +2,15 @@ import type { Binding, IslandCaller, Step, StretchProgram, ToolRegistry } from "
 import { asArray, assertValid, inDistribution, isBarrierName, isReadName } from "@eden/ir";
 import { ChildScope, evalArgs, evalBinding, type BindScope } from "./bind";
 
+import { DeoptError } from "./deopt";
+import { evalAssert } from "./assert";
+
 /**
  * Fan-out width for a provably read-only loop body. Bounded because the point
  * is to stop paying N round trips in series, not to open N sockets at once
  * against someone's rate limit.
  */
 export const DEFAULT_LOOP_CONCURRENCY = 8;
-import { DeoptError } from "./deopt";
-import { evalAssert } from "./assert";
 
 export type RunStats = {
   llmCalls: number;
@@ -138,6 +139,8 @@ export async function runProgram(
   const bodyOwned = new Set<string>();
   for (const s of program.steps) if (s.kind === "loop") for (const id of s.body) bodyOwned.add(id);
   let lastResult: unknown;
+  /** Tool calls issued, whether or not they returned. See DeoptError.stepsRun. */
+  let toolCallsIssued = 0;
 
   const execStep = async (
     step: Step,
@@ -148,6 +151,11 @@ export async function runProgram(
     if (signal.aborted) throw new DeoptError("aborted");
     if (step.kind === "tool") {
       const args = evalArgs(step.args, scope);
+      // Counted before the call, not after it. stats.toolCalls is only appended
+      // once a step returns, so a tool that ran and *then* threw would look
+      // like it never happened — precisely the case where a caller must not
+      // replay the sequence.
+      toolCallsIssued++;
       const value = await opts.registry.execute(step.tool, args, { signal });
       if (signal.aborted) throw new DeoptError("aborted");
       scope.results.set(step.id, value);
@@ -298,6 +306,10 @@ export async function runProgram(
     if (err instanceof DeoptError) {
       stats.deopt = true;
       stats.deoptReason = err.reason;
+      // Tell the caller whether the world has been touched. Without this a
+      // fallback path has to infer it from the reason string, and gets it
+      // wrong for any bail that happens after the first tool call.
+      err.stepsRun = toolCallsIssued;
       throw err;
     }
     throw err;

@@ -57,11 +57,37 @@ export function densifyValue(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Is this exactly the shape densifyValue() emits for a uniform object array?
+ *
+ * The columnar form is structural — `{keys, rows}` — with nothing marking it as
+ * Eden's. The previous check was just "has array-valued `keys` and `rows`",
+ * which matched plenty of real payloads: SQL-over-HTTP APIs return precisely
+ * that. Worse, it kept only those two properties, so
+ * `{keys, rows, total, page}` came back as a row array with `total` and `page`
+ * silently gone.
+ *
+ * Tightening to the exact emitted shape — those two keys and no others, keys all
+ * strings, every row an array of matching length — removes the data loss and
+ * almost all false positives. It cannot remove them entirely: a payload that is
+ * genuinely `{keys: string[], rows: unknown[][]}` is indistinguishable from a
+ * densified table, and the only real cure is a discriminator in the emitted
+ * form. That would change densified_bytes, which is the billing unit, so it is
+ * deliberately not done here.
+ */
+function isColumnar(value: Record<string, unknown>): value is { keys: string[]; rows: unknown[][] } {
+  const names = Object.keys(value);
+  if (names.length !== 2 || !names.includes("keys") || !names.includes("rows")) return false;
+  const { keys, rows } = value;
+  if (!Array.isArray(keys) || !Array.isArray(rows)) return false;
+  if (!keys.every((k) => typeof k === "string")) return false;
+  return rows.every((row) => Array.isArray(row) && row.length === keys.length);
+}
+
 export function undensifyValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(undensifyValue);
-  if (isPlainObject(value) && Array.isArray(value.keys) && Array.isArray(value.rows)) {
-    const keys = value.keys as string[];
-    const rows = value.rows as unknown[][];
+  if (isPlainObject(value) && isColumnar(value)) {
+    const { keys, rows } = value;
     return rows.map((row) => {
       const obj: Record<string, unknown> = {};
       keys.forEach((k, i) => {

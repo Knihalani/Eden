@@ -1,6 +1,6 @@
 import type { IslandCaller, StretchProgram, ToolRegistry } from "@eden/ir";
 import { inDistribution, redact, eq } from "@eden/ir";
-import { DeoptError, isDeopt, registryFrom, runProgram } from "@eden/runtime";
+import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram } from "@eden/runtime";
 import { asToolDef, emptyRun, type EdenOpts, type Receipt, type ToolDef, type ToolsIn } from "./types";
 import { extractInput } from "./steer";
 import type { StretchTrace } from "@eden/ir";
@@ -37,9 +37,30 @@ function wrapAuth(state: WrapState): string | undefined {
   return state.opts.apiKey || process.env.EDEN_API_KEY || (process.env.EDEN_DEV === "1" ? "eden_dev" : undefined);
 }
 
+/**
+ * May the caller re-run the raw sequence after this failure?
+ *
+ * Only when the compiled attempt provably issued no tool calls. This used to
+ * match on the reason string, and "island X needs an island caller" was on the
+ * safe list — but an island sits wherever it sat in the observed trace, which
+ * is routinely after a write. With no island caller configured (the default
+ * whenever OPENAI_API_KEY is unset) a program of
+ * `[tool writeRecord, island draft, tool notify]` wrote the record, bailed at
+ * the island, was declared "early", and the raw writeRecord then ran again.
+ *
+ * runProgram now reports what it actually did, so the guess is gone.
+ */
 function isEarlyDeopt(err: unknown): boolean {
-  const reason = err instanceof DeoptError ? err.reason : String((err as Error)?.message ?? "");
-  return /input not in witness envelope|no island caller|island .+ needs an island caller/.test(reason);
+  return isReplaySafe(err);
+}
+
+/** Tail of the program's sequence, as tool name -> number of calls made. */
+function restCounts(program: StretchProgram): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const name of (program.sequence ?? []).slice(1)) {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function outboxOf(state: WrapState): OutboxJob[] {
@@ -246,7 +267,13 @@ export function wrapTools<T extends ToolsIn>(
   state: WrapState,
 ): { [K in keyof T]: ToolDef } & Record<string, ToolDef> {
   const run = emptyRun();
-  const skipRest = new Map<string, { rest: Set<string>; input: Record<string, unknown>; programId: string }>();
+  // `rest` counts how many raw calls of each tool the compiled run has already
+  // performed on the caller's behalf, so a sequence that calls one tool twice
+  // suppresses both raw repeats rather than only the first.
+  const skipRest = new Map<
+    string,
+    { rest: Map<string, number>; input: Record<string, unknown>; programId: string }
+  >();
   const registry = registryFrom(
     Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])),
   );
@@ -282,14 +309,27 @@ export function wrapTools<T extends ToolsIn>(
           .sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
         const hit = prefixHits[0];
         if (hit) {
+          // Armed *before* the await, not after. Real hosts issue a turn's tool
+          // calls in parallel, and while the compiled program was running the
+          // map was still empty — so a sibling call naming a later step of the
+          // same stretch sailed past the skip check and executed for real,
+          // duplicating whatever the compiled leg was in the middle of doing.
+          const armKey = `${hit.p.id}#${++skipSeq}`;
+          skipRest.set(armKey, {
+            rest: restCounts(hit.p),
+            input: hit.input,
+            programId: hit.p.id,
+          });
           try {
             const value = await runCompiled(state, hit.p, hit.input, tools, registry);
-            const rest = (hit.p.sequence ?? []).slice(1);
-            skipRest.set(`${hit.p.id}#${++skipSeq}`, { rest: new Set(rest), input: hit.input, programId: hit.p.id });
             emitTrace(state, run, hit.input);
             return value;
           } catch (err) {
-            for (const [k, v] of skipRest) if (v.programId === hit.p.id) skipRest.delete(k);
+            // Only this invocation's arming. The previous code deleted every
+            // arming for the program, so one failed run for input B disarmed a
+            // successful run for input A and let A's raw tail execute a second
+            // time.
+            skipRest.delete(armKey);
             if (state.opts.failOpen === false) throw err;
             if (!isDeopt(err)) throw err;
             if (!isEarlyDeopt(err)) {
@@ -301,11 +341,17 @@ export function wrapTools<T extends ToolsIn>(
         }
 
         for (const [id, armed] of skipRest) {
-          if (!armed.rest.has(name)) continue;
+          const remaining = armed.rest.get(name);
+          if (!remaining) continue;
           const liveP = live.find((p) => p.id === armed.programId);
           const cur = liveP ? extractInput(liveP, args) : args;
           if (!eq(cur, armed.input)) continue;
-          armed.rest.delete(name);
+          // Decrement rather than delete: a sequence may call the same tool
+          // more than once, and the compiled program performed each of those.
+          // Treating the tail as a Set swallowed only the first raw repeat and
+          // let every later one execute again.
+          if (remaining > 1) armed.rest.set(name, remaining - 1);
+          else armed.rest.delete(name);
           if (!armed.rest.size) skipRest.delete(id);
           return { eden: "steered", skipped: name };
         }
