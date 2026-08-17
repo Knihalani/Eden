@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IslandStep, StepKind, ToolEvent } from "./types";
 import { familyId, parseNamedCli, extractNamedCliCalls, type ParsedCli } from "./named-cli";
-import { githubRestFromCli, parameterizeUrl } from "./urls";
+import { githubRestFromCli, parameterizeUrl, toolNameFromUrls } from "./urls";
 
 const SHARED = new Set(["Read", "Bash", "Write", "Edit", "Grep", "Glob", "get_customer"]);
 const EDIT_LIKE = new Set(["Edit", "Write", "NotebookEdit"]);
@@ -203,10 +203,19 @@ export function cutIslands(events: ToolEvent[]): IslandStep[][] {
   return islands.filter((island) => island.some((s) => s.kind === "cloud_http" || s.kind === "cloud_oauth"));
 }
 
+function stepShape(step: IslandStep): string {
+  return step.source_url ? parameterizeUrl(step.source_url) : step.name;
+}
+
 function canonicalIsland(steps: IslandStep[]): IslandStep[] {
   const commute = steps.every((s) => s.commute);
   if (!commute) return steps;
-  return [...steps].sort((a, b) => a.name.localeCompare(b.name) || a.arg_keys.join().localeCompare(b.arg_keys.join()));
+  return [...steps].sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) ||
+      a.arg_keys.join().localeCompare(b.arg_keys.join()) ||
+      stepShape(a).localeCompare(stepShape(b)),
+  );
 }
 
 export function fingerprintIsland(steps: IslandStep[]): string {
@@ -215,8 +224,8 @@ export function fingerprintIsland(steps: IslandStep[]): string {
     arg_keys: s.arg_keys,
     param_keys: [...s.param_keys].sort(),
     constant_keys: Object.keys(s.constants).sort(),
-    constants: s.constants,
     kind: s.kind,
+    url: stepShape(s),
   }));
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
@@ -225,24 +234,28 @@ export function mergeConstantFlip(a: IslandStep[], b: IslandStep[]): IslandStep[
   if (a.length !== b.length) return null;
   const out: IslandStep[] = [];
   for (let i = 0; i < a.length; i++) {
-    if (a[i].name !== b[i].name) return null;
-    if (a[i].arg_keys.join() !== b[i].arg_keys.join()) return null;
-    const keys = new Set([...Object.keys(a[i].constants), ...Object.keys(b[i].constants)]);
+    const ai = a[i]!;
+    const bi = b[i]!;
+    if (ai.name !== bi.name) return null;
+    if (ai.arg_keys.join() !== bi.arg_keys.join()) return null;
+    const keys = new Set([...Object.keys(ai.constants), ...Object.keys(bi.constants)]);
     const constants: Record<string, string> = {};
-    const param_keys = new Set(a[i].param_keys);
+    const param_keys = new Set(ai.param_keys);
     for (const k of keys) {
-      if (a[i].constants[k] === b[i].constants[k]) constants[k] = a[i].constants[k];
+      const av = ai.constants[k];
+      if (av !== undefined && av === bi.constants[k]) constants[k] = av;
       else param_keys.add(k);
     }
-    out.push({ ...a[i], constants, param_keys: [...param_keys] });
+    out.push({ ...ai, constants, param_keys: [...param_keys] });
   }
   return out;
 }
 
 export function requiredK(steps: IslandStep[]): number {
-  if (steps.length === 0) return 99;
-  const first = steps[0].name.split(".")[0];
-  if (SHARED.has(first) || SHARED.has(steps[0].name) || first === "Bash" || first === "Read") return 2;
+  const head = steps[0];
+  if (!head) return 99;
+  const first = head.name.split(".")[0]!;
+  if (SHARED.has(first) || SHARED.has(head.name) || first === "Bash" || first === "Read") return 2;
   return 1;
 }
 
@@ -253,13 +266,16 @@ export function heuristicName(steps: IslandStep[]): string {
   if (/\/issues\//.test(urls) && /\/comments/.test(urls)) return "github_issue_bundle";
   if (/\/issues\//.test(urls)) return "github_issue";
   if (/\/commits\/.*\/status/.test(urls)) return "github_commit_status";
+  const fromUrls = toolNameFromUrls(cloud.map((s) => s.source_url || "").filter(Boolean));
+  if (fromUrls) return fromUrls;
   const names = cloud.map((s) => s.name.replace(/[^a-zA-Z0-9]+/g, "_")).slice(0, 3);
   return names.join("_").slice(0, 48) || "compiled_tool";
 }
 
-/** Concatenated gh.api noise is not a product tool. */
+/** Concatenated family noise is not a product tool. */
 export function isCompilableToolName(name: string): boolean {
   if (!name || name === "compiled_tool") return false;
   if (/^gh_api(_gh_api)*$/.test(name)) return false;
+  if (/^curl_get(_curl_get)*$/.test(name)) return false;
   return true;
 }

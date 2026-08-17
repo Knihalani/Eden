@@ -1,0 +1,159 @@
+{
+  "whatThisIs": "In-process V1 (no OpenAI gateway). LLM delay is Bun.sleep, not a billed model.",
+  "traces": {
+    "n": 40,
+    "collectMs": 2,
+    "skipVerifyNoise": 10,
+    "skipVerifyRate": 0.25
+  },
+  "compiler": {
+    "ms": 9,
+    "programs": 1,
+    "refusals": 0,
+    "hasIsland": true,
+    "hasVerify": true,
+    "sequence": [
+      "lookupTicket",
+      "fetchDetails",
+      "parseFields",
+      "validate",
+      "draftReply",
+      "writeRecord",
+      "verifyWrite",
+      "notify"
+    ]
+  },
+  "shadow": {
+    "ms": 6,
+    "verdict": "PASS",
+    "canApprove": true,
+    "manifest": {
+      "llmReduction": 7.75,
+      "latencyReduction": 16328.534324422557,
+      "costReduction": 7.75,
+      "skipRateBefore": 0.25,
+      "skipRateAfter": 0,
+      "nShadow": 40
+    },
+    "reasons": []
+  },
+  "hot": {
+    "llmMs": 200,
+    "tickets": 8,
+    "naive": {
+      "llm": {
+        "n": 8,
+        "sum": 64,
+        "mean": 8,
+        "p50": 8,
+        "p95": 8
+      },
+      "ms": {
+        "n": 8,
+        "sum": 12879,
+        "mean": 1610,
+        "p50": 1609,
+        "p95": 1612
+      },
+      "cents": {
+        "n": 8,
+        "sum": 64,
+        "mean": 8,
+        "p50": 8,
+        "p95": 8
+      },
+      "skipVerify": 0,
+      "verified": 8
+    },
+    "wrapToolsMined": {
+      "llm": {
+        "n": 8,
+        "sum": 8,
+        "mean": 1,
+        "p50": 1,
+        "p95": 1
+      },
+      "ms": {
+        "n": 8,
+        "sum": 1612,
+        "mean": 202,
+        "p50": 201,
+        "p95": 202
+      },
+      "cents": {
+        "n": 8,
+        "sum": 8,
+        "mean": 1,
+        "p50": 1,
+        "p95": 1
+      },
+      "verified": 8
+    },
+    "runProgramMined": {
+      "llm": {
+        "n": 8,
+        "sum": 8,
+        "mean": 1,
+        "p50": 1,
+        "p95": 1
+      },
+      "ms": {
+        "n": 8,
+        "sum": 1613,
+        "mean": 202,
+        "p50": 202,
+        "p95": 202
+      }
+    },
+    "handwrittenOneShotMs": 202,
+    "reduction": {
+      "llm": 8,
+      "ms": 7.99,
+      "cents": 8
+    }
+  },
+  "safety": {
+    "oodMutations": {
+      "wrote": false,
+      "verified": false,
+      "notified": false
+    },
+    "oodDidNotSteerVerify": true,
+    "steerWitnesses": "3/3",
+    "oodNotSteered": true,
+    "injectedCompiledFirst": true
+  },
+  "nested": {
+    "programs": 1,
+    "innerLoop": true,
+    "getItemHits": 4,
+    "expectedHits": 4
+  },
+  "controlPlane": {
+    "compilePrograms": 1,
+    "approved": true,
+    "candidateCleared": true,
+    "wrapRunMs": 202,
+    "wrapRunNotified": true,
+    "wrapRunVerified": true,
+    "oodWrapRun": {
+      "status": 409,
+      "deopt": true,
+      "early": true
+    }
+  },
+  "gates": {
+    "programsExactly1": true,
+    "shadowPass": true,
+    "llm5x": true,
+    "ms5x": true,
+    "cents5x": true,
+    "verifyPinned": true,
+    "naiveCanSkip": true,
+    "oodNoMutate": true,
+    "steer100": true,
+    "nestedInner": true,
+    "wrapRunLive": true,
+    "oodDeopt": true
+  }
+}

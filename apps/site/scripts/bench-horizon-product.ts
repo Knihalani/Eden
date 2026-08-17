@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Product-agent fair bench. No coding hooks/hookd/rewriteBash.
- * Win = compile after t1, MCP from t2, same gold predicates on decisions/prs.json.
+ * Product-agent fair bench. Same Eden wrap as prod (`eden setup` hooks + MCP).
+ * Eden compiles tools from the agent's own traces. Win = compile after t1, MCP from t2.
  */
 import { mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -16,7 +16,10 @@ const KEY = "eden_dev";
 const DB = join(OUT, "eden.db");
 const EDEN_HOME = join(OUT, "eden-home");
 const LOCAL = join(ROOT, "apps/site/src/local.ts");
+const CLI = join(ROOT, "packages/cli/src/cli.ts");
 const REPO = "KaiavN/Eden";
+const HOOKD_PORT = 8800;
+const HOOKD = `http://127.0.0.1:${HOOKD_PORT}`;
 const PRS_LEARN = [170, 169, 168, 167, 166];
 const PRS_MORE = [165, 164, 163];
 const PRS_ALL = [...PRS_LEARN, ...PRS_MORE];
@@ -153,6 +156,35 @@ async function ingestSession(runId: string, stdout: string) {
   return events.length;
 }
 
+function hooksSettings() {
+  const cmd = `curl -sS --max-time 8 -H 'content-type: application/json' --data-binary @- ${HOOKD}/hook || echo '{}'`;
+  return {
+    hooks: {
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: cmd }] }],
+      PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: cmd }] }],
+      Stop: [{ hooks: [{ type: "command", command: cmd }] }],
+    },
+  };
+}
+
+async function drain() {
+  const { appendFileSync, existsSync: ex, readdirSync: rd } = await import("node:fs");
+  const runsDir = join(EDEN_HOME, "runs");
+  const outbox = join(EDEN_HOME, "outbox.jsonl");
+  if (ex(runsDir)) {
+    for (const f of rd(runsDir)) {
+      if (!f.endsWith(".jsonl") || f.endsWith(".sent.jsonl")) continue;
+      appendFileSync(outbox, JSON.stringify({ run_id: f.replace(/\.jsonl$/, ""), kind: "stretch_end", ts: Date.now() }) + "\n");
+    }
+  }
+  const proc = Bun.spawn(["bun", CLI, "drain"], {
+    env: { ...process.env, EDEN_HOME, EDEN_BASE_URL: ORIGIN, EDEN_API_KEY: KEY, EDEN_KNOCK: "0" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+}
+
 function reviewCount(row: { reviews?: unknown }): number | null {
   if (typeof row.reviews === "number" && Number.isFinite(row.reviews)) return row.reviews;
   if (Array.isArray(row.reviews)) return row.reviews.length;
@@ -235,6 +267,7 @@ async function runClaude(opts: {
     "--disallowedTools",
     "ToolSearch,Task,WebSearch,WebFetch,Skill,Agent",
   ];
+  if (opts.arm === "with") args.push("--settings", join(OUT, "hooks.json"));
   if (opts.mcp) {
     args.push(
       "--mcp-config",
@@ -284,6 +317,7 @@ async function runClaude(opts: {
   };
   writeFileSync(join(dir, "summary.json"), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify({ arm: opts.arm, task: opts.task, wall_ms, cost: summary.cost_usd, tools: parsed.tool_names, ingested, err: summary.is_error }));
+  if (opts.arm === "with") await drain();
   return summary;
 }
 
@@ -292,8 +326,10 @@ if (process.env.BENCH_RESUME !== "1") {
 }
 mkdirSync(OUT, { recursive: true });
 mkdirSync(EDEN_HOME, { recursive: true });
+mkdirSync(join(EDEN_HOME, "runs"), { recursive: true });
 mkdirSync(join(OUT, "with"), { recursive: true });
 mkdirSync(join(OUT, "without"), { recursive: true });
+writeFileSync(join(OUT, "hooks.json"), JSON.stringify(hooksSettings(), null, 2));
 writeFileSync(join(EDEN_HOME, "config.json"), JSON.stringify({ api_key: KEY, base_url: ORIGIN }, null, 2));
 
 const tokenProc = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe" });
@@ -345,6 +381,38 @@ if (!ready) {
   }
 }
 console.log("server", ORIGIN);
+
+const hookd = Bun.spawn(["bun", CLI, "hookd"], {
+  cwd: ROOT,
+  env: {
+    ...process.env,
+    EDEN_HOOKD_PORT: String(HOOKD_PORT),
+    EDEN_HOME,
+    EDEN_BASE_URL: ORIGIN,
+    EDEN_API_KEY: KEY,
+    EDEN_KNOCK: "0",
+  },
+  stdout: "pipe",
+  stderr: "pipe",
+});
+let hookdReady = false;
+for (let i = 0; i < 40; i++) {
+  await Bun.sleep(50);
+  try {
+    if ((await fetch(`${HOOKD}/health`)).ok) {
+      hookdReady = true;
+      break;
+    }
+  } catch {
+    /* wait */
+  }
+}
+if (!hookdReady) {
+  hookd.kill();
+  server.kill();
+  throw new Error("hookd failed");
+}
+console.log("hookd", HOOKD);
 
 try {
   const gold: Record<number, Awaited<ReturnType<typeof goldPr>>> = {};
@@ -411,8 +479,8 @@ try {
     protocol: {
       seed: "none",
       auto_approve: true,
-      hooks: false,
-      ingest: "POST /v1/ingest from jsonl Bash gh api",
+      hooks: true,
+      ingest: "Eden drain from hooks, plus jsonl Bash backup",
       persist: "Eden DB + MCP across 3 sequential product sessions",
       tasks: "decisions/prs.json + memo/rank.md, same gold predicates as coding fair",
     },
@@ -425,5 +493,6 @@ try {
   console.log("\n=== TOTALS ===");
   console.log(JSON.stringify(report.totals, null, 2));
 } finally {
+  hookd.kill();
   server.kill();
 }

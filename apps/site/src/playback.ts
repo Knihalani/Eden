@@ -15,7 +15,14 @@ import {
 } from "@eden/core";
 import { handleForge } from "./forge";
 
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 30 * 60_000;
+
+function isBlockedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "metadata.google.internal" || h.endsWith(".internal")) return true;
+  if (h === "169.254.169.254" || h.startsWith("169.254.")) return true;
+  return false;
+}
 
 function requestHeaders(url: string): Record<string, string> {
   try {
@@ -52,12 +59,18 @@ async function playOne(
   params: Record<string, string>,
 ): Promise<Receipt> {
   const t0 = Date.now();
-  const steps = JSON.parse(tool.steps) as CompiledStep[];
+  let steps: CompiledStep[];
+  try {
+    steps = JSON.parse(tool.steps) as CompiledStep[];
+  } catch {
+    throw new Error("corrupt tool steps");
+  }
   params = {
     owner: process.env.EDEN_GH_OWNER || "",
     repo: process.env.EDEN_GH_REPO || "",
     ...params,
-    issue: params.issue || params.pr || params.number || "",
+    issue: params.issue || params.id || params.pr || params.number || "",
+    id: params.id || params.issue || params.pr || params.number || "",
   };
   const dag = buildDag(steps);
   const results: Record<string, unknown> = {};
@@ -81,7 +94,7 @@ async function playOne(
         }
         const url = resolveTemplate(step.url || "", bound, results);
         if (!url) return { id: step.id, value: { error: "no_url" }, fail: true };
-        const cacheKey = `${step.method || "GET"}:${url}`;
+        const cacheKey = `${tool.id}:${step.method || "GET"}:${url}`;
         if ((step.method || "GET") === "GET") {
           const hit = await db.get<{ body: string; expires_at: number }>(
             `SELECT body, expires_at FROM result_cache WHERE cache_key = ?`,
@@ -97,6 +110,12 @@ async function playOne(
         try {
           const parsedUrl = new URL(url);
           const local = handleForge(parsedUrl);
+          if (!local) {
+            if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+              throw new Error("blocked url scheme");
+            }
+            if (isBlockedHost(parsedUrl.hostname)) throw new Error("blocked host");
+          }
           const res = local || (await fetchWithRetry(url, { method: step.method || "GET" }));
           const text = await res.text();
           stepOk = res.ok;
@@ -120,6 +139,8 @@ async function playOne(
     );
     for (const r of layerOut) {
       results[r.id] = r.value;
+    }
+    for (const r of layerOut) {
       if (r.fail) {
         failed = attempted;
         break;
@@ -179,10 +200,16 @@ export async function playTool(
 ): Promise<Receipt> {
   const issues = issuesFromParams(params);
   if (issues.length <= 1) {
-    return playOne(db, tool, { ...params, issue: issues[0] || params.issue || params.pr || params.number || "" });
+    return playOne(db, tool, {
+      ...params,
+      issue: issues[0] || params.issue || params.pr || params.number || params.id || "",
+      id: issues[0] || params.id || params.issue || params.pr || params.number || "",
+    });
   }
   const t0 = Date.now();
-  const receipts = await Promise.all(issues.map((issue) => playOne(db, tool, { ...params, issue })));
+  const receipts = await Promise.all(
+    issues.map((issue) => playOne(db, tool, { ...params, issue, id: issue, number: issue })),
+  );
   const table = receipts.map((r, i) => r.table || receiptTableLine(issues[i], r.facts)).join("\n");
   const rows = receipts.flatMap((r, i) => r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [issues[i]]));
   return {
@@ -200,4 +227,39 @@ export async function playTool(
     table,
     rows,
   };
+}
+
+const warming = new Map<string, number>();
+
+/** Fill result_cache from ids Eden already watched. Does not edit compiled tools. */
+export async function warmWorkspaceBundle(
+  db: EdenDb,
+  workspaceId: string,
+  origin = process.env.EDEN_PUBLIC_URL || "",
+): Promise<void> {
+  const prev = warming.get(workspaceId) || 0;
+  if (Date.now() - prev < 8_000) return;
+  warming.set(workspaceId, Date.now());
+  const tools = await db.all<{ id: string; name: string; steps: string }>(
+    `SELECT id, name, steps FROM tool WHERE workspace_id = ? AND state = 'on'`,
+    [workspaceId],
+  );
+  if (!tools.length) return;
+  const ids = await db.all<{ issue: string }>(
+    `SELECT issue FROM watched_issue WHERE workspace_id = ? ORDER BY seen_at DESC LIMIT 16`,
+    [workspaceId],
+  );
+  if (!ids.length) return;
+  const csv = ids.map((r) => r.issue).join(",");
+  for (const tool of tools) {
+    const steps = (() => {
+      try {
+        return JSON.parse(tool.steps || "[]") as Array<{ url?: string }>;
+      } catch {
+        return [];
+      }
+    })();
+    if (!steps.some((s) => s.url && /\{(id|issue|run_id)\}/.test(s.url))) continue;
+    await playTool(db, tool, { issues: csv, ids: csv, origin });
+  }
 }

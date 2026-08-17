@@ -22,6 +22,7 @@ const SQLITE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS result_cache (cache_key TEXT PRIMARY KEY, body TEXT, expires_at BIGINT)`,
   `CREATE TABLE IF NOT EXISTS ignore_fp (workspace_id TEXT, fingerprint TEXT, PRIMARY KEY (workspace_id, fingerprint))`,
   `CREATE TABLE IF NOT EXISTS wrap_cache (run_id TEXT, tool_id TEXT, facts TEXT, created_at BIGINT, PRIMARY KEY (run_id, tool_id))`,
+  `CREATE TABLE IF NOT EXISTS watched_issue (workspace_id TEXT, issue TEXT, seen_at BIGINT, PRIMARY KEY (workspace_id, issue))`,
 ];
 
 export class EdenDb {
@@ -60,6 +61,10 @@ function toPg(sql: string): string {
   if (/INSERT OR REPLACE INTO result_cache/i.test(s)) {
     s = s.replace(/INSERT OR REPLACE INTO/i, "INSERT INTO");
     s += " ON CONFLICT (cache_key) DO UPDATE SET body = EXCLUDED.body, expires_at = EXCLUDED.expires_at";
+  }
+  if (/INSERT OR REPLACE INTO watched_issue/i.test(s)) {
+    s = s.replace(/INSERT OR REPLACE INTO/i, "INSERT INTO");
+    s += " ON CONFLICT (workspace_id, issue) DO UPDATE SET seen_at = EXCLUDED.seen_at";
   }
   if (/INSERT OR IGNORE INTO/i.test(s)) {
     s = s.replace(/INSERT OR IGNORE INTO/i, "INSERT INTO") + " ON CONFLICT DO NOTHING";

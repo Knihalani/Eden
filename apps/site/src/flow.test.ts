@@ -137,6 +137,8 @@ describe("ingest → draft → approve → play", () => {
     expect(steps.some((s) => /\/status/.test(s.url || ""))).toBe(true);
     expect(steps.some((s) => /\/files/.test(s.url || ""))).toBe(true);
     expect(steps.find((s) => /\/status/.test(s.url || ""))?.bind?.sha).toBe("{{s1.head.sha}}");
+    const watched = await db.all<{ issue: string }>(`SELECT issue FROM watched_issue ORDER BY issue`);
+    expect(watched.map((r) => r.issue)).toEqual(["12"]);
   });
 
   test("playTool issues[] returns one table for two forge PRs", async () => {
@@ -195,6 +197,15 @@ describe("forge routing", () => {
   test("does not intercept real GitHub API hosts", () => {
     expect(handleForge(new URL("https://api.github.com/repos/KaiavN/Eden/pulls/168"))).toBeNull();
     expect(handleForge(new URL("http://127.0.0.1:8791/forge/repos/acme/app/pulls/12"))).not.toBeNull();
+  });
+
+  test("serves generic shop REST resources", async () => {
+    const order = handleForge(new URL("http://127.0.0.1/shop/orders/11"));
+    expect(order).not.toBeNull();
+    const body = await order!.json();
+    expect(body).toEqual({ id: 11, title: "Order 11", total: 115, status: "open" });
+    const items = await handleForge(new URL("http://127.0.0.1/shop/orders/11/items"))!.json();
+    expect(items).toHaveLength(2);
   });
 });
 
@@ -311,5 +322,52 @@ describe("playback bind", () => {
     const receipt = await playTool(db, tool!, { issue: "12", origin });
     expect(receipt.ok).toBe(true);
     expect(receipt.steps_ok).toBe(2);
+  });
+
+  test("curl shop traces compile a playable shop_orders tool", async () => {
+    process.env.EDEN_AUTO_APPROVE = "1";
+    const db = await openDb(`/tmp/eden-shop-${Date.now()}.db`);
+    const island = [
+      ev(1, "curl http://127.0.0.1/shop/orders/11"),
+      ev(2, "curl http://127.0.0.1/shop/orders/11/items"),
+    ];
+    await ingest(db, "ws_local", "shop1", island, true);
+    delete process.env.EDEN_AUTO_APPROVE;
+    const tool = await db.get<{ id: string; name: string; state: string; steps: string }>(
+      `SELECT id, name, state, steps FROM tool LIMIT 1`,
+    );
+    expect(tool?.name).toBe("shop_orders");
+    expect(tool?.state).toBe("on");
+    const steps = JSON.parse(tool!.steps) as Array<{ url?: string }>;
+    expect(steps.some((s) => s.url?.includes("/shop/orders/{id}"))).toBe(true);
+    expect(steps.some((s) => s.url?.endsWith("/items"))).toBe(true);
+    const receipt = await playTool(db, tool!, { ids: "11,12" });
+    expect(receipt.ok).toBe(true);
+    expect(receipt.facts && typeof receipt.facts === "object").toBe(true);
+    const rows = (receipt.facts as { rows?: Array<{ s1?: { title?: string; total?: number } }> }).rows;
+    expect(rows?.map((r) => r.s1?.title)).toEqual(["Order 11", "Order 12"]);
+    expect(rows?.every((r) => typeof r.s1?.total === "number")).toBe(true);
+  });
+
+  test("customers and orders compile as separate tools", async () => {
+    process.env.EDEN_AUTO_APPROVE = "1";
+    const db = await openDb(`/tmp/eden-shop-multi-${Date.now()}.db`);
+    await ingest(
+      db,
+      "ws_local",
+      "orders",
+      [ev(1, "curl http://127.0.0.1/shop/orders/11"), ev(2, "curl http://127.0.0.1/shop/orders/11/items")],
+      true,
+    );
+    await ingest(
+      db,
+      "ws_local",
+      "customers",
+      [ev(1, "curl http://127.0.0.1/shop/customers/21"), ev(2, "curl http://127.0.0.1/shop/customers/21/orders")],
+      true,
+    );
+    delete process.env.EDEN_AUTO_APPROVE;
+    const names = (await db.all<{ name: string }>(`SELECT name FROM tool ORDER BY name`)).map((t) => t.name);
+    expect(names).toEqual(["shop_customers", "shop_orders"]);
   });
 });

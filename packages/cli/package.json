@@ -6,6 +6,8 @@
     "eden": "./src/cli.ts"
   },
   "dependencies": {
-    "@eden/core": "workspace:*"
+    "@eden/ir": "workspace:*",
+    "@eden/wrap": "workspace:*",
+    "@eden/control": "workspace:*"
   }
 }

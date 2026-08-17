@@ -10,10 +10,10 @@ export function parseIssueList(raw: string | undefined | null): string[] {
 export function extractLoopIds(command: string): string[] {
   const forIds = command.match(/for\s+\w+\s+in\s+([\d\s]+)/);
   if (forIds) {
-    const ids = forIds[1].trim().split(/\s+/).filter((n) => /^\d+$/.test(n));
+    const ids = forIds[1]!.trim().split(/\s+/).filter((n) => /^\d+$/.test(n));
     if (ids.length) return ids;
   }
-  const fromPaths = [...command.matchAll(/\/(?:pulls|issues)\/(\d+)/g)].map((m) => m[1]);
+  const fromPaths = [...command.matchAll(/\/(?:pulls|issues)\/(\d+)/g)].map((m) => m[1]!);
   return [...new Set(fromPaths)];
 }
 
@@ -79,7 +79,7 @@ function destFromLine(line: string): string | undefined {
 function varsFromCommand(command: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const m of command.matchAll(/(?:^|[\n;\s])([A-Za-z_][A-Za-z0-9_]*)=([^\s;]+)/g)) {
-    out[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    out[m[1]!] = m[2]!.replace(/^["']|["']$/g, "");
   }
   return out;
 }
@@ -164,9 +164,9 @@ export async function runFulfillPlan(
     plan.ids.map(async (n) => {
       const pullPath = `repos/${plan.repo}/pulls/${n}`;
       const [pullRaw, reviewsRaw, filesRaw] = await Promise.all([
-        getJson(pullPath),
-        getJson(`${pullPath}/reviews`),
-        getJson(`${pullPath}/files`),
+        plan.pull !== false ? getJson(pullPath) : Promise.resolve({}),
+        plan.reviews ? getJson(`${pullPath}/reviews`) : Promise.resolve([]),
+        plan.files ? getJson(`${pullPath}/files`) : Promise.resolve([]),
       ]);
       const pull = (pullRaw || {}) as Record<string, unknown>;
       const reviews = Array.isArray(reviewsRaw) ? reviewsRaw : [];
@@ -195,8 +195,8 @@ export async function runFulfillPlan(
   return { table: typedTable(rows), rows };
 }
 
-export const MCP_LIST_LIMIT = 3;
-export const MCP_DESC_CHARS = 60;
+export const MCP_LIST_LIMIT = 6;
+export const MCP_DESC_CHARS = 140;
 
 function isHiddenWhenBundle(name: string): boolean {
   if (name.startsWith("github_pr_bundle")) return false;
@@ -211,7 +211,7 @@ export function selectMcpTools<T extends { name: string; uses_count?: number | n
     ranked = ranked.filter((t) => !isHiddenWhenBundle(t.name));
     const bundles = ranked.filter((t) => t.name.startsWith("github_pr_bundle"));
     if (bundles.length > 1) {
-      const keep = bundles[0].name;
+      const keep = bundles[0]!.name;
       ranked = ranked.filter((t) => !t.name.startsWith("github_pr_bundle") || t.name === keep);
     }
   }

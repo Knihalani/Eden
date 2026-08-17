@@ -1,0 +1,502 @@
+import type { IslandCaller, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
+import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf } from "@eden/ir";
+import { isDeopt, runProgram } from "@eden/runtime";
+import { wrapTimeoutMs } from "@eden/wrap";
+import { compileTraces } from "@eden/compile";
+import { canApprove, registryCovers, shadowProgram, uncoveredTools } from "@eden/shadow";
+import { pushPrev, type Candidate, type Store } from "./store";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export type ApiCtx = {
+  store: Store;
+  registry?: ToolRegistry;
+  island?: IslandCaller;
+  token: string;
+};
+
+function auth(req: Request, ctx: ApiCtx): boolean {
+  const h = req.headers.get("authorization") || "";
+  const tok = h.replace(/^Bearer\s+/i, "");
+  if (!ctx.token) return true;
+  return tok === ctx.token;
+}
+
+function json(data: unknown, status = 200): Response {
+  return Response.json(data, { status, headers: { "access-control-allow-origin": "*" } });
+}
+
+async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { ok: false; res: Response }> {
+  try {
+    return { ok: true, value: await req.json() };
+  } catch {
+    return { ok: false, res: json({ error: "invalid json" }, 400) };
+  }
+}
+
+function syncLiveTools(store: Store): void {
+  try {
+    const dir = process.env.EDEN_HOME || join(homedir(), ".eden");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "live-tools.json"),
+      JSON.stringify(
+        store.livePrograms().map((p) => ({
+          name: p.name,
+          sequence: p.sequence ?? [],
+          id: p.id,
+          envelope: p.contract.envelope ?? null,
+        })),
+      ),
+    );
+  } catch {
+    /* fail-open */
+  }
+}
+
+async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: number }> {
+  ctx.store.clearCandidates();
+  const compiled = compileTraces(ctx.store.traces(), { minLlmReduction: minLlmReductionOf(Number(process.env.EDEN_MIN_LLM_REDUCTION)) });
+  for (const program of compiled.programs) {
+    let verdict: "PASS" | "FAIL" | "INCONCLUSIVE" | "pending" = "pending";
+    let manifest = program.manifest;
+    let refusal: Refusal | null = null;
+    const missing = uncoveredTools(ctx.registry, program);
+    if (ctx.registry && missing.length === 0) {
+      const sh = await shadowProgram(program, ctx.store.traces(), {
+        registry: ctx.registry,
+        island: ctx.island,
+      });
+      verdict = sh.verdict;
+      manifest = sh.manifest;
+      if (manifest) program.manifest = manifest;
+      if (sh.verdict !== "PASS" && sh.reasons.length) {
+        refusal = { sequence: program.sequence ?? [], reason: sh.reasons[0]! };
+      }
+    } else if (!ctx.registry) {
+      refusal = { sequence: program.sequence ?? [], reason: "no wrap registry — start eden wrap to replay this stretch" };
+    } else {
+      refusal = { sequence: program.sequence ?? [], reason: `uncovered: ${missing.join(", ")}` };
+    }
+    ctx.store.putCandidate({
+      id: program.id,
+      sequence: program.sequence ?? [],
+      program,
+      refusal,
+      verdict,
+      manifest,
+      created_at: Date.now(),
+    });
+  }
+  for (const refusal of compiled.refusals) {
+    ctx.store.putCandidate({
+      id: `ref_${createHash("sha256").update(canonicalize({ sequence: refusal.sequence, reason: refusal.reason })).digest("hex").slice(0, 12)}`,
+      sequence: refusal.sequence,
+      program: null,
+      refusal,
+      verdict: "FAIL",
+      manifest: null,
+      created_at: Date.now(),
+    });
+  }
+  return { programs: compiled.programs.length, refusals: compiled.refusals.length };
+}
+
+type Edits = { name?: string; forceIsland?: string[]; drop?: string[]; pinAssert?: string[] };
+
+async function shipCandidate(
+  ctx: ApiCtx,
+  c: Candidate,
+  edits?: Edits,
+): Promise<{ ok: true; program: StretchProgram } | { ok: false; status: number; error: string; extra?: Record<string, unknown> }> {
+  if (!c.program) return { ok: false, status: 409, error: c.refusal?.reason || "refused" };
+  if (c.verdict !== "PASS") {
+    const error =
+      c.verdict === "pending"
+        ? c.refusal?.reason || "shadow pending"
+        : c.verdict === "FAIL"
+          ? c.refusal?.reason || "shadow failed"
+          : `${c.verdict} does not ship`;
+    return { ok: false, status: 409, error, extra: { verdict: c.verdict } };
+  }
+  if (
+    !canApprove({
+      verdict: "PASS",
+      manifest: c.manifest,
+      reasons: [],
+      n: c.manifest?.nShadow ?? 0,
+      minLlmReduction: c.program.contract?.minLlmReduction,
+    })
+  ) {
+    return { ok: false, status: 409, error: "shadow did not pass" };
+  }
+  let program = c.program;
+  const next: Edits = {};
+  if (edits?.name && edits.name !== program.name) next.name = edits.name;
+  if (edits?.drop?.length) next.drop = edits.drop;
+  if (edits?.forceIsland?.length) next.forceIsland = edits.forceIsland;
+  if (edits?.pinAssert?.length) next.pinAssert = edits.pinAssert;
+  const structural = Boolean(next.drop?.length || next.forceIsland?.length || next.pinAssert?.length);
+  edits = next.name || structural ? next : undefined;
+  if (edits?.name) program = { ...program, name: edits.name };
+  if (edits?.drop?.length) {
+    const drop = new Set(edits.drop);
+    const dropped = program.steps.filter((s) => drop.has(s.id));
+    if (dropped.some((s) => s.kind === "assert" || (s.kind === "tool" && isCheckName(s.tool)))) {
+      return { ok: false, status: 409, error: "cannot drop a pinned check" };
+    }
+    const nextSteps = program.steps
+      .filter((s) => !drop.has(s.id))
+      .map((s) => (s.kind === "loop" ? { ...s, body: s.body.filter((id) => !drop.has(id)) } : s));
+    if (nextSteps.some((s) => s.kind === "loop" && s.body.length === 0)) {
+      return { ok: false, status: 409, error: "drop emptied a loop" };
+    }
+    if (program.returns && program.returns.kind === "from" && drop.has(program.returns.step)) {
+      return { ok: false, status: 409, error: "cannot drop the return step" };
+    }
+    program = { ...program, steps: nextSteps };
+    const issues = validateProgram(program);
+    if (issues.length) return { ok: false, status: 409, error: issues[0]!.message, extra: { issues } };
+  }
+  if (edits?.forceIsland?.length) {
+    const force = new Set(edits.forceIsland);
+    program = {
+      ...program,
+      steps: program.steps.map((s) =>
+        s.kind === "tool" && force.has(s.id)
+          ? {
+              id: s.id,
+              kind: "island" as const,
+              input: Object.values(s.args)[0] ?? { kind: "input" as const, path: "" },
+              system: `Perform ${s.tool}. Return JSON.`,
+              outputSchema: { type: "object" },
+            }
+          : s,
+      ),
+    };
+  }
+  if (edits?.pinAssert?.length) {
+    program = {
+      ...program,
+      steps: [
+        ...program.steps,
+        ...edits.pinAssert.map((expr, i) => ({
+          id: `pin_${i}`,
+          kind: "assert" as const,
+          expr,
+          onFail: "error" as const,
+        })),
+      ],
+    };
+  }
+  if (structural && !ctx.registry) {
+    return { ok: false, status: 409, error: "dropping or rewriting a step needs the wrap agent connected so Eden can re-check the stretch" };
+  }
+  if (structural && ctx.registry) {
+    program = withVersion({ ...program, version: undefined });
+    const sh = await shadowProgram(program, ctx.store.traces(), { registry: ctx.registry, island: ctx.island });
+    if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow after edit did not pass", extra: { shadow: sh } };
+    program = { ...program, manifest: sh.manifest };
+  } else if (ctx.registry && registryCovers(ctx.registry, program) && ctx.store.tracesCount() >= 3) {
+    const sh = await shadowProgram(program, ctx.store.traces(), { registry: ctx.registry, island: ctx.island });
+    if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow on approve did not pass", extra: { shadow: sh } };
+    program = { ...program, manifest: sh.manifest };
+  }
+  const existing = ctx.store.tool(program.id);
+  ctx.store.putTool({
+    id: program.id,
+    name: program.name,
+    version: program.version,
+    program,
+    state: "live",
+    prev: pushPrev(existing),
+    created_at: existing?.created_at ?? Date.now(),
+    updated_at: Date.now(),
+  });
+  syncLiveTools(ctx.store);
+  ctx.store.deleteCandidate(c.id);
+  return { ok: true, program };
+}
+
+async function maybeAutoApprove(ctx: ApiCtx): Promise<number> {
+  if (process.env.EDEN_AUTO_APPROVE !== "1") return 0;
+  let n = 0;
+  for (const c of ctx.store.candidates()) {
+    const r = await shipCandidate(ctx, c);
+    if (r.ok) n++;
+  }
+  return n;
+}
+
+export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Response | null> {
+  const p = url.pathname;
+  if (p === "/health" && req.method === "GET") {
+    ctx.store.heartbeat();
+    return json({
+      ok: true,
+      heartbeat: ctx.store.lastHeartbeat(),
+      traces: ctx.store.tracesCount(),
+      live: ctx.store.liveCount(),
+      candidates: ctx.store.candidatesCount(),
+      receipts: ctx.store.receiptsCount(),
+      fails: ctx.store.failsCount(),
+      savings: ctx.store.savings(),
+      minLlmReduction: minLlmReductionOf(Number(process.env.EDEN_MIN_LLM_REDUCTION)),
+      registry: Boolean(ctx.registry),
+      island: Boolean(ctx.island),
+    });
+  }
+  if (p.startsWith("/v1/") && p !== "/v1/inbox" && p !== "/v1/chat/completions" && !auth(req, ctx)) {
+    return json({ error: "unauthorized" }, 401);
+  }
+  if (p === "/v1/stats" && req.method === "GET") {
+    return json({
+      traces: ctx.store.tracesCount(),
+      live: ctx.store.liveCount(),
+      candidates: ctx.store.candidatesCount(),
+      receipts: ctx.store.receiptsCount(),
+      fails: ctx.store.failsCount(),
+      savings: ctx.store.savings(),
+    });
+  }
+
+  if (p === "/v1/savings" && req.method === "GET") {
+    return json(ctx.store.savings());
+  }
+
+  if (p === "/v1/traces" && req.method === "POST") {
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as StretchTrace | { traces?: StretchTrace[] };
+    const list = Array.isArray((body as { traces?: StretchTrace[] }).traces)
+      ? (body as { traces: StretchTrace[] }).traces
+      : [body as StretchTrace];
+    return ctx.store.enqueue(async () => {
+      let accepted = 0;
+      let duplicates = 0;
+      for (const t of list) {
+        if (!t || !Array.isArray(t.events) || !t.events.length) continue;
+        if (ctx.store.putTrace(t)) accepted++;
+        else duplicates++;
+      }
+      ctx.store.heartbeat();
+      const n = ctx.store.tracesCount();
+      if (n >= 3 && n !== ctx.store.compiledCount()) {
+        await runCompile(ctx);
+        ctx.store.setCompiledCount(n);
+        await maybeAutoApprove(ctx);
+      }
+      return json({ ok: true, n: list.length, accepted, duplicates });
+    });
+  }
+
+  if (p === "/v1/compile" && req.method === "POST") {
+    return ctx.store.enqueue(async () => {
+      const out = await runCompile(ctx);
+      ctx.store.setCompiledCount(ctx.store.tracesCount());
+      const shipped = await maybeAutoApprove(ctx);
+      return json({ ok: true, ...out, shipped });
+    });
+  }
+
+  if (p === "/v1/traces" && req.method === "GET") {
+    return json({ traces: ctx.store.traces() });
+  }
+
+  if (p === "/v1/candidates" && req.method === "GET") {
+    return json({ candidates: ctx.store.candidates() });
+  }
+
+  if (p === "/v1/inbox" && req.method === "GET") {
+    return json({
+      heartbeat: ctx.store.lastHeartbeat(),
+      connected: Date.now() - ctx.store.lastHeartbeat() < 30_000,
+      sig: ctx.store.inboxSig(),
+      candidates: ctx.store.candidates(),
+      live: ctx.store.tools()
+        .filter((t) => t.state === "live" || t.state === "paused")
+        .map((t) => {
+          const stats = ctx.store.receiptStats(t.id);
+          const last = ctx.store.receiptsFor(t.id)[0];
+          const stack = Array.isArray(t.prev) ? t.prev : t.prev ? [t.prev] : [];
+          return {
+            id: t.id,
+            name: t.name,
+            version: t.version,
+            program: t.program,
+            state: t.state,
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+            stats,
+            last: last
+              ? { ok: last.ok, ms: last.ms, llm_calls: last.llm_calls, created_at: last.created_at }
+              : null,
+            canRollback: stack.length > 0,
+          };
+        }),
+      savings: ctx.store.savings(),
+    });
+  }
+
+  const shadowMatch = p.match(/^\/v1\/candidates\/([^/]+)\/shadow$/);
+  if (shadowMatch && req.method === "POST") {
+    const c = ctx.store.candidate(shadowMatch[1]!);
+    if (!c) return json({ error: "not found" }, 404);
+    if (!c.program) return json({ error: "refused" }, 409);
+    if (!ctx.registry) return json({ error: "no registry for shadow" }, 409);
+    const missing = uncoveredTools(ctx.registry, c.program);
+    if (missing.length) return json({ error: `uncovered: ${missing.join(", ")}` }, 409);
+    const sh = await shadowProgram(c.program, ctx.store.traces(), {
+      registry: ctx.registry,
+      island: ctx.island,
+    });
+    c.verdict = sh.verdict;
+    c.manifest = sh.manifest;
+    c.program = { ...c.program, manifest: sh.manifest };
+    c.refusal =
+      sh.verdict === "PASS" ? null : sh.reasons[0] ? { sequence: c.sequence, reason: sh.reasons[0] } : c.refusal;
+    ctx.store.putCandidate(c);
+    return json({ ok: true, verdict: sh.verdict, manifest: sh.manifest, reasons: sh.reasons, n: sh.n });
+  }
+
+  if (p === "/v1/wrap-run" && req.method === "POST") {
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as {
+      toolId?: string;
+      program?: StretchProgram;
+      input?: Record<string, unknown>;
+      timeoutMs?: number;
+      timeout?: number;
+    };
+    if (body.input != null && (typeof body.input !== "object" || Array.isArray(body.input))) {
+      return json({ error: "input must be an object" }, 400);
+    }
+    const found =
+      (body.toolId ? ctx.store.tool(body.toolId) : undefined) ??
+      ctx.store.tools().find(
+        (t) => t.id === body.program?.id || t.name === body.program?.name || t.program.name === body.program?.name,
+      );
+    if (!found) return json({ error: "not live" }, 404);
+    if (found.state === "paused") return json({ error: "paused", program: found.name }, 409);
+    if (found.state !== "live") return json({ error: "not live", state: found.state }, 409);
+    const live = found;
+    if (!ctx.registry) return json({ error: "no registry" }, 409);
+    const q = Number(url.searchParams.get("timeout"));
+    const timeoutMs = wrapTimeoutMs(Number.isFinite(q) && q > 0 ? q : body.timeoutMs ?? body.timeout);
+    try {
+      const run = await runProgram(live.program, body.input ?? {}, {
+        registry: ctx.registry,
+        island: ctx.island,
+        timeoutMs,
+      });
+      ctx.store.putReceipt({
+        tool_id: live.id,
+        version: live.version,
+        ms: run.stats.ms,
+        llm_calls: run.stats.llmCalls,
+        cents: run.stats.cents,
+        ok: 1,
+      });
+      return json({ ok: true, value: run.value, stats: run.stats });
+    } catch (err) {
+      if (isDeopt(err)) {
+        ctx.store.putReceipt({
+          tool_id: live.id,
+          version: live.version,
+          ms: 0,
+          llm_calls: 0,
+          cents: 0,
+          ok: 0,
+        });
+        const early = /witness envelope|no island caller|island .+ needs an island caller/.test(err.reason);
+        return json({ error: "deopt", reason: err.reason, deopt: true, early, program: live.name }, 409);
+      }
+      return json({ error: String(err) }, 500);
+    }
+  }
+
+  const approve = p.match(/^\/v1\/tools\/([^/]+)\/approve$/);
+  if (approve && req.method === "POST") {
+    const c = ctx.store.candidate(approve[1]!);
+    if (!c) return json({ error: "not found" }, 404);
+    const body = (await req.json().catch(() => ({}))) as { edits?: Edits };
+    const shipped = await shipCandidate(ctx, c, body.edits);
+    if (!shipped.ok) return json({ error: shipped.error, ...shipped.extra }, shipped.status);
+    return json({ ok: true, id: shipped.program.id, name: shipped.program.name, program: shipped.program });
+  }
+
+  const pause = p.match(/^\/v1\/tools\/([^/]+)\/(pause|rollback|resume)$/);
+  if (pause && req.method === "POST") {
+    const t = ctx.store.tool(pause[1]!);
+    if (!t) return json({ error: "not found" }, 404);
+    if (pause[2] === "pause") t.state = "paused";
+    else if (pause[2] === "resume") {
+      if (t.state !== "paused" && t.state !== "rolled_back") return json({ error: "not paused" }, 409);
+      t.state = "live";
+    } else {
+      const stack = Array.isArray(t.prev) ? t.prev : t.prev ? [t.prev] : [];
+      const top = stack[0];
+      if (!top) return json({ error: "nothing to rollback" }, 409);
+      t.state = "rolled_back";
+      t.program = top;
+      t.version = top.version;
+      t.prev = stack.slice(1);
+    }
+    t.updated_at = Date.now();
+    ctx.store.putTool(t);
+    syncLiveTools(ctx.store);
+    return json({ ok: true, state: t.state });
+  }
+
+  const prog = p.match(/^\/v1\/tools\/([^/]+)\/program$/);
+  if (prog && req.method === "GET") {
+    const t = ctx.store.tool(prog[1]!);
+    if (!t || t.state !== "live") return json({ error: "not found" }, 404);
+    return json(t.program);
+  }
+
+  const one = p.match(/^\/v1\/tools\/([^/]+)$/);
+  if (one && req.method === "GET") {
+    const t = ctx.store.tool(one[1]!);
+    if (!t) return json({ error: "not found" }, 404);
+    return json(t);
+  }
+
+  if (p === "/v1/tools" && req.method === "GET") {
+    const state = url.searchParams.get("state");
+    const tools = state ? ctx.store.tools().filter((t) => t.state === state) : ctx.store.tools();
+    return json({ tools });
+  }
+
+  if (p === "/v1/receipts" && req.method === "GET") {
+    const toolId = url.searchParams.get("tool");
+    return json({ receipts: toolId ? ctx.store.receiptsFor(toolId) : ctx.store.receipts() });
+  }
+
+  const delCand = p.match(/^\/v1\/candidates\/([^/]+)$/);
+  if (delCand && req.method === "DELETE") {
+    if (!ctx.store.deleteCandidate(delCand[1]!)) return json({ error: "not found" }, 404);
+    return json({ ok: true });
+  }
+
+  if (p === "/v1/receipts" && req.method === "POST") {
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const b = parsed.value as { toolId?: string; version?: string; ms?: number; llmCalls?: number; cents?: number; ok?: boolean };
+    if (!b.toolId) return json({ error: "toolId required" }, 400);
+    ctx.store.putReceipt({
+      tool_id: b.toolId,
+      version: b.version ?? "",
+      ms: Number(b.ms) || 0,
+      llm_calls: Number(b.llmCalls) || 0,
+      cents: Number(b.cents) || 0,
+      ok: b.ok ? 1 : 0,
+    });
+    return json({ ok: true });
+  }
+
+  return null;
+}

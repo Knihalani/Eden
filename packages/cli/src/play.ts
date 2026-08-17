@@ -1,9 +1,11 @@
-import { readConfig, ensureHome } from "./home";
+import { readConfig, ensureHome, resolveApiKey, sitePlaneUrl } from "./home";
 import {
   bundleJson,
   compactReceipt,
+  compactRowFromFacts,
   parseIssueList,
   prRowsFromFacts,
+  receiptJson,
   writePrefetch,
   extractGhRepo,
   runFulfillPlan,
@@ -15,19 +17,21 @@ export async function playCli(args: string[]): Promise<void> {
   ensureHome();
   const name = args[0];
   if (!name) {
-    console.error("eden play <tool> --issues 170,169");
+    console.error("eden play <tool> --ids 11,12");
     process.exit(1);
   }
   const issuesIdx = args.indexOf("--issues");
+  const idsIdx = args.indexOf("--ids");
   const issueIdx = args.indexOf("--issue");
-  const issues = issuesIdx >= 0 ? args[issuesIdx + 1] : issueIdx >= 0 ? args[issueIdx + 1] : args[1];
+  const issues =
+    idsIdx >= 0 ? args[idsIdx + 1] : issuesIdx >= 0 ? args[issuesIdx + 1] : issueIdx >= 0 ? args[issueIdx + 1] : args[1];
   const cfg = readConfig();
-  const base = cfg?.base_url || process.env.EDEN_BASE_URL || "http://127.0.0.1:8787";
-  const key = cfg?.api_key || process.env.EDEN_API_KEY || "eden_dev";
+  const base = sitePlaneUrl(cfg?.base_url || process.env.EDEN_BASE_URL);
+  const key = resolveApiKey(args.slice(1));
   const res = await fetch(`${base}/v1/play`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ name, issues, issue: String(issues || "").split(/[,\s]+/)[0] }),
+    body: JSON.stringify({ name, issues, ids: issues, issue: String(issues || "").split(/[,\s]+/)[0] }),
   });
   const json = (await res.json()) as {
     table?: string;
@@ -37,9 +41,20 @@ export async function playCli(args: string[]): Promise<void> {
   };
   const issueIds = parseIssueList(issues);
   const rows = json.rows?.length ? json.rows : prRowsFromFacts(json.facts, issueIds);
+  const generic = issueIds
+    .map((n, i) => {
+      const facts =
+        json.facts && typeof json.facts === "object" && Array.isArray((json.facts as { rows?: unknown }).rows)
+          ? (json.facts as { rows: unknown[] }).rows[i]
+          : json.facts;
+      return compactRowFromFacts(facts, n);
+    })
+    .filter((r): r is Record<string, unknown> => r !== null);
   const text = rows.length
     ? bundleJson(rows)
-    : json.table || compactReceipt(json.facts) || JSON.stringify(json.facts ?? json);
+    : generic.length
+      ? receiptJson(generic)
+      : json.table || compactReceipt(json.facts) || JSON.stringify(json.facts ?? json);
   process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
   if (!res.ok || json.ok === false) process.exit(1);
 }

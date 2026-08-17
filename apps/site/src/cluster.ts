@@ -2,6 +2,7 @@ import type { EdenDb } from "./db";
 import {
   compileStepUrl,
   cutIslands,
+  extractLoopIds,
   fingerprintIsland,
   heuristicName,
   isCompilableToolName,
@@ -10,6 +11,14 @@ import {
   requiredK,
   type ToolEvent,
 } from "@eden/core";
+
+function parseJson<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 export async function ingest(
   db: EdenDb,
@@ -34,6 +43,7 @@ export async function ingest(
       ],
     );
   }
+  await rememberIssues(db, workspaceId, events);
   if (!stretchEnd) return { drafts: 0 };
   const rows = await db.all<{
     event_id: string;
@@ -42,12 +52,15 @@ export async function ingest(
     args: string;
     command: string | null;
     ok: number;
-  }>(`SELECT event_id, seq, name, args, command, ok FROM tool_event WHERE run_id = ? ORDER BY seq`, [runId]);
+  }>(`SELECT event_id, seq, name, args, command, ok FROM tool_event WHERE workspace_id = ? AND run_id = ? ORDER BY seq`, [
+    workspaceId,
+    runId,
+  ]);
   const parsed: ToolEvent[] = rows.map((r) => ({
     event_id: r.event_id,
     seq: r.seq,
     name: r.name,
-    args: JSON.parse(r.args || "{}"),
+    args: parseJson(r.args || "{}", {}),
     command: r.command || undefined,
     ok: Number(r.ok) === 1,
   }));
@@ -60,7 +73,8 @@ export async function ingest(
       fp,
     ]);
     if (ignored) continue;
-    const dup = await db.get(`SELECT 1 as ok FROM stretch WHERE run_id = ? AND fingerprint = ? AND island_index = ?`, [
+    const dup = await db.get(`SELECT 1 as ok FROM stretch WHERE workspace_id = ? AND run_id = ? AND fingerprint = ? AND island_index = ?`, [
+      workspaceId,
       runId,
       fp,
       island_index,
@@ -71,17 +85,13 @@ export async function ingest(
       [crypto.randomUUID(), workspaceId, runId, fp, JSON.stringify(steps), island_index],
     );
     const existing = await db.get<{ count: number; status: string; steps: string }>(
-      `SELECT count, status, steps FROM cluster WHERE fingerprint = ?`,
-      [fp],
+      `SELECT count, status, steps FROM cluster WHERE fingerprint = ? AND workspace_id = ?`,
+      [fp, workspaceId],
     );
     let storedSteps = steps;
     if (existing?.steps) {
-      try {
-        const prev = JSON.parse(existing.steps);
-        storedSteps = mergeConstantFlip(prev, steps) || steps;
-      } catch {
-        storedSteps = steps;
-      }
+      const prev = parseJson(existing.steps, null as unknown[] | null);
+      storedSteps = (Array.isArray(prev) ? mergeConstantFlip(prev as typeof steps, steps) : null) || steps;
     }
     const count = (existing?.count || 0) + 1;
     await db.run(
@@ -93,15 +103,12 @@ export async function ingest(
       const compiled = stepsToCompiled(storedSteps);
       const base = heuristicName(storedSteps);
       if (!isCompilableToolName(base)) continue;
-      const prior =
-        base.startsWith("github_pr_bundle")
-          ? await db.get<{ id: string; steps: string }>(
-              `SELECT id, steps FROM tool WHERE workspace_id = ? AND (name = 'github_pr_bundle' OR name LIKE 'github_pr_bundle_%') LIMIT 1`,
-              [workspaceId],
-            )
-          : undefined;
+      const prior = await db.get<{ id: string; steps: string }>(
+        `SELECT id, steps FROM tool WHERE workspace_id = ? AND (name = ? OR name LIKE ?) LIMIT 1`,
+        [workspaceId, base, `${base}_%`],
+      );
       if (prior) {
-        const prev = JSON.parse(prior.steps || "[]") as Array<{ url?: string }>;
+        const prev = parseJson(prior.steps || "[]", [] as Array<{ url?: string }>);
         const next = compiled.length >= prev.length ? compiled : prev;
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
           JSON.stringify(next),
@@ -132,7 +139,7 @@ export async function ingest(
       }
     }
     if (count === 2) {
-      const tool = await db.get<{ id: string }>(`SELECT id FROM tool WHERE fingerprint = ?`, [fp]);
+      const tool = await db.get<{ id: string }>(`SELECT id FROM tool WHERE fingerprint = ? AND workspace_id = ?`, [fp, workspaceId]);
       if (tool) {
         const compiled = stepsToCompiled(storedSteps);
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
@@ -153,6 +160,22 @@ export async function ingest(
   return { drafts, islands: islands.length };
 }
 
+async function rememberIssues(db: EdenDb, workspaceId: string, events: ToolEvent[]): Promise<void> {
+  const now = Date.now();
+  const ids = new Set<string>();
+  for (const e of events) {
+    const command = e.command || String((e.args as { command?: string } | undefined)?.command || "");
+    for (const n of extractLoopIds(command)) ids.add(n);
+  }
+  for (const issue of ids) {
+    await db.run(`INSERT OR REPLACE INTO watched_issue (workspace_id, issue, seen_at) VALUES (?, ?, ?)`, [
+      workspaceId,
+      issue,
+      now,
+    ]);
+  }
+}
+
 async function uniqueToolName(db: EdenDb, workspaceId: string, base: string): Promise<string> {
   let name = base.slice(0, 48);
   let n = 2;
@@ -166,7 +189,8 @@ function whenToUse(name: string): string {
   if (name.startsWith("github_pr_bundle")) return "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]";
   if (name.startsWith("github_pr_files")) return "issues: csv of PRs. table: number | files";
   if (name.startsWith("github_issue_bundle")) return "issues: csv. table: number | title | comments";
-  return `One call with all ids for ${name.replaceAll("_", " ")}.`;
+  const label = name.replaceAll("_", " ");
+  return `ids csv → JSON rows from ${label}. Prefer this over repeating the same curl/CLI loop.`;
 }
 
 async function maybeAutoOn(
