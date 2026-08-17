@@ -89,6 +89,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@eden/ir": "workspace:*",
+        "@eden/measure": "workspace:*",
       },
     },
     "packages/sdk-js": {

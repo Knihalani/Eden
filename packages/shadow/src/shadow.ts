@@ -107,6 +107,12 @@ export async function shadowProgram(
 
   const n = held.length;
   const llmReduction = reductionRatio(mean(naiveLlm), mean(compiledLlm));
+  // Reported, never gated on — and read it with care. `naiveMs` is whatever the
+  // recorder wrote into the trace (for the TicketShip fixture, a synthetic
+  // 200ms per LLM call), while `compiledMs` is real in-process execution. The
+  // two are not the same clock, so the ratio can reach absurd values and means
+  // nothing unless the traces carry genuinely measured durations. Only
+  // llmReduction and skipRateAfter decide whether a program may ship.
   const latencyReduction = reductionRatio(mean(naiveMs), mean(compiledMs));
   const costReduction = reductionRatio(mean(naiveCents), mean(compiledCents));
   const skipRateBefore = naiveSkips / n;

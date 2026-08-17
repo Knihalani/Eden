@@ -1,4 +1,11 @@
 import { eq, getPath } from "@eden/ir";
+import type { ResultScope } from "./bind";
+
+/**
+ * Asserts only read prior step results, so they accept anything that can be
+ * read from — a plain Map, or a loop iteration's layered scope.
+ */
+type StepResults = Pick<ResultScope, "get">;
 
 type Tok =
   | { t: "id"; v: string }
@@ -67,7 +74,7 @@ function tokenize(expr: string): Tok[] {
   return toks;
 }
 
-function lookup(path: string, prev: unknown, input: Record<string, unknown>, steps: Map<string, unknown>): unknown {
+function lookup(path: string, prev: unknown, input: Record<string, unknown>, steps: StepResults): unknown {
   const raw = path.startsWith("$.") ? path.slice(2) : path === "$" ? "" : path.startsWith("$") ? path.slice(1) : path;
   if (!raw) return prev;
   if (raw.startsWith("input.")) return getPath(input, raw.slice("input.".length));
@@ -87,7 +94,7 @@ export function evalAssert(
   expr: string,
   prev: unknown,
   input: Record<string, unknown>,
-  steps: Map<string, unknown>,
+  steps: StepResults,
 ): boolean {
   const toks = tokenize(expr);
   let i = 0;

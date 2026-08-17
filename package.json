@@ -13,7 +13,8 @@
     "cli": "bun run packages/cli/src/cli.ts",
     "bench": "bun run packages/runtime/src/bench.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "bench:verdict": "bun run packages/measure/src/analyze.ts apps/site/scripts/bench-horizon-results.json apps/site/scripts/bench-horizon-hard-results.json apps/site/scripts/bench-horizon-harder-results.json apps/site/scripts/bench-horizon-product-results.json apps/site/scripts/bench-workshop-results.json"
+    "bench:verdict": "bun run packages/measure/src/analyze.ts apps/site/scripts/bench-horizon-results.json apps/site/scripts/bench-horizon-hard-results.json apps/site/scripts/bench-horizon-harder-results.json apps/site/scripts/bench-horizon-product-results.json apps/site/scripts/bench-workshop-results.json",
+    "bench:loop": "bun run packages/runtime/src/bench-loop.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

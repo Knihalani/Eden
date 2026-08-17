@@ -1,6 +1,13 @@
 import type { Binding, IslandCaller, Step, StretchProgram, ToolRegistry } from "@eden/ir";
-import { asArray, assertValid, inDistribution, isBarrierName } from "@eden/ir";
-import { evalArgs, evalBinding, type BindScope } from "./bind";
+import { asArray, assertValid, inDistribution, isBarrierName, isReadName } from "@eden/ir";
+import { ChildScope, evalArgs, evalBinding, type BindScope } from "./bind";
+
+/**
+ * Fan-out width for a provably read-only loop body. Bounded because the point
+ * is to stop paying N round trips in series, not to open N sockets at once
+ * against someone's rate limit.
+ */
+export const DEFAULT_LOOP_CONCURRENCY = 8;
 import { DeoptError } from "./deopt";
 import { evalAssert } from "./assert";
 
@@ -25,6 +32,11 @@ export type RunOpts = {
   llmCents?: number;
   checkEnvelope?: boolean;
   timeoutMs?: number;
+  /**
+   * Maximum iterations in flight for a loop whose body is provably read-only.
+   * 1 restores fully sequential execution. Defaults to DEFAULT_LOOP_CONCURRENCY.
+   */
+  loopConcurrency?: number;
 };
 
 function bindingDeps(b: Binding): string[] {
@@ -44,6 +56,43 @@ function isBarrier(step: Step): boolean {
   if (step.kind === "assert" || step.kind === "loop" || step.kind === "island") return true;
   if (step.kind === "tool") return isBarrierName(step.tool);
   return false;
+}
+
+/**
+ * Whether a loop's iterations may run concurrently, and how wide.
+ *
+ * Safety here is an allowlist, not a denylist. `isMutating` is a list of verbs
+ * (write, create, post, …) and misses plenty of things that change the world —
+ * charge, refund, merge, deploy, approve — so it is the wrong basis for a
+ * decision about whether an operation can be repeated out of order. A step
+ * qualifies only if it is positively known to be side-effect free:
+ *
+ *   - a tool the program explicitly marked `readOnly`, which is the compiler's
+ *     or the registry's assertion to make, not the runtime's to guess; or
+ *   - a tool whose name matches the read vocabulary (fetch/get/list/…); or
+ *   - an island, which is a model call with no tool access; or
+ *   - an assert, which only reads.
+ *
+ * Anything else — including any tool the runtime simply does not recognise —
+ * keeps the sequential path.
+ */
+function stepIsParallelSafe(step: Step): boolean {
+  if (step.kind === "assert" || step.kind === "island") return true;
+  if (step.kind === "tool") return step.readOnly === true || isReadName(step.tool);
+  return false; // a nested loop: leave the inner one to make its own decision
+}
+
+export function loopConcurrency(
+  loop: Step & { kind: "loop" },
+  body: readonly Step[],
+  itemCount: number,
+  opts: Pick<RunOpts, "loopConcurrency">,
+): number {
+  const limit = opts.loopConcurrency ?? DEFAULT_LOOP_CONCURRENCY;
+  if (limit <= 1 || itemCount < 2) return 1;
+  if (loop.parallel === false) return 1;
+  if (!body.length || !body.every(stepIsParallelSafe)) return 1;
+  return Math.min(limit, itemCount);
 }
 
 async function withTimeout<T>(work: (signal: AbortSignal) => Promise<T>, timeoutMs?: number): Promise<T> {
@@ -90,13 +139,18 @@ export async function runProgram(
   for (const s of program.steps) if (s.kind === "loop") for (const id of s.body) bodyOwned.add(id);
   let lastResult: unknown;
 
-  const execStep = async (step: Step, signal: AbortSignal, touchLast = true): Promise<unknown> => {
+  const execStep = async (
+    step: Step,
+    signal: AbortSignal,
+    scope: BindScope,
+    touchLast = true,
+  ): Promise<unknown> => {
     if (signal.aborted) throw new DeoptError("aborted");
     if (step.kind === "tool") {
       const args = evalArgs(step.args, scope);
       const value = await opts.registry.execute(step.tool, args, { signal });
       if (signal.aborted) throw new DeoptError("aborted");
-      results.set(step.id, value);
+      scope.results.set(step.id, value);
       if (touchLast) lastResult = value;
       return value;
     }
@@ -108,39 +162,84 @@ export async function runProgram(
       stats.cents += opts.llmCents ?? 1;
       const value = await opts.island({ system: step.system, input: islandInput, outputSchema: step.outputSchema, signal });
       if (signal.aborted) throw new DeoptError("aborted");
-      results.set(step.id, value);
+      scope.results.set(step.id, value);
       if (touchLast) lastResult = value;
       return value;
     }
     if (step.kind === "assert") {
-      const ok = evalAssert(step.expr, lastResult, input, results);
+      const ok = evalAssert(step.expr, lastResult, input, scope.results);
       if (!ok) {
         const reason = `assert failed: ${step.expr}`;
         if (step.onFail === "deopt") throw new DeoptError(reason);
         throw new Error(reason);
       }
-      results.set(step.id, true);
+      scope.results.set(step.id, true);
       return true;
     }
     const items = asArray(evalBinding(step.over, scope));
-    const collected: unknown[] = [];
-    try {
-      for (const item of items) {
-        results.set(step.item, item);
-        let last: unknown;
-        for (const id of step.body) {
-          const body = byId.get(id);
-          if (!body) throw new Error(`loop body missing ${id}`);
-          last = await execStep(body, signal);
-          if (body.kind === "tool") stats.toolCalls.push(body.tool);
-        }
-        collected.push(last);
+    const body = step.body.map((id) => {
+      const s = byId.get(id);
+      if (!s) throw new Error(`loop body missing ${id}`);
+      return s;
+    });
+    const width = loopConcurrency(step, body, items.length, opts);
+
+    // One iteration, against whichever scope it was given.
+    const runIteration = async (item: unknown, iterScope: BindScope, signal: AbortSignal) => {
+      iterScope.results.set(step.item, item);
+      const calls: string[] = [];
+      let last: unknown;
+      for (const s of body) {
+        last = await execStep(s, signal, iterScope, true);
+        if (s.kind === "tool") calls.push(s.tool);
       }
-    } finally {
-      results.delete(step.item);
+      return { last, calls };
+    };
+
+    const collected: unknown[] = new Array(items.length);
+    const callsPerItem: string[][] = new Array(items.length);
+
+    if (width <= 1) {
+      const iterScope: BindScope = scope;
+      try {
+        for (let i = 0; i < items.length; i++) {
+          const out = await runIteration(items[i], iterScope, signal);
+          collected[i] = out.last;
+          callsPerItem[i] = out.calls;
+        }
+      } finally {
+        iterScope.results.delete(step.item);
+      }
+    } else {
+      // Each iteration gets its own layer so concurrent writes to the body step
+      // ids cannot see one another. The last iteration's layer is merged back
+      // afterwards, which is the state a sequential run would have left.
+      const layers: Array<ChildScope | undefined> = new Array(items.length);
+      let next = 0;
+      const worker = async () => {
+        for (;;) {
+          const i = next++;
+          if (i >= items.length) return;
+          if (signal.aborted) throw new DeoptError("aborted");
+          const layer = new ChildScope(scope.results);
+          layers[i] = layer;
+          const out = await runIteration(items[i], { input, results: layer }, signal);
+          collected[i] = out.last;
+          callsPerItem[i] = out.calls;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(width, items.length) }, worker));
+      const tail = layers[items.length - 1];
+      if (tail) {
+        for (const [k, v] of tail.entries()) if (k !== step.item) scope.results.set(k, v);
+      }
     }
-    results.set(step.id, collected);
-    lastResult = collected;
+
+    // Ordered by item index, not by completion, so a receipt from a parallel
+    // run is byte-identical to one from a sequential run.
+    for (const calls of callsPerItem) if (calls) stats.toolCalls.push(...calls);
+    scope.results.set(step.id, collected);
+    if (touchLast) lastResult = collected;
     return collected;
   };
 
@@ -152,7 +251,7 @@ export async function runProgram(
       if (signal.aborted) throw new DeoptError("aborted");
       const step = pending[i]!;
       if (isBarrier(step)) {
-        await execStep(step, signal);
+        await execStep(step, signal, scope);
         if (step.kind === "tool") stats.toolCalls.push(step.tool);
         i++;
         continue;
@@ -170,19 +269,19 @@ export async function runProgram(
         i++;
       }
       if (!wave.length) {
-        await execStep(step, signal);
+        await execStep(step, signal, scope);
         if (step.kind === "tool") stats.toolCalls.push(step.tool);
         i++;
         continue;
       }
       if (wave.length === 1) {
-        await execStep(wave[0]!, signal);
+        await execStep(wave[0]!, signal, scope);
       } else {
         // Steps in a wave race, so none of them may claim `lastResult` as it
         // finishes — the winner would be nondeterministic. Assign it afterwards
         // from the last step in program order, which is what a sequential run
         // would have left behind for a following bare-path assert to read.
-        await Promise.all(wave.map((s) => execStep(s, signal, false)));
+        await Promise.all(wave.map((s) => execStep(s, signal, scope, false)));
         lastResult = results.get(wave[wave.length - 1]!.id);
       }
       for (const s of wave) if (s.kind === "tool") stats.toolCalls.push(s.tool);
