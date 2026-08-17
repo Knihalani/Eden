@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { codingRegistry } from "../src/coding";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 describe("coding registry", () => {
@@ -64,5 +64,45 @@ describe("coding registry", () => {
     await expect(reg.execute("Bash", { command: "cat $(pwd)/../package.json" })).rejects.toThrow(/outside/);
     await expect(reg.execute("Bash", { command: 'cd ".." && ls' })).rejects.toThrow(/outside/);
     await expect(reg.execute("Bash", { command: "cat $HOME/.zshrc" })).rejects.toThrow(/outside/);
+  });
+
+  test("Edit splices literally instead of expanding $ patterns", async () => {
+    // String.prototype.replace expands $&, $` and $' in the *replacement* even
+    // when the pattern is a plain string, so an edit introducing a `$` rewrote
+    // itself into something else on the way to disk. Silent source corruption.
+    const dir = join(import.meta.dir, "../../.tmp-coding");
+    mkdirSync(dir, { recursive: true });
+    const reg = codingRegistry(dir);
+
+    const dollarAmp = join(dir, "amp.ts");
+    writeFileSync(dollarAmp, "const price = PLACEHOLDER;\n");
+    await reg.execute("Edit", { path: dollarAmp, old_string: "PLACEHOLDER", new_string: "cost * $& + 1" });
+    expect(readFileSync(dollarAmp, "utf8")).toBe("const price = cost * $& + 1;\n");
+
+    const dollarTick = join(dir, "tick.txt");
+    writeFileSync(dollarTick, "HEAD\nMARK\nTAIL\n");
+    await reg.execute("Edit", { path: dollarTick, old_string: "MARK", new_string: "x$'y" });
+    expect(readFileSync(dollarTick, "utf8")).toBe("HEAD\nx$'y\nTAIL\n");
+  });
+
+  test("Edit refuses an ambiguous old_string rather than picking one", async () => {
+    const dir = join(import.meta.dir, "../../.tmp-coding");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "dupe.txt");
+    writeFileSync(path, "foo\nfoo\n");
+    const reg = codingRegistry(dir);
+    await expect(reg.execute("Edit", { path, old_string: "foo", new_string: "bar" })).rejects.toThrow(/not unique/);
+    expect(readFileSync(path, "utf8")).toBe("foo\nfoo\n");
+  });
+
+  test("Edit without old_string does not truncate the file", async () => {
+    // An omitted old_string used to mean "replace the whole file".
+    const dir = join(import.meta.dir, "../../.tmp-coding");
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, "keep.txt");
+    writeFileSync(path, "important existing content\n");
+    const reg = codingRegistry(dir);
+    await expect(reg.execute("Edit", { path, new_string: "tiny" })).rejects.toThrow(/old_string is required/);
+    expect(readFileSync(path, "utf8")).toBe("important existing content\n");
   });
 });

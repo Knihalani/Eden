@@ -164,8 +164,16 @@ async function hashLegacyKeys(db: EdenDb) {
   const rows = await db.all<{ prefix: string; hash: string | null }>(`SELECT prefix, hash FROM api_key`);
   for (const row of rows) {
     if (row.hash && /^[0-9a-f]{64}$/.test(row.hash)) continue;
-    const secret = row.hash || row.prefix;
-    await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, [hashApiKey(secret), row.prefix]);
+    if (!row.hash) {
+      // A row with no secret cannot be migrated into one. Falling back to the
+      // prefix here would hash the *non-secret* row label and store it as the
+      // credential, so presenting a key's public identifier would authenticate
+      // — exactly the hole the prefix-matching removal closed. Disable the row
+      // instead; a key nobody can use is the safe failure.
+      await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, ["disabled", row.prefix]);
+      continue;
+    }
+    await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, [hashApiKey(row.hash), row.prefix]);
   }
 }
 

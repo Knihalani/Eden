@@ -89,4 +89,24 @@ describe("workspaceForKey", () => {
     expect(row?.hash).toBe(hashApiKey("eden_legacy_secret"));
     expect(await workspaceForKey(reopened, "Bearer eden_legacy_secret")).toBe("ws_legacy");
   });
+
+  test("a row with no stored secret is disabled, not keyed on its prefix", async () => {
+    // The migration used to fall back to hashing the prefix when `hash` was
+    // NULL. The prefix is the key's *public* label, so that quietly turned a
+    // row identifier into a working credential — reopening the hole that
+    // removing prefix-matching had just closed.
+    process.env.EDEN_DEV = "0";
+    const file = join(dir, "nullhash.db");
+    const first = await openDb(file);
+    await first.run(`INSERT OR IGNORE INTO api_key (prefix, hash, workspace_id) VALUES (?, ?, ?)`, [
+      "eden_pubprefix",
+      null,
+      "ws_victim",
+    ]);
+    const reopened = await openDb(file);
+    const row = await reopened.get<{ hash: string }>(`SELECT hash FROM api_key WHERE prefix = ?`, ["eden_pubprefix"]);
+    expect(row?.hash).toBe("disabled");
+    expect(row?.hash).not.toBe(hashApiKey("eden_pubprefix"));
+    expect(await workspaceForKey(reopened, "Bearer eden_pubprefix")).toBeNull();
+  });
 });

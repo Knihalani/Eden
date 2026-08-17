@@ -114,8 +114,19 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         const old = String(args.old_string ?? args.oldString ?? "");
         const next = String(args.new_string ?? args.newString ?? args.contents ?? "");
         const cur = await readFile(path, { encoding: "utf8", signal: ctx?.signal });
-        if (old && !cur.includes(old)) throw new Error("old_string not found");
-        const updated = old ? cur.replace(old, next) : next;
+        // An omitted old_string used to mean "replace the whole file", so a
+        // malformed Edit silently truncated the target instead of failing.
+        if (!old) throw new Error("old_string is required; use Write to replace a whole file");
+        const at = cur.indexOf(old);
+        if (at === -1) throw new Error("old_string not found");
+        if (cur.indexOf(old, at + old.length) !== -1) {
+          throw new Error("old_string is not unique; include more context");
+        }
+        // Spliced, not String.replace(). replace() expands $&, $`, $' and $1 in
+        // the *replacement* even when the pattern is a plain string, so an edit
+        // introducing `cost * $&` or a shell snippet containing `$'` rewrote
+        // itself into something else on the way to disk.
+        const updated = cur.slice(0, at) + next + cur.slice(at + old.length);
         await writeFile(path, updated, { encoding: "utf8", signal: ctx?.signal });
         return { ok: true, path };
       }

@@ -78,17 +78,79 @@ function ipv4Blocked(value: number): boolean {
   );
 }
 
-function ipv6Blocked(host: string): boolean {
-  const h = host.toLowerCase();
-  if (h === "::" || h === "::1") return true;
-  // IPv4-mapped (::ffff:127.0.0.1) and IPv4-compatible forms defer to the v4 rules.
-  const mapped = h.match(/^::(?:ffff:)?((?:\d{1,3}\.){3}\d{1,3})$/);
-  if (mapped) {
-    const v4 = parseIpv4(mapped[1]!);
-    return v4 === null || ipv4Blocked(v4);
+/**
+ * Expands an IPv6 literal to its eight 16-bit groups, or null if malformed.
+ *
+ * Parsed rather than pattern-matched. Matching textual forms cannot work: the
+ * same address has many spellings, and `::ffff:7f00:1` is `::ffff:127.0.0.1`
+ * written in hex. A regex looking for a dotted-quad tail waves it straight
+ * through to loopback.
+ */
+export function parseIpv6(host: string): number[] | null {
+  let h = host.toLowerCase();
+  if (h.includes("%")) h = h.slice(0, h.indexOf("%")); // drop any zone id
+  if (!h || h.includes(":::")) return null;
+
+  // A trailing dotted quad contributes the last two groups.
+  let tail: number[] = [];
+  const lastColon = h.lastIndexOf(":");
+  const maybeV4 = h.slice(lastColon + 1);
+  if (maybeV4.includes(".")) {
+    const v4 = parseIpv4(maybeV4);
+    if (v4 === null) return null;
+    tail = [(v4 >>> 16) & 0xffff, v4 & 0xffff];
+    h = h.slice(0, lastColon + 1);
+    if (h.endsWith("::")) h = h.slice(0, -1);
+    else h = h.slice(0, -1);
   }
-  if (/^f[cd][0-9a-f]{2}:/.test(h)) return true; // fc00::/7 unique-local
-  if (/^fe[89ab][0-9a-f]:/.test(h)) return true; // fe80::/10 link-local
+
+  const parts = h.split("::");
+  if (parts.length > 2) return null;
+  const toGroups = (s: string): number[] | null => {
+    if (!s) return [];
+    const out: number[] = [];
+    for (const g of s.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+      out.push(parseInt(g, 16));
+    }
+    return out;
+  };
+  const head = toGroups(parts[0] ?? "");
+  const rest = parts.length === 2 ? toGroups(parts[1] ?? "") : null;
+  if (head === null || (parts.length === 2 && rest === null)) return null;
+
+  let groups: number[];
+  if (parts.length === 2) {
+    const known = head.length + rest!.length + tail.length;
+    if (known > 8) return null;
+    groups = [...head, ...new Array(8 - known).fill(0), ...rest!, ...tail];
+  } else {
+    groups = [...head, ...tail];
+  }
+  return groups.length === 8 ? groups : null;
+}
+
+function ipv6Blocked(host: string): boolean {
+  const g = parseIpv6(host);
+  // Unparseable: fail closed rather than let an odd spelling through.
+  if (!g) return true;
+  if (g.every((x) => x === 0)) return true; // ::
+  if (g.slice(0, 7).every((x) => x === 0) && g[7] === 1) return true; // ::1
+
+  const leadingZeros = g.slice(0, 5).every((x) => x === 0);
+  // ::ffff:a.b.c.d (IPv4-mapped) and ::a.b.c.d (IPv4-compatible) are the same
+  // destinations as their v4 forms, in any spelling, so defer to the v4 rules.
+  if (leadingZeros && (g[5] === 0xffff || g[5] === 0)) {
+    const v4 = (((g[6]! << 16) >>> 0) + g[7]!) >>> 0;
+    return ipv4Blocked(v4);
+  }
+  // 64:ff9b::/96 — NAT64, likewise a v4 destination wearing a v6 address.
+  if (g[0] === 0x64 && g[1] === 0xff9b && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+    return ipv4Blocked(((((g[6]! << 16) >>> 0) + g[7]!) >>> 0));
+  }
+  if ((g[0]! & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+  if ((g[0]! & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((g[0]! & 0xff00) === 0xff00) return true; // ff00::/8 multicast
   return false;
 }
 
@@ -147,6 +209,17 @@ export type SafeFetch = (url: string, init: RequestInit) => Promise<Response>;
  * `redirect: "manual"` is the point of this: the default "follow" would let a
  * permitted host hand us a Location pointing anywhere it liked.
  */
+/** Headers a redirect to a different origin must not carry. */
+const CREDENTIAL_HEADERS = ["authorization", "cookie", "proxy-authorization"];
+
+function stripCredentials(headers: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  new Headers(headers).forEach((value, key) => {
+    if (!CREDENTIAL_HEADERS.includes(key.toLowerCase())) out[key] = value;
+  });
+  return out;
+}
+
 export async function safeFetch(
   url: string,
   init: RequestInit,
@@ -155,10 +228,21 @@ export async function safeFetch(
   const maxRedirects = opts.maxRedirects ?? 5;
   const doFetch = opts.fetchImpl ?? fetch;
   let current = url;
+  let headers = init.headers;
+  let origin = new URL(url).origin;
+
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const check = await checkEgressUrl(current);
     if (!check.ok) throw new Error(check.reason);
-    const res = await doFetch(current, { ...init, redirect: "manual" });
+    if (check.url.origin !== origin) {
+      // WHATWG fetch drops credentials on a cross-origin redirect. Following
+      // hops by hand means doing that ourselves — playback attaches
+      // `Authorization: Bearer $GITHUB_TOKEN` for api.github.com, and replaying
+      // it verbatim would hand the token to whatever host a 302 named.
+      headers = stripCredentials(headers);
+      origin = check.url.origin;
+    }
+    const res = await doFetch(current, { ...init, headers, redirect: "manual" });
     if (res.status < 300 || res.status > 399) return res;
     const location = res.headers.get("location");
     if (!location) return res;
