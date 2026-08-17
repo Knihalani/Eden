@@ -1,5 +1,5 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
-import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashTrace, withVersion, minLlmReductionOf } from "@eden/ir";
+import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf } from "@eden/ir";
 import { argKeys, bindContext, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
 import { clusterTraces } from "./mine";
 import { normalizeTraces } from "./normalize";
@@ -163,12 +163,11 @@ function loopItemArgs(traces: StretchTrace[], tool: string, priorTool: string, p
  * The set of inputs the program was witnessed on.
  *
  * Order is normalised, and that is load-bearing rather than tidiness. The
- * envelope goes into contract, contract goes into hashProgram, and the hash is
- * the program's identity (`p_<version>`). Left in trace order, ingesting the
- * same evidence in a different sequence — a reordered drain batch, a different
- * DB scan order, two concurrent ingests — minted a *different* program id for
- * an identical program, so the store recorded a second tool for a stretch it
- * had already compiled instead of recognising the one it had.
+ * envelope goes into contract and contract is hashed into `version`, so left in
+ * trace order the same evidence ingested in a different sequence — a reordered
+ * drain batch, a different DB scan order, two concurrent ingests — produced a
+ * different version for a byte-identical program, and every consumer comparing
+ * versions saw a change that had not happened.
  *
  * inDistribution() only ever asks whether a value is a member, so sorting the
  * values changes nothing about behaviour.
@@ -443,7 +442,10 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
         },
         manifest: null,
       });
-    const program = { ...drafted, id: `p_${drafted.version.slice(0, 16)}` };
+    // id identifies the stretch, version identifies this compilation of it.
+    // Deriving the id from the version instead made every new witness look like
+    // a new tool.
+    const program = { ...drafted, id: `p_${hashStretch(drafted).slice(0, 16)}` };
     try {
       assertValid(program);
       programs.push(program);

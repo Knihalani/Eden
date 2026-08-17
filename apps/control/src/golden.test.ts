@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Store } from "./store";
+import { pushPrev, Store } from "./store";
 import { createHandler } from "./server";
 import { compileTraces } from "@eden/compile";
 import { shadowProgram } from "@eden/shadow";
@@ -645,5 +645,66 @@ describe("TicketShip golden", () => {
     };
     expect(inbox.live.some((t) => t.id === "t1" && t.state === "paused")).toBe(true);
     expect(inbox.live.find((t) => t.id === "t1")?.stats.n).toBe(1);
+  });
+
+  test("re-mining a stretch updates the tool in place instead of duplicating it", async () => {
+    // program.id identifies the stretch; program.version identifies the
+    // compilation. When id was derived from the version, a new witness gave the
+    // same program a brand new id, so store.tool(id) missed, a second row was
+    // inserted for one stretch, and pushPrev() — the mechanism behind
+    // pause/rollback — could never accumulate anything.
+    const chain = ["lookup", "fetchDetails", "parseFields", "writeRecord", "verifyWrite", "notify"];
+    const evidence = (n: number): StretchTrace[] =>
+      Array.from({ length: n }, (_, i) => ({
+        id: `ev-${i}`,
+        llmCalls: chain.length,
+        duration_ms: 60,
+        cost_cents: 6,
+        input: { id: `E-${i}` },
+        events: chain.map((name, j) => ({
+          name,
+          args: { id: `E-${i}` },
+          result: { ok: true, id: `E-${i}`, n: j },
+          ok: true,
+        })),
+      }));
+
+    const first = compileTraces(evidence(5)).programs[0]!;
+    const store = new Store(":memory:");
+    store.putTool({
+      id: first.id,
+      name: first.name,
+      version: first.version,
+      program: first,
+      state: "live",
+      prev: pushPrev(store.tool(first.id)),
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+
+    // Four more distinct witnesses: same stretch, wider envelope.
+    const second = compileTraces(evidence(9)).programs[0]!;
+    expect(second.id).toBe(first.id);
+    expect(second.version).not.toBe(first.version);
+    expect(second.contract.witnesses).toBeGreaterThan(first.contract.witnesses);
+
+    const existing = store.tool(second.id);
+    expect(existing).toBeDefined();
+    store.putTool({
+      id: second.id,
+      name: second.name,
+      version: second.version,
+      program: second,
+      state: "live",
+      prev: pushPrev(existing),
+      created_at: existing!.created_at,
+      updated_at: Date.now(),
+    });
+
+    const after = store.tool(second.id)!;
+    expect(after.version).toBe(second.version);
+    const stack = (Array.isArray(after.prev) ? after.prev : []) as Array<{ version: string }>;
+    expect(stack).toHaveLength(1);
+    expect(stack[0]!.version).toBe(first.version);
   });
 });

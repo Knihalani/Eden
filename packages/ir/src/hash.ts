@@ -20,6 +20,27 @@ export function hashProgram(program: Pick<StretchProgram, "name" | "description"
   return createHash("sha256").update(canonicalize(payload)).digest("hex");
 }
 
+/**
+ * The identity of the *stretch* a program was mined from, as opposed to the
+ * identity of one particular compilation of it.
+ *
+ * hashProgram() covers the whole program including contract.witnesses, so it
+ * changes every time another trace is observed. Keying stored tools on that
+ * meant a fourth witness produced a brand new tool id for an unchanged
+ * program: the store never found the existing row, so it inserted a duplicate
+ * and the `prev` version stack it maintains could never be reached. Two tools
+ * for one stretch is exactly the `github_pr_bundle` / `github_pr_bundle_2`
+ * pattern in the recorded benchmark runs.
+ *
+ * Identity is therefore the stretch — the tool sequence the agent kept
+ * repeating — and hashProgram() remains the version within it.
+ */
+export function hashStretch(program: Pick<StretchProgram, "name" | "sequence">): string {
+  return createHash("sha256")
+    .update(canonicalize({ name: program.name, sequence: program.sequence ?? [] }))
+    .digest("hex");
+}
+
 export function hashTrace(t: Pick<StretchTrace, "events" | "input">): string {
   const input = cloneJson(t.input ?? null);
   const events = cloneJson(

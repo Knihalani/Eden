@@ -108,23 +108,30 @@ describe("compile golden", () => {
   });
 
   test("the program version is content-addressed and reproducible", () => {
-    // Two independent compiles of identical traces must agree, or the hosted
-    // tool id churns and every cached reference misses.
     const a = compileTraces(synth(20, 12, 1)).programs[0]!;
     const b = compileTraces(synth(20, 12, 1)).programs[0]!;
     expect(a.version).toBe(b.version);
     expect(a.id).toBe(b.id);
-    expect(a.id).toBe(`p_${a.version.slice(0, 16)}`);
   });
 
-  test("more witnesses of the same stretch change the version", () => {
-    // contract.witnesses is part of the hash, so evidence accumulating does
-    // re-identify the program. Pinned because it is a real property to know
-    // about, not necessarily a desirable one.
+  test("more witnesses bump the version but keep the tool identity", () => {
+    // The distinction the store depends on. `id` says which stretch this is, so
+    // approving, pausing, rolling back and the `prev` version stack all keep
+    // working as evidence accumulates. `version` says which compilation it is,
+    // so a widened envelope is still visible as a change.
     const a = compileTraces(synth(20, 12, 1)).programs[0]!;
     const b = compileTraces(synth(21, 12, 1)).programs[0]!;
+    expect(a.id).toBe(b.id);
     expect(a.version).not.toBe(b.version);
     expect(a.steps.map(shape)).toEqual(b.steps.map(shape));
+    expect(a.contract.witnesses).not.toBe(b.contract.witnesses);
+  });
+
+  test("a different stretch gets a different identity", () => {
+    const a = compileTraces(synth(20, 12, 1)).programs[0]!;
+    const b = compileTraces(synth(20, 14, 5)).programs[0]!;
+    expect(a.sequence).not.toEqual(b.sequence!);
+    expect(a.id).not.toBe(b.id);
   });
 
   test("two distinct stretches compile separately, longest first", () => {
