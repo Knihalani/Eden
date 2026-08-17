@@ -25,29 +25,54 @@ function producersFor(
   return found;
 }
 
-function intersectProducers(rows: Producer[][]): Producer | null {
-  if (!rows.length || rows.some((r) => !r.length)) return null;
-  const key = (p: Producer) => (p.kind === "input" ? `input:${p.path}` : `from:${p.step}:${p.path}`);
-  let set = new Set(rows[0]!.map(key));
-  const map = new Map(rows[0]!.map((p) => [key(p), p]));
-  for (let i = 1; i < rows.length; i++) {
-    const next = new Set(rows[i]!.map(key));
-    set = new Set([...set].filter((k) => next.has(k)));
+function producerKey(p: Producer): string {
+  return p.kind === "input" ? `input:${p.path}` : `from:${p.step}:${p.path}`;
+}
+
+function sameValue(candidate: unknown, value: unknown, primitive: boolean): boolean {
+  return primitive ? candidate === value : eq(candidate, value);
+}
+
+/**
+ * Does this producer still yield `value` for one particular witness?
+ *
+ * The verification half of the intersection. Mirrors producersFor() exactly,
+ * including its treatment of weak values — a weak value gets no `from`
+ * producers and no root-path `input` producer — but answers for a single
+ * candidate with a map lookup instead of enumerating everything the witness
+ * could possibly have produced.
+ */
+function producerHolds(
+  p: Producer,
+  value: unknown,
+  inputFlat: Map<string, unknown>,
+  priors: Array<{ id: string; flat: Map<string, unknown> }>,
+): boolean {
+  const weak = isWeakValue(value);
+  const primitive = value == null || typeof value !== "object";
+  if (p.kind === "input") {
+    if (weak && !p.path) return false;
+    if (!inputFlat.has(p.path)) return false;
+    return sameValue(inputFlat.get(p.path), value, primitive);
   }
-  if (!set.size) return null;
-  const ranked = [...set].sort((a, b) => {
-    const pa = map.get(a)!;
-    const pb = map.get(b)!;
-    if (pa.kind === "input" && pb.kind !== "input") return -1;
-    if (pb.kind === "input" && pa.kind !== "input") return 1;
-    return a.length - b.length;
-  });
-  const chosen = ranked[0]!;
-  for (const row of rows) {
-    const hit = row.find((p) => key(p) === chosen);
-    if (hit) return hit;
+  if (weak) return false;
+  // The same tool can appear more than once among the priors, so any occurrence
+  // producing the value counts — matching producersFor(), whose duplicate
+  // entries collapse onto one key.
+  for (const step of priors) {
+    if (step.id !== p.step) continue;
+    if (step.flat.has(p.path) && sameValue(step.flat.get(p.path), value, primitive)) return true;
   }
-  return map.get(chosen) ?? null;
+  return false;
+}
+
+function rankProducers(candidates: Producer[]): Producer | null {
+  if (!candidates.length) return null;
+  return [...candidates].sort((a, b) => {
+    if (a.kind === "input" && b.kind !== "input") return -1;
+    if (b.kind === "input" && a.kind !== "input") return 1;
+    return producerKey(a).length - producerKey(b).length;
+  })[0]!;
 }
 
 function agreement(values: unknown[]): number {
@@ -105,31 +130,83 @@ export type BindResult =
   | { ok: true; binding: Binding }
   | { ok: false; reason: string; trap92?: boolean };
 
+/**
+ * Events bucketed by tool name, memoised per trace.
+ *
+ * Rebuilt for every argument slot before, then for every step; a trace's events
+ * do not change during a compile, so it is built once. Bucketing at all
+ * replaces the old filter-per-prior-id scan, which was O(priors x events).
+ */
+const eventsByName = new WeakMap<object, Map<string, TraceEvent[]>>();
+
+function indexEvents(t: StretchTrace): Map<string, TraceEvent[]> {
+  const hit = eventsByName.get(t);
+  if (hit) return hit;
+  const byName = new Map<string, TraceEvent[]>();
+  for (const e of t.events) {
+    const list = byName.get(e.name);
+    if (list) list.push(e);
+    else byName.set(e.name, [e]);
+  }
+  eventsByName.set(t, byName);
+  return byName;
+}
+
 function priorFlats(traces: StretchTrace[], priorIds: string[]) {
   return traces.map((t) => {
+    const byName = indexEvents(t);
     const seen = new Map<string, number>();
     return priorIds.map((id) => {
       const nth = seen.get(id) ?? 0;
       seen.set(id, nth + 1);
-      const hits = t.events.filter((e) => e.name === id);
-      const ev = hits[nth];
+      const ev = byName.get(id)?.[nth];
       return { id, result: ev?.result, flat: flatten(ev?.result) };
     });
   });
 }
 
+export type BindContext = {
+  traces: StretchTrace[];
+  inputFlats: Array<Map<string, unknown>>;
+  priors: ReturnType<typeof priorFlats>;
+};
+
+/**
+ * The per-step work every slot in that step shares.
+ *
+ * Flattening the inputs and the prior results depends only on the step's
+ * position, not on which argument is being bound, but bindSlot() used to redo
+ * both for every argument. On a cluster with hundreds of witnesses that
+ * dominated compile time.
+ */
+export function bindContext(traces: StretchTrace[], priorIds: string[]): BindContext {
+  return {
+    traces,
+    inputFlats: traces.map((t) => flatten(t.input ?? {})),
+    priors: priorFlats(traces, priorIds),
+  };
+}
+
 export function bindSlot(
   values: unknown[],
-  traces: StretchTrace[],
-  priorIds: string[],
+  ctx: BindContext,
   opts: { mutating: boolean; allowExact: boolean },
 ): BindResult {
   if (!values.length) return { ok: false, reason: "empty slot" };
-  const inputs = traces.map((t) => t.input ?? {});
-  const inputFlats = inputs.map((i) => flatten(i));
-  const priors = priorFlats(traces, priorIds);
-  const rows = values.map((v, i) => producersFor(v, inputFlats[i]!, priors[i]!));
-  const unique = intersectProducers(rows);
+  const { inputFlats, priors } = ctx;
+  // Enumerate every producer for the first witness, then only *verify* the
+  // survivors against the rest. Enumerating for all of them and intersecting
+  // afterwards costs O(witnesses x flattened entries); verification is a map
+  // lookup per surviving candidate, and the candidate set collapses within the
+  // first couple of witnesses. This was the compiler's hottest loop.
+  let candidates = producersFor(values[0], inputFlats[0]!, priors[0]!);
+  for (let i = 1; i < values.length && candidates.length; i++) {
+    const flat = inputFlats[i]!;
+    const prior = priors[i]!;
+    const value = values[i];
+    candidates = candidates.filter((p) => producerHolds(p, value, flat, prior));
+  }
+  const unique = rankProducers(candidates);
   if (unique) {
     if (unique.kind === "input") return { ok: true, binding: { kind: "input", path: unique.path } };
     return { ok: true, binding: { kind: "from", step: unique.step, path: unique.path } };

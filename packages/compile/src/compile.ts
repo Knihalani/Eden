@@ -1,6 +1,6 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
 import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashTrace, withVersion, minLlmReductionOf } from "@eden/ir";
-import { argKeys, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
+import { argKeys, bindContext, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
 import { clusterTraces } from "./mine";
 import { normalizeTraces } from "./normalize";
 
@@ -159,6 +159,20 @@ function loopItemArgs(traces: StretchTrace[], tool: string, priorTool: string, p
   return args;
 }
 
+/**
+ * The set of inputs the program was witnessed on.
+ *
+ * Order is normalised, and that is load-bearing rather than tidiness. The
+ * envelope goes into contract, contract goes into hashProgram, and the hash is
+ * the program's identity (`p_<version>`). Left in trace order, ingesting the
+ * same evidence in a different sequence — a reordered drain batch, a different
+ * DB scan order, two concurrent ingests — minted a *different* program id for
+ * an identical program, so the store recorded a second tool for a stretch it
+ * had already compiled instead of recognising the one it had.
+ *
+ * inDistribution() only ever asks whether a value is a member, so sorting the
+ * values changes nothing about behaviour.
+ */
 function envelopeFrom(traces: StretchTrace[], inputPaths: string[]): { inputs: Record<string, unknown[]> } | undefined {
   const paths = [...new Set(inputPaths.filter((p) => p !== ""))];
   if (!paths.length) {
@@ -166,15 +180,24 @@ function envelopeFrom(traces: StretchTrace[], inputPaths: string[]): { inputs: R
     for (const t of traces) for (const k of Object.keys(t.input ?? {})) keys.add(k);
     paths.push(...keys);
   }
+  paths.sort();
   const inputs: Record<string, unknown[]> = {};
   for (const path of paths) {
-    const uniq: unknown[] = [];
+    // Dedup through canonical form rather than a linear eq() scan: the envelope
+    // holds one entry per distinct witnessed input, so the scan was quadratic in
+    // the number of witnesses. canonicalize() agrees with eq() — it sorts keys
+    // and, since the traversal fix, is insensitive to reference sharing — so
+    // this keeps the same set, in the same first-seen order.
+    const seen = new Map<string, unknown>();
     for (const t of traces) {
       const v = getPath(t.input ?? {}, path);
       if (v === undefined) continue;
-      if (!uniq.some((u) => eq(u, v))) uniq.push(v);
+      const k = canonicalize(v);
+      if (!seen.has(k)) seen.set(k, v);
     }
-    if (uniq.length) inputs[path] = uniq;
+    if (seen.size) {
+      inputs[path] = [...seen.keys()].sort().map((k) => seen.get(k));
+    }
   }
   return Object.keys(inputs).length ? { inputs } : undefined;
 }
@@ -315,14 +338,18 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
         if (!(isCheckName(tool) && evs.length / cluster.traces.length >= CHECK_MIN_SUPPORT)) continue;
       }
 
+      // Flattening the inputs and every prior step's result depends only on
+      // where we are in the sequence, so it is done once here rather than once
+      // per argument slot below.
+      const ctx = bindContext(alignedTraces, sequence.slice(0, i));
+
       if (isIslandName(tool) || (!isMutating(tool) && !isCheckName(tool) && divergeSameArgs(evs))) {
         const argNames = argKeys(evs);
         let islandInput: Binding = { kind: "input", path: "" };
         if (argNames.length) {
           const bound = bindSlot(
             evs.map((e) => e.args[argNames[0]!]),
-            alignedTraces,
-            sequence.slice(0, i),
+            ctx,
             { mutating: false, allowExact },
           );
           if (bound.ok) islandInput = remapBinding(bound.binding, nameToId);
@@ -347,8 +374,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
       for (const key of argKeys(evs)) {
         const bound = bindSlot(
           evs.map((e) => e.args[key]),
-          alignedTraces,
-          sequence.slice(0, i),
+          ctx,
           { mutating: isMutating(tool), allowExact },
         );
         if (!bound.ok) {

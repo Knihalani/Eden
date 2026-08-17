@@ -6,8 +6,25 @@ export type Cluster = {
   traces: StretchTrace[];
 };
 
+/**
+ * The tool names of a trace, in order.
+ *
+ * Memoised per trace object. clusterTraces() tests every candidate n-gram
+ * against every trace, and medianIndex() re-walks every trace per name, so the
+ * uncached version rebuilt two arrays on each of those O(grams x traces) probes
+ * — the single hottest thing in the compiler. Traces are immutable for the
+ * duration of a compile, so caching on identity is safe, and a WeakMap means
+ * the entries disappear with the traces.
+ */
+const nameCache = new WeakMap<object, string[]>();
+
 function names(t: StretchTrace): string[] {
-  return t.events.filter((e) => e.ok && !e.skipped).map((e) => e.name);
+  const hit = nameCache.get(t);
+  if (hit) return hit;
+  const out: string[] = [];
+  for (const e of t.events) if (e.ok && !e.skipped) out.push(e.name);
+  nameCache.set(t, out);
+  return out;
 }
 
 export function oneInsert(a: string[], b: string[]): boolean {
