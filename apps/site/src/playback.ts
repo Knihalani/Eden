@@ -14,15 +14,10 @@ import {
   type Receipt,
 } from "@eden/core";
 import { handleForge } from "./forge";
+import { safeFetch } from "./ssrf";
 
 const CACHE_TTL_MS = 30 * 60_000;
 
-function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "metadata.google.internal" || h.endsWith(".internal")) return true;
-  if (h === "169.254.169.254" || h.startsWith("169.254.")) return true;
-  return false;
-}
 
 function requestHeaders(url: string): Record<string, string> {
   try {
@@ -46,7 +41,10 @@ async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promis
   let last: Response | undefined;
   const headers = { ...requestHeaders(url), ...(init.headers as Record<string, string> | undefined) };
   for (let i = 0; i < tries; i++) {
-    last = await fetch(url, { ...init, headers });
+    // safeFetch re-validates every redirect hop. Plain fetch() follows them
+    // silently, which would let an allowed host redirect us into the private
+    // network the egress check exists to protect.
+    last = await safeFetch(url, { ...init, headers });
     if (last.status !== 429 && last.status < 500) return last;
     await new Promise((r) => setTimeout(r, 50 * (i + 1)));
   }
@@ -109,13 +107,9 @@ async function playOne(
         let stepOk = false;
         try {
           const parsedUrl = new URL(url);
+          // The forge is an in-process fixture: it never leaves the process, so
+          // it is exempt from the egress rules rather than checked against them.
           const local = handleForge(parsedUrl);
-          if (!local) {
-            if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-              throw new Error("blocked url scheme");
-            }
-            if (isBlockedHost(parsedUrl.hostname)) throw new Error("blocked host");
-          }
           const res = local || (await fetchWithRetry(url, { method: step.method || "GET" }));
           const text = await res.text();
           stepOk = res.ok;
