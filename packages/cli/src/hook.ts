@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { edenHome, ensureHome, appendJsonl, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl } from "./home";
+import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl } from "./home";
 import { redact, isStretchEnd, inDistribution } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
 
@@ -30,7 +30,17 @@ export async function runHook(): Promise<void> {
   } catch {
     body = {};
   }
-  const out = respondToHook(body);
+  // The last line of defence for "a broken Eden never blocks the agent". Any
+  // throw in here — a stale lock, an unreadable home directory, a corrupt run
+  // log — used to exit non-zero with empty stdout. `{}` is the answer that
+  // lets the tool call proceed.
+  let out: Record<string, unknown> = { ok: true };
+  try {
+    out = respondToHook(body);
+  } catch (err) {
+    process.stderr.write(`eden hook: ${(err as Error)?.message ?? String(err)}\n`);
+    out = {};
+  }
   process.stdout.write(JSON.stringify(out));
 }
 
@@ -52,7 +62,7 @@ function readJsonl(path: string): Array<Record<string, unknown>> {
 function flushSession(session: string, events: Array<Record<string, unknown>>): void {
   const cfg = readConfig();
   if (!cfg || events.length < 2) return;
-  const path = join(edenHome(), "runs", `${session}.jsonl`);
+  const path = eventsPath(session);
   const flushedIds = events.map((e) => String(e.id ?? ""));
   const first = events[0]!;
   const t0 = Number(first.ts ?? Date.now());
@@ -98,7 +108,7 @@ export function respondToHook(body: HookIn): Record<string, unknown> {
       ok: (body as { is_error?: boolean }).is_error !== true,
       ts: Date.now(),
     }) as Record<string, unknown>;
-    const path = join(edenHome(), "runs", `${session}.jsonl`);
+    const path = eventsPath(session);
     withFileLock(`${path}.lock`, () => appendJsonl(path, event));
     const events = readJsonl(path);
     if (events.length >= 2 && isStretchEnd(name)) {
@@ -109,20 +119,30 @@ export function respondToHook(body: HookIn): Record<string, unknown> {
     withFileLock(`${outboxPath()}.lock`, () =>
       appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
     );
-    const path = join(edenHome(), "runs", `${session}.jsonl`);
+    const path = eventsPath(session);
     const events = readJsonl(path);
     if (events.length >= 2) flushSession(session, events);
   }
-  const live = readJson<
-    Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>
-  >(join(edenHome(), "live-tools.json"), []);
+  // readJson only guards against a parse error, not against the file holding
+  // something other than an array. drain writes `json.tools ?? json`, so a site
+  // response without a `tools` key — a proxy error page, a version skew — put
+  // an *object* here and `live.some(...)` then threw on every single PreToolUse.
+  const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
+  const live = (
+    Array.isArray(liveRaw) ? liveRaw : []
+  ) as Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>;
   if (body.hook_event_name === "PreToolUse" && name) {
     if (live.some((t) => t.name === name)) return { ok: true };
     const hits = live
       .filter((t) => (t.sequence ?? [])[0] === name)
       .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
     const hit = hits[0];
-    if (hit) {
+    // Never deny in favour of a tool we cannot name. drain writes
+    // `name: t.program?.name ?? t.name`, either of which may be undefined, and
+    // the result was a hard deny on every Bash call telling the agent to "use
+    // the Eden compiled tool null" — Eden bricking the user's agent, which is
+    // the one thing it must never do.
+    if (hit && typeof hit.name === "string" && hit.name.length > 0) {
       if (hit.envelope?.inputs) {
         const probe = {
           contract: { envelope: hit.envelope, allowExact: false, witnesses: 1, minLlmReduction: 2 },
