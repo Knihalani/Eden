@@ -233,7 +233,18 @@ function liveOf(state: WrapState): StretchProgram[] {
   return state.programs.filter((p) => p.manifest);
 }
 
-export function wrapTools<T extends ToolsIn>(tools: T, state: WrapState): T & Record<string, ToolDef> {
+/**
+ * Returns `{ [K in keyof T]: ToolDef }`, not `T` — every entry has been through
+ * asToolDef(), so a bare function in becomes a ToolDef out. Saying `T` claimed
+ * the inputs came back untouched, which handed callers the *input* signature:
+ * an inline `{ ping: { execute: () => 1 } }` made `tools.ping.execute({})` a
+ * type error even though the proxy passes args through. Intersecting with the
+ * index signature keeps dynamic lookups of compiled tools working.
+ */
+export function wrapTools<T extends ToolsIn>(
+  tools: T,
+  state: WrapState,
+): { [K in keyof T]: ToolDef } & Record<string, ToolDef> {
   const run = emptyRun();
   const skipRest = new Map<string, { rest: Set<string>; input: Record<string, unknown>; programId: string }>();
   const registry = registryFrom(
@@ -338,7 +349,7 @@ export function wrapTools<T extends ToolsIn>(tools: T, state: WrapState): T & Re
       if (value === undefined) return undefined;
       return { configurable: true, enumerable: true, writable: true, value };
     },
-  }) as T & Record<string, ToolDef>;
+  }) as { [K in keyof T]: ToolDef } & Record<string, ToolDef>;
 }
 
 export function recordTools(state: WrapState): StretchTrace[] {
