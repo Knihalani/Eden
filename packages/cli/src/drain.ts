@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
-import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl } from "./home";
+import { applyFlushTruncate } from "./hook";
+import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, readJson, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl } from "./home";
 
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
@@ -29,7 +30,7 @@ export function stretchEndForRun(outboxText: string, runId: string): boolean {
   return lastOutboxKind(outboxText, runId) === "stretch_end";
 }
 
-function rewriteOutbox(text: string, dropRunIds: Set<string>): string {
+export function rewriteOutbox(text: string, dropRunIds: Set<string>): string {
   return text
     .split("\n")
     .filter((line) => {
@@ -41,7 +42,12 @@ function rewriteOutbox(text: string, dropRunIds: Set<string>): string {
         return true;
       }
     })
-    .join("\n");
+    // Trailing newline, or the next appendJsonl() concatenates onto the last
+    // record and destroys two rows at once: the one it lands on and its own.
+    // Because stretch_end markers live in this file, a swallowed marker means
+    // the run never clusters — a silent, permanent loss of the core signal.
+    .map((line) => `${line}\n`)
+    .join("");
 }
 
 export async function drain(): Promise<void> {
@@ -76,7 +82,13 @@ export async function drain(): Promise<void> {
         return [];
       }
     }).map((e, i) => ({
-        event_id: e.event_id,
+        // The hook writes `id`; only `event_id` was read here, so the field
+        // arrived undefined on every event. Ingest keys `tool_event` on it for
+        // `INSERT OR IGNORE` dedup, and SQLite allows unlimited NULLs in a TEXT
+        // primary key — so every retry duplicated every event, and on Postgres
+        // (where a primary key implies NOT NULL) ingest would reject the batch
+        // outright and the run log would never drain at all.
+        event_id: e.event_id ?? e.id,
         seq: typeof e.seq === "number" ? e.seq : i + 1,
         name: e.name,
         args: e.args || {},
@@ -91,6 +103,21 @@ export async function drain(): Promise<void> {
       body: JSON.stringify({ agent_id: "claude_code", run_id: runId, events, stretch_end }),
     });
     if (!res.ok) continue;
+    // Remove exactly the events that were sent, under the lock, rather than
+    // unlinking the file. The read, the POST and the delete all happened
+    // outside the lock, so any PostToolUse hook that fired during the request
+    // window had its event written into a file that was then destroyed.
+    const sentIds = events.map((e) => String(e.event_id ?? "")).filter(Boolean);
+    if (sentIds.length) {
+      try {
+        withFileLock(`${path}.lock`, () => applyFlushTruncate(path, sentIds));
+      } catch {
+        // Contended or unwritable: leave the file alone. Re-sending is
+        // harmless now that event_id makes ingest idempotent; losing events
+        // is not.
+      }
+      continue;
+    }
     if (existsSync(path)) {
       writeFileSync(path.replace(/\.jsonl$/, ".sent.jsonl"), JSON.stringify({ sent: Date.now(), n: events.length }));
       unlinkSync(path);
@@ -127,11 +154,17 @@ export async function drain(): Promise<void> {
         tools?: unknown;
         knock?: string | { message?: string; tool_id?: string } | null;
       };
-      writeFileSync(liveToolsPath(), JSON.stringify(json.tools ?? json, null, 2));
+      // `json.tools ?? json` wrote an *object* whenever the response had no
+      // `tools` key — a proxy error page, a version skew — and the hook then
+      // threw on every PreToolUse trying to iterate it. The reader guards this
+      // too now; writing something unusable in the first place is the bug.
+      writeFileSync(liveToolsPath(), JSON.stringify(Array.isArray(json.tools) ? json.tools : [], null, 2));
       const knockPath = `${edenHome()}/knock.json`;
       const knock = json.knock;
       if (knock) {
-        const prev = existsSync(knockPath) ? JSON.parse(readFileSync(knockPath, "utf8")) : {};
+        // A corrupt knock.json used to throw out of drain() before the outbox
+        // rewrite below, so the outbox never drained either.
+        const prev = readJson<{ shown?: number }>(knockPath, {});
         writeFileSync(
           knockPath,
           JSON.stringify({
