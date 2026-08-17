@@ -1,5 +1,5 @@
 import type { StretchTrace } from "@eden/ir";
-import { isCheckName } from "@eden/ir";
+import { CHECK_MIN_SUPPORT, isCheckName } from "@eden/ir";
 
 export type Cluster = {
   sequence: string[];
@@ -51,8 +51,12 @@ function medianIndex(traces: StretchTrace[], name: string): number {
 
 function keep(name: string, count: number, n: number, minFrac: number): boolean {
   if (count / n >= minFrac) return true;
-  // Reliability pin: a check the agent usually ran after a mutation still compiles in.
-  if (/verify|validate|assert|check|confirm/i.test(name) && count / n >= Math.min(minFrac, 0.8) - 1e-9) return true;
+  // Reliability pin: a check the agent usually ran after a mutation still
+  // compiles in. This was `Math.min(minFrac, 0.8)`, which at the default
+  // minFrac of 0.8 is just minFrac — the pin never lowered anything, and a
+  // verify step the agent ran in 7 of 10 traces was mined away, leaving a
+  // compiled tool that writes and never checks.
+  if (isCheckName(name) && count / n >= Math.min(minFrac, CHECK_MIN_SUPPORT) - 1e-9) return true;
   return false;
 }
 
