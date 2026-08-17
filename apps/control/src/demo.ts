@@ -8,9 +8,24 @@ import type { StretchTrace } from "@eden/ir";
 
 const PORT = Number(process.env.PORT || 8788);
 const token = process.env.EDEN_API_KEY || "eden_dev";
-const db =
-  process.env.EDEN_DB ||
-  join(process.env.EDEN_HOME || join(homedir(), ".eden"), "demo.sqlite");
+const explicitDb = process.env.EDEN_DB;
+const db = explicitDb || join(process.env.EDEN_HOME || join(homedir(), ".eden"), "demo.sqlite");
+
+// The demo tells a story from an empty database: ten runs come in, one stretch
+// compiles, it ships, then a sibling is refused. Replaying that narrative onto
+// leftover state does not reproduce it — the traces are already ingested and
+// the program is already shipped, so nothing lands in the inbox as a fresh PASS
+// candidate and the script reports "Compile mined nothing". That made `bun run
+// demo` work exactly once per machine and look broken every time after.
+//
+// An explicit EDEN_DB is left alone; it is the caller saying they want their
+// own store.
+if (!explicitDb) {
+  const { rmSync, mkdirSync } = await import("node:fs");
+  const { dirname } = await import("node:path");
+  mkdirSync(dirname(db), { recursive: true });
+  for (const suffix of ["", "-wal", "-shm"]) rmSync(`${db}${suffix}`, { force: true });
+}
 
 const world = createTicketShip({ llmMs: 0 });
 const store = new Store(db);
@@ -107,7 +122,7 @@ Eden demo is up
 
 What just happened
   10 TicketShip agent runs: lookupTicket → fetchDetails → parseFields → validate → draftReply → writeRecord → verifyWrite → notify.
-  Compile mined ${pass ? pass.program?.name : "nothing"}${pass?.manifest?.llmReduction ? ` · ${pass.manifest.llmReduction.toFixed(1)}× LLM (ships from 2×; latency ${pass.manifest.latencyReduction?.toFixed(1)}× is reported)` : ""}.
+  Compile mined ${pass ? pass.program?.name : "nothing"}${pass?.manifest?.llmReduction ? ` · ${pass.manifest.llmReduction.toFixed(1)}× LLM (ships from 2×)` : ""}.
   Sequence: ${(pass?.program?.sequence ?? []).join(" → ")}
   ${shipped?.name ? `Approved and shipped ${shipped.name}.` : "No PASS candidate to ship."}
   Then a sibling stretch with an unbound writeRecord.id was refused${refused ? ` · ${refused.refusal?.reason}` : ""}.

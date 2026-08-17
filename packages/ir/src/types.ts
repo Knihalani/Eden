@@ -25,6 +25,13 @@ export type ToolStep = {
   kind: "tool";
   tool: string;
   args: Record<string, Binding>;
+  /**
+   * Asserts this call has no side effects, so the runtime may repeat it out of
+   * order inside a parallel loop. Only ever set from something that knows —
+   * a registry capability, or an MCP `readOnlyHint` — never inferred from a
+   * name at this level. Absent means "unknown", which is treated as unsafe.
+   */
+  readOnly?: boolean;
 };
 
 export type IslandStep = {
@@ -41,6 +48,12 @@ export type LoopStep = {
   over: Binding;
   item: string;
   body: string[];
+  /**
+   * Set false to force sequential iteration even when the body looks read-only
+   * — for a paginated API that must be walked in order, say. Leaving it unset
+   * lets the runtime decide, and it only parallelises a body it can prove safe.
+   */
+  parallel?: boolean;
 };
 
 export type AssertStep = {
