@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StretchTrace } from "@eden/ir";
-import { compileTraces, isCheckName, isIslandName, isMutating, tryTemplateForTest, oneInsert, oneSubstitute } from "../src/index";
+import { compileTraces, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute } from "../src/index";
 import { createTicketShip, runNaive, ticketShipProgram, underdeterminedSiblingTraces, WITNESS_IDS } from "../../runtime/src/ticketship";
 
 async function ticketTraces(n = 10): Promise<StretchTrace[]> {
@@ -433,6 +433,58 @@ describe("compile", () => {
     expect(opts).toBeDefined();
     expect(opts!.kind).toBe("literal");
     expect(opts!.value).toEqual({ mode: "fast", retries: 2 });
+  });
+
+  test("pins a verify step the agent skipped in some witnesses", () => {
+    // The agent ran verifyWrite in 7 of 10 traces. Pinning exactly this case is
+    // the point of the compiler: the naive agent is unreliable about its own
+    // check, and the compiled tool should not inherit that. The pin used to be
+    // `Math.min(minFrac, 0.8)` against a default minFrac of 0.8 — never lower
+    // than the ordinary bar — so the check was mined out and the program wrote
+    // without verifying.
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 10; i++) {
+      const events = [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        ...(i >= 3
+          ? [{ name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true }]
+          : []),
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ];
+      traces.push({
+        id: `v${i}`,
+        llmCalls: 4,
+        duration_ms: 40,
+        cost_cents: 4,
+        input: { id: `T-${i}` },
+        events,
+      });
+    }
+    expect(majoritySequence(traces)).toContain("verifyWrite");
+  });
+
+  test("does not pin a check that is mostly absent", () => {
+    // The pin lowers the bar; it does not remove it. A check seen in 3 of 10
+    // traces is not part of the stretch and must not be invented.
+    const traces: StretchTrace[] = [];
+    for (let i = 0; i < 10; i++) {
+      const events = [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        ...(i < 3 ? [{ name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true }] : []),
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ];
+      traces.push({
+        id: `w${i}`,
+        llmCalls: 4,
+        duration_ms: 40,
+        cost_cents: 4,
+        input: { id: `T-${i}` },
+        events,
+      });
+    }
+    expect(majoritySequence(traces)).not.toContain("verifyWrite");
   });
 
   test("oneInsert does not merge away a check tool", () => {

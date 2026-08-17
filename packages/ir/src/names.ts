@@ -22,6 +22,19 @@ export const CHECK_NAME = /verify|validate|assert|check|confirm|ensure/i;
 export const STRETCH_END = /^(notify|complete|finalize|done)$/i;
 export const READ_NAME = /^(lookup|fetch|get|read|list|search|find|describe|show|head)/i;
 
+/**
+ * How often a *check* must appear across witnesses to be compiled in, as a
+ * fraction. Deliberately below the bar for ordinary tools: the agent skipping
+ * its own verify step some of the time is the unreliability Eden exists to fix,
+ * so a check that shows up most of the time gets pinned into the program rather
+ * than mined away.
+ *
+ * Shared so the two gates cannot drift: mine.ts decides whether the check makes
+ * it into the mined sequence at all, and compile.ts decides whether to emit a
+ * step for it. A stricter mine-side gate silently defeats the compile-side one.
+ */
+export const CHECK_MIN_SUPPORT = 0.7;
+
 export function isCheckName(name: string): boolean {
   return CHECK_NAME.test(name);
 }

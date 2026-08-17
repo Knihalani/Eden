@@ -1,5 +1,5 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
-import { assertValid, canonicalize, eq, getPath, hashTrace, withVersion, minLlmReductionOf } from "@eden/ir";
+import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashTrace, withVersion, minLlmReductionOf } from "@eden/ir";
 import { argKeys, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
 import { clusterTraces } from "./mine";
 import { normalizeTraces } from "./normalize";
@@ -312,7 +312,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
       const evs = pair.events;
       const alignedTraces = pair.traces;
       if (evs.length / cluster.traces.length < 0.8 - 1e-9) {
-        if (!(isCheckName(tool) && evs.length / cluster.traces.length >= 0.7)) continue;
+        if (!(isCheckName(tool) && evs.length / cluster.traces.length >= CHECK_MIN_SUPPORT)) continue;
       }
 
       if (isIslandName(tool) || (!isMutating(tool) && !isCheckName(tool) && divergeSameArgs(evs))) {
