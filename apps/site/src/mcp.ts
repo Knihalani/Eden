@@ -3,6 +3,7 @@ import {
   bundleJson,
   compactReceipt,
   compactRowFromFacts,
+  mcpInstructions,
   prRowsFromFacts,
   receiptJson,
   selectMcpTools,
@@ -33,6 +34,25 @@ function listPublishedOnly(): boolean {
   return process.env.EDEN_LIST_MCP !== "1";
 }
 
+type ToolRow = {
+  id: string;
+  name: string;
+  when_to_use: string;
+  steps: string;
+  uses_count: number | null;
+};
+
+/** The tools this workspace would serve, after the same selection tools/list applies. */
+async function liveTools(db: EdenDb, workspaceId: string): Promise<ToolRow[]> {
+  const rows = await db.all<ToolRow>(
+    listPublishedOnly()
+      ? `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on' AND published = 1`
+      : `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on'`,
+    [workspaceId],
+  );
+  return selectMcpTools(rows);
+}
+
 export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, origin: string): Promise<unknown> {
   const { method, id, params } = body;
   if (method === "initialize") {
@@ -44,6 +64,9 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
         protocolVersion: "2025-03-26",
         capabilities: { tools: { listChanged: true } },
         serverInfo: { name: "eden", version: "0.1.0" },
+        // The protocol's own route into the system prompt. Without a CLI hook
+        // or an LLM proxy this is the only steering a hosted Eden has.
+        instructions: mcpInstructions(await liveTools(db, workspaceId)),
       },
     };
   }
@@ -52,20 +75,7 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   }
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
   if (method === "tools/list") {
-    const published = listPublishedOnly();
-    const tools = await db.all<{
-      id: string;
-      name: string;
-      when_to_use: string;
-      steps: string;
-      uses_count: number | null;
-    }>(
-      published
-        ? `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on' AND published = 1`
-        : `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on'`,
-      [workspaceId],
-    );
-    const listed = selectMcpTools(tools);
+    const listed = await liveTools(db, workspaceId);
     void warmWorkspaceBundle(db, workspaceId, origin);
     return {
       jsonrpc: "2.0",

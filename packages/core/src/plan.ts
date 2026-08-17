@@ -226,3 +226,57 @@ export function shortenWhenToUse(s: string, n = MCP_DESC_CHARS): string {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
 }
+
+/** Keeps the hint bounded: it is prepended to a system prompt, not read by a human. */
+export const MCP_INSTRUCTIONS_CHARS = 1200;
+
+/**
+ * The server-level hint returned from `initialize`.
+ *
+ * MCP's InitializeResult carries an optional `instructions` string that clients
+ * MAY add to the system prompt — the protocol's own channel for telling a model
+ * how to use a server. Eden returned nothing there, which mattered more than it
+ * sounds: with no CLI hook and no LLM proxy in front of it, a hosted Eden had
+ * no mechanism at all for getting its compiled tool called except a 140-char
+ * tool description competing against the model's habit of writing the loop by
+ * hand.
+ *
+ * Two things are said deliberately:
+ *
+ *  - what each tool *replaces*, since a compiled tool is only worth calling if
+ *    the model connects it to the loop it was about to write;
+ *  - what to do with partial coverage. In the recorded product benchmark the
+ *    compiled tool returned 3 of the 5 fields the task needed, and the agent
+ *    responded by re-running the entire per-item loop, so the tool cost a call
+ *    and saved nothing. "Use it for what it covers and fetch only the rest" is
+ *    aimed squarely at that.
+ */
+export function mcpInstructions(
+  tools: Array<{ name: string; when_to_use?: string | null }>,
+  limit = MCP_INSTRUCTIONS_CHARS,
+): string {
+  if (!tools.length) {
+    return [
+      "Eden compiles tool sequences this workspace repeats into single calls.",
+      "None are live yet, so there is nothing here to prefer over your usual approach.",
+    ].join(" ");
+  }
+  const lines = [
+    "Eden hosts tools compiled from call sequences this workspace has already run by hand.",
+    "Each one replaces a fixed loop of API or CLI calls with a single call returning the same facts.",
+    "",
+    "Live now:",
+  ];
+  for (const t of tools) {
+    const hint = shortenWhenToUse(t.when_to_use || t.name, 100);
+    lines.push(`- ${t.name}: ${hint}`);
+  }
+  lines.push(
+    "",
+    "When a task needs the same fields for several ids, call the Eden tool once with all the ids",
+    "rather than looping per id. If it does not return every field you need, still use it for the",
+    "fields it does return and fetch only the remainder — do not re-run the whole loop.",
+  );
+  const text = lines.join("\n");
+  return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
+}
