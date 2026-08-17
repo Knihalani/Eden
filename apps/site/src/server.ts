@@ -71,6 +71,34 @@ async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { 
   }
 }
 
+/**
+ * Rejects a state-changing request that a *page the user was visiting* could
+ * have made on their behalf.
+ *
+ * workspaceForKey() grants ws_local to a request with no Authorization header
+ * at all on any non-managed install, which is the default. There is no cookie,
+ * so there is no SameSite boundary, and a cross-origin form POST needs no
+ * preflight — so any page the user visited could POST /v1/tools/:id/approve and
+ * turn a compiled tool On, or POST /v1/ingest and poison the workspace. That
+ * defeats the invariant the workshop page itself asserts: "Approve only here —
+ * a key never turns a tool On."
+ *
+ * The workshop's own forms are same-origin, and CLI/API callers send no Origin
+ * at all, so requiring "absent, or equal to ours" costs neither of them
+ * anything while removing the drive-by entirely.
+ */
+function crossOriginWrite(req: Request, selfOrigin: string): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return true;
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).origin !== new URL(selfOrigin).origin;
+  } catch {
+    return true;
+  }
+}
+
 export async function handleFetch(req: Request): Promise<Response> {
   if (process.env.VERCEL && process.env.EDEN_DEV !== "1") {
     delete process.env.EDEN_AUTO_APPROVE;
@@ -83,6 +111,12 @@ export async function handleFetch(req: Request): Promise<Response> {
   if (forge) return forge;
 
   if (url.pathname === "/health") return Response.json({ ok: true });
+
+  // One gate for every write, rather than per-route: a route added later is
+  // covered by default instead of by remembering.
+  if (req.method !== "GET" && req.method !== "HEAD" && crossOriginWrite(req, url.origin)) {
+    return new Response("cross-origin write refused", { status: 403 });
+  }
 
   const wsId = await workspaceForKey(d, req.headers.get("authorization"));
 
@@ -211,10 +245,16 @@ export async function handleFetch(req: Request): Promise<Response> {
       [wsId],
     );
     if (k) {
-      const tool = await d.get<{ fingerprint: string }>(`SELECT fingerprint FROM tool WHERE id = ?`, [k.tool_id]);
+      // Scoped like its siblings. The id is itself fetched through a scoped query,
+      // so there is no live cross-tenant path today — but an unscoped DELETE on the
+      // primary tenant table should not depend on that staying true.
+      const tool = await d.get<{ fingerprint: string }>(
+        `SELECT fingerprint FROM tool WHERE id = ? AND workspace_id = ?`,
+        [k.tool_id, wsId],
+      );
       await d.run(`UPDATE knock SET resolution = 'reject' WHERE id = ?`, [k.id]);
       if (tool) await d.run(`INSERT OR IGNORE INTO ignore_fp (workspace_id, fingerprint) VALUES (?, ?)`, [wsId, tool.fingerprint]);
-      await d.run(`DELETE FROM tool WHERE id = ?`, [k.tool_id]);
+      await d.run(`DELETE FROM tool WHERE id = ? AND workspace_id = ?`, [k.tool_id, wsId]);
     }
     return Response.json({ ok: true });
   }

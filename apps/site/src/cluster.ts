@@ -128,7 +128,7 @@ export async function ingest(
           whenToUse(base),
           prior.id,
         ]);
-        await maybeAutoOn(db, prior.id, compiled);
+        await maybeAutoOn(db, workspaceId, prior.id, compiled);
       } else {
         const id = crypto.randomUUID();
         const name = await uniqueToolName(db, workspaceId, base);
@@ -146,7 +146,7 @@ export async function ingest(
             requiredK(storedSteps),
           ],
         );
-        await maybeAutoOn(db, id, compiled);
+        await maybeAutoOn(db, workspaceId, id, compiled);
         drafts++;
       }
     }
@@ -170,7 +170,7 @@ export async function ingest(
           whenToUse(heuristicName(storedSteps)),
           tool.id,
         ]);
-        await maybeAutoOn(db, tool.id, compiled);
+        await maybeAutoOn(db, workspaceId, tool.id, compiled);
         await db.run(`INSERT INTO knock (id, workspace_id, tool_id, attempt, resolution) VALUES (?, ?, ?, 1, NULL)`, [
           crypto.randomUUID(),
           workspaceId,
@@ -232,12 +232,13 @@ function whenToUse(name: string): string {
 
 async function maybeAutoOn(
   db: EdenDb,
+  workspaceId: string,
   toolId: string,
   compiled: Array<{ url?: string }>,
 ): Promise<void> {
   if (process.env.EDEN_AUTO_APPROVE !== "1") return;
   if (!compiled.some((s) => Boolean(s.url))) return;
-  await db.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ?`, [toolId]);
+  await db.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ? AND workspace_id = ?`, [toolId, workspaceId]);
 }
 
 function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
