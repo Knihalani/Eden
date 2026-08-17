@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const SQLITE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS workspace (id TEXT PRIMARY KEY, name TEXT)`,
   `CREATE TABLE IF NOT EXISTS api_key (prefix TEXT PRIMARY KEY, hash TEXT, workspace_id TEXT)`,
@@ -45,7 +47,10 @@ export class EdenDb {
   }
 
   async get<T>(sql: string, params: unknown[] = []): Promise<T | undefined> {
-    if (this.sqlite) return this.sqlite.query(sql).get(...params) as T | undefined;
+    // bun:sqlite yields `null` for "no row" while Neon yields `undefined`.
+    // Normalising here keeps the declared return type honest, so a caller
+    // testing `=== undefined` cannot silently miss the SQLite case.
+    if (this.sqlite) return (this.sqlite.query(sql).get(...params) as T | null) ?? undefined;
     const rows = (await this.neonSql!(toPg(sql), params)) as T[];
     return rows?.[0];
   }
@@ -84,6 +89,7 @@ export async function openDb(path?: string): Promise<EdenDb> {
     for (const stmt of SQLITE_STATEMENTS) await db.exec(stmt);
     await migrate(db, true);
     await seed(db);
+    await hashLegacyKeys(db);
     return db;
   }
   if (process.env.VERCEL && !path) {
@@ -100,6 +106,7 @@ export async function openDb(path?: string): Promise<EdenDb> {
   const db = new EdenDb(sqlite, null);
   await migrate(db, false);
   await seed(db);
+  await hashLegacyKeys(db);
   return db;
 }
 
@@ -112,26 +119,66 @@ async function migrate(db: EdenDb, neon: boolean) {
   await db.exec(`ALTER TABLE tool ADD COLUMN published INTEGER DEFAULT 0`).catch(() => undefined);
 }
 
+/** The `hash` column stores this, never the token itself. */
+export function hashApiKey(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * The local development credential. Seeded only into an on-disk SQLite file —
+ * never into a managed database. It used to be seeded unconditionally, which
+ * put a publicly-known credential into every Neon-backed deployment: seed()
+ * runs on the Neon branch of openDb(), and workspaceForKey() consults the table
+ * before any environment check, so `Authorization: Bearer eden_dev` authorised
+ * ingest, tool approval and /v1/play against production.
+ */
+const DEV_TOKEN = "eden_dev";
+
+/**
+ * Whether this process is serving a real deployment rather than a laptop.
+ *
+ * Deliberately keyed off the environment, not off which driver openDb() picked:
+ * seeding and authentication must agree. If workspaceForKey() considers the
+ * deployment managed — and so withholds the permissive dev fallback — then
+ * seed() must not plant a dev credential behind its back.
+ */
+function isManagedDeployment(): boolean {
+  return Boolean(process.env.DATABASE_URL) || Boolean(process.env.VERCEL);
+}
+
 async function seed(db: EdenDb) {
   await db.run(`INSERT OR IGNORE INTO workspace (id, name) VALUES (?, ?)`, ["ws_local", "local"]);
+  if (isManagedDeployment()) return;
   await db.run(`INSERT OR IGNORE INTO api_key (prefix, hash, workspace_id) VALUES (?, ?, ?)`, [
-    "eden_dev",
-    "eden_dev",
+    DEV_TOKEN,
+    hashApiKey(DEV_TOKEN),
     "ws_local",
   ]);
 }
 
+/**
+ * Rewrites any api_key row still holding a plaintext secret in `hash`.
+ * Rows written before hashing existed would otherwise stop authenticating.
+ */
+async function hashLegacyKeys(db: EdenDb) {
+  const rows = await db.all<{ prefix: string; hash: string | null }>(`SELECT prefix, hash FROM api_key`);
+  for (const row of rows) {
+    if (row.hash && /^[0-9a-f]{64}$/.test(row.hash)) continue;
+    const secret = row.hash || row.prefix;
+    await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, [hashApiKey(secret), row.prefix]);
+  }
+}
+
 export async function workspaceForKey(db: EdenDb, auth: string | null): Promise<string | null> {
   const token = auth?.replace(/^Bearer\s+/i, "") || "";
-  if (!token) {
-    if (process.env.VERCEL && process.env.EDEN_DEV !== "1") return null;
-    return process.env.EDEN_DEV === "0" ? null : "ws_local";
-  }
-  const row = await db.get<{ workspace_id: string }>(`SELECT workspace_id FROM api_key WHERE prefix = ? OR hash = ?`, [
-    token,
-    token,
+  const devFallback = isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
+  if (!token) return devFallback ? "ws_local" : null;
+  // Authenticate on the secret alone. `prefix` is a non-secret row identifier —
+  // matching on it let anyone who had merely seen a key's label present that
+  // label as the key.
+  const row = await db.get<{ workspace_id: string }>(`SELECT workspace_id FROM api_key WHERE hash = ?`, [
+    hashApiKey(token),
   ]);
   if (row?.workspace_id) return row.workspace_id;
-  if (process.env.VERCEL && process.env.EDEN_DEV !== "1") return null;
-  return token.startsWith("eden_") ? "ws_local" : null;
+  return devFallback && token.startsWith("eden_") ? "ws_local" : null;
 }
