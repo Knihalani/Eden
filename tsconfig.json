@@ -5,6 +5,7 @@
     "packages/compile/src",
     "packages/runtime/src",
     "packages/shadow/src",
+    "packages/measure/src",
     "packages/wrap/src",
     "packages/core/src",
     "packages/cli/src",
