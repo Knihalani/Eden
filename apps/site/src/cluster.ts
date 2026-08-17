@@ -185,10 +185,25 @@ async function uniqueToolName(db: EdenDb, workspaceId: string, base: string): Pr
   return name;
 }
 
+/**
+ * The tool description the model actually sees.
+ *
+ * Kept terse — it is truncated to MCP_DESC_CHARS — but every branch now says
+ * what the tool *replaces*. The three special-cased families used to return a
+ * bare schema hint with no preference language at all, which left the flagship
+ * `github_pr_bundle` competing against the model's habit of writing the loop
+ * with nothing but a field list. The generic branch had always said it.
+ */
 function whenToUse(name: string): string {
-  if (name.startsWith("github_pr_bundle")) return "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]";
-  if (name.startsWith("github_pr_files")) return "issues: csv of PRs. table: number | files";
-  if (name.startsWith("github_issue_bundle")) return "issues: csv. table: number | title | comments";
+  if (name.startsWith("github_pr_bundle")) {
+    return "issues csv → JSON [{number,title,reviews:int,status:CI,files:int}]. One call for all PRs; use instead of a per-PR gh api loop.";
+  }
+  if (name.startsWith("github_pr_files")) {
+    return "issues csv → number | files. One call for all PRs; use instead of a per-PR gh api loop.";
+  }
+  if (name.startsWith("github_issue_bundle")) {
+    return "issues csv → number | title | comments. One call for all issues; use instead of a per-issue gh api loop.";
+  }
   const label = name.replaceAll("_", " ");
   return `ids csv → JSON rows from ${label}. Prefer this over repeating the same curl/CLI loop.`;
 }
