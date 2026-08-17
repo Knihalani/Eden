@@ -80,6 +80,10 @@
       "name": "@eden/ir",
       "version": "0.1.0",
     },
+    "packages/measure": {
+      "name": "@eden/measure",
+      "version": "0.1.0",
+    },
     "packages/runtime": {
       "name": "@eden/runtime",
       "version": "0.1.0",
@@ -118,6 +122,8 @@
     "@eden/core": ["@eden/core@workspace:packages/core"],
 
     "@eden/ir": ["@eden/ir@workspace:packages/ir"],
+
+    "@eden/measure": ["@eden/measure@workspace:packages/measure"],
 
     "@eden/runtime": ["@eden/runtime@workspace:packages/runtime"],
 
