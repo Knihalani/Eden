@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { IslandStep, StepKind, ToolEvent } from "./types";
-import { familyId, parseNamedCli, extractNamedCliCalls, type ParsedCli } from "./named-cli";
+import { familyId, parseNamedCli, extractNamedCliCalls, isMutatingGh, isMutatingCurl, type ParsedCli } from "./named-cli";
 import { githubRestFromCli, parameterizeUrl, toolNameFromUrls } from "./urls";
 
 const SHARED = new Set(["Read", "Bash", "Write", "Edit", "Grep", "Glob", "get_customer"]);
@@ -101,12 +101,7 @@ function toStep(event: ToolEvent): IslandStep {
   }
   const name = parsed ? familyId(parsed) : event.name;
   const kind = classifyKind(event, parsed);
-  const commute =
-    kind === "cloud_http" &&
-    (parsed?.family === "curl" ||
-      (parsed?.family === "gh" && !/create|merge|close|comment|edit|request/i.test(parsed.subcommand)) ||
-      event.name === "WebFetch" ||
-      /get|list|view|status/i.test(name));
+  const commute = commutes(kind, parsed, name, cmd, event.name);
   const urlMatch = cmd.match(/https?:\/\/[^\s'"]+/);
   let source_url = urlMatch?.[0];
   if (!source_url && parsed) source_url = githubRestFromCli(parsed, cmd);
@@ -136,13 +131,45 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
   return out;
 }
 
+/**
+ * May this step be reordered against its neighbours?
+ *
+ * `commute` is not a hint. buildDag drops the sequential edge for a commuting
+ * step so it runs concurrently with the rest of its layer, and dedupeCloudSteps
+ * *discards* a commuting step whose parameterised URL matches an earlier one.
+ * So a write misclassified here is not merely reordered, it is silently
+ * dropped: two identical POSTs to the same endpoint compiled down to one.
+ *
+ * Three ways that used to happen:
+ *  - every curl was commute, because parseNamedCli hardcodes subcommand "get"
+ *    for curl and never inspects -X or -d.
+ *  - every `gh api` was commute, because its subcommand is the literal string
+ *    "api", which matches none of the mutating words that were being tested.
+ *  - the verb test was unanchored, so `widget_create`, `set_budget` and
+ *    `gadget_purge` all commuted for containing "get".
+ */
+function commutes(
+  kind: IslandStep["kind"],
+  parsed: ParsedCli | null | undefined,
+  name: string,
+  cmd: string,
+  eventName?: string,
+): boolean {
+  if (kind !== "cloud_http") return false;
+  if (parsed?.family === "curl") return !isMutatingCurl(cmd);
+  if (parsed?.family === "gh") return !isMutatingGh(cmd) && !MUTATING_GH_SUB.test(parsed.subcommand);
+  if (eventName === "WebFetch") return true;
+  return READ_VERB.test(name);
+}
+
+const MUTATING_GH_SUB = /create|merge|close|comment|edit|request|delete|update|add|remove|lock|pin|transfer/i;
+/** Anchored to a word start, so "widget_create" is not a read. */
+const READ_VERB = /(^|[._\-/])(get|list|view|status|read|show|describe|search|fetch)/i;
+
 function toStepFromParsed(parsed: ParsedCli, cmd: string): IslandStep {
   const name = familyId(parsed);
   const kind = parsed.rewrite_host ? "cloud_http" : "runner";
-  const commute =
-    kind === "cloud_http" &&
-    (parsed.family === "curl" ||
-      (parsed.family === "gh" && !/create|merge|close|comment|edit|request/i.test(parsed.subcommand)));
+  const commute = commutes(kind, parsed, name, cmd);
   let source_url = githubRestFromCli(parsed, cmd) || githubRestFromCli(parsed, `gh api ${parsed.positionals[0] || ""}`);
   if (!source_url) {
     const urlMatch = cmd.match(/https?:\/\/[^\s'"]+/);

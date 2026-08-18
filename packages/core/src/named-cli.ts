@@ -149,3 +149,46 @@ export function extractNamedCliCalls(command: string): ParsedCli[] {
   const whole = parseNamedCli(command);
   return whole ? [whole] : [];
 }
+/** HTTP verbs that change something on the far side. */
+const WRITE_VERB = "POST|PATCH|PUT|DELETE";
+
+/**
+ * `--method VERB`, `--method=VERB`, `-X VERB`, `-XVERB`.
+ *
+ * The whitespace-only form missed `gh api --method=DELETE …`, a perfectly
+ * ordinary spelling, and this predicate is the sole mutation gate for
+ * planFromBash, rewriteBash, addJqToCommand and parallelizeSequentialGh — so a
+ * false negative here gets a DELETE backgrounded, parallelised, or fitted with
+ * a --jq filter.
+ */
+const METHOD_FLAG = new RegExp(String.raw`(?:^|\s)-{1,2}(?:method|X)[=\s]*(${WRITE_VERB})\b`, "i");
+
+/** Flags that carry a request body, which implies a write even with no verb. */
+const BODY_FLAG = /(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:[=\s]|$)/;
+
+export function isMutatingGh(command: string): boolean {
+  if (METHOD_FLAG.test(command)) return true;
+  if (/\bgh\s+api\s+graphql\b/.test(command)) return /\bmutation\s*\{/.test(command);
+  return /\bgh\s+api\b/.test(command) && BODY_FLAG.test(command);
+}
+
+/** curl body-carrying flags. Any of these means a write, whatever the verb. */
+const CURL_BODY_FLAG =
+  /(?:^|\s)(?:-d|--data|--data-raw|--data-binary|--data-urlencode|--data-ascii|-F|--form|-T|--upload-file)(?:[=\s]|$)/;
+
+/**
+ * Does this curl invocation change anything?
+ *
+ * parseNamedCli hardcodes `subcommand: "get"` for every curl and never looks
+ * at the verb, so `curl -X POST https://api.stripe.com/v1/charges` was being
+ * treated as a read — reorderable, and worse, deduplicated against an
+ * identical sibling so that two charges compiled down to one.
+ */
+export function isMutatingCurl(command: string): boolean {
+  const m = command.match(new RegExp(String.raw`(?:^|\s)-{1,2}(?:request|X)[=\s]*([A-Za-z]+)`, "i"));
+  if (m) return new RegExp(`^(?:${WRITE_VERB})$`, "i").test(m[1]!);
+  // No explicit verb: curl sends GET unless a body is attached, which makes it
+  // a POST.
+  return CURL_BODY_FLAG.test(command);
+}
+

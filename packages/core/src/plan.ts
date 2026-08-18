@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isCompilableToolName } from "./islands";
+import { isMutatingGh } from "./named-cli";
 
 export function parseIssueList(raw: string | undefined | null): string[] {
   if (!raw) return [];
@@ -30,12 +31,6 @@ export function extractGhRepo(command: string): string | undefined {
     return `${process.env.EDEN_GH_OWNER}/${process.env.EDEN_GH_REPO}`;
   }
   return undefined;
-}
-
-export function isMutatingGh(command: string): boolean {
-  if (/--method\s+(POST|PATCH|PUT|DELETE)|-X\s+(POST|PATCH|PUT|DELETE)/i.test(command)) return true;
-  if (/\bgh\s+api\s+graphql\b/.test(command)) return /\bmutation\s*\{/.test(command);
-  return /\bgh\s+api\b[\s\S]*\s-f\s/i.test(command);
 }
 
 export type TypedPrRow = {
@@ -280,3 +275,7 @@ export function mcpInstructions(
   const text = lines.join("\n");
   return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
 }
+
+// Mutation detection lives with the CLI parsing it inspects, so that islands.ts
+// can reach it without importing this module (which imports islands.ts).
+export { isMutatingGh, isMutatingCurl } from "./named-cli";
