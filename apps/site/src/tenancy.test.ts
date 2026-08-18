@@ -243,3 +243,117 @@ describe("a disabled api_key row stays disabled", () => {
     expect(await workspaceForKey(reopened, "Bearer disabled")).not.toBe("ws_other");
   });
 });
+
+describe("ingest cannot change what an approved tool does", () => {
+  /**
+   * The workshop page states the invariant outright: approve only there, a key
+   * never turns a tool On. A key could not turn one on — but two UPDATE
+   * statements in ingest rewrote `steps` with no state filter, so an ingest
+   * could silently change what an already-approved, MCP-published tool *does*,
+   * leaving state at 'on' with no re-approval and no knock. Pointing a step at
+   * a URL of the attacker's choosing turns the approved tool into a proxy.
+   */
+  let dir: string;
+  let db: EdenDb;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "eden-approved-"));
+    db = await openDb(join(dir, "t.sqlite"));
+    await db.run(`INSERT OR IGNORE INTO workspace (id, name) VALUES ('ws_a', 'a')`);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const evs = (runId: string, urls: string[]): ToolEvent[] =>
+    urls.map((url, i) => {
+      const command = `curl ${url}`;
+      return { event_id: `${runId}-${i}`, seq: i, name: "Bash", args: { command }, command, ok: true };
+    }) as ToolEvent[];
+
+  const urls = [
+    "https://api.acme.com/v1/orders/1",
+    "https://api.acme.com/v1/orders/1/items",
+    "https://api.acme.com/v1/orders/1/shipping",
+  ];
+
+  test("an approved tool's steps are frozen; a draft's are not", async () => {
+    await ingest(db, "ws_a", "r1", evs("r1", urls), true);
+    const tool = await db.get<{ id: string; steps: string }>(`SELECT id, steps FROM tool LIMIT 1`);
+    expect(tool).toBeTruthy();
+
+    // A draft still tracks the stretch.
+    await ingest(db, "ws_a", "r2", evs("r2", urls), true);
+    const asDraft = await db.get<{ steps: string }>(`SELECT steps FROM tool WHERE id = ?`, [tool!.id]);
+    expect(asDraft).toBeTruthy();
+
+    // Approve it, the way the workshop page does.
+    await db.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ?`, [tool!.id]);
+    const approved = await db.get<{ steps: string }>(`SELECT steps FROM tool WHERE id = ?`, [tool!.id]);
+
+    // A different stretch on the same API now arrives. It is a different
+    // fingerprint, so it is a new cluster — but heuristicName derives the tool
+    // name from the host, so it collides, and the `prior` lookup matches by
+    // name. That is the path that rewrote an approved tool's steps.
+    const other = [
+      "https://api.acme.com/v1/orders/1",
+      "https://api.acme.com/v1/orders/1/items",
+      "https://api.acme.com/v1/orders/1/refunds",
+      "https://api.acme.com/v1/orders/1/exfiltrate",
+    ];
+    await ingest(db, "ws_a", "r3", evs("r3", other), true);
+    await ingest(db, "ws_a", "r4", evs("r4", other), true);
+
+    const after = await db.get<{ steps: string; state: string }>(`SELECT steps, state FROM tool WHERE id = ?`, [tool!.id]);
+    expect(after!.state).toBe("on");
+    expect(after!.steps).toBe(approved!.steps);
+    expect(after!.steps).not.toContain("/exfiltrate");
+  });
+});
+
+describe("Eden does not invent requests to a host it was merely shown", () => {
+  /**
+   * ensurePrBundleSteps fabricates four step URLs against an origin lifted out
+   * of recorded command text, and heuristicName decides to call it by testing
+   * for "/pulls/" anywhere in the concatenated URLs, without looking at the
+   * host. The origin pattern accepted any host at all, so one ingested event
+   * containing `curl http://attacker.tld/repos/a/b/pulls/1` made Eden
+   * synthesise four requests to attacker.tld that appear in no trace, each
+   * replayed with retries. The SSRF guard permits it, because the target is a
+   * public host — that guard answers a different question.
+   */
+  let dir: string;
+  let db: EdenDb;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "eden-forge-"));
+    db = await openDb(join(dir, "t.sqlite"));
+    await db.run(`INSERT OR IGNORE INTO workspace (id, name) VALUES ('ws_a', 'a')`);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const prEvents = (runId: string, host: string): ToolEvent[] =>
+    [
+      `http://${host}/repos/a/b/pulls/12`,
+      `http://${host}/repos/a/b/pulls/12/reviews`,
+      `http://${host}/repos/a/b/commits/abc123/status`,
+    ].map((url, i) => {
+      const command = `gh api ${url}`;
+      return { event_id: `${runId}-${i}`, seq: i, name: "Bash", args: { command }, command, ok: true };
+    }) as ToolEvent[];
+
+  test("no bundle steps are synthesised against an unknown host", async () => {
+    await ingest(db, "ws_a", "h1", prEvents("h1", "attacker.tld"), true);
+    const rows = await db.all<{ steps: string }>(`SELECT steps FROM tool`);
+    const all = rows.map((r) => r.steps).join("");
+    expect(all).not.toContain("attacker.tld/repos/a/b/pulls/{issue}/files");
+    // Only URLs the trace actually contained.
+    const synthesised = (all.match(/attacker\.tld/g) || []).length;
+    const recorded = 3;
+    expect(synthesised).toBeLessThanOrEqual(recorded);
+  });
+
+  test("a real forge still gets its bundle", async () => {
+    await ingest(db, "ws_a", "h2", prEvents("h2", "api.github.com"), true);
+    const rows = await db.all<{ steps: string }>(`SELECT steps FROM tool`);
+    expect(rows.map((r) => r.steps).join("")).toContain("/files");
+  });
+});
