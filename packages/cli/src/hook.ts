@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl } from "./home";
 import { redact, isStretchEnd, inDistribution } from "@eden/ir";
@@ -88,11 +88,39 @@ function flushSession(session: string, events: Array<Record<string, unknown>>): 
     .catch(() => undefined);
 }
 
+/**
+ * Drop the events that were successfully uploaded, keeping everything else.
+ *
+ * Two failure modes this has to avoid, both of which lose events:
+ *  - An empty id set used to fall through to `rest = []`, i.e. "nothing was
+ *    confirmed sent, so delete the entire log". Callers happen to guard
+ *    against it today, but the safe reading of "no ids to drop" is to drop
+ *    nothing.
+ *  - Rewriting in place truncates first and writes after. A crash, a full
+ *    disk, or a power loss in between leaves the log empty or ending in half a
+ *    line, which `readJsonl` then cannot parse. Writing a sibling temp file
+ *    and renaming makes the replacement atomic: readers see either the old
+ *    file or the new one, never a partial one.
+ */
 export function applyFlushTruncate(path: string, flushedIds: string[]): void {
   const drop = new Set(flushedIds.filter(Boolean));
+  if (!drop.size) return;
   const current = readJsonl(path);
-  const rest = drop.size ? current.filter((e) => !drop.has(String(e.id ?? ""))) : [];
-  writeFileSync(path, rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "");
+  const rest = current.filter((e) => !drop.has(String(e.id ?? "")));
+  if (rest.length === current.length) return;
+  const body = rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "";
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, body);
+    renameSync(tmp, path);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* nothing to clean up */
+    }
+    throw err;
+  }
 }
 
 export function respondToHook(body: HookIn): Record<string, unknown> {
