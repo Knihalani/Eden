@@ -54,6 +54,83 @@ function isEarlyDeopt(err: unknown): boolean {
   return isReplaySafe(err);
 }
 
+type Armed = {
+  rest: Map<string, number>;
+  input: Record<string, unknown>;
+  programId: string;
+  /** Monotonic (performance.now), so an NTP step cannot make this immortal. */
+  armedAt: number;
+  armedAtCall: number;
+  callBudget: number;
+};
+
+/**
+ * How long an arming may suppress raw calls.
+ *
+ * The agent finishes the rest of a stretch within a few turns of starting it,
+ * so these are generous. What they rule out is an arming surviving long enough
+ * to swallow an unrelated later mutation, which is the failure that actually
+ * loses a user's work.
+ *
+ * The call budget is counted *on top of* the tail the arming is there to
+ * absorb. Every wrapped execute increments the counter, including the
+ * suppressed ones, so a flat budget was being spent by the very calls it was
+ * meant to cover: any program whose tail ran longer than the budget disarmed
+ * partway through and executed the remainder for real. A 40-write program
+ * performed 40 writes compiled and then 8 more raw.
+ */
+const ARM_TTL_MS = 60_000;
+const ARM_SLACK_CALLS = 32;
+const ARM_MAX_ENTRIES = 64;
+
+function armExpired(a: Armed, now: number, calls: number): boolean {
+  return now - a.armedAt > ARM_TTL_MS || calls - a.armedAtCall > a.callBudget;
+}
+
+/** Total number of raw calls this arming expects to absorb. */
+function totalRest(rest: Map<string, number>): number {
+  let n = 0;
+  for (const c of rest.values()) n += c;
+  return n;
+}
+
+/**
+ * Keep the arming map bounded without throwing away armings that are still
+ * doing their job.
+ *
+ * Eviction was unconditionally oldest-first, so a burst of distinct inputs
+ * pushed out entries that had not expired and whose tails had not run yet —
+ * and every one of those tails then executed for real against a tool the
+ * compiled program had already called. Expired entries are swept first and
+ * are almost always enough; oldest-first is the fallback that keeps the hard
+ * bound.
+ */
+function evictArmings(skipRest: Map<string, Armed>, calls: number): void {
+  if (skipRest.size <= ARM_MAX_ENTRIES) return;
+  const now = performance.now();
+  for (const [id, a] of skipRest) {
+    if (skipRest.size <= ARM_MAX_ENTRIES) return;
+    if (armExpired(a, now, calls)) skipRest.delete(id);
+  }
+  // Still over after sweeping: give up the armings with the least budget left,
+  // which are the ones closest to retiring anyway. Insertion order is a poor
+  // proxy for that once programs have tails of different lengths — the oldest
+  // entry may be the one with the longest tail still to absorb.
+  while (skipRest.size > ARM_MAX_ENTRIES) {
+    let victim: string | undefined;
+    let least = Infinity;
+    for (const [id, a] of skipRest) {
+      const left = a.callBudget - (calls - a.armedAtCall);
+      if (left < least) {
+        least = left;
+        victim = id;
+      }
+    }
+    if (victim === undefined) return;
+    skipRest.delete(victim);
+  }
+}
+
 /** Tail of the program's sequence, as tool name -> number of calls made. */
 function restCounts(program: StretchProgram): Map<string, number> {
   const counts = new Map<string, number>();
@@ -186,7 +263,7 @@ export async function runCompiled(
     };
     state.receipts.push(receipt);
     if (state.receipts.length > MAX_TRACES) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
-    state.opts.onReceipt?.(receipt);
+    notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
     return result.value;
   } catch (err) {
@@ -199,21 +276,62 @@ export async function runCompiled(
       ok: false,
     };
     state.receipts.push(receipt);
-    state.opts.onReceipt?.(receipt);
+    notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
     throw err;
   }
 }
 
+/**
+ * Run a host callback without letting it fail the caller's tool call.
+ *
+ * onTrace and onReceipt are arbitrary code supplied by whoever wrapped the
+ * tools. A throw in either used to propagate out of a tool call that had
+ * already succeeded — and for onReceipt inside runCompiled, out of one whose
+ * compiled program had already performed its writes, where isDeopt says "not a
+ * deopt" and the error is rethrown. Host telemetry is not allowed to decide
+ * whether the agent's tool worked.
+ */
+function notifyHost(fn: () => void): void {
+  try {
+    fn();
+  } catch {
+    /* the host's observer is the host's problem */
+  }
+}
+
+/**
+ * Flush the buffered events as a trace.
+ *
+ * This runs inside the success path of every wrapped call, so it is wrapped
+ * whole: anything it throws would otherwise be caught by the caller's error
+ * branch, recorded as a second bogus ok:false event for a call that worked,
+ * and rethrown at the agent. The buffer is reset either way — a trace we could
+ * not build is not a trace worth retrying against the same events forever.
+ */
 function emitTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: Record<string, unknown>): void {
   if (!run.events.length) return;
+  try {
+    buildAndSendTrace(state, run, input);
+  } catch {
+    /* observing a call must never fail it */
+  } finally {
+    run.events = [];
+    run.llmCalls = 0;
+    run.cost = 0;
+    run.t0 = performance.now();
+  }
+}
+
+function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: Record<string, unknown>): void {
   const trace: StretchTrace = {
+    // Events were redacted at push time, so what is buffered is already a
+    // snapshot: holding the caller's live objects until flush meant a caller
+    // that reuses its args record between turns rewrote the history the
+    // compiler learns from, and moved the redaction window to the wrong
+    // moment.
     id: crypto.randomUUID(),
-    events: run.events.map((e) => ({
-      ...e,
-      args: redact(e.args) as Record<string, unknown>,
-      result: redact(e.result),
-    })),
+    events: run.events,
     input: (redact(input ?? run.events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
     llmCalls: Math.max(run.llmCalls, run.events.length),
     duration_ms: performance.now() - run.t0,
@@ -222,12 +340,8 @@ function emitTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: R
   };
   state.traces.push(trace);
   if (state.traces.length > MAX_TRACES) state.traces.splice(0, state.traces.length - MAX_TRACES);
-  state.opts.onTrace?.(trace);
+  notifyHost(() => state.opts.onTrace?.(trace));
   post(state, "/v1/traces", trace);
-  run.events = [];
-  run.llmCalls = 0;
-  run.cost = 0;
-  run.t0 = performance.now();
 }
 
 function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, registry: ToolRegistry): ToolDef {
@@ -270,26 +384,35 @@ export function wrapTools<T extends ToolsIn>(
   // `rest` counts how many raw calls of each tool the compiled run has already
   // performed on the caller's behalf, so a sequence that calls one tool twice
   // suppresses both raw repeats rather than only the first.
-  const skipRest = new Map<
-    string,
-    { rest: Map<string, number>; input: Record<string, unknown>; programId: string }
-  >();
+  //
+  // `armedAt`/`armedAtCall` bound how long an arming can act. Nothing used to
+  // retire them: an entry stayed live for the life of the process, so a write
+  // the agent made much later — a genuinely different mutation that happened to
+  // carry the same id — was still silently swallowed, and the map (plus the
+  // linear scan over it on every single tool call) grew without limit.
+  const skipRest = new Map<string, Armed>();
   const registry = registryFrom(
     Object.fromEntries(Object.entries(tools).map(([k, v]) => [k, asToolDef(k, v).execute])),
   );
   const wrapped: Record<string, ToolDef> = {};
-  const compiledCache = new Map<string, ToolDef>();
+  // Keyed by program id, but holding the program the entry was built from.
+  // `compiledDef` closes over that program, so caching by id alone pinned the
+  // first version ever seen: after pullLive swapped in a fixed — or rolled
+  // back — build of the same id, this process kept executing the old steps for
+  // the life of the process, which is exactly the case a server-side rollback
+  // exists to stop. Comparing identity re-derives on any swap, and needs no
+  // version field to be present or trustworthy.
+  const compiledCache = new Map<string, { program: StretchProgram; def: ToolDef }>();
   let calls = 0;
   let skipSeq = 0;
 
   const compiledFor = (name: string): ToolDef | undefined => {
     const p = state.programs.find((x) => x.manifest && (x.name === name || x.id === name));
     if (!p) return undefined;
-    let def = compiledCache.get(p.id);
-    if (!def) {
-      def = compiledDef(state, p, tools, registry);
-      compiledCache.set(p.id, def);
-    }
+    const cached = compiledCache.get(p.id);
+    if (cached && cached.program === p) return cached.def;
+    const def = compiledDef(state, p, tools, registry);
+    compiledCache.set(p.id, { program: p, def });
     return def;
   };
 
@@ -315,13 +438,28 @@ export function wrapTools<T extends ToolsIn>(
           // same stretch sailed past the skip check and executed for real,
           // duplicating whatever the compiled leg was in the middle of doing.
           const armKey = `${hit.p.id}#${++skipSeq}`;
-          skipRest.set(armKey, {
-            rest: restCounts(hit.p),
+          const rest = restCounts(hit.p);
+          const armed: Armed = {
+            rest,
             input: hit.input,
             programId: hit.p.id,
-          });
+            armedAt: performance.now(),
+            armedAtCall: calls,
+            callBudget: totalRest(rest) + ARM_SLACK_CALLS,
+          };
+          skipRest.set(armKey, armed);
+          evictArmings(skipRest, calls);
           try {
             const value = await runCompiled(state, hit.p, hit.input, tools, registry);
+            // Re-stamp now the run has actually finished. The TTL was started
+            // before the await, but wrapTimeoutMs permits a compiled program
+            // up to 300s — five times the TTL — so a legitimately slow run
+            // returned to an arming that had already expired and every raw
+            // tail call went straight through to the real tool. The entry
+            // still has to be *inserted* early, for the parallel-sibling race
+            // above; only the clock starts late.
+            armed.armedAt = performance.now();
+            armed.armedAtCall = calls;
             emitTrace(state, run, hit.input);
             return value;
           } catch (err) {
@@ -340,7 +478,12 @@ export function wrapTools<T extends ToolsIn>(
           }
         }
 
+        const now = performance.now();
         for (const [id, armed] of skipRest) {
+          if (armExpired(armed, now, calls)) {
+            skipRest.delete(id);
+            continue;
+          }
           const remaining = armed.rest.get(name);
           if (!remaining) continue;
           const liveP = live.find((p) => p.id === armed.programId);
@@ -359,7 +502,18 @@ export function wrapTools<T extends ToolsIn>(
         const t0 = performance.now();
         try {
           const result = await spec.execute(args);
-          run.events.push({ name, args, result, ok: true, duration_ms: performance.now() - t0 });
+          // Redact here, not at flush. These stay buffered for up to 12 events,
+          // and holding live references to the caller's objects meant an agent
+          // loop that reuses one args record per turn rewrote already-recorded
+          // history — the witnesses programs get compiled from were of calls
+          // that never happened. It also kept arbitrary result graphs alive.
+          run.events.push({
+            name,
+            args: redact(args) as Record<string, unknown>,
+            result: redact(result),
+            ok: true,
+            duration_ms: performance.now() - t0,
+          });
           run.llmCalls += 1;
           run.cost += state.opts.llmCents ?? 1;
           const last = live.some((p) => (p.sequence ?? []).at(-1) === name);
@@ -368,7 +522,7 @@ export function wrapTools<T extends ToolsIn>(
           }
           return result;
         } catch (err) {
-          run.events.push({ name, args, ok: false, duration_ms: performance.now() - t0 });
+          run.events.push({ name, args: redact(args) as Record<string, unknown>, ok: false, duration_ms: performance.now() - t0 });
           throw err;
         }
       },
