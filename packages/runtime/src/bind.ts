@@ -1,5 +1,5 @@
 import type { Binding } from "@eden/ir";
-import { cloneJson, getPath, interpolate } from "@eden/ir";
+import { cloneJson, getPath, interpolate, setKey } from "@eden/ir";
 
 /**
  * The subset of Map that binding evaluation needs. A plain Map satisfies it, so
@@ -88,6 +88,9 @@ export function evalBinding(binding: Binding, scope: BindScope): unknown {
 
 export function evalArgs(args: Record<string, Binding>, scope: BindScope): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [k, b] of Object.entries(args)) out[k] = evalBinding(b, scope);
+  // setKey rather than `out[k] =`: a step whose args carry a "__proto__" key
+  // would otherwise run the inherited setter, losing the argument and
+  // installing it as the prototype of the object handed to the tool.
+  for (const [k, b] of Object.entries(args)) setKey(out, k, evalBinding(b, scope));
   return out;
 }
