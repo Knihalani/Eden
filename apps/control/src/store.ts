@@ -133,7 +133,10 @@ export class Store {
     const cands = this.candidates()
       .map((c) => `${c.id}:${c.verdict}:${c.refusal ? "r" : "p"}`)
       .join(",");
-    return `${this.tracesCount()}|${this.liveCount()}|${this.receiptsCount()}|${this.lastHeartbeat()}|${cands}`;
+    const tools = this.tools()
+      .map((t) => `${t.id}:${t.state}:${t.updated_at}`)
+      .join(",");
+    return `${this.tracesCount()}|${this.liveCount()}|${this.receiptsCount()}|${this.lastHeartbeat()}|${cands}|${tools}`;
   }
 
   traces(): StretchTrace[] {

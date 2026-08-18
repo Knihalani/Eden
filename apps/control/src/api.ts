@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IslandCaller, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
 import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf } from "@eden/ir";
 import { isDeopt, runProgram } from "@eden/runtime";
@@ -14,18 +15,49 @@ export type ApiCtx = {
   store: Store;
   registry?: ToolRegistry;
   island?: IslandCaller;
-  token: string;
+  /** Absent means nothing is authorised, not that everything is. */
+  token?: string;
 };
 
+/**
+ * Is this request allowed to drive the control plane?
+ *
+ * This used to return true when `ctx.token` was empty, which is failing open
+ * on the one input an embedder is most likely to leave unset — and handleApi
+ * is a public export, so `handleApi(req, url, { token: "" })` was a wide-open
+ * API. No token configured now means nothing is authorised; the server
+ * refuses to start without one.
+ */
 function auth(req: Request, ctx: ApiCtx): boolean {
+  if (!ctx.token) return false;
   const h = req.headers.get("authorization") || "";
-  const tok = h.replace(/^Bearer\s+/i, "");
-  if (!ctx.token) return true;
-  return tok === ctx.token;
+  const m = /^Bearer\s+(.*)$/i.exec(h);
+  if (!m) return false;
+  return timingSafeEqualStr(m[1]!, ctx.token);
 }
 
-function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status, headers: { "access-control-allow-origin": "*" } });
+/** Compare without letting the response time reveal a prefix match. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+/**
+ * Echo the caller's origin only when it is local.
+ *
+ * Every response used to carry `access-control-allow-origin: *`, so any page
+ * on the internet could read the control plane's replies.
+ */
+function corsFor(req?: Request): Record<string, string> {
+  const origin = req?.headers.get("origin") || "";
+  if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return { vary: "origin" };
+  return { "access-control-allow-origin": origin, vary: "origin" };
+}
+
+function json(data: unknown, status = 200, req?: Request): Response {
+  return Response.json(data, { status, headers: corsFor(req) });
 }
 
 async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { ok: false; res: Response }> {
@@ -248,8 +280,13 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       island: Boolean(ctx.island),
     });
   }
-  if (p.startsWith("/v1/") && p !== "/v1/inbox" && p !== "/v1/chat/completions" && !auth(req, ctx)) {
-    return json({ error: "unauthorized" }, 401);
+  // No exemptions. /v1/inbox was exempt while /v1/candidates and /v1/tools —
+  // both strict subsets of what it returns — required a key, so it was a
+  // straight authorization bypass over the whole store: every compiled program
+  // with the literal arguments mined from real traces, readable with no
+  // credential at all.
+  if (p.startsWith("/v1/") && !auth(req, ctx)) {
+    return json({ error: "unauthorized" }, 401, req);
   }
   if (p === "/v1/stats" && req.method === "GET") {
     return json({
