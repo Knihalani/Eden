@@ -1,4 +1,4 @@
-import { openDb, workspaceForKey, type EdenDb } from "./db";
+import { openDb, workspaceForKey, isManagedDeployment, type EdenDb } from "./db";
 import { ingest } from "./cluster";
 import { handleMcp } from "./mcp";
 import { playTool } from "./playback";
@@ -100,7 +100,9 @@ function crossOriginWrite(req: Request, selfOrigin: string): boolean {
 }
 
 export async function handleFetch(req: Request): Promise<Response> {
-  if (process.env.VERCEL && process.env.EDEN_DEV !== "1") {
+  // Same predicate as authentication uses: auto-approve must be impossible
+  // anywhere a key is actually required, not only on Vercel.
+  if (isManagedDeployment() && process.env.EDEN_DEV !== "1") {
     delete process.env.EDEN_AUTO_APPROVE;
   }
   const d = await db();
@@ -182,7 +184,13 @@ export async function handleFetch(req: Request): Promise<Response> {
   }
 
   if (url.pathname === "/v1/setup" && req.method === "POST") {
-    if (process.env.VERCEL && process.env.EDEN_DEV !== "1") return new Response("unauthorized", { status: 401 });
+    // Gated on isManagedDeployment(), not on VERCEL alone. The rest of the
+    // auth stack asks "is this a real deployment" and answers
+    // `DATABASE_URL || VERCEL`; this asked only about Vercel, so every other
+    // way of running the same code in production — Fly, Render, Docker, a box
+    // on the LAN — served an unauthenticated endpoint that handed out a
+    // working credential to anyone who posted to it.
+    if (isManagedDeployment() && process.env.EDEN_DEV !== "1") return new Response("unauthorized", { status: 401 });
     return Response.json({ api_key: "eden_dev", base_url: origin });
   }
 

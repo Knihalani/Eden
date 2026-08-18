@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolEvent } from "@eden/core";
-import { openDb, type EdenDb } from "./db";
+import { openDb, workspaceForKey, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
 import { handleFetch } from "./server";
 
@@ -161,5 +161,85 @@ describe("state-changing routes refuse cross-origin drive-bys", () => {
       new Request("http://127.0.0.1:8787/health", { headers: { origin: "https://evil.example" } }),
     );
     expect(res.status).toBe(200);
+  });
+});
+
+describe("which predicate decides that this is production", () => {
+  /**
+   * The auth stack asks "is this a real deployment" and answers
+   * `DATABASE_URL || VERCEL`. Two places asked only about VERCEL, so every
+   * other way of shipping the same code — Fly, Render, Docker, a box on the
+   * LAN — was classified as somebody's laptop.
+   */
+  const saved: Record<string, string | undefined> = {};
+  function setEnv(k: string, v: string | undefined) {
+    if (!(k in saved)) saved[k] = process.env[k];
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    for (const k of Object.keys(saved)) delete saved[k];
+  });
+
+  test("a DATABASE_URL deployment does not hand out credentials", async () => {
+    setEnv("VERCEL", undefined);
+    setEnv("DATABASE_URL", "postgres://example/db");
+    setEnv("EDEN_DEV", "0");
+    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", body: "{}" }));
+    expect(res.status).toBe(401);
+  });
+
+  test("a laptop still can, which is what the endpoint is for", async () => {
+    setEnv("VERCEL", undefined);
+    setEnv("DATABASE_URL", undefined);
+    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", body: "{}" }));
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("a disabled api_key row stays disabled", () => {
+  /**
+   * hashLegacyKeys runs on every boot and has to be idempotent. It was not:
+   * "disabled" is truthy and is not 64 hex characters, so on the second boot
+   * it fell through to the rehash branch and was stored as sha256("disabled").
+   * From then on the literal token `disabled` authenticated into that row's
+   * workspace.
+   */
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "eden-keys-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  test("a null-hash row does not become a working key on the second boot", async () => {
+    const path = join(dir, "keys.sqlite");
+    const first = await openDb(path);
+    await first.run(`INSERT INTO workspace (id, name) VALUES (?, ?)`, ["ws_other", "other"]);
+    await first.run(`INSERT INTO api_key (prefix, hash, workspace_id) VALUES (?, NULL, ?)`, ["eden_abc", "ws_other"]);
+
+    // Boot again, and again — the migration must converge, not oscillate.
+    await openDb(path);
+    const third = await openDb(path);
+
+    expect(await workspaceForKey(third, "Bearer disabled")).not.toBe("ws_other");
+    expect(await workspaceForKey(third, "Bearer eden_abc")).not.toBe("ws_other");
+  });
+
+  test("an already-poisoned row is repaired rather than left working", async () => {
+    const path = join(dir, "poisoned.sqlite");
+    const db = await openDb(path);
+    await db.run(`INSERT INTO workspace (id, name) VALUES (?, ?)`, ["ws_other", "other"]);
+    // Exactly what the old migration wrote on its second run.
+    await db.run(`INSERT INTO api_key (prefix, hash, workspace_id) VALUES (?, ?, ?)`, [
+      "eden_abc",
+      hashApiKey("disabled"),
+      "ws_other",
+    ]);
+    const reopened = await openDb(path);
+    expect(await workspaceForKey(reopened, "Bearer disabled")).not.toBe("ws_other");
   });
 });
