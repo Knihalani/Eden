@@ -110,7 +110,13 @@ describe("TicketShip golden", () => {
     const program = programs[0]!;
     expect(program.steps.some((s) => s.kind === "tool" && s.tool === "verifyWrite")).toBe(true);
     const world = createTicketShip({ llmMs: 0 });
-    const sh = await shadowProgram(program, traces, { registry: registryFrom(world.tools), island: world.island });
+    const sh = await shadowProgram(program, traces, {
+      registry: registryFrom(world.tools),
+      // A throwaway world per trace, so the program's writes land nowhere.
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
     expect(sh.verdict).toBe("PASS");
     program.manifest = sh.manifest;
 
@@ -125,7 +131,13 @@ describe("TicketShip golden", () => {
       manifest: sh.manifest,
       created_at: Date.now(),
     });
-    const fetchHandler = createHandler({ store, token: "eden_dev", registry: registryFrom(world.tools), island: world.island });
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      registry: registryFrom(world.tools),
+      sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+    });
     const approved = await fetchHandler(
       new Request(`http://x/v1/tools/${program.id}/approve`, {
         method: "POST",
@@ -291,6 +303,7 @@ describe("TicketShip golden", () => {
       store,
       token: "eden_dev",
       registry: registryFrom(world.tools),
+      sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
       island: world.island,
     });
     const forged = await fetchHandler(
@@ -313,7 +326,12 @@ describe("TicketShip golden", () => {
     const { programs } = compileTraces(traces);
     const program = programs[0]!;
     const world = createTicketShip({ llmMs: 0 });
-    const sh = await shadowProgram(program, traces, { registry: registryFrom(world.tools), island: world.island });
+    const sh = await shadowProgram(program, traces, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
     program.manifest = sh.manifest;
     const store = new Store(":memory:");
     store.putCandidate({
@@ -329,6 +347,7 @@ describe("TicketShip golden", () => {
       store,
       token: "eden_dev",
       registry: registryFrom(world.tools),
+      sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
       island: world.island,
     });
     const approved = await fetchHandler(
@@ -455,6 +474,7 @@ describe("TicketShip golden", () => {
         store,
         token: "eden_dev",
         registry: registryFrom(world.tools),
+        sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
         island: world.island,
       });
       const res = await fetchHandler(

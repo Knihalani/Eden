@@ -10,7 +10,7 @@ export type ServerOpts = {
   token?: string;
   upstream?: string;
   upstreamKey?: string;
-} & Pick<ApiCtx, "registry" | "island">;
+} & Pick<ApiCtx, "registry" | "island" | "sandboxFor">;
 
 /**
  * Only a local page may talk to the control plane from a browser.
@@ -54,6 +54,7 @@ export function createHandler(opts: ServerOpts) {
     store: opts.store,
     registry: opts.registry,
     island: opts.island,
+    sandboxFor: opts.sandboxFor,
     // No default. `auth()` fails open on an empty token, and "eden_dev" was
     // hardcoded here and in four other places, so the shipped configuration
     // authenticated anybody who had read the source.

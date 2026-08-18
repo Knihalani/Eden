@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { registryFrom } from "@eden/runtime";
-import { canApprove, shadowProgram, uncoveredTools } from "../src/index";
+import { canApprove, mutatingSteps, replayRegistry, shadowProgram, uncoveredTools } from "../src/index";
 import { createTicketShip, ticketShipProgram, WITNESS_IDS } from "../../runtime/src/ticketship";
 import { compileTraces } from "../../compile/src/index";
 import { runNaive } from "../../runtime/src/ticketship";
@@ -33,7 +33,12 @@ describe("shadow", () => {
     const world = createTicketShip({ llmMs: 0 });
     const result = await shadowProgram(ticketShipProgram(), held, {
       registry: registryFrom(world.tools),
+      // Each trace replays against its own throwaway world, so the writes in
+      // this program land nowhere anyone can see. That is what lets shadowing
+      // run a candidate that mutates at all.
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
       island: world.island,
+      allowSideEffects: true,
     });
     expect(result.verdict).toBe("PASS");
     expect(result.manifest?.llmReduction).toBeGreaterThanOrEqual(5);
@@ -63,7 +68,12 @@ describe("shadow", () => {
     const world = createTicketShip({ llmMs: 0 });
     const result = await shadowProgram(p, all, {
       registry: registryFrom(world.tools),
+      // Each trace replays against its own throwaway world, so the writes in
+      // this program land nowhere anyone can see. That is what lets shadowing
+      // run a candidate that mutates at all.
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
       island: world.island,
+      allowSideEffects: true,
     });
     expect(result.verdict).toBe("PASS");
     expect(canApprove(result)).toBe(true);
@@ -76,6 +86,7 @@ describe("shadow", () => {
       registry: registryFrom(createTicketShip({ llmMs: 0 }).tools),
       island,
       registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      allowSideEffects: true,
     });
     expect(result.verdict).toBe("PASS");
     expect(result.manifest?.skipRateAfter).toBe(0);
@@ -143,5 +154,105 @@ describe("shadow", () => {
     const registry = { has: (n: string) => n === "Read" || n === "Write", execute: async () => ({}) };
     expect(uncoveredTools(registry, program)).toEqual(["Grep"]);
     expect(uncoveredTools(undefined, program)).toEqual(["Read", "Grep", "Write"]);
+  });
+});
+
+describe("shadowing must not be the thing that does the damage", () => {
+  test("a candidate that writes is refused when there is nowhere safe to write", async () => {
+    // Shadowing replays the candidate once per held-out trace. Handed the live
+    // registry — which is what apps/control passed — validating a stretch that
+    // writes a record and notifies performed n real writes and n real
+    // notifications, in order to decide whether the program should be allowed
+    // to perform them.
+    const held = await traces(6, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    let realWrites = 0;
+    const counting = {
+      ...world.tools,
+      writeRecord: {
+        execute: async (a: Record<string, unknown>) => {
+          realWrites++;
+          return world.tools.writeRecord!.execute(a);
+        },
+      },
+    };
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(counting),
+      island: world.island,
+    });
+    expect(result.verdict).toBe("INCONCLUSIVE");
+    expect(result.reasons[0]).toMatch(/would perform .*writeRecord/);
+    // Refused before running anything, so nothing was written.
+    expect(realWrites).toBe(0);
+  });
+
+  test("mutatingSteps names the steps that make it unsafe", () => {
+    expect(mutatingSteps(ticketShipProgram()).sort()).toEqual(["notify", "writeRecord"]);
+  });
+
+  test("a program that returns the wrong answer does not pass", async () => {
+    // Nothing here ever read t.output: whether the compiled program produced
+    // the *right value* was not among the things shadow checked. A program
+    // whose `returns` binding points at the wrong step runs cleanly, returns
+    // something else entirely, and used to be recorded as complete purely for
+    // not throwing.
+    const held = await traces(6, 0);
+    const good = ticketShipProgram();
+    const wrong = {
+      ...good,
+      returns: { kind: "literal", value: { not: "what the agent produced" } },
+    } as typeof good;
+    const result = await shadowProgram(wrong, held, {
+      registry: registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: createTicketShip({ llmMs: 0 }).island,
+      allowSideEffects: true,
+    });
+    expect(result.verdict).toBe("FAIL");
+    expect(result.reasons.some((r) => /output differs/.test(r))).toBe(true);
+  });
+});
+
+describe("replayRegistry", () => {
+  test("serves recorded results in order and calls nothing for real", async () => {
+    const held = await traces(3, 0);
+    const t = held[0]!;
+    const world = createTicketShip({ llmMs: 0 });
+    let realWrites = 0;
+    const counting = {
+      ...world.tools,
+      writeRecord: {
+        execute: async (a: Record<string, unknown>) => {
+          realWrites++;
+          return world.tools.writeRecord!.execute(a);
+        },
+      },
+    };
+    const reg = replayRegistry(registryFrom(counting), t);
+
+    const first = t.events.find((e) => e.name === "writeRecord")!;
+    expect(await reg.execute("writeRecord", first.args)).toEqual(first.result);
+    expect(realWrites).toBe(0);
+    expect(reg.misses).toEqual([]);
+  });
+
+  test("a call the trace never made is reported, not invented and not performed", async () => {
+    const held = await traces(3, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    const reg = replayRegistry(registryFrom(world.tools), held[0]!);
+    await expect(reg.execute("notify", { id: "T-100" })).resolves.toBeDefined();
+    await expect(reg.execute("notify", { id: "T-100" })).rejects.toThrow(/cannot be replayed/);
+    expect(reg.misses.some((m) => m.reason === "unrecorded" && m.tool === "notify")).toBe(true);
+  });
+
+  test("different arguments are recorded but do not fail the call", async () => {
+    // Any step downstream of an island takes the model's fresh output as an
+    // argument, so it differs from the recording every run. Failing on that
+    // would refuse every program with an island in it.
+    const held = await traces(3, 0);
+    const reg = replayRegistry(undefined, held[0]!);
+    const rec = held[0]!.events.find((e) => e.name === "writeRecord")!;
+    await expect(reg.execute("writeRecord", { ...rec.args, extra: "drifted" })).resolves.toEqual(rec.result);
+    expect(reg.misses.some((m) => m.reason === "different-args")).toBe(true);
   });
 });
