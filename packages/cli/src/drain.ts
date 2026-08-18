@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
-import { applyFlushTruncate } from "./hook";
-import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, readJson, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl } from "./home";
+import { applyFlushTruncate, dropConsumedLines } from "./hook";
+import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, readJson, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
 
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
@@ -97,33 +97,67 @@ export async function drain(): Promise<void> {
       }));
     const stretch_end = stretchEndForRun(outbox, runId);
     if (!events.length && !stretch_end) continue;
-    const res = await fetch(`${site}/v1/ingest`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ agent_id: "claude_code", run_id: runId, events, stretch_end }),
-    });
+    // fetch *rejects* on ECONNREFUSED rather than resolving, and there was no
+    // try/catch anywhere in drain(). One unreachable site aborted the whole
+    // loop before the outbox rewrite below, so with the plane down drain was a
+    // permanent no-op rather than a retry.
+    let res: Response;
+    try {
+      res = await fetch(`${site}/v1/ingest`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ agent_id: "claude_code", run_id: runId, events, stretch_end }),
+      });
+    } catch {
+      continue;
+    }
     if (!res.ok) continue;
+    // Recorded before any of the early exits below. This used to sit after the
+    // `continue` on the healthy path, so dropRuns stayed empty, rewriteOutbox
+    // removed nothing, and the row was immortal — every later drain re-POSTed
+    // stretch_end for a run that was still live, and the outbox grew forever.
+    if (stretch_end) dropRuns.add(runId);
     // Remove exactly the events that were sent, under the lock, rather than
     // unlinking the file. The read, the POST and the delete all happened
     // outside the lock, so any PostToolUse hook that fired during the request
     // window had its event written into a file that was then destroyed.
     const sentIds = events.map((e) => String(e.event_id ?? "")).filter(Boolean);
-    if (sentIds.length) {
-      try {
-        withFileLock(`${path}.lock`, () => applyFlushTruncate(path, sentIds));
-      } catch {
-        // Contended or unwritable: leave the file alone. Re-sending is
-        // harmless now that event_id makes ingest idempotent; losing events
-        // is not.
-      }
-      continue;
+    try {
+      // Remove exactly the lines this drain consumed, under the lock. The old
+      // fallback for "nothing had an id" unlinked the whole file, and it sat
+      // *outside* the lock — so a PostToolUse hook that correctly took the
+      // lock and appended during the in-flight POST had its event destroyed.
+      // Matching on the raw lines we read keeps anything appended since.
+      withFileLock(`${path}.lock`, () => {
+        if (sentIds.length) applyFlushTruncate(path, sentIds);
+        dropConsumedLines(path, lines);
+      });
+    } catch {
+      // Contended or unwritable: leave the file alone. Re-sending is
+      // harmless now that event_id makes ingest idempotent; losing events
+      // is not.
     }
-    if (existsSync(path)) {
-      writeFileSync(path.replace(/\.jsonl$/, ".sent.jsonl"), JSON.stringify({ sent: Date.now(), n: events.length }));
-      unlinkSync(path);
-    }
-    if (stretch_end) dropRuns.add(runId);
   }
+  // Refreshing the live-tool list is best effort. It used to sit unguarded
+  // between the ingest loop and the outbox rewrite, so an unreachable wrap or
+  // site plane threw straight past the rewrite and drain never drained.
+  try {
+    await refreshLiveTools(site, wrap, key);
+  } catch {
+    /* keep the tool list we already have */
+  }
+  if (existsSync(outboxPath())) {
+    withFileLock(`${outboxPath()}.lock`, () => {
+      const fresh = existsSync(outboxPath()) ? readFileSync(outboxPath(), "utf8") : "";
+      // Atomic, like applyFlushTruncate: this file holds the stretch_end
+      // markers, and an in-place rewrite that dies halfway loses them.
+      writeFileAtomic(outboxPath(), rewriteOutbox(fresh, dropRuns));
+    });
+  }
+}
+
+
+async function refreshLiveTools(site: string, wrap: string, key: string): Promise<void> {
   const wrapLive = await fetch(`${wrap}/v1/tools?state=live`, { headers: { Authorization: `Bearer ${key}` } });
   if (wrapLive.ok) {
     const json = (await wrapLive.json()) as {
@@ -177,12 +211,6 @@ export async function drain(): Promise<void> {
         unlinkSync(knockPath);
       }
     }
-  }
-  if (existsSync(outboxPath())) {
-    withFileLock(`${outboxPath()}.lock`, () => {
-      const fresh = existsSync(outboxPath()) ? readFileSync(outboxPath(), "utf8") : "";
-      writeFileSync(outboxPath(), rewriteOutbox(fresh, dropRuns));
-    });
   }
 }
 
