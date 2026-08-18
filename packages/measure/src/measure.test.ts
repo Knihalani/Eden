@@ -18,6 +18,7 @@ import {
   scoreRecord,
   scoreRecords,
   stdev,
+  tQuantile,
   type Sample,
 } from "../src/index";
 
@@ -395,5 +396,79 @@ describe("the scorer does not award marks it cannot justify", () => {
   test("claiming a value where gold says null is still wrong", () => {
     const r = scoreRecord({ merged_at: "2024-01-01" }, { merged_at: null }, [{ name: "merged_at" }]);
     expect(r.fabricated).toEqual(["merged_at"]);
+  });
+});
+
+describe("sizing an experiment uses the right distribution", () => {
+  test("tQuantile matches published tables", () => {
+    // These two functions sized experiments with the *normal* quantile, but
+    // decide() requires only 6 blocks — so the normal approximation was used
+    // exactly where it is worst. At 5 degrees of freedom t(0.975) is 2.571
+    // against z's 1.960: the minimum detectable effect was understated by
+    // about 24% and the required sample size under-quoted by about 55%.
+    const known: Array<[number, number, number]> = [
+      [0.975, 4, 2.7764],
+      [0.975, 5, 2.5706],
+      [0.975, 10, 2.2281],
+      [0.975, 30, 2.0423],
+      [0.95, 5, 2.015],
+      [0.8, 5, 0.9195],
+      [0.8, 10, 0.8791],
+    ];
+    for (const [p, df, want] of known) {
+      expect(Math.abs(tQuantile(p, df) - want)).toBeLessThan(0.005);
+    }
+  });
+
+  test("one and two degrees of freedom use their closed forms", () => {
+    // The Cornish–Fisher expansion is asymptotic in 1/df and diverges here,
+    // where the true quantiles are enormous.
+    expect(Math.abs(tQuantile(0.975, 1) - 12.7062)).toBeLessThan(0.01);
+    expect(Math.abs(tQuantile(0.975, 2) - 4.3027)).toBeLessThan(0.01);
+  });
+
+  test("it converges on the normal as the sample grows", () => {
+    expect(Math.abs(tQuantile(0.975, 1000) - 1.95996)).toBeLessThan(0.005);
+  });
+
+  test("minDetectableEffect and requiredBlocks are inverses", () => {
+    for (const n of [4, 8, 16, 64]) {
+      expect(requiredBlocks(100, minDetectableEffect(100, n))).toBe(n);
+    }
+  });
+
+  test("a t-based bound is stricter than the normal one it replaced", () => {
+    // The point of the change: at small n the honest number is bigger.
+    const df = 5;
+    expect(minDetectableEffect(100, df + 1)).toBeGreaterThan((1.95996 + 0.8416) * (100 / Math.sqrt(df + 1)));
+  });
+});
+
+describe("a block pairs one control with one treatment", () => {
+  test("duplicate blocks are refused, not silently multiplied", () => {
+    // byKey was last-write-wins and was never consumed, so N treatment rows
+    // sharing a key all paired against the same control value — turning one
+    // real block into N "independent" ones, which inflates n and shrinks both
+    // the bootstrap interval and the permutation p-value. A module that
+    // exists to refuse over-claiming must not manufacture its own sample size.
+    const control = [{ task: "a", repeat: 0, value: 1 }];
+    const treatment = [
+      { task: "a", repeat: 0, value: 2 },
+      { task: "a", repeat: 0, value: 3 },
+    ];
+    expect(() => pairDeltas(treatment, control)).toThrow(/one to one/);
+    expect(() => pairDeltas(control, [...control, ...control])).toThrow(/one to one/);
+  });
+
+  test("ordinary paired samples are unaffected", () => {
+    const control = [
+      { task: "a", repeat: 0, value: 1 },
+      { task: "b", repeat: 0, value: 2 },
+    ];
+    const treatment = [
+      { task: "a", repeat: 0, value: 3 },
+      { task: "b", repeat: 0, value: 5 },
+    ];
+    expect(pairDeltas(treatment, control).map((d) => d.delta)).toEqual([2, 3]);
   });
 });
