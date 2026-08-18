@@ -76,6 +76,18 @@ export function appendJsonl(path: string, row: unknown): void {
  */
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 1500;
+/**
+ * Backstop for a stamp that claims to be alive.
+ *
+ * `kill(pid, 0)` answers "is this pid addressable", not "is this the process
+ * that took the lock". After a reboot or enough process churn the pid can
+ * belong to something else entirely, and EPERM — a pid owned by another user —
+ * also reads as alive. Without an upper bound those cases wedge the lock
+ * permanently, because the staleness horizon is never consulted for a stamped
+ * lock. Nothing legitimately holds one of these for ten minutes: every
+ * critical section here is a small file rewrite.
+ */
+const LOCK_ABANDON_MS = 600_000;
 
 type LockStamp = { pid: number; host: string; ts: number };
 
@@ -189,23 +201,28 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
 /**
  * Remove a lock that its holder can no longer release.
  *
- * Only two things justify deleting a lock we do not hold: the process that
- * stamped it is gone, or the lock is unattributable and older than the horizon.
- * A live local holder is left alone no matter how long it has been in there.
+ * Only three things justify deleting a lock we do not hold: the process that
+ * stamped it is gone, the lock is unattributable and older than the horizon, or
+ * it is so old that whatever the stamp says, nobody is coming back for it. A
+ * live local holder is otherwise left alone however long it has been in there.
+ *
+ * The abandonment decision and the unlink are two syscalls apart, and in
+ * between the holder may release and a third process may acquire. Deleting
+ * then would evict a live holder — the very failure this function exists to
+ * avoid — so the inode observed when the decision was made is captured and
+ * compared before unlinking. Checking merely that *a* file is still there is
+ * not the same test: a replacement lock is also a file.
  */
 function breakIfAbandoned(lockPath: string): void {
   try {
+    const before = inodeAt(lockPath);
+    if (before === null) return;
     const stamp = readLockStamp(lockPath);
     const state = holderState(stamp);
-    if (state === "alive") return;
-    if (state === "unknown") {
-      const age = Date.now() - statSync(lockPath).mtimeMs;
-      if (age <= LOCK_STALE_MS) return;
-    }
-    // Re-check identity immediately before unlinking so we cannot delete a
-    // fresh lock that replaced the abandoned one while we were deciding.
-    const seen = inodeAt(lockPath);
-    if (seen === null) return;
+    const age = Date.now() - statSync(lockPath).mtimeMs;
+    if (state === "alive" && age <= LOCK_ABANDON_MS) return;
+    if (state === "unknown" && age <= LOCK_STALE_MS) return;
+    if (inodeAt(lockPath) !== before) return;
     unlinkSync(lockPath);
   } catch {
     /* raced with the holder releasing it, or not ours to remove; just retry */

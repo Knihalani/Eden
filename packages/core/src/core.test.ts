@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { densifyPayload, densifyValue, undensifyValue, cellsEqual } from "../src/densify";
 import { modelFacing, prRowFromFacts, bundleJson, CI_STATE } from "../src/compact";
-import { parseNamedCli, extractNamedCliCalls } from "../src/named-cli";
+import { parseNamedCli, extractNamedCliCalls, isMutatingGh, isMutatingCurl } from "../src/named-cli";
 import { parameterizeUrl, compileStepUrl, resolveTemplate, githubRestFromCli } from "../src/urls";
 import {
   cutIslands,
@@ -831,5 +831,121 @@ describe("any-workflow compile", () => {
     expect(r.kind).toBe("parallel");
     expect(r.command).toContain("wait");
     expect(r.command).toContain("curl ");
+  });
+});
+
+describe("what may be reordered, and what may not", () => {
+  /**
+   * `commute` is not advisory. buildDag drops the sequential edge for a
+   * commuting step so it runs concurrently with its layer, and
+   * dedupeCloudSteps *discards* a commuting step whose parameterised URL
+   * matches an earlier one. A write misclassified as commuting is therefore
+   * not merely reordered, it is silently dropped: two identical POSTs to the
+   * same endpoint compiled down to one.
+   */
+  test("a curl that writes does not read as a read", () => {
+    // parseNamedCli hardcodes subcommand "get" for every curl and never looks
+    // at the verb, so all of these used to commute.
+    for (const cmd of [
+      "curl -X POST https://api.stripe.com/v1/charges",
+      "curl -XPOST https://api.stripe.com/v1/charges",
+      "curl --request DELETE https://api.acme.com/v1/orders/1",
+      "curl --request=PUT https://api.acme.com/v1/orders/1",
+      "curl -d 'amount=100' https://api.stripe.com/v1/charges",
+      "curl --data-binary @body.json https://api.acme.com/v1/orders",
+      "curl -F file=@x.png https://api.acme.com/v1/upload",
+    ]) {
+      expect(isMutatingCurl(cmd)).toBe(true);
+    }
+    for (const cmd of [
+      "curl https://api.acme.com/v1/orders/1",
+      "curl -X GET https://api.acme.com/v1/orders/1",
+      "curl -H 'Accept: application/json' https://api.acme.com/v1/orders/1",
+    ]) {
+      expect(isMutatingCurl(cmd)).toBe(false);
+    }
+  });
+
+  test("gh api mutations are recognised however the method is spelled", () => {
+    // The whitespace-only form missed --method=DELETE, and `gh api`'s
+    // subcommand is the literal string "api", which matched none of the
+    // mutating words the old test looked for.
+    for (const cmd of [
+      "gh api -X DELETE repos/o/r/issues/1/labels/bug",
+      "gh api --method=DELETE repos/o/r/issues/1/labels/bug",
+      "gh api --method DELETE repos/o/r/issues/1/labels/bug",
+      "gh api -XPATCH repos/o/r/issues/1",
+      "gh api repos/o/r/issues -f title=x",
+      "gh api repos/o/r/issues --field title=x",
+      "gh api repos/o/r/issues --raw-field title=x",
+      "gh api graphql -f query='mutation { addComment }'",
+    ]) {
+      expect(isMutatingGh(cmd)).toBe(true);
+    }
+    for (const cmd of [
+      "gh api repos/o/r/issues/1",
+      "gh api -X GET repos/o/r/issues/1",
+      "gh api graphql -f query='query { repository }'",
+    ]) {
+      expect(isMutatingGh(cmd)).toBe(false);
+    }
+  });
+
+  test("a step whose name merely contains a read verb is not a read", () => {
+    // The verb test was unanchored, so "widget_create" commuted for containing
+    // "get", as did set_budget and gadget_purge.
+    const writes = cutIslands([
+      { name: "widget_create", args: { id: "1" }, ok: true, event_id: "e1", seq: 1 },
+      { name: "set_budget", args: { id: "1" }, ok: true, event_id: "e2", seq: 2 },
+      { name: "gadget_purge", args: { id: "1" }, ok: true, event_id: "e3", seq: 3 },
+    ]).flat();
+    expect(writes.length).toBeGreaterThan(0);
+    for (const s of writes) expect(s.commute).toBe(false);
+
+    const reads = cutIslands([
+      { name: "get_customer", args: { id: "1" }, ok: true, event_id: "e4", seq: 1 },
+      { name: "list_orders", args: { id: "1" }, ok: true, event_id: "e5", seq: 2 },
+      { name: "order.view", args: { id: "1" }, ok: true, event_id: "e6", seq: 3 },
+    ]).flat();
+    expect(reads.length).toBeGreaterThan(0);
+    for (const s of reads) expect(s.commute).toBe(true);
+  });
+
+  test("an ordered step waits for the ordered step before it, not just its neighbour", () => {
+    // [A ordered, B commuting, C ordered]: C's immediate predecessor commutes,
+    // so C used to get no dependency at all and land in layer 0 beside A.
+    // Layers are run through Promise.all, so two steps that each declared
+    // themselves order-dependent executed concurrently.
+    const dag = buildDag([
+      { id: "A", commute: false } as never,
+      { id: "B", commute: true } as never,
+      { id: "C", commute: false } as never,
+    ]);
+    expect(dag.find((n) => n.id === "C")!.deps).toEqual(["A"]);
+
+    const waves = layers(dag).map((w) => w.map((n) => n.id));
+    const layerOf = (id: string) => waves.findIndex((wave) => wave.includes(id));
+    expect(layerOf("C")).toBeGreaterThan(layerOf("A"));
+  });
+
+  test("layers still reports a dependency that can never be satisfied", () => {
+    expect(() => layers([{ id: "A", deps: ["ghost"] } as never])).toThrow(/unresolvable step deps/);
+    expect(() => layers([{ id: "A", deps: ["A"] } as never])).toThrow(/unresolvable step deps/);
+    expect(() =>
+      layers([
+        { id: "A", deps: ["B"] } as never,
+        { id: "B", deps: ["A"] } as never,
+      ]),
+    ).toThrow(/unresolvable step deps/);
+  });
+
+  test("layers groups independent steps into one wave and keeps chains ordered", () => {
+    const waves = layers([
+      { id: "A", deps: [] } as never,
+      { id: "B", deps: [] } as never,
+      { id: "C", deps: ["A", "B"] } as never,
+      { id: "D", deps: ["C"] } as never,
+    ]).map((w) => w.map((n) => n.id));
+    expect(waves).toEqual([["A", "B"], ["C"], ["D"]]);
   });
 });
