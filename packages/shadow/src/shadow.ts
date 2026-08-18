@@ -1,6 +1,7 @@
 import type { Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
 import { canonicalize, inDistribution, isCheckName, isIslandName, isMutating, minLlmReductionOf, redact } from "@eden/ir";
 import { isDeopt, runProgram } from "@eden/runtime";
+import { isUnrecordedCall } from "./replay";
 
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE";
 
@@ -107,6 +108,20 @@ export async function shadowProgram(
   let compiledSkips = 0;
   let naiveSkips = 0;
   let extraMisses = 0;
+  /**
+   * Traces the recording could not answer, because the compiled program made a
+   * call the agent never made.
+   *
+   * Counted apart from extraMisses on purpose. A compiled program runs the
+   * checks the agent skipped — TicketShip's whole fixture is built around an
+   * agent that skips verifyWrite a fifth of the time — and
+   * skipRateBefore/skipRateAfter exist to *reward* exactly that. Treating it
+   * as a miss meant the gate failed programs for the one improvement the
+   * product is sold on. It is absence of evidence, not evidence of a fault:
+   * the trace simply cannot validate this program, so it is set aside.
+   */
+  let unvalidatable = 0;
+  let validated = 0;
   const required =
     opts.requiredTools ?? program.sequence?.filter((n) => isCheckName(n)) ?? [];
   const hasIsland = program.steps.some((s) => s.kind === "island");
@@ -135,6 +150,7 @@ export async function shadowProgram(
       // — it used to count every run that merely did not throw, against a
       // naive count of traces flagged complete, so the two were not the same
       // predicate and the gate could not fire.
+      validated++;
       if (outputMatches(run.value, t.output)) compiledComplete++;
       else {
         extraMisses++;
@@ -151,6 +167,13 @@ export async function shadowProgram(
         if (reasons.length < 8) reasons.push("island program produced 0 LLM calls");
       }
     } catch (err) {
+      if (isUnrecordedCall(err)) {
+        unvalidatable++;
+        if (reasons.length < 8) {
+          reasons.push(`compiled program ran ${(err as { tool?: string }).tool ?? "a step"} that this trace never recorded`);
+        }
+        continue;
+      }
       if (isDeopt(err)) {
         extraMisses++;
         if (reasons.length < 8) reasons.push(`deopt on in-distribution input: ${(err as Error).message}`);
@@ -162,6 +185,21 @@ export async function shadowProgram(
   }
 
   const n = held.length;
+  // A verdict needs traces that actually exercised the program end to end. If
+  // the recording could not answer most of them, the honest answer is that we
+  // do not know — not that everything passed by default.
+  if (validated < minN) {
+    return {
+      verdict: "INCONCLUSIVE",
+      manifest: null,
+      reasons: [
+        ...reasons,
+        `only ${validated} of ${n} held-out traces could validate this program (${unvalidatable} made calls the recording does not contain)`,
+      ],
+      n,
+      minLlmReduction: minLlmReductionOf(program.contract.minLlmReduction),
+    };
+  }
   const llmReduction = reductionRatio(mean(naiveLlm), mean(compiledLlm));
   // Reported, never gated on — and read it with care. `naiveMs` is whatever the
   // recorder wrote into the trace (for the TicketShip fixture, a synthetic
@@ -172,7 +210,7 @@ export async function shadowProgram(
   const latencyReduction = reductionRatio(mean(naiveMs), mean(compiledMs));
   const costReduction = reductionRatio(mean(naiveCents), mean(compiledCents));
   const skipRateBefore = naiveSkips / n;
-  const skipRateAfter = compiledSkips / n;
+  const skipRateAfter = compiledSkips / Math.max(validated, 1);
   const minR = minLlmReductionOf(program.contract.minLlmReduction);
 
   const manifest: Manifest = {
@@ -188,7 +226,9 @@ export async function shadowProgram(
     reasons.push(`extra misses ${extraMisses}`);
     return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
   }
-  if (naiveComplete > 0 && compiledComplete < naiveComplete) {
+  // Compared over the traces that ran, not over every held-out trace: a trace
+  // the recording could not answer contributes to neither side.
+  if (naiveComplete > 0 && compiledComplete < Math.min(naiveComplete, validated)) {
     reasons.push(`complete ${compiledComplete} < naive ${naiveComplete}`);
     return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
   }

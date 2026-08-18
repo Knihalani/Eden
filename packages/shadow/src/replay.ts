@@ -24,6 +24,28 @@ import { canonicalize, redact } from "@eden/ir";
  * not have. A shadow world has to be self-consistent to mean anything.
  */
 
+/**
+ * Thrown when the recording has no answer for a call the program made.
+ *
+ * Distinct from an ordinary failure on purpose: a compiled program runs the
+ * checks the agent skipped — that is most of the point, and it is what
+ * skipRateBefore/skipRateAfter measure — so a call the trace never made is
+ * absence of evidence, not evidence of a fault. shadowProgram treats it as
+ * "this trace cannot validate the program" rather than "the program is wrong".
+ */
+export class UnrecordedCall extends Error {
+  readonly tool: string;
+  constructor(tool: string) {
+    super(`shadow: ${tool} was not recorded in this trace, so it cannot be replayed`);
+    this.name = "UnrecordedCall";
+    this.tool = tool;
+  }
+}
+
+export function isUnrecordedCall(e: unknown): e is UnrecordedCall {
+  return e instanceof UnrecordedCall || (e as { name?: string })?.name === "UnrecordedCall";
+}
+
 export type ReplayMiss = {
   tool: string;
   reason: "unrecorded" | "different-args";
@@ -87,7 +109,7 @@ export function replayRegistry(base: ToolRegistry | undefined, trace: StretchTra
         // call this particular trace never made. There is simply no recorded
         // answer, and calling the real tool is what this exists to prevent.
         misses.push({ tool: name, reason: "unrecorded", args });
-        throw new Error(`shadow: ${name} was not recorded in this trace, so it cannot be replayed`);
+        throw new UnrecordedCall(name);
       }
       // A divergence in arguments is recorded but not fatal. Any step
       // downstream of an island takes the model's fresh output as an argument,

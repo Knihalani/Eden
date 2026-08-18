@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { Store, createHandler } from "@eden/control";
 import { ensureHome, resolveApiKey } from "./home";
 import { codingRegistry, wrapIsland } from "@eden/wrap";
+import { replayRegistry } from "@eden/shadow";
 
 export function wrapRegistry(args: string[]) {
   if (args.includes("--no-coding")) return undefined;
@@ -23,12 +24,21 @@ export async function wrapCmd(args: string[]): Promise<void> {
   const store = new Store(db);
   const token = resolveApiKey(args);
   const upstream = process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL;
+  const registry = wrapRegistry(args);
   const fetchHandler = createHandler({
     store,
     token,
     upstream,
     upstreamKey: process.env.OPENAI_API_KEY,
-    registry: wrapRegistry(args),
+    registry,
+    // Shadowing replays a candidate once per held-out trace to decide whether
+    // it should ship. Against the live registry that means a candidate which
+    // updates an issue and notifies performs those writes for real, n times,
+    // in order to decide whether it may. The replay sandbox answers every call
+    // from the trace's own recording instead, so validation costs nothing and
+    // changes nothing — and a candidate that runs a check the agent skipped is
+    // credited for it rather than failed.
+    sandboxFor: (t) => replayRegistry(registry, t),
     island: wrapIsland({ apiKey: process.env.OPENAI_API_KEY, upstream }),
   });
   const server = Bun.serve({ port, hostname, fetch: fetchHandler });

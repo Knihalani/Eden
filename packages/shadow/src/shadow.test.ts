@@ -256,3 +256,67 @@ describe("replayRegistry", () => {
     expect(reg.misses.some((m) => m.reason === "different-args")).toBe(true);
   });
 });
+
+describe("a program that checks more than the agent did is credited, not failed", () => {
+  /**
+   * TicketShip's fixture is built around an agent that skips verifyWrite a
+   * fifth of the time, and skipRateBefore/skipRateAfter exist to reward a
+   * compiled program for not skipping it. But a call the recording never made
+   * was counted into extraMisses, which is an outright FAIL — so the gate
+   * failed programs for the single improvement the product is sold on.
+   *
+   * It is absence of evidence, not evidence of a fault: that trace cannot
+   * validate the program, so it is set aside and reported.
+   */
+  const sandboxed = async (n: number) => {
+    const held = await traces(n, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    let realWrites = 0;
+    const counting = {
+      ...world.tools,
+      writeRecord: {
+        execute: async (a: Record<string, unknown>) => {
+          realWrites++;
+          return world.tools.writeRecord!.execute(a);
+        },
+      },
+    };
+    const reg = registryFrom(counting);
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: reg,
+      registryFor: (t) => replayRegistry(reg, t),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    return { result, realWrites };
+  };
+
+  test("the replay sandbox lets a write-performing program ship, having written nothing", async () => {
+    const { result, realWrites } = await sandboxed(6);
+    expect(result.verdict).toBe("PASS");
+    // The whole point: validating a program that writes cost zero writes.
+    expect(realWrites).toBe(0);
+    expect(result.manifest!.llmReduction).toBeGreaterThanOrEqual(2);
+  });
+
+  test("the traces it could not validate are named, not silently dropped", async () => {
+    const { result } = await sandboxed(6);
+    expect(result.reasons.some((r) => /never recorded/.test(r))).toBe(true);
+  });
+
+  test("a program no trace could validate is INCONCLUSIVE, not PASS", async () => {
+    // Set aside is not the same as ignored: if the recording answers nothing,
+    // the honest verdict is that we do not know.
+    const held = await traces(6, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    const empty = held.map((t) => ({ ...t, events: [] }));
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: (t) => replayRegistry(registryFrom(world.tools), empty.find((e) => e.id === t.id) ?? { ...t, events: [] }),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.verdict).toBe("INCONCLUSIVE");
+    expect(result.reasons.join(" ")).toMatch(/could validate this program/);
+  });
+});
