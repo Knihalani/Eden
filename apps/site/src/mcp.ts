@@ -100,11 +100,12 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   if (method === "tools/call") {
     const name = String(params?.name || "");
     const args = { ...((params?.arguments || {}) as Record<string, string>) };
-    if (!args.issue && (args.pr || args.number || args.id)) args.issue = args.pr || args.number || args.id;
+    const alias = args.pr || args.number || args.id;
+    if (!args.issue && alias) args.issue = alias;
     if (!args.ids && args.issues) args.ids = args.issues;
     if (!args.issues && args.ids) args.issues = args.ids;
     if (!args.issues && args.issue) args.issues = args.issue;
-    if (!args.issue && args.issues) args.issue = String(args.issues).split(/[,\s]+/)[0];
+    if (!args.issue && args.issues) args.issue = String(args.issues).split(/[,\s]+/)[0] ?? "";
     const tool = await db.get<{ id: string; name: string; steps: string }>(
       `SELECT id, name, steps FROM tool WHERE workspace_id = ? AND name = ? AND state = 'on'`,
       [workspaceId, name],

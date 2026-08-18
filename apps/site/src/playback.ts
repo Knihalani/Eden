@@ -210,8 +210,11 @@ export async function playTool(
   const receipts = await Promise.all(
     issues.map((issue) => playOne(db, tool, { ...params, issue, id: issue, number: issue })),
   );
-  const table = receipts.map((r, i) => r.table || receiptTableLine(issues[i], r.facts)).join("\n");
-  const rows = receipts.flatMap((r, i) => r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [issues[i]]));
+  // `issues[i]` is index-parallel to `receipts` by construction (receipts came
+  // from issues.map), so the fallback never fires; it is there to satisfy the
+  // index signature rather than to describe a reachable state.
+  const table = receipts.map((r, i) => r.table || receiptTableLine(issues[i] ?? "", r.facts)).join("\n");
+  const rows = receipts.flatMap((r, i) => (r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [issues[i] ?? ""])));
   return {
     ok: receipts.every((r) => r.ok),
     steps_ok: receipts.reduce((a, r) => a + r.steps_ok, 0),

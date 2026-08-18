@@ -268,13 +268,14 @@ function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
   }
   if (heuristicName(steps).startsWith("github_pr")) ensurePrBundleSteps(compiled);
   compiled.sort((a, b) => rankPlaybackUrl(a.url || "") - rankPlaybackUrl(b.url || ""));
-  for (let i = 0; i < compiled.length; i++) compiled[i].id = `s${i + 1}`;
-  for (let i = 0; i < compiled.length; i++) {
-    const url = compiled[i].url || "";
-    if (!url.includes("{sha}")) continue;
+  compiled.forEach((step, i) => {
+    step.id = `s${i + 1}`;
+  });
+  compiled.forEach((step, i) => {
+    if (!(step.url || "").includes("{sha}")) return;
     const prior = compiled.find((s, j) => j < i && /\/(pulls|issues)\/\{issue\}$/.test(s.url || ""));
-    if (prior) compiled[i].bind = { sha: `{{${prior.id}.head.sha}}` };
-  }
+    if (prior) step.bind = { sha: `{{${prior.id}.head.sha}}` };
+  });
   return compiled.map(({ bind, ...rest }) => (bind ? { ...rest, bind } : rest));
 }
 
