@@ -4,7 +4,7 @@ import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductio
 import { isDeopt, runProgram } from "@eden/runtime";
 import { wrapTimeoutMs } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
-import { canApprove, registryCovers, shadowProgram, uncoveredTools } from "@eden/shadow";
+import { canApprove, registryCovers, replayRegistry, shadowProgram, uncoveredTools } from "@eden/shadow";
 import { pushPrev, type Candidate, type Store } from "./store";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -17,6 +17,17 @@ export type ApiCtx = {
   island?: IslandCaller;
   /** Absent means nothing is authorised, not that everything is. */
   token?: string;
+  /**
+   * A throwaway world to shadow a write-performing candidate against.
+   *
+   * Called once per held-out trace and expected to return a registry whose
+   * effects nobody will see. Without it, a candidate containing a mutating
+   * step is refused rather than validated by actually performing the mutation
+   * — see the comment at the shadowProgram call below. `replayRegistry` is a
+   * ready-made implementation for the case where the recorded trace answers
+   * every call the program makes.
+   */
+  sandboxFor?: (t: StretchTrace) => ToolRegistry;
 };
 
 /**
@@ -88,6 +99,26 @@ function syncLiveTools(store: Store): void {
   }
 }
 
+/**
+ * Every shadow run in this file goes through here.
+ *
+ * Shadowing replays a candidate once per held-out trace, so handing it the
+ * live registry means validating a stretch that updates an issue and notifies
+ * by performing n real updates and n real notifications — in order to decide
+ * whether the program should be allowed to perform them. There were four call
+ * sites and the decision has to be the same at all of them, so it is made
+ * once, here: with a sandbox, a write-performing candidate is validated
+ * against the sandbox; without one, shadowProgram refuses it and says why.
+ */
+function shadowCandidate(ctx: ApiCtx, program: StretchProgram) {
+  return shadowProgram(program, ctx.store.traces(), {
+    registry: ctx.registry!,
+    registryFor: ctx.sandboxFor,
+    island: ctx.island,
+    allowSideEffects: Boolean(ctx.sandboxFor),
+  });
+}
+
 async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: number }> {
   ctx.store.clearCandidates();
   const compiled = compileTraces(ctx.store.traces(), { minLlmReduction: minLlmReductionOf(Number(process.env.EDEN_MIN_LLM_REDUCTION)) });
@@ -97,10 +128,7 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
     let refusal: Refusal | null = null;
     const missing = uncoveredTools(ctx.registry, program);
     if (ctx.registry && missing.length === 0) {
-      const sh = await shadowProgram(program, ctx.store.traces(), {
-        registry: ctx.registry,
-        island: ctx.island,
-      });
+      const sh = await shadowCandidate(ctx, program);
       verdict = sh.verdict;
       manifest = sh.manifest;
       if (manifest) program.manifest = manifest;
@@ -228,11 +256,11 @@ async function shipCandidate(
   }
   if (structural && ctx.registry) {
     program = withVersion({ ...program, version: undefined });
-    const sh = await shadowProgram(program, ctx.store.traces(), { registry: ctx.registry, island: ctx.island });
+    const sh = await shadowCandidate(ctx, program);
     if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow after edit did not pass", extra: { shadow: sh } };
     program = { ...program, manifest: sh.manifest };
   } else if (ctx.registry && registryCovers(ctx.registry, program) && ctx.store.tracesCount() >= 3) {
-    const sh = await shadowProgram(program, ctx.store.traces(), { registry: ctx.registry, island: ctx.island });
+    const sh = await shadowCandidate(ctx, program);
     if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow on approve did not pass", extra: { shadow: sh } };
     program = { ...program, manifest: sh.manifest };
   }
@@ -385,10 +413,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     if (!ctx.registry) return json({ error: "no registry for shadow" }, 409);
     const missing = uncoveredTools(ctx.registry, c.program);
     if (missing.length) return json({ error: `uncovered: ${missing.join(", ")}` }, 409);
-    const sh = await shadowProgram(c.program, ctx.store.traces(), {
-      registry: ctx.registry,
-      island: ctx.island,
-    });
+    const sh = await shadowCandidate(ctx, c.program);
     c.verdict = sh.verdict;
     c.manifest = sh.manifest;
     c.program = { ...c.program, manifest: sh.manifest };

@@ -66,17 +66,32 @@ const listOf = (n: number) => ({
 describe("parallel loops", () => {
   test("a read-only body runs concurrently", async () => {
     const N = 12;
-    const r = registry({ delayMs: 25, results: listOf(N) });
-    const t0 = performance.now();
+    const parallel = registry({ delayMs: 25, results: listOf(N) });
+    const pt0 = performance.now();
     const out = await runProgram(loopProgram("fetchDetails", N), { q: "x" }, {
-      registry: r.registry,
+      registry: parallel.registry,
       checkEnvelope: false,
     });
-    const ms = performance.now() - t0;
+    const parallelMs = performance.now() - pt0;
     expect((out.value as unknown[]).length).toBe(N);
-    expect(r.peakConcurrency).toBeGreaterThan(1);
-    // 12 sequential 25ms calls would be ~300ms; at width 8 it should be ~50ms.
-    expect(ms).toBeLessThan(200);
+    expect(parallel.peakConcurrency).toBeGreaterThan(1);
+
+    // Timed against a sequential run of the same work rather than an absolute
+    // threshold. A fixed millisecond bound measures the machine as much as the
+    // scheduler: this failed at 515ms on a box under load 56 while
+    // peakConcurrency proved the concurrency was working perfectly. A ratio
+    // cancels the load out, because both halves pay it.
+    const sequential = registry({ delayMs: 25, results: listOf(N) });
+    const st0 = performance.now();
+    await runProgram(loopProgram("postComment", N), { q: "x" }, {
+      registry: sequential.registry,
+      checkEnvelope: false,
+    });
+    const sequentialMs = performance.now() - st0;
+    expect(sequential.peakConcurrency).toBe(1);
+    // Width 8 over 12 items is two waves against twelve, so ~3x. Assert half
+    // of that, which is still impossible without real concurrency.
+    expect(parallelMs).toBeLessThan(sequentialMs / 1.5);
   });
 
   test("a mutating body stays sequential", async () => {
