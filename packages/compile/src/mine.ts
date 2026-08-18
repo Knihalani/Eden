@@ -103,7 +103,11 @@ export function majoritySequence(traces: StretchTrace[], minFrac = 0.8): string[
   const expanded = (ranked[0] ? names(ranked[0]) : []).filter((n) => kept.has(n));
   if (expanded.length >= 3) return expanded.slice(0, 12);
   const unique = [...kept];
-  unique.sort((a, b) => medianIndex(traces, a) - medianIndex(traces, b) || a.localeCompare(b));
+  // Decorate, sort, undecorate. medianIndex maps over every trace, does an
+  // indexOf and sorts a fresh array, and calling it from inside a comparator
+  // ran all of that O(U log U) times.
+  const medians = new Map(unique.map((n) => [n, medianIndex(traces, n)]));
+  unique.sort((a, b) => medians.get(a)! - medians.get(b)! || a.localeCompare(b));
   return unique;
 }
 

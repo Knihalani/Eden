@@ -242,11 +242,21 @@ export function argKeys(events: TraceEvent[]): string[] {
   return [...freq.entries()].filter(([, c]) => c / Math.max(events.length, 1) >= 0.8).map(([k]) => k);
 }
 
-export function keyJaccard(events: TraceEvent[]): number {
+/**
+ * The least similar pair of argument key-sets across these events.
+ *
+ * `floor` lets the caller stop as soon as the answer is already below the
+ * threshold it is going to compare against. This is all-pairs — O(events²·keys)
+ * — and it runs for every mutating tool in every cluster, so at 500 witnesses
+ * it was 125k set intersections computed in full to produce a number that gets
+ * compared against a single constant.
+ */
+export function keyJaccard(events: TraceEvent[], floor = 0): number {
   if (events.length < 2) return 1;
   const sets = events.map((e) => new Set(Object.keys(e.args ?? {})));
   let min = 1;
   for (let i = 0; i < sets.length; i++) {
+    if (min < floor) return min;
     for (let j = i + 1; j < sets.length; j++) {
       const a = sets[i]!;
       const b = sets[j]!;
@@ -254,6 +264,7 @@ export function keyJaccard(events: TraceEvent[]): number {
       for (const k of a) if (b.has(k)) inter++;
       const union = a.size + b.size - inter;
       min = Math.min(min, union ? inter / union : 1);
+      if (min < floor) return min;
     }
   }
   return min;

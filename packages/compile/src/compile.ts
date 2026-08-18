@@ -364,7 +364,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
         continue;
       }
 
-      if (isMutating(tool) && keyJaccard(evs) < 0.8) {
+      if (isMutating(tool) && keyJaccard(evs, 0.8) < 0.8) {
         refused = { sequence, reason: `${tool} arguments are under-determined`, slot: tool };
         break;
       }
