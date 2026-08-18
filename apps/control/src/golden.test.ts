@@ -39,8 +39,8 @@ async function naiveTraces(n: number, skip = 0.2): Promise<StretchTrace[]> {
 describe("control plane", () => {
   test("empty inbox does not 500", async () => {
     const store = new Store(":memory:");
-    const fetchHandler = createHandler({ store });
-    const inbox = await fetchHandler(new Request("http://x/v1/inbox"));
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const inbox = await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }));
     expect(inbox.status).toBe(200);
     const health = await fetchHandler(new Request("http://x/health"));
     const hj = (await health.json()) as { ok: boolean; traces?: number; registry?: boolean; island?: boolean };
@@ -89,7 +89,7 @@ describe("control plane", () => {
       new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
     );
     expect(compiled.status).toBe(200);
-    const inbox = await (await fetchHandler(new Request("http://x/v1/inbox"))).json() as { candidates: Array<{ id: string; refusal?: { reason: string } }> };
+    const inbox = await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json() as { candidates: Array<{ id: string; refusal?: { reason: string } }> };
     expect(inbox.candidates.some((c) => c.refusal?.reason)).toBe(true);
     const page = await fetchHandler(new Request("http://x/"));
     expect(page.status).toBe(404);
@@ -97,7 +97,7 @@ describe("control plane", () => {
       new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
     );
     expect(again.status).toBe(200);
-    const inbox2 = await (await fetchHandler(new Request("http://x/v1/inbox"))).json() as { candidates: Array<{ id: string }> };
+    const inbox2 = await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json() as { candidates: Array<{ id: string }> };
     expect(inbox2.candidates[0]?.id).toBe(inbox.candidates[0]?.id);
   });
 });
@@ -237,7 +237,7 @@ describe("TicketShip golden", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox"))).json()) as { candidates: unknown[] };
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { candidates: unknown[] };
     expect(inbox.candidates.length).toBeGreaterThanOrEqual(1);
     const again = await fetchHandler(
       new Request("http://x/v1/traces", {
@@ -268,7 +268,7 @@ describe("TicketShip golden", () => {
     }
     const fetchHandler = createHandler({ store, token: "eden_dev" });
     await fetchHandler(new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }));
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox"))).json()) as { candidates: unknown[] };
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { candidates: unknown[] };
     expect(inbox.candidates).toEqual([]);
   });
 
@@ -438,7 +438,7 @@ describe("TicketShip golden", () => {
     expect(body.accepted).toBe(2);
     expect(body.duplicates).toBe(1);
     expect(store.traces().length).toBe(3);
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox"))).json()) as { sig: string };
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as { sig: string };
     expect(inbox.sig.length).toBeGreaterThan(0);
     const savings = await fetchHandler(new Request("http://x/v1/savings", { headers: { authorization: "Bearer eden_dev" } }));
     expect(savings.status).toBe(200);
@@ -509,7 +509,7 @@ describe("TicketShip golden", () => {
     await fetchHandler(
       new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
     );
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox"))).json()) as {
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as {
       candidates: Array<{ id: string; program: unknown; verdict: string; refusal: { reason: string } | null }>;
     };
     const c = inbox.candidates.find((x) => x.program);
@@ -640,7 +640,7 @@ describe("TicketShip golden", () => {
     });
     store.putReceipt({ tool_id: "t1", version: "1", ms: 40, llm_calls: 0, cents: 0.1, ok: 1 });
     const fetchHandler = createHandler({ store, token: "eden_dev" });
-    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox"))).json()) as {
+    const inbox = (await (await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))).json()) as {
       live: Array<{ id: string; state: string; stats: { n: number } }>;
     };
     expect(inbox.live.some((t) => t.id === "t1" && t.state === "paused")).toBe(true);
@@ -706,5 +706,75 @@ describe("TicketShip golden", () => {
     const stack = (Array.isArray(after.prev) ? after.prev : []) as Array<{ version: string }>;
     expect(stack).toHaveLength(1);
     expect(stack[0]!.version).toBe(first.version);
+  });
+});
+
+describe("the control plane is not reachable from a web page", () => {
+  /**
+   * eden wrap binds this on 127.0.0.1:8788, and /v1/wrap-run reaches the
+   * coding registry's Bash, Write and Edit executors. It used to answer every
+   * preflight with `access-control-allow-origin: *` and
+   * `allow-headers: authorization` — legal, because the credential is a bearer
+   * header rather than a cookie, and therefore a straight path from any page
+   * the user visited to command execution on their machine.
+   */
+  function handler() {
+    return createHandler({ store: new Store(":memory:"), token: "eden_dev" });
+  }
+
+  test("a preflight from a remote origin is not granted", async () => {
+    const res = await handler()(
+      new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "https://evil.example" } }),
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe(null);
+  });
+
+  test("a preflight from a local page is granted, and only that origin", async () => {
+    const res = await handler()(
+      new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "http://localhost:3000" } }),
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+    expect(res.headers.get("vary")).toBe("origin");
+  });
+
+  test("no response ever carries a wildcard origin", async () => {
+    const h = handler();
+    for (const req of [
+      new Request("http://x/v1/tools", { method: "OPTIONS", headers: { origin: "https://evil.example" } }),
+      new Request("http://x/v1/inbox", { headers: { origin: "https://evil.example" } }),
+      new Request("http://x/v1/stats", { headers: { origin: "https://evil.example", authorization: "Bearer eden_dev" } }),
+    ]) {
+      expect((await h(req)).headers.get("access-control-allow-origin")).not.toBe("*");
+    }
+  });
+
+  test("/v1/inbox needs the key, like the endpoints whose data it repeats", async () => {
+    // It was exempt from auth while /v1/candidates and /v1/tools — both strict
+    // subsets of what it returns — required a key. Zero-credential exfiltration
+    // of every compiled program and the literal arguments mined into it.
+    const res = await handler()(new Request("http://x/v1/inbox"));
+    expect(res.status).toBe(401);
+  });
+
+  test("/v1/chat/completions needs the key before it spends the upstream one", async () => {
+    const res = await handler()(
+      new Request("http://x/v1/chat/completions", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("a handler with no token authorises nobody rather than everybody", () => {
+    // auth() returned true when the token was empty, and handleApi is a public
+    // export — so `{ token: "" }` was a wide-open API.
+    expect(() => createHandler({ store: new Store(":memory:"), token: "" })).toThrow(/needs a token/);
+    expect(() => createHandler({ store: new Store(":memory:") })).toThrow(/needs a token/);
+  });
+
+  test("a bare token, or a prefix of the real one, does not authenticate", async () => {
+    const h = createHandler({ store: new Store(":memory:"), token: "secret-token" });
+    for (const authorization of ["secret-token", "Bearer secret", "Bearer secret-token-more", "Bearer "]) {
+      expect((await h(new Request("http://x/v1/stats", { headers: { authorization } }))).status).toBe(401);
+    }
+    expect((await h(new Request("http://x/v1/stats", { headers: { authorization: "Bearer secret-token" } }))).status).toBe(200);
   });
 });
