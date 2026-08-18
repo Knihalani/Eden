@@ -135,6 +135,43 @@ export function pairedPermutationP(
 }
 
 /**
+ * Inverse Student-t, via the Cornish–Fisher expansion of the normal quantile.
+ *
+ * The two functions below sized experiments with `probit`, the *normal*
+ * quantile — but `decide()` requires only max(minBlocks, blocksForResolution)
+ * = 6 blocks, so the normal approximation was being used exactly where it is
+ * worst. At 6 blocks (5 degrees of freedom) t(0.975) is 2.571 against z's
+ * 1.960, so the minimum detectable effect was understated by about 24% and
+ * the required sample size under-quoted by about 55%. For a module whose
+ * whole purpose is to let a benchmark say "I cannot tell", the number most
+ * likely to be quoted was the one most likely to be wrong.
+ *
+ * The expansion is accurate to ~3 decimals for df >= 4 and converges on the
+ * normal as df grows, which is the behaviour we want.
+ */
+export function tQuantile(p: number, df: number): number {
+  const z = probit(p);
+  if (!Number.isFinite(z) || df <= 0) return z;
+  if (df > 200) return z;
+  // The expansion is asymptotic in 1/df and diverges for one and two degrees
+  // of freedom, where the true quantiles are enormous (t(0.975, 1) is 12.7).
+  // Both have closed forms, so use them rather than an approximation that is
+  // not merely imprecise there but wrong.
+  if (df === 1) return Math.tan(Math.PI * (p - 0.5));
+  if (df === 2) return (2 * p - 1) * Math.sqrt(2 / (4 * p * (1 - p)));
+  const z2 = z * z;
+  const z3 = z2 * z;
+  const z5 = z3 * z2;
+  const z7 = z5 * z2;
+  const z9 = z7 * z2;
+  const g1 = (z3 + z) / 4;
+  const g2 = (5 * z5 + 16 * z3 + 3 * z) / 96;
+  const g3 = (3 * z7 + 19 * z5 + 17 * z3 - 15 * z) / 384;
+  const g4 = (79 * z9 + 776 * z7 + 1482 * z5 - 1920 * z3 - 945 * z) / 92160;
+  return z + g1 / df + g2 / df ** 2 + g3 / df ** 3 + g4 / df ** 4;
+}
+
+/**
  * The smallest true effect this design could reliably detect, in the units of
  * the deltas.
  *
@@ -151,7 +188,8 @@ export function minDetectableEffect(
   const alpha = opts.alpha ?? 0.05;
   const power = opts.power ?? 0.8;
   if (blocks < 2 || sdOfDeltas <= 0) return Number.POSITIVE_INFINITY;
-  return (probit(1 - alpha / 2) + probit(power)) * (sdOfDeltas / Math.sqrt(blocks));
+  const df = blocks - 1;
+  return (tQuantile(1 - alpha / 2, df) + tQuantile(power, df)) * (sdOfDeltas / Math.sqrt(blocks));
 }
 
 /**
@@ -183,6 +221,16 @@ export function requiredBlocks(
   const power = opts.power ?? 0.8;
   if (!(effect > 0)) return Number.POSITIVE_INFINITY;
   if (sdOfDeltas <= 0) return 2;
-  const z = probit(1 - alpha / 2) + probit(power);
-  return Math.max(2, Math.ceil((z * sdOfDeltas / effect) ** 2));
+  // The quantile depends on the degrees of freedom, which depend on the answer.
+  // Searching upward rather than iterating a fixed point: the requirement
+  // falls as n rises, so the smallest n that satisfies its own requirement is
+  // the answer, and a scan cannot oscillate the way a fixed point can.
+  const need = (n: number) => ((tQuantile(1 - alpha / 2, n - 1) + tQuantile(power, n - 1)) * sdOfDeltas / effect) ** 2;
+  for (let n = 2; n <= 100_000; n++) {
+    // A hair of tolerance, so that n round-trips exactly through
+    // minDetectableEffect rather than landing one block higher on a rounding
+    // error at the boundary.
+    if (n + 1e-9 >= need(n)) return n;
+  }
+  return Number.POSITIVE_INFINITY;
 }
