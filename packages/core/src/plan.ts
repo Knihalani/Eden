@@ -186,7 +186,13 @@ export async function runFulfillPlan(
       return row;
     }),
   );
-  rows.sort((a, b) => plan.ids.indexOf(String(a.number)) - plan.ids.indexOf(String(b.number)));
+  // No sort. `Promise.all(plan.ids.map(...))` already resolves in input order,
+  // so this was at best a no-op — and not a free one. `a.number` comes from
+  // `Number(pull.number ?? n)`, so whenever the API returned a number that
+  // differs from the id we asked for, or the id had a leading zero ("007"
+  // becomes "7"), indexOf returned -1 and those rows jumped to the front of a
+  // table whose whole purpose is to line up with the ids requested. It was
+  // also quadratic, doing a linear scan inside the comparator.
   return { table: typedTable(rows), rows };
 }
 
@@ -211,9 +217,12 @@ export function selectMcpTools<T extends { name: string; uses_count?: number | n
     }
   }
   ranked = ranked.filter((t) => isCompilableToolName(t.name));
-  if (ranked.length <= limit) return ranked;
-  const used = ranked.filter((t) => Number(t.uses_count) > 0);
-  if (used.length) return used.slice(0, limit);
+  // `ranked` is already sorted by uses_count descending, so the top `limit`
+  // are the used ones followed by the best of the rest. Filtering to *only*
+  // the used tools left the remaining slots empty — ten compiled tools of
+  // which one had ever been used returned one tool, not six — and a freshly
+  // compiled tool could then never be surfaced, because it has no uses and
+  // some other tool always does. A cold-start trap that closes behind itself.
   return ranked.slice(0, limit);
 }
 
