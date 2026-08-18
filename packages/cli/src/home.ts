@@ -1,7 +1,7 @@
 import { homedir, hostname } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, writeSync, fstatSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, writeSync, fstatSync, renameSync } from "node:fs";
 
 export function edenHome(): string {
   return process.env.EDEN_HOME || join(homedir(), ".eden");
@@ -62,6 +62,30 @@ export function readConfig(): Config | null {
 export function writeConfig(c: Config): void {
   ensureHome();
   writeFileSync(configPath(), JSON.stringify(c, null, 2), { mode: 0o600 });
+}
+
+/**
+ * Replace a file's contents without a window in which it is half-written.
+ *
+ * writeFileSync truncates first and writes second, so a crash, a full disk or
+ * a power loss in between leaves the file empty or ending in a partial line —
+ * and every file this module manages is JSONL that a reader has to parse.
+ * Writing a sibling temp file and renaming makes the swap atomic: a reader
+ * sees the old contents or the new ones, never a mixture.
+ */
+export function writeFileAtomic(path: string, body: string): void {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, body);
+    renameSync(tmp, path);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* nothing to clean up */
+    }
+    throw err;
+  }
 }
 
 export function appendJsonl(path: string, row: unknown): void {

@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl } from "./home";
+import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
 import { redact, isStretchEnd, inDistribution } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
 
@@ -102,25 +102,30 @@ function flushSession(session: string, events: Array<Record<string, unknown>>): 
  *    and renaming makes the replacement atomic: readers see either the old
  *    file or the new one, never a partial one.
  */
+/**
+ * Drop exactly the lines a caller has finished with, keeping anything that
+ * arrived since it read them.
+ *
+ * Matching on the raw line text rather than unlinking the file is what makes
+ * this safe against a hook appending during an in-flight upload: a line the
+ * caller never saw cannot be in `consumed`.
+ */
+export function dropConsumedLines(path: string, consumed: string[]): void {
+  if (!consumed.length || !existsSync(path)) return;
+  const drop = new Set(consumed);
+  const current = readFileSync(path, "utf8").split("\n").filter(Boolean);
+  const rest = current.filter((l) => !drop.has(l));
+  if (rest.length === current.length) return;
+  writeFileAtomic(path, rest.length ? rest.join("\n") + "\n" : "");
+}
+
 export function applyFlushTruncate(path: string, flushedIds: string[]): void {
   const drop = new Set(flushedIds.filter(Boolean));
   if (!drop.size) return;
   const current = readJsonl(path);
   const rest = current.filter((e) => !drop.has(String(e.id ?? "")));
   if (rest.length === current.length) return;
-  const body = rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "";
-  const tmp = `${path}.${process.pid}.tmp`;
-  try {
-    writeFileSync(tmp, body);
-    renameSync(tmp, path);
-  } catch (err) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      /* nothing to clean up */
-    }
-    throw err;
-  }
+  writeFileAtomic(path, rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "");
 }
 
 export function respondToHook(body: HookIn): Record<string, unknown> {
