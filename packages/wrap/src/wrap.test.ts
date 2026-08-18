@@ -341,3 +341,79 @@ describe("control outbox", () => {
     expect(n).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("the proxy speaks the protocol its clients read", () => {
+  const streamed = async (upstream: Record<string, unknown>, tools: unknown) => {
+    const p = liveProgram();
+    const state = createState({
+      programs: [p],
+      fetch: (async () => new Response(JSON.stringify(upstream))) as unknown as typeof fetch,
+    });
+    const res = await handleChatCompletions(
+      new Request("http://local/v1/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({ model: "gpt-4o", messages: [], stream: true, tools }),
+      }),
+      { state, getPrograms: () => [p] },
+    );
+    const text = await res.text();
+    const chunks = text
+      .split("\n\n")
+      .map((l) => l.replace(/^data: /, "").trim())
+      .filter((l) => l && l !== "[DONE]")
+      .map((l) => JSON.parse(l) as { object: string; choices: Array<{ delta?: Record<string, unknown>; finish_reason: string | null }> });
+    return { text, chunks };
+  };
+
+  test("a streamed reply carries delta, not message", async () => {
+    // The request is forced non-streaming upstream so tool calls can be
+    // steered, and the completion was then wrapped in a single `data:` line
+    // unchanged. A streaming client reads choices[].delta, so `delta` was
+    // undefined and both content and tool calls came back empty — every
+    // OpenAI-SDK client using stream:true with a tool list got nothing.
+    const { text, chunks } = await streamed(
+      { id: "x", model: "gpt-4o", choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }] },
+      [{ type: "function", function: { name: "lookupTicket" } }],
+    );
+    expect(text).toContain("[DONE]");
+    expect(chunks.every((c) => c.object === "chat.completion.chunk")).toBe(true);
+    expect(chunks[0]!.choices[0]!.delta!.content).toBe("ok");
+    expect(chunks.at(-1)!.choices[0]!.finish_reason).toBe("stop");
+    expect(text).not.toContain('"message"');
+  });
+
+  test("streamed tool calls are steered and carry an index", async () => {
+    const { chunks } = await streamed(
+      {
+        id: "x",
+        model: "gpt-4o",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              tool_calls: [{ id: "c1", type: "function", function: { name: "lookupTicket", arguments: '{"id":"T-100"}' } }],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      },
+      [{ type: "function", function: { name: "lookupTicket" } }],
+    );
+    const calls = chunks[0]!.choices[0]!.delta!.tool_calls as Array<{ index: number; function: { name: string } }>;
+    expect(calls[0]!.index).toBe(0);
+    expect(calls[0]!.function.name).toBe("resolve_ticket");
+  });
+
+  test("a client that asked for no tools is not given any", async () => {
+    // injectTools returned the compiled tools whenever `tools` was not an
+    // array, so a plain completion came back with tools attached and its reply
+    // steered into a tool_calls response the caller had no handler for.
+    const p = liveProgram();
+    expect(injectTools(undefined, [p])).toBeUndefined();
+    // An empty array is different: the client opted into function calling and
+    // simply has none of its own, which is who compiled tools are for.
+    expect(Array.isArray(injectTools([], [p]))).toBe(true);
+    expect((injectTools([], [p]) as unknown[]).length).toBe(1);
+  });
+});

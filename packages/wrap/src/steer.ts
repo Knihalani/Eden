@@ -90,11 +90,22 @@ export function compiledSchema(program: StretchProgram) {
   };
 }
 
+/**
+ * Offer the compiled tools alongside whatever the client already asked for.
+ *
+ * A client that sent no `tools` field at all has not opted into function
+ * calling and has no handler for a tool call, so it gets none back. This used
+ * to return `extra` whenever `tools` was not an array, so a plain completion
+ * request came back with compiled tools attached and its reply steered into a
+ * tool_calls response the caller could do nothing with. An empty array is
+ * different: the client asked for function calling and simply has no tools of
+ * its own, which is exactly who compiled tools are for.
+ */
 export function injectTools(tools: unknown, programs: StretchProgram[]): unknown {
+  if (!Array.isArray(tools)) return tools;
   const live = programs.filter((p) => p.manifest);
   if (!live.length) return tools;
   const extra = live.map(compiledSchema);
-  if (!Array.isArray(tools)) return extra;
   const names = new Set(live.map((p) => p.name));
   return [...extra, ...tools.filter((t) => !names.has(String((t as { function?: { name?: string } }).function?.name)))];
 }
