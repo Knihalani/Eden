@@ -416,7 +416,20 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
       refusals.push({ sequence, reason: "under-determined envelope: no witnessed inputs" });
       continue;
     }
-    const last = [...steps].reverse().find((s) => s.kind === "tool" || s.kind === "island");
+    // The last *top-level* step, not the last step in the array. A loop is
+    // pushed and its body steps pushed immediately after it, so a plain
+    // reverse-find always returned a body step whenever a loop came last. Two
+    // things went wrong with that. The program returned one iteration's single
+    // result where the caller expected the collected array — compare the
+    // hand-written reference program in runtime/bench-loop.ts, which returns
+    // the loop. And if `over` resolved to an empty array the body never ran,
+    // its id was never written to the scope, and evaluating the return binding
+    // threw a plain "unknown step" Error: not a DeoptError, so isReplaySafe
+    // could not classify it and the caller could not tell it was safe to retry.
+    const inLoopBody = new Set(steps.flatMap((s) => (s.kind === "loop" ? s.body : [])));
+    const last = [...steps]
+      .reverse()
+      .find((s) => !inLoopBody.has(s.id) && (s.kind === "tool" || s.kind === "island" || s.kind === "loop"));
     const label = stretchName(sequence);
     const propKeys = env ? Object.keys(env.inputs) : Object.keys(cluster.traces[0]?.input ?? { id: true });
     const props = Object.fromEntries(
