@@ -343,7 +343,13 @@ describe("ir", () => {
     );
     const cyclic: Record<string, unknown> = { a: 1 };
     cyclic.self = cyclic;
-    expect(canonicalize(cyclic)).toBe('{"a":1,"self":"$cycle"}');
+    // Unquoted, and that matters: the sentinel used to be the *string*
+    // "$cycle", which JSON.stringify produces for a literal "$cycle" in the
+    // data. A payload could therefore forge a back-edge and collide with a
+    // genuinely cyclic one. JSON.stringify always quotes a string, so a bare
+    // token cannot be produced by any input.
+    expect(canonicalize(cyclic)).toBe('{"a":1,"self":$cycle}');
+    expect(canonicalize({ a: 1, self: "$cycle" })).not.toBe(canonicalize(cyclic));
   });
 
   test("containsRedaction finds the sentinel at depth", () => {
@@ -377,5 +383,92 @@ describe("ir", () => {
     const issues = validateProgram(p);
     expect(issues.some((i) => i.message.includes("array"))).toBe(true);
     expect(inDistribution({ ...p, contract: { ...p.contract, envelope: { inputs: { id: "T-1" as unknown as unknown[] } } } }, { id: "T-1" })).toBe(false);
+  });
+});
+
+describe("canonicalize agrees with eq about what is different", () => {
+  /**
+   * canonicalize is the content hash behind agreement(), divergeSameArgs(),
+   * hashProgram and hashTrace. Equal hashes are read as "the witnesses agree",
+   * and an agreed slot is bound into the compiled program as a literal — so a
+   * collision between values eq calls different bakes one witness's value in
+   * as though it were everybody's.
+   *
+   * It walked non-plain objects with Object.keys(), which returns nothing for
+   * a Date, a Map, a Set or an Error, so all of them hashed to `{}`.
+   */
+  const pairs: Array<[string, unknown, unknown]> = [
+    ["two dates", new Date(1000), new Date(999999)],
+    ["a date and an empty object", new Date(1000), {}],
+    ["a map and a set", new Map([["a", 1]]), new Set([1, 2, 3])],
+    ["a typed array and its index object", new Uint8Array([1, 2, 3]), { 0: 1, 1: 2, 2: 3 }],
+    ["two typed arrays", new Uint8Array([1, 2, 3]), new Uint8Array([1, 2, 4])],
+    ["two errors", new Error("a"), new Error("b")],
+    ["two regexps", /a/g, /b/i],
+    ["two maps with different values", new Map([["a", 1]]), new Map([["a", 2]])],
+    ["two sets with different members", new Set([1]), new Set([2])],
+  ];
+
+  for (const [what, a, b] of pairs) {
+    test(`${what}: eq says different, so the hash must differ`, () => {
+      expect(eq(a, b)).toBe(false);
+      expect(canonicalize(a)).not.toBe(canonicalize(b));
+    });
+  }
+
+  test("values eq calls equal still hash equally", () => {
+    const same: Array<[unknown, unknown]> = [
+      [new Date(1000), new Date(1000)],
+      [new Uint8Array([1, 2]), new Uint8Array([1, 2])],
+      [new Map([["a", 1]]), new Map([["a", 1]])],
+      [new Set([1, 2]), new Set([2, 1])], // order is not a difference
+      [new Error("boom"), new Error("boom")],
+      [/a/g, /a/g],
+      [{ a: 1, b: 2 }, { b: 2, a: 1 }],
+    ];
+    for (const [a, b] of same) {
+      expect(eq(a, b)).toBe(true);
+      expect(canonicalize(a)).toBe(canonicalize(b));
+    }
+  });
+
+  test("a bigint hashes instead of throwing", () => {
+    // JSON.stringify throws on a BigInt, so hashProgram/hashTrace threw on any
+    // trace carrying one — ordinary from a database driver with 64-bit ids.
+    expect(() => canonicalize({ id: 9007199254740993n })).not.toThrow();
+    expect(canonicalize({ id: 1n })).not.toBe(canonicalize({ id: 2n }));
+    expect(canonicalize({ id: 1n })).not.toBe(canonicalize({ id: 1 }));
+  });
+
+  test("a shared subtree is still expanded, and quickly", () => {
+    // The cycle guard is path-scoped by design, so a value reachable by k
+    // paths is expanded k times: thirty objects in a diamond are 2^30 nodes.
+    // Depth 22 measured 3.7s and an 88MB string before memoisation.
+    let dag: Record<string, unknown> = { leaf: 1 };
+    for (let i = 0; i < 30; i++) dag = { a: dag, b: dag };
+    const t0 = performance.now();
+    canonicalize(dag);
+    expect(performance.now() - t0).toBeLessThan(1000);
+  });
+
+  test("two different oversized values do not hash alike", () => {
+    const big = (leaf: string) => {
+      let d: Record<string, unknown> = { leaf };
+      for (let i = 0; i < 30; i++) d = { a: d, b: d };
+      return d;
+    };
+    expect(canonicalize(big("x"))).not.toBe(canonicalize(big("y")));
+  });
+
+  test("two distinct class instances do not read as agreement", () => {
+    class Thing {
+      constructor(public n: number) {}
+    }
+    // eq only considers a non-plain object equal to itself, so a structural
+    // hash here would collide two instances and read as agreement.
+    expect(eq(new Thing(1), new Thing(1))).toBe(false);
+    expect(canonicalize(new Thing(1))).not.toBe(canonicalize(new Thing(1)));
+    const one = new Thing(1);
+    expect(canonicalize(one)).toBe(canonicalize(one));
   });
 });
