@@ -1021,3 +1021,27 @@ describe("URL shapes match at segment boundaries", () => {
     );
   });
 });
+
+describe("two curls to different endpoints are two steps", () => {
+  test("a compound command keeps both URLs", () => {
+    // parseNamedCli dropped the URL, so every curl keyed as
+    // `curl.get::<host>` and the dedupe collapsed them. toStepFromParsed then
+    // re-scanned the whole command for a URL and picked the first, so the
+    // second endpoint disappeared from the mined island entirely.
+    const parsed = extractNamedCliCalls(
+      "curl https://api.acme.com/v1/orders/1 ; curl https://api.acme.com/v1/customers/9",
+    );
+    expect(parsed).toHaveLength(2);
+    expect(parsed.map((p) => p.positionals[0])).toEqual([
+      "https://api.acme.com/v1/orders/1",
+      "https://api.acme.com/v1/customers/9",
+    ]);
+  });
+
+  test("the same URL twice is still one step", () => {
+    const parsed = extractNamedCliCalls(
+      "curl https://api.acme.com/v1/orders/1 ; curl https://api.acme.com/v1/orders/1",
+    );
+    expect(parsed).toHaveLength(1);
+  });
+});

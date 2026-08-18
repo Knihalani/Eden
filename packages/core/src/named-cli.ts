@@ -43,7 +43,13 @@ export function parseNamedCli(command: string): ParsedCli | null {
       host = undefined;
     }
     const flags = parts.filter((p) => p.startsWith("-")).map((p) => p.split("=")[0]!);
-    return { family: "curl", subcommand: "get", flags: unique(flags), positionals: [], rewrite_host: host };
+    // The URL goes in positionals. It used to be dropped entirely, so every
+    // curl parsed to the same `curl.get::<host>` and the dedupe below
+    // collapsed two different endpoints on one host into a single step —
+    // and toStepFromParsed, having no URL to work from, then re-scanned the
+    // whole command and picked the *first* one, so the second endpoint
+    // vanished from the mined island.
+    return { family: "curl", subcommand: "get", flags: unique(flags), positionals: url ? [url] : [], rewrite_host: host };
   }
   const spec = NAMED[bin];
   if (!spec) return null;
