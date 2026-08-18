@@ -190,9 +190,17 @@ const DEV_TOKEN = "eden_dev";
  * deployment managed — and so withholds the permissive dev fallback — then
  * seed() must not plant a dev credential behind its back.
  */
-function isManagedDeployment(): boolean {
+export function isManagedDeployment(): boolean {
   return Boolean(process.env.DATABASE_URL) || Boolean(process.env.VERCEL);
 }
+
+/**
+ * Marker for an api_key row that can never authenticate.
+ *
+ * Deliberately not 64 hex characters, so it cannot collide with a real
+ * sha256 and cannot be produced by hashing any token.
+ */
+const DISABLED_HASH = "disabled";
 
 async function seed(db: EdenDb) {
   await db.run(`INSERT OR IGNORE INTO workspace (id, name) VALUES (?, ?)`, ["ws_local", "local"]);
@@ -207,10 +215,26 @@ async function seed(db: EdenDb) {
 /**
  * Rewrites any api_key row still holding a plaintext secret in `hash`.
  * Rows written before hashing existed would otherwise stop authenticating.
+ *
+ * This runs on every boot, so it has to be idempotent, and it was not. A row
+ * disabled on the first boot came back on the second: "disabled" is truthy and
+ * is not 64 hex characters, so it fell through to the last line and was stored
+ * as sha256("disabled"). From then on the literal token `disabled`
+ * authenticated into that row's workspace. Deployments that had booted twice
+ * are repaired here as well as protected, since the damage is already in their
+ * database.
  */
 async function hashLegacyKeys(db: EdenDb) {
+  const disabledHashed = hashApiKey(DISABLED_HASH);
   const rows = await db.all<{ prefix: string; hash: string | null }>(`SELECT prefix, hash FROM api_key`);
   for (const row of rows) {
+    if (row.hash === DISABLED_HASH) continue;
+    if (row.hash === disabledHashed) {
+      // Left behind by the non-idempotent version of this migration. As it
+      // stands, presenting the word "disabled" as a key authenticates.
+      await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, [DISABLED_HASH, row.prefix]);
+      continue;
+    }
     if (row.hash && /^[0-9a-f]{64}$/.test(row.hash)) continue;
     if (!row.hash) {
       // A row with no secret cannot be migrated into one. Falling back to the
@@ -218,7 +242,7 @@ async function hashLegacyKeys(db: EdenDb) {
       // credential, so presenting a key's public identifier would authenticate
       // — exactly the hole the prefix-matching removal closed. Disable the row
       // instead; a key nobody can use is the safe failure.
-      await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, ["disabled", row.prefix]);
+      await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, [DISABLED_HASH, row.prefix]);
       continue;
     }
     await db.run(`UPDATE api_key SET hash = ? WHERE prefix = ?`, [hashApiKey(row.hash), row.prefix]);
