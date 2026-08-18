@@ -1,5 +1,5 @@
 import type { StretchProgram } from "@eden/ir";
-import { inDistribution, asRecord, getPath } from "@eden/ir";
+import { inDistribution, asRecord, getPath, setKey } from "@eden/ir";
 
 export type OpenAiToolCall = {
   id?: string;
@@ -29,11 +29,14 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   const envKeys = Object.keys(program.contract.envelope?.inputs ?? {});
   const keys = [...new Set([...Object.keys(props), ...envKeys])];
   const out: Record<string, unknown> = {};
+  // setKey rather than `out[k] =`: a key named "__proto__" runs the inherited
+  // setter instead of defining a property, which both loses the input and
+  // installs it as the prototype of the args object handed to the tool.
   for (const k of keys) {
-    if (k in args) out[k] = args[k];
+    if (k in args) setKey(out, k, args[k]);
     else {
       const nested = k.includes(".") ? getPath(args, k) : undefined;
-      if (nested !== undefined) out[k] = nested;
+      if (nested !== undefined) setKey(out, k, nested);
     }
   }
   if (!Object.keys(out).length) {
@@ -41,7 +44,7 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
     const dest = keys[0] || "id";
     for (const a of aliases) {
       if (a in args) {
-        out[dest] = args[a];
+        setKey(out, dest, args[a]);
         break;
       }
     }
