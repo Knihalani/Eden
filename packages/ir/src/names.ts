@@ -39,14 +39,50 @@ export function isCheckName(name: string): boolean {
   return CHECK_NAME.test(name);
 }
 
+/**
+ * Does this name describe an operation that changes something?
+ *
+ * The check-name test used to short-circuit *before* the verb test, and
+ * CHECK_NAME is unanchored — so any mutating tool whose name happens to
+ * contain a check word was reported as a read. `delete_check_run`,
+ * `update_check_run` and `create_check_suite` are all real GitHub operations
+ * and all three came back false, which skipped the compiler's mutating-tool
+ * guards (the Jaccard threshold, the 92% trap, the empty-args refusal) and
+ * compiled a write in as an ordinary read. `confirm_and_delete` and
+ * `send_verification_email` are the same shape.
+ *
+ * An explicit mutating verb at the front of the name is the stronger signal,
+ * so it is tested first — and once it is, the check-name exclusion has nothing
+ * left to do: a name that does not begin with a mutating verb already answers
+ * false. It is gone rather than reordered.
+ */
+/** Split a tool name into words: snake, kebab, dotted and camel all count. */
+export function nameWords(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase());
+}
+
+const isMutatingWord = (w: string): boolean => MUTATING_VERBS.includes(w as (typeof MUTATING_VERBS)[number]);
+
 export function isMutating(name: string): boolean {
-  if (isCheckName(name)) return false;
-  const lower = name.toLowerCase();
-  for (const verb of MUTATING_VERBS) {
-    if (lower === verb) return true;
-    if (lower.startsWith(verb) && name.length > verb.length && /[A-Z0-9_]/.test(name[verb.length]!)) return true;
-  }
-  return false;
+  const words = nameWords(name);
+  // The first word is the verb and the rest are its object. That distinction
+  // is the whole difference between `verifyWrite`, which reads back a write,
+  // and `delete_check_run`, which deletes a check run — and getting it wrong
+  // in either direction is expensive. CHECK_NAME used to short-circuit the
+  // whole function, and being unanchored it caught the second case as well as
+  // the first, so `delete_check_run`, `update_check_run` and
+  // `create_check_suite` all reported as reads and skipped the compiler's
+  // mutating-tool guards.
+  const head = words[0];
+  if (head && isMutatingWord(head)) return true;
+  if (head && CHECK_NAME.test(head)) return false;
+  // No verb at the head: fall back to any mutating word, so a name that leads
+  // with a noun still gets recognised.
+  return words.some(isMutatingWord);
 }
 
 export function isIslandName(name: string): boolean {

@@ -191,8 +191,24 @@ export async function runMcp(args: string[] = process.argv.slice(2)): Promise<vo
         } catch {
           continue;
         }
-        await handleMcp(msg, { base, key, programs, send, error });
+        try {
+          await handleMcp(msg, { base, key, programs, send, error });
+        } catch (err) {
+          // One rejection used to poison the chain for the life of the
+          // process: `chain = chain.then(...)` makes every later message wait
+          // on a promise that is already rejected, so the server stayed alive
+          // and stopped answering, and the client hung forever with no
+          // diagnostic. A JSON-RPC request gets an error reply; a
+          // notification, which has no id, gets a line on stderr.
+          const message = (err as Error)?.message ?? String(err);
+          if (msg.id !== undefined && msg.id !== null) error(msg.id, -32603, message);
+          else process.stderr.write(`eden mcp: ${message}\n`);
+        }
       }
+    }).catch((err: unknown) => {
+      // The chain itself must never settle rejected, or the next message
+      // inherits the rejection.
+      process.stderr.write(`eden mcp: ${(err as Error)?.message ?? String(err)}\n`);
     });
   });
 }

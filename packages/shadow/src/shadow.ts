@@ -54,7 +54,14 @@ function reductionRatio(naive: number, compiled: number): number {
 }
 
 export function uncoveredTools(registry: ToolRegistry | undefined, program: StretchProgram): string[] {
-  const names = program.sequence ?? program.steps.filter((s) => s.kind === "tool").map((s) => s.tool);
+  // `??` only falls back on nullish, so an empty `sequence` — which a program
+  // may legitimately carry — meant "no tools to cover" and the coverage check
+  // passed trivially. api.ts gates shadowing on that check being empty, so a
+  // program whose steps included a tool the registry had never heard of was
+  // shadowed anyway.
+  const names = program.sequence?.length
+    ? program.sequence
+    : program.steps.filter((s) => s.kind === "tool").map((s) => s.tool);
   return names.filter((n) => !isIslandName(n) && !registry?.has?.(n));
 }
 
