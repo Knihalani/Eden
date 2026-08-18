@@ -361,3 +361,53 @@ describe("a parallel loop body sees its own results, not a sibling's", () => {
     await expect(runProgram(assertingLoop(N), { q: "x" }, { registry: reg, checkEnvelope: false })).rejects.toThrow();
   });
 });
+
+describe("a top-level wave holds to the same safety test as a loop body", () => {
+  /**
+   * Wave membership was gated on isBarrier, which rests on isMutating — a
+   * fixed list of verbs. stepIsParallelSafe's own doc comment explains why
+   * that is the wrong basis ("charge, refund, merge, deploy, approve") and
+   * uses an allowlist instead, but only loop bodies were held to it. Two
+   * independent steps whose names the verb list does not recognise were
+   * batched into one wave and run concurrently.
+   */
+  function twoSteps(tool: string): StretchProgram {
+    return withVersion({
+      id: "p_wave",
+      name: "wave",
+      description: "d",
+      inputSchema: { type: "object", properties: { q: { type: "string" } }, required: ["q"] },
+      sequence: [tool, tool],
+      steps: [
+        { id: "a", kind: "tool", tool, args: { q: { kind: "input", path: "q" } } },
+        { id: "b", kind: "tool", tool, args: { q: { kind: "input", path: "q" } } },
+      ],
+      returns: { kind: "from", step: "b", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+  }
+
+  test("two chargeCard steps do not run concurrently", async () => {
+    // "charge" is in neither the mutating verb list nor the read vocabulary,
+    // so it was treated as batchable by the denylist and unsafe by the
+    // allowlist. The allowlist is right.
+    const r = registry({ delayMs: 10 });
+    await runProgram(twoSteps("chargeCard"), { q: "x" }, { registry: r.registry, checkEnvelope: false });
+    expect(r.peakConcurrency).toBe(1);
+  });
+
+  test("two reads still share a wave", async () => {
+    const r = registry({ delayMs: 10 });
+    await runProgram(twoSteps("fetchDetails"), { q: "x" }, { registry: r.registry, checkEnvelope: false });
+    expect(r.peakConcurrency).toBe(2);
+  });
+
+  test("a step the program marked readOnly still shares a wave", async () => {
+    const p = twoSteps("chargeCard");
+    for (const s of p.steps) (s as { readOnly?: boolean }).readOnly = true;
+    const r = registry({ delayMs: 10 });
+    await runProgram(p, { q: "x" }, { registry: r.registry, checkEnvelope: false });
+    expect(r.peakConcurrency).toBe(2);
+  });
+});

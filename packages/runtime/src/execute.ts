@@ -282,7 +282,15 @@ export async function runProgram(
       const waveIds = new Set<string>();
       while (i < pending.length) {
         const s = pending[i]!;
-        if (isBarrier(s)) break;
+        // The same allowlist a loop body has to pass, and for the same reason
+        // stepIsParallelSafe spells out: isBarrier rests on isMutating, a list
+        // of verbs that misses charge, refund, merge, deploy and approve. Two
+        // independent `charge*` steps whose arguments both come from `input`
+        // were batched into one wave and run concurrently, with
+        // nondeterministic ordering and partial-effect-on-error semantics.
+        // Loop bodies were held to the stricter test and top-level waves were
+        // not.
+        if (isBarrier(s) || !stepIsParallelSafe(s)) break;
         const deps = stepDeps(s);
         if (deps.some((d) => !results.has(d))) break;
         if (deps.some((d) => waveIds.has(d))) break;
