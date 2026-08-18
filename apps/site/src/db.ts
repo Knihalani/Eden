@@ -3,8 +3,14 @@ import { createHash } from "node:crypto";
 const SQLITE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS workspace (id TEXT PRIMARY KEY, name TEXT)`,
   `CREATE TABLE IF NOT EXISTS api_key (prefix TEXT PRIMARY KEY, hash TEXT, workspace_id TEXT)`,
+  // Keyed by (workspace_id, event_id), not event_id alone. The id is chosen by
+  // the client — `bench-horizon-product.ts` emits `bash-${seq}`, and any SDK
+  // may do the same — so with a global key one tenant claiming an id silently
+  // suppressed another tenant's event, because ingest inserts OR IGNORE. The
+  // same reasoning as `cluster` below.
   `CREATE TABLE IF NOT EXISTS tool_event (
-      event_id TEXT PRIMARY KEY, workspace_id TEXT, run_id TEXT, seq INTEGER, name TEXT, args TEXT, command TEXT, ok INTEGER
+      event_id TEXT, workspace_id TEXT, run_id TEXT, seq INTEGER, name TEXT, args TEXT, command TEXT, ok INTEGER,
+      PRIMARY KEY (workspace_id, event_id)
     )`,
   `CREATE TABLE IF NOT EXISTS stretch (
       id TEXT PRIMARY KEY, workspace_id TEXT, run_id TEXT, fingerprint TEXT, steps TEXT, island_index INTEGER
@@ -125,35 +131,53 @@ export async function openDb(path?: string): Promise<EdenDb> {
  * `ON CONFLICT (workspace_id, fingerprint)` upsert has no matching constraint
  * to target. Copies rows across, keeping the highest count per pair.
  */
-async function migrateClusterKey(db: EdenDb, neon: boolean): Promise<void> {
-  try {
-    if (neon) {
-      const row = await db.get<{ n: number | string }>(
-        `SELECT count(*) AS n
-           FROM information_schema.table_constraints c
-           JOIN information_schema.key_column_usage k ON k.constraint_name = c.constraint_name
-          WHERE c.table_name = 'cluster' AND c.constraint_type = 'PRIMARY KEY' AND k.column_name = 'workspace_id'`,
-      );
-      if (Number(row?.n ?? 0) > 0) return;
-    } else {
-      const row = await db.get<{ sql: string }>(
-        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cluster'`,
-      );
-      if (!row?.sql || /PRIMARY KEY\s*\(\s*workspace_id/i.test(row.sql)) return;
-    }
-    await db.exec(`CREATE TABLE IF NOT EXISTS cluster_v2 (
-        fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT,
-        PRIMARY KEY (workspace_id, fingerprint)
-      )`);
-    await db.exec(
-      `INSERT INTO cluster_v2 (fingerprint, workspace_id, count, steps, status)
-         SELECT fingerprint, workspace_id, count, steps, status FROM cluster`,
+async function alreadyTenantKeyed(db: EdenDb, neon: boolean, table: string): Promise<boolean> {
+  if (neon) {
+    const row = await db.get<{ n: number | string }>(
+      `SELECT count(*) AS n
+         FROM information_schema.table_constraints c
+         JOIN information_schema.key_column_usage k ON k.constraint_name = c.constraint_name
+        WHERE c.table_name = $1 AND c.constraint_type = 'PRIMARY KEY' AND k.column_name = 'workspace_id'`,
+      [table],
     );
-    await db.exec(`DROP TABLE cluster`);
-    await db.exec(`ALTER TABLE cluster_v2 RENAME TO cluster`);
+    return Number(row?.n ?? 0) > 0;
+  }
+  const row = await db.get<{ sql: string }>(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, [table]);
+  return !row?.sql || /PRIMARY KEY\s*\(\s*workspace_id/i.test(row.sql);
+}
+
+/**
+ * Re-key a table onto (workspace_id, <id>) by copying it through a v2 table.
+ *
+ * Shared by `cluster` and `tool_event`, which had the same fault for the same
+ * reason: an id that is not globally unique used as a global primary key, so
+ * one tenant's row silently displaced another's.
+ */
+async function migrateTenantKey(
+  db: EdenDb,
+  neon: boolean,
+  table: string,
+  idColumn: string,
+  columns: string,
+): Promise<void> {
+  try {
+    if (await alreadyTenantKeyed(db, neon, table)) return;
+    const tmp = `${table}_v2`;
+    await db.exec(`CREATE TABLE IF NOT EXISTS ${tmp} (
+        ${columns},
+        PRIMARY KEY (workspace_id, ${idColumn})
+      )`);
+    const names = columns
+      .split(",")
+      .map((c) => c.trim().split(/\s+/)[0])
+      .filter(Boolean)
+      .join(", ");
+    await db.exec(`INSERT INTO ${tmp} (${names}) SELECT ${names} FROM ${table}`);
+    await db.exec(`DROP TABLE ${table}`);
+    await db.exec(`ALTER TABLE ${tmp} RENAME TO ${table}`);
   } catch {
-    // A failed migration must not stop the server booting. The upsert below
-    // still works against the old key; it just keeps the old collision.
+    // A failed migration must not stop the server booting. Writes still work
+    // against the old key; they just keep the old collision.
   }
 }
 
@@ -164,7 +188,14 @@ async function migrate(db: EdenDb, neon: boolean) {
   }
   await db.exec(`ALTER TABLE tool ADD COLUMN required_k INTEGER DEFAULT 2`).catch(() => undefined);
   await db.exec(`ALTER TABLE tool ADD COLUMN published INTEGER DEFAULT 0`).catch(() => undefined);
-  await migrateClusterKey(db, neon);
+  await migrateTenantKey(db, neon, "cluster", "fingerprint", "fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT");
+  await migrateTenantKey(
+    db,
+    neon,
+    "tool_event",
+    "event_id",
+    "event_id TEXT, workspace_id TEXT, run_id TEXT, seq INTEGER, name TEXT, args TEXT, command TEXT, ok INTEGER",
+  );
 }
 
 /** The `hash` column stores this, never the token itself. */

@@ -357,3 +357,47 @@ describe("Eden does not invent requests to a host it was merely shown", () => {
     expect(rows.map((r) => r.steps).join("")).toContain("/files");
   });
 });
+
+describe("one tenant's event ids cannot suppress another's", () => {
+  /**
+   * event_id was a *global* primary key and ingest inserts OR IGNORE, so a
+   * tenant that claimed an id silently swallowed another tenant's event with
+   * the same id. The ids are client-chosen — bench-horizon-product.ts emits
+   * `bash-${seq}` — so collisions need no malice, only two tenants using the
+   * same SDK.
+   */
+  let dir: string;
+  let db: EdenDb;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "eden-evt-"));
+    db = await openDb(join(dir, "t.sqlite"));
+    for (const w of ["ws_a", "ws_b"]) {
+      await db.run(`INSERT OR IGNORE INTO workspace (id, name) VALUES (?, ?)`, [w, w]);
+    }
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const ev = (): ToolEvent[] =>
+    [
+      { event_id: "bash-0", seq: 0, name: "Bash", args: { command: "curl https://api.acme.com/a" }, command: "curl https://api.acme.com/a", ok: true },
+      { event_id: "bash-1", seq: 1, name: "Bash", args: { command: "curl https://api.acme.com/b" }, command: "curl https://api.acme.com/b", ok: true },
+    ] as ToolEvent[];
+
+  test("both tenants keep their own events", async () => {
+    await ingest(db, "ws_a", "run1", ev(), true);
+    await ingest(db, "ws_b", "run1", ev(), true);
+    for (const w of ["ws_a", "ws_b"]) {
+      const rows = await db.all<{ event_id: string }>(`SELECT event_id FROM tool_event WHERE workspace_id = ?`, [w]);
+      expect(rows.map((r) => r.event_id).sort()).toEqual(["bash-0", "bash-1"]);
+    }
+  });
+
+  test("a repeated id within one tenant is still deduped", async () => {
+    // The dedupe the global key was there for must survive the re-keying.
+    await ingest(db, "ws_a", "run1", ev(), true);
+    await ingest(db, "ws_a", "run1", ev(), true);
+    const rows = await db.all<{ event_id: string }>(`SELECT event_id FROM tool_event WHERE workspace_id = 'ws_a'`);
+    expect(rows).toHaveLength(2);
+  });
+});
