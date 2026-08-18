@@ -261,6 +261,47 @@ describe("compile", () => {
     expect(p.steps.some((s) => s.kind === "loop")).toBe(true);
     const loop = p.steps.find((s) => s.kind === "loop");
     expect(loop && loop.kind === "loop" && loop.body.length).toBe(1);
+
+    // A loop is pushed and its body steps pushed immediately after it, so a
+    // reverse scan of the flat array found the *body* step whenever a loop
+    // came last. The program then returned one iteration's single result
+    // instead of the collected array — and if `over` resolved to empty, the
+    // body never ran, its id was never in scope, and evaluating the return
+    // binding threw a plain "unknown step" that isReplaySafe cannot classify.
+    const bodyIds = new Set(p.steps.flatMap((s) => (s.kind === "loop" ? s.body : [])));
+    expect(bodyIds.has((p.returns as { step: string }).step)).toBe(false);
+  });
+
+  test("a program ending in a loop returns the loop, not its last iteration", () => {
+    // The loop step is pushed and its body steps pushed immediately after, so
+    // a reverse scan of the flat array found the body step. The program then
+    // returned one iteration's single result where the caller expected the
+    // collected array — and when `over` resolved to an empty array the body
+    // never ran at all, its id was never written to the scope, and evaluating
+    // the return binding threw a plain "unknown step" Error rather than a
+    // DeoptError, so isReplaySafe could not tell the caller it was safe to
+    // retry.
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
+      const ids = [`a${i}`, `b${i}`, `c${i}`];
+      return {
+        id: `tail${i}`,
+        llmCalls: 5,
+        duration_ms: 1000,
+        cost_cents: 5,
+        input: { q: "open" },
+        complete: true,
+        events: [
+          { name: "listItems", args: { q: "open" }, result: { items: ids.map((id) => ({ id })) }, ok: true },
+          ...ids.map((id) => ({ name: "getItem", args: { id }, result: { id, body: `b-${id}` }, ok: true })),
+        ],
+        output: { done: true },
+      };
+    });
+    const { programs } = compileTraces(traces);
+    const p = programs[0]!;
+    const loop = p.steps.find((s) => s.kind === "loop");
+    expect(loop).toBeTruthy();
+    expect(p.returns).toEqual({ kind: "from", step: loop!.id, path: "" });
   });
 
   test("mines a period-2 loop over a prior array", () => {

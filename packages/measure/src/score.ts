@@ -41,13 +41,50 @@ export type RecordScore = {
 export function looseEquals(actual: unknown, expected: unknown): boolean {
   if (actual === expected) return true;
   if (actual == null || expected == null) return false;
+  // Ahead of the numeric branch: that branch coerces with Number(), so
+  // `looseEquals(0, false)` and `looseEquals(1, true)` both came out true.
+  // A boolean is only loosely equal to the same boolean, which `===` above
+  // has already settled.
+  if (typeof actual === "boolean" || typeof expected === "boolean") return false;
   if (typeof actual === "number" || typeof expected === "number") {
+    // Number("") and Number("   ") are both 0, so an answer that said nothing
+    // scored as having said the number zero.
+    const blank = (v: unknown) => typeof v === "string" && v.trim() === "";
+    if (blank(actual) || blank(expected)) return false;
     const a = Number(actual);
     const b = Number(expected);
     if (Number.isFinite(a) && Number.isFinite(b)) return a === b;
   }
+  // Objects and arrays are compared structurally. `String({...})` is
+  // "[object Object]" for every plain object, so the normalising comparison
+  // below rated *any* two objects equal: scoreRecord awarded full marks, with
+  // zero fabrications, to a record whose nested field was completely wrong.
+  // That is exactly the saturation this module exists to prevent.
+  if (typeof actual === "object" || typeof expected === "object") {
+    if (typeof actual !== "object" || typeof expected !== "object") return false;
+    return stableJson(actual) === stableJson(expected);
+  }
   const norm = (v: unknown) => String(v).trim().toLowerCase().replace(/\s+/g, " ");
   return norm(actual) === norm(expected);
+}
+
+/** JSON with object keys sorted, so key order is not a difference. */
+function stableJson(v: unknown): string {
+  return JSON.stringify(sortKeys(v, new WeakSet()));
+}
+
+function sortKeys(v: unknown, seen: WeakSet<object>): unknown {
+  if (v === null || typeof v !== "object") return v;
+  if (seen.has(v)) return "[cycle]";
+  seen.add(v);
+  try {
+    if (Array.isArray(v)) return v.map((x) => sortKeys(x, seen));
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v).sort()) out[k] = sortKeys((v as Record<string, unknown>)[k], seen);
+    return out;
+  } finally {
+    seen.delete(v);
+  }
 }
 
 /**
@@ -74,7 +111,12 @@ export function scoreRecord(
     const expected = gold[f.name];
     if (expected === undefined) continue; // gold says nothing; nothing to score
     max += 1;
-    const present = answer != null && Object.hasOwn(answer, f.name) && answer[f.name] != null;
+    // Present means "the answer said something about this field", not "said
+    // something non-null". Gold values are legitimately null — merged_at,
+    // closed_by, assignee — and an answer that correctly reported null was
+    // scored as having omitted the field, making those fields unscoreable.
+    // Whether null is the *right* answer is looseEquals's job, below.
+    const present = answer != null && Object.hasOwn(answer, f.name);
     if (!present) {
       fields.push({ name: f.name, outcome: "missing", expected });
       missing.push(f.name);

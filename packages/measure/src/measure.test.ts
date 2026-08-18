@@ -349,3 +349,51 @@ describe("score", () => {
     expect(s.fraction).toBe(0);
   });
 });
+
+describe("the scorer does not award marks it cannot justify", () => {
+  test("two different objects are not equal", () => {
+    // `String({...})` is "[object Object]" for every plain object, so the
+    // normalising comparison rated any two objects equal. A record whose
+    // nested field was completely wrong scored full marks with zero
+    // fabrications — the exact saturation this module exists to prevent.
+    expect(looseEquals({ login: "alice" }, { login: "bob" })).toBe(false);
+    expect(looseEquals({ login: "alice" }, { login: "alice" })).toBe(true);
+    expect(looseEquals([1, 2], [1, 3])).toBe(false);
+    expect(looseEquals([1, 2], [1, 2])).toBe(true);
+    expect(looseEquals({ a: 1 }, [1])).toBe(false);
+    expect(looseEquals({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true); // key order is not a difference
+  });
+
+  test("a wrong nested field is scored wrong, not correct", () => {
+    const r = scoreRecord(
+      { owner: { login: "WRONG" }, n: 5 },
+      { owner: { login: "alice" }, n: 5 },
+      [{ name: "owner" }, { name: "n" }],
+    );
+    expect(r.score).toBe(0); // one correct, one fabricated, penalty 1
+    expect(r.max).toBe(2);
+    expect(r.fabricated).toEqual(["owner"]);
+  });
+
+  test("a boolean is not loosely equal to a number or an empty string", () => {
+    expect(looseEquals(1, true)).toBe(false);
+    expect(looseEquals(0, false)).toBe(false);
+    expect(looseEquals(0, "")).toBe(false);
+    expect(looseEquals(true, true)).toBe(true);
+  });
+
+  test("correctly reporting a null gold value earns the point", () => {
+    // `present` also required the value to be non-null, so an answer that
+    // correctly said null was recorded as having omitted the field. Fields
+    // whose gold value is legitimately null — merged_at, closed_by, assignee
+    // — were unscoreable.
+    const r = scoreRecord({ merged_at: null }, { merged_at: null }, [{ name: "merged_at" }]);
+    expect(r.missing).toEqual([]);
+    expect(r.score).toBe(1);
+  });
+
+  test("claiming a value where gold says null is still wrong", () => {
+    const r = scoreRecord({ merged_at: "2024-01-01" }, { merged_at: null }, [{ name: "merged_at" }]);
+    expect(r.fabricated).toEqual(["merged_at"]);
+  });
+});
