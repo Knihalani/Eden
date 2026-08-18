@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { densifyPayload, densifyValue, undensifyValue, cellsEqual } from "../src/densify";
 import { modelFacing, prRowFromFacts, bundleJson, CI_STATE } from "../src/compact";
 import { parseNamedCli, extractNamedCliCalls, isMutatingGh, isMutatingCurl } from "../src/named-cli";
-import { parameterizeUrl, compileStepUrl, resolveTemplate, githubRestFromCli } from "../src/urls";
+import { parameterizeUrl, compileStepUrl, resolveTemplate, githubRestFromCli, commandMatchesToolUrls } from "../src/urls";
 import {
   cutIslands,
   fingerprintIsland,
@@ -660,7 +660,13 @@ describe("plan + mcp ranking", () => {
     expect(listed.map((t) => t.name)).toEqual(["github_pr_bundle"]);
   });
 
-  test("selectMcpTools ranks by uses and evicts unused when over the list cap", () => {
+  test("selectMcpTools ranks by uses and fills the list cap", () => {
+    // Used tools first, then the best of the rest until the cap is reached.
+    // This used to return *only* the used ones, leaving the remaining slots
+    // empty — ten compiled tools of which one had ever been used surfaced one
+    // tool, not six. Worse, it closed behind itself: a freshly compiled tool
+    // has no uses, so once any tool had one it could never appear, and the
+    // compile-surface-use loop the product depends on had no way to start.
     const listed = selectMcpTools([
       { name: "zero_a", uses_count: 0 },
       { name: "hot", uses_count: 9 },
@@ -670,7 +676,16 @@ describe("plan + mcp ranking", () => {
       { name: "mid", uses_count: 1 },
       { name: "zero_d", uses_count: 0 },
     ]);
-    expect(listed.map((t) => t.name)).toEqual(["hot", "warm", "mid"]);
+    expect(listed.map((t) => t.name)).toEqual(["hot", "warm", "mid", "zero_a", "zero_b", "zero_c"]);
+    expect(listed).toHaveLength(6);
+  });
+
+  test("a newly compiled tool can still reach the list", () => {
+    const listed = selectMcpTools([
+      { name: "hot", uses_count: 9 },
+      { name: "brand_new", uses_count: 0 },
+    ]);
+    expect(listed.map((t) => t.name)).toContain("brand_new");
   });
 
   test("selectMcpTools keeps a small unused set", () => {
@@ -947,5 +962,62 @@ describe("what may be reordered, and what may not", () => {
       { id: "D", deps: ["C"] } as never,
     ]).map((w) => w.map((n) => n.id));
     expect(waves).toEqual([["A", "B"], ["C"], ["D"]]);
+  });
+});
+
+describe("rewriting a command does not corrupt it", () => {
+  test("splitJsonValues survives a stray closing brace", () => {
+    // depth went negative on a leading `}`, after which `depth === 0` was
+    // never true again and every later JSON value was silently dropped.
+    const text = `} trailing junk from a truncated log\n{"a":1}\n{"b":2}`;
+    expect(compactStdout("gh api repos/o/r", text).stdout).toBeTruthy();
+  });
+
+  test("prose about passwords is not reported as a test run", () => {
+    // /(\d+)\s+pass/ matched inside "3 passwords", so any output containing
+    // such a phrase was replaced wholesale by a fabricated test summary.
+    const prose = "Rotated 3 passwords and notified 150 passengers.";
+    expect(compactStdout("bash -lc 'echo hi'", prose).stdout).not.toMatch(/^test: /m);
+  });
+
+  test("a real test run is still summarised", () => {
+    const real = "bun test v1.3.13\n\n 12 pass\n 0 fail\nRan 12 tests across 3 files. [40ms]";
+    expect(compactStdout("bun test", real).stdout).toContain("test: 12 pass / 0 fail");
+  });
+});
+
+describe("URL shapes match at segment boundaries", () => {
+  test("a prefix that stops mid-segment is not a match", () => {
+    // Plain startsWith compared raw strings, so a path that merely shares a
+    // *character* prefix matched: `repos/o/rep` against a tool compiled for
+    // `repos/o/repo-two/pulls/{id}`. Steering on that similarity sends the
+    // agent to a tool that fetches a different repository. A prefix now has
+    // to end where a path segment ends.
+    expect(
+      commandMatchesToolUrls("gh api repos/o/rep", ["https://api.github.com/repos/o/repo-two/pulls/1"]),
+    ).toBe(false);
+    expect(
+      commandMatchesToolUrls("gh api repos/o/repo-two/pulls/1", ["https://api.github.com/repos/o/rep"]),
+    ).toBe(false);
+  });
+
+  test("an exact shape still matches", () => {
+    expect(
+      commandMatchesToolUrls("gh api repos/o/r/pulls/1/reviews", ["https://api.github.com/repos/o/r/pulls/2/reviews"]),
+    ).toBe(true);
+  });
+
+  test("a bound value is URL-encoded like a parameter is", () => {
+    // The {{step.path}} pass interpolated raw while {param} encoded, so a
+    // bound value carrying ?, # or & was spliced unescaped into the URL that
+    // playback hands to new URL().
+    const out = resolveTemplate("https://api.acme.com/s/{{s1.q}}", {}, { s1: { q: "a b?c#d&e" } });
+    expect(out).toBe("https://api.acme.com/s/a%20b%3Fc%23d%26e");
+  });
+
+  test("a non-scalar bound value contributes nothing, not [object Object]", () => {
+    expect(resolveTemplate("https://api.acme.com/s/{{s1.q}}", {}, { s1: { q: { deep: 1 } } })).toBe(
+      "https://api.acme.com/s/",
+    );
   });
 });

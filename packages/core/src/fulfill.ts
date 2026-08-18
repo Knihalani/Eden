@@ -151,7 +151,12 @@ export function rewriteBash(
       const playCmd = cmds.join(" ; ");
       const loopRe = /for\s+\w+\s+in\s+[\d\s]+[;\n]\s*do\b[\s\S]*?\bdone\b/;
       if (loopRe.test(trimmed)) {
-        const next = trimmed.replace(loopRe, playCmd);
+        // A replacer function, not a replacement string: `$&`, `` $` ``, `$'`
+        // and `$1` are all substituted inside a replacement string, and
+        // playCmd is a generated shell command that can contain any of them.
+        // The two sibling call sites already use functions; this one was
+        // missed.
+        const next = trimmed.replace(loopRe, () => playCmd);
         return { command: next, changed: true, kind: "play" };
       }
       return { command: playCmd, changed: true, kind: "play" };
@@ -262,6 +267,14 @@ function splitJsonValues(text: string): unknown[] {
       if (depth === 0) start = i;
       depth++;
     } else if (c === "}" || c === "]") {
+      // Clamped at zero. A stray closing brace before any opening one — the
+      // tail of a truncated log, a brace inside unquoted prose — drove depth
+      // negative, after which `depth === 0` was never true again and every
+      // subsequent valid JSON value in the output was silently dropped.
+      if (depth === 0) {
+        start = -1;
+        continue;
+      }
       depth--;
       if (depth === 0 && start >= 0) {
         try {
@@ -283,10 +296,18 @@ function factsLine(value: unknown): string {
 }
 
 function compactTestOutput(text: string): string | null {
-  const pass = text.match(/(\d+)\s+pass/);
-  const fail = text.match(/(\d+)\s+fail/);
+  // `pass` and `fail` have to be whole words. `/(\d+)\s+pass/` matched inside
+  // "3 passwords" and "150 passengers", so any output containing a phrase like
+  // that was replaced wholesale by a fabricated test summary and the real
+  // output was destroyed.
+  const pass = text.match(/(\d+)\s+pass(?:ed|ing)?\b/);
+  const fail = text.match(/(\d+)\s+fail(?:ed|ing|ures?)?\b/);
   if (!pass && !fail) return null;
-  if (!/\b(bun test|npm test|pnpm test|vitest|Ran \d+ tests)\b/i.test(text) && !pass) return null;
+  // And it has to look like a test run. The old test allowed any output at all
+  // through as long as it had matched `pass`, which is what let prose past.
+  if (!/\b(bun test|npm test|pnpm test|yarn test|jest|vitest|pytest|go test|cargo test|Ran \d+ tests?)\b/i.test(text)) {
+    return null;
+  }
   const failN = Number(fail?.[1] || 0);
   const passN = Number(pass?.[1] || 0);
   const ms = text.match(/\[(\d+(?:\.\d+)?)ms\]/);

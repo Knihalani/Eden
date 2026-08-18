@@ -119,7 +119,12 @@ export function commandMatchesToolUrls(command: string, toolUrls: string[]): boo
   const cmd = extractCommandUrls(command).map(urlShape);
   if (!cmd.length) return false;
   const tools = toolUrls.filter(Boolean).map(urlShape);
-  return cmd.some((c) => tools.some((t) => t === c || t.startsWith(c) || c.startsWith(t)));
+  // A prefix only counts where a path segment ends. Raw startsWith matched on
+  // a shared *character* prefix, so `repos/o/rep` matched a tool compiled for
+  // `repos/o/repo-two/pulls/{id}` — steering the agent to a tool that fetches
+  // a different repository.
+  const prefixAt = (a: string, b: string) => a.startsWith(b) && (a.length === b.length || a[b.length] === "/");
+  return cmd.some((c) => tools.some((t) => t === c || prefixAt(t, c) || prefixAt(c, t)));
 }
 
 /** Map a named `gh` invocation to the REST URL Eden can play back. */
@@ -177,9 +182,17 @@ export function resolveTemplate(
   params: Record<string, string>,
   results: Record<string, unknown> = {},
 ): string {
+  // Encoded the same way `{param}` is, below. This pass interpolated raw, so
+  // a bound value containing `?`, `#`, `&` or a space was spliced unescaped
+  // into a URL that playback then hands to `new URL()` — changing which
+  // resource is fetched, or which query parameters it carries. A non-scalar
+  // became the literal "[object Object]", which is never what was meant, so
+  // it contributes nothing rather than a nonsense path segment.
   const withBind = template.replace(/\{\{(\w+)\.([^}]+)\}\}/g, (_, id, path) => {
     const v = getPath(results[id], path);
-    return v == null ? "" : String(v);
+    if (v == null) return "";
+    if (typeof v === "object") return "";
+    return encodeURIComponent(String(v));
   });
   return withBind.replace(/\{(\w+)\}/g, (_, k) => {
     if (k === "origin") return params.origin ?? "";
