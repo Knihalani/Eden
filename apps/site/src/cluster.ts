@@ -122,7 +122,14 @@ export async function ingest(
       if (prior) {
         const prev = parseJson(prior.steps || "[]", [] as Array<{ url?: string }>);
         const next = compiled.length >= prev.length ? compiled : prev;
-        await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
+        // `state = 'draft'` is the whole point of this clause. Without it an
+        // ingest silently rewrote the steps of a tool that had already been
+        // approved and published to MCP — no re-approval, no knock, no
+        // notification, state left at 'on'. That defeats the one invariant the
+        // workshop page states outright: approve only there, a key never turns
+        // a tool On. A key could not turn one on, but it could change what an
+        // on tool does, which is worse.
+        await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ? AND state = 'draft'`, [
           JSON.stringify(next),
           JSON.stringify(storedSteps.map((s) => s.name)),
           whenToUse(base),
@@ -164,7 +171,9 @@ export async function ingest(
         : undefined;
       if (tool && !already) {
         const compiled = stepsToCompiled(storedSteps);
-        await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ?`, [
+        // Draft-only, for the same reason as the update above: an approved
+        // tool's steps are frozen until a human approves a change.
+        await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ? AND state = 'draft'`, [
           JSON.stringify(compiled),
           JSON.stringify(storedSteps.map((s) => s.name)),
           whenToUse(heuristicName(storedSteps)),
@@ -279,9 +288,39 @@ function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
   return compiled.map(({ bind, ...rest }) => (bind ? { ...rest, bind } : rest));
 }
 
+/**
+ * Hosts whose /repos/{owner}/{name} shape we are willing to synthesise
+ * additional requests against.
+ *
+ * `forge` is Eden's own in-process fixture, so it is always allowed.
+ */
+function isForgeHost(host: string): boolean {
+  const h = host.replace(/:\d+$/, "").toLowerCase();
+  if (h === "api.github.com" || h === "github.com" || h.endsWith(".github.com")) return true;
+  const configured = (process.env.EDEN_FORGE_HOST || "").toLowerCase();
+  return Boolean(configured) && h === configured;
+}
+
+/**
+ * The `repos/{owner}/{name}` prefix of a URL, if it names a forge we know.
+ *
+ * The host class here used to be `[^/]+`, i.e. anything — the "github" in the
+ * name was aspirational. ensurePrBundleSteps then fabricates four *more* step
+ * URLs against whatever origin this returns, and heuristicName decides to call
+ * it by testing for "/pulls/" anywhere in the concatenated URLs without
+ * looking at the host at all. So a single ingested event containing
+ * `curl http://attacker.tld/repos/a/b/pulls/1` made Eden invent four requests
+ * to attacker.tld that appear in no trace, each replayed with three retries:
+ * an outbound amplifier aimed by whoever could write one event. The target is
+ * a public host, so the SSRF guard permits it — that guard answers a different
+ * question.
+ */
 function githubRepoOrigin(url: string): string | undefined {
-  const m = url.match(/^(https?:\/\/[^/]+\/(?:forge\/)?repos\/[^/]+\/[^/]+)/);
-  return m?.[1];
+  const m = url.match(/^(https?:\/\/([^/]+)\/(?:forge\/)?repos\/[^/]+\/[^/]+)/);
+  if (!m) return undefined;
+  const host = m[2]!;
+  if (url.includes("/forge/repos/") || isForgeHost(host)) return m[1];
+  return undefined;
 }
 
 function ensurePrBundleSteps(
