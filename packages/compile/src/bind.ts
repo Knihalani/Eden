@@ -267,17 +267,47 @@ export function outputsDiverge(events: TraceEvent[]): boolean {
 }
 
 export function inferSchema(values: unknown[]): Record<string, unknown> {
-  const keys = new Map<string, string>();
+  // Tally every witnessed type per key and take the modal one, rather than
+  // whichever witness happened to come last. `keys.set` overwrote, so a single
+  // late null downgraded a number field to "string" for the whole schema.
+  const seen = new Map<string, Map<string, number>>();
   const present = new Map<string, number>();
   let nObj = 0;
   for (const v of values) {
     if (!v || typeof v !== "object" || Array.isArray(v)) continue;
     nObj++;
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-      const t = Array.isArray(val) ? "array" : val === null ? "null" : typeof val;
-      keys.set(k, t === "object" ? "object" : t === "number" ? "number" : t === "boolean" ? "boolean" : "string");
+      // "array" and "null" both used to fall through to "string", so an island
+      // whose witnessed result was `{items: [...]}` told the model to return a
+      // string where the program's consumers expect an array. null is not
+      // evidence of a type at all, so it is skipped rather than counted.
+      if (val === null) continue;
+      const t = Array.isArray(val)
+        ? "array"
+        : typeof val === "number"
+          ? "number"
+          : typeof val === "boolean"
+            ? "boolean"
+            : typeof val === "object"
+              ? "object"
+              : "string";
+      const tally = seen.get(k) ?? new Map<string, number>();
+      tally.set(t, (tally.get(t) ?? 0) + 1);
+      seen.set(k, tally);
       present.set(k, (present.get(k) ?? 0) + 1);
     }
+  }
+  const keys = new Map<string, string>();
+  for (const [k, tally] of seen) {
+    let best = "string";
+    let bestN = -1;
+    for (const [t, n] of tally) {
+      if (n > bestN) {
+        best = t;
+        bestN = n;
+      }
+    }
+    keys.set(k, best);
   }
   return {
     type: "object",

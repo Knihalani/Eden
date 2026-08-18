@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StretchTrace } from "@eden/ir";
-import { compileTraces, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute } from "../src/index";
+import { compileTraces, inferSchema, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute } from "../src/index";
 import { createTicketShip, runNaive, ticketShipProgram, underdeterminedSiblingTraces, WITNESS_IDS } from "../../runtime/src/ticketship";
 
 async function ticketTraces(n = 10): Promise<StretchTrace[]> {
@@ -532,5 +532,30 @@ describe("compile", () => {
     expect(oneInsert(["lookup", "write", "verifyWrite", "notify"], ["lookup", "write", "notify"])).toBe(false);
     expect(oneInsert(["lookup", "write", "notify"], ["lookup", "tagItem", "write", "notify"])).toBe(true);
     expect(oneSubstitute(["lookup", "verifyWrite", "notify"], ["lookup", "draftReply", "notify"])).toBe(false);
+  });
+});
+
+describe("an inferred schema describes what was witnessed", () => {
+  test("an array field is typed array, not string", () => {
+    // "array" and "null" both fell through to "string", so an island whose
+    // witnessed result was {items: [...]} instructed the model to return a
+    // string where the program's consumers expect an array.
+    const schema = inferSchema([
+      { items: [{ id: "a" }], n: 3, ok: true, note: "x" },
+      { items: [{ id: "b" }], n: 4, ok: false, note: "y" },
+    ]) as { properties: Record<string, { type: string }> };
+    expect(schema.properties.items!.type).toBe("array");
+    expect(schema.properties.n!.type).toBe("number");
+    expect(schema.properties.ok!.type).toBe("boolean");
+    expect(schema.properties.note!.type).toBe("string");
+  });
+
+  test("one late null does not downgrade a numeric field", () => {
+    // keys.set overwrote, so whichever witness came last decided the type,
+    // and null fell through to "string".
+    const schema = inferSchema([{ n: 1 }, { n: 2 }, { n: 3 }, { n: null }]) as {
+      properties: Record<string, { type: string }>;
+    };
+    expect(schema.properties.n!.type).toBe("number");
   });
 });
