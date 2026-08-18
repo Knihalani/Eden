@@ -12,15 +12,22 @@
  *   3. the names it actually resolves to are public too.
  *
  * (3) matters because a public hostname is free to have an A record pointing at
- * 127.0.0.1; checking the literal alone stops nothing. A determined attacker can
- * still re-point DNS between our lookup and the connection (rebinding), which
- * needs connection-level pinning to close properly — this narrows the hole a
- * long way without that machinery.
+ * 127.0.0.1; checking the literal alone stops nothing.
+ *
+ * The addresses cleared by (3) are then pinned: safeFetch connects to those
+ * exact addresses instead of resolving the hostname a second time, so re-pointing
+ * DNS between the check and the connection (rebinding) no longer buys anything.
+ * See pinnedFetch(). What this does not cover: a host that is genuinely public
+ * at check time and is itself attacker-controlled, anything reached through an
+ * HTTP proxy env var, and IP addresses that become internal after the fact
+ * (a cloud provider re-assigning a public address into your VPC).
  *
  * Redirects are handled by safeFetch(): fetch() follows them by default, so a
  * permitted host answering `302 -> http://169.254.169.254/` would sail straight
  * past a check performed only on the original URL.
  */
+import http from "node:http";
+import https from "node:https";
 import { lookup } from "node:dns/promises";
 
 const BLOCKED_SUFFIXES = [".internal", ".local", ".localhost", ".home.arpa"];
@@ -166,23 +173,41 @@ export function isBlockedHost(hostname: string): boolean {
   return false;
 }
 
-/** True if every address `hostname` resolves to is publicly routable. */
-export async function resolvesToPublicAddress(hostname: string): Promise<boolean> {
+/** An address the egress rules have cleared, ready to be connected to. */
+export type PinnedAddress = { address: string; family: number };
+
+/**
+ * Every address `hostname` resolves to, or null if any of them is non-public.
+ *
+ * Returns the addresses rather than a verdict so the caller can connect to the
+ * very same ones it just cleared — see pinnedFetch().
+ */
+async function publicAddressesFor(hostname: string): Promise<PinnedAddress[] | null> {
   const h = hostname.replace(/^\[/, "").replace(/\]$/, "");
-  if (isBlockedHost(h)) return false;
+  if (isBlockedHost(h)) return null;
   // A literal needs no lookup, and asking for one would only add a failure mode.
-  if (h.includes(":") || parseIpv4(h) !== null) return true;
+  if (h.includes(":") || parseIpv4(h) !== null) {
+    return [{ address: h, family: h.includes(":") ? 6 : 4 }];
+  }
   let addrs: Array<{ address: string; family: number }>;
   try {
     addrs = await lookup(h, { all: true });
   } catch {
-    return false; // unresolvable: fail closed
+    return null; // unresolvable: fail closed
   }
-  if (!addrs.length) return false;
-  return addrs.every((a) => !isBlockedHost(a.address));
+  if (!addrs.length) return null;
+  if (!addrs.every((a) => !isBlockedHost(a.address))) return null;
+  return addrs.map((a) => ({ address: a.address, family: a.family }));
 }
 
-export type UrlCheck = { ok: true; url: URL } | { ok: false; reason: string };
+/** True if every address `hostname` resolves to is publicly routable. */
+export async function resolvesToPublicAddress(hostname: string): Promise<boolean> {
+  return (await publicAddressesFor(hostname)) !== null;
+}
+
+export type UrlCheck =
+  | { ok: true; url: URL; addresses: PinnedAddress[] }
+  | { ok: false; reason: string };
 
 export async function checkEgressUrl(raw: string): Promise<UrlCheck> {
   let url: URL;
@@ -195,10 +220,11 @@ export async function checkEgressUrl(raw: string): Promise<UrlCheck> {
     return { ok: false, reason: `blocked url scheme ${url.protocol}` };
   }
   if (isBlockedHost(url.hostname)) return { ok: false, reason: `blocked host ${url.hostname}` };
-  if (!(await resolvesToPublicAddress(url.hostname))) {
+  const addresses = await publicAddressesFor(url.hostname);
+  if (!addresses) {
     return { ok: false, reason: `host resolves to a non-public address: ${url.hostname}` };
   }
-  return { ok: true, url };
+  return { ok: true, url, addresses };
 }
 
 export type SafeFetch = (url: string, init: RequestInit) => Promise<Response>;
@@ -227,13 +253,140 @@ function stripCredentials(headers: HeaderSource | undefined): Record<string, str
   return out;
 }
 
+/**
+ * fetch(), but connecting only to `pinned` — the addresses checkEgressUrl just
+ * cleared — instead of resolving the hostname a second time.
+ *
+ * This is what closes DNS rebinding. `fetch` gives no way to control where the
+ * connection goes (Bun has no dispatcher/lookup option, and Node's undici is
+ * not a dependency here), so the request is issued through node:http(s), whose
+ * `lookup` hook both runtimes honour. The hostname still drives the Host header
+ * and the TLS servername, so certificate validation and virtual hosting behave
+ * exactly as before; only address selection is overridden.
+ */
+/**
+ * Ceilings for a single egress request.
+ *
+ * There were none: no timeout anywhere on this path, and the body was read to
+ * completion however large it was. With Vercel's maxDuration at 300s, a slow
+ * or endless target could hold an invocation for five minutes, and a large one
+ * could exhaust memory. A compiled step's URL is mined from recorded traffic,
+ * so the far end is not something to extend unlimited credit to.
+ */
+export const EGRESS_TIMEOUT_MS = 15_000;
+export const EGRESS_MAX_BYTES = 8 * 1024 * 1024;
+
+export function pinnedFetch(pinned: PinnedAddress[]): typeof fetch {
+  return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const req = new Request(input as never, init as never);
+    const url = new URL(req.url);
+    const isTls = url.protocol === "https:";
+    const host = url.hostname.replace(/^\[/, "").replace(/\]$/, "");
+
+    const headers: Record<string, string> = {};
+    req.headers.forEach((value, key) => {
+      // Host is derived from the URL below; letting a caller set it would
+      // reintroduce exactly the origin confusion this module exists to stop.
+      if (key.toLowerCase() === "host") return;
+      headers[key] = value;
+    });
+    // node:http does not transparently decompress the way fetch does.
+    headers["accept-encoding"] = "identity";
+
+    const body =
+      req.method === "GET" || req.method === "HEAD" ? null : Buffer.from(await req.arrayBuffer());
+
+    return await new Promise<Response>((resolveRaw, rejectRaw) => {
+      // destroy() alone does not reliably surface *why* a request ended — the
+      // socket's own error can win the race — so both ceilings reject
+      // explicitly, and a guard keeps the first outcome.
+      let settled = false;
+      const resolve = (r: Response) => {
+        if (settled) return;
+        settled = true;
+        resolveRaw(r);
+      };
+      const reject = (e: Error) => {
+        if (settled) return;
+        settled = true;
+        rejectRaw(e);
+      };
+      const cr = (isTls ? https : http).request(
+        {
+          host,
+          port: url.port || (isTls ? 443 : 80),
+          path: `${url.pathname}${url.search}`,
+          method: req.method,
+          headers,
+          ...(isTls ? { servername: host } : {}),
+          // No pooling: a reused keep-alive socket is keyed by hostname and
+          // skips `lookup` entirely, which would silently un-pin the request.
+          agent: false,
+          lookup: ((_h: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
+            // A fresh array of fresh objects every call: Bun takes ownership of
+            // the one it is handed, and reusing it makes every request after
+            // the first fail with ENOTFOUND.
+            const copy = pinned.map((p) => ({ address: p.address, family: p.family }));
+            if (opts && opts.all) cb(null, copy);
+            else cb(null, copy[0]!.address, copy[0]!.family);
+          }) as never,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          let size = 0;
+          res.on("data", (c: Buffer) => {
+            size += c.length;
+            if (size > EGRESS_MAX_BYTES) {
+              reject(new Error(`response exceeded ${EGRESS_MAX_BYTES} bytes`));
+              res.destroy();
+              cr.destroy();
+              return;
+            }
+            chunks.push(c);
+          });
+          res.on("error", (e: Error) => reject(e));
+          res.on("end", () => {
+            const status = res.statusCode ?? 502;
+            const out = new Headers();
+            for (const [key, value] of Object.entries(res.headers)) {
+              if (value === undefined) continue;
+              if (Array.isArray(value)) for (const v of value) out.append(key, v);
+              else out.append(key, String(value));
+            }
+            const bodyless = status === 204 || status === 205 || status === 304;
+            resolve(
+              new Response(bodyless ? null : Buffer.concat(chunks), {
+                status,
+                statusText: res.statusMessage || "",
+                headers: out,
+              }),
+            );
+          });
+        },
+      );
+      cr.on("error", (e: Error) => reject(e));
+      // A target that accepts the connection and then says nothing would
+      // otherwise hold the request until the platform kills the invocation.
+      cr.setTimeout(EGRESS_TIMEOUT_MS, () => {
+        reject(new Error(`egress timeout after ${EGRESS_TIMEOUT_MS}ms`));
+        cr.destroy();
+      });
+      if (req.signal) {
+        if (req.signal.aborted) cr.destroy(new Error("aborted"));
+        else req.signal.addEventListener("abort", () => cr.destroy(new Error("aborted")), { once: true });
+      }
+      if (body) cr.write(body);
+      cr.end();
+    });
+  }) as typeof fetch;
+}
+
 export async function safeFetch(
   url: string,
   init: RequestInit,
   opts: { maxRedirects?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<Response> {
   const maxRedirects = opts.maxRedirects ?? 5;
-  const doFetch = opts.fetchImpl ?? fetch;
   let current = url;
   let headers = init.headers;
   let origin = new URL(url).origin;
@@ -249,6 +402,9 @@ export async function safeFetch(
       headers = stripCredentials(headers);
       origin = check.url.origin;
     }
+    // Pinned to the addresses this hop just cleared, so the connection cannot
+    // land somewhere else than the check approved.
+    const doFetch = opts.fetchImpl ?? pinnedFetch(check.addresses);
     const res = await doFetch(current, { ...init, headers, redirect: "manual" });
     if (res.status < 300 || res.status > 399) return res;
     const location = res.headers.get("location");

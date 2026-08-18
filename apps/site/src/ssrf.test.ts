@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { checkEgressUrl, isBlockedHost, parseIpv4, parseIpv6, safeFetch } from "./ssrf";
+import { createServer } from "node:http";
+import { checkEgressUrl, EGRESS_TIMEOUT_MS, isBlockedHost, parseIpv4, parseIpv6, pinnedFetch, safeFetch } from "./ssrf";
 
 describe("isBlockedHost", () => {
   test("blocks loopback and private ranges the old guard let through", () => {
@@ -194,4 +195,93 @@ describe("safeFetch does not leak credentials across a redirect", () => {
     await safeFetch("https://8.8.8.8/start", { headers: { authorization: "Bearer SECRET" } }, { fetchImpl });
     expect(seen).toEqual(["Bearer SECRET", "Bearer SECRET"]);
   });
+});
+
+describe("egress connects only where the check cleared", () => {
+  /**
+   * checkEgressUrl resolved the hostname and cleared the addresses; fetch then
+   * resolved it a second time, independently. Nothing tied the two together,
+   * so re-pointing DNS in between (rebinding) defeated the guard entirely —
+   * the file's own header used to say so.
+   *
+   * Neither runtime lets `fetch` control where a connection goes: Bun has no
+   * dispatcher or lookup option, and Bun's built-in undici shim *accepts* an
+   * Agent with `connect.lookup` and silently ignores it, which is worse than
+   * refusing. node:http(s) `.request({ lookup })` is honoured by both.
+   */
+  test("the connection goes to the pinned address while Host stays the hostname", async () => {
+    const seen: string[] = [];
+    const srv = createServer((req, res) => {
+      seen.push(String(req.headers.host));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const f = pinnedFetch([{ address: "127.0.0.1", family: 4 }]);
+      // Three in a row on purpose. Bun takes ownership of the array handed to
+      // the lookup callback, so reusing one made the first request succeed and
+      // every one after it fail with ENOTFOUND — a bug a single-request test
+      // cannot see.
+      for (let i = 0; i < 3; i++) {
+        const res = await f(`http://example.com:${port}/x`);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true });
+      }
+      // Host and TLS servername still come from the URL, so certificate
+      // validation and virtual hosting are unaffected — only address
+      // selection is overridden.
+      expect(seen).toHaveLength(3);
+      expect(seen.every((h) => h.startsWith("example.com"))).toBe(true);
+    } finally {
+      srv.close();
+    }
+  });
+
+  test("a pinned address that does not serve is refused, not silently re-resolved", async () => {
+    // This is the test that fails if connection pooling is ever reintroduced:
+    // a reused keep-alive socket is keyed by hostname and skips lookup
+    // entirely, which silently un-pins the request.
+    const f = pinnedFetch([{ address: "127.0.0.1", family: 4 }]);
+    await expect(f("https://api.github.com/")).rejects.toThrow();
+  });
+
+  test("a response larger than the ceiling is refused", async () => {
+    const srv = createServer((_req, res) => {
+      res.writeHead(200);
+      const chunk = Buffer.alloc(1024 * 1024, 0x61);
+      for (let i = 0; i < 16; i++) res.write(chunk);
+      res.end();
+    });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const f = pinnedFetch([{ address: "127.0.0.1", family: 4 }]);
+      await expect(f(`http://example.com:${port}/big`)).rejects.toThrow(/exceeded/);
+    } finally {
+      srv.close();
+    }
+  });
+
+  test("a target that accepts and then says nothing is timed out", async () => {
+    const srv = createServer(() => {
+      /* accept, never respond */
+    });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const f = pinnedFetch([{ address: "127.0.0.1", family: 4 }]);
+      const started = Date.now();
+      await expect(
+        Promise.race([
+          f(`http://example.com:${port}/hang`),
+          new Promise((_r, rej) => setTimeout(() => rej(new Error("test gave up first")), EGRESS_TIMEOUT_MS + 5_000)),
+        ]),
+      ).rejects.toThrow(/timeout/);
+      expect(Date.now() - started).toBeLessThan(EGRESS_TIMEOUT_MS + 5_000);
+    } finally {
+      srv.close();
+    }
+  }, 30_000);
 });
