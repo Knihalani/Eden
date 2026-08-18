@@ -46,14 +46,24 @@ function childPath(path: string, k: string): string {
   return seg.dotted ? `${path}.${seg.path}` : `${path}${seg.path}`;
 }
 
-const flattenCache = new WeakMap<object, Map<string, unknown>>();
+/**
+ * Memo for flatten().
+ *
+ * Holds the *entries*, not the Map that was handed out. The cache used to
+ * store and return the live Map, so every caller shared one mutable object:
+ * anything that wrote into a returned Map corrupted it for every later
+ * caller, and bind.ts consumes these in three places. Handing back a fresh
+ * Map each time costs a copy and removes the coupling entirely.
+ */
+const flattenCache = new WeakMap<object, Array<[string, unknown]>>();
 
 export function flatten(
   value: unknown,
   opts: { maxDepth?: number; maxArray?: number } = {},
 ): Map<string, unknown> {
   const custom = opts.maxDepth != null || opts.maxArray != null;
-  if (!custom && value && typeof value === "object" && flattenCache.has(value)) return flattenCache.get(value)!;
+  const cached = !custom && value && typeof value === "object" ? flattenCache.get(value) : undefined;
+  if (cached) return new Map(cached);
   const maxDepth = opts.maxDepth ?? 6;
   const maxArray = opts.maxArray ?? 32;
   const out = new Map<string, unknown>();
@@ -81,7 +91,7 @@ export function flatten(
     }
   };
   walk(value, "", 0);
-  if (!custom && value && typeof value === "object") flattenCache.set(value, out);
+  if (!custom && value && typeof value === "object") flattenCache.set(value, [...out]);
   return out;
 }
 
