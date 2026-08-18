@@ -1,7 +1,7 @@
 import { homedir, hostname } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, writeSync, fstatSync, renameSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, writeSync, fstatSync, renameSync, chmodSync } from "node:fs";
 
 export function edenHome(): string {
   return process.env.EDEN_HOME || join(homedir(), ".eden");
@@ -10,7 +10,21 @@ export function edenHome(): string {
 export function ensureHome(): string {
   const h = edenHome();
   mkdirSync(join(h, "runs"), { recursive: true });
+  // ~/.eden holds the API key and the full recorded tool traces of every
+  // session. mkdir's mode is masked by the process umask and is not applied at
+  // all to a directory that already exists, so the permissions are set
+  // explicitly rather than requested.
+  chmodQuietly(h, 0o700);
+  chmodQuietly(join(h, "runs"), 0o700);
   return h;
+}
+
+function chmodQuietly(path: string, mode: number): void {
+  try {
+    chmodSync(path, mode);
+  } catch {
+    /* a filesystem without POSIX modes, or not ours to change */
+  }
 }
 
 export function liveToolsPath(): string {
@@ -61,7 +75,14 @@ export function readConfig(): Config | null {
 
 export function writeConfig(c: Config): void {
   ensureHome();
-  writeFileSync(configPath(), JSON.stringify(c, null, 2), { mode: 0o600 });
+  const p = configPath();
+  writeFileSync(p, JSON.stringify(c, null, 2), { mode: 0o600 });
+  // `mode` on writeFileSync applies only when the file is *created*. Rewriting
+  // an existing config left whatever mode it already had, so a config.json
+  // that had once been written without the flag — or created by an editor,
+  // or restored from a backup — kept its 0644 and the API key stayed
+  // world-readable however many times setup ran.
+  chmodQuietly(p, 0o600);
 }
 
 /**

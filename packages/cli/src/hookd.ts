@@ -16,13 +16,32 @@ export function hookdTimeoutMs(): number {
  *
  * The hook is a local, machine-to-machine caller, so it never carries Origin.
  * A browser always does, and Sec-Fetch-Mode marks the request as cross-site.
- * Rejecting on either is enough to close the drive-by path without needing a
+ * Rejecting on either closes the ordinary drive-by path without needing a
  * shared secret the hook command would have to carry.
+ *
+ * Neither of those signals survives DNS rebinding, though, because both are
+ * relative to an origin the attacker now controls the name of. A page on
+ * http://evil.test:8794 whose hostname re-resolves to 127.0.0.1 is, as far as
+ * the browser is concerned, talking to itself: it sends no Origin and
+ * `Sec-Fetch-Site: same-origin`, and both checks above pass. The one header
+ * that still tells the truth is Host, which carries the name the client
+ * *asked* for rather than the address it reached — and a genuine local caller
+ * asks for 127.0.0.1 or localhost.
  */
 function looksBrowserDriven(req: Request): boolean {
   if (req.headers.get("origin")) return true;
   const site = req.headers.get("sec-fetch-site");
   return site !== null && site !== "none";
+}
+
+/** The names a caller that really means "this machine" will have used. */
+function hostIsLoopback(req: Request): boolean {
+  const raw = req.headers.get("host");
+  // No Host at all is HTTP/1.0 or a raw socket, not a browser; a browser
+  // always sends one. Bun also fills req.url from it, so absence is benign.
+  if (!raw) return true;
+  const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1";
 }
 
 export async function handleHookd(req: Request): Promise<Response> {
@@ -33,7 +52,7 @@ export async function handleHookd(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return Response.json({});
   }
-  if (looksBrowserDriven(req)) {
+  if (looksBrowserDriven(req) || !hostIsLoopback(req)) {
     return Response.json({}, { status: 403 });
   }
   // Only the hook endpoint accepts a payload. Anything else is a caller that
