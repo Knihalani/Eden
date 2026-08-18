@@ -1,7 +1,7 @@
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, writeSync, fstatSync } from "node:fs";
 
 export function edenHome(): string {
   return process.env.EDEN_HOME || join(homedir(), ".eden");
@@ -68,9 +68,57 @@ export function appendJsonl(path: string, row: unknown): void {
   appendFileSync(path, JSON.stringify(row) + "\n");
 }
 
-/** A lock older than this belonged to a process that is not coming back. */
+/**
+ * Fallback staleness horizon, used only when the lock does not say who holds
+ * it (a legacy lock, or one caught between create and stamp) or when it is
+ * held from a different machine. A live local holder is detected directly and
+ * is never judged stale, however long it has been running.
+ */
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 1500;
+
+type LockStamp = { pid: number; host: string; ts: number };
+
+function readLockStamp(lockPath: string): LockStamp | null {
+  try {
+    const s = JSON.parse(readFileSync(lockPath, "utf8")) as Partial<LockStamp>;
+    if (typeof s?.pid === "number" && typeof s?.host === "string") {
+      return { pid: s.pid, host: s.host, ts: Number(s.ts) || 0 };
+    }
+  } catch {
+    /* absent, empty, half-written, or a pre-stamp lock: fall back to age */
+  }
+  return null;
+}
+
+/**
+ * Is the process named by the lock still around?
+ *
+ * `kill(pid, 0)` sends no signal, it only asks whether the pid is addressable.
+ * EPERM means the process exists but belongs to another user, which still
+ * counts as alive. A stamp from another host cannot be judged this way, so it
+ * is reported as unknown and the caller falls back to the age horizon.
+ */
+function holderState(stamp: LockStamp | null): "alive" | "dead" | "unknown" {
+  if (!stamp) return "unknown";
+  if (stamp.host !== hostname()) return "unknown";
+  if (!Number.isInteger(stamp.pid) || stamp.pid <= 0) return "unknown";
+  try {
+    process.kill(stamp.pid, 0);
+    return "alive";
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM" ? "alive" : "dead";
+  }
+}
+
+/** Identity of the file currently at `lockPath`, or null if it is gone. */
+function inodeAt(lockPath: string): number | null {
+  try {
+    return statSync(lockPath).ino;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Advisory lock around a small file mutation.
@@ -86,6 +134,17 @@ const LOCK_WAIT_MS = 1500;
  *    a real error (ENOSPC, a JSON throw) was swallowed, the caller was told
  *    "could not acquire lock", and the side-effecting callback was retried
  *    ~124 times over the wait window.
+ *  - Staleness had been judged purely on the lock's age, which broke mutual
+ *    exclusion outright. A holder only has to be *stopped* for longer than the
+ *    horizon, not dead — a suspended laptop, SIGSTOP under a debugger, a
+ *    swapping machine or a hung network mount all qualify. The waiter deleted a
+ *    live holder's lock, took its own, and both ran the critical section at
+ *    once; then the original holder's `finally` deleted the *waiter's* lock,
+ *    letting a third process in, and so on. Two concurrent
+ *    read-modify-writes of the same events file lose events, which is the one
+ *    thing this lock exists to prevent. So the holder now stamps its identity
+ *    into the lock and a live local holder is never broken, and release only
+ *    removes the lock if it is still the one we created.
  */
 export function withFileLock<T>(lockPath: string, fn: () => T): T {
   mkdirSync(dirname(lockPath), { recursive: true });
@@ -95,15 +154,25 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
     try {
       fd = openSync(lockPath, "wx");
     } catch {
-      // Held, or abandoned. Break an abandoned one rather than spin on it.
-      try {
-        const age = Date.now() - statSync(lockPath).mtimeMs;
-        if (age > LOCK_STALE_MS) unlinkSync(lockPath);
-      } catch {
-        /* raced with the holder releasing it; just retry */
-      }
+      breakIfAbandoned(lockPath);
       sleepBriefly();
       continue;
+    }
+    // Stamp who we are so a contender can tell "still running" from "died
+    // holding it". Best effort: an unstamped lock is simply judged on age, as
+    // it was before, so a failure here degrades rather than breaks.
+    // Identity first and on its own: fstat of a descriptor we just opened is
+    // the one part that cannot realistically fail, and release depends on it.
+    let ino: number | null = null;
+    try {
+      ino = fstatSync(fd).ino;
+    } catch {
+      /* no provable identity; release falls back to an unconditional unlink */
+    }
+    try {
+      writeSync(fd, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() } satisfies LockStamp));
+    } catch {
+      /* unstamped: contenders fall back to the age horizon */
     }
     // Outside the acquisition try/catch: whatever fn() throws is the caller's
     // error and propagates unchanged, exactly once.
@@ -111,14 +180,54 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
       return fn();
     } finally {
       closeSync(fd);
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        /* ignore */
-      }
+      releaseLock(lockPath, ino);
     }
   }
   throw new Error(`could not acquire lock ${lockPath}`);
+}
+
+/**
+ * Remove a lock that its holder can no longer release.
+ *
+ * Only two things justify deleting a lock we do not hold: the process that
+ * stamped it is gone, or the lock is unattributable and older than the horizon.
+ * A live local holder is left alone no matter how long it has been in there.
+ */
+function breakIfAbandoned(lockPath: string): void {
+  try {
+    const stamp = readLockStamp(lockPath);
+    const state = holderState(stamp);
+    if (state === "alive") return;
+    if (state === "unknown") {
+      const age = Date.now() - statSync(lockPath).mtimeMs;
+      if (age <= LOCK_STALE_MS) return;
+    }
+    // Re-check identity immediately before unlinking so we cannot delete a
+    // fresh lock that replaced the abandoned one while we were deciding.
+    const seen = inodeAt(lockPath);
+    if (seen === null) return;
+    unlinkSync(lockPath);
+  } catch {
+    /* raced with the holder releasing it, or not ours to remove; just retry */
+  }
+}
+
+/**
+ * Release only our own lock.
+ *
+ * If a contender already judged this lock abandoned and replaced it, the file
+ * sitting at `lockPath` belongs to that contender and deleting it would let a
+ * third process in behind their back. In the rare case where we never got an
+ * inode to compare against, an unconditional unlink is still better than
+ * leaving the lock wedged for the whole staleness horizon.
+ */
+function releaseLock(lockPath: string, ino: number | null): void {
+  try {
+    if (ino !== null && inodeAt(lockPath) !== ino) return;
+    unlinkSync(lockPath);
+  } catch {
+    /* already gone */
+  }
 }
 
 function sleepBriefly(): void {
