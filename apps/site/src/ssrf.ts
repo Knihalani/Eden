@@ -212,7 +212,14 @@ export type SafeFetch = (url: string, init: RequestInit) => Promise<Response>;
 /** Headers a redirect to a different origin must not carry. */
 const CREDENTIAL_HEADERS = ["authorization", "cookie", "proxy-authorization"];
 
-function stripCredentials(headers: HeadersInit | undefined): Record<string, string> {
+/**
+ * Derived from RequestInit rather than naming `HeadersInit`, which is not a
+ * global in this project's lib set — and derived rather than hand-written, so
+ * it stays exactly whatever safeFetch's own callers are allowed to pass.
+ */
+type HeaderSource = NonNullable<RequestInit["headers"]>;
+
+function stripCredentials(headers: HeaderSource | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   new Headers(headers).forEach((value, key) => {
     if (!CREDENTIAL_HEADERS.includes(key.toLowerCase())) out[key] = value;

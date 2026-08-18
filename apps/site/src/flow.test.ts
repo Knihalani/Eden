@@ -71,8 +71,8 @@ describe("ingest → draft → approve → play", () => {
     await ingest(db, "ws_local", "bindsha", island, true);
     const tool = await db.get<{ steps: string }>(`SELECT steps FROM tool LIMIT 1`);
     const steps = JSON.parse(tool!.steps) as Array<{ url?: string; bind?: Record<string, string> }>;
-    expect(steps[2].url).toContain("/commits/{sha}/status");
-    expect(steps[2].bind?.sha).toBe("{{s1.head.sha}}");
+    expect(steps[2]!.url).toContain("/commits/{sha}/status");
+    expect(steps[2]!.bind?.sha).toBe("{{s1.head.sha}}");
     expect(steps.some((s) => /\/files$/.test(s.url || ""))).toBe(true);
   });
 
