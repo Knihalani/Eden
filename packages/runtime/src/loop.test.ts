@@ -285,3 +285,79 @@ describe("parallel loops", () => {
     expect(out.value).toEqual([]);
   });
 });
+
+describe("a parallel loop body sees its own results, not a sibling's", () => {
+  /**
+   * `lastResult` — what a bare-path assert reads as "the step before this one"
+   * — was a single closure variable shared by every concurrent iteration. N
+   * iterations interleave, so it held whichever one returned most recently,
+   * and an assert inside a concurrent body evaluated against another
+   * iteration's data. `stepIsParallelSafe` explicitly permits asserts in a
+   * parallel body, and the wave scheduler already guards against exactly this
+   * for its own steps; loop iterations were missed.
+   */
+  function assertingLoop(items: number): StretchProgram {
+    return withVersion({
+      id: "p_assert_loop",
+      name: "assert_loop",
+      description: "d",
+      inputSchema: { type: "object", properties: { q: { type: "string" } }, required: ["q"] },
+      sequence: ["listItems", "fetchDetails"],
+      steps: [
+        { id: "listItems", kind: "tool", tool: "listItems", args: { q: { kind: "input", path: "q" } } },
+        {
+          id: "loop1",
+          kind: "loop",
+          over: { kind: "from", step: "listItems", path: "items" },
+          item: "item_loop1",
+          body: ["bodyStep", "bodyAssert"],
+        },
+        {
+          id: "bodyStep",
+          kind: "tool",
+          tool: "fetchDetails",
+          args: { id: { kind: "from", step: "item_loop1", path: "id" } },
+        },
+        // Reads the previous step's result by bare path.
+        { id: "bodyAssert", kind: "assert", expr: "mine == true", onFail: "deopt" },
+      ],
+      returns: { kind: "from", step: "loop1", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: null },
+      manifest: null,
+    } as unknown as Omit<StretchProgram, "version">) as StretchProgram;
+  }
+
+  test("an assert in a concurrent body reads the result of its own iteration", async () => {
+    const N = 8;
+    // Every iteration's own result satisfies the assert, but they finish out
+    // of order: the first-issued call returns last. With a shared "previous
+    // result" the assert reads a sibling's value.
+    let issued = 0;
+    const reg = {
+      async execute(tool: string, args: Record<string, unknown>) {
+        if (tool === "listItems") {
+          return { items: Array.from({ length: N }, (_, i) => ({ id: `I-${i}` })) };
+        }
+        const n = issued++;
+        await Bun.sleep((N - n) * 4);
+        return { mine: true, id: args.id };
+      },
+      has: () => true,
+    };
+    const out = await runProgram(assertingLoop(N), { q: "x" }, { registry: reg, checkEnvelope: false });
+    expect((out.value as unknown[]).length).toBe(N);
+  });
+
+  test("a failing assert in one iteration still fails", async () => {
+    // The guard must not become "asserts in loops never fire".
+    const N = 4;
+    const reg = {
+      async execute(tool: string, args: Record<string, unknown>) {
+        if (tool === "listItems") return { items: Array.from({ length: N }, (_, i) => ({ id: `I-${i}` })) };
+        return { mine: args.id !== "I-2", id: args.id };
+      },
+      has: () => true,
+    };
+    await expect(runProgram(assertingLoop(N), { q: "x" }, { registry: reg, checkEnvelope: false })).rejects.toThrow();
+  });
+});

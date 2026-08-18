@@ -138,7 +138,18 @@ export async function runProgram(
   const byId = new Map(program.steps.map((s) => [s.id, s]));
   const bodyOwned = new Set<string>();
   for (const s of program.steps) if (s.kind === "loop") for (const id of s.body) bodyOwned.add(id);
-  let lastResult: unknown;
+  /**
+   * "The result of the step before this one", which a bare-path assert reads.
+   *
+   * A box rather than a closure variable, because a parallel loop body needs
+   * its own. It was shared: N iterations interleaved and every one of them
+   * wrote here, so an assert inside a concurrent body — which
+   * stepIsParallelSafe explicitly permits — evaluated against whichever
+   * iteration happened to return most recently, and passed or failed
+   * nondeterministically. The wave scheduler already guards against exactly
+   * this for its own steps; loop iterations were missed.
+   */
+  const topLast: { value: unknown } = { value: undefined };
   /** Tool calls issued, whether or not they returned. See DeoptError.stepsRun. */
   let toolCallsIssued = 0;
 
@@ -147,6 +158,7 @@ export async function runProgram(
     signal: AbortSignal,
     scope: BindScope,
     touchLast = true,
+    last: { value: unknown } = topLast,
   ): Promise<unknown> => {
     if (signal.aborted) throw new DeoptError("aborted");
     if (step.kind === "tool") {
@@ -159,7 +171,7 @@ export async function runProgram(
       const value = await opts.registry.execute(step.tool, args, { signal });
       if (signal.aborted) throw new DeoptError("aborted");
       scope.results.set(step.id, value);
-      if (touchLast) lastResult = value;
+      if (touchLast) last.value = value;
       return value;
     }
     if (step.kind === "island") {
@@ -171,11 +183,11 @@ export async function runProgram(
       const value = await opts.island({ system: step.system, input: islandInput, outputSchema: step.outputSchema, signal });
       if (signal.aborted) throw new DeoptError("aborted");
       scope.results.set(step.id, value);
-      if (touchLast) lastResult = value;
+      if (touchLast) last.value = value;
       return value;
     }
     if (step.kind === "assert") {
-      const ok = evalAssert(step.expr, lastResult, input, scope.results);
+      const ok = evalAssert(step.expr, last.value, input, scope.results);
       if (!ok) {
         const reason = `assert failed: ${step.expr}`;
         if (step.onFail === "deopt") throw new DeoptError(reason);
@@ -196,12 +208,14 @@ export async function runProgram(
     const runIteration = async (item: unknown, iterScope: BindScope, signal: AbortSignal) => {
       iterScope.results.set(step.item, item);
       const calls: string[] = [];
-      let last: unknown;
+      // This iteration's own box, so a concurrent sibling cannot become the
+      // "previous step" that an assert in this body reads.
+      const iterLast: { value: unknown } = { value: undefined };
       for (const s of body) {
-        last = await execStep(s, signal, iterScope, true);
+        await execStep(s, signal, iterScope, true, iterLast);
         if (s.kind === "tool") calls.push(s.tool);
       }
-      return { last, calls };
+      return { last: iterLast.value, calls };
     };
 
     const collected: unknown[] = new Array(items.length);
@@ -247,7 +261,7 @@ export async function runProgram(
     // run is byte-identical to one from a sequential run.
     for (const calls of callsPerItem) if (calls) stats.toolCalls.push(...calls);
     scope.results.set(step.id, collected);
-    if (touchLast) lastResult = collected;
+    if (touchLast) last.value = collected;
     return collected;
   };
 
@@ -290,7 +304,7 @@ export async function runProgram(
         // from the last step in program order, which is what a sequential run
         // would have left behind for a following bare-path assert to read.
         await Promise.all(wave.map((s) => execStep(s, signal, scope, false)));
-        lastResult = results.get(wave[wave.length - 1]!.id);
+        topLast.value = results.get(wave[wave.length - 1]!.id);
       }
       for (const s of wave) if (s.kind === "tool") stats.toolCalls.push(s.tool);
     }
