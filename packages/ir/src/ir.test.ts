@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalize, cloneJson, containsRedaction, containsSecret, eq, flatten, getPath, hashProgram, hashTrace, inDistribution, interpolate, isSecretKey, isWeakValue, minLlmReductionOf, redact, redactString, validateProgram, withVersion } from "../src/index";
+import { canonicalize, cloneJson, containsRedaction, containsSecret, eq, flatten, getPath, hashProgram, hashTrace, inDistribution, interpolate, isMutating, isSecretKey, isWeakValue, minLlmReductionOf, redact, redactString, validateProgram, withVersion } from "../src/index";
 import type { StretchProgram } from "../src/index";
 
 const mini = (): StretchProgram =>
@@ -470,5 +470,53 @@ describe("canonicalize agrees with eq about what is different", () => {
     expect(canonicalize(new Thing(1))).not.toBe(canonicalize(new Thing(1)));
     const one = new Thing(1);
     expect(canonicalize(one)).toBe(canonicalize(one));
+  });
+});
+
+describe("a write is a write even when its name mentions a check", () => {
+  test("mutating verbs win over the check-name exclusion", () => {
+    // CHECK_NAME is unanchored and used to short-circuit before the verb test,
+    // so every one of these real GitHub operations reported as a read — which
+    // skipped the compiler's mutating-tool guards and compiled a write in as
+    // an ordinary read.
+    for (const n of [
+      "delete_check_run",
+      "update_check_run",
+      "create_check_suite",
+      "send_verification_email",
+      "issue_delete",
+    ]) {
+      expect(isMutating(n)).toBe(true);
+    }
+  });
+
+  test("the first word is the verb, the rest are its object", () => {
+    // This is the whole difference between verifyWrite, which reads back a
+    // write, and delete_check_run, which deletes a check run.
+    expect(isMutating("verifyWrite")).toBe(false);
+    expect(isMutating("delete_check_run")).toBe(true);
+    // Known limitation, stated rather than hidden: a name whose head is a
+    // check verb and whose tail is a mutating one reads as a check.
+    // `confirm_and_delete` deletes, and this says it does not.
+    expect(isMutating("confirm_and_delete")).toBe(false);
+  });
+
+  test("a genuine check is still not a write", () => {
+    for (const n of ["verifyWrite", "check_status", "validate_input", "ensure_ready", "assertOk"]) {
+      expect(isMutating(n)).toBe(false);
+    }
+  });
+
+  test("case does not decide whether a verb prefix counts", () => {
+    // The prefix was matched lowercased but the boundary character was read
+    // from the original, so "DELETEFILE" was a write and "deletefile" was not.
+    expect(isMutating("DELETEFILE")).toBe(isMutating("deletefile"));
+    expect(isMutating("deletefile")).toBe(false);
+    expect(isMutating("deleteFile")).toBe(true);
+    expect(isMutating("delete_file")).toBe(true);
+    expect(isMutating("delete")).toBe(true);
+    // Not a verb prefix at a word boundary.
+    expect(isMutating("posted")).toBe(false);
+    expect(isMutating("updater")).toBe(false);
   });
 });

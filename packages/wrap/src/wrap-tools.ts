@@ -261,8 +261,7 @@ export async function runCompiled(
       cents: result.stats.cents,
       ok: true,
     };
-    state.receipts.push(receipt);
-    if (state.receipts.length > MAX_TRACES) state.receipts.splice(0, state.receipts.length - MAX_TRACES);
+    pushCapped(state.receipts, receipt);
     notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
     return result.value;
@@ -275,7 +274,10 @@ export async function runCompiled(
       cents: 0,
       ok: false,
     };
-    state.receipts.push(receipt);
+    // Capped on this path too. The success branch trimmed to MAX_TRACES and
+    // this one did not, so a program that deopts on every call grew the array
+    // without limit for the life of the process.
+    pushCapped(state.receipts, receipt);
     notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
     throw err;
@@ -292,6 +294,17 @@ export async function runCompiled(
  * deopt" and the error is rethrown. Host telemetry is not allowed to decide
  * whether the agent's tool worked.
  */
+/**
+ * Append, keeping the buffer bounded.
+ *
+ * Trimming one element per push once the cap is reached moves the whole array
+ * every time; dropping a batch amortises that to O(1) per push.
+ */
+function pushCapped<T>(buf: T[], item: T): void {
+  buf.push(item);
+  if (buf.length > MAX_TRACES + 256) buf.splice(0, buf.length - MAX_TRACES);
+}
+
 function notifyHost(fn: () => void): void {
   try {
     fn();
@@ -338,8 +351,7 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, i
     cost_cents: Math.max(run.cost, run.events.length),
     complete: run.events.at(-1)?.ok,
   };
-  state.traces.push(trace);
-  if (state.traces.length > MAX_TRACES) state.traces.splice(0, state.traces.length - MAX_TRACES);
+  pushCapped(state.traces, trace);
   notifyHost(() => state.opts.onTrace?.(trace));
   post(state, "/v1/traces", trace);
 }
