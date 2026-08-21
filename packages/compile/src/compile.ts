@@ -61,7 +61,7 @@ function aligned(traces: StretchTrace[], tool: string, nth = 0): { traces: Stret
   const tracesOut: StretchTrace[] = [];
   const events: TraceEvent[] = [];
   for (const t of traces) {
-    const hits = t.events.filter((ev) => ev.name === tool && ev.ok);
+    const hits = t.events.filter((ev) => ev.name === tool && ev.ok && !ev.skipped);
     const e = hits[nth];
     if (!e) continue;
     tracesOut.push(t);

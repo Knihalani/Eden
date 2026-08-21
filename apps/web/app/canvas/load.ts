@@ -26,7 +26,10 @@ export type LoadCanvasResult =
 export async function loadCanvas(mode: "request" | "live", id: string): Promise<LoadCanvasResult> {
   try {
     if (mode === "live") {
-      const res = await plane(`/v1/tools/${encodeURIComponent(id)}`);
+      const [res, receiptsRes] = await Promise.all([
+        plane(`/v1/tools/${encodeURIComponent(id)}`),
+        plane(`/v1/receipts?tool=${encodeURIComponent(id)}`),
+      ]);
       if (res.status === 404) return { status: "miss" };
       if (!res.ok) return { status: "error" };
       const tool = asRecord(await res.json());
@@ -35,13 +38,8 @@ export async function loadCanvas(mode: "request" | "live", id: string): Promise<
       const pinned = typeof tool.version === "string" ? tool.version : program?.version ?? "";
       let liveVersion: string | undefined;
       if (tool.state === "live") {
-        const live = await plane(`/v1/tools/${encodeURIComponent(id)}/program`);
-        if (live.ok) {
-          const body = asRecord(await live.json());
-          liveVersion = typeof body?.version === "string" ? body.version : program?.version;
-        }
+        liveVersion = typeof tool.version === "string" ? tool.version : program?.version;
       }
-      const receiptsRes = await plane(`/v1/receipts?tool=${encodeURIComponent(id)}`);
       const receiptsJson = receiptsRes.ok ? asRecord(await receiptsRes.json()) : null;
       const receipts = Array.isArray(receiptsJson?.receipts) ? receiptsJson.receipts : [];
       const last = asRecord(receipts[0]);

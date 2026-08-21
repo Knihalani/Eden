@@ -144,7 +144,7 @@ export function receiptPostmortem(
     timeSavedMs?: number | null;
     ms?: number;
   },
-  opts?: { tapeMs?: number; drift?: boolean },
+  opts?: { budgetMs?: number; drift?: boolean },
 ): string {
   return [
     outcomeWord(rec),
@@ -156,7 +156,7 @@ export function receiptPostmortem(
     savedThisRun(rec.timeSavedMs, "ms"),
     rec.tokensSaved != null && rec.tokensSaved > 0 ? `${Math.round(rec.tokensSaved)} tokens saved this run` : null,
     rec.ms != null ? `${Math.round(rec.ms)}ms this run` : null,
-    opts?.tapeMs != null && opts.tapeMs > 0 ? `tape ${Math.round(opts.tapeMs)}ms` : null,
+    opts?.budgetMs != null && opts.budgetMs > 0 ? `budget ${Math.round(opts.budgetMs)}ms` : null,
   ]
     .filter(Boolean)
     .join(" · ");

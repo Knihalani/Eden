@@ -156,6 +156,7 @@ export class SseUsageParser {
       this.finished = true;
       return;
     }
+    if (!data.includes("usage") && !data.includes("finish_reason")) return;
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(data) as Record<string, unknown>;

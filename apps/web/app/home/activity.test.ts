@@ -125,7 +125,7 @@ test("requests keyed by failure mode start from the warning", () => {
       },
     ],
   });
-  expect(items[0]?.status).toBe("Pending · Loop at 3");
+  expect(items[0]?.status).toBe("Loop · from call 3");
 });
 
 test("receiptSeries buckets last 7 local days and ignores seed tools", () => {

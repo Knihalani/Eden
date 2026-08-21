@@ -19,6 +19,30 @@ function matchingProgram(live: StretchProgram[], pred: (p: StretchProgram) => bo
   return live.filter((p) => p.manifest).find(pred);
 }
 
+/** Checks required by the live program this run is actually on, not the union of every live tool. */
+export function requiredChecks(
+  live: StretchProgram[],
+  events: { name: string; skipped?: boolean }[],
+): string[] {
+  const seen = events.filter((e) => !e.skipped).map((e) => e.name);
+  const first = seen[0];
+  if (!first) return [];
+  const hit = live
+    .filter((p) => {
+      const s = p.sequence ?? [];
+      if (s[0] !== first) return false;
+      let j = 0;
+      for (const n of seen) {
+        const at = s.indexOf(n, j);
+        if (at < 0) return false;
+        j = at + 1;
+      }
+      return true;
+    })
+    .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0))[0];
+  return hit ? (hit.sequence ?? []).filter(isCheckName) : [];
+}
+
 export function killAfterWarningEnabled(opts: EdenOpts): boolean {
   if (opts.killAfterWarning != null) return opts.killAfterWarning;
   return process.env.EDEN_KILL_AFTER_WARNING === "1";
@@ -46,11 +70,11 @@ export function decideGuard(args: {
     return { action: "halt", reason: "loop" };
   }
   if (isStretchEnd(name)) {
-    const required = [...new Set(live.flatMap((p) => (p.sequence ?? []).filter(isCheckName)))];
+    const required = requiredChecks(live, [...run.events, { name }]);
     const preview = evidenceLedger([...run.events, { name, args: {}, ok: true }], required);
     if (preview.absent.length) {
       const need = new Set(preview.absent);
-      const hit = matchingProgram(live, (p) => (p.sequence ?? []).some((n) => need.has(n) || isCheckName(n)));
+      const hit = matchingProgram(live, (p) => (p.sequence ?? []).some((n) => need.has(n)));
       if (hit) return { action: "steer", program: hit, reason: "missing_evidence" };
       return { action: "block", reason: "missing_evidence" };
     }

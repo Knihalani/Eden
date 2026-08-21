@@ -835,4 +835,30 @@ describe("the control plane is not reachable from a web page", () => {
     }
     expect(store.tool("live_fail")?.state).toBe("paused");
   });
+
+  test("early deopt receipts do not auto-pause a live tool", () => {
+    const program = ticketShipProgram();
+    const store = new Store(":memory:");
+    store.putTool({
+      id: "live_ood",
+      name: "live_ood",
+      version: "1",
+      program,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    for (let i = 0; i < 4; i++) {
+      store.putReceipt({
+        tool_id: "live_ood",
+        version: "1",
+        ms: 1,
+        llm_calls: 0,
+        cents: 0,
+        ok: 0,
+        payload: JSON.stringify({ outcome: "deopt", early: true }),
+      });
+    }
+    expect(store.tool("live_ood")?.state).toBe("live");
+  });
 });

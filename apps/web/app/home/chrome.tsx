@@ -66,7 +66,7 @@ export function AppChrome({
   }, [router, home, orgId]);
 
   return (
-    <ActivityProvider initial={initial} owner={owner} quiet={slim}>
+    <ActivityProvider initial={initial} owner={owner} quiet={slim || canvas}>
       <div className="app">
         <header className="app-bar">
           <Link

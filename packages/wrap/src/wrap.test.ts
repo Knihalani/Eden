@@ -649,4 +649,42 @@ describe("online signal bus", () => {
     expect(second).toEqual({ eden: "steered", skipped: "fetchDetails" });
     expect(state.run.events.some((e) => e.name === "fetchDetails" && e.skipped)).toBe(true);
   });
+
+  test("steered skips flush onto the compiled stretch", async () => {
+    const world = createTicketShip({ llmMs: 0 });
+    const program = { ...liveProgram(), sequence: ["lookupTicket", "fetchDetails"] };
+    const state = createState({ programs: [program], island: world.island });
+    const tools = wrapTools(world.tools, state);
+    await tools.lookupTicket.execute({ id: "T-102" });
+    await tools.fetchDetails.execute({ id: "T-102" });
+    expect(state.traces.some((t) => t.skipped?.includes("fetchDetails"))).toBe(true);
+  });
+
+  test("evidence required is the matching program, not the union of live", async () => {
+    const write = {
+      ...liveProgram(),
+      id: "write_stretch",
+      name: "write_stretch",
+      sequence: ["writeRecord", "verifyWrite", "notify"],
+    };
+    const other = {
+      ...liveProgram(),
+      id: "refund_stretch",
+      name: "refund_stretch",
+      sequence: ["lookupTicket", "verifyRefund", "notify"],
+    };
+    const state = createState({ programs: [write, other] });
+    const tools = wrapTools(
+      {
+        writeRecord: async () => ({ written: true }),
+        verifyWrite: async () => ({ verified: true }),
+        notify: async () => ({ done: true }),
+      },
+      state,
+    );
+    await tools.writeRecord.execute({ id: "T-1" });
+    await tools.verifyWrite.execute({ id: "T-1" });
+    const out = await tools.notify.execute({ id: "T-1" });
+    expect(out).toEqual({ done: true });
+  });
 });

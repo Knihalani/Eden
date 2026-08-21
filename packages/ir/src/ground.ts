@@ -1,4 +1,3 @@
-import { hashTrace } from "./hash";
 import { isUsableOutput } from "./signals";
 import type { StretchTrace } from "./types";
 
@@ -7,20 +6,18 @@ export type Grounding = {
   cached: boolean;
 };
 
-const CACHE = new Map<string, boolean | "unknown">();
-const CACHE_MAX = 256;
+const MEMO = new WeakMap<StretchTrace, boolean | "unknown">();
 
 /**
  * Selective offline grounding when `t.output` is absent.
  *
  * Not an LLM-as-judge on every run. Structural: a usable output plus no
  * failed/absent evidence is grounded; missing output without evidence is
- * unknown; empty-but-ok is not grounded. Optional LLM is env-gated and
- * cached on the trace hash.
+ * unknown; empty-but-ok is not grounded. Cached on the trace object so a
+ * flush does not re-hash the same events.
  */
 export function judgeGrounding(t: StretchTrace): Grounding {
-  const key = hashTrace(t);
-  const hit = CACHE.get(key);
+  const hit = MEMO.get(t);
   if (hit !== undefined) return { grounded: hit, cached: true };
 
   let grounded: boolean | "unknown";
@@ -36,11 +33,7 @@ export function judgeGrounding(t: StretchTrace): Grounding {
     grounded = false;
   }
 
-  if (CACHE.size >= CACHE_MAX) {
-    const first = CACHE.keys().next().value;
-    if (first !== undefined) CACHE.delete(first);
-  }
-  CACHE.set(key, grounded);
+  MEMO.set(t, grounded);
   return { grounded, cached: false };
 }
 
