@@ -1,7 +1,8 @@
 import type { Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
-import { canonicalize, inDistribution, isCheckName, isIslandName, isMutating, minLlmReductionOf, redact } from "@eden/ir";
+import { canonicalize, inDistribution, isCheckName, isIslandName, isMutating, isUsableOutput, minLlmReductionOf, redact } from "@eden/ir";
 import { isDeopt, runProgram } from "@eden/runtime";
 import { isUnrecordedCall } from "./replay";
+import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, traceTokens } from "./measure";
 
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE";
 
@@ -103,6 +104,12 @@ export async function shadowProgram(
   const naiveLlm: number[] = [];
   const naiveMs: number[] = [];
   const naiveCents: number[] = [];
+  const naiveTok: number[] = [];
+  const compiledTok: number[] = [];
+  const naiveTime: number[] = [];
+  const compiledTime: number[] = [];
+  let tokensMeasured = true;
+  let timeMeasured = true;
   let compiledComplete = 0;
   let naiveComplete = 0;
   let compiledSkips = 0;
@@ -142,16 +149,31 @@ export async function shadowProgram(
       compiledLlm.push(run.stats.llmCalls);
       compiledMs.push(run.stats.ms);
       compiledCents.push(run.stats.cents);
-      // Whether the compiled program returns the *right answer* was never
-      // checked: nothing here read t.output. A program whose  binding
-      // points at the wrong step runs cleanly, returns undefined, and passed.
-      // "Completed" now means "agreed with the trace it was compiled from",
-      // which is also what makes the naiveComplete comparison below meaningful
-      // — it used to count every run that merely did not throw, against a
-      // naive count of traces flagged complete, so the two were not the same
-      // predicate and the gate could not fire.
+      const naiveT = traceTokens(t);
+      const compiledT = compiledTokens(t, run.stats.llmCalls, hasIsland);
+      if (naiveT == null || compiledT == null) tokensMeasured = false;
+      else {
+        naiveTok.push(naiveT);
+        compiledTok.push(compiledT);
+      }
+      const toolsMs = compiledToolMs(t, run.stats.toolCalls);
+      const naiveTools = naiveToolMs(t);
+      if (isSyntheticDuration(t) || naiveTools == null || toolsMs == null) timeMeasured = false;
+      else {
+        naiveTime.push(naiveTools);
+        compiledTime.push(toolsMs + (hasIsland && run.stats.llmCalls >= 1 ? run.stats.islandMs : 0));
+      }
       validated++;
-      if (outputMatches(run.value, t.output)) compiledComplete++;
+      const usable = isUsableOutput(run.value);
+      if (!usable) {
+        extraMisses++;
+        if (reasons.length < 8) reasons.push("succeeded with nothing");
+      }
+      const match = outputMatches(run.value, t.output);
+      if (match === "vacuous") {
+        extraMisses++;
+        if (reasons.length < 8) reasons.push("trace has no recorded output — quality cannot be scored");
+      } else if (match) compiledComplete++;
       else {
         extraMisses++;
         if (reasons.length < 8) reasons.push("compiled output differs from the recorded trace");
@@ -201,13 +223,10 @@ export async function shadowProgram(
     };
   }
   const llmReduction = reductionRatio(mean(naiveLlm), mean(compiledLlm));
-  // Reported, never gated on — and read it with care. `naiveMs` is whatever the
-  // recorder wrote into the trace (for the TicketShip fixture, a synthetic
-  // 200ms per LLM call), while `compiledMs` is real in-process execution. The
-  // two are not the same clock, so the ratio can reach absurd values and means
-  // nothing unless the traces carry genuinely measured durations. Only
-  // llmReduction and skipRateAfter decide whether a program may ship.
-  const latencyReduction = reductionRatio(mean(naiveMs), mean(compiledMs));
+  const timeSavedMs = timeMeasured && naiveTime.length ? mean(naiveTime) - mean(compiledTime) : null;
+  const tokensSaved = tokensMeasured && naiveTok.length ? mean(naiveTok) - mean(compiledTok) : null;
+  const latencyReduction =
+    timeMeasured && compiledTime.length ? reductionRatio(mean(naiveTime), mean(compiledTime)) : reductionRatio(mean(naiveMs), mean(compiledMs));
   const costReduction = reductionRatio(mean(naiveCents), mean(compiledCents));
   const skipRateBefore = naiveSkips / n;
   const skipRateAfter = compiledSkips / Math.max(validated, 1);
@@ -220,27 +239,29 @@ export async function shadowProgram(
     skipRateBefore,
     skipRateAfter,
     nShadow: n,
+    tokensSaved,
+    timeSavedMs,
+    tokensMeasured,
+    timeMeasured,
   };
 
   if (extraMisses > 0) {
     reasons.push(`extra misses ${extraMisses}`);
     return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
   }
-  // Compared over the traces that ran, not over every held-out trace: a trace
-  // the recording could not answer contributes to neither side.
   if (naiveComplete > 0 && compiledComplete < Math.min(naiveComplete, validated)) {
     reasons.push(`complete ${compiledComplete} < naive ${naiveComplete}`);
-    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
-  }
-  if (llmReduction < minR) {
-    reasons.push(
-      `reductions llm=${llmReduction.toFixed(2)} lat=${latencyReduction.toFixed(2)} cost=${costReduction.toFixed(2)} need ≥${minR}× LLM`,
-    );
     return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
   }
   if (skipRateAfter > 0) {
     reasons.push(`compiled skip rate ${skipRateAfter}`);
     return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
+  }
+  const tokensOk = tokensMeasured && tokensSaved != null && tokensSaved > 0;
+  const timeOk = timeMeasured && timeSavedMs != null && timeSavedMs > 0;
+  if (!tokensOk && !timeOk) {
+    reasons.push("not measured — quality held but neither tokens nor time saved");
+    return { verdict: "INCONCLUSIVE", manifest, reasons, n, minLlmReduction: minR };
   }
   return { verdict: "PASS", manifest, reasons, n, minLlmReduction: minR };
 }
@@ -248,8 +269,10 @@ export async function shadowProgram(
 export function canApprove(result: ShadowResult): boolean {
   const m = result.manifest;
   if (result.verdict !== "PASS" || !m) return false;
-  const minR = minLlmReductionOf(result.minLlmReduction);
-  return m.llmReduction >= minR && m.skipRateAfter === 0;
+  if (m.skipRateAfter !== 0) return false;
+  const tokensOk = Boolean(m.tokensMeasured) && (m.tokensSaved ?? 0) > 0;
+  const timeOk = Boolean(m.timeMeasured) && (m.timeSavedMs ?? 0) > 0;
+  return tokensOk || timeOk;
 }
 
 /**
@@ -257,11 +280,11 @@ export function canApprove(result: ShadowResult): boolean {
  *
  * Compared through redact() so a credential that was redacted on the way into
  * the trace does not read as a difference, and through canonicalize() so key
- * order does not either. A trace with no recorded output cannot answer the
- * question, so it is not counted against the program.
+ * order does not either. A trace with no recorded output cannot answer — that
+ * is not a pass.
  */
-function outputMatches(actual: unknown, expected: unknown): boolean {
-  if (expected === undefined) return true;
+function outputMatches(actual: unknown, expected: unknown): boolean | "vacuous" {
+  if (expected === undefined) return "vacuous";
   try {
     return canonicalize(redact(actual)) === canonicalize(redact(expected));
   } catch {

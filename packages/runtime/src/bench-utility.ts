@@ -16,6 +16,7 @@ import {
   createTicketShip,
   runNaive,
   ticketShipProgram,
+  toNaiveTrace,
 } from "../src/ticketship";
 import type { StretchTrace } from "@eden/ir";
 
@@ -47,16 +48,7 @@ async function collectTraces(n: number, llmMs = 0): Promise<StretchTrace[]> {
     const world = createTicketShip({ llmMs });
     const id = WITNESS_IDS[i % WITNESS_IDS.length]!;
     const run = await runNaive(world, id, { skipVerifyP: 0.2, seed: 100 + i });
-    out.push({
-      id: `u${i}`,
-      events: run.events,
-      input: { id },
-      llmCalls: run.stats.llmCalls,
-      duration_ms: Math.max(run.stats.duration_ms, 200 * run.stats.llmCalls),
-      cost_cents: run.stats.cost_cents,
-      skipped: run.stats.skipped,
-      complete: run.stats.complete,
-    });
+    out.push(toNaiveTrace(`u${i}`, id, run));
   }
   return out;
 }

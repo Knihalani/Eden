@@ -1,26 +1,25 @@
-import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import type { ReactNode } from "react";
+import { Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 
-const sans = Source_Sans_3({
+const ui = Bricolage_Grotesque({
   subsets: ["latin"],
-  variable: "--font-sans",
+  weight: ["500", "600"],
+  variable: "--font-ui-family",
   display: "swap",
   preload: true,
+  fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
   adjustFontFallback: true,
 });
 
-const serif = Source_Serif_4({
-  subsets: ["latin"],
-  variable: "--font-serif",
-  display: "swap",
-  preload: false,
-  adjustFontFallback: true,
-});
+export const viewport = {
+  colorScheme: "dark" as const,
+  themeColor: "#1f1f27",
+};
 
 export const metadata = {
   title: "Eden",
-  description: "Compile repeating agent tools. Approve before they go live.",
+  description: "Making your agents more deterministic.",
   icons: {
     icon: [
       { url: "/favicon.webp", sizes: "32x32", type: "image/webp" },
@@ -32,8 +31,13 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${serif.variable}`}>
-      <body>{children}</body>
+    <html lang="en" className={ui.variable}>
+      <body>
+        <a className="skip" href="#content">
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

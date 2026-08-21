@@ -45,7 +45,7 @@ export async function wrapCmd(args: string[]): Promise<void> {
   console.log(`Eden wrap ${server.url}`);
   console.log(`OPENAI_BASE_URL=${new URL("/v1", server.url).href}`);
   console.log("UI: bun run --cwd apps/web dev");
-  console.log("Ships from 2× fewer LLM calls");
+      console.log("Ships when quality holds and tokens or time are measured");
   await new Promise(() => undefined);
 }
 

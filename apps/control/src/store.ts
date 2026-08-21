@@ -33,6 +33,7 @@ export type StoredReceipt = {
   cents: number;
   ok: number;
   created_at: number;
+  payload?: string | null;
 };
 
 export class Store {
@@ -91,6 +92,11 @@ export class Store {
       /* already present */
     }
     try {
+      this.db.exec(`ALTER TABLE receipts ADD COLUMN payload TEXT`);
+    } catch {
+      /* already present */
+    }
+    try {
       this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS traces_hash ON traces(hash)`);
     } catch {
       /* duplicate hashes on migrate — still usable */
@@ -126,6 +132,36 @@ export class Store {
     if (n > 5000) {
       this.db.run(`DELETE FROM traces WHERE id IN (SELECT id FROM traces ORDER BY created_at ASC LIMIT ?)`, [n - 5000]);
     }
+    return true;
+  }
+
+  /**
+   * Late proxy usage for a stretch we already stored unmeasured.
+   * Hash ignores tokens, so a re-post would otherwise be a duplicate forever.
+   */
+  sealUnmeasured(sealed: StretchTrace): boolean {
+    const hash = hashTrace(sealed);
+    const row = this.db.query(`SELECT id, payload FROM traces WHERE hash = ?`).get(hash) as { id: string; payload: string } | null;
+    if (!row) return false;
+    let current: StretchTrace;
+    try {
+      current = JSON.parse(row.payload) as StretchTrace;
+    } catch {
+      return false;
+    }
+    if (current.prompt_tokens != null) return false;
+    if (sealed.prompt_tokens == null && sealed.llmCalls === current.llmCalls && sealed.output === current.output) {
+      return false;
+    }
+    const next: StretchTrace = {
+      ...current,
+      llmCalls: sealed.llmCalls || current.llmCalls,
+      output: current.output ?? sealed.output,
+      ...(sealed.prompt_tokens != null
+        ? { prompt_tokens: sealed.prompt_tokens, completion_tokens: sealed.completion_tokens }
+        : {}),
+    };
+    this.db.run(`UPDATE traces SET payload = ? WHERE id = ?`, [JSON.stringify(next), row.id]);
     return true;
   }
 
@@ -231,13 +267,25 @@ export class Store {
 
   putReceipt(r: Omit<StoredReceipt, "id" | "created_at"> & { id?: string }): void {
     this.db.run(
-      `INSERT INTO receipts (id, tool_id, version, ms, llm_calls, cents, ok, created_at) VALUES (?,?,?,?,?,?,?,?)`,
-      [r.id ?? crypto.randomUUID(), r.tool_id, r.version, r.ms, r.llm_calls, r.cents, r.ok, Date.now()],
+      `INSERT INTO receipts (id, tool_id, version, ms, llm_calls, cents, ok, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [r.id ?? crypto.randomUUID(), r.tool_id, r.version, r.ms, r.llm_calls, r.cents, r.ok, Date.now(), r.payload ?? null],
     );
     const n = (this.db.query(`SELECT COUNT(*) as n FROM receipts`).get() as { n: number }).n;
     if (n > 5000) {
       this.db.run(`DELETE FROM receipts WHERE id IN (SELECT id FROM receipts ORDER BY created_at ASC LIMIT ?)`, [n - 5000]);
     }
+    this.maybeAutoPause(r.tool_id);
+  }
+
+  /** Failed compiled tools don’t keep running (44). */
+  maybeAutoPause(toolId: string): void {
+    const stats = this.receiptStats(toolId);
+    if (stats.n < 4 || stats.fail / stats.n < 0.5) return;
+    const t = this.tool(toolId);
+    if (!t || t.state !== "live") return;
+    t.state = "paused";
+    t.updated_at = Date.now();
+    this.putTool(t);
   }
 
   receipts(): StoredReceipt[] {
@@ -275,23 +323,49 @@ export class Store {
     this.db.run(`INSERT OR REPLACE INTO meta (k, v) VALUES ('compiled_n', ?)`, [String(n)]);
   }
 
-  savings(): { runs: number; fail: number; llmReductionMean: number; live: number } {
+  savings(): {
+    runs: number;
+    fail: number;
+    llmReductionMean: number;
+    tokensSavedMean: number;
+    timeSavedMsMean: number;
+    live: number;
+  } {
     const live = this.tools().filter((t) => t.state === "live");
     let runs = 0;
     let fail = 0;
     let red = 0;
+    let tok = 0;
+    let time = 0;
     let withM = 0;
+    let withTok = 0;
+    let withTime = 0;
     for (const t of live) {
       const stats = this.receiptStats(t.id);
       runs += stats.n;
       fail += stats.fail;
-      const m = t.program.manifest?.llmReduction;
-      if (m && Number.isFinite(m)) {
-        red += m;
+      const m = t.program.manifest;
+      if (m?.llmReduction && Number.isFinite(m.llmReduction)) {
+        red += m.llmReduction;
         withM++;
       }
+      if (m?.tokensMeasured && m.tokensSaved != null && Number.isFinite(m.tokensSaved)) {
+        tok += m.tokensSaved;
+        withTok++;
+      }
+      if (m?.timeMeasured && m.timeSavedMs != null && Number.isFinite(m.timeSavedMs)) {
+        time += m.timeSavedMs;
+        withTime++;
+      }
     }
-    return { runs, fail, llmReductionMean: withM ? red / withM : 0, live: live.length };
+    return {
+      runs,
+      fail,
+      llmReductionMean: withM ? red / withM : 0,
+      tokensSavedMean: withTok ? tok / withTok : 0,
+      timeSavedMsMean: withTime ? time / withTime : 0,
+      live: live.length,
+    };
   }
 }
 

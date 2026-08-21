@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { registryFrom } from "@eden/runtime";
 import { canApprove, mutatingSteps, replayRegistry, shadowProgram, uncoveredTools } from "../src/index";
-import { createTicketShip, ticketShipProgram, WITNESS_IDS } from "../../runtime/src/ticketship";
+import { createTicketShip, ticketShipProgram, toNaiveTrace, WITNESS_IDS } from "../../runtime/src/ticketship";
 import { compileTraces } from "../../compile/src/index";
 import { runNaive } from "../../runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
@@ -12,17 +12,7 @@ async function traces(n: number, skip = 0.2): Promise<StretchTrace[]> {
     const world = createTicketShip({ llmMs: 0 });
     const id = WITNESS_IDS[i % 3]!;
       const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : skip, seed: 50 + i });
-    out.push({
-      id: `s${i}`,
-      events: run.events,
-      input: { id },
-      output: run.output,
-      llmCalls: run.stats.llmCalls,
-      duration_ms: 200 * run.stats.llmCalls,
-      cost_cents: run.stats.cost_cents,
-      skipped: run.stats.skipped,
-      complete: run.stats.complete,
-    });
+    out.push(toNaiveTrace(`s${i}`, id, run));
   }
   return out;
 }
@@ -45,6 +35,9 @@ describe("shadow", () => {
     expect(result.manifest?.latencyReduction).toBeGreaterThanOrEqual(5);
     expect(result.manifest?.costReduction).toBeGreaterThanOrEqual(5);
     expect(result.manifest?.skipRateAfter).toBe(0);
+    expect(result.manifest?.tokensMeasured).toBe(true);
+    expect(result.manifest?.tokensSaved ?? 0).toBeGreaterThan(0);
+    expect(result.manifest?.timeMeasured).toBe(false);
     expect(canApprove(result)).toBe(true);
   });
 
@@ -92,56 +85,46 @@ describe("shadow", () => {
     expect(result.manifest?.skipRateAfter).toBe(0);
   });
 
-  test("canApprove honors contract minLlmReduction", () => {
+  test("canApprove ships on measured tokens, not × LLM", () => {
     expect(
       canApprove({
         verdict: "PASS",
         manifest: {
-          llmReduction: 3,
-          latencyReduction: 3,
-          costReduction: 3,
-          skipRateBefore: 0.2,
+          llmReduction: 1.1,
+          latencyReduction: 1,
+          costReduction: 1,
+          skipRateBefore: 0,
           skipRateAfter: 0,
           nShadow: 6,
+          tokensMeasured: true,
+          timeMeasured: false,
+          tokensSaved: 80,
+          timeSavedMs: null,
         },
         reasons: [],
         n: 6,
-        minLlmReduction: 3,
       }),
     ).toBe(true);
   });
 
-  test("promotes at 2× LLM even when latency is only slightly better", () => {
+  test("canApprove refuses vacuous PASS without tokens or time", () => {
     expect(
       canApprove({
         verdict: "PASS",
         manifest: {
-          llmReduction: 2.1,
-          latencyReduction: 1.15,
-          costReduction: 2.1,
-          skipRateBefore: 0.2,
-          skipRateAfter: 0,
-          nShadow: 4,
-        },
-        reasons: [],
-        n: 4,
-        minLlmReduction: 2,
-      }),
-    ).toBe(true);
-    expect(
-      canApprove({
-        verdict: "PASS",
-        manifest: {
-          llmReduction: 1.4,
+          llmReduction: 8,
           latencyReduction: 8,
           costReduction: 8,
           skipRateBefore: 0,
           skipRateAfter: 0,
           nShadow: 4,
+          tokensMeasured: false,
+          timeMeasured: false,
+          tokensSaved: null,
+          timeSavedMs: null,
         },
         reasons: [],
         n: 4,
-        minLlmReduction: 2,
       }),
     ).toBe(false);
   });
@@ -318,5 +301,58 @@ describe("a program that checks more than the agent did is credited, not failed"
     });
     expect(result.verdict).toBe("INCONCLUSIVE");
     expect(result.reasons.join(" ")).toMatch(/could validate this program/);
+  });
+});
+
+describe("20b ship gate is tokens, time, and quality", () => {
+  test("missing usage is not measured and does not PASS", async () => {
+    const held = (await traces(6, 0)).map(({ prompt_tokens, completion_tokens, ...t }) => t);
+    const world = createTicketShip({ llmMs: 0 });
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.verdict).toBe("INCONCLUSIVE");
+    expect(result.manifest?.tokensMeasured).toBe(false);
+    expect(result.manifest?.timeMeasured).toBe(false);
+    expect(canApprove(result)).toBe(false);
+    expect(result.reasons.join(" ")).toMatch(/not measured/);
+  });
+
+  test("vacuous output is a miss, not a pass", async () => {
+    const held = (await traces(6, 0)).map((t) => ({ ...t, output: undefined }));
+    const world = createTicketShip({ llmMs: 0 });
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.verdict).toBe("FAIL");
+    expect(result.reasons.join(" ")).toMatch(/no recorded output/);
+  });
+
+  test("time from event duration_ms, not tape-lookup wall clock", async () => {
+    const held = (await traces(10, 0))
+      .filter((t) => t.events.some((e) => e.name === "verifyWrite"))
+      .slice(0, 6)
+      .map((t) => ({
+        ...t,
+        duration_ms: 50_000,
+        events: t.events.map((e, i) => ({ ...e, duration_ms: 100 + i })),
+      }));
+    expect(held).toHaveLength(6);
+    const world = createTicketShip({ llmMs: 0 });
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.manifest?.timeMeasured).toBe(true);
+    expect(result.manifest?.timeSavedMs).not.toBeNull();
+    expect(Math.abs(result.manifest?.timeSavedMs ?? 0)).toBeLessThan(10_000);
   });
 });

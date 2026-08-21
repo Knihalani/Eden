@@ -22,6 +22,27 @@ export type ServerOpts = {
  * /v1/wrap-run reaches the coding registry's Bash, Write and Edit executors.
  * A visited web page was one fetch away from running commands.
  */
+/**
+ * `handleApi` builds its responses without the request in hand, so all but one
+ * of its ~39 exits carried `vary: origin` and no `access-control-allow-origin`.
+ * A browser therefore got an affirmative preflight from the branch above and
+ * then a CORS failure on the real response — the 401 was the only reply it
+ * could actually read. Stamping the headers once, here at the boundary every
+ * consumer shares, keeps that impossible to reintroduce a call site at a time.
+ */
+function withCors(res: Response, req: Request): Response {
+  const cors = corsHeaders(req);
+  try {
+    for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
+    return res;
+  } catch {
+    // A guarded (immutable) response cannot be mutated; rebuild it instead.
+    const headers = new Headers(res.headers);
+    for (const [k, v] of Object.entries(cors)) headers.set(k, v);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  }
+}
+
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
   if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return { vary: "origin" };
@@ -29,6 +50,7 @@ function corsHeaders(req: Request): Record<string, string> {
     "access-control-allow-origin": origin,
     "access-control-allow-headers": "authorization, content-type",
     "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+    "cache-control": "private, no-store",
     vary: "origin",
   };
 }
@@ -55,9 +77,7 @@ export function createHandler(opts: ServerOpts) {
     registry: opts.registry,
     island: opts.island,
     sandboxFor: opts.sandboxFor,
-    // No default. `auth()` fails open on an empty token, and "eden_dev" was
-    // hardcoded here and in four other places, so the shipped configuration
-    // authenticated anybody who had read the source.
+    wrapState,
     token: opts.token,
   };
 
@@ -100,7 +120,7 @@ export function createHandler(opts: ServerOpts) {
       });
     }
     const api = await handleApi(req, url, ctx);
-    if (api) return api;
-    return new Response("Not found", { status: 404 });
+    if (api) return withCors(api, req);
+    return new Response("Not found", { status: 404, headers: corsHeaders(req) });
   };
 }

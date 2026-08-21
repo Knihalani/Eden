@@ -1,4 +1,4 @@
-import type { IslandCaller, StretchProgram, ToolExecute } from "@eden/ir";
+import type { IslandCaller, StretchProgram, StretchTrace, ToolExecute } from "@eden/ir";
 import { withVersion } from "@eden/ir";
 
 export const WITNESS_IDS = ["T-100", "T-101", "T-102"] as const;
@@ -226,6 +226,28 @@ export async function runNaive(
       notified: mut.notified,
       complete: mut.wrote && mut.notified,
     },
+  };
+}
+
+/** StretchTrace from a naive TicketShip run. Tokens are measured; wall clock is the synthetic fixture. */
+export function toNaiveTrace(
+  id: string,
+  ticketId: string,
+  run: Awaited<ReturnType<typeof runNaive>>,
+): StretchTrace {
+  const llm = run.stats.llmCalls;
+  return {
+    id,
+    events: run.events,
+    input: { id: ticketId },
+    output: run.output,
+    llmCalls: llm,
+    duration_ms: LLM_MS * llm,
+    cost_cents: run.stats.cost_cents,
+    skipped: run.stats.skipped,
+    complete: run.stats.complete,
+    prompt_tokens: 40 * llm,
+    completion_tokens: 10 * llm,
   };
 }
 

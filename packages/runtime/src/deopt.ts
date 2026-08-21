@@ -13,6 +13,10 @@ export class DeoptError extends Error {
    * 0 means the program provably did nothing and replaying is safe.
    */
   stepsRun = 0;
+  /** Wall of the failed compiled attempt. 0 if it bailed before work. */
+  ms = 0;
+  llmCalls = 0;
+  cents = 0;
 
   constructor(readonly reason: string) {
     super(`deopt: ${reason}`);

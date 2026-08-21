@@ -59,28 +59,39 @@ function readJsonl(path: string): Array<Record<string, unknown>> {
     .filter((x): x is Record<string, unknown> => !!x);
 }
 
+/** Tools-only hook stretch. Real `usage` is attached at ingest from the chat proxy. */
+export function hookTraceBody(events: Array<Record<string, unknown>>): Record<string, unknown> {
+  const first = events[0]!;
+  const t0 = Number(first.ts ?? Date.now());
+  const t1 = Number(events.at(-1)?.ts ?? t0);
+  return {
+    events,
+    input: first.args ?? {},
+    output: lastOkResult(events),
+    llmCalls: 0,
+    duration_ms: Math.max(0, t1 - t0),
+    cost_cents: 0,
+    complete: true,
+  };
+}
+
+function lastOkResult(events: Array<Record<string, unknown>>): unknown {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]!;
+    if (ev.ok !== false && ev.result !== undefined) return ev.result;
+  }
+  return undefined;
+}
+
 function flushSession(session: string, events: Array<Record<string, unknown>>): void {
   const cfg = readConfig();
   if (!cfg || events.length < 2) return;
   const path = eventsPath(session);
   const flushedIds = events.map((e) => String(e.id ?? ""));
-  const first = events[0]!;
-  const t0 = Number(first.ts ?? Date.now());
-  const t1 = Number(events.at(-1)?.ts ?? t0);
-  const islandish = events.filter((e) => /draft|reply|generate|summarize|compose|llm/i.test(String(e.name))).length;
-  const naiveLlm = Math.max(islandish, events.length);
   void fetch(`${wrapPlaneUrl(cfg.base_url)}/v1/traces`, {
     method: "POST",
     headers: { authorization: `Bearer ${cfg.api_key}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      id: crypto.randomUUID(),
-      events,
-      input: first.args ?? {},
-      llmCalls: naiveLlm,
-      duration_ms: Math.max(0, t1 - t0),
-      cost_cents: naiveLlm,
-      complete: true,
-    }),
+    body: JSON.stringify({ id: crypto.randomUUID(), ...hookTraceBody(events) }),
   })
     .then((r) => {
       if (r.ok) withFileLock(`${path}.lock`, () => applyFlushTruncate(path, flushedIds));

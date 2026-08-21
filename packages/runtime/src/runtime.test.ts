@@ -60,6 +60,8 @@ describe("runtime bind/deopt", () => {
     } catch (err) {
       expect(isDeopt(err)).toBe(true);
       expect((err as DeoptError).reason).toContain("assert failed");
+      expect((err as DeoptError).stepsRun).toBe(1);
+      expect((err as DeoptError).ms).toBeGreaterThanOrEqual(0);
     }
   });
 

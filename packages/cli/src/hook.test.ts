@@ -1,11 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { respondToHook, applyFlushTruncate } from "./hook";
+import { respondToHook, applyFlushTruncate, hookTraceBody } from "./hook";
 import { handleHookd, hookdTimeoutMs } from "./hookd";
 import { handleMcp, McpAuthError } from "./mcp";
 import { join } from "node:path";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 
 describe("hook", () => {
+  test("hook flush payload does not invent llmCalls from the event count", () => {
+    const body = hookTraceBody([
+      { name: "lookupTicket", args: { id: "T-100" }, ok: true, result: { id: "T-100" }, ts: 1 },
+      { name: "notify", args: { id: "T-100" }, ok: true, result: { sent: true }, ts: 4 },
+    ]);
+    expect(body.llmCalls).toBe(0);
+    expect(body.cost_cents).toBe(0);
+    expect(body.output).toEqual({ sent: true });
+  });
+
   test("PostToolUse records without throwing", () => {
     const home = join(import.meta.dir, "../../.tmp-eden-hook");
     mkdirSync(join(home, "runs"), { recursive: true });
