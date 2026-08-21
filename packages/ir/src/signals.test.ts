@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { takeSignals } from "./signals";
+import { evidenceLedger, takeSignals } from "./signals";
 import type { TraceEvent } from "./types";
 
 function ev(name: string, ok = true): TraceEvent {
@@ -61,5 +61,16 @@ describe("online signals", () => {
     const out = takeSignals([ev("search"), ev("search"), ev("search")], { duration_ms: 2, llmCalls: 0 }, new Set());
     expect(out[0]!.kind).toBe("repeat_ngram");
     expect(out[0]!.ngram).toEqual(["search", "search"]);
+  });
+
+  test("a steered skip of a required check is not presence", () => {
+    const events = [
+      ev("writeRecord"),
+      { name: "verifyWrite", args: {}, ok: true, skipped: true },
+      ev("notify"),
+    ];
+    const ledger = evidenceLedger(events, ["verifyWrite"]);
+    expect(ledger.present).toEqual([]);
+    expect(ledger.absent).toEqual(["verifyWrite"]);
   });
 });

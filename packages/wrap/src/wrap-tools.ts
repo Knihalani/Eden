@@ -3,7 +3,6 @@ import {
   evidenceLedger,
   firstWarningIndex,
   inDistribution,
-  isCheckName,
   judgeGrounding,
   postWarningSpend,
   redact,
@@ -18,7 +17,7 @@ import { asToolDef, emptyRun, type EdenOpts, type Receipt, type RunRecorder, typ
 import { extractInput } from "./steer";
 import type { StretchTrace } from "@eden/ir";
 import { resetUsage } from "./usage";
-import { decideGuard } from "./guard";
+import { decideGuard, requiredChecks } from "./guard";
 
 const MAX_TRACES = 2000;
 const PULL_EVERY = 24;
@@ -435,14 +434,15 @@ function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
     llmCalls: run.llmCalls,
     ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
   };
-  const required = [...new Set(liveOf(state).flatMap((p) => (p.sequence ?? []).filter(isCheckName)))];
-  const fresh = takeSignals(run.events, budget, run.seenSignals, required);
+  const required = requiredChecks(liveOf(state), run.events);
+  const ledger = evidenceLedger(run.events, required);
+  const fresh = takeSignals(run.events, budget, run.seenSignals, required, ledger);
   for (const w of fresh) {
     if (run.warnings.length >= MAX_WARNINGS) break;
     run.warnings.push(w);
     notifyHost(() => state.opts.onWarning?.(w));
   }
-  run.evidence = evidenceLedger(run.events, required);
+  run.evidence = ledger;
   if (run.firstWarningAt == null) {
     const at = firstWarningIndex(run.events, run.warnings);
     if (at != null) {
@@ -558,27 +558,34 @@ export function wrapTools<T extends ToolsIn>(
         const prefixHits = live
           .filter((p) => (p.sequence ?? [])[0] === name)
           .map((p) => ({ p, input: extractInput(p, args) }))
-          .filter(({ p, input }) => inDistribution(p, input))
-          .sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
+          .filter(({ p, input }) => inDistribution(p, input));
+        if (prefixHits.length > 1) {
+          prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
+        }
         const hit = prefixHits[0];
+        const armTail = (program: StretchProgram, input: Record<string, unknown>): { key: string; armed: Armed } => {
+          const key = `${program.id}#${++skipSeq}`;
+          const rest = restCounts(program);
+          const armed: Armed = {
+            rest,
+            input,
+            programId: program.id,
+            armedAt: performance.now(),
+            armedAtCall: calls,
+            callBudget: totalRest(rest) + ARM_SLACK_CALLS,
+          };
+          skipRest.set(key, armed);
+          evictArmings(skipRest, calls);
+          return { key, armed };
+        };
         if (hit) {
           // Armed *before* the await, not after. Real hosts issue a turn's tool
           // calls in parallel, and while the compiled program was running the
           // map was still empty — so a sibling call naming a later step of the
           // same stretch sailed past the skip check and executed for real,
           // duplicating whatever the compiled leg was in the middle of doing.
-          const armKey = `${hit.p.id}#${++skipSeq}`;
-          const rest = restCounts(hit.p);
-          const armed: Armed = {
-            rest,
-            input: hit.input,
-            programId: hit.p.id,
-            armedAt: performance.now(),
-            armedAtCall: calls,
-            callBudget: totalRest(rest) + ARM_SLACK_CALLS,
-          };
-          skipRest.set(armKey, armed);
-          evictArmings(skipRest, calls);
+          if (run.events.length) emitTrace(state, run, run.events[0]?.args);
+          const { key: armKey, armed } = armTail(hit.p, hit.input);
           try {
             const value = await runCompiled(state, hit.p, hit.input, tools, registry);
             // Re-stamp now the run has actually finished. The TTL was started
@@ -590,7 +597,9 @@ export function wrapTools<T extends ToolsIn>(
             // above; only the clock starts late.
             armed.armedAt = performance.now();
             armed.armedAtCall = calls;
-            emitTrace(state, run, hit.input);
+            // Flush after the steered tail is absorbed so skipped names land
+            // on this stretch instead of leaking into the next ticket.
+            if (!armed.rest.size) emitTrace(state, run, hit.input);
             return value;
           } catch (err) {
             // Only this invocation's arming. The previous code deleted every
@@ -625,7 +634,6 @@ export function wrapTools<T extends ToolsIn>(
           // let every later one execute again.
           if (remaining > 1) armed.rest.set(name, remaining - 1);
           else armed.rest.delete(name);
-          if (!armed.rest.size) skipRest.delete(id);
           run.events.push({
             name,
             args: redact(args) as Record<string, unknown>,
@@ -634,17 +642,26 @@ export function wrapTools<T extends ToolsIn>(
             duration_ms: 0,
           });
           noteSignals(state, run);
+          if (!armed.rest.size) {
+            skipRest.delete(id);
+            emitTrace(state, run, armed.input);
+          }
           return { eden: "steered", skipped: name };
         }
 
         const guard = decideGuard({ name, run, live, opts: state.opts, now });
         if (guard) {
           if (guard.action === "steer") {
+            const steeredIn = extractInput(guard.program, args);
+            const { key: armKey, armed } = armTail(guard.program, steeredIn);
             try {
-              const value = await runCompiled(state, guard.program, extractInput(guard.program, args), tools, registry);
-              emitTrace(state, run, extractInput(guard.program, args));
+              const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
+              armed.armedAt = performance.now();
+              armed.armedAtCall = calls;
+              if (!armed.rest.size) emitTrace(state, run, steeredIn);
               return value;
             } catch {
+              skipRest.delete(armKey);
               emitTrace(state, run, run.events[0]?.args);
               return { eden: "halted", reason: guard.reason };
             }

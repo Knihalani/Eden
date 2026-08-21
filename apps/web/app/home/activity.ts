@@ -178,14 +178,14 @@ export function inboxItems(activity: Activity): InboxItem[] {
     ...requests.map((item) => {
       const base = requestStatus(item.verdict, item.refused);
       const fail = item.failureMode ? failureModeLabel(item.failureMode) : "";
-      const at = item.firstWarningAt != null ? ` at ${item.firstWarningAt}` : "";
+      const from = item.firstWarningAt != null ? ` · from call ${item.firstWarningAt}` : "";
       return {
         id: `request:${item.id}`,
         name: item.name,
         href: requestPath(item.id),
         kind: "request" as const,
         kindLabel: "Request",
-        status: fail ? `${base} · ${fail}${at}` : base,
+        status: fail ? `${fail}${from}` : base,
       };
     }),
     ...workflows.map((item) => ({

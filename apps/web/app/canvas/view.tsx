@@ -551,7 +551,7 @@ function LiveStrip({
   const live = model.state === "live";
   const rec = model.receipt;
   const postmortem = rec
-    ? receiptPostmortem(rec, { tapeMs: model.program?.budget?.ms, drift: model.drift })
+    ? receiptPostmortem(rec, { budgetMs: model.program?.budget?.ms, drift: model.drift })
     : "";
   return (
     <footer className="canvas-ship">

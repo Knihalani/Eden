@@ -36,6 +36,16 @@ export type StoredReceipt = {
   payload?: string | null;
 };
 
+function receiptIsEarlyDeopt(payload: string | null | undefined): boolean {
+  if (!payload) return false;
+  try {
+    const extra = JSON.parse(payload) as { early?: unknown; outcome?: unknown };
+    return extra.early === true || extra.outcome === "deopt";
+  } catch {
+    return false;
+  }
+}
+
 export class Store {
   db: EdenDb;
   constructor(path = ":memory:") {
@@ -277,10 +287,12 @@ export class Store {
     this.maybeAutoPause(r.tool_id);
   }
 
-  /** Failed compiled tools don’t keep running (44). */
+  /** Failed compiled tools don’t keep running (44). Early deopts are not fails. */
   maybeAutoPause(toolId: string): void {
-    const stats = this.receiptStats(toolId);
-    if (stats.n < 4 || stats.fail / stats.n < 0.5) return;
+    const rows = this.receiptsFor(toolId);
+    if (rows.length < 4) return;
+    const hard = rows.filter((r) => r.ok === 0 && !receiptIsEarlyDeopt(r.payload)).length;
+    if (hard / rows.length < 0.5) return;
     const t = this.tool(toolId);
     if (!t || t.state !== "live") return;
     t.state = "paused";

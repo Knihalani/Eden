@@ -18,7 +18,8 @@ export const MUTATING_VERBS = [
 
 export const MUTATING = new RegExp(`^(${MUTATING_VERBS.join("|")})([A-Z0-9_].*)?$`);
 export const ISLAND_NAME = /draft|reply|generate|summarize|compose|llm|narrate|prose/i;
-export const CHECK_NAME = /verify|validate|assert|check|confirm|ensure/i;
+export const CHECK_VERBS = ["verify", "validate", "assert", "check", "confirm", "ensure"] as const;
+export const CHECK_NAME = new RegExp(`^(${CHECK_VERBS.join("|")})([A-Z0-9_].*)?$`, "i");
 export const STRETCH_END = /^(notify|complete|finalize|done)$/i;
 export const READ_NAME = /^(lookup|fetch|get|read|list|search|find|describe|show|head)/i;
 
@@ -36,7 +37,8 @@ export const READ_NAME = /^(lookup|fetch|get|read|list|search|find|describe|show
 export const CHECK_MIN_SUPPORT = 0.7;
 
 export function isCheckName(name: string): boolean {
-  return CHECK_NAME.test(name);
+  const head = nameWords(name)[0];
+  return Boolean(head && (CHECK_VERBS as readonly string[]).includes(head));
 }
 
 /**

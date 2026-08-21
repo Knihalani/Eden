@@ -35,10 +35,16 @@ export function hashProgram(program: Pick<StretchProgram, "name" | "description"
  * Identity is therefore the stretch — the tool sequence the agent kept
  * repeating — and hashProgram() remains the version within it.
  */
+const STRETCH_HASH = new WeakMap<object, string>();
+
 export function hashStretch(program: Pick<StretchProgram, "name" | "sequence">): string {
-  return createHash("sha256")
+  const hit = STRETCH_HASH.get(program);
+  if (hit) return hit;
+  const hex = createHash("sha256")
     .update(canonicalize({ name: program.name, sequence: program.sequence ?? [] }))
     .digest("hex");
+  STRETCH_HASH.set(program, hex);
+  return hex;
 }
 
 export function hashTrace(t: Pick<StretchTrace, "events" | "input">): string {

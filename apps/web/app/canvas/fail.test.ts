@@ -45,15 +45,15 @@ describe("canvas fail language", () => {
     expect(
       receiptPostmortem(
         { outcome: "ok", stepsRun: 4, timeSavedMs: 68, ms: 12 },
-        { tapeMs: 80 },
+        { budgetMs: 80 },
       ),
-    ).toBe("Ok · 4 steps · 68ms saved this run · 12ms this run · tape 80ms");
+    ).toBe("Ok · 4 steps · 68ms saved this run · 12ms this run · budget 80ms");
     expect(receiptPostmortem({ outcome: "deopt", early: true, deoptReason: "deopt: input not in witness envelope", ms: 0 })).toBe(
       "Fell back · early · input not in witness envelope · 0ms this run",
     );
-    expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { tapeMs: 80, drift: true })).toMatch(
+    expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { budgetMs: 80, drift: true })).toMatch(
       /fingerprint moved/,
     );
-    expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { tapeMs: 80 })).toMatch(/4ms over the tape/);
+    expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { budgetMs: 80 })).toMatch(/4ms over the tape/);
   });
 });

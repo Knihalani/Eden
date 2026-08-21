@@ -135,8 +135,11 @@ export function evidenceLedger(events: TraceEvent[], required: string[] = []): E
   const last = [...events].reverse().find((e) => !e.skipped);
   const ending = Boolean(last && isStretchEnd(last.name));
   const sawMut = events.some((e) => !e.skipped && e.ok && isMutating(e.name));
+  const named = (n: string) => events.some((e) => e.name === n && !e.skipped);
   const absent =
-    ending && sawMut ? req.filter((n) => !present.includes(n) && !failed.includes(n)) : req.filter((n) => !present.includes(n) && !failed.includes(n) && events.some((e) => e.name === n));
+    ending && sawMut
+      ? req.filter((n) => !present.includes(n) && !failed.includes(n))
+      : req.filter((n) => !present.includes(n) && !failed.includes(n) && named(n));
   return { required: req, present, absent, failed };
 }
 
@@ -180,6 +183,7 @@ export function takeSignals(
   budget: SignalBudget,
   seen: Set<string>,
   required: string[] = [],
+  ledger?: EvidenceLedger,
 ): OnlineWarning[] {
   const at = events.length - 1;
   if (at < 0) return [];
@@ -218,12 +222,12 @@ export function takeSignals(
     }
   }
 
-  const ledger = evidenceLedger(events, required);
-  if (ledger.absent.length) {
-    const key = `evidence_gap:${ledger.absent.join(",")}`;
+  const book = ledger ?? evidenceLedger(events, required);
+  if (book.absent.length) {
+    const key = `evidence_gap:${book.absent.join(",")}`;
     if (!seen.has(key)) {
       seen.add(key);
-      fresh.push(withBudget("evidence_gap", at, `missing ${ledger.absent.join(", ")}`, budget, { n: ledger.absent.length }));
+      fresh.push(withBudget("evidence_gap", at, `missing ${book.absent.join(", ")}`, budget, { n: book.absent.length }));
     }
   }
 

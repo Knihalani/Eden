@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalize, cloneJson, containsRedaction, containsSecret, eq, flatten, getPath, hashProgram, hashTrace, inDistribution, interpolate, isMutating, isSecretKey, isWeakValue, minLlmReductionOf, redact, redactString, validateProgram, withVersion } from "../src/index";
+import { canonicalize, cloneJson, containsRedaction, containsSecret, eq, flatten, getPath, hashProgram, hashTrace, inDistribution, interpolate, isCheckName, isMutating, isSecretKey, isWeakValue, minLlmReductionOf, redact, redactString, validateProgram, withVersion } from "../src/index";
 import type { StretchProgram } from "../src/index";
 
 const mini = (): StretchProgram =>
@@ -524,5 +524,13 @@ describe("a write is a write even when its name mentions a check", () => {
     // Not a verb prefix at a word boundary.
     expect(isMutating("posted")).toBe(false);
     expect(isMutating("updater")).toBe(false);
+  });
+
+  test("a check is the head verb, not a substring", () => {
+    expect(isCheckName("verifyWrite")).toBe(true);
+    expect(isCheckName("check_status")).toBe(true);
+    expect(isCheckName("checkout")).toBe(false);
+    expect(isCheckName("checkpoint")).toBe(false);
+    expect(isCheckName("delete_check_run")).toBe(false);
   });
 });

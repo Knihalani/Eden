@@ -52,7 +52,9 @@ export function DashBoard() {
       </header>
 
       {waiting ? (
-        <div className="load-well" aria-busy="true" />
+        <div className="load-well" aria-busy="true" role="status">
+          <span className="sr-only">Loading activity.</span>
+        </div>
       ) : failed ? (
         <p className="home-empty-msg home-load-fail" role="status">
           {homeEmptyLine("overview", true)}
@@ -149,7 +151,16 @@ function Metric({
 }
 
 function statusTone(status: string) {
-  if (status.startsWith("Failed") || status.startsWith("Refused") || status.includes("Fail streak")) return "fail";
+  if (
+    status.startsWith("Failed") ||
+    status.startsWith("Refused") ||
+    status.includes("Fail streak") ||
+    status.startsWith("Loop") ||
+    status.startsWith("Low gain") ||
+    status.startsWith("Evidence")
+  ) {
+    return "fail";
+  }
   if (status.startsWith("Ready")) return "ready";
   if (status === "Live") return "live";
   return "wait";
@@ -196,7 +207,7 @@ function WorkList({ items, label }: { items: InboxItem[]; label: string }) {
         <li key={item.id}>
           <Link href={item.href} className="home-row" prefetch={true}>
             <span className="home-row-name">{item.name}</span>
-            <span className="home-row-status" data-tone={statusTone(item.status)}>
+            <span className="home-row-status" data-tone={statusTone(item.status)} title={item.status}>
               <span className="home-pip" aria-hidden="true" />
               {item.status}
             </span>
@@ -229,7 +240,12 @@ function RunChart({ series }: { series: DayPoint[] }) {
   const area = `${left},${axis} ${line} ${left + innerW},${axis}`;
 
   return (
-    <svg className="home-plot" viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Compiled runs, last 7 days">
+    <svg
+      className="home-plot"
+      viewBox={`0 0 ${w} ${h}`}
+      role="img"
+      aria-label={`Compiled runs, last 7 days: ${points.map((point) => `${point.label} ${point.runs}`).join(", ")}`}
+    >
       <polygon className="home-plot-area" points={area} />
       <polyline className="home-plot-line" points={line} />
       <line className="home-plot-axis" x1={left} x2={w - right} y1={axis} y2={axis} />
