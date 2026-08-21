@@ -1,4 +1,4 @@
-import { createTicketShip, runNaive, ticketShipProgram, WITNESS_IDS } from "../src/ticketship";
+import { createTicketShip, runNaive, ticketShipProgram, toNaiveTrace, WITNESS_IDS } from "../src/ticketship";
 import { compileTraces } from "../../compile/src/index";
 import { registryFrom, runProgram } from "../src/index";
 import type { StretchTrace } from "@eden/ir";
@@ -9,16 +9,7 @@ async function traces(n: number): Promise<StretchTrace[]> {
     const world = createTicketShip({ llmMs: 0 });
     const id = WITNESS_IDS[i % 3]!;
     const run = await runNaive(world, id, { skipVerifyP: 0.2, seed: i + 3 });
-    out.push({
-      id: `b${i}`,
-      events: run.events,
-      input: { id },
-      llmCalls: run.stats.llmCalls,
-      duration_ms: 200 * run.stats.llmCalls,
-      cost_cents: run.stats.cost_cents,
-      skipped: run.stats.skipped,
-      complete: run.stats.complete,
-    });
+    out.push(toNaiveTrace(`b${i}`, id, run));
   }
   return out;
 }

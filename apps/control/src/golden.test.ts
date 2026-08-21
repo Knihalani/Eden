@@ -9,6 +9,7 @@ import {
   createTicketShip,
   runNaive,
   ticketShipProgram,
+  toNaiveTrace,
   underdeterminedSiblingTraces,
   OOD_ID,
   WITNESS_IDS,
@@ -21,19 +22,25 @@ async function naiveTraces(n: number, skip = 0.2): Promise<StretchTrace[]> {
     const world = createTicketShip({ llmMs: 0 });
     const id = WITNESS_IDS[i % 3]!;
       const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : 0, seed: 7 + i });
-    out.push({
-      id: `g${i}`,
-      events: run.events,
-      input: { id },
-      output: run.output,
-      llmCalls: run.stats.llmCalls,
-      duration_ms: 200 * run.stats.llmCalls,
-      cost_cents: run.stats.cost_cents,
-      skipped: run.stats.skipped,
-      complete: run.stats.complete,
-    });
+    out.push(toNaiveTrace(`g${i}`, id, run));
   }
   return out;
+}
+
+function shipManifest(over: Record<string, unknown> = {}) {
+  return {
+    llmReduction: 5,
+    latencyReduction: 2,
+    costReduction: 2,
+    skipRateBefore: 0.1,
+    skipRateAfter: 0,
+    nShadow: 6,
+    tokensMeasured: true,
+    timeMeasured: false,
+    tokensSaved: 400,
+    timeSavedMs: null,
+    ...over,
+  };
 }
 
 describe("control plane", () => {
@@ -461,7 +468,14 @@ describe("TicketShip golden", () => {
     expect(inbox.sig.length).toBeGreaterThan(0);
     const savings = await fetchHandler(new Request("http://x/v1/savings", { headers: { authorization: "Bearer eden_dev" } }));
     expect(savings.status).toBe(200);
-    expect(await savings.json()).toEqual({ runs: 0, fail: 0, llmReductionMean: 0, live: 0 });
+    expect(await savings.json()).toEqual({
+      runs: 0,
+      fail: 0,
+      llmReductionMean: 0,
+      tokensSavedMean: 0,
+      timeSavedMsMean: 0,
+      live: 0,
+    });
   });
 
   test("EDEN_AUTO_APPROVE ships PASS candidates after compile", async () => {
@@ -550,14 +564,7 @@ describe("TicketShip golden", () => {
 
   test("empty edits object ships without a registry", async () => {
     const program = ticketShipProgram();
-    const manifest = {
-      llmReduction: 5,
-      latencyReduction: 2,
-      costReduction: 2,
-      skipRateBefore: 0.1,
-      skipRateAfter: 0,
-      nShadow: 6,
-    };
+    const manifest = shipManifest();
     program.manifest = manifest;
     const store = new Store(":memory:");
     store.putCandidate({
@@ -583,14 +590,7 @@ describe("TicketShip golden", () => {
 
   test("name-only edit ships without a registry", async () => {
     const program = ticketShipProgram();
-    const manifest = {
-      llmReduction: 5,
-      latencyReduction: 2,
-      costReduction: 2,
-      skipRateBefore: 0.1,
-      skipRateAfter: 0,
-      nShadow: 6,
-    };
+    const manifest = shipManifest();
     program.manifest = manifest;
     const store = new Store(":memory:");
     store.putCandidate({
@@ -616,14 +616,7 @@ describe("TicketShip golden", () => {
 
   test("structural drop without registry is refused", async () => {
     const program = ticketShipProgram();
-    const manifest = {
-      llmReduction: 5,
-      latencyReduction: 2,
-      costReduction: 2,
-      skipRateBefore: 0.1,
-      skipRateAfter: 0,
-      nShadow: 6,
-    };
+    const manifest = shipManifest();
     program.manifest = manifest;
     const store = new Store(":memory:");
     store.putCandidate({
@@ -644,6 +637,33 @@ describe("TicketShip golden", () => {
       }),
     );
     expect(approved.status).toBe(409);
+  });
+
+  test("empty bind path fails closed", async () => {
+    const program = ticketShipProgram();
+    const manifest = shipManifest();
+    program.manifest = manifest;
+    const store = new Store(":memory:");
+    store.putCandidate({
+      id: "c4",
+      sequence: program.sequence ?? [],
+      program,
+      refusal: null,
+      verdict: "PASS",
+      manifest,
+      created_at: Date.now(),
+    });
+    const fetchHandler = createHandler({ store, token: "eden_dev" });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/c4/approve", {
+        method: "POST",
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json" },
+        body: JSON.stringify({ edits: { bind: [{ step: "write", field: "customer", path: "" }] } }),
+      }),
+    );
+    expect(approved.status).toBe(409);
+    const err = (await approved.json()) as { error: string };
+    expect(err.error).toMatch(/missing path/i);
   });
 
   test("inbox lists paused tools with receipt stats", async () => {
@@ -796,5 +816,23 @@ describe("the control plane is not reachable from a web page", () => {
       expect((await h(new Request("http://x/v1/stats", { headers: { authorization } }))).status).toBe(401);
     }
     expect((await h(new Request("http://x/v1/stats", { headers: { authorization: "Bearer secret-token" } }))).status).toBe(200);
+  });
+
+  test("receipt fail rate auto-pauses a live tool", () => {
+    const program = ticketShipProgram();
+    const store = new Store(":memory:");
+    store.putTool({
+      id: "live_fail",
+      name: "live_fail",
+      version: "1",
+      program,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    for (let i = 0; i < 4; i++) {
+      store.putReceipt({ tool_id: "live_fail", version: "1", ms: 10, llm_calls: 0, cents: 0, ok: 0 });
+    }
+    expect(store.tool("live_fail")?.state).toBe("paused");
   });
 });

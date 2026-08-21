@@ -1,14 +1,30 @@
 import type { IslandCaller, StretchProgram, ToolRegistry } from "@eden/ir";
-import { inDistribution, redact, eq } from "@eden/ir";
+import {
+  evidenceLedger,
+  firstWarningIndex,
+  inDistribution,
+  isCheckName,
+  judgeGrounding,
+  postWarningSpend,
+  redact,
+  eq,
+  takeSignals,
+  usableTrace,
+  hashStretch,
+  liveTimeSavedMs,
+} from "@eden/ir";
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram } from "@eden/runtime";
-import { asToolDef, emptyRun, type EdenOpts, type Receipt, type ToolDef, type ToolsIn } from "./types";
+import { asToolDef, emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
 import { extractInput } from "./steer";
 import type { StretchTrace } from "@eden/ir";
+import { resetUsage } from "./usage";
+import { decideGuard } from "./guard";
 
 const MAX_TRACES = 2000;
 const PULL_EVERY = 24;
 const MAX_OUTBOX = 64;
 const MAX_POST_TRIES = 5;
+const MAX_WARNINGS = 32;
 
 export type WrapState = {
   opts: EdenOpts;
@@ -16,6 +32,8 @@ export type WrapState = {
   traces: StretchTrace[];
   receipts: Receipt[];
   pulls?: number;
+  run: RunRecorder;
+  pausedIds: Set<string>;
 };
 
 type OutboxJob = { path: string; body: unknown; tries: number };
@@ -30,7 +48,7 @@ export function wrapTimeoutMs(explicit?: number): number {
 }
 
 export function createState(opts: EdenOpts = {}): WrapState {
-  return { opts: { failOpen: true, ...opts }, programs: [...(opts.programs ?? [])], traces: [], receipts: [], pulls: 0 };
+  return { opts: { failOpen: true, ...opts }, programs: [...(opts.programs ?? [])], traces: [], receipts: [], pulls: 0, run: emptyRun(), pausedIds: new Set() };
 }
 
 function wrapAuth(state: WrapState): string | undefined {
@@ -230,6 +248,36 @@ export async function pullLive(state: WrapState): Promise<void> {
   }
 }
 
+function compiledReceipt(
+  program: StretchProgram,
+  ok: boolean,
+  stats: { ms: number; llmCalls: number; cents: number; skipped: string[]; stepsRun?: number; early?: boolean; deoptReason?: string },
+  err?: unknown,
+): Receipt {
+  const deopt = isDeopt(err);
+  const early = deopt ? isReplaySafe(err) : Boolean(stats.early);
+  const stepsRun = deopt ? err.stepsRun : (stats.stepsRun ?? stats.skipped.length);
+  const timeSavedMs = liveTimeSavedMs(program, stats.ms, ok);
+  let outcome: Receipt["outcome"] = ok ? "ok" : deopt ? "deopt" : "failed";
+  if (!ok && stats.skipped.length) outcome = "skipped";
+  const receipt: Receipt = {
+    toolId: program.id,
+    version: program.version,
+    ms: stats.ms,
+    llmCalls: stats.llmCalls,
+    cents: stats.cents,
+    ok,
+    early,
+    stepsRun,
+    skipped: stats.skipped,
+    outcome,
+    fingerprint: hashStretch(program),
+  };
+  if (deopt) receipt.deoptReason = err.reason;
+  if (timeSavedMs != null) receipt.timeSavedMs = timeSavedMs;
+  return receipt;
+}
+
 export async function runCompiled(
   state: WrapState,
   program: StretchProgram,
@@ -237,13 +285,15 @@ export async function runCompiled(
   tools: ToolsIn,
   registry?: ToolRegistry,
 ): Promise<unknown> {
-  if (!inDistribution(program, input)) throw new DeoptError("input not in witness envelope");
+  const t0 = performance.now();
   const island: IslandCaller =
     state.opts.island ??
     (async () => {
       throw new DeoptError("no island caller");
     });
   try {
+    // Inside the try so an envelope miss still writes a deopt receipt (51).
+    if (!inDistribution(program, input)) throw new DeoptError("input not in witness envelope");
     const result = await runProgram(program, input, {
       registry:
         registry ??
@@ -253,27 +303,27 @@ export async function runCompiled(
       checkEnvelope: false,
       timeoutMs: wrapTimeoutMs(state.opts.timeoutMs),
     });
-    const receipt: Receipt = {
-      toolId: program.id,
-      version: program.version,
-      ms: result.stats.ms,
-      llmCalls: result.stats.llmCalls,
-      cents: result.stats.cents,
-      ok: true,
-    };
+    const receipt = compiledReceipt(program, true, result.stats);
     pushCapped(state.receipts, receipt);
     notifyHost(() => state.opts.onReceipt?.(receipt));
     post(state, "/v1/receipts", receipt);
     return result.value;
   } catch (err) {
-    const receipt: Receipt = {
-      toolId: program.id,
-      version: program.version,
-      ms: 0,
-      llmCalls: 0,
-      cents: 0,
-      ok: false,
-    };
+    const elapsed = performance.now() - t0;
+    const receipt = compiledReceipt(
+      program,
+      false,
+      {
+        ms: isDeopt(err) && err.ms > 0 ? err.ms : elapsed,
+        llmCalls: isDeopt(err) ? err.llmCalls : 0,
+        cents: isDeopt(err) ? err.cents : 0,
+        skipped: [],
+        stepsRun: isDeopt(err) ? err.stepsRun : 0,
+        early: isDeopt(err) && isReplaySafe(err),
+        deoptReason: isDeopt(err) ? err.reason : undefined,
+      },
+      err,
+    );
     // Capped on this path too. The success branch trimmed to MAX_TRACES and
     // this one did not, so a program that deopts on every call grew the array
     // without limit for the life of the process.
@@ -285,16 +335,6 @@ export async function runCompiled(
 }
 
 /**
- * Run a host callback without letting it fail the caller's tool call.
- *
- * onTrace and onReceipt are arbitrary code supplied by whoever wrapped the
- * tools. A throw in either used to propagate out of a tool call that had
- * already succeeded — and for onReceipt inside runCompiled, out of one whose
- * compiled program had already performed its writes, where isDeopt says "not a
- * deopt" and the error is rethrown. Host telemetry is not allowed to decide
- * whether the agent's tool worked.
- */
-/**
  * Append, keeping the buffer bounded.
  *
  * Trimming one element per push once the cap is reached moves the whole array
@@ -305,6 +345,16 @@ function pushCapped<T>(buf: T[], item: T): void {
   if (buf.length > MAX_TRACES + 256) buf.splice(0, buf.length - MAX_TRACES);
 }
 
+/**
+ * Run a host callback without letting it fail the caller's tool call.
+ *
+ * onTrace, onWarning, and onReceipt are arbitrary code supplied by whoever
+ * wrapped the tools. A throw in any of them used to propagate out of a tool
+ * call that had already succeeded — and for onReceipt inside runCompiled, out
+ * of one whose compiled program had already performed its writes, where
+ * isDeopt says "not a deopt" and the error is rethrown. Host telemetry is not
+ * allowed to decide whether the agent's tool worked.
+ */
 function notifyHost(fn: () => void): void {
   try {
     fn();
@@ -330,13 +380,20 @@ function emitTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: R
     /* observing a call must never fail it */
   } finally {
     run.events = [];
-    run.llmCalls = 0;
-    run.cost = 0;
+    run.warnings = [];
+    run.seenSignals.clear();
+    run.firstWarningAt = undefined;
+    run.warnBudget = undefined;
+    run.evidence = undefined;
+    run.tripped = false;
+    resetUsage(run);
     run.t0 = performance.now();
   }
 }
 
 function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: Record<string, unknown>): void {
+  const lastOk = lastOkResult(run.events);
+  const output = lastOk ?? run.output;
   const trace: StretchTrace = {
     // Events were redacted at push time, so what is buffered is already a
     // snapshot: holding the caller's live objects until flush meant a caller
@@ -346,14 +403,75 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, i
     id: crypto.randomUUID(),
     events: run.events,
     input: (redact(input ?? run.events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
-    llmCalls: Math.max(run.llmCalls, run.events.length),
+    output: output === undefined ? undefined : redact(output),
+    llmCalls: run.llmCalls,
     duration_ms: performance.now() - run.t0,
-    cost_cents: Math.max(run.cost, run.events.length),
+    cost_cents: run.cost,
     complete: run.events.at(-1)?.ok,
+    ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+    ...(run.warnings.length ? { warnings: run.warnings.slice() } : {}),
+    ...(run.firstWarningAt != null ? { firstWarningAt: run.firstWarningAt } : {}),
+    ...(run.evidence ? { evidence: run.evidence } : {}),
+    ...(run.events.some((e) => e.skipped) ? { skipped: run.events.filter((e) => e.skipped).map((e) => e.name) } : {}),
   };
+  const nowBudget = {
+    duration_ms: trace.duration_ms,
+    llmCalls: trace.llmCalls,
+    ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+  };
+  const spent = postWarningSpend(nowBudget, run.warnBudget);
+  if (spent) trace.postWarning = spent;
+  trace.usable = usableTrace(trace);
+  trace.grounded = judgeGrounding(trace).grounded;
   pushCapped(state.traces, trace);
   notifyHost(() => state.opts.onTrace?.(trace));
   post(state, "/v1/traces", trace);
+}
+
+function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
+  if (run.warnings.length >= MAX_WARNINGS) return;
+  const budget = {
+    duration_ms: Math.max(0, performance.now() - run.t0),
+    llmCalls: run.llmCalls,
+    ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
+  };
+  const required = [...new Set(liveOf(state).flatMap((p) => (p.sequence ?? []).filter(isCheckName)))];
+  const fresh = takeSignals(run.events, budget, run.seenSignals, required);
+  for (const w of fresh) {
+    if (run.warnings.length >= MAX_WARNINGS) break;
+    run.warnings.push(w);
+    notifyHost(() => state.opts.onWarning?.(w));
+  }
+  run.evidence = evidenceLedger(run.events, required);
+  if (run.firstWarningAt == null) {
+    const at = firstWarningIndex(run.events, run.warnings);
+    if (at != null) {
+      run.firstWarningAt = at;
+      run.warnBudget = budget;
+    }
+  }
+  if (fresh.some((w) => w.kind === "fail_streak")) {
+    run.tripped = true;
+    const last = run.events.at(-1)?.name;
+    if (last) pauseLiveFor(state, last);
+  }
+}
+
+function pauseLiveFor(state: WrapState, toolName: string): void {
+  for (const p of state.programs) {
+    if (!p.manifest || state.pausedIds.has(p.id)) continue;
+    if (!(p.sequence ?? []).includes(toolName)) continue;
+    state.pausedIds.add(p.id);
+    post(state, `/v1/tools/${encodeURIComponent(p.id)}/pause`, {});
+  }
+}
+
+function lastOkResult(events: WrapState["run"]["events"]): unknown {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]!;
+    if (ev.ok) return ev.result;
+  }
+  return undefined;
 }
 
 function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, registry: ToolRegistry): ToolDef {
@@ -377,7 +495,7 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
 }
 
 function liveOf(state: WrapState): StretchProgram[] {
-  return state.programs.filter((p) => p.manifest);
+  return state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id));
 }
 
 /**
@@ -392,7 +510,7 @@ export function wrapTools<T extends ToolsIn>(
   tools: T,
   state: WrapState,
 ): { [K in keyof T]: ToolDef } & Record<string, ToolDef> {
-  const run = emptyRun();
+  const run = state.run;
   // `rest` counts how many raw calls of each tool the compiled run has already
   // performed on the caller's behalf, so a sequence that calls one tool twice
   // suppresses both raw repeats rather than only the first.
@@ -508,7 +626,31 @@ export function wrapTools<T extends ToolsIn>(
           if (remaining > 1) armed.rest.set(name, remaining - 1);
           else armed.rest.delete(name);
           if (!armed.rest.size) skipRest.delete(id);
+          run.events.push({
+            name,
+            args: redact(args) as Record<string, unknown>,
+            ok: true,
+            skipped: true,
+            duration_ms: 0,
+          });
+          noteSignals(state, run);
           return { eden: "steered", skipped: name };
+        }
+
+        const guard = decideGuard({ name, run, live, opts: state.opts, now });
+        if (guard) {
+          if (guard.action === "steer") {
+            try {
+              const value = await runCompiled(state, guard.program, extractInput(guard.program, args), tools, registry);
+              emitTrace(state, run, extractInput(guard.program, args));
+              return value;
+            } catch {
+              emitTrace(state, run, run.events[0]?.args);
+              return { eden: "halted", reason: guard.reason };
+            }
+          }
+          emitTrace(state, run, run.events[0]?.args);
+          return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason };
         }
 
         const t0 = performance.now();
@@ -526,8 +668,7 @@ export function wrapTools<T extends ToolsIn>(
             ok: true,
             duration_ms: performance.now() - t0,
           });
-          run.llmCalls += 1;
-          run.cost += state.opts.llmCents ?? 1;
+          noteSignals(state, run);
           const last = live.some((p) => (p.sequence ?? []).at(-1) === name);
           if (last || /^(notify|complete|finalize|done)$/i.test(name) || run.events.length >= 12) {
             emitTrace(state, run, run.events[0]?.args);
@@ -535,6 +676,7 @@ export function wrapTools<T extends ToolsIn>(
           return result;
         } catch (err) {
           run.events.push({ name, args: redact(args) as Record<string, unknown>, ok: false, duration_ms: performance.now() - t0 });
+          noteSignals(state, run);
           throw err;
         }
       },

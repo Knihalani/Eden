@@ -77,12 +77,30 @@ export type Contract = {
 };
 
 export type Manifest = {
+  /** Reported only. Not a ship gate (20b). */
   llmReduction: number;
   latencyReduction: number;
   costReduction: number;
   skipRateBefore: number;
   skipRateAfter: number;
   nShadow: number;
+  /** Mean naive − compiled tokens when wrap scraped usage. */
+  tokensSaved?: number | null;
+  /** Mean naive − compiled ms from event `duration_ms` (+ island wall if it ran). */
+  timeSavedMs?: number | null;
+  tokensMeasured?: boolean;
+  timeMeasured?: boolean;
+};
+
+export type ProgramBudget = {
+  llmCalls: number;
+  ms: number;
+  cents: number;
+};
+
+export type ProgramOrigin = {
+  mode: "happy" | "loop" | "fail_streak" | "low_gain" | "evidence";
+  firstWarningAt?: number;
 };
 
 export type StretchProgram = {
@@ -97,6 +115,10 @@ export type StretchProgram = {
   manifest: Manifest | null;
   /** Original tool-name sequence, used to steer the agent into this program. */
   sequence?: string[];
+  /** Mean witness llm/ms/cents. Halt compares predicted vs actual (47). */
+  budget?: ProgramBudget;
+  /** Set when this program was mined from a warned/failing cluster (45, 50). */
+  origin?: ProgramOrigin;
 };
 
 export type TraceEvent = {
@@ -108,16 +130,56 @@ export type TraceEvent = {
   skipped?: boolean;
 };
 
+export const SIGNAL_KINDS = ["repeat_ngram", "fail_streak", "budget", "low_gain", "evidence_gap"] as const;
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
+
+/** Wall / LLM snapshot. Token fields are omitted until wrap scraped `usage`. */
+export type SignalBudget = {
+  duration_ms: number;
+  llmCalls: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+};
+
+export type OnlineWarning = SignalBudget & {
+  kind: SignalKind;
+  /** Event index the warning fired at (the run is still in progress). */
+  at: number;
+  detail: string;
+  n?: number;
+  ngram?: string[];
+  gain?: number;
+};
+
+export type EvidenceLedger = {
+  required: string[];
+  present: string[];
+  absent: string[];
+  failed: string[];
+};
+
 export type StretchTrace = {
   id: string;
   events: TraceEvent[];
   input?: Record<string, unknown>;
   output?: unknown;
   llmCalls: number;
+  /** Present only when the wrap scraped provider `usage`. Absent = not measured. */
+  prompt_tokens?: number;
+  completion_tokens?: number;
   duration_ms: number;
   cost_cents: number;
   skipped?: string[];
   complete?: boolean;
+  /** Cheap online warnings. Absent until the wrap bus has something to say. */
+  warnings?: OnlineWarning[];
+  /** First deopt / skip / ok:false / bus warning. Cost after this is post-warning spend. */
+  firstWarningAt?: number;
+  postWarning?: SignalBudget;
+  evidence?: EvidenceLedger;
+  /** Complete trace + grounded, non-empty result. Empty-but-ok is not success. */
+  usable?: boolean;
+  grounded?: boolean | "unknown";
 };
 
 export type Refusal = {

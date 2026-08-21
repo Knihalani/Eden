@@ -96,6 +96,38 @@ describe("wrapTools", () => {
     expect(world.mutationsFor("T-100")).toEqual({ wrote: true, verified: true, notified: true });
     expect(state.receipts[0]?.llmCalls).toBe(1);
     expect(state.receipts[0]?.ok).toBe(true);
+    expect(state.receipts[0]?.tokensSaved).toBeUndefined();
+  });
+
+  test("a live receipt confirms time against the tape, not the shadow estimate", async () => {
+    const world = createTicketShip({ llmMs: 0 });
+    const program = {
+      ...liveProgram(),
+      budget: { llmCalls: 8, ms: 80, cents: 8 },
+      manifest: { ...liveManifest, timeMeasured: true, timeSavedMs: 999, tokensMeasured: true, tokensSaved: 400 },
+    };
+    const state = createState({ programs: [program], island: world.island, llmCents: 1 });
+    const tools = wrapTools(world.tools, state);
+    await tools[program.name]!.execute({ id: "T-100" });
+    const rec = state.receipts[0]!;
+    expect(rec.ok).toBe(true);
+    expect(rec.tokensSaved).toBeUndefined();
+    expect(rec.timeSavedMs).toBe(80 - rec.ms);
+    expect(rec.timeSavedMs).not.toBe(999);
+  });
+
+  test("an out-of-envelope deopt receipt keeps the elapsed ms", async () => {
+    const world = createTicketShip({ llmMs: 0 });
+    const program = { ...liveProgram(), manifest: { ...liveManifest, tokensMeasured: true, tokensSaved: 400 } };
+    const state = createState({ programs: [program], island: world.island, failOpen: true });
+    const tools = wrapTools(world.tools, state);
+    await tools[program.name]!.execute({ id: OOD_ID });
+    const rec = state.receipts.find((r) => !r.ok);
+    expect(rec).toBeTruthy();
+    expect(rec!.ms).toBeGreaterThanOrEqual(0);
+    expect(rec!.tokensSaved).toBeUndefined();
+    expect(rec!.early).toBe(true);
+    expect(rec!.outcome).toBe("deopt");
   });
 
   test("steer: first old tool collapses to the compiled program", async () => {
@@ -196,6 +228,11 @@ describe("wrapTools", () => {
     await tools.notify.execute({ id: "T-100" });
     expect(state.traces.length).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(state.traces)).not.toContain("sk-secret");
+    const t = state.traces[0]!;
+    expect(t.llmCalls).toBe(0);
+    expect(t.prompt_tokens).toBeUndefined();
+    expect(t.completion_tokens).toBeUndefined();
+    expect(t.output).toBeDefined();
   });
 
   test("redaction keeps secrets out of traces", () => {
@@ -238,6 +275,72 @@ describe("openai proxy", () => {
     );
     const json = (await res.json()) as { choices: Array<{ message: { tool_calls: Array<{ function: { name: string } }> } }> };
     expect(json.choices[0]!.message.tool_calls[0]!.function.name).toBe("resolve_ticket");
+  });
+
+  test("records provider usage onto the current run", async () => {
+    const state = createState({
+      fetch: (async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "ok", tool_calls: [] } }],
+            usage: { prompt_tokens: 21, completion_tokens: 7 },
+          }),
+        )) as unknown as typeof fetch,
+    });
+    const res = await handleChatCompletions(
+      new Request("http://local/v1/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({ model: "gpt-4o", messages: [] }),
+      }),
+      { state },
+    );
+    expect(res.ok).toBe(true);
+    expect(state.run.measured).toBe(true);
+    expect(state.run.llmCalls).toBe(1);
+    expect(state.run.prompt_tokens).toBe(21);
+    expect(state.run.completion_tokens).toBe(7);
+    expect(state.run.output).toBe("ok");
+  });
+
+  test("stream passthrough scrapes usage without inventing calls", async () => {
+    const sse = [
+      `data: {"choices":[{"delta":{"content":"hi"}}]}\n\n`,
+      `data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1}}\n\n`,
+      `data: [DONE]\n\n`,
+    ].join("");
+    const state = createState({
+      fetch: (async () => new Response(sse, { headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch,
+    });
+    const res = await handleChatCompletions(
+      new Request("http://local/v1/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({ model: "gpt-4o", messages: [], stream: true }),
+      }),
+      { state },
+    );
+    expect(res.headers.get("content-type") || "").toContain("text/event-stream");
+    await res.text();
+    expect(state.run.measured).toBe(true);
+    expect(state.run.llmCalls).toBe(1);
+    expect(state.run.prompt_tokens).toBe(4);
+    expect(state.run.completion_tokens).toBe(1);
+  });
+
+  test("failed upstream stream does not invent an LLM call", async () => {
+    const state = createState({
+      fetch: (async () => new Response("nope", { status: 502, headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch,
+    });
+    const res = await handleChatCompletions(
+      new Request("http://local/v1/chat/completions", {
+        method: "POST",
+        body: JSON.stringify({ model: "gpt-4o", messages: [], stream: true }),
+      }),
+      { state },
+    );
+    expect(res.status).toBe(502);
+    await res.text();
+    expect(state.run.llmCalls).toBe(0);
+    expect(state.run.measured).toBe(false);
   });
 
   test("stream=true with live tools returns SSE", async () => {
@@ -415,5 +518,135 @@ describe("the proxy speaks the protocol its clients read", () => {
     // simply has none of its own, which is who compiled tools are for.
     expect(Array.isArray(injectTools([], [p]))).toBe(true);
     expect((injectTools([], [p]) as unknown[]).length).toBe(1);
+  });
+});
+
+describe("online signal bus", () => {
+  test("a failing run emits cheap warnings while it is still running", async () => {
+    const fired: string[] = [];
+    const state = createState({
+      programs: [],
+      onWarning: (w) => fired.push(w.kind),
+    });
+    const tools = wrapTools(
+      {
+        boom: async () => {
+          throw new Error("no");
+        },
+      },
+      state,
+    );
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    expect(fired).toEqual([]);
+    expect(state.run.events).toHaveLength(1);
+
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    expect(fired).toEqual(["fail_streak", "budget"]);
+    expect(state.run.events).toHaveLength(2);
+    expect(state.run.events.every((e) => !e.ok)).toBe(true);
+    expect(state.run.warnings.some((w) => w.kind === "fail_streak")).toBe(true);
+    expect(state.run.warnings.some((w) => w.kind === "budget")).toBe(true);
+    expect(state.run.warnings[0]).not.toHaveProperty("prompt_tokens");
+    expect(state.traces).toHaveLength(0);
+  });
+
+  test("a repeating tool n-gram is on the flushed trace", async () => {
+    const fired: string[] = [];
+    const state = createState({
+      programs: [],
+      onWarning: (w) => fired.push(w.kind),
+    });
+    const tools = wrapTools(
+      {
+        search: async () => ({ hit: 1 }),
+        write: async () => ({ ok: true }),
+        notify: async () => ({ done: true }),
+      },
+      state,
+    );
+    await tools.search.execute({});
+    await tools.write.execute({});
+    await tools.search.execute({});
+    await tools.write.execute({});
+    expect(fired).toEqual(["repeat_ngram", "budget"]);
+    await tools.notify.execute({});
+    expect(state.traces[0]?.warnings?.map((w) => w.kind)).toEqual(["repeat_ngram", "budget"]);
+    expect(state.traces[0]?.warnings?.[0]?.ngram).toEqual(["search", "write"]);
+  });
+
+  test("a third consecutive fail is halted by the circuit breaker", async () => {
+    const state = createState({ programs: [] });
+    const tools = wrapTools(
+      {
+        boom: async () => {
+          throw new Error("no");
+        },
+      },
+      state,
+    );
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    expect(state.run.firstWarningAt).toBe(0);
+    expect(await tools.boom.execute({})).toEqual({ eden: "halted", reason: "fail_streak" });
+  });
+
+  test("killAfterWarning stops spend after the first fail", async () => {
+    const state = createState({ programs: [], killAfterWarning: true });
+    const tools = wrapTools(
+      {
+        boom: async () => {
+          throw new Error("no");
+        },
+      },
+      state,
+    );
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    expect(await tools.boom.execute({})).toEqual({ eden: "halted", reason: "warning" });
+  });
+
+  test("a repeating n-gram hard-stops the next cycle when nothing is compiled", async () => {
+    const state = createState({ programs: [] });
+    const tools = wrapTools(
+      {
+        search: async () => ({ hit: 1 }),
+        write: async () => ({ ok: true }),
+      },
+      state,
+    );
+    await tools.search.execute({});
+    await tools.write.execute({});
+    await tools.search.execute({});
+    await tools.write.execute({});
+    expect(await tools.search.execute({})).toEqual({ eden: "halted", reason: "loop" });
+  });
+
+  test("finalize without a required check is blocked", async () => {
+    const program = {
+      ...liveProgram(),
+      sequence: ["writeRecord", "verifyWrite", "notify"],
+    };
+    const state = createState({ programs: [program] });
+    const tools = wrapTools(
+      {
+        writeRecord: async () => ({ written: true }),
+        notify: async () => ({ done: true }),
+      },
+      state,
+    );
+    await tools.writeRecord.execute({ id: "T-1" });
+    const out = (await tools.notify.execute({ id: "T-1" })) as { eden?: string; reason?: string };
+    expect(out.reason).toBe("missing_evidence");
+    expect(out.eden === "blocked" || out.eden === "halted").toBe(true);
+  });
+
+  test("steered skips are recorded on the trace", async () => {
+    const world = createTicketShip({ llmMs: 0 });
+    const program = liveProgram();
+    const state = createState({ programs: [program], island: world.island });
+    const tools = wrapTools(world.tools, state);
+    await tools.lookupTicket.execute({ id: "T-102" });
+    const second = await tools.fetchDetails.execute({ id: "T-102" });
+    expect(second).toEqual({ eden: "steered", skipped: "fetchDetails" });
+    expect(state.run.events.some((e) => e.name === "fetchDetails" && e.skipped)).toBe(true);
   });
 });

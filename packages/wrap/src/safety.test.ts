@@ -387,8 +387,8 @@ describe("wrap stops trusting an arming that has gone stale", () => {
   });
 
   test("a host telemetry callback that throws does not fail the tool call", async () => {
-    // onTrace and onReceipt are arbitrary host code. A throw in either used to
-    // propagate out of a tool call that had already succeeded.
+    // onTrace, onWarning, and onReceipt are arbitrary host code. A throw in any
+    // of them used to propagate out of a tool call that had already succeeded.
     const c = counted(["ping"]);
     const tools = wrapTools(
       c.tools,
@@ -397,11 +397,32 @@ describe("wrap stops trusting an arming that has gone stale", () => {
         onTrace: () => {
           throw new Error("collector hook blew up");
         },
+        onWarning: () => {
+          throw new Error("warning hook blew up");
+        },
       }),
     );
     for (let i = 0; i < 13; i++) {
       expect(await tools.ping!.execute({ id: "T-1" })).toEqual({ ran: "ping", id: "T-1" });
     }
+  });
+
+  test("onWarning throw does not swallow a tool failure", async () => {
+    const tools = wrapTools(
+      {
+        boom: async () => {
+          throw new Error("no");
+        },
+      },
+      createState({
+        programs: [],
+        onWarning: () => {
+          throw new Error("warning hook blew up");
+        },
+      }),
+    );
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
+    await expect(tools.boom.execute({})).rejects.toThrow("no");
   });
 });
 

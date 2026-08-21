@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "bun --bun next dev --turbo --port 8788 --hostname 127.0.0.1",
+    "dev": "bun --bun next dev --turbo --port 8788 --hostname localhost",
     "build": "bun --bun next build",
-    "start": "bun --bun next start --port 8788 --hostname 127.0.0.1"
+    "start": "bun --bun next start --port 8788 --hostname localhost"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.7.8",
     "@eden/control": "workspace:*",
+    "@eden/ir": "workspace:*",
     "next": "^15.5.9",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"

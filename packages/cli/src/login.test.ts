@@ -34,7 +34,7 @@ describe("login", () => {
   test("formatStatus includes trace and live counts", () => {
     expect(formatStatus("http://x", "eden_dev", { ok: true, traces: 4, live: 1 })).toContain("traces 4");
     expect(formatStatus("http://x", "eden_dev", { ok: true, traces: 4, live: 1, fails: 2 })).toContain("fails 2");
-    expect(formatStatus("http://x", "eden_dev", { ok: true, traces: 4, live: 1, savings: { llmReductionMean: 5.2 } })).toContain("5.2× LLM");
+    expect(formatStatus("http://x", "eden_dev", { ok: true, traces: 4, live: 1, savings: { tokensSavedMean: 420 } })).toContain("420 tokens saved");
     expect(formatStatus("http://x", "eden_dev", null)).toContain("down");
   });
 });

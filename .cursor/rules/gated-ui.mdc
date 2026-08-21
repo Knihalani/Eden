@@ -1,0 +1,22 @@
+---
+description: Rebuild the Eden workbench one approved phase at a time
+alwaysApply: true
+---
+
+# Gated UI rebuild
+
+The workbench is being rebuilt from scratch. Follow `apps/web/REBUILD.md` (landing is **1–6**; next is account).
+
+## Required
+
+- One phase at a time. After shipping a phase, **stop** and wait for the user to review the live page.
+- Do not start the next phase until they say it is approved.
+- Do not autonomously loop (audit → fix → screenshot → next) across the whole UI.
+- Do not restore the deleted dashboard/canvas/inspect chrome unless a listed phase explicitly asks for that piece.
+- Wrap/API routes (`app/v1`, `app/health`, `lib/wrap.ts`) stay unless the user asks to touch them.
+- Landing: impressive scroll is allowed; fake proof and product-internals dumps are not.
+- Color: crimson ship accent on graphite. Not ochre. Not coral. Not ice. Dashboard has no ship color.
+
+## After each phase
+
+Tell them the URL, what changed, and what to look at. Then wait.

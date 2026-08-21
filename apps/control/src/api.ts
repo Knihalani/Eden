@@ -1,8 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
-import type { IslandCaller, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
-import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf } from "@eden/ir";
-import { isDeopt, runProgram } from "@eden/runtime";
-import { wrapTimeoutMs } from "@eden/wrap";
+import type { Binding, IslandCaller, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
+import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, hashStretch, liveTimeSavedMs } from "@eden/ir";
+import { isDeopt, isReplaySafe, runProgram } from "@eden/runtime";
+import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, type WrapState } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
 import { canApprove, registryCovers, replayRegistry, shadowProgram, uncoveredTools } from "@eden/shadow";
 import { pushPrev, type Candidate, type Store } from "./store";
@@ -28,6 +28,8 @@ export type ApiCtx = {
    * every call the program makes.
    */
   sandboxFor?: (t: StretchTrace) => ToolRegistry;
+  /** Shared with the chat proxy so scraped `usage` lands on the next posted trace. */
+  wrapState?: WrapState;
 };
 
 /**
@@ -68,7 +70,23 @@ function corsFor(req?: Request): Record<string, string> {
 }
 
 function json(data: unknown, status = 200, req?: Request): Response {
-  return Response.json(data, { status, headers: corsFor(req) });
+  return Response.json(data, { status, headers: { ...corsFor(req), "cache-control": "private, no-store" } });
+}
+
+function receiptExtras(row: { payload?: string | null }): Record<string, unknown> {
+  if (!row.payload) return {};
+  try {
+    const parsed = JSON.parse(String(row.payload)) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function expandReceipt(row: { payload?: string | null } & Record<string, unknown>): Record<string, unknown> {
+  const extra = receiptExtras(row);
+  const { payload: _payload, ...rest } = row;
+  return { ...rest, ...extra };
 }
 
 async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { ok: false; res: Response }> {
@@ -164,7 +182,57 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
   return { programs: compiled.programs.length, refusals: compiled.refusals.length };
 }
 
-type Edits = { name?: string; forceIsland?: string[]; drop?: string[]; pinAssert?: string[] };
+type BindEdit = { step: string; field: string; path?: string; from?: string };
+type Edits = { name?: string; forceIsland?: string[]; drop?: string[]; pinAssert?: string[]; bind?: BindEdit[] };
+
+function patchBinding(b: Binding, edit: BindEdit, known: Set<string>): Binding | { error: string } {
+  if (b.kind === "from") {
+    const from = edit.from ?? b.step;
+    const path = edit.path ?? b.path;
+    if (edit.from && !known.has(edit.from)) return { error: `unknown step ${edit.from}` };
+    if (edit.path !== undefined && !edit.path.trim()) return { error: "missing path" };
+    return { kind: "from", step: from, path };
+  }
+  if (b.kind === "input" && edit.path !== undefined) {
+    if (!edit.path.trim()) return { error: "missing path" };
+    return { kind: "input", path: edit.path };
+  }
+  if (b.kind === "transform") {
+    const of = patchBinding(b.of, edit, known);
+    if ("error" in of) return of;
+    return { ...b, of };
+  }
+  return b;
+}
+
+function applyBindEdits(program: StretchProgram, binds: BindEdit[]): StretchProgram | { error: string } {
+  const known = new Set(program.steps.map((s) => s.id));
+  let steps = program.steps;
+  for (const edit of binds) {
+    const i = steps.findIndex((s) => s.id === edit.step);
+    if (i < 0) return { error: `unknown step ${edit.step}` };
+    const s = steps[i]!;
+    const apply = (b: Binding) => patchBinding(b, edit, known);
+    if (s.kind === "tool") {
+      const cur = s.args[edit.field];
+      if (!cur) return { error: `unknown field ${edit.field}` };
+      const next = apply(cur);
+      if ("error" in next) return next;
+      steps = steps.map((row, j) => (j === i ? { ...s, args: { ...s.args, [edit.field]: next } } : row));
+    } else if (s.kind === "island" && edit.field === "input") {
+      const next = apply(s.input);
+      if ("error" in next) return next;
+      steps = steps.map((row, j) => (j === i ? { ...s, input: next } : row));
+    } else if (s.kind === "loop" && edit.field === "over") {
+      const next = apply(s.over);
+      if ("error" in next) return next;
+      steps = steps.map((row, j) => (j === i ? { ...s, over: next } : row));
+    } else {
+      return { error: `unknown field ${edit.field}` };
+    }
+  }
+  return { ...program, steps };
+}
 
 async function shipCandidate(
   ctx: ApiCtx,
@@ -198,9 +266,15 @@ async function shipCandidate(
   if (edits?.drop?.length) next.drop = edits.drop;
   if (edits?.forceIsland?.length) next.forceIsland = edits.forceIsland;
   if (edits?.pinAssert?.length) next.pinAssert = edits.pinAssert;
-  const structural = Boolean(next.drop?.length || next.forceIsland?.length || next.pinAssert?.length);
+  if (edits?.bind?.length) next.bind = edits.bind;
+  const structural = Boolean(next.drop?.length || next.forceIsland?.length || next.pinAssert?.length || next.bind?.length);
   edits = next.name || structural ? next : undefined;
   if (edits?.name) program = { ...program, name: edits.name };
+  if (edits?.bind?.length) {
+    const bound = applyBindEdits(program, edits.bind);
+    if ("error" in bound) return { ok: false, status: 409, error: bound.error };
+    program = bound;
+  }
   if (edits?.drop?.length) {
     const drop = new Set(edits.drop);
     const dropped = program.steps.filter((s) => drop.has(s.id));
@@ -341,10 +415,24 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     return ctx.store.enqueue(async () => {
       let accepted = 0;
       let duplicates = 0;
+      const usage = ctx.wrapState ? peekChatUsage(ctx.wrapState) : null;
+      let consumed = false;
       for (const t of list) {
         if (!t || !Array.isArray(t.events) || !t.events.length) continue;
-        if (ctx.store.putTrace(t)) accepted++;
-        else duplicates++;
+        const sealed = !consumed ? attachChatUsage(t, usage) : t;
+        if (ctx.store.putTrace(sealed)) {
+          accepted++;
+          if (!consumed && usage && ctx.wrapState && sealed !== t) {
+            resetUsage(ctx.wrapState.run);
+            consumed = true;
+          }
+        } else {
+          duplicates++;
+          if (!consumed && usage && ctx.wrapState && sealed !== t && ctx.store.sealUnmeasured(sealed)) {
+            resetUsage(ctx.wrapState.run);
+            consumed = true;
+          }
+        }
       }
       ctx.store.heartbeat();
       const n = ctx.store.tracesCount();
@@ -396,7 +484,13 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
             updated_at: t.updated_at,
             stats,
             last: last
-              ? { ok: last.ok, ms: last.ms, llm_calls: last.llm_calls, created_at: last.created_at }
+              ? {
+                  ok: last.ok,
+                  ms: last.ms,
+                  llm_calls: last.llm_calls,
+                  created_at: last.created_at,
+                  ...receiptExtras(last),
+                }
               : null,
             canRollback: stack.length > 0,
           };
@@ -461,6 +555,14 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
         llm_calls: run.stats.llmCalls,
         cents: run.stats.cents,
         ok: 1,
+        payload: JSON.stringify({
+          outcome: "ok",
+          stepsRun: run.stats.stepsRun,
+          early: false,
+          skipped: run.stats.skipped,
+          fingerprint: hashStretch(live.program),
+          timeSavedMs: liveTimeSavedMs(live.program, run.stats.ms, true),
+        }),
       });
       return json({ ok: true, value: run.value, stats: run.stats });
     } catch (err) {
@@ -468,13 +570,22 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
         ctx.store.putReceipt({
           tool_id: live.id,
           version: live.version,
-          ms: 0,
-          llm_calls: 0,
-          cents: 0,
+          ms: err.ms,
+          llm_calls: err.llmCalls,
+          cents: err.cents,
           ok: 0,
+          payload: JSON.stringify({
+            outcome: "deopt",
+            deoptReason: err.reason,
+            early: isReplaySafe(err),
+            stepsRun: err.stepsRun,
+            fingerprint: hashStretch(live.program),
+          }),
         });
-        const early = /witness envelope|no island caller|island .+ needs an island caller/.test(err.reason);
-        return json({ error: "deopt", reason: err.reason, deopt: true, early, program: live.name }, 409);
+        return json(
+          { error: "deopt", reason: err.reason, deopt: true, early: isReplaySafe(err), stepsRun: err.stepsRun, program: live.name },
+          409,
+        );
       }
       return json({ error: String(err) }, 500);
     }
@@ -535,7 +646,8 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
 
   if (p === "/v1/receipts" && req.method === "GET") {
     const toolId = url.searchParams.get("tool");
-    return json({ receipts: toolId ? ctx.store.receiptsFor(toolId) : ctx.store.receipts() });
+    const rows = toolId ? ctx.store.receiptsFor(toolId) : ctx.store.receipts();
+    return json({ receipts: rows.map(expandReceipt) });
   }
 
   const delCand = p.match(/^\/v1\/candidates\/([^/]+)$/);
@@ -547,7 +659,23 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   if (p === "/v1/receipts" && req.method === "POST") {
     const parsed = await readJson(req);
     if (!parsed.ok) return parsed.res;
-    const b = parsed.value as { toolId?: string; version?: string; ms?: number; llmCalls?: number; cents?: number; ok?: boolean };
+    const b = parsed.value as {
+      toolId?: string;
+      version?: string;
+      ms?: number;
+      llmCalls?: number;
+      cents?: number;
+      ok?: boolean;
+      early?: boolean;
+      deoptReason?: string;
+      stepsRun?: number;
+      skipped?: string[];
+      outcome?: string;
+      tokens?: number;
+      tokensSaved?: number | null;
+      timeSavedMs?: number | null;
+      fingerprint?: string;
+    };
     if (!b.toolId) return json({ error: "toolId required" }, 400);
     ctx.store.putReceipt({
       tool_id: b.toolId,
@@ -556,6 +684,17 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       llm_calls: Number(b.llmCalls) || 0,
       cents: Number(b.cents) || 0,
       ok: b.ok ? 1 : 0,
+      payload: JSON.stringify({
+        early: b.early,
+        deoptReason: b.deoptReason,
+        stepsRun: b.stepsRun,
+        skipped: b.skipped,
+        outcome: b.outcome,
+        tokens: b.tokens,
+        tokensSaved: b.tokensSaved,
+        timeSavedMs: b.timeSavedMs,
+        fingerprint: b.fingerprint,
+      }),
     });
     return json({ ok: true });
   }

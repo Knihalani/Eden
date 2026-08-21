@@ -1,7 +1,7 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
-import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf } from "@eden/ir";
+import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf, failureModeOf, isUsableOutput } from "@eden/ir";
 import { argKeys, bindContext, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
-import { clusterTraces } from "./mine";
+import { clusterFailureTraces, clusterTraces } from "./mine";
 import { normalizeTraces } from "./normalize";
 
 export type CompileOpts = {
@@ -213,6 +213,30 @@ function uniqueTraces(traces: StretchTrace[]): StretchTrace[] {
   return out;
 }
 
+function mean(xs: number[]): number {
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+}
+
+function budgetOf(traces: StretchTrace[]): StretchProgram["budget"] {
+  const llm = traces.map((t) => t.llmCalls).filter((n) => n > 0);
+  const ms = traces.map((t) => t.duration_ms).filter((n) => Number.isFinite(n) && n > 0);
+  const cents = traces.map((t) => t.cost_cents).filter((n) => Number.isFinite(n) && n > 0);
+  if (!llm.length && !ms.length && !cents.length) return undefined;
+  return {
+    llmCalls: llm.length ? mean(llm) : 0,
+    ms: ms.length ? mean(ms) : 0,
+    cents: cents.length ? mean(cents) : 0,
+  };
+}
+
+function originOf(traces: StretchTrace[]): StretchProgram["origin"] {
+  const warned = traces.filter((t) => (t.warnings?.length ?? 0) > 0);
+  if (!warned.length) return undefined;
+  const mode = failureModeOf(warned[0]!.warnings);
+  const firstWarningAt = warned.map((t) => t.firstWarningAt).find((n) => n != null);
+  return { mode: mode === "happy" ? "loop" : mode, ...(firstWarningAt != null ? { firstWarningAt } : {}) };
+}
+
 export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): CompileResult {
   const minSupport = opts.minSupport ?? 3;
   const allowExact = opts.allowExact ?? false;
@@ -220,8 +244,12 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
   const traces = uniqueTraces(normalizeTraces(raw));
   const programs: StretchProgram[] = [];
   const refusals: Refusal[] = [];
+  const seenSeq = new Set<string>();
 
-  for (const cluster of clusterTraces(traces, minSupport)) {
+  for (const cluster of [...clusterTraces(traces, minSupport), ...clusterFailureTraces(traces, minSupport)]) {
+    const seqKey = cluster.sequence.join("\0");
+    if (seenSeq.has(seqKey)) continue;
+    seenSeq.add(seqKey);
     const { sequence } = cluster;
     const used = new Set<string>();
     const steps: Step[] = [];
@@ -406,6 +434,11 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
       refusals.push(refused);
       continue;
     }
+    const recorded = cluster.traces.filter((t) => t.output !== undefined);
+    if (recorded.length && recorded.every((t) => !isUsableOutput(t.output))) {
+      refusals.push({ sequence, reason: "constant/empty output" });
+      continue;
+    }
     if (steps.length < 3) {
       refusals.push({ sequence, reason: "compiled to fewer than 3 steps" });
       continue;
@@ -454,6 +487,8 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
           envelope: env,
         },
         manifest: null,
+        budget: budgetOf(cluster.traces),
+        origin: originOf(cluster.traces),
       });
     // id identifies the stretch, version identifies this compilation of it.
     // Deriving the id from the version instead made every new witness look like

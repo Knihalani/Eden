@@ -16,10 +16,16 @@ export type RunStats = {
   llmCalls: number;
   toolCalls: string[];
   ms: number;
+  /** Wall of real island calls during this run. 0 if none ran. */
+  islandMs: number;
   cents: number;
   deopt: boolean;
   deoptReason?: string;
   skipped: string[];
+  /** Tool calls issued (including ones that then deopted). */
+  stepsRun: number;
+  /** True when a deopt happened before any tool call. */
+  early: boolean;
 };
 
 export type RunResult = {
@@ -128,7 +134,7 @@ export async function runProgram(
 ): Promise<RunResult> {
   assertValid(program);
   const t0 = performance.now();
-  const stats: RunStats = { llmCalls: 0, toolCalls: [], ms: 0, cents: 0, deopt: false, skipped: [] };
+  const stats: RunStats = { llmCalls: 0, toolCalls: [], ms: 0, islandMs: 0, cents: 0, deopt: false, skipped: [], stepsRun: 0, early: false };
   if (opts.checkEnvelope !== false && !inDistribution(program, input)) {
     const keys = Object.keys(program.contract.envelope?.inputs ?? {});
     throw new DeoptError(`input not in witness envelope${keys.length ? ` (${keys.join(",")})` : ""}`);
@@ -180,7 +186,9 @@ export async function runProgram(
       const islandInput = evalBinding(step.input, scope);
       stats.llmCalls += 1;
       stats.cents += opts.llmCents ?? 1;
+      const islandT0 = performance.now();
       const value = await opts.island({ system: step.system, input: islandInput, outputSchema: step.outputSchema, signal });
+      stats.islandMs += performance.now() - islandT0;
       if (signal.aborted) throw new DeoptError("aborted");
       scope.results.set(step.id, value);
       if (touchLast) last.value = value;
@@ -318,6 +326,8 @@ export async function runProgram(
     }
     const value = evalBinding(program.returns, scope);
     stats.ms = performance.now() - t0;
+    stats.stepsRun = toolCallsIssued;
+    stats.early = false;
     return { value, stats };
   };
 
@@ -332,6 +342,11 @@ export async function runProgram(
       // fallback path has to infer it from the reason string, and gets it
       // wrong for any bail that happens after the first tool call.
       err.stepsRun = toolCallsIssued;
+      err.ms = stats.ms;
+      err.llmCalls = stats.llmCalls;
+      err.cents = stats.cents;
+      stats.stepsRun = toolCallsIssued;
+      stats.early = toolCallsIssued === 0;
       throw err;
     }
     throw err;

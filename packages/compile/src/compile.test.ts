@@ -559,3 +559,68 @@ describe("an inferred schema describes what was witnessed", () => {
     expect(schema.properties.n!.type).toBe("number");
   });
 });
+
+describe("compile from waste (45–49)", () => {
+  test("refuses a stretch whose recorded outputs are empty", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `e${i}`,
+      llmCalls: 3,
+      duration_ms: 40,
+      cost_cents: 1,
+      input: { id: `T-${i}` },
+      output: {},
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: {}, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: {}, ok: true },
+      ],
+    }));
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs).toEqual([]);
+    expect(refusals.some((r) => /empty output/i.test(r.reason))).toBe(true);
+  });
+
+  test("mines a warned prefix, not only happy traces", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `w${i}`,
+      llmCalls: 4,
+      duration_ms: 80,
+      cost_cents: 2,
+      input: { id: `T-${i}` },
+      output: { ok: true },
+      firstWarningAt: 3,
+      warnings: [{ kind: "repeat_ngram" as const, at: 3, detail: "loop", duration_ms: 80, llmCalls: 4 }],
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "writeRecord", args: { id: `T-${i}` }, result: { written: true }, ok: true },
+        { name: "verifyWrite", args: { id: `T-${i}` }, result: { verified: true }, ok: true },
+        { name: "search", args: { q: "x" }, result: { hits: [1] }, ok: true },
+        { name: "search", args: { q: "x" }, result: { hits: [1] }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    expect(programs.some((p) => p.origin?.mode === "loop")).toBe(true);
+    expect(programs.some((p) => p.budget && p.budget.ms > 0)).toBe(true);
+  });
+
+  test("two model hops compile into one program", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `i${i}`,
+      llmCalls: 4,
+      duration_ms: 50,
+      cost_cents: 2,
+      input: { id: `T-${i}` },
+      output: { text: "ok" },
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "draftReply", args: { id: `T-${i}` }, result: { text: "a" }, ok: true },
+        { name: "summarize", args: { id: `T-${i}` }, result: { text: "b" }, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    const p = programs[0];
+    expect(p).toBeTruthy();
+    expect(p!.steps.filter((s) => s.kind === "island").length).toBeGreaterThanOrEqual(2);
+  });
+});

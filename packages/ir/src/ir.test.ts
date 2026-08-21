@@ -62,6 +62,12 @@ describe("ir", () => {
     expect(a).toHaveLength(64);
     const wired = hashTrace(JSON.parse(JSON.stringify({ events, input: { id: "T-100", skip: undefined } })));
     expect(hashTrace({ events, input: { id: "T-100", skip: undefined } })).toBe(wired);
+    const withWarnings = {
+      events,
+      input: { id: "T-100" },
+      warnings: [{ kind: "fail_streak" as const, at: 0, detail: "ignore", duration_ms: 1, llmCalls: 0 }],
+    };
+    expect(hashTrace(withWarnings)).toBe(a);
   });
 
   test("getPath and eq", () => {

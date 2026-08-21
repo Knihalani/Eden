@@ -12,7 +12,7 @@
     "demo": "bun run --cwd apps/control src/demo.ts",
     "cli": "bun run packages/cli/src/cli.ts",
     "bench": "bun run packages/runtime/src/bench.ts",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "./scripts/typecheck.sh",
     "bench:verdict": "bun run packages/measure/src/analyze.ts apps/site/scripts/bench-horizon-results.json apps/site/scripts/bench-horizon-hard-results.json apps/site/scripts/bench-horizon-harder-results.json apps/site/scripts/bench-horizon-product-results.json apps/site/scripts/bench-workshop-results.json",
     "bench:loop": "bun run packages/runtime/src/bench-loop.ts"
   },

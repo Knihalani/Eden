@@ -111,6 +111,39 @@ export function majoritySequence(traces: StretchTrace[], minFrac = 0.8): string[
   return unique;
 }
 
+function namesBefore(t: StretchTrace, at: number): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < t.events.length && i < at; i++) {
+    const e = t.events[i]!;
+    if (e.ok && !e.skipped) out.push(e.name);
+  }
+  return out;
+}
+
+/**
+ * Compile from warned/failing runs: the productive prefix before the first
+ * warning, not only ≥3 happy traces.
+ */
+export function clusterFailureTraces(traces: StretchTrace[], minSupport = 3): Cluster[] {
+  const warned = traces.filter((t) => (t.warnings?.length ?? 0) > 0 || t.firstWarningAt != null);
+  const bySeq = new Map<string, { arr: string[]; traces: StretchTrace[] }>();
+  for (const t of warned) {
+    const at = t.firstWarningAt ?? t.warnings?.[0]?.at ?? t.events.length;
+    const arr = namesBefore(t, at);
+    if (arr.length < 3) continue;
+    const key = arr.join("\0");
+    const row = bySeq.get(key);
+    if (row) row.traces.push(t);
+    else bySeq.set(key, { arr, traces: [t] });
+  }
+  const clusters: Cluster[] = [];
+  for (const row of bySeq.values()) {
+    if (row.traces.length < minSupport) continue;
+    clusters.push({ sequence: row.arr, traces: row.traces });
+  }
+  return clusters.sort((a, b) => b.traces.length - a.traces.length || b.sequence.length - a.sequence.length);
+}
+
 export function clusterTraces(traces: StretchTrace[], minSupport = 3): Cluster[] {
   const grams = ngrams(traces, minSupport, 3, 12);
   const fromNgrams: Cluster[] = [];

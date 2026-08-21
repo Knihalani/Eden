@@ -8,9 +8,9 @@ function seq(names: string[]): string {
   return names.map((n) => `<span class="pill">${esc(n)}</span>`).join(`<span class="arr">→</span>`);
 }
 
-function fmt(n: number | undefined): string {
-  if (n == null || Number.isNaN(n)) return "—";
-  return `${n.toFixed(1)}×`;
+function fmtAbs(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  return Math.round(n).toString();
 }
 
 function connected(store: Store): boolean {
@@ -133,13 +133,13 @@ export function inboxPage(store: Store, token?: string): string {
     : "";
   const body = `
     <h1>Inbox</h1>
-    <p class="lede">Point Eden at the agent you already have. Repeating stretches become one tool that cannot skip checks. We promote from <strong>2× fewer LLM calls</strong>.</p>
+    <p class="lede">Point Eden at the agent you already have. Repeating stretches become one tool that cannot skip checks. We ship when quality holds and tokens or time are measured.</p>
     ${moment}
     <div class="strip">
       <span><i class="dot ${on ? "on" : ""}"></i> wrap ${on ? "connected" : "waiting"}</span>
       <span>OPENAI_BASE_URL=http://127.0.0.1:8788/v1</span>
       <span>live ${live.length}</span>
-      <span>${save.llmReductionMean ? fmt(save.llmReductionMean) + " LLM" : "no receipts yet"}</span>
+      <span>${save.tokensSavedMean ? Math.round(save.tokensSavedMean) + " tokens saved" : "not measured"}</span>
       <span><kbd>c</kbd> compile</span>
     </div>
     <div class="row" style="margin-bottom:1rem">
@@ -170,9 +170,9 @@ function candidateCard(c: Candidate): string {
           : "";
   const nums = m
     ? `<div class="nums">
-        <div><b>${fmt(m.llmReduction)}</b><span>LLM (gate)</span></div>
-        <div><b>${fmt(m.latencyReduction)}</b><span>latency</span></div>
-        <div><b>${fmt(m.costReduction)}</b><span>cost</span></div>
+        <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b><span>tokens saved</span></div>
+        <div><b>${m.timeMeasured && m.timeSavedMs != null ? fmtAbs(m.timeSavedMs) : "—"}</b><span>ms saved</span></div>
+        <div><b>${((m.skipRateAfter ?? 0) * 100).toFixed(0)}%</b><span>skips after</span></div>
         <div><b>${witnesses ?? "—"}</b><span>witnesses</span></div>
       </div>`
     : `<p class="muted">${esc(why)}${witnesses != null ? ` ${witnesses} witnesses.` : ""}</p>`;
@@ -207,9 +207,8 @@ export function toolPage(store: Store, id: string, token?: string): string {
     <h1>${esc(program?.name || "Refused stretch")}</h1>
     <p class="lede">${esc(program?.description || c?.refusal?.reason || "")}</p>
     ${m ? `<div class="nums">
-      <div><b>${fmt(m.llmReduction)}</b><span>LLM</span></div>
-      <div><b>${fmt(m.latencyReduction)}</b><span>latency</span></div>
-      <div><b>${fmt(m.costReduction)}</b><span>cost</span></div>
+      <div><b>${m.tokensMeasured && m.tokensSaved != null ? fmtAbs(m.tokensSaved) : "—"}</b><span>tokens saved</span></div>
+      <div><b>${m.timeMeasured && m.timeSavedMs != null ? fmtAbs(m.timeSavedMs) : "—"}</b><span>ms saved</span></div>
       <div><b>${((m.skipRateAfter ?? 0) * 100).toFixed(0)}%</b><span>skips after</span></div>
     </div>` : ""}
     <div class="graph">${steps || `<p class="bad">${esc(c?.refusal?.reason || "")}</p>`}</div>
@@ -245,7 +244,7 @@ export function livePage(store: Store, token?: string): string {
     <span>live ${save.live}</span>
     <span>${save.runs} runs</span>
     <span>${save.fail} failed</span>
-    <span>${save.llmReductionMean ? fmt(save.llmReductionMean) + " LLM mean" : "no shadow yet"}</span>
+    <span>${save.tokensSavedMean ? Math.round(save.tokensSavedMean) + " tokens saved" : save.timeSavedMsMean ? Math.round(save.timeSavedMsMean) + " ms saved" : "not measured"}</span>
   </div>`;
   return layout("Live tools", `<h1>Live tools</h1>${strip}<div class="grid">${cards}</div>`, "/live", token);
 }
