@@ -63,6 +63,7 @@
       },
       "dependencies": {
         "@eden/control": "workspace:*",
+        "@eden/core": "workspace:*",
         "@eden/ir": "workspace:*",
         "@eden/shadow": "workspace:*",
         "@eden/wrap": "workspace:*",
