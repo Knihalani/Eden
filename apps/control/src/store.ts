@@ -1,7 +1,7 @@
-import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { hashTrace, type Manifest, type Refusal, type StretchProgram, type StretchTrace } from "@eden/ir";
+import { openDb, type EdenDb } from "./db";
 
 export type Candidate = {
   id: string;
@@ -37,10 +37,10 @@ export type StoredReceipt = {
 };
 
 export class Store {
-  db: Database;
+  db: EdenDb;
   constructor(path = ":memory:") {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.db = new Database(path);
+    this.db = openDb(path);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS traces (
         id TEXT PRIMARY KEY,

@@ -6,7 +6,7 @@ import { PRIVATE_NO_CACHE, PRIVATE_NO_STORE, PUBLIC_ASSET, PUBLIC_HOUR } from ".
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["bun:sqlite", "@eden/control"],
+  serverExternalPackages: ["bun:sqlite", "node:sqlite", "@eden/control"],
   outputFileTracingRoot: path.join(__dirname, "../.."),
   devIndicators: false,
   experimental: {

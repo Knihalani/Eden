@@ -7,7 +7,11 @@ type WrapFetch = (req: Request) => Promise<Response>;
 const g = globalThis as typeof globalThis & { __edenStore?: Store; __edenWrap?: WrapFetch };
 
 export function wrapFetch(): WrapFetch {
-  const db = process.env.EDEN_DB || join(process.env.EDEN_HOME || join(homedir(), ".eden"), "control.sqlite");
+  const db =
+    process.env.EDEN_DB ||
+    (process.env.VERCEL
+      ? "/tmp/eden-control.sqlite"
+      : join(process.env.EDEN_HOME || join(homedir(), ".eden"), "control.sqlite"));
   if (!g.__edenStore) g.__edenStore = new Store(db);
   if (g.__edenWrap) return g.__edenWrap;
   g.__edenWrap = createHandler({
