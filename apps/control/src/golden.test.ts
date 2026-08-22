@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { pushPrev, Store } from "./store";
 import { createHandler } from "./server";
 import { compileTraces } from "@eden/compile";
-import { shadowProgram } from "@eden/shadow";
+import { shadowProgram, replayRegistry } from "@eden/shadow";
 import { registryFrom } from "@eden/runtime";
 import { createState, wrapTools, steerToolCalls, codingRegistry } from "@eden/wrap";
 import {
@@ -86,6 +86,36 @@ describe("control plane", () => {
     expect(tracesOk.status).toBe(200);
     const tracesBody = (await tracesOk.json()) as { traces: unknown[] };
     expect(Array.isArray(tracesBody.traces)).toBe(true);
+    const miss = await fetchHandler(new Request("http://x/v1/candidates/nope", { headers: { authorization: "Bearer eden_dev" } }));
+    expect(miss.status).toBe(404);
+  });
+
+  test("replay sandbox shadows without a live registry", async () => {
+    const traces = await naiveTraces(6, 0);
+    const store = new Store(":memory:");
+    for (const t of traces) store.putTrace(t);
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      sandboxFor: (t) => replayRegistry(undefined, t),
+      island: createTicketShip({ llmMs: 0 }).island,
+    });
+    const compiled = await fetchHandler(
+      new Request("http://x/v1/compile", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }),
+    );
+    expect(compiled.status).toBe(200);
+    const inbox = (await (
+      await fetchHandler(new Request("http://x/v1/inbox", { headers: { authorization: "Bearer eden_dev" } }))
+    ).json()) as { candidates: Array<{ verdict: string; refusal: { reason: string } | null; program: unknown }> };
+    const hit = inbox.candidates.find((c) => c.program);
+    expect(hit).toBeTruthy();
+    expect(hit!.refusal?.reason ?? "").not.toMatch(/no wrap registry/);
+    const one = await fetchHandler(
+      new Request(`http://x/v1/candidates/${store.candidates().find((c) => c.program)?.id}`, {
+        headers: { authorization: "Bearer eden_dev" },
+      }),
+    );
+    expect(one.status).toBe(200);
   });
 
   test("inbox shows refusal of under-determined sibling", async () => {

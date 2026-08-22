@@ -7,7 +7,7 @@ import { useMemo, useState, useTransition } from "react";
 import type { Binding, Step, StretchProgram } from "@eden/ir/types";
 import { isCheckName, isMutating } from "@eden/ir/names";
 import { approveTool, dismissRequest, pauseTool, resumeTool, type BindEdit } from "./actions";
-import { failLabel, receiptPostmortem } from "./fail";
+import { failLabel, originLine, receiptPostmortem } from "./fail";
 import {
   NODE_H,
   NODE_W,
@@ -108,6 +108,8 @@ function tipLine(model: CanvasModel): string {
         : "";
     return `${state}${pin}${live}`;
   }
+  const origin = originLine(model.origin);
+  if (origin) return origin;
   if (model.verdict === "PASS") return "Ready to inspect";
   if (model.verdict === "FAIL") return "Refused";
   if (model.verdict === "INCONCLUSIVE") return "Not measured";
@@ -156,6 +158,7 @@ export function CanvasView({ model }: { model: CanvasModel }) {
   const failedDeps = program && model.fail?.step ? dependentsOf(program, model.fail.step) : [];
   const hold = shipHold(model, faults);
   const ship = !hold && canShip(model);
+  const origin = originLine(model.origin);
 
   const onApprove = () => {
     start(async () => {
@@ -199,6 +202,7 @@ export function CanvasView({ model }: { model: CanvasModel }) {
           {selectedStep && program ? (
             <NodeDetail
               step={selectedStep}
+              fromIds={methodSteps(program).map((s) => s.id)}
               version={model.version}
               stripped={stripped}
               blocked={blocked}
@@ -219,12 +223,13 @@ export function CanvasView({ model }: { model: CanvasModel }) {
         </aside>
       </div>
 
-      {model.fail ? (
+      {origin || model.fail ? (
         <p className="canvas-fail" role="status">
-          {failLabel(model.fail.kind)}
-          {model.fail.step ? ` · ${model.fail.step}` : ""}
-          {` · ${model.fail.detail}`}
-          {` ${model.fail.next}`}
+          {origin}
+          {origin && model.fail ? " · " : null}
+          {model.fail
+            ? `${failLabel(model.fail.kind)}${model.fail.step ? ` · ${model.fail.step}` : ""} · ${model.fail.detail} ${model.fail.next}`
+            : null}
         </p>
       ) : null}
 
@@ -295,7 +300,7 @@ function Graph({
   const w = layout.width + pad * 2;
   const h = layout.height + pad * 2;
   return (
-    <div className="canvas-graph" role="list">
+    <ul className="canvas-graph">
       <svg className="canvas-wires" viewBox={`0 0 ${w} ${h}`} width={w} height={h} aria-hidden="true">
         {layout.edges.map((e) => {
           const a = layout.nodes.find((n) => n.id === e.from)!;
@@ -319,10 +324,9 @@ function Graph({
         const failed = fail === n.id || fail === n.tool;
         const held = blocked.includes(n.id);
         return (
+          <li key={n.id} className="canvas-node-wrap" style={{ left: n.x + pad, top: n.y + pad, width: NODE_W, height: NODE_H }}>
           <button
-            key={n.id}
             type="button"
-            role="listitem"
             className="canvas-node"
             draggable
             data-kind={n.kind}
@@ -332,7 +336,6 @@ function Graph({
             data-fail={failed ? "true" : undefined}
             data-blocked={held ? "true" : undefined}
             data-drag={drag === n.id ? "true" : undefined}
-            style={{ left: n.x + pad, top: n.y + pad, width: NODE_W, height: NODE_H }}
             onClick={() => onSelect(n.id)}
             onDragStart={(ev) => {
               ev.dataTransfer.setData("text/eden-step", n.id);
@@ -347,14 +350,16 @@ function Graph({
             </span>
             <span className="canvas-node-name">{n.label}</span>
           </button>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }
 
 function NodeDetail({
   step,
+  fromIds,
   version,
   stripped,
   blocked,
@@ -368,6 +373,7 @@ function NodeDetail({
   onDrop,
 }: {
   step: Step;
+  fromIds: string[];
   version: string;
   stripped: string[];
   blocked: string[];
@@ -431,10 +437,23 @@ function NodeDetail({
                   <code>{row.text || "—"}</code>
                 )}
                 {rewirable ? (
-                  <span className="canvas-k">
-                    from {from}
-                    {drag && drag !== step.id ? " · drop a node to rewire" : ""}
-                  </span>
+                  <>
+                    <select
+                      className="canvas-path"
+                      aria-label={`${row.field} from`}
+                      value={from ?? ""}
+                      onChange={(e) => onSource(key, e.target.value)}
+                    >
+                      {(from && !fromIds.includes(from) ? [from, ...fromIds] : fromIds)
+                        .filter((id) => id !== step.id)
+                        .map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                    </select>
+                    {drag && drag !== step.id ? <span className="canvas-k">drop a node to rewire</span> : null}
+                  </>
                 ) : null}
               </li>
             );

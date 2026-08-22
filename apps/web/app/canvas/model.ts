@@ -41,4 +41,5 @@ export type CanvasModel = {
   fail: CanvasFail | null;
   receipt?: CanvasReceipt | null;
   drift?: boolean;
+  origin?: { mode: string; firstWarningAt?: number };
 };

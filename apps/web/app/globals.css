@@ -128,6 +128,12 @@ img {
   outline-offset: 3px;
 }
 
+body:has(.app) .skip {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ship);
+}
+
 .hero-pin {
   position: relative;
   height: 320vh;
@@ -1741,45 +1747,6 @@ button.signin {
   max-height: min(22rem, 50vh);
 }
 
-.home-desk .copy-btn[data-priority] {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
-}
-
-.home-desk .copy-btn[data-priority]:hover,
-.home-desk .copy-btn[data-priority]:focus-visible {
-  background: var(--ink-lift);
-  border-color: var(--ink-lift);
-  color: var(--bg);
-}
-
-.home-desk .copy-btn[data-priority]:active {
-  background: var(--muted);
-  border-color: var(--muted);
-}
-
-.home-desk-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap);
-  font-family: var(--font-ui);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.home-desk-link:hover,
-.home-desk-link:focus-visible {
-  color: var(--ink);
-}
-
-.home-desk-link:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-}
-
 .home-desk .account-error,
 .home-desk .setup-notice {
   max-width: 38rem;
@@ -1818,10 +1785,6 @@ button.signin {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--muted);
-}
-
-.home-cols[data-cols="3"] {
-  grid-template-columns: minmax(0, 1fr) 7.5rem 7rem;
 }
 
 .home-cols span:last-child {
@@ -1930,10 +1893,6 @@ button.signin {
   transition: background-color 160ms var(--ease-out);
 }
 
-.home-row[data-cols="3"] {
-  grid-template-columns: minmax(0, 1fr) 7.5rem 7rem;
-}
-
 .home-row:hover,
 .home-row:focus-visible {
   background: var(--surface);
@@ -1958,15 +1917,6 @@ button.signin {
   line-height: 1.35;
   color: var(--ink);
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-row-kind {
-  font-family: var(--font-ui);
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.35;
-  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -2037,31 +1987,6 @@ button.signin {
   outline-offset: 4px;
 }
 
-.drill {
-  display: grid;
-  align-content: start;
-  gap: var(--space-3);
-  width: min(40rem, 100%);
-}
-
-.drill h1 {
-  margin: 0;
-  font-family: var(--font-ui);
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.drill-meta {
-  margin: 0;
-  font-family: var(--font-ui);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--muted);
-}
-
 .canvas {
   --canvas-well: oklch(0.13 0.01 260);
   display: grid;
@@ -2108,8 +2033,17 @@ button.signin {
   position: relative;
   overflow: auto;
   min-height: 18rem;
+  margin: 0;
   padding: var(--space-5);
+  list-style: none;
   contain: layout style;
+}
+
+.canvas-node-wrap {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .canvas-wires {
@@ -2128,6 +2062,9 @@ button.signin {
 
 .canvas-node {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: grid;
   align-content: center;
   gap: 0.15rem;
@@ -2749,16 +2686,6 @@ button.signin {
   .home-chart-range {
     position: static;
     margin: 0.2rem 0 0;
-  }
-
-  .home-cols[data-cols="3"] span:nth-child(2),
-  .home-row[data-cols="3"] .home-row-kind {
-    display: none;
-  }
-
-  .home-cols[data-cols="3"],
-  .home-row[data-cols="3"] {
-    grid-template-columns: minmax(0, 1fr) 7rem;
   }
 
   .home-cols,

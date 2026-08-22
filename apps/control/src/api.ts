@@ -130,7 +130,7 @@ function syncLiveTools(store: Store): void {
  */
 function shadowCandidate(ctx: ApiCtx, program: StretchProgram) {
   return shadowProgram(program, ctx.store.traces(), {
-    registry: ctx.registry!,
+    registry: ctx.registry ?? { execute: async () => undefined, has: () => false },
     registryFor: ctx.sandboxFor,
     island: ctx.island,
     allowSideEffects: Boolean(ctx.sandboxFor),
@@ -145,7 +145,9 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
     let manifest = program.manifest;
     let refusal: Refusal | null = null;
     const missing = uncoveredTools(ctx.registry, program);
-    if (ctx.registry && missing.length === 0) {
+    if (ctx.registry && missing.length) {
+      refusal = { sequence: program.sequence ?? [], reason: `uncovered: ${missing.join(", ")}` };
+    } else if (ctx.registry || ctx.sandboxFor) {
       const sh = await shadowCandidate(ctx, program);
       verdict = sh.verdict;
       manifest = sh.manifest;
@@ -153,10 +155,8 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
       if (sh.verdict !== "PASS" && sh.reasons.length) {
         refusal = { sequence: program.sequence ?? [], reason: sh.reasons[0]! };
       }
-    } else if (!ctx.registry) {
-      refusal = { sequence: program.sequence ?? [], reason: "no wrap registry — start eden wrap to replay this stretch" };
     } else {
-      refusal = { sequence: program.sequence ?? [], reason: `uncovered: ${missing.join(", ")}` };
+      refusal = { sequence: program.sequence ?? [], reason: "no wrap registry — start eden wrap to replay this stretch" };
     }
     ctx.store.putCandidate({
       id: program.id,
@@ -325,10 +325,10 @@ async function shipCandidate(
       ],
     };
   }
-  if (structural && !ctx.registry) {
+  if (structural && !ctx.registry && !ctx.sandboxFor) {
     return { ok: false, status: 409, error: "dropping or rewriting a step needs the wrap agent connected so Eden can re-check the stretch" };
   }
-  if (structural && ctx.registry) {
+  if (structural && (ctx.registry || ctx.sandboxFor)) {
     program = withVersion({ ...program, version: undefined });
     const sh = await shadowCandidate(ctx, program);
     if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow after edit did not pass", extra: { shadow: sh } };
@@ -504,9 +504,9 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     const c = ctx.store.candidate(shadowMatch[1]!);
     if (!c) return json({ error: "not found" }, 404);
     if (!c.program) return json({ error: "refused" }, 409);
-    if (!ctx.registry) return json({ error: "no registry for shadow" }, 409);
+    if (!ctx.registry && !ctx.sandboxFor) return json({ error: "no registry for shadow" }, 409);
     const missing = uncoveredTools(ctx.registry, c.program);
-    if (missing.length) return json({ error: `uncovered: ${missing.join(", ")}` }, 409);
+    if (ctx.registry && missing.length) return json({ error: `uncovered: ${missing.join(", ")}` }, 409);
     const sh = await shadowCandidate(ctx, c.program);
     c.verdict = sh.verdict;
     c.manifest = sh.manifest;
@@ -651,6 +651,11 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   }
 
   const delCand = p.match(/^\/v1\/candidates\/([^/]+)$/);
+  if (delCand && req.method === "GET") {
+    const c = ctx.store.candidate(delCand[1]!);
+    if (!c) return json({ error: "not found" }, 404);
+    return json(c);
+  }
   if (delCand && req.method === "DELETE") {
     if (!ctx.store.deleteCandidate(delCand[1]!)) return json({ error: "not found" }, 404);
     return json({ ok: true });

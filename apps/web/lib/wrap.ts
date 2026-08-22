@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Store, createHandler } from "@eden/control";
+import { Store, createHandler, replayRegistry } from "@eden/control";
 
 type WrapFetch = (req: Request) => Promise<Response>;
 
@@ -19,6 +19,7 @@ export function wrapFetch(): WrapFetch {
     token: process.env.EDEN_API_KEY || "eden_dev",
     upstream: process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL,
     upstreamKey: process.env.OPENAI_API_KEY,
+    sandboxFor: (t) => replayRegistry(undefined, t),
   });
   return g.__edenWrap;
 }

@@ -1,9 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
-import { handleChatCompletions } from "@eden/wrap";
+import { handleChatCompletions, createState } from "@eden/wrap";
+import { minLlmReductionOf } from "@eden/ir";
 import { handleApi, type ApiCtx } from "./api";
 import type { Store } from "./store";
-import { createState } from "@eden/wrap";
-import { minLlmReductionOf } from "@eden/ir";
 
 export type ServerOpts = {
   store: Store;

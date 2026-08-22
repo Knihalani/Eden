@@ -94,7 +94,7 @@ test("labels wrap verdicts and refusals, newest first", () => {
   expect(activity.fails).toBe(1);
   expect(activity.requests.map((item) => [item.id, item.name, requestStatus(item.verdict, item.refused)])).toEqual([
     ["new", "search", "Refused"],
-    ["old", "lookup · notify", "Inconclusive"],
+    ["old", "lookup_notify", "Inconclusive"],
   ]);
 });
 

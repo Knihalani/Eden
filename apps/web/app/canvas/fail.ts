@@ -1,3 +1,5 @@
+import { failureModeLabel } from "../home/activity";
+
 export type FailKind = "failed" | "skipped" | "degraded" | "blocked";
 
 export type CanvasFail = {
@@ -160,4 +162,12 @@ export function receiptPostmortem(
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+/** Same failure-mode words as the home list, as a canvas sentence (50). */
+export function originLine(origin?: { mode: string; firstWarningAt?: number } | null): string | null {
+  if (!origin?.mode || origin.mode === "happy") return null;
+  const noun = failureModeLabel(origin.mode);
+  const head = `Compiled from a ${noun[0]!.toLowerCase()}${noun.slice(1)}`;
+  return origin.firstWarningAt != null ? `${head} · warning at call ${origin.firstWarningAt}` : head;
 }

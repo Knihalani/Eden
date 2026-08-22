@@ -242,6 +242,12 @@ export async function pullLive(state: WrapState): Promise<void> {
     const known = new Set(rows.map((t) => t.program?.id).filter((id): id is string => typeof id === "string" && !!id));
     const localOnly = state.programs.filter((p) => p.manifest && !known.has(p.id));
     state.programs = [...pulled, ...localOnly];
+    for (const t of rows) {
+      const id = t.program?.id;
+      if (typeof id !== "string" || !id) continue;
+      if (t.state === "live") state.pausedIds.delete(id);
+      else state.pausedIds.add(id);
+    }
   } catch {
     /* fail-open */
   }
@@ -469,7 +475,7 @@ function pauseLiveFor(state: WrapState, toolName: string): void {
 function lastOkResult(events: WrapState["run"]["events"]): unknown {
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i]!;
-    if (ev.ok) return ev.result;
+    if (ev.ok && !ev.skipped) return ev.result;
   }
   return undefined;
 }
@@ -636,7 +642,7 @@ export function wrapTools<T extends ToolsIn>(
           else armed.rest.delete(name);
           run.events.push({
             name,
-            args: redact(args) as Record<string, unknown>,
+            args: {},
             ok: true,
             skipped: true,
             duration_ms: 0,

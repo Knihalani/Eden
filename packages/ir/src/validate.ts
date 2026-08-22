@@ -168,11 +168,15 @@ export function validateProgram(program: unknown): ValidateIssue[] {
   return issues;
 }
 
+const VALID = new WeakSet<object>();
+
 export function assertValid(program: unknown): StretchProgram {
+  if (program && typeof program === "object" && VALID.has(program)) return program as StretchProgram;
   const issues = validateProgram(program);
   if (issues.length) {
     throw new Error(`invalid StretchProgram: ${issues.map((i) => `${i.path}: ${i.message}`).join("; ")}`);
   }
+  VALID.add(program as object);
   return program as StretchProgram;
 }
 
