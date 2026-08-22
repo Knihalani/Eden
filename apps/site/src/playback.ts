@@ -18,6 +18,15 @@ import { safeFetch } from "./ssrf";
 
 const CACHE_TTL_MS = 30 * 60_000;
 
+/**
+ * Ceiling on how many ids one call may fan out over. `issues` is a caller-supplied
+ * CSV, and playTool replays every id it names concurrently — so an unbounded list
+ * (a 100k-element CSV, whether hostile or accidental) turned into 100k parallel
+ * fetches against the target host from a single request. Real batches are PR
+ * loops; 100 covers them and bounds the amplification.
+ */
+const MAX_BATCH_ISSUES = 100;
+
 
 function requestHeaders(url: string): Record<string, string> {
   try {
@@ -105,8 +114,15 @@ async function playOne(
             [cacheKey],
           );
           if (hit && hit.expires_at > Date.now()) {
-            cacheHits++;
-            return { id: step.id, value: JSON.parse(hit.body), fail: false };
+            // A corrupt cached body (older writer, truncated write) is a miss,
+            // not a crash: refetch and overwrite below.
+            try {
+              const value = JSON.parse(hit.body);
+              cacheHits++;
+              return { id: step.id, value, fail: false };
+            } catch {
+              /* fall through to a live fetch */
+            }
           }
         }
         let parsed: unknown;
@@ -133,6 +149,13 @@ async function playOne(
             JSON.stringify(parsed),
             Date.now() + CACHE_TTL_MS,
           ]);
+          // Expired rows are never read again but were never deleted, so the
+          // table grew without bound on long-lived installs. A full sweep on
+          // every write would tax the hot path; sampling keeps it bounded at
+          // ~2% overhead while still converging.
+          if (Math.random() < 0.02) {
+            void db.run(`DELETE FROM result_cache WHERE expires_at < ?`, [Date.now() - CACHE_TTL_MS]).catch(() => undefined);
+          }
         }
         return { id: step.id, value: parsed, fail: !stepOk };
       }),
@@ -173,8 +196,8 @@ async function playOne(
     })(),
   };
   await db.run(
-    `INSERT INTO tool_run (id, tool_id, steps_attempted, steps_ok, server_ms, runner_ms, raw_bytes, densified_bytes, billable_ms, cache_hits, receipt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tool_run (id, tool_id, steps_attempted, steps_ok, server_ms, runner_ms, raw_bytes, densified_bytes, billable_ms, cache_hits, receipt, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       crypto.randomUUID(),
       tool.id,
@@ -187,9 +210,21 @@ async function playOne(
       receipt.billable_ms,
       receipt.cache_hits,
       JSON.stringify(receipt),
+      Date.now(),
     ],
   );
   await db.run(`UPDATE tool SET uses_count = uses_count + 1 WHERE id = ?`, [tool.id]);
+  // tool_run is the lifetime ledger the dashboard sums, so its rows are never
+  // deleted — but the receipt JSON they carry is only read for recent runs.
+  // Sampled sweep nulls receipts older than 90 days, keeping the totals
+  // honest while bounding the table's size.
+  if (Math.random() < 0.02) {
+    void db
+      .run(`UPDATE tool_run SET receipt = NULL WHERE created_at < ? AND receipt IS NOT NULL`, [
+        Date.now() - 90 * 24 * 60 * 60_000,
+      ])
+      .catch(() => undefined);
+  }
   return receipt;
 }
 
@@ -207,14 +242,17 @@ export async function playTool(
     });
   }
   const t0 = Date.now();
+  // Bounded, not trusted: see MAX_BATCH_ISSUES. The cap is silent by design —
+  // the receipt reports what it actually played.
+  const batch = issues.slice(0, MAX_BATCH_ISSUES);
   const receipts = await Promise.all(
-    issues.map((issue) => playOne(db, tool, { ...params, issue, id: issue, number: issue })),
+    batch.map((issue) => playOne(db, tool, { ...params, issue, id: issue, number: issue })),
   );
-  // `issues[i]` is index-parallel to `receipts` by construction (receipts came
-  // from issues.map), so the fallback never fires; it is there to satisfy the
+  // `batch[i]` is index-parallel to `receipts` by construction (receipts came
+  // from batch.map), so the fallback never fires; it is there to satisfy the
   // index signature rather than to describe a reachable state.
-  const table = receipts.map((r, i) => r.table || receiptTableLine(issues[i] ?? "", r.facts)).join("\n");
-  const rows = receipts.flatMap((r, i) => (r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [issues[i] ?? ""])));
+  const table = receipts.map((r, i) => r.table || receiptTableLine(batch[i] ?? "", r.facts)).join("\n");
+  const rows = receipts.flatMap((r, i) => (r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [batch[i] ?? ""])));
   return {
     ok: receipts.every((r) => r.ok),
     steps_ok: receipts.reduce((a, r) => a + r.steps_ok, 0),
@@ -244,12 +282,16 @@ export async function warmWorkspaceBundle(
   if (Date.now() - prev < 8_000) return;
   warming.set(workspaceId, Date.now());
   const tools = await db.all<{ id: string; name: string; steps: string }>(
-    `SELECT id, name, steps FROM tool WHERE workspace_id = ? AND state = 'on'`,
+    // The most-used tools only: warming exists to pre-fill the cache the next
+    // calls will hit, and initialize triggered this — replaying every live
+    // tool against sixteen ids each was a self-inflicted request storm on
+    // every MCP handshake.
+    `SELECT id, name, steps FROM tool WHERE workspace_id = ? AND state = 'on' ORDER BY uses_count DESC LIMIT 3`,
     [workspaceId],
   );
   if (!tools.length) return;
   const ids = await db.all<{ issue: string }>(
-    `SELECT issue FROM watched_issue WHERE workspace_id = ? ORDER BY seen_at DESC LIMIT 16`,
+    `SELECT issue FROM watched_issue WHERE workspace_id = ? ORDER BY seen_at DESC LIMIT 6`,
     [workspaceId],
   );
   if (!ids.length) return;
@@ -257,7 +299,10 @@ export async function warmWorkspaceBundle(
   for (const tool of tools) {
     const steps = (() => {
       try {
-        return JSON.parse(tool.steps || "[]") as Array<{ url?: string }>;
+        // Guarded here rather than only around JSON.parse: valid JSON that is
+        // not an array (`5`, `{}`, `null`) would throw on .some() below.
+        const parsed = JSON.parse(tool.steps || "[]") as unknown;
+        return Array.isArray(parsed) ? (parsed as Array<{ url?: string }>) : [];
       } catch {
         return [];
       }

@@ -87,7 +87,11 @@ export function decideGuard(args: {
   const remaining = cap - elapsed;
   const predicted = live.reduce((m, p) => Math.max(m, p.budget?.ms ?? 0), 0);
   if (predicted > 0 && remaining >= 0 && predicted > remaining) {
-    const hit = matchingProgram(live, (p) => (p.budget?.ms ?? 0) <= remaining || Boolean(p.manifest));
+    // Only a program that *fits* the time left may be steered to. The old
+    // `|| Boolean(p.manifest)` made this predicate always true for verified
+    // programs, so the branch steered to whichever came first — even one
+    // that could not fit and would itself deopt on timeout.
+    const hit = matchingProgram(live, (p) => (p.budget?.ms ?? 0) <= remaining);
     if (hit) return { action: "steer", program: hit, reason: "budget" };
     return { action: "halt", reason: "budget" };
   }

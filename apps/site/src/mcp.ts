@@ -12,6 +12,14 @@ import {
 } from "@eden/core";
 import { playTool, warmWorkspaceBundle } from "./playback";
 
+// Warming is fire-and-forget: it touches the database and the network long
+// after the response has been sent. On Node an unhandled rejection here would
+// take the whole process down (default since v15), so it is observed and
+// dropped — warming is best-effort cache filling by design.
+function warmInBackground(db: EdenDb, workspaceId: string, origin: string): void {
+  void warmWorkspaceBundle(db, workspaceId, origin).catch(() => undefined);
+}
+
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
 
 function schemaFor(steps: Array<{ url?: string; bind?: Record<string, string> }>) {
@@ -56,7 +64,7 @@ async function liveTools(db: EdenDb, workspaceId: string): Promise<ToolRow[]> {
 export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, origin: string): Promise<unknown> {
   const { method, id, params } = body;
   if (method === "initialize") {
-    void warmWorkspaceBundle(db, workspaceId, origin);
+    warmInBackground(db, workspaceId, origin);
     return {
       jsonrpc: "2.0",
       id,
@@ -76,7 +84,7 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
   if (method === "tools/list") {
     const listed = await liveTools(db, workspaceId);
-    void warmWorkspaceBundle(db, workspaceId, origin);
+    warmInBackground(db, workspaceId, origin);
     return {
       jsonrpc: "2.0",
       id,
@@ -113,7 +121,18 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
     if (!tool) {
       return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool ${name}` } };
     }
-    const receipt = await playTool(db, tool, { ...args, origin });
+    let receipt;
+    try {
+      receipt = await playTool(db, tool, { ...args, origin });
+    } catch (err) {
+      // A corrupt tool row is a server-side data problem, but the caller is
+      // still owed a JSON-RPC answer — not a connection-killing 500.
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32603, message: `tool execution failed: ${(err as Error).message}` },
+      };
+    }
     const ids = String(args.issues || args.ids || args.issue || "")
       .split(/[,\s]+/)
       .filter(Boolean);

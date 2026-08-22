@@ -1,5 +1,6 @@
 "use server";
 
+import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { wrapFetch } from "@/lib/wrap";
 
@@ -7,7 +8,23 @@ const token = () => process.env.EDEN_API_KEY || "eden_dev";
 
 export type BindEdit = { step: string; field: string; path?: string; from?: string };
 
+/**
+ * Clerk is the only real gate: every action shares one bearer token for the
+ * embedded control plane, so an unauthenticated caller, a session without an
+ * active workspace, or a pending session must be refused here — before any
+ * control-plane request is built.
+ */
+async function gate(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { userId, orgId, sessionStatus } = await auth();
+  if (!userId) return { ok: false, error: "sign in to manage live tools" };
+  if (!orgId) return { ok: false, error: "join or create a workspace first" };
+  if (sessionStatus !== "active") return { ok: false, error: "your session is not active yet" };
+  return { ok: true };
+}
+
 async function plane(path: string, init: RequestInit): Promise<{ ok: boolean; error?: string }> {
+  const g = await gate();
+  if (!g.ok) return g;
   const headers = new Headers(init.headers);
   headers.set("authorization", `Bearer ${token()}`);
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");

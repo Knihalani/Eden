@@ -61,6 +61,37 @@ describe("ingest → draft → approve → play", () => {
     expect(knocks?.c).toBe(0);
   });
 
+  test("an already-On tool gets no knock on later ingests of its stretch", async () => {
+    // With auto-approve the first observation goes straight On; the second
+    // ingest crossed the knock threshold and used to mint a knock reporting a
+    // "draft" for a tool that was live — noise pointing at a state that did
+    // not exist. Promotion must skip tools already in state 'on'.
+    process.env.EDEN_AUTO_APPROVE = "1";
+    const db = await openDb(`/tmp/eden-on-no-knock-${Date.now()}.db`);
+    const island = [
+      ev(1, "gh api repos/KaiavN/Eden/pulls/12"),
+      ev(2, "gh api repos/KaiavN/Eden/pulls/12/reviews"),
+      ev(3, "gh api repos/KaiavN/Eden/commits/abc123def/status"),
+    ];
+    await ingest(db, "ws_local", "on-run-1", island, true);
+    const tool = await db.get<{ id: string; state: string; steps: string }>(`SELECT id, state, steps FROM tool LIMIT 1`);
+    expect(tool?.state).toBe("on");
+
+    await ingest(
+      db,
+      "ws_local",
+      "on-run-2",
+      island.map((e, i) => ({ ...e, event_id: e.event_id + "-2", seq: i })),
+      true,
+    );
+    delete process.env.EDEN_AUTO_APPROVE;
+    const knocks = await db.all<{ id: string }>(`SELECT id FROM knock`);
+    expect(knocks).toHaveLength(0);
+    // The approved tool's steps are untouched by the later stretch.
+    const after = await db.get<{ steps: string }>(`SELECT steps FROM tool WHERE id = ?`, [tool!.id]);
+    expect(after?.steps).toBe(tool!.steps);
+  });
+
   test("compiled gh pull+status binds sha from the pull", async () => {
     const db = await openDb(`/tmp/eden-bind-sha-${Date.now()}.db`);
     const island = [
@@ -285,8 +316,8 @@ describe("wrap cache", () => {
     );
     const { wrapPlay } = await import("./wrap");
     const tool = { id, name: "local_only", steps: JSON.stringify([{ id: "s1", kind: "runner", name: "git.status" }]), seen: "[]" };
-    const a = await wrapPlay(db, tool, {}, "http://127.0.0.1", "run-fail");
-    const b = await wrapPlay(db, tool, {}, "http://127.0.0.1", "run-fail");
+    const a = await wrapPlay(db, "ws_local", tool, {}, "http://127.0.0.1", "run-fail");
+    const b = await wrapPlay(db, "ws_local", tool, {}, "http://127.0.0.1", "run-fail");
     expect(a.ok).toBe(false);
     expect(b.ok).toBe(false);
     const cached = await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM wrap_cache`);

@@ -104,33 +104,46 @@ function eqTagged(t: string, a: object, b: object, seen?: WeakMap<object, WeakSe
     if (a.constructor !== b.constructor) return false;
     return sameBytes(bytesOf(a as ArrayBuffer), bytesOf(b as ArrayBuffer));
   }
-  if (t === "Set") {
-    const x = a as Set<unknown>;
-    const y = b as Set<unknown>;
-    if (x.size !== y.size) return false;
-    // Order-insensitive, and by value rather than by reference, so two sets
-    // built from equal-but-distinct objects agree.
-    const rest = [...y];
-    for (const v of x) {
-      const i = rest.findIndex((w) => eq(v, w, seen));
-      if (i < 0) return false;
-      rest.splice(i, 1);
+  if (t === "Set" || t === "Map") {
+    // Cut self-referential containers the same way plain objects are cut:
+    // register the (a, b) pair before comparing elements, so a set or map
+    // that contains itself terminates as equal instead of overflowing.
+    const map = seen ?? new WeakMap<object, WeakSet<object>>();
+    let pair = map.get(a);
+    if (!pair) {
+      pair = new WeakSet<object>();
+      map.set(a, pair);
     }
-    return true;
-  }
-  if (t === "Map") {
-    const x = a as Map<unknown, unknown>;
-    const y = b as Map<unknown, unknown>;
-    if (x.size !== y.size) return false;
-    const rest = [...y];
-    for (const [k, v] of x) {
-      const i = rest.findIndex(([k2, v2]) => eq(k, k2, seen) && eq(v, v2, seen));
-      if (i < 0) return false;
-      rest.splice(i, 1);
-    }
-    return true;
+    if (pair.has(b)) return true;
+    pair.add(b);
+    if (t === "Set") return eqSet(a as Set<unknown>, b as Set<unknown>, map);
+    return eqMap(a as Map<unknown, unknown>, b as Map<unknown, unknown>, map);
   }
   return false;
+}
+
+function eqSet(x: Set<unknown>, y: Set<unknown>, seen: WeakMap<object, WeakSet<object>>): boolean {
+  if (x.size !== y.size) return false;
+  // Order-insensitive, and by value rather than by reference, so two sets
+  // built from equal-but-distinct objects agree.
+  const rest = [...y];
+  for (const v of x) {
+    const i = rest.findIndex((w) => eq(v, w, seen));
+    if (i < 0) return false;
+    rest.splice(i, 1);
+  }
+  return true;
+}
+
+function eqMap(x: Map<unknown, unknown>, y: Map<unknown, unknown>, seen: WeakMap<object, WeakSet<object>>): boolean {
+  if (x.size !== y.size) return false;
+  const rest = [...y];
+  for (const [k, v] of x) {
+    const i = rest.findIndex(([k2, v2]) => eq(k, k2, seen) && eq(v, v2, seen));
+    if (i < 0) return false;
+    rest.splice(i, 1);
+  }
+  return true;
 }
 
 /**

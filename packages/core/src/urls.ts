@@ -3,7 +3,15 @@ import type { ParsedCli } from "./named-cli";
 const SKIP_SEGS = new Set(["forge", "repos", "v1", "v2", "api", "rest", "graphql"]);
 
 function demacroPath(s: string): string {
-  return s.replace(/\$\{?[A-Za-z_][\w]*\}?/g, "12");
+  // The substitution has to agree with the mine side. `${sha}`-shaped macros
+  // stand in for commit hashes, which parameterizeUrl only recognizes at 5+
+  // hex characters — substituting "12" made a re-run command never match a
+  // tool compiled from a recorded /commits/{sha} shape. Numeric-looking
+  // macros keep the short substitute the issue/pull shapes expect.
+  return s.replace(/\$\{?[A-Za-z_][\w]*\}?/g, (m) => {
+    const name = m.replace(/^\$\{?/, "").replace(/\}$/, "").toLowerCase();
+    return /sha|commit|hash|digest|rev/.test(name) ? "abcde12345" : "12";
+  });
 }
 
 /** Turn recorded SaaS URLs into playback templates. GitHub keeps {issue}/{sha}; everything else gets {id}. */
@@ -16,7 +24,9 @@ export function parameterizeUrl(url: string): string {
     .replace(/\/commits\/[A-Fa-f0-9]{5,}/g, "/commits/{sha}")
     .replace(/\/runs\/\d+/gi, "/runs/{run_id}");
   let n = 0;
-  out = out.replace(/\/(\d+)(?=\/|$|\?)/g, () => {
+  // A segment is finished by `/`, the query, OR a fragment: /orders/5#top is
+  // the order with id 5, not an opaque path.
+  out = out.replace(/\/(\d+)(?=\/|#|$|\?)/g, () => {
     n += 1;
     return n === 1 ? "/{id}" : `/{id${n}}`;
   });

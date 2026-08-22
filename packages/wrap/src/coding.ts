@@ -5,18 +5,63 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import type { ToolRegistry, ToolRunCtx } from "@eden/ir";
 import { DeoptError } from "@eden/runtime";
 
+/** Binaries that move data over the network when they are on the receiving end of a pipe. */
+const NETWORK_BINARIES = new Set(["curl", "wget", "nc", "ncat", "netcat", "ssh", "scp", "ftp"]);
+
+function networkAllow(): Set<string> {
+  return new Set(
+    (process.env.EDEN_NET_ALLOW ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
 function bashJail(cwd: string, cmd: string): void {
   if (/[`$]|\$\(|\$\{/.test(cmd)) throw new Error("path outside workspace");
+  // Process substitution runs the inner command with no confinement at all,
+  // and its paths are invisible to the token scan below.
+  if (/[<>]\(/.test(cmd)) throw new Error("path outside workspace");
   if (/(^|[;&|\n]|&&|\|\|)\s*cd\s+['"]?(\.\.|\/|~)/.test(cmd) || /(^|[\s'"`])\.\.(\/|$)/.test(cmd)) {
     throw new Error("path outside workspace");
   }
-  for (const m of cmd.matchAll(/(?:^|[\s;|&`'"(=])((?:~\/|\/)[^\s'"`;&|)]*)/g)) {
+  // `cd` into absolute/home/parent territory is refused wherever it hides —
+  // statement position, a subshell, or behind a `then`. A compiled replay has
+  // no business leaving the workspace directory at all.
+  if (/(^|[\s;(])cd\s+['"]?(\.\.|\/|~)/.test(cmd)) {
+    throw new Error("path outside workspace");
+  }
+  // ~user expansions resolve outside the workspace just like ~/ do.
+  if (/(^|[\s;|&'"(])~[A-Za-z0-9_-]/.test(cmd)) {
+    throw new Error("path outside workspace");
+  }
+  for (const m of cmd.matchAll(/(?:^|[\s;|&`'"(=]|(?:\d)?[<>])((?:~\/|~[A-Za-z0-9_-]+|\/)[^\s'"`;&|)]*)/g)) {
     const token = m[1]!;
     if (!token || token.includes("://")) continue;
     if (token === "/dev/null" || token.startsWith("/dev/fd")) continue;
-    const path = token.startsWith("~/") ? token.slice(2) : token;
-    if (token.startsWith("~/") || token === "~") throw new Error("path outside workspace");
+    const path = token.startsWith("~") ? token.slice(token.indexOf("/") + 1 || token.length) : token;
+    if (token.startsWith("~")) throw new Error("path outside workspace");
     confined(cwd, path);
+  }
+  // Exfiltration needs no forbidden path: print a file, pipe it to curl. The
+  // danger is the process on the other end of the pipe, so it gets its own
+  // refusal. Plain use of a network binary (no pipe) is untouched, and
+  // EDEN_NET_ALLOW is the explicit escape hatch.
+  const allow = networkAllow();
+  const segments = cmd.split(/\||&&/);
+  for (let s = 1; s < segments.length; s++) {
+    const words = segments[s]!.trim().split(/\s+/);
+    let target = "";
+    for (const w of words) {
+      const base = w.split("/").pop()!.toLowerCase();
+      if (base === "sudo" || base === "env" || base === "nohup" || base === "exec" || base === "command") continue;
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) continue;
+      target = base;
+      break;
+    }
+    if (NETWORK_BINARIES.has(target) && !allow.has(target)) {
+      throw new Error(`network binary ${target} cannot receive a pipe`);
+    }
   }
 }
 
@@ -77,14 +122,27 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
         bashJail(cwd, cmd);
         const env = { ...process.env };
         for (const k of Object.keys(env)) {
-          if (/key|token|secret|password|passwd|authorization/i.test(k)) delete env[k];
+          // Key-name patterns are not enough: a credential under an innocent
+          // name (EDEN_WEBHOOK_URL) reaches the child shell verbatim. Values
+          // carrying URL-embedded credentials are filtered too.
+          if (/key|token|secret|password|passwd|authorization/i.test(k)) {
+            delete env[k];
+            continue;
+          }
+          const v = env[k];
+          if (typeof v === "string" && /[a-z][a-z0-9+.-]*:\/\/[^\s/@]+:[^\s@]+@/i.test(v)) delete env[k];
         }
         const proc = spawn(cmd, { cwd, shell: true, env });
         const chunks: Buffer[] = [];
         const err: Buffer[] = [];
         proc.stdout.on("data", (c) => chunks.push(c as Buffer));
         proc.stderr.on("data", (c) => err.push(c as Buffer));
-        const ms = Math.min(Number(args.timeout_ms ?? 15_000), 60_000);
+        // Coerce defensively: Number("30s") is NaN, and setTimeout(NaN)
+        // fires immediately — every command died at t≈0 with truncated
+        // output. Anything non-numeric (or non-positive) falls back to the
+        // default instead.
+        const requested = Number(args.timeout_ms);
+        const ms = Math.min(Number.isFinite(requested) && requested > 0 ? requested : 15_000, 60_000);
         const killer = setTimeout(() => proc.kill("SIGKILL"), ms);
         const onAbort = () => proc.kill("SIGKILL");
         ctx?.signal?.addEventListener("abort", onAbort, { once: true });
