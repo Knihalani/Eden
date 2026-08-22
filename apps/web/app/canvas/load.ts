@@ -91,16 +91,24 @@ export async function loadCanvas(mode: "request" | "live", id: string): Promise<
       };
     }
 
-    const res = await plane("/v1/candidates");
+    const [res, listRes] = await Promise.all([
+      plane(`/v1/candidates/${encodeURIComponent(id)}`),
+      plane("/v1/candidates"),
+    ]);
+    if (res.status === 404) return { status: "miss" };
     if (!res.ok) return { status: "error" };
-    const body = asRecord(await res.json());
-    const list = Array.isArray(body?.candidates) ? body.candidates : [];
-    const hit = list.map(asRecord).find((row) => row?.id === id);
-    if (!hit) return { status: "miss" };
+    const hit = asRecord(await res.json());
+    if (!hit || hit.id !== id) return { status: "miss" };
     const program = (hit.program as StretchProgram) ?? null;
     const refusal = asRecord(hit.refusal);
     const reason = typeof refusal?.reason === "string" ? refusal.reason : undefined;
     const manifest = ((hit.manifest as Manifest | null) ?? program?.manifest) || null;
+    const originRec = program ? asRecord((program as { origin?: unknown }).origin) : asRecord(hit.origin);
+    const originMode =
+      typeof originRec?.mode === "string" && originRec.mode !== "happy" ? originRec.mode : undefined;
+    const warnAt = Number(originRec?.firstWarningAt);
+    const listBody = listRes.ok ? asRecord(await listRes.json()) : null;
+    const list = Array.isArray(listBody?.candidates) ? listBody.candidates : [];
     const siblings: CanvasSibling[] = list
       .map(asRecord)
       .filter((row): row is Record<string, unknown> => Boolean(row && row.id !== id))
@@ -131,6 +139,14 @@ export async function loadCanvas(mode: "request" | "live", id: string): Promise<
           reason,
           skipRateAfter: manifest?.skipRateAfter,
         }),
+        ...(originMode
+          ? {
+              origin: {
+                mode: originMode,
+                ...(Number.isFinite(warnAt) ? { firstWarningAt: Math.round(warnAt) } : {}),
+              },
+            }
+          : {}),
       },
     };
   } catch {

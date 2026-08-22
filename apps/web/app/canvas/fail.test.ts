@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifyFail, failLabel, receiptPostmortem } from "./fail";
+import { classifyFail, failLabel, originLine, receiptPostmortem } from "./fail";
 
 describe("canvas fail language", () => {
   test("missing path is blocked, not invented", () => {
@@ -55,5 +55,12 @@ describe("canvas fail language", () => {
       /fingerprint moved/,
     );
     expect(receiptPostmortem({ outcome: "ok", timeSavedMs: -4, ms: 84 }, { budgetMs: 80 })).toMatch(/4ms over the tape/);
+  });
+
+  test("request origin uses the same failure words as the home list", () => {
+    expect(originLine({ mode: "loop", firstWarningAt: 3 })).toBe("Compiled from a loop · warning at call 3");
+    expect(originLine({ mode: "loop" })).toBe("Compiled from a loop");
+    expect(originLine({ mode: "happy" })).toBeNull();
+    expect(originLine(undefined)).toBeNull();
   });
 });

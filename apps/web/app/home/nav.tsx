@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { SETUP, homePath, navCurrent, parseHomeView } from "../account/home";
 import { formatCount } from "./activity";
 import { useActivity } from "./activity-context";
@@ -13,7 +13,7 @@ export function useNavCollapsed() {
   const [collapsed, setCollapsed] = useState(false);
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setCollapsed(window.localStorage.getItem(NAV_KEY) === "1");
     const frame = window.requestAnimationFrame(() => setReady(true));
     return () => window.cancelAnimationFrame(frame);

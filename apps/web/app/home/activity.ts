@@ -1,3 +1,5 @@
+import { isCheckName } from "@eden/ir/names";
+
 export type WorkflowItem = {
   id: string;
   name: string;
@@ -252,6 +254,13 @@ function asWorkflow(value: unknown): WorkflowItem | null {
   };
 }
 
+function stretchLabel(sequence: string[]): string {
+  const core = sequence.filter((n) => !isCheckName(n));
+  const parts = core.length ? core : sequence;
+  if (!parts.length) return "Request";
+  return parts.length <= 2 ? parts.join("_") : `${parts[0]}_to_${parts[parts.length - 1]}`;
+}
+
 function asRequest(value: unknown): RequestItem | null {
   const row = asRecord(value);
   if (!row || typeof row.id !== "string" || !row.id) return null;
@@ -266,7 +275,7 @@ function asRequest(value: unknown): RequestItem | null {
   const warnAt = Number(origin?.firstWarningAt);
   return {
     id: row.id,
-    name: fromProgram || sequence.join(" · ") || "Request",
+    name: fromProgram || stretchLabel(sequence),
     verdict: typeof row.verdict === "string" && row.verdict ? row.verdict : "pending",
     refused: Boolean(refusal),
     at: asTime(row.created_at),

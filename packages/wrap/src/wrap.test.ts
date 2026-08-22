@@ -404,6 +404,22 @@ describe("pullLive", () => {
     await pullLive(state);
     expect(state.programs).toEqual([]);
   });
+
+  test("resume on the desk clears a locally paused tool", async () => {
+    const { pullLive, createState } = await import("../src/wrap-tools");
+    const program = liveProgram();
+    const state = createState({
+      programs: [program],
+      apiKey: "eden_dev",
+      baseUrl: "http://x",
+      fetch: (async () =>
+        new Response(JSON.stringify({ tools: [{ program, state: "live" }] }), { status: 200 })) as unknown as typeof fetch,
+    });
+    state.pausedIds.add(program.id);
+    await pullLive(state);
+    expect(state.pausedIds.has(program.id)).toBe(false);
+    expect(state.programs.some((p) => p.id === program.id)).toBe(true);
+  });
 });
 
 describe("wrapTimeoutMs", () => {
