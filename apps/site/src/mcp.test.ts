@@ -121,3 +121,58 @@ describe("handleMcp initialize", () => {
     for (const t of list.result.tools) expect(init.result.instructions).toContain(t.name);
   });
 });
+
+describe("DELETE /mcp terminates the session cleanly", () => {
+  /**
+   * Streamable HTTP lets a client end its session with DELETE. This server
+   * keeps no per-session state, so it used to fall through to body parsing and
+   * answer a non-JSON error — clients read that as a protocol failure instead
+   * of a clean shutdown.
+   */
+  // Cache-busted import: a private server singleton (and db connection) that
+  // outlives nothing, so afterEach's cleanup cannot pull the database out from
+  // under an instance another test file shares.
+  const SERVER_MOD = `./server?bust=mcp-delete`;
+  let dir: string;
+  let dbFile: string;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED"]) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+    dir = mkdtempSync(join(tmpdir(), "eden-mcp-del-"));
+    dbFile = join(dir, "mcp.db");
+    process.env.EDEN_DB = dbFile;
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("answers 202 accepted, not a non-JSON error", async () => {
+    const { handleFetch } = await import(SERVER_MOD);
+    const res = await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE" }));
+    expect(res.status).toBe(202);
+  });
+
+  test("POST still reaches the JSON-RPC handler afterwards", async () => {
+    const { handleFetch } = await import(SERVER_MOD);
+    await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE" }));
+    const res = await handleFetch(
+      new Request("http://127.0.0.1:8787/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { result: Record<string, unknown> };
+    expect(body.result).toEqual({});
+  });
+});

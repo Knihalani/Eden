@@ -27,23 +27,50 @@ export async function ingest(
   events: ToolEvent[],
   stretchEnd: boolean,
 ) {
-  for (const e of events) {
+  // The events are independent rows keyed by (workspace_id, event_id) and are
+  // read back ORDER BY seq, so insertion order carries no meaning. One round
+  // trip per event dominated ingest latency on a remote driver, and Promise.all
+  // only hides it up to the connection pool — a 100-event batch is one INSERT
+  // per chunk now, not one per event.
+  const CHUNK = 50;
+  for (let i = 0; i < events.length; i += CHUNK) {
+    const chunk = events.slice(i, i + CHUNK);
+    const placeholders = chunk.map(() => `(?, ?, ?, ?, ?, ?, ?, ?, ?)`).join(", ");
     await db.run(
-      `INSERT OR IGNORE INTO tool_event (event_id, workspace_id, run_id, seq, name, args, command, ok)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      `INSERT OR IGNORE INTO tool_event (event_id, workspace_id, run_id, seq, name, args, command, ok, created_at)
+       VALUES ${placeholders}`,
+      chunk.flatMap((e) => [
         e.event_id,
         workspaceId,
         runId,
-        e.seq,
-        e.name,
+        // Normalised, not trusted: SQLite's INTEGER affinity silently accepts
+        // a numeric string where Postgres refuses the bind — the same payload
+        // must not succeed locally and 500 remotely.
+        Number.isFinite(Number(e.seq)) ? Number(e.seq) : 0,
+        String(e.name ?? ""),
         JSON.stringify(e.args || {}),
         e.command ?? (e.args as { command?: string })?.command ?? null,
         e.ok ? 1 : 0,
-      ],
+        Date.now(),
+      ]),
     );
   }
   await rememberIssues(db, workspaceId, events);
+  // Sampled housekeeping, same shape as the result_cache sweep. tool_event
+  // and stretch are mining inputs, not records queried forever; without a
+  // ceiling a long-lived install grew both without bound. TTL-based, because
+  // there is no portable "newest N" across SQLite and Postgres.
+  if (Math.random() < 0.02) {
+    const cutoff = Date.now() - 14 * 24 * 60 * 60_000;
+    void db.run(`DELETE FROM tool_event WHERE created_at < ?`, [cutoff]).catch(() => undefined);
+    void db.run(`DELETE FROM stretch WHERE created_at < ?`, [cutoff]).catch(() => undefined);
+    // Watched issues drive cache warming; anything colder than a month will
+    // not be re-warmed. Also bounds what one ingest can plant: every numeric
+    // id harvested from recorded commands becomes a row here.
+    void db
+      .run(`DELETE FROM watched_issue WHERE seen_at < ?`, [Date.now() - 30 * 24 * 60 * 60_000])
+      .catch(() => undefined);
+  }
   if (!stretchEnd) return { drafts: 0 };
   const rows = await db.all<{
     event_id: string;
@@ -80,9 +107,12 @@ export async function ingest(
       island_index,
     ]);
     if (dup) continue;
+    // OR IGNORE, not INSERT: the dup-check read races concurrent ingests of
+    // the same run, and the unique index from migrate() is what actually
+    // enforces one observation — a loser here just keeps its count honest.
     await db.run(
-      `INSERT INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index) VALUES (?, ?, ?, ?, ?, ?)`,
-      [crypto.randomUUID(), workspaceId, runId, fp, JSON.stringify(steps), island_index],
+      `INSERT OR IGNORE INTO stretch (id, workspace_id, run_id, fingerprint, steps, island_index, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), workspaceId, runId, fp, JSON.stringify(steps), island_index, Date.now()],
     );
     const existing = await db.get<{ count: number; status: string; steps: string }>(
       `SELECT count, status, steps FROM cluster WHERE fingerprint = ? AND workspace_id = ?`,
@@ -139,8 +169,12 @@ export async function ingest(
       } else {
         const id = crypto.randomUUID();
         const name = await uniqueToolName(db, workspaceId, base);
+        // OR IGNORE + re-read: a concurrent ingest of the same fingerprint can
+        // win the (workspace_id, fingerprint) unique index; the loser must not
+        // count a draft that does not exist, and both paths converge on the
+        // surviving row.
         await db.run(
-          `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
+          `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
            VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
           [
             id,
@@ -153,8 +187,12 @@ export async function ingest(
             requiredK(storedSteps),
           ],
         );
-        await maybeAutoOn(db, workspaceId, id, compiled);
-        drafts++;
+        const winner = await db.get<{ id: string }>(
+          `SELECT id FROM tool WHERE workspace_id = ? AND fingerprint = ?`,
+          [workspaceId, fp],
+        );
+        if (winner) await maybeAutoOn(db, workspaceId, winner.id, compiled);
+        if (winner?.id === id) drafts++;
       }
     }
     // `>= 2`, not `=== 2`: if the count ever skips past 2 — a concurrent
@@ -162,14 +200,19 @@ export async function ingest(
     // and the tool stays a draft permanently. The insert below is guarded by
     // the absence of an existing knock, so a later ingest cannot duplicate it.
     if (count >= 2) {
-      const tool = await db.get<{ id: string }>(`SELECT id FROM tool WHERE fingerprint = ? AND workspace_id = ?`, [fp, workspaceId]);
+      const tool = await db.get<{ id: string; state: string }>(`SELECT id, state FROM tool WHERE fingerprint = ? AND workspace_id = ?`, [fp, workspaceId]);
       const already = tool
         ? await db.get<{ id: string }>(`SELECT id FROM knock WHERE tool_id = ? AND workspace_id = ?`, [
             tool.id,
             workspaceId,
           ])
         : undefined;
-      if (tool && !already) {
+      // A tool already approved and live is not a draft: knocking about it
+      // reported a "draft" the workshop did not have, and the step rewrite
+      // below could never apply to it anyway. Skip promotion entirely — a
+      // change to what an On tool does needs a human, per the workshop's own
+      // invariant.
+      if (tool && tool.state !== "on" && !already) {
         const compiled = stepsToCompiled(storedSteps);
         // Draft-only, for the same reason as the update above: an approved
         // tool's steps are frozen until a human approves a change.
@@ -198,12 +241,19 @@ async function rememberIssues(db: EdenDb, workspaceId: string, events: ToolEvent
     const command = e.command || String((e.args as { command?: string } | undefined)?.command || "");
     for (const n of extractLoopIds(command)) ids.add(n);
   }
-  for (const issue of ids) {
-    await db.run(`INSERT OR REPLACE INTO watched_issue (workspace_id, issue, seen_at) VALUES (?, ?, ?)`, [
-      workspaceId,
-      issue,
-      now,
-    ]);
+  if (!ids.size) return;
+  // One statement, not one per id: the id list is attacker-influenced (every
+  // number harvested from recorded commands), so a single event could have
+  // fanned out into hundreds of round trips.
+  const list = [...ids];
+  const CHUNK = 50;
+  for (let i = 0; i < list.length; i += CHUNK) {
+    const chunk = list.slice(i, i + CHUNK);
+    const placeholders = chunk.map(() => `(?, ?, ?)`).join(", ");
+    await db.run(
+      `INSERT OR REPLACE INTO watched_issue (workspace_id, issue, seen_at) VALUES ${placeholders}`,
+      chunk.flatMap((issue) => [workspaceId, issue, now]),
+    );
   }
 }
 

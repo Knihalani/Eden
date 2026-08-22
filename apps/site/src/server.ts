@@ -7,14 +7,32 @@ import { escapeHtml, layout } from "./html";
 import { findOnTool, wrapPlay, toolHasPlayback } from "./wrap";
 import type { ToolEvent } from "@eden/core";
 
-const PORT = Number(process.env.PORT || 8787);
+/** A malformed PORT must fall back, not hand NaN to Bun.serve. */
+export function envPort(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : fallback;
+}
+
+const PORT = envPort(process.env.PORT, 8787);
 let dbPromise: Promise<EdenDb> | null = null;
 
 function db(): Promise<EdenDb> {
-  if (!dbPromise) dbPromise = openDb(process.env.EDEN_DB || undefined).then(async (d) => {
-    await seedBundle(d);
-    return d;
-  });
+  if (!dbPromise) {
+    // A failed open must not be cached: dbPromise would otherwise hold the
+    // rejection forever and every later request would fail until the process
+    // restarted, even though the transient outage that caused it had cleared.
+    // The rejection still surfaces to the request that triggered the open —
+    // the next one gets a fresh attempt.
+    dbPromise = openDb(process.env.EDEN_DB || undefined)
+      .then(async (d) => {
+        await seedBundle(d);
+        return d;
+      })
+      .catch((err: unknown) => {
+        dbPromise = null;
+        throw err;
+      });
+  }
   return dbPromise;
 }
 
@@ -72,6 +90,36 @@ async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { 
 }
 
 /**
+ * JSON that parses is not JSON we can serve. `null`, an array or a scalar
+ * reaches the handlers as a typed cast today and then throws somewhere
+ * deeper — a 500 with a stack trace for what is plainly a bad request.
+ */
+function readJsonObject(
+  parsed: { ok: true; value: unknown } | { ok: false; res: Response },
+): { ok: true; value: Record<string, unknown> } | { ok: false; res: Response } {
+  if (!parsed.ok) return parsed;
+  if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+    return { ok: false, res: Response.json({ error: "expected a json object body" }, { status: 400 }) };
+  }
+  return parsed as { ok: true; value: Record<string, unknown> };
+}
+
+/**
+ * JSON columns written by older builds (or by a crashed writer) can hold
+ * anything. Every parse below feeds `.map()`/`.some()`, so a scalar or an
+ * object would throw out of a page render — the empty-array fallback degrades
+ * one row instead of failing the whole endpoint.
+ */
+function jsonRows(raw: string | null | undefined): unknown[] {
+  try {
+    const v = JSON.parse(raw || "[]") as unknown;
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Rejects a state-changing request that a *page the user was visiting* could
  * have made on their behalf.
  *
@@ -124,18 +172,58 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   if (url.pathname === "/dashboard" || url.pathname === "/") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const usage = (await d.get<{
+    // Lifetime totals for the counters; the money line is genuinely
+    // *this month* — filtered on created_at, which rows written before the
+    // column existed do not have (they stay in the lifetime numbers only).
+    // One pass, not two: both aggregates come out of a single scan, which
+    // halves the dashboard's database round trips on a remote driver.
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const totals = await d.get<{
       runs: number;
       server_ms: number;
       steps: number;
       raw_bytes: number;
       densified_bytes: number;
+      m_runs: number;
+      m_server_ms: number;
+      m_steps: number;
+      m_raw_bytes: number;
+      m_densified_bytes: number;
     }>(
-      `SELECT COUNT(*) as runs, COALESCE(SUM(r.server_ms),0) as server_ms, COALESCE(SUM(r.steps_attempted),0) as steps,
-              COALESCE(SUM(r.raw_bytes),0) as raw_bytes, COALESCE(SUM(r.densified_bytes),0) as densified_bytes
+      `SELECT COUNT(*) as runs,
+              COALESCE(SUM(r.server_ms),0) as server_ms,
+              COALESCE(SUM(r.steps_attempted),0) as steps,
+              COALESCE(SUM(r.raw_bytes),0) as raw_bytes,
+              COALESCE(SUM(r.densified_bytes),0) as densified_bytes,
+              COALESCE(SUM(CASE WHEN r.created_at >= ? THEN 1 ELSE 0 END),0) as m_runs,
+              COALESCE(SUM(CASE WHEN r.created_at >= ? THEN r.server_ms ELSE 0 END),0) as m_server_ms,
+              COALESCE(SUM(CASE WHEN r.created_at >= ? THEN r.steps_attempted ELSE 0 END),0) as m_steps,
+              COALESCE(SUM(CASE WHEN r.created_at >= ? THEN r.raw_bytes ELSE 0 END),0) as m_raw_bytes,
+              COALESCE(SUM(CASE WHEN r.created_at >= ? THEN r.densified_bytes ELSE 0 END),0) as m_densified_bytes
        FROM tool_run r JOIN tool t ON t.id = r.tool_id WHERE t.workspace_id = ?`,
-      [wsId],
-    )) || { runs: 0, server_ms: 0, steps: 0, raw_bytes: 0, densified_bytes: 0 };
+      [monthStart.getTime(), monthStart.getTime(), monthStart.getTime(), monthStart.getTime(), monthStart.getTime(), wsId],
+    );
+    const usage = totals || {
+      runs: 0,
+      server_ms: 0,
+      steps: 0,
+      raw_bytes: 0,
+      densified_bytes: 0,
+      m_runs: 0,
+      m_server_ms: 0,
+      m_steps: 0,
+      m_raw_bytes: 0,
+      m_densified_bytes: 0,
+    };
+    const month = {
+      runs: Number(usage.m_runs),
+      server_ms: Number(usage.m_server_ms),
+      steps: Number(usage.m_steps),
+      raw_bytes: Number(usage.m_raw_bytes),
+      densified_bytes: Number(usage.m_densified_bytes),
+    };
     const drafts = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'draft'`, [wsId])) || { c: 0 };
     const on = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId])) || { c: 0 };
     const lines = [
@@ -145,7 +233,7 @@ export async function handleFetch(req: Request): Promise<Response> {
     ];
     if (usage.runs > 0) {
       lines.push(
-        `<div class="row">This month: ${(usage.server_ms / 1000).toFixed(1)}s server compute · ${usage.steps} steps · ${(usage.raw_bytes / 1e6).toFixed(2)}MB raw → ${(usage.densified_bytes / 1000).toFixed(0)}KB to the model · ${usage.runs} runs</div>`,
+        `<div class="row">This month: ${(month.server_ms / 1000).toFixed(1)}s server compute · ${month.steps} steps · ${(month.raw_bytes / 1e6).toFixed(2)}MB raw → ${(month.densified_bytes / 1000).toFixed(0)}KB to the model · ${month.runs} runs</div>`,
       );
     }
     return html("Dashboard", `<h1>Dashboard</h1>${lines.join("")}`);
@@ -171,8 +259,10 @@ export async function handleFetch(req: Request): Promise<Response> {
       [ws[1], wsId],
     );
     if (!t) return new Response("not found", { status: 404 });
-    const steps = JSON.parse(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
-    const list = steps.map((s) => `<div class="row"><code>${escapeHtml(s.name)}</code> · ${escapeHtml(s.kind)}${s.url ? ` · ${escapeHtml(s.url)}` : ""}</div>`).join("");
+    const steps = jsonRows(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
+    const list = steps
+      .map((s) => `<div class="row"><code>${escapeHtml(String(s.name))}</code> · ${escapeHtml(String(s.kind))}${s.url ? ` · ${escapeHtml(String(s.url))}` : ""}</div>`)
+      .join("");
     const approve =
       t.state !== "on"
         ? `<form method="post" action="/v1/tools/${t.id}/approve"><button>Approve</button></form>`
@@ -210,18 +300,38 @@ export async function handleFetch(req: Request): Promise<Response> {
         name: t.name,
         state: t.state,
         when_to_use: t.when_to_use,
-        seen: JSON.parse(t.seen || "[]"),
-        has_playback: JSON.parse(t.steps || "[]").some((s: { url?: string }) => Boolean(s.url)),
+        seen: jsonRows(t.seen),
+        has_playback: (jsonRows(t.steps) as Array<{ url?: string }>).some((s) => Boolean(s?.url)),
       })),
     });
   }
 
   if (url.pathname === "/v1/ingest" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const parsed = await readJson(req);
+    const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
-    const body = parsed.value as { run_id: string; events: ToolEvent[]; stretch_end?: boolean };
-    const result = await ingest(d, wsId, body.run_id, body.events || [], Boolean(body.stretch_end));
+    const body = parsed.value as { run_id?: unknown; events?: unknown; stretch_end?: unknown };
+    // The handler below maps over `events` and binds every field into SQL, so
+    // shape errors here would otherwise surface as a 500 after some rows of
+    // the batch had already committed.
+    if (typeof body.run_id !== "string" || !body.run_id) {
+      return Response.json({ error: "run_id must be a non-empty string" }, { status: 400 });
+    }
+    if (!Array.isArray(body.events)) {
+      return Response.json({ error: "events must be an array" }, { status: 400 });
+    }
+    const bad = body.events.findIndex(
+      (e) => !e || typeof e !== "object" || typeof (e as ToolEvent).event_id !== "string",
+    );
+    if (bad >= 0) {
+      return Response.json({ error: `events[${bad}] must be an object with a string event_id` }, { status: 400 });
+    }    const result = await ingest(
+      d,
+      wsId,
+      body.run_id,
+      body.events as ToolEvent[],
+      Boolean(body.stretch_end),
+    );
     return Response.json(result, { status: 202 });
   }
 
@@ -238,9 +348,9 @@ export async function handleFetch(req: Request): Promise<Response> {
     return Response.json({
       tools: tools.map((t) => ({
         name: t.name,
-        seen: JSON.parse(t.seen || "[]") as string[],
+        seen: jsonRows(t.seen) as string[],
         required_k: Number(t.required_k) || 2,
-        urls: (JSON.parse(t.steps || "[]") as Array<{ url?: string }>).map((s) => s.url).filter(Boolean) as string[],
+        urls: (jsonRows(t.steps) as Array<{ url?: string }>).map((s) => s?.url).filter(Boolean) as string[],
       })),
       knock: knock ? { message: `draft ${knock.tool_id}`, tool_id: knock.tool_id } : null,
     });
@@ -270,46 +380,108 @@ export async function handleFetch(req: Request): Promise<Response> {
   const approve = url.pathname.match(/^\/v1\/tools\/([^/]+)\/approve$/);
   if (approve && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
+    // Existence first: the UPDATE below is scoped and simply affects zero rows
+    // for an id that is not this workspace's, which used to be answered with
+    // the same success redirect as a real approval.
+    const tool = await d.get<{ id: string }>(`SELECT id FROM tool WHERE id = ? AND workspace_id = ?`, [
+      approve[1],
+      wsId,
+    ]);
+    if (!tool) {
+      if (req.headers.get("accept")?.includes("json")) return Response.json({ error: "not found" }, { status: 404 });
+      return new Response("not found", { status: 404 });
+    }
     await d.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ? AND workspace_id = ?`, [approve[1], wsId]);
     if (req.headers.get("accept")?.includes("json")) return Response.json({ ok: true });
-    return Response.redirect(`${origin}/workshop/${approve[1]}`, 303);
+    // Encoded: the raw segment came off the request path, and an id carrying
+    // `?` or `#` would otherwise rewrite which URL the form lands on.
+    const id = approve[1]!;
+    return Response.redirect(`${origin}/workshop/${encodeURIComponent(id)}`, 303);
   }
 
   if (url.pathname === "/v1/play" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const parsed = await readJson(req);
+    const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
-    const body = parsed.value as { name: string; issue?: string; issues?: string; ids?: string };
+    const body = parsed.value as { name?: unknown; issue?: unknown; issues?: unknown; ids?: unknown };
+    if (typeof body.name !== "string" || !body.name) {
+      return Response.json({ error: "name must be a non-empty string" }, { status: 400 });
+    }
+    const str = (v: unknown) => (typeof v === "string" ? v : "");
     const tool = await d.get<{ id: string; name: string; steps: string }>(
       `SELECT id, name, steps FROM tool WHERE name = ? AND state = 'on' AND workspace_id = ?`,
       [body.name, wsId],
     );
     if (!tool) return new Response("not found", { status: 404 });
-    const receipt = await playTool(d, tool, {
-      issue: body.issue || "",
-      issues: body.issues || body.ids || body.issue || "",
-      ids: body.ids || body.issues || body.issue || "",
-      origin,
-    });
+    let receipt;
+    try {
+      receipt = await playTool(d, tool, {
+        issue: str(body.issue),
+        issues: str(body.issues) || str(body.ids) || str(body.issue),
+        ids: str(body.ids) || str(body.issues) || str(body.issue),
+        origin,
+      });
+    } catch (err) {
+      // Corrupt stored steps throw inside playback. That is a data problem on
+      // our side — answer with a clean 500-shaped JSON body rather than an
+      // unhandled exception and a stack trace.
+      return Response.json({ error: `tool execution failed: ${(err as Error).message}` }, { status: 500 });
+    }
     return Response.json(receipt);
   }
 
   if (url.pathname === "/v1/wrap" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    const parsed = await readJson(req);
+    const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
-    const body = parsed.value as { name: string; args?: Record<string, string>; run_id?: string };
+    const body = parsed.value as { name?: unknown; args?: unknown; run_id?: unknown };
+    if (typeof body.name !== "string" || !body.name) {
+      return Response.json({ error: "name must be a non-empty string" }, { status: 400 });
+    }
+    if (body.args != null && (typeof body.args !== "object" || Array.isArray(body.args))) {
+      return Response.json({ error: "args must be an object" }, { status: 400 });
+    }
+    if (body.run_id != null && typeof body.run_id !== "string") {
+      return Response.json({ error: "run_id must be a string" }, { status: 400 });
+    }
     const tool = await findOnTool(d, wsId, body.name);
     if (!tool || !toolHasPlayback(tool)) return Response.json({ action: "original" });
-    return Response.json(await wrapPlay(d, tool, body.args || {}, origin, body.run_id));
+    const runId = typeof body.run_id === "string" ? body.run_id : undefined;
+    let played;
+    try {
+      played = await wrapPlay(d, wsId, tool, (body.args ?? {}) as Record<string, string>, origin, runId);
+    } catch (err) {
+      return Response.json({ error: `tool execution failed: ${(err as Error).message}` }, { status: 500 });
+    }
+    return Response.json(played);
   }
 
   if (url.pathname === "/mcp") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
-    if (req.method === "GET") return new Response("ok", { headers: { "content-type": "text/event-stream" } });
-    const parsed = await readJson(req);
+    // No server→client push channel exists, so a GET would have to answer
+    // 200 text/event-stream with a stream that never speaks MCP — clients
+    // waiting on it hang or misparse the body as a malformed event. The
+    // Streamable HTTP transport says such a server answers 405.
+    if (req.method === "GET") {
+      return new Response("method not allowed; this server accepts JSON-RPC over POST only", { status: 405 });
+    }
+    // Streamable HTTP: DELETE terminates the session. This server keeps no
+    // per-session state, so there is nothing to refuse and nothing to tear
+    // down — answering 202 (the same accepted-but-empty shape as a
+    // notification) lets a client close its session cleanly instead of
+    // parsing a non-JSON 404 as a protocol error.
+    if (req.method === "DELETE") {
+      return new Response(null, { status: 202 });
+    }
+    const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
     const rpc = parsed.value as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
+    if (typeof rpc.method !== "string") {
+      return Response.json(
+        { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request: method must be a string" } },
+        { status: 400 },
+      );
+    }
     const out = await handleMcp(d, wsId, rpc, origin);
     if (out === null) return new Response(null, { status: 202 });
     return Response.json(out);

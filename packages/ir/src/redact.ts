@@ -62,7 +62,7 @@ const SECRET_NOUNS = [
  * the compound spellings the anchored `^…$` version missed: user_password,
  * authToken, github_token, apiSecret, x_api_key, AWS_SECRET_ACCESS_KEY.
  */
-const SECRET_KEY_SUFFIX = new RegExp(`(?:${SECRET_NOUNS.join("|")})s?$`, "i");
+const SECRET_KEY_SUFFIX = new RegExp(`(?:${SECRET_NOUNS.join("|")})s?[0-9]?$`, "i");
 
 /**
  * Standalone credential shapes — things that are secret by their own syntax,
@@ -77,6 +77,9 @@ const SECRET_TOKEN_PATTERNS = [
   String.raw`\bgithub_pat_[A-Za-z0-9_]{20,}`,
   String.raw`\bxox[baprs]-[A-Za-z0-9-]{10,}`,
   String.raw`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`,
+  // The whole block, banner to END line. Matching only the banner left the
+  // base64 body sitting in the clear right under a "[REDACTED]" hat.
+  String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`,
   String.raw`-----BEGIN [A-Z ]*PRIVATE KEY-----`,
 ] as const;
 
@@ -190,11 +193,28 @@ function scanAssignments(s: string, onSecret: null | ((keyEnd: number, valueStar
     while (keyStart > floor && isKeyChar(s.charCodeAt(keyStart - 1))) keyStart--;
     if (keyStart === keyEnd) continue;
 
-    // Value: whitespace, then a run that stops at the next field.
+    // Value: whitespace, then a run that stops at the next field. A quoted
+    // value runs to its closing quote — commas inside it belong to the value
+    // ("password":"a,b","n":1 must keep n) and an escaped quote (`\"`) does
+    // not close it, or the tail of the secret survives in the clear.
     let valueStart = i + 1;
     while (valueStart < s.length && isSpace(s.charCodeAt(valueStart))) valueStart++;
     let valueEnd = valueStart;
-    while (valueEnd < s.length && !endsValue(s.charCodeAt(valueEnd))) valueEnd++;
+    const vq = s.charCodeAt(valueStart);
+    if (vq === 34 || vq === 39) {
+      valueEnd++;
+      while (valueEnd < s.length) {
+        const c = s.charCodeAt(valueEnd);
+        if (c === 92 /* \ */) {
+          valueEnd += 2;
+          continue;
+        }
+        valueEnd++;
+        if (c === vq) break;
+      }
+    } else {
+      while (valueEnd < s.length && !endsValue(s.charCodeAt(valueEnd))) valueEnd++;
+    }
     if (valueEnd === valueStart) continue;
 
     i = valueEnd - 1;

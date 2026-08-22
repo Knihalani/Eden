@@ -9,6 +9,7 @@ import { playCli, fulfillCli, prefetchCli, recallCli } from "./play";
 import { openTool, rejectTool } from "./open";
 import { mcpHeaders } from "./headers";
 import { doctor } from "./doctor";
+import { bench } from "./bench";
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -29,10 +30,11 @@ else if (cmd === "recall") await recallCli(rest);
 else if (cmd === "mcp-headers") mcpHeaders();
 else if (cmd === "doctor") process.exit(await doctor(rest));
 else if (cmd === "savings") await savings();
+else if (cmd === "bench") process.exit(await bench(rest));
 else {
   console.log(`eden ${cmd || ""}
 Point Eden at the agent you already have. We turn the repeating parts into one tool that cannot skip steps — and we show you what we refused.
 
-commands: login | wrap | hook | hookd | mcp | status | setup | drain | play | open | fulfill | doctor | savings`);
+commands: login | wrap | hook | hookd | mcp | status | setup | drain | play | open | fulfill | bench | doctor | savings`);
   process.exit(cmd ? 1 : 0);
 }

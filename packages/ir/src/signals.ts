@@ -77,7 +77,9 @@ export function valueOverlap(a: unknown, b: unknown): number {
     if (ca === cb) return 1;
     const ta = ca.replace(/[{}\[\]",:]/g, " ").split(/\s+/).filter(Boolean);
     const tb = cb.replace(/[{}\[\]",:]/g, " ").split(/\s+/).filter(Boolean);
-    if (!ta.length && !tb.length) return 1;
+    // Different shapes with no tokens at all — {} vs [] — are different
+    // values, not a perfect overlap. Everything-tokenless used to score 1.
+    if (!ta.length && !tb.length) return 0;
     const sb = new Set(tb);
     let hit = 0;
     for (const t of ta) if (sb.has(t)) hit++;

@@ -122,7 +122,21 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
   const out: ToolEvent[] = [];
   for (const e of events) {
     const prev = out[out.length - 1];
-    if (prev && prev.name === e.name && JSON.stringify(prev.args) === JSON.stringify(e.args)) {
+    // Two guards against silent under-execution. First, the comparison
+    // includes the command: hook recordings carry the command at the top
+    // level with args left {}, so name+args alone collapsed two *different*
+    // calls into one. Second, a mutating call never collapses, not even a
+    // byte-identical repeat — two identical POSTs are two writes (double
+    // recording by hook + proxy is only harmless for reads).
+    const cmd = e.command ?? "";
+    const mutating = cmd ? isMutatingCurl(cmd) || isMutatingGh(cmd) : false;
+    if (
+      prev &&
+      !mutating &&
+      prev.name === e.name &&
+      JSON.stringify(prev.args) === JSON.stringify(e.args) &&
+      (prev.command ?? "") === cmd
+    ) {
       out[out.length - 1] = e;
       continue;
     }
@@ -200,6 +214,14 @@ function dedupeCloudSteps(steps: IslandStep[]): IslandStep[] {
   const seen = new Set<string>();
   const out: IslandStep[] = [];
   for (const s of steps) {
+    // Only commuting (read) steps may collapse onto a parameterised shape.
+    // Two writes to the same shape — POST /issues/5/comments then
+    // POST /issues/7/comments — are two mutations; dropping the second
+    // silently under-executed the compiled tool.
+    if (!s.commute) {
+      out.push(s);
+      continue;
+    }
     const key = s.source_url ? parameterizeUrl(s.source_url) : s.name;
     if (seen.has(key)) continue;
     seen.add(key);

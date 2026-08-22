@@ -79,7 +79,8 @@ export type Contract = {
 export type Manifest = {
   /** Reported only. Not a ship gate (20b). */
   llmReduction: number;
-  latencyReduction: number;
+  /** Null when the clocks cannot be compared honestly (synthetic fixture, missing durations). */
+  latencyReduction: number | null;
   costReduction: number;
   skipRateBefore: number;
   skipRateAfter: number;

@@ -1,0 +1,201 @@
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openDb, type EdenDb } from "./db";
+import { playTool } from "./playback";
+import { wrapPlay } from "./wrap";
+
+/**
+ * Regression tests for audited fixes: approve-of-nothing, loud migration
+ * failures, workspace-scoped wrap caching and the bounded batch fan-out.
+ */
+
+describe("approve of an unknown or foreign tool is a 404", () => {
+  /**
+   * The UPDATE was scoped correctly — it just affected zero rows and then
+   * answered 303 anyway. A caller (or a mistyped workshop link) could believe
+   * a tool had been approved when nothing at all had happened.
+   */
+  let dir: string;
+  let dbFile: string;
+  let db: EdenDb;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeAll(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED"]) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+    dir = mkdtempSync(join(tmpdir(), "eden-approve-404-"));
+    dbFile = join(dir, "a.db");
+    process.env.EDEN_DB = dbFile;
+    db = await openDb(dbFile);
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES ('t-live', 'ws_local', 'live_tool', 'x', 'draft', '[]', '[]', 'fp-live')`,
+    );
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES ('t-foreign', 'ws_other', 'foreign_tool', 'x', 'draft', '[]', '[]', 'fp-foreign')`,
+    );
+  });
+
+  afterAll(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const post = (id: string, headers: Record<string, string> = {}) =>
+    // Cache-busted import: this suite owns a private server singleton (and
+    // therefore a private db connection), so removing our temp directory in
+    // afterAll cannot pull the file out from under the instance another test
+    // file already cached.
+    import(`./server?bust=${"approve-404"}`).then(({ handleFetch }) =>
+      handleFetch(new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, { method: "POST", headers })),
+    );
+
+  test("an existing workspace tool still approves with a 303 redirect", async () => {
+    const res = await post("t-live");
+    expect(res.status).toBe(303);
+    const row = await db.get<{ state: string; published: number }>(`SELECT state, published FROM tool WHERE id = 't-live'`);
+    expect(row?.state).toBe("on");
+    expect(Number(row?.published)).toBe(1);
+  });
+
+  test("a nonexistent id answers 404 instead of success", async () => {
+    const res = await post("no-such-tool");
+    expect(res.status).toBe(404);
+  });
+
+  test("the json caller gets a 404 body too, not an ok:true", async () => {
+    const res = await post("no-such-tool", { accept: "application/json" });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toBe("not found");
+  });
+
+  test("another workspace's id is equally invisible", async () => {
+    const res = await post("t-foreign");
+    expect(res.status).toBe(404);
+    const row = await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = 't-foreign'`);
+    expect(row?.state).toBe("draft");
+  });
+});
+
+describe("a failed tenant-key migration fails loudly", () => {
+  /**
+   * The migration must never block boot, but a silent catch meant an operator
+   * whose tenant-isolation re-key failed had degraded cross-tenant keying with
+   * zero signal. The failure now has to reach stderr.
+   */
+  test("boot logs the failure to stderr and continues", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-migrate-loud-"));
+    const path = join(dir, "legacy.db");
+    const { Database } = await import("bun:sqlite");
+    // Hand-build the pre-composite-key shape: cluster keyed on fingerprint
+    // alone, plus a v2 staging table that cannot accept the copied rows
+    // (its extra NOT NULL column has no default), which forces the migration
+    // down its failure path.
+    const raw = new Database(path);
+    raw.exec(
+      `CREATE TABLE cluster (fingerprint TEXT PRIMARY KEY, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT)`,
+    );
+    raw.exec(`INSERT INTO cluster VALUES ('fp', 'ws_a', 1, '[]', 'draft')`);
+    raw.exec(
+      `CREATE TABLE cluster_v2 (fingerprint TEXT, workspace_id TEXT, count INTEGER, steps TEXT, status TEXT, oops TEXT NOT NULL)`,
+    );
+    (raw as unknown as { close(): void }).close();
+
+    const errSpy = spyOn(console, "error");
+    try {
+      // Must resolve: startup proceeds despite the failed migration.
+      const d = await openDb(path);
+      const logged = errSpy.mock.calls.map((c) => c.map(String).join(" ")).join("\n");
+      expect(logged).toContain("cluster");
+      expect(logged).toContain("FAILED");
+      // Writes against the legacy table still work after the failed attempt.
+      await d.run(`INSERT OR REPLACE INTO cluster (fingerprint, workspace_id, count, steps, status) VALUES ('fp', 'ws_a', 2, '[]', 'knock')`);
+      const row = await d.get<{ count: number }>(`SELECT count FROM cluster WHERE fingerprint = 'fp' AND workspace_id = 'ws_a'`);
+      expect(Number(row?.count)).toBe(2);
+    } finally {
+      errSpy.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the wrap result cache is workspace-scoped", () => {
+  /**
+   * The cache key used to be `runId:toolId:issues`. Tool ids are UUIDs minted
+   * here, so exploiting it needs a bug elsewhere — but one tenant's cached
+   * facts answering another tenant's call would be a silent leak, so the
+   * workspace belongs in the key as defense-in-depth.
+   */
+  test("one workspace cannot hit another's cached play under the same run_id", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-wrap-ws-"));
+    try {
+      const db = await openDb(join(dir, "w.db"));
+      const sharedId = "shared-tool-id";
+      const playable = {
+        id: sharedId,
+        name: "bundle",
+        seen: "[]",
+        steps: JSON.stringify([
+          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/issues/{issue}" },
+        ]),
+      };
+      const failing = {
+        id: sharedId,
+        name: "bundle",
+        seen: "[]",
+        steps: JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }]),
+      };
+
+      const a1 = await wrapPlay(db, "ws_a", playable, { issue: "12" }, "http://127.0.0.1", "run-shared");
+      expect(a1.ok).toBe(true);
+
+      // Same run_id, same tool id, same args: the old unscoped key returned
+      // ws_a's cached success here.
+      const b = await wrapPlay(db, "ws_b", failing, { issue: "12" }, "http://127.0.0.1", "run-shared");
+      expect(b.ok).toBe(false);
+
+      // ws_a still hits its own cache.
+      const a2 = await wrapPlay(db, "ws_a", playable, { issue: "12" }, "http://127.0.0.1", "run-shared");
+      expect(a2.ok).toBe(true);
+      expect(a2.server_ms).toBe(0);
+      expect(a2.facts).toEqual(a1.facts);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("batch fan-out over a caller-supplied issues csv is bounded", () => {
+  /**
+   * playTool replayed every id in the CSV concurrently; a huge list (hostile
+   * or accidental) meant thousands of parallel fetches from one request. The
+   * cap is MAX_BATCH_ISSUES (100) inside playback.ts.
+   */
+  test("an oversized csv plays only the capped number of ids", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-cap-"));
+    try {
+      const db = await openDb(join(dir, "c.db"));
+      await db.run(
+        `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+         VALUES ('t-cap', 'ws_local', 'capped', 'x', 'on', ?, '[]', 'fp-cap')`,
+        [JSON.stringify([{ id: "s1", kind: "runner", name: "git.status", commute: true }])],
+      );
+      const tool = await db.get<{ id: string; name: string; steps: string }>(`SELECT id, name, steps FROM tool WHERE id = 't-cap'`);
+      const ids = Array.from({ length: 250 }, (_, i) => String(i + 1)).join(",");
+      const receipt = await playTool(db, tool!, { ids });
+      // One attempted step per id played: 250 requested, 100 played.
+      expect(receipt.steps_attempted).toBe(100);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
