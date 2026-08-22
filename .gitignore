@@ -40,3 +40,5 @@ apps/site/scripts/pocs/
 
 # Throwaway probe scripts used while auditing; never part of the tree.
 .probe/
+
+.tmp-*
