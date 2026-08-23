@@ -12,7 +12,10 @@ process.env.EDEN_DB = mkdtempSync(join(tmpdir(), "eden-validate-")) + "/validate
 const PREV_DEV = process.env.EDEN_DEV;
 process.env.EDEN_DEV = "1";
 
-const AUTH = { authorization: "Bearer eden_dev" };
+// Host rides along like a real client would send it — the server refuses
+// Host-less writes (RFC 7230 §5.4), which Bun's Request constructor does not
+// synthesize.
+const AUTH = { authorization: "Bearer eden_dev", host: "127.0.0.1" };
 
 afterEach(() => {
   // Tests below flip EDEN_DB; restore the dev flag's environment each time.

@@ -564,6 +564,50 @@ describe("TicketShip golden", () => {
     }
   });
 
+  test("EDEN_AUTO_APPROVE is scrubbed on a managed install unless EDEN_DEV=1", async () => {
+    const savedUrl = process.env.DATABASE_URL;
+    const savedDev = process.env.EDEN_DEV;
+    process.env.DATABASE_URL = "postgres://managed";
+    delete process.env.EDEN_DEV;
+    process.env.EDEN_AUTO_APPROVE = "1";
+    try {
+      const traces = await naiveTraces(10, 0);
+      const store = new Store(":memory:");
+      for (const t of traces) store.putTrace(t);
+      const world = createTicketShip({ llmMs: 0 });
+      const fetchHandler = createHandler({
+        store,
+        token: "k_managed",
+        registry: registryFrom(world.tools),
+        sandboxFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+        island: world.island,
+      });
+      const compiled = await fetchHandler(
+        new Request("http://x/v1/compile", {
+          method: "POST",
+          headers: { authorization: "Bearer k_managed", "content-type": "application/json" },
+          body: "{}",
+        }),
+      );
+      // Same compile, same PASS candidates — but nothing ships without a
+      // review: the env var was deleted before maybeAutoApprove looked at it.
+      const body = (await compiled.json()) as { shipped?: number; programs?: number };
+      expect(compiled.status).toBe(200);
+      expect(body.programs).toBeGreaterThanOrEqual(1);
+      expect(body.shipped).toBe(0);
+      expect(store.liveCount()).toBe(0);
+      expect(store.candidatesCount()).toBeGreaterThanOrEqual(1);
+      // And the trace-post path that compiles implicitly is covered by the
+      // same scrub, since it funnels through maybeAutoApprove too.
+    } finally {
+      if (savedUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = savedUrl;
+      if (savedDev === undefined) delete process.env.EDEN_DEV;
+      else process.env.EDEN_DEV = savedDev;
+      delete process.env.EDEN_AUTO_APPROVE;
+    }
+  });
+
   test("concurrent trace posts compile under a single flight", async () => {
     const store = new Store(":memory:");
     const fetchHandler = createHandler({ store, token: "eden_dev" });

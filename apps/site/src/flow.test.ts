@@ -254,7 +254,9 @@ describe("approve is workspace-gated", () => {
     delete process.env.EDEN_AUTO_APPROVE;
     try {
       const { handleFetch } = await import("./server");
-      const res = await handleFetch(new Request("http://127.0.0.1/v1/tools/nope/approve", { method: "POST" }));
+      const res = await handleFetch(
+        new Request("http://127.0.0.1/v1/tools/nope/approve", { method: "POST", headers: { host: "127.0.0.1" } }),
+      );
       expect(res.status).toBe(401);
     } finally {
       process.env.VERCEL = prev.VERCEL;

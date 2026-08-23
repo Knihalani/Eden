@@ -49,6 +49,12 @@
   --tap: 44px;
   --dash-inset: var(--space-page);
   --convert-clear: calc(5.75rem + env(safe-area-inset-bottom));
+
+  /* Product type scale: one page-title size, one section-heading size.
+     Marketing and auth stages keep their own deliberately larger display
+     sizes outside this scale. */
+  --title-page: 1.5rem;
+  --title-section: 1.25rem;
 }
 
 *,
@@ -1056,7 +1062,7 @@ button.signin {
 }
 
 .account-stage-prompt .account-copy h1 {
-  font-size: 1.625rem;
+  font-size: var(--title-page);
   max-width: none;
   letter-spacing: -0.03em;
 }
@@ -1203,7 +1209,7 @@ button.signin {
   min-height: var(--tap);
   padding: 0 0.75rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 2px;
   background: none;
   color: var(--muted);
   font-family: var(--font-ui);
@@ -1276,6 +1282,9 @@ button.signin {
 @media (min-width: 721px) {
   .app-body[data-nav="thin"] .app-nav {
     padding-inline: 0.4rem;
+    /* The rail holds five fixed items and never scrolls; visible overflow lets
+       a focused item's label reveal outside it (see the tooltip rule below). */
+    overflow: visible;
   }
 
   .app-body[data-nav="thin"] .app-nav a,
@@ -1295,6 +1304,28 @@ button.signin {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  /* Collapsed items keep their accessible names, but the label must not depend
+     on hover-only titles: keyboard focus reveals it beside the rail. */
+  .app-body[data-nav="thin"] .app-nav a:focus-visible .app-nav-label,
+  .app-body[data-nav="thin"] .app-nav-fold:focus-visible .app-nav-label {
+    position: absolute;
+    left: calc(100% + 0.6rem);
+    top: 50%;
+    translate: 0 -50%;
+    z-index: var(--z-dropdown);
+    width: max-content;
+    height: auto;
+    padding: var(--space-1) var(--space-2);
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 2px;
   }
 
   .app-body[data-nav="thin"] .app-nav a[data-hot]::after {
@@ -1605,7 +1636,7 @@ button.signin {
 .home-head h1 {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: 1.5rem;
+  font-size: var(--title-page);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -1709,11 +1740,18 @@ a.home-metric:focus-visible .home-metric-go {
   color: var(--ink);
 }
 
+/* Header is a normal flow row, so the range label can't collide with the
+   title at narrow widths the way the old absolute placement did. */
+.home-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
 .home-chart-range {
-  position: absolute;
-  top: 1.2rem;
-  right: var(--dash-inset);
   margin: 0;
+  flex: 0 0 auto;
   font-family: var(--font-ui);
   font-size: 0.875rem;
   font-weight: 500;
@@ -1812,7 +1850,7 @@ a.home-metric:focus-visible .home-metric-go {
   margin: 0;
   max-width: 28ch;
   font-family: var(--font-ui);
-  font-size: 1.5rem;
+  font-size: var(--title-section);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -2118,7 +2156,8 @@ a.home-metric:focus-visible .home-metric-go {
 .canvas-bar h1 {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: 1.25rem;
+  /* Section scale on purpose: the canvas title sits in a dense toolbar row. */
+  font-size: var(--title-section);
   font-weight: 600;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
@@ -2701,6 +2740,11 @@ a.home-metric:focus-visible .home-metric-go {
     overflow: hidden;
   }
 
+  /* Keep the pinned story's beats but halve the dead scroll on phones. */
+  .hero-pin {
+    height: 220vh;
+  }
+
   .hero .brand-name {
     display: none;
   }
@@ -2822,18 +2866,9 @@ a.home-metric:focus-visible .home-metric-go {
     border-bottom: 1px solid var(--line);
   }
 
-  .home-chart-range {
-    position: static;
-    margin: 0.2rem 0 0;
-  }
-
   .home-cols,
   .home-row {
     column-gap: var(--space-3);
-  }
-
-  .account-stage-prompt .account-copy h1 {
-    font-size: 1.45rem;
   }
 
   .setup-bar {

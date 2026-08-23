@@ -88,8 +88,10 @@ export function DashBoard() {
           </section>
 
           <section className="home-chart">
-            <h2>Compiled runs</h2>
-            <p className="home-chart-range">Last 7 days</p>
+            <div className="home-chart-head">
+              <h2>Compiled runs</h2>
+              <p className="home-chart-range">Last 7 days</p>
+            </div>
             <RunChart series={activity.series} />
           </section>
 

@@ -116,6 +116,10 @@ export function sanitizeManifest(v: unknown): { ok: true; value: ShadowManifestR
   for (const key of ["tokensSaved", "timeSavedMs"] as const) {
     if (rec[key] === undefined) continue;
     if (typeof rec[key] !== "number" || !Number.isFinite(rec[key])) return { ok: false, error: `manifest.${key} must be a finite number` };
+    // A negative saving is a cost, not a saving. Storing one would render as
+    // "(measured)" savings in the ledger — exactly the evidence-without-
+    // backing this module exists to refuse.
+    if ((rec[key] as number) < 0) return { ok: false, error: `manifest.${key} must not be negative` };
     out[key] = rec[key];
   }
   for (const key of ["tokensMeasured", "timeMeasured", "tokensEstimated"] as const) {

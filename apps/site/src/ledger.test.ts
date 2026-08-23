@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, type EdenDb } from "./db";
-import { buildLedger, ensureLedgerSchema, type SavingsLedger } from "./ledger";
+import { buildLedger, ensureLedgerSchema, sanitizeManifest, type SavingsLedger } from "./ledger";
 
 const ENV_KEYS = ["DATABASE_URL", "VERCEL", "EDEN_DEV", "EDEN_DB", "EDEN_SKIP_SEED"] as const;
 
@@ -74,6 +74,15 @@ describe("savings ledger", () => {
     expect(led.time_saved_ms_mean).toEqual({ value: 2000, measured: true });
     expect(led.per_tool.find((t) => t.name === "bare")?.tokens.measured).toBe(false);
     expect(led.per_tool.find((t) => t.name === "flagged_only")?.tokens.value).toBeNull();
+  });
+
+  test("negative savings figures are refused, not stored as measured wins", () => {
+    expect(sanitizeManifest({ tokensSaved: -42, tokensMeasured: true }).ok).toBe(false);
+    expect(sanitizeManifest({ timeSavedMs: -1, timeMeasured: true }).ok).toBe(false);
+    // Zero is honest (no measurable saving) and still accepted.
+    expect(sanitizeManifest({ tokensSaved: 0, tokensMeasured: true }).ok).toBe(true);
+    const bad = sanitizeManifest({ tokensSaved: -42 });
+    expect(bad.ok === false && bad.error).toContain("negative");
   });
 
   test("estimated-only tokens are reported as an estimate, never as measured savings", async () => {
