@@ -138,10 +138,8 @@ export async function shadowProgram(
   }
 
   const compiledLlm: number[] = [];
-  const compiledMs: number[] = [];
   const compiledCents: number[] = [];
   const naiveLlm: number[] = [];
-  const naiveMs: number[] = [];
   const naiveCents: number[] = [];
   const naiveTok: number[] = [];
   const compiledTok: number[] = [];
@@ -183,9 +181,6 @@ export async function shadowProgram(
   const islandDerivedOutput = outputDerivesFromIsland(program);
 
   for (const t of held) {
-    naiveLlm.push(t.llmCalls);
-    naiveMs.push(t.duration_ms);
-    naiveCents.push(t.cost_cents);
     if (t.complete === true) naiveComplete++;
     try {
       const run = await runProgram(program, t.input ?? {}, {
@@ -194,8 +189,16 @@ export async function shadowProgram(
         checkEnvelope: true,
         timeoutMs: 60_000,
       });
+      // Paired with the compiled pushes below, deliberately: the naive
+      // numbers used to be pushed for EVERY held trace while their compiled
+      // counterparts were pushed only on successful replay, so a PASS verdict
+      // (which can coexist with unvalidatable traces) compared means over
+      // DIFFERENT sample sets — llmReduction/costReduction biased by exactly
+      // the traces that could not answer. Every ratio must be computed over
+      // the same paired sample set: one push per side, or neither.
+      naiveLlm.push(t.llmCalls);
+      naiveCents.push(t.cost_cents);
       compiledLlm.push(run.stats.llmCalls);
-      compiledMs.push(run.stats.ms);
       compiledCents.push(run.stats.cents);
       const naiveT = traceTokens(t);
       const compiledT = compiledTokens(t, run.stats.llmCalls, hasIsland);
@@ -281,8 +284,12 @@ export async function shadowProgram(
   const llmReduction = reductionRatio(mean(naiveLlm), mean(compiledLlm));
   const timeSavedMs = timeMeasured && naiveTime.length ? mean(naiveTime) - mean(compiledTime) : null;
   const tokensSaved = tokensMeasured && naiveTok.length ? mean(naiveTok) - mean(compiledTok) : null;
-  const latencyReduction =
-    timeMeasured && compiledTime.length ? reductionRatio(mean(naiveTime), mean(compiledTime)) : reductionRatio(mean(naiveMs), mean(compiledMs));
+  // Synthetic fixture wall clock is not a measurement: when the per-step
+  // durations needed to compare tool time honestly are absent, there is no
+  // latency number — not one computed from naive wall clock vs compiled
+  // replay wall clock, which is exactly an estimate wearing measurement's
+  // clothes. Manifest.latencyReduction is number|null for this reason.
+  const latencyReduction = timeMeasured && compiledTime.length ? reductionRatio(mean(naiveTime), mean(compiledTime)) : null;
   const costReduction = reductionRatio(mean(naiveCents), mean(compiledCents));
   // One denominator for both rates: traces that could validate the program.
   const validatedN = Math.max(validated, 1);

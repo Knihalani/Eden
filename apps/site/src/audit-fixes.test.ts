@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, type EdenDb } from "./db";
 import { playTool } from "./playback";
 import { wrapPlay } from "./wrap";
+import { buildLedger, ensureLedgerSchema } from "./ledger";
 
 /**
  * Regression tests for audited fixes: approve-of-nothing, loud migration
@@ -197,5 +198,159 @@ describe("batch fan-out over a caller-supplied issues csv is bounded", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("state-changing requests with a forged Host are refused", () => {
+  /**
+   * The Origin and Sec-Fetch-Site checks are relative to an origin derived
+   * from the request itself (Bun fills req.url from Host), so a DNS-rebinding
+   * page — evil.test re-resolved onto this server — passed every check: it
+   * sends no Origin, `Sec-Fetch-Site: same-origin`, and a request-derived
+   * origin that matches itself. Host is the one header that still tells the
+   * truth about which name the client asked for.
+   */
+  let dir: string;
+  let dbFile: string;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED", "EDEN_PUBLIC_URL"]) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+    dir = mkdtempSync(join(tmpdir(), "eden-host-"));
+    dbFile = join(dir, "h.db");
+    process.env.EDEN_DB = dbFile;
+    process.env.EDEN_SKIP_SEED = "1";
+    await openDb(dbFile);
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const post = (url: string, headers: Record<string, string>) =>
+    // Cache-busted import: each suite here owns its private server/db
+    // singleton, same reason as the approve-404 suite above.
+    import(`./server?bust=${"host-" + Math.random().toString(36).slice(2)}`).then(({ handleFetch }) =>
+      handleFetch(new Request(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ run_id: "r1", events: [] }) })),
+    );
+
+  test("a rebinding page's shape — no Origin, same-site fetch marker, forged Host — is refused", async () => {
+    const res = await post("http://127.0.0.1:8787/v1/ingest", { host: "evil.test", "sec-fetch-site": "same-origin" });
+    expect(res.status).toBe(403);
+  });
+
+  test("forged Host with an Origin matching the request-derived origin is still refused", async () => {
+    const res = await post("http://evil.test:8787/v1/ingest", { host: "evil.test", origin: "http://evil.test:8787" });
+    expect(res.status).toBe(403);
+  });
+
+  test("a genuine loopback caller passes", async () => {
+    const res = await post("http://127.0.0.1:8787/v1/ingest", { host: "127.0.0.1:8787" });
+    expect(res.status).not.toBe(403);
+  });
+
+  test("EDEN_PUBLIC_URL admits the configured public host over http", async () => {
+    process.env.EDEN_PUBLIC_URL = "https://eden.example.com";
+    const allowed = await post("http://eden.example.com/v1/ingest", { host: "eden.example.com" });
+    expect(allowed.status).not.toBe(403);
+  });
+
+  test("without EDEN_PUBLIC_URL the same public host is not admitted", async () => {
+    const res = await post("http://eden.example.com/v1/ingest", { host: "eden.example.com" });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("approving persists the candidate's shadow manifest", () => {
+  /**
+   * tool.manifest had no writer at all, so /v1/ledger could never report
+   * measured savings. The manifest itself lives in the control plane's gate
+   * run — unreachable through any existing helper — so the approve route
+   * accepts it as an optional validated body field instead of fabricating
+   * numbers.
+   */
+  let dir: string;
+  let dbFile: string;
+  let db: Awaited<ReturnType<typeof openDb>>;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED"]) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+    dir = mkdtempSync(join(tmpdir(), "eden-manifest-"));
+    dbFile = join(dir, "m.db");
+    process.env.EDEN_DB = dbFile;
+    process.env.EDEN_SKIP_SEED = "1";
+    db = await openDb(dbFile);
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES ('t-m', 'ws_local', 'manifested', 'x', 'draft', '[]', '[]', 'fp-m')`,
+    );
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const postJson = (id: string, body?: unknown) =>
+    import(`./server?bust=${"manifest-" + Math.random().toString(36).slice(2)}`).then(({ handleFetch }) =>
+      handleFetch(
+        new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, {
+          method: "POST",
+          headers: { accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        }),
+      ),
+    );
+
+  test("a valid manifest is persisted and the ledger reports it as measured", async () => {
+    const res = await postJson("t-m", {
+      manifest: { tokensSaved: 1200, timeSavedMs: 4000, tokensMeasured: true, timeMeasured: true },
+    });
+    expect(res.status).toBe(200);
+    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    expect(row?.state).toBe("on");
+    expect(JSON.parse(row!.manifest!)).toEqual({ tokensSaved: 1200, timeSavedMs: 4000, tokensMeasured: true, timeMeasured: true });
+    const ledger = await buildLedger(db, "ws_local");
+    expect(ledger.tokens_saved_mean).toEqual({ value: 1200, measured: true, estimated: false });
+    expect(ledger.time_saved_ms_mean).toEqual({ value: 4000, measured: true });
+  });
+
+  test("an invalid manifest is refused without approving anything", async () => {
+    const res = await postJson("t-m", { manifest: { tokensSaved: "lots", tokensMeasured: true } });
+    expect(res.status).toBe(400);
+    // The refusal path exits before the route's own schema ensure, so provide
+    // the column here to assert nothing was written into it.
+    await ensureLedgerSchema(db);
+    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    expect(row?.state).toBe("draft");
+    expect(row?.manifest).toBeNull();
+  });
+
+  test("an unknown manifest field is rejected rather than silently dropped", async () => {
+    const res = await postJson("t-m", { manifest: { tokensSaved: 5, llmReduction: 9 } });
+    expect(res.status).toBe(400);
+    expect((await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = 't-m'`))?.state).toBe("draft");
+  });
+
+  test("the workshop's form approval carries no manifest and works unchanged", async () => {
+    const res = await postJson("t-m");
+    expect([200, 303]).toContain(res.status);
+    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    expect(row?.state).toBe("on");
+    expect(row?.manifest).toBeNull();
   });
 });

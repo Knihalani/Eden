@@ -73,8 +73,95 @@ export type RecompileOutcome =
   | { action: "no-compiler" }
   | { action: "no-shadow-gate" }
   | { action: "recompile-refused"; reasons: string[] }
+  | { action: "unplayable-refused"; reasons: string[] }
   | { action: "skipped"; verdict: CanaryVerdict; reasons: string[] }
   | { action: "queued"; draft_id: string; knock_id: string; verdict: CanaryVerdict };
+
+/**
+ * The step shape every other writer stores into tool.steps (cluster.ts's
+ * stepsToCompiled, server.ts's seed): playback's parse + buildDag path
+ * consumes exactly this — an ARRAY of steps keyed by id/name/url.
+ */
+type CompiledStepLike = {
+  id: string;
+  kind: string;
+  name: string;
+  commute?: boolean;
+  url?: string;
+  command?: string;
+  method?: string;
+};
+
+/**
+ * Project a recompiled StretchProgram onto the CompiledStep[] shape playback
+ * can actually run, using the drifted tool's own compiled steps as the URL
+ * source of truth: an IR tool step names a recorded call (`step.tool`), and
+ * the matching prior CompiledStep carries that call's url/kind/commute.
+ *
+ * This is deliberately strict. Playback has no semantics for island/loop/
+ * assert steps, and a tool step with no recorded URL cannot be replayed — so
+ * where conversion is not lossless we refuse to queue rather than store
+ * something that would 500 /v1/play the moment a human approved it.
+ *
+ * The full StretchProgram is intentionally not persisted: every existing
+ * consumer of the JSON columns expects their established shape (`steps` an
+ * array of CompiledStep, `seen` a string[] of names), and no free column can
+ * hold the artifact honestly. The projection below preserves what is
+ * replayable; the gate's own record remains with its caller.
+ */
+export function programToCompiledSteps(
+  program: unknown,
+  priorStepsRaw: string | null | undefined,
+): { ok: true; steps: CompiledStepLike[] } | { ok: false; reasons: string[] } {
+  let prior: unknown;
+  try {
+    prior = JSON.parse(priorStepsRaw || "[]");
+  } catch {
+    return { ok: false, reasons: ["drifted tool's stored steps are not valid JSON"] };
+  }
+  if (!Array.isArray(prior)) return { ok: false, reasons: ["drifted tool's stored steps are not an array"] };
+  const byName = new Map<string, CompiledStepLike>();
+  for (const s of prior as Array<Record<string, unknown>>) {
+    if (s && typeof s === "object" && typeof s.name === "string") byName.set(s.name, s as CompiledStepLike);
+  }
+
+  const steps = (program as { steps?: unknown } | null)?.steps;
+  if (!Array.isArray(steps)) return { ok: false, reasons: ["recompiled program carries no step list"] };
+
+  const reasons: string[] = [];
+  const projected: CompiledStepLike[] = [];
+  for (const s of steps) {
+    const rec = s as { id?: unknown; kind?: unknown; tool?: unknown } | null;
+    if (!rec || typeof rec !== "object") {
+      reasons.push("a recompiled step is not an object");
+      continue;
+    }
+    if (rec.kind !== "tool") {
+      reasons.push(`step ${String(rec.id ?? "?")} is ${String(rec.kind)}: playback has no runtime for it`);
+      continue;
+    }
+    const name = typeof rec.tool === "string" ? rec.tool : "";
+    const match = name ? byName.get(name) : undefined;
+    if (!match?.url) {
+      reasons.push(`step "${name || "?"}" has no recorded URL in the drifted tool to replay`);
+      continue;
+    }
+    projected.push({
+      id: `s${projected.length + 1}`,
+      kind: String(match.kind ?? "cloud_http"),
+      name: match.name,
+      ...(match.commute !== undefined ? { commute: match.commute } : {}),
+      url: match.url,
+      ...(match.command !== undefined ? { command: match.command } : {}),
+      ...(match.method !== undefined ? { method: match.method } : {}),
+    });
+  }
+  if (reasons.length || !projected.length) {
+    if (!reasons.length && !projected.length) reasons.push("recompiled program contains no replayable steps");
+    return { ok: false, reasons };
+  }
+  return { ok: true, steps: projected };
+}
 
 /** Marks a recompiled draft's lineage in its fingerprint. */
 const RC_MARK = "@rc";
@@ -207,18 +294,34 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
     return { action: "skipped", verdict: verdict.verdict, reasons: verdict.reasons ?? [] };
   }
 
-  // 6. PASS → queue a NEW draft beside the old version. The old row is left
-  // exactly as it is (still On, still serving) until a human approves the new
-  // one in the workshop; the knock points at the OLD id so the workshop pairs
-  // them. `state` is hardcoded to 'draft' below — nothing in the canary path
-  // may turn a tool On, whatever EDEN_AUTO_APPROVE says about mined drafts.
+  // 6. PASS → project the program onto what playback can actually run, and
+  // refuse to queue anything that would 500 /v1/play once a human approved it.
+  // Every consumer of tool.steps expects a CompiledStep[] array — storing the
+  // raw StretchProgram object here made the draft dead on arrival: playback
+  // buildDag calls steps.map and throws, the workshop renders zero steps.
+  const projection = programToCompiledSteps(program, tool.steps);
+  if (!projection.ok) {
+    console.error(`[eden-canary] ${tool.name}: refusing to queue unplayable recompile: ${projection.reasons.join("; ")}`);
+    return { action: "unplayable-refused", reasons: projection.reasons };
+  }
+  const compiledSteps = JSON.stringify(projection.steps);
+  const seq = Array.isArray((program as { sequence?: unknown }).sequence)
+    ? (program as { sequence: unknown[] }).sequence.map(String)
+    : [];
+
+  // OR IGNORE + re-read convergence, same as cluster.ts's draft insert: the
+  // suffix count below races concurrent ingests of the same fingerprint — two
+  // writers can both compute the same @rc<n> — and the (workspace_id,
+  // fingerprint) unique index is what actually enforces one row. A loser here
+  // used to throw and lose the whole knock until the next deopt; now it
+  // converges on whichever row survived.
   const suffixN =
     (
-      await db.get<{ n: number | string }>(
-        `SELECT COUNT(*) AS n FROM tool WHERE workspace_id = ? AND fingerprint LIKE ? ESCAPE '\\'`,
+      await db.get<{ c: number | string }>(
+        `SELECT COUNT(*) AS c FROM tool WHERE workspace_id = ? AND fingerprint LIKE ? ESCAPE '\\'`,
         [input.workspace_id, `${escapeLike(tool.fingerprint)}${RC_MARK}%`],
       )
-    )?.n ?? 0;
+    )?.c ?? 0;
   const rcFingerprint = `${tool.fingerprint}${RC_MARK}${Number(suffixN) + 1}`;
   let name = `${tool.name}_v2`;
   let n = 3;
@@ -226,21 +329,25 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
     name = `${tool.name.slice(0, 44)}_v${n++}`;
   }
   const draftId = crypto.randomUUID();
-  const rawSeq = (program as { sequence?: unknown }).sequence;
-  const seq = Array.isArray(rawSeq) ? rawSeq.map(String) : [];
   await db.run(
-    `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
+    `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
      VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, 2)`,
     [
       draftId,
       input.workspace_id,
       name,
       `Recompiled replacement for ${tool.name} after ${deopts} deopts in the last ${Math.round(windowMs / 3600_000)}h. Old version stays live until you approve this one.`,
-      JSON.stringify(program),
+      compiledSteps,
       JSON.stringify(seq),
       rcFingerprint,
     ],
   );
+  // The surviving row wins even if a concurrent ingest landed first.
+  const queued = (await db.get<{ id: string }>(`SELECT id FROM tool WHERE workspace_id = ? AND fingerprint = ?`, [
+    input.workspace_id,
+    rcFingerprint,
+  ]))?.id;
+  const finalDraftId = queued || draftId;
   const knockId = crypto.randomUUID();
   const attemptRow = await db.get<{ n: number | string }>(
     `SELECT COUNT(*) AS n FROM knock WHERE workspace_id = ? AND tool_id = ?`,
@@ -252,7 +359,7 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
     tool.id,
     Number(attemptRow?.n ?? 0) + 1,
   ]);
-  return { action: "queued", draft_id: draftId, knock_id: knockId, verdict: "PASS" };
+  return { action: "queued", draft_id: finalDraftId, knock_id: knockId, verdict: "PASS" };
 }
 
 /**
@@ -268,11 +375,23 @@ export async function maybeRecompileWorkspace(
 ): Promise<void> {
   const windowMs = deps.windowMs ?? 24 * 60 * 60_000;
   const rows = await db
-    .all<{ tool_id: string }>(
-      `SELECT DISTINCT tool_id FROM deopt_event WHERE workspace_id = ? AND created_at >= ? LIMIT 5`,
+    .all<{ tool_id: string; last_deopt: number }>(
+      // Newest first: LIMIT without ORDER BY leaves the set to the planner's
+      // mood, so a hot ledger could starve the tools a human most needs told
+      // about. Grouped rather than DISTINCT-ordered: Postgres requires every
+      // DISTINCT ORDER BY expression in the select list, and this shape is
+      // portable across both drivers.
+      `SELECT tool_id, MAX(created_at) AS last_deopt FROM deopt_event
+        WHERE workspace_id = ? AND created_at >= ?
+        GROUP BY tool_id ORDER BY last_deopt DESC LIMIT 5`,
       [workspaceId, Date.now() - windowMs],
     )
-    .catch(() => [] as Array<{ tool_id: string }>);
+    .catch((err: unknown) => {
+      // Swallowed by contract (ingest must not wait on the canary), but a
+      // silently dead sweep looks exactly like no drift anywhere.
+      console.error("[eden-canary] deopt ledger sweep failed:", err);
+      return [] as Array<{ tool_id: string; last_deopt: number }>;
+    });
   for (const row of rows) {
     try {
       await maybeRecompile(db, { ...deps, workspace_id: workspaceId, tool_id: row.tool_id });

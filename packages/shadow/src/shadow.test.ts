@@ -493,6 +493,59 @@ describe("skip rates share one denominator", () => {
     // Nothing validated → INCONCLUSIVE long before rates are computed.
     expect(result.verdict).toBe("INCONCLUSIVE");
   });
+
+  test("unvalidatable traces are excluded from BOTH sides of every ratio", async () => {
+    // The naive llm/ms/cents used to be pushed for every held trace while the
+    // compiled counterparts were pushed only on successful replay, so
+    // llmReduction/costReduction compared means over DIFFERENT sample sets —
+    // PASS verdicts coexisting with unvalidatable traces carried biased
+    // headline numbers. Now the pushes are paired: a trace that cannot answer
+    // contributes to neither side, so changing its numbers changes nothing.
+    const stripped = new Set(["s1", "s3"]);
+    const world = createTicketShip({ llmMs: 0 });
+    const reg = registryFrom(world.tools);
+    const shadowWith = async (inflateUnvalidatable: boolean) => {
+      const held = (await traces(6, 0)).map((t) =>
+        stripped.has(t.id)
+          ? {
+              ...t,
+              events: t.events.filter((e) => e.name !== "fetchDetails"),
+              ...(inflateUnvalidatable ? { llmCalls: 10_000, cost_cents: 999_999 } : {}),
+            }
+          : t,
+      );
+      return shadowProgram(ticketShipProgram(), held, {
+        registry: reg,
+        registryFor: (t) =>
+          stripped.has(t.id) ? replayRegistry(registryFrom(world.tools), t) : registryFrom(createTicketShip({ llmMs: 0 }).tools),
+        island: world.island,
+        allowSideEffects: true,
+      });
+    };
+    const baseline = await shadowWith(false);
+    const inflated = await shadowWith(true);
+    // Identical arithmetic over identical paired samples → exactly equal,
+    // not approximately: the unvalidatable traces' numbers appear nowhere.
+    expect(inflated.manifest!.llmReduction).toBe(baseline.manifest!.llmReduction);
+    expect(inflated.manifest!.costReduction).toBe(baseline.manifest!.costReduction);
+  });
+
+  test("latencyReduction is absent when time was not measured", async () => {
+    // The fallback used to compute a reduction from naive wall clock vs
+    // compiled replay wall clock — the synthetic fixture clock wearing
+    // measurement's clothes. Honest numbers or absent: null, like timeSavedMs.
+    const held = await traces(6, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.manifest?.timeMeasured).toBe(false);
+    expect(result.manifest?.timeSavedMs).toBeNull();
+    expect(result.manifest?.latencyReduction).toBeNull();
+  });
 });
 
 describe("island-derived output comparison", () => {

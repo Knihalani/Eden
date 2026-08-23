@@ -5,7 +5,7 @@ import { playTool } from "./playback";
 import { handleForge } from "./forge";
 import { escapeHtml, layout } from "./html";
 import { findOnTool, wrapPlay, toolHasPlayback } from "./wrap";
-import { buildLedger, type LedgerFigure } from "./ledger";
+import { buildLedger, ensureLedgerSchema, sanitizeManifest, type LedgerFigure } from "./ledger";
 import type { ToolEvent } from "@eden/core";
 
 /** A malformed PORT must fall back, not hand NaN to Bun.serve. */
@@ -149,6 +149,52 @@ function crossOriginWrite(req: Request, selfOrigin: string): boolean {
 }
 
 /**
+ * Host names a caller that really means *this* deployment will have used.
+ *
+ * Loopback variants, plus the configured public origin when the environment
+ * names one (EDEN_PUBLIC_URL, or VERCEL_URL on Vercel). selfOrigin is
+ * deliberately NOT trusted here: Bun derives req.url from the Host header,
+ * so echoing it back would validate whatever name an attacker asked for.
+ */
+function allowedHostNames(): Set<string> {
+  const hosts = new Set(["127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"]);
+  const candidates = [process.env.EDEN_PUBLIC_URL, process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ""];
+  for (const candidate of candidates) {
+    try {
+      if (candidate) hosts.add(new URL(candidate).hostname.toLowerCase());
+    } catch {
+      /* a malformed configured origin simply adds nothing */
+    }
+  }
+  return hosts;
+}
+
+/**
+ * The cross-origin checks above are relative to an origin derived from the
+ * request itself, so they do not survive DNS rebinding: a page on
+ * http://evil.test whose hostname re-resolves to this server sends no Origin,
+ * `Sec-Fetch-Site: same-origin`, and a request-derived origin that matches
+ * its own — every check passes. The one header that still tells the truth is
+ * Host, which carries the name the client *asked* for rather than the address
+ * it reached (hookd's hostIsLoopback makes the same argument).
+ *
+ * HTTPS requests are exempt: TLS binds the name, and a rebinding page cannot
+ * present a valid certificate for one it rebound. A missing Host is
+ * HTTP/1.0 or a raw socket, not a browser — benign, as in hookd.
+ */
+function hostHeaderMatchesDeployment(req: Request): boolean {
+  const raw = req.headers.get("host");
+  if (!raw) return true;
+  try {
+    if (new URL(req.url).protocol === "https:") return true;
+  } catch {
+    /* fall through to the check below */
+  }
+  const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+  return allowedHostNames().has(host);
+}
+
+/**
  * One wording rule for the ledger, on the page and in the endpoint: a number
  * shows only where evidence backs it. No measurement means "not measured" —
  * never zero, and an estimate is always labelled as one.
@@ -175,8 +221,14 @@ export async function handleFetch(req: Request): Promise<Response> {
   if (url.pathname === "/health") return Response.json({ ok: true });
 
   // One gate for every write, rather than per-route: a route added later is
-  // covered by default instead of by remembering.
-  if (req.method !== "GET" && req.method !== "HEAD" && crossOriginWrite(req, url.origin)) {
+  // covered by default instead of by remembering. Host validation rides the
+  // same gate and the same response class — to a rebinding page it is just
+  // another cross-origin refusal.
+  if (
+    req.method !== "GET" &&
+    req.method !== "HEAD" &&
+    (crossOriginWrite(req, url.origin) || !hostHeaderMatchesDeployment(req))
+  ) {
     return new Response("cross-origin write refused", { status: 403 });
   }
 
@@ -420,7 +472,38 @@ export async function handleFetch(req: Request): Promise<Response> {
       if (req.headers.get("accept")?.includes("json")) return Response.json({ error: "not found" }, { status: 404 });
       return new Response("not found", { status: 404 });
     }
-    await d.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ? AND workspace_id = ?`, [approve[1], wsId]);
+    // The savings ledger reads tool.manifest, and this route is the only place
+    // a tool flips to 'on' — but the shadow manifest itself lives in the
+    // control plane's gate run, which is not reachable from here through any
+    // existing helper. Rather than fabricate numbers, the route accepts the
+    // candidate's manifest as an optional JSON body field, validates it
+    // against the ShadowManifest shape (sanitizeManifest rejects unknown
+    // fields and mistyped values), and persists it verbatim. A form approval
+    // (urlencoded body) carries no manifest and approves exactly as before;
+    // an invalid one is refused rather than half-stored.
+    let manifestJson: string | null = null;
+    if ((req.headers.get("content-type") || "").includes("application/json")) {
+      const parsed = readJsonObject(await readJson(req));
+      if (!parsed.ok) return parsed.res;
+      if (parsed.value.manifest !== undefined && parsed.value.manifest !== null) {
+        const m = sanitizeManifest(parsed.value.manifest);
+        if (!m.ok) {
+          console.error(`[eden] approve ${approve[1]}: refusing bad manifest: ${m.error}`);
+          return Response.json({ error: `invalid manifest: ${m.error}` }, { status: 400 });
+        }
+        manifestJson = JSON.stringify(m.value);
+      }
+    }
+    await ensureLedgerSchema(d);
+    if (manifestJson) {
+      await d.run(`UPDATE tool SET state = 'on', published = 1, manifest = ? WHERE id = ? AND workspace_id = ?`, [
+        manifestJson,
+        approve[1],
+        wsId,
+      ]);
+    } else {
+      await d.run(`UPDATE tool SET state = 'on', published = 1 WHERE id = ? AND workspace_id = ?`, [approve[1], wsId]);
+    }
     if (req.headers.get("accept")?.includes("json")) return Response.json({ ok: true });
     // Encoded: the raw segment came off the request path, and an id carrying
     // `?` or `#` would otherwise rewrite which URL the form lands on.

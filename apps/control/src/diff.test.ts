@@ -1,8 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { withVersion, type StretchProgram } from "@eden/ir";
 import { createHandler } from "./server";
 import { Store } from "./store";
 
+// Org binding: a DATABASE_URL in .env makes the control plane treat itself as
+// managed, where the permissive legacy fallback requires explicit opt-in.
+// These tests drive state-changing routes without org bindings, so pin dev.
+const PREV_DEV = process.env.EDEN_DEV;
+process.env.EDEN_DEV = "1";
+afterAll(() => {
+  process.env.EDEN_DEV = PREV_DEV;
+});
 const program = (over: Partial<StretchProgram> = {}): StretchProgram =>
   withVersion({
     id: "t",

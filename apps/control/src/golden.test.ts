@@ -1,6 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { pushPrev, Store } from "./store";
 import { createHandler } from "./server";
+
+// Org binding: a DATABASE_URL in .env makes the control plane treat itself as
+// managed, where the permissive legacy fallback requires explicit opt-in.
+// These tests approve/pause without org bindings, so pin dev like
+// apps/site/src/validation.test.ts does.
+const PREV_DEV = process.env.EDEN_DEV;
+process.env.EDEN_DEV = "1";
+afterAll(() => {
+  process.env.EDEN_DEV = PREV_DEV;
+});
 import { compileTraces } from "@eden/compile";
 import { shadowProgram, replayRegistry } from "@eden/shadow";
 import { registryFrom } from "@eden/runtime";

@@ -177,7 +177,7 @@ const WRITE_VERB = "POST|PATCH|PUT|DELETE";
 const METHOD_FLAG = new RegExp(String.raw`(?:^|\s)-{1,2}(?:method|X)[=\s]*(${WRITE_VERB})\b`, "i");
 
 /** Flags that carry a request body, which implies a write even with no verb. */
-const BODY_FLAG = /(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:[=\s]|$)/;
+const BODY_FLAG = /(?:^|\s)(?:-f|-F|--field|--raw-field|--input|-b|--body|--body-file)(?:[=\s]|$)/;
 
 /**
  * The `;`/newline-delimited shell segment containing offset `at`.
@@ -209,11 +209,13 @@ function segmentIsMutatingGh(command: string, at: number): boolean {
  * write that looks like nothing at all to the HTTP-verb heuristics.
  */
 const GH_MUTATING_VERBS: Record<string, Set<string>> = {
-  pr: new Set(["close", "merge", "edit", "reopen", "ready", "pin"]),
-  issue: new Set(["close", "delete", "edit", "pin"]),
-  repo: new Set(["delete", "archive", "edit"]),
-  run: new Set(["cancel", "rerun"]),
-  release: new Set(["delete"]),
+  pr: new Set(["close", "comment", "create", "edit", "lock", "merge", "pin", "ready", "reopen", "revert", "transfer", "unlock", "unpin"]),
+  issue: new Set(["close", "comment", "create", "delete", "edit", "lock", "pin", "reopen", "transfer", "unlock", "unpin"]),
+  repo: new Set(["archive", "create", "delete", "edit", "rename", "star", "unarchive", "unstar"]),
+  run: new Set(["cancel", "rerun", "delete"]),
+  release: new Set(["create", "delete", "edit", "upload", "unarchive"]),
+  gist: new Set(["create", "delete", "edit", "rename"]),
+  label: new Set(["clone", "create", "delete", "edit"]),
 };
 
 /**

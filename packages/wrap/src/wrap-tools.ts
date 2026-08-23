@@ -426,6 +426,11 @@ function emitTrace(
 ): void {
   if (!run.events.length) return;
   let events = run.events;
+  // Whether this pass actually consumed events. A partitioned pass that claims
+  // nothing of its own must not touch the shared warning state: another
+  // invocation is mid-flight and resetting its budget/window under it would
+  // corrupt the trace it is still building.
+  let consumed = true;
   try {
     if (owner) {
       const mine: TraceEvent[] = [];
@@ -442,7 +447,10 @@ function emitTrace(
         if (!rec || (rec.done && rec.finishedAt <= owner.startedAt)) mine.push(ev);
         else rest.push(ev);
       }
-      if (!mine.length) return;
+      if (!mine.length) {
+        consumed = false;
+        return;
+      }
       run.events = rest;
       events = mine;
     }
@@ -451,14 +459,16 @@ function emitTrace(
     /* observing a call must never fail it */
   } finally {
     if (!owner) run.events = [];
-    run.warnings = [];
-    run.seenSignals.clear();
-    run.firstWarningAt = undefined;
-    run.warnBudget = undefined;
-    run.evidence = undefined;
-    run.tripped = false;
-    resetUsage(run);
-    run.t0 = performance.now();
+    if (consumed) {
+      run.warnings = [];
+      run.seenSignals.clear();
+      run.firstWarningAt = undefined;
+      run.warnBudget = undefined;
+      run.evidence = undefined;
+      run.tripped = false;
+      resetUsage(run);
+      run.t0 = performance.now();
+    }
   }
 }
 

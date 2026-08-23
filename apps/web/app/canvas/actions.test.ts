@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 
 /**
  * approveTool / pauseTool / resumeTool / dismissRequest drive the embedded
@@ -15,6 +15,7 @@ const authState: { userId: string | null; orgId: string | null; sessionStatus: s
 };
 
 let wrapCalls = 0;
+const lastHeaders: Record<string, string> = {};
 
 mock.module("@clerk/nextjs/server", () => ({
   auth: async () => ({
@@ -31,11 +32,33 @@ mock.module("next/cache", () => ({
 mock.module("@/lib/wrap", () => ({
   wrapFetch: () => (req: Request) => {
     wrapCalls++;
+    req.headers.forEach((v, k) => {
+      lastHeaders[k] = v;
+    });
     return Promise.resolve(Response.json({ ok: true }));
   },
 }));
 
-const { approveTool, pauseTool, resumeTool, dismissRequest } = await import("./actions");
+const { approveTool, pauseTool, resumeTool, dismissRequest, bindWorkspaceOrg } = await import("./actions");
+
+/**
+ * The credential helper reads the environment at call time, so pin it for the
+ * whole file: bun auto-loads this repo's .env (which carries DATABASE_URL),
+ * and under those managed markers edenKey() correctly refuses eden_dev.
+ */
+const savedEnv = Object.fromEntries(
+  ["DATABASE_URL", "VERCEL", "EDEN_API_KEY", "EDEN_DEV"].map((k) => [k, process.env[k]]),
+);
+delete process.env.DATABASE_URL;
+delete process.env.VERCEL;
+process.env.EDEN_API_KEY = "test_key";
+
+afterAll(() => {
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+});
 
 function signedIn() {
   authState.userId = "user_1";
@@ -81,5 +104,42 @@ describe("canvas server actions auth gate", () => {
     const out = await approveTool("tool_1");
     expect(out.ok).toBe(true);
     expect(wrapCalls).toBe(1);
+  });
+
+  test("the action carries the caller's org id as x-eden-org", async () => {
+    signedIn();
+    authState.orgId = "org_9";
+    const out = await approveTool("tool_1");
+    expect(out.ok).toBe(true);
+    expect(lastHeaders["x-eden-org"]).toBe("org_9");
+  });
+
+  test("bindWorkspaceOrg registers the caller's org", async () => {
+    signedIn();
+    authState.orgId = "org_7";
+    const out = await bindWorkspaceOrg();
+    expect(out.ok).toBe(true);
+    expect(lastHeaders["x-eden-org"]).toBe("org_7");
+  });
+
+  test("no eden_dev fallback on a managed install without EDEN_API_KEY", async () => {
+    const env = { DATABASE_URL: process.env.DATABASE_URL, VERCEL: process.env.VERCEL, EDEN_API_KEY: process.env.EDEN_API_KEY, EDEN_DEV: process.env.EDEN_DEV };
+    try {
+      process.env.DATABASE_URL = "postgres://managed";
+      delete process.env.VERCEL;
+      delete process.env.EDEN_API_KEY;
+      delete process.env.EDEN_DEV;
+      signedIn();
+      const callsBefore = wrapCalls;
+      const out = await approveTool("tool_1");
+      expect(out.ok).toBe(false);
+      expect(out.error).toContain("EDEN_API_KEY");
+      expect(wrapCalls).toBe(callsBefore);
+    } finally {
+      for (const [k, v] of Object.entries(env)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   });
 });

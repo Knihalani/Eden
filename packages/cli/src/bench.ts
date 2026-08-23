@@ -54,11 +54,12 @@ export type BenchMetric = {
 export type BenchReport = {
   verdict: Verdict;
   n: number;
-  p_value: number;
+  /** null when the permutation test returned a non-finite p (see notes). */
+  p_value: number | null;
   ci: {
-    point: number;
-    lo: number;
-    hi: number;
+    point: number | null;
+    lo: number | null;
+    hi: number | null;
     relative: { point: number | null; lo: number | null; hi: number | null };
     unit: string;
   };
@@ -314,10 +315,16 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
     tokens = { delta: null, measured: false };
     notes.push("tokens not measured: some traces carry no scraped usage, so the delta would mix instruments.");
   } else {
-    const estimated = hasIsland && tokenPairs.some((p) => p.y > 0);
-    tokens = { delta: meanOf(tokenPairs.map((p) => p.y - p.x)), measured: true, estimated };
-    if (estimated) {
-      notes.push("tokens estimated: island usage is scaled from the recording, not metered — it cannot gate a ship decision alone.");
+    const raw = meanOf(tokenPairs.map((p) => p.y - p.x));
+    if (!Number.isFinite(raw)) {
+      tokens = { delta: null, measured: false };
+      notes.push("tokens not measured: the computed delta came back non-finite.");
+    } else {
+      const estimated = hasIsland && tokenPairs.some((p) => p.y > 0);
+      tokens = { delta: raw, measured: true, estimated };
+      if (estimated) {
+        notes.push("tokens estimated: island usage is scaled from the recording, not metered — it cannot gate a ship decision alone.");
+      }
     }
   }
 
@@ -329,19 +336,36 @@ export async function collectBench(traces: StretchTrace[], opts: BenchOpts = {})
     time = { delta: null, measured: false };
     notes.push("time not measured: some events carry no duration_ms, so the delta would mix clocks.");
   } else {
-    time = { delta: meanOf(timePairs.map((p) => p.y - p.x)), measured: true };
+    const raw = meanOf(timePairs.map((p) => p.y - p.x));
+    if (!Number.isFinite(raw)) {
+      time = { delta: null, measured: false };
+      notes.push("time not measured: the computed delta came back non-finite.");
+    } else {
+      time = { delta: raw, measured: true };
+    }
   }
 
   notes.push(...decision.reasons);
 
+  // Honest numbers or absent: a non-finite statistic must never stringify to
+  // null silently — it becomes an explicit null plus a note saying why.
+  const p = Number.isFinite(decision.p) ? decision.p : null;
+  if (p === null) notes.push("p_value not measured: the permutation test returned a non-finite p.");
+  const point = Number.isFinite(decision.delta.point) ? decision.delta.point : null;
+  const lo = Number.isFinite(decision.delta.lo) ? decision.delta.lo : null;
+  const hi = Number.isFinite(decision.delta.hi) ? decision.delta.hi : null;
+  if (point === null || lo === null || hi === null) {
+    notes.push("ci not measured: the bootstrap interval returned non-finite bounds.");
+  }
+
   return {
     verdict: decision.verdict,
     n: decision.blocks,
-    p_value: decision.p,
+    p_value: p,
     ci: {
-      point: decision.delta.point,
-      lo: decision.delta.lo,
-      hi: decision.delta.hi,
+      point,
+      lo,
+      hi,
       relative: {
         point: Number.isFinite(decision.relative.point) ? decision.relative.point : null,
         lo: Number.isFinite(decision.relative.lo) ? decision.relative.lo : null,
