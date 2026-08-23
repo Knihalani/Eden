@@ -5,6 +5,7 @@ import { playTool } from "./playback";
 import { handleForge } from "./forge";
 import { escapeHtml, layout } from "./html";
 import { findOnTool, wrapPlay, toolHasPlayback } from "./wrap";
+import { buildLedger, type LedgerFigure } from "./ledger";
 import type { ToolEvent } from "@eden/core";
 
 /** A malformed PORT must fall back, not hand NaN to Bun.serve. */
@@ -147,6 +148,17 @@ function crossOriginWrite(req: Request, selfOrigin: string): boolean {
   }
 }
 
+/**
+ * One wording rule for the ledger, on the page and in the endpoint: a number
+ * shows only where evidence backs it. No measurement means "not measured" —
+ * never zero, and an estimate is always labelled as one.
+ */
+function savingsWord(f: LedgerFigure & { estimated?: boolean }): string {
+  if (f.measured && f.value != null) return `${Math.round(f.value)} (measured)`;
+  if (f.estimated && f.value != null) return `${Math.round(f.value)} (estimated)`;
+  return "not measured";
+}
+
 export async function handleFetch(req: Request): Promise<Response> {
   // Same predicate as authentication uses: auto-approve must be impossible
   // anywhere a key is actually required, not only on Vercel.
@@ -226,10 +238,17 @@ export async function handleFetch(req: Request): Promise<Response> {
     };
     const drafts = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'draft'`, [wsId])) || { c: 0 };
     const on = (await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId])) || { c: 0 };
+    // The honest savings ledger, summarized in the same spare style. Absent
+    // evidence renders as "not measured" — the dashboard must not say more
+    // than the receipts behind it do.
+    const ledger = await buildLedger(d, wsId);
     const lines = [
       `<p class="muted">Eden is watching the agent work. Same stretch twice → a draft in Workshop. Approve only here — a key never turns a tool On.</p>`,
       `<div class="row">Drafts waiting <strong>${drafts.c}</strong></div>`,
       `<div class="row">Tools on <strong>${on.c}</strong></div>`,
+      `<div class="row">Ledger <a href="/v1/ledger">/v1/ledger</a> · ${ledger.runs} runs · ${ledger.live} live</div>`,
+      `<div class="row">Tokens saved <strong>${escapeHtml(savingsWord(ledger.tokens_saved_mean))}</strong></div>`,
+      `<div class="row">Time saved <strong>${escapeHtml(savingsWord(ledger.time_saved_ms_mean))}</strong></div>`,
     ];
     if (usage.runs > 0) {
       lines.push(
@@ -354,6 +373,16 @@ export async function handleFetch(req: Request): Promise<Response> {
       })),
       knock: knock ? { message: `draft ${knock.tool_id}`, tool_id: knock.tool_id } : null,
     });
+  }
+
+  // The honest savings ledger: one per-workspace aggregate where every number
+  // is backed by evidence or explicitly "not measured". Same Bearer gate as
+  // every sibling /v1 read, and no-store — a ledger is evidence, not a
+  // cacheable opinion.
+  if (url.pathname === "/v1/ledger") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const ledger = await buildLedger(d, wsId);
+    return Response.json(ledger, { headers: { "cache-control": "no-store" } });
   }
 
   if (url.pathname === "/v1/knock/reject" && req.method === "POST") {

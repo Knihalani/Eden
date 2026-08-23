@@ -1,4 +1,5 @@
 import type { EdenDb } from "./db";
+import { maybeRecompileWorkspace } from "./canary";
 import {
   compileStepUrl,
   cutIslands,
@@ -56,6 +57,16 @@ export async function ingest(
     );
   }
   await rememberIssues(db, workspaceId, events);
+  // Fire-and-forget drift canary: after the events are persisted, sweep this
+  // workspace's deopt ledger and queue a recompiled draft for any tool that
+  // has drifted enough. It is guarded twice over so ingest latency stays
+  // exactly what it was — the call is not awaited, and a synchronous throw
+  // before the first await cannot escape either.
+  try {
+    void maybeRecompileWorkspace(db, workspaceId).catch(() => undefined);
+  } catch {
+    /* ingest must never wait on the canary */
+  }
   // Sampled housekeeping, same shape as the result_cache sweep. tool_event
   // and stretch are mining inputs, not records queried forever; without a
   // ceiling a long-lived install grew both without bound. TTL-based, because

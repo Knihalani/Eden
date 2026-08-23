@@ -900,3 +900,75 @@ describe("the control plane is not reachable from a web page", () => {
     expect(store.tool("live_ood")?.state).toBe("live");
   });
 });
+
+describe("list endpoints limit param", () => {
+  function handler() {
+    const store = new Store(":memory:");
+    return { store, fetchHandler: createHandler({ store, token: "eden_dev" }) };
+  }
+
+  const auth = { authorization: "Bearer eden_dev" };
+
+  test("traces GET defaults to 100 and clamps over-cap requests", async () => {
+    const { store, fetchHandler } = handler();
+    for (let i = 0; i < 1100; i++) {
+      // Vary the events: putTrace dedupes on a content hash that ignores id.
+      store.putTrace({ id: `t${i}`, events: [{ name: `x${i}` }] } as unknown as StretchTrace);
+    }
+    const def = await fetchHandler(new Request("http://x/v1/traces", { headers: auth }));
+    expect(def.status).toBe(200);
+    expect(((await def.json()) as { traces: unknown[] }).traces.length).toBe(100);
+
+    const capped = await fetchHandler(new Request("http://x/v1/traces?limit=99999", { headers: auth }));
+    expect(((await capped.json()) as { traces: unknown[] }).traces.length).toBe(1000);
+
+    const exact = await fetchHandler(new Request("http://x/v1/traces?limit=7", { headers: auth }));
+    expect(((await exact.json()) as { traces: unknown[] }).traces.length).toBe(7);
+  });
+
+  test("receipts GET honours limit without breaking tool scoping", async () => {
+    const { store, fetchHandler } = handler();
+    for (let i = 0; i < 1100; i++) {
+      store.putReceipt({
+        tool_id: i % 2 === 0 ? "tool_a" : "tool_b",
+        version: "1",
+        ms: 1,
+        llm_calls: 0,
+        cents: 0,
+        ok: 1,
+        payload: "{}",
+      });
+    }
+    const def = await fetchHandler(new Request("http://x/v1/receipts", { headers: auth }));
+    expect(def.status).toBe(200);
+    expect(((await def.json()) as { receipts: unknown[] }).receipts.length).toBe(100);
+
+    const capped = await fetchHandler(new Request("http://x/v1/receipts?limit=5000", { headers: auth }));
+    expect(((await capped.json()) as { receipts: unknown[] }).receipts.length).toBe(1000);
+
+    // Scoping by tool still applies on top of the limit.
+    const scoped = await fetchHandler(new Request("http://x/v1/receipts?tool=tool_a&limit=3", { headers: auth }));
+    const rows = ((await scoped.json()) as { receipts: Array<{ tool_id: string }> }).receipts;
+    expect(rows.length).toBe(3);
+    for (const r of rows) expect(r.tool_id).toBe("tool_a");
+  });
+
+  test("garbage limit falls back to the default instead of erroring", async () => {
+    const { store, fetchHandler } = handler();
+    for (let i = 0; i < 3; i++) {
+      store.putTrace({ id: `g${i}`, events: [{ name: `x${i}` }] } as unknown as StretchTrace);
+    }
+    for (const bad of ["abc", "-5", "1e999"]) {
+      const res = await fetchHandler(new Request(`http://x/v1/traces?limit=${encodeURIComponent(bad)}`, { headers: auth }));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { traces: unknown[] };
+      // Non-numeric falls back to the default; non-numeric and infinite values
+      // are clamped rather than rejected.
+      if (bad === "-5") {
+        expect(body.traces.length).toBe(1); // clamped up to the minimum of 1
+      } else {
+        expect(body.traces.length).toBe(3);
+      }
+    }
+  });
+});
