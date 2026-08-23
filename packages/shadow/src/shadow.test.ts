@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { registryFrom } from "@eden/runtime";
-import { canApprove, mutatingSteps, replayRegistry, shadowProgram, uncoveredTools } from "../src/index";
+import { canApprove, mutatingSteps, outputDerivesFromIsland, replayRegistry, shadowProgram, uncoveredTools } from "../src/index";
 import { createTicketShip, ticketShipProgram, toNaiveTrace, WITNESS_IDS } from "../../runtime/src/ticketship";
 import { compileTraces } from "../../compile/src/index";
 import { runNaive } from "../../runtime/src/ticketship";
-import type { StretchTrace } from "@eden/ir";
+import type { StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
 
 async function traces(n: number, skip = 0.2): Promise<StretchTrace[]> {
   const out: StretchTrace[] = [];
@@ -17,9 +17,35 @@ async function traces(n: number, skip = 0.2): Promise<StretchTrace[]> {
   return out;
 }
 
+/** Real per-event durations: tools 100ms, the island draft 5_000ms; total = sum. */
+function stampRealDurations(t: StretchTrace): StretchTrace {
+  const events = t.events.map((e) => ({ ...e, duration_ms: e.name === "draftReply" ? 5000 : 100 }));
+  return { ...t, duration_ms: events.reduce((a, e) => a + (e.duration_ms ?? 0), 0), events };
+}
+
+/**
+ * Witnesses carrying measured time instead of the synthetic 200×llm fixture
+ * clock. The ship gate now demands measured time or measured (non-extrapolated)
+ * tokens, so the PASS-path fixtures must be able to show one honestly.
+ */
+async function measuredTraces(n: number): Promise<StretchTrace[]> {
+  const out: StretchTrace[] = [];
+  for (let i = 0; i < n; i++) {
+    const world = createTicketShip({ llmMs: 0 });
+    const id = WITNESS_IDS[i % 3]!;
+    const run = await runNaive(world, id, { skipVerifyP: 0, seed: 50 + i });
+    out.push(stampRealDurations(toNaiveTrace(`s${i}`, id, run)));
+  }
+  return out;
+}
+
 describe("shadow", () => {
   test("handwritten TicketShip PASSes with 5x manifest", async () => {
-    const held = await traces(6, 0);
+    // Updated for honest numbers: this fixture used to PASS on island tokens
+    // extrapolated from remaining LLM calls against the synthetic 200×llm
+    // clock. Extrapolation is now flagged and does not satisfy the gate, so
+    // the traces carry real per-event durations and pass on measured time.
+    const held = await measuredTraces(6);
     const world = createTicketShip({ llmMs: 0 });
     const result = await shadowProgram(ticketShipProgram(), held, {
       registry: registryFrom(world.tools),
@@ -36,9 +62,32 @@ describe("shadow", () => {
     expect(result.manifest?.costReduction).toBeGreaterThanOrEqual(5);
     expect(result.manifest?.skipRateAfter).toBe(0);
     expect(result.manifest?.tokensMeasured).toBe(true);
+    // Island scaling is named as an estimate even when time carries the gate.
+    expect(result.manifest?.tokensEstimated).toBe(true);
+    expect(result.tokensEstimated).toBe(true);
     expect(result.manifest?.tokensSaved ?? 0).toBeGreaterThan(0);
-    expect(result.manifest?.timeMeasured).toBe(false);
+    expect(result.manifest?.timeMeasured).toBe(true);
     expect(canApprove(result)).toBe(true);
+  });
+
+  test("extrapolated island tokens no longer PASS on the synthetic clock", async () => {
+    // The old behavior this test pins out: with only the synthetic fixture
+    // clock available, an island program used to PASS on tokens that were
+    // naive × remaining-LLM-calls — an estimate. The gate now returns
+    // INCONCLUSIVE and says so.
+    const held = await traces(6, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.verdict).toBe("INCONCLUSIVE");
+    expect(result.manifest?.tokensEstimated).toBe(true);
+    expect(result.manifest?.timeMeasured).toBe(false);
+    expect(canApprove(result)).toBe(false);
+    expect(result.reasons.join(" ")).toMatch(/extrapolated/);
   });
 
   test("INCONCLUSIVE does not approve", async () => {
@@ -54,7 +103,9 @@ describe("shadow", () => {
   });
 
   test("compiled program from traces also PASSes", async () => {
-    const all = await traces(10, 0.2);
+    // Measured-time fixtures, for the same reason as the handwritten test
+    // above: extrapolated island tokens no longer satisfy the ship gate.
+    const all = await measuredTraces(10);
     const { programs } = compileTraces(all);
     const p = programs[0]!;
     expect(p).toBeTruthy();
@@ -73,7 +124,7 @@ describe("shadow", () => {
   });
 
   test("isolated registries do not leak writes across traces", async () => {
-    const held = await traces(6, 0);
+    const held = await measuredTraces(6);
     const island = createTicketShip({ llmMs: 0 }).island;
     const result = await shadowProgram(ticketShipProgram(), held, {
       registry: registryFrom(createTicketShip({ llmMs: 0 }).tools),
@@ -105,6 +156,31 @@ describe("shadow", () => {
         n: 6,
       }),
     ).toBe(true);
+  });
+
+  test("canApprove refuses extrapolated island tokens without measured time", () => {
+    // Same manifest as above except the token delta is flagged as the island
+    // extrapolation it is. Estimated numbers do not ship.
+    expect(
+      canApprove({
+        verdict: "PASS",
+        manifest: {
+          llmReduction: 8,
+          latencyReduction: 8,
+          costReduction: 8,
+          skipRateBefore: 0,
+          skipRateAfter: 0,
+          nShadow: 6,
+          tokensMeasured: true,
+          tokensEstimated: true,
+          timeMeasured: false,
+          tokensSaved: 80,
+          timeSavedMs: null,
+        },
+        reasons: [],
+        n: 6,
+      }),
+    ).toBe(false);
   });
 
   test("canApprove refuses vacuous PASS without tokens or time", () => {
@@ -170,7 +246,21 @@ describe("shadowing must not be the thing that does the damage", () => {
   });
 
   test("mutatingSteps names the steps that make it unsafe", () => {
-    expect(mutatingSteps(ticketShipProgram()).sort()).toEqual(["notify", "writeRecord"]);
+    // Updated for the inverted refusal: this used to be a denylist — a tool
+    // was trusted unless isMutating's verb list recognised it — so
+    // parseFields, validate and verifyWrite came back safe because no verb on
+    // that list happened to match. It is now an allowlist following
+    // stepIsParallelSafe in runtime/execute.ts: a tool step is flagged unless
+    // the program marked it readOnly or its name positively matches read
+    // vocabulary, so every tool here except lookupTicket and fetchDetails is
+    // named.
+    expect(mutatingSteps(ticketShipProgram()).sort()).toEqual([
+      "notify",
+      "parseFields",
+      "validate",
+      "verifyWrite",
+      "writeRecord",
+    ]);
   });
 
   test("a program that returns the wrong answer does not pass", async () => {
@@ -252,7 +342,11 @@ describe("a program that checks more than the agent did is credited, not failed"
    * validate the program, so it is set aside and reported.
    */
   const sandboxed = async (n: number) => {
-    const held = await traces(n, 0);
+    // Real per-event durations: the replay sandbox validates 4 of these 6
+    // traces (i=0 and i=5 skipped verifyWrite, so the recording cannot answer
+    // it), and without measured time the run would be INCONCLUSIVE on
+    // extrapolated island tokens alone.
+    const held = (await traces(n, 0)).map(stampRealDurations);
     const world = createTicketShip({ llmMs: 0 });
     let realWrites = 0;
     const counting = {
@@ -354,5 +448,134 @@ describe("20b ship gate is tokens, time, and quality", () => {
     expect(result.manifest?.timeMeasured).toBe(true);
     expect(result.manifest?.timeSavedMs).not.toBeNull();
     expect(Math.abs(result.manifest?.timeSavedMs ?? 0)).toBeLessThan(10_000);
+  });
+});
+
+describe("skip rates share one denominator", () => {
+  test("only traces that reach validation success count, on both sides", async () => {
+    const held = await traces(6, 0);
+    // Traces 1 and 3 cannot answer the candidate at all: handed the replay
+    // sandbox they make a call the recording never made (fetchDetails was
+    // struck from those recordings), so they validate nothing and may appear
+    // in neither numerator nor denominator.
+    const stripped = new Set(["s1", "s3"]);
+    const world = createTicketShip({ llmMs: 0 });
+    const reg = registryFrom(world.tools);
+    const heldStripped = held.map((t) =>
+      stripped.has(t.id) ? { ...t, events: t.events.filter((e) => e.name !== "fetchDetails") } : t,
+    );
+    const result = await shadowProgram(ticketShipProgram(), heldStripped, {
+      registry: reg,
+      registryFor: (t) =>
+        stripped.has(t.id) ? replayRegistry(registryFrom(world.tools), t) : registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    expect(result.manifest!.nShadow).toBe(6);
+    // Validated: traces 0, 2, 4, 5 → four. Of those, 0 and 5 skipped
+    // verifyWrite, so the honest before-rate is exactly 2/4. Accumulating over
+    // all six held traces while dividing by the validated count — the old
+    // behavior — would have mixed denominators and inflated the improvement.
+    expect(result.manifest!.skipRateBefore).toBe(2 / 4);
+    expect(result.manifest!.skipRateAfter).toBe(0);
+    expect(result.reasons.some((r) => /never recorded/.test(r))).toBe(true);
+  });
+
+  test("a rate with nothing validatable stays zero, not NaN", async () => {
+    const world = createTicketShip({ llmMs: 0 });
+    const empty = (await traces(3, 0)).map((t) => ({ ...t, events: [] }));
+    const result = await shadowProgram(ticketShipProgram(), empty, {
+      registry: registryFrom(world.tools),
+      registryFor: (t) => replayRegistry(registryFrom(world.tools), t),
+      island: world.island,
+      allowSideEffects: true,
+    });
+    // Nothing validated → INCONCLUSIVE long before rates are computed.
+    expect(result.verdict).toBe("INCONCLUSIVE");
+  });
+});
+
+describe("island-derived output comparison", () => {
+  /**
+   * An island's prose is fresh every run, so strict byte equality failed every
+   * program whose final output was that prose — unrelated to quality. When the
+   * output provably chains back to an island step, comparison relaxes to
+   * structural: keys present, non-string scalars equal after redaction, strings
+   * free to differ. Unknown references break the chain and fail closed.
+   */
+  const proseProgram = (): StretchProgram =>
+    ({
+      id: "prose",
+      name: "draft_prose",
+      version: "1",
+      description: "draft",
+      inputSchema: {},
+      steps: [
+        {
+          id: "draft",
+          kind: "island",
+          input: { kind: "input", path: "topic" },
+          system: "Write one line.",
+          outputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+        },
+      ],
+      returns: { kind: "from", step: "draft", path: "" },
+      contract: {
+        witnesses: 3,
+        minLlmReduction: 2,
+        allowExact: false,
+        envelope: { inputs: { topic: ["alpha", "beta", "gamma"] } },
+      },
+      manifest: null,
+    }) as unknown as StretchProgram;
+
+  const proseTraces = (output: unknown): StretchTrace[] =>
+    ["alpha", "beta", "gamma"].map((topic, i) => ({
+      id: `p${i}`,
+      events: [{ name: "draftReply", args: { topic }, ok: true, result: { text: "recorded prose" }, duration_ms: 5000 }],
+      input: { topic },
+      output,
+      llmCalls: 1,
+      duration_ms: 5000,
+      cost_cents: 1,
+      complete: true,
+      prompt_tokens: 100,
+      completion_tokens: 20,
+    }));
+
+  const shadowProse = async (traceOutput: unknown) => {
+    let n = 0;
+    return shadowProgram(proseProgram(), proseTraces(traceOutput), {
+      registry: { has: () => true, execute: async () => ({}) } as ToolRegistry,
+      island: async () => {
+        n++;
+        return { text: `fresh prose ${n}-${Math.random()}` };
+      },
+    });
+  };
+
+  test("nondeterministic island prose passes structurally, marked prose-divergent", async () => {
+    expect(outputDerivesFromIsland(proseProgram())).toBe(true);
+    const result = await shadowProse({ text: "recorded prose" });
+    expect(result.verdict).toBe("PASS");
+    expect(result.reasons.some((r) => r.includes("prose-divergent"))).toBe(true);
+  });
+
+  test("shape drift still fails under the structural relaxation", async () => {
+    const result = await shadowProse({ text: "recorded prose", urgency: "high" });
+    expect(result.verdict).toBe("FAIL");
+    expect(result.reasons.some((r) => /output differs/.test(r))).toBe(true);
+  });
+
+  test("non-island outputs keep byte equality, and broken chains fail closed", async () => {
+    // TicketShip returns what `notify` returned, and notify's arguments come
+    // from the input alone — no island anywhere up the chain.
+    expect(outputDerivesFromIsland(ticketShipProgram())).toBe(false);
+    // One hop through a tool whose argument carries the island's draft.
+    const throughTool = { ...ticketShipProgram(), returns: { kind: "from", step: "write", path: "" } } as unknown as StretchProgram;
+    expect(outputDerivesFromIsland(throughTool)).toBe(true);
+    // A reference to a step that does not exist proves nothing.
+    const ghost = { ...ticketShipProgram(), returns: { kind: "from", step: "ghost", path: "" } } as unknown as StretchProgram;
+    expect(outputDerivesFromIsland(ghost)).toBe(false);
   });
 });

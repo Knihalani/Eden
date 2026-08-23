@@ -244,6 +244,52 @@ export function withFileLock<T>(lockPath: string, fn: () => T): T {
 }
 
 /**
+ * Async twin of {@link withFileLock} for long-lived processes.
+ *
+ * The acquisition loop is byte-for-byte the same policy — stamped locks,
+ * abandonment, inode-checked release — with one difference: it waits with
+ * `await Bun.sleep(8)` instead of `Bun.sleepSync(8)`. `sleepSync` parks the
+ * *entire event loop*, so in hookd's long-lived process one contended lock
+ * stalled every other session's request for the whole wait window. One-shot
+ * hook processes keep the sync {@link withFileLock}: they have nothing else to
+ * serve and pay no cost for spinning.
+ */
+export async function withFileLockAsync<T>(lockPath: string, fn: () => T | Promise<T>): Promise<T> {
+  mkdirSync(dirname(lockPath), { recursive: true });
+  const t0 = Date.now();
+  while (Date.now() - t0 < LOCK_WAIT_MS) {
+    let fd: number | undefined;
+    try {
+      fd = openSync(lockPath, "wx");
+    } catch {
+      breakIfAbandoned(lockPath);
+      await Bun.sleep(8);
+      continue;
+    }
+    // Stamp who we are so a contender can tell "still running" from "died
+    // holding it" — same best-effort stamp as withFileLock.
+    let ino: number | null = null;
+    try {
+      ino = fstatSync(fd).ino;
+    } catch {
+      /* no provable identity; release falls back to an unconditional unlink */
+    }
+    try {
+      writeSync(fd, JSON.stringify({ pid: process.pid, host: hostname(), ts: Date.now() } satisfies LockStamp));
+    } catch {
+      /* unstamped: contenders fall back to the age horizon */
+    }
+    try {
+      return await fn();
+    } finally {
+      closeSync(fd);
+      releaseLock(lockPath, ino);
+    }
+  }
+  throw new Error(`could not acquire lock ${lockPath}`);
+}
+
+/**
  * Remove a lock that its holder can no longer release.
  *
  * Only three things justify deleting a lock we do not hold: the process that
@@ -301,6 +347,18 @@ function sleepBriefly(): void {
       /* wait for lock */
     }
   }
+}
+
+/**
+ * Non-reversible stand-in for an API key in human-facing output.
+ *
+ * doctor and login used to print the first 6–8 characters of the key itself,
+ * which is exactly the part of a bearer token that carries its prefix and
+ * narrows a brute force. A SHA-256 fingerprint identifies *which* key this is
+ * ("is that the dev key or the prod one?") without disclosing any of it.
+ */
+export function keyFingerprint(key: string): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 12);
 }
 
 export function wrapPlaneUrl(raw?: string | null): string {

@@ -11,6 +11,7 @@ import {
   type InboxItem,
 } from "./activity";
 import { useActivity } from "./activity-context";
+import { HomeSkeleton } from "./skeletons";
 import { SetupBlock } from "./prompt";
 import { PLACEHOLDER_ENV } from "./prompt-text";
 
@@ -52,9 +53,7 @@ export function DashBoard() {
       </header>
 
       {waiting ? (
-        <div className="load-well" aria-busy="true" role="status">
-          <span className="sr-only">Loading activity.</span>
-        </div>
+        <HomeSkeleton />
       ) : failed ? (
         <p className="home-empty-msg home-load-fail" role="status">
           {homeEmptyLine("overview", true)}
@@ -68,6 +67,7 @@ export function DashBoard() {
               value={formatCount(failed ? 0 : activity.compiled)}
               label="Live tools"
               tone="ink"
+              href={homePath("workflows")}
             />
             <Metric
               value={formatCount(failed ? 0 : activity.runs)}
@@ -78,6 +78,7 @@ export function DashBoard() {
               value={formatCount(failed ? 0 : activity.waiting)}
               label="Waiting"
               tone="ink"
+              href={homePath("requests")}
             />
             <Metric
               value={formatCount(failed ? 0 : activity.fails)}
@@ -114,7 +115,7 @@ export function DashBoard() {
             <div className="home-panel-head">
               <h2>
                 <Link href={homePath("workflows")} prefetch={true}>
-                  Live
+                  Live tools
                 </Link>
               </h2>
               <p>{formatCount(workflows.length)}</p>
@@ -123,7 +124,7 @@ export function DashBoard() {
               items={workflows}
               vacant={workflows.length === 0}
               empty={homeEmptyLine("workflows", false)}
-              label="Live"
+              label="Live tools"
               compact
             />
           </section>
@@ -137,16 +138,31 @@ function Metric({
   value,
   label,
   tone,
+  href,
 }: {
   value: string;
   label: string;
   tone: "ink" | "fail";
+  href?: string;
 }) {
-  return (
-    <div className="home-metric" data-tone={tone}>
+  const body = (
+    <>
       <b>{value}</b>
-      <span>{label}</span>
-    </div>
+      <span>
+        {label}
+        {href ? (
+          <span className="home-metric-go" aria-hidden="true">
+            →
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
+  if (!href) return <div className="home-metric" data-tone={tone}>{body}</div>;
+  return (
+    <Link className="home-metric" data-tone={tone} href={href} prefetch={true}>
+      {body}
+    </Link>
   );
 }
 
@@ -207,7 +223,7 @@ function WorkList({ items, label }: { items: InboxItem[]; label: string }) {
         <li key={item.id}>
           <Link href={item.href} className="home-row" prefetch={true}>
             <span className="home-row-name">{item.name}</span>
-            <span className="home-row-status" data-tone={statusTone(item.status)} title={item.status}>
+            <span className="home-row-status" data-tone={statusTone(item.status)}>
               <span className="home-pip" aria-hidden="true" />
               {item.status}
             </span>

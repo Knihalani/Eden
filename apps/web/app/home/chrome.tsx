@@ -194,6 +194,9 @@ function ProfileMenu({ portrait, owner }: { portrait: Portrait; owner: string })
     } else if (event.key === "End") {
       event.preventDefault();
       focusItem(items.length - 1);
+    } else if (event.key === "Tab") {
+      // Let Tab leave naturally; the menu just closes instead of trapping.
+      setOpen(false);
     }
   };
 

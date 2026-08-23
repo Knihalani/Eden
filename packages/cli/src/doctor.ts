@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { liveToolsPath, readConfig, wrapPlaneUrl } from "./home";
+import { liveToolsPath, readConfig, wrapPlaneUrl, keyFingerprint } from "./home";
 
 export type DoctorCheck = { name: string; ok: boolean; detail: string };
 
@@ -10,7 +10,7 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   const checks: DoctorCheck[] = [];
   const cfg = readConfig();
   if (!cfg) checks.push({ name: "config", ok: false, detail: "missing · run eden login --dev" });
-  else checks.push({ name: "config", ok: true, detail: `${cfg.base_url} · ${cfg.api_key.slice(0, 8)}…` });
+  else checks.push({ name: "config", ok: true, detail: `${cfg.base_url} · key ${keyFingerprint(cfg.api_key)}` });
 
   const configured = (cfg?.base_url || "http://127.0.0.1:8788").replace(/\/$/, "");
   const base = wrapPlaneUrl(configured);

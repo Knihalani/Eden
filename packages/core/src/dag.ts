@@ -36,12 +36,18 @@ function lastOrderedBefore(steps: CompiledStep[], i: number): string | undefined
 
 export function buildDag(steps: CompiledStep[]): DagNode[] {
   return steps.map((step, i) => {
-    const deps: string[] = priorStepRefs(step);
-    if (deps.length === 0 && i > 0 && !step.commute) {
+    let deps = priorStepRefs(step);
+    // The sequential edge is not a fallback for steps with no data deps — it
+    // holds *in addition* to them. A non-commuting step whose data deps point
+    // at earlier commuting reads used to skip this edge and land in the same
+    // parallel wave as another non-commuting step, so two writes raced through
+    // Promise.all. Order-dependent steps queue behind each other regardless of
+    // what else they wait on.
+    if (i > 0 && !step.commute) {
       const prev = lastOrderedBefore(steps, i);
-      if (prev !== undefined) deps.push(prev);
+      if (prev !== undefined) deps = deps.concat(prev);
     }
-    return { ...step, deps };
+    return { ...step, deps: [...new Set(deps)] };
   });
 }
 

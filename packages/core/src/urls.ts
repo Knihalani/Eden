@@ -177,10 +177,21 @@ export function compileStepUrl(step: {
   return undefined;
 }
 
+// Mirrors the DANGEROUS set in packages/ir/src/path.ts. Core does not depend
+// on @eden/ir, so the guard is copied locally rather than imported — keep the
+// two in agreement.
+const DANGEROUS_SEG = new Set(["__proto__", "prototype", "constructor"]);
+
 function getPath(obj: unknown, path: string): unknown {
   let cur = obj;
   for (const p of path.split(".")) {
     if (!cur || typeof cur !== "object") return undefined;
+    // `__proto__` walks the prototype chain and `constructor` reaches Function/
+    // Object themselves, so a template like {{s1.constructor.name}} interpolated
+    // engine internals into a URL. Object.hasOwn keeps inherited properties out
+    // for the same reason: only values the prior step actually returned may be
+    // bound.
+    if (DANGEROUS_SEG.has(p) || !Object.hasOwn(cur, p)) return undefined;
     cur = (cur as Record<string, unknown>)[p];
   }
   return cur;

@@ -20,7 +20,7 @@ export function homePath(view: HomeView = "overview") {
 
 export function homeViewTitle(view: HomeView) {
   if (view === "requests") return "Requests";
-  if (view === "workflows") return "Workflows";
+  if (view === "workflows") return "Live tools";
   return "Home";
 }
 
@@ -36,7 +36,7 @@ export function homeEmptyLine(view: HomeView, failed = false) {
   if (failed) return "Couldn’t load activity.";
   if (view === "requests") return "Nothing waiting. New compile requests land here.";
   if (view === "workflows") return "No live tools yet. Approve a request and it shows up here.";
-  return "Requests and workflows land here after you wrap.";
+  return "Requests and live tools land here after you wrap.";
 }
 
 export function navCurrent(path: string, view: HomeView = "overview"): HomeView | "setup" | "tour" | null {

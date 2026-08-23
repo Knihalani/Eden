@@ -16,13 +16,21 @@ import {
 } from "../../../packages/runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
 
-async function naiveTraces(n: number, skip = 0.2): Promise<StretchTrace[]> {
+async function naiveTraces(n: number, _skip = 0.2): Promise<StretchTrace[]> {
   const out: StretchTrace[] = [];
   for (let i = 0; i < n; i++) {
     const world = createTicketShip({ llmMs: 0 });
     const id = WITNESS_IDS[i % 3]!;
-      const run = await runNaive(world, id, { skipVerifyP: i % 5 === 0 ? 1 : 0, seed: 7 + i });
-    out.push(toNaiveTrace(`g${i}`, id, run));
+    // Real per-event durations instead of the synthetic 200×llm fixture clock:
+    // tools cost 100ms each, the island draft 5_000ms, and the session total
+    // is their sum. The ship gate counts only measured numbers or absent ones,
+    // and these fixtures used to PASS on island tokens extrapolated from
+    // remaining LLM calls against a synthetic clock. skipVerifyP is 0 so every
+    // recording contains its verifyWrite event and can validate the candidate.
+    const run = await runNaive(world, id, { skipVerifyP: 0, seed: 7 + i });
+    const base = toNaiveTrace(`g${i}`, id, run);
+    const events = base.events.map((e) => ({ ...e, duration_ms: e.name === "draftReply" ? 5000 : 100 }));
+    out.push({ ...base, duration_ms: events.reduce((a, e) => a + (e.duration_ms ?? 0), 0), events });
   }
   return out;
 }

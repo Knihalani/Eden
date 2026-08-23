@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hookCommand, installedHooks, mergeHooks, wrapMcpServer } from "./setup";
+import { hookCommand, preHookCommand, installedHooks, mergeHooks, wrapMcpServer } from "./setup";
 import { wrapPlaneUrl, sitePlaneUrl } from "./home";
 
 describe("setup hookd", () => {
@@ -24,12 +24,36 @@ describe("setup hookd", () => {
     expect("PostToolUseFailure" in hooks).toBe(false);
   });
 
-  test("PreToolUse does not fail-open allow with echo", () => {
-    const cmd = hookCommand("/abs/cli.ts", 8794);
-    const hooks = installedHooks(cmd);
-    expect(hooks.PreToolUse[0]!.hooks[0]!.command).not.toContain("echo '{}'");
-    expect(hooks.PostToolUse[0]!.hooks[0]!.command).toContain("echo '{}'");
-    expect(hookCommand("/abs/cli.ts", 8794, { failOpen: false })).not.toContain("echo '{}'");
+  test("PreToolUse is a fast fail-open probe and never cold-spawns the CLI", () => {
+    // UPDATED BEHAVIOUR: this test previously encoded the blocking design —
+    // PreToolUse inherited the full Post/Stop chain (`--max-time 8` curl then
+    // a cold `bun <cli> hook` spawn) with no `|| echo '{}'` fail-open. That
+    // meant a tool call blocked up to 8s+ whenever hookd was down. PreToolUse
+    // now gets its own command: `curl --max-time 1 … || echo '{}'`, no bun
+    // spawn at all — ordinary tool calls never wait on Eden.
+    const hooks = installedHooks(hookCommand("/abs/cli.ts", 8794));
+    const pre = String(hooks.PreToolUse[0]!.hooks[0]!.command);
+    expect(pre).toContain("--max-time 1");
+    expect(pre).toContain("|| echo '{}'");
+    expect(pre).not.toContain("bun ");
+    // The warm chain stays on Post/Stop/SessionStart.
+    for (const event of ["PostToolUse", "Stop", "SessionStart"] as const) {
+      const cmd = String(hooks[event]![0]!.hooks[0]!.command);
+      expect(cmd).toContain("--max-time 8");
+      expect(cmd).toContain("bun '/abs/cli.ts' hook");
+    }
+    expect(String(hooks.PostToolUse[0]!.hooks[0]!.command)).toContain("echo '{}'");
+  });
+
+  test("preHookCommand is explicit and installedHooks accepts an explicit pre command", () => {
+    const pre = preHookCommand(9001);
+    expect(pre).toContain("http://127.0.0.1:9001/hook");
+    expect(pre).toContain("--max-time 1");
+    expect(pre.endsWith("|| echo '{}'")).toBe(true);
+    const preCmd = "my-own-pre-hook --fast";
+    const hooks = installedHooks("warm-chain-cmd", preCmd);
+    expect(hooks.PreToolUse[0]!.hooks[0]!.command).toBe(preCmd);
+    expect(hooks.PostToolUse[0]!.hooks[0]!.command).toBe("warm-chain-cmd");
   });
 
   test("compiled-tools MCP is stdio bun mcp on wrap 8788", () => {
@@ -41,7 +65,8 @@ describe("setup hookd", () => {
 });
 
 describe("eden setup does not disarm the user's own hooks", () => {
-  const ours = installedHooks("curl -sS http://127.0.0.1:8794/hook || bun '/abs/cli.ts' hook || echo '{}'");
+  const warmCmd = "curl -sS http://127.0.0.1:8794/hook || bun '/abs/cli.ts' hook || echo '{}'";
+  const ours = installedHooks(warmCmd, warmCmd.replace(/ \|\| echo '\{\}'$/, ""));
 
   const usersOwn = {
     PreToolUse: [{ hooks: [{ type: "command", command: "/usr/local/bin/allowlist-guard" }] }],

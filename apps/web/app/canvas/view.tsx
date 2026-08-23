@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { homePath } from "../account/home";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import type { Binding, Step, StretchProgram } from "@eden/ir/types";
 import { isCheckName, isMutating } from "@eden/ir/names";
 import { approveTool, dismissRequest, pauseTool, resumeTool, type BindEdit } from "./actions";
+import { DISMISS_CONFIRM_MS, confirmExpired, dismissButtonLabel } from "./dismiss";
 import { failLabel, originLine, receiptPostmortem } from "./fail";
 import {
   NODE_H,
@@ -175,10 +176,13 @@ export function CanvasView({ model }: { model: CanvasModel }) {
     <section className="canvas">
       <header className="canvas-bar">
         <Link href={model.mode === "live" ? homePath("workflows") : homePath("requests")} className="home-go">
-          {model.mode === "live" ? "Workflows" : "Requests"}
+          {model.mode === "live" ? "Live tools" : "Requests"}
         </Link>
         <h1>{model.name}</h1>
         <p className="canvas-tip">{tipLine(model)}</p>
+        <p className="canvas-hint" aria-hidden="true">
+          Scroll to see the whole graph.
+        </p>
       </header>
 
       <div className="canvas-stage">
@@ -198,7 +202,8 @@ export function CanvasView({ model }: { model: CanvasModel }) {
             {model.refusal || "No method yet. Wrap more runs, then come back."}
           </p>
         )}
-        <aside className="canvas-panel" aria-label="Step">
+        <aside className="canvas-panel" aria-label="Step" aria-live="polite">
+          {selectedStep ? <span className="sr-only">Selected step: {selectedStep.id}.</span> : null}
           {selectedStep && program ? (
             <NodeDetail
               step={selectedStep}
@@ -336,6 +341,7 @@ function Graph({
             data-fail={failed ? "true" : undefined}
             data-blocked={held ? "true" : undefined}
             data-drag={drag === n.id ? "true" : undefined}
+            aria-pressed={selected === n.id}
             onClick={() => onSelect(n.id)}
             onDragStart={(ev) => {
               ev.dataTransfer.setData("text/eden-step", n.id);
@@ -346,7 +352,7 @@ function Graph({
           >
             <span className="canvas-node-kind">
               {n.kind === "assert" ? "check" : n.write ? "write" : n.kind === "tool" ? "read" : n.kind === "island" ? "model" : n.kind}
-              {failed ? " · failed" : held ? " · blocked" : drop.includes(n.id) ? " · dropped" : ""}
+              {failed ? " · failed" : held ? " · blocked" : drop.includes(n.id) ? " · removed" : ""}
             </span>
             <span className="canvas-node-name">{n.label}</span>
           </button>
@@ -478,10 +484,10 @@ function NodeDetail({
       {!check ? (
         <label className="canvas-drop">
           <input type="checkbox" checked={dropped} onChange={(e) => onDrop(e.target.checked)} />
-          Drop this step before Approve
+          Remove this step before Approve
         </label>
       ) : (
-        <p className="canvas-k">Pinned check — cannot drop.</p>
+        <p className="canvas-k">Pinned check — cannot remove.</p>
       )}
     </>
   );
@@ -504,6 +510,33 @@ function ApproveStrip({
   onApprove: () => void;
   onDismiss: () => void;
 }) {
+  // Dismiss deletes permanently, so it arms into "Confirm dismiss" for a short
+  // window; Esc or moving focus away reverts it before anything is deleted.
+  const [armedAt, setArmedAt] = useState<number | null>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirming = armedAt != null && !confirmExpired(armedAt, Date.now());
+
+  const disarm = () => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+    armTimer.current = null;
+    setArmedAt(null);
+  };
+
+  const arm = () => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+    setArmedAt(Date.now());
+    armTimer.current = setTimeout(disarm, DISMISS_CONFIRM_MS);
+  };
+
+  const onDismissClick = () => {
+    if (!confirming) {
+      arm();
+      return;
+    }
+    disarm();
+    onDismiss();
+  };
+
   const m = model.manifest;
   const writes = model.program
     ? methodSteps(model.program).filter((s) => s.kind === "tool" && isMutating(s.tool))
@@ -545,8 +578,21 @@ function ApproveStrip({
         <button type="button" className="signup signup-compact" disabled={!ship || pending} onClick={onApprove}>
           {pending ? "Shipping…" : "Approve"}
         </button>
-        <button type="button" className="canvas-quiet" disabled={pending} onClick={onDismiss}>
-          Dismiss
+        <button
+          type="button"
+          className="canvas-quiet canvas-dismiss"
+          data-armed={confirming ? "true" : undefined}
+          disabled={pending}
+          onClick={onDismissClick}
+          onBlur={disarm}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              disarm();
+            }
+          }}
+        >
+          {dismissButtonLabel(confirming)}
         </button>
       </div>
       {notice ? <p className="canvas-note">{notice}</p> : null}

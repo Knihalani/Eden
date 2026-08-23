@@ -43,17 +43,28 @@ function rollupCheckConclusions(rows: unknown[]): string | undefined {
 
 const SKIP_SCALAR = /^(body|html_url|url|avatar_url|node_id|diff|patch|content|readme|description)$/i;
 
-function pickScalar(k: string, v: unknown): unknown {
+function pickScalar(k: string, v: unknown, t: Truncation): unknown {
   if (SKIP_SCALAR.test(k)) return undefined;
   if (typeof v === "number" || typeof v === "boolean") return v;
   if (typeof v === "string" && v.length > 0 && v.length < 160) return v;
+  // A long string was dropped on purpose, but it *was* dropped: the model sees
+  // less than the tool returned. Count it rather than inferring truncation
+  // later from JSON sizes.
+  if (typeof v === "string" && v.length >= 160) t.longString = true;
   return undefined;
 }
 
-function pickFacts(value: unknown, depth = 0): unknown {
-  if (depth > 4) return undefined;
+/** Which caps pickFacts actually hit. Truncation is structural, not a size guess. */
+type Truncation = { depth: boolean; sample: boolean; longString: boolean };
+
+function pickFacts(value: unknown, depth = 0, t: Truncation = { depth: false, sample: false, longString: false }): unknown {
+  if (depth > 4) {
+    t.depth = true;
+    return undefined;
+  }
   if (Array.isArray(value)) {
-    const facts = value.slice(0, 3).map((row) => pickFacts(row, depth + 1));
+    if (value.length > 3) t.sample = true;
+    const facts = value.slice(0, 3).map((row) => pickFacts(row, depth + 1, t));
     const out: Record<string, unknown> = { n: value.length, sample: facts };
     const rolled = rollupCheckConclusions(value);
     if (rolled) out.state = rolled;
@@ -66,11 +77,11 @@ function pickFacts(value: unknown, depth = 0): unknown {
   }
   for (const [k, v] of Object.entries(value)) {
     if (k in out) continue;
-    const scalar = pickScalar(k, v);
+    const scalar = pickScalar(k, v, t);
     if (scalar !== undefined) out[k] = scalar;
-    else if (Array.isArray(v)) out[k] = pickFacts(v, depth + 1);
+    else if (Array.isArray(v)) out[k] = pickFacts(v, depth + 1, t);
     else if (isPlainObject(v) && depth < 2) {
-      const nested = pickFacts(v, depth + 1);
+      const nested = pickFacts(v, depth + 1, t);
       if (nested && typeof nested === "object" && Object.keys(nested as object).length) out[k] = nested;
     }
   }
@@ -79,9 +90,16 @@ function pickFacts(value: unknown, depth = 0): unknown {
 
 /** Short JSON the model should see. Full densified body stays on Eden / in tool_run. */
 export function modelFacing(value: unknown, maxChars = 2500): { text: string; facts: unknown; truncated: boolean } {
-  const facts = pickFacts(value);
+  const t: Truncation = { depth: false, sample: false, longString: false };
+  const facts = pickFacts(value, 0, t);
   const factsJson = JSON.stringify(facts);
-  if (factsJson.length <= maxChars) return { text: factsJson, facts, truncated: factsJson.length < JSON.stringify(value).length };
+  // The old flag compared the two stringify sizes, which is the wrong question:
+  // it said "not truncated" whenever the picked facts happened to serialize
+  // shorter than the raw body — true for every sampled or depth-capped result,
+  // exactly the cases where information was discarded. Ask the walk instead.
+  const truncated =
+    t.depth || t.sample || t.longString || factsJson.length > maxChars;
+  if (factsJson.length <= maxChars) return { text: factsJson, facts, truncated };
   return {
     text: JSON.stringify({ n: "truncated", hint: "full result stored on Eden" }),
     facts,

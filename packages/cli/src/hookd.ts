@@ -1,4 +1,5 @@
 import { respondToHook, type HookIn } from "./hook";
+import { withFileLockAsync } from "./home";
 
 export function hookdTimeoutMs(): number {
   const n = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
@@ -68,7 +69,9 @@ export async function handleHookd(req: Request): Promise<Response> {
   }
   try {
     const out = await Promise.race([
-      Promise.resolve(respondToHook(input)),
+      // Async lock acquisition: hookd is long-lived and sleepSync would park
+      // its whole event loop while it waits out a contended lock.
+      Promise.resolve(respondToHook(input, withFileLockAsync)),
       new Promise<Record<string, never>>((_, reject) => {
         const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
         t.unref?.();
