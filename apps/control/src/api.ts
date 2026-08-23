@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
-import type { Binding, IslandCaller, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
-import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, hashStretch, liveTimeSavedMs } from "@eden/ir";
+import type { Binding, IslandCaller, ProgramDiff, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
+import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, hashStretch, liveTimeSavedMs, diffPrograms } from "@eden/ir";
 import { isDeopt, isReplaySafe, runProgram } from "@eden/runtime";
 import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, type WrapState } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
@@ -109,6 +109,22 @@ function expandReceipt(row: { payload?: string | null } & Record<string, unknown
   const extra = receiptExtras(row);
   const { payload: _payload, ...rest } = row;
   return { ...rest, ...extra };
+}
+
+/**
+ * What a candidate changes relative to the program it would replace.
+ *
+ * The prior side is the live/pinned tool for the same stretch id; a candidate
+ * for a stretch with nothing live yet is brand-new and diffs to null — there
+ * is nothing to review it against. Structured output from diffPrograms, so
+ * reviewers see "step b added, field id now a hardcoded literal" instead of
+ * reading two JSON blobs.
+ */
+function candidateDiff(store: Store, program: StretchProgram | null): ProgramDiff | null {
+  if (!program) return null;
+  const live = store.tool(program.id);
+  if (!live) return null;
+  return diffPrograms(live.program, program);
 }
 
 async function readJson(req: Request): Promise<{ ok: true; value: unknown } | { ok: false; res: Response }> {
@@ -617,10 +633,13 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   if (approve && req.method === "POST") {
     const c = ctx.store.candidate(approve[1]!);
     if (!c) return json({ error: "not found" }, 404);
+    // Computed before the ship so the response records exactly what the
+    // approver was able to see — live vs candidate, not live vs edited.
+    const diff = candidateDiff(ctx.store, c.program);
     const body = (await req.json().catch(() => ({}))) as { edits?: Edits };
     const shipped = await shipCandidate(ctx, c, body.edits);
     if (!shipped.ok) return json({ error: shipped.error, ...shipped.extra }, shipped.status);
-    return json({ ok: true, id: shipped.program.id, name: shipped.program.name, program: shipped.program });
+    return json({ ok: true, id: shipped.program.id, name: shipped.program.name, program: shipped.program, diff });
   }
 
   const pause = p.match(/^\/v1\/tools\/([^/]+)\/(pause|rollback|resume)$/);
@@ -657,7 +676,16 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   if (one && req.method === "GET") {
     const t = ctx.store.tool(one[1]!);
     if (!t) return json({ error: "not found" }, 404);
-    return json(t);
+    // Review surface: the queued candidate for this stretch (if any) diffed
+    // against what is live, plus the superseded compilations this tool still
+    // remembers. Both are null/empty for a stretch that was never replaced.
+    const candidate = ctx.store.candidates().find((c) => c.program?.id === t.id) ?? null;
+    return json({
+      ...t,
+      versions: ctx.store.programVersions(t.id).map((v) => ({ version: v.version, created_at: v.created_at })),
+      candidate: candidate ? { id: candidate.id, verdict: candidate.verdict } : null,
+      candidate_diff: candidateDiff(ctx.store, candidate?.program ?? null),
+    });
   }
 
   if (p === "/v1/tools" && req.method === "GET") {
@@ -677,7 +705,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   if (delCand && req.method === "GET") {
     const c = ctx.store.candidate(delCand[1]!);
     if (!c) return json({ error: "not found" }, 404);
-    return json(c);
+    return json({ ...c, diff: candidateDiff(ctx.store, c.program) });
   }
   if (delCand && req.method === "DELETE") {
     if (!ctx.store.deleteCandidate(delCand[1]!)) return json({ error: "not found" }, 404);

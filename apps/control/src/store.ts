@@ -36,6 +36,14 @@ export type StoredReceipt = {
   payload?: string | null;
 };
 
+/** One superseded compilation of a stretch, kept so candidates can be diffed against what they replace. */
+export type StoredProgramVersion = {
+  tool_id: string;
+  version: string;
+  program: StretchProgram;
+  created_at: number;
+};
+
 function receiptIsEarlyDeopt(payload: string | null | undefined): boolean {
   if (!payload) return false;
   try {
@@ -91,10 +99,18 @@ export class Store {
         k TEXT PRIMARY KEY,
         v TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS program_versions (
+        tool_id TEXT NOT NULL,
+        version TEXT NOT NULL,
+        program TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (tool_id, version)
+      );
       CREATE INDEX IF NOT EXISTS traces_created ON traces(created_at);
       CREATE INDEX IF NOT EXISTS receipts_tool ON receipts(tool_id, created_at);
       CREATE INDEX IF NOT EXISTS tools_state ON tools(state);
       CREATE INDEX IF NOT EXISTS candidates_created ON candidates(created_at);
+      CREATE INDEX IF NOT EXISTS program_versions_tool ON program_versions(tool_id, created_at);
     `);
     try {
       this.db.exec(`ALTER TABLE traces ADD COLUMN hash TEXT`);
@@ -243,10 +259,65 @@ export class Store {
   }
 
   putTool(t: LiveTool): void {
+    // Version history: when this write replaces a different compilation of the
+    // same stretch, park the superseded program here first. Re-mining a
+    // stretch updates its tool in place, so without this the previous
+    // compilation would be gone and reviewers could not be shown what a new
+    // candidate changes. Rows are scoped by tool_id, so two stretches never
+    // see each other's versions.
+    const existing = this.db.query(`SELECT version, program FROM tools WHERE id = ?`).get(t.id) as
+      | { version: string; program: string }
+      | null;
+    if (existing && existing.version !== t.version) {
+      this.recordProgramVersion(t.id, existing.version, existing.program);
+    }
     this.db.run(
       `INSERT OR REPLACE INTO tools (id, name, version, program, state, prev, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
       [t.id, t.name, t.version, JSON.stringify(t.program), t.state, t.prev ? JSON.stringify(t.prev) : null, t.created_at, t.updated_at],
     );
+  }
+
+  /** How many superseded compilations to keep per tool id. */
+  static PROGRAM_VERSION_HISTORY = 5;
+
+  private recordProgramVersion(toolId: string, version: string, programJson: string): void {
+    try {
+      this.db.run(
+        `INSERT OR REPLACE INTO program_versions (tool_id, version, program, created_at) VALUES (?,?,?,?)`,
+        [toolId, version, programJson, Date.now()],
+      );
+      const keep = Store.PROGRAM_VERSION_HISTORY;
+      this.db.run(
+        `DELETE FROM program_versions WHERE tool_id = ? AND version NOT IN (
+           SELECT version FROM program_versions WHERE tool_id = ? ORDER BY created_at DESC, version DESC LIMIT ?
+         )`,
+        [toolId, toolId, keep],
+      );
+    } catch {
+      /* history is best-effort; never block a ship on it */
+    }
+  }
+
+  /** Superseded compilations for one tool, newest first. Empty for a tool that was never replaced. */
+  programVersions(toolId: string): StoredProgramVersion[] {
+    return this.db
+      .query(`SELECT * FROM program_versions WHERE tool_id = ? ORDER BY created_at DESC`)
+      .all(toolId)
+      .flatMap((row) => {
+        const r = row as Record<string, string | number | null>;
+        try {
+          return [
+            {
+              tool_id: String(r.tool_id),
+              version: String(r.version),
+              program: JSON.parse(String(r.program)) as StretchProgram,
+              created_at: Number(r.created_at),
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
   }
 
   tools(): LiveTool[] {

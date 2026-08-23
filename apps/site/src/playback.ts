@@ -11,13 +11,106 @@ import {
   receiptTableLine,
   resolveTemplate,
   type CompiledStep,
+  type DagNode,
   type Receipt,
 } from "@eden/core";
 import { handleForge } from "./forge";
 import { safeFetch } from "./ssrf";
 import { recordDeopt } from "./db";
+import {
+  joinInflight,
+  prefetchCounters,
+  readResult,
+  resultCacheKey,
+  singleFlight,
+  trackPrefetch,
+  writeResult,
+} from "./cache";
 
-const CACHE_TTL_MS = 30 * 60_000;
+type ToolRef = { id: string; steps: string; name: string; workspace_id?: string };
+
+/**
+ * Ceiling on speculative prefetch fan-out per run. A compiled run's waves are
+ * already bounded by DAG width through Promise.all; prefetch reuses that shape
+ * but gets its own tighter cap, because it is best-effort work racing the
+ * response path — losing that race must never cost more than eight extra
+ * in-flight requests.
+ */
+const MAX_PREFETCH_PER_RUN = 8;
+
+/**
+ * Provably read-only, in the playback sense. The IR marks steps readOnly at
+ * compile time; CompiledStep carries that flag through verbatim when present.
+ * Where it is absent, a plain cloud_http GET is read-only by HTTP semantics —
+ * the same property the exact-result cache has always leaned on. Everything
+ * else (POSTs, runner steps, oauth handshakes) is treated as mutating:
+ * prefetching a write would be a side effect fired while nobody is watching.
+ */
+function stepIsReadOnly(step: CompiledStep): boolean {
+  const flag = (step as { readOnly?: boolean }).readOnly;
+  if (typeof flag === "boolean") return flag === true;
+  return step.kind === "cloud_http" && (step.method || "GET") === "GET";
+}
+
+/** Bind resolution shared by the hot path and prefetch, so both see one answer. */
+function resolveBound(
+  step: CompiledStep,
+  params: Record<string, string>,
+  results: Record<string, unknown>,
+): Record<string, string> {
+  const bound = { ...params };
+  for (const [k, v] of Object.entries(step.bind ?? {})) {
+    bound[k] = resolveTemplate(String(v), bound, results);
+  }
+  return bound;
+}
+
+/**
+ * One live fetch, plus its cache fill. Used by the hot path and by prefetch
+ * alike — wrapped in singleFlight by the callers, so whichever arrives first
+ * pays the request and everyone with the same key rides along.
+ */
+function liveLoad(
+  ctx: { db: EdenDb },
+  cacheKey: string,
+  step: CompiledStep,
+  url: string,
+): () => Promise<{ parsed: unknown; ok: boolean }> {
+  return async (): Promise<{ parsed: unknown; ok: boolean }> => {
+    const parsedUrl = new URL(url);
+    // The forge is an in-process fixture: it never leaves the process, so
+    // it is exempt from the egress rules rather than checked against them.
+    const res = handleForge(parsedUrl) || (await fetchWithRetry(url, { method: step.method || "GET" }));
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+    if ((step.method || "GET") === "GET" && res.ok) {
+      await writeResult(ctx.db, cacheKey, parsed);
+    }
+    return { parsed, ok: res.ok };
+  };
+}
+
+type StepOutcome = { id: string; value: unknown; fail: boolean };
+
+/**
+ * The cache key is tenant-scoped (see cache.ts), so every read and write needs
+ * the workspace. It rides on the tool row; resolving it here — once per run,
+ * not per step — keeps playTool's signature untouched for existing callers.
+ */
+async function resolveWorkspaceId(db: EdenDb, tool: ToolRef): Promise<string> {
+  if (tool.workspace_id) return tool.workspace_id;
+  try {
+    const row = await db.get<{ workspace_id: string }>(`SELECT workspace_id FROM tool WHERE id = ?`, [tool.id]);
+    return row?.workspace_id ?? "";
+  } catch {
+    return "";
+  }
+}
 
 /**
  * Ceiling on how many ids one call may fan out over. `issues` is a caller-supplied
@@ -63,7 +156,7 @@ async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promis
 
 async function playOne(
   db: EdenDb,
-  tool: { id: string; steps: string; name: string },
+  tool: ToolRef,
   params: Record<string, string>,
 ): Promise<Receipt> {
   const t0 = Date.now();
@@ -87,76 +180,88 @@ async function playOne(
     id: params.id || params.issue || params.pr || params.number || "",
   };
   const dag = buildDag(steps);
+  const waves = layers(dag);
+  const workspaceId = await resolveWorkspaceId(db, tool);
   const results: Record<string, unknown> = {};
   let attempted = 0;
   let ok = 0;
   let cacheHits = 0;
   let runnerMs = 0;
   let failed: number | undefined;
+  // Keys already handed to prefetch this run, so two waves can never double-
+  // fire the same speculative load.
+  const prefetched = new Set<string>();
 
-  for (const layer of layers(dag)) {
+  /**
+   * Speculative execution of an all-read-only next wave, kicked the moment the
+   * current wave completes. Fire-and-forget by contract: nothing here is ever
+   * awaited on the response path. When prefetch wins the race, the wave's own
+   * execution joins the in-flight single-flight promise — a counted cache hit
+   * with no network wait; when it loses, the wave simply fetches as before.
+   */
+  const maybePrefetch = (nextLayer: DagNode[]): void => {
+    if (!nextLayer.every(stepIsReadOnly)) return;
+    for (const step of nextLayer.slice(0, MAX_PREFETCH_PER_RUN)) {
+      void (async () => {
+        try {
+          const bound = resolveBound(step, params, results);
+          const url = resolveTemplate(step.url || "", bound, results);
+          if (!url) return;
+          const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
+          if (prefetched.has(cacheKey)) return;
+          prefetched.add(cacheKey);
+          // Already cached from an earlier run or prefetch: nothing to warm.
+          if ((await readResult(db, cacheKey)) !== undefined) return;
+          trackPrefetch(() => singleFlight(cacheKey, liveLoad({ db }, cacheKey, step, url)));
+        } catch {
+          // Synchronous setup failures count exactly like async ones:
+          // swallowed, tallied, invisible to the run.
+          prefetchCounters.errors++;
+        }
+      })();
+    }
+  };
+
+  for (let wi = 0; wi < waves.length; wi++) {
+    const layer = waves[wi]!;
     const layerOut = await Promise.all(
-      layer.map(async (step) => {
+      layer.map(async (step): Promise<StepOutcome> => {
         attempted++;
         if (step.kind === "runner") {
           runnerMs += 1;
           return { id: step.id, value: { skipped: "runner_unbound", name: step.name }, fail: true };
         }
-        const bound = { ...params };
-        for (const [k, v] of Object.entries(step.bind ?? {})) {
-          bound[k] = resolveTemplate(String(v), bound, results);
-        }
+        const bound = resolveBound(step, params, results);
         const url = resolveTemplate(step.url || "", bound, results);
         if (!url) return { id: step.id, value: { error: "no_url" }, fail: true };
-        const cacheKey = `${tool.id}:${step.method || "GET"}:${url}`;
-        if ((step.method || "GET") === "GET") {
-          const hit = await db.get<{ body: string; expires_at: number }>(
-            `SELECT body, expires_at FROM result_cache WHERE cache_key = ?`,
-            [cacheKey],
-          );
-          if (hit && hit.expires_at > Date.now()) {
-            // A corrupt cached body (older writer, truncated write) is a miss,
-            // not a crash: refetch and overwrite below.
-            try {
-              const value = JSON.parse(hit.body);
-              cacheHits++;
-              return { id: step.id, value, fail: false };
-            } catch {
-              /* fall through to a live fetch */
-            }
+        const isGet = (step.method || "GET") === "GET";
+        const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
+        if (isGet) {
+          // A prefetch already fetching this exact resource: ride along rather
+          // than duplicate the request. A rejected speculative load surfaces
+          // here as undefined — a miss we fall through from.
+          const joined = await joinInflight<unknown>(cacheKey);
+          if (joined !== undefined) {
+            cacheHits++;
+            return { id: step.id, value: joined, fail: false };
+          }
+          const hit = await readResult<unknown>(db, cacheKey);
+          if (hit !== undefined) {
+            cacheHits++;
+            return { id: step.id, value: hit, fail: false };
           }
         }
         let parsed: unknown;
         let stepOk = false;
         try {
-          const parsedUrl = new URL(url);
-          // The forge is an in-process fixture: it never leaves the process, so
-          // it is exempt from the egress rules rather than checked against them.
-          const local = handleForge(parsedUrl);
-          const res = local || (await fetchWithRetry(url, { method: step.method || "GET" }));
-          const text = await res.text();
-          stepOk = res.ok;
-          try {
-            parsed = JSON.parse(text);
-          } catch {
-            parsed = text;
-          }
+          const load = liveLoad({ db }, cacheKey, step, url);
+          // GETs dedupe through singleFlight so prefetch and hot path share one
+          // request; mutating methods must each execute, so they never do.
+          const out = isGet ? await singleFlight(cacheKey, load) : await load();
+          parsed = out.parsed;
+          stepOk = out.ok;
         } catch (err) {
           return { id: step.id, value: { error: String(err) }, fail: true };
-        }
-        if ((step.method || "GET") === "GET" && stepOk) {
-          await db.run(`INSERT OR REPLACE INTO result_cache (cache_key, body, expires_at) VALUES (?, ?, ?)`, [
-            cacheKey,
-            JSON.stringify(parsed),
-            Date.now() + CACHE_TTL_MS,
-          ]);
-          // Expired rows are never read again but were never deleted, so the
-          // table grew without bound on long-lived installs. A full sweep on
-          // every write would tax the hot path; sampling keeps it bounded at
-          // ~2% overhead while still converging.
-          if (Math.random() < 0.02) {
-            void db.run(`DELETE FROM result_cache WHERE expires_at < ?`, [Date.now() - CACHE_TTL_MS]).catch(() => undefined);
-          }
         }
         return { id: step.id, value: parsed, fail: !stepOk };
       }),
@@ -171,6 +276,7 @@ async function playOne(
       }
       ok++;
     }
+    if (!failed && wi + 1 < waves.length) maybePrefetch(waves[wi + 1]!);
     if (failed) break;
   }
 
@@ -249,7 +355,7 @@ function asDeopt(err: unknown): { reason: string; stepsRun: number } | null {
 
 export async function playTool(
   db: EdenDb,
-  tool: { id: string; steps: string; name: string },
+  tool: ToolRef,
   params: Record<string, string>,
 ): Promise<Receipt> {
   try {
@@ -274,7 +380,7 @@ export async function playTool(
 
 async function playOne0(
   db: EdenDb,
-  tool: { id: string; steps: string; name: string },
+  tool: ToolRef,
   params: Record<string, string>,
 ): Promise<Receipt> {
   const issues = issuesFromParams(params);
@@ -352,6 +458,8 @@ export async function warmWorkspaceBundle(
       }
     })();
     if (!steps.some((s) => s.url && /\{(id|issue|run_id)\}/.test(s.url))) continue;
-    await playTool(db, tool, { issues: csv, ids: csv, origin });
+    // workspace_id rides along so the run's cache keys are tenant-scoped from
+    // the start instead of costing a tool-row lookup per playOne.
+    await playTool(db, { ...tool, workspace_id: workspaceId }, { issues: csv, ids: csv, origin });
   }
 }

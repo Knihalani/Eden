@@ -1,0 +1,155 @@
+"""HTTP client for the hosted Eden runtime.
+
+Pure stdlib (urllib) — no third-party dependencies, Python >= 3.9.
+
+Honesty invariants:
+
+- Nothing in this module can approve anything. Approval happens only on the
+  Eden website; a key never turns a tool On. These calls only *ask* the
+  runtime whether a compiled tool answers, *execute* an already-On tool, or
+  *record* what the agent did anyway.
+- Configuration comes from arguments first, then ``EDEN_API_KEY`` /
+  ``EDEN_PLANE_URL`` (with ``EDEN_BASE_URL`` kept as an alias), so hosts can
+  point the SDK at their plane without code changes.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import urllib.error
+import urllib.request
+from typing import Any
+
+DEFAULT_BASE_URL = "http://127.0.0.1:8787"
+DEFAULT_API_KEY = "eden_dev"
+DEFAULT_TIMEOUT_SECONDS = 5.0
+
+
+class EdenError(RuntimeError):
+    """A request to the runtime failed (non-2xx, bad body, network)."""
+
+    def __init__(self, message: str, *, status: int | None = None, url: str | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.url = url
+
+
+class EdenTimeoutError(EdenError):
+    """The runtime did not answer within the configured timeout."""
+
+
+def _resolve(base_url: str | None, api_key: str | None) -> tuple[str, str]:
+    base = (
+        base_url
+        or os.environ.get("EDEN_PLANE_URL")
+        or os.environ.get("EDEN_BASE_URL")
+        or DEFAULT_BASE_URL
+    )
+    key = api_key or os.environ.get("EDEN_API_KEY") or DEFAULT_API_KEY
+    return base.rstrip("/"), key
+
+
+class EdenClient:
+    """Small typed-ish client: every method returns plain dicts."""
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout: float | None = None,
+    ) -> None:
+        self.base_url, self.api_key = _resolve(base_url, api_key)
+        self.timeout = DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout
+
+    # -- low level ---------------------------------------------------------
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """POST/GET one JSON exchange. Raises :class:`EdenError` on failure."""
+        url = f"{self.base_url}{path}"
+        data = None
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if payload is not None:
+            data = json.dumps(payload).encode()
+            headers["content-type"] = "application/json"
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout if timeout is None else timeout) as res:
+                raw = res.read().decode()
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = json.loads(exc.read().decode())
+                message = detail.get("error") if isinstance(detail, dict) else None
+            except Exception:
+                message = None
+            raise EdenError(
+                message or f"{method} {path} failed",
+                status=exc.code,
+                url=url,
+            ) from exc
+        except Exception as exc:
+            raise EdenTimeoutError(
+                f"{method} {path} timed out or was unreachable ({exc.__class__.__name__})",
+                url=url,
+            ) from exc
+        if not raw:
+            return {}
+        try:
+            body = json.loads(raw)
+        except ValueError as exc:
+            raise EdenError(f"{method} {path} returned non-JSON body", url=url) from exc
+        if not isinstance(body, dict):
+            raise EdenError(f"{method} {path} returned a non-object JSON body", url=url)
+        return body
+
+    def post(self, path: str, payload: dict[str, Any], timeout: float | None = None) -> dict[str, Any]:
+        return self.request("POST", path, payload, timeout)
+
+    # -- product contract --------------------------------------------------
+
+    def wrap(self, name: str, args: dict[str, Any], run_id: str | None = None) -> dict[str, Any]:
+        """Ask whether a compiled tool answers for this call.
+
+        Returns ``{"action": "play", "facts"|"text": ...}`` when the runtime
+        serves the compiled tool, or ``{"action": "original"}`` when the agent
+        should run the real thing.
+        """
+        body: dict[str, Any] = {"name": name, "args": args}
+        if run_id:
+            body["run_id"] = run_id
+        return self.post("/v1/wrap", body)
+
+    def play(self, name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute an already-approved (state='on') compiled tool via /v1/play."""
+        body: dict[str, Any] = {"name": name}
+        if args is not None:
+            body["args"] = args
+        return self.post("/v1/play", body)
+
+    def ingest(
+        self,
+        *,
+        agent_id: str,
+        run_id: str,
+        events: list[dict[str, Any]],
+        stretch_end: bool = False,
+    ) -> dict[str, Any]:
+        """Record observed tool calls. Best-effort by design; callers must
+        treat every failure here as ignorable."""
+        return self.post(
+            "/v1/ingest",
+            {"agent_id": agent_id, "run_id": run_id, "stretch_end": bool(stretch_end), "events": events},
+        )
+
+    def end_run(self, run_id: str, agent_id: str = "sdk_py") -> dict[str, Any]:
+        """Mark a recorded run finished (stretch_end). Records only."""
+        return self.ingest(agent_id=agent_id, run_id=run_id, events=[], stretch_end=True)
+
+
+__all__ = ["EdenClient", "EdenError", "EdenTimeoutError"]
