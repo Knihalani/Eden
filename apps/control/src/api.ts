@@ -49,6 +49,28 @@ function auth(req: Request, ctx: ApiCtx): boolean {
   return timingSafeEqualStr(m[1]!, ctx.token);
 }
 
+/**
+ * Shared page size for the list endpoints (`/v1/traces`, `/v1/receipts`).
+ * These used to return everything, unbounded — a long-running deployment
+ * could grow both tables without limit and the GETs would happily serialise
+ * all of it on every poll.
+ */
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 1000;
+
+/**
+ * Parse the `limit` query param: integer page size, default 100, hard cap
+ * 1000. Garbage falls back to the default rather than erroring, matching how
+ * /v1/tools/run treats a bogus `timeout`.
+ */
+function listLimitOf(url: URL): number {
+  const raw = url.searchParams.get("limit");
+  if (raw === null || raw.trim() === "") return DEFAULT_LIST_LIMIT;
+  const q = Number(raw);
+  if (!Number.isFinite(q)) return DEFAULT_LIST_LIMIT;
+  return Math.min(MAX_LIST_LIMIT, Math.max(1, Math.floor(q)));
+}
+
 /** Compare without letting the response time reveal a prefix match. */
 function timingSafeEqualStr(a: string, b: string): boolean {
   const ab = Buffer.from(a, "utf8");
@@ -455,7 +477,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   }
 
   if (p === "/v1/traces" && req.method === "GET") {
-    return json({ traces: ctx.store.traces() });
+    return json({ traces: ctx.store.traces().slice(0, listLimitOf(url)) });
   }
 
   if (p === "/v1/candidates" && req.method === "GET") {
@@ -646,8 +668,9 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
 
   if (p === "/v1/receipts" && req.method === "GET") {
     const toolId = url.searchParams.get("tool");
+    const limit = listLimitOf(url);
     const rows = toolId ? ctx.store.receiptsFor(toolId) : ctx.store.receipts();
-    return json({ receipts: rows.map(expandReceipt) });
+    return json({ receipts: rows.slice(0, limit).map(expandReceipt) });
   }
 
   const delCand = p.match(/^\/v1\/candidates\/([^/]+)$/);

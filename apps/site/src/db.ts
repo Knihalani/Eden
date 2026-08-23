@@ -231,6 +231,95 @@ async function migrate(db: EdenDb, neon: boolean) {
   await db
     .exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stretch_observed ON stretch (workspace_id, run_id, fingerprint, island_index)`)
     .catch(() => undefined);
+  // Drift canary ledger: one row per caught DeoptError during playback. The
+  // autoincrement id is the spec'd shape for SQLite; Neon cannot parse
+  // AUTOINCREMENT, so the managed branch creates its own SERIAL-flavored twin.
+  // Best-effort like every other backfill here — a failed ledger must not stop
+  // the server booting, it would only mean deopts go unwitnessed.
+  if (neon) {
+    await db
+      .exec(
+        `CREATE TABLE IF NOT EXISTS deopt_event (
+           id SERIAL PRIMARY KEY,
+           workspace_id TEXT NOT NULL,
+           tool_id TEXT NOT NULL,
+           reason TEXT,
+           steps_run INTEGER,
+           created_at BIGINT DEFAULT 0
+         )`,
+      )
+      .catch(() => undefined);
+  } else {
+    await db
+      .exec(
+        `CREATE TABLE IF NOT EXISTS deopt_event (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           workspace_id TEXT NOT NULL,
+           tool_id TEXT NOT NULL,
+           reason TEXT,
+           steps_run INTEGER,
+           created_at INTEGER
+         )`,
+      )
+      .catch(() => undefined);
+  }
+  await db
+    .exec(`CREATE INDEX IF NOT EXISTS idx_deopt_tool_created ON deopt_event (workspace_id, tool_id, created_at)`)
+    .catch(() => undefined);
+}
+
+/**
+ * Ledger one caught DeoptError against a tool.
+ *
+ * Called off playback's response path, so it swallows its own failures: losing
+ * a drift observation is recoverable (the next deopt records one), while an
+ * insert error surfacing into a /v1/play response that already did its work is
+ * not.
+ */
+export async function recordDeopt(
+  db: EdenDb,
+  workspaceId: string,
+  toolId: string,
+  opts: { reason?: string; steps_run?: number } = {},
+): Promise<void> {
+  try {
+    await db.run(`INSERT INTO deopt_event (workspace_id, tool_id, reason, steps_run, created_at) VALUES (?, ?, ?, ?, ?)`, [
+      workspaceId,
+      toolId,
+      opts.reason ?? null,
+      Number.isFinite(opts.steps_run) ? Number(opts.steps_run) : 0,
+      Date.now(),
+    ]);
+  } catch {
+    /* best-effort by contract */
+  }
+}
+
+/** How many deopts a tool accumulated inside the trailing window. */
+export async function countDeopts(
+  db: EdenDb,
+  workspaceId: string,
+  toolId: string,
+  windowMs = 24 * 60 * 60_000,
+): Promise<number> {
+  const row = await db.get<{ n: number | string }>(
+    `SELECT COUNT(*) AS n FROM deopt_event WHERE workspace_id = ? AND tool_id = ? AND created_at >= ?`,
+    [workspaceId, toolId, Date.now() - windowMs],
+  );
+  return Number(row?.n ?? 0);
+}
+
+export async function listDeopts(
+  db: EdenDb,
+  workspaceId: string,
+  toolId: string,
+  limit = 20,
+): Promise<Array<{ id: number; tool_id: string; reason: string | null; steps_run: number | null; created_at: number }>> {
+  return db.all(
+    `SELECT id, tool_id, reason, steps_run, created_at FROM deopt_event
+      WHERE workspace_id = ? AND tool_id = ? ORDER BY created_at DESC LIMIT ?`,
+    [workspaceId, toolId, limit],
+  );
 }
 
 /** The `hash` column stores this, never the token itself. */

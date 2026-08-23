@@ -15,6 +15,7 @@ import {
 } from "@eden/core";
 import { handleForge } from "./forge";
 import { safeFetch } from "./ssrf";
+import { recordDeopt } from "./db";
 
 const CACHE_TTL_MS = 30 * 60_000;
 
@@ -228,7 +229,50 @@ async function playOne(
   return receipt;
 }
 
+/**
+ * Structural DeoptError recognition, without a hard dependency on the runtime
+ * package: isDeopt() in @eden/runtime answers exactly this shape (the `deopt`
+ * marker plus the name), and playback cannot import that package — apps/site
+ * only links @eden/core. If the runtime ever changes its duck-type, this
+ * mirrors it; anything unknown is simply not a deopt.
+ */
+function asDeopt(err: unknown): { reason: string; stepsRun: number } | null {
+  if (!err || typeof err !== "object") return null;
+  const rec = err as { deopt?: boolean; name?: string; reason?: unknown; stepsRun?: unknown };
+  if (rec.deopt !== true || rec.name !== "DeoptError") return null;
+  const n = Number(rec.stepsRun);
+  return {
+    reason: typeof rec.reason === "string" ? rec.reason : String(rec.reason ?? ""),
+    stepsRun: Number.isFinite(n) ? n : 0,
+  };
+}
+
 export async function playTool(
+  db: EdenDb,
+  tool: { id: string; steps: string; name: string },
+  params: Record<string, string>,
+): Promise<Receipt> {
+  try {
+    return await playOne0(db, tool, params);
+  } catch (err) {
+    const deopt = asDeopt(err);
+    if (deopt) {
+      // Drift ledger, best-effort and strictly off the response path's error
+      // contract: the caller already gets the deopt thrown back regardless of
+      // whether the ledger row landed. The workspace comes from the tool row —
+      // playTool's signature never carried it.
+      try {
+        const row = await db.get<{ workspace_id: string }>(`SELECT workspace_id FROM tool WHERE id = ?`, [tool.id]);
+        if (row) await recordDeopt(db, row.workspace_id, tool.id, { reason: deopt.reason, steps_run: deopt.stepsRun });
+      } catch {
+        /* the deopt itself must still propagate untouched */
+      }
+    }
+    throw err;
+  }
+}
+
+async function playOne0(
   db: EdenDb,
   tool: { id: string; steps: string; name: string },
   params: Record<string, string>,
