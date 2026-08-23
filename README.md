@@ -16,3 +16,8 @@ Dashboard  /dashboard
 Workshop   /workshop
 MCP        POST /mcp
 ```
+
+| Package | What it is |
+| --- | --- |
+| `packages/sdk-js` | TS SDK: wrap tool calls so model traffic routes onto compiled tools |
+| `packages/sdk-py` | Pure-stdlib Python SDK: same wrap/fallback contract, no dependencies |

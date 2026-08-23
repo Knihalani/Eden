@@ -9,3 +9,4 @@ export * from "./names";
 export * from "./signals";
 export * from "./ground";
 export * from "./confirm";
+export * from "./diff";

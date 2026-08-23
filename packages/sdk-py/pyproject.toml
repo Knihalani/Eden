@@ -1,0 +1,10 @@
+[project]
+name = "eden-agent"
+version = "0.1.0"
+description = "Pure-stdlib Python client for the Eden runtime: wrap tool calls onto compiled tools with fail-open fallback."
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.eden]
+# No build/install step needed to run the tests: `python3 -m unittest
+# discover -s packages/sdk-py/tests` puts the package root on sys.path.

@@ -25,5 +25,17 @@ if [ -z "$dirs" ]; then
 fi
 
 echo "test dirs:" $dirs
+
+# Python SDK tests live under packages/sdk-py. bun's discovery only finds
+# *.test.ts, so run them here when python3 exists; environments without
+# python3 skip quietly and stay green.
+if command -v python3 >/dev/null 2>&1; then
+  echo "python tests: packages/sdk-py"
+  python3 -m unittest discover -s packages/sdk-py/tests || {
+    echo "python tests failed" >&2
+    exit 1
+  }
+fi
+
 # shellcheck disable=SC2086 # word splitting is intended: one argument per dir
 exec bun test "$@" $dirs
