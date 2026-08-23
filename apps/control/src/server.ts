@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { handleChatCompletions, createState } from "@eden/wrap";
 import { minLlmReductionOf } from "@eden/ir";
-import { handleApi, type ApiCtx } from "./api";
+import { handleApi, isManagedDeployment, type ApiCtx } from "./api";
 import type { Store } from "./store";
 
 export type ServerOpts = {
@@ -64,20 +64,39 @@ function authorized(req: Request, token?: string): boolean {
 }
 
 export function createHandler(opts: ServerOpts) {
+  // "eden_dev" is a public credential — it is in the source, the docs and
+  // every laptop install. Middleware exempts /v1 from Clerk, so an embedded
+  // handler built with the `EDEN_API_KEY || "eden_dev"` fallback on a managed
+  // deployment would accept it from the public internet on the catch-all
+  // route: full read of every workspace, plus writes on ungated routes. Same
+  // managed/dev logic as apps/web's eden-key: on a managed install without a
+  // real key, refuse the fallback (log once, then authorise nobody) instead
+  // of presenting a credential anyone can guess.
+  let token = opts.token;
+  const refusedDevFallback = token === "eden_dev" && isManagedDeployment() && process.env.EDEN_DEV !== "1";
+  if (refusedDevFallback) {
+    console.error(
+      "[eden] EDEN_API_KEY is not set on a managed install; refusing the public dev credential — set EDEN_API_KEY (or EDEN_DEV=1 for a deliberate dev install)",
+    );
+    token = undefined;
+  }
   // Fail at construction rather than serving an API that authorises nobody and
   // reports 401 for everything, which reads as a broken install rather than a
-  // misconfigured one.
+  // misconfigured one. (The refused-fallback case above deliberately does not
+  // throw: a misconfigured deploy should answer 401, not crash-loop.)
   if (!opts.token) {
     throw new Error("eden control needs a token: pass --key, set EDEN_API_KEY, run eden login, or use --dev");
   }
-  const wrapState = createState({ apiKey: opts.token });
+  const wrapState = createState({ apiKey: token });
   const ctx: ApiCtx = {
     store: opts.store,
     registry: opts.registry,
     island: opts.island,
     sandboxFor: opts.sandboxFor,
     wrapState,
-    token: opts.token,
+    // The scrubbed token, not opts.token: when the dev fallback was refused,
+    // auth() must see "nothing is authorised" and 401 everything.
+    token,
   };
 
   return async (req: Request): Promise<Response> => {
@@ -108,7 +127,7 @@ export function createHandler(opts: ServerOpts) {
       // where the /v1/ gate lives. Unauthenticated, it was free inference on
       // the operator's upstream key for anyone who could reach the port — and
       // a text/plain POST is CORS-simple, so it needed no preflight to allow.
-      if (!authorized(req, opts.token)) {
+      if (!authorized(req, token)) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401, headers: corsHeaders(req) });
       }
       return handleChatCompletions(req, {

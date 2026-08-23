@@ -85,6 +85,26 @@ describe("write steps survive mining", () => {
     expect(cleanEvents([read("get_issue", 0), read("get_issue", 1)])).toHaveLength(1);
     expect(cleanEvents([read("list_comments", 0), read("list_comments", 1)])).toHaveLength(1);
     expect(cleanEvents([read("mcp__linear__get_issue", 0), read("mcp__linear__get_issue", 1)])).toHaveLength(1);
+    expect(cleanEvents([read("fetchUserDetails", 0), read("fetchUserDetails", 1)])).toHaveLength(1);
+  });
+
+  test("byte-identical mutating-compound names survive as two", () => {
+    // nameIsRead used to test READ_VERB anywhere in the name after camelCase
+    // word-breaking, so a mutating compound whose head or object contained a
+    // read word ("get", "read", "list", "status") classified as a read and its
+    // byte-identical repeats collapsed into one — silent under-execution.
+    // getOrCreateRecord, readThenWrite, listAndCharge, update_status (matches
+    // "status"!) and trigger_fetch all carry a mutating word; none may collapse.
+    const mk = (name: string, seq: number): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name,
+      args: { id: "7" },
+      ok: true,
+    });
+    for (const name of ["getOrCreateRecord", "readThenWrite", "listAndCharge", "update_status", "trigger_fetch"]) {
+      expect(cleanEvents([mk(name, 0), mk(name, 1)])).toHaveLength(2);
+    }
   });
 });
 

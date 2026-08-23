@@ -157,17 +157,17 @@ describe("DELETE /mcp terminates the session cleanly", () => {
 
   test("answers 202 accepted, not a non-JSON error", async () => {
     const { handleFetch } = await import(SERVER_MOD);
-    const res = await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE" }));
+    const res = await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }));
     expect(res.status).toBe(202);
   });
 
   test("POST still reaches the JSON-RPC handler afterwards", async () => {
     const { handleFetch } = await import(SERVER_MOD);
-    await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE" }));
+    await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }));
     const res = await handleFetch(
       new Request("http://127.0.0.1:8787/mcp", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", host: "127.0.0.1:8787" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
       }),
     );

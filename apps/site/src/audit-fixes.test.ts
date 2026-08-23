@@ -56,7 +56,9 @@ describe("approve of an unknown or foreign tool is a 404", () => {
     // afterAll cannot pull the file out from under the instance another test
     // file already cached.
     import(`./server?bust=${"approve-404"}`).then(({ handleFetch }) =>
-      handleFetch(new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, { method: "POST", headers })),
+      handleFetch(
+        new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, { method: "POST", headers: { host: "127.0.0.1:8787", ...headers } }),
+      ),
     );
 
   test("an existing workspace tool still approves with a 303 redirect", async () => {
@@ -266,6 +268,23 @@ describe("state-changing requests with a forged Host are refused", () => {
     const res = await post("http://eden.example.com/v1/ingest", { host: "eden.example.com" });
     expect(res.status).toBe(403);
   });
+
+  test("a write with no Host header at all is refused (RFC 7230 §5.4, fail-closed)", async () => {
+    // Bun does not synthesize Host on constructed Requests, so this really is
+    // a Host-less write — the shape a rebinding page could send to slip past
+    // every request-derived check.
+    const { handleFetch } = await import(`./server?bust=${"nohost-" + Math.random().toString(36).slice(2)}`);
+    const res = await handleFetch(
+      new Request("http://127.0.0.1:8787/v1/ingest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ run_id: "r1", events: [] }),
+      }),
+    );
+    expect(res.status).toBe(403);
+    const res2 = await handleFetch(new Request("http://127.0.0.1:8787/v1/ingest", { method: "POST", body: "{}" }));
+    expect(res2.status).toBe(403);
+  });
 });
 
 describe("approving persists the candidate's shadow manifest", () => {
@@ -310,7 +329,7 @@ describe("approving persists the candidate's shadow manifest", () => {
       handleFetch(
         new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, {
           method: "POST",
-          headers: { accept: "application/json", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+          headers: { accept: "application/json", host: "127.0.0.1:8787", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         }),
       ),
@@ -344,6 +363,17 @@ describe("approving persists the candidate's shadow manifest", () => {
     const res = await postJson("t-m", { manifest: { tokensSaved: 5, llmReduction: 9 } });
     expect(res.status).toBe(400);
     expect((await db.get<{ state: string }>(`SELECT state FROM tool WHERE id = 't-m'`))?.state).toBe("draft");
+  });
+
+  test("a negative saving is refused — a cost must not render as measured savings", async () => {
+    const res = await postJson("t-m", { manifest: { tokensSaved: -42, tokensMeasured: true } });
+    expect(res.status).toBe(400);
+    // The refusal path exits before the route's own schema ensure, so provide
+    // the column here to assert nothing was written into it.
+    await ensureLedgerSchema(db);
+    const row = await db.get<{ manifest: string | null; state: string }>(`SELECT manifest, state FROM tool WHERE id = 't-m'`);
+    expect(row?.state).toBe("draft");
+    expect(row?.manifest).toBeNull();
   });
 
   test("the workshop's form approval carries no manifest and works unchanged", async () => {

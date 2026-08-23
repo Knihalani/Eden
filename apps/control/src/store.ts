@@ -405,13 +405,37 @@ export class Store {
    * authenticated /v1/workspace/orgs route, and that route refuses to add an
    * org to a workspace already bound to a different one — otherwise any
    * authenticated member of any org could claim tenant access after the fact.
+   *
+   * The claim itself is atomic: a single INSERT … SELECT … WHERE NOT EXISTS
+   * inside an IMMEDIATE transaction, so two processes sharing this database
+   * file cannot both read "no binding yet" and each write their own org (the
+   * first-bind TOCTOU — the read-then-write check in the route cannot close
+   * it, because the read and the write are separate statements). Returns
+   * "bound" when this call created the first binding, "exists" when the
+   * requested org already holds the workspace (idempotent re-bind), and
+   * "conflict" when a different org won the race or got there first.
    */
-  bindOrg(workspaceId: string, orgId: string): void {
-    this.db.run(`INSERT OR IGNORE INTO workspace_orgs (workspace_id, org_id, created_at) VALUES (?,?,?)`, [
-      workspaceId,
-      orgId,
-      Date.now(),
-    ]);
+  bindOrg(workspaceId: string, orgId: string): "bound" | "exists" | "conflict" {
+    this.db.exec(`BEGIN IMMEDIATE`);
+    try {
+      const claim = this.db.run(
+        `INSERT INTO workspace_orgs (workspace_id, org_id, created_at)
+         SELECT ?, ?, ? WHERE NOT EXISTS (
+           SELECT 1 FROM workspace_orgs WHERE workspace_id = ?
+         )`,
+        [workspaceId, orgId, Date.now(), workspaceId],
+      );
+      const result = claim.changes > 0 ? "bound" : this.orgsFor(workspaceId).includes(orgId) ? "exists" : "conflict";
+      this.db.exec(`COMMIT`);
+      return result;
+    } catch (err) {
+      try {
+        this.db.exec(`ROLLBACK`);
+      } catch {
+        /* transaction already unwound */
+      }
+      throw err;
+    }
   }
 
   /** Every org allowed to drive state changes on this workspace. */

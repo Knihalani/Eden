@@ -1,6 +1,16 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, afterAll } from "bun:test";
 import { Store } from "./store";
 import { createHandler } from "./server";
+
+// Org binding: a DATABASE_URL in .env makes the control plane treat itself as
+// managed, which would refuse this file's deliberate "eden_dev" handler.
+// Same pin as golden.test.ts.
+const PREV_DEV = process.env.EDEN_DEV;
+process.env.EDEN_DEV = "1";
+afterAll(() => {
+  if (PREV_DEV === undefined) delete process.env.EDEN_DEV;
+  else process.env.EDEN_DEV = PREV_DEV;
+});
 
 /**
  * The preflight branch in `server.ts` and the ~39 `return json(...)` exits in

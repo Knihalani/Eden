@@ -193,11 +193,84 @@ describe("org binding", () => {
       const first = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
       expect(first.status).toBe(200);
       const steal = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_b"), body: JSON.stringify({ org_id: "org_b" }) }));
-      expect(steal.status).toBe(403);
+      // 409, not 403: the refusal now comes from the store's atomic claim
+      // (the binding already exists and names a different org) rather than a
+      // read-then-write pre-check that raced across processes.
+      expect(steal.status).toBe(409);
+      expect(((await steal.json()) as { error: string }).error).toBe("workspace not bound to this org");
       expect(store.orgsFor(Store.WORKSPACE_ID)).toEqual(["org_a"]);
       // Re-binding the same org is idempotent.
       const again = await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
       expect(again.status).toBe(200);
+    });
+  });
+
+  test("the first-bind claim itself is atomic", () => {
+    const store = new Store(":memory:");
+    // First bind wins…
+    expect(store.bindOrg(Store.WORKSPACE_ID, "org_a")).toBe("bound");
+    // …same org re-binds idempotently…
+    expect(store.bindOrg(Store.WORKSPACE_ID, "org_a")).toBe("exists");
+    // …and a different org loses even when it would have read "no binding"
+    // in the old check-then-insert window (two processes sharing one DB).
+    expect(store.bindOrg(Store.WORKSPACE_ID, "org_b")).toBe("conflict");
+    expect(store.orgsFor(Store.WORKSPACE_ID)).toEqual(["org_a"]);
+  });
+
+  test("wrap-run carries the tenant gate", async () => {
+    await withEnv({ DATABASE_URL: undefined, VERCEL: undefined }, async () => {
+      const store = new Store(":memory:");
+      const handler = createHandler({ store, token: TOKEN });
+      seedTool(store);
+      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      // Running a tool performs its third-party calls — state-changing, so a
+      // foreign (or absent) org must not reach the executor.
+      const wrong = await handler(new Request("http://x/v1/wrap-run", { method: "POST", headers: auth("org_b"), body: "{}" }));
+      expect(wrong.status).toBe(403);
+      const noOrg = await handler(new Request("http://x/v1/wrap-run", { method: "POST", headers: auth(), body: "{}" }));
+      expect(noOrg.status).toBe(403);
+      // Nothing ran: no receipts were written for the tool.
+      expect(store.receiptStats("tool_1").n).toBe(0);
+    });
+  });
+
+  test("candidate shadow carries the tenant gate", async () => {
+    await withEnv({ DATABASE_URL: undefined, VERCEL: undefined }, async () => {
+      const store = new Store(":memory:");
+      const handler = createHandler({ store, token: TOKEN });
+      seedApprovableCandidate(store);
+      await handler(new Request("http://x/v1/workspace/orgs", { method: "POST", headers: auth("org_a"), body: JSON.stringify({ org_id: "org_a" }) }));
+      // Re-shadowing overwrites verdict/manifest/refusal — review state a
+      // foreign org must not be able to rewrite or clear.
+      const before = store.candidate("tool_1");
+      const wrong = await handler(new Request("http://x/v1/candidates/tool_1/shadow", { method: "POST", headers: auth("org_b"), body: "{}" }));
+      expect(wrong.status).toBe(403);
+      expect(store.candidate("tool_1")).toEqual(before);
+      const noOrg = await handler(new Request("http://x/v1/candidates/tool_1/shadow", { method: "POST", headers: auth(), body: "{}" }));
+      expect(noOrg.status).toBe(403);
+    });
+  });
+
+  test("a managed install never accepts the public dev credential", async () => {
+    await withEnv({ DATABASE_URL: "postgres://managed", VERCEL: undefined, EDEN_DEV: undefined }, async () => {
+      const store = new Store(":memory:");
+      const errors: string[] = [];
+      const orig = console.error;
+      console.error = (...parts: unknown[]) => errors.push(parts.join(" "));
+      let handler: (req: Request) => Promise<Response>;
+      try {
+        handler = createHandler({ store, token: "eden_dev" });
+      } finally {
+        console.error = orig;
+      }
+      // The fallback was refused at construction, so every /v1 request —
+      // including one bearing the literal every Eden deployment ships with —
+      // gets 401 instead of a full read of all workspaces.
+      const res = await handler(new Request("http://x/v1/tools", { headers: { authorization: "Bearer eden_dev" } }));
+      expect(res.status).toBe(401);
+      const chat = await handler(new Request("http://x/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer eden_dev" }, body: "{}" }));
+      expect(chat.status).toBe(401);
+      expect(errors.some((e) => e.includes("refusing the public dev credential"))).toBe(true);
     });
   });
 

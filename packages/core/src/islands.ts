@@ -131,8 +131,8 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
     // an allowlist, following the same philosophy as commutes(): a shell
     // event's mutation comes from its COMMAND via the curl/gh write
     // heuristics; any other event's mutation comes from its NAME, which must
-    // positively classify as a read — the READ_VERB pattern over __ . _ - /
-    // delimiters and camelCase word breaks — to ever collapse. The old
+    // positively classify as a read — no mutating word anywhere, and a READ
+    // word at the head only (see nameIsRead) — to ever collapse. The old
     // shell-only guard let byte-identical mcp__linear__create_issue /
     // create_record repeats collapse into one because neither heuristic had
     // ever heard of them: silent under-execution. Provably-read repeats
@@ -158,15 +158,86 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
 /**
  * Positive read classification for a tool-event NAME.
  *
- * The same allowlist discipline as `commutes()`: only a name that positively
- * matches read vocabulary counts as safe to collapse. READ_VERB is anchored to
- * a delimiter (`__`, `.`, `_`, `-`, `/`) or string start, so "widget_get" is a
- * read but "targeted" and "forgetful" are not; camelCase boundaries are normalised
- * to word breaks first so "commentsList" reads like "comments.list".
+ * This mirrors the discipline of packages/ir/src/names.ts (isMutating +
+ * isReadName). It is duplicated locally because core does NOT depend on
+ * @eden/ir — if either vocabulary changes, align the other.
+ *
+ * Three rules, in order:
+ *  1. The name is word-broken over camelCase boundaries and the `__ . _ - /`
+ *     delimiters first.
+ *  2. ANY mutating word anywhere makes the name a write: compound verbs like
+ *     getOrCreateRecord, readThenWrite and listAndCharge mutate, and so does
+ *     update_status for carrying "update" at all. The old unanchored READ_VERB
+ *     matched the "get"/"read"/"list"/"status" fragments inside exactly those
+ *     names, so their byte-identical repeats collapsed into one call — silent
+ *     under-execution.
+ *  3. Otherwise a READ word must sit at the HEAD position only (the first word
+ *     after any mcp__server__ transport prefix), from a conservative vocabulary
+ *     matching ir/names.ts's READ_NAME (view/status/show-style heads are not
+ *     trusted there either). Anything unmatched fails closed: an unknown name
+ *     never collapses.
  */
+const MUTATING_WORDS = [
+  // Copied from packages/ir/src/names.ts MUTATING_VERBS:
+  "write",
+  "create",
+  "update",
+  "delete",
+  "send",
+  "notify",
+  "post",
+  "put",
+  "patch",
+  "insert",
+  "remove",
+  "destroy",
+  "drop",
+  "publish",
+  "upsert",
+  // Core extensions for compound tool names ir has not met yet:
+  "set",
+  "add",
+  "merge",
+  "close",
+  "cancel",
+  "charge",
+  "deploy",
+  "run",
+  "execute",
+  "trigger",
+  "rotate",
+  "revoke",
+  "invite",
+  "comment",
+  "reply",
+  "submit",
+  "approve",
+  "pay",
+  "refund",
+];
+// Mirrors READ_NAME in packages/ir/src/names.ts.
+const READ_WORDS = ["lookup", "fetch", "get", "read", "list", "search", "find", "describe", "show", "head"];
+/** Coding-native tools we name ourselves and know are reads. */
+const NATIVE_READS = new Set(["WebFetch", "WebSearch"]);
+
+/** Split a tool name into words: snake, kebab, dotted, slashed and camel all count. */
+function nameWords(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase());
+}
+
 function nameIsRead(name: string): boolean {
-  const wordBroken = name.replace(/([a-z0-9])([A-Z])/g, "$1.$2");
-  return READ_VERB.test(wordBroken);
+  if (NATIVE_READS.has(name)) return true;
+  // mcp__linear__get_issue carries its verb after the server prefix; judge the
+  // effective tool name, not the transport decoration.
+  const effective = name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
+  const words = nameWords(effective);
+  if (words.some((w) => MUTATING_WORDS.includes(w))) return false;
+  const head = words[0];
+  return Boolean(head && READ_WORDS.includes(head));
 }
 
 /**

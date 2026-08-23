@@ -107,7 +107,7 @@ const ORG_HEADER = "x-eden-org";
  * apps/site's managed-install check (DATABASE_URL / VERCEL, EDEN_DEV override)
  * so both planes agree on when permissive dev behaviour is allowed.
  */
-function isManagedDeployment(): boolean {
+export function isManagedDeployment(): boolean {
   return Boolean(process.env.DATABASE_URL) || Boolean(process.env.VERCEL);
 }
 
@@ -445,6 +445,12 @@ async function shipCandidate(
 }
 
 async function maybeAutoApprove(ctx: ApiCtx): Promise<number> {
+  // Same predicate as apps/site's handleFetch: auto-approve must be impossible
+  // anywhere credentials are actually required, not only on Vercel. The env
+  // var used to survive onto managed installs, where a single posted trace
+  // batch that crosses the compile threshold shipped every PASS candidate with
+  // no review at all.
+  if (isManagedDeployment() && process.env.EDEN_DEV !== "1") delete process.env.EDEN_AUTO_APPROVE;
   if (process.env.EDEN_AUTO_APPROVE !== "1") return 0;
   let n = 0;
   for (const c of ctx.store.candidates()) {
@@ -497,11 +503,11 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
 
   /**
    * Provisioning: register the caller's Clerk org against this workspace.
-   * Key-gated like every /v1 route, but the write is workspace-scoped by the
-   * binding rules themselves — an already-bound workspace only accepts its own
-   * org (idempotent re-bind), never a new one, so a second org cannot claim
-   * tenant access with the shared key. The web plane calls this when it
-   * onboards an org ("with keys").
+   * Key-gated like every /v1 route. The write goes through the store's atomic
+   * claim, so an already-bound workspace only ever accepts its own org
+   * (idempotent re-bind) — a second org gets 409, and so does a racing
+   * process that lost a first-bind race it could previously have both "won".
+   * The web plane calls this when it onboards an org ("with keys").
    */
   if (p === "/v1/workspace/orgs" && req.method === "POST") {
     const parsed = await readJson(req);
@@ -509,9 +515,10 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     const b = parsed.value as { org_id?: string; orgId?: string };
     const org = (b.org_id || b.orgId || req.headers.get(ORG_HEADER) || "").trim();
     if (!org) return json({ error: "org_id required" }, 400);
-    const bound = ctx.store.orgsFor(Store.WORKSPACE_ID);
-    if (bound.length && !bound.includes(org)) return json({ error: "workspace not bound to this org" }, 403, req);
-    ctx.store.bindOrg(Store.WORKSPACE_ID, org);
+    const claimed = ctx.store.bindOrg(Store.WORKSPACE_ID, org);
+    // No read-then-write here: the pre-check that used to sit in front of
+    // bindOrg was itself a TOCTOU window across processes sharing one DB.
+    if (claimed === "conflict") return json({ error: "workspace not bound to this org" }, 409, req);
     return json({ ok: true, orgs: ctx.store.orgsFor(Store.WORKSPACE_ID) });
   }
 
@@ -611,6 +618,11 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
 
   const shadowMatch = p.match(/^\/v1\/candidates\/([^/]+)\/shadow$/);
   if (shadowMatch && req.method === "POST") {
+    // Re-shadowing overwrites the review state (verdict, manifest, refusal),
+    // so it is a tenant write like approve/pause, not a read — without the
+    // gate any key-holder could rewrite or clear another org's refusal.
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
     const c = ctx.store.candidate(shadowMatch[1]!);
     if (!c) return json({ error: "not found" }, 404);
     if (!c.program) return json({ error: "refused" }, 409);
@@ -628,6 +640,10 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   }
 
   if (p === "/v1/wrap-run" && req.method === "POST") {
+    // Running a program performs its tool calls against third-party APIs —
+    // state-changing, and cross-tenant if ungated. Same gate as approve/pause.
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
     const parsed = await readJson(req);
     if (!parsed.ok) return parsed.res;
     const body = parsed.value as {

@@ -179,12 +179,26 @@ function allowedHostNames(): Set<string> {
  * it reached (hookd's hostIsLoopback makes the same argument).
  *
  * HTTPS requests are exempt: TLS binds the name, and a rebinding page cannot
- * present a valid certificate for one it rebound. A missing Host is
- * HTTP/1.0 or a raw socket, not a browser — benign, as in hookd.
+ * present a valid certificate for one it rebound.
+ *
+ * A missing Host is refused. RFC 7230 §5.4 requires every HTTP/1.1 request to
+ * carry Host, so an absent header is either malformed or pre-HTTP/1.1 — and
+ * Bun's Request does not expose which, so the version exemption cannot be
+ * detected honestly. Fail-open for everything would restore the DNS-rebinding
+ * hole this check exists to close (a rebinder can simply omit Host). The one
+ * concession: body-less GET/HEAD reads are still admitted, because they carry
+ * no write for a rebinding page to forge and legacy clients plausibly predate
+ * Host. Everything that can mutate is refused without one.
  */
 function hostHeaderMatchesDeployment(req: Request): boolean {
   const raw = req.headers.get("host");
-  if (!raw) return true;
+  if (!raw) {
+    // GET/HEAD cannot carry a body by fetch-spec construction, so the null
+    // check below only ever documents intent — but it keeps this exception
+    // honest if a bodiless read method is ever widened.
+    const bodilessRead = (req.method === "GET" || req.method === "HEAD") && req.body === null;
+    return bodilessRead;
+  }
   try {
     if (new URL(req.url).protocol === "https:") return true;
   } catch {

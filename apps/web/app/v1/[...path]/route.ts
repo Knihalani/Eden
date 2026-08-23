@@ -1,5 +1,6 @@
 import { wrapFetch } from "@/lib/wrap";
 import { PRIVATE_NO_STORE } from "@/lib/http-cache";
+import { v1Authorized } from "../auth";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -13,7 +14,15 @@ function seal(res: Response): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
+const unauthorized = () =>
+  Response.json({ error: "unauthorized" }, { status: 401, headers: { "cache-control": PRIVATE_NO_STORE } });
+
 function run(req: Request) {
+  // OPTIONS carries no authorization header by spec — the handler answers
+  // CORS preflights itself. Everything else must present a credential that is
+  // valid for this install (see ./auth.ts for why this sits in front of the
+  // embedded handler's own gate).
+  if (req.method !== "OPTIONS" && !v1Authorized(req)) return unauthorized();
   return wrapFetch()(req).then(seal);
 }
 

@@ -90,13 +90,20 @@ type CompiledStepLike = {
   url?: string;
   command?: string;
   method?: string;
+  /** Template bindings playback's resolveBound applies before URL expansion. */
+  bind?: Record<string, string>;
+  /** IR readOnly flag, carried through so prefetch never guesses. */
+  readOnly?: boolean;
 };
 
 /**
  * Project a recompiled StretchProgram onto the CompiledStep[] shape playback
  * can actually run, using the drifted tool's own compiled steps as the URL
  * source of truth: an IR tool step names a recorded call (`step.tool`), and
- * the matching prior CompiledStep carries that call's url/kind/commute.
+ * the matching prior CompiledStep carries that call's url/kind/commute. The
+ * prior step's bind map is carried over verbatim, and the IR step's readOnly
+ * flag is projected onto the copy, so playback resolves bound templates and
+ * prefetch-guards exactly as it would for a hand-compiled tool.
  *
  * This is deliberately strict. Playback has no semantics for island/loop/
  * assert steps, and a tool step with no recorded URL cannot be replayed — so
@@ -131,7 +138,7 @@ export function programToCompiledSteps(
   const reasons: string[] = [];
   const projected: CompiledStepLike[] = [];
   for (const s of steps) {
-    const rec = s as { id?: unknown; kind?: unknown; tool?: unknown } | null;
+    const rec = s as { id?: unknown; kind?: unknown; tool?: unknown; readOnly?: unknown } | null;
     if (!rec || typeof rec !== "object") {
       reasons.push("a recompiled step is not an object");
       continue;
@@ -154,6 +161,17 @@ export function programToCompiledSteps(
       url: match.url,
       ...(match.command !== undefined ? { command: match.command } : {}),
       ...(match.method !== undefined ? { method: match.method } : {}),
+      // Copied verbatim from the matched prior step: the recorded call's bind
+      // map is what lets playback's resolveBound fill template URLs like
+      // {{s1.head.sha}}. Dropping it made such drafts replay the unresolved
+      // template and fail at play time.
+      ...(match.bind !== undefined ? { bind: match.bind } : {}),
+      // Projected from the IR step (packages/ir ToolStep.readOnly), not from
+      // the prior compiled copy — the recompile may carry a fresher hint.
+      // Without this, playback's stepIsReadOnly falls back to "cloud_http GET
+      // ⇒ read-only" and an explicitly writable GET could be speculatively
+      // prefetched, firing its side effect unwatched.
+      ...(typeof rec.readOnly === "boolean" ? { readOnly: rec.readOnly } : {}),
     });
   }
   if (reasons.length || !projected.length) {

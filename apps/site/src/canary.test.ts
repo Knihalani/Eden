@@ -3,6 +3,7 @@ import { openDb } from "./db";
 import { recordDeopt } from "./db";
 import { maybeRecompile } from "./canary";
 import { buildDag, layers } from "@eden/core";
+import { playTool } from "./playback";
 
 function tmpDb(tag: string) {
   return openDb(`/tmp/eden-canary-${tag}-${Date.now()}.db`);
@@ -264,5 +265,114 @@ describe("drift canary & auto-recompile", () => {
     // nothing queued, no knock raised — the original keeps serving
     expect((await db.all(`SELECT id FROM tool`)).length).toBe(1);
     expect(await db.all(`SELECT id FROM knock`)).toEqual([]);
+  });
+
+  test("the projection carries bind verbatim, so a bound-template draft plays resolved", async () => {
+    /**
+     * The recorded call's bind map is what lets playback's resolveBound fill
+     * template URLs like {{s1.number}}. The projection used to drop it, so a
+     * queued draft replayed the unresolved template and failed at play time.
+     */
+    const db = await tmpDb("bound");
+    const oldTool = crypto.randomUUID();
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES (?, 'ws_local', 'bound_drift', 'x', 'on', ?, '[]', ?)`,
+      [
+        oldTool,
+        JSON.stringify([
+          { id: "s1", kind: "cloud_http", name: "issue", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/issues/{issue}" },
+          {
+            id: "s2",
+            kind: "cloud_http",
+            name: "comments",
+            commute: true,
+            url: "http://127.0.0.1/forge/repos/acme/app/issues/{{s1.number}}/comments",
+            bind: { issue: "{{s1.number}}" },
+          },
+        ]),
+        "fp/acme/bound",
+      ],
+    );
+    await recordDeopt(db, "ws_local", oldTool, {});
+    await recordDeopt(db, "ws_local", oldTool, {});
+    const out = await maybeRecompile(db, {
+      workspace_id: "ws_local",
+      tool_id: oldTool,
+      gatherTracesFn: passingDeps.gatherTracesFn,
+      compileTracesFn: () => ({
+        programs: [
+          {
+            id: "p1",
+            sequence: ["issue", "comments"],
+            steps: [
+              { id: "x1", kind: "tool", tool: "issue" },
+              { id: "x2", kind: "tool", tool: "comments" },
+            ],
+          },
+        ],
+        refusals: [],
+      }),
+      shadowProgramFn: async () => ({ verdict: "PASS" as const, reasons: [] }),
+    });
+    expect(out.action).toBe("queued");
+    if (out.action !== "queued") return;
+
+    // bind survives verbatim into the stored JSON…
+    const draft = await db.get<{ steps: string }>(`SELECT steps FROM tool WHERE id = ?`, [out.draft_id]);
+    const steps = JSON.parse(draft!.steps!) as Array<{ name: string; url?: string; bind?: Record<string, string> }>;
+    expect(steps[1]!.bind).toEqual({ issue: "{{s1.number}}" });
+
+    // …and the draft actually plays: resolveBound fills the template from s1.
+    const row = await db.get<{ id: string; name: string; steps: string }>(`SELECT id, name, steps FROM tool WHERE id = ?`, [
+      out.draft_id,
+    ]);
+    const receipt = await playTool(db, row!, { issue: "12", origin: "http://127.0.0.1" });
+    expect(receipt.ok).toBe(true);
+    expect(receipt.steps_ok).toBe(2);
+  });
+
+  test("an explicit IR readOnly:false survives into the stored steps — GET does not imply read-only", async () => {
+    // playback's stepIsReadOnly falls back to "cloud_http GET ⇒ read-only"
+    // when readOnly is absent; a step explicitly marked writable must keep
+    // that flag so speculative prefetch never fires its side effect.
+    const db = await tmpDb("readonly");
+    const oldTool = crypto.randomUUID();
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES (?, 'ws_local', 'ro_drift', 'x', 'on', ?, '[]', ?)`,
+      [
+        oldTool,
+        JSON.stringify([
+          { id: "s1", kind: "cloud_http", name: "curl", commute: false, method: "GET", url: "http://127.0.0.1/forge/repos/acme/app/issues/12" },
+        ]),
+        "fp/acme/ro",
+      ],
+    );
+    await recordDeopt(db, "ws_local", oldTool, {});
+    await recordDeopt(db, "ws_local", oldTool, {});
+    const out = await maybeRecompile(db, {
+      workspace_id: "ws_local",
+      tool_id: oldTool,
+      gatherTracesFn: passingDeps.gatherTracesFn,
+      compileTracesFn: () => ({
+        programs: [
+          {
+            id: "p1",
+            sequence: ["curl"],
+            steps: [{ id: "x1", kind: "tool", tool: "curl", args: {}, readOnly: false }],
+          },
+        ],
+        refusals: [],
+      }),
+      shadowProgramFn: async () => ({ verdict: "PASS" as const, reasons: [] }),
+    });
+    expect(out.action).toBe("queued");
+    if (out.action !== "queued") return;
+    const draft = await db.get<{ steps: string }>(`SELECT steps FROM tool WHERE id = ?`, [out.draft_id]);
+    const steps = JSON.parse(draft!.steps!) as Array<{ name: string; method?: string; readOnly?: boolean }>;
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.method).toBe("GET"); // the trap: GET alone would read as prefetch-safe
+    expect(steps[0]!.readOnly).toBe(false);
   });
 });

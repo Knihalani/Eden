@@ -129,7 +129,7 @@ describe("state-changing routes refuse cross-origin drive-bys", () => {
   const write = (headers: Record<string, string> = {}) =>
     new Request("http://127.0.0.1:8787/v1/ingest", {
       method: "POST",
-      headers: { "content-type": "application/json", ...headers },
+      headers: { "content-type": "application/json", host: "127.0.0.1:8787", ...headers },
       body: JSON.stringify({ run_id: "r1", events: [], stretch_end: false }),
     });
 
@@ -189,14 +189,14 @@ describe("which predicate decides that this is production", () => {
     setEnv("VERCEL", undefined);
     setEnv("DATABASE_URL", "postgres://example/db");
     setEnv("EDEN_DEV", "0");
-    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", body: "{}" }));
+    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", headers: { host: "127.0.0.1:8787" }, body: "{}" }));
     expect(res.status).toBe(401);
   });
 
   test("a laptop still can, which is what the endpoint is for", async () => {
     setEnv("VERCEL", undefined);
     setEnv("DATABASE_URL", undefined);
-    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", body: "{}" }));
+    const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", headers: { host: "127.0.0.1:8787" }, body: "{}" }));
     expect(res.status).toBe(200);
   });
 });
