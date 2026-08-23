@@ -16,10 +16,10 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function sortKeys(obj: Record<string, unknown>): Record<string, unknown> {
+function sortKeys(obj: Record<string, unknown>, ancestors: WeakSet<object>, depth: number): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(obj).sort()) {
-    out[k] = densifyValue(obj[k]);
+    out[k] = densifyWalk(obj[k], ancestors, depth + 1);
   }
   return out;
 }
@@ -36,25 +36,47 @@ function uniformKeys(arr: Record<string, unknown>[]): string[] | null {
   return keys;
 }
 
+/** Deep enough for any real payload; past this the walk is a runaway, not data. */
+const DENSIFY_MAX_DEPTH = 200;
+
+/**
+ * Ancestors on the current traversal path only, mirroring redact() in
+ * @eden/ir. A back-edge to an ancestor is a real cycle — without the check,
+ * densifyValue recursed until the stack blew. A value shared between sibling
+ * branches is not a cycle and must still be densified under both parents, so
+ * marking every visited object would corrupt legitimate repeated data.
+ */
 export function densifyValue(value: unknown): unknown {
+  return densifyWalk(value, new WeakSet<object>(), 0);
+}
+
+function densifyWalk(value: unknown, ancestors: WeakSet<object>, depth: number): unknown {
   if (typeof value === "string") return minifyCli(value);
-  if (Array.isArray(value)) {
-    const objects = value.every(isPlainObject);
-    if (objects) {
-      const rows = value as Record<string, unknown>[];
-      const keys = uniformKeys(rows);
-      if (keys) {
-        return {
-          keys,
-          rows: rows.map((row) => keys.map((k) => densifyValue(row[k]))),
-        };
+  // Non-plain exotics (Map, Date, …) pass through as before.
+  if (!Array.isArray(value) && !isPlainObject(value)) return value;
+  if (depth >= DENSIFY_MAX_DEPTH) return "[TRUNCATED]";
+  if (ancestors.has(value)) return "[CYCLE]";
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const objects = value.every(isPlainObject);
+      if (objects) {
+        const rows = value as Record<string, unknown>[];
+        const keys = uniformKeys(rows);
+        if (keys) {
+          return {
+            keys,
+            rows: rows.map((row) => keys.map((k) => densifyWalk(row[k], ancestors, depth + 1))),
+          };
+        }
+        return rows.map((row) => sortKeys(row, ancestors, depth + 1));
       }
-      return rows.map((row) => sortKeys(row));
+      return value.map((v) => densifyWalk(v, ancestors, depth + 1));
     }
-    return value.map(densifyValue);
+    return sortKeys(value, ancestors, depth);
+  } finally {
+    ancestors.delete(value);
   }
-  if (isPlainObject(value)) return sortKeys(value);
-  return value;
 }
 
 /**

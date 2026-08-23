@@ -1,4 +1,4 @@
-import { readConfig, writeConfig, ensureHome, wrapPlaneUrl } from "./home";
+import { readConfig, writeConfig, ensureHome, wrapPlaneUrl, keyFingerprint } from "./home";
 
 export async function login(args: string[]): Promise<void> {
   ensureHome();
@@ -23,15 +23,17 @@ export function formatStatus(
     savings?: { llmReductionMean?: number; tokensSavedMean?: number; timeSavedMsMean?: number; runs?: number };
   } | null,
 ): string {
-  const short = key.slice(0, 6);
-  if (!health?.ok) return `${base} · down · key ${short}…`;
+  // A fingerprint, not a prefix: the leading characters of a bearer key are
+  // its most guessable half, and status output has no need of them.
+  const short = keyFingerprint(key);
+  if (!health?.ok) return `${base} · down · key ${short}`;
   const fails = health.fails ? ` · fails ${health.fails}` : "";
   const tokens = health.savings?.tokensSavedMean;
   const save =
     tokens != null && Number.isFinite(tokens) && tokens > 0
       ? ` · ${Math.round(tokens)} tokens saved`
       : "";
-  return `${base} · ok · traces ${health.traces ?? 0} · live ${health.live ?? 0}${fails}${save} · key ${short}…`;
+  return `${base} · ok · traces ${health.traces ?? 0} · live ${health.live ?? 0}${fails}${save} · key ${short}`;
 }
 
 export async function status(): Promise<void> {

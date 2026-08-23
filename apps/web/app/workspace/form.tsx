@@ -41,7 +41,7 @@ export function WorkspaceForm() {
     if (!createOrganization || !setActive) return;
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Name the workspace.");
+      setError("Enter a workspace name.");
       return;
     }
     setBusy(true);
@@ -51,7 +51,7 @@ export function WorkspaceForm() {
       if (created) await setActive({ organization: created.id });
       router.replace(TOUR);
     } catch {
-      setError("That workspace didn’t create. Try another name.");
+      setError("Couldn’t create that workspace. Try another name.");
     } finally {
       setBusy(false);
     }
@@ -81,7 +81,7 @@ export function WorkspaceForm() {
       if (id) await setActive({ organization: id });
       router.refresh();
     } catch {
-      setError("That invite didn’t accept. Try again.");
+      setError("Couldn’t accept that invite. Try again.");
     } finally {
       setBusy(false);
     }

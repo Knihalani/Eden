@@ -66,7 +66,7 @@ export function AppNav({
           mark="workflows"
           collapsed={collapsed}
         >
-          Workflows
+          Live tools
         </NavItem>
       </div>
       <div className="app-nav-foot">

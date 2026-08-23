@@ -1,7 +1,7 @@
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { writeConfig, ensureHome, edenHome, resolveApiKey, readConfig, wrapPlaneUrl, sitePlaneUrl } from "./home";
+import { writeConfig, ensureHome, edenHome, resolveApiKey, readConfig, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
 
 function claudeSettingsDir(scope: "user" | "project"): string {
   if (scope === "user") return join(homedir(), ".claude");
@@ -11,6 +11,22 @@ function claudeSettingsDir(scope: "user" | "project"): string {
 /** POSIX single-quoting: the only form a shell does no substitution inside. */
 function shq(v: string): string {
   return `'${v.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * The PreToolUse probe: a single curl with a one-second ceiling that fails
+ * open to `{}` and never spawns bun.
+ *
+ * PreToolUse runs on *every* tool call, and it used to share the PostToolUse
+ * chain — `--max-time 8` curl, then a cold `bun <cli> hook` spawn. When hookd
+ * was down, a tool call blocked for up to eight-plus seconds before the CLI
+ * even started. Ordinary tool calls must never wait on Eden, so the Pre path
+ * gives up after 1s and answers `{}`, which lets the call proceed; the deny
+ * steering toward compiled tools is best-effort by design.
+ */
+export function preHookCommand(hookdPort = Number(process.env.EDEN_HOOKD_PORT || 8794)): string {
+  const hookd = `http://127.0.0.1:${hookdPort}/hook`;
+  return `curl -sS --max-time 1 -H 'content-type: application/json' --data-binary @- ${hookd} || echo '{}'`;
 }
 
 export function hookCommand(
@@ -30,7 +46,7 @@ export function hookCommand(
   return opts.failOpen === false ? core : `${core} || echo '{}'`;
 }
 
-export function installedHooks(hookCmd: string, preCmd = hookCmd.replace(/ \|\| echo '\{\}'$/, "")) {
+export function installedHooks(hookCmd: string, preCmd: string = preHookCommand()) {
   return {
     PreToolUse: [{ hooks: [{ type: "command" as const, command: preCmd }] }],
     PostToolUse: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
@@ -99,7 +115,7 @@ function readSettings(path: string): Record<string, unknown> {
     /* fall through to the backup path */
   }
   const backup = `${path}.eden-backup-${Date.now()}`;
-  writeFileSync(backup, raw);
+  writeFileAtomic(backup, raw);
   console.warn(`eden setup: ${path} was not valid JSON. Kept a copy at ${backup} and started a fresh one.`);
   return {};
 }
@@ -134,6 +150,7 @@ export async function setup(args: string[]): Promise<void> {
 
   const cliPath = join(import.meta.dir, "cli.ts");
   const hookCmd = hookCommand(cliPath);
+  const preCmd = preHookCommand();
   const headersCmd = `bun "${cliPath}" mcp-headers`;
 
   const userClaude = claudeSettingsDir("user");
@@ -141,8 +158,8 @@ export async function setup(args: string[]): Promise<void> {
 
   const settingsPath = join(userClaude, "settings.json");
   const settings = readSettings(settingsPath);
-  settings.hooks = mergeHooks(settings.hooks, installedHooks(hookCmd));
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  settings.hooks = mergeHooks(settings.hooks, installedHooks(hookCmd, preCmd));
+  writeFileAtomic(settingsPath, JSON.stringify(settings, null, 2));
 
   const mcpPath = join(process.cwd(), ".mcp.json");
   let mcp: { mcpServers?: Record<string, unknown> } = {};
@@ -164,7 +181,7 @@ export async function setup(args: string[]): Promise<void> {
       headersHelper: headersCmd,
     };
   }
-  writeFileSync(mcpPath, JSON.stringify(mcp, null, 2));
+  writeFileAtomic(mcpPath, JSON.stringify(mcp, null, 2));
 
   console.log("Eden setup complete.");
   console.log(`  key stored in ${join(edenHome(), "config.json")}`);

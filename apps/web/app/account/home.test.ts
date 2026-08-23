@@ -88,7 +88,7 @@ test("home views stay on /home and highlight the matching rail item", () => {
   expect(homeViewTitle("overview")).toBe("Home");
   expect(homeStatus({ requests: [], workflows: [] })).toBe("Empty until you wrap");
   expect(homeStatus({ requests: [{}], workflows: [] })).toBe("1 request waiting");
-  expect(homeEmptyLine("overview")).toBe("Requests and workflows land here after you wrap.");
+  expect(homeEmptyLine("overview")).toBe("Requests and live tools land here after you wrap.");
   expect(homeEmptyLine("requests")).toBe("Nothing waiting. New compile requests land here.");
   expect(homeEmptyLine("workflows")).toBe("No live tools yet. Approve a request and it shows up here.");
   expect(homeEmptyLine("overview", true)).toBe("Couldn’t load activity.");

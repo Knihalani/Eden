@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
+import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, withFileLockAsync, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
 import { redact, isStretchEnd, inDistribution } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
 
@@ -36,13 +36,24 @@ export async function runHook(): Promise<void> {
   // lets the tool call proceed.
   let out: Record<string, unknown> = { ok: true };
   try {
-    out = respondToHook(body);
+    out = await respondToHook(body);
   } catch (err) {
     process.stderr.write(`eden hook: ${(err as Error)?.message ?? String(err)}\n`);
     out = {};
   }
   process.stdout.write(JSON.stringify(out));
 }
+
+/**
+ * The lock a hook run takes around each session-file mutation.
+ *
+ * One-shot `eden hook` processes keep the sync {@link withFileLock}: the
+ * process exists for one event, has nothing else to serve, and spinning on
+ * sleepSync costs it nothing. hookd passes {@link withFileLockAsync} instead —
+ * sleepSync parks its whole event loop, so one contended lock stalled every
+ * other session's request behind it.
+ */
+export type HookLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
 
 function readJsonl(path: string): Array<Record<string, unknown>> {
   if (!existsSync(path)) return [];
@@ -128,6 +139,9 @@ export function dropConsumedLines(path: string, consumed: string[]): void {
   const rest = current.filter((l) => !drop.has(l));
   if (rest.length === current.length) return;
   writeFileAtomic(path, rest.length ? rest.join("\n") + "\n" : "");
+  // The log just shrank behind the cursor's back; re-anchor it so the hot path
+  // does not act on a count that no longer describes the file.
+  setCursorLines(path, rest.length);
 }
 
 export function applyFlushTruncate(path: string, flushedIds: string[]): void {
@@ -137,9 +151,72 @@ export function applyFlushTruncate(path: string, flushedIds: string[]): void {
   const rest = current.filter((e) => !drop.has(String(e.id ?? "")));
   if (rest.length === current.length) return;
   writeFileAtomic(path, rest.length ? rest.map((e) => JSON.stringify(e)).join("\n") + "\n" : "");
+  setCursorLines(path, rest.length);
 }
 
-export function respondToHook(body: HookIn): Record<string, unknown> {
+/**
+ * Flushed-cursor sidecar: `<session>.jsonl.cursor.json`.
+ *
+ * PostToolUse fires on every tool call and used to re-read and JSON-parse the
+ * *entire* session log synchronously just to learn its line count for the
+ * stretch-end check. The sidecar records how many lines have been appended,
+ * under the same file lock as the append itself, so the hot path touches only
+ * this tiny file; the full log is read where it is actually needed — at a
+ * stretch end, or once after the count has been invalidated (a lost or corrupt
+ * sidecar, or another writer having truncated the log).
+ *
+ * A cursor that has drifted high only makes the stretch-end check fire early,
+ * and the authoritative `events.length >= 2` guard in flushSession still runs
+ * on the real snapshot — so drift costs a redundant read, never a lost or
+ * duplicated event. "Every event flushed exactly once" stays owned by the id
+ * matching in applyFlushTruncate.
+ */
+function cursorPathFor(path: string): string {
+  return `${path}.cursor.json`;
+}
+
+function readCursorLines(path: string): number | null {
+  try {
+    const c = JSON.parse(readFileSync(cursorPathFor(path), "utf8")) as { lines?: unknown };
+    if (typeof c?.lines === "number" && Number.isInteger(c.lines) && c.lines >= 0) return c.lines;
+  } catch {
+    /* absent, corrupt, or half-written: fall through to a rebuild */
+  }
+  return null;
+}
+
+function setCursorLines(path: string, lines: number): void {
+  writeFileAtomic(cursorPathFor(path), JSON.stringify({ lines }));
+}
+
+function countSessionLines(path: string): number {
+  if (!existsSync(path)) return 0;
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).length;
+}
+
+/**
+ * One appended event later. Must run under `${path}.lock`, alongside the
+ * append it counts, so the sidecar can never describe a line that was not
+ * written or miss one that was.
+ *
+ * A missing or invalid cursor is rebuilt from the real log once (the
+ * invalidation path) rather than silently restarting at zero, which would
+ * suppress stretch-end flushing until two more events happened by. The rebuild
+ * count is taken *before* the append so the fresh line itself is not counted
+ * twice.
+ */
+export function recordAppendedEvent(path: string, append: () => void): number {
+  const prev = readCursorLines(path);
+  const lines = (prev ?? countSessionLines(path)) + 1;
+  append();
+  setCursorLines(path, lines);
+  return lines;
+}
+
+export async function respondToHook(
+  body: HookIn,
+  locker: HookLocker = withFileLock,
+): Promise<Record<string, unknown>> {
   ensureHome();
   const session = body.session_id || "local";
   const name = body.tool_name;
@@ -153,14 +230,21 @@ export function respondToHook(body: HookIn): Record<string, unknown> {
       ts: Date.now(),
     }) as Record<string, unknown>;
     const path = eventsPath(session);
-    withFileLock(`${path}.lock`, () => appendJsonl(path, event));
-    const events = readJsonl(path);
-    if (events.length >= 2 && isStretchEnd(name)) {
-      flushSession(session, events);
+    // Append and count under one lock acquisition: the hot path never opens
+    // the session log itself, only the tiny cursor sidecar.
+    let lineCount = 0;
+    await locker(`${path}.lock`, () => {
+      lineCount = recordAppendedEvent(path, () => appendJsonl(path, event));
+    });
+    // Full read only at a stretch end; flushSession's own `events.length >= 2`
+    // guard on the real snapshot stays authoritative.
+    if (lineCount >= 2 && isStretchEnd(name)) {
+      const events = readJsonl(path);
+      if (events.length >= 2) flushSession(session, events);
     }
   }
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
-    withFileLock(`${outboxPath()}.lock`, () =>
+    await locker(`${outboxPath()}.lock`, () =>
       appendJsonl(outboxPath(), { run_id: session, kind: "stretch_end", ts: Date.now() }),
     );
     const path = eventsPath(session);

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isCompilableToolName } from "./islands";
-import { isMutatingGh } from "./named-cli";
+import { hasUnsafeGhVerb, isMutatingGh } from "./named-cli";
 
 export function parseIssueList(raw: string | undefined | null): string[] {
   if (!raw) return [];
@@ -93,6 +93,10 @@ function destHasUnknownVar(s: string): boolean {
 
 export function planFromBash(command: string): FulfillPlan | null {
   if (isMutatingGh(command)) return null;
+  // The compiled program replays once per id. A named gh verb we cannot prove
+  // read-only (`gh pr merge`, or anything outside the known tables) must not
+  // be baked into that loop.
+  if (hasUnsafeGhVerb(command)) return null;
   const ids = extractLoopIds(command);
   if (ids.length < 2) return null;
   const repo = extractGhRepo(command);

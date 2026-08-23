@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { redact } from "@eden/ir";
+import type { StretchProgram } from "@eden/ir";
 import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, pendingPosts, flushOutbox } from "../src/index";
+import type { OpenAiHandle } from "../src/eden";
 import { createTicketShip, ticketShipProgram, OOD_ID, WITNESS_IDS } from "../../runtime/src/ticketship";
 
 const liveManifest = {
@@ -14,6 +16,33 @@ const liveManifest = {
 
 function liveProgram() {
   return { ...ticketShipProgram(), manifest: liveManifest };
+}
+
+/**
+ * A live one-step program whose first step binds a literal string (a URL or a
+ * command). The envelope gates only `id`, so the shaped value itself can be
+ * anything — that is what lets the arg-shape matcher be tested separately
+ * from the distribution gate.
+ */
+function shapeProgram(literal: string): StretchProgram {
+  return {
+    id: "shapeprog",
+    version: "1",
+    name: "fetch_remote",
+    description: "Fetch a remote resource.",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, target: { type: "string" } } },
+    steps: [
+      {
+        id: "s0",
+        kind: "tool",
+        tool: "getRemote",
+        args: { target: { kind: "literal", value: literal }, id: { kind: "input", path: "id" } },
+      },
+    ],
+    returns: { kind: "from", step: "s0", path: "" },
+    contract: { witnesses: 3, minLlmReduction: 2, allowExact: true, envelope: { inputs: { id: ["T-100"] } } },
+    manifest: liveManifest,
+  };
 }
 
 describe("steer + inject", () => {
@@ -58,6 +87,11 @@ describe("steer + inject", () => {
   });
 
   test("collapses a multi-call batch onto the compiled tool", () => {
+    // Precondition for the collapse: writeRecord names a LATER step of the
+    // matched sequence (lookupTicket → … → writeRecord → … → notify), so the
+    // compiled run performs it anyway and the sibling is absorbed. Siblings
+    // that are NOT steps of the matched program must survive — see the two
+    // tests below.
     const p = liveProgram();
     const out = steerToolCalls(
       [
@@ -70,9 +104,119 @@ describe("steer + inject", () => {
     expect(out[0]!.function?.name).toBe("resolve_ticket");
   });
 
+  test("an unrelated sibling in a steered batch survives", () => {
+    // The steered call used to be returned alone, silently dropping every
+    // sibling in the batch — an agent asking for [lookupTicket, webSearch]
+    // lost the webSearch entirely.
+    const p = liveProgram();
+    const out = steerToolCalls(
+      [
+        { function: { name: "lookupTicket", arguments: JSON.stringify({ id: "T-100" }) } },
+        { function: { name: "webSearch", arguments: JSON.stringify({ q: "eden" }) } },
+      ],
+      [p],
+    );
+    expect(out).toHaveLength(2);
+    expect(out[0]!.function?.name).toBe("resolve_ticket");
+    expect(out[0]!.matched_by).toBe("name");
+    expect(out[1]!.function?.name).toBe("webSearch");
+  });
+
+  test("a mixed batch keeps only the unrelated siblings", () => {
+    const p = liveProgram();
+    const out = steerToolCalls(
+      [
+        { function: { name: "lookupTicket", arguments: JSON.stringify({ id: "T-100" }) } },
+        { function: { name: "writeRecord", arguments: JSON.stringify({ id: "T-100" }) } }, // later step: absorbed
+        { function: { name: "fetchDetails", arguments: JSON.stringify({ id: "T-100" }) } }, // later step: absorbed
+        { function: { name: "webSearch", arguments: JSON.stringify({ q: "eden" }) } }, // unrelated: kept
+      ],
+      [p],
+    );
+    expect(out.map((c) => c.function?.name)).toEqual(["resolve_ticket", "webSearch"]);
+  });
+
   test("extractInput accepts ticket_id alias", () => {
     const p = liveProgram();
     expect(extractInput(p, { ticket_id: "T-100" })).toEqual({ id: "T-100" });
+  });
+
+  describe("arg-shape steering fallback", () => {
+    test("a renamed tool with the same URL shape still steers, stamped argshape", () => {
+      const p = shapeProgram("https://api.github.com/repos/acme/widgets/pulls/7");
+      const out = steerToolCalls(
+        [
+          {
+            function: {
+              name: "loadPull",
+              arguments: JSON.stringify({ id: "T-100", target: "https://api.github.com/repos/acme/widgets/pulls/99" }),
+            },
+          },
+        ],
+        [p],
+      );
+      expect(out[0]!.function?.name).toBe("fetch_remote");
+      expect(out[0]!.matched_by).toBe("argshape");
+    });
+
+    test("a different repo never matches", () => {
+      // Same numeric shape of path, different repository segment: exact
+      // signature equality fails and the call passes through untouched.
+      const p = shapeProgram("https://api.github.com/repos/acme/widgets/pulls/7");
+      const out = steerToolCalls(
+        [
+          {
+            function: {
+              name: "loadPull",
+              arguments: JSON.stringify({ id: "T-100", target: "https://api.github.com/repos/acme/other/pulls/7" }),
+            },
+          },
+        ],
+        [p],
+      );
+      expect(out).toHaveLength(1);
+      expect(out[0]!.function?.name).toBe("loadPull");
+      expect(out[0]!.matched_by).toBeUndefined();
+    });
+
+    test("an out-of-distribution input passes through even on a shape hit", () => {
+      const p = shapeProgram("https://api.github.com/repos/acme/widgets/pulls/7");
+      const out = steerToolCalls(
+        [
+          {
+            function: {
+              name: "loadPull",
+              arguments: JSON.stringify({ id: OOD_ID, target: "https://api.github.com/repos/acme/widgets/pulls/7" }),
+            },
+          },
+        ],
+        [p],
+      );
+      expect(out[0]!.function?.name).toBe("loadPull");
+      expect(out[0]!.matched_by).toBeUndefined();
+    });
+
+    test("a CLI family match steers with numeric positionals parameterized", () => {
+      const p = shapeProgram("gh pr view 123");
+      const out = steerToolCalls(
+        [{ function: { name: "runGh", arguments: JSON.stringify({ id: "T-100", target: "gh pr view 456" }) } }],
+        [p],
+      );
+      expect(out[0]!.function?.name).toBe("fetch_remote");
+      expect(out[0]!.matched_by).toBe("argshape");
+    });
+
+    test("no identifiable shape never matches", () => {
+      // Prose carries no URL or named CLI signature; fail closed.
+      const p = shapeProgram("gh pr view 123");
+      const out = steerToolCalls(
+        [{ function: { name: "runGh", arguments: JSON.stringify({ id: "T-100", target: "just some prose" }) } }],
+        [p],
+      );
+      expect(out).toHaveLength(1);
+      expect(out[0]!.function?.name).toBe("runGh");
+      expect(out[0]!.matched_by).toBeUndefined();
+    });
   });
 
   test("injects compiled schema", () => {
@@ -375,6 +519,21 @@ describe("eden() fail-open helper", () => {
     expect(m.model).toBe("gpt-4o");
     expect(m.baseURL).toContain("/v1");
   });
+
+  test("resolve falls back to api.openai.com when the local wrap is down", async () => {
+    // Port 9 refuses instantly, so this exercises the fallback path without
+    // waiting out the health-check timeout.
+    const prev = process.env.EDEN_WRAP_URL;
+    process.env.EDEN_WRAP_URL = "http://127.0.0.1:9/v1";
+    try {
+      const e = eden({ apiKey: "k" });
+      const h = await (e.openai("gpt-4o") as OpenAiHandle & { resolve: () => Promise<OpenAiHandle> }).resolve();
+      expect(h.baseURL).toBe("https://api.openai.com/v1");
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_WRAP_URL;
+      else process.env.EDEN_WRAP_URL = prev;
+    }
+  });
 });
 
 describe("pullLive", () => {
@@ -458,6 +617,24 @@ describe("control outbox", () => {
       else await Bun.sleep(10);
     }
     expect(n).toBeGreaterThanOrEqual(2);
+  });
+
+  test("outbox overflow counts drops and surfaces dropped_posts on traces", async () => {
+    // The outbox used to discard receipts/traces past MAX_OUTBOX — and once a
+    // job exhausted its retries — without any record that telemetry was lost.
+    const state = createState({
+      baseUrl: "http://127.0.0.1:9",
+      apiKey: "k",
+      fetch: (async () => new Response("down", { status: 500 })) as unknown as typeof fetch,
+    });
+    const tools = wrapTools({ notify: async () => ({ done: true }) }, state);
+    // Every notify posts a trace; 80 posts into a 64-slot queue must drop.
+    for (let i = 0; i < 80; i++) await tools.notify.execute({ i });
+    await Bun.sleep(30);
+    for (let i = 0; i < 12; i++) await flushOutbox(state);
+    expect(state.droppedPosts).toBeGreaterThan(0);
+    await tools.notify.execute({});
+    expect((state.traces.at(-1)! as { dropped_posts?: number }).dropped_posts).toBeGreaterThan(0);
   });
 });
 
@@ -702,5 +879,32 @@ describe("online signal bus", () => {
     await tools.verifyWrite.execute({ id: "T-1" });
     const out = await tools.notify.execute({ id: "T-1" });
     expect(out).toEqual({ done: true });
+  });
+
+  test("a gated flush does not swallow a concurrent call's events", async () => {
+    // notify flushes as soon as it resolves; search overlaps it and lands its
+    // event mid-flight. The shared run recorder used to drain the whole buffer
+    // at flush time, so whoever flushed second either lost its event or had it
+    // attributed to the wrong trace. The overlapping search event must stay
+    // buffered for search's own flush.
+    const state = createState({ programs: [] });
+    const tools = wrapTools(
+      {
+        notify: async () => {
+          await Bun.sleep(25);
+          return { done: true };
+        },
+        search: async () => {
+          await Bun.sleep(5);
+          return { hits: [1] };
+        },
+      },
+      state,
+    );
+    await Promise.all([tools.notify.execute({ id: "T-1" }), tools.search.execute({ q: "x" })]);
+    expect(state.traces.length).toBe(1);
+    expect(state.traces[0]!.events.map((e) => e.name)).toEqual(["notify"]);
+    // Not dropped, not misattributed: still waiting for its own trace.
+    expect(state.run.events.some((e) => e.name === "search")).toBe(true);
   });
 });

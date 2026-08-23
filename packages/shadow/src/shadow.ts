@@ -1,17 +1,30 @@
-import type { Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
-import { canonicalize, inDistribution, isCheckName, isIslandName, isMutating, isUsableOutput, minLlmReductionOf, redact } from "@eden/ir";
+import type { Binding, Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
+import { canonicalize, inDistribution, isCheckName, isIslandName, isReadName, isUsableOutput, minLlmReductionOf, redact } from "@eden/ir";
 import { isDeopt, runProgram } from "@eden/runtime";
 import { isUnrecordedCall } from "./replay";
-import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, traceTokens } from "./measure";
+import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, tokensExtrapolated, traceTokens } from "./measure";
 
 export type Verdict = "PASS" | "FAIL" | "INCONCLUSIVE";
 
+/**
+ * A manifest plus the honesty flag the island extrapolation forces: when
+ * compiled tokens were scaled from remaining LLM calls rather than scraped
+ * from provider usage, `tokensEstimated` says so and every gate downstream
+ * treats the token delta as absent.
+ */
+export type ShadowManifest = Manifest & {
+  /** True when `compiledTokens` produced the delta by scaling naive tokens. */
+  tokensEstimated?: boolean;
+};
+
 export type ShadowResult = {
   verdict: Verdict;
-  manifest: Manifest | null;
+  manifest: ShadowManifest | null;
   reasons: string[];
   n: number;
   minLlmReduction?: number;
+  /** Mirrors `manifest.tokensEstimated` so callers need not dig into the manifest. */
+  tokensEstimated?: boolean;
 };
 
 export type ShadowOpts = {
@@ -34,12 +47,38 @@ export type ShadowOpts = {
   allowSideEffects?: boolean;
 };
 
-/** Steps that would change something on the far side if replayed for real. */
+/**
+ * Read vocabulary beyond the runtime's READ_NAME list, as defense in depth:
+ * a tool the denylist never heard of used to count as safe, which is exactly
+ * backwards. These extra verbs are names that only ever describe reading —
+ * query, scan, inspect, select, view. Deliberately *not* including check or
+ * parse verbs: `verifyWrite` and `parseFields` are not positively known to be
+ * reads, and an allowlist that guesses is a denylist wearing a costume.
+ */
+const EXTRA_READ_NAME = /^(query|scan|inspect|select|view)/i;
+
+function isReadStepName(tool: string): boolean {
+  return isReadName(tool) || EXTRA_READ_NAME.test(tool);
+}
+
+/**
+ * Steps that would change something on the far side if replayed for real.
+ *
+ * The refusal used to be inverted: every tool step was trusted UNLESS
+ * `isMutating`'s verb list recognised it, so any tool that list had never
+ * heard of was replayed for real. Safety here is an allowlist, mirroring
+ * `stepIsParallelSafe` in runtime/execute.ts — a tool step is flagged unless
+ *
+ *   - the program explicitly marked it `readOnly`, or
+ *   - its name positively matches read vocabulary (fetch/get/list/…), or
+ *   - the caller set `allowSideEffects`, the explicit escape hatch for a
+ *     caller that has arranged a sandbox and says so.
+ */
 export function mutatingSteps(program: StretchProgram): string[] {
   return [
     ...new Set(
       program.steps
-        .filter((s) => s.kind === "tool" && s.readOnly !== true && isMutating(s.tool))
+        .filter((s) => s.kind === "tool" && s.readOnly !== true && !isReadStepName(s.tool))
         .map((s) => (s as { tool: string }).tool),
     ),
   ];
@@ -110,9 +149,16 @@ export async function shadowProgram(
   const compiledTime: number[] = [];
   let tokensMeasured = true;
   let timeMeasured = true;
+  let tokensEstimated = false;
   let compiledComplete = 0;
   let naiveComplete = 0;
   let compiledSkips = 0;
+  /**
+   * Skips the *naive* agent made, accumulated only for traces that reach
+   * validation success. It used to accumulate over every held trace while
+   * compiledSkips divided by the validated count, so the two rates did not
+   * share a denominator and unvalidatable traces inflated the improvement.
+   */
   let naiveSkips = 0;
   let extraMisses = 0;
   /**
@@ -132,13 +178,15 @@ export async function shadowProgram(
   const required =
     opts.requiredTools ?? program.sequence?.filter((n) => isCheckName(n)) ?? [];
   const hasIsland = program.steps.some((s) => s.kind === "island");
+  // Proven once, statically: whether the final output chains back to an island
+  // step decides only *how* outputs are compared, never whether they are.
+  const islandDerivedOutput = outputDerivesFromIsland(program);
 
   for (const t of held) {
     naiveLlm.push(t.llmCalls);
     naiveMs.push(t.duration_ms);
     naiveCents.push(t.cost_cents);
     if (t.complete === true) naiveComplete++;
-    naiveSkips += t.skipped?.length ?? 0;
     try {
       const run = await runProgram(program, t.input ?? {}, {
         registry: opts.registryFor?.(t) ?? opts.registry,
@@ -155,6 +203,7 @@ export async function shadowProgram(
       else {
         naiveTok.push(naiveT);
         compiledTok.push(compiledT);
+        if (tokensExtrapolated(run.stats.llmCalls, hasIsland)) tokensEstimated = true;
       }
       const toolsMs = compiledToolMs(t, run.stats.toolCalls);
       const naiveTools = naiveToolMs(t);
@@ -164,15 +213,22 @@ export async function shadowProgram(
         compiledTime.push(toolsMs + (hasIsland && run.stats.llmCalls >= 1 ? run.stats.islandMs : 0));
       }
       validated++;
+      // Counted here, not at the top of the loop: naiveSkips and compiledSkips
+      // must share one denominator, and only traces that reach validation
+      // success are in it.
+      naiveSkips += t.skipped?.length ?? 0;
       const usable = isUsableOutput(run.value);
       if (!usable) {
         extraMisses++;
         if (reasons.length < 8) reasons.push("succeeded with nothing");
       }
-      const match = outputMatches(run.value, t.output);
+      const match = outputMatches(run.value, t.output, islandDerivedOutput);
       if (match === "vacuous") {
         extraMisses++;
         if (reasons.length < 8) reasons.push("trace has no recorded output — quality cannot be scored");
+      } else if (match === "prose-divergent") {
+        compiledComplete++;
+        if (reasons.length < 8) reasons.push("prose-divergent: output derives from the island and was compared structurally, not byte-for-byte");
       } else if (match) compiledComplete++;
       else {
         extraMisses++;
@@ -228,11 +284,13 @@ export async function shadowProgram(
   const latencyReduction =
     timeMeasured && compiledTime.length ? reductionRatio(mean(naiveTime), mean(compiledTime)) : reductionRatio(mean(naiveMs), mean(compiledMs));
   const costReduction = reductionRatio(mean(naiveCents), mean(compiledCents));
-  const skipRateBefore = naiveSkips / n;
-  const skipRateAfter = compiledSkips / Math.max(validated, 1);
+  // One denominator for both rates: traces that could validate the program.
+  const validatedN = Math.max(validated, 1);
+  const skipRateBefore = naiveSkips / validatedN;
+  const skipRateAfter = compiledSkips / validatedN;
   const minR = minLlmReductionOf(program.contract.minLlmReduction);
 
-  const manifest: Manifest = {
+  const manifest: ShadowManifest = {
     llmReduction,
     latencyReduction,
     costReduction,
@@ -243,34 +301,43 @@ export async function shadowProgram(
     timeSavedMs,
     tokensMeasured,
     timeMeasured,
+    tokensEstimated,
   };
 
   if (extraMisses > 0) {
     reasons.push(`extra misses ${extraMisses}`);
-    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
+    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
   }
   if (naiveComplete > 0 && compiledComplete < Math.min(naiveComplete, validated)) {
     reasons.push(`complete ${compiledComplete} < naive ${naiveComplete}`);
-    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
+    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
   }
   if (skipRateAfter > 0) {
     reasons.push(`compiled skip rate ${skipRateAfter}`);
-    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR };
+    return { verdict: "FAIL", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
   }
-  const tokensOk = tokensMeasured && tokensSaved != null && tokensSaved > 0;
+  // The ship gate wants honest numbers or absent. Extrapolated island tokens
+  // are neither a measurement nor absent — they are an estimate wearing a
+  // measurement's clothes — so they do not count: the run must show measured
+  // time or measured (non-estimated) token savings.
+  const tokensOk = tokensMeasured && !tokensEstimated && tokensSaved != null && tokensSaved > 0;
   const timeOk = timeMeasured && timeSavedMs != null && timeSavedMs > 0;
   if (!tokensOk && !timeOk) {
-    reasons.push("not measured — quality held but neither tokens nor time saved");
-    return { verdict: "INCONCLUSIVE", manifest, reasons, n, minLlmReduction: minR };
+    reasons.push(
+      tokensEstimated
+        ? "token savings are extrapolated from remaining LLM calls across the island step, not measured — supply measured time or provider-reported usage"
+        : "not measured — quality held but neither tokens nor time saved",
+    );
+    return { verdict: "INCONCLUSIVE", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
   }
-  return { verdict: "PASS", manifest, reasons, n, minLlmReduction: minR };
+  return { verdict: "PASS", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
 }
 
 export function canApprove(result: ShadowResult): boolean {
   const m = result.manifest;
   if (result.verdict !== "PASS" || !m) return false;
   if (m.skipRateAfter !== 0) return false;
-  const tokensOk = Boolean(m.tokensMeasured) && (m.tokensSaved ?? 0) > 0;
+  const tokensOk = Boolean(m.tokensMeasured) && m.tokensEstimated !== true && (m.tokensSaved ?? 0) > 0;
   const timeOk = Boolean(m.timeMeasured) && (m.timeSavedMs ?? 0) > 0;
   return tokensOk || timeOk;
 }
@@ -282,12 +349,86 @@ export function canApprove(result: ShadowResult): boolean {
  * the trace does not read as a difference, and through canonicalize() so key
  * order does not either. A trace with no recorded output cannot answer — that
  * is not a pass.
+ *
+ * When `islandDerived` is proven — see outputDerivesFromIsland() — byte
+ * equality is relaxed to structural: an island's prose is fresh every run, so
+ * string values are not compared, but object keys must be present and every
+ * non-string scalar must be equal after redaction. Unknown references break
+ * the chain and fail closed to byte equality.
  */
-function outputMatches(actual: unknown, expected: unknown): boolean | "vacuous" {
+function outputMatches(actual: unknown, expected: unknown, islandDerived: boolean): boolean | "vacuous" | "prose-divergent" {
   if (expected === undefined) return "vacuous";
   try {
-    return canonicalize(redact(actual)) === canonicalize(redact(expected));
+    if (canonicalize(redact(actual)) === canonicalize(redact(expected))) return true;
+    if (islandDerived && structurallyEqual(redact(actual), redact(expected))) return "prose-divergent";
+    return false;
   } catch {
     return false;
   }
+}
+
+/**
+ * Structural equality for island-derived output: keys present, non-string
+ * scalars equal. Strings are exempt — that is the point; fresh prose is the
+ * product — but the shape around them may not drift.
+ */
+function structurallyEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((x, i) => structurallyEqual(x, b[i]));
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const ka = Object.keys(a as object).sort();
+    const kb = Object.keys(b as object).sort();
+    if (ka.length !== kb.length || !ka.every((k, i) => k === kb[i])) return false;
+    return ka.every((k) => structurallyEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+  }
+  // Strings in matching key positions are accepted as prose divergence — that
+  // is the whole relaxation. A string vs a number, or true vs false, still fails.
+  if (typeof a === "string" && typeof b === "string") return true;
+  return false;
+}
+
+/**
+ * Does the program's final output derive from an island step?
+ *
+ * Walks `returns` statically: a binding is proven island-derived when it
+ * points (`from`) at a step that is an island, or whose own args/input/over
+ * bindings chain back to one. A literal or `input` binding proves nothing;
+ * a reference to a step that does not exist breaks the chain, and so does a
+ * cycle — both fail closed to plain byte equality in outputMatches().
+ */
+export function outputDerivesFromIsland(program: StretchProgram): boolean {
+  const byId = new Map(program.steps.map((s) => [s.id, s]));
+
+  const bindingsOf = (step: NonNullable<ReturnType<typeof byId.get>>): Binding[] => {
+    switch (step.kind) {
+      case "tool":
+        return Object.values(step.args);
+      case "island":
+        return [step.input];
+      case "loop":
+        return [step.over];
+      default:
+        return []; // assert: reads only
+    }
+  };
+
+  const bindingProven = (b: Binding, seen: Set<string>): boolean => {
+    if (b.kind === "from") return stepProven(b.step, seen);
+    if (b.kind === "transform") return bindingProven(b.of, seen);
+    return false; // literal or input: no island anywhere upstream
+  };
+
+  const stepProven = (id: string, seen: Set<string>): boolean => {
+    if (seen.has(id)) return false; // a cycle proves nothing
+    const step = byId.get(id);
+    if (!step) return false; // unknown reference: fail closed
+    if (step.kind === "island") return true;
+    const next = new Set(seen).add(id);
+    return bindingsOf(step).some((b) => bindingProven(b, next));
+  };
+
+  return bindingProven(program.returns, new Set());
 }

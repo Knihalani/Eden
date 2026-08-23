@@ -32,6 +32,6 @@ export async function inviteToWorkspace(emailAddress: string) {
     });
     return { error: null };
   } catch {
-    return { error: "That invite didn’t send. Try again." };
+    return { error: "Couldn’t send that invite. Try again." };
   }
 }

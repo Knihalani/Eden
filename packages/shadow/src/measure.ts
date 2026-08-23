@@ -63,6 +63,16 @@ export function compiledTokens(t: StretchTrace, compiledLlm: number, hasIsland: 
   return naive * (compiledLlm / t.llmCalls);
 }
 
+/**
+ * Whether the token delta came from that scaling — an estimate, not provider
+ * usage. Callers must say so: the ship gate treats estimated numbers as
+ * absent, because "honest numbers or absent" does not have an "honest-ish"
+ * tier.
+ */
+export function tokensExtrapolated(compiledLlm: number, hasIsland: boolean): boolean {
+  return hasIsland && compiledLlm > 0;
+}
+
 function nthEvent(events: TraceEvent[], name: string, n: number): number {
   let seen = 0;
   for (let i = 0; i < events.length; i++) {

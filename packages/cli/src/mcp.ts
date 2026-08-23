@@ -5,6 +5,19 @@ type Rpc = { jsonrpc: "2.0"; id?: unknown; method?: string; params?: Record<stri
 
 const CACHE_MS = 5_000;
 
+/**
+ * Client-side ceiling for every fetch this server makes.
+ *
+ * Both fetches — /v1/tools and /v1/wrap-run — are awaited on the serialized
+ * stdio chain, so one endpoint that accepts the connection and never answers
+ * wedged every later request behind it: the MCP client saw a live server that
+ * answered nothing. The signal aborts the socket; each caller already has an
+ * error reply on its failure paths, so the chain keeps moving.
+ */
+function edenTimeoutSignal(): AbortSignal {
+  return AbortSignal.timeout(Number(process.env.EDEN_TIMEOUT_MS) || 60_000);
+}
+
 export class McpAuthError extends Error {
   readonly status = 401;
   constructor() {
@@ -117,6 +130,7 @@ export async function handleMcp(msg: Rpc, ctx: {
         method: "POST",
         headers: { authorization: `Bearer ${ctx.key}`, "content-type": "application/json" },
         body: JSON.stringify({ program: p, input: msg.params?.arguments ?? {}, timeoutMs: Number(process.env.EDEN_TIMEOUT_MS) || 60_000 }),
+        signal: edenTimeoutSignal(),
       });
       if (r.status === 401) {
         fail(msg.id, -32001, "unauthorized");
@@ -153,7 +167,7 @@ export async function runMcp(args: string[] = process.argv.slice(2)): Promise<vo
   const programs = async (): Promise<StretchProgram[]> => {
     if (cached && Date.now() - cached.at < CACHE_MS) return cached.programs;
     try {
-      const r = await fetch(`${base.replace(/\/$/, "")}/v1/tools`, { headers: { authorization: `Bearer ${key}` } });
+      const r = await fetch(`${base.replace(/\/$/, "")}/v1/tools`, { headers: { authorization: `Bearer ${key}` }, signal: edenTimeoutSignal() });
       if (r.status === 401) throw new McpAuthError();
       if (!r.ok) throw new Error(`tools ${r.status}`);
       const j = (await r.json()) as { tools?: Array<{ program: StretchProgram; state: string }> };

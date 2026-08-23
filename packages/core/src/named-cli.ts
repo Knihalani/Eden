@@ -126,24 +126,31 @@ export function familyId(parsed: ParsedCli): string {
 export function extractNamedCliCalls(command: string): ParsedCli[] {
   const found: ParsedCli[] = [];
   const seen = new Set<string>();
-  const push = (p: ParsedCli | null) => {
+  const push = (p: ParsedCli | null, opts?: { noDedupe?: boolean }) => {
     if (!p) return;
     const key = `${p.family}.${p.subcommand}:${p.positionals[0] || ""}:${p.rewrite_host || ""}`;
-    if (seen.has(key)) return;
-    seen.add(key);
+    // The dedupe key carries no flags, so `curl -X POST … -d amount=1` twice
+    // collapsed into ONE call and half the writes vanished. A mutating call is
+    // never collapsed: two identical-looking POSTs are two effects.
+    if (!opts?.noDedupe) {
+      if (seen.has(key)) return;
+      seen.add(key);
+    }
     found.push(p);
   };
   const ghApi = /gh\s+api\s+(?:"([^"]+)"|'([^']+)'|([^\s"'\\]+))/g;
   for (const m of command.matchAll(ghApi)) {
     const path = demacro(m[1] || m[2] || m[3] || "");
     if (!path) continue;
-    push(parseNamedCli(`gh api ${path}`));
+    push(parseNamedCli(`gh api ${path}`), { noDedupe: segmentIsMutatingGh(command, m.index ?? 0) });
   }
   const curls = /https?:\/\/[^\s"'\\]+/g;
   if (/\bcurl\b/.test(command)) {
     for (const m of command.matchAll(curls)) {
       const url = demacro(m[0]);
-      push(parseNamedCli(`curl ${url}`));
+      const seg = shellSegmentAt(command, m.index ?? 0);
+      const mutating = /\bcurl\b/.test(seg) && isMutatingCurl(seg);
+      push(parseNamedCli(`curl ${url}`), { noDedupe: mutating });
     }
   }
   const ghVerb = /gh\s+(pr|issue|run)\s+(view|list|checks|status)\s+([^\s"'\\]+)?/g;
@@ -172,9 +179,95 @@ const METHOD_FLAG = new RegExp(String.raw`(?:^|\s)-{1,2}(?:method|X)[=\s]*(${WRI
 /** Flags that carry a request body, which implies a write even with no verb. */
 const BODY_FLAG = /(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:[=\s]|$)/;
 
+/**
+ * The `;`/newline-delimited shell segment containing offset `at`.
+ *
+ * Mutation predicates (isMutatingGh / isMutatingCurl) are per-invocation, but
+ * extractNamedCliCalls sees a whole compound command. Judging the compound
+ * command as a whole would let one mutating call taint every URL in it, so
+ * each match is judged by the segment it actually sits in.
+ */
+function shellSegmentAt(command: string, at: number): string {
+  let start = 0;
+  for (let i = 0; i <= command.length; i++) {
+    if (i === command.length || command[i] === "\n" || command[i] === ";") {
+      if (at < i) return command.slice(start, i);
+      start = i + 1;
+    }
+  }
+  return command;
+}
+
+function segmentIsMutatingGh(command: string, at: number): boolean {
+  const seg = shellSegmentAt(command, at);
+  return /\bgh\s+api\b/.test(seg) && isMutatingGh(seg);
+}
+
+/**
+ * Mutating named `gh` subcommands. These never appear in the METHOD_FLAG /
+ * BODY_FLAG checks because they carry no `-X` or `-f`: `gh pr merge 12` is a
+ * write that looks like nothing at all to the HTTP-verb heuristics.
+ */
+const GH_MUTATING_VERBS: Record<string, Set<string>> = {
+  pr: new Set(["close", "merge", "edit", "reopen", "ready", "pin"]),
+  issue: new Set(["close", "delete", "edit", "pin"]),
+  repo: new Set(["delete", "archive", "edit"]),
+  run: new Set(["cancel", "rerun"]),
+  release: new Set(["delete"]),
+};
+
+/**
+ * The named verbs this module can prove are read-only. Anything outside these
+ * sets — including verbs that merely look harmless — cannot be proven safe,
+ * and hasUnsafeGhVerb treats unprovable as unsafe.
+ */
+const GH_READONLY_VERBS: Record<string, Set<string>> = {
+  pr: new Set(["view", "list", "checks", "status", "diff"]),
+  issue: new Set(["view", "list", "status"]),
+  repo: new Set(["view", "list"]),
+  run: new Set(["view", "list"]),
+  release: new Set(["view", "list"]),
+};
+
+/** The `gh <noun> <verb>` pair on one shell line, if any. `gh api` is excluded — its mutation gate is isMutatingGh. */
+export function ghNamedVerb(line: string): { noun: string; verb: string } | null {
+  const m = line.match(/\bgh\s+(?!api\b)([a-z]+)\s+([a-z]+)/);
+  if (!m) return null;
+  return { noun: m[1]!, verb: m[2]! };
+}
+
+/** True when any line carries a known-mutating named gh subcommand. */
+function hasMutatingGhVerb(command: string): boolean {
+  for (const line of command.split(/\n|;/)) {
+    const v = ghNamedVerb(line);
+    if (!v) continue;
+    if (GH_MUTATING_VERBS[v.noun]?.has(v.verb)) return true;
+  }
+  return false;
+}
+
+/**
+ * True when any line's gh named verb is not provably read-only.
+ *
+ * Stricter than hasMutatingGhVerb: an unknown verb cannot be proven safe, and
+ * "we do not know what this does" is not the same as "this is a read".
+ * Used as a ship gate by planFromBash, which replays a compiled program once
+ * per id — an unrecognized write there multiplies.
+ */
+export function hasUnsafeGhVerb(command: string): boolean {
+  if (hasMutatingGhVerb(command)) return true;
+  for (const line of command.split(/\n|;/)) {
+    const v = ghNamedVerb(line);
+    if (!v) continue;
+    if (!GH_READONLY_VERBS[v.noun]?.has(v.verb)) return true;
+  }
+  return false;
+}
+
 export function isMutatingGh(command: string): boolean {
   if (METHOD_FLAG.test(command)) return true;
   if (/\bgh\s+api\s+graphql\b/.test(command)) return /\bmutation\s*\{/.test(command);
+  if (hasMutatingGhVerb(command)) return true;
   return /\bgh\s+api\b/.test(command) && BODY_FLAG.test(command);
 }
 

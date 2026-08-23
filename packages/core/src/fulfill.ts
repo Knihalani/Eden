@@ -342,7 +342,14 @@ function compactLs(command: string, text: string): string | null {
 export function compactStdout(command: string, stdout: string, maxBytes = TOKEN_SLA_BYTES): { stdout: string; vaulted: boolean } {
   const stripped = stripAnsi(stdout);
   if (!stripped.trim()) return { stdout: stripped, vaulted: false };
-  if (/\s--jq\b|\s-q\b/.test(command) || /\bfulfill\b/.test(command) || /\bplay\b/.test(command)) {
+  // The --jq/-q bail used to fire on any command carrying `-q`, so `pytest -q`
+  // — and every other tool with a quiet flag — had ALL compaction switched
+  // off. That escape hatch exists for `gh api … --jq`, where the filter has
+  // already shrunk the JSON to what the model asked for; scope it to gh api.
+  if (/\bgh\s+api\b/.test(command) && /\s--jq\b|\s-q\b/.test(command)) {
+    return { stdout: stripped, vaulted: false };
+  }
+  if (/\bfulfill\b/.test(command) || /\bplay\b/.test(command)) {
     return { stdout: stripped, vaulted: false };
   }
   // Live GitHub JSON must keep head.sha and other fields the model already asked for.

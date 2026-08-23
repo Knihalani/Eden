@@ -15,7 +15,7 @@ import {
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram } from "@eden/runtime";
 import { asToolDef, emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
 import { extractInput } from "./steer";
-import type { StretchTrace } from "@eden/ir";
+import type { StretchTrace, TraceEvent } from "@eden/ir";
 import { resetUsage } from "./usage";
 import { decideGuard, requiredChecks } from "./guard";
 
@@ -33,6 +33,12 @@ export type WrapState = {
   pulls?: number;
   run: RunRecorder;
   pausedIds: Set<string>;
+  /**
+   * Receipts/traces the control-plane outbox had to throw away because it was
+   * full (or a job exhausted its retries). Telemetry loss is not silent:
+   * every trace emitted afterwards carries `dropped_posts`.
+   */
+  droppedPosts: number;
 };
 
 type OutboxJob = { path: string; body: unknown; tries: number };
@@ -47,7 +53,7 @@ export function wrapTimeoutMs(explicit?: number): number {
 }
 
 export function createState(opts: EdenOpts = {}): WrapState {
-  return { opts: { failOpen: true, ...opts }, programs: [...(opts.programs ?? [])], traces: [], receipts: [], pulls: 0, run: emptyRun(), pausedIds: new Set() };
+  return { opts: { failOpen: true, ...opts }, programs: [...(opts.programs ?? [])], traces: [], receipts: [], pulls: 0, run: emptyRun(), pausedIds: new Set(), droppedPosts: 0 };
 }
 
 function wrapAuth(state: WrapState): string | undefined {
@@ -209,6 +215,7 @@ export async function flushOutbox(state: WrapState): Promise<void> {
   if (!ok) {
     job.tries++;
     if (job.tries < MAX_POST_TRIES && q.length < MAX_OUTBOX) q.push(job);
+    else state.droppedPosts++; // retries exhausted, or no room to wait — counted, not silent
     scheduleFlush(state, Math.min(30_000, 200 * 2 ** Math.min(job.tries, 8)));
   } else if (q.length) {
     scheduleFlush(state, 0);
@@ -222,7 +229,13 @@ function post(state: WrapState, path: string, body: unknown): void {
   void sendPost(state, path, body).then((ok) => {
     if (ok) return;
     const q = outboxOf(state);
-    if (q.length >= MAX_OUTBOX) return;
+    if (q.length >= MAX_OUTBOX) {
+      // The outbox is full and this receipt/trace is gone. Count it: the
+      // dropped_posts field on the next emitted trace is the only record
+      // that telemetry was lost here.
+      state.droppedPosts++;
+      return;
+    }
     q.push({ path, body, tries: 0 });
     scheduleFlush(state, 50);
   });
@@ -369,22 +382,75 @@ function notifyHost(fn: () => void): void {
 }
 
 /**
+ * Which invocation pushed which event.
+ *
+ * `state.run` is one shared RunRecorder for every wrapped tool call in the
+ * process. When a raw call and a compiled call overlap in time, a flush that
+ * drained the whole buffer attributed the other call's events — sometimes its
+ * results, sometimes its failures — to the wrong trace. Each pushed event now
+ * carries the id of the invocation that produced it under this module-level
+ * symbol, and emitTrace partitions on it.
+ */
+const INVOCATION = Symbol("eden.invocation");
+type TaggedEvent = TraceEvent & { [INVOCATION]?: number };
+
+/** Lifetime of one wrapped execute(). */
+type Invocation = {
+  startedAt: number;
+  done: boolean;
+  finishedAt: number;
+};
+
+/**
  * Flush the buffered events as a trace.
  *
- * This runs inside the success path of every wrapped call, so it is wrapped
- * whole: anything it throws would otherwise be caught by the caller's error
- * branch, recorded as a second bogus ok:false event for a call that worked,
- * and rethrown at the agent. The buffer is reset either way — a trace we could
- * not build is not a trace worth retrying against the same events forever.
+ * With an `owner` (the invocation doing the flushing) the buffer is
+ * partitioned: the trace takes the owner's own events plus events from
+ * invocations that had already *finished before the owner began* — the
+ * ordinary sequential case, where earlier calls are simply waiting to be
+ * flushed. Events from invocations that overlap the owner stay buffered and
+ * ride out with their own flush.
+ *
+ * Residual risk, accepted on purpose: warnings/seenSignals/usage/t0 remain
+ * per-state rather than per-invocation, so two overlapping calls can still
+ * share a warning budget or a duration window; and an event whose invocation
+ * record has been evicted (see the bound below) is treated as long-finished
+ * and claimed by the next flush. Partitioning events is the part that could
+ * corrupt or lose attribution of results; the rest only skews telemetry.
  */
-function emitTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: Record<string, unknown>): void {
+function emitTrace(
+  state: WrapState,
+  run: ReturnType<typeof emptyRun>,
+  input?: Record<string, unknown>,
+  owner?: { id: number; startedAt: number; invocations: Map<number, Invocation> },
+): void {
   if (!run.events.length) return;
+  let events = run.events;
   try {
-    buildAndSendTrace(state, run, input);
+    if (owner) {
+      const mine: TraceEvent[] = [];
+      const rest: TraceEvent[] = [];
+      for (const ev of run.events as TaggedEvent[]) {
+        const id = ev[INVOCATION];
+        if (id === owner.id) {
+          mine.push(ev);
+          continue;
+        }
+        const rec = id != null ? owner.invocations.get(id) : undefined;
+        // Unknown id: either an untagged legacy path or an evicted ancient
+        // invocation — both long finished, safe to attribute here.
+        if (!rec || (rec.done && rec.finishedAt <= owner.startedAt)) mine.push(ev);
+        else rest.push(ev);
+      }
+      if (!mine.length) return;
+      run.events = rest;
+      events = mine;
+    }
+    buildAndSendTrace(state, run, events, input);
   } catch {
     /* observing a call must never fail it */
   } finally {
-    run.events = [];
+    if (!owner) run.events = [];
     run.warnings = [];
     run.seenSignals.clear();
     run.firstWarningAt = undefined;
@@ -396,8 +462,8 @@ function emitTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: R
   }
 }
 
-function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, input?: Record<string, unknown>): void {
-  const lastOk = lastOkResult(run.events);
+function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, events: TraceEvent[], input?: Record<string, unknown>): void {
+  const lastOk = lastOkResult(events);
   const output = lastOk ?? run.output;
   const trace: StretchTrace = {
     // Events were redacted at push time, so what is buffered is already a
@@ -406,18 +472,18 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, i
     // compiler learns from, and moved the redaction window to the wrong
     // moment.
     id: crypto.randomUUID(),
-    events: run.events,
-    input: (redact(input ?? run.events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
+    events,
+    input: (redact(input ?? events[0]?.args ?? {}) as Record<string, unknown>) ?? {},
     output: output === undefined ? undefined : redact(output),
     llmCalls: run.llmCalls,
     duration_ms: performance.now() - run.t0,
     cost_cents: run.cost,
-    complete: run.events.at(-1)?.ok,
+    complete: events.at(-1)?.ok,
     ...(run.measured ? { prompt_tokens: run.prompt_tokens, completion_tokens: run.completion_tokens } : {}),
     ...(run.warnings.length ? { warnings: run.warnings.slice() } : {}),
     ...(run.firstWarningAt != null ? { firstWarningAt: run.firstWarningAt } : {}),
     ...(run.evidence ? { evidence: run.evidence } : {}),
-    ...(run.events.some((e) => e.skipped) ? { skipped: run.events.filter((e) => e.skipped).map((e) => e.name) } : {}),
+    ...(events.some((e) => e.skipped) ? { skipped: events.filter((e) => e.skipped).map((e) => e.name) } : {}),
   };
   const nowBudget = {
     duration_ms: trace.duration_ms,
@@ -428,6 +494,11 @@ function buildAndSendTrace(state: WrapState, run: ReturnType<typeof emptyRun>, i
   if (spent) trace.postWarning = spent;
   trace.usable = usableTrace(trace);
   trace.grounded = judgeGrounding(trace).grounded;
+  if (state.droppedPosts > 0) {
+    // Outbox overflow silently destroyed receipts/traces. Surface the count on
+    // every later trace so the loss is at least visible to the desk.
+    (trace as StretchTrace & { dropped_posts?: number }).dropped_posts = state.droppedPosts;
+  }
   pushCapped(state.traces, trace);
   notifyHost(() => state.opts.onTrace?.(trace));
   post(state, "/v1/traces", trace);
@@ -517,6 +588,20 @@ export function wrapTools<T extends ToolsIn>(
   state: WrapState,
 ): { [K in keyof T]: ToolDef } & Record<string, ToolDef> {
   const run = state.run;
+  // Per-invocation records for trace attribution (see emitTrace). Keyed by a
+  // monotonically increasing id stamped onto each pushed event.
+  const invocations = new Map<number, Invocation>();
+  let nextInvocationId = 0;
+  // Bounded like every other per-call structure: once finished entries are
+  // evicted, their buffered events are treated as long-finished and claimed by
+  // the next flush rather than leaking forever.
+  const evictInvocations = (): void => {
+    if (invocations.size <= 256) return;
+    for (const [id, rec] of invocations) {
+      if (invocations.size <= 128) break;
+      if (rec.done) invocations.delete(id);
+    }
+  };
   // `rest` counts how many raw calls of each tool the compiled run has already
   // performed on the caller's behalf, so a sequence that calls one tool twice
   // suppresses both raw repeats rather than only the first.
@@ -554,12 +639,16 @@ export function wrapTools<T extends ToolsIn>(
 
   for (const [name, def] of Object.entries(tools)) {
     const spec = asToolDef(name, def);
-    wrapped[name] = {
-      ...spec,
-      execute: async (args: Record<string, unknown>) => {
-        calls++;
+    const runOne = async (args: Record<string, unknown>, selfId: number, startedAt: number): Promise<unknown> => {
         if (state.opts.baseUrl && calls % PULL_EVERY === 0) void pullLive(state);
         const live = liveOf(state);
+        // Every buffered event carries the id of the invocation that pushed it,
+        // so a concurrent flush cannot claim it (see emitTrace).
+        const tagEvent = (ev: TraceEvent): TraceEvent => {
+          (ev as TaggedEvent)[INVOCATION] = selfId;
+          return ev;
+        };
+        const owner = { id: selfId, startedAt, invocations };
 
         const prefixHits = live
           .filter((p) => (p.sequence ?? [])[0] === name)
@@ -590,7 +679,7 @@ export function wrapTools<T extends ToolsIn>(
           // map was still empty — so a sibling call naming a later step of the
           // same stretch sailed past the skip check and executed for real,
           // duplicating whatever the compiled leg was in the middle of doing.
-          if (run.events.length) emitTrace(state, run, run.events[0]?.args);
+          if (run.events.length) emitTrace(state, run, run.events[0]?.args, owner);
           const { key: armKey, armed } = armTail(hit.p, hit.input);
           try {
             const value = await runCompiled(state, hit.p, hit.input, tools, registry);
@@ -605,7 +694,7 @@ export function wrapTools<T extends ToolsIn>(
             armed.armedAtCall = calls;
             // Flush after the steered tail is absorbed so skipped names land
             // on this stretch instead of leaking into the next ticket.
-            if (!armed.rest.size) emitTrace(state, run, hit.input);
+            if (!armed.rest.size) emitTrace(state, run, hit.input, owner);
             return value;
           } catch (err) {
             // Only this invocation's arming. The previous code deleted every
@@ -640,17 +729,19 @@ export function wrapTools<T extends ToolsIn>(
           // let every later one execute again.
           if (remaining > 1) armed.rest.set(name, remaining - 1);
           else armed.rest.delete(name);
-          run.events.push({
-            name,
-            args: {},
-            ok: true,
-            skipped: true,
-            duration_ms: 0,
-          });
+          run.events.push(
+            tagEvent({
+              name,
+              args: {},
+              ok: true,
+              skipped: true,
+              duration_ms: 0,
+            }),
+          );
           noteSignals(state, run);
           if (!armed.rest.size) {
             skipRest.delete(id);
-            emitTrace(state, run, armed.input);
+            emitTrace(state, run, armed.input, owner);
           }
           return { eden: "steered", skipped: name };
         }
@@ -664,15 +755,15 @@ export function wrapTools<T extends ToolsIn>(
               const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
               armed.armedAt = performance.now();
               armed.armedAtCall = calls;
-              if (!armed.rest.size) emitTrace(state, run, steeredIn);
+              if (!armed.rest.size) emitTrace(state, run, steeredIn, owner);
               return value;
             } catch {
               skipRest.delete(armKey);
-              emitTrace(state, run, run.events[0]?.args);
+              emitTrace(state, run, run.events[0]?.args, owner);
               return { eden: "halted", reason: guard.reason };
             }
           }
-          emitTrace(state, run, run.events[0]?.args);
+          emitTrace(state, run, run.events[0]?.args, owner);
           return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason };
         }
 
@@ -684,23 +775,43 @@ export function wrapTools<T extends ToolsIn>(
           // loop that reuses one args record per turn rewrote already-recorded
           // history — the witnesses programs get compiled from were of calls
           // that never happened. It also kept arbitrary result graphs alive.
-          run.events.push({
-            name,
-            args: redact(args) as Record<string, unknown>,
-            result: redact(result),
-            ok: true,
-            duration_ms: performance.now() - t0,
-          });
+          run.events.push(
+            tagEvent({
+              name,
+              args: redact(args) as Record<string, unknown>,
+              result: redact(result),
+              ok: true,
+              duration_ms: performance.now() - t0,
+            }),
+          );
           noteSignals(state, run);
           const last = live.some((p) => (p.sequence ?? []).at(-1) === name);
           if (last || /^(notify|complete|finalize|done)$/i.test(name) || run.events.length >= 12) {
-            emitTrace(state, run, run.events[0]?.args);
+            emitTrace(state, run, run.events[0]?.args, owner);
           }
           return result;
         } catch (err) {
-          run.events.push({ name, args: redact(args) as Record<string, unknown>, ok: false, duration_ms: performance.now() - t0 });
+          run.events.push(tagEvent({ name, args: redact(args) as Record<string, unknown>, ok: false, duration_ms: performance.now() - t0 }));
           noteSignals(state, run);
           throw err;
+        }
+    };
+    wrapped[name] = {
+      ...spec,
+      execute: async (args: Record<string, unknown>) => {
+        calls++;
+        // One invocation record per execute. The `finally` stamps completion
+        // even when the call throws, so a failed raw call's event is still
+        // claimable by a later sequential flush.
+        const selfId = ++nextInvocationId;
+        const rec: Invocation = { startedAt: performance.now(), done: false, finishedAt: 0 };
+        invocations.set(selfId, rec);
+        evictInvocations();
+        try {
+          return await runOne(args, selfId, rec.startedAt);
+        } finally {
+          rec.done = true;
+          rec.finishedAt = performance.now();
         }
       },
     };

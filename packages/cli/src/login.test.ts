@@ -37,6 +37,17 @@ describe("login", () => {
     expect(formatStatus("http://x", "eden_dev", { ok: true, traces: 4, live: 1, savings: { tokensSavedMean: 420 } })).toContain("420 tokens saved");
     expect(formatStatus("http://x", "eden_dev", null)).toContain("down");
   });
+
+  test("formatStatus prints a fingerprint, never a fragment of the key itself", () => {
+    for (const health of [null, { ok: true, traces: 4, live: 1 }]) {
+      const out = formatStatus("http://x", "eden_dev_secret_value_123456", health as never);
+      // First-12-hex SHA-256 fingerprint identifies the key without leaking
+      // any of its characters.
+      expect(out).toMatch(/key [0-9a-f]{12}( |$)/);
+      expect(out).not.toContain("eden_dev_secret");
+      expect(out).not.toContain("123456");
+    }
+  });
 });
 
 describe("resolveApiKey", () => {
