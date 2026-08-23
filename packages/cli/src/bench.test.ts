@@ -47,8 +47,8 @@ describe("eden bench", () => {
     expect(report.n).toBe(9);
     expect(report.p_value).toBeLessThan(0.05);
     expect(report.ci.point).toBeLessThan(0);
-    expect(report.ci.lo).toBeLessThanOrEqual(report.ci.point);
-    expect(report.ci.hi).toBeGreaterThanOrEqual(report.ci.point);
+    expect(report.ci.lo).toBeLessThanOrEqual(report.ci.point!);
+    expect(report.ci.hi).toBeGreaterThanOrEqual(report.ci.point!);
 
     // Tokens were scraped on the naive side but the island half is scaled,
     // not metered — measured AND estimated at once.

@@ -5,7 +5,7 @@ import { isDeopt, isReplaySafe, runProgram } from "@eden/runtime";
 import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, type WrapState } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
 import { canApprove, registryCovers, replayRegistry, shadowProgram, uncoveredTools } from "@eden/shadow";
-import { pushPrev, type Candidate, type Store } from "./store";
+import { pushPrev, Store, type Candidate } from "./store";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
@@ -93,6 +93,58 @@ function corsFor(req?: Request): Record<string, string> {
 
 function json(data: unknown, status = 200, req?: Request): Response {
   return Response.json(data, { status, headers: { ...corsFor(req), "cache-control": "private, no-store" } });
+}
+
+/**
+ * Which Clerk org is this request acting for? The web plane sends it on every
+ * call after its Clerk gate; a bearer token alone says nothing about tenancy,
+ * because every org of a deployment shares one control-plane key.
+ */
+const ORG_HEADER = "x-eden-org";
+
+/**
+ * Whether this process serves a real deployment rather than a laptop. Mirrors
+ * apps/site's managed-install check (DATABASE_URL / VERCEL, EDEN_DEV override)
+ * so both planes agree on when permissive dev behaviour is allowed.
+ */
+function isManagedDeployment(): boolean {
+  return Boolean(process.env.DATABASE_URL) || Boolean(process.env.VERCEL);
+}
+
+function devFallbackAllowed(): boolean {
+  return isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
+}
+
+/** Warn once per store: legacy unbound workspaces keep working only in dev. */
+const warnedStores = new WeakSet<object>();
+
+/**
+ * Tenant gate for state-changing routes.
+ *
+ * A bound workspace only accepts its own org — any other (or absent) org id is
+ * refused, so one tenant can never approve, pause or dismiss another's tools.
+ * A workspace with no binding at all is legacy: dev installs keep working with
+ * a stderr warning, while managed deployments must refuse an unmapped org —
+ * that is the whole point of the binding. Read-only routes stay key-gated and
+ * skip this check entirely.
+ */
+function orgGate(req: Request, ctx: ApiCtx): Response | null {
+  const org = (req.headers.get(ORG_HEADER) || "").trim();
+  const bound = ctx.store.orgsFor(Store.WORKSPACE_ID);
+  if (!bound.length) {
+    if (devFallbackAllowed()) {
+      if (!warnedStores.has(ctx.store)) {
+        warnedStores.add(ctx.store);
+        console.error(
+          "[eden] workspace has no org binding; allowing unscoped state change only because this install is unmanaged — bind via POST /v1/workspace/orgs",
+        );
+      }
+      return null;
+    }
+    return json({ error: "workspace not bound to this org" }, 403, req);
+  }
+  if (!org || !bound.includes(org)) return json({ error: "workspace not bound to this org" }, 403, req);
+  return null;
 }
 
 function receiptExtras(row: { payload?: string | null }): Record<string, unknown> {
@@ -443,6 +495,26 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     return json(ctx.store.savings());
   }
 
+  /**
+   * Provisioning: register the caller's Clerk org against this workspace.
+   * Key-gated like every /v1 route, but the write is workspace-scoped by the
+   * binding rules themselves — an already-bound workspace only accepts its own
+   * org (idempotent re-bind), never a new one, so a second org cannot claim
+   * tenant access with the shared key. The web plane calls this when it
+   * onboards an org ("with keys").
+   */
+  if (p === "/v1/workspace/orgs" && req.method === "POST") {
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const b = parsed.value as { org_id?: string; orgId?: string };
+    const org = (b.org_id || b.orgId || req.headers.get(ORG_HEADER) || "").trim();
+    if (!org) return json({ error: "org_id required" }, 400);
+    const bound = ctx.store.orgsFor(Store.WORKSPACE_ID);
+    if (bound.length && !bound.includes(org)) return json({ error: "workspace not bound to this org" }, 403, req);
+    ctx.store.bindOrg(Store.WORKSPACE_ID, org);
+    return json({ ok: true, orgs: ctx.store.orgsFor(Store.WORKSPACE_ID) });
+  }
+
   if (p === "/v1/traces" && req.method === "POST") {
     const parsed = await readJson(req);
     if (!parsed.ok) return parsed.res;
@@ -631,6 +703,8 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
 
   const approve = p.match(/^\/v1\/tools\/([^/]+)\/approve$/);
   if (approve && req.method === "POST") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
     const c = ctx.store.candidate(approve[1]!);
     if (!c) return json({ error: "not found" }, 404);
     // Computed before the ship so the response records exactly what the
@@ -644,6 +718,8 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
 
   const pause = p.match(/^\/v1\/tools\/([^/]+)\/(pause|rollback|resume)$/);
   if (pause && req.method === "POST") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
     const t = ctx.store.tool(pause[1]!);
     if (!t) return json({ error: "not found" }, 404);
     if (pause[2] === "pause") t.state = "paused";
@@ -708,6 +784,8 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     return json({ ...c, diff: candidateDiff(ctx.store, c.program) });
   }
   if (delCand && req.method === "DELETE") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
     if (!ctx.store.deleteCandidate(delCand[1]!)) return json({ error: "not found" }, 404);
     return json({ ok: true });
   }

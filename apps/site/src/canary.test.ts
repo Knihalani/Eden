@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { openDb } from "./db";
 import { recordDeopt } from "./db";
 import { maybeRecompile } from "./canary";
+import { buildDag, layers } from "@eden/core";
 
 function tmpDb(tag: string) {
   return openDb(`/tmp/eden-canary-${tag}-${Date.now()}.db`);
@@ -25,13 +26,21 @@ async function seedTool(db: Awaited<ReturnType<typeof openDb>>, workspaceId: str
   return id;
 }
 
+/**
+ * A program shaped like @eden/compile's real output: one IR tool step naming
+ * the recorded call, which the canary projects onto the drifted tool's own
+ * CompiledStep (the URL source of truth) before queueing.
+ */
 const passingDeps = {
   gatherTracesFn: async () => [
     { id: "t1", input: { issue: 1 }, events: [{ name: "curl", args: {}, ok: true }] },
     { id: "t2", input: { issue: 2 }, events: [{ name: "curl", args: {}, ok: true }] },
     { id: "t3", input: { issue: 3 }, events: [{ name: "curl", args: {}, ok: true }] },
   ],
-  compileTracesFn: () => ({ programs: [{ id: "p1", sequence: ["curl"] }], refusals: [] }),
+  compileTracesFn: () => ({
+    programs: [{ id: "p1", sequence: ["curl"], steps: [{ id: "x1", kind: "tool", tool: "curl" }] }],
+    refusals: [],
+  }),
   shadowProgramFn: async () => ({ verdict: "PASS" as const, reasons: [] }),
 };
 
@@ -84,8 +93,12 @@ describe("drift canary & auto-recompile", () => {
     const fresh = rows.find((r) => r.id !== oldTool)!;
     expect(fresh.state).toBe("draft");
     expect(fresh.fingerprint.startsWith("fp/acme/issues@rc")).toBe(true);
-    // the new draft carries the recompiled artifact, not a copy of the old steps
-    expect(JSON.parse(fresh.steps)).toEqual({ id: "p1", sequence: ["curl"] });
+    // the new draft carries a CompiledStep[] projection of the recompiled
+    // program — URL-bearing, same shape every other writer stores — not the
+    // raw StretchProgram object playback cannot consume.
+    expect(JSON.parse(fresh.steps)).toEqual([
+      { id: "s1", kind: "cloud_http", name: "curl", commute: true, url: "https://api.github.com/repos/a/b/issues/{issue}" },
+    ]);
 
     // knock references the OLD version so the workshop shows old-vs-new
     const knocks = await db.all<{ tool_id: string }>(`SELECT tool_id FROM knock`);
@@ -204,5 +217,52 @@ describe("drift canary & auto-recompile", () => {
     });
     expect(noGate.action).toBe("no-shadow-gate");
     expect((await db.all(`SELECT id FROM tool`)).length).toBe(1);
+  });
+
+  test("a queued draft's steps survive playback's parse + buildDag path", async () => {
+    /**
+     * The recompiled draft used to store the raw StretchProgram object into
+     * tool.steps. Every consumer expects a CompiledStep[] array — playback's
+     * buildDag calls steps.map and threw a TypeError, so /v1/play 500'd the
+     * moment a human approved the draft.
+     */
+    const db = await tmpDb("playable");
+    const oldTool = await seedTool(db, "ws_local");
+    await recordDeopt(db, "ws_local", oldTool, {});
+    await recordDeopt(db, "ws_local", oldTool, {});
+    const out = await maybeRecompile(db, { workspace_id: "ws_local", tool_id: oldTool, ...passingDeps });
+    expect(out.action).toBe("queued");
+    const draft = await db.get<{ steps: string }>(`SELECT steps FROM tool WHERE id = ?`, [
+      (out as { draft_id: string }).draft_id,
+    ]);
+    const parsed: unknown = JSON.parse(draft!.steps!);
+    // The exact shape playOne parses before buildDag.
+    expect(Array.isArray(parsed)).toBe(true);
+    // buildDag is what the object-shaped steps blew up on (.map over an
+    // object). It must run clean against what we store now.
+    const dag = buildDag(parsed as Parameters<typeof buildDag>[0]);
+    expect(layers(dag).flat().map((s) => s.id)).toEqual(["s1"]);
+  });
+
+  test("a recompile that cannot be projected onto playable steps is refused, not queued", async () => {
+    const db = await tmpDb("unplayable");
+    const toolId = await seedTool(db, "ws_local");
+    await recordDeopt(db, "ws_local", toolId, {});
+    await recordDeopt(db, "ws_local", toolId, {});
+    const out = await maybeRecompile(db, {
+      workspace_id: "ws_local",
+      tool_id: toolId,
+      ...passingDeps,
+      compileTracesFn: () => ({
+        programs: [{ id: "p2", sequence: ["curl"], steps: [{ id: "i1", kind: "island", input: { kind: "literal", value: "" }, system: "", outputSchema: {} }] }],
+        refusals: [],
+      }),
+    });
+    expect(out.action).toBe("unplayable-refused");
+    if (out.action !== "unplayable-refused") return;
+    expect(out.reasons.join("; ")).toContain("island");
+    // nothing queued, no knock raised — the original keeps serving
+    expect((await db.all(`SELECT id FROM tool`)).length).toBe(1);
+    expect(await db.all(`SELECT id FROM knock`)).toEqual([]);
   });
 });

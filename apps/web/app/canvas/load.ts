@@ -1,4 +1,5 @@
 import { wrapFetch } from "@/lib/wrap";
+import { edenKey } from "../lib/eden-key";
 import type { Manifest, StretchProgram } from "@eden/ir";
 import { hashStretch } from "@eden/ir";
 import { classifyFail } from "./fail";
@@ -6,11 +7,10 @@ import type { CanvasModel, CanvasReceipt, CanvasSibling } from "./model";
 
 export type { CanvasFail, CanvasModel, CanvasSibling } from "./model";
 
-const token = () => process.env.EDEN_API_KEY || "eden_dev";
-
 async function plane(path: string, init?: RequestInit): Promise<Response> {
+  // Read-only routes stay key-gated; no org binding needed here.
   const headers = new Headers(init?.headers);
-  headers.set("authorization", `Bearer ${token()}`);
+  headers.set("authorization", `Bearer ${edenKey()}`);
   return wrapFetch()(new Request(`http://eden.local${path}`, { ...init, headers }));
 }
 

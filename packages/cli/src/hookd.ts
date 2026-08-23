@@ -78,7 +78,10 @@ export async function handleHookd(req: Request): Promise<Response> {
       }),
     ]);
     return Response.json(out);
-  } catch {
+  } catch (err) {
+    // Same last-line-of-defence contract as `eden hook`: `{}` never blocks the
+    // agent — but the failure must still reach the operator's log.
+    process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
     return Response.json({});
   }
 }

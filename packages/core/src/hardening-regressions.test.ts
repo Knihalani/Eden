@@ -90,6 +90,29 @@ describe("gh named verbs gate mutations", () => {
     }
   });
 
+  test("verbs that write but carry no -X or -f are still mutating", () => {
+    // create/comment/reopen/transfer/unlock/star-style verbs perform writes
+    // that the HTTP-verb heuristics can never see, and gh's -b/--body carry a
+    // request body exactly like -f does.
+    for (const cmd of [
+      "gh pr create --title x",
+      "gh issue comment 12 --body x",
+      "gh issue comment 12 -b x",
+      "gh issue reopen 5",
+      "gh issue transfer 5 o/other",
+      "gh issue unlock 5",
+      "gh repo star cli/cli",
+      "gh api repos/o/r/issues -b 'body text'",
+      "gh api repos/o/r/issues --body 'body text'",
+    ]) {
+      expect(isMutatingGh(cmd)).toBe(true);
+    }
+    // Reads are unaffected by the widened lists.
+    for (const cmd of ["gh pr view 12", "gh issue view 5", "gh run list"]) {
+      expect(isMutatingGh(cmd)).toBe(false);
+    }
+  });
+
   test("hasUnsafeGhVerb refuses what it cannot prove read-only", () => {
     for (const cmd of [
       "gh pr close 12",

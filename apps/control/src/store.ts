@@ -56,6 +56,8 @@ function receiptIsEarlyDeopt(payload: string | null | undefined): boolean {
 
 export class Store {
   db: EdenDb;
+  /** The embedded control plane serves one workspace; org bindings hang off it. */
+  static WORKSPACE_ID = "ws_local";
   constructor(path = ":memory:") {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = openDb(path);
@@ -98,6 +100,12 @@ export class Store {
       CREATE TABLE IF NOT EXISTS meta (
         k TEXT PRIMARY KEY,
         v TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS workspace_orgs (
+        workspace_id TEXT NOT NULL,
+        org_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (workspace_id, org_id)
       );
       CREATE TABLE IF NOT EXISTS program_versions (
         tool_id TEXT NOT NULL,
@@ -390,6 +398,28 @@ export class Store {
 
   heartbeat(): void {
     this.db.run(`INSERT OR REPLACE INTO meta (k, v) VALUES ('heartbeat', ?)`, [String(Date.now())]);
+  }
+
+  /**
+   * Bind a Clerk org to this workspace. Writes only happen through the
+   * authenticated /v1/workspace/orgs route, and that route refuses to add an
+   * org to a workspace already bound to a different one — otherwise any
+   * authenticated member of any org could claim tenant access after the fact.
+   */
+  bindOrg(workspaceId: string, orgId: string): void {
+    this.db.run(`INSERT OR IGNORE INTO workspace_orgs (workspace_id, org_id, created_at) VALUES (?,?,?)`, [
+      workspaceId,
+      orgId,
+      Date.now(),
+    ]);
+  }
+
+  /** Every org allowed to drive state changes on this workspace. */
+  orgsFor(workspaceId: string): string[] {
+    return this.db
+      .query(`SELECT org_id FROM workspace_orgs WHERE workspace_id = ? ORDER BY created_at`)
+      .all(workspaceId)
+      .map((r) => String((r as { org_id: string }).org_id));
   }
 
   lastHeartbeat(): number {

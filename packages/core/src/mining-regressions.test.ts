@@ -46,6 +46,46 @@ describe("write steps survive mining", () => {
     const events = [bash(post, 0), bash(post, 1)];
     expect(cleanEvents(events).length).toBe(2);
   });
+
+  test("byte-identical mutating MCP events survive as two", () => {
+    // The mutation guard used to be shell-only: isMutatingCurl/isMutatingGh
+    // have nothing to say about an MCP event, so two byte-identical
+    // mcp__linear__create_issue calls collapsed into one — silent
+    // under-execution. A name that is not positively a read never collapses.
+    const mk = (seq: number): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name: "mcp__linear__create_issue",
+      args: { title: "hi", team: "eng" },
+      ok: true,
+    });
+    expect(cleanEvents([mk(0), mk(1)])).toHaveLength(2);
+  });
+
+  test("byte-identical product-verb writes survive as two", () => {
+    const mk = (seq: number): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name: "create_record",
+      args: { table: "orders", data: "x" },
+      ok: true,
+    });
+    expect(cleanEvents([mk(0), mk(1)])).toHaveLength(2);
+  });
+
+  test("identical non-shell reads still collapse", () => {
+    // Double-recording by hook + proxy stays harmless for provably-read names.
+    const read = (name: string, seq: number): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name,
+      args: { issue: "12" },
+      ok: true,
+    });
+    expect(cleanEvents([read("get_issue", 0), read("get_issue", 1)])).toHaveLength(1);
+    expect(cleanEvents([read("list_comments", 0), read("list_comments", 1)])).toHaveLength(1);
+    expect(cleanEvents([read("mcp__linear__get_issue", 0), read("mcp__linear__get_issue", 1)])).toHaveLength(1);
+  });
 });
 
 describe("steering url matching", () => {

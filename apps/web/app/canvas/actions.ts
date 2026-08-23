@@ -3,8 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { wrapFetch } from "@/lib/wrap";
-
-const token = () => process.env.EDEN_API_KEY || "eden_dev";
+import { edenKey } from "../lib/eden-key";
 
 export type BindEdit = { step: string; field: string; path?: string; from?: string };
 
@@ -12,23 +11,62 @@ export type BindEdit = { step: string; field: string; path?: string; from?: stri
  * Clerk is the only real gate: every action shares one bearer token for the
  * embedded control plane, so an unauthenticated caller, a session without an
  * active workspace, or a pending session must be refused here — before any
- * control-plane request is built.
+ * control-plane request is built. The caller's org id travels along as
+ * x-eden-org so the control plane can bind the action to this tenant.
  */
-async function gate(): Promise<{ ok: true } | { ok: false; error: string }> {
+async function gate(): Promise<{ ok: true; orgId: string } | { ok: false; error: string }> {
   const { userId, orgId, sessionStatus } = await auth();
   if (!userId) return { ok: false, error: "sign in to manage live tools" };
   if (!orgId) return { ok: false, error: "join or create a workspace first" };
   if (sessionStatus !== "active") return { ok: false, error: "your session is not active yet" };
-  return { ok: true };
+  return { ok: true, orgId };
+}
+
+function authHeaders(orgId?: string): Headers | { error: string } {
+  let key: string;
+  try {
+    key = edenKey();
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "control-plane key is not configured" };
+  }
+  const headers = new Headers();
+  headers.set("authorization", `Bearer ${key}`);
+  if (orgId) headers.set("x-eden-org", orgId);
+  return headers;
 }
 
 async function plane(path: string, init: RequestInit): Promise<{ ok: boolean; error?: string }> {
   const g = await gate();
   if (!g.ok) return g;
+  const authed = authHeaders(g.orgId);
+  if ("error" in authed) return { ok: false, error: authed.error };
   const headers = new Headers(init.headers);
-  headers.set("authorization", `Bearer ${token()}`);
+  for (const [k, v] of authed) headers.set(k, v);
   if (init.body && !headers.has("content-type")) headers.set("content-type", "application/json");
   const res = await wrapFetch()(new Request(`http://eden.local${path}`, { ...init, headers }));
+  if (res.ok) return { ok: true };
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  return { ok: false, error: body.error || `HTTP ${res.status}` };
+}
+
+/**
+ * Provisioning: register the caller's org against the workspace so later
+ * approve/pause/dismiss calls pass the control plane's tenant gate. Called on
+ * onboarding ("with keys"); best-effort there, but exported so any flow that
+ * connects a workspace can do the same.
+ */
+export async function bindWorkspaceOrg(): Promise<{ ok: boolean; error?: string }> {
+  const g = await gate();
+  if (!g.ok) return g;
+  const authed = authHeaders(g.orgId);
+  if ("error" in authed) return { ok: false, error: authed.error };
+  const res = await wrapFetch()(
+    new Request("http://eden.local/v1/workspace/orgs", {
+      method: "POST",
+      headers: new Headers([...authed, ["content-type", "application/json"]]),
+      body: JSON.stringify({ org_id: g.orgId }),
+    }),
+  );
   if (res.ok) return { ok: true };
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   return { ok: false, error: body.error || `HTTP ${res.status}` };

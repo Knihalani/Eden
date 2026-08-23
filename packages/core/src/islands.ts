@@ -127,9 +127,19 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
     // level with args left {}, so name+args alone collapsed two *different*
     // calls into one. Second, a mutating call never collapses, not even a
     // byte-identical repeat — two identical POSTs are two writes (double
-    // recording by hook + proxy is only harmless for reads).
+    // recording by hook + proxy is only harmless for reads). Mutation here is
+    // an allowlist, following the same philosophy as commutes(): a shell
+    // event's mutation comes from its COMMAND via the curl/gh write
+    // heuristics; any other event's mutation comes from its NAME, which must
+    // positively classify as a read — the READ_VERB pattern over __ . _ - /
+    // delimiters and camelCase word breaks — to ever collapse. The old
+    // shell-only guard let byte-identical mcp__linear__create_issue /
+    // create_record repeats collapse into one because neither heuristic had
+    // ever heard of them: silent under-execution. Provably-read repeats
+    // still dedupe.
     const cmd = e.command ?? "";
-    const mutating = cmd ? isMutatingCurl(cmd) || isMutatingGh(cmd) : false;
+    const shell = e.name === "Bash" || e.name === "bash";
+    const mutating = Boolean(cmd && (isMutatingCurl(cmd) || isMutatingGh(cmd))) || (!shell && !nameIsRead(e.name));
     if (
       prev &&
       !mutating &&
@@ -143,6 +153,20 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
     out.push(e);
   }
   return out;
+}
+
+/**
+ * Positive read classification for a tool-event NAME.
+ *
+ * The same allowlist discipline as `commutes()`: only a name that positively
+ * matches read vocabulary counts as safe to collapse. READ_VERB is anchored to
+ * a delimiter (`__`, `.`, `_`, `-`, `/`) or string start, so "widget_get" is a
+ * read but "targeted" and "forgetful" are not; camelCase boundaries are normalised
+ * to word breaks first so "commentsList" reads like "comments.list".
+ */
+function nameIsRead(name: string): boolean {
+  const wordBroken = name.replace(/([a-z0-9])([A-Z])/g, "$1.$2");
+  return READ_VERB.test(wordBroken);
 }
 
 /**

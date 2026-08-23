@@ -72,11 +72,62 @@ const ensured = new WeakSet<object>();
  * Additively provides the `tool.manifest` column this ledger reads. Mirrors
  * db.ts's best-effort migration style: a failure must not stop serving — it
  * just means the ledger reports not-measured until it succeeds.
+ *
+ * Only success is memoized: a transient Neon hiccup must be retryable on the
+ * next call, so a failed ALTER is logged to stderr and left un-cached. A
+ * duplicate-column error is the steady state of an already-migrated database,
+ * and counts as success.
  */
 export async function ensureLedgerSchema(db: EdenDb): Promise<void> {
   if (ensured.has(db)) return;
-  await db.exec(`ALTER TABLE tool ADD COLUMN manifest TEXT`).catch(() => undefined);
-  ensured.add(db);
+  try {
+    await db.exec(`ALTER TABLE tool ADD COLUMN manifest TEXT`);
+    ensured.add(db);
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? err);
+    if (/already exists|duplicate column/i.test(msg)) {
+      ensured.add(db);
+      return;
+    }
+    console.error("[eden-ledger] could not add tool.manifest column; will retry next call:", err);
+  }
+}
+
+/**
+ * The ShadowManifest shape the approve route persists onto tool.manifest —
+ * exactly the fields packages/shadow's Manifest reports for savings evidence
+ * and nothing else. Unknown keys are rejected rather than dropped: a ledger
+ * number nobody can trace back to a field definition is how synthetic
+ * evidence starts.
+ */
+export type ShadowManifestRecord = {
+  tokensSaved?: number;
+  timeSavedMs?: number;
+  tokensMeasured?: boolean;
+  timeMeasured?: boolean;
+  tokensEstimated?: boolean;
+};
+
+export function sanitizeManifest(v: unknown): { ok: true; value: ShadowManifestRecord } | { ok: false; error: string } {
+  if (v === null || v === undefined) return { ok: false, error: "manifest is absent" };
+  if (!v || typeof v !== "object" || Array.isArray(v)) return { ok: false, error: "manifest must be a json object" };
+  const rec = v as Record<string, unknown>;
+  const out: ShadowManifestRecord = {};
+  for (const key of ["tokensSaved", "timeSavedMs"] as const) {
+    if (rec[key] === undefined) continue;
+    if (typeof rec[key] !== "number" || !Number.isFinite(rec[key])) return { ok: false, error: `manifest.${key} must be a finite number` };
+    out[key] = rec[key];
+  }
+  for (const key of ["tokensMeasured", "timeMeasured", "tokensEstimated"] as const) {
+    if (rec[key] === undefined) continue;
+    if (typeof rec[key] !== "boolean") return { ok: false, error: `manifest.${key} must be a boolean` };
+    out[key] = rec[key];
+  }
+  const known = new Set(["tokensSaved", "timeSavedMs", "tokensMeasured", "timeMeasured", "tokensEstimated"]);
+  for (const key of Object.keys(rec)) {
+    if (!known.has(key)) return { ok: false, error: `manifest.${key} is not a recognized field` };
+  }
+  return { ok: true, value: out };
 }
 
 function parseManifest(raw: string | null | undefined): StoredManifest | null {
