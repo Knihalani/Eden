@@ -61,6 +61,23 @@ function shipManifest(over: Record<string, unknown> = {}) {
   };
 }
 
+function kubectlTrace(ns: string, id: string): StretchTrace {
+  return {
+    id,
+    events: [
+      { name: "Bash", args: { command: `kubectl get pods -n ${ns}` }, result: { pods: [] }, ok: true },
+      { name: "Bash", args: { command: `kubectl get svc -n ${ns}` }, result: { svc: [] }, ok: true },
+      { name: "Bash", args: { command: `kubectl get deployments -n ${ns}` }, result: { deployments: [] }, ok: true },
+    ],
+    input: { namespace: ns },
+    output: { ns },
+    llmCalls: 6,
+    duration_ms: 6000,
+    cost_cents: 6,
+    complete: true,
+  };
+}
+
 describe("control plane", () => {
   test("empty inbox does not 500", async () => {
     const store = new Store(":memory:");
@@ -106,6 +123,66 @@ describe("control plane", () => {
     expect(Array.isArray(tracesBody.traces)).toBe(true);
     const miss = await fetchHandler(new Request("http://x/v1/candidates/nope", { headers: { authorization: "Bearer eden_dev" } }));
     expect(miss.status).toBe(404);
+  });
+
+  test("demo narrative end to end over HTTP: ingest → compile → approve → run → ood", async () => {
+    // This is the `bun run demo` story driven through the real server routes.
+    // It exists because the demo broke twice without any test noticing: the
+    // auth hardening made /v1/inbox require a credential the demo did not
+    // send, and the ship gate began (correctly) rejecting the demo's
+    // synthetic fixture clock. Both were product breaks invisible to a suite
+    // that built candidates by hand.
+    const world = createTicketShip({ llmMs: 0 });
+    const store = new Store(":memory:");
+    const fetchHandler = createHandler({
+      store,
+      token: "eden_dev",
+      registry: registryFrom(world.tools),
+      island: world.island,
+      sandboxFor: (t) => replayRegistry(registryFrom(world.tools), t),
+    });
+    const auth = (path: string, init: RequestInit = {}) =>
+      new Request(`http://x${path}`, {
+        ...init,
+        headers: { authorization: "Bearer eden_dev", "content-type": "application/json", ...(init.headers ?? {}) },
+      });
+
+    const traces = await naiveTraces(10);
+    const posted = await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces }) }));
+    expect(posted.status).toBe(200);
+
+    const compiled = await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
+    expect(compiled.status).toBe(200);
+
+    const inbox = (await (
+      await fetchHandler(auth("/v1/inbox"))
+    ).json()) as {
+      candidates: Array<{ id: string; verdict: string; program: { name: string } | null; manifest: { llmReduction?: number } | null }>;
+    };
+    const pass = inbox.candidates.find((c) => c.verdict === "PASS" && c.program);
+    expect(pass).toBeTruthy();
+    expect(pass!.manifest?.llmReduction ?? 0).toBeGreaterThanOrEqual(2);
+
+    const approved = await fetchHandler(auth(`/v1/tools/${pass!.id}/approve`, { method: "POST", body: "{}" }));
+    expect(approved.status).toBe(200);
+
+    // In-envelope run: one island call instead of the naive eight.
+    const runOk = await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: pass!.id, input: { id: "T-100" } }) }),
+    );
+    expect(runOk.status).toBe(200);
+    const okBody = (await runOk.json()) as { value?: unknown; stats?: { llmCalls?: number } };
+    expect(okBody.value).toEqual({ notified: true, id: "T-100" });
+    expect(okBody.stats?.llmCalls ?? 99).toBeLessThan(8);
+
+    // Out-of-distribution input refuses rather than guessing.
+    const runOod = await fetchHandler(
+      auth("/v1/wrap-run", { method: "POST", body: JSON.stringify({ toolId: pass!.id, input: { id: OOD_ID } }) }),
+    );
+    expect(runOod.status).toBe(409);
+    const oodBody = (await runOod.json()) as { error?: string };
+    expect(String(oodBody.error ?? "")).toMatch(/deopt|envelope/i);
+    expect(world.mutationsFor(OOD_ID).wrote).toBe(false);
   });
 
   test("replay sandbox shadows without a live registry", async () => {
@@ -158,6 +235,119 @@ describe("control plane", () => {
 });
 
 describe("TicketShip golden", () => {
+  test("an MCP product-tool stretch compiles without any vendor knowledge", async () => {
+    // Notion-shaped verbs: no gh, no curl, no URL — the compiler must qualify
+    // this stretch by repetition alone. This is the shape every SaaS MCP
+    // server takes, so it is the generality case that matters most.
+    const mk = (id: string): StretchTrace => ({
+      id: `notion-${id}`,
+      events: [
+        { name: "mcp__notion__query_database", args: { database_id: "db_1", filter: JSON.stringify({ property: "Status", select: { name: "Blocked" } }) }, result: { results: [{ id }] }, ok: true },
+        { name: "mcp__notion__update_page", args: { page_id: id, properties: { Status: { select: { name: "In progress" } } } }, result: { id, archived: false }, ok: true },
+        { name: "mcp__notion__create_comment", args: { page_id: id, rich_text: "moved to in progress" }, result: { id: `c-${id}` }, ok: true },
+      ],
+      input: { pageId: id },
+      output: { moved: [id] },
+      llmCalls: 9,
+      duration_ms: 9000,
+      cost_cents: 9,
+      complete: true,
+    });
+    const traces = ["p-1", "p-2", "p-3"].map(mk);
+    const mined = compileTraces(traces);
+    expect(mined.refusals.length).toBe(0);
+    expect(mined.programs.length).toBe(1);
+    expect(mined.programs[0]!.sequence).toEqual([
+      "mcp__notion__query_database",
+      "mcp__notion__update_page",
+      "mcp__notion__create_comment",
+    ]);
+  });
+
+  test("a live raw shell call steers to its compiled stretch (generality)", async () => {
+    // The agent never learned about the compiled tool and starts typing the
+    // old kubectl loop by hand. The proxy must recognise the command's shape,
+    // recover the slot value from the witness envelope, and redirect — the
+    // same steer path URL-shaped tools already get.
+    const traces = [
+      kubectlTrace("dev", "k1"),
+      kubectlTrace("stage", "k2"),
+      kubectlTrace("prod", "k3"),
+    ];
+    const { programs } = compileTraces(traces);
+    expect(programs.length).toBe(1);
+    const program = {
+      ...programs[0]!,
+      manifest: {
+        name: "kubectl_bundle",
+        llmReduction: 5,
+        latencyReduction: 5,
+        costReduction: 5,
+        skipRateBefore: 0.2,
+        skipRateAfter: 0,
+        nShadow: 6,
+      },
+    };
+
+    const live = [program];
+    const calls = [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl get pods -n stage" }) } }];
+    const steered = steerToolCalls(calls, live);
+    expect(steered[0]!.function?.name).toBe(program.name);
+    const input = JSON.parse(steered[0]!.function!.arguments) as { namespace?: string };
+    expect(input.namespace).toBe("stage");
+
+    // Multi-slot recovery exists (G4) but depends on variation-driven slot
+    // abstraction for positional args (G13) — see generalization plan.
+
+    // Multi-slot steering: a compiled `kubectl logs <app> -n <ns>` stretch
+    // (G13) steers a live raw logs call by template recovery, and the two
+    // shell programs disambiguate — the pods call never lands on logs.
+    const logsTraces: StretchTrace[] = [
+      { id: "l1", events: [
+        { name: "Bash", args: { command: "kubectl logs api -n dev" }, result: { lines: 1 }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods -n dev" }, result: { pods: [] }, ok: true },
+        { name: "Bash", args: { command: "kubectl get svc -n dev" }, result: { svc: [] }, ok: true },
+      ], input: { app: "api", namespace: "dev" }, output: { ns: "dev" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+      { id: "l2", events: [
+        { name: "Bash", args: { command: "kubectl logs web -n stage" }, result: { lines: 4 }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods -n stage" }, result: { pods: [] }, ok: true },
+        { name: "Bash", args: { command: "kubectl get svc -n stage" }, result: { svc: [] }, ok: true },
+      ], input: { app: "web", namespace: "stage" }, output: { ns: "stage" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+      { id: "l3", events: [
+        { name: "Bash", args: { command: "kubectl logs jobs -n prod" }, result: { lines: 7 }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods -n prod" }, result: { pods: [] }, ok: true },
+        { name: "Bash", args: { command: "kubectl get svc -n prod" }, result: { svc: [] }, ok: true },
+      ], input: { app: "jobs", namespace: "prod" }, output: { ns: "prod" }, llmCalls: 3, duration_ms: 3000, cost_cents: 3, complete: true },
+    ];
+    const logsMined = compileTraces(logsTraces);
+    expect(logsMined.programs.length).toBe(1);
+    const logsProgram = {
+      ...logsMined.programs[0]!,
+      manifest: { name: "logs_bundle", llmReduction: 3, latencyReduction: 3, costReduction: 3, skipRateBefore: 0, skipRateAfter: 0, nShadow: 6 },
+    };
+    const both = [program, logsProgram];
+    const toLogs = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl logs web -n stage" }) } }],
+      both,
+    );
+    expect(toLogs[0]!.function?.name).toBe(logsProgram.name);
+    const logsInput = JSON.parse(toLogs[0]!.function!.arguments) as { app?: string; namespace?: string };
+    expect(logsInput.app).toBe("web");
+    expect(logsInput.namespace).toBe("stage");
+    const toPods = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl get pods -n stage" }) } }],
+      both,
+    );
+    expect(toPods[0]!.function?.name).toBe(program.name);
+
+    // An unseen value must not steer.
+    const unknown = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "kubectl get pods -n chaos" }) } }],
+      both,
+    );
+    expect(unknown[0]!.function?.name).toBe("Bash");
+  });
+
   test("compile + shadow + approve + wrap 5x gates, steer, ood, fail-open", async () => {
     const traces = await naiveTraces(10, 0.2);
     const { programs, refusals } = compileTraces(traces);

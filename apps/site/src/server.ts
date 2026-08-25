@@ -3,9 +3,11 @@ import { ingest } from "./cluster";
 import { handleMcp } from "./mcp";
 import { playTool } from "./playback";
 import { handleForge } from "./forge";
-import { escapeHtml, layout } from "./html";
+import { copyBtn, escapeHtml, layout, nav } from "./html";
 import { findOnTool, wrapPlay, toolHasPlayback } from "./wrap";
 import { buildLedger, ensureLedgerSchema, sanitizeManifest, type LedgerFigure } from "./ledger";
+import { detectAndParse } from "@eden/core";
+import { protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER, redact } from "@eden/ir";
 import type { ToolEvent } from "@eden/core";
 
 /** A malformed PORT must fall back, not hand NaN to Bun.serve. */
@@ -232,7 +234,24 @@ export async function handleFetch(req: Request): Promise<Response> {
   const forge = handleForge(url);
   if (forge) return forge;
 
-  if (url.pathname === "/health") return Response.json({ ok: true });
+  if (url.pathname === "/health") {
+    return Response.json(
+      { ok: true, protocol: EDEN_PROTOCOL_VERSION },
+      { headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
+    );
+  }
+
+  // Protocol gate on the /v1/* API surface: a client speaking a different
+  // wire version gets an explicit 426 instead of obscure shape failures.
+  if (url.pathname.startsWith("/v1/")) {
+    const gate = protocolCheck(req.headers.get(PROTOCOL_HEADER));
+    if (!gate.ok) {
+      return Response.json(
+        { error: gate.reason },
+        { status: gate.status, headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
+      );
+    }
+  }
 
   // One gate for every write, rather than per-route: a route added later is
   // covered by default instead of by remembering. Host validation rides the
@@ -247,6 +266,120 @@ export async function handleFetch(req: Request): Promise<Response> {
   }
 
   const wsId = await workspaceForKey(d, req.headers.get("authorization"));
+
+  if (url.pathname === "/onboarding") {
+    if (!wsId) {
+      return html("Eden", `<div class="container" style="max-width:520px">
+<h1>Welcome to Eden</h1>
+<p class="sub">Eden watches how your agent solves tasks, and compiles the workflows it repeats into a single tool call. Same result, a fraction of the calls.</p>
+<div class="panel" style="padding:24px">
+  <h2>Sign in to your workspace</h2>
+  <p class="muted" style="margin-bottom:12px">Paste the API key from your Eden config, or continue in dev mode for local testing.</p>
+  <input type="text" id="apiKey" placeholder="EDEN_API_KEY=…" style="margin-bottom:12px"/>
+  <button class="btn" onclick="location.href='/onboarding?dev=1'">Continue in dev mode →</button>
+</div></div>`);
+    }
+    const tc = Number((await d.get<{ c: number }>(`SELECT COUNT(DISTINCT run_id) as c FROM stretch WHERE workspace_id = ?`, [wsId]) ?? {c:0}).c);
+    const cc = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [wsId]) ?? {c:0}).c);
+    const lc = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId]) ?? {c:0}).c);
+    const st = (n:number,done:boolean,cur:boolean,title:string,body:string)=>`<div class="step ${done?"done":cur?"current":"pending"}"><div class="step-head"><span class="num">${done?"✓":n}</span><span class="step-title">${title}</span><span class="badge ${done?"ok":cur?"action":"todo"}">${done?"Done":cur?"Do this":"Waiting"}</span></div><div style="padding-left:34px">${body}</div></div>`;
+    const setupPrompt = [
+      "OPENAI_BASE_URL=http://127.0.0.1:8788/v1",
+      "OPENAI_API_KEY=<your provider key — Eden forwards it upstream>",
+    ].join("\n");
+    return html("Eden — Setup", nav("Setup")
+      + `<h1>Set up in three steps</h1><p class="sub">Point your agent at Eden, let it work normally, approve what Eden compiles. Nothing about your agent changes until you approve.</p>`
+      + st(1,true,false,"Connect your agent",`
+        <p style="margin-bottom:6px"><strong>Claude Code</strong> — run <code>eden init</code>. It installs recording hooks and wires up MCP.</p>
+        <p style="margin-bottom:6px"><strong>OpenAI-compatible agent or SDK</strong> — set one environment variable:</p>
+        <pre><code>${escapeHtml(setupPrompt)}</code>${copyBtn()}</pre>
+        <p class="muted">That's the whole integration. Your requests flow through Eden to your provider; Eden records the tool-call patterns it sees.</p>`)
+      + st(2,tc>0,tc===0,"Let your agent work — or import past traces",tc>0?`<p class="success">✓ ${tc} run${tc===1?"":"s"} recorded so far. The more repeats, the faster patterns compile.</p>`:`
+        <p><strong>Easiest:</strong> just use your agent as usual. After two runs of the same workflow, a compiled draft appears.</p>
+        <p><strong>No time to wait?</strong> Import history you already have (LangSmith, OpenTelemetry, OpenAI logs, JSONL):</p>
+        <a href="/import" class="btn secondary" style="margin-top:8px;display:inline-block">Import existing traces →</a>`)
+      + st(3,cc>0,cc===0&&tc>0,"Approve compiled tools",cc>0?`<p class="success">✓ ${cc} workflow pattern${cc===1?"":"s"} ready for review. Nothing goes live until you approve it.</p><a href="/workshop" class="btn" style="margin-top:8px;display:inline-block">Review & approve →</a>`:`<p class="muted">When a workflow repeats enough times, its draft shows up under <strong>Approve</strong>. You see exactly what will run before anything goes live.</p>`)
+      + `<h2 style="margin-top:32px;margin-bottom:4px">What you get — and what it costs</h2>
+         <div class="panel good"><h2>The upside</h2>
+           <ul>
+             <li><strong>Fewer LLM calls per repeated workflow</strong> — a stretch that took N calls becomes one compiled tool invocation.</li>
+             <li><strong>Lower latency and spend</strong> on everything your agent does more than once.</li>
+             <li><strong>Steps can't be skipped</strong> — a compiled tool runs the whole recorded sequence, checks included.</li>
+             <li><strong>Honest numbers</strong> — savings show only when receipts back them; otherwise the dashboard says "not measured".</li>
+           </ul>
+         </div>
+         <div class="panel warn"><h2>The trade-offs</h2>
+           <ul>
+             <li><strong>Compiled tools are only as general as their witnesses.</strong> Inputs outside the observed range are refused and fall back to your agent's normal path — safe, but no savings there.</li>
+             <li><strong>A mid-run failure on a mutating workflow returns a structured error instead of re-running raw</strong>, so a write is never duplicated — but that one call saves nothing.</li>
+             <li><strong>Recording adds a small local overhead</strong> per tool call (writes are batched and off the critical path).</li>
+             <li><strong>Hard guardrails are opt-in.</strong> By default Eden observes and steers but never halts; turn on enforcement if you want runaway-loop caps at the price of possible refusals.</li>
+           </ul>
+         </div>
+         <div class="panel safe"><h2>What Eden will never do</h2>
+           <ul>
+             <li>Never block, halt, or fail a call because Eden itself broke — every Eden failure falls back to passing your traffic through untouched.</li>
+             <li>Never change what your agent does without your approval — compiled tools go live only via the Approve page, by a human.</li>
+             <li>Never re-execute a write automatically after a partial compiled run.</li>
+             <li>Never report a savings number it didn't measure.</li>
+           </ul>
+         </div>`
+    );
+  }
+
+
+  // Trace import page — cold-start elimination via observability exports.
+  if (url.pathname === "/import") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const body = nav("Import") + `
+<h1>Import existing traces</h1>
+<p class="sub">Already have agent history in LangSmith, OpenTelemetry, or plain JSONL? Paste it below and Eden will mine it for repeatable workflows — no waiting for fresh runs.</p>
+<div class="panel">
+<form id="importForm">
+  <textarea id="traceContent" rows="12" placeholder='Paste a LangSmith / OTel / OpenAI / JSONL export here…'></textarea>
+  <div style="margin-top:10px;display:flex;align-items:center;gap:12px">
+    <button type="submit" class="btn">Import & analyze</button>
+    <span id="status" class="muted">Format is auto-detected.</span>
+  </div>
+</form></div>
+<div id="results"></div>
+<script>
+document.getElementById("importForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const content = document.getElementById("traceContent").value;
+  const status = document.getElementById("status");
+  const results = document.getElementById("results");
+  if (!content.trim()) { status.textContent = "Paste some trace data first."; return; }
+  status.textContent = "Importing…";
+  try {
+    const res = await fetch("/v1/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    const j = await res.json();
+    if (res.ok) {
+      status.innerHTML = '<span class="success">✓ Imported</span>';
+      results.innerHTML = \`
+        <div class="panel good"><h2>Import complete</h2>
+        <div class="stat-row">
+          <div class="stat"><div class="stat-val">\${j.traces}</div><div class="stat-label">Traces imported</div></div>
+          <div class="stat"><div class="stat-val">\${j.events}</div><div class="stat-label">Tool calls captured</div></div>
+          <div class="stat"><div class="stat-val dim">\${j.format}</div><div class="stat-label">Detected format</div></div>
+        </div>
+        <a href="/onboarding" class="btn">Continue setup →</a></div>\`;
+    } else {
+      status.innerHTML = '<span class="error-text">✗ Import failed</span>';
+      results.innerHTML = \`<div class="panel warn"><p>\${j.error || "Could not read that data."}</p><p class="muted">Try exporting as JSONL — one run per line, with tool name, arguments, and result.</p></div>\`;
+    }
+  } catch (err) {
+    status.innerHTML = '<span class="error-text">✗ Import failed</span>';
+    results.textContent = String(err);
+  }
+});
+</script>`;
+    return html("Import traces", nav("Import") + body);
+  }
 
   if (url.pathname === "/dashboard" || url.pathname === "/") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
@@ -308,20 +441,58 @@ export async function handleFetch(req: Request): Promise<Response> {
     // evidence renders as "not measured" — the dashboard must not say more
     // than the receipts behind it do.
     const ledger = await buildLedger(d, wsId);
-    const lines = [
-      `<p class="muted">Eden is watching the agent work. Same stretch twice → a draft in Workshop. Approve only here — a key never turns a tool On.</p>`,
-      `<div class="row">Drafts waiting <strong>${drafts.c}</strong></div>`,
-      `<div class="row">Tools on <strong>${on.c}</strong></div>`,
-      `<div class="row">Ledger <a href="/v1/ledger">/v1/ledger</a> · ${ledger.runs} runs · ${ledger.live} live</div>`,
-      `<div class="row">Tokens saved <strong>${escapeHtml(savingsWord(ledger.tokens_saved_mean))}</strong></div>`,
-      `<div class="row">Time saved <strong>${escapeHtml(savingsWord(ledger.time_saved_ms_mean))}</strong></div>`,
-    ];
-    if (usage.runs > 0) {
-      lines.push(
-        `<div class="row">This month: ${(month.server_ms / 1000).toFixed(1)}s server compute · ${month.steps} steps · ${(month.raw_bytes / 1e6).toFixed(2)}MB raw → ${(month.densified_bytes / 1000).toFixed(0)}KB to the model · ${month.runs} runs</div>`,
-      );
-    }
-    return html("Dashboard", `<h1>Dashboard</h1>${lines.join("")}`);
+    const recent = await d.all<{ name: string; steps_ok: number; steps_attempted: number; server_ms: number; created_at: number }>(
+      `SELECT t.name, r.steps_ok, r.steps_attempted, r.server_ms, r.created_at
+       FROM tool_run r JOIN tool t ON t.id = r.tool_id
+       WHERE t.workspace_id = ? ORDER BY r.created_at DESC LIMIT 8`,
+      [wsId],
+    );
+    const fmtWhen = (ts: number): string => {
+      if (!ts) return "";
+      const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
+      if (s < 60) return `${s}s ago`;
+      if (s < 3600) return `${Math.round(s / 60)}m ago`;
+      if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+      return `${Math.round(s / 86400)}d ago`;
+    };
+    const stat = (val: string, label: string, dim = false) =>
+      `<div class="stat"><div class="stat-val${dim ? " dim" : ""}">${escapeHtml(val)}</div><div class="stat-label">${label}</div></div>`;
+    const activity = recent.length
+      ? `<h2 style="margin-top:28px">Recent compiled runs</h2>
+         <table class="activity">${recent
+           .map(
+             (r) =>
+               `<tr><td>${escapeHtml(r.name)}</td><td>${r.steps_ok}/${r.steps_attempted} steps</td><td class="num-cell">${r.server_ms} ms</td><td class="num-cell">${fmtWhen(Number(r.created_at))}</td></tr>`,
+           )
+           .join("")}</table>`
+      : `<p class="muted" style="margin-top:28px">No compiled runs yet. Once you approve a tool and your agent uses it, each run lands here.</p>`;
+    const body = nav("Dashboard")
+      + `<h1>Dashboard</h1>
+<p class="sub">Eden is watching the agent work. Same stretch twice → a draft under Approve. Nothing goes live until you approve it.</p>
+<div class="stat-row">
+  ${stat(escapeHtml(savingsWord(ledger.tokens_saved_mean)), "Tokens saved per run")}
+  ${stat(escapeHtml(savingsWord(ledger.time_saved_ms_mean)), "Time saved per run")}
+  ${stat(String(ledger.runs), "Compiled runs")}
+  ${stat(String(on.c), "Live tools", on.c === 0)}
+</div>
+<div class="stat-row">
+  ${stat(String(drafts.c), "Drafts waiting to be approved", drafts.c === 0)}
+  ${stat(String(ledger.live), "Tools currently live", ledger.live === 0)}
+  ${stat(`${ledger.fail}/${ledger.runs}`, "Run failures / total", ledger.runs === 0)}
+</div>`
+      + (usage.runs > 0
+        ? `<div class="panel"><h2>This month</h2><p class="muted">${month.runs} runs · ${(month.server_ms / 1000).toFixed(1)}s server compute · ${(month.raw_bytes / 1e6).toFixed(2)}MB raw compressed to ${(month.densified_bytes / 1000).toFixed(0)}KB sent to the model</p></div>`
+        : "")
+      + activity
+      + `<div class="panel safe" style="margin-top:28px"><h2>How to read these numbers</h2>
+<ul>
+<li><strong>"measured"</strong> comes from shadow-run receipts — Eden executed the compiled version alongside the real one and compared.</li>
+<li><strong>"estimated"</strong> is labelled as such: projected from recorded traces, not proven by a paired run.</li>
+<li><strong>"not measured"</strong> means no evidence yet. It never silently reads as zero, and no number is shown without one of these labels.</li>
+<li>A failure here means the compiled run errored — your agent received a structured result it could recover from, never a broken call.</li>
+</ul></div>
+<p style="margin-top:20px"><a href="/onboarding" class="btn secondary">Setup guide →</a> &nbsp; <a href="/workshop" class="btn">Approve tools${drafts.c ? ` (${drafts.c} waiting)` : ""} →</a></p>`;
+    return html("Eden — Dashboard", body);
   }
 
   if (url.pathname === "/workshop") {
@@ -331,9 +502,11 @@ export async function handleFetch(req: Request): Promise<Response> {
       [wsId],
     );
     const rows = tools
-      .map((t) => `<div class="row"><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a> · ${escapeHtml(t.state)} · ${t.uses_count} uses</div>`)
+      .map((t) => `<div class="step"><div class="step-head"><span class="step-title"><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a></span><span class="badge ${t.state === "on" ? "ok" : "todo"}">${escapeHtml(t.state)}</span><span class="muted" style="margin-left:12px">${t.uses_count} uses</span></div></div>`)
       .join("");
-    return html("Workshop", `<h1>Workshop</h1><p class="muted">Approve only on this page. A key never turns a tool On.</p>${rows || `<p class="muted">No drafts yet.</p>`}`);
+    return html("Eden — Approve", nav("Approve") + `<h1>Approve compiled tools</h1>
+<p class="sub">This is the only place a tool goes live. Nothing runs in front of your agent until you approve it here — an API key can never flip a tool On.</p>
+${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">import traces</a> — repeatable workflows will appear here.</p>`}`);
   }
 
   const ws = url.pathname.match(/^\/workshop\/([^/]+)$/);
@@ -410,14 +583,59 @@ export async function handleFetch(req: Request): Promise<Response> {
     );
     if (bad >= 0) {
       return Response.json({ error: `events[${bad}] must be an object with a string event_id` }, { status: 400 });
-    }    const result = await ingest(
+    }
+    // Redact credential-shaped values at the boundary. Clients vary — hooks
+    // redact locally, SDKs may not — so the plane itself is the guarantee
+    // that secrets never persist.
+    const cleanEvents = (body.events as ToolEvent[]).map((e) => ({
+      ...e,
+      ...(e.args !== undefined ? { args: redact(e.args) as Record<string, unknown> } : {}),
+      ...(e.result !== undefined ? { result: redact(e.result) } : {}),
+      ...(typeof (e as { command?: string }).command === "string"
+        ? { command: redact((e as { command: string }).command) }
+        : {}),
+    })) as ToolEvent[];
+    const result = await ingest(
       d,
       wsId,
       body.run_id,
-      body.events as ToolEvent[],
+      cleanEvents,
       Boolean(body.stretch_end),
     );
     return Response.json(result, { status: 202 });
+  }
+
+  // Bulk import from observability exports. Accepts raw file content, sniffs
+  // the format (LangSmith / OTel / OpenAI chat / generic JSONL), normalizes
+  // via adapters, and feeds each trace group through the standard ingest
+  // pipeline. This is the web-UI counterpart to cold-start elimination.
+  if (url.pathname === "/v1/import" && req.method === "POST") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const parsed = readJsonObject(await readJson(req));
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as { content?: unknown };
+    if (typeof body.content !== "string" || !body.content.trim()) {
+      return Response.json({ error: "content must be a non-empty string" }, { status: 400 });
+    }
+    const detected = detectAndParse(body.content);
+    if (!detected) {
+      return Response.json({ error: "Unrecognized trace format" }, { status: 400 });
+    }
+    let totalTraces = 0;
+    let totalEvents = 0;
+    const errors: string[] = [];
+    for (const [traceId, events] of detected.traces) {
+      if (events.length < 2) continue;
+      try {
+        const result = await ingest(d, wsId, `${detected.format}-${traceId}`, events, true);
+        totalTraces++;
+        totalEvents += events.length;
+        void result;
+      } catch (err) {
+        errors.push(`${traceId}: ${err}`);
+      }
+    }
+    return Response.json({ ok: true, format: detected.format, traces: totalTraces, events: totalEvents, errors });
   }
 
   if (url.pathname === "/v1/live-tools") {
@@ -529,7 +747,7 @@ export async function handleFetch(req: Request): Promise<Response> {
     if (!wsId) return new Response("unauthorized", { status: 401 });
     const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
-    const body = parsed.value as { name?: unknown; issue?: unknown; issues?: unknown; ids?: unknown };
+    const body = parsed.value as { name?: unknown; issue?: unknown; issues?: unknown; ids?: unknown; dryRun?: unknown };
     if (typeof body.name !== "string" || !body.name) {
       return Response.json({ error: "name must be a non-empty string" }, { status: 400 });
     }
@@ -541,12 +759,20 @@ export async function handleFetch(req: Request): Promise<Response> {
     if (!tool) return new Response("not found", { status: 404 });
     let receipt;
     try {
-      receipt = await playTool(d, tool, {
-        issue: str(body.issue),
-        issues: str(body.issues) || str(body.ids) || str(body.issue),
-        ids: str(body.ids) || str(body.issues) || str(body.issue),
-        origin,
-      });
+      receipt = await playTool(
+        d,
+        tool,
+        {
+          issue: str(body.issue),
+          issues: str(body.issues) || str(body.ids) || str(body.issue),
+          ids: str(body.ids) || str(body.issues) || str(body.issue),
+          origin,
+        },
+        // Dry-run rehearsal (G9): mutating steps are resolved and reported,
+        // not executed. Reads run for real so templates and binds are
+        // exercised against live data.
+        { dryRun: body.dryRun === true },
+      );
     } catch (err) {
       // Corrupt stored steps throw inside playback. That is a data problem on
       // our side — answer with a clean 500-shaped JSON body rather than an

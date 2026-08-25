@@ -768,7 +768,7 @@ describe("online signal bus", () => {
   });
 
   test("a third consecutive fail is halted by the circuit breaker", async () => {
-    const state = createState({ programs: [] });
+    const state = createState({ programs: [], enforce: true });
     const tools = wrapTools(
       {
         boom: async () => {
@@ -784,7 +784,7 @@ describe("online signal bus", () => {
   });
 
   test("killAfterWarning stops spend after the first fail", async () => {
-    const state = createState({ programs: [], killAfterWarning: true });
+    const state = createState({ programs: [], killAfterWarning: true, enforce: true });
     const tools = wrapTools(
       {
         boom: async () => {
@@ -798,7 +798,7 @@ describe("online signal bus", () => {
   });
 
   test("a repeating n-gram hard-stops the next cycle when nothing is compiled", async () => {
-    const state = createState({ programs: [] });
+    const state = createState({ programs: [], enforce: true });
     const tools = wrapTools(
       {
         search: async () => ({ hit: 1 }),
@@ -813,12 +813,173 @@ describe("online signal bus", () => {
     expect(await tools.search.execute({})).toEqual({ eden: "halted", reason: "loop" });
   });
 
+  test("a poll whose result changed is not halted, a stalled one still is (W2)", async () => {
+    // CI polling: get_status → list_checks … All-read loops are never
+    // hard-stopped — the halt would land on exactly the observation that
+    // would have shown progress. Mixed loops with a mutating or unknown-name
+    // tool still stop after two identical stalled cycles.
+    let ci = "pending";
+    const state = createState({ programs: [] });
+    const tools = wrapTools(
+      {
+        get_ci_status: async () => ({ state: ci }),
+        list_checks: async () => ({ n: 2 }),
+      },
+      state,
+    );
+    await tools.get_ci_status.execute({});
+    await tools.list_checks.execute({});
+    await tools.get_ci_status.execute({});
+    await tools.list_checks.execute({});
+    // Two stalled cycles: warnings exist, but reads are allowed through.
+    expect(await tools.get_ci_status.execute({})).toEqual({ state: "pending" });
+    ci = "success";
+    expect(await tools.list_checks.execute({})).toEqual({ n: 2 });
+    expect(await tools.get_ci_status.execute({})).toEqual({ state: "success" });
+  });
+
+  test("a stalled loop touching a non-read tool still hard-stops (W2)", async () => {
+    const state = createState({ programs: [], enforce: true });
+    const tools = wrapTools(
+      {
+        get_ci_status: async () => ({ state: "pending" }),
+        wait_a_bit: async () => ({}),
+      },
+      state,
+    );
+    await tools.get_ci_status.execute({});
+    await tools.wait_a_bit.execute({});
+    await tools.get_ci_status.execute({});
+    await tools.wait_a_bit.execute({});
+    expect(await tools.wait_a_bit.execute({})).toEqual({ eden: "halted", reason: "loop" });
+  });
+
+  test("an unconditional executed-call ceiling halts drifting thrash (probe)", async () => {
+    // Progress detection is heuristic: one rotating field in results or args
+    // defeats every similarity check. The executed-call ceiling cannot be
+    // fooled because it counts executions.
+    process.env.EDEN_MAX_STEPS = "12";
+    try {
+      let n = 0;
+      const state = createState({ programs: [], enforce: true });
+      const tools = wrapTools(
+        {
+          poll: async () => ({ ok: true, ts: `2026-01-01T00:00:${String(n++ % 60).padStart(2, "0")}Z` }),
+        },
+        state,
+      );
+      let halted = false;
+      for (let i = 0; i < 40; i++) {
+        const out = (await tools.poll.execute({})) as { eden?: string };
+        if (out && typeof out === "object" && out.eden === "halted") {
+          halted = true;
+          break;
+        }
+      }
+      expect(halted).toBe(true);
+      expect(state.traces.at(-1)?.events.filter((e) => !e.skipped).length).toBeLessThanOrEqual(12);
+    } finally {
+      delete process.env.EDEN_MAX_STEPS;
+    }
+  });
+
+  test("an unconditional executed-call ceiling halts drifting thrash (probe)", async () => {
+    // Progress detection is heuristic: one rotating field in results or args
+    // defeats every similarity check. The executed-call ceiling cannot be
+    // fooled because it counts executions.
+    process.env.EDEN_MAX_STEPS = "12";
+    try {
+      let n = 0;
+      const state = createState({ programs: [], enforce: true });
+      const tools = wrapTools(
+        {
+          poll: async () => ({ ok: true, ts: `2026-01-01T00:00:${String(n++ % 60).padStart(2, "0")}Z` }),
+        },
+        state,
+      );
+      let halted = false;
+      for (let i = 0; i < 40; i++) {
+        const out = (await tools.poll.execute({})) as { eden?: string };
+        if (out && typeof out === "object" && out.eden === "halted") {
+          halted = true;
+          break;
+        }
+      }
+      expect(halted).toBe(true);
+      expect(state.traces.at(-1)?.events.filter((e) => !e.skipped).length).toBeLessThanOrEqual(12);
+    } finally {
+      delete process.env.EDEN_MAX_STEPS;
+    }
+  });
+
+  test("a max_steps halt does not wedge the state for unrelated work (probe R1)", async () => {
+    // The original ceiling implementation halted and then NEVER reset:
+    // every later call on the same state — including completely different,
+    // legitimate work — returned {eden:"halted"} forever. The halt must push
+    // its marker through the flush path so the counter resets.
+    process.env.EDEN_MAX_STEPS = "12";
+    try {
+      const state = createState({ programs: [], enforce: true });
+      const tools = wrapTools(
+        {
+          poll: async () => ({ ok: true, ts: "x" }),
+          other: async () => ({ fine: true }),
+        },
+        state,
+      );
+      for (let i = 0; i < 15; i++) await tools.poll.execute({});
+      // A brand-new kind of work proceeds normally afterwards.
+      const out = (await tools.other.execute({})) as { fine?: boolean };
+      expect(out.fine).toBe(true);
+    } finally {
+      delete process.env.EDEN_MAX_STEPS;
+    }
+  });
+
+  test("dotted-path templates recover nested input records (probe R3)", async () => {
+    const { steerToolCalls } = await import("./steer");
+    const program = {
+      id: "p_db",
+      version: "1",
+      name: "db_dump",
+      description: "",
+      inputSchema: { type: "object", properties: { host: { type: "string" } } },
+      sequence: ["Bash"],
+      steps: [
+        {
+          id: "dump",
+          kind: "tool",
+          tool: "Bash",
+          args: {
+            command: {
+              kind: "transform",
+              fn: "template",
+              expr: "pg_dump -h {db.host} -U {db.user}",
+              of: { kind: "input", path: "" },
+            },
+          },
+        },
+      ],
+      returns: { kind: "literal", value: null },
+      contract: { witnesses: 2, minLlmReduction: 2, envelope: { inputs: { "db.host": ["db.example.com"], "db.user": ["deploy"] } } },
+      manifest: { name: "db_dump" },
+    } as unknown as StretchProgram;
+    const steered = steerToolCalls(
+      [{ function: { name: "Bash", arguments: JSON.stringify({ command: "pg_dump -h db.example.com -U deploy" }) } }],
+      [program],
+    );
+    expect(steered[0]!.function?.name).toBe("db_dump");
+    const input = JSON.parse(steered[0]!.function!.arguments) as { db?: { host?: string; user?: string } };
+    expect(input.db?.host).toBe("db.example.com");
+    expect(input.db?.user).toBe("deploy");
+  });
+
   test("finalize without a required check is blocked", async () => {
     const program = {
       ...liveProgram(),
       sequence: ["writeRecord", "verifyWrite", "notify"],
     };
-    const state = createState({ programs: [program] });
+    const state = createState({ programs: [program], enforce: true });
     const tools = wrapTools(
       {
         writeRecord: async () => ({ written: true }),

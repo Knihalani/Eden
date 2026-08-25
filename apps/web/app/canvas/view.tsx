@@ -84,6 +84,8 @@ function accessLine(step: Step): string {
   if (step.kind === "island") return "Model call. Auth declared on wrap — not stored here.";
   if (step.kind === "loop") return "Loop. Body stays inside this step.";
   if (step.kind === "assert") return "Check. Pinned — cannot drop.";
+  if (step.kind === "branch") return "Branch. Both arms witnessed before shipping.";
+  if (step.kind !== "tool") return "Model step. Auth declared on wrap — not stored here.";
   if (isMutating(step.tool)) return "Write. Auth declared on wrap — not stored here.";
   return "Read. Auth declared on wrap — not stored here.";
 }
@@ -96,6 +98,7 @@ function kindLabel(step: Step): string {
   if (step.kind === "assert") return "check";
   if (step.kind === "island") return "model";
   if (step.kind === "loop") return "loop";
+  if (step.kind === "branch") return "branch";
   return isMutating(step.tool) ? "write" : "read";
 }
 

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { minifyCli, stripAnsi } from "./densify";
 import { compactReceipt, modelFacing } from "./compact";
+import { commandShape } from "./shapes";
 import {
   extractLoopIds,
   fulfillArgv,
@@ -73,13 +74,32 @@ function maybeInnerParallel(body: string): string {
 
 /** Parallelize independent cloud GETs without interleaving stdout. */
 export function rewriteForLoop(command: string): string | null {
-  const m = command.match(/for\s+([A-Za-z_]\w*)\s+in\s+([\d\s]+)[;\n]\s*do\b([\s\S]*?)\bdone\b/);
+  const m = command.match(/for\s+([A-Za-z_]\w*)\s+in\s+([^;]+)[;\n]\s*do\b([\s\S]*?)\bdone\b/);
   if (!m) return null;
   const varName = m[1]!;
-  const ids = m[2]!.trim().split(/\s+/).filter((n) => /^\d+$/.test(n));
+  const items = m[2]!.trim().split(/\s+/).filter(Boolean);
   const body = m[3]!;
-  if (ids.length < 2) return null;
-  if (!/\bgh\s+api\b/.test(body) && !/\bcurl\b/.test(body)) return null;
+  if (items.length < 2 || items.length > 100) return null;
+  const numericItems = items.every((n) => /^\d+$/.test(n));
+  const knownCloud = /\bgh\s+api\b/.test(body) || /\bcurl\b/.test(body);
+  // Domain-general admission (G3): an unknown binary's loop qualifies when
+  // EVERY segment of its body carries a positively-read shape — the same
+  // fail-closed rule the island path uses, and word-valued lists are welcome
+  // (`for ns in dev stage prod`). Mutating or unrecognizable bodies keep
+  // sequential semantics, which is what the agent did by hand anyway.
+  let genericRead = false;
+  if (!knownCloud) {
+    const segs = body.split(/&&|\|\||;|\|/).map((s) => s.trim()).filter(Boolean);
+    genericRead =
+      segs.length > 0 &&
+      segs.every((seg) => {
+        const stripped = seg.replace(/^sudo\s+/, "");
+        const sh = commandShape(stripped);
+        return sh !== null && sh.possiblyRead;
+      });
+  }
+  if (!knownCloud && !genericRead) return null;
+  if (!numericItems && !genericRead) return null;
   if (isMutatingGh(body)) return null;
   if (/&/.test(body)) return null;
   const trimmedBody = body.trim().replace(/;\s*$/, "");
@@ -87,12 +107,12 @@ export function rewriteForLoop(command: string): string | null {
   const loop = [
     `_e=/tmp/eden-par-$$`,
     `mkdir -p "$_e"`,
-    `for ${varName} in ${ids.join(" ")}; do`,
+    `for ${varName} in ${items.join(" ")}; do`,
     `  ( ${inner}; echo $? > "$_e/$${varName}.ec" ) > "$_e/$${varName}" 2>&1 &`,
     `done`,
     `wait`,
     `_fail=0`,
-    `for ${varName} in ${ids.join(" ")}; do cat "$_e/$${varName}"; [ "$(cat "$_e/$${varName}.ec" 2>/dev/null)" = 0 ] || _fail=1; done`,
+    `for ${varName} in ${items.join(" ")}; do cat "$_e/$${varName}"; [ "$(cat "$_e/$${varName}.ec" 2>/dev/null)" = 0 ] || _fail=1; done`,
     `rm -rf "$_e"`,
     `[ "$_fail" = 0 ]`,
   ].join("\n");

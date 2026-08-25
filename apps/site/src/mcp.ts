@@ -23,18 +23,20 @@ function warmInBackground(db: EdenDb, workspaceId: string, origin: string): void
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
 
 function schemaFor(steps: Array<{ url?: string; bind?: Record<string, string> }>) {
+  // Domain-general: every template key the compiled steps actually use
+  // becomes an argument, plus a CSV plural for batch fan-out. Nothing here
+  // knows about GitHub — {issue}/{id} happen to be common keys, but so are
+  // {order}, {customer}, {run_id}, {invoice}, and they all resolve the same
+  // way at playback (resolveTemplate reads params by name).
   const keys = templateKeys(steps.map((s) => s.url || ""));
   const properties: Record<string, { type: string; description: string }> = {};
-  if (keys.includes("issue") || keys.includes("run_id")) {
-    properties.issues = {
+  for (const k of keys) {
+    properties[k] = { type: "string", description: `${k} of the resource(s) to fetch` };
+    properties[`${k}s`] = {
       type: "string",
-      description: "csv of ids. returns JSON array of compact rows",
+      description: `csv of ${k}s — one compact row per id, fetched concurrently`,
     };
   }
-  properties.ids = {
-    type: "string",
-    description: "csv of ids. returns JSON array of compact rows",
-  };
   return { type: "object", properties, required: [] as string[] };
 }
 
@@ -120,6 +122,28 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
     );
     if (!tool) {
       return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool ${name}` } };
+    }
+    // Domain-general batching: any `<key>s` csv whose singular is one of this
+    // tool's template keys routes into the same concurrent batch machinery
+    // that issues/ids use. A compiled {order} tool therefore accepts
+    // orders="11,12,13" without the server knowing what an order is.
+    if (!args.ids && !args.issues) {
+      const steps = (() => {
+        try {
+          const parsed = JSON.parse(tool.steps || "[]") as Array<{ url?: string }>;
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [] as Array<{ url?: string }>;
+        }
+      })();
+      for (const k of templateKeys(steps.map((s) => s.url || ""))) {
+        const csv = args[`${k}s`];
+        if (typeof csv === "string" && csv.trim()) {
+          args.ids = csv;
+          args.issues = csv;
+          break;
+        }
+      }
     }
     let receipt;
     try {

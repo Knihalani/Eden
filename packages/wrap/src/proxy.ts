@@ -20,11 +20,21 @@ function corsOrigin(req: Request): Record<string, string> {
 }
 
 function programs(opts: ProxyOpts): StretchProgram[] {
-  return opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest);
+  // A throwing program source is degraded to "nothing live": the request
+  // proceeds unsteered rather than failing.
+  try {
+    return opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest);
+  } catch {
+    return [];
+  }
 }
 
-function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch } {
+function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string; fn: typeof fetch; timeout: number } {
   const base = (opts.upstream || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  // Generous by default — completions and streams legitimately run minutes —
+  // but bounded, so a hung upstream is an error the client can see rather than
+  // a request that never returns.
+  const env = Number(process.env.EDEN_UPSTREAM_TIMEOUT_MS);
   return {
     url: `${base}/chat/completions`,
     key:
@@ -33,6 +43,7 @@ function upstreamChat(opts: ProxyOpts, req: Request): { url: string; key: string
       process.env.OPENAI_API_KEY ||
       "",
     fn: opts.state.opts.fetch ?? fetch,
+    timeout: Number.isFinite(env) && env > 0 ? Math.min(600_000, env) : 300_000,
   };
 }
 
@@ -44,21 +55,26 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     return Response.json({ error: { message: "invalid json" } }, { status: 400 });
   }
   const live = programs(opts);
-  if (killAfterWarningEnabled(opts.state.opts) && opts.state.run.firstWarningAt != null) {
-    return Response.json(
-      { error: { message: "halted after warning", fail_open: false } },
-      { status: 409, headers: corsOrigin(req) },
-    );
-  }
+  // A tripped kill switch must never take the user's traffic down with it
+  // (prime directive: Eden never blocks the agent). It only loses its privilege
+  // to steer: requests pass straight through, untouched, while the condition
+  // stays visible on the dashboard.
+  const steerable =
+    !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   const wantsStream = Boolean(body.stream);
-  const clientTools = Array.isArray(body.tools) && body.tools.length > 0;
-  const { url, key, fn } = upstreamChat(opts, req);
-  if (wantsStream && (!live.length || !clientTools)) {
+  // Opt-in means the client sent a tools ARRAY — an empty array has opted into
+  // function calling and is exactly who compiled tools serve (see injectTools).
+  // A missing tools field has not.
+  const clientOptedIn = Array.isArray(body.tools);
+  const { url, key, fn, timeout } = upstreamChat(opts, req);
+  const shouldSteer = steerable && live.length > 0 && clientOptedIn;
+  if (wantsStream && !shouldSteer) {
     try {
       const upstreamRes = await fn(url, {
         method: "POST",
         headers: { authorization: key ? `Bearer ${key}` : "", "content-type": "application/json" },
         body: JSON.stringify(withStreamUsage(body)),
+        signal: AbortSignal.timeout(timeout),
       });
       const src = upstreamRes.body;
       const headers = { "content-type": upstreamRes.headers.get("content-type") || "text/event-stream" };
@@ -70,7 +86,11 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
       return Response.json({ error: { message: "upstream unavailable", fail_open: true } }, { status: 502 });
     }
   }
-  const steeredBody = { ...body, stream: false, tools: injectTools(body.tools, live) };
+  const injected = safely(
+    () => (shouldSteer ? injectTools(body.tools, live) : body.tools),
+    body.tools,
+  );
+  const steeredBody = { ...body, stream: false, tools: injected };
   let upstreamRes: Response;
   try {
     upstreamRes = await fn(url, {
@@ -80,6 +100,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
         "content-type": "application/json",
       },
       body: JSON.stringify(steeredBody),
+      signal: AbortSignal.timeout(timeout),
     });
   } catch {
     return Response.json({ error: { message: "upstream unavailable", fail_open: true } }, { status: 502 });
@@ -87,22 +108,62 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   if (!upstreamRes.ok) {
     return new Response(upstreamRes.body, { status: upstreamRes.status, headers: { "content-type": "application/json" } });
   }
-  const json = (await upstreamRes.json()) as {
+  // Read once as text so a malformed upstream body can be handed back verbatim
+  // rather than turned into an Eden-shaped 500. Everything below — usage
+  // recording, steering — is a bonus on top of a response that already
+  // succeeded; none of it may fail the response.
+  const text = await upstreamRes.text();
+  let json: {
     choices?: Array<{ message?: { tool_calls?: unknown; content?: unknown } }>;
     usage?: unknown;
   };
-  recordCompletion(opts.state.run, json as Record<string, unknown>);
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return new Response(text, {
+      status: upstreamRes.status,
+      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json" },
+    });
+  }
+  safely(() => recordCompletion(opts.state.run, json as Record<string, unknown>), undefined);
+  // Steer only when this request was steerable — an unsteered passthrough
+  // (tripped kill switch, no live programs, client sent no tools) must return
+  // the model's own tool calls untouched.
   const choice = json.choices?.[0]?.message;
-  if (choice && Array.isArray(choice.tool_calls)) {
-    choice.tool_calls = steerToolCalls(choice.tool_calls as never, live);
+  if (shouldSteer && choice && Array.isArray(choice.tool_calls)) {
+    safely(
+      () => {
+        choice.tool_calls = steerToolCalls(choice.tool_calls as never, live);
+      },
+      undefined,
+    );
   }
   if (wantsStream) {
-    return new Response(asStreamChunks(json), {
+    return new Response(safely(() => asStreamChunks(json as Record<string, unknown>), text), {
       status: 200,
       headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", ...corsOrigin(req) },
     });
   }
-  return Response.json(json, { headers: corsOrigin(req) });
+  return safely(
+    () => Response.json(json, { headers: corsOrigin(req) }),
+    new Response(text, {
+      status: upstreamRes.status,
+      headers: { "content-type": upstreamRes.headers.get("content-type") || "application/json" },
+    }),
+  );
+}
+
+/**
+ * Run an Eden-side computation, degrading to `fallback` on any throw. Same
+ * contract as the wrap-tools helper of the same name: nothing Eden computes
+ * about a request may fail the request.
+ */
+function safely<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
 }
 
 /**

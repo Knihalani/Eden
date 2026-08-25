@@ -1,7 +1,7 @@
 import { homedir, hostname } from "node:os";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, writeSync, fstatSync, renameSync, chmodSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, unlinkSync, statSync, readdirSync, writeSync, fstatSync, renameSync, chmodSync } from "node:fs";
 
 export function edenHome(): string {
   return process.env.EDEN_HOME || join(homedir(), ".eden");
@@ -16,7 +16,67 @@ export function ensureHome(): string {
   // explicitly rather than requested.
   chmodQuietly(h, 0o700);
   chmodQuietly(join(h, "runs"), 0o700);
+  sweepRunsHome(h);
   return h;
+}
+
+/**
+ * Retention for ~/.eden/runs: un-uploaded session logs used to grow forever
+ * when the plane stayed down, and drained sessions left empty .jsonl shells
+ * and .lock/.cursor sidecars behind permanently.
+ *
+ * Swept here (every ensureHome — every CLI entry point) rather than in drain,
+ * because drain is exactly the thing that is DOWN when files accumulate.
+ * Best-effort by construction: any failure to sweep must never fail the
+ * command that called ensureHome.
+ *
+ * Policy:
+ *   - delete empty .jsonl shells older than an hour (a fresh file may be
+ *     mid-session with nothing written yet)
+ *   - delete orphaned sidecars (.lock/.cursor) whose log is gone or stale
+ *   - delete non-empty logs older than RETAIN_DAYS (default 14) — recording
+ *     exists to be uploaded; two-week-old un-uploaded runs are dead weight
+ */
+function sweepRunsHome(h: string): void {
+  try {
+    const runsDir = join(h, "runs");
+    const now = Date.now();
+    const EMPTY_SHELL_MS = 60 * 60_000;
+    const retainDays = Number(process.env.EDEN_RETAIN_DAYS);
+    const RETAIN_MS = (Number.isFinite(retainDays) && retainDays > 0 ? retainDays : 14) * 86_400_000;
+    for (const f of readdirSync(runsDir)) {
+      if (!f.endsWith(".jsonl") && !f.endsWith(".lock") && !f.endsWith(".cursor")) continue;
+      const p = join(runsDir, f);
+      let st: { size: number; mtimeMs: number };
+      try {
+        st = statSync(p);
+      } catch {
+        continue; // raced away
+      }
+      const age = now - st.mtimeMs;
+      const base = f.replace(/\.(jsonl|lock|cursor)$/, "");
+      if (f.endsWith(".jsonl")) {
+        if ((st.size === 0 && age > EMPTY_SHELL_MS) || age > RETAIN_MS) {
+          rmQuietly(p);
+          rmQuietly(join(runsDir, `${base}.lock`));
+          rmQuietly(join(runsDir, `${base}.cursor`));
+        }
+      } else {
+        // Sidecar without its log: pure garbage.
+        if (!existsSync(join(runsDir, `${base}.jsonl`))) rmQuietly(p);
+      }
+    }
+  } catch {
+    /* sweeping must never break the command that ran ensureHome */
+  }
+}
+
+function rmQuietly(p: string): void {
+  try {
+    unlinkSync(p);
+  } catch {
+    /* gone already, or locked this instant — either is fine */
+  }
 }
 
 function chmodQuietly(path: string, mode: number): void {
@@ -65,6 +125,13 @@ export type Config = {
   api_key: string;
   base_url: string;
   workspace_id?: string;
+  /**
+   * Opt-in hook steering. Default OFF — the prime directive is that a broken
+   * or half-set-up Eden never denies one of the agent's own tool calls. When
+   * true, a PreToolUse whose call matches a live compiled tool is pointed at
+   * the MCP tool instead.
+   */
+  steer_hooks?: boolean;
 };
 
 export function readConfig(): Config | null {

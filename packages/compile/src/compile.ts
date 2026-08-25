@@ -1,7 +1,8 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
 import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf, failureModeOf, isUsableOutput } from "@eden/ir";
 import { argKeys, bindContext, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
-import { clusterFailureTraces, clusterTraces } from "./mine";
+import { clusterFailureTraces, clusterTraces, effectiveEventName, buildShellNames, setActiveShellNames } from "./mine";
+import { findForkedGroups, assembleForkProgram } from "./fork";
 import { normalizeTraces } from "./normalize";
 
 export type CompileOpts = {
@@ -57,11 +58,17 @@ function divergeSameArgs(evs: TraceEvent[]): boolean {
   return false;
 }
 
-function aligned(traces: StretchTrace[], tool: string, nth = 0): { traces: StretchTrace[]; events: TraceEvent[] } {
+function aligned(traces: StretchTrace[], tool: string, nth = 0, cutAt?: number[]): { traces: StretchTrace[]; events: TraceEvent[] } {
   const tracesOut: StretchTrace[] = [];
   const events: TraceEvent[] = [];
-  for (const t of traces) {
-    const hits = t.events.filter((ev) => ev.name === tool && ev.ok && !ev.skipped);
+  for (const [k, t] of traces.entries()) {
+    // Match on the effective (shape-derived) name so a cluster mined from
+    // `Bash:kubectl.get.pods` aligns with the actual shell events, while the
+    // emitted step still calls the registry's real tool name. For failure
+    // clusters the search stops at the trace's own warning cut: occurrences
+    // after it are not part of the mined prefix.
+    const bound = cutAt?.[k];
+    const hits = t.events.filter((ev, j) => (bound === undefined || j < bound) && effectiveEventName(ev) === tool && ev.ok && !ev.skipped);
     const e = hits[nth];
     if (!e) continue;
     tracesOut.push(t);
@@ -109,7 +116,7 @@ function inferLoopOver(
   if (!priorTool || times < 2) return null;
   const paths: string[] = [];
   for (const t of traces) {
-    const prior = t.events.find((e) => e.name === priorTool && e.ok);
+    const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
     const r = prior?.result;
     if (Array.isArray(r) && r.length === times) {
       paths.push("");
@@ -129,13 +136,26 @@ function inferLoopOver(
   return { kind: "from", step: priorTool, path };
 }
 
+
+/**
+ * The registry name a cluster identity actually executes against.
+ *
+ * Shell-derived clusters carry decorated identities (`Bash:kubectl.get.pods`)
+ * while the registry only knows "Bash". Every emission path must rewrite —
+ * the loop branches used to skip this and ship programs that crashed at
+ * replay with `unknown tool`.
+ */
+function realToolOf(traces: StretchTrace[], tool: string, nth = 0): string {
+  return aligned(traces, tool, nth).events[0]?.name ?? tool;
+}
+
 function loopItemArgs(traces: StretchTrace[], tool: string, priorTool: string, path: string): Record<string, Binding> | null {
   const keyHits = new Map<string, "item" | "id">();
   for (const t of traces) {
-    const prior = t.events.find((e) => e.name === priorTool && e.ok);
+    const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
     const raw = path ? (prior?.result as Record<string, unknown> | undefined)?.[path] : prior?.result;
     const items = Array.isArray(raw) ? raw : [];
-    const evsAll = t.events.filter((e) => e.name === tool && e.ok);
+    const evsAll = t.events.filter((e) => effectiveEventName(e) === tool && e.ok);
     const evs = items.length && evsAll.length > items.length && evsAll.length % items.length === 0
       ? evsAll.slice(0, items.length)
       : evsAll;
@@ -245,7 +265,24 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
   const programs: StretchProgram[] = [];
   const refusals: Refusal[] = [];
   const seenSeq = new Set<string>();
+  // Variation-driven shell identities must cover mining AND alignment alike,
+  // or a cluster mined under skeletons would fail to align its own events.
+  setActiveShellNames(buildShellNames(traces));
+  try {
+    return compileAll(traces, { minSupport, allowExact, minLlmReduction }, programs, refusals, seenSeq);
+  } finally {
+    setActiveShellNames(undefined);
+  }
+}
 
+function compileAll(
+  traces: StretchTrace[],
+  opts: { minSupport: number; allowExact: boolean; minLlmReduction: number },
+  programs: StretchProgram[],
+  refusals: Refusal[],
+  seenSeq: Set<string>,
+): CompileResult {
+  const { minSupport, allowExact, minLlmReduction } = opts;
   for (const cluster of [...clusterTraces(traces, minSupport), ...clusterFailureTraces(traces, minSupport)]) {
     const seqKey = cluster.sequence.join("\0");
     if (seenSeq.has(seqKey)) continue;
@@ -297,7 +334,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
                 item: innerItem,
                 body: [innerBodyId],
               });
-              bodySteps.push({ id: innerBodyId, kind: "tool", tool: g.tool, args: named });
+              bodySteps.push({ id: innerBodyId, kind: "tool", tool: realToolOf(cluster.traces, g.tool), args: named });
               bodyIds.push(innerLoopId);
               nameToId.set(g.tool, innerLoopId);
               continue;
@@ -312,7 +349,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
             for (const [k, b] of Object.entries(loopArgs)) {
               named[k] = b.kind === "from" && b.step === "item" ? { ...b, step: item } : b;
             }
-            bodySteps.push({ id: bodyId, kind: "tool", tool: g.tool, args: named });
+            bodySteps.push({ id: bodyId, kind: "tool", tool: realToolOf(cluster.traces, g.tool), args: named });
             bodyIds.push(bodyId);
             nameToId.set(g.tool, bodyId);
           }
@@ -350,7 +387,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
             item,
             body: [bodyId],
           });
-          steps.push({ id: bodyId, kind: "tool", tool, args: loopArgsNamed });
+          steps.push({ id: bodyId, kind: "tool", tool: realToolOf(cluster.traces, tool), args: loopArgsNamed });
           nameToId.set(tool, loopId);
           continue;
         }
@@ -358,7 +395,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
         break;
       }
       const nth = sequence.slice(0, i).filter((n) => n === tool).length;
-      const pair = aligned(cluster.traces, tool, nth);
+      const pair = aligned(cluster.traces, tool, nth, cluster.cutAt);
       const evs = pair.events;
       const alignedTraces = pair.traces;
       if (evs.length / cluster.traces.length < 0.8 - 1e-9) {
@@ -369,6 +406,31 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
       // where we are in the sequence, so it is done once here rather than once
       // per argument slot below.
       const ctx = bindContext(alignedTraces, sequence.slice(0, i));
+
+      // Shell-derived group: the cluster identity was a shape name
+      // (`Bash:kubectl.get.pods`) but the registry only knows the real tool
+      // ("Bash"). Bind the command string itself — the template binding can
+      // lift varying tokens out of trace input or prior results — and emit a
+      // plain tool step against the real tool. If the varying parts cannot be
+      // explained by witnessed inputs, refuse: replaying an unexplained
+      // command would be guessing.
+      const realTool = evs[0]?.name ?? tool;
+      if (realTool !== tool) {
+        const cmds = evs.map((e) => String((e.args as Record<string, unknown> | undefined)?.command ?? ""));
+        const bound = bindSlot(cmds, ctx, { mutating: false, allowExact });
+        if (!bound.ok) {
+          refused = { sequence, reason: `${tool} commands are under-determined`, slot: tool };
+          break;
+        }
+        steps.push({
+          id,
+          kind: "tool",
+          tool: realTool,
+          args: { command: remapBinding(bound.binding, nameToId) },
+        });
+        nameToId.set(tool, id);
+        continue;
+      }
 
       if (isIslandName(tool) || (!isMutating(tool) && !isCheckName(tool) && divergeSameArgs(evs))) {
         const argNames = argKeys(evs);
@@ -436,17 +498,17 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
     }
     const recorded = cluster.traces.filter((t) => t.output !== undefined);
     if (recorded.length && recorded.every((t) => !isUsableOutput(t.output))) {
-      refusals.push({ sequence, reason: "constant/empty output" });
+      refusals.push({ sequence, reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding." });
       continue;
     }
     if (steps.length < 3) {
-      refusals.push({ sequence, reason: "compiled to fewer than 3 steps" });
+      refusals.push({ sequence, reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation." });
       continue;
     }
 
     const env = envelopeFrom(cluster.traces, inputPaths);
     if (!allowExact && !env) {
-      refusals.push({ sequence, reason: "under-determined envelope: no witnessed inputs" });
+      refusals.push({ sequence, reason: "No witnessed input values found. Eden needs at least one recorded input parameter across your traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, queries) rather than calling tools with no arguments." });
       continue;
     }
     // The last *top-level* step, not the last step in the array. A loop is
@@ -502,8 +564,65 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
     }
   }
 
+  // Fork mining pass: detect divergent workflows that linear clustering
+  // misses. Runs AFTER the linear pass so linear programs are preferred when
+  // both fire on the same traces, and BEFORE the program cap so fork programs
+  // share the same MAX_PROGRAMS accounting instead of silently overflowing it.
+  if (traces.length >= opts.minSupport * 2) {
+    const forks = findForkedGroups(traces, opts.minSupport);
+    for (const fork of forks) {
+      const seqKey = `fork:${fork.prefixNames.join("\0")}→${fork.field}`;
+      if (seenSeq.has(seqKey)) continue;
+      seenSeq.add(seqKey);
+      const sequence = [...fork.prefixNames, `branch_${fork.field}`];
+      const drafted = assembleForkProgram(fork, "pending", `forked_${fork.field}_gate`);
+      if (!drafted) {
+        refusals.push({ sequence, reason: "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess." });
+        continue;
+      }
+      const allForkTraces = [...fork.thenTraces, ...fork.elseTraces];
+      // Honesty gates mirroring the linear pass.
+      if ((drafted.steps?.length ?? 0) < 3) {
+        refusals.push({ sequence, reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation." });
+        continue;
+      }
+      const envInputs = (drafted.contract as { envelope?: { inputs?: Record<string, unknown[]> } | null }).envelope?.inputs;
+      const allowExact = (drafted.contract as { allowExact?: boolean }).allowExact === true;
+      if (!envInputs && !allowExact) {
+        refusals.push({ sequence, reason: "No witnessed input values found across the branched traces. Eden needs at least one recorded input parameter to know what values are valid." });
+        continue;
+      }
+      if (allForkTraces.every((t) => !t.output || typeof t.output !== "object" || Object.keys(t.output as object).length === 0)) {
+        refusals.push({ sequence, reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results." });
+        continue;
+      }
+      // Stable identity, same scheme as linear programs: id identifies the
+      // stretch (name + sequence), version identifies this compilation. The
+      // old positional `fork_${fi}` id changed meaning whenever a different
+      // set of candidates mined first — one extra workflow upstream and every
+      // stored tool pointed at the wrong program.
+      const withId = { ...drafted, id: `p_${hashStretch(drafted).slice(0, 16)}` };
+      const program = withVersion(withId);
+      try {
+        assertValid(program);
+        programs.push(program);
+      } catch (err) {
+        refusals.push({ sequence, reason: `invalid program: ${(err as Error).message}` });
+      }
+    }
+  }
+
   const MAX_PROGRAMS = 24;
   const extra = programs.slice(MAX_PROGRAMS);
   for (const p of extra) refusals.push({ sequence: p.sequence ?? [], reason: "max programs cap" });
+
+  if (process.env.EDEN_DEBUG_FORK === "1") {
+    const forks = findForkedGroups(traces, opts.minSupport);
+    console.error(`[fork-debug] traces=${traces.length} minSupport=${opts.minSupport} forks=${forks.length} programs=${programs.length}`);
+    for (const f of forks) {
+      console.error(`  fork: prefix=[${f.prefixNames}] field=${f.field} thenVal=${f.thenValue} nA=${f.thenTraces.length} nB=${f.elseTraces.length}`);
+    }
+  }
+
   return { programs: programs.slice(0, MAX_PROGRAMS), refusals };
 }

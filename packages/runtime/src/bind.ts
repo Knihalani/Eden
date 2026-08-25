@@ -1,5 +1,5 @@
 import type { Binding } from "@eden/ir";
-import { cloneJson, getPath, interpolate, setKey } from "@eden/ir";
+import { cloneJson, getPath, interpolate, interpolateSlots, setKey } from "@eden/ir";
 
 /**
  * The subset of Map that binding evaluation needs. A plain Map satisfies it, so
@@ -81,7 +81,9 @@ export function evalBinding(binding: Binding, scope: BindScope): unknown {
       const inner = evalBinding(binding.of, scope);
       if (binding.fn === "identity") return inner;
       if (binding.fn === "jsonpath") return getPath(inner, binding.expr);
-      return interpolate(binding.expr, inner);
+      // interpolateSlots preserves literal braces in structured bodies
+      // (JSON, shell expansions) while still resolving named slots.
+      return interpolateSlots(binding.expr, inner);
     }
   }
 }

@@ -67,16 +67,15 @@ export async function handleHookd(req: Request): Promise<Response> {
   } catch {
     return Response.json({});
   }
+  // Serialized, not raced-then-abandoned: the old Promise.race returned to the
+  // client on timeout while the losing respondToHook KEPT RUNNING holding the
+  // session-file lock, so every hook during that window contended for up to
+  // LOCK_WAIT_MS and then failed open — recording silently lost under load.
+  // A queue bounds total latency (timeout per request) and makes lock
+  // contention structurally impossible.
+  const done = enqueue(input);
   try {
-    const out = await Promise.race([
-      // Async lock acquisition: hookd is long-lived and sleepSync would park
-      // its whole event loop while it waits out a contended lock.
-      Promise.resolve(respondToHook(input, withFileLockAsync)),
-      new Promise<Record<string, never>>((_, reject) => {
-        const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
-        t.unref?.();
-      }),
-    ]);
+    const out = await done;
     return Response.json(out);
   } catch (err) {
     // Same last-line-of-defence contract as `eden hook`: `{}` never blocks the
@@ -84,6 +83,32 @@ export async function handleHookd(req: Request): Promise<Response> {
     process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
     return Response.json({});
   }
+}
+
+/** Serializes /hook handling; each entry is bounded by hookdTimeoutMs. */
+let tail: Promise<unknown> = Promise.resolve();
+function enqueue(input: HookIn): Promise<Record<string, unknown>> {
+  const job = tail.then(
+    () => Promise.race([
+      Promise.resolve(respondToHook(input, withFileLockAsync)),
+      new Promise<Record<string, never>>((_, reject) => {
+        const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
+        t.unref?.();
+      }),
+    ]),
+    // A previous failure must not poison the chain.
+    () =>
+      Promise.race([
+        Promise.resolve(respondToHook(input, withFileLockAsync)),
+        new Promise<Record<string, never>>((_, reject) => {
+          const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
+          t.unref?.();
+        }),
+      ]),
+  );
+  // Keep the chain alive regardless of this job's outcome.
+  tail = job.catch(() => undefined);
+  return job;
 }
 
 export async function runHookd(): Promise<void> {
@@ -95,6 +120,21 @@ export async function runHookd(): Promise<void> {
     fetch: handleHookd,
   });
   console.error(`eden hookd ${server.url}`);
+  // Graceful shutdown: stop accepting, let the in-flight queue drain (each
+  // entry bounded by its own timeout), then exit 0. SIGKILL remains the
+  // user's escape hatch; stale-lock detection covers it.
+  let closing = false;
+  const shutdown = (): void => {
+    if (closing) return;
+    closing = true;
+    server.stop(false); // stop accepting new connections
+    void tail.then(() => process.exit(0));
+    // If draining somehow wedges, the unref'd timers below still let the
+    // process die naturally rather than hanging forever.
+    setTimeout(() => process.exit(0), 10_000).unref?.();
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
   await new Promise(() => undefined);
 }
 

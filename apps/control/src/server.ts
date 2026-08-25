@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { handleChatCompletions, createState } from "@eden/wrap";
-import { minLlmReductionOf } from "@eden/ir";
+import { handleAnthropicMessages } from "@eden/wrap";
+import { minLlmReductionOf, protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER } from "@eden/ir";
 import { handleApi, isManagedDeployment, type ApiCtx } from "./api";
 import type { Store } from "./store";
 
@@ -104,6 +105,20 @@ export function createHandler(opts: ServerOpts) {
     opts.store.heartbeat();
     wrapState.programs = opts.store.livePrograms();
 
+    // Protocol gate: refuse a client whose wire version mismatches ours with
+    // an explanation, instead of letting shape skew fail obscurely downstream.
+    if (url.pathname.startsWith("/v1/")) {
+      const gate = protocolCheck(req.headers.get(PROTOCOL_HEADER));
+      if (!gate.ok) {
+        return Response.json(
+          { error: gate.reason },
+          {
+            status: gate.status,
+            headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION), ...corsHeaders(req) },
+          },
+        );
+      }
+    }
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(req) });
     }
@@ -111,6 +126,7 @@ export function createHandler(opts: ServerOpts) {
       return Response.json({
         ok: true,
         service: "eden-wrap",
+        protocol: EDEN_PROTOCOL_VERSION,
         traces: opts.store.tracesCount(),
         live: opts.store.liveCount(),
         candidates: opts.store.candidatesCount(),
@@ -134,6 +150,16 @@ export function createHandler(opts: ServerOpts) {
         state: wrapState,
         upstream: opts.upstream,
         upstreamKey: opts.upstreamKey,
+        getPrograms: () => opts.store.livePrograms(),
+      });
+    }
+    if (url.pathname === "/v1/messages" && req.method === "POST") {
+      // Anthropic Messages API dialect (G7): same auth gate as chat/completions.
+      if (!authorized(req, token)) {
+        return Response.json({ error: { message: "unauthorized" } }, { status: 401 });
+      }
+      return handleAnthropicMessages(req, {
+        state: wrapState,
         getPrograms: () => opts.store.livePrograms(),
       });
     }

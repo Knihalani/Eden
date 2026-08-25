@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, SYNTHETIC_MS_PER_LLM, traceTokens } from "./measure";
+import { compiledTokens, compiledToolMs, isSyntheticDuration, naiveToolMs, SYNTHETIC_MS_PER_LLM, tokensExtrapolated, traceTokens } from "./measure";
 import type { StretchTrace } from "@eden/ir";
 
 function t(over: Partial<StretchTrace> = {}): StretchTrace {
@@ -32,5 +32,16 @@ describe("20b measure", () => {
     expect(compiledToolMs(t(), ["write"])).toBe(40);
     expect(compiledTokens(t({ prompt_tokens: 80, completion_tokens: 0 }), 1, true)).toBe(20);
     expect(compiledTokens(t({ prompt_tokens: 80, completion_tokens: 0 }), 0, false)).toBe(0);
+  });
+});
+
+describe("L6: token extrapolation keyed on compiled LLM use, not direct island steps", () => {
+  test("a composed sub-program's island calls mark tokens estimated, not a fake zero", () => {
+    // hasIsland=false but the compiled run DID make LLM calls through a
+    // composed sub-program. The old code reported measured-zero.
+    expect(tokensExtrapolated(2, false)).toBe(true);
+    const t = { llmCalls: 4 } as never;
+    expect(compiledTokens(t, 2, false)).not.toBe(0);
+    expect(tokensExtrapolated(0, true)).toBe(false); // genuinely no provider work
   });
 });

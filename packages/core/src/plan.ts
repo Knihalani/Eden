@@ -227,7 +227,15 @@ export function selectMcpTools<T extends { name: string; uses_count?: number | n
   // which one had ever been used returned one tool, not six — and a freshly
   // compiled tool could then never be surfaced, because it has no uses and
   // some other tool always does. A cold-start trap that closes behind itself.
-  return ranked.slice(0, limit);
+  //
+  // The list is *emitted* alphabetically, not in usage order. This response
+  // sits in the agent's prompt, where tool arrays ordered by live counts
+  // reshuffle on every use — each increment reorders neighbours and
+  // invalidates the provider's KV cache from that position back for every
+  // turn after it (cached reads are ~90% cheaper than uncached, so a
+  // churning prefix is roughly a 10x tax). Admission stays popularity-based;
+  // only the wire order is stabilized.
+  return ranked.slice(0, limit).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function shortenWhenToUse(s: string, n = MCP_DESC_CHARS): string {

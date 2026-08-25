@@ -577,7 +577,7 @@ describe("compile from waste (45–49)", () => {
     }));
     const { programs, refusals } = compileTraces(traces);
     expect(programs).toEqual([]);
-    expect(refusals.some((r) => /empty output/i.test(r.reason))).toBe(true);
+    expect(refusals.some((r) => /empty.*output|identical output/i.test(r.reason))).toBe(true);
   });
 
   test("mines a warned prefix, not only happy traces", () => {
@@ -622,5 +622,38 @@ describe("compile from waste (45–49)", () => {
     const p = programs[0];
     expect(p).toBeTruthy();
     expect(p!.steps.filter((s) => s.kind === "island").length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("failure-cluster name decoration (H2)", () => {
+  test("shell events in warned prefixes keep their decorated names and compile", () => {
+    // Regression: namesBefore used raw e.name, so a warned prefix of shell
+    // calls mined as bare "Bash" — which can never align with the decorated
+    // "Bash:kubectl.*" names the rest of the pipeline matches on. The cluster
+    // was silently dropped while its sequence advertised phantom steps.
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `sh${i}`,
+      llmCalls: 4,
+      duration_ms: 80,
+      cost_cents: 2,
+      input: { id: `T-${i}` },
+      output: { ok: true },
+      firstWarningAt: 4,
+      warnings: [{ kind: "repeat_ngram" as const, at: 4, detail: "loop", duration_ms: 80, llmCalls: 4 }],
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "Bash", args: { command: "kubectl get pods" }, result: { out: "a" }, ok: true },
+        { name: "Bash", args: { command: "kubectl describe pod web" }, result: { out: "b" }, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: { sent: true }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    const withShell = programs.filter((p) =>
+      p.steps?.some((s) => s.kind === "tool" && (s as { tool?: string }).tool === "Bash"),
+    );
+    expect(withShell.length).toBeGreaterThan(0);
+    // The emitted sequence carries DECORATED names (alignable), while the
+    // steps call the registry's real tool.
+    expect(withShell.some((p) => (p.sequence ?? []).some((n) => n.startsWith("Bash:kubectl.")))).toBe(true);
   });
 });

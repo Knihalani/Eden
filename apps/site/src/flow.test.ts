@@ -124,8 +124,8 @@ describe("ingest → draft → approve → play", () => {
     await ingest(db, "ws_local", "run-a", a, true);
     await ingest(db, "ws_local", "run-b", b, true);
     delete process.env.EDEN_AUTO_APPROVE;
-    const tools = await db.all<{ name: string }>(`SELECT name FROM tool WHERE name LIKE 'github_pr_bundle%'`);
-    expect(tools.map((t) => t.name)).toEqual(["github_pr_bundle"]);
+    const tools = await db.all<{ name: string }>(`SELECT name FROM tool WHERE name LIKE 'pulls_reviews_status%'`);
+    expect(tools.map((t) => t.name)).toEqual(["pulls_reviews_status_files"]);
   });
 
   test("EDEN_AUTO_APPROVE turns a playable draft On", async () => {
@@ -141,7 +141,7 @@ describe("ingest → draft → approve → play", () => {
       `SELECT name, state, published FROM tool LIMIT 1`,
     );
     delete process.env.EDEN_AUTO_APPROVE;
-    expect(tool?.name).toBe("github_pr_bundle");
+    expect(tool?.name).toBe("pulls_reviews_status_files");
     expect(tool?.state).toBe("on");
     expect(tool?.published).toBe(1);
   });
@@ -161,7 +161,7 @@ describe("ingest → draft → approve → play", () => {
     );
     delete process.env.EDEN_AUTO_APPROVE;
     const tool = await db.get<{ name: string; steps: string }>(`SELECT name, steps FROM tool LIMIT 1`);
-    expect(tool?.name).toBe("github_pr_bundle");
+    expect(tool?.name).toBe("pulls_reviews_status_files");
     const steps = JSON.parse(tool!.steps) as Array<{ url?: string; bind?: Record<string, string> }>;
     expect(steps.some((s) => /\/pulls\/\{issue\}$/.test(s.url || ""))).toBe(true);
     expect(steps.some((s) => /\/reviews/.test(s.url || ""))).toBe(true);
@@ -204,6 +204,50 @@ describe("ingest → draft → approve → play", () => {
     expect(receipt.rows?.map((r) => r.number)).toEqual([12, 13]);
     expect(receipt.rows?.every((r) => typeof r.reviews === "number")).toBe(true);
     expect(receipt.rows?.every((r) => /^(success|failure|pending|error)$/.test(r.status))).toBe(true);
+  });
+  test("dry-run rehearses mutating steps without performing them (G9)", async () => {
+    const db = await openDb(`/tmp/eden-dry-${Date.now()}.db`);
+    const steps = [
+      { id: "s1", kind: "cloud_http", name: "get", commute: true, url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}" },
+      {
+        id: "s2",
+        kind: "cloud_http",
+        name: "mutate",
+        commute: false,
+        method: "POST",
+        url: "http://127.0.0.1/forge/repos/acme/app/pulls/{issue}/notes",
+        body: { text: "rehearsed" },
+      },
+    ];
+    await db.run(
+      `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
+       VALUES (?, 'ws_local', 'note_bundle', 'x', 'on', ?, '[]', 'fp-dry')`,
+      [crypto.randomUUID(), JSON.stringify(steps)],
+    );
+    const tool = await db.get<{ id: string; name: string; steps: string }>(
+      `SELECT id, name, steps FROM tool WHERE name = 'note_bundle'`,
+    );
+    // Reads execute for real (the GET fills templates and cache); the POST is
+    // resolved — URL, method — but never sent.
+    const receipt = await playTool(db, tool!, { issues: "12" }, { dryRun: true });
+    expect(receipt.dryRun).toBe(true);
+    expect(receipt.ok).toBe(true);
+    const dry = receipt.result as { keys: string[]; rows: Array<Array<Record<string, unknown>>> };
+    void dry;
+    // The mutating step's outcome carries the skipped marker with its would-be
+    // request, proving resolution happened without execution.
+    const resultJson = JSON.stringify(receipt.result);
+    expect(resultJson).toContain("dry_run");
+    expect(resultJson).toContain("/pulls/12/notes");
+    void tool;
+
+    // Batch path: the aggregate receipt keeps the flag too, and rehearsals
+    // are not counted as tool usage.
+    const before = await db.get<{ uses_count: number }>(`SELECT uses_count FROM tool WHERE name = 'note_bundle'`);
+    const batch = await playTool(db, tool!, { issues: "12,13" }, { dryRun: true });
+    expect(batch.dryRun).toBe(true);
+    const after = await db.get<{ uses_count: number }>(`SELECT uses_count FROM tool WHERE name = 'note_bundle'`);
+    expect(after!.uses_count).toBe(before!.uses_count);
   });
 });
 
@@ -369,7 +413,7 @@ describe("playback bind", () => {
     const tool = await db.get<{ id: string; name: string; state: string; steps: string }>(
       `SELECT id, name, state, steps FROM tool LIMIT 1`,
     );
-    expect(tool?.name).toBe("shop_orders");
+    expect(tool?.name).toBe("orders_items");
     expect(tool?.state).toBe("on");
     const steps = JSON.parse(tool!.steps) as Array<{ url?: string }>;
     expect(steps.some((s) => s.url?.includes("/shop/orders/{id}"))).toBe(true);
@@ -401,6 +445,6 @@ describe("playback bind", () => {
     );
     delete process.env.EDEN_AUTO_APPROVE;
     const names = (await db.all<{ name: string }>(`SELECT name FROM tool ORDER BY name`)).map((t) => t.name);
-    expect(names).toEqual(["shop_customers", "shop_orders"]);
+    expect(names).toEqual(["customers_orders", "orders_items"]);
   });
 });

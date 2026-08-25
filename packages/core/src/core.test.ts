@@ -114,6 +114,16 @@ describe("densify", () => {
     expect(facing.text).toContain("Cannot deploy widget 12");
     expect(facing.text).not.toContain("x".repeat(100));
   });
+
+  test("modelFacing admits when a nested object is dropped for depth (W8)", () => {
+    // A subtree deeper than the fact walk reaches used to vanish silently:
+    // the key was gone from the facts and truncated stayed false, so the
+    // agent read a projection missing whole branches and had no way to know.
+    let deep: unknown = { leaf: 1 };
+    for (let i = 0; i < 20; i++) deep = { nested: deep };
+    const facing = modelFacing({ outer: deep });
+    expect(facing.truncated).toBe(true);
+  });
 });
 
 describe("named cli", () => {
@@ -149,7 +159,7 @@ describe("named cli", () => {
     const calls = extractNamedCliCalls(cmd);
     expect(calls.length).toBe(3);
     const islands = cutIslands([ev({ name: "Bash", command: cmd, args: { command: cmd } })]);
-    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("pulls_reviews_status");
     const quoted =
       `mkdir -p .raw && for n in 170 169 168; do ` +
       `gh api "repos/KaiavN/Eden/pulls/$n" > ".raw/pull-$n.json"; ` +
@@ -159,7 +169,7 @@ describe("named cli", () => {
     const qCalls = extractNamedCliCalls(quoted);
     expect(qCalls.length).toBe(3);
     const qIslands = cutIslands([ev({ name: "Bash", command: quoted, args: { command: quoted } })]);
-    expect(heuristicName(qIslands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(qIslands[0]!)).toBe("pulls_reviews_status");
   });
 });
 
@@ -240,7 +250,7 @@ describe("islands", () => {
       }),
     ]);
     expect(islands.flat().every((s) => !String(s.name).includes("auth"))).toBe(true);
-    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("pulls_reviews");
   });
 
   test("git log is not compiled into a GitHub island", () => {
@@ -251,7 +261,7 @@ describe("islands", () => {
     ]);
     expect(islands.length).toBeGreaterThan(0);
     expect(islands.flat().every((s) => s.name !== "git.log")).toBe(true);
-    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("pulls_reviews");
   });
 
   test("constant-flip becomes params and same fingerprint names", () => {
@@ -301,7 +311,7 @@ describe("islands", () => {
           source_url: "https://api.github.com/repos/KaiavN/Eden/pulls/12",
         },
       ]),
-    ).toBe("github_pr_bundle");
+    ).toBe("pulls");
   });
 
   test("heuristicName for pull+reviews+status is github_pr_bundle", () => {
@@ -318,7 +328,7 @@ describe("islands", () => {
         args: { command: "gh api repos/KaiavN/Eden/commits/abc123def/status" },
       }),
     ]);
-    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("pulls_reviews_status");
   });
 
   test("probe + loop does not duplicate parameterized pull URLs", () => {
@@ -337,7 +347,7 @@ describe("islands", () => {
     const urls = islands[0]!.map((s) => s.source_url).filter(Boolean);
     const parameterized = urls.map((u) => u!.replace(/\/pulls\/\d+/g, "/pulls/{issue}"));
     expect(new Set(parameterized).size).toBe(parameterized.length);
-    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("pulls_reviews");
   });
 
   test("heuristicName prefers bundle when files and reviews are both present", () => {
@@ -354,7 +364,7 @@ describe("islands", () => {
         args: { command: "gh api repos/KaiavN/Eden/pulls/12/files" },
       }),
     ]);
-    expect(heuristicName(islands[0]!)).toBe("github_pr_bundle");
+    expect(heuristicName(islands[0]!)).toBe("pulls_reviews_files");
   });
 });
 
@@ -456,6 +466,24 @@ describe("fulfill wrap", () => {
     const r = rewriteBash("gh api repos/KaiavN/Eden/pulls/170");
     expect(r.changed).toBe(false);
     expect(r.command).toBe("gh api repos/KaiavN/Eden/pulls/170");
+  });
+
+  test("rewriteForLoop parallelizes unknown-binary read loops too (G3)", () => {
+    // No gh, no curl — an unfamiliar CLI whose body shape is positively-read
+    // parallelizes exactly like the vendor cases. This is the G3 slice:
+    // loop *parallelization* is domain-general; play-rewriting still needs
+    // runner-template storage (plan §P1 remainder).
+    const g3 = rewriteBash("for ns in dev stage prod; do kubectl get pods -n $ns; done");
+    expect(g3.changed).toBe(true);
+    expect(g3.kind).toBe("parallel");
+    expect(g3.command).toContain("wait");
+    expect(g3.command).toContain("kubectl get pods -n $ns");
+  });
+
+  test("rewriteForLoop refuses mutating or unrecognizable generic bodies (G3)", () => {
+    expect(rewriteBash("for f in a b c; do terraform apply -auto-approve -target=$f; done").kind).toBe("none");
+    expect(rewriteBash("for d in a b c; do rm -rf ./build/$d; done").kind).toBe("none");
+    expect(rewriteBash("for q in a b; do psql -c $q; done").kind).toBe("none");
   });
 
   test("mutating gh api is left alone", () => {
@@ -676,8 +704,30 @@ describe("plan + mcp ranking", () => {
       { name: "mid", uses_count: 1 },
       { name: "zero_d", uses_count: 0 },
     ]);
-    expect(listed.map((t) => t.name)).toEqual(["hot", "warm", "mid", "zero_a", "zero_b", "zero_c"]);
+    // Admission is popularity-based (hot/warm/mid over the zeros), but the
+    // emitted order is alphabetical: this list lands in the agent's prompt,
+    // and count-ordered tool arrays reshuffle on every use, churning the
+    // provider KV cache ~10x per turn. See selectMcpTools.
+    expect(listed.map((t) => t.name)).toEqual(["hot", "mid", "warm", "zero_a", "zero_b", "zero_c"]);
     expect(listed).toHaveLength(6);
+  });
+
+  test("selectMcpTools output order is stable as counts move (W14)", () => {
+    // Between two agent turns a tool call increments its counter. The list
+    // the second turn sees must be byte-identical to the first, or the
+    // prompt cache dies mid-session.
+    const before = selectMcpTools([
+      { name: "gamma", uses_count: 3 },
+      { name: "alpha", uses_count: 2 },
+      { name: "beta", uses_count: 1 },
+    ]).map((t) => t.name);
+    const after = selectMcpTools([
+      { name: "gamma", uses_count: 4 },
+      { name: "alpha", uses_count: 5 },
+      { name: "beta", uses_count: 2 },
+    ]).map((t) => t.name);
+    expect(before).toEqual(["alpha", "beta", "gamma"]);
+    expect(after).toEqual(before);
   });
 
   test("a newly compiled tool can still reach the list", () => {
@@ -700,6 +750,87 @@ describe("plan + mcp ranking", () => {
     const s = shortenWhenToUse("x".repeat(200));
     expect(s.length).toBe(140);
     expect(s.endsWith("…")).toBe(true);
+  });
+});
+
+describe("domain-general compilation (no vendor knowledge)", () => {
+  test("an unfamiliar CLI loop cuts a runner island named by its shape", () => {
+    const islands = cutIslands(
+      [
+        ev({ name: "Bash", command: "kubectl get pods --namespace prod", args: { command: "kubectl get pods --namespace prod" } }),
+        ev({ name: "Bash", command: "kubectl get svc --namespace prod", args: { command: "kubectl get svc --namespace prod" } }),
+      ],
+      { allowRunnerOnly: true },
+    );
+    expect(islands.length).toBe(1);
+    const names = islands[0]!.map((s) => s.name);
+    // Two witnesses slot the resource token identically, so both steps share
+    // a skeleton; occurrence suffixes keep their identities distinct.
+    expect(names[0]).toBe("kubectl.get.{v0}.namespace.prod");
+    expect(names[1]).toBe("kubectl.get.{v0}.namespace.prod-2");
+    // Unknown commands are never reads: they must not commute, or a misread
+    // could be reordered or deduped away.
+    expect(islands[0]!.every((s) => s.commute === false)).toBe(true);
+  });
+
+  test("hosted mode (default) keeps cloud-only islands; runner-only needs opt-in", () => {
+    const events = [
+      ev({ name: "Bash", command: "kubectl get pods", args: { command: "kubectl get pods" } }),
+      ev({ name: "Bash", command: "kubectl get svc", args: { command: "kubectl get svc" } }),
+    ];
+    expect(cutIslands(events)).toEqual([]);
+    expect(cutIslands(events, { allowRunnerOnly: true }).length).toBe(1);
+  });
+
+  test("a generic for-loop decomposes into per-item shell steps (G8)", () => {
+    const events = [
+      ev({ name: "Bash", command: "for ns in dev stage prod; do kubectl get pods -n $ns; done", args: { command: "for ns in dev stage prod; do kubectl get pods -n $ns; done" } }),
+    ];
+    const islands = cutIslands(events, { allowRunnerOnly: true });
+    expect(islands.length).toBe(1);
+    const names = islands[0]!.map((s) => s.name);
+    // All three substitutions share one skeleton: variation slots the
+    // namespace, so the loop is one identity family, not three unrelated
+    // commands. Occurrence suffixes keep the steps distinct.
+    expect(names.every((n) => n.startsWith("kubectl.get.pods.n.{v0}"))).toBe(true);
+  });
+
+  test("a cloud for-loop over an arbitrary API compiles generically (G8)", () => {
+    const events = [
+      ev({ name: "Bash", command: "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done", args: { command: "for n in 170 169; do curl -s https://api.acme.com/v2/orders/$n; curl -s https://api.acme.com/v2/orders/$n/items; done" } }),
+    ];
+    const islands = cutIslands(events);
+    expect(islands.length).toBe(1);
+    const urls = islands[0]!.map((s) => s.source_url);
+    expect(urls.some((u) => (u ?? "").includes("/orders/"))).toBe(true);
+    expect(urls.some((u) => (u ?? "").includes("/items"))).toBe(true);
+  });
+
+  test("session plumbing never joins an island", () => {
+    const events = [
+      ev({ name: "Bash", command: "ls -la", args: { command: "ls -la" } }),
+      ev({ name: "Bash", command: "stripe invoices list --limit 10", args: { command: "stripe invoices list --limit 10" } }),
+      ev({ name: "Bash", command: "echo done", args: { command: "echo done" } }),
+    ];
+    const islands = cutIslands(events, { allowRunnerOnly: true });
+    expect(islands.length).toBe(0);
+  });
+
+  test("a SaaS REST island names itself from host and resource chain", () => {
+    const islands = cutIslands([
+      ev({
+        name: "Bash",
+        command: "curl -s https://api.stripe.com/v1/invoices/in_123",
+        args: { command: "curl -s https://api.stripe.com/v1/invoices/in_123" },
+      }),
+      ev({
+        name: "Bash",
+        command: "curl -s https://api.stripe.com/v1/invoices/in_123/lines",
+        args: { command: "curl -s https://api.stripe.com/v1/invoices/in_123/lines" },
+      }),
+    ]);
+    expect(islands.length).toBe(1);
+    expect(heuristicName(islands[0]!)).toBe("stripe_invoices_lines");
   });
 });
 
@@ -784,7 +915,7 @@ describe("any-workflow compile", () => {
       }),
     ]);
     expect(islands.length).toBe(1);
-    expect(heuristicName(islands[0]!)).toBe("shop_orders");
+    expect(heuristicName(islands[0]!)).toBe("orders_items");
     expect(isCompilableToolName(heuristicName(islands[0]!))).toBe(true);
     expect(isCompilableToolName("curl_get_curl_get")).toBe(false);
   });
@@ -827,8 +958,8 @@ describe("any-workflow compile", () => {
       }),
     ]);
     expect(fingerprintIsland(posts[0]!)).not.toBe(fingerprintIsland(users[0]!));
-    expect(heuristicName(posts[0]!)).toBe("x_posts");
-    expect(heuristicName(users[0]!)).toBe("x_users");
+    expect(heuristicName(posts[0]!)).toBe("x_posts_comments");
+    expect(heuristicName(users[0]!)).toBe("x_users_todos");
   });
 
   test("playFor rewrites a curl loop when the callback matches", () => {

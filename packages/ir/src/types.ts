@@ -2,7 +2,7 @@ export const IR_VERSION = 1;
 export const DEFAULT_MIN_LLM_REDUCTION = 2;
 
 export const BINDING_KINDS = ["literal", "input", "from", "transform"] as const;
-export const STEP_KINDS = ["tool", "island", "loop", "assert"] as const;
+export const STEP_KINDS = ["tool", "island", "loop", "assert", "branch"] as const;
 export const TRANSFORM_FNS = ["identity", "jsonpath", "template"] as const;
 export const ASSERT_ON_FAIL = ["deopt", "error"] as const;
 
@@ -56,6 +56,28 @@ export type LoopStep = {
   parallel?: boolean;
 };
 
+/**
+ * A witnessed conditional (G2).
+ *
+ * `expr` is an assert-style expression evaluated against the prior step's
+ * result (plus input and step results); truthy runs the `then` arm, falsy the
+ * `else` arm. Arm ids reference flat steps elsewhere in `program.steps` —
+ * the same shape loops use for bodies.
+ *
+ * Admission discipline lives in the compiler, not here: every arm must be
+ * covered by successful taped executions (one witness per arm plus the
+ * negative witness that forced the split), or the program is refused before
+ * it ever reaches this representation. The runtime trusts the shape and
+ * executes deterministically.
+ */
+export type BranchStep = {
+  id: string;
+  kind: "branch";
+  expr: string;
+  then: string[];
+  else?: string[];
+};
+
 export type AssertStep = {
   id: string;
   kind: "assert";
@@ -63,7 +85,7 @@ export type AssertStep = {
   onFail: AssertOnFail;
 };
 
-export type Step = ToolStep | IslandStep | LoopStep | AssertStep;
+export type Step = ToolStep | IslandStep | LoopStep | AssertStep | BranchStep;
 
 export function minLlmReductionOf(n?: number | null): number {
   return Number.isFinite(n) && (n as number) > 0 ? (n as number) : DEFAULT_MIN_LLM_REDUCTION;
@@ -131,7 +153,7 @@ export type TraceEvent = {
   skipped?: boolean;
 };
 
-export const SIGNAL_KINDS = ["repeat_ngram", "fail_streak", "budget", "low_gain", "evidence_gap"] as const;
+export const SIGNAL_KINDS = ["repeat_ngram", "fail_streak", "budget", "low_gain", "evidence_gap", "repeat_visits"] as const;
 export type SignalKind = (typeof SIGNAL_KINDS)[number];
 
 /** Wall / LLM snapshot. Token fields are omitted until wrap scraped `usage`. */
@@ -181,6 +203,12 @@ export type StretchTrace = {
   /** Complete trace + grounded, non-empty result. Empty-but-ok is not success. */
   usable?: boolean;
   grounded?: boolean | "unknown";
+  /**
+   * True when llmCalls/duration_ms/cost_cents were reconstructed from event
+   * counts (trace imports) rather than measured. Gates may treat such numbers
+   * as directional only; the honest-savings ledger never reads them anyway.
+   */
+  metrics_estimated?: true;
 };
 
 export type Refusal = {

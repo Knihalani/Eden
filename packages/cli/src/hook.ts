@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, withFileLockAsync, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
-import { redact, isStretchEnd, inDistribution } from "@eden/ir";
+import { redact, isStretchEnd, inDistribution, protocolHeaders } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
 
 export type HookIn = {
@@ -28,15 +28,26 @@ export async function runHook(): Promise<void> {
   try {
     body = JSON.parse(raw || "{}") as HookIn;
   } catch {
-    body = {};
+    body = {}
   }
   // The last line of defence for "a broken Eden never blocks the agent". Any
   // throw in here — a stale lock, an unreadable home directory, a corrupt run
   // log — used to exit non-zero with empty stdout. `{}` is the answer that
   // lets the tool call proceed.
+  //
+  // The same defence against *hanging*: Claude Code waits on this process, so
+  // respondToHook is raced against a hard timeout. A wedged lock or a slow
+  // disk costs Eden its recording for one event; it never costs the agent its
+  // tool call.
+  const HOOK_TIMEOUT_MS = 2_500;
   let out: Record<string, unknown> = { ok: true };
   try {
-    out = await respondToHook(body);
+    out = await Promise.race([
+      respondToHook(body),
+      new Promise<Record<string, unknown>>((resolve) =>
+        setTimeout(() => resolve({ ok: true, eden_timeout: true }), HOOK_TIMEOUT_MS),
+      ),
+    ]);
   } catch (err) {
     process.stderr.write(`eden hook: ${(err as Error)?.message ?? String(err)}\n`);
     out = {};
@@ -55,8 +66,15 @@ export async function runHook(): Promise<void> {
  */
 export type HookLocker = <T>(lockPath: string, fn: () => T) => T | Promise<T>;
 
-function readJsonl(path: string): Array<Record<string, unknown>> {
-  if (!existsSync(path)) return [];
+function readConfigSafely(): { steer_hooks?: boolean } | null {
+  try {
+    return readConfig();
+  } catch {
+    return null;
+  }
+}
+
+function readJsonl(path: string): Array<Record<string, unknown>> {  if (!existsSync(path)) return [];
   return readFileSync(path, "utf8")
     .split("\n")
     .filter(Boolean)
@@ -101,7 +119,7 @@ function flushSession(session: string, events: Array<Record<string, unknown>>): 
   const flushedIds = events.map((e) => String(e.id ?? ""));
   void fetch(`${wrapPlaneUrl(cfg.base_url)}/v1/traces`, {
     method: "POST",
-    headers: { authorization: `Bearer ${cfg.api_key}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${cfg.api_key}`, "content-type": "application/json", ...protocolHeaders() },
     body: JSON.stringify({ id: crypto.randomUUID(), ...hookTraceBody(events) }),
   })
     .then((r) => {
@@ -259,8 +277,19 @@ export async function respondToHook(
   const live = (
     Array.isArray(liveRaw) ? liveRaw : []
   ) as Array<{ name: string; sequence?: string[]; envelope?: { inputs?: Record<string, unknown[]> } }>;
+  // Config is advisory here: a corrupt or half-written config.json must not
+  // stop the hook from answering (an answer of "allow" is always available).
+  const cfg = readConfigSafely();
   if (body.hook_event_name === "PreToolUse" && name) {
     if (live.some((t) => t.name === name)) return { ok: true };
+    // Steering a raw call to the MCP tool is opt-in (steer_hooks in config, or
+    // EDEN_STEER_HOOKS=1). Default is observe: Eden records the pattern but
+    // never denies the agent's own call — if the MCP server is down, mid-restart,
+    // or the compiled tool deopts, a deny here would leave the agent stranded
+    // with no way to do the work at all.
+    const steerHooks =
+      process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
+    if (!steerHooks) return { ok: true };
     const hits = live
       .filter((t) => (t.sequence ?? [])[0] === name)
       .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));

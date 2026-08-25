@@ -43,7 +43,15 @@ export class UnrecordedCall extends Error {
 }
 
 export function isUnrecordedCall(e: unknown): e is UnrecordedCall {
-  return e instanceof UnrecordedCall || (e as { name?: string })?.name === "UnrecordedCall";
+  // Walk the cause chain: the runtime wraps mid-run failures in DeoptError to
+  // carry completion state, and the original UnrecordedCall rides along as
+  // `cause` without losing its meaning.
+  let cur: unknown = e;
+  for (let depth = 0; cur != null && depth < 5; depth++) {
+    if (cur instanceof UnrecordedCall || (cur as { name?: string })?.name === "UnrecordedCall") return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 export type ReplayMiss = {

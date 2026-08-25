@@ -60,16 +60,38 @@ function splitUrl(url: string): { host: string; pathname: string } | null {
 }
 
 export function pathResource(pathname: string): string {
+  // Keep identifier-shaped segments visible during the walk: numbers, hashes,
+  // templated slots and capitalised slugs are exactly where REST paths pivot
+  // from scoping to the resource (`/repos/{owner}/{repo}/pulls/{id}/reviews`).
   const segs = pathname
     .split("/")
     .filter(Boolean)
     .filter((s) => {
-      if (s.startsWith("{") || s.startsWith("%7B") || s.startsWith("%7b")) return false;
-      if (/^\d+$/.test(s)) return false;
+      if (s.startsWith("%7B") || s.startsWith("%7b")) return false;
       if (SKIP_SEGS.has(s.toLowerCase())) return false;
       return true;
     });
-  const joined = segs
+  const isIdent = (s: string) =>
+    s.startsWith("{") ||
+    /^\d+$/.test(s) ||
+    /^[a-f0-9]{6,}$/i.test(s) ||
+    /^[A-Z][a-zA-Z0-9_]*$/.test(s) ||
+    // Prefixed entity ids: in_123, cus_8kQ2, order-8891 — a short type tag
+    // followed by digits is an identifier in essentially every SaaS API.
+    /^[a-z]{2,8}[-_]\d[\w-]*$/i.test(s);
+  let lastIdent = -1;
+  for (let i = 0; i < segs.length; i++) {
+    if (isIdent(segs[i]!)) lastIdent = i;
+  }
+  let picked: string[];
+  if (lastIdent >= 0 && lastIdent < segs.length - 1) {
+    picked = segs.slice(lastIdent + 1);
+  } else {
+    // No trailing resource after the last identifier — the identifier's
+    // *container* is the resource (/posts/1 → posts).
+    picked = lastIdent > 0 ? [segs[lastIdent - 1]!] : segs.slice(0, 1);
+  }
+  const joined = picked
     .slice(0, 2)
     .join("_")
     .replace(/[^a-zA-Z0-9_]+/g, "_")
@@ -81,18 +103,25 @@ export function toolNameFromUrls(urls: string[]): string | null {
   const usable = urls.filter(Boolean);
   if (!usable.length) return null;
   let host: string | null = null;
+  const seen = new Set<string>();
   const resources: string[] = [];
   for (const raw of usable) {
     const parts = splitUrl(parameterizeUrl(raw));
     if (!parts) continue;
     host = host || hostSlug(parts.host);
-    resources.push(pathResource(parts.pathname));
+    const r = pathResource(parts.pathname);
+    // A chain, not a shortest pick: an island that fetches pulls + reviews +
+    // status is named for everything it replaces, which is what makes the
+    // name say what the tool *does* without any vendor table.
+    if (!seen.has(r)) {
+      seen.add(r);
+      resources.push(r);
+    }
   }
   if (!resources.length) return null;
-  resources.sort((a, b) => a.length - b.length || a.localeCompare(b));
-  const path = resources[0]!;
+  const path = resources.join("_");
   const name = host && host !== "github" ? `${host}_${path}` : path;
-  return name.slice(0, 48) || null;
+  return name.slice(0, 48).replace(/^_|_$/g, "") || null;
 }
 
 function urlShape(url: string): string {

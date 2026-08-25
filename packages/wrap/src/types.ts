@@ -42,6 +42,13 @@ export type EdenOpts = {
   timeoutMs?: number;
   /** Operator override (43): after the first warning, further LLM/tool spend is refused. */
   killAfterWarning?: boolean;
+  /**
+   * Opt-in hard enforcement. Default (false) is strict fail-safe: Eden never
+   * refuses, blocks, or halts a call — guards record warnings and steer where
+   * safe, but the agent's own call always goes through. Setting this lets
+   * guards halt loops, cap spend, and refuse unverifiable writes.
+   */
+  enforce?: boolean;
 };
 
 export type RunRecorder = {
@@ -59,6 +66,8 @@ export type RunRecorder = {
   warnBudget?: SignalBudget;
   evidence?: EvidenceLedger;
   tripped?: boolean;
+  /** Executed (non-skipped) raw calls this run. Unconditional ceiling input. */
+  rawExecuted: number;
 };
 
 export function emptyRun(): RunRecorder {
@@ -72,6 +81,8 @@ export function emptyRun(): RunRecorder {
     measured: false,
     warnings: [],
     seenSignals: new Set(),
+    /** Executed (non-skipped) raw calls this run. Unconditional ceiling input. */
+    rawExecuted: 0,
   };
 }
 

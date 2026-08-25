@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { applyFlushTruncate, dropConsumedLines } from "./hook";
 import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, readJson, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
+import { protocolHeaders } from "@eden/ir";
 
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
@@ -56,7 +57,7 @@ export async function drain(): Promise<void> {
   const site = sitePlaneUrl(cfg?.base_url);
   const wrap = wrapPlaneUrl(cfg?.base_url);
   const key = resolveApiKey();
-  const headers = { Authorization: `Bearer ${key}`, "content-type": "application/json" };
+  const headers = { Authorization: `Bearer ${key}`, "content-type": "application/json", ...protocolHeaders() };
   const outbox = existsSync(outboxPath()) ? readFileSync(outboxPath(), "utf8") : "";
   const dropRuns = new Set<string>();
   const runsDir = `${edenHome()}/runs`;

@@ -59,6 +59,7 @@ function shape(step: Step): string {
   }
   if (step.kind === "island") return `island ${step.id}<-${bindingKind(step.input)}`;
   if (step.kind === "loop") return `loop ${step.id} over ${bindingKind(step.over)} body=${step.body.join("+")}`;
+  if (step.kind === "branch") return `branch ${step.expr} then=${step.then.join("+")} else=${(step.else ?? []).join("+")}`;
   return `assert ${step.expr} onFail=${step.onFail}`;
 }
 

@@ -115,21 +115,31 @@ describe("hook", () => {
     rmSync(home, { recursive: true, force: true });
   });
 
-  test("PreToolUse steers toward compiled MCP tool when live", async () => {
+  test("PreToolUse steers toward compiled MCP tool only when opted in", async () => {
     const home = join(import.meta.dir, "../../.tmp-eden-hook2");
     mkdirSync(home, { recursive: true });
     process.env.EDEN_HOME = home;
     writeFileSync(join(home, "live-tools.json"), JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"] }]));
-    const out = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
-    expect((out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe("deny");
-    writeFileSync(
-      join(home, "live-tools.json"),
-      JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"], envelope: { inputs: { id: ["T-100", "T-101", "T-102"] } } }]),
-    );
-    const ood = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-999" } });
-    expect((ood as { ok?: boolean }).ok).toBe(true);
-    const self = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "resolve_ticket", tool_input: { id: "T-100" } });
-    expect((self as { ok?: boolean }).ok).toBe(true);
+    // Default is observe: a matching call is allowed through untouched.
+    delete process.env.EDEN_STEER_HOOKS;
+    const observe = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
+    expect((observe as { ok?: boolean }).ok).toBe(true);
+    // Opt-in via env steers (denies the raw call in favour of the MCP tool).
+    process.env.EDEN_STEER_HOOKS = "1";
+    try {
+      const out = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-100" } });
+      expect((out as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe("deny");
+      writeFileSync(
+        join(home, "live-tools.json"),
+        JSON.stringify([{ name: "resolve_ticket", sequence: ["lookupTicket"], envelope: { inputs: { id: ["T-100", "T-101", "T-102"] } } }]),
+      );
+      const ood = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "lookupTicket", tool_input: { id: "T-999" } });
+      expect((ood as { ok?: boolean }).ok).toBe(true);
+      const self = await respondToHook({ hook_event_name: "PreToolUse", tool_name: "resolve_ticket", tool_input: { id: "T-100" } });
+      expect((self as { ok?: boolean }).ok).toBe(true);
+    } finally {
+      delete process.env.EDEN_STEER_HOOKS;
+    }
     rmSync(home, { recursive: true, force: true });
   });
 
