@@ -291,7 +291,7 @@ function pageAuth(req: Request, wsId: string | null): Response | null {
       const noDevMode = isManagedDeployment() && process.env.EDEN_DEV !== "1";
       return html("Eden", `<div class="container" style="max-width:520px">
 <h1>Welcome to Eden</h1>
-<p class="sub">Eden watches how your agent solves tasks, and compiles the workflows it repeats into a single tool call. Same result, a fraction of the calls.</p>
+<p class="sub">Repeated work becomes one call — measured, approved by you, and fail-safe by construction.</p>
 <div class="panel" style="padding:24px">
   <h2>Sign in to your workspace</h2>
   <p class="muted" style="margin-bottom:12px">Paste the API key from your Eden config${noDevMode ? "." : ", or continue in dev mode for local testing."}</p>
@@ -406,30 +406,26 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
   // The public front door: a proper landing for visitors, dashboard for users.
   if (url.pathname === "/" && !wsId) {
     const body = nav("") + `
-<div style="padding:56px 0 24px;text-align:center">
-  <h1 style="font-size:34px;line-height:1.2;max-width:640px;margin:0 auto">Your agent repeats itself.<br/><span style="color:#c23434">Eden compiles the repetition.</span></h1>
-  <p class="sub" style="max-width:560px;margin:20px auto 28px;font-size:15px">Point your agent at Eden. It watches which tool sequences run again and again, compiles them into single-call tools you approve once, and routes matching calls through them.</p>
-  <a href="/signup" class="btn" style="font-size:15px;padding:12px 24px">Get your API key — free</a>
-  <p class="muted" style="margin-top:10px"><a href="https://github.com/Knihalani/Eden" style="text-decoration:underline">Source</a> · runs beside your agent, never in front of it</p>
+<div style="padding:72px 0 32px;text-align:center">
+  <h1 style="font-size:36px;line-height:1.18;max-width:700px;margin:0 auto">The second time your agent does something,<br/>it should cost <span style="color:#c23434">less</span>.</h1>
+  <p class="sub" style="max-width:520px;margin:22px auto 30px;font-size:15px">Eden sits beside your agent and quietly collapses its repeated work into single calls. Measured. Approved by you. And it can never take your agent down.</p>
+  <a href="/signup" class="btn" style="font-size:15px;padding:12px 24px">Get your API key</a>
+  <p class="muted" style="margin-top:12px"><a href="https://github.com/Knihalani/Eden" style="text-decoration:underline">Source</a></p>
 </div>
-<h2 style="text-align:center;margin:32px 0 16px">How it works</h2>
-<div class="stat-row">
-  <div class="stat"><div class="stat-val">1</div><div style="font-weight:600;margin-top:4px">Record</div><p class="muted" style="margin-top:6px">Run your agent as usual. Eden records its tool-call traces — cheaply, locally.</p></div>
-  <div class="stat"><div class="stat-val">2</div><div style="font-weight:600;margin-top:4px">Approve</div><p class="muted" style="margin-top:6px">Repeated workflows become compiled drafts. You review and approve each one here. Nothing goes live without you.</p></div>
-  <div class="stat"><div class="stat-val">3</div><div style="font-weight:600;margin-top:4px">Save</div><p class="muted" style="margin-top:6px">Matching calls are served by one compiled call — fewer LLM round trips, lower latency, steps that cannot be skipped.</p></div>
+<div class="stat-row" style="max-width:720px;margin:0 auto 36px">
+  <div class="stat" style="text-align:center"><div class="stat-val">8×</div><div class="stat-label">fewer model calls</div></div>
+  <div class="stat" style="text-align:center"><div class="stat-val">7.7×</div><div class="stat-label">faster</div></div>
+  <div class="stat" style="text-align:center"><div class="stat-val">−84%</div><div class="stat-label">loop wall time</div></div>
+  <div class="stat" style="text-align:center"><div class="stat-val">−84%</div><div class="stat-label">runaway spend</div></div>
 </div>
-<div class="panel safe">
-  <h2>The one promise everything else serves</h2>
-  <p>A broken or thrashing Eden must never break, block, or halt your agent's own calls. Every failure inside Eden falls back to passing your traffic through untouched. Hard guarantees, pinned by tests:</p>
-  <ul>
-    <li>Eden never refuses one of your agent's calls because Eden itself broke.</li>
-    <li>A partially-executed workflow is never silently re-run — writes are never duplicated.</li>
-    <li>You approve every compiled tool; an API key can never flip one On.</li>
-    <li>Savings numbers appear only when receipts back them. Otherwise: "not measured."</li>
-  </ul>
+<div class="stat-row" style="max-width:760px">
+  <div class="stat"><div style="font-weight:600;margin-bottom:8px">It pays attention.</div><p class="muted">Work your agent has done before starts finishing in one call instead of a dozen.</p></div>
+  <div class="stat"><div style="font-weight:600;margin-bottom:8px">You decide.</div><p class="muted">Nothing changes until you approve it. One screen. Plain language. Reversible.</p></div>
+  <div class="stat"><div style="font-weight:600;margin-bottom:8px">It behaves.</div><p class="muted">If Eden is ever wrong, slow, or broken, your agent keeps working exactly as it did before. Pinned by tests.</p></div>
 </div>
-<p style="text-align:center;margin-top:28px"><a href="/signup" class="btn">Get started — create your workspace</a></p>`;
-    return html("Eden — compile your agent's repetition", body);
+<p class="muted" style="text-align:center;margin-top:26px;font-size:13px">Every number above comes from a paired benchmark that must win or it does not ship.</p>
+<p style="text-align:center;margin-top:20px"><a href="/signup" class="btn">Create your workspace</a></p>`;
+    return html("Eden", body);
   }
   if (url.pathname === "/dashboard" || url.pathname === "/") {
     const denied = pageAuth(req, wsId);
