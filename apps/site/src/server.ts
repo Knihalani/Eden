@@ -267,16 +267,36 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   const wsId = await workspaceForKey(d, req.headers.get("authorization"));
 
+/**
+ * Auth gate for HTML pages: a signed-out browser is sent to onboarding
+ * instead of a bare 401 body it cannot act on. API clients (no text/html in
+ * Accept, or non-GET) still get the machine-readable 401.
+ */
+function pageAuth(req: Request, wsId: string | null): Response | null {
+  if (wsId) return null;
+  const wantsHtml =
+    req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html");
+  if (!wantsHtml) return new Response("unauthorized", { status: 401 });
+  const url = new URL(req.url);
+  return new Response(null, {
+    status: 302,
+    headers: { location: `/onboarding?next=${encodeURIComponent(url.pathname)}` },
+  });
+}
+
   if (url.pathname === "/onboarding") {
     if (!wsId) {
+      // On a managed deployment there is no dev mode to continue into — the
+      // only door is a real API key. On a laptop, dev mode is the fastest path.
+      const noDevMode = isManagedDeployment() && process.env.EDEN_DEV !== "1";
       return html("Eden", `<div class="container" style="max-width:520px">
 <h1>Welcome to Eden</h1>
 <p class="sub">Eden watches how your agent solves tasks, and compiles the workflows it repeats into a single tool call. Same result, a fraction of the calls.</p>
 <div class="panel" style="padding:24px">
   <h2>Sign in to your workspace</h2>
-  <p class="muted" style="margin-bottom:12px">Paste the API key from your Eden config, or continue in dev mode for local testing.</p>
+  <p class="muted" style="margin-bottom:12px">Paste the API key from your Eden config${noDevMode ? "." : ", or continue in dev mode for local testing."}</p>
   <input type="text" id="apiKey" placeholder="EDEN_API_KEY=…" style="margin-bottom:12px"/>
-  <button class="btn" onclick="location.href='/onboarding?dev=1'">Continue in dev mode →</button>
+  ${noDevMode ? `<p class="muted">Running locally? Start <code>eden wrap</code> and open its dashboard instead.</p>` : `<button class="btn" onclick="location.href='/onboarding?dev=1'">Continue in dev mode →</button>`}
 </div></div>`);
     }
     const tc = Number((await d.get<{ c: number }>(`SELECT COUNT(DISTINCT run_id) as c FROM stretch WHERE workspace_id = ?`, [wsId]) ?? {c:0}).c);
@@ -330,7 +350,9 @@ export async function handleFetch(req: Request): Promise<Response> {
 
   // Trace import page — cold-start elimination via observability exports.
   if (url.pathname === "/import") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const denied = pageAuth(req, wsId);
+    if (denied) return denied;
+    if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
     const body = nav("Import") + `
 <h1>Import existing traces</h1>
 <p class="sub">Already have agent history in LangSmith, OpenTelemetry, or plain JSONL? Paste it below and Eden will mine it for repeatable workflows — no waiting for fresh runs.</p>
@@ -387,7 +409,9 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
     return new Response(null, { status: 302, headers: { location: "/onboarding" } });
   }
   if (url.pathname === "/dashboard" || url.pathname === "/") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const denied = pageAuth(req, wsId);
+    if (denied) return denied;
+    if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
     // Lifetime totals for the counters; the money line is genuinely
     // *this month* — filtered on created_at, which rows written before the
     // column existed do not have (they stay in the lifetime numbers only).
@@ -446,12 +470,14 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
     // evidence renders as "not measured" — the dashboard must not say more
     // than the receipts behind it do.
     const ledger = await buildLedger(d, wsId);
-    const recent = await d.all<{ name: string; steps_ok: number; steps_attempted: number; server_ms: number; created_at: number }>(
-      `SELECT t.name, r.steps_ok, r.steps_attempted, r.server_ms, r.created_at
+    const recent = wsId
+      ? await d.all<{ name: string; steps_ok: number; steps_attempted: number; server_ms: number; created_at: number }>(
+          `SELECT t.name, r.steps_ok, r.steps_attempted, r.server_ms, r.created_at
        FROM tool_run r JOIN tool t ON t.id = r.tool_id
        WHERE t.workspace_id = ? ORDER BY r.created_at DESC LIMIT 8`,
-      [wsId],
-    );
+          [wsId],
+        )
+      : [];
     const fmtWhen = (ts: number): string => {
       if (!ts) return "";
       const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -500,7 +526,9 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
   }
 
   if (url.pathname === "/workshop") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const denied = pageAuth(req, wsId);
+    if (denied) return denied;
+    if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
     const tools = await d.all<{ id: string; name: string; state: string; uses_count: number }>(
       `SELECT id, name, state, uses_count FROM tool WHERE workspace_id = ? ORDER BY CASE state WHEN 'draft' THEN 0 WHEN 'on' THEN 1 ELSE 2 END, name`,
       [wsId],
@@ -515,12 +543,21 @@ ${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">
 
   const ws = url.pathname.match(/^\/workshop\/([^/]+)$/);
   if (ws && req.method === "GET") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const denied = pageAuth(req, wsId);
+    if (denied) return denied;
+    if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
     const t = await d.get<{ id: string; name: string; when_to_use: string; state: string; steps: string; published?: number }>(
       `SELECT id, name, when_to_use, state, steps, published FROM tool WHERE id = ? AND workspace_id = ?`,
       [ws[1], wsId],
     );
-    if (!t) return new Response("not found", { status: 404 });
+    if (!t) {
+      return html(
+        "Eden — Not found",
+        nav("Approve") +
+          `<h1>Tool not found</h1><p class="sub">This tool does not exist in your workspace (it may have been removed, or the link is from another workspace).</p>
+           <p><a href="/workshop" class="btn secondary">Back to Approve →</a></p>`,
+      );
+    }
     const steps = jsonRows(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
     const list = steps.length
       ? `<h2 style="margin-top:20px">What it runs</h2><table class="activity">${steps
