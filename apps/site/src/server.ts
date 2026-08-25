@@ -1,4 +1,4 @@
-import { openDb, workspaceForKey, isManagedDeployment, type EdenDb } from "./db";
+import { openDb, workspaceForKey, isManagedDeployment, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
 import { handleMcp } from "./mcp";
 import { playTool } from "./playback";
@@ -296,7 +296,7 @@ function pageAuth(req: Request, wsId: string | null): Response | null {
   <h2>Sign in to your workspace</h2>
   <p class="muted" style="margin-bottom:12px">Paste the API key from your Eden config${noDevMode ? "." : ", or continue in dev mode for local testing."}</p>
   <input type="text" id="apiKey" placeholder="EDEN_API_KEY=…" style="margin-bottom:12px"/>
-  ${noDevMode ? `<p class="muted">Running locally? Start <code>eden wrap</code> and open its dashboard instead.</p>` : `<button class="btn" onclick="location.href='/onboarding?dev=1'">Continue in dev mode →</button>`}
+  ${noDevMode ? `<p class="muted" style="margin-bottom:12px">No key yet? <a href="/signup" style="text-decoration:underline">Create a workspace — it takes thirty seconds.</a></p><p class="muted">Running locally? Start <code>eden wrap</code> and open its dashboard instead.</p>` : `<button class="btn" onclick="location.href='/onboarding?dev=1'">Continue in dev mode →</button>`}
 </div></div>`);
     }
     const tc = Number((await d.get<{ c: number }>(`SELECT COUNT(DISTINCT run_id) as c FROM stretch WHERE workspace_id = ?`, [wsId]) ?? {c:0}).c);
@@ -403,10 +403,33 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
     return html("Import traces", nav("Import") + body);
   }
 
-  // The public front door: a visitor without credentials sees the landing
-  // and onboarding, never a bare 401. Authenticated users get the dashboard.
+  // The public front door: a proper landing for visitors, dashboard for users.
   if (url.pathname === "/" && !wsId) {
-    return new Response(null, { status: 302, headers: { location: "/onboarding" } });
+    const body = nav("") + `
+<div style="padding:56px 0 24px;text-align:center">
+  <h1 style="font-size:34px;line-height:1.2;max-width:640px;margin:0 auto">Your agent repeats itself.<br/><span style="color:#c23434">Eden compiles the repetition.</span></h1>
+  <p class="sub" style="max-width:560px;margin:20px auto 28px;font-size:15px">Point your agent at Eden. It watches which tool sequences run again and again, compiles them into single-call tools you approve once, and routes matching calls through them.</p>
+  <a href="/signup" class="btn" style="font-size:15px;padding:12px 24px">Get your API key — free</a>
+  <p class="muted" style="margin-top:10px"><a href="https://github.com/Knihalani/Eden" style="text-decoration:underline">Source</a> · runs beside your agent, never in front of it</p>
+</div>
+<h2 style="text-align:center;margin:32px 0 16px">How it works</h2>
+<div class="stat-row">
+  <div class="stat"><div class="stat-val">1</div><div style="font-weight:600;margin-top:4px">Record</div><p class="muted" style="margin-top:6px">Run your agent as usual. Eden records its tool-call traces — cheaply, locally.</p></div>
+  <div class="stat"><div class="stat-val">2</div><div style="font-weight:600;margin-top:4px">Approve</div><p class="muted" style="margin-top:6px">Repeated workflows become compiled drafts. You review and approve each one here. Nothing goes live without you.</p></div>
+  <div class="stat"><div class="stat-val">3</div><div style="font-weight:600;margin-top:4px">Save</div><p class="muted" style="margin-top:6px">Matching calls are served by one compiled call — fewer LLM round trips, lower latency, steps that cannot be skipped.</p></div>
+</div>
+<div class="panel safe">
+  <h2>The one promise everything else serves</h2>
+  <p>A broken or thrashing Eden must never break, block, or halt your agent's own calls. Every failure inside Eden falls back to passing your traffic through untouched. Hard guarantees, pinned by tests:</p>
+  <ul>
+    <li>Eden never refuses one of your agent's calls because Eden itself broke.</li>
+    <li>A partially-executed workflow is never silently re-run — writes are never duplicated.</li>
+    <li>You approve every compiled tool; an API key can never flip one On.</li>
+    <li>Savings numbers appear only when receipts back them. Otherwise: "not measured."</li>
+  </ul>
+</div>
+<p style="text-align:center;margin-top:28px"><a href="/signup" class="btn">Get started — create your workspace</a></p>`;
+    return html("Eden — compile your agent's repetition", body);
   }
   if (url.pathname === "/dashboard" || url.pathname === "/") {
     const denied = pageAuth(req, wsId);
@@ -581,6 +604,159 @@ ${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">
          <span class="badge ${t.state === "on" ? "ok" : "todo"}">${escapeHtml(t.state)}</span>
          ${list}${approve}`,
     );
+  }
+
+  // ── Self-serve signup: the door for actual users. ─────────────────────────
+  // A visitor can read every page, but until they hold an API key they cannot
+  // DO anything. This endpoint mints a workspace + key in one call, rate
+  // limited per IP so abuse costs bounded resources. The key is returned ONCE;
+  // only its sha256 is stored.
+  if (url.pathname === "/v1/signup" && req.method === "POST") {
+    const ip =
+      req.headers.get("x-real-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+    const RATE_LIMIT = 5;
+    const WINDOW_MS = 3_600_000;
+    await d.run(
+      `CREATE TABLE IF NOT EXISTS signup_rate (ip TEXT PRIMARY KEY, hits INTEGER, window_start BIGINT)`,
+      [],
+    );
+    const row = await d.get<{ hits: number; window_start: number }>(
+      `SELECT hits, window_start FROM signup_rate WHERE ip = ?`,
+      [ip],
+    );
+    const now = Date.now();
+    const hits = row && now - row.window_start < WINDOW_MS ? row.hits : 0;
+    if (hits >= RATE_LIMIT) {
+      return Response.json(
+        {
+          error:
+            "Too many workspaces created from this address this hour. Try again later, or run `eden wrap` locally — local use needs no key at all.",
+        },
+        { status: 429 },
+      );
+    }
+    if (row) {
+      await d.run(`UPDATE signup_rate SET hits = ? WHERE ip = ?`, [hits + 1, ip]);
+    } else {
+      await d.run(`INSERT INTO signup_rate (ip, hits, window_start) VALUES (?, ?, ?)`, [ip, 1, now]);
+    }
+
+    let name = "";
+    try {
+      const parsed = (await req.json()) as { name?: unknown };
+      if (typeof parsed?.name === "string") name = parsed.name.slice(0, 80);
+    } catch {
+      /* empty body is fine */
+    }
+    const wsId = `ws_${crypto.randomUUID().slice(0, 12)}`;
+    // WebCrypto has no randomBytes; getRandomValues is the portable form.
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const token = `eden_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+    await d.run(`INSERT INTO workspace (id, name) VALUES (?, ?)`, [
+      wsId,
+      name || `workspace-${wsId.slice(3, 9)}`,
+    ]);
+    await d.run(`INSERT INTO api_key (prefix, hash, workspace_id) VALUES (?, ?, ?)`, [
+      token.slice(0, 12),
+      hashApiKey(token),
+      wsId,
+    ]);
+    return Response.json({
+      api_key: token,
+      workspace_id: wsId,
+      base_url: origin,
+      note: "This key is shown once. Store it now.",
+    });
+  }
+
+  // Signup page.
+  if (url.pathname === "/signup" && req.method === "GET") {
+    const body = nav("") + `
+<h1>Get your API key</h1>
+<p class="sub">One workspace, one key, thirty seconds. No credit card, no email confirmation — the key below is your account.</p>
+<div class="panel" id="signupPanel">
+  <label for="wsName" style="display:block;margin-bottom:6px;font-weight:600">Workspace name <span class="muted">(optional)</span></label>
+  <input type="text" id="wsName" placeholder="my-agent-project" style="margin-bottom:14px;max-width:360px"/>
+  <button class="btn" id="signupBtn">Create my workspace</button>
+  <p id="signupErr" class="error-text" style="margin-top:10px"></p>
+</div>
+<div class="panel good hidden" id="donePanel">
+  <h2>✓ Your workspace is ready</h2>
+  <p class="muted" style="margin-bottom:10px">This key is shown <strong>once</strong>. Copy it somewhere safe now.</p>
+  <pre><code id="keyOut"></code><button class="copy" onclick="copyText(this.previousElementSibling)">Copy</button></pre>
+  <h2 style="margin-top:20px">Connect your agent</h2>
+  <p style="margin-bottom:6px">Install the CLI and log in:</p>
+  <pre><code>npm i -g eden
+eden login --url ${escapeHtml(origin)} --key &lt;your key&gt;
+eden wrap</code><button class="copy" onclick="copyText(this.previousElementSibling)">Copy</button></pre>
+  <p class="muted">Then point your agent's <code>OPENAI_BASE_URL</code> at the local proxy (<code>http://127.0.0.1:8788/v1</code>) and run it as usual. Full guide in <a href="/onboarding" style="text-decoration:underline">Setup</a>.</p>
+  <a href="/onboarding" class="btn secondary" style="margin-top:14px;display:inline-block">Open the setup guide →</a>
+</div>
+<script>
+document.getElementById("signupBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("signupBtn");
+  btn.disabled = true; btn.textContent = "Creating…";
+  document.getElementById("signupErr").textContent = "";
+  try {
+    const res = await fetch("/v1/signup", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ name: document.getElementById("wsName").value }) });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || "Signup failed");
+    document.getElementById("signupPanel").classList.add("hidden");
+    document.getElementById("donePanel").classList.remove("hidden");
+    document.getElementById("keyOut").textContent = j.api_key;
+  } catch (err) {
+    document.getElementById("signupErr").textContent = String(err.message || err);
+    btn.disabled = false; btn.textContent = "Create my workspace";
+  }
+});
+</script>`;
+    return html("Eden — Sign up", body);
+  }
+
+  // Trace intake for CLI clients (`eden import`, hook flush). Accepts one
+  // StretchTrace-shaped body or {traces:[...]}, adapts each event into this
+  // plane's ToolEvent model, and runs the same redact+ingest pipeline as
+  // /v1/ingest. Without this route, logging into the hosted deployment broke
+  // every client-side recorder with a 404.
+  if (url.pathname === "/v1/traces" && req.method === "POST") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const parsed = readJsonObject(await readJson(req));
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as {
+      id?: unknown;
+      complete?: unknown;
+      events?: unknown;
+      traces?: Array<Record<string, unknown>>;
+    };
+    const list: Array<Record<string, unknown>> = Array.isArray(body.traces) ? body.traces : [body as Record<string, unknown>];
+    let accepted = 0;
+    let batches = 0;
+    for (const t of list) {
+      if (!t || !Array.isArray(t.events) || !t.events.length) continue;
+      batches++;
+      const runId = typeof t.id === "string" && t.id ? t.id : crypto.randomUUID();
+      const evs: ToolEvent[] = t.events
+        .map((e: Record<string, unknown>, i: number): ToolEvent | null => {
+          if (!e || typeof e.name !== "string" || !e.name) return null;
+          return {
+            event_id: `${runId}-${i}`,
+            seq: typeof e.seq === "number" ? e.seq : i,
+            name: e.name,
+            args: redact((e.args ?? {}) as Record<string, unknown>) as Record<string, unknown>,
+            ...(e.result !== undefined ? { result: redact(e.result) } : {}),
+            ok: e.ok !== false,
+            ...(typeof e.duration_ms === "number" ? { duration_ms: e.duration_ms } : {}),
+            ...(typeof e.command === "string" ? { command: e.command } : {}),
+          };
+        })
+        .filter((e): e is ToolEvent => e !== null);
+      if (!evs.length) continue;
+      await ingest(d, wsId, runId, evs, Boolean(t.complete));
+      accepted++;
+    }
+    return Response.json({ ok: true, n: list.length, accepted }, { status: 202 });
   }
 
   if (url.pathname === "/v1/setup" && req.method === "POST") {
