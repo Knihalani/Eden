@@ -109,7 +109,7 @@ describe("signup", () => {
     );
     expect(land.status).toBe(200);
     const html = await land.text();
-    expect(html).toContain("Eden compiles the repetition");
+    expect(html).toContain("should cost");
     expect(html).toContain("/signup");
 
     const page = await handleFetch(
