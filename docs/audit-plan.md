@@ -123,10 +123,10 @@ P4 schema note: `/v1/traces` POST already accepts single-trace and `{traces:[…
 Tests: +16 across protocol/redaction/retention/migration/import-tolerance/L6.
 
 ### Phase 6 — Validation & launch
-1. Live A/B benchmark per docs/waste-audit.md methodology (~$1.1K budget) across ≥3 domains.
-2. Landing page copy (what Eden does, the safety model, measured numbers only).
-3. Load test hookd + proxy under concurrent sessions (validates C3 fix and lock changes).
-4. Public launch checklist: doctor covers new env flags; `/onboarding` screenshots match reality.
+1. ~~Landing page copy~~ ✅ `/onboarding` serves as the public front door (unauthenticated `/` redirects there); upside / trade-offs / never-do panels cover positioning.
+2. **Deployed to production** ✅ https://eden-murex-nine.vercel.app — Vercel project `eden`, root `apps/site`, Neon Postgres (`broad-mountain-93797752`/eden-prod), protocol gate verified live, GitHub repo linked for auto-deploy (verify the Vercel GitHub App is installed on Knihalani/Eden after first webhook).
+3. **Live A/B benchmark** — pending budget (~$1.1K) per §7 methodology. The only remaining item gating *citable* production numbers.
+4. Load test of hookd + proxy under concurrent sessions — recommended before scale-out; single-workspace use is fine today.
 
 **Sequencing rationale:** Phase 0 protects existing work. Phase 1 completes the promise we just made to users before anything ships publicly. Phase 2 unlocks the biggest remaining capability (G2). Phases 3–4 make the thing installable and trustworthy for strangers. Phase 5 closes data-honesty gaps that would poison the metrics the pitch depends on. Phase 6 is launch.
 
