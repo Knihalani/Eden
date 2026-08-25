@@ -44,6 +44,12 @@ export type RunOpts = {
    * 1 restores fully sequential execution. Defaults to DEFAULT_LOOP_CONCURRENCY.
    */
   loopConcurrency?: number;
+  /**
+   * Cancellation from an enclosing run. When a composed parent is aborted,
+   * the sub-program must abort with it — not keep executing to its own
+   * timeout while the parent has already given up.
+   */
+  signal?: AbortSignal;
 };
 
 function bindingDeps(b: Binding): string[] {
@@ -60,7 +66,7 @@ function stepDeps(step: Step): string[] {
 }
 
 function isBarrier(step: Step): boolean {
-  if (step.kind === "assert" || step.kind === "loop" || step.kind === "island") return true;
+  if (step.kind === "assert" || step.kind === "loop" || step.kind === "island" || step.kind === "branch") return true;
   if (step.kind === "tool") return isBarrierName(step.tool);
   return false;
 }
@@ -102,14 +108,33 @@ export function loopConcurrency(
   return Math.min(limit, itemCount);
 }
 
-async function withTimeout<T>(work: (signal: AbortSignal) => Promise<T>, timeoutMs?: number): Promise<T> {
+async function withTimeout<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  timeoutMs?: number,
+  external?: AbortSignal,
+): Promise<T> {
   const ac = new AbortController();
-  if (!timeoutMs || timeoutMs <= 0) return work(ac.signal);
+  // An externally-supplied signal (a parent composed run being cancelled)
+  // forwards into this run: cancelling the parent must cancel the child,
+  // not leave it executing to its own timeout.
+  const onExternalAbort = () => ac.abort();
+  if (external) {
+    if (external.aborted) ac.abort();
+    else external.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  if (!timeoutMs || timeoutMs <= 0) {
+    try {
+      return await work(ac.signal);
+    } finally {
+      external?.removeEventListener("abort", onExternalAbort);
+    }
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
   try {
     return await Promise.race([
       work(ac.signal).catch((err) => {
+        if (external?.aborted) throw new DeoptError("aborted");
         if (timedOut || ac.signal.aborted) throw new DeoptError(`timeout ${timeoutMs}ms`);
         throw err;
       }),
@@ -124,6 +149,7 @@ async function withTimeout<T>(work: (signal: AbortSignal) => Promise<T>, timeout
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+    external?.removeEventListener("abort", onExternalAbort);
   }
 }
 
@@ -143,7 +169,14 @@ export async function runProgram(
   const scope: BindScope = { input, results };
   const byId = new Map(program.steps.map((s) => [s.id, s]));
   const bodyOwned = new Set<string>();
-  for (const s of program.steps) if (s.kind === "loop") for (const id of s.body) bodyOwned.add(id);
+  for (const s of program.steps) {
+    if (s.kind === "loop") for (const id of s.body) bodyOwned.add(id);
+    // Branch arms are owned by their branch: they never run at top level.
+    if (s.kind === "branch") {
+      for (const id of s.then) bodyOwned.add(id);
+      for (const id of s.else ?? []) bodyOwned.add(id);
+    }
+  }
   /**
    * "The result of the step before this one", which a bare-path assert reads.
    *
@@ -203,6 +236,33 @@ export async function runProgram(
       }
       scope.results.set(step.id, true);
       return true;
+    }
+    if (step.kind === "branch") {
+      // Same expression grammar asserts use; truthy selects the then-arm.
+      const cond = evalAssert(step.expr, last.value, input, scope.results);
+      const armIds: string[] = cond ? step.then : step.else ?? [];
+      // Arms execute sequentially against their own last-box so an assert
+      // inside an arm reads the arm's own previous step, not whatever raced
+      // by outside.
+      const armLast: { value: unknown } = { value: last.value };
+      const armTools: string[] = [];
+      for (const id of armIds) {
+        const owned = byId.get(id);
+        if (!owned) throw new DeoptError(`branch ${step.id} references missing step ${id}`);
+        await execStep(owned, signal, scope, true, armLast);
+        if (owned.kind === "tool") {
+          // execStep already counted the call before issuing it; counting
+          // again here made every deopt near a branch report ~2× stepsRun,
+          // skewing replay-safety boundaries and receipts.
+          armTools.push(owned.tool);
+        }
+      }
+      const armValue = armLast.value;
+      scope.results.set(step.id, armValue);
+      if (touchLast) last.value = armValue;
+      // Program-order accounting, matching what a linear run would report.
+      stats.toolCalls.push(...armTools);
+      return armValue;
     }
     const items = asArray(evalBinding(step.over, scope));
     const body = step.body.map((id) => {
@@ -332,7 +392,7 @@ export async function runProgram(
   };
 
   try {
-    return await withTimeout(runBody, opts.timeoutMs);
+    return await withTimeout(runBody, opts.timeoutMs, opts.signal);
   } catch (err) {
     stats.ms = performance.now() - t0;
     if (err instanceof DeoptError) {
@@ -345,10 +405,34 @@ export async function runProgram(
       err.ms = stats.ms;
       err.llmCalls = stats.llmCalls;
       err.cents = stats.cents;
+      // Which steps COMPLETED (returned), not just which were entered —
+      // suppressed siblings must re-run anything absent from this list.
+      err.toolCalls = [...stats.toolCalls];
       stats.stepsRun = toolCallsIssued;
       stats.early = toolCallsIssued === 0;
       throw err;
     }
-    throw err;
+    // Any other failure escaping the body — a binding bug, an evalArgs throw,
+    // anything we did not anticipate — carries the SAME obligation: the caller
+    // and any suppressed siblings must know exactly how far the run got.
+    // Leaving these as plain Errors made their touched-ness unknowable, which
+    // forced every downstream fallback into guessing.
+    const wrapped = new DeoptError(
+      `step failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    // Preserve the original so semantic classifiers (e.g. shadow's
+    // UnrecordedCall, meaning "this trace cannot validate the program")
+    // can still recognise what actually happened through the cause chain.
+    (wrapped as { cause?: unknown }).cause = err;
+    wrapped.stepsRun = toolCallsIssued;
+    wrapped.ms = stats.ms;
+    wrapped.llmCalls = stats.llmCalls;
+    wrapped.cents = stats.cents;
+    wrapped.toolCalls = [...stats.toolCalls];
+    stats.deopt = true;
+    stats.deoptReason = wrapped.reason;
+    stats.stepsRun = toolCallsIssued;
+    stats.early = toolCallsIssued === 0;
+    throw wrapped;
   }
 }

@@ -88,6 +88,55 @@ describe("write steps survive mining", () => {
     expect(cleanEvents([read("fetchUserDetails", 0), read("fetchUserDetails", 1)])).toHaveLength(1);
   });
 
+  test("an interleaved read repeat does not collapse (W1)", () => {
+    // get_issue, list_comments, get_issue: only *adjacent* identical reads
+    // are double-recording. The last get_issue may legitimately see a
+    // different world than the first — collapsing it would compile a tool
+    // that under-reports.
+    const read = (name: string, seq: number): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name,
+      args: { issue: "12" },
+      ok: true,
+    });
+    expect(cleanEvents([read("get_issue", 0), read("list_comments", 1), read("get_issue", 2)])).toHaveLength(3);
+  });
+
+  test("byte-identical mutating generic-shell repeats do not collapse (probe HIGH-1)", () => {
+    // Non-curl/gh binaries used to fail OPEN (treated as reads), so identical
+    // repeats of destructive commands collapsed into one — the exact
+    // double-recording under-execution the mutation rule exists to prevent.
+    const mk = (command: string, seq: number): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name: "Bash",
+      args: { command },
+      command,
+      ok: true,
+    });
+    expect(cleanEvents([mk("terraform destroy -auto-approve", 0), mk("terraform destroy -auto-approve", 1)])).toHaveLength(2);
+    expect(cleanEvents([mk('psql -c "INSERT INTO ledger(amount) VALUES (100)"', 0), mk('psql -c "INSERT INTO ledger(amount) VALUES (100)"', 1)])).toHaveLength(2);
+    expect(cleanEvents([mk("docker stop web", 0), mk("docker stop web", 1)])).toHaveLength(2);
+    // Reads still collapse.
+    expect(cleanEvents([mk("kubectl get pods -n prod", 0), mk("kubectl get pods -n prod", 1)])).toHaveLength(1);
+  });
+
+  test("same args in a different key order do not collapse (W1)", () => {
+    // Comparison is structural-adjacent via JSON text; differing key order
+    // stays two events. Conservative on purpose: collapsing a call whose
+    // arguments merely serialized differently risks under-execution, while
+    // keeping it costs one extra mining candidate.
+    const mk = (seq: number, flip: boolean): ToolEvent => ({
+      event_id: `e${seq}`,
+      seq,
+      name: "get_issue",
+      args: flip ? { issue: "12", team: "eng" } : { team: "eng", issue: "12" },
+      ok: true,
+    });
+    expect(cleanEvents([mk(0, false), mk(1, true)])).toHaveLength(2);
+  });
+
   test("byte-identical mutating-compound names survive as two", () => {
     // nameIsRead used to test READ_VERB anywhere in the name after camelCase
     // word-breaking, so a mutating compound whose head or object contained a

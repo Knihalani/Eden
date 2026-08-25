@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Binding, IslandCaller, ProgramDiff, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
-import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, hashStretch, liveTimeSavedMs, diffPrograms } from "@eden/ir";
+import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, hashStretch, liveTimeSavedMs, diffPrograms, redact } from "@eden/ir";
 import { isDeopt, isReplaySafe, runProgram } from "@eden/runtime";
 import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, type WrapState } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
@@ -529,12 +529,27 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     const list = Array.isArray((body as { traces?: StretchTrace[] }).traces)
       ? (body as { traces: StretchTrace[] }).traces
       : [body as StretchTrace];
+    // Redact credential-shaped values at the boundary. Clients vary — the
+    // CLI redacts before posting, SDKs may not — so the plane itself is the
+    // guarantee that secrets never persist.
+    const cleanList = list.map((t) =>
+      t && Array.isArray(t.events)
+        ? {
+            ...t,
+            events: t.events.map((e) => ({
+              ...e,
+              ...(e.args !== undefined ? { args: redact(e.args) as Record<string, unknown> } : {}),
+              ...(e.result !== undefined ? { result: redact(e.result) } : {}),
+            })),
+          }
+        : t,
+    );
     return ctx.store.enqueue(async () => {
       let accepted = 0;
       let duplicates = 0;
       const usage = ctx.wrapState ? peekChatUsage(ctx.wrapState) : null;
       let consumed = false;
-      for (const t of list) {
+      for (const t of cleanList) {
         if (!t || !Array.isArray(t.events) || !t.events.length) continue;
         const sealed = !consumed ? attachChatUsage(t, usage) : t;
         if (ctx.store.putTrace(sealed)) {

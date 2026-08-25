@@ -158,6 +158,7 @@ async function playOne(
   db: EdenDb,
   tool: ToolRef,
   params: Record<string, string>,
+  opts: { dryRun?: boolean } = {},
 ): Promise<Receipt> {
   const t0 = Date.now();
   let steps: CompiledStep[];
@@ -234,6 +235,12 @@ async function playOne(
         const bound = resolveBound(step, params, results);
         const url = resolveTemplate(step.url || "", bound, results);
         if (!url) return { id: step.id, value: { error: "no_url" }, fail: true };
+        // Dry-run (G9): mutating steps report what they WOULD call and touch
+        // nothing. Reads still execute, so the rehearsal exercises the real
+        // data flow — templates, binds, cache — without performing writes.
+        if (opts.dryRun && !stepIsReadOnly(step)) {
+          return { id: step.id, value: { skipped: "dry_run", method: step.method || "GET", url }, fail: false };
+        }
         const isGet = (step.method || "GET") === "GET";
         const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
         if (isGet) {
@@ -285,6 +292,7 @@ async function playOne(
   const server_ms = Date.now() - t0;
   const receipt: Receipt = {
     ok: failed === undefined,
+    ...(opts.dryRun ? { dryRun: true } : {}),
     steps_ok: ok,
     steps_attempted: attempted,
     server_ms,
@@ -320,7 +328,11 @@ async function playOne(
       Date.now(),
     ],
   );
-  await db.run(`UPDATE tool SET uses_count = uses_count + 1 WHERE id = ?`, [tool.id]);
+  // Rehearsals are not usage: counting them inflated the dashboard's uses
+  // and the savings ledger described work that never executed.
+  if (!opts.dryRun) {
+    await db.run(`UPDATE tool SET uses_count = uses_count + 1 WHERE id = ?`, [tool.id]);
+  }
   // tool_run is the lifetime ledger the dashboard sums, so its rows are never
   // deleted — but the receipt JSON they carry is only read for recent runs.
   // Sampled sweep nulls receipts older than 90 days, keeping the totals
@@ -357,9 +369,10 @@ export async function playTool(
   db: EdenDb,
   tool: ToolRef,
   params: Record<string, string>,
+  opts: { dryRun?: boolean } = {},
 ): Promise<Receipt> {
   try {
-    return await playOne0(db, tool, params);
+    return await playOne0(db, tool, params, opts);
   } catch (err) {
     const deopt = asDeopt(err);
     if (deopt) {
@@ -382,6 +395,7 @@ async function playOne0(
   db: EdenDb,
   tool: ToolRef,
   params: Record<string, string>,
+  opts: { dryRun?: boolean } = {},
 ): Promise<Receipt> {
   const issues = issuesFromParams(params);
   if (issues.length <= 1) {
@@ -389,14 +403,14 @@ async function playOne0(
       ...params,
       issue: issues[0] || params.issue || params.pr || params.number || params.id || "",
       id: issues[0] || params.id || params.issue || params.pr || params.number || "",
-    });
+    }, opts);
   }
   const t0 = Date.now();
   // Bounded, not trusted: see MAX_BATCH_ISSUES. The cap is silent by design —
   // the receipt reports what it actually played.
   const batch = issues.slice(0, MAX_BATCH_ISSUES);
   const receipts = await Promise.all(
-    batch.map((issue) => playOne(db, tool, { ...params, issue, id: issue, number: issue })),
+    batch.map((issue) => playOne(db, tool, { ...params, issue, id: issue, number: issue }, opts)),
   );
   // `batch[i]` is index-parallel to `receipts` by construction (receipts came
   // from batch.map), so the fallback never fires; it is there to satisfy the
@@ -405,6 +419,7 @@ async function playOne0(
   const rows = receipts.flatMap((r, i) => (r.rows?.length ? r.rows : prRowsFromFacts(r.facts, [batch[i] ?? ""])));
   return {
     ok: receipts.every((r) => r.ok),
+    ...(opts.dryRun ? { dryRun: true } : {}),
     steps_ok: receipts.reduce((a, r) => a + r.steps_ok, 0),
     steps_attempted: receipts.reduce((a, r) => a + r.steps_attempted, 0),
     server_ms: Date.now() - t0,
@@ -460,6 +475,10 @@ export async function warmWorkspaceBundle(
     if (!steps.some((s) => s.url && /\{(id|issue|run_id)\}/.test(s.url))) continue;
     // workspace_id rides along so the run's cache keys are tenant-scoped from
     // the start instead of costing a tool-row lookup per playOne.
-    await playTool(db, { ...tool, workspace_id: workspaceId }, { issues: csv, ids: csv, origin });
+    // Warming is cache pre-fill: reads only, by force. Without dryRun this
+    // replayed a write-performing tool's POSTs unattended — on every MCP
+    // handshake — which is exactly the "side effect fired while nobody is
+    // watching" the prefetch gate exists to prevent.
+    await playTool(db, { ...tool, workspace_id: workspaceId }, { issues: csv, ids: csv, origin }, { dryRun: true });
   }
 }

@@ -56,9 +56,10 @@ export function compiledToolMs(t: StretchTrace, toolCalls: string[]): number | n
  * inventing a second agent run.
  */
 export function compiledTokens(t: StretchTrace, compiledLlm: number, hasIsland: boolean): number | null {
+  void hasIsland; // kept for signature stability; see tokensExtrapolated
   const naive = traceTokens(t);
   if (naive == null) return null;
-  if (!hasIsland || compiledLlm <= 0) return 0;
+  if (compiledLlm <= 0) return 0;
   if (!(t.llmCalls > 0)) return null;
   return naive * (compiledLlm / t.llmCalls);
 }
@@ -68,9 +69,13 @@ export function compiledTokens(t: StretchTrace, compiledLlm: number, hasIsland: 
  * usage. Callers must say so: the ship gate treats estimated numbers as
  * absent, because "honest numbers or absent" does not have an "honest-ish"
  * tier.
+ *
+ * Keyed on compiledLlm alone, not hasIsland: a program with no DIRECT island
+ * step can still burn provider tokens through composed sub-programs, and the
+ * old hasIsland-only check let such runs report a measured-looking ZERO.
  */
-export function tokensExtrapolated(compiledLlm: number, hasIsland: boolean): boolean {
-  return hasIsland && compiledLlm > 0;
+export function tokensExtrapolated(compiledLlm: number, _hasIsland: boolean): boolean {
+  return compiledLlm > 0;
 }
 
 function nthEvent(events: TraceEvent[], name: string, n: number): number {

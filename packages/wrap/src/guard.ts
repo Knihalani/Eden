@@ -1,4 +1,4 @@
-import { evidenceLedger, isCheckName, isStretchEnd } from "@eden/ir";
+import { evidenceLedger, isCheckName, isReadName, isStretchEnd, latestRepeatStalled } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
 import type { EdenOpts, RunRecorder } from "./types";
 
@@ -48,6 +48,22 @@ export function killAfterWarningEnabled(opts: EdenOpts): boolean {
   return process.env.EDEN_KILL_AFTER_WARNING === "1";
 }
 
+/**
+ * Is hard enforcement on?
+ *
+ * Default is NO — and this default is the product's prime directive: a broken
+ * or thrashing Eden must never refuse, block, or halt the agent's own call.
+ * Guards still observe (warnings are recorded, surfaced on the dashboard, and
+ * honoured by steering that has a verified fallback), they just never stop
+ * traffic. Operators who want hard caps opt in with `enforce: true` or
+ * EDEN_ENFORCE=1, accepting that a guard can refuse a call in exchange for
+ * bounded spend.
+ */
+export function enforcementEnabled(opts: EdenOpts): boolean {
+  if (opts.enforce != null) return opts.enforce;
+  return process.env.EDEN_ENFORCE === "1";
+}
+
 /** Cheap mid-run halt / steer. No extra LLM. */
 export function decideGuard(args: {
   name: string;
@@ -65,9 +81,22 @@ export function decideGuard(args: {
   }
   const loop = [...run.warnings].reverse().find((w) => w.kind === "repeat_ngram" && w.ngram && new Set(w.ngram).size >= 2);
   if (loop?.ngram && loop.ngram.includes(name)) {
-    const hit = matchingProgram(live, (p) => hasNgram(p.sequence, loop.ngram!));
-    if (hit) return { action: "steer", program: hit, reason: "loop" };
-    return { action: "halt", reason: "loop" };
+    // An all-read loop is never hard-stopped. The halt lands on the *next*
+    // loop call, which for a poller is exactly the observation that would
+    // have shown progress — CI flips to success, and the agent is killed
+    // one call before seeing it. Reads are cheap and side-effect-free; the
+    // asymmetry runs entirely the wrong way. They keep accumulating
+    // repeat_ngram / low_gain warnings (visible on traces, honoured by
+    // killAfterWarning and the budget guard), they just don't get executed
+    // into a dead stop. Loops touching a mutating or unknown-name tool stay
+    // subject to the hard stop: repeating writes is both expensive and
+    // dangerous.
+    const allReads = loop.ngram.every((n) => isReadName(n));
+    if (!allReads && latestRepeatStalled(run.events, loop.ngram)) {
+      const hit = matchingProgram(live, (p) => hasNgram(p.sequence, loop.ngram!));
+      if (hit) return { action: "steer", program: hit, reason: "loop" };
+      return { action: "halt", reason: "loop" };
+    }
   }
   if (isStretchEnd(name)) {
     const required = requiredChecks(live, [...run.events, { name }]);

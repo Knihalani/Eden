@@ -83,6 +83,13 @@ function pickFacts(value: unknown, depth = 0, t: Truncation = { depth: false, sa
     else if (isPlainObject(v) && depth < 2) {
       const nested = pickFacts(v, depth + 1, t);
       if (nested && typeof nested === "object" && Object.keys(nested as object).length) out[k] = nested;
+    } else if (isPlainObject(v)) {
+      // Dropped for depth. This used to fall off the end of the chain
+      // silently: the key vanished from the facts and `truncated` stayed
+      // false, so the agent read a projection missing whole subtrees and had
+      // no way to know. Information the model cannot see must say so —
+      // same honesty rule as sampled arrays and long strings.
+      t.depth = true;
     }
   }
   return out;

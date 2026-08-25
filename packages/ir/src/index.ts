@@ -10,3 +10,4 @@ export * from "./signals";
 export * from "./ground";
 export * from "./confirm";
 export * from "./diff";
+export * from "./protocol";

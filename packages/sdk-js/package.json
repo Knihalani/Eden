@@ -1,6 +1,19 @@
 {
   "name": "@eden/sdk",
   "version": "0.1.0",
+  "description": "Eden JS SDK: wrap tool calls so repeated agent workflows route onto compiled tools, falling back to your originals on any failure.",
   "type": "module",
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "llm",
+    "tool-calling",
+    "mcp"
+  ],
+  "license": "MIT"
 }

@@ -32,6 +32,10 @@ export async function wrapCmd(args: string[]): Promise<void> {
   const token = resolveApiKey(args);
   const upstream = process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL;
   const registry = wrapRegistry(args);
+  // A laptop registry executes runner steps (Bash/cwd/fs), so locally a
+  // pure-CLI stretch — kubectl, aws, psql — may compile. Hosted MCP keeps
+  // the cloud-only default because it cannot play runner steps.
+  process.env.EDEN_RUNNER_ISLANDS = "1";
   const fetchHandler = createHandler({
     store,
     token,

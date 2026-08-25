@@ -23,6 +23,7 @@ export async function playCli(args: string[]): Promise<void> {
   const issuesIdx = args.indexOf("--issues");
   const idsIdx = args.indexOf("--ids");
   const issueIdx = args.indexOf("--issue");
+  const dryRun = args.includes("--dry-run");
   const issues =
     idsIdx >= 0 ? args[idsIdx + 1] : issuesIdx >= 0 ? args[issuesIdx + 1] : issueIdx >= 0 ? args[issueIdx + 1] : args[1];
   const cfg = readConfig();
@@ -31,7 +32,7 @@ export async function playCli(args: string[]): Promise<void> {
   const res = await fetch(`${base}/v1/play`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ name, issues, ids: issues, issue: String(issues || "").split(/[,\s]+/)[0] }),
+    body: JSON.stringify({ name, issues, ids: issues, issue: String(issues || "").split(/[,\s]+/)[0], dryRun }),
   });
   const json = (await res.json()) as {
     table?: string;

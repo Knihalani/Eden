@@ -21,3 +21,6 @@ jobs:
       # hardcoded list had drifted to a third of the suite, omitting every
       # package under active development.
       - run: bun run test
+      # The published CLI is a single-file bundle; a workspace dep or Bun API
+      # that stops bundling must fail CI, not the first user's `npm i`.
+      - run: bash scripts/build-cli.sh

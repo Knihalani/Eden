@@ -7,6 +7,7 @@ export type ToolEvent = {
   seq: number;
   name: string;
   args: Record<string, unknown>;
+  result?: unknown;
   ok: boolean;
   duration_ms?: number;
   command?: string;
@@ -22,6 +23,13 @@ export type IslandStep = {
   commute: boolean;
   rewrite_host?: string;
   source_url?: string;
+  /**
+   * Raw command for shell-derived steps. Kept so cutIslands can run
+   * variation-driven slot abstraction across an island's peers (see
+   * abstractShellGroup) — a single command cannot know which of its words
+   * are data, but its siblings voting on the same positions can.
+   */
+  command?: string;
 };
 
 export type CompiledStep = {
@@ -52,4 +60,6 @@ export type Receipt = {
   table?: string;
   rows?: TypedPrRow[];
   failed_step?: number;
+  /** True when mutating steps were rehearsed, not executed (G9 dry-run). */
+  dryRun?: boolean;
 };

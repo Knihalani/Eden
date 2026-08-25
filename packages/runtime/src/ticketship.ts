@@ -167,21 +167,25 @@ export async function runNaive(
   world: TicketShipWorld,
   id: string,
   opts: { skipVerifyP?: number; seed?: number } = {},
-): Promise<{ output: unknown; stats: TicketShipStats; events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean }> }> {
+): Promise<{ output: unknown; stats: TicketShipStats; events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean; duration_ms?: number }> }> {
   const skipP = opts.skipVerifyP ?? SKIP_VERIFY_P;
   const rng = mulberry32(opts.seed ?? 1);
   const t0 = performance.now();
   const tools: string[] = [];
   const skipped: string[] = [];
-  const events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean }> = [];
+  const events: Array<{ name: string; args: Record<string, unknown>; result: unknown; ok: boolean; duration_ms?: number }> = [];
   let llmCalls = 0;
 
   const call = async (name: TicketToolName, args: Record<string, unknown>) => {
     await world.mockLlm();
     llmCalls++;
+    const c0 = performance.now();
     const result = await world.tools[name].execute(args);
     tools.push(name);
-    events.push({ name, args, result, ok: true });
+    // Real per-call wall clock. The shadow gates treat a trace without event
+    // durations as time-unmeasured ("do not mix clocks"), so a fixture that
+    // wants to prove latency savings has to carry them.
+    events.push({ name, args, result, ok: true, duration_ms: performance.now() - c0 });
     return result as Record<string, unknown>;
   };
 

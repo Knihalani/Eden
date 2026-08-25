@@ -286,6 +286,11 @@ const CURL_BODY_FLAG =
  * identical sibling so that two charges compiled down to one.
  */
 export function isMutatingCurl(command: string): boolean {
+  // Method-override headers smuggle a verb past -X: `-H "X-HTTP-Method-Override:
+  // DELETE"` reads as a GET everywhere else, and dedupe would then merge a
+  // real DELETE against an identical GET sibling. Scan header values too.
+  const override = command.match(/X-(?:HTTP-)?Method-(?:Override|Verb)\s*:\s*"?([A-Za-z]+)/i);
+  if (override) return new RegExp(`^(?:${WRITE_VERB})$`, "i").test(override[1]!);
   const m = command.match(new RegExp(String.raw`(?:^|\s)-{1,2}(?:request|X)[=\s]*([A-Za-z]+)`, "i"));
   if (m) return new RegExp(`^(?:${WRITE_VERB})$`, "i").test(m[1]!);
   // No explicit verb: curl sends GET unless a body is attached, which makes it

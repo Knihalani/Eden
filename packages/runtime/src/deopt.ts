@@ -17,6 +17,13 @@ export class DeoptError extends Error {
   ms = 0;
   llmCalls = 0;
   cents = 0;
+  /**
+   * Tool steps that COMPLETED before the failure (a step counts only once it
+   * returned). Sibling calls suppressed against this run read this to decide
+   * whether their work was already done: absent from the list means nobody
+   * performed it and the raw call must still run.
+   */
+  toolCalls: string[] = [];
 
   constructor(readonly reason: string) {
     super(`deopt: ${reason}`);

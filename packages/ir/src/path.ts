@@ -113,3 +113,22 @@ export function interpolate(expr: string, value: unknown): string {
     return v == null ? "" : typeof v === "string" ? v : JSON.stringify(v);
   });
 }
+
+/**
+ * Slot-only interpolation for templates embedded in structured data.
+ *
+ * Unlike interpolate(), which matches any `{…}` pattern, this only replaces
+ * `{path}` where `path` resolves to a defined value in the record. Literal
+ * braces (JSON objects, shell expansions) pass through untouched — so a
+ * template binding on a JSON body works: `{"text":"Status: {status}"}`
+ * resolves `{status}` while preserving the surrounding JSON structure.
+ *
+ * Dotted paths (`{db.host}`) walk nested records via getPath.
+ */
+export function interpolateSlots(expr: string, value: unknown): string {
+  return expr.replace(/\{([\w.]+)\}/g, (match, path: string) => {
+    const v = getPath(value, path);
+    if (v === undefined || v === null) return match; // preserve unresolvable slots
+    return typeof v === "string" ? v : JSON.stringify(v);
+  });
+}

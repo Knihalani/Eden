@@ -21,7 +21,11 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-DEFAULT_BASE_URL = "http://127.0.0.1:8787"
+# The wrap plane (`eden wrap`) defaults to 8788; 8787 is the dashboard.
+DEFAULT_BASE_URL = "http://127.0.0.1:8788"
+
+#: Wire-protocol version; must match the server's X-Eden-Version gate.
+EDEN_PROTOCOL_VERSION = 1
 DEFAULT_API_KEY = "eden_dev"
 DEFAULT_TIMEOUT_SECONDS = 5.0
 
@@ -74,7 +78,7 @@ class EdenClient:
         """POST/GET one JSON exchange. Raises :class:`EdenError` on failure."""
         url = f"{self.base_url}{path}"
         data = None
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "X-Eden-Version": str(EDEN_PROTOCOL_VERSION)}
         if payload is not None:
             data = json.dumps(payload).encode()
             headers["content-type"] = "application/json"

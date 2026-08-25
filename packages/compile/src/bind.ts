@@ -1,5 +1,5 @@
 import type { Binding, StretchTrace, TraceEvent } from "@eden/ir";
-import { canonicalize, containsRedaction, eq, flatten, interpolate, isWeakValue } from "@eden/ir";
+import { canonicalize, containsRedaction, eq, flatten, interpolateSlots, isWeakValue } from "@eden/ir";
 export { isCheckName, isIslandName, isMutating } from "@eden/ir";
 
 type Producer = { kind: "input"; path: string } | { kind: "from"; step: string; path: string };
@@ -91,11 +91,89 @@ function inputRecord(flat: Map<string, unknown>): Record<string, unknown> {
   return Object.fromEntries([...flat].filter(([k]) => k));
 }
 
+/**
+ * Multi-slot whitespace-token template inference.
+ *
+ * Every witness must tokenize to the same width (skeleton clustering
+ * guarantees this for shell steps); each varying token position resolves to
+ * ONE record key whose value equals that witness's token. All slots must
+ * resolve against the SAME source record — the binding interpolates from a
+ * single `of` — and the finished template must reproduce every witness
+ * verbatim before it is trusted.
+ */
+function tryTokenTemplate(
+  strs: string[],
+  inputFlats: Map<string, unknown>[],
+  priorFlats: Array<Array<{ id: string; flat: Map<string, unknown>; result: unknown }>>,
+): Binding | null {
+  if (!strs.every((v) => typeof v === "string")) return null;
+  const rows = strs.map((s) => (s as string).split(/\s+/));
+  const w = rows[0]!.length;
+  if (w < 2 || !rows.every((r) => r.length === w)) return null;
+
+  type Source = { kind: "input" } | { kind: "from"; id: string };
+  const sources: Source[] = [{ kind: "input" }];
+  for (const step of priorFlats[0] ?? []) sources.push({ kind: "from", id: step.id });
+
+  const recordFor = (source: Source, j: number): Record<string, unknown> | undefined => {
+    if (source.kind === "input") return inputRecord(inputFlats[j]!);
+    const step = priorFlats[j]?.find((p) => p.id === source.id);
+    const r = step?.result;
+    return r && typeof r === "object" && !Array.isArray(r) ? (r as Record<string, unknown>) : undefined;
+  };
+
+  for (const source of sources) {
+    const recs = rows.map((_, j) => recordFor(source, j));
+    if (recs.some((r) => !r)) continue;
+    const exprTokens = rows[0]!.slice();
+    let slots = 0;
+    let resolved = true;
+    for (let i = 0; i < w && resolved; i++) {
+      const col = rows.map((r) => r[i]!);
+      if (col.every((t) => t === col[0]!)) continue;
+      // Numbers and booleans are legitimate slot sources: interpolate()
+      // stringifies them exactly, so --replicas 3 binds {replicas} just like
+      // a string would. The old string-only filter refused stretches whose
+      // varying parameter was witnessed as a number.
+      const keys = new Set<string>();
+      for (const r of recs)
+        for (const [k, v] of Object.entries(r!))
+          if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") keys.add(k);
+      let hit: string | null = null;
+      for (const k of keys) {
+        if (rows.every((r, j) => String(recs[j]![k]) === col[j])) {
+          hit = k;
+          break;
+        }
+      }
+      if (!hit) {
+        resolved = false;
+        break;
+      }
+      exprTokens[i] = `{${hit}}`;
+      slots++;
+    }
+    if (!resolved || !slots) continue;
+    const expr = exprTokens.join(" ");
+    if (!rows.every((_, j) => interpolateSlots(expr, recs[j]!) === strs[j])) continue;
+    return source.kind === "input"
+      ? { kind: "transform", fn: "template", expr, of: { kind: "input", path: "" } }
+      : { kind: "transform", fn: "template", expr, of: { kind: "from", step: source.id, path: "" } };
+  }
+  return null;
+}
+
 function tryTemplate(
   values: unknown[],
   inputFlats: Map<string, unknown>[],
   priorFlats: Array<Array<{ id: string; flat: Map<string, unknown>; result: unknown }>>,
 ): Binding | null {
+  // Multi-slot token template first: commands whose varying parts span more
+  // than one value (`kubectl logs {app} -n {namespace}`) are unreachable by
+  // the single-value substitution below. Token alignment is guaranteed for
+  // skeleton-clustered shell steps and harmless to attempt otherwise.
+  const tokenAttempt = tryTokenTemplate(values as string[], inputFlats, priorFlats);
+  if (tokenAttempt) return tokenAttempt;
   if (!values.every((v) => typeof v === "string")) return null;
   const strs = values as string[];
   const base = strs[0]!;
@@ -105,7 +183,7 @@ function tryTemplate(
   for (const [path, v] of ranked) {
     const expr = base.split(v as string).join(`{${path}}`);
     if (expr === base || !expr.includes("{")) continue;
-    const ok = strs.every((s, j) => interpolate(expr, inputRecord(inputFlats[j]!)) === s);
+    const ok = strs.every((s, j) => interpolateSlots(expr, inputRecord(inputFlats[j]!)) === s);
     if (ok) return { kind: "transform", fn: "template", expr, of: { kind: "input", path: "" } };
   }
   const priorHits = [...(priorFlats[0] ?? [])].flatMap((step) =>
@@ -119,7 +197,12 @@ function tryTemplate(
     const ok = strs.every((s, j) => {
       const src = priorFlats[j]!.find((p) => p.id === step.id);
       if (!src) return false;
-      return interpolate(expr, src.result) === s;
+      // Verify with the SAME renderer the runtime executes (interpolateSlots).
+      // The old interpolate() also expanded ${…} and emptied unresolvable
+      // {…} tokens, so a command containing literal shell expansions verified
+      // here but executed at runtime with those tokens left raw — the
+      // compiled tool ran a command that was never witnessed.
+      return interpolateSlots(expr, src.result) === s;
     });
     if (ok) return { kind: "transform", fn: "template", expr, of: { kind: "from", step: step.id, path: "" } };
   }

@@ -1,15 +1,30 @@
 {
-  "name": "@eden/cli",
+  "name": "eden",
   "version": "0.1.0",
+  "description": "Compiles repeated agent tool-call patterns into single-call tools. Domain-general, fail-safe, measured.",
   "type": "module",
   "bin": {
-    "eden": "./src/cli.ts"
+    "eden": "./dist/eden.js"
   },
-  "dependencies": {
-    "@eden/ir": "workspace:*",
-    "@eden/core": "workspace:*",
-    "@eden/wrap": "workspace:*",
-    "@eden/control": "workspace:*",
-    "@eden/shadow": "workspace:*"
-  }
+  "files": [
+    "dist/eden.js",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bash ../../scripts/build-cli.sh",
+    "prepublishOnly": "bun run build"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "llm",
+    "tool-calling",
+    "claude",
+    "openai",
+    "mcp"
+  ],
+  "license": "MIT"
 }

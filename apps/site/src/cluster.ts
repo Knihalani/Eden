@@ -10,6 +10,8 @@ import {
   mergeConstantFlip,
   parameterizeUrl,
   requiredK,
+  templateKeys,
+  toolNameFromUrls,
   type ToolEvent,
 } from "@eden/core";
 
@@ -102,7 +104,32 @@ export async function ingest(
     command: r.command || undefined,
     ok: Number(r.ok) === 1,
   }));
-  const islands = cutIslands(parsed);
+  // Prior ingests' shell commands vote on slot variation: the first run of
+  // `kubectl logs api -n dev` has no peers, but its stored command lets the
+  // second run (`logs web`) abstract both onto one skeleton — which is what
+  // makes their fingerprints merge instead of forking per pod name.
+  const priorShell = await db.all<{ steps: string }>(
+    `SELECT steps FROM stretch WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 200`,
+    [workspaceId],
+  );
+  const peerCommands: string[] = [];
+  for (const r of priorShell) {
+    const arr = parseJson(r.steps, [] as unknown[]);
+    if (!Array.isArray(arr)) continue;
+    for (const s of arr) {
+      if (s && typeof s === "object" && typeof (s as { command?: unknown }).command === "string") {
+        peerCommands.push((s as { command: string }).command);
+      }
+    }
+  }
+  const islands = cutIslands(parsed, {
+    // Laptop registries execute runner steps (Bash/cwd/fs), so a local wrap
+    // may compile pure-CLI stretches — kubectl/aws/psql loops. The hosted
+    // MCP cannot play them ("runner_unbound"), so cloud-only stays the
+    // default there.
+    allowRunnerOnly: process.env.EDEN_RUNNER_ISLANDS === "1",
+    peerCommands,
+  });
   let drafts = 0;
   for (const [island_index, steps] of islands.entries()) {
     const fp = fingerprintIsland(steps);
@@ -154,7 +181,13 @@ export async function ingest(
     const count = Number(after?.count ?? (existing?.count || 0) + 1);
     if (count === 1) {
       const compiled = stepsToCompiled(storedSteps);
-      const base = heuristicName(storedSteps);
+      // Named from the *enriched* compiled steps, not the raw island: two
+      // observations of one routine that happen to carry different endpoint
+      // subsets (a PR loop with files, one without) canonicalise to the same
+      // compiled steps here, so they must land on the same tool name and the
+      // second observation updates the first instead of forking it.
+      const base =
+        toolNameFromUrls(compiled.map((s) => s.url || "").filter(Boolean)) || heuristicName(storedSteps);
       if (!isCompilableToolName(base)) continue;
       const prior = await db.get<{ id: string; steps: string }>(
         `SELECT id, steps FROM tool WHERE workspace_id = ? AND (name = ? OR name LIKE ?) LIMIT 1`,
@@ -173,7 +206,7 @@ export async function ingest(
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ? AND state = 'draft'`, [
           JSON.stringify(next),
           JSON.stringify(storedSteps.map((s) => s.name)),
-          whenToUse(base),
+          whenToUseFor(base, compiled.map((s) => s.url || "")),
           prior.id,
         ]);
         await maybeAutoOn(db, workspaceId, prior.id, compiled);
@@ -191,7 +224,7 @@ export async function ingest(
             id,
             workspaceId,
             name,
-            whenToUse(name),
+            whenToUseFor(name, compiled.map((s) => s.url || "")),
             JSON.stringify(compiled),
             JSON.stringify(storedSteps.map((s) => s.name)),
             fp,
@@ -230,7 +263,7 @@ export async function ingest(
         await db.run(`UPDATE tool SET steps = ?, seen = ?, when_to_use = ? WHERE id = ? AND state = 'draft'`, [
           JSON.stringify(compiled),
           JSON.stringify(storedSteps.map((s) => s.name)),
-          whenToUse(heuristicName(storedSteps)),
+          whenToUseFor(heuristicName(storedSteps), storedSteps.map((s) => s.source_url || "")),
           tool.id,
         ]);
         await maybeAutoOn(db, workspaceId, tool.id, compiled);
@@ -300,6 +333,21 @@ function whenToUse(name: string): string {
   return `ids csv → JSON rows from ${label}. Prefer this over repeating the same curl/CLI loop.`;
 }
 
+/**
+ * Domain-general hint built from what the stretch actually fetched: the
+ * resource chain plus its template parameters. Vendor bundles keep their
+ * hand-tuned copy; everything else gets a description naming the parameters
+ * it accepts, which is what a model needs to connect the tool to the loop
+ * it was about to write.
+ */
+function whenToUseFor(name: string, urls: string[]): string {
+  if (name.startsWith("github_")) return whenToUse(name);
+  const keys = templateKeys(urls).filter((k) => k !== "origin");
+  if (!keys.length) return `Replaces a repeated multi-step routine with one call (${name}).`;
+  const plural = keys.map((k) => `${k}s`).join("/");
+  return `${name}: pass ${plural} (csv) → compact JSON rows, one call instead of the per-id loop.`;
+}
+
 async function maybeAutoOn(
   db: EdenDb,
   workspaceId: string,
@@ -336,7 +384,16 @@ function stepsToCompiled(steps: ReturnType<typeof cutIslands>[number]) {
       command: s.cli_family,
     });
   }
-  if (heuristicName(steps).startsWith("github_pr")) ensurePrBundleSteps(compiled);
+  // PR-bundle enrichment keys off what the island actually fetched, not a
+  // name prefix: names are now domain-general resource chains
+  // (pulls_reviews_status), and the same enrichment should one day serve
+  // other vendors' expandable bundles.
+  if (
+    steps.some((s) => /\/pulls\/\d+/.test(s.source_url || "")) &&
+    steps.some((s) => /\/(reviews|files|commits)/.test(s.source_url || ""))
+  ) {
+    ensurePrBundleSteps(compiled);
+  }
   compiled.sort((a, b) => rankPlaybackUrl(a.url || "") - rankPlaybackUrl(b.url || ""));
   compiled.forEach((step, i) => {
     step.id = `s${i + 1}`;

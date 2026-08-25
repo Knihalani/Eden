@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { Store } from "./store";
 import { createHandler } from "./server";
 import { registryFrom } from "@eden/runtime";
+import { replayRegistry } from "@eden/shadow";
 import { createTicketShip, runNaive, underdeterminedSiblingTraces, WITNESS_IDS } from "../../../packages/runtime/src/ticketship";
 import type { StretchTrace } from "@eden/ir";
 
@@ -33,24 +34,33 @@ const fetchHandler = createHandler({
   store,
   token,
   registry: registryFrom(world.tools),
+  // Shadowing replays a candidate once per held-out trace to decide whether
+  // it should ship. The replay sandbox answers every call from the trace's
+  // own recording, so a write-performing stretch validates without performing
+  // its writes — same wiring as `eden wrap`.
+  sandboxFor: (t) => replayRegistry(registryFrom(world.tools), t),
   island: world.island,
 });
 
 async function naiveTraces(n: number): Promise<StretchTrace[]> {
+  const llmMs = Number(process.env.LLM_MS || 25);
   const out: StretchTrace[] = [];
   for (let i = 0; i < n; i++) {
     const id = WITNESS_IDS[i % WITNESS_IDS.length]!;
-    const run = await runNaive(createTicketShip({ llmMs: 0 }), id, {
+    const run = await runNaive(createTicketShip({ llmMs }), id, {
       skipVerifyP: i % 5 === 0 ? 1 : 0,
       seed: 7 + i,
     });
+    // duration_ms is the real wall clock of this run (the synthetic
+    // `200 * llmCalls` spelling used to be rejected by the ship gate as an
+    // estimate wearing measurement's clothes — correctly).
     out.push({
       id: `demo-${i}`,
       events: run.events,
       input: { id },
       output: run.output,
       llmCalls: run.stats.llmCalls,
-      duration_ms: 200 * run.stats.llmCalls,
+      duration_ms: run.stats.duration_ms,
       cost_cents: run.stats.cost_cents,
       skipped: run.stats.skipped,
       complete: run.stats.complete,
@@ -84,7 +94,7 @@ const server = Bun.serve({ port: PORT, hostname: "127.0.0.1", fetch: fetchHandle
 await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces }) }));
 await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
 
-const inbox = (await (await fetchHandler(new Request(new URL("/v1/inbox", server.url).href))).json()) as { candidates: InboxCand[] };
+const inbox = (await (await fetchHandler(auth("/v1/inbox"))).json()) as { candidates: InboxCand[] };
 const pass = inbox.candidates.find((c) => c.verdict === "PASS" && c.program);
 
 let shipped: { name?: string; id?: string } | null = null;
@@ -104,7 +114,7 @@ const oodBody = runOod ? ((await runOod.json()) as { error?: string; reason?: st
 
 await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces: underdeterminedSiblingTraces(3) }) }));
 await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
-const after = (await (await fetchHandler(new Request(new URL("/v1/inbox", server.url).href))).json()) as { candidates: InboxCand[] };
+const after = (await (await fetchHandler(auth("/v1/inbox"))).json()) as { candidates: InboxCand[] };
 const refused = after.candidates.find((c) => c.refusal);
 
 const savings = (await (await fetchHandler(auth("/v1/savings"))).json()) as {

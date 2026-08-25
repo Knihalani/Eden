@@ -3,6 +3,7 @@ import {
   evidenceLedger,
   firstWarningIndex,
   inDistribution,
+  isReadName,
   judgeGrounding,
   postWarningSpend,
   redact,
@@ -11,19 +12,32 @@ import {
   usableTrace,
   hashStretch,
   liveTimeSavedMs,
+  protocolHeaders,
 } from "@eden/ir";
 import { DeoptError, isDeopt, isReplaySafe, registryFrom, runProgram } from "@eden/runtime";
+import { MAX_RUN_STEPS } from "@eden/ir";
 import { asToolDef, emptyRun, type EdenOpts, type Receipt, type RunRecorder, type ToolDef, type ToolsIn } from "./types";
 import { extractInput } from "./steer";
 import type { StretchTrace, TraceEvent } from "@eden/ir";
 import { resetUsage } from "./usage";
-import { decideGuard, requiredChecks } from "./guard";
+import { decideGuard, enforcementEnabled, requiredChecks } from "./guard";
 
 const MAX_TRACES = 2000;
 const PULL_EVERY = 24;
 const MAX_OUTBOX = 64;
 const MAX_POST_TRIES = 5;
 const MAX_WARNINGS = 32;
+
+/**
+ * Executed-call ceiling for one wrap run (see ir MAX_RUN_STEPS rationale).
+ * Counted on real executions only — steered skips do not spend, so they do
+ * not consume the budget.
+ */
+export function maxRunSteps(): number {
+  const env = Number(process.env.EDEN_MAX_STEPS);
+  if (Number.isFinite(env) && env > 0) return Math.min(10_000, Math.max(10, Math.floor(env)));
+  return MAX_RUN_STEPS;
+}
 
 export type WrapState = {
   opts: EdenOpts;
@@ -85,6 +99,17 @@ type Armed = {
   armedAt: number;
   armedAtCall: number;
   callBudget: number;
+  /**
+   * Resolves true when the head's compiled run SUCCEEDED, false when it
+   * failed. Parallel siblings wait on this before claiming their share of the
+   * tail: claiming first and learning later is how a suppressed call's work
+   * got lost forever when the head failed mid-flight (C3).
+   */
+  settled: Promise<boolean>;
+  resolveSettled: (ok: boolean) => void;
+  /** The head's failure, when settled === false — siblings read it to decide
+   * whether their step was already performed by the compiled run. */
+  headErr?: unknown;
 };
 
 /**
@@ -180,6 +205,12 @@ function shouldRetryStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+/** Bounded control-plane calls: a hung plane must cost telemetry, not requests. */
+function controlTimeoutMs(): number {
+  const env = Number(process.env.EDEN_CONTROL_TIMEOUT_MS);
+  return Number.isFinite(env) && env > 0 ? Math.min(120_000, env) : 10_000;
+}
+
 async function sendPost(state: WrapState, path: string, body: unknown): Promise<boolean> {
   const base = state.opts.baseUrl;
   const key = wrapAuth(state);
@@ -188,8 +219,9 @@ async function sendPost(state: WrapState, path: string, body: unknown): Promise<
   try {
     const r = await fn(`${base.replace(/\/$/, "")}${path}`, {
       method: "POST",
-      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json", ...protocolHeaders() },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(controlTimeoutMs()),
     });
     return r.ok || !shouldRetryStatus(r.status);
   } catch {
@@ -247,7 +279,10 @@ export async function pullLive(state: WrapState): Promise<void> {
   if (!base || !key) return;
   const fn = state.opts.fetch ?? fetch;
   try {
-    const r = await fn(`${base.replace(/\/$/, "")}/v1/tools`, { headers: { authorization: `Bearer ${key}` } });
+    const r = await fn(`${base.replace(/\/$/, "")}/v1/tools`, {
+      headers: { authorization: `Bearer ${key}`, ...protocolHeaders() },
+      signal: AbortSignal.timeout(controlTimeoutMs()),
+    });
     if (!r.ok) return;
     const j = (await r.json()) as { tools?: Array<{ program: StretchProgram; state: string }> };
     const rows = j.tools ?? [];
@@ -455,11 +490,19 @@ function emitTrace(
       events = mine;
     }
     buildAndSendTrace(state, run, events, input);
-  } catch {
+   } catch {
     /* observing a call must never fail it */
   } finally {
+    // A window with NO loop-family warning means the agent did varied,
+    // non-repeating work — that is what earns a fresh ceiling. Windows that
+    // carry repeat warnings keep accumulating toward the executed-call cap
+    // across flushes, or a 12-event flush cadence would reset the ceiling
+    // mid-thrash forever.
+    const hadLoopWarning =
+      run.warnings.some((w) => w.kind === "repeat_ngram" || w.kind === "repeat_visits") || false;
     if (!owner) run.events = [];
     if (consumed) {
+      if (!hadLoopWarning) run.rawExecuted = 0;
       run.warnings = [];
       run.seenSignals.clear();
       run.firstWarningAt = undefined;
@@ -545,6 +588,11 @@ function noteSignals(state: WrapState, run: ReturnType<typeof emptyRun>): void {
 }
 
 function pauseLiveFor(state: WrapState, toolName: string): void {
+  // Enforcement-only action. Pausing mutates which programs run and POSTs
+  // control-plane state — in observe mode the guards are witnesses, not
+  // actors: they record the fail_streak and surface it, they don't reach
+  // into the agent's toolset.
+  if (!enforcementEnabled(state.opts)) return;
   for (const p of state.programs) {
     if (!p.manifest || state.pausedIds.has(p.id)) continue;
     if (!(p.sequence ?? []).includes(toolName)) continue;
@@ -571,11 +619,27 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
         return await runCompiled(state, p, args, tools, registry);
       } catch (err) {
         if (state.opts.failOpen === false) throw err;
-        if (!isDeopt(err)) throw err;
-        if (!isEarlyDeopt(err)) return { eden: "deopt", reason: (err as Error).message };
+        // Same fallback policy as the prefix-steer path — one engine, one
+        // promise. A plain Error has UNKNOWN touched-ness (it may have thrown
+        // after earlier steps ran), so only an all-reads stretch replays raw.
+        // Everything else returns the structured deopt the agent can read and
+        // recover from; a validation bug or registry gap never becomes the
+        // call's result.
         const first = (p.sequence ?? [])[0];
-        if (!first || !(first in tools)) throw err;
-        return asToolDef(first, tools[first]!).execute(args);
+        const canReplay = replayableProgram(p) && !!first && first in tools;
+        if (!isDeopt(err)) {
+          return canReplay
+            ? asToolDef(first!, tools[first!]!).execute(args)
+            : { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
+        }
+        if (!isEarlyDeopt(err) && !replayableProgram(p)) {
+          return { eden: "deopt", reason: (err as Error).message };
+        }
+        if (canReplay) return asToolDef(first!, tools[first!]!).execute(args);
+        // No raw counterpart exists for this compiled name. Nothing proved
+        // touched (or it is all reads), but there is nothing to fall back to:
+        // hand back a structured result rather than a thrown error.
+        return { eden: "deopt", reason: (err as Error).message };
       }
     },
   };
@@ -583,6 +647,29 @@ function compiledDef(state: WrapState, p: StretchProgram, tools: ToolsIn, regist
 
 function liveOf(state: WrapState): StretchProgram[] {
   return state.programs.filter((p) => p.manifest && !state.pausedIds.has(p.id));
+}
+
+/**
+ * Run an Eden-side computation, degrading to `fallback` if it throws.
+ *
+ * This is the mechanical form of the prime directive: nothing Eden computes
+ * about a call — matching, envelopes, arming, guards, telemetry — is allowed
+ * to make the call itself fail. A corrupt program, a bad envelope shape, a bug
+ * in our own bookkeeping: the agent's tool call still executes exactly as if
+ * Eden were absent.
+ */
+function safely<T>(fn: () => T, fallback: T, onErr?: (err: unknown) => void): T {
+  try {
+    return fn();
+  } catch (err) {
+    onErr?.(err);
+    return fallback;
+  }
+}
+
+/** Can this stretch be re-run raw after a partial compiled attempt without duplicating side effects? */
+function replayableProgram(p: StretchProgram): boolean {
+  return (p.sequence ?? []).every((n) => isReadName(n));
 }
 
 /**
@@ -660,10 +747,23 @@ export function wrapTools<T extends ToolsIn>(
         };
         const owner = { id: selfId, startedAt, invocations };
 
-        const prefixHits = live
-          .filter((p) => (p.sequence ?? [])[0] === name)
-          .map((p) => ({ p, input: extractInput(p, args) }))
-          .filter(({ p, input }) => inDistribution(p, input));
+        // Telemetry must never be the thing that fails a call: these are the
+        // only Eden entry points that run on EVERY raw invocation.
+        const safeNote = (): void => safely(() => noteSignals(state, run), undefined);
+        const safeEmit = (input: Record<string, unknown> | undefined): void =>
+          safely(() => emitTrace(state, run, input, owner), undefined);
+
+        // Everything between here and the raw execute is Eden's own
+        // bookkeeping, each piece wrapped so its failure degrades to
+        // "no opinion" rather than a failed call (see safely()).
+        const prefixHits = safely(
+          () =>
+            live
+              .filter((p) => (p.sequence ?? [])[0] === name)
+              .map((p) => ({ p, input: extractInput(p, args) }))
+              .filter(({ p, input }) => inDistribution(p, input)),
+          [],
+        );
         if (prefixHits.length > 1) {
           prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
         }
@@ -671,6 +771,8 @@ export function wrapTools<T extends ToolsIn>(
         const armTail = (program: StretchProgram, input: Record<string, unknown>): { key: string; armed: Armed } => {
           const key = `${program.id}#${++skipSeq}`;
           const rest = restCounts(program);
+          let resolveSettled!: (ok: boolean) => void;
+          const settled = new Promise<boolean>((r) => (resolveSettled = r));
           const armed: Armed = {
             rest,
             input,
@@ -678,6 +780,8 @@ export function wrapTools<T extends ToolsIn>(
             armedAt: performance.now(),
             armedAtCall: calls,
             callBudget: totalRest(rest) + ARM_SLACK_CALLS,
+            settled,
+            resolveSettled,
           };
           skipRest.set(key, armed);
           evictArmings(skipRest, calls);
@@ -689,8 +793,13 @@ export function wrapTools<T extends ToolsIn>(
           // map was still empty — so a sibling call naming a later step of the
           // same stretch sailed past the skip check and executed for real,
           // duplicating whatever the compiled leg was in the middle of doing.
-          if (run.events.length) emitTrace(state, run, run.events[0]?.args, owner);
-          const { key: armKey, armed } = armTail(hit.p, hit.input);
+          if (run.events.length) safeEmit(run.events[0]?.args);
+          const pair = safely(() => armTail(hit.p, hit.input), null);
+          if (!pair) {
+            // Corrupt program defeated arming; treat as no opinion and let the
+            // raw call run below.
+          } else {
+          const { key: armKey, armed } = pair;
           try {
             const value = await runCompiled(state, hit.p, hit.input, tools, registry);
             // Re-stamp now the run has actually finished. The TTL was started
@@ -702,84 +811,216 @@ export function wrapTools<T extends ToolsIn>(
             // above; only the clock starts late.
             armed.armedAt = performance.now();
             armed.armedAtCall = calls;
+            // Wake any parallel siblings that were waiting on this outcome.
+            try {
+              armed.resolveSettled(true);
+            } catch { /* deferred already gone */ }
             // Flush after the steered tail is absorbed so skipped names land
             // on this stretch instead of leaking into the next ticket.
-            if (!armed.rest.size) emitTrace(state, run, hit.input, owner);
+            if (!armed.rest.size) safeEmit(hit.input);
             return value;
           } catch (err) {
             // Only this invocation's arming. The previous code deleted every
             // arming for the program, so one failed run for input B disarmed a
             // successful run for input A and let A's raw tail execute a second
             // time.
+            armed.headErr = err;
+            try {
+              armed.resolveSettled(false);
+            } catch { /* deferred already gone */ }
             skipRest.delete(armKey);
             if (state.opts.failOpen === false) throw err;
-            if (!isDeopt(err)) throw err;
-            if (!isEarlyDeopt(err)) {
-              void pullLive(state);
-              return { eden: "deopt", reason: (err as Error).message };
-            }
             void pullLive(state);
+            // Fall back to raw whenever replay provably duplicates nothing:
+            // a deopt that issued no tool calls, or an all-reads stretch. A
+            // plain Error has UNKNOWN touched-ness — it may have thrown after
+            // earlier steps ran — so only all-reads stretches replay it.
+            // Everything else returns the structured deopt: re-running raw
+            // could repeat a write, and a structured result is one the agent
+            // can read and recover from. Eden chose to run this stretch, so
+            // an Eden-side failure may never become the call's result.
+            const touched = isDeopt(err) && !isEarlyDeopt(err);
+            const unknownState = !isDeopt(err);
+            if ((touched || unknownState) && !replayableProgram(hit.p)) {
+              return { eden: "deopt", reason: err instanceof Error ? err.message : String(err) };
+            }
+          }
           }
         }
 
         const now = performance.now();
-        for (const [id, armed] of skipRest) {
-          if (armExpired(armed, now, calls)) {
+        // Per-entry isolation: one corrupt arming degrades to "no opinion" for
+        // itself without taking down the scan or the call.
+        let steeredSkip = false;
+        let structuredDeopt: string | null = null;
+        for (const [id, armed] of [...skipRest]) {
+          if (safely(() => armExpired(armed, now, calls), false)) {
             skipRest.delete(id);
             continue;
           }
-          const remaining = armed.rest.get(name);
+          const remaining = safely(() => armed.rest.get(name), 0);
           if (!remaining) continue;
-          const liveP = live.find((p) => p.id === armed.programId);
-          const cur = liveP ? extractInput(liveP, args) : args;
-          if (!eq(cur, armed.input)) continue;
-          // Decrement rather than delete: a sequence may call the same tool
-          // more than once, and the compiled program performed each of those.
-          // Treating the tail as a Set swallowed only the first raw repeat and
-          // let every later one execute again.
-          if (remaining > 1) armed.rest.set(name, remaining - 1);
-          else armed.rest.delete(name);
-          run.events.push(
-            tagEvent({
-              name,
-              args: {},
-              ok: true,
-              skipped: true,
-              duration_ms: 0,
-            }),
-          );
-          noteSignals(state, run);
-          if (!armed.rest.size) {
-            skipRest.delete(id);
-            emitTrace(state, run, armed.input, owner);
+          const inputMatches = safely(() => {
+            const liveP = live.find((p) => p.id === armed.programId);
+            const cur = liveP ? extractInput(liveP, args) : args;
+            return eq(cur, armed.input);
+          }, false);
+          if (!inputMatches) continue;
+          // The head's compiled run is doing this call's work. Wait for its
+          // outcome before claiming anything — claiming first and learning
+          // later is how a suppressed sibling's work was lost forever when the
+          // head failed mid-flight. Bounded by the wrap timeout so a hung head
+          // degrades to raw execution, never an eternal wait.
+          const ok = await Promise.race([
+            armed.settled,
+            new Promise<boolean>((r) => setTimeout(() => r(false), wrapTimeoutMs(state.opts.timeoutMs))),
+          ]);
+          if (ok) {
+            // Head succeeded; the compiled run performed this step. Re-verify
+            // the entry still holds work to claim (a concurrent sibling may
+            // have taken the last unit while we waited).
+            const stillThere = safely(() => skipRest.get(id) === armed && !!armed.rest.get(name), false);
+            if (!stillThere) continue;
+            safely(() => {
+              // Decrement rather than delete: a sequence may call the same tool
+              // more than once, and the compiled program performed each of those.
+              // Treating the tail as a Set swallowed only the first raw repeat and
+              // let every later one execute again.
+              const left = armed.rest.get(name)!;
+              if (left > 1) armed.rest.set(name, left - 1);
+              else armed.rest.delete(name);
+              run.events.push(
+                tagEvent({
+                  name,
+                  args: {},
+                  ok: true,
+                  skipped: true,
+                  duration_ms: 0,
+                }),
+              );
+              safeNote();
+              if (!armed.rest.size) {
+                skipRest.delete(id);
+                safeEmit(armed.input);
+              }
+            }, undefined);
+            steeredSkip = true;
+            break;
           }
-          return { eden: "steered", skipped: name };
+          // Head failed. Was THIS step already performed before the failure?
+          // DeoptError carries the completed-tool list; a plain error tells us
+          // nothing about state.
+          const doneByCompiled = safely(() => {
+            const e = armed.headErr;
+            return isDeopt(e) && Array.isArray((e as { toolCalls?: string[] }).toolCalls)
+              ? (e as { toolCalls: string[] }).toolCalls.includes(name)
+              : null;
+          }, null);
+          if (doneByCompiled === true) {
+            // The compiled run completed this step before failing later on.
+            // Claim it exactly like a success.
+            safely(() => {
+              const left = armed.rest.get(name)!;
+              if (left > 1) armed.rest.set(name, left - 1);
+              else armed.rest.delete(name);
+              if (!armed.rest.size) skipRest.delete(id);
+            }, undefined);
+            steeredSkip = true;
+            break;
+          }
+          // Reads are always safe to re-run. A mutating step under unknown
+          // state gets the honest structured result — never a silent re-run
+          // that could duplicate a write, never a false "steered" that claims
+          // work happened when nobody knows.
+          if (!isReadName(name)) {
+            const reason = safely(
+              () => (armed.headErr instanceof Error ? armed.headErr.message : String(armed.headErr)),
+              "compiled run failed",
+            );
+            structuredDeopt = reason;
+            break;
+          }
+          continue;
         }
+        if (steeredSkip) return { eden: "steered", skipped: name };
+        if (structuredDeopt != null) return { eden: "deopt", reason: structuredDeopt };
 
-        const guard = decideGuard({ name, run, live, opts: state.opts, now });
-        if (guard) {
-          if (guard.action === "steer") {
-            const steeredIn = extractInput(guard.program, args);
-            const { key: armKey, armed } = armTail(guard.program, steeredIn);
-            try {
-              const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
-              armed.armedAt = performance.now();
-              armed.armedAtCall = calls;
-              if (!armed.rest.size) emitTrace(state, run, steeredIn, owner);
-              return value;
-            } catch {
-              skipRest.delete(armKey);
-              emitTrace(state, run, run.events[0]?.args, owner);
-              return { eden: "halted", reason: guard.reason };
-            }
+        // Guards only act — halt, block, refuse — when enforcement is on. In
+        // the default fail-safe mode they stay observers: warnings accumulate
+        // (noteSignals), show up on the dashboard, and never stop a call.
+        if (enforcementEnabled(state.opts)) {
+          const guard = safely(() => decideGuard({ name, run, live, opts: state.opts, now }), null);
+          if (guard && guard.action !== "steer") {
+            safeEmit(run.events[0]?.args);
+            return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason };
           }
-          emitTrace(state, run, run.events[0]?.args, owner);
-          return { eden: guard.action === "block" ? "blocked" : "halted", reason: guard.reason };
+          if (guard && guard.action === "steer") {
+            const steeredIn = safely(() => extractInput(guard.program, args), null);
+            const pair = steeredIn ? safely(() => armTail(guard.program, steeredIn), null) : null;
+            if (pair && steeredIn) {
+              const { key: armKey, armed } = pair;
+              try {
+                const value = await runCompiled(state, guard.program, steeredIn, tools, registry);
+                armed.armedAt = performance.now();
+                armed.armedAtCall = calls;
+                try {
+                  armed.resolveSettled(true);
+                } catch { /* deferred already gone */ }
+                if (!armed.rest.size) safeEmit(steeredIn);
+                return value;
+              } catch (err) {
+                armed.headErr = err;
+                try {
+                  armed.resolveSettled(false);
+                } catch { /* deferred already gone */ }
+                skipRest.delete(armKey);
+                safeEmit(run.events[0]?.args);
+                // DIFFERENT from prefix steering, deliberately: the guard
+                // chose this program because the raw call was unacceptable
+                // (unverifiable finalize, over-budget). Falling back to that
+                // raw call would defeat the refusal, so a failed guard-steer
+                // ends the call — unless the stretch is reads, where a raw
+                // retry duplicates nothing and refuses nothing.
+                const touched = isDeopt(err) && !isEarlyDeopt(err);
+                if (!(replayableProgram(guard.program) && !touched)) {
+                  return { eden: "halted", reason: guard.reason };
+                }
+                // all-reads + provably-untouched: safe to fall through to raw
+              }
+            }
+            // pair === null: arming failed on a corrupt program — fall through
+            // to raw rather than ending the call.
+          }
         }
 
         const t0 = performance.now();
+        // Unconditional run-length ceiling — enforcement mode only (see
+        // enforcementEnabled). Progress detection is heuristic; one drifting
+        // field (a timestamp on results, a nonce in args) can defeat every
+        // detector while spend accumulates per call. This cap counts
+        // executions, not similarity, so it cannot be gamed.
+        //
+        // The halt MUST push a marker event before flushing: emitTrace
+        // early-returns on an empty buffer and its finally-block is the only
+        // place rawExecuted resets when the window carries loop warnings.
+        // Without the marker the first halt wedged the state permanently —
+        // every later call halted with an empty event buffer, unreachable by
+        // the reset. After the marker, the window flushes clean-ish and work
+        // resumes; sustained thrash simply re-arms the ceiling (bounded spend,
+        // never a bricked state).
+        if (enforcementEnabled(state.opts) && run.rawExecuted >= maxRunSteps()) {
+          // Explicit reset: with the marker flushed, the next cycle starts
+          // fresh — sustained thrash re-arms the ceiling instead of wedging.
+          run.rawExecuted = 0;
+          safeNote();
+          const marker: TraceEvent = { name, args: {}, ok: true, skipped: true, duration_ms: 0 };
+          run.events.push(marker);
+          safeEmit(run.events[0]?.args);
+          return { eden: "halted", reason: "max_steps" };
+        }
         try {
           const result = await spec.execute(args);
+          run.rawExecuted++;
           // Redact here, not at flush. These stay buffered for up to 12 events,
           // and holding live references to the caller's objects meant an agent
           // loop that reuses one args record per turn rewrote already-recorded
@@ -794,15 +1035,16 @@ export function wrapTools<T extends ToolsIn>(
               duration_ms: performance.now() - t0,
             }),
           );
-          noteSignals(state, run);
+          safeNote();
           const last = live.some((p) => (p.sequence ?? []).at(-1) === name);
           if (last || /^(notify|complete|finalize|done)$/i.test(name) || run.events.length >= 12) {
-            emitTrace(state, run, run.events[0]?.args, owner);
+            safeEmit(run.events[0]?.args);
           }
           return result;
         } catch (err) {
+          run.rawExecuted++;
           run.events.push(tagEvent({ name, args: redact(args) as Record<string, unknown>, ok: false, duration_ms: performance.now() - t0 }));
-          noteSignals(state, run);
+          safeNote();
           throw err;
         }
     };
@@ -827,11 +1069,30 @@ export function wrapTools<T extends ToolsIn>(
     };
   }
 
+  // Name collisions between a host's own tool and an approved compiled tool
+  // must resolve the SAME WAY everywhere: injectTools (the HTTP proxy) already
+  // drops the client's duplicate, so the compiled tool wins there. The local
+  // Proxy used to do the opposite — raw wins — so the same agent executed
+  // different logic depending on how it was connected. Compiled wins now,
+  // with a one-time warning; the compiled artifact passed human approval and
+  // shadow validation, its ad-hoc namesake did not.
+  const warnedCollisions = new Set<string>();
   return new Proxy(wrapped, {
     get(target, prop, recv) {
       if (typeof prop !== "string") return Reflect.get(target, prop, recv);
+      const compiled = compiledFor(prop);
+      if (compiled) {
+        if (prop in target && !warnedCollisions.has(prop)) {
+          warnedCollisions.add(prop);
+          console.error(
+            `[eden] tool "${prop}" exists both in your tools and as an approved compiled tool; ` +
+              "the compiled version takes precedence (matching the HTTP proxy). Rename one to disambiguate.",
+          );
+        }
+        return compiled;
+      }
       if (prop in target) return target[prop];
-      return compiledFor(prop);
+      return undefined;
     },
     has(target, prop) {
       if (typeof prop === "string" && state.programs.some((x) => x.manifest && x.name === prop)) return true;

@@ -104,7 +104,14 @@ export async function openDb(path?: string): Promise<EdenDb> {
     const { neon } = await import("@neondatabase/serverless");
     const sql = neon(url);
     const db = new EdenDb(null, async (q, p) => sql.query(q, p as never[]));
-    for (const stmt of SQLITE_STATEMENTS) await db.exec(stmt);
+    // Same per-statement tolerance as the SQLite path: migrate() backfills.
+    for (const stmt of SQLITE_STATEMENTS) {
+      try {
+        await db.exec(stmt);
+      } catch {
+        /* migrate() backfills */
+      }
+    }
     await migrate(db, true);
     await seed(db);
     await hashLegacyKeys(db);
@@ -120,7 +127,17 @@ export async function openDb(path?: string): Promise<EdenDb> {
   mkdirSync(dirname(file), { recursive: true });
   const sqlite = new Database(file, { create: true });
   sqlite.exec("PRAGMA journal_mode=WAL;");
-  for (const stmt of SQLITE_STATEMENTS) sqlite.exec(stmt);
+  // Per-statement tolerance: a database from an older schema can lack a column
+  // a baseline index names (e.g. tool_run.created_at), and failing here bricks
+  // startup BEFORE migrate() gets to add the column. migrate() below backfills
+  // whatever these statements could not create.
+  for (const stmt of SQLITE_STATEMENTS) {
+    try {
+      sqlite.exec(stmt);
+    } catch {
+      /* migrate() backfills */
+    }
+  }
   const db = new EdenDb(sqlite, null);
   await migrate(db, false);
   await seed(db);

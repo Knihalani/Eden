@@ -1,9 +1,10 @@
 import type { StretchProgram, ToolStep } from "@eden/ir";
-import { inDistribution, asRecord, getPath, setKey } from "@eden/ir";
+import { inDistribution, asRecord, getPath, interpolateSlots, setKey } from "@eden/ir";
 // Core helpers via relative paths (the same pattern the tests use); wrap does
 // not declare a workspace dependency on core.
 import { parameterizeUrl, extractCommandUrls } from "../../core/src/urls";
 import { parseNamedCli, familyId } from "../../core/src/named-cli";
+import { commandShape } from "../../core/src/shapes";
 
 export type OpenAiToolCall = {
   id?: string;
@@ -96,7 +97,15 @@ function shapesOfString(s: string, into: Set<string>): void {
   }
   const cli = cliShape(s);
   if (cli) into.add(cli);
+  // Domain-general shell shapes: an unknown binary's command shape is its own
+  // signature, so a live `kubectl get pods -n prod` can match a compiled
+  // stretch without Eden knowing what kubectl is.
+  const shape = commandShape(s);
+  if (shape && !NOISE_SHAPE.has(shape.name)) into.add(`cli:${shape.name}`);
 }
+
+/** Shape names that are too generic to steer on. */
+const NOISE_SHAPE = new Set(["echo", "ls", "cd", "pwd", "cat", "sleep", "true", "false"]);
 
 /** Sorted shape signature of a call's string arguments (top level + arrays). */
 export function argShapes(args: Record<string, unknown>): string[] {
@@ -119,9 +128,17 @@ export function programFirstStepShapes(p: StretchProgram): string[] {
   const step0 = p.steps[0] as ToolStep | undefined;
   if (step0 && step0.kind === "tool") {
     for (const b of Object.values(step0.args ?? {})) {
-      if (b && typeof b === "object" && (b as { kind?: unknown }).kind === "literal") {
+      if (!b || typeof b !== "object") continue;
+      const bk = (b as { kind?: unknown }).kind;
+      if (bk === "literal") {
         const v = (b as { value?: unknown }).value;
         if (typeof v === "string") strings.push(v);
+      } else if (bk === "transform") {
+        // Shell programs bind their command as a template
+        // ("kubectl get pods -n {namespace}"): the skeleton minus slots is a
+        // perfectly good shape signature.
+        const expr = (b as { expr?: unknown }).expr;
+        if (typeof expr === "string") strings.push(expr);
       }
     }
   }
@@ -131,6 +148,122 @@ export function programFirstStepShapes(p: StretchProgram): string[] {
   const shapes = new Set<string>();
   for (const s of strings) shapesOfString(s, shapes);
   return [...shapes].sort();
+}
+
+/**
+ * Recover a shell program's slot values from the raw call.
+ *
+ * A compiled kubectl stretch takes {namespace}, but the live call is
+ * `Bash("kubectl get pods -n prod")` — no schema-shaped argument anywhere.
+ * Fill the template's slots with witnessed values and accept the filling
+ * that reproduces the command being run.
+ *
+ * Filling uses the SAME single-pass interpolateSlots() the runtime's
+ * evalBinding uses for transform templates. The earlier multi-pass string
+ * replace substituted a witness value containing another slot's placeholder
+ * twice, validating a rendering the compiled program could never produce —
+ * and steering onto it. (It also used interpolate(), which additionally
+ * expands ${…} and empties unresolvable {…}; the runtime never does, so a
+ * command containing literal shell expansions verified under one renderer
+ * and executed under another.)
+ *
+ * Matching is restricted to the `command` argument: quantifying over all
+ * string args let an incidental field carry the match while the actual
+ * command was something else entirely.
+ *
+ * Multi-slot enumeration is capped (MAX_SLOT_COMBOS); past the cap the answer
+ * is "cannot recover" — no steer beats a wrong or quadratic steer. Unseen
+ * values fail closed: no recovery, no steer.
+ */
+const MAX_SLOT_COMBOS = 200;
+
+export function recoverShellInput(
+  p: StretchProgram,
+  args: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const step0 = p.steps[0] as ToolStep | undefined;
+  if (!step0 || step0.kind !== "tool") return null;
+  const live = typeof args.command === "string" ? args.command : null;
+  if (!live) return null;
+  for (const [k, b] of Object.entries(step0.args ?? {})) {
+    if (k !== "command" || !b || typeof b !== "object") continue;
+    const t = b as { kind?: unknown; fn?: unknown; expr?: unknown };
+    if (t.kind !== "transform" || t.fn !== "template" || typeof t.expr !== "string") continue;
+    const expr = t.expr as string;
+    // Dotted paths ({db.host}) are legal slots — interpolate resolves them
+    // through getPath against a NESTED record, so recovery must build nested
+    // input, not flat keyed entries.
+    const slots = [...new Set([...expr.matchAll(/\{([\w.]+)\}/g)].map((m) => m[1]!))];
+    if (!slots.length || slots.length > 4) continue;
+    const pools = slots.map((path) => {
+      const w = p.contract.envelope?.inputs?.[path];
+      return { path, values: (Array.isArray(w) ? w : []).filter((v): v is string => typeof v === "string") };
+    });
+    if (pools.some((pool) => !pool.values.length)) continue;
+    const total = pools.reduce((a, pool) => a * pool.values.length, 1);
+    if (total > MAX_SLOT_COMBOS) continue;
+    // Ordinal-driven enumeration (no mutable counter array): index combo
+    // decomposes into one witness per slot, most-significant first.
+    for (let combo = 0; combo < total; combo++) {
+      let rest = combo;
+      const input: Record<string, unknown> = {};
+      for (let i = 0; i < pools.length; i++) {
+        const pool = pools[pools.length - 1 - i]!;
+        const idx = rest % pool.values.length;
+        rest = Math.floor(rest / pool.values.length);
+        setNested(input, pool.path.split("."), pool.values[idx]!);
+      }
+      // Single pass, identical to the runtime's rendering — whatever this
+      // returns is exactly what the compiled run would execute. Nested
+      // records make dotted slots ({db.host}) resolve through getPath.
+      if (interpolateSlots(expr, input) === live) return input;
+    }
+  }
+  return null;
+}
+
+/** Build nested records so interpolate's getPath resolves dotted slots. */
+function setNested(obj: Record<string, unknown>, parts: string[], value: string): void {
+  let cur: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const k = parts[i]!;
+    const next = cur[k];
+    if (!next || typeof next !== "object") cur[k] = {};
+    cur = cur[k] as Record<string, unknown>;
+  }
+  cur[parts.at(-1)!] = value;
+}
+
+/**
+ * The first step's command template, when the program is a shell stretch.
+ */
+export function firstCommandTemplate(p: StretchProgram): string | null {
+  const step0 = p.steps[0] as ToolStep | undefined;
+  if (!step0 || step0.kind !== "tool") return null;
+  for (const [k, b] of Object.entries(step0.args ?? {})) {
+    if (k !== "command" || !b || typeof b !== "object") continue;
+    const t = b as { kind?: unknown; fn?: unknown; expr?: unknown };
+    if (t.kind === "transform" && t.fn === "template" && typeof t.expr === "string") return t.expr;
+  }
+  return null;
+}
+
+/**
+ * Structural prefilter for a shell template against a live command: same
+ * binary, same arity, same flag set. Slot positions make signature equality
+ * impossible (`{app}` vs `web`), but structure survives abstraction.
+ */
+export function templateFits(expr: string, live: string): boolean {
+  const te = expr.split(/\s+/);
+  const le = live.split(/\s+/);
+  if (te.length !== le.length || !te.length) return false;
+  const bin = (s: string[]) => s[0]!.replace(/^\{|\}$/g, "");
+  if (bin(te) !== bin(le)) return false;
+  if (te[1] !== le[1] && !/^\{\w+\}$/.test(te[1] ?? "") && !/^\{\w+\}$/.test(le[1] ?? "")) return false;
+  const flags = (s: string[]) => s.filter((w) => w.startsWith("-")).sort();
+  const tf = flags(te);
+  const lf = flags(le);
+  return tf.length === lf.length && tf.every((f, i) => f === lf[i]);
 }
 
 export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram[]): OpenAiToolCall[] {
@@ -158,10 +291,22 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
     if (sig.length) {
       for (const p of live) {
         const psig = programFirstStepShapes(p);
-        if (!psig.length || psig.length !== sig.length) continue;
-        if (!psig.every((s, i) => s === sig[i])) continue;
-        const input = extractInput(p, callArgs(first));
-        if (!inDistribution(p, input)) continue;
+        let input: Record<string, unknown> | null = null;
+        const tmpl = firstCommandTemplate(p);
+        if (tmpl) {
+          // Shell programs bind their command as a template; the live call
+          // carries values where the template has slots, so signature
+          // equality can never fire. Prefilter on structure instead — same
+          // binary, same arity, same flags — then let slot recovery decide.
+          const cmdLive = callArgs(first).command;
+          if (typeof cmdLive !== "string" || !templateFits(tmpl, cmdLive)) continue;
+          input = recoverShellInput(p, callArgs(first));
+        } else {
+          if (!psig.length || psig.length !== sig.length) continue;
+          if (!psig.every((s, i) => s === sig[i])) continue;
+          input = extractInput(p, callArgs(first));
+        }
+        if (!input || !inDistribution(p, input)) continue;
         hits.push({ p, input, by: "argshape" });
       }
     }

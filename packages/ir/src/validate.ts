@@ -72,6 +72,16 @@ function checkStep(step: unknown, path: string, issues: ValidateIssue[]): void {
     }
     return;
   }
+  if (step.kind === "branch") {
+    if (typeof step.expr !== "string" || !step.expr) issues.push({ path, message: "branch needs expr" });
+    if (!Array.isArray(step.then) || !step.then.length || step.then.some((id) => typeof id !== "string")) {
+      issues.push({ path, message: "branch then must be non-empty step ids" });
+    }
+    if (step.else !== undefined && (!Array.isArray(step.else) || step.else.some((id) => typeof id !== "string"))) {
+      issues.push({ path, message: "branch else must be step ids when present" });
+    }
+    return;
+  }
   if (step.kind === "assert") {
     if (typeof step.expr !== "string" || !step.expr) issues.push({ path, message: "assert needs expr" });
     if (!(ASSERT_ON_FAIL as readonly string[]).includes(step.onFail as string)) {
@@ -131,6 +141,15 @@ export function validateProgram(program: unknown): ValidateIssue[] {
       if (step?.kind === "loop") {
         for (const id of step.body) {
           if (!ids.has(id)) issues.push({ path: `steps[${i}].body`, message: `unknown body step ${id}` });
+        }
+      }
+      if (step?.kind === "branch") {
+        for (const armLabel of ["then", "else"] as const) {
+          const arm = (step as unknown as Record<string, unknown>)[armLabel];
+          if (arm === undefined && armLabel === "else") continue;
+          for (const id of Array.isArray(arm) ? arm : []) {
+            if (!ids.has(id)) issues.push({ path: `steps[${i}].${armLabel}`, message: `unknown arm step ${id}` });
+          }
         }
       }
     }
