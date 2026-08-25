@@ -381,6 +381,11 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
     return html("Import traces", nav("Import") + body);
   }
 
+  // The public front door: a visitor without credentials sees the landing
+  // and onboarding, never a bare 401. Authenticated users get the dashboard.
+  if (url.pathname === "/" && !wsId) {
+    return new Response(null, { status: 302, headers: { location: "/onboarding" } });
+  }
   if (url.pathname === "/dashboard" || url.pathname === "/") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
     // Lifetime totals for the counters; the money line is genuinely
@@ -473,12 +478,11 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
   ${stat(escapeHtml(savingsWord(ledger.tokens_saved_mean)), "Tokens saved per run")}
   ${stat(escapeHtml(savingsWord(ledger.time_saved_ms_mean)), "Time saved per run")}
   ${stat(String(ledger.runs), "Compiled runs")}
-  ${stat(String(on.c), "Live tools", on.c === 0)}
+  ${stat(`${ledger.fail}/${ledger.runs}`, "Failed runs / total", ledger.runs === 0)}
 </div>
 <div class="stat-row">
   ${stat(String(drafts.c), "Drafts waiting to be approved", drafts.c === 0)}
-  ${stat(String(ledger.live), "Tools currently live", ledger.live === 0)}
-  ${stat(`${ledger.fail}/${ledger.runs}`, "Run failures / total", ledger.runs === 0)}
+  ${stat(String(on.c), "Live tools", on.c === 0)}
 </div>`
       + (usage.runs > 0
         ? `<div class="panel"><h2>This month</h2><p class="muted">${month.runs} runs · ${(month.server_ms / 1000).toFixed(1)}s server compute · ${(month.raw_bytes / 1e6).toFixed(2)}MB raw compressed to ${(month.densified_bytes / 1000).toFixed(0)}KB sent to the model</p></div>`
@@ -518,17 +522,28 @@ ${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">
     );
     if (!t) return new Response("not found", { status: 404 });
     const steps = jsonRows(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
-    const list = steps
-      .map((s) => `<div class="row"><code>${escapeHtml(String(s.name))}</code> · ${escapeHtml(String(s.kind))}${s.url ? ` · ${escapeHtml(String(s.url))}` : ""}</div>`)
-      .join("");
+    const list = steps.length
+      ? `<h2 style="margin-top:20px">What it runs</h2><table class="activity">${steps
+          .map((s, i) => `<tr><td>${i + 1}. ${escapeHtml(String(s.name))}</td><td>${escapeHtml(String(s.kind))}</td><td>${s.url ? escapeHtml(String(s.url)) : ""}</td></tr>`)
+          .join("")}</table>`
+      : "";
     const approve =
       t.state !== "on"
-        ? `<form method="post" action="/v1/tools/${t.id}/approve"><button>Approve</button></form>`
+        ? `<div class="panel" style="margin-top:20px"><h2>Go live?</h2>
+           <p class="muted" style="margin-bottom:12px">Once approved, your agent's matching calls are served by this compiled tool — measured receipts land on the dashboard.</p>
+           <form method="post" action="/v1/tools/${t.id}/approve"><button class="btn">Approve tool</button></form></div>`
         : t.published
-          ? `<p class="muted">Published on MCP as <code>${escapeHtml(t.name)}</code>.</p>`
-          : `<p class="muted">On for this workspace. Publish to list it on MCP.</p>
-             <form method="post" action="/v1/tools/${t.id}/approve"><button>Publish to MCP</button></form>`;
-    return html(`Tool ${t.name}`, `<h1>${escapeHtml(t.name)}</h1><p class="muted">${escapeHtml(t.when_to_use)}</p>${list}${approve}`);
+          ? `<div class="panel good" style="margin-top:20px"><p class="success">✓ Live</p><p class="muted">Published on MCP as <code>${escapeHtml(t.name)}</code>.</p></div>`
+          : `<div class="panel" style="margin-top:20px"><p>On for this workspace.</p>
+             <form method="post" action="/v1/tools/${t.id}/approve" style="margin-top:10px"><button class="btn secondary">Publish to MCP</button></form></div>`;
+    return html(
+      `Eden — ${t.name}`,
+      nav("Approve") +
+        `<h1><code>${escapeHtml(t.name)}</code></h1>
+         <p class="sub">${escapeHtml(t.when_to_use) || "No description recorded."}</p>
+         <span class="badge ${t.state === "on" ? "ok" : "todo"}">${escapeHtml(t.state)}</span>
+         ${list}${approve}`,
+    );
   }
 
   if (url.pathname === "/v1/setup" && req.method === "POST") {
