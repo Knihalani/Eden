@@ -67,6 +67,8 @@ export function layout(title: string, body: string): string {
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="Eden compiles your agent's repeated tool-call workflows into single-call tools you approve once. Fail-safe by construction: a broken Eden never breaks your agent."/>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0a0b'/%3E%3Ctext x='16' y='23' font-family='-apple-system,sans-serif' font-size='20' font-weight='700' fill='%23c23434' text-anchor='middle'%3Ee%3C/text%3E%3C/svg%3E"/>
 <style>${BASE_CSS}</style>
 </head>
 <body><div class="container">${body}${footer()}</div>
