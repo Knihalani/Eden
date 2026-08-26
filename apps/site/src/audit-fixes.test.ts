@@ -24,13 +24,14 @@ describe("approve of an unknown or foreign tool is a 404", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED"]) {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
     dir = mkdtempSync(join(tmpdir(), "eden-approve-404-"));
     dbFile = join(dir, "a.db");
     process.env.EDEN_DB = dbFile;
+    process.env.EDEN_DEV = "1";
     db = await openDb(dbFile);
     await db.run(
       `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)
@@ -50,15 +51,19 @@ describe("approve of an unknown or foreign tool is a 404", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  // One bust for the describe (not a fixed literal — those collide under
+  // shuffle). Import once so db() stays on this suite's EDEN_DB.
+  const SERVER_MOD = `./server?bust=approve-404-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let handleFetch: (req: Request) => Promise<Response>;
+
+  beforeAll(async () => {
+    process.env.EDEN_DB = dbFile;
+    ({ handleFetch } = await import(SERVER_MOD));
+  });
+
   const post = (id: string, headers: Record<string, string> = {}) =>
-    // Cache-busted import: this suite owns a private server singleton (and
-    // therefore a private db connection), so removing our temp directory in
-    // afterAll cannot pull the file out from under the instance another test
-    // file already cached.
-    import(`./server?bust=${"approve-404"}`).then(({ handleFetch }) =>
-      handleFetch(
-        new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, { method: "POST", headers: { host: "127.0.0.1:8787", ...headers } }),
-      ),
+    handleFetch(
+      new Request(`http://127.0.0.1:8787/v1/tools/${id}/approve`, { method: "POST", headers: { host: "127.0.0.1:8787", ...headers } }),
     );
 
   test("an existing workspace tool still approves with a 303 redirect", async () => {
@@ -217,7 +222,7 @@ describe("state-changing requests with a forged Host are refused", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeEach(async () => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED", "EDEN_PUBLIC_URL"]) {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED", "EDEN_PUBLIC_URL", "EDEN_DEV"]) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
@@ -225,6 +230,7 @@ describe("state-changing requests with a forged Host are refused", () => {
     dbFile = join(dir, "h.db");
     process.env.EDEN_DB = dbFile;
     process.env.EDEN_SKIP_SEED = "1";
+    process.env.EDEN_DEV = "1";
     await openDb(dbFile);
   });
 
@@ -301,7 +307,7 @@ describe("approving persists the candidate's shadow manifest", () => {
   const saved: Record<string, string | undefined> = {};
 
   beforeEach(async () => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED"]) {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
@@ -309,6 +315,7 @@ describe("approving persists the candidate's shadow manifest", () => {
     dbFile = join(dir, "m.db");
     process.env.EDEN_DB = dbFile;
     process.env.EDEN_SKIP_SEED = "1";
+    process.env.EDEN_DEV = "1";
     db = await openDb(dbFile);
     await db.run(
       `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint)

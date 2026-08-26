@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolEvent } from "@eden/core";
 import { openDb, workspaceForKey, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
-import { handleFetch } from "./server";
+// Cache-busted: a static `./server` import reuses whoever opened `db()` first.
 
 /**
  * Fingerprints are derived from URL *shape*, so two tenants hitting the same
@@ -110,15 +110,22 @@ describe("cluster rows are per workspace", () => {
 describe("state-changing routes refuse cross-origin drive-bys", () => {
   const saved: Record<string, string | undefined> = {};
   let dbFile: string;
+  let handleFetch: (req: Request) => Promise<Response>;
+  const SERVER_MOD = `./server?bust=tenancy-csrf-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  beforeEach(() => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED"]) saved[k] = process.env[k];
+  beforeAll(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DB", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
+      saved[k] = process.env[k];
+    }
     dbFile = join(tmpdir(), `eden-csrf-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
     process.env.EDEN_DB = dbFile;
     process.env.EDEN_SKIP_SEED = "1";
+    delete process.env.DATABASE_URL;
+    delete process.env.VERCEL;
+    ({ handleFetch } = await import(SERVER_MOD));
   });
 
-  afterEach(() => {
+  afterAll(() => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
@@ -172,18 +179,31 @@ describe("which predicate decides that this is production", () => {
    * LAN — was classified as somebody's laptop.
    */
   const saved: Record<string, string | undefined> = {};
-  function setEnv(k: string, v: string | undefined) {
-    if (!(k in saved)) saved[k] = process.env[k];
-    if (v === undefined) delete process.env[k];
-    else process.env[k] = v;
-  }
-  afterEach(() => {
+  let dbFile: string;
+  let handleFetch: (req: Request) => Promise<Response>;
+  const SERVER_MOD = `./server?bust=tenancy-prod-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  beforeAll(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_DEV", "EDEN_DB"]) saved[k] = process.env[k];
+    dbFile = join(tmpdir(), `eden-prodpred-${Date.now()}.db`);
+    process.env.EDEN_DB = dbFile;
+    delete process.env.DATABASE_URL;
+    delete process.env.VERCEL;
+    ({ handleFetch } = await import(SERVER_MOD));
+  });
+
+  afterAll(() => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
-    for (const k of Object.keys(saved)) delete saved[k];
+    rmSync(dbFile, { force: true });
   });
+
+  function setEnv(k: string, v: string | undefined) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 
   test("a DATABASE_URL deployment does not hand out credentials", async () => {
     setEnv("VERCEL", undefined);
@@ -191,6 +211,8 @@ describe("which predicate decides that this is production", () => {
     setEnv("EDEN_DEV", "0");
     const res = await handleFetch(new Request("http://127.0.0.1:8787/v1/setup", { method: "POST", headers: { host: "127.0.0.1:8787" }, body: "{}" }));
     expect(res.status).toBe(401);
+    setEnv("DATABASE_URL", undefined);
+    setEnv("EDEN_DEV", undefined);
   });
 
   test("a laptop still can, which is what the endpoint is for", async () => {

@@ -166,6 +166,7 @@ async function refreshLiveTools(site: string, wrap: string, key: string): Promis
         id?: string;
         name?: string;
         sequence?: string[];
+        read_only?: boolean;
         program?: { name?: string; sequence?: string[]; contract?: { envelope?: unknown } };
       }>;
     };
@@ -177,6 +178,8 @@ async function refreshLiveTools(site: string, wrap: string, key: string): Promis
           sequence: t.program?.sequence ?? t.sequence ?? [],
           id: t.id,
           envelope: t.program?.contract?.envelope ?? null,
+          // Absent = unknown = ineligible for transparent execution (fail closed).
+          ...(typeof t.read_only === "boolean" ? { read_only: t.read_only } : {}),
         })),
         null,
         2,

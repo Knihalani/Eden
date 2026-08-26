@@ -132,6 +132,14 @@ export type Config = {
    * the MCP tool instead.
    */
   steer_hooks?: boolean;
+  /**
+   * Transparent execution. Default ON for READ-ONLY programs: a PostToolUse
+   * matching an approved read-only program's first step gets its output
+   * replaced with the compiled run's facts (original output preserved,
+   * appended to). Every failure path falls open to the agent's own output;
+   * set false (or EDEN_TRANSPARENT=0) to disable entirely.
+   */
+  transparent_exec?: boolean;
 };
 
 export function readConfig(): Config | null {

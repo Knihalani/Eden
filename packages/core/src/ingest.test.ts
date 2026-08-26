@@ -176,6 +176,49 @@ describe("auto-detection", () => {
     expect(events[0]!.result).toEqual({ title: "fix bug", state: "open" });
   });
 
+  test("groups OpenAI logs into per-conversation traces when export metadata exists", () => {
+    // Four identical conversations: the compiler's minSupport=3 gate needs
+    // ≥3 TRACES repeating a sequence — a single cross-conversation
+    // super-trace could never qualify (and fabricated stretches besides).
+    const convo = (id: number) => [
+      {
+        conversation_id: `conv-${id}`,
+        choices: [{ message: { role: "assistant", tool_calls: [{ id: `c${id}-1`, function: { name: "gh_pr_view", arguments: '{"pr":"10' + id + '"}' } }] } }],
+      },
+      { conversation_id: `conv-${id}`, choices: [{ message: { role: "tool", tool_call_id: `c${id}-1`, content: '{"pr":true}' } }] },
+      {
+        conversation_id: `conv-${id}`,
+        choices: [{ message: { role: "assistant", tool_calls: [{ id: `c${id}-2`, function: { name: "gh_pr_checks", arguments: '{"pr":"10' + id + '"}' } }] } }],
+      },
+      { conversation_id: `conv-${id}`, choices: [{ message: { role: "tool", tool_call_id: `c${id}-2`, content: '{"state":"pass"}' } }] },
+    ];
+    const logs = [0, 1, 2, 3].flatMap(convo);
+    const traces = parseOpenAIToolCalls(logs);
+    expect(traces.size).toBe(4);
+    for (const events of traces.values()) {
+      expect(events.map((e) => e.name)).toEqual(["gh_pr_view", "gh_pr_checks"]);
+    }
+  });
+
+  test("detectAndParse routes raw OpenAI logs instead of rejecting them", () => {
+    const log = JSON.stringify([
+      {
+        conversation_id: "conv-1",
+        choices: [{ message: { role: "assistant", tool_calls: [{ id: "x1", function: { name: "a_tool", arguments: "{}" } }] } }],
+      },
+      { conversation_id: "conv-1", choices: [{ message: { role: "tool", tool_call_id: "x1", content: '{"ok":1}' } }] },
+      {
+        conversation_id: "conv-1",
+        choices: [{ message: { role: "assistant", tool_calls: [{ id: "x2", function: { name: "b_tool", arguments: "{}" } }] } }],
+      },
+      { conversation_id: "conv-1", choices: [{ message: { role: "tool", tool_call_id: "x2", content: '{"ok":2}' } }] },
+    ]);
+    const result = detectAndParse(log);
+    expect(result).not.toBeNull();
+    expect(result!.format).toBe("openai_logs");
+    expect(result!.traces.size).toBe(1);
+  });
+
   test("parses Langfuse TOOL observations", () => {
     const observations = [
       { type: "TOOL", name: "search", input: { q: "test" }, output: { hits: 3 }, level: "DEFAULT", startTime: "2026-01-01T00:00:00Z", traceId: "lf-1" },

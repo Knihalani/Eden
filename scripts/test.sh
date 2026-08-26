@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 
 # Kept POSIX-ish: macOS still ships bash 3.2, which has no `mapfile`.
 dirs=$(
-  find packages apps \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
+  find packages apps benchmarks \( -name '*.test.ts' -o -name '*.test.tsx' \) -print \
     | grep -v '/node_modules/' \
     | sed 's|/[^/]*$||' \
     | sort -u

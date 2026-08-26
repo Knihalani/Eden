@@ -3,6 +3,8 @@ import { openDb } from "./db";
 import { playTool } from "./playback";
 import { handleForge } from "./forge";
 import {
+  publicResultKey,
+  readStaleEntry,
   drainPrefetches,
   joinInflight,
   prefetchCounters,
@@ -177,16 +179,23 @@ describe("speculative read prefetch", () => {
     expect(await singleFlight("sf:1", async () => ((runs++, "fresh")))).toBe("fresh");
     expect(runs).toBe(2);
 
+    // Hold the winner open with a deferred so the rider joins the same
+    // inflight promise — no wall sleep used as synchronization.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
     let concurrent = 0;
     const winner = singleFlight("sf:2", async () => {
       concurrent++;
-      await new Promise((r) => setTimeout(r, 10));
+      await gate;
       return "shared";
     });
     const rider = singleFlight("sf:2", async () => {
       concurrent++;
       return "other";
     });
+    release();
     expect(await rider).toBe("shared");
     expect(await winner).toBe("shared");
     expect(concurrent).toBe(1);
@@ -194,5 +203,56 @@ describe("speculative read prefetch", () => {
 
   afterAll(async () => {
     /* file db */
+  });
+});
+
+describe("public pool + etag envelopes", () => {
+  const dbP = openDb(`/tmp/eden-cache-env-${Date.now()}.db`);
+  const db = () => dbP;
+
+  test("public keys differ from tenant keys and ignore the workspace", () => {
+    const base = { toolId: "t1", step: step({ id: "s0" }), url: "https://api.github.com/x" };
+    const a = publicResultKey(base);
+    const b = publicResultKey(base);
+    expect(a).toBe(b); // workspace-less identity is the point
+    expect(a.startsWith("rcp:")).toBe(true);
+    const tenant = resultCacheKey({ ...base, workspaceId: "ws1" });
+    expect(tenant).not.toBe(a);
+  });
+
+  test("etag envelope round-trips; legacy plain rows stay readable", async () => {
+    const d = await db();
+    await writeResult(d, "k-env", { hello: "world" }, 60_000, '"abc"');
+    const entry = await readStaleEntry(d, "k-env");
+    expect(entry?.etag).toBe('"abc"');
+    expect(entry?.value).toEqual({ hello: "world" });
+    // legacy row (no envelope) written directly
+    await d.run(`INSERT OR REPLACE INTO result_cache (cache_key, body, expires_at) VALUES ('k-legacy', '{"plain":1}', ?)`, [
+      Date.now() + 60_000,
+    ]);
+    expect(await readResult<Record<string, unknown>>(d, "k-legacy")).toEqual({ plain: 1 });
+    const stale = await readStaleEntry(d, "k-legacy");
+    expect(stale?.value).toEqual({ plain: 1 });
+    expect(stale?.etag).toBeUndefined();
+  });
+
+  test("expired entries without an etag are worthless; with one they survive for revalidation", async () => {
+    // Suppress writeResult's sampled sweep for the duration: these rows are
+    // written already-expired, and a sweep fired by one of THIS test's own
+    // writes (its cutoff derives from that write's ttl) deletes them before
+    // the assertions run — a ~2%/write race that eventually fails the suite.
+    const realRandom = Math.random;
+    Math.random = () => 0.99;
+    try {
+      const d = await db();
+      await writeResult(d, "k-old", { a: 1 }, -1_000); // already expired, no etag
+      expect(await readStaleEntry(d, "k-old")).toBeUndefined();
+      await writeResult(d, "k-tagged", { b: 2 }, -1_000, '"e1"');
+      const entry = await readStaleEntry(d, "k-tagged");
+      expect(entry?.etag).toBe('"e1"');
+      expect(entry?.value).toEqual({ b: 2 });
+    } finally {
+      Math.random = realRandom;
+    }
   });
 });

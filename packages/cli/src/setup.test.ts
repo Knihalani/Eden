@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hookCommand, preHookCommand, installedHooks, mergeHooks, wrapMcpServer } from "./setup";
+import { hookCommand, preHookCommand, installedHooks, mergeHooks, wrapMcpServer, geminiHookConfig, applyCodexToml, opencodePluginSource } from "./setup";
 import { wrapPlaneUrl, sitePlaneUrl } from "./home";
 
 describe("setup hookd", () => {
@@ -110,5 +110,32 @@ describe("eden setup does not disarm the user's own hooks", () => {
   test("a path containing a quote cannot break out of its quoting", () => {
     const cmd = hookCommand("/tmp/it's/cli.ts", 8794);
     expect(cmd).toContain(`'/tmp/it'\\''s/cli.ts'`);
+  });
+});
+
+describe("multi-agent installer", () => {
+  const pre = "curl -sS --max-time 1 … || echo '{}'";
+  const post = "curl -sS --max-time 8 … || bun cli.ts hook || echo '{}'";
+
+  test("gemini config merges without clobbering unrelated keys", () => {
+    const existing = { theme: "dark", hooks: { UserPromptSubmit: [{ command: "mine" }] } };
+    const out = geminiHookConfig(existing, pre, post) as Record<string, any>;
+    expect(out.theme).toBe("dark");
+    expect((out.hooks as any).UserPromptSubmit).toBeDefined();
+    expect((out.hooks as any).BeforeToolUse).toEqual([{ command: pre }]);
+  });
+
+  test("codex toml append is idempotent and replaces only the managed section", () => {
+    const once = applyCodexToml("[model]\nname = \"x\"\n", post);
+    expect(once).toContain('name = "x"');
+    expect(once).toContain("eden-recorder");
+    const twice = applyCodexToml(once, post);
+    expect(twice).toBe(once);
+  });
+
+  test("opencode plugin source is fail-open by construction", () => {
+    const src = opencodePluginSource();
+    expect(src).toContain("AbortSignal.timeout(1000)");
+    expect(src).toContain("// swallow");
   });
 });

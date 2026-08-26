@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attachChatUsage, consumeChatUsage, parseUsage, peekChatUsage, recordCompletion, scrapeSseUsage } from "./usage";
+import { attachChatUsage, consumeChatUsage, parseCacheTokens, parseUsage, peekChatUsage, recordCompletion, scrapeSseUsage } from "./usage";
 import { emptyRun } from "./types";
 import type { StretchTrace } from "@eden/ir";
 
@@ -20,6 +20,28 @@ describe("provider usage scrape", () => {
     expect(parseUsage({ input_tokens: 3, output_tokens: 2 })).toEqual({ prompt: 3, completion: 2 });
     expect(parseUsage({})).toBeNull();
     expect(parseUsage(null)).toBeNull();
+  });
+
+  test("parseUsage does not fold cache fields into prompt/completion (Arc 1 catcher)", () => {
+    // Billing stays prompt+completion until Arc 1 wires a ledger line.
+    expect(
+      parseUsage({
+        prompt_tokens: 100,
+        completion_tokens: 10,
+        cached_tokens: 80,
+        cache_read_input_tokens: 80,
+        prompt_tokens_details: { cached_tokens: 80 },
+      }),
+    ).toEqual({ prompt: 100, completion: 10 });
+  });
+
+  test("parseCacheTokens reads OpenAI and Anthropic cache dialects", () => {
+    expect(parseCacheTokens({ prompt_tokens_details: { cached_tokens: 40 } })).toEqual({ cached: 40 });
+    expect(
+      parseCacheTokens({ cache_read_input_tokens: 12, cache_creation_input_tokens: 3 }),
+    ).toEqual({ cached: 12, cacheWrite: 3 });
+    expect(parseCacheTokens({ cached_tokens: 7 })).toEqual({ cached: 7 });
+    expect(parseCacheTokens({ prompt_tokens: 10, completion_tokens: 2 })).toBeNull();
   });
 
   test("recordCompletion counts a real LLM call and does not invent tokens", () => {

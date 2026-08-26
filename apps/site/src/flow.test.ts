@@ -297,7 +297,10 @@ describe("approve is workspace-gated", () => {
     process.env.EDEN_DB = `/tmp/eden-approve-${Date.now()}.db`;
     delete process.env.EDEN_AUTO_APPROVE;
     try {
-      const { handleFetch } = await import("./server");
+      // Cache-bust: bare `./server` reuses whichever suite opened db() first.
+      const { handleFetch } = await import(
+        `./server?bust=flow-approve-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
       const res = await handleFetch(
         new Request("http://127.0.0.1/v1/tools/nope/approve", { method: "POST", headers: { host: "127.0.0.1" } }),
       );

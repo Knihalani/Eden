@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, withFileLockAsync, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
 import { redact, isStretchEnd, inDistribution, protocolHeaders } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
+import { eligibleForTransparent, executeTransparent, postToolUseReplacement, type LiveTool } from "./transparent";
 
 export type HookIn = {
   hook_event_name?: string;
@@ -259,6 +260,27 @@ export async function respondToHook(
     if (lineCount >= 2 && isStretchEnd(name)) {
       const events = readJsonl(path);
       if (events.length >= 2) flushSession(session, events);
+    }
+    // Transparent execution: this call matched a live read-only program's
+    // first step — serve the rest of the routine by replacing this call's
+    // output. Recording above already happened; every failure below falls
+    // open to `{ ok: true }` so the agent's own output stands.
+    try {
+      const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
+      const live = (Array.isArray(liveRaw) ? liveRaw : []) as LiveTool[];
+      const entry = live.find(
+        (t) => (t.sequence ?? [])[0] === name && eligibleForTransparent(t, body.tool_input ?? {}),
+      );
+      if (entry) {
+        const receiptText = await executeTransparent(entry, body.tool_input ?? {});
+        if (receiptText !== null) {
+          // `name` (the real tool, e.g. Bash) selects the native result shape;
+          // the program name appears in the appended sentinel.
+          return postToolUseReplacement(name, body.tool_response ?? body.tool_output ?? "", receiptText, entry.name);
+        }
+      }
+    } catch {
+      /* fall open */
     }
   }
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {

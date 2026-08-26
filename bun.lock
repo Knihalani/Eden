@@ -56,18 +56,23 @@
         "typescript": "5.9.2",
       },
     },
+    "benchmarks/campaign": {
+      "name": "@eden/campaign",
+      "dependencies": {
+        "@eden/compile": "workspace:*",
+        "@eden/core": "workspace:*",
+        "@eden/ir": "workspace:*",
+        "@eden/measure": "workspace:*",
+        "@eden/runtime": "workspace:*",
+        "@eden/shadow": "workspace:*",
+        "@eden/wrap": "workspace:*",
+      },
+    },
     "packages/cli": {
       "name": "eden",
       "version": "0.1.0",
       "bin": {
-        "eden": "./src/cli.ts",
-      },
-      "dependencies": {
-        "@eden/control": "workspace:*",
-        "@eden/core": "workspace:*",
-        "@eden/ir": "workspace:*",
-        "@eden/shadow": "workspace:*",
-        "@eden/wrap": "workspace:*",
+        "eden": "./dist/eden.js",
       },
     },
     "packages/compile": {
@@ -129,6 +134,8 @@
     "@clerk/react": ["@clerk/react@6.14.4", "", { "dependencies": { "@clerk/shared": "^4.29.2", "tslib": "2.8.1" }, "peerDependencies": { "react": "^18.0.0 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0", "react-dom": "^18.0.0 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0" } }, "sha512-vMv3SU8dvo/b09/FAY7A0xaAe+YhZ2u4nvkRUUdqmOi8u3HNSJ3s2k2PIb0cNHsLurMvDzw/dD2Hbk97MPnN/A=="],
 
     "@clerk/shared": ["@clerk/shared@4.29.2", "", { "dependencies": { "@tanstack/query-core": "^5.100.6", "dequal": "2.0.3", "glob-to-regexp": "0.4.1", "js-cookie": "3.0.7" }, "peerDependencies": { "react": "^18.0.0 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0", "react-dom": "^18.0.0 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-9c9Mc1oqumsqo+JY5R37O1ipwcG3RmwPK9oadBLL9E4VxZXthXVaFI9u+1/I4BSFGA/B9BO+17tkVDL4G0Wpbg=="],
+
+    "@eden/campaign": ["@eden/campaign@workspace:benchmarks/campaign"],
 
     "@eden/compile": ["@eden/compile@workspace:packages/compile"],
 

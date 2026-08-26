@@ -110,6 +110,22 @@ export function registryCovers(registry: ToolRegistry, program: StretchProgram):
   return uncoveredTools(registry, program).length === 0;
 }
 
+/**
+ * Did this replay deopt because a program tool failed the same way one failed
+ * in the recorded trace? The wrapper carries `step failed: <message>`; match a
+ * failed event name against the program's tools.
+ */
+function envFlakedTool(err: unknown, t: StretchTrace, program: StretchProgram): string | null {
+  const msg = err instanceof Error ? err.message : "";
+  if (!msg.includes("step failed")) return null;
+  const failedNames = new Set(t.events.filter((e) => e.ok === false).map((e) => e.name));
+  if (!failedNames.size) return null;
+  for (const s of program.steps) {
+    if (s.kind === "tool" && failedNames.has(s.tool)) return s.tool;
+  }
+  return null;
+}
+
 export async function shadowProgram(
   program: StretchProgram,
   traces: StretchTrace[],
@@ -256,6 +272,16 @@ export async function shadowProgram(
         continue;
       }
       if (isDeopt(err)) {
+        // A replay that dies on a tool error the RECORDING ALSO CONTAINS is
+        // measuring the environment, not the program: the naive agent hit the
+        // same transient failure and retried around it. Set the trace aside
+        // (like an unrecorded call) instead of charging the program a miss.
+        const flaked = envFlakedTool(err, t, program);
+        if (flaked) {
+          unvalidatable++;
+          if (reasons.length < 8) reasons.push(`replay hit a ${flaked} failure the recording also contains`);
+          continue;
+        }
         extraMisses++;
         if (reasons.length < 8) reasons.push(`deopt on in-distribution input: ${(err as Error).message}`);
         continue;

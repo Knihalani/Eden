@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   commandShape,
   commandShapeKey,
+  commandShapeCached,
+  commandShapeKeyCached,
   isNoiseCommand,
   looksLikeIdentifier,
 } from "./shapes";
@@ -79,5 +81,31 @@ describe("command shapes", () => {
     const c = commandShapeKey("stripe invoices void --limit 10");
     expect(a).toBe(b);
     expect(a).not.toBe(c);
+  });
+});
+
+describe("shape memoization (hot-path cache)", () => {
+  test("cached variants return results identical to the uncached originals", () => {
+    const cmds = [
+      "gh pr view 101 --repo acme/app",
+      "kubectl get pods -n app-prod -o json",
+      "stripe invoices list --limit 10 --status open",
+      "rm -rf build",
+      "",
+      "   ",
+    ];
+    for (const c of cmds) {
+      expect(commandShapeCached(c)).toEqual(commandShape(c));
+      expect(commandShapeKeyCached(c)).toBe(commandShapeKey(c));
+    }
+  });
+
+  test("memo is transparent under repetition and interleaving", () => {
+    const a = "gh pr checks 202 --repo acme/app";
+    const b = "aws s3 ls s3://acme-artifacts/build-202/";
+    const first = commandShapeCached(a);
+    commandShapeCached(b);
+    expect(commandShapeCached(a)).toEqual(first); // hit returns the same value
+    expect(commandShapeCached("never-seen-cmd list items")).toEqual(commandShape("never-seen-cmd list items"));
   });
 });

@@ -8,6 +8,7 @@ import { drain } from "./drain";
 import { runHookd } from "./hookd";
 import { playCli, fulfillCli, prefetchCli, recallCli } from "./play";
 import { openTool, rejectTool } from "./open";
+import { manifestCli } from "./manifest";
 import { mcpHeaders } from "./headers";
 import { doctor } from "./doctor";
 import { bench } from "./bench";
@@ -26,6 +27,7 @@ else if (cmd === "runner") { const { runner } = await import("./runner"); await 
 else if (cmd === "drain") await drain();
 else if (cmd === "hookd") await runHookd();
 else if (cmd === "play") await playCli(rest);
+else if (cmd === "manifest") manifestCli(rest);
 else if (cmd === "open") await openTool();
 else if (cmd === "reject") await rejectTool();
 else if (cmd === "fulfill") await fulfillCli(rest);

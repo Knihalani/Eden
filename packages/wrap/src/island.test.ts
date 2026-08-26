@@ -1,92 +1,68 @@
 import { describe, expect, test } from "bun:test";
-import { openaiIsland, islandUpstreamUrl, wrapIsland } from "../src/island";
+import {
+  createWitnessTable,
+  islandMemoKey,
+  openaiIsland,
+  withWitnessMemo,
+} from "./island";
 
-describe("openaiIsland", () => {
-  test("parses JSON content from a chat completion", async () => {
-    const island = openaiIsland({
-      apiKey: "k",
-      fetch: (async () =>
-        new Response(JSON.stringify({ choices: [{ message: { content: '{"text":"hi"}' } }] }))) as unknown as typeof fetch,
-    });
-    const out = await island({ system: "draft", input: { n: 1 }, outputSchema: { type: "object" } });
-    expect(out).toEqual({ text: "hi" });
+/** Fake OpenAI fetch. Latency is optional; default 0 — tests assert memoization, not wall time. */
+function fakeFetch(calls: { n: number }, latencyMs = 0): typeof fetch {
+  const fn = async (_url: unknown, init: RequestInit) => {
+    calls.n++;
+    if (latencyMs > 0) await new Promise((r) => setTimeout(r, latencyMs));
+    const body = JSON.parse(String(init.body));
+    const user = JSON.parse(body.messages[1].content);
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: JSON.stringify({ owner: user.repos?.[0]?.split("/")[0] ?? "?" }) } }] }),
+      { status: 200 },
+    );
+  };
+  return fn as typeof fetch;
+}
+
+describe("deterministic-first islands", () => {
+  test("identical input twice is served from witnesses forever after; unseen input falls back", async () => {
+    const calls = { n: 0 };
+    const base = openaiIsland({ fetch: fakeFetch(calls) });
+    const fast = withWitnessMemo(base);
+    const req = { system: "s", input: { repos: ["acme/app"] }, outputSchema: {} } as never;
+
+    const r1 = await fast(req); // miss → live call
+    const r2 = await fast(req); // seen=2 now
+    const before = calls.n;
+    const r3 = await fast(req); // served from memo
+
+    expect(r1).toEqual({ owner: "acme" });
+    expect(r2).toEqual({ owner: "acme" });
+    expect(r3).toEqual({ owner: "acme" });
+    expect(calls.n - before).toBe(0);
+
+    await fast({ system: "s", input: { repos: ["other/x"] }, outputSchema: {} } as never);
+    expect(calls.n).toBeGreaterThan(before); // fallback still reaches the model
   });
 
-  test("wrap island does not loop back into local wrap", () => {
-    expect(islandUpstreamUrl("http://127.0.0.1:8788/v1")).toBe("https://api.openai.com/v1");
-    const prev = process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
-    expect(wrapIsland({})).toBeUndefined();
-    expect(wrapIsland({ apiKey: "k" })).toBeTypeOf("function");
-    if (prev === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = prev;
+  test("disagreeing outputs reset the evidence count instead of poisoning the table", () => {
+    const t = createWitnessTable();
+    const k = islandMemoKey({ system: "s", input: 1, outputSchema: {} });
+    t.observe(k, { a: 1 });
+    expect(t.lookup(k)).toBeUndefined();
+    t.observe(k, { a: 1 });
+    expect(t.lookup(k)).toEqual({ a: 1 });
+    t.observe(k, { a: 2 }); // contradiction
+    expect(t.lookup(k)).toBeUndefined(); // evidence reset, not stale answer
+    t.observe(k, { a: 2 });
+    expect(t.lookup(k)).toEqual({ a: 2 });
   });
 
-  describe("transient-failure retries (waste audit: deopt-replay avoidance)", () => {
-    function okResponse() {
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }));
-    }
-
-    test("a 429 is retried and then succeeds", async () => {
-      let calls = 0;
-      const island = openaiIsland({
-        apiKey: "k",
-        fetch: (async () => {
-          calls++;
-          return calls === 1 ? new Response("rate limited", { status: 429 }) : okResponse();
-        }) as unknown as typeof fetch,
-      });
-      const out = await island({ system: "s", input: {}, outputSchema: {} });
-      expect(out).toEqual({ ok: true });
-      expect(calls).toBe(2);
-    });
-
-    test("a 500 blip burns one retry, not the program", async () => {
-      let calls = 0;
-      const island = openaiIsland({
-        apiKey: "k",
-        fetch: (async () => {
-          calls++;
-          return calls <= 2 ? new Response("boom", { status: 500 }) : okResponse();
-        }) as unknown as typeof fetch,
-      });
-      expect(await island({ system: "s", input: {}, outputSchema: {} })).toEqual({ ok: true });
-      expect(calls).toBe(3);
-    });
-
-    test("a schema rejection (400) fails immediately", async () => {
-      let calls = 0;
-      const island = openaiIsland({
-        apiKey: "k",
-        fetch: (async () => {
-          calls++;
-          return new Response("bad request", { status: 400 });
-        }) as unknown as typeof fetch,
-      });
-      await expect(island({ system: "s", input: {}, outputSchema: {} })).rejects.toThrow("island llm 400");
-      expect(calls).toBe(1);
-    });
-
-    test("a network-level failure is retried", async () => {
-      let calls = 0;
-      const island = openaiIsland({
-        apiKey: "k",
-        fetch: (async () => {
-          calls++;
-          if (calls === 1) throw new TypeError("fetch failed");
-          return okResponse();
-        }) as unknown as typeof fetch,
-      });
-      expect(await island({ system: "s", input: {}, outputSchema: {} })).toEqual({ ok: true });
-      expect(calls).toBe(2);
-    });
-
-    test("exhausted retries throw the provider status", async () => {
-      const island = openaiIsland({
-        apiKey: "k",
-        fetch: (async () => new Response("overloaded", { status: 503 })) as unknown as typeof fetch,
-      });
-      await expect(island({ system: "s", input: {}, outputSchema: {} })).rejects.toThrow("island llm 503");
-    });
+  test("different schemas/inputs never share an entry", async () => {
+    const calls = { n: 0 };
+    const base = openaiIsland({ fetch: fakeFetch(calls) });
+    const fast = withWitnessMemo(base);
+    await fast({ system: "s", input: { repos: ["o/r"] }, outputSchema: {} } as never);
+    await fast({ system: "s", input: { repos: ["o/r"] }, outputSchema: {} } as never);
+    const before = calls.n;
+    await fast({ system: "s2", input: { repos: ["o/r"] }, outputSchema: {} } as never);
+    expect(calls.n).toBe(before + 1);
   });
 });

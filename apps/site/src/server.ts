@@ -777,14 +777,25 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
       steps: string;
     }>(`SELECT id, name, state, when_to_use, seen, steps FROM tool WHERE workspace_id = ? ORDER BY name`, [wsId]);
     return Response.json({
-      tools: tools.map((t) => ({
-        id: t.id,
-        name: t.name,
-        state: t.state,
-        when_to_use: t.when_to_use,
-        seen: jsonRows(t.seen),
-        has_playback: (jsonRows(t.steps) as Array<{ url?: string }>).some((s) => Boolean(s?.url)),
-      })),
+      tools: tools.map((t) => {
+        const steps = jsonRows(t.steps) as Array<{ kind?: string; method?: string; command?: string }>;
+        // Read-only means every step is a plain GET: transparent execution
+        // may serve such programs on the agent's behalf. Anything else —
+        // POSTs, runner commands, island glue — stays explicit-only until a
+        // human opts that program in.
+        const read_only =
+          steps.length > 0 &&
+          steps.every((s) => s.kind === "cloud_http" && (s.method || "GET") === "GET");
+        return {
+          id: t.id,
+          name: t.name,
+          state: t.state,
+          when_to_use: t.when_to_use,
+          seen: jsonRows(t.seen),
+          has_playback: steps.some((s) => Boolean((s as { url?: string })?.url)),
+          read_only,
+        };
+      }),
     });
   }
 

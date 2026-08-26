@@ -1,6 +1,6 @@
 import type { StretchTrace } from "@eden/ir";
 import { CHECK_MIN_SUPPORT, isCheckName } from "@eden/ir";
-import { commandShape, abstractShellGroup } from "../../core/src/shapes";
+import { commandShapeCached, abstractShellGroup } from "../../core/src/shapes";
 
 /**
  * The identity an event contributes to a mined sequence.
@@ -36,7 +36,7 @@ export function effectiveEventName(
   const cmd = String(e.command ?? e.args?.command ?? "");
   const mapped = (shellNames ?? activeShellNames)?.get(cmd);
   if (mapped) return `${e.name}:${mapped}`;
-  const shape = commandShape(cmd);
+  const shape = commandShapeCached(cmd);
   return shape ? `${e.name}:${shape.name}` : e.name;
 }
 
@@ -269,8 +269,8 @@ export function clusterFailureTraces(traces: StretchTrace[], minSupport = 3): Cl
   return clusters.sort((a, b) => b.traces.length - a.traces.length || b.sequence.length - a.sequence.length);
 }
 
-export function clusterTraces(traces: StretchTrace[], minSupport = 3): Cluster[] {
-  const grams = ngrams(traces, minSupport, 3, 12);
+export function clusterTraces(traces: StretchTrace[], minSupport = 3, maxLen = 12): Cluster[] {
+  const grams = ngrams(traces, minSupport, 3, maxLen);
   const fromNgrams: Cluster[] = [];
   for (const seq of grams) {
     if (fromNgrams.some((c) => isSubsequence(seq, c.sequence))) continue;
