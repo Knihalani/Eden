@@ -4,7 +4,7 @@ import { inDistribution, asRecord, getPath, interpolateSlots, setKey } from "@ed
 // not declare a workspace dependency on core.
 import { parameterizeUrl, extractCommandUrls } from "../../core/src/urls";
 import { parseNamedCli, familyId } from "../../core/src/named-cli";
-import { commandShape } from "../../core/src/shapes";
+import { commandShapeCached } from "../../core/src/shapes";
 
 export type OpenAiToolCall = {
   id?: string;
@@ -100,7 +100,7 @@ function shapesOfString(s: string, into: Set<string>): void {
   // Domain-general shell shapes: an unknown binary's command shape is its own
   // signature, so a live `kubectl get pods -n prod` can match a compiled
   // stretch without Eden knowing what kubectl is.
-  const shape = commandShape(s);
+  const shape = commandShapeCached(s);
   if (shape && !NOISE_SHAPE.has(shape.name)) into.add(`cli:${shape.name}`);
 }
 
@@ -351,6 +351,10 @@ export function compiledSchema(program: StretchProgram) {
  * tool_calls response the caller could do nothing with. An empty array is
  * different: the client asked for function calling and simply has no tools of
  * its own, which is exactly who compiled tools are for.
+ *
+ * `programs` is what the caller chose to surface — under Dispatch
+ * (docs/dispatch.md) the handler runs selectSurfacePrograms() first, so this
+ * function stays pure formatting and the surface policy has exactly one home.
  */
 export function injectTools(tools: unknown, programs: StretchProgram[]): unknown {
   if (!Array.isArray(tools)) return tools;

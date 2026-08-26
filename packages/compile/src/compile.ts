@@ -9,6 +9,14 @@ export type CompileOpts = {
   minSupport?: number;
   allowExact?: boolean;
   minLlmReduction?: number;
+  /**
+   * Longest n-gram window the miner considers. Stretches longer than this are
+   * fragmented into overlapping windows, which still compile but bind
+   * positionally and cannot see the stretch's own head — so a period loop
+   * that starts before the window never gets an `over` binding. Callers who
+   * know their stretches run long (ETL chunks of 20+ calls) raise it.
+   */
+  maxGram?: number;
 };
 
 export type CompileResult = {
@@ -77,8 +85,7 @@ function aligned(traces: StretchTrace[], tool: string, nth = 0, cutAt?: number[]
   return { traces: tracesOut, events };
 }
 
-function repeatingPeriod(seq: string[]): { start: number; unit: string[]; times: number; end: number } | null {
-  let best: { start: number; unit: string[]; times: number; end: number; score: number } | null = null;
+function repeatingPeriod(seq: string[]): { start: number; unit: string[]; times: number; end: number } | null {  let best: { start: number; unit: string[]; times: number; end: number; score: number } | null = null;
   for (let p = 2; p <= Math.min(4, Math.floor(seq.length / 2)); p++) {
     for (let start = 0; start <= seq.length - p * 2; start++) {
       const unit = seq.slice(start, start + p);
@@ -108,7 +115,48 @@ function collapseConsecutive(sequence: string[]): Array<{ tool: string; times: n
   return out;
 }
 
+/**
+ * How many times `tool` repeats in THIS trace, as the run immediately following
+ * `priorTool`'s first ok event. Clusters deliberately merge traces whose repeat
+ * widths differ (nearSeq unions a 7-item fan-out with a 10-item one), so the
+ * cluster-majority width cannot be used to bind the loop's `over` array: each
+ * witness must bind against its own width. The compiled program does not care —
+ * at replay the loop iterates whatever array the input actually produces.
+ */
+function traceRepeatRun(t: StretchTrace, tool: string, priorTool: string): number {
+  const names = t.events.filter((e) => e.ok).map((e) => effectiveEventName(e));
+  const p = names.indexOf(priorTool);
+  if (p < 0 || names[p + 1] !== tool) return 0;
+  let n = 0;
+  while (names[p + 1 + n] === tool) n++;
+  return n;
+}
+
 function inferLoopOver(
+  traces: StretchTrace[],
+  priorTool: string | undefined,
+  tool: string,
+): FromBinding | null {
+  if (!priorTool || traces.length === 0) return null;
+  const paths: string[] = [];
+  for (const t of traces) {
+    const need = traceRepeatRun(t, tool, priorTool);
+    if (need < 2) return null;
+    const hit = findArrayBinding(t, priorTool, need);
+    if (hit == null) return null;
+    paths.push(hit);
+  }
+  const path = paths[0]!;
+  if (!paths.every((p) => p === path)) return null;
+  return { kind: "from", step: priorTool, path };
+}
+
+/**
+ * Exact-width variant for period loops: the cluster's majority sequence fixes
+ * the width, and period alignment already assumes every witness ran the same
+ * number of unit repetitions.
+ */
+function inferLoopOverExact(
   traces: StretchTrace[],
   priorTool: string | undefined,
   times: number,
@@ -116,24 +164,25 @@ function inferLoopOver(
   if (!priorTool || times < 2) return null;
   const paths: string[] = [];
   for (const t of traces) {
-    const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
-    const r = prior?.result;
-    if (Array.isArray(r) && r.length === times) {
-      paths.push("");
-      continue;
-    }
-    if (r && typeof r === "object") {
-      const hit = Object.entries(r as Record<string, unknown>).find(([, v]) => Array.isArray(v) && v.length === times);
-      if (hit) {
-        paths.push(hit[0]);
-        continue;
-      }
-    }
-    return null;
+    const hit = findArrayBinding(t, priorTool, times);
+    if (hit == null) return null;
+    paths.push(hit);
   }
   const path = paths[0]!;
   if (!paths.every((p) => p === path)) return null;
   return { kind: "from", step: priorTool, path };
+}
+
+/** Path to the array on `priorTool`'s result whose length is exactly `need`. */
+function findArrayBinding(t: StretchTrace, priorTool: string, need: number): string | null {
+  const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
+  const r = prior?.result;
+  if (Array.isArray(r) && r.length === need) return "";
+  if (r && typeof r === "object") {
+    const hit = Object.entries(r as Record<string, unknown>).find(([, v]) => Array.isArray(v) && v.length === need);
+    if (hit) return hit[0];
+  }
+  return null;
 }
 
 
@@ -269,7 +318,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
   // or a cluster mined under skeletons would fail to align its own events.
   setActiveShellNames(buildShellNames(traces));
   try {
-    return compileAll(traces, { minSupport, allowExact, minLlmReduction }, programs, refusals, seenSeq);
+    return compileAll(traces, { minSupport, allowExact, minLlmReduction, maxGram: opts.maxGram ?? 12 }, programs, refusals, seenSeq);
   } finally {
     setActiveShellNames(undefined);
   }
@@ -277,13 +326,13 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
 
 function compileAll(
   traces: StretchTrace[],
-  opts: { minSupport: number; allowExact: boolean; minLlmReduction: number },
+  opts: { minSupport: number; allowExact: boolean; minLlmReduction: number; maxGram: number },
   programs: StretchProgram[],
   refusals: Refusal[],
   seenSeq: Set<string>,
 ): CompileResult {
   const { minSupport, allowExact, minLlmReduction } = opts;
-  for (const cluster of [...clusterTraces(traces, minSupport), ...clusterFailureTraces(traces, minSupport)]) {
+  for (const cluster of [...clusterTraces(traces, minSupport, opts.maxGram), ...clusterFailureTraces(traces, minSupport)]) {
     const seqKey = cluster.sequence.join("\0");
     if (seenSeq.has(seqKey)) continue;
     seenSeq.add(seqKey);
@@ -303,7 +352,7 @@ function compileAll(
       const id = stepId(tool, used);
       if (period && i === period.start && tool === period.unit[0]) {
         const priorTool = i > 0 ? sequence[i - 1] : undefined;
-        const over = inferLoopOver(cluster.traces, priorTool, period.times);
+        const over = inferLoopOverExact(cluster.traces, priorTool, period.times);
         if (over && priorTool) {
           const unitGroups = collapseConsecutive(period.unit);
           const bodyIds: string[] = [];
@@ -314,7 +363,7 @@ function compileAll(
           for (const g of unitGroups) {
             const innerPrior = g.start > 0 ? period.unit[g.start - 1] : priorTool;
             if (g.times >= 2 && innerPrior) {
-              const innerOver = inferLoopOver(cluster.traces, innerPrior, g.times);
+              const innerOver = inferLoopOverExact(cluster.traces, innerPrior, g.times);
               const innerArgs = innerOver ? loopItemArgs(cluster.traces, g.tool, innerPrior, innerOver.path) : null;
               if (!innerOver || !innerArgs) {
                 ok = false;
@@ -370,7 +419,7 @@ function compileAll(
       }
       if (times >= 2) {
         const priorTool = i > 0 ? sequence[i - 1] : undefined;
-        const over = inferLoopOver(cluster.traces, priorTool, times);
+        const over = inferLoopOver(cluster.traces, priorTool, tool);
         const loopArgs = over && priorTool ? loopItemArgs(cluster.traces, tool, priorTool, over.path) : null;
         if (over && loopArgs) {
           const bodyId = id;

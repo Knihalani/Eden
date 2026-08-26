@@ -23,6 +23,35 @@ export function parseUsage(raw: unknown): { prompt: number; completion: number }
   return { prompt: prompt ?? 0, completion: completion ?? 0 };
 }
 
+/**
+ * Provider cache-hit fields (OpenAI + Anthropic dialects).
+ *
+ * Not folded into `parseUsage` / wrap billing — Arc 1 `cached_tokens` parsing
+ * lands as a ledger line, not as a silent change to prompt/completion. Wave 1
+ * only exposes the parser so the contract is test-pinned.
+ */
+export type CacheTokenFields = {
+  cached: number;
+  cacheWrite?: number;
+};
+
+export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
+  if (!raw || typeof raw !== "object") return null;
+  const u = raw as Record<string, unknown>;
+  const details =
+    u.prompt_tokens_details && typeof u.prompt_tokens_details === "object"
+      ? (u.prompt_tokens_details as Record<string, unknown>)
+      : null;
+  const cached =
+    coerceInt(u.cache_read_input_tokens) ??
+    coerceInt(details?.cached_tokens) ??
+    coerceInt(u.cached_tokens);
+  const cacheWrite =
+    coerceInt(u.cache_creation_input_tokens) ?? coerceInt(details?.cache_creation_tokens);
+  if (cached == null && cacheWrite == null) return null;
+  return { cached: cached ?? 0, ...(cacheWrite != null ? { cacheWrite } : {}) };
+}
+
 export function extractOutput(json: Record<string, unknown>): unknown {
   const choices = json.choices;
   if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== "object") return undefined;

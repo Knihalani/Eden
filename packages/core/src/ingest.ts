@@ -268,6 +268,12 @@ interface OpenAIMessage {
 
 interface OpenAICompletionLog {
   choices?: Array<{ message?: OpenAIMessage; finish_reason?: string }>;
+  /** Optional export metadata. When present, conversations are kept apart so
+   * the compiler sees N traces (its repetition gate needs ≥3) instead of one
+   * fabricated cross-conversation super-sequence. */
+  conversation_id?: string;
+  session_id?: string;
+  thread_id?: string;
 }
 
 /**
@@ -281,54 +287,90 @@ interface OpenAICompletionLog {
  * a matching result are skipped — they are incomplete and would mislead mining.
  */
 export function parseOpenAIToolCalls(logs: OpenAICompletionLog[]): Map<string, ToolEvent[]> {
-  // Pass 1: collect all tool_call requests and all tool results.
-  interface Pending { name: string; args: Record<string, unknown>; logIdx: number }
-  interface Result { output: unknown; isError: boolean }
-  const pending = new Map<string, Pending>();
-  const results = new Map<string, Result>();
-  for (const log of logs) {
-    for (const choice of log.choices ?? []) {
-      const msg = choice.message;
-      if (!msg) continue;
-      if (msg.tool_calls) {
-        for (const tc of msg.tool_calls) {
-          if (!tc.id || !tc.function?.name) continue;
-          let parsedArgs: Record<string, unknown> = {};
+  // Pairing is identical either way; only the trace partition differs.
+  const convoOf = (log: OpenAICompletionLog): string =>
+    log.conversation_id ?? log.session_id ?? log.thread_id ?? "";
+
+  const hasConvoIds = logs.some((l) => convoOf(l) !== "");
+  const partitions = new Map<string, OpenAICompletionLog[]>();
+  if (hasConvoIds) {
+    for (const log of logs) {
+      const key = convoOf(log) || `unkeyed-${partitions.size}`;
+      const list = partitions.get(key);
+      if (list) list.push(log);
+      else partitions.set(key, [log]);
+    }
+  } else {
+    partitions.set("openai-sequence", logs); // legacy single-trace behavior
+  }
+
+  const out = new Map<string, ToolEvent[]>();
+  for (const [key, partLogs] of partitions) {
+    // Pass 1: collect all tool_call requests and all tool results.
+    interface Pending { name: string; args: Record<string, unknown>; logIdx: number }
+    interface Result { output: unknown; isError: boolean }
+    const pending = new Map<string, Pending>();
+    const results = new Map<string, Result>();
+    for (const log of partLogs) {
+      for (const choice of log.choices ?? []) {
+        const msg = choice.message;
+        if (!msg) continue;
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            if (!tc.id || !tc.function?.name) continue;
+            let parsedArgs: Record<string, unknown> = {};
+            try {
+              const p = JSON.parse(tc.function.arguments ?? "{}");
+              if (p && typeof p === "object") parsedArgs = p;
+            } catch { parsedArgs = { raw: tc.function.arguments }; }
+            pending.set(tc.id, { name: tc.function.name, args: parsedArgs, logIdx: 0 });
+          }
+        }
+        if (msg.role === "tool" && msg.tool_call_id) {
+          let output: unknown = msg.content;
           try {
-            const p = JSON.parse(tc.function.arguments ?? "{}");
-            if (p && typeof p === "object") parsedArgs = p;
-          } catch { parsedArgs = { raw: tc.function.arguments }; }
-          pending.set(tc.id, { name: tc.function.name, args: parsedArgs, logIdx: 0 });
+            const p = JSON.parse(msg.content ?? "");
+            if (p !== null && typeof p === "object") output = p;
+          } catch { /* keep as string */ }
+          results.set(msg.tool_call_id, { output, isError: false });
         }
       }
-      if (msg.role === "tool" && msg.tool_call_id) {
-        let output: unknown = msg.content;
-        try {
-          const p = JSON.parse(msg.content ?? "");
-          if (p !== null && typeof p === "object") output = p;
-        } catch { /* keep as string */ }
-        results.set(msg.tool_call_id, { output, isError: false });
-      }
     }
+    // Pass 2: pair requests with results.
+    const paired: Array<{ name: string; args: Record<string, unknown>; result: unknown }> = [];
+    for (const [id, req] of pending) {
+      const res = results.get(id);
+      if (!res) continue; // incomplete call — no result came back
+      paired.push({ name: req.name, args: req.args, result: res.output });
+    }
+    if (paired.length < 2) continue;
+    const events: ToolEvent[] = paired.map((p, i) => ({
+      event_id: `openai-${i}`,
+      seq: i,
+      name: p.name,
+      args: p.args,
+      result: p.result,
+      ok: true,
+    }));
+    out.set(key === "openai-sequence" ? key : `openai-${key.slice(0, 24)}`, events);
   }
-  // Pass 2: pair requests with results.
-  const paired: Array<{ name: string; args: Record<string, unknown>; result: unknown }> = [];
-  for (const [id, req] of pending) {
-    const res = results.get(id);
-    if (!res) continue; // incomplete call — no result came back
-    paired.push({ name: req.name, args: req.args, result: res.output });
-  }
-  if (paired.length < 2) return new Map();
-  // Group into a single synthetic trace.
-  const events: ToolEvent[] = paired.map((p, i) => ({
-    event_id: `openai-${i}`,
-    seq: i,
-    name: p.name,
-    args: p.args,
-    result: p.result,
-    ok: true,
-  }));
-  return new Map([["openai-sequence", events]]);
+  return out;
+}
+
+/**
+ * Auto-detect routing for raw OpenAI chat-completion logs: a JSON array of
+ * objects that carry `choices` arrays. Unreachable before, so OpenAI-shop
+ * exports fell through to "Unrecognized format" despite the adapter existing.
+ */
+export function looksLikeOpenAILogs(parsed: unknown): parsed is OpenAICompletionLog[] {
+  return (
+    Array.isArray(parsed) &&
+    parsed.length > 0 &&
+    parsed.every(
+      (entry) =>
+        entry !== null && typeof entry === "object" && Array.isArray((entry as OpenAICompletionLog).choices),
+    )
+  );
 }
 
 // ─── Auto-detection ─────────────────────────────────────────────────────────
@@ -388,6 +430,11 @@ export function detectAndParse(content: string): { format: string; traces: Map<s
       if ((typeof first.traceId === "string" || typeof first.spanId === "string") && typeof first.name === "string") {
         const parsed = parseOtelSpans(arr as OTelSpan[]);
         return { format: "otel_spans", traces: parsed };
+      }
+      // Raw OpenAI chat-completion logs (array of {choices}). Routed here so
+      // OpenAI-shop exports stop falling through to "Unrecognized format".
+      if (looksLikeOpenAILogs(arr)) {
+        return { format: "openai_logs", traces: parseOpenAIToolCalls(arr) };
       }
       // LangSmith array
       if (typeof first.run_type === "string") {

@@ -239,6 +239,36 @@ export function commandShapeKey(command: string): string | null {
     .slice(0, 16);
 }
 
+// Shape extraction re-tokenizes the same command strings many times per
+// compile (islands predicates and mining alignment each call these), and at
+// steering time every observed call passes through too. Tokenization is pure
+// and commands repeat heavily during mining, so a bounded memo turns repeat
+// inspections free — the same pattern as the redactor's key memo. Bounded so
+// a pathological stream of unique commands cannot grow it without limit;
+// clear-on-full keeps correctness trivially (a miss simply recomputes).
+const SHAPE_MEMO_CAP = 4096;
+
+const shapeMemo = new Map<string, ReturnType<typeof commandShape>>();
+const shapeKeyMemo = new Map<string, string | null>();
+
+export function commandShapeCached(command: string): CommandShape | null {
+  const hit = shapeMemo.get(command);
+  if (hit !== undefined || shapeMemo.has(command)) return hit ?? null;
+  const fresh = commandShape(command);
+  if (shapeMemo.size >= SHAPE_MEMO_CAP) shapeMemo.clear();
+  shapeMemo.set(command, fresh);
+  return fresh;
+}
+
+export function commandShapeKeyCached(command: string): string | null {
+  const hit = shapeKeyMemo.get(command);
+  if (hit !== undefined || shapeKeyMemo.has(command)) return hit ?? null;
+  const fresh = commandShapeKey(command);
+  if (shapeKeyMemo.size >= SHAPE_MEMO_CAP) shapeKeyMemo.clear();
+  shapeKeyMemo.set(command, fresh);
+  return fresh;
+}
+
 /**
  * Variation-driven slot abstraction (the FlashFill move, applied to shells).
  *

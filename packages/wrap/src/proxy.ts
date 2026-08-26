@@ -1,5 +1,6 @@
 import type { StretchProgram } from "@eden/ir";
 import { compiledSchema, injectTools, steerToolCalls } from "./steer";
+import { selectForRequest } from "./intent";
 import { recordCompletion, tapSseUsage, withStreamUsage } from "./usage";
 import type { WrapState } from "./wrap-tools";
 import { killAfterWarningEnabled } from "./guard";
@@ -87,7 +88,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }
   }
   const injected = safely(
-    () => (shouldSteer ? injectTools(body.tools, live) : body.tools),
+    () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined)) : body.tools),
     body.tools,
   );
   const steeredBody = { ...body, stream: false, tools: injected };

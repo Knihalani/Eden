@@ -72,7 +72,15 @@ function signedOut() {
 }
 
 describe("canvas server actions auth gate", () => {
+  // wrapCalls is module-scoped; --randomize reorders these tests, so each case
+  // must start from a known counter (absolute expects, not suite order).
+  function resetCalls() {
+    wrapCalls = 0;
+    for (const k of Object.keys(lastHeaders)) delete lastHeaders[k];
+  }
+
   test("an anonymous visitor cannot approve", async () => {
+    resetCalls();
     signedOut();
     const out = await approveTool("tool_1");
     expect(out.ok).toBe(false);
@@ -81,6 +89,7 @@ describe("canvas server actions auth gate", () => {
   });
 
   test("a session without an active workspace cannot pause or dismiss", async () => {
+    resetCalls();
     authState.userId = "user_1";
     authState.orgId = null;
     const p = await pauseTool("tool_1");
@@ -91,6 +100,7 @@ describe("canvas server actions auth gate", () => {
   });
 
   test("a pending session cannot resume", async () => {
+    resetCalls();
     authState.userId = "user_1";
     authState.orgId = "org_1";
     authState.sessionStatus = "pending";
@@ -100,6 +110,7 @@ describe("canvas server actions auth gate", () => {
   });
 
   test("a signed-in active member reaches the control plane", async () => {
+    resetCalls();
     signedIn();
     const out = await approveTool("tool_1");
     expect(out.ok).toBe(true);
@@ -107,6 +118,7 @@ describe("canvas server actions auth gate", () => {
   });
 
   test("the action carries the caller's org id as x-eden-org", async () => {
+    resetCalls();
     signedIn();
     authState.orgId = "org_9";
     const out = await approveTool("tool_1");
@@ -115,6 +127,7 @@ describe("canvas server actions auth gate", () => {
   });
 
   test("bindWorkspaceOrg registers the caller's org", async () => {
+    resetCalls();
     signedIn();
     authState.orgId = "org_7";
     const out = await bindWorkspaceOrg();
@@ -123,6 +136,7 @@ describe("canvas server actions auth gate", () => {
   });
 
   test("no eden_dev fallback on a managed install without EDEN_API_KEY", async () => {
+    resetCalls();
     const env = { DATABASE_URL: process.env.DATABASE_URL, VERCEL: process.env.VERCEL, EDEN_API_KEY: process.env.EDEN_API_KEY, EDEN_DEV: process.env.EDEN_DEV };
     try {
       process.env.DATABASE_URL = "postgres://managed";

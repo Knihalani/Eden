@@ -598,6 +598,9 @@ describe("wrapTimeoutMs", () => {
 });
 
 describe("control outbox", () => {
+  /** Yield the event loop so fire-and-forget sendPost().then handlers settle — not a flake delay. */
+  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+
   test("failed posts retry on flush", async () => {
     let n = 0;
     const state = createState({
@@ -612,9 +615,9 @@ describe("control outbox", () => {
     const world = createTicketShip({ llmMs: 0 });
     const tools = wrapTools(world.tools, state);
     await tools.notify.execute({ id: "T-100" });
-    for (let i = 0; i < 40 && n < 2; i++) {
+    for (let i = 0; i < 200 && n < 2; i++) {
       if (pendingPosts(state) > 0) await flushOutbox(state);
-      else await Bun.sleep(10);
+      else await tick();
     }
     expect(n).toBeGreaterThanOrEqual(2);
   });
@@ -630,7 +633,10 @@ describe("control outbox", () => {
     const tools = wrapTools({ notify: async () => ({ done: true }) }, state);
     // Every notify posts a trace; 80 posts into a 64-slot queue must drop.
     for (let i = 0; i < 80; i++) await tools.notify.execute({ i });
-    await Bun.sleep(30);
+    for (let i = 0; i < 500 && state.droppedPosts === 0; i++) {
+      if (pendingPosts(state) > 0) await flushOutbox(state);
+      else await tick();
+    }
     for (let i = 0; i < 12; i++) await flushOutbox(state);
     expect(state.droppedPosts).toBeGreaterThan(0);
     await tools.notify.execute({});

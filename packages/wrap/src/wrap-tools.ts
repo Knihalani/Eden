@@ -98,7 +98,13 @@ type Armed = {
   /** Monotonic (performance.now), so an NTP step cannot make this immortal. */
   armedAt: number;
   armedAtCall: number;
-  callBudget: number;
+  /**
+   * Matching-call budget: how many calls agreeing with this input the arming
+   * may see before it is considered stale. Claims and same-input noise both
+   * count; other stretches' calls do not.
+   */
+  budgetCalls: number;
+  matchedCalls: number;
   /**
    * Resolves true when the head's compiled run SUCCEEDED, false when it
    * failed. Parallel siblings wait on this before claiming their share of the
@@ -132,7 +138,8 @@ const ARM_SLACK_CALLS = 32;
 const ARM_MAX_ENTRIES = 64;
 
 function armExpired(a: Armed, now: number, calls: number): boolean {
-  return now - a.armedAt > ARM_TTL_MS || calls - a.armedAtCall > a.callBudget;
+  void calls;
+  return now - a.armedAt > ARM_TTL_MS || a.matchedCalls >= a.budgetCalls;
 }
 
 /** Total number of raw calls this arming expects to absorb. */
@@ -150,8 +157,8 @@ function totalRest(rest: Map<string, number>): number {
  * pushed out entries that had not expired and whose tails had not run yet —
  * and every one of those tails then executed for real against a tool the
  * compiled program had already called. Expired entries are swept first and
- * are almost always enough; oldest-first is the fallback that keeps the hard
- * bound.
+ * are almost always enough. There is no oldest-first live eviction: a burst
+ * that still fills the map after the expired sweep fails open (A3).
  */
 function evictArmings(skipRest: Map<string, Armed>, calls: number): void {
   if (skipRest.size <= ARM_MAX_ENTRIES) return;
@@ -159,23 +166,6 @@ function evictArmings(skipRest: Map<string, Armed>, calls: number): void {
   for (const [id, a] of skipRest) {
     if (skipRest.size <= ARM_MAX_ENTRIES) return;
     if (armExpired(a, now, calls)) skipRest.delete(id);
-  }
-  // Still over after sweeping: give up the armings with the least budget left,
-  // which are the ones closest to retiring anyway. Insertion order is a poor
-  // proxy for that once programs have tails of different lengths — the oldest
-  // entry may be the one with the longest tail still to absorb.
-  while (skipRest.size > ARM_MAX_ENTRIES) {
-    let victim: string | undefined;
-    let least = Infinity;
-    for (const [id, a] of skipRest) {
-      const left = a.callBudget - (calls - a.armedAtCall);
-      if (left < least) {
-        least = left;
-        victim = id;
-      }
-    }
-    if (victim === undefined) return;
-    skipRest.delete(victim);
   }
 }
 
@@ -768,26 +758,59 @@ export function wrapTools<T extends ToolsIn>(
           prefixHits.sort((a, b) => (b.p.sequence?.length ?? 0) - (a.p.sequence?.length ?? 0));
         }
         const hit = prefixHits[0];
-        const armTail = (program: StretchProgram, input: Record<string, unknown>): { key: string; armed: Armed } => {
+        const armTail = (program: StretchProgram, input: Record<string, unknown>): { key: string; armed: Armed } | null => {
           const key = `${program.id}#${++skipSeq}`;
           const rest = restCounts(program);
           let resolveSettled!: (ok: boolean) => void;
           const settled = new Promise<boolean>((r) => (resolveSettled = r));
+          // Capacity gate BEFORE inserting: if live armings already fill the
+          // bound, this stretch simply does not steer. The old code inserted
+          // first and evicted "the least-budget" entry — which under a burst
+          // of concurrent stretches threw away LIVE suppressions and let
+          // their tails re-execute against tools the compiled runs had
+          // already called. Failing open to raw costs those stretches their
+          // savings; dropping someone else's arming cost them their writes.
+          evictArmings(skipRest, calls);
+          if (skipRest.size >= ARM_MAX_ENTRIES) return null;
           const armed: Armed = {
             rest,
             input,
             programId: program.id,
             armedAt: performance.now(),
             armedAtCall: calls,
-            callBudget: totalRest(rest) + ARM_SLACK_CALLS,
+            budgetCalls: totalRest(rest) + ARM_SLACK_CALLS,
+            matchedCalls: 0,
             settled,
             resolveSettled,
           };
           skipRest.set(key, armed);
-          evictArmings(skipRest, calls);
           return { key, armed };
         };
         if (hit) {
+          // If this entity is already armed, do NOT start a second compiled run.
+          // A sequence that repeats the head tool name — or an oblivious agent
+          // that re-issues the head call — used to re-steer here and duplicate
+          // every mutation the in-flight (or just-finished) run already
+          // performed. Fall through to the sibling claim path instead (ADR 002
+          // partial-input identity; ADR 003 keep failed armings readable).
+          const alreadyArmed = safely(() => {
+            for (const [, armed] of skipRest) {
+              if (armed.programId !== hit.p.id) continue;
+              if (eq(armed.input, hit.input)) return true;
+              const rec = armed.input as Record<string, unknown> | null;
+              if (!rec || typeof rec !== "object") continue;
+              const cur = hit.input as Record<string, unknown>;
+              const keys = Object.keys(cur);
+              if (
+                keys.length > 0 &&
+                keys.every((k) => k in rec && eq(cur[k], rec[k]))
+              ) {
+                return true;
+              }
+            }
+            return false;
+          }, false);
+          if (!alreadyArmed) {
           // Armed *before* the await, not after. Real hosts issue a turn's tool
           // calls in parallel, and while the compiled program was running the
           // map was still empty — so a sibling call naming a later step of the
@@ -828,7 +851,15 @@ export function wrapTools<T extends ToolsIn>(
             try {
               armed.resolveSettled(false);
             } catch { /* deferred already gone */ }
-            skipRest.delete(armKey);
+            // KEEP this arming. Deleting it here used to strand the very
+            // information siblings need: a deopt after a mutating step means
+            // that step is DONE, and the only record of which steps ran is
+            // this entry's headErr.toolCalls. With the entry gone, an
+            // oblivious agent's next raw call found nothing to claim and
+            // executed a second time — a duplicated write on every failed
+            // stretch. Failed armings expire through the normal paths (TTL,
+            // call budget, bounded-map eviction); input matching keeps them
+            // from claiming anything but their own stretch.
             if (state.opts.failOpen === false) throw err;
             void pullLive(state);
             // Fall back to raw whenever replay provably duplicates nothing:
@@ -846,6 +877,7 @@ export function wrapTools<T extends ToolsIn>(
             }
           }
           }
+          }
         }
 
         const now = performance.now();
@@ -858,14 +890,36 @@ export function wrapTools<T extends ToolsIn>(
             skipRest.delete(id);
             continue;
           }
-          const remaining = safely(() => armed.rest.get(name), 0);
-          if (!remaining) continue;
           const inputMatches = safely(() => {
             const liveP = live.find((p) => p.id === armed.programId);
             const cur = liveP ? extractInput(liveP, args) : args;
-            return eq(cur, armed.input);
+            if (eq(cur, armed.input)) return true;
+            // Partial match: every key the sibling's args CAN recover must
+            // agree with the arming. Tail calls routinely cannot carry the
+            // head call's full context — fetchDetails(id) has no complaint
+            // text — and requiring the whole input there made every tail call
+            // fall through and RE-EXECUTE after the compiled run had already
+            // done its work: duplicated writes for any agent that keeps
+            // issuing calls instead of stopping at the first one.
+            const rec = armed.input as Record<string, unknown> | null;
+            if (!rec || typeof rec !== "object") return false;
+            const keys = Object.keys(cur as Record<string, unknown>);
+            return (
+              keys.length > 0 &&
+              keys.every((k) =>
+                k in rec && eq((cur as Record<string, unknown>)[k], rec[k]),
+              )
+            );
           }, false);
           if (!inputMatches) continue;
+          // A matching call burns budget whether or not a unit is left: this
+          // is how an agent that has moved well past the stretch eventually
+          // disarms it, while other stretches' interleaved calls do not.
+          safely(() => {
+            armed.matchedCalls++;
+          }, undefined);
+          const remaining = safely(() => armed.rest.get(name), 0);
+          if (!remaining) continue;
           // The head's compiled run is doing this call's work. Wait for its
           // outcome before claiming anything — claiming first and learning
           // later is how a suppressed sibling's work was lost forever when the
@@ -973,7 +1027,9 @@ export function wrapTools<T extends ToolsIn>(
                 try {
                   armed.resolveSettled(false);
                 } catch { /* deferred already gone */ }
-                skipRest.delete(armKey);
+                // Keep the arming (see prefix-steering catch): a sibling whose
+                // step the failed run already performed must claim it, not
+                // re-run it, even though THIS call is refused.
                 safeEmit(run.events[0]?.args);
                 // DIFFERENT from prefix steering, deliberately: the guard
                 // chose this program because the raw call was unacceptable

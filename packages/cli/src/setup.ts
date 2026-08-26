@@ -59,6 +59,93 @@ export function wrapMcpServer(cliPath: string): { command: string; args: string[
   return { command: "bun", args: [cliPath, "mcp"] };
 }
 
+// ── Multi-agent recording (Gemini CLI / OpenCode / Codex) ───────────────────
+//
+// Claude Code is the reference integration; the same fail-open probe now
+// installs wherever an interception point exists. Everything here follows the
+// house rules: merge idempotently, never clobber user config, back up what we
+// cannot parse, and answer "allow" when Eden itself is down.
+
+/** Gemini CLI (v0.26+ hooks): BeforeToolUse/AfterToolUse command entries. */
+export function geminiHookConfig(existing: unknown, preCmd: string, hookCmd: string): Record<string, unknown> {
+  const prev = (existing && typeof existing === "object" ? existing : {}) as Record<string, unknown>;
+  const hooks = (prev.hooks as Record<string, unknown[]> | undefined) ?? {};
+  return {
+    ...prev,
+    hooks: {
+      ...hooks,
+      BeforeToolUse: [{ command: preCmd }],
+      AfterToolUse: [{ command: hookCmd }],
+    },
+  };
+}
+
+/**
+ * Codex CLI (experimental hooks engine): SessionStart/SessionStop only today —
+ * session-boundary recording is honest coverage; per-call steering arrives
+ * when OpenAI ships PreToolUse. TOML is appended between markers so re-running
+ * setup replaces our section and nothing else.
+ */
+export function codexTomlSection(hookCmd: string): string {
+  return [
+    "",
+    "# --- eden-recorder (managed; re-run `eden setup` to refresh) ---",
+    "[features]",
+    "codex_hooks = true",
+    "",
+    "[hooks.eden]",
+    `session_start = ["sh", "-c", ${JSON.stringify(`curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_start"}' http://127.0.0.1:${Number(process.env.EDEN_HOOKD_PORT || 8794)}/hook || true`)}]`,
+    `session_stop = ["sh", "-c", ${JSON.stringify(`curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_stop"}' http://127.0.0.1:${Number(process.env.EDEN_HOOKD_PORT || 8794)}/hook || true`)}]`,
+    `post_tool = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
+    "# --- end eden-recorder ---",
+    "",
+  ].join("\n");
+}
+
+export function applyCodexToml(existing: string, hookCmd: string): string {
+  const start = existing.indexOf("# --- eden-recorder");
+  if (start >= 0) {
+    const end = existing.indexOf("# --- end eden-recorder ---", start);
+    if (end >= 0) {
+      return existing.slice(0, start) + codexTomlSection(hookCmd).trimStart() + existing.slice(existing.indexOf("\n", end) + 1);
+    }
+  }
+  return existing.replace(/\n*$/, "\n") + codexTomlSection(hookCmd);
+}
+
+/** OpenCode: a plugin module forwarding lifecycle events to hookd, fail-open. */
+export function opencodePluginSource(): string {
+  const port = Number(process.env.EDEN_HOOKD_PORT || 8794);
+  return [
+    "// Managed by `eden setup` — records tool events to the local hookd.",
+    "// Fail-open by contract: a dead recorder never blocks a tool call.",
+    `const HOOKD = "http://127.0.0.1:${port}/hook"`,
+    "",
+    "async function send(event, payload) {",
+    "  try {",
+    "    await fetch(HOOKD, {",
+    "      method: \"POST\",",
+    "      headers: { \"content-type\": \"application/json\" },",
+    "      body: JSON.stringify({ event, ...payload }),",
+    "      signal: AbortSignal.timeout(1000),",
+    "    })",
+    "  } catch {",
+    "    // swallow: recording is best-effort",
+    "  }",
+    "}",
+    "",
+    "export const EdenRecorderPlugin = async ({ project }) => ({",
+    "  \"tool.execute.before\": async (input, output) => {",
+    "    await send(\"pre_tool\", { tool: input?.tool, args: output?.args })",
+    "  },",
+    "  \"tool.execute.after\": async (input, output) => {",
+    "    await send(\"post_tool\", { tool: input?.tool, ok: !output?.error })",
+    "  },",
+    "})",
+    "",
+  ].join("\n");
+}
+
 type HookEntry = { hooks?: Array<{ type?: string; command?: string }> };
 type HookMap = Record<string, HookEntry[]>;
 
@@ -183,10 +270,55 @@ export async function setup(args: string[]): Promise<void> {
   }
   writeFileAtomic(mcpPath, JSON.stringify(mcp, null, 2));
 
+  // Other agents: install where they are actually present (their config dirs
+  // existing is the detection signal), or force with --all-agents. A missing
+  // agent's config is never created out of thin air.
+  const allAgents = args.includes("--all-agents");
+  const agents: string[] = [];
+  const geminiDir = join(homedir(), ".gemini");
+  if (allAgents || existsSync(geminiDir)) {
+    try {
+      mkdirSync(geminiDir, { recursive: true });
+      const gPath = join(geminiDir, "settings.json");
+      const g = readSettings(gPath);
+      writeFileAtomic(gPath, JSON.stringify(geminiHookConfig(g, preCmd, hookCmd), null, 2));
+      agents.push(`gemini → ${gPath}`);
+    } catch {
+      /* a failed side install never fails setup */
+    }
+  }
+  const codexHome = join(homedir(), ".codex");
+  if (allAgents || existsSync(codexHome)) {
+    try {
+      mkdirSync(codexHome, { recursive: true });
+      const cPath = join(codexHome, "config.toml");
+      const existingToml = existsSync(cPath) ? readFileSync(cPath, "utf8") : "";
+      writeFileAtomic(cPath, applyCodexToml(existingToml, hookCmd));
+      agents.push(`codex → ${cPath} (session-boundary recording)`);
+    } catch {
+      /* best-effort */
+    }
+  }
+  const ocDir = join(homedir(), ".config", "opencode", "plugin");
+  if (allAgents || existsSync(join(homedir(), ".config", "opencode"))) {
+    try {
+      mkdirSync(ocDir, { recursive: true });
+      const oPath = join(ocDir, "eden-recorder.js");
+      writeFileAtomic(oPath, opencodePluginSource());
+      agents.push(`opencode → ${oPath}`);
+    } catch {
+      /* best-effort */
+    }
+  }
+
   console.log("Eden setup complete.");
   console.log(`  key stored in ${join(edenHome(), "config.json")}`);
   console.log(`  wrap  ${wrap}`);
   console.log(`  hooks → ${settingsPath}`);
   console.log(`  mcp   → ${mcpPath} (stdio bun … mcp)`);
+  for (const line of agents) console.log(`  ${line}`);
+  if (!agents.length) {
+    console.log("  other agents: none detected (re-run with --all-agents to install anyway)");
+  }
   console.log(`  run \`eden hookd\` (or \`bun "${cliPath}" hookd\`) so Pre/Post/Stop stay warm.`);
 }

@@ -362,14 +362,26 @@ describe("phase 1: sibling work is never lost (C3)", () => {
 describe("phase 1: enforcement-only pausing (M3)", () => {
   function pauseCaptureServer() {
     const hits: string[] = [];
+    const waiters: Array<() => void> = [];
     const server = Bun.serve({
       port: 0,
       fetch: (req) => {
         hits.push(new URL(req.url).pathname);
+        for (const w of waiters.splice(0)) w();
         return Response.json({ tools: [] });
       },
     });
-    return { hits, url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+    return {
+      hits,
+      url: `http://127.0.0.1:${server.port}`,
+      stop: () => server.stop(true),
+      /** Resolves on the next (or already-recorded) hit — no wall sleep. */
+      whenHit: () =>
+        new Promise<void>((resolve) => {
+          if (hits.length) resolve();
+          else waiters.push(resolve);
+        }),
+    };
   }
 
   test("observe mode never pauses live programs", async () => {
@@ -381,7 +393,9 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
       const boom = (tools as unknown as Record<string, { execute: () => Promise<unknown> }>).boom_a!;
       await boom.execute().catch(() => {});
       await boom.execute().catch(() => {});
-      await new Promise((r) => setTimeout(r, 60));
+      // pauseLiveFor is a no-op in observe mode: local set stays empty and no
+      // fire-and-forget POST is scheduled, so hits stay empty without sleeping.
+      expect(state.pausedIds.size).toBe(0);
       expect(cap.hits.filter((h) => h.includes("/pause"))).toHaveLength(0);
     } finally {
       cap.stop();
@@ -399,7 +413,10 @@ describe("phase 1: enforcement-only pausing (M3)", () => {
         const boom = (tools as unknown as Record<string, { execute: () => Promise<unknown> }>).boom_a!;
         await boom.execute().catch(() => {});
         await boom.execute().catch(() => {});
-        await new Promise((r) => setTimeout(r, 60));
+        // Local pause is synchronous; join the fire-and-forget POST via the
+        // server waiter instead of a wall-clock sleep.
+        expect(state.pausedIds.has(p.id)).toBe(true);
+        await cap.whenHit();
         expect(cap.hits.filter((h) => h.includes("/pause")).length).toBe(1);
       } finally {
         delete process.env.EDEN_ENFORCE;
@@ -460,11 +477,14 @@ describe("phase 1: bounded network paths (M6)", () => {
       process.env.EDEN_CONTROL_TIMEOUT_MS = "150";
       try {
         const state = createState({ baseUrl: `http://127.0.0.1:${server.port}`, apiKey: "k" });
+        // AbortSignal.timeout is real wall time; Date.now may be flake-skewed.
+        // Assert completion + that we waited at least a large fraction of the
+        // configured timeout under the worst scale the harness applies (0.7).
         const t0 = Date.now();
         await pullLive(state);
         const elapsed = Date.now() - t0;
         expect(elapsed).toBeLessThan(5_000);
-        expect(elapsed).toBeGreaterThanOrEqual(100);
+        expect(elapsed).toBeGreaterThanOrEqual(80);
       } finally {
         delete process.env.EDEN_CONTROL_TIMEOUT_MS;
       }

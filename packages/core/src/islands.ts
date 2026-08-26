@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { IslandStep, StepKind, ToolEvent } from "./types";
 import { familyId, parseNamedCli, extractNamedCliCalls, isMutatingGh, isMutatingCurl, type ParsedCli } from "./named-cli";
 import { githubRestFromCli, parameterizeUrl, toolNameFromUrls } from "./urls";
-import { commandShape, isNoiseCommand, abstractShellGroup } from "./shapes";
+import { commandShapeCached, isNoiseCommand, abstractShellGroup } from "./shapes";
 
 const SHARED = new Set(["Read", "Bash", "Write", "Edit", "Grep", "Glob", "get_customer"]);
 const EDIT_LIKE = new Set(["Edit", "Write", "NotebookEdit"]);
@@ -72,7 +72,7 @@ function isGenericBash(event: ToolEvent): boolean {
   if (event.name !== "Bash" && event.name !== "bash") return false;
   const cmd = String(event.command ?? event.args.command ?? "");
   if (extractNamedCliCalls(cmd).length > 0) return false;
-  if (!commandShape(cmd)) return true;
+  if (!commandShapeCached(cmd)) return true;
   return isNoiseCommand(cmd);
 }
 
@@ -115,7 +115,7 @@ function toStep(event: ToolEvent): IslandStep {
   // Domain-general fallback: an unknown binary is named by its own shape
   // (binary + subcommand path) rather than by the transport ("Bash"), which
   // would collapse every unrelated command onto one step identity.
-  const shape = parsed ? null : commandShape(cmd);
+  const shape = parsed ? null : commandShapeCached(cmd);
   const keys = (parsed ? parsed.flags : shape ? [...shape.flags] : argKeys(event.args)).filter((k) => k !== "command");
   const constants: Record<string, string> = {};
   for (const k of argKeys(event.args)) {
@@ -171,7 +171,7 @@ export function cleanEvents(events: ToolEvent[]): ToolEvent[] {
     // The old default (no marker ⇒ read) collapsed byte-identical repeats of
     // `terraform destroy` / `psql -c "INSERT …"` for every vendor the
     // domain-general path exists to serve — under-execution by dedupe.
-    const shape = shell && cmd ? commandShape(cmd) : undefined;
+    const shape = shell && cmd ? commandShapeCached(cmd) : undefined;
     // Named CLI calls keep marker-based classification (a bare `curl URL` is
     // a GET with no read verb to prove); generic shells need shape proof.
     const hasNamedCli = Boolean(cmd && extractNamedCliCalls(cmd).length);

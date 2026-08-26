@@ -55,21 +55,103 @@ export function resultCacheKey(identity: ResultCacheIdentity): string {
 }
 
 /**
+ * Public-pool key: identical to the tenant key minus the workspace. Only
+ * responses fetched WITHOUT credentials may land here (see playback's
+ * credential-free check) — two tenants hitting the same unauthenticated
+ * public endpoint receive byte-identical bodies, so sharing them costs one
+ * upstream request instead of W. Private calls never touch this namespace.
+ */
+export function publicResultKey(identity: Omit<ResultCacheIdentity, "workspaceId">): string {
+  const canon = stableStringify({
+    v: 1,
+    pool: "public",
+    tool: identity.toolId,
+    step: identity.step.id,
+    name: identity.step.name ?? "",
+    method: identity.step.method || "GET",
+    url: identity.url,
+    bound: identity.bound ?? {},
+  });
+  return `rcp:${createHash("sha256").update(canon).digest("hex")}`;
+}
+
+/**
+ * Storage envelope. When an entry carries an upstream validator (ETag), it is
+ * stored as {"__eden_cache":2,"etag","v"}; readers without an etag get the
+ * plain body exactly as before, so pre-envelope rows stay readable and
+ * etag-less writers keep writing legacy-shaped bodies.
+ */
+type Envelope = { __eden_cache: 2; etag?: string; v: unknown };
+
+function packBody(value: unknown, etag?: string): string {
+  return etag === undefined ? JSON.stringify(value) : JSON.stringify({ __eden_cache: 2 as const, etag, v: value });
+}
+
+function unpackBody(body: string): CacheEntry | undefined {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      (parsed as Envelope).__eden_cache === 2
+    ) {
+      const env = parsed as Envelope;
+      return { value: env.v, ...(env.etag !== undefined ? { etag: env.etag } : {}) };
+    }
+    return { value: parsed };
+  } catch {
+    return undefined;
+  }
+}
+
+export type CacheEntry = { value: unknown; etag?: string };
+
+/**
  * A corrupt cached body (older writer, truncated write) is a miss, not a
  * crash: callers fall through to a live fetch and overwrite below.
  */
 export async function readResult<T = unknown>(db: EdenDb, key: string): Promise<T | undefined> {
+  const entry = await readEntry(db, key);
+  return entry === undefined ? undefined : (entry.value as T);
+}
+
+/** Fresh-only entry read (envelope-aware). */
+export async function readEntry(db: EdenDb, key: string): Promise<CacheEntry | undefined> {
   try {
     const hit = await db.get<{ body: string; expires_at: number }>(
       `SELECT body, expires_at FROM result_cache WHERE cache_key = ?`,
       [key],
     );
     if (!hit || hit.expires_at <= Date.now()) return undefined;
-    try {
-      return JSON.parse(hit.body) as T;
-    } catch {
-      return undefined;
-    }
+    return unpackBody(hit.body);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Entry of ANY age, with its expiry — the revalidation path. An expired
+ * entry is not garbage while its ETag lives: one If-None-Match round trip
+ * either proves it current (a ~free hit) or the upstream returns fresher
+ * bytes. Entries without an etag are worthless once expired.
+ */
+export async function readStaleEntry(
+  db: EdenDb,
+  key: string,
+): Promise<(CacheEntry & { expiresAt: number }) | undefined> {
+  try {
+    const hit = await db.get<{ body: string; expires_at: number }>(
+      `SELECT body, expires_at FROM result_cache WHERE cache_key = ?`,
+      [key],
+    );
+    if (!hit) return undefined;
+    const entry = unpackBody(hit.body);
+    if (!entry) return undefined;
+    // Without a validator, expiry means worthless; with one, revalidation
+    // can still prove the entry current.
+    if (!entry.etag && hit.expires_at <= Date.now()) return undefined;
+    return { ...entry, expiresAt: hit.expires_at };
   } catch {
     return undefined;
   }
@@ -80,11 +162,12 @@ export async function writeResult(
   key: string,
   value: unknown,
   ttlMs: number = RESULT_CACHE_TTL_MS,
+  etag?: string,
 ): Promise<void> {
   try {
     await db.run(`INSERT OR REPLACE INTO result_cache (cache_key, body, expires_at) VALUES (?, ?, ?)`, [
       key,
-      JSON.stringify(value),
+      packBody(value, etag),
       Date.now() + ttlMs,
     ]);
     // Expired rows are never read again but were never deleted, so the table

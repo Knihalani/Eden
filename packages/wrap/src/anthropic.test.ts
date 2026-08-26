@@ -4,6 +4,7 @@ import {
   anthropicMessageToSse,
   handleAnthropicMessages,
   steerAnthropicToolUses,
+  applyCacheBreakpoints
 } from "./anthropic";
 import { createState } from "./wrap-tools";
 
@@ -213,5 +214,47 @@ describe("anthropic handler", () => {
     expect(sse).toContain('"text":"Hello."');
     expect(sse).toContain('"stop_reason":"end_turn"');
     expect(sse.trim().endsWith("data: {\"type\":\"message_stop\"}")).toBe(true);
+  });
+});
+
+describe("prompt-cache breakpoints (W20)", () => {
+  test("string system converts to a cached block; last tool and last message get breakpoints", () => {
+    const body: any = {
+      model: "claude",
+      system: "be brief",
+      tools: [{ name: "a", input_schema: {} }, { name: "b", input_schema: {} }],
+      messages: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: [{ type: "text", text: "hello" }] },
+      ],
+    };
+    applyCacheBreakpoints(body);
+    expect(Array.isArray(body.system)).toBe(true);
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.tools[1].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.tools[0].cache_control).toBeUndefined();
+    const lastMsg = body.messages[1];
+    expect(lastMsg.content[0].cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  test("array system marks only the final block; string message content is upgraded safely", () => {
+    const body: any = {
+      system: [{ type: "text", text: "a" }, { type: "text", text: "b" }],
+      messages: [{ role: "user", content: "one line" }],
+    };
+    applyCacheBreakpoints(body);
+    expect(body.system[0].cache_control).toBeUndefined();
+    expect(body.system[1].cache_control).toBeDefined();
+    expect(Array.isArray(body.messages[0].content)).toBe(true);
+    expect(body.messages[0].content[0].text).toBe("one line");
+    expect(body.messages[0].content[0].cache_control).toBeDefined();
+  });
+
+  test("opt-out env disables everything", () => {
+    process.env.EDEN_PROMPT_CACHE = "0";
+    const body: any = { system: "s", tools: [{ name: "t", input_schema: {} }], messages: [] };
+    applyCacheBreakpoints(body);
+    expect(typeof body.system).toBe("string");
+    delete process.env.EDEN_PROMPT_CACHE;
   });
 });

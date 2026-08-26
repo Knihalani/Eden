@@ -130,12 +130,15 @@ export function jsonBytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
-export function densifyPayload(value: unknown): {
+export function densifyPayload(value: unknown, opts: { rawBytes?: number } = {}): {
   densified: unknown;
   raw_bytes: number;
   densified_bytes: number;
 } {
-  const raw_bytes = jsonBytes(value);
+  // Callers that already hold the response text (playback's liveLoad) pass
+  // its byte length; stringifying the whole payload again just to measure it
+  // was pure waste on the latency+billing path.
+  const raw_bytes = opts.rawBytes ?? jsonBytes(value);
   const densified = densifyValue(value);
   const densified_bytes = jsonBytes(densified);
   return { densified, raw_bytes, densified_bytes };

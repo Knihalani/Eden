@@ -10,9 +10,34 @@ export async function openTool(): Promise<void> {
   // JSON.parse; it is advisory data, so a bad file just means the plain
   // workshop URL — same guard drain uses for its reads.
   const knock = readJson<{ tool_id?: string }>(knockPath, {});
-  const url = knock.tool_id ? `${base}/workshop/${knock.tool_id}` : `${base}/workshop`;
-  Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" });
+  const url = knockWorkshopUrl(base, knock);
+  openBrowser(url);
   console.log(url);
+}
+
+/** Workshop URL from an advisory knock. Corrupt/missing knock → root, never throw. */
+export function knockWorkshopUrl(base: string, knock: { tool_id?: string } | null | undefined): string {
+  const id = knock?.tool_id;
+  return id ? `${base}/workshop/${id}` : `${base}/workshop`;
+}
+
+/** Cross-platform browser open. macOS is not the only place agents run. */
+export function openBrowser(url: string): void {
+  const platform = process.platform;
+  const cmd =
+    platform === "darwin"
+      ? ["open", url]
+      : platform === "win32"
+        ? ["cmd", "/c", "start", "", url]
+        : ["xdg-open", url];
+  try {
+    const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" });
+    // xdg-open exits non-zero when nothing can claim the URL; the printed
+    // link below is the fallback either way.
+    void proc.exited.catch(() => undefined);
+  } catch {
+    /* the URL is printed regardless */
+  }
 }
 
 export async function rejectTool(): Promise<void> {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -129,25 +129,33 @@ describe("DELETE /mcp terminates the session cleanly", () => {
    * answer a non-JSON error — clients read that as a protocol failure instead
    * of a clean shutdown.
    */
-  // Cache-busted import: a private server singleton (and db connection) that
-  // outlives nothing, so afterEach's cleanup cannot pull the database out from
-  // under an instance another test file shares.
-  const SERVER_MOD = `./server?bust=mcp-delete`;
+  // One bust + one sqlite for the describe. beforeEach used to mint a new
+  // EDEN_DB while re-importing the same busted module — server.db() stays
+  // memoized on the first path, then afterEach deleted that file under the
+  // open handle (shuffle flake).
+  const SERVER_MOD = `./server?bust=mcp-delete-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let dir: string;
   let dbFile: string;
+  let handleFetch: (req: Request) => Promise<Response>;
   const saved: Record<string, string | undefined> = {};
 
-  beforeEach(async () => {
-    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED"]) {
+  beforeAll(async () => {
+    for (const k of ["DATABASE_URL", "VERCEL", "EDEN_SKIP_SEED", "EDEN_DEV"]) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
+    // Force the anonymous local fallback. Other suites (signup/flow) pin
+    // EDEN_DEV=0; under --randomize that would make /mcp 401 before DELETE
+    // can return 202. Clearing DATABASE_URL/VERCEL alone is not enough when
+    // a later restore or bun .env reload re-marks the process as managed.
+    process.env.EDEN_DEV = "1";
     dir = mkdtempSync(join(tmpdir(), "eden-mcp-del-"));
     dbFile = join(dir, "mcp.db");
     process.env.EDEN_DB = dbFile;
+    ({ handleFetch } = await import(SERVER_MOD));
   });
 
-  afterEach(() => {
+  afterAll(() => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
@@ -155,14 +163,19 @@ describe("DELETE /mcp terminates the session cleanly", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  beforeEach(() => {
+    process.env.EDEN_DEV = "1";
+    process.env.EDEN_DB = dbFile;
+    delete process.env.DATABASE_URL;
+    delete process.env.VERCEL;
+  });
+
   test("answers 202 accepted, not a non-JSON error", async () => {
-    const { handleFetch } = await import(SERVER_MOD);
     const res = await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }));
     expect(res.status).toBe(202);
   });
 
   test("POST still reaches the JSON-RPC handler afterwards", async () => {
-    const { handleFetch } = await import(SERVER_MOD);
     await handleFetch(new Request("http://127.0.0.1:8787/mcp", { method: "DELETE", headers: { host: "127.0.0.1:8787" } }));
     const res = await handleFetch(
       new Request("http://127.0.0.1:8787/mcp", {

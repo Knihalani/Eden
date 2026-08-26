@@ -36,6 +36,12 @@ function run() {
   const r = emptyRun();
   // The budget branch is only reached after a first warning.
   r.firstWarningAt = 0;
+  // Pin the run's clock origin. emptyRun stamps t0 from performance.now(),
+  // so with the literal `now: 50_000` below this test only passed while the
+  // whole suite finished within 50 seconds of process start — a longer suite
+  // silently flipped these cases into "no time pressure". Control both ends
+  // of the subtraction.
+  r.t0 = -5_000;
   return r;
 }
 

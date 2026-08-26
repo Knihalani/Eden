@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { minifyCli, stripAnsi } from "./densify";
 import { compactReceipt, modelFacing } from "./compact";
-import { commandShape } from "./shapes";
+import { commandShapeCached } from "./shapes";
 import {
   extractLoopIds,
   fulfillArgv,
@@ -94,7 +94,7 @@ export function rewriteForLoop(command: string): string | null {
       segs.length > 0 &&
       segs.every((seg) => {
         const stripped = seg.replace(/^sudo\s+/, "");
-        const sh = commandShape(stripped);
+        const sh = commandShapeCached(stripped);
         return sh !== null && sh.possiblyRead;
       });
   }

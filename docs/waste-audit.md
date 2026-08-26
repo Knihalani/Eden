@@ -37,7 +37,7 @@ strings) rather than vendor tables.*
 | W13 | Tool-definition bloat in the prompt | 150k → 2k tokens (98.7%) progressive disclosure | `selectMcpTools` cap (6) + bounded instructions (1200 chars) | ✅ |
 | W14 | Tool-list churn invalidates agent KV-cache | Manus: cache hit rate = #1 metric; ~10× price spread | **emit list alphabetically; admission stays popularity-based** | ✅ fixed |
 | W15 | Multi-agent duplicated work / no blackboard | Anthropic 15× tokens; MAST inter-agent misalignment; Cognition essay | none — Eden sits on one agent's tool path | ❌ |
-| W16 | Overthinking / verbose deliberation tokens | Chain of Draft −92%; process efficiency often < 20% | islands run on a cheap model (gpt-4o-mini, temp 0) with transient-error retries — cascade routing | 🟡 partial |
+| W16 | Overthinking / verbose deliberation tokens | Chain of Draft −92%; process efficiency often < 20% | islands run on a cheap model (gpt-5.6-luna, temp 0) with transient-error retries — cascade routing | 🟡 partial |
 | W17 | Live duplicate reads within a session | context-rot re-read spiral | by design not suppressed (spec: ordinary calls must not wait on Eden); warnings only | ⚪ |
 | W18 | LLM used as CPU (determinism waste) | OpenAI latency guide: "don't default to an LLM" | compiled steps are code; island LLM only for semantic glue | ✅ |
 | W19 | Retry amplification from invalid args | BFCL AST/exec gap; ±10% temp sensitivity | witness-envelope gate (`inDistribution`) refuses out-of-distribution inputs instead of executing blind | ✅ |

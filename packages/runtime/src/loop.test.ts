@@ -234,10 +234,16 @@ describe("parallel loops", () => {
 
   test("parallel and sequential runs agree exactly", async () => {
     const N = 10;
+    // Seeded jitter — outcomes must not depend on Math.random races.
+    let s = 0xC0FFEE >>> 0;
+    const rand = () => {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      return s / 0x100000000;
+    };
     const make = () => ({
       async execute(tool: string, args: Record<string, unknown>) {
         if (tool === "listItems") return { items: Array.from({ length: N }, (_, i) => ({ id: `I-${i}` })) };
-        await Bun.sleep(Math.random() * 5);
+        await Bun.sleep(rand() * 5);
         return { of: args.id, n: Number(String(args.id).split("-")[1]) * 2 };
       },
     });

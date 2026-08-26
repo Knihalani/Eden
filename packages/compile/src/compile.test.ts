@@ -304,6 +304,48 @@ describe("compile", () => {
     expect(p.returns).toEqual({ kind: "from", step: loop!.id, path: "" });
   });
 
+  test("mines a fan-out loop across witnesses with DIFFERENT widths", () => {
+    // Clustering deliberately merges near-identical sequences whose only
+    // difference is the fan-out width (nearSeq). The loop's `over` binding
+    // must therefore come from each witness's own array length, not the
+    // cluster-majority width — otherwise every merged cluster refuses.
+    const traces: StretchTrace[] = [4, 4, 4, 5].map((n, i) => {
+      const ids = Array.from({ length: n }, (_, j) => `s${i}-${j}`);
+      return {
+        id: `width${i}`,
+        llmCalls: n + 4,
+        duration_ms: 1000,
+        cost_cents: n + 4,
+        input: { orderId: `O-${i}` },
+        complete: true,
+        events: [
+          { name: "findOrder", args: { orderId: `O-${i}` }, result: { orderId: `O-${i}`, items: ids, paid: true }, ok: true },
+          ...ids.map((id) => ({ name: "checkStock", args: { itemId: id }, result: { itemId: id, inStock: true }, ok: true })),
+          { name: "issueRefund", args: { orderId: `O-${i}` }, result: { refunded: true }, ok: true },
+          { name: "sendReceipt", args: { orderId: `O-${i}` }, result: { sent: true }, ok: true },
+        ],
+        output: { sent: true },
+      };
+    });
+    const { programs } = compileTraces(traces);
+    // The majority-width group must yield a fan-out loop bound to the order's
+    // items array; minority widths may refuse loudly but never silently.
+    const p = programs.find((q) => q.steps.some((s) => s.kind === "loop"));
+    expect(p).toBeTruthy();
+    const loop = p!.steps.find((s) => s.kind === "loop");
+    expect(loop && loop.kind === "loop").toBe(true);
+    if (loop && loop.kind === "loop") {
+      // over must point at findOrder's items array, not a fixed width.
+      const over = loop.over;
+      const isFrom = over.kind === "from";
+      expect(isFrom).toBe(true);
+      if (isFrom) {
+        expect(over.path).toBe("items");
+        expect(p!.steps.some((s) => s.id === over.step && s.kind === "tool" && s.tool === "findOrder")).toBe(true);
+      }
+    }
+  });
+
   test("mines a period-2 loop over a prior array", () => {
     const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => {
       const ids = [`a${i}`, `b${i}`, `c${i}`];

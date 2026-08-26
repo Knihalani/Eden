@@ -1,6 +1,7 @@
 import type { StretchProgram } from "@eden/ir";
 import { redact } from "@eden/ir";
 import { compiledSchema, steerToolCalls } from "./steer";
+import { selectForRequest } from "./intent";
 import { killAfterWarningEnabled } from "./guard";
 import type { WrapState } from "./wrap-tools";
 
@@ -37,6 +38,7 @@ interface AnthropicContentBlock {
   name?: string;
   input?: Record<string, unknown>;
   tool_use_id?: string;
+  cache_control?: { type: "ephemeral" };
   content?: string;
   is_error?: boolean;
 }
@@ -44,10 +46,52 @@ interface AnthropicContentBlock {
 interface AnthropicRequest {
   model?: string;
   max_tokens?: number;
-  system?: string | Array<{ type: string; text?: string }>;
+  system?: string | Array<{ type: string; text?: string; cache_control?: { type: "ephemeral" } }>;
   messages?: Array<{ role: string; content: string | AnthropicContentBlock[] }>;
-  tools?: Array<{ name: string; description?: string; input_schema?: object }>;
+  tools?: Array<{ name: string; description?: string; input_schema?: object; cache_control?: { type: "ephemeral" } }>;
   stream?: boolean;
+}
+
+/**
+ * Serving-side prompt-cache discipline (W20). Provider caches bill a stable
+ * prefix at ~10% of input price, but only up to an explicit breakpoint, and
+ * any byte that changes invalidates from there back. Eden controls three
+ * naturally-stable boundaries in every proxied request:
+ *
+ *   1. the last tool definition (covers system + tools),
+ *   2. the system prompt itself,
+ *   3. the final content block of the last message — sessions are
+ *      append-only, so "everything before the newest turn" is exactly the
+ *      cacheable history.
+ *
+ * Sessions that reorder their tool array churn the prefix and pay full price
+ * regardless; nothing here can help that (and alphabetical emission is the
+ * MCP surface's job). Opt out with EDEN_PROMPT_CACHE=0.
+ */
+export function applyCacheBreakpoints(body: AnthropicRequest): void {
+  if (process.env.EDEN_PROMPT_CACHE === "0") return;
+  if (Array.isArray(body.tools) && body.tools.length > 0) {
+    const last = body.tools[body.tools.length - 1]!;
+    last.cache_control = { type: "ephemeral" };
+  }
+  if (typeof body.system === "string") {
+    body.system = [{ type: "text", text: body.system, cache_control: { type: "ephemeral" } }];
+  } else if (Array.isArray(body.system) && body.system.length > 0) {
+    const last = body.system[body.system.length - 1]!;
+    last.cache_control = { type: "ephemeral" };
+  }
+  const msgs = body.messages;
+  if (Array.isArray(msgs) && msgs.length > 0) {
+    const lastMsg = msgs[msgs.length - 1]!;
+    if (typeof lastMsg.content === "string") {
+      lastMsg.content = [{ type: "text", text: lastMsg.content, cache_control: { type: "ephemeral" } }];
+    } else if (Array.isArray(lastMsg.content) && lastMsg.content.length > 0) {
+      const lastBlock = lastMsg.content[lastMsg.content.length - 1]!;
+      // tool_result blocks carry results the next turn depends on verbatim;
+      // they are as append-only-stable as anything else at the tail.
+      (lastBlock as { cache_control?: { type: "ephemeral" } }).cache_control = { type: "ephemeral" };
+    }
+  }
 }
 
 type AnthropicMessage = {
@@ -77,7 +121,11 @@ function anthropicToolDef(program: StretchProgram) {
   };
 }
 
-/** Inject compiled tools into an Anthropic request's tools array. */
+/**
+ * Inject compiled tools into an Anthropic request's tools array. `programs`
+ * is what the caller chose to surface via selectSurfacePrograms() — this
+ * stays pure formatting (Dispatch policy lives in intent.ts).
+ */
 function injectAnthropicTools(
   existing: AnthropicRequest["tools"],
   programs: StretchProgram[],
@@ -232,10 +280,12 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   // Opt-in means the client sent a tools ARRAY — an empty array has opted into
   // function calling (see injectTools). A missing tools field has not.
   const shouldSteer = steerable && live.length > 0 && Array.isArray(body.tools);
-  if (shouldSteer) body.tools = injectAnthropicTools(body.tools, live);
+  if (shouldSteer) body.tools = injectAnthropicTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined));
 
   const wantsStream = Boolean(body.stream);
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
+
+  applyCacheBreakpoints(body);
 
   const fn = opts.fetch ?? fetch;
   const anthropicKey = req.headers.get("x-api-key") || process.env.ANTHROPIC_API_KEY || "";

@@ -195,8 +195,11 @@ describe("TicketShip handwritten program vs naive", () => {
     expect(verifyAt).toBeGreaterThan(writeAt);
     expect(compiledWorld.mutationsFor("T-100")).toEqual({ wrote: true, verified: true, notified: true });
     expect(compiled.value).toEqual({ notified: true, id: "T-100" });
-    expect(naive.stats.duration_ms).toBeGreaterThan(LLM_MS * 7);
-    expect(compiled.stats.ms).toBeGreaterThan(LLM_MS * 0.5);
+    // duration_ms is performance.now(); flake-audit scales that clock (±30%).
+    const clock = Number(process.env.EDEN_FLAKE_CLOCK_SCALE ?? "1");
+    const scale = Number.isFinite(clock) && clock > 0 ? clock : 1;
+    expect(naive.stats.duration_ms).toBeGreaterThan(LLM_MS * 7 * scale);
+    expect(compiled.stats.ms).toBeGreaterThan(LLM_MS * 0.5 * scale);
   });
 
   test("verifyWrite skip rate 0 vs naive ~0.2", async () => {
