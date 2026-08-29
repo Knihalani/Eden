@@ -50,6 +50,42 @@ export function parseNetAllow(raw: string | undefined): string[] {
 
 const NET_ALLOW_EMPTY = "EDEN_NET_ALLOW empty · piped network binaries stay refused";
 const SURFACE_ALL = "EDEN_SURFACE all · jit-soak FAIL precision=0.789 n=38 · default stays all";
+export const PROBE_MS = 800;
+
+/** Fetch + JSON with a hard deadline. AbortSignal alone can miss a hanging body. */
+export async function probeJson(
+  url: string,
+  fetchFn: typeof fetch = fetch,
+  ms = PROBE_MS,
+): Promise<{ ok: boolean; status: number; body: unknown } | null> {
+  const ac = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ac.abort();
+      reject(new Error("probe-deadline"));
+    }, ms);
+  });
+  try {
+    const pending = fetchFn(url, { signal: ac.signal });
+    void pending.catch(() => {});
+    const r = await Promise.race([pending, deadline]);
+    const text = await Promise.race([r.text(), deadline]);
+    let body: unknown = null;
+    if (text) {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        body = null;
+      }
+    }
+    return { ok: r.ok, status: r.status, body };
+  } catch {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 /** Same split as wrap `surfaceMode()`. Empty/unknown is `all`, never a silent jit flip. */
 export function surfaceModeOf(raw: string | undefined = process.env.EDEN_SURFACE): "all" | "none" | "jit" | "jit-shadow" {
@@ -156,39 +192,37 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
 
   let wrapUp = false;
   let tracesKnown: number | undefined;
-  try {
-    const r = await fetchFn(`${base}/health`, { signal: AbortSignal.timeout(800) });
-    const j = r.ok
-      ? ((await r.json()) as {
-          traces?: number;
-          live?: number;
-          candidates?: number;
-          registry?: boolean;
-          island?: boolean;
-        })
-      : null;
-    wrapUp = r.ok;
-    if (r.ok && typeof j?.traces === "number") tracesKnown = j.traces;
+  const wrap = await probeJson(`${base}/health`, fetchFn);
+  if (wrap) {
+    const j = wrap.body && typeof wrap.body === "object" ? (wrap.body as {
+      traces?: number;
+      live?: number;
+      candidates?: number;
+      registry?: boolean;
+      island?: boolean;
+    }) : null;
+    wrapUp = wrap.ok;
+    if (wrap.ok && typeof j?.traces === "number") tracesKnown = j.traces;
     health.push({
       name: "wrap",
-      ok: r.ok,
-      detail: r.ok ? `up · traces ${j?.traces ?? "?"} · live ${j?.live ?? "?"}` : `HTTP ${r.status}`,
+      ok: wrap.ok,
+      detail: wrap.ok ? `up · traces ${j?.traces ?? "?"} · live ${j?.live ?? "?"}` : `HTTP ${wrap.status}`,
     });
-    if (r.ok && j && "registry" in j) {
+    if (wrap.ok && j && "registry" in j) {
       health.push({
         name: "registry",
         ok: Boolean(j.registry),
         detail: j.registry ? "present" : "missing · start eden wrap without --no-coding",
       });
     }
-    if (r.ok && j && "island" in j) {
+    if (wrap.ok && j && "island" in j) {
       health.push({
         name: "island",
         ok: true,
         detail: j.island ? "wired" : "none · set OPENAI_API_KEY so island steps can run",
       });
     }
-  } catch {
+  } else {
     wrapUp = false;
     health.push({
       name: "wrap",
@@ -202,48 +236,38 @@ export async function collectDoctor(opts?: { fetch?: typeof fetch }): Promise<Do
   let served = 0;
   let stuck = 0;
   if (wrapUp) {
-    try {
-      const r = await fetchFn(`${base}/v1/inbox`, { signal: AbortSignal.timeout(800) });
-      if (r.ok) {
-        const inbox = (await r.json()) as { candidates?: InboxCandidate[]; live?: InboxLive[] };
-        const cands = inbox.candidates ?? [];
-        mined = cands.length;
-        waiting = waitingCount(cands);
-        served = servedCount(inbox.live ?? []);
-        stuck = cands.filter(
-          (c) => c.verdict === "pending" || c.refusal?.reason?.startsWith("uncovered"),
-        ).length;
-      }
-    } catch {
-      /* wrap already reported */
+    const inbox = await probeJson(`${base}/v1/inbox`, fetchFn);
+    if (inbox?.ok && inbox.body && typeof inbox.body === "object") {
+      const box = inbox.body as { candidates?: InboxCandidate[]; live?: InboxLive[] };
+      const cands = box.candidates ?? [];
+      mined = cands.length;
+      waiting = waitingCount(cands);
+      served = servedCount(box.live ?? []);
+      stuck = cands.filter(
+        (c) => c.verdict === "pending" || c.refusal?.reason?.startsWith("uncovered"),
+      ).length;
     }
   }
 
   const hookdPort = process.env.EDEN_HOOKD_PORT || "8794";
   let hookdUp = false;
-  try {
-    const r = await fetchFn(`http://127.0.0.1:${hookdPort}/health`, { signal: AbortSignal.timeout(800) });
-    hookdUp = r.ok;
-    if (r.ok) {
-      let healthPid: number | null = null;
-      try {
-        const j = (await r.json()) as { pid?: unknown; service?: string };
-        const n = Number(j.pid);
-        if (Number.isFinite(n) && n > 0) healthPid = Math.round(n);
-      } catch {
-        /* body optional */
-      }
-      const filePid = readHookdPid();
-      const owned = Boolean(filePid && hookdPidAlive(filePid) && (healthPid == null || filePid === healthPid));
-      health.push({
-        name: "hookd",
-        ok: owned,
-        detail: owned ? "up · record" : hookdOrphanDetail(healthPid, filePid),
-      });
-    } else {
-      health.push({ name: "hookd", ok: false, detail: `HTTP ${r.status}` });
-    }
-  } catch {
+  const hookd = await probeJson(`http://127.0.0.1:${hookdPort}/health`, fetchFn);
+  if (hookd?.ok) {
+    hookdUp = true;
+    let healthPid: number | null = null;
+    const j = hookd.body && typeof hookd.body === "object" ? (hookd.body as { pid?: unknown }) : null;
+    const n = Number(j?.pid);
+    if (Number.isFinite(n) && n > 0) healthPid = Math.round(n);
+    const filePid = readHookdPid();
+    const owned = Boolean(filePid && hookdPidAlive(filePid) && (healthPid == null || filePid === healthPid));
+    health.push({
+      name: "hookd",
+      ok: owned,
+      detail: owned ? "up · record" : hookdOrphanDetail(healthPid, filePid),
+    });
+  } else if (hookd) {
+    health.push({ name: "hookd", ok: false, detail: `HTTP ${hookd.status}` });
+  } else {
     hookdUp = false;
     const pid = readHookdPid();
     if (pid && !hookdPidAlive(pid)) {
@@ -324,7 +348,7 @@ export function doctorHelp(): string {
 
 NET_ALLOW empty refuses piped network binaries. A live hookd without a
 matching pid file is named orphan · eden hookd --stop. EDEN_AUTO_APPROVE=1
-prints as a bypass, never a default. Wave 21–22 leftovers stay Next/Later.
+prints as a bypass, never a default. Wave 21 leftovers stay Next. Wave 22 stays Later.
 `;
 }
 

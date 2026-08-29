@@ -16,7 +16,7 @@ const ROOT = resolve(import.meta.dir, "../../..");
 const ROADMAP = readFileSync(resolve(ROOT, "docs/ROADMAP.md"), "utf8");
 
 describe("tree inventory", () => {
-  test("Wave 16–20 has no Open; Wave 21–22 still Open; customer n is 0", () => {
+  test("Wave 16–20 has no Open; Wave 21 stays Open; customer n is 0", () => {
     const snap = treeSnapshot();
     expect(snap.open16_20).toBe(0);
     expect(snap.closed).toBe(true);
@@ -30,7 +30,8 @@ describe("tree inventory", () => {
   test("letter says closed, names Next/Later, never SOC2 certified or a customer n", () => {
     const letter = renderTreeLetter();
     expect(letter).toMatch(/^Tree closed — Wave 16–20/);
-    expect(letter).toMatch(/Wave 21–22 stay Next\/Later/);
+    expect(letter).toMatch(/Wave 21 stays Next \(\d+ open\)/);
+    expect(letter).toMatch(/Wave 22 stays Later until a file or a soak PASS/);
     expect(letter).toMatch(/Customer studies {7}0/);
     expect(letter).toMatch(/Human Approve {10}required/);
     expect(letter).toMatch(/skills-only/);

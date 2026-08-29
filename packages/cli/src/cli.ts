@@ -99,7 +99,7 @@ Advanced:
   eden archive compact  Move eligible runs hot → warm → cold
   eden digest        Weekly letter that mirrors Home (opt-in; EDEN_DIGEST=1)
   eden claims        Published limits board (analogue labeled; limits not wins)
-  eden doctor --tree Wave 16–20 leftover letter (Wave 21–22 stay Next)
+  eden doctor --tree Wave 16–20 leftover letter (Wave 21 stays Next)
   eden know run      Continuous web ingest onto the Know graph (free, robots-ok)
 `);
   process.exit(cmd ? 1 : 0);

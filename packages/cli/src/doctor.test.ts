@@ -14,6 +14,7 @@ import {
   hookdOrphanDetail,
   liveToolsDetail,
   netAllowCheck,
+  probeJson,
   parseNetAllow,
   recordState,
   surfaceCheck,
@@ -627,7 +628,8 @@ describe("doctor", () => {
       expect(tree?.ok).toBe(true);
       expect(tree?.count).toBe(0);
       expect(tree?.detail).toMatch(/Wave 16–20 0 open/);
-      expect(tree?.detail).toMatch(/Wave 21–22 stay Next\/Later/);
+      expect(tree?.detail).toMatch(/Wave 21 stays Next/);
+      expect(tree?.detail).toMatch(/Wave 22 stays Later/);
       expect(FUNNEL_STAGES).not.toContain("tree");
       expect(funnelSnapshot(checks).some((s) => (s as { name: string }).name === "tree")).toBe(false);
       const printed = formatDoctor(checks);
@@ -703,5 +705,34 @@ describe("doctor", () => {
     } finally {
       console.log = log;
     }
+  });
+
+  test("a hung wrap fetch still finishes; wrap is named down", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-hang");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    const hung = () => new Promise<Response>(() => {}) as Promise<Response>;
+    const t0 = Date.now();
+    try {
+      const checks = await collectDoctor({ fetch: hung as typeof fetch });
+      expect(Date.now() - t0).toBeLessThan(2500);
+      expect(checks.find((c) => c.name === "wrap")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "wrap")?.detail).toMatch(/down · control wrap/);
+      expect(checks.find((c) => c.name === "hookd")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "tree")?.ok).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("probeJson returns null on a never-resolving fetch", async () => {
+    const t0 = Date.now();
+    const out = await probeJson("http://127.0.0.1:9/health", () => new Promise(() => {}) as Promise<Response>, 50);
+    expect(out).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(500);
   });
 });
