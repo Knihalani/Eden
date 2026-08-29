@@ -100,7 +100,8 @@ export function renderTreeLetter(rows: readonly Leftover[] = WAVE_LEFTOVERS): st
     snap.closed ? "Tree closed — Wave 16–20" : `Tree open — Wave 16–20 ${snap.open16_20} leftover${snap.open16_20 === 1 ? "" : "s"}`,
     "",
     `${snap.open16_20} open · ${snap.shipped16_20} shipped · ${snap.limit16_20} limit`,
-    `Wave 21–22 stay Next/Later (${snap.open21_22} open)`,
+    `Wave 21 stays Next (${snap.open21_22} open)`,
+    "Wave 22 stays Later until a file or a soak PASS",
     "",
     "Cursor/Windsurf/Cline  skills-only until a hook API",
     "Customer studies       0",
@@ -139,7 +140,7 @@ export function treeCheck(): { name: "tree"; ok: boolean; count: number; detail:
     name: "tree",
     ok: true,
     count: 0,
-    detail: `Wave 16–20 0 open · ${snap.shipped16_20} shipped · ${snap.limit16_20} limit · Wave 21–22 stay Next/Later`,
+    detail: `Wave 16–20 0 open · ${snap.shipped16_20} shipped · ${snap.limit16_20} limit · Wave 21 stays Next · Wave 22 stays Later`,
   };
 }
 
