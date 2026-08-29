@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { openDb } from "./db";
 import { recordDeopt } from "./db";
-import { maybeRecompile } from "./canary";
+import { maybeRecompile, REFRESH_WAITING_COPY } from "./canary";
 import { buildDag, layers } from "@eden/core";
 import { playTool } from "./playback";
 
@@ -100,6 +100,8 @@ describe("drift canary & auto-recompile", () => {
     expect(JSON.parse(fresh.steps)).toEqual([
       { id: "s1", kind: "cloud_http", name: "curl", commute: true, url: "https://api.github.com/repos/a/b/issues/{issue}" },
     ]);
+    const copy = await db.get<{ when_to_use: string }>(`SELECT when_to_use FROM tool WHERE id = ?`, [fresh.id]);
+    expect(copy?.when_to_use).toBe(REFRESH_WAITING_COPY);
 
     // knock references the OLD version so the workshop shows old-vs-new
     const knocks = await db.all<{ tool_id: string }>(`SELECT tool_id FROM knock`);
@@ -374,5 +376,20 @@ describe("drift canary & auto-recompile", () => {
     expect(steps).toHaveLength(1);
     expect(steps[0]!.method).toBe("GET"); // the trap: GET alone would read as prefetch-safe
     expect(steps[0]!.readOnly).toBe(false);
+  });
+
+  test("canary source never writes state on — approval stays human", async () => {
+    const src = await Bun.file(new URL("./canary.ts", import.meta.url)).text();
+    expect(src).toContain('QUEUED_STATE = "draft"');
+    expect(src).toContain("REFRESH_WAITING_COPY");
+    expect(src).not.toMatch(/state\s*=\s*['"]on['"]/);
+    expect(src).not.toMatch(/['"]on['"]\s*,\s*['"]draft['"]/);
+  });
+
+  test("cluster ingest passes compile/shadow deps and does not await the canary", async () => {
+    const src = await Bun.file(new URL("./cluster.ts", import.meta.url)).text();
+    expect(src).toContain("canaryWorkspaceDeps()");
+    expect(src).toMatch(/void maybeRecompileWorkspace\(db, workspaceId, canaryWorkspaceDeps\(\)\)/);
+    expect(src).not.toMatch(/await maybeRecompileWorkspace/);
   });
 });

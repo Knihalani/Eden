@@ -1,5 +1,7 @@
 import { readConfig, resolveApiKey, wrapPlaneUrl } from "./home";
 import type { StretchProgram } from "@eden/ir";
+import { whenToUseOf } from "@eden/ir";
+import { dispatchMessages, dispatchPrograms } from "@eden/wrap";
 
 type Rpc = { jsonrpc: "2.0"; id?: unknown; method?: string; params?: Record<string, unknown> };
 
@@ -37,7 +39,13 @@ export async function handleMcp(msg: Rpc, ctx: {
     else ctx.send(id, { error: { code, message } });
   };
   if (msg.method === "initialize") {
-    ctx.send(msg.id, { protocolVersion: "2024-11-05", capabilities: { tools: {}, resources: {} }, serverInfo: { name: "eden", version: "0.1.0" } });
+    ctx.send(msg.id, {
+      protocolVersion: "2024-11-05",
+      capabilities: { tools: {}, resources: {} },
+      serverInfo: { name: "eden", version: "0.1.0" },
+      instructions:
+        "Eden compiles repeated tool sequences into single calls. tools/list is an empty catalog. POST tools/dispatch with the conversation messages to receive at most one schema when the transcript matches a live program, or an empty list when nothing matches.",
+    });
     return;
   }
   if (msg.method === "notifications/initialized") return;
@@ -47,15 +55,9 @@ export async function handleMcp(msg: Rpc, ctx: {
   }
   if (msg.method === "resources/list") {
     try {
-      const live = await ctx.programs();
-      ctx.send(msg.id, {
-        resources: live.map((p) => ({
-          uri: `eden://program/${p.id}`,
-          name: p.name,
-          mimeType: "application/json",
-          description: p.description,
-        })),
-      });
+      // Same as tools/list: enumerating every live program is a catalog dump.
+      await ctx.programs();
+      ctx.send(msg.id, { resources: [] });
     } catch (err) {
       if (err instanceof McpAuthError || (err as { status?: number }).status === 401) {
         fail(msg.id, -32001, "unauthorized");
@@ -90,20 +92,43 @@ export async function handleMcp(msg: Rpc, ctx: {
   }
   if (msg.method === "tools/list") {
     try {
-      const live = await ctx.programs();
-      ctx.send(msg.id, {
-        tools: live.map((p) => ({
-          name: p.name,
-          description: p.description,
-          inputSchema: p.inputSchema,
-        })),
-      });
+      // Still fetch so a 401 is a JSON-RPC error, not an empty catalog.
+      await ctx.programs();
+      ctx.send(msg.id, { tools: [] });
     } catch (err) {
       if (err instanceof McpAuthError || (err as { status?: number }).status === 401) {
         fail(msg.id, -32001, "unauthorized");
         return;
       }
       fail(msg.id, -32603, String(err));
+    }
+    return;
+  }
+  if (msg.method === "tools/dispatch") {
+    let live: StretchProgram[];
+    try {
+      live = await ctx.programs();
+    } catch (err) {
+      if (err instanceof McpAuthError || (err as { status?: number }).status === 401) {
+        fail(msg.id, -32001, "unauthorized");
+        return;
+      }
+      fail(msg.id, -32603, String(err));
+      return;
+    }
+    try {
+      const picked = dispatchPrograms(dispatchMessages(msg.params), live).slice(0, 1);
+      ctx.send(msg.id, {
+        tools: picked.map((p) => ({
+          name: p.name,
+          description: whenToUseOf(p),
+          inputSchema: p.inputSchema,
+          defer_loading: true,
+          allowed_callers: ["direct", "code_execution_20260120"],
+        })),
+      });
+    } catch {
+      ctx.send(msg.id, { tools: [] });
     }
     return;
   }

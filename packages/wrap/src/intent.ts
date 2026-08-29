@@ -1,4 +1,5 @@
 import type { StretchProgram } from "@eden/ir";
+import { jitMax } from "@eden/ir";
 import { argShapes, firstCommandTemplate, programFirstStepShapes, templateFits } from "./steer";
 
 /**
@@ -21,7 +22,9 @@ import { argShapes, firstCommandTemplate, programFirstStepShapes, templateFits }
  *              on real traffic before jit is allowed anywhere near it.
  *
  * The default is "all" so an upgrade changes nothing until an operator opts
- * in — the same observe-mode doctrine as steering itself.
+ * in — the same observe-mode doctrine as steering itself. Wave 19 remeasured
+ * `benchmarks/campaign/jit-soak.ts` as FAIL (`precision=0.789 n=38`); the
+ * default stays `all` until a later soak prints PASS.
  */
 export type SurfaceMode = "all" | "none" | "jit" | "jit-shadow";
 
@@ -240,20 +243,132 @@ export function selectSurfacePrograms(opts: {
 }
 
 /**
+ * MCP POST-transcript dispatch. Same scorer as local JIT — not a second ranker.
+ * Shadow pick equals `selectSurfacePrograms({ mode: "jit", live, messages })`
+ * on the same transcript + programs. Result length is 0 or 1.
+ *
+ * Missing / non-array messages, empty transcript, or a scorer fault → [].
+ */
+export function dispatchPrograms(
+  messages: unknown[] | undefined,
+  programs: StretchProgram[],
+): StretchProgram[] {
+  try {
+    return selectSurfacePrograms({ mode: "jit", live: programs, messages }).surface.slice(0, 1);
+  } catch {
+    return [];
+  }
+}
+
+/** JSON-RPC params: `{ messages }` or alias `{ transcript }`. Non-arrays are missing. */
+export function dispatchMessages(params?: Record<string, unknown> | null): unknown[] | undefined {
+  if (!params || typeof params !== "object") return undefined;
+  const raw = params.messages ?? params.transcript;
+  return Array.isArray(raw) ? raw : undefined;
+}
+
+/** Consecutive unused JIT injections before the episode demotes to S0 (none). */
+export const JIT_UNUSED_DEMOTE = 3;
+
+/**
+ * Per-episode JIT bookkeeping. One of these lives on WrapState so inject,
+ * the proxy response, and wrapTools share a conversion counter.
+ */
+export type JitGuard = {
+  injections: number;
+  unusedStreak: number;
+  pendingName?: string;
+  pendingAliases: string[];
+  demoted: boolean;
+};
+
+export function createJitGuard(): JitGuard {
+  return { injections: 0, unusedStreak: 0, pendingAliases: [], demoted: false };
+}
+
+/** The injected schema (or its first raw step) was actually called. */
+export function noteJitUsed(jit: JitGuard, names: readonly string[]): void {
+  if (!jit.pendingName) return;
+  const hit = names.some((n) => n === jit.pendingName || jit.pendingAliases.includes(n));
+  if (!hit) return;
+  jit.pendingName = undefined;
+  jit.pendingAliases = [];
+  jit.unusedStreak = 0;
+}
+
+function toolNamesInMessages(messages?: unknown[]): string[] {
+  const names: string[] = [];
+  const walk = (v: unknown, depth: number): void => {
+    if (v == null || depth > 6 || names.length > 32) return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, depth + 1);
+      return;
+    }
+    if (typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    const fn = o.function;
+    if (fn && typeof fn === "object" && typeof (fn as { name?: unknown }).name === "string") {
+      names.push((fn as { name: string }).name);
+    }
+    if (typeof o.name === "string" && (o.type === "function" || o.type === "tool_use")) {
+      names.push(o.name);
+    }
+    for (const k of ["tool_calls", "content", "message"]) if (k in o) walk(o[k], depth + 1);
+  };
+  if (messages) walk(messages, 0);
+  return names;
+}
+
+function settleJit(jit: JitGuard, messages?: unknown[]): boolean {
+  if (jit.demoted) return true;
+  if (jit.pendingName) {
+    noteJitUsed(jit, toolNamesInMessages(messages));
+  }
+  if (jit.pendingName) {
+    jit.unusedStreak++;
+    jit.pendingName = undefined;
+    jit.pendingAliases = [];
+    if (jit.unusedStreak >= JIT_UNUSED_DEMOTE) {
+      jit.demoted = true;
+      return true;
+    }
+  }
+  return jit.injections >= jitMax();
+}
+
+function recordJitInject(jit: JitGuard, program: StretchProgram): void {
+  jit.injections++;
+  jit.pendingName = program.name;
+  const seq0 = (program.sequence ?? [])[0];
+  jit.pendingAliases = seq0 && seq0 !== program.name ? [program.name, seq0] : [program.name];
+}
+
+/**
  * The one entry point request handlers call: reads EDEN_SURFACE, applies the
  * policy, logs shadow candidates. On any internal fault it degrades to the
  * historic full catalog — steering is unaffected either way, and a fat catalog
  * costs tokens while silence-by-crash starves the library silently.
+ *
+ * When mode is jit, `jit` caps injections per episode at jitMax() (EDEN_JIT_MAX,
+ * default 4). Three consecutive unused injections demote the rest of the
+ * episode to S0 (nothing surfaced).
  */
-export function selectForRequest(live: StretchProgram[], messages?: unknown[]): StretchProgram[] {
+export function selectForRequest(
+  live: StretchProgram[],
+  messages?: unknown[],
+  jit?: JitGuard,
+): StretchProgram[] {
   let selected = live;
   try {
+    const mode = surfaceMode();
+    if (mode === "jit" && jit && settleJit(jit, messages)) return [];
     selected = selectSurfacePrograms({
-      mode: surfaceMode(),
+      mode,
       live,
       messages,
       onShadow: (names) => console.error(`[eden] intent-shadow: would surface ${names.join(", ")}`),
     }).surface;
+    if (mode === "jit" && jit && selected[0]) recordJitInject(jit, selected[0]);
   } catch {
     selected = live;
   }

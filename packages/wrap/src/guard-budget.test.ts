@@ -37,17 +37,18 @@ function run() {
   // The budget branch is only reached after a first warning.
   r.firstWarningAt = 0;
   // Pin the run's clock origin. emptyRun stamps t0 from performance.now(),
-  // so with the literal `now: 50_000` below this test only passed while the
-  // whole suite finished within 50 seconds of process start — a longer suite
+  // so with a literal `now` below this test only passed while the
+  // whole suite finished within that window of process start — a longer suite
   // silently flipped these cases into "no time pressure". Control both ends
-  // of the subtraction.
-  r.t0 = -5_000;
+  // of the subtraction. Event "a" identifies the in-flight sequence ["a","b"].
+  r.t0 = 0;
+  r.events.push({ name: "a", args: {}, ok: true });
   return r;
 }
 
-// opts.timeoutMs = 60_000, now = 50_000, t0 = -5_000
-// → elapsed 55_000, cap 60_000, remaining 5_000.
-const timing = { opts: { timeoutMs: 60_000 }, now: 50_000 };
+// opts.timeoutMs = 20_000, now = 2_000, t0 = 0
+// → elapsed 2_000, cap 20_000, remaining 18_000.
+const timing = { opts: { timeoutMs: 20_000 }, now: 2_000 };
 
 describe("budget guard", () => {
   test("no warning-level time pressure means no guard action", () => {
@@ -66,5 +67,27 @@ describe("budget guard", () => {
     const d = decideGuard({ name: "b", run: run(), live, ...timing });
     expect(d?.action).toBe("steer");
     if (d?.action === "steer") expect(d.program.id).toBe("small");
+  });
+
+  test("unwarned actual llmCalls >= predicted llmCalls=2 halts with predicted-vs-actual detail", () => {
+    const r = emptyRun();
+    r.t0 = 0;
+    r.llmCalls = 2;
+    r.events.push({ name: "a", args: {}, ok: true });
+    expect(r.firstWarningAt).toBeUndefined();
+    const p = program("on", 4_000);
+    p.budget = { ms: 4_000, llmCalls: 2, cents: 0 };
+    const d = decideGuard({ name: "b", run: r, live: [p], ...timing });
+    console.log(`unwarned spent action=${d?.action} reason=${d && "reason" in d ? d.reason : ""} detail=${d && "detail" in d ? d.detail : ""}`);
+    expect(d).toMatchObject({ action: "halt", reason: "budget", detail: "predicted llmCalls=2 actual=2" });
+  });
+
+  test("unwarned timeout-pressure does not halt", () => {
+    const r = emptyRun();
+    r.t0 = 0;
+    r.events.push({ name: "a", args: {}, ok: true });
+    expect(r.firstWarningAt).toBeUndefined();
+    const d = decideGuard({ name: "b", run: r, live: [program("big", 50_000)], ...timing });
+    expect(d).toBeNull();
   });
 });

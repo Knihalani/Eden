@@ -1,7 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { SEE_PENDING, WORKSPACE } from "../../account/home";
+import { SEE_PENDING } from "../../account/home";
+import { productGate } from "../../account/route";
 import { SetupPrompt } from "../../home/prompt";
 import { PLACEHOLDER_ENV } from "../../home/prompt-text";
 
@@ -10,9 +11,9 @@ export const metadata = {
 };
 
 export default async function SetupPage() {
-  const { userId, orgId, sessionStatus } = await auth(SEE_PENDING);
-  if (!userId) redirect("/");
-  if (sessionStatus === "pending" || !orgId) redirect(WORKSPACE);
+  const session = await auth(SEE_PENDING);
+  const dest = productGate("/setup", session);
+  if (dest) redirect(dest);
 
   return (
     <Suspense fallback={<SetupFallback />}>

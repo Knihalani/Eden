@@ -17,42 +17,12 @@
  */
 import { describe, expect, test } from "bun:test";
 import { withVersion, type Step, type StretchProgram } from "@eden/ir";
-import { createState, wrapTools, type ToolDef } from "@eden/wrap";
+import { createState, wrapTools, createArmingStore, type ToolDef } from "@eden/wrap";
+import { fireOblivious, linearProgram } from "./struggle-harness";
 
 process.env.CAMPAIGN_THINK_MS = "1";
 const TIMEOUT = 120_000;
 
-function linearProgram(id: string, sequence: string[], opts: { text?: boolean } = {}): StretchProgram {
-  const steps: Step[] = sequence.map((tool, i) => ({
-    id: tool,
-    kind: "tool",
-    tool,
-    args: { id: { kind: "input", path: "id" }, ...(i === 0 && opts.text ? { text: { kind: "input", path: "text" } } : {}) },
-  }));
-  return withVersion({
-    id,
-    name: id,
-    description: "d",
-    inputSchema: {
-      type: "object",
-      properties: opts.text ? { id: { type: "string" }, text: { type: "string" } } : { id: { type: "string" } },
-      required: opts.text ? ["id", "text"] : ["id"],
-    },
-    sequence,
-    steps,
-    returns: { kind: "from", step: sequence[sequence.length - 1]!, path: "" },
-    contract: { witnesses: 3, minLlmReduction: 2, allowExact: true },
-    manifest: { llmReduction: 5, latencyReduction: 2, costReduction: 5, skipRateBefore: 0, skipRateAfter: 0, nShadow: 3 },
-  }) as StretchProgram;
-}
-
-/** Oblivious driver: fires the full script for each goal, all goals CONCURRENTLY. */
-async function fireOblivious(
-  wrapped: Record<string, ToolDef>,
-  script: Array<{ tool: string; args: Record<string, unknown> }>,
-): Promise<void> {
-  await Promise.all(script.map((c) => wrapped[c.tool]!.execute(c.args)));
-}
 
 describe("struggle: capacity bounds", () => {
   test(
@@ -154,6 +124,57 @@ describe("struggle: capacity bounds", () => {
 
       for (let i = 0; i < N; i++) {
         const id = `W-${i}`;
+        expect(writes[id]).toBe(1);
+        expect(audits[id]).toBe(1);
+      }
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "P1c: W=100 sessions × 1 stretch on a shared store — all armed, zero duplicate writes (Wave 4.2)",
+    async () => {
+      const N = 100;
+      const TAIL = ["fetch", "judge", "write", "audit"];
+      const writes: Record<string, number> = {};
+      const audits: Record<string, number> = {};
+      const mkTool = (name: string, mutate?: (id: string) => void): ToolDef => ({
+        description: name,
+        execute: async (args: Record<string, unknown>) => {
+          mutate?.(String(args.id));
+          return { name, id: args.id };
+        },
+      });
+      const tools: Record<string, ToolDef> = {
+        lookup: mkTool("lookup"),
+        fetch: mkTool("fetch"),
+        judge: mkTool("judge"),
+        write: mkTool("write", (id) => {
+          writes[id] = (writes[id] ?? 0) + 1;
+        }),
+        audit: mkTool("audit", (id) => {
+          audits[id] = (audits[id] ?? 0) + 1;
+        }),
+      };
+      const prog = linearProgram("p_hosted100", ["lookup", ...TAIL], { text: true });
+      const arming = createArmingStore();
+      await Promise.all(
+        Array.from({ length: N }, (_, i) => {
+          const state = createState({ programs: [prog], arming, sessionId: `sess-${i}` });
+          const wrapped = wrapTools(tools, state) as Record<string, ToolDef>;
+          return fireOblivious(wrapped, [
+            { tool: "lookup", args: { id: `S-${i}`, text: `complaint ${i}` } },
+            { tool: "fetch", args: { id: `S-${i}` } },
+            { tool: "judge", args: { id: `S-${i}` } },
+            { tool: "write", args: { id: `S-${i}` } },
+            { tool: "audit", args: { id: `S-${i}` } },
+          ]);
+        }),
+      );
+      expect(arming.stats().rejects).toBe(0);
+      expect(arming.stats().admits).toBeGreaterThanOrEqual(N);
+      for (let i = 0; i < N; i++) {
+        const id = `S-${i}`;
         expect(writes[id]).toBe(1);
         expect(audits[id]).toBe(1);
       }

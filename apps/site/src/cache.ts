@@ -1,6 +1,24 @@
 import { createHash } from "node:crypto";
 import type { EdenDb } from "./db";
 import type { CompiledStep } from "@eden/core";
+import { isMutatingMethod, observeCacheKey, recordAdmissionDecision, resetCacheAdmission as resetAdmitSketch, shouldAdmitWrite } from "./cache-admit";
+import { packCacheBody, unpackCacheBody } from "./cache-compress";
+
+export {
+  ADMISSION_WINDOW_CAP,
+  admissionStats,
+  isMutatingMethod,
+  observeCacheKey,
+  shouldAdmitWrite,
+} from "./cache-admit";
+export {
+  COMPRESS_MIN_BYTES,
+  ENVELOPE_REV,
+  GUNZIP_MAX_BYTES,
+  LEGACY_ENVELOPE_REV,
+  packCacheBody,
+  unpackCacheBody,
+} from "./cache-compress";
 
 /**
  * Exact-result cache shared by playback and speculative prefetch.
@@ -20,6 +38,50 @@ import type { CompiledStep } from "@eden/core";
  */
 
 export const RESULT_CACHE_TTL_MS = 30 * 60_000;
+
+/**
+ * Decoded hot set. gzip is a durability/size choice (SQLite TEXT); the hit
+ * path serves the JS value already in hand from the fill, the way a RAM
+ * cache would. Gunzip is paid on a hot-set miss (restart, eviction), not on
+ * every hit — that is how the read-latency tax stays under the §10 budget
+ * without giving up −30% stored size.
+ */
+const HOT_DECODED_CAP = 256;
+type HotRow = { entry: CacheEntry; expiresAt: number };
+const hotDecoded = new Map<string, HotRow>();
+
+function rememberHot(key: string, entry: CacheEntry, expiresAt: number): void {
+  if (hotDecoded.has(key)) hotDecoded.delete(key);
+  hotDecoded.set(key, { entry, expiresAt });
+  while (hotDecoded.size > HOT_DECODED_CAP) {
+    const oldest = hotDecoded.keys().next().value;
+    if (oldest === undefined) break;
+    hotDecoded.delete(oldest);
+  }
+}
+
+function takeHot(key: string): CacheEntry | undefined {
+  const row = hotDecoded.get(key);
+  if (!row) return undefined;
+  if (row.expiresAt <= Date.now()) {
+    hotDecoded.delete(key);
+    return undefined;
+  }
+  hotDecoded.delete(key);
+  hotDecoded.set(key, row);
+  return row.entry;
+}
+
+function forgetHot(key: string): void {
+  hotDecoded.delete(key);
+}
+
+const inflight = new Map<string, Promise<unknown>>();
+
+export function resetCacheAdmission(): void {
+  resetAdmitSketch();
+  hotDecoded.clear();
+}
 
 /** Deterministic JSON: sorted object keys, arrays kept in order, no whitespace. */
 export function stableStringify(value: unknown): string {
@@ -75,37 +137,28 @@ export function publicResultKey(identity: Omit<ResultCacheIdentity, "workspaceId
   return `rcp:${createHash("sha256").update(canon).digest("hex")}`;
 }
 
-/**
- * Storage envelope. When an entry carries an upstream validator (ETag), it is
- * stored as {"__eden_cache":2,"etag","v"}; readers without an etag get the
- * plain body exactly as before, so pre-envelope rows stay readable and
- * etag-less writers keep writing legacy-shaped bodies.
- */
-type Envelope = { __eden_cache: 2; etag?: string; v: unknown };
-
-function packBody(value: unknown, etag?: string): string {
-  return etag === undefined ? JSON.stringify(value) : JSON.stringify({ __eden_cache: 2 as const, etag, v: value });
-}
-
-function unpackBody(body: string): CacheEntry | undefined {
-  try {
-    const parsed = JSON.parse(body) as unknown;
-    if (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      (parsed as Envelope).__eden_cache === 2
-    ) {
-      const env = parsed as Envelope;
-      return { value: env.v, ...(env.etag !== undefined ? { etag: env.etag } : {}) };
-    }
-    return { value: parsed };
-  } catch {
-    return undefined;
-  }
-}
-
 export type CacheEntry = { value: unknown; etag?: string };
+
+export type WriteResultOpts = {
+  /** HTTP method of the step that produced this value. Non-GET is never stored. */
+  method?: string;
+  /** Skip admission (TTL refresh / 304 revalidation of an already-admitted row). */
+  force?: boolean;
+  /** Partitions the admission window; omitted keys share one bucket. */
+  workspaceId?: string;
+};
+
+/**
+ * Hit-rate fields for a receipt. Zero lookups → omit (never a fake 0% that
+ * looks like a failure on a run that never consulted the cache).
+ */
+export function cacheHitRateFields(
+  hits: number,
+  lookups: number,
+): { cache_lookups: number; cache_hit_rate: number } | Record<string, never> {
+  if (!(lookups > 0)) return {};
+  return { cache_lookups: lookups, cache_hit_rate: hits / lookups };
+}
 
 /**
  * A corrupt cached body (older writer, truncated write) is a miss, not a
@@ -119,12 +172,21 @@ export async function readResult<T = unknown>(db: EdenDb, key: string): Promise<
 /** Fresh-only entry read (envelope-aware). */
 export async function readEntry(db: EdenDb, key: string): Promise<CacheEntry | undefined> {
   try {
+    const mem = takeHot(key);
+    if (mem) {
+      observeCacheKey(key);
+      return mem;
+    }
     const hit = await db.get<{ body: string; expires_at: number }>(
       `SELECT body, expires_at FROM result_cache WHERE cache_key = ?`,
       [key],
     );
     if (!hit || hit.expires_at <= Date.now()) return undefined;
-    return unpackBody(hit.body);
+    const entry = unpackCacheBody(hit.body);
+    if (!entry) return undefined;
+    observeCacheKey(key);
+    rememberHot(key, entry, hit.expires_at);
+    return entry;
   } catch {
     return undefined;
   }
@@ -146,7 +208,7 @@ export async function readStaleEntry(
       [key],
     );
     if (!hit) return undefined;
-    const entry = unpackBody(hit.body);
+    const entry = unpackCacheBody(hit.body);
     if (!entry) return undefined;
     // Without a validator, expiry means worthless; with one, revalidation
     // can still prove the entry current.
@@ -163,13 +225,24 @@ export async function writeResult(
   value: unknown,
   ttlMs: number = RESULT_CACHE_TTL_MS,
   etag?: string,
+  opts?: WriteResultOpts,
 ): Promise<void> {
   try {
+    // Frequency is not an excuse to cache a mutation. Method omitted (tests
+    // writing synthetic keys) is allowed through; playback always passes one.
+    if (isMutatingMethod(opts?.method)) return;
+    if (opts?.method !== undefined && opts.method.toUpperCase() !== "GET") return;
+    if (!opts?.force && !shouldAdmitWrite(key, opts?.workspaceId)) {
+      recordAdmissionDecision(false);
+      return;
+    }
     await db.run(`INSERT OR REPLACE INTO result_cache (cache_key, body, expires_at) VALUES (?, ?, ?)`, [
       key,
-      packBody(value, etag),
+      packCacheBody(value, etag),
       Date.now() + ttlMs,
     ]);
+    recordAdmissionDecision(true);
+    rememberHot(key, { value, ...(etag !== undefined ? { etag } : {}) }, Date.now() + ttlMs);
     // Expired rows are never read again but were never deleted, so the table
     // grew without bound on long-lived installs. Sampled sweep keeps the hot
     // path clean while still converging.
@@ -182,6 +255,30 @@ export async function writeResult(
 }
 
 /**
+ * On-demand invalidation: drop one exact-result key from SQLite and the
+ * decoded hot set. A missing key is a no-op (returns false), never a throw —
+ * the next read is a miss either way. Does not scan, does not wipe, and never
+ * writes a replacement row. Callers that know a public GET identity also drop
+ * the matching `rcp:` key themselves; this function only touches the named
+ * key, so one tenant's webhook cannot evict another tenant's private `rc:`.
+ */
+export async function dropResult(db: EdenDb, key: string): Promise<boolean> {
+  if (!key) return false;
+  try {
+    forgetHot(key);
+    inflight.delete(key);
+    const hit = await db.get<{ cache_key: string }>(`SELECT cache_key FROM result_cache WHERE cache_key = ?`, [key]);
+    if (!hit) return false;
+    await db.run(`DELETE FROM result_cache WHERE cache_key = ?`, [key]);
+    return true;
+  } catch {
+    forgetHot(key);
+    inflight.delete(key);
+    return false;
+  }
+}
+
+/**
  * Single-flight dedupe over one cache key.
  *
  * Speculative prefetch and the ordinary hot path both resolve to the same key;
@@ -190,8 +287,6 @@ export async function writeResult(
  * with the same key rides along. Entries are removed on settle, so a rejected
  * load is never sticky — the next caller simply fetches fresh.
  */
-const inflight = new Map<string, Promise<unknown>>();
-
 export function singleFlight<T>(key: string, load: () => Promise<T>): Promise<T> {
   const prev = inflight.get(key);
   if (prev) return prev as Promise<T>;

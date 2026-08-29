@@ -257,4 +257,37 @@ describe("prompt-cache breakpoints (W20)", () => {
     expect(typeof body.system).toBe("string");
     delete process.env.EDEN_PROMPT_CACHE;
   });
+
+  test("cache-guard moves a timestamp block after stable and breakpoints the stable prefix", () => {
+    process.env.EDEN_CACHE_GUARD = "1";
+    const body: any = {
+      system: [
+        { type: "text", text: "session 2026-08-27T11:00:00Z" },
+        { type: "text", text: "You are a coding assistant." },
+      ],
+      messages: [{ role: "user", content: "hi" }],
+    };
+    applyCacheBreakpoints(body);
+    expect(body.system[0].text).toBe("You are a coding assistant.");
+    expect(body.system[1].text).toMatch(/2026-08-27T11:00:00Z/);
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.system[1].cache_control).toBeUndefined();
+    delete process.env.EDEN_CACHE_GUARD;
+  });
+
+  test("cache-guard is a no-op when EDEN_PROMPT_CACHE=0", () => {
+    process.env.EDEN_CACHE_GUARD = "1";
+    process.env.EDEN_PROMPT_CACHE = "0";
+    const body: any = {
+      system: [
+        { type: "text", text: "session 2026-08-27T11:00:00Z" },
+        { type: "text", text: "stable" },
+      ],
+    };
+    applyCacheBreakpoints(body);
+    expect(body.system[0].text).toMatch(/2026-08-27T11:00:00Z/);
+    expect(body.system[0].cache_control).toBeUndefined();
+    delete process.env.EDEN_CACHE_GUARD;
+    delete process.env.EDEN_PROMPT_CACHE;
+  });
 });

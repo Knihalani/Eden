@@ -3,6 +3,7 @@ import { handleChatCompletions, createState } from "@eden/wrap";
 import { handleAnthropicMessages } from "@eden/wrap";
 import { minLlmReductionOf, protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER } from "@eden/ir";
 import { handleApi, isManagedDeployment, type ApiCtx } from "./api";
+import { scheduleClockEnabled, startScheduleClock } from "./schedule-clock";
 import type { Store } from "./store";
 
 export type ServerOpts = {
@@ -10,6 +11,8 @@ export type ServerOpts = {
   token?: string;
   upstream?: string;
   upstreamKey?: string;
+  /** Minute clock for due schedules. Tests omit this. `EDEN_SCHEDULE_CLOCK=0` wins. */
+  scheduleClock?: boolean | { intervalMs?: number };
 } & Pick<ApiCtx, "registry" | "island" | "sandboxFor">;
 
 /**
@@ -99,6 +102,11 @@ export function createHandler(opts: ServerOpts) {
     // auth() must see "nothing is authorised" and 401 everything.
     token,
   };
+
+  if (opts.scheduleClock && scheduleClockEnabled()) {
+    const intervalMs = typeof opts.scheduleClock === "object" ? opts.scheduleClock.intervalMs : undefined;
+    startScheduleClock(ctx, intervalMs != null ? { intervalMs } : undefined);
+  }
 
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);

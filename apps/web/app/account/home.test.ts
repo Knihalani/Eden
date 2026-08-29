@@ -1,10 +1,12 @@
 import {
   continuePath,
   destAfterAuth,
+  destAfterWorkspace,
   fieldMessage,
   globalMessage,
   goDecorated,
   HOME,
+  canvasBackTitle,
   homeEmptyLine,
   homePath,
   homeStatus,
@@ -29,6 +31,7 @@ test("destAfterAuth sends a finished session home, not marketing", () => {
   expect(destAfterAuth({ currentTask: { key: "choose-organization" } })).toBe("/workspace");
   expect(destAfterAuth({ status: "pending" })).toBe("/workspace");
   expect(destAfterAuth(null)).toBe(HOME);
+  expect(destAfterAuth({ status: "active" }, "up")).toBe(TOUR);
   expect(HOME).toBe("/home");
   expect(SETUP).toBe("/setup");
   expect(TOUR).toBe("/tour");
@@ -38,6 +41,14 @@ test("continuePath keeps pending or org-less sessions on workspace", () => {
   expect(continuePath("pending", "org_1")).toBe("/workspace");
   expect(continuePath("active", null)).toBe("/workspace");
   expect(continuePath("active", "org_1")).toBe("/home");
+  expect(continuePath("active", "org_1", "up")).toBe("/tour");
+});
+
+test("destAfterWorkspace sends first-run to tour and returning members home", () => {
+  expect(destAfterWorkspace("create")).toBe(TOUR);
+  expect(destAfterWorkspace("invite")).toBe(TOUR);
+  expect(destAfterWorkspace("select")).toBe(HOME);
+  expect(destAfterWorkspace("continue")).toBe(HOME);
 });
 
 test("signedInDest and needsWorkspaceGate treat pending as needing a workspace", () => {
@@ -86,10 +97,21 @@ test("home views stay on /home and highlight the matching rail item", () => {
   expect(navCurrent("/request/req_1")).toBe("requests");
   expect(navCurrent("/workspace")).toBe(null);
   expect(homeViewTitle("overview")).toBe("Home");
+  expect(homeViewTitle("workflows")).toBe("0 programs");
+  expect(homeViewTitle("workflows", { canary: 0, live: 0 })).toBe("0 programs");
+  expect(homeViewTitle("workflows", { canary: 1, live: 0 })).toBe("Canary");
+  expect(homeViewTitle("workflows", { canary: 1, live: 1 })).toBe("Tools");
+  expect(homeViewTitle("workflows", { canary: 0, live: 2 })).toBe("Live tools");
   expect(homeStatus({ requests: [], workflows: [] })).toBe("Empty until you wrap");
   expect(homeStatus({ requests: [{}], workflows: [] })).toBe("1 request waiting");
-  expect(homeEmptyLine("overview")).toBe("Requests and live tools land here after you wrap.");
-  expect(homeEmptyLine("requests")).toBe("Nothing waiting. New compile requests land here.");
-  expect(homeEmptyLine("workflows")).toBe("No live tools yet. Approve a request and it shows up here.");
+  expect(homeEmptyLine("overview")).toBe("Requests land here after you wrap. Empty is 0 programs.");
+  expect(homeEmptyLine("requests")).toBe("Nothing waiting. If nothing compiled: eden explain.");
+  expect(homeEmptyLine("workflows")).toBe("0 programs. Approve a request and it shows up here.");
+  expect(homeEmptyLine("workflows")).toContain("0 programs");
   expect(homeEmptyLine("overview", true)).toBe("Couldn’t load activity.");
+  expect(canvasBackTitle({ mode: "request" })).toBe("Requests");
+  expect(canvasBackTitle({ mode: "live" })).toBe("0 programs");
+  expect(canvasBackTitle({ mode: "live", program: {} })).toBe("Live tools");
+  expect(canvasBackTitle({ mode: "live", rollout: "canary", program: {} })).toBe("Canary");
+  expect(canvasBackTitle({ mode: "live", rollout: "live", program: {} })).toBe("Live tools");
 });

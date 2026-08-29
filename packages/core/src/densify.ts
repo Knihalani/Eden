@@ -12,14 +12,49 @@ export function minifyCli(text: string): string {
     .trimEnd();
 }
 
+/**
+ * Fold consecutive duplicate lines after minifyCli. 50 identical CLI lines
+ * become `line ×50` — still a string the model can read. Applied only when the
+ * folded run is strictly shorter; unique lines are left alone. v1 keeps
+ * minifyCli only.
+ */
+function foldRepeatedLines(text: string): string {
+  if (!text.includes("\n")) return text;
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; ) {
+    const line = lines[i]!;
+    let n = 1;
+    while (i + n < lines.length && lines[i + n] === line) n++;
+    if (n >= 2) {
+      const folded = `${line} ×${n}`;
+      const original = lines.slice(i, i + n).join("\n");
+      if (folded.length < original.length) out.push(folded);
+      else for (let k = 0; k < n; k++) out.push(line);
+    } else {
+      out.push(line);
+    }
+    i += n;
+  }
+  const result = out.join("\n");
+  return result.length < text.length ? result : text;
+}
+
+function densifyString(text: string, version: 1 | 2): string {
+  const min = minifyCli(text);
+  if (version < 2) return min;
+  const folded = foldRepeatedLines(min);
+  return folded.length < min.length ? folded : min;
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function sortKeys(obj: Record<string, unknown>, ancestors: WeakSet<object>, depth: number): Record<string, unknown> {
+function sortKeys(obj: Record<string, unknown>, ancestors: WeakSet<object>, depth: number, version: 1 | 2): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of Object.keys(obj).sort()) {
-    out[k] = densifyWalk(obj[k], ancestors, depth + 1);
+    out[k] = densifyWalk(obj[k], ancestors, depth + 1, version);
   }
   return out;
 }
@@ -47,11 +82,16 @@ const DENSIFY_MAX_DEPTH = 200;
  * marking every visited object would corrupt legitimate repeated data.
  */
 export function densifyValue(value: unknown): unknown {
-  return densifyWalk(value, new WeakSet<object>(), 0);
+  return densifyWalk(value, new WeakSet<object>(), 0, 2);
 }
 
-function densifyWalk(value: unknown, ancestors: WeakSet<object>, depth: number): unknown {
-  if (typeof value === "string") return minifyCli(value);
+/** Wave-12 walk: columnar `{keys, rows}` only. Kept so the gated table can score v2 against v1. */
+export function densifyValueV1(value: unknown): unknown {
+  return densifyWalk(value, new WeakSet<object>(), 0, 1);
+}
+
+function densifyWalk(value: unknown, ancestors: WeakSet<object>, depth: number, version: 1 | 2): unknown {
+  if (typeof value === "string") return densifyString(value, version);
   // Non-plain exotics (Map, Date, …) pass through as before.
   if (!Array.isArray(value) && !isPlainObject(value)) return value;
   if (depth >= DENSIFY_MAX_DEPTH) return "[TRUNCATED]";
@@ -64,57 +104,174 @@ function densifyWalk(value: unknown, ancestors: WeakSet<object>, depth: number):
         const rows = value as Record<string, unknown>[];
         const keys = uniformKeys(rows);
         if (keys) {
-          return {
+          const packed = {
             keys,
-            rows: rows.map((row) => keys.map((k) => densifyWalk(row[k], ancestors, depth + 1))),
+            rows: rows.map((row) => keys.map((k) => densifyWalk(row[k], ancestors, depth + 1, version))),
           };
+          return version >= 2 ? internColumns(packed) : packed;
         }
-        return rows.map((row) => sortKeys(row, ancestors, depth + 1));
+        return rows.map((row) => sortKeys(row, ancestors, depth + 1, version));
       }
-      return value.map((v) => densifyWalk(v, ancestors, depth + 1));
+      return value.map((v) => densifyWalk(v, ancestors, depth + 1, version));
     }
-    return sortKeys(value, ancestors, depth);
+    return sortKeys(value, ancestors, depth, version);
   } finally {
     ancestors.delete(value);
   }
 }
 
 /**
+ * Dictionary-encode repeated cells in a columnar table.
+ *
+ * v1 already lifts key names out of every row; the leftover waste is values
+ * spelled out per row (`"octocat"`, `"open"`, ISO timestamps, nested
+ * `{name:"bug"}` labels). Replace a low-cardinality column with indices into a
+ * parallel intern table `d`. `d[i] === 0` means column i is stored literally.
+ * `d[i]` of length 1 is a constant: the value lives once in `d` and is omitted
+ * from every row (invoice-class repeated keys). Longer `d[i]` is an intern
+ * table and the row stores an index.
+ *
+ * `d` is omitted unless it strictly reduces JSON bytes vs `{keys, rows}` — it
+ * is not a type tag, and unique-value tables keep the v1 shape so they cannot
+ * inflate. `{keys, rows, total, page}` still has extra fields and is not
+ * treated as columnar on the way back.
+ */
+function internColumns(table: { keys: string[]; rows: unknown[][] }): unknown {
+  const { keys, rows } = table;
+  const n = rows.length;
+  const d: unknown[] = [];
+  const kind: ("lit" | "idx" | "const")[] = [];
+  const idxsPerCol: number[][] = [];
+  let any = false;
+
+  for (let c = 0; c < keys.length; c++) {
+    const firstIndex = new Map<string, number>();
+    const unique: unknown[] = [];
+    const idxs: number[] = [];
+    let internable = true;
+    for (let r = 0; r < n; r++) {
+      const cell = rows[r]![c];
+      let sig: string | undefined;
+      try {
+        sig = JSON.stringify(cell);
+      } catch {
+        internable = false;
+        break;
+      }
+      if (typeof sig !== "string") {
+        internable = false;
+        break;
+      }
+      let i = firstIndex.get(sig);
+      if (i === undefined) {
+        i = unique.length;
+        firstIndex.set(sig, i);
+        unique.push(cell);
+      }
+      idxs.push(i);
+    }
+    if (!internable || unique.length === 0 || unique.length === n) {
+      d.push(0);
+      kind.push("lit");
+      idxsPerCol.push([]);
+      continue;
+    }
+    any = true;
+    d.push(unique);
+    idxsPerCol.push(idxs);
+    // A single unique value is stored once in `d` and omitted from every row.
+    kind.push(unique.length === 1 ? "const" : "idx");
+  }
+
+  if (!any) return table;
+
+  const internedRows: unknown[][] = [];
+  for (let r = 0; r < n; r++) {
+    const packed: unknown[] = [];
+    for (let c = 0; c < keys.length; c++) {
+      if (kind[c] === "const") continue;
+      packed.push(kind[c] === "idx" ? idxsPerCol[c]![r]! : rows[r]![c]);
+    }
+    internedRows.push(packed);
+  }
+
+  const withDict = { keys, rows: internedRows, d };
+  return jsonBytes(withDict) < jsonBytes(table) ? withDict : table;
+}
+
+function rowWidth(keys: string[], d: unknown[] | undefined): number {
+  if (!d) return keys.length;
+  let w = 0;
+  for (const e of d) {
+    if (e === 0) w++;
+    else if (Array.isArray(e) && e.length !== 1) w++;
+  }
+  return w;
+}
+
+/**
  * Is this exactly the shape densifyValue() emits for a uniform object array?
  *
- * The columnar form is structural — `{keys, rows}` — with nothing marking it as
- * Eden's. The previous check was just "has array-valued `keys` and `rows`",
- * which matched plenty of real payloads: SQL-over-HTTP APIs return precisely
- * that. Worse, it kept only those two properties, so
+ * The columnar form is structural — `{keys, rows}` or `{keys, rows, d}` — with
+ * nothing marking it as Eden's. The previous check was just "has array-valued
+ * `keys` and `rows`", which matched plenty of real payloads: SQL-over-HTTP
+ * APIs return precisely that. Worse, it kept only those two properties, so
  * `{keys, rows, total, page}` came back as a row array with `total` and `page`
  * silently gone.
  *
- * Tightening to the exact emitted shape — those two keys and no others, keys all
- * strings, every row an array of matching length — removes the data loss and
- * almost all false positives. It cannot remove them entirely: a payload that is
- * genuinely `{keys: string[], rows: unknown[][]}` is indistinguishable from a
- * densified table, and the only real cure is a discriminator in the emitted
- * form. That would change densified_bytes, which is the billing unit, so it is
- * deliberately not done here.
+ * Tightening to the exact emitted shape — those two keys (plus optional intern
+ * table `d`) and no others, keys all strings, every row an array of matching
+ * length — removes the data loss and almost all false positives. It cannot
+ * remove them entirely: a payload that is genuinely `{keys: string[], rows:
+ * unknown[][]}` is indistinguishable from a densified table, and the only real
+ * cure is a discriminator in the emitted form. That would change
+ * densified_bytes, which is the billing unit, so it is deliberately not done
+ * here. `d` is an intern table, not a type tag: unique-value tables still emit
+ * `{keys, rows}` only. All-zero `d` (`[0,0,…]`) is user data — v2 never emits
+ * that, so it must not match and `d` must survive undensify.
  */
-function isColumnar(value: Record<string, unknown>): value is { keys: string[]; rows: unknown[][] } {
+function isInternTable(e: unknown): e is unknown[] {
+  return Array.isArray(e) && e.length >= 1;
+}
+
+function isColumnar(
+  value: Record<string, unknown>,
+): value is { keys: string[]; rows: unknown[][]; d?: unknown[] } {
   const names = Object.keys(value);
-  if (names.length !== 2 || !names.includes("keys") || !names.includes("rows")) return false;
-  const { keys, rows } = value;
+  if (!names.includes("keys") || !names.includes("rows")) return false;
+  for (const n of names) {
+    if (n !== "keys" && n !== "rows" && n !== "d") return false;
+  }
+  const { keys, rows, d } = value;
   if (!Array.isArray(keys) || !Array.isArray(rows)) return false;
   if (!keys.every((k) => typeof k === "string")) return false;
-  return rows.every((row) => Array.isArray(row) && row.length === keys.length);
+  if (d !== undefined) {
+    if (!Array.isArray(d) || d.length !== keys.length) return false;
+    if (!d.every((e) => e === 0 || Array.isArray(e))) return false;
+    // All-zero (or empty) `d` is not an intern table we emit.
+    if (!d.some(isInternTable)) return false;
+  }
+  const width = rowWidth(keys, d as unknown[] | undefined);
+  return rows.every((row) => Array.isArray(row) && row.length === width);
 }
 
 export function undensifyValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(undensifyValue);
   if (isPlainObject(value) && isColumnar(value)) {
-    const { keys, rows } = value;
+    const { keys, rows, d } = value;
     return rows.map((row) => {
       const obj: Record<string, unknown> = {};
-      keys.forEach((k, i) => {
-        obj[k] = undensifyValue(row[i]);
-      });
+      let slot = 0;
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i]!;
+        const table = d?.[i];
+        if (Array.isArray(table) && table.length === 1) {
+          obj[k] = undensifyValue(table[0]);
+          continue;
+        }
+        const cell = row[slot++];
+        obj[k] = undensifyValue(Array.isArray(table) && typeof cell === "number" ? table[cell] : cell);
+      }
       return obj;
     });
   }
@@ -139,9 +296,13 @@ export function densifyPayload(value: unknown, opts: { rawBytes?: number } = {})
   // its byte length; stringifying the whole payload again just to measure it
   // was pure waste on the latency+billing path.
   const raw_bytes = opts.rawBytes ?? jsonBytes(value);
-  const densified = densifyValue(value);
-  const densified_bytes = jsonBytes(densified);
-  return { densified, raw_bytes, densified_bytes };
+  const packed = densifyValue(value);
+  const packed_bytes = jsonBytes(packed);
+  // Never inflate billing bytes: a transform that grew the payload is a no-op.
+  if (packed_bytes > raw_bytes) {
+    return { densified: value, raw_bytes, densified_bytes: raw_bytes };
+  }
+  return { densified: packed, raw_bytes, densified_bytes: packed_bytes };
 }
 
 export function cellsEqual(a: unknown, b: unknown): boolean {

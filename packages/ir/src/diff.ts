@@ -220,3 +220,50 @@ function recordBinding(step: string, field: string, from: Binding, to: Binding, 
     }
   }
 }
+
+export type DiffCardOpts = {
+  name: string;
+  /** Candidate id the CLI looks up. When omitted, the displayed name is used. */
+  id?: string;
+  sequence?: string[];
+  witnesses?: number;
+  /** True when there is no live program to diff against. */
+  first?: boolean;
+};
+
+/**
+ * One-screen review card. Same facts as workshop diff, terminal-shaped.
+ * Empty structural diff still prints the sequence so a first Approve has something to read.
+ */
+export function formatDiffCard(diff: ProgramDiff | null | undefined, opts: DiffCardOpts): string {
+  const name = opts.name?.trim() || "(unnamed)";
+  const ship = (opts.id?.trim() || name).replace(/\s+/g, "");
+  const seq = (opts.sequence ?? []).filter(Boolean);
+  const lines: string[] = [name];
+  if (seq.length) lines.push(`  steps: ${seq.join(" → ")}`);
+  else lines.push("  steps: (recorded routine)");
+  if (opts.first || !diff) {
+    lines.push("  vs live: first version — nothing to replace");
+  } else {
+    const bits: string[] = [];
+    if (diff.name_changed) bits.push("name changed");
+    if (diff.steps_added.length) bits.push(`+${diff.steps_added.length} steps`);
+    if (diff.steps_removed.length) bits.push(`−${diff.steps_removed.length} steps`);
+    if (diff.literals_introduced.length) {
+      bits.push(`${diff.literals_introduced.length} literal baked in`);
+    }
+    if (diff.bindings_changed.length && !diff.literals_introduced.length) {
+      bits.push(`${diff.bindings_changed.length} bindings moved`);
+    }
+    if (diff.asserts_tightened) bits.push(`asserts tightened ×${diff.asserts_tightened}`);
+    if (diff.asserts_loosened) bits.push(`asserts loosened ×${diff.asserts_loosened}`);
+    if (diff.contract_changed) bits.push(diff.contract_changes.join(", ") || "contract changed");
+    if (diff.readonly_flips.length) bits.push(`${diff.readonly_flips.length} read-only flips`);
+    lines.push(bits.length ? `  vs live: ${bits.join("; ")}` : "  vs live: same structure");
+  }
+  const w = opts.witnesses;
+  if (typeof w === "number" && Number.isFinite(w)) lines.push(`  witnesses: ${Math.max(0, Math.round(w))}`);
+  lines.push("");
+  lines.push(`Approve?  eden approve ${ship} --yes`);
+  return lines.join("\n");
+}

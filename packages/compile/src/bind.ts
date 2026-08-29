@@ -1,6 +1,6 @@
 import type { Binding, StretchTrace, TraceEvent } from "@eden/ir";
 import { canonicalize, containsRedaction, eq, flatten, interpolateSlots, isWeakValue } from "@eden/ir";
-export { isCheckName, isIslandName, isMutating } from "@eden/ir";
+export { isCheckName, isIslandName, isMutating, isReadName } from "@eden/ir";
 
 type Producer = { kind: "input"; path: string } | { kind: "from"; step: string; path: string };
 

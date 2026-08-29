@@ -33,7 +33,7 @@ const WITNESS = 12;
 async function liveAfter(factory: WorldFactory, pool: Array<Record<string, unknown>>) {
   const s = new Session([["w", factory]], true);
   for (let i = 0; i < WITNESS; i++) await s.stretch("w", pool[i % pool.length]!, 900 + i);
-  const r = await s.goLive("w", { compile: WITNESS - 3, holdout: 3, sandbox: factory, maxGram: 26, assumeProviderUsage: true });
+  const r = await s.goLive("w", { compile: WITNESS - 3, holdout: 3, sandbox: factory, maxGram: 26 });
   return { session: s, result: r };
 }
 

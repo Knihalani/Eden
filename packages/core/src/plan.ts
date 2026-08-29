@@ -249,23 +249,10 @@ export const MCP_INSTRUCTIONS_CHARS = 1200;
 /**
  * The server-level hint returned from `initialize`.
  *
- * MCP's InitializeResult carries an optional `instructions` string that clients
- * MAY add to the system prompt — the protocol's own channel for telling a model
- * how to use a server. Eden returned nothing there, which mattered more than it
- * sounds: with no CLI hook and no LLM proxy in front of it, a hosted Eden had
- * no mechanism at all for getting its compiled tool called except a 140-char
- * tool description competing against the model's habit of writing the loop by
- * hand.
- *
- * Two things are said deliberately:
- *
- *  - what each tool *replaces*, since a compiled tool is only worth calling if
- *    the model connects it to the loop it was about to write;
- *  - what to do with partial coverage. In the recorded product benchmark the
- *    compiled tool returned 3 of the 5 fields the task needed, and the agent
- *    responded by re-running the entire per-item loop, so the tool cost a call
- *    and saved nothing. "Use it for what it covers and fetch only the rest" is
- *    aimed squarely at that.
+ * Naming every live tool here is a catalog dump in the system prompt — the same
+ * disease `tools/list` used to have. When anything is live, point at
+ * `tools/dispatch`: POST the transcript, get at most one schema. Empty-catalog
+ * language when nothing is live stays.
  */
 export function mcpInstructions(
   tools: Array<{ name: string; when_to_use?: string | null }>,
@@ -277,23 +264,11 @@ export function mcpInstructions(
       "None are live yet, so there is nothing here to prefer over your usual approach.",
     ].join(" ");
   }
-  const lines = [
-    "Eden hosts tools compiled from call sequences this workspace has already run by hand.",
-    "Each one replaces a fixed loop of API or CLI calls with a single call returning the same facts.",
-    "",
-    "Live now:",
-  ];
-  for (const t of tools) {
-    const hint = shortenWhenToUse(t.when_to_use || t.name, 100);
-    lines.push(`- ${t.name}: ${hint}`);
-  }
-  lines.push(
-    "",
-    "When a task needs the same fields for several ids, call the Eden tool once with all the ids",
-    "rather than looping per id. If it does not return every field you need, still use it for the",
-    "fields it does return and fetch only the remainder — do not re-run the whole loop.",
-  );
-  const text = lines.join("\n");
+  const text = [
+    "Eden compiles repeated tool sequences into single calls.",
+    "tools/list is an empty catalog.",
+    "POST tools/dispatch with the conversation messages to receive at most one schema when the transcript matches a live program, or an empty list when nothing matches.",
+  ].join(" ");
   return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
 }
 

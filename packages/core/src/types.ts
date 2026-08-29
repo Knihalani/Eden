@@ -55,6 +55,16 @@ export type Receipt = {
   densified_bytes: number;
   billable_ms: number;
   cache_hits: number;
+  /**
+   * GET steps that consulted the exact-result cache this run (hits + misses).
+   * Omitted when the run never looked up a cacheable step — not a fake zero.
+   */
+  cache_lookups?: number;
+  /**
+   * hits / (hits + misses) = cache_hits / cache_lookups. Present only when
+   * cache_lookups > 0. A POST-only run must not report 0% as if the cache failed.
+   */
+  cache_hit_rate?: number | null;
   result: unknown;
   facts?: unknown;
   table?: string;

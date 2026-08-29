@@ -6,10 +6,12 @@ import {
   mcpInstructions,
   prRowsFromFacts,
   receiptJson,
-  selectMcpTools,
   shortenWhenToUse,
   templateKeys,
 } from "@eden/core";
+import { negotiateMcpProtocolVersion, readMcpProtocolVersion } from "@eden/ir";
+import type { StretchProgram } from "@eden/ir";
+import { dispatchMessages, dispatchPrograms } from "@eden/wrap";
 import { playTool, warmWorkspaceBundle } from "./playback";
 
 // Warming is fire-and-forget: it touches the database and the network long
@@ -52,31 +54,102 @@ type ToolRow = {
   uses_count: number | null;
 };
 
-/** The tools this workspace would serve, after the same selection tools/list applies. */
-async function liveTools(db: EdenDb, workspaceId: string): Promise<ToolRow[]> {
-  const rows = await db.all<ToolRow>(
+type SiteStep = { url?: string; command?: string; bind?: Record<string, string> };
+
+function parseSiteSteps(raw: string): SiteStep[] {
+  try {
+    const parsed = JSON.parse(raw || "[]") as unknown;
+    return Array.isArray(parsed) ? (parsed as SiteStep[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mcpToolSchema(t: ToolRow) {
+  return {
+    name: t.name,
+    description: shortenWhenToUse(t.when_to_use || t.name),
+    inputSchema: schemaFor(parseSiteSteps(t.steps)),
+    defer_loading: true as const,
+  };
+}
+
+/**
+ * Hosted tool rows are not StretchPrograms. Rank skips `!p.manifest`, so stub
+ * `manifest: {}`. First-step URL/command land in IR tool-step args so a GitHub
+ * URL (or shell template) in the transcript can match the wrap JIT scorer.
+ */
+export function toolRowToProgram(row: ToolRow): StretchProgram {
+  const siteSteps = parseSiteSteps(row.steps);
+  const url = siteSteps.map((s) => s.url).find((u) => typeof u === "string" && u);
+  const command = siteSteps.map((s) => s.command).find((c) => typeof c === "string" && c);
+  const args: Record<string, { kind: "literal"; value: string } | { kind: "transform"; fn: "template"; expr: string }> =
+    {};
+  if (url) args.u = { kind: "literal", value: url };
+  if (command) args.command = { kind: "transform", fn: "template", expr: command };
+  return {
+    id: row.id,
+    version: "v1",
+    name: row.name,
+    description: row.when_to_use || row.name,
+    inputSchema: schemaFor(siteSteps),
+    steps: url || command ? [{ id: "s0", kind: "tool", tool: row.name, args }] : [],
+    returns: { kind: "literal", value: null },
+    contract: { witnesses: 0, minLlmReduction: 0, allowExact: false },
+    manifest: {} as StretchProgram["manifest"],
+    sequence: [row.name],
+  } as StretchProgram;
+}
+
+/**
+ * Every live row for this workspace. The old 6-tool list cap starved dispatch:
+ * tool 7 never matched even when the transcript named it. Listing is empty now,
+ * so ranking sees the whole library and still returns ≤1 schema.
+ */
+export async function liveTools(db: EdenDb, workspaceId: string): Promise<ToolRow[]> {
+  return db.all<ToolRow>(
     listPublishedOnly()
       ? `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on' AND published = 1`
       : `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on'`,
     [workspaceId],
   );
-  return selectMcpTools(rows);
+}
+
+export function dispatchResult(rows: ToolRow[], params?: Record<string, unknown>): { tools: ReturnType<typeof mcpToolSchema>[] } {
+  try {
+    const messages = dispatchMessages(params);
+    const picked = dispatchPrograms(messages, rows.map(toolRowToProgram));
+    const hit = picked[0] ? rows.find((r) => r.name === picked[0]!.name || r.id === picked[0]!.id) : undefined;
+    return { tools: hit ? [mcpToolSchema(hit)] : [] };
+  } catch {
+    return { tools: [] };
+  }
 }
 
 export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, origin: string): Promise<unknown> {
   const { method, id, params } = body;
   if (method === "initialize") {
-    warmInBackground(db, workspaceId, origin);
+    // Lifecycle: echo a supported client proposal; otherwise state our latest.
+    // Hostile / missing / garbage protocolVersion must still be a JSON-RPC
+    // result — never a thrown 500.
+    const negotiated = negotiateMcpProtocolVersion(readMcpProtocolVersion(params));
+    let instructions = "";
+    try {
+      warmInBackground(db, workspaceId, origin);
+      instructions = mcpInstructions(await liveTools(db, workspaceId));
+    } catch {
+      instructions = mcpInstructions([]);
+    }
     return {
       jsonrpc: "2.0",
       id,
       result: {
-        protocolVersion: "2025-03-26",
+        protocolVersion: negotiated.protocolVersion,
         capabilities: { tools: { listChanged: true } },
         serverInfo: { name: "eden", version: "0.1.0" },
         // The protocol's own route into the system prompt. Without a CLI hook
         // or an LLM proxy this is the only steering a hosted Eden has.
-        instructions: mcpInstructions(await liveTools(db, workspaceId)),
+        instructions,
       },
     };
   }
@@ -85,27 +158,20 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   }
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
   if (method === "tools/list") {
-    const listed = await liveTools(db, workspaceId);
+    // Empty catalog: listing live tools is a dump even at the old cap of 6.
+    // Auth lives on the HTTP session (workspace id), not here.
     warmInBackground(db, workspaceId, origin);
-    return {
-      jsonrpc: "2.0",
-      id,
-      result: {
-        tools: listed.map((t) => {
-          let steps: Array<{ url?: string; bind?: Record<string, string> }> = [];
-          try {
-            steps = JSON.parse(t.steps || "[]") as Array<{ url?: string; bind?: Record<string, string> }>;
-          } catch {
-            steps = [];
-          }
-          return {
-            name: t.name,
-            description: shortenWhenToUse(t.when_to_use || t.name),
-            inputSchema: schemaFor(steps),
-          };
-        }),
-      },
-    };
+    return { jsonrpc: "2.0", id, result: { tools: [] } };
+  }
+  if (method === "tools/dispatch") {
+    let tools: ReturnType<typeof mcpToolSchema>[] = [];
+    try {
+      tools = dispatchResult(await liveTools(db, workspaceId), params).tools;
+    } catch {
+      tools = [];
+    }
+    warmInBackground(db, workspaceId, origin);
+    return { jsonrpc: "2.0", id, result: { tools } };
   }
   if (method === "tools/call") {
     const name = String(params?.name || "");

@@ -1,11 +1,19 @@
 import { evidenceLedger, isCheckName, isReadName, isStretchEnd, latestRepeatStalled } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
+import {
+  forecastCopy,
+  forecastTimeoutMs,
+  inFlightProgram,
+  matchingRunPrograms,
+  remainingBudget,
+  actualSpend,
+} from "./forecast";
 import type { EdenOpts, RunRecorder } from "./types";
 
 export type GuardDecision =
-  | { action: "halt"; reason: string }
-  | { action: "block"; reason: string }
-  | { action: "steer"; program: StretchProgram; reason: string };
+  | { action: "halt"; reason: string; detail?: string }
+  | { action: "block"; reason: string; detail?: string }
+  | { action: "steer"; program: StretchProgram; reason: string; detail?: string };
 
 function hasNgram(sequence: string[] | undefined, ngram: string[]): boolean {
   if (!sequence?.length || ngram.length > sequence.length) return false;
@@ -24,22 +32,7 @@ export function requiredChecks(
   live: StretchProgram[],
   events: { name: string; skipped?: boolean }[],
 ): string[] {
-  const seen = events.filter((e) => !e.skipped).map((e) => e.name);
-  const first = seen[0];
-  if (!first) return [];
-  const hit = live
-    .filter((p) => {
-      const s = p.sequence ?? [];
-      if (s[0] !== first) return false;
-      let j = 0;
-      for (const n of seen) {
-        const at = s.indexOf(n, j);
-        if (at < 0) return false;
-        j = at + 1;
-      }
-      return true;
-    })
-    .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0))[0];
+  const hit = inFlightProgram(live, events);
   return hit ? (hit.sequence ?? []).filter(isCheckName) : [];
 }
 
@@ -108,21 +101,36 @@ export function decideGuard(args: {
       return { action: "block", reason: "missing_evidence" };
     }
   }
-  if (run.firstWarningAt == null) return null;
   const elapsed = now - run.t0;
-  const env = Number(process.env.EDEN_TIMEOUT_MS);
-  const raw = opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : Number.isFinite(env) && env > 0 ? env : 60_000;
-  const cap = Math.min(300_000, Math.max(1, raw));
+  const cap = forecastTimeoutMs(opts);
   const remaining = cap - elapsed;
-  const predicted = live.reduce((m, p) => Math.max(m, p.budget?.ms ?? 0), 0);
-  if (predicted > 0 && remaining >= 0 && predicted > remaining) {
+  // Only the program this run is actually on — never max(all live budget.ms).
+  // A stretch that matches no live sequence is unique-work and must not take
+  // a budget halt because some other live tool has a large predicted ms.
+  const onPath = [...run.events, { name }];
+  const matches = matchingRunPrograms(live, onPath);
+  const on = matches[0];
+  if (!on?.budget) return null;
+  const view = remainingBudget({
+    predicted: on.budget,
+    actual: actualSpend(run, now),
+    remainingTimeoutMs: remaining,
+  });
+  // Spent (actual ≥ predicted llm/ms/cents) does not wait on firstWarningAt.
+  // Timeout-pressure (predicted ms > remaining timeout) still does: lifting
+  // that would false-halt the first call of any program whose predicted ms
+  // exceeds the cap left.
+  if (view.spent) return { action: "halt", reason: "budget", detail: forecastCopy(view) };
+  if (run.firstWarningAt == null) return null;
+  if (view.timeoutPressure) {
     // Only a program that *fits* the time left may be steered to. The old
     // `|| Boolean(p.manifest)` made this predicate always true for verified
     // programs, so the branch steered to whichever came first — even one
-    // that could not fit and would itself deopt on timeout.
-    const hit = matchingProgram(live, (p) => (p.budget?.ms ?? 0) <= remaining);
+    // that could not fit and would itself deopt on timeout. Scope the
+    // candidates to the in-flight match set, not every live tool.
+    const hit = matchingProgram(matches, (p) => (p.budget?.ms ?? 0) <= remaining);
     if (hit) return { action: "steer", program: hit, reason: "budget" };
-    return { action: "halt", reason: "budget" };
+    return { action: "halt", reason: "budget", detail: forecastCopy(view) };
   }
   return null;
 }

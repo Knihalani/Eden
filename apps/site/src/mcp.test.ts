@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mcpInstructions, MCP_INSTRUCTIONS_CHARS } from "@eden/core";
 import { openDb, type EdenDb } from "./db";
-import { handleMcp } from "./mcp";
+import { handleMcp, toolRowToProgram } from "./mcp";
+import { dispatchPrograms, selectSurfacePrograms } from "@eden/wrap";
 
 type InitResult = {
   result: {
@@ -16,23 +17,15 @@ type InitResult = {
 };
 
 describe("mcpInstructions", () => {
-  test("names every live tool and what it replaces", () => {
+  test("does not name live tools — that is a dump; points at dispatch", () => {
     const text = mcpInstructions([
       { name: "github_pr_bundle", when_to_use: "issues csv → JSON rows. One call for all PRs." },
       { name: "shop_orders", when_to_use: "ids csv → JSON rows from shop orders." },
     ]);
-    expect(text).toContain("github_pr_bundle");
-    expect(text).toContain("shop_orders");
-    expect(text).toContain("One call for all PRs");
-  });
-
-  test("tells the model what to do about partial coverage", () => {
-    // The recorded product benchmark lost because the compiled tool returned 3
-    // of 5 required fields and the agent re-ran the whole per-PR loop anyway,
-    // so the call cost a turn and displaced nothing.
-    const text = mcpInstructions([{ name: "github_pr_bundle", when_to_use: "x" }]);
-    expect(text).toMatch(/fetch only the remainder/);
-    expect(text).toMatch(/do not re-run the whole loop/);
+    expect(text).not.toContain("github_pr_bundle");
+    expect(text).not.toContain("shop_orders");
+    expect(text).toMatch(/tools\/dispatch/);
+    expect(text).toMatch(/at most one schema/);
   });
 
   test("says something sensible when nothing is live", () => {
@@ -47,6 +40,7 @@ describe("mcpInstructions", () => {
       when_to_use: "a fairly long description that would otherwise run away with the system prompt budget",
     }));
     expect(mcpInstructions(many).length).toBeLessThanOrEqual(MCP_INSTRUCTIONS_CHARS);
+    expect(mcpInstructions(many)).not.toContain("tool_number_0");
   });
 });
 
@@ -72,36 +66,35 @@ describe("handleMcp initialize", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  async function addTool(name: string, whenToUse: string) {
+  async function addTool(name: string, whenToUse: string, steps: unknown = [], workspaceId = "ws_local") {
     await db.run(
       `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, uses_count, published)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [name, "ws_local", name, whenToUse, "on", "[]", "[]", name, 0, 1],
+      [name, workspaceId, name, whenToUse, "on", JSON.stringify(steps), "[]", name, 0, 1],
     );
   }
 
-  test("returns instructions naming the workspace's live tools", async () => {
-    // MCP's InitializeResult carries an optional `instructions` string that
-    // clients MAY put in the system prompt. Serving a hosted MCP with no hook
-    // and no proxy, it is the only steering channel there is, and Eden left it
-    // empty.
-    await addTool("github_pr_bundle", "issues csv → JSON rows. One call for all PRs.");
+  const GH_STEPS = [{ url: "https://api.github.com/repos/acme/app/pulls/{issue}" }];
+  const GH_MESSAGE = [
+    { role: "user", content: "Look at https://api.github.com/repos/acme/app/pulls/12 and summarize the reviews" },
+  ];
+  const MISS_MESSAGE = [{ role: "user", content: "write a sonnet about the sea" }];
+
+  test("returns a dispatch hint, not a dump of live tool names", async () => {
+    await addTool("github_pr_bundle", "issues csv → JSON rows. One call for all PRs.", GH_STEPS);
     const res = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
     expect(res.result.protocolVersion).toBe("2025-03-26");
     expect(res.result.instructions).toBeDefined();
-    expect(res.result.instructions).toContain("github_pr_bundle");
+    expect(res.result.instructions).toMatch(/tools\/dispatch/);
+    expect(res.result.instructions).not.toContain("github_pr_bundle");
   });
 
   test("does not leak another workspace's tools into the hint", async () => {
-    await addTool("github_pr_bundle", "mine");
-    await db.run(
-      `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, uses_count, published)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      ["other_secret_tool", "ws_other", "other_secret_tool", "not yours", "on", "[]", "[]", "f2", 0, 1],
-    );
+    await addTool("github_pr_bundle", "mine", GH_STEPS);
+    await addTool("other_secret_tool", "not yours", GH_STEPS, "ws_other");
     const res = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
-    expect(res.result.instructions).toContain("github_pr_bundle");
     expect(res.result.instructions).not.toContain("other_secret_tool");
+    expect(res.result.instructions).not.toContain("github_pr_bundle");
   });
 
   test("initialize still succeeds with no tools at all", async () => {
@@ -110,15 +103,203 @@ describe("handleMcp initialize", () => {
     expect(res.result.instructions).toContain("None are live");
   });
 
-  test("the hint lists exactly what tools/list serves", async () => {
-    // Naming a tool in the system prompt that the model cannot then call is
-    // worse than saying nothing, so both paths go through the same selection.
-    for (const n of ["alpha_rows", "beta_rows", "gamma_rows"]) await addTool(n, `ids csv → ${n}`);
+  test("echoes a supported protocolVersion (2025-03-26 and 2024-11-05)", async () => {
+    const latest = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26" } },
+      "http://x",
+    )) as InitResult;
+    expect(latest.result.protocolVersion).toBe("2025-03-26");
+    const older = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 2, method: "initialize", params: { protocolVersion: "2024-11-05" } },
+      "http://x",
+    )) as InitResult;
+    expect(older.result.protocolVersion).toBe("2024-11-05");
+  });
+
+  test("2024-11-05 initialize still serves tools/list + notifications/initialized", async () => {
+    const init = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05" } },
+      "http://x",
+    )) as InitResult;
+    expect(init.result.protocolVersion).toBe("2024-11-05");
+    const listed = await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 2, method: "tools/list" }, "http://x");
+    expect(listed).toHaveProperty("result.tools");
+    const note = await handleMcp(db, "ws_local", { jsonrpc: "2.0", method: "notifications/initialized" }, "http://x");
+    expect(note).toBeNull();
+  });
+
+  test("missing / 1.0.0 / garbage / hostile protocolVersion degrade — never throw, never 500", async () => {
+    const cases: unknown[] = [
+      undefined,
+      "1.0.0",
+      "not-a-date",
+      2025,
+      { not: "a string" },
+      ["2025-03-26"],
+      "h".repeat(250_000),
+    ];
+    for (const protocolVersion of cases) {
+      const params = protocolVersion === undefined ? {} : { protocolVersion };
+      let res: unknown;
+      try {
+        res = await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize", params }, "http://x");
+      } catch (err) {
+        throw new Error(`initialize threw on ${typeof protocolVersion}: ${(err as Error).message}`);
+      }
+      const body = res as { jsonrpc?: string; result?: { protocolVersion?: string }; error?: unknown };
+      expect(body.jsonrpc).toBe("2.0");
+      expect(body.error).toBeUndefined();
+      expect(body.result?.protocolVersion).toBe("2025-03-26");
+    }
+    const hostileParams = {
+      get protocolVersion() {
+        throw new Error("injected");
+      },
+    };
+    const hostile = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 9, method: "initialize", params: hostileParams },
+      "http://x",
+    )) as InitResult;
+    expect(hostile.result.protocolVersion).toBe("2025-03-26");
+  });
+
+  test("the catalog is empty; dispatch returns the one match", async () => {
+    await addTool("alpha_rows", "ids csv → alpha_rows");
+    await addTool("github_pr_bundle", "issues csv → JSON rows", GH_STEPS);
     const init = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "initialize" }, "http://x")) as InitResult;
     const list = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 2, method: "tools/list" }, "http://x")) as {
-      result: { tools: Array<{ name: string }> };
+      result: { tools: Array<{ name: string; defer_loading?: boolean }> };
     };
-    for (const t of list.result.tools) expect(init.result.instructions).toContain(t.name);
+    expect(list.result.tools).toEqual([]);
+    expect(init.result.instructions).not.toContain("github_pr_bundle");
+    expect(init.result.instructions).not.toContain("alpha_rows");
+    const hit = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 3, method: "tools/dispatch", params: { messages: GH_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: Array<{ name: string; defer_loading?: boolean }> } };
+    expect(hit.result.tools).toHaveLength(1);
+    expect(hit.result.tools[0]!.name).toBe("github_pr_bundle");
+    expect(hit.result.tools[0]!.defer_loading).toBe(true);
+  });
+
+  test("tools/dispatch miss / missing messages / transcript alias", async () => {
+    await addTool("github_pr_bundle", "issues csv → JSON rows", GH_STEPS);
+    const miss = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: { messages: MISS_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: unknown[] } };
+    expect(miss.result.tools).toEqual([]);
+    const none = (await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 2, method: "tools/dispatch" }, "http://x")) as {
+      result: { tools: unknown[] };
+    };
+    expect(none.result.tools).toEqual([]);
+    const alias = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 3, method: "tools/dispatch", params: { transcript: GH_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: Array<{ name: string }> } };
+    expect(alias.result.tools.map((t) => t.name)).toEqual(["github_pr_bundle"]);
+  });
+
+  test("dispatch still matches a 7th live tool — the old list cap must not starve it", async () => {
+    for (let i = 0; i < 6; i++) {
+      await db.run(
+        `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, uses_count, published)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        [`hot_${i}`, "ws_local", `hot_${i}`, "noise", "on", "[]", "[]", `hot_${i}`, 99, 1],
+      );
+    }
+    await addTool("github_pr_bundle", "issues csv → JSON rows", GH_STEPS);
+    const hit = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: { messages: GH_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: Array<{ name: string }> } };
+    expect(hit.result.tools.map((t) => t.name)).toEqual(["github_pr_bundle"]);
+    expect(hit.result.tools).toHaveLength(1);
+  });
+
+  test("ws_other tools are absent from ws_local dispatch", async () => {
+    await addTool("other_secret_tool", "not yours", GH_STEPS, "ws_other");
+    const leaked = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: { messages: GH_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: Array<{ name: string }> } };
+    expect(leaked.result.tools).toEqual([]);
+    const own = (await handleMcp(
+      db,
+      "ws_other",
+      { jsonrpc: "2.0", id: 2, method: "tools/dispatch", params: { messages: GH_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: Array<{ name: string }> } };
+    expect(own.result.tools.map((t) => t.name)).toEqual(["other_secret_tool"]);
+  });
+
+  test("dispatch never returns more than one schema", async () => {
+    await addTool("github_pr_bundle", "a", GH_STEPS);
+    await addTool("github_pr_files", "b", GH_STEPS);
+    const hit = (await handleMcp(
+      db,
+      "ws_local",
+      { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: { messages: GH_MESSAGE } },
+      "http://x",
+    )) as { result: { tools: unknown[] } };
+    expect(hit.result.tools.length).toBeLessThanOrEqual(1);
+  });
+
+  test("converted rows pick the same name as local JIT on the same transcript", async () => {
+    await addTool("github_pr_bundle", "issues csv → JSON rows", GH_STEPS);
+    await addTool("shop_orders", "ids csv");
+    const rows = [
+      {
+        id: "github_pr_bundle",
+        name: "github_pr_bundle",
+        when_to_use: "issues csv → JSON rows",
+        steps: JSON.stringify(GH_STEPS),
+        uses_count: 0,
+      },
+      { id: "shop_orders", name: "shop_orders", when_to_use: "ids csv", steps: "[]", uses_count: 0 },
+    ];
+    const programs = rows.map(toolRowToProgram);
+    const viaDispatch = dispatchPrograms(GH_MESSAGE, programs).map((p) => p.name);
+    const viaJit = selectSurfacePrograms({ mode: "jit", live: programs, messages: GH_MESSAGE }).surface.map((p) => p.name);
+    expect(viaDispatch).toEqual(viaJit);
+    expect(viaDispatch).toEqual(["github_pr_bundle"]);
+  });
+
+  test("scorer fault fail-opens to empty tools, never throws", async () => {
+    await addTool("github_pr_bundle", "x", GH_STEPS);
+    const hostile = {
+      get messages() {
+        throw new Error("injected");
+      },
+    };
+    let res: unknown;
+    try {
+      res = await handleMcp(db, "ws_local", { jsonrpc: "2.0", id: 1, method: "tools/dispatch", params: hostile }, "http://x");
+    } catch (err) {
+      throw new Error(`dispatch threw: ${(err as Error).message}`);
+    }
+    const body = res as { jsonrpc?: string; result?: { tools?: unknown[] }; error?: unknown };
+    expect(body.jsonrpc).toBe("2.0");
+    expect(body.error).toBeUndefined();
+    expect(body.result?.tools).toEqual([]);
   });
 });
 

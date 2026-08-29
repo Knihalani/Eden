@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { SEE_PENDING } from "../../account/home";
+import { productGate } from "../../account/route";
 import { WorkspaceForm } from "../../workspace/form";
 
 export const metadata = {
@@ -8,8 +9,7 @@ export const metadata = {
 };
 
 export default async function WorkspacePage() {
-  const { userId } = await auth(SEE_PENDING);
-  if (!userId) redirect("/sign-in");
-
+  const dest = productGate("/workspace", await auth(SEE_PENDING));
+  if (dest) redirect(dest);
   return <WorkspaceForm />;
 }

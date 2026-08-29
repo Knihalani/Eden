@@ -5,6 +5,12 @@ import { ensureHome, resolveApiKey } from "./home";
 import { codingRegistry, wrapIsland } from "@eden/wrap";
 import { replayRegistry } from "@eden/shadow";
 
+/** Bring up hookd so Claude Code's 1s PreToolUse curl can deny remainder. */
+export async function bootHookdFromWrap(): Promise<boolean> {
+  const { startHookdBackground } = await import("./hookd");
+  return startHookdBackground();
+}
+
 export function wrapRegistry(args: string[]) {
   if (args.includes("--no-coding")) return undefined;
   return codingRegistry(arg(args, "--cwd") || process.cwd());
@@ -26,6 +32,9 @@ export function wrapListen(args: string[]): { port: number; hostname: string } {
 
 export async function wrapCmd(args: string[]): Promise<void> {
   ensureHome();
+  if (await bootHookdFromWrap()) {
+    console.log("Recording daemon starting (`eden hookd`). Stop with `eden hookd --stop`.");
+  }
   const { port, hostname } = wrapListen(args);
   const db = process.env.EDEN_DB || join(process.env.EDEN_HOME || join(homedir(), ".eden"), "control.sqlite");
   const store = new Store(db);
@@ -42,21 +51,15 @@ export async function wrapCmd(args: string[]): Promise<void> {
     upstream,
     upstreamKey: process.env.OPENAI_API_KEY,
     registry,
-    // Shadowing replays a candidate once per held-out trace to decide whether
-    // it should ship. Against the live registry that means a candidate which
-    // updates an issue and notifies performs those writes for real, n times,
-    // in order to decide whether it may. The replay sandbox answers every call
-    // from the trace's own recording instead, so validation costs nothing and
-    // changes nothing — and a candidate that runs a check the agent skipped is
-    // credited for it rather than failed.
     sandboxFor: (t) => replayRegistry(registry, t),
     island: wrapIsland({ apiKey: process.env.OPENAI_API_KEY, upstream }),
+    scheduleClock: true,
   });
   const server = Bun.serve({ port, hostname, fetch: fetchHandler });
   console.log(`Eden wrap ${server.url}`);
   console.log(`OPENAI_BASE_URL=${new URL("/v1", server.url).href}`);
   console.log("UI: bun run --cwd apps/web dev");
-      console.log("Ships when quality holds and tokens or time are measured");
+  console.log("Ships when quality holds and tokens or time are measured");
   await new Promise(() => undefined);
 }
 

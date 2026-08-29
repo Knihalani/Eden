@@ -101,4 +101,83 @@ describe("composed registries", () => {
     const result = await reg.execute!("notify", {});
     expect(result).toEqual({ notified: true });
   });
+
+  test("a handoff-shaped parent runs two child programs through composedRegistry", async () => {
+    const intake: StretchProgram = {
+      id: "p_intake",
+      version: "1",
+      name: "lookupTicket_to_classifyIssue",
+      description: "Intake.",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      sequence: ["lookupTicket", "classifyIssue"],
+      steps: [
+        { id: "lt", kind: "tool", tool: "lookupTicket", args: { id: { kind: "input", path: "id" } } },
+        { id: "cl", kind: "tool", tool: "classifyIssue", args: { id: { kind: "input", path: "id" } } },
+      ],
+      returns: { kind: "from", step: "cl", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: false },
+      manifest: null,
+    };
+    const billing: StretchProgram = {
+      id: "p_billing",
+      version: "1",
+      name: "fetchInvoice_to_applyCredit",
+      description: "Billing.",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      sequence: ["fetchInvoice", "applyCredit"],
+      steps: [
+        { id: "fi", kind: "tool", tool: "fetchInvoice", args: { id: { kind: "input", path: "id" } } },
+        { id: "ac", kind: "tool", tool: "applyCredit", args: { id: { kind: "input", path: "id" } } },
+      ],
+      returns: { kind: "from", step: "ac", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: false },
+      manifest: null,
+    };
+    const parent: StretchProgram = {
+      id: "p_handoff",
+      version: "1",
+      name: "intake_to_billing",
+      description: "Composed handoff: lookupTicket_to_classifyIssue → fetchInvoice_to_applyCredit.",
+      inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+      sequence: [intake.name, billing.name],
+      steps: [
+        { id: "intake", kind: "tool", tool: intake.name, args: { id: { kind: "input", path: "id" } } },
+        { id: "billing", kind: "tool", tool: billing.name, args: { id: { kind: "from", step: "intake", path: "id" } } },
+      ],
+      returns: { kind: "from", step: "billing", path: "" },
+      contract: { witnesses: 3, minLlmReduction: 2, allowExact: false },
+      manifest: null,
+      origin: { mode: "handoff" },
+      composedOf: [intake.id, billing.id],
+    };
+    const calls: string[] = [];
+    const reg = composedRegistry(
+      {
+        lookupTicket: async (args: Record<string, unknown>) => {
+          calls.push("lookupTicket");
+          return { ok: true, id: args.id };
+        },
+        classifyIssue: async (args: Record<string, unknown>) => {
+          calls.push("classifyIssue");
+          return { class: "billing", id: args.id };
+        },
+        fetchInvoice: async (args: Record<string, unknown>) => {
+          calls.push("fetchInvoice");
+          return { id: args.id, total: 40 };
+        },
+        applyCredit: async (args: Record<string, unknown>) => {
+          calls.push("applyCredit");
+          return { applied: true, id: args.id };
+        },
+      },
+      {
+        [intake.name]: { program: intake },
+        [billing.name]: { program: billing },
+      },
+    );
+    const out = await runProgram(parent, { id: "T-0" }, { registry: reg, checkEnvelope: false });
+    expect(calls).toEqual(["lookupTicket", "classifyIssue", "fetchInvoice", "applyCredit"]);
+    expect(out.value).toEqual({ applied: true, id: "T-0" });
+    expect(parent.manifest).toBeNull();
+  });
 });

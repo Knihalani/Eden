@@ -12,6 +12,11 @@ export type ChatUsage = {
   completion_tokens: number;
   measured: boolean;
   output?: unknown;
+  cached_tokens?: number;
+  /** Provider cache-write tokens. Stamped from the usage object; 0 is measured. */
+  cache_write_tokens?: number;
+  /** Hit-% denominator stamped at parse time. Not billed prompt. */
+  cache_input_tokens?: number;
 };
 
 export function parseUsage(raw: unknown): { prompt: number; completion: number } | null {
@@ -33,7 +38,26 @@ export function parseUsage(raw: unknown): { prompt: number; completion: number }
 export type CacheTokenFields = {
   cached: number;
   cacheWrite?: number;
+  /** Dialect total input, stamped from the usage object. */
+  denom?: number;
 };
+
+/**
+ * Hit-% denominator from the raw usage object (not cached vs prompt).
+ * OpenAI: prompt_tokens. Anthropic: cache_read + cache_creation + input_tokens.
+ */
+export function cacheHitDenomFromUsage(raw: unknown): number | null {
+  if (!raw || typeof raw !== "object") return null;
+  const u = raw as Record<string, unknown>;
+  if ("cache_read_input_tokens" in u || "cache_creation_input_tokens" in u) {
+    return (
+      (coerceInt(u.cache_read_input_tokens) ?? 0) +
+      (coerceInt(u.cache_creation_input_tokens) ?? 0) +
+      (coerceInt(u.input_tokens) ?? 0)
+    );
+  }
+  return coerceInt(u.prompt_tokens) ?? null;
+}
 
 export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
   if (!raw || typeof raw !== "object") return null;
@@ -49,7 +73,12 @@ export function parseCacheTokens(raw: unknown): CacheTokenFields | null {
   const cacheWrite =
     coerceInt(u.cache_creation_input_tokens) ?? coerceInt(details?.cache_creation_tokens);
   if (cached == null && cacheWrite == null) return null;
-  return { cached: cached ?? 0, ...(cacheWrite != null ? { cacheWrite } : {}) };
+  const denom = cacheHitDenomFromUsage(u);
+  return {
+    cached: cached ?? 0,
+    ...(cacheWrite != null ? { cacheWrite } : {}),
+    ...(denom != null ? { denom } : {}),
+  };
 }
 
 export function extractOutput(json: Record<string, unknown>): unknown {
@@ -78,6 +107,12 @@ export function recordCompletion(run: RunRecorder, json: Record<string, unknown>
     run.prompt_tokens += usage.prompt;
     run.completion_tokens += usage.completion;
   }
+  const cache = parseCacheTokens(json.usage);
+  if (cache) {
+    run.cached_tokens += cache.cached;
+    if (cache.cacheWrite != null) run.cache_write_tokens += cache.cacheWrite;
+    if (cache.denom != null) run.cache_input_tokens += cache.denom;
+  }
   const out = extractOutput(json);
   if (out != null) run.output = redact(out);
 }
@@ -86,9 +121,19 @@ export function resetUsage(run: RunRecorder): void {
   run.llmCalls = 0;
   run.prompt_tokens = 0;
   run.completion_tokens = 0;
+  run.cached_tokens = 0;
+  run.cache_write_tokens = 0;
+  run.cache_input_tokens = 0;
   run.measured = false;
   run.output = undefined;
   run.cost = 0;
+  run.island_prompt_tokens = 0;
+  run.island_completion_tokens = 0;
+  run.island_cached_tokens = 0;
+  run.island_cache_write_tokens = 0;
+  run.island_cache_input_tokens = 0;
+  run.island_memoized = false;
+  run.island_measured = false;
 }
 
 export function peekChatUsage(state: { run: RunRecorder }): ChatUsage | null {
@@ -100,6 +145,7 @@ export function peekChatUsage(state: { run: RunRecorder }): ChatUsage | null {
     completion_tokens: run.completion_tokens,
     measured: run.measured,
     output: run.output,
+    ...cacheHitSpread(run.cached_tokens, run.cache_write_tokens, run.cache_input_tokens),
   };
 }
 
@@ -107,6 +153,23 @@ export function consumeChatUsage(state: { run: RunRecorder }): ChatUsage | null 
   const taken = peekChatUsage(state);
   if (taken) resetUsage(state.run);
   return taken;
+}
+
+/** Additive cache-hit fields for traces/receipts. Write is not hidden when denom is 0. */
+export function cacheHitSpread(
+  cached: number,
+  write: number,
+  denom: number,
+): {
+  cached_tokens?: number;
+  cache_write_tokens?: number;
+  cache_input_tokens?: number;
+} {
+  return {
+    ...(cached > 0 ? { cached_tokens: cached } : {}),
+    ...(denom > 0 ? { cache_input_tokens: denom } : {}),
+    ...(write > 0 || denom > 0 ? { cache_write_tokens: write } : {}),
+  };
 }
 
 export function attachChatUsage(trace: StretchTrace, usage: ChatUsage | null): StretchTrace {
@@ -120,7 +183,17 @@ export function attachChatUsage(trace: StretchTrace, usage: ChatUsage | null): S
     ...trace,
     llmCalls,
     output,
-    ...(usage.measured ? { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens } : {}),
+    ...(usage.measured
+      ? {
+          prompt_tokens: usage.prompt_tokens,
+          completion_tokens: usage.completion_tokens,
+          ...cacheHitSpread(
+            usage.cached_tokens ?? 0,
+            usage.cache_write_tokens ?? 0,
+            usage.cache_input_tokens ?? 0,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -140,7 +213,8 @@ export function withStreamUsage(body: Record<string, unknown>): Record<string, u
  */
 export class SseUsageParser {
   private buf = "";
-  private usage: { prompt: number; completion: number } | null = null;
+  /** Raw provider `usage` object — cache dialects ride with prompt/completion. */
+  private usage: Record<string, unknown> | null = null;
   private finished = false;
   private committed = false;
   private readonly dec = new TextDecoder();
@@ -161,9 +235,7 @@ export class SseUsageParser {
     if (this.committed) return;
     if (!this.finished && !this.usage) return;
     this.committed = true;
-    const json: Record<string, unknown> = this.usage
-      ? { usage: { prompt_tokens: this.usage.prompt, completion_tokens: this.usage.completion } }
-      : {};
+    const json: Record<string, unknown> = this.usage ? { usage: this.usage } : {};
     recordCompletion(run, json);
   }
 
@@ -192,8 +264,13 @@ export class SseUsageParser {
     } catch {
       return;
     }
-    const parsed = parseUsage(json.usage);
-    if (parsed) this.usage = parsed;
+    const raw = json.usage;
+    const parsed = parseUsage(raw);
+    const cache = parseCacheTokens(raw);
+    if (parsed || cache) {
+      const next = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+      this.usage = { ...(this.usage ?? {}), ...next };
+    }
     const choices = json.choices;
     if (Array.isArray(choices) && choices.some((c) => c && typeof c === "object" && (c as { finish_reason?: unknown }).finish_reason)) {
       this.finished = true;

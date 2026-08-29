@@ -123,7 +123,7 @@ await check("approve requires the workshop gate and flips state", async () => {
   expect(json.ok, `approve status ${json.status}`);
 });
 
-await check("MCP handshake lists the approved tool", async () => {
+await check("MCP handshake is an empty catalog; dispatch matches a live tool", async () => {
   const res = await fetch(`${base}/mcp`, {
     method: "POST",
     headers: AUTH,
@@ -138,7 +138,24 @@ await check("MCP handshake lists the approved tool", async () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
     })
   ).json()) as { result?: { tools?: Array<{ name: string }> } };
-  expect((list.result?.tools ?? []).length >= 1, "no tools listed after approve");
+  expect((list.result?.tools ?? []).length === 0, "tools/list must not dump the catalog");
+  const inventory = (await (await fetch(`${base}/v1/tools`, { headers: AUTH })).json()) as {
+    tools: Array<{ state: string }>;
+  };
+  if (!inventory.tools.some((t) => t.state === "on")) return;
+  const dispatch = (await (
+    await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: AUTH,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/dispatch",
+        params: { messages: [{ role: "user", content: "curl http://127.0.0.1/forge/repos/acme/app/issues/12" }] },
+      }),
+    })
+  ).json()) as { result?: { tools?: Array<{ name: string }> } };
+  expect((dispatch.result?.tools ?? []).length === 1, `dispatch expected 1, got ${JSON.stringify(dispatch).slice(0, 200)}`);
 });
 
 await check("play runs the compiled tool against the in-process forge", async () => {

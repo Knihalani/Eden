@@ -1,5 +1,10 @@
 export * from "./normalize";
+export * from "./negative";
 export * from "./mine";
 export * from "./bind";
 export * from "./compile";
 export * from "./fork";
+export * from "./handoff";
+export * from "./compose";
+export * from "./width-inherit";
+export { intakeBillingHandoffTraces } from "./corpus/fixtures";

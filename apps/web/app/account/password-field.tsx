@@ -26,9 +26,11 @@ export function PasswordField({
       <span className="field-lock">
         <input
           id={id}
-          name="password"
+          name={autoComplete === "new-password" ? "new-password" : "password"}
           type={shown ? "text" : "password"}
           autoComplete={autoComplete}
+          autoCapitalize="none"
+          autoCorrect="off"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={invalid || undefined}

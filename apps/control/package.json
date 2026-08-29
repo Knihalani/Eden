@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@eden/ir": "workspace:*",
+    "@eden/measure": "workspace:*",
     "@eden/runtime": "workspace:*",
     "@eden/compile": "workspace:*",
     "@eden/shadow": "workspace:*",

@@ -12,6 +12,7 @@
     "dev": "bun run --cwd apps/web dev",
     "demo": "bun run --cwd apps/control src/demo.ts",
     "cli": "bun run packages/cli/src/cli.ts",
+    "know": "bun run packages/know/src/cli.ts",
     "bench": "bun run packages/runtime/src/bench.ts",
     "typecheck": "./scripts/typecheck.sh",
     "bench:verdict": "bun run packages/measure/src/analyze.ts apps/site/scripts/bench-horizon-results.json apps/site/scripts/bench-horizon-hard-results.json apps/site/scripts/bench-horizon-harder-results.json apps/site/scripts/bench-horizon-product-results.json apps/site/scripts/bench-workshop-results.json",
@@ -21,6 +22,12 @@
     "bench:negative": "bun run benchmarks/campaign/bench-negative.ts",
     "bench:calibrate": "bun run benchmarks/campaign/calibrate.ts",
     "bench:coverage": "bun run benchmarks/campaign/bench-coverage.ts",
+    "bench:8-witness": "bun run benchmarks/campaign/bench-8-witness.ts",
+    "bench:timeout": "bun run benchmarks/campaign/bench-timeout.ts",
+    "bench:matrix": "bun run benchmarks/campaign/concurrency-matrix.ts",
+    "bench:jit-soak": "bun run benchmarks/campaign/jit-soak.ts",
+    "test:corpus": "bun test packages/compile/src/corpus",
+    "test:compile": "bun test packages/compile",
     "test:flake": "./scripts/flake-audit.sh"
   },
   "devDependencies": {

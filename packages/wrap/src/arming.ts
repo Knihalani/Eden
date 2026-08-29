@@ -1,0 +1,309 @@
+/**
+ * Session-partitioned suppression store (Wave 4.2) and the scan fast-path (4.3).
+ *
+ * One wrap used to keep a single Map capped at 64. That is the right fail-open
+ * gate for ONE agent (ADR 004: never evict a live arming). Hosted dispatch of
+ * many agents on one process needs the same gate *per session*, plus a global
+ * ceiling, plus a scan that does not walk everyone else's armings.
+ */
+import type { StretchProgram } from "@eden/ir";
+
+/** How long a *settled* arming may suppress raw calls. In-flight heads are exempt. */
+export const ARM_TTL_MS = 60_000;
+/** Extra matching calls beyond the tail before a settled arming is stale. */
+export const ARM_SLACK_CALLS = 32;
+/** Per-session capacity. Bursts past this fail open (A3). */
+export const ARM_MAX_PER_SESSION = 64;
+/** Process-wide ceiling across sessions. Configurable; never steals live work. */
+export const ARM_MAX_GLOBAL = 4_096;
+/** @deprecated name kept so existing comments/tests still grep. Alias of per-session. */
+export const ARM_MAX_ENTRIES = ARM_MAX_PER_SESSION;
+
+export function armMaxPerSession(explicit?: number): number {
+  const env = Number(process.env.EDEN_ARM_MAX);
+  const raw = explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : ARM_MAX_PER_SESSION;
+  return Math.min(10_000, Math.max(1, Math.floor(raw)));
+}
+
+export function armMaxGlobal(explicit?: number): number {
+  const env = Number(process.env.EDEN_ARM_GLOBAL);
+  const raw = explicit && explicit > 0 ? explicit : Number.isFinite(env) && env > 0 ? env : ARM_MAX_GLOBAL;
+  return Math.min(1_000_000, Math.max(1, Math.floor(raw)));
+}
+
+/** Empty string is the single-tenant default bucket. */
+export function wrapSessionId(explicit?: string): string {
+  if (typeof explicit === "string" && explicit.length > 0) return explicit;
+  const env = process.env.EDEN_SESSION;
+  return typeof env === "string" && env.length > 0 ? env : "";
+}
+
+export type Armed = {
+  rest: Map<string, number>;
+  input: Record<string, unknown>;
+  programId: string;
+  /** Monotonic (performance.now), so an NTP step cannot make this immortal. */
+  armedAt: number;
+  armedAtCall: number;
+  /**
+   * Matching-call budget: how many calls agreeing with this input the arming
+   * may see before it is considered stale. Claims and same-input noise both
+   * count; other stretches' calls do not.
+   */
+  budgetCalls: number;
+  matchedCalls: number;
+  /**
+   * Resolves true when the head's compiled run SUCCEEDED, false when it
+   * failed. Parallel siblings wait on this before claiming their share of the
+   * tail.
+   */
+  settled: Promise<boolean>;
+  resolveSettled: (ok: boolean) => void;
+  headErr?: unknown;
+  /** True once the head compiled run resolved. In-flight heads do not TTL-expire. */
+  closed: boolean;
+  /** Cheap identity for fast reject before extractInput. Canonical form of the arming input (id / ticket_id / orderId). */
+  hintId: unknown;
+  /**
+   * True only when every sequence name is a read and none is a mutation.
+   * Mutating programs never set this. scanFleet requires `true`.
+   */
+  readOnly?: boolean;
+  /** Fleet key this arming may be claimed under. Absent/empty = session only. */
+  fleetId?: string;
+  /** sequence[0] — not in `rest`. Fleet head-skip uses this. */
+  head?: string;
+  /** Names the compiled run served. Fleet agents skip these even after rest is 0. */
+  served?: Set<string>;
+  /** Agents that have joined this serving. Size ≥2 → `shared across N agents`. */
+  agentIds?: Set<string>;
+};
+
+/** Cross-session hit for read-only fleet claims. */
+export type FleetHit = { session: string; key: string; armed: Armed };
+
+export type ArmingStats = {
+  sessions: number;
+  armings: number;
+  admits: number;
+  rejects: number;
+};
+
+export type ArmingStore = {
+  readonly perSessionMax: number;
+  readonly globalMax: number;
+  insert(session: string, key: string, armed: Armed): boolean;
+  delete(session: string, key: string): void;
+  get(session: string, key: string): Armed | undefined;
+  /**
+   * Newest-first candidates that might match this call. Sweeps expired
+   * (settled) entries. Does not walk other sessions.
+   */
+  scan(session: string, name: string, args: Record<string, unknown>, now: number): Array<[string, Armed]>;
+  /**
+   * Read-only armings in this fleet, newest-first per session. Empty fleetId
+   * returns []. Does not return mutating armings.
+   */
+  scanFleet(fleetId: string, name: string, args: Record<string, unknown>, now: number): FleetHit[];
+  /** Newest-first, expired swept. For the already-armed head check. */
+  all(session: string, now: number): Array<[string, Armed]>;
+  /** All live read-only armings in this fleet. Empty fleetId returns []. */
+  allFleet(fleetId: string, now: number): FleetHit[];
+  sessionSize(session: string): number;
+  globalSize(): number;
+  stats(): ArmingStats;
+  noteRest(session: string, key: string): void;
+};
+
+type Bucket = {
+  byKey: Map<string, Armed>;
+  /** Newest last. n ≤ perSessionMax, so reverse scan is cheap. */
+  recency: string[];
+};
+
+export function restCounts(program: StretchProgram): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const name of (program.sequence ?? []).slice(1)) {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function totalRest(rest: Map<string, number>): number {
+  let n = 0;
+  for (const c of rest.values()) n += c;
+  return n;
+}
+
+export function hintIdOf(rec: Record<string, unknown>): unknown {
+  if ("id" in rec) return rec.id;
+  if ("ticket_id" in rec) return rec.ticket_id;
+  if ("ticketId" in rec) return rec.ticketId;
+  if ("orderId" in rec) return rec.orderId;
+  if ("key" in rec) return rec.key;
+  return undefined;
+}
+
+/**
+ * In-flight heads must not expire: siblings wait on `settled`, and a TTL
+ * delete would drop the only record of in-flight work (Wave 4 hard case).
+ */
+export function armExpired(a: Armed, now: number): boolean {
+  if (!a.closed) return false;
+  return now - a.armedAt > ARM_TTL_MS || a.matchedCalls >= a.budgetCalls;
+}
+
+/**
+ * Skip extractInput when this arming cannot be this call.
+ *
+ * Claim path: rest still has `name` (unless identity already disagrees).
+ * Budget path: same-entity noise still counts even when `name` is not in rest.
+ */
+export function mightClaim(armed: Armed, name: string, args: Record<string, unknown>): boolean {
+  const argHint = hintIdOf(args);
+  if (armed.hintId !== undefined && argHint !== undefined && armed.hintId !== argHint) return false;
+  if (armed.rest.has(name)) return true;
+  // Budget path: same-entity noise still counts even when `name` is not in rest.
+  // No identity on the call cannot be that noise, and cannot claim — skip extractInput.
+  if (armed.hintId !== undefined && argHint !== undefined && armed.hintId === argHint) return true;
+  return false;
+}
+
+export function createArmingStore(opts?: { perSessionMax?: number; globalMax?: number }): ArmingStore {
+  const perSessionMax = armMaxPerSession(opts?.perSessionMax);
+  const globalMax = armMaxGlobal(opts?.globalMax);
+  const sessions = new Map<string, Bucket>();
+  let global = 0;
+  let admits = 0;
+  let rejects = 0;
+
+  const bucket = (session: string): Bucket => {
+    let b = sessions.get(session);
+    if (!b) {
+      b = { byKey: new Map(), recency: [] };
+      sessions.set(session, b);
+    }
+    return b;
+  };
+
+  const drop = (session: string, b: Bucket, key: string): void => {
+    if (!b.byKey.delete(key)) return;
+    global--;
+    const i = b.recency.indexOf(key);
+    if (i >= 0) b.recency.splice(i, 1);
+    if (!b.byKey.size) sessions.delete(session);
+  };
+
+  const sweepBucket = (session: string, b: Bucket, now: number): void => {
+    for (const [key, a] of b.byKey) {
+      if (armExpired(a, now)) drop(session, b, key);
+    }
+  };
+
+  const sweepSession = (session: string, now: number): Bucket | undefined => {
+    const b = sessions.get(session);
+    if (!b) return undefined;
+    sweepBucket(session, b, now);
+    return sessions.get(session);
+  };
+
+  const sweepAllExpired = (now: number): void => {
+    for (const session of [...sessions.keys()]) sweepSession(session, now);
+  };
+
+  const newest = (b: Bucket): Array<[string, Armed]> => {
+    const out: Array<[string, Armed]> = [];
+    for (let i = b.recency.length - 1; i >= 0; i--) {
+      const key = b.recency[i]!;
+      const a = b.byKey.get(key);
+      if (a) out.push([key, a]);
+    }
+    return out;
+  };
+
+  const walkFleet = (fleetId: string, now: number): FleetHit[] => {
+    const out: FleetHit[] = [];
+    for (const session of [...sessions.keys()]) {
+      const b = sweepSession(session, now);
+      if (!b) continue;
+      for (const [key, armed] of newest(b)) {
+        if (armed.readOnly !== true) continue;
+        if (armed.fleetId !== fleetId) continue;
+        out.push({ session, key, armed });
+      }
+    }
+    return out;
+  };
+
+  return {
+    perSessionMax,
+    globalMax,
+    insert(session, key, armed) {
+      const now = performance.now();
+      let b = sweepSession(session, now) ?? bucket(session);
+      if (b.byKey.size >= perSessionMax) {
+        rejects++;
+        return false;
+      }
+      if (global >= globalMax) {
+        sweepAllExpired(now);
+        b = sessions.get(session) ?? bucket(session);
+        if (global >= globalMax || b.byKey.size >= perSessionMax) {
+          rejects++;
+          return false;
+        }
+      }
+      b.byKey.set(key, armed);
+      b.recency.push(key);
+      global++;
+      admits++;
+      return true;
+    },
+    delete(session, key) {
+      const b = sessions.get(session);
+      if (!b) return;
+      drop(session, b, key);
+    },
+    get(session, key) {
+      return sessions.get(session)?.byKey.get(key);
+    },
+    scan(session, name, args, now) {
+      const b = sweepSession(session, now);
+      if (!b) return [];
+      const out: Array<[string, Armed]> = [];
+      for (const pair of newest(b)) {
+        if (mightClaim(pair[1], name, args)) out.push(pair);
+      }
+      return out;
+    },
+    scanFleet(fleetId, name, args, now) {
+      if (!fleetId) return [];
+      const out: FleetHit[] = [];
+      for (const hit of walkFleet(fleetId, now)) {
+        if (mightClaim(hit.armed, name, args)) out.push(hit);
+      }
+      return out;
+    },
+    all(session, now) {
+      const b = sweepSession(session, now);
+      if (!b) return [];
+      return newest(b);
+    },
+    allFleet(fleetId, now) {
+      if (!fleetId) return [];
+      return walkFleet(fleetId, now);
+    },
+    sessionSize(session) {
+      return sessions.get(session)?.byKey.size ?? 0;
+    },
+    globalSize() {
+      return global;
+    },
+    stats() {
+      return { sessions: sessions.size, armings: global, admits, rejects };
+    },
+    noteRest() {
+      /* rest is read live off Armed; index is optional. Hook kept for callers. */
+    },
+  };
+}

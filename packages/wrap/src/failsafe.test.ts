@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createState, handleChatCompletions, wrapTools } from "../src/index";
-import { pullLive } from "../src/wrap-tools";
+import { filterCanary, pullLive } from "../src/wrap-tools";
 import { DeoptError } from "@eden/runtime";
 import type { StretchProgram, StretchTrace } from "@eden/ir";
 
@@ -49,6 +49,15 @@ function liveProgram(overrides: Partial<StretchProgram> = {}): StretchProgram {
 }
 
 describe("prime directive: a broken Eden never breaks the agent", () => {
+  test("a canary flag that throws is skipped, not served at 100%", () => {
+    const boom = {
+      get rollout(): "canary" {
+        throw new Error("hash");
+      },
+    } as { rollout?: "canary" | "live" };
+    expect(filterCanary([boom, { rollout: "live" }], "sess-1")).toEqual([{ rollout: "live" }]);
+  });
+
   test("kill switch tripped still serves traffic — unsteered, never a 409", async () => {
     const p = liveProgram();
     let upstreamBody = "";
@@ -632,5 +641,60 @@ describe("phase 3: collision precedence (M5)", () => {
     const tools = wrapTools({ lookup_fan: async () => ({ ticket: "raw-ok" }) }, state);
     const out = await tools.lookup_fan.execute({ id: "T-100" });
     expect(out).toEqual({ ticket: "raw-ok" });
+  });
+});
+
+describe("read-your-writes", () => {
+  test("write then sibling read is not a stale pre-write value", async () => {
+    const store: Record<string, string> = { "T-100": "old" };
+    const p = twoStepProgram("ryw", "lookup_to_details", "lookupTicket", "fetchDetails");
+    const state = createState({ programs: [p] });
+    const tools = wrapTools(
+      {
+        lookupTicket: async (a: Record<string, unknown>) => ({ value: store[String(a.id)] }),
+        fetchDetails: async (a: Record<string, unknown>) => ({ details: store[String(a.id)] }),
+        writeRecord: async (a: Record<string, unknown>) => {
+          store[String(a.id)] = "new";
+          return { written: true };
+        },
+      },
+      state,
+    );
+    const first = await tools.lookupTicket.execute({ id: "T-100" });
+    expect(first).toEqual({ details: "old" });
+    await tools.writeRecord.execute({ id: "T-100" });
+    const sib = await tools.fetchDetails.execute({ id: "T-100" });
+    expect(sib).toEqual({ details: "new" });
+    const again = await tools.lookupTicket.execute({ id: "T-100" });
+    expect(JSON.stringify(again)).not.toMatch(/"old"/);
+    expect(JSON.stringify(again)).toMatch(/new/);
+  });
+
+  test("a dirty-set fault fails open and does not block the read", async () => {
+    const store: Record<string, string> = { "T-100": "old" };
+    const p = twoStepProgram("ryw-fo", "lookup_to_details", "lookupTicket", "fetchDetails");
+    const state = createState({ programs: [p] });
+    const tools = wrapTools(
+      {
+        lookupTicket: async (a: Record<string, unknown>) => ({ value: store[String(a.id)] }),
+        fetchDetails: async (a: Record<string, unknown>) => ({ details: store[String(a.id)] }),
+        writeRecord: async (a: Record<string, unknown>) => {
+          store[String(a.id)] = "new";
+          return { written: true };
+        },
+      },
+      state,
+    );
+    await tools.lookupTicket.execute({ id: "T-100" });
+    await tools.writeRecord.execute({ id: "T-100" });
+    state.dirtyEntities.has = () => {
+      throw new Error("dirty-set exploded");
+    };
+    state.dirtyEntities.add = () => {
+      throw new Error("dirty-set exploded");
+    };
+    const out = await tools.fetchDetails.execute({ id: "T-100" });
+    expect(out).toBeTypeOf("object");
+    expect((out as { eden?: string }).eden).not.toBe("deopt");
   });
 });

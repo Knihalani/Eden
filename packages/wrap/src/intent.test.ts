@@ -8,7 +8,11 @@ import {
   rankPrograms,
   selectForRequest,
   selectSurfacePrograms,
+  dispatchPrograms,
   surfaceMode,
+  createJitGuard,
+  noteJitUsed,
+  JIT_UNUSED_DEMOTE,
 } from "./intent";
 
 /**
@@ -164,6 +168,29 @@ describe("selectSurfacePrograms", () => {
   });
 });
 
+describe("dispatchPrograms", () => {
+  test("same messages → same single name as local JIT", () => {
+    const live = [TICKET, GH, KUBECTL];
+    const viaDispatch = dispatchPrograms(GH_MESSAGE, live).map((p) => p.name);
+    const viaJit = selectSurfacePrograms({ mode: "jit", live, messages: GH_MESSAGE }).surface.map((p) => p.name);
+    expect(viaDispatch).toEqual(viaJit);
+    expect(viaDispatch).toEqual(["github_pr_bundle"]);
+    expect(dispatchPrograms(VAGUE_MESSAGE, live)).toEqual([]);
+    expect(dispatchPrograms(UNRELATED_MESSAGE, live)).toEqual([]);
+    expect(dispatchPrograms(undefined, live)).toEqual([]);
+    expect(dispatchPrograms([], live)).toEqual([]);
+  });
+
+  test("length is 0 or 1 even when several programs clear the bar", () => {
+    const twin = prog({
+      name: "github_pr_files",
+      seq: ["web_fetch"],
+      url: "https://api.github.com/repos/acme/app/pulls/12",
+    });
+    expect(dispatchPrograms(GH_MESSAGE, [GH, twin]).length).toBeLessThanOrEqual(1);
+  });
+});
+
 describe("injectTools under the surface policy", () => {
   const clientTool = { type: "function", function: { name: "lookupTicket", parameters: {} } };
 
@@ -271,5 +298,70 @@ describe("proxy wiring (handleChatCompletions)", () => {
     const tools = await proxied("none");
     expect(tools.length).toBe(1);
     expect(tools[0]!.function!.name).toBe("lookupTicket");
+  });
+});
+
+describe("JIT injection-rate guards", () => {
+  test("default surface mode stays all — jit caps do not fire", () => {
+    withEnv(undefined, () => {
+      const jit = createJitGuard();
+      for (let i = 0; i < 8; i++) {
+        expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      }
+      expect(jit.injections).toBe(0);
+      expect(jit.demoted).toBe(false);
+    });
+  });
+
+  test("jit caps injections per episode at jitMax (default 4)", () => {
+    withEnv("jit", () => {
+      const jit = createJitGuard();
+      for (let i = 0; i < 4; i++) {
+        expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+        noteJitUsed(jit, ["github_pr_bundle"]);
+      }
+      expect(jit.injections).toBe(4);
+      expect(selectForRequest([GH], GH_MESSAGE, jit)).toEqual([]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit)).toEqual([]);
+    });
+  });
+
+  test("three consecutive unused injections demote the episode to S0", () => {
+    withEnv("jit", () => {
+      const jit = createJitGuard();
+      expect(JIT_UNUSED_DEMOTE).toBe(3);
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit)).toEqual([]);
+      expect(jit.demoted).toBe(true);
+      expect(selectForRequest([GH], GH_MESSAGE, jit)).toEqual([]);
+    });
+  });
+
+  test("a used injection resets the unused streak", () => {
+    withEnv("jit", () => {
+      const jit = createJitGuard();
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      noteJitUsed(jit, ["github_pr_bundle"]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(jit.demoted).toBe(false);
+    });
+  });
+
+  test("a tool call in the next conversation counts as used", () => {
+    withEnv("jit", () => {
+      const jit = createJitGuard();
+      expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      const follow = [
+        ...GH_MESSAGE,
+        { role: "assistant", tool_calls: [{ type: "function", function: { name: "github_pr_bundle", arguments: "{}" } }] },
+      ];
+      expect(selectForRequest([GH], follow, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+      expect(jit.unusedStreak).toBe(0);
+      expect(jit.demoted).toBe(false);
+    });
   });
 });

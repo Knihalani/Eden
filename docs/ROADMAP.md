@@ -1,6 +1,6 @@
 # Eden Roadmap — v4.0 Adversarial Edition
 
-**Date:** August 26, 2026 · Supersedes v3.1. This edition folds in the adversarial verification wave (`benchmarks/campaign/`): a positive campaign across six agent domains, a **negative-control campaign across eight regimes where Eden should not help**, and five capacity/degradation probes that broke Eden four times before the fixes landed. Every number below is either gated (paired, counterbalanced, A/A-checked) or labeled modeled. The companion ledger lives in `benchmarks/campaign/README.md`.
+**Date:** August 26, 2026 · Supersedes v3.1. This edition folds in the adversarial verification wave (`benchmarks/campaign/`): a positive campaign across six agent domains, a **negative-control campaign across nine regimes where Eden should not help**, and five capacity/degradation probes that broke Eden four times before the fixes landed. Every number below is either gated (paired, counterbalanced, A/A-checked) or labeled modeled. The companion ledger lives in `benchmarks/campaign/README.md`.
 
 ---
 
@@ -12,7 +12,7 @@
 
 **Method (three tiers, enforced everywhere below):**
 1. **Positive gates.** Every measurable improvement runs a paired, counterbalanced, replicated benchmark with a clean A/A cell (`bun run bench*`, `benchmarks/campaign/bench-campaign.ts`). WIN or it does not ship.
-2. **Negative gates.** *New in v4.* Eight adversarial regimes where Eden should NOT help (non-repeating work, all-judgment stretches, sub-minimum sequences, instant tools, distribution drift, failure storms, concurrent interleaving). Success criterion is **parity within materiality** (+1%); a LOSS fails the exit code. A tool that only benchmarks well on its own home turf is a bias machine, not a product. (`bench-negative.ts`)
+2. **Negative gates.** *New in v4.* Nine adversarial regimes where Eden should NOT help (non-repeating work, all-judgment stretches, sub-minimum sequences, instant tools, distribution drift, failure storms, concurrent interleaving, silent-drop host). Success criterion is **parity within materiality** (+1%); a LOSS fails the exit code. A tool that only benchmarks well on its own home turf is a bias machine, not a product. (`bench-negative.ts`)
 3. **Struggle probes.** *New in v4.* Pass/fail correctness under capacity pressure and partial failure — eviction pressure, slack overflow, mid-run timeouts, dead islands, version churn. Exactly-once mutations hold or the probe fails. (`struggle.test.ts`)
 4. Every code path obeys the prime directive: a broken Eden never breaks the agent. Default observe; enforcement opt-in; fail-open on every internal error.
 5. Nothing goes live without human Approve (Workshop is the only place a tool turns On).
@@ -24,9 +24,8 @@ Execution proceeds in **waves** (§4): batches of benchmarking / testing / optim
 
 | Horizon | Items |
 |---|---|
-| **Now — Wave 1** | Noise-floor calibration · suite-wide flake audit · coverage expansion (slow-tool, very-long-session, high-cardinality worlds) · failsafe property-fuzz seedling |
-| **Next — Waves 2–3** | Token attribution → certified go-live pipeline → DC% instrumentation (Wave 2 lanes) ∥ compile-quality corpus, miner throughput, `maxGram` auto-tune, variant-tolerant clustering (Wave 3 lanes); wrap idle-path optimization and witness-economics debugging run alongside |
-| **Later — Waves 4–8** | Concurrency matrix + multi-tenant arming store · S1 hardening and S1b suppression · cache/memory intelligence · governance export · multi-agent dedupe · production A/B with published negative results |
+| **Now — Wave 21** | Honesty files (Wave 19 shorts) |
+| **Later — Wave 22** | Un-retire only when evidence exists |
 
 ### Standing rules
 
@@ -114,8 +113,8 @@ Soak: flat heap under forced GC across thousands of executions; zero correctness
 | Rung | Mechanism | Agent pays | Status |
 |---|---|---|---|
 | **S0 · Silent + record** | Hooks record behavior; nothing injected; steering routes behind the scenes | 0 tokens, 0 decisions | shipped (default) |
-| **S1 · Transparent execution** ⭐ | See §2.1 | 0 tokens, 0 decisions | shipped (read-only; hardening next) |
-| **S1b · Remainder suppression** | PreToolUse deny for calls 2..N of an already-served stretch | 0 tokens + short denial reason | next — see business case below |
+| **S1 · Transparent execution** ⭐ | See §2.1 | 0 tokens, 0 decisions | shipped (read-only; Write dual-gated). OpenCode native rewrite; Codex post_tool; Gemini additionalContext degrade |
+| **S1b · Remainder suppression** | PreToolUse deny for calls 2..N of an already-served stretch | 0 tokens + short denial reason | shipped on Claude Code; OpenCode before-hook + MCP-drop class (`opencode-drop.ts`) |
 | **S2 · Skill-native manifest** | SKILL.md bundle; plain `eden.tools.md` fallback | ~25 tok/program, read-once | shipped |
 | **S3 · JIT injection** | Exactly one schema appended on matched turns; episode pinning; precision-gated | ≤1 schema on matched turns | wiring shipped; rollout gated |
 | **S4 · MCP / hosted adapters** | Capped catalog, meta-tool, hosted dispatch; deferred-loading-compatible | legacy tax | shipped; permanent adapter tier |
@@ -125,7 +124,7 @@ Soak: flat heap under forced GC across thousands of executions; zero correctness
 2. One selection policy and one receipt format across all rungs.
 3. Coverage is measured per workspace *across the ladder*, reported once Arc 1 lands.
 
-**S1b business case (measured this edition).** The campaign's `oblivious-long` scenario — an agent that keeps issuing calls after a steered head returns the full result — shows Eden today costs **+2.8% cents and +3.2% wall** in that regime (island spend with no turn savings). S1b converts those wasted tail calls into suppressions, flipping the regime from loss to break-even-or-win for hosts that expose PreToolUse. No other roadmap item changes the sign of a measured loss; S1b does.
+**S1b business case (measured this edition).** Two meters. Wrap-path `oblivious-long` (in-process skipRest) is still a **loss: +2.8% cents and +3.2% wall**. That is not S1b. S1b is PreToolUse remainder deny on the **hook / headless** path: **−9.1% cents (analogue)** vs raw on the silent-drop replica (3.3 → 3.0, n=8, `benchmarks/campaign/SILENT-DROP.md`), 2 suppressions per stretch. Live Claude Code cannot ack an always-drop of a correct rewrite; the replica writes `host-drop`. Analogue cents, replica-only host-drop, wrap-path sign, and Home stretch-vs-latest-receipt close in **Wave 8.1**, not here.
 
 ### 2.1 S1 — Transparent execution (spec)
 
@@ -137,13 +136,13 @@ Soak: flat heap under forced GC across thousands of executions; zero correctness
 
 ### 2.2 Research integrated — findings R1–R6
 
-**R1 · Output replacement is shape-strict and silently lossy.** `updatedToolOutput` must mirror the tool's native result shape; mismatches are silently ignored (debug-log only). *Shipped:* Bash-native object form, 9,500-char merge cap. *Roadmap:* shape table + transcript-diff verification + degrade-to-`additionalContext`.
+**R1 · Output replacement is shape-strict and silently lossy.** `updatedToolOutput` must mirror the tool's native result shape; mismatches are silently ignored (debug-log only). *Shipped:* `TOOL_SHAPES` for Bash/Read/WebFetch/Glob/Grep/Write; 9,500-char merge cap; `transcript-diff` harness; OpenCode/Codex/Gemini adapters (Gemini honest additionalContext degrade).
 
 **R2 · One rewriter per matcher** — concurrent PostToolUse rewrites race. *Consequence:* setup owns exactly one managed entry.
 
 **R3 · `additionalContext` always lands** — survives even `decision:"block"`. *Consequence:* guaranteed-delivery degrade path.
 
-**R4 · Agent Skills crossed into shared infrastructure** — SKILL.md read by ~40 products; progressive disclosure; skills marketplaces are now indexing and grading community skills (SkillHub et al.). *Consequence:* S2 emits SKILL.md bundles; skills double as Eden's install surface; marketplace listing becomes a free distribution channel once numbers are publishable (Arc 8).
+**R4 · Agent Skills crossed into shared infrastructure** — SKILL.md read by ~40 products; progressive disclosure; skills marketplaces are now indexing and grading community skills (SkillHub et al.). *Consequence:* S2 emits SKILL.md bundles; marketplace listing is Wave 16.4, draft-only from `PUBLIC_CLAIMS`, unpublished.
 
 **R5 · Hook timing budgets** — command hooks default 600 s; PostToolUse timeout keeps tool result; timed-out hooks discarded. *Consequence:* self-caps at 1 s/8 s internally.
 
@@ -153,15 +152,15 @@ Soak: flat heap under forced GC across thousands of executions; zero correctness
 
 | Item | Deliverables | Done when |
 |---|---|---|
-| S1 hardening: per-tool shape table | `TOOL_SHAPES` map (Bash done; Read/WebFetch/Glob/Grep/Write follow); unknown ⇒ string form + `additionalContext` duplicate | transcript-diff harness proves sentinel reaches the model on every built-in tool |
-| S1 verification harness | scripted headless sessions assert model-visible output contains sentinel | CI job green; catches harness regressions within one release cycle |
-| S1b remainder suppression | hookd session state mirroring wrap skipRest semantics (including the matched-calls budget semantics shipped this edition); deny reason cites program | replayed 3-call loop yields 1 real call + 2 suppressions, counted in ledger |
-| S1 write-inclusive transparency | Approve-time checkbox + `EDEN_TRANSPARENT_WRITES=1` gate | mutating programs never serve transparently without both |
-| S2 skill auto-refresh | Approve regenerates SKILL.md atomically when present | approve → file updated within one drain cycle |
-| S2 when_to_use synthesis | island-generated one-liners rendered into manifest/skill entries | entries explain themselves without hand-written copy |
-| S3 injection-rate guards | max injections/episode; auto-demote to S0 on poor conversion | telemetry gates enablement automatically |
-| S4 hosted dispatch endpoint | POST transcript → ≤1 schema or empty; tenancy-isolated | parity with local JIT precision in shadow |
-| S4 deferred-loading compatibility | manifest entries carry `defer_loading` metadata so S4 catalogs light up under Anthropic Tool Search without dual maintenance | one catalog serves both selection policies |
+| S1 hardening: per-tool shape table | `TOOL_SHAPES` map (Bash/Read/WebFetch/Glob/Grep/Write); unknown ⇒ string form + `additionalContext` duplicate | **Shipped.** `packages/cli/src/shapes.ts` + `transparent.test.ts`. OpenCode/Codex/Gemini: Wave 11 |
+| S1 verification harness | scripted headless sessions assert model-visible output contains sentinel | **Shipped.** `packages/cli/src/transcript-diff.ts` + host applyOpenCodeAfter / applyCodexAfter / applyGeminiAfter |
+| S1b remainder suppression | hookd session state mirroring wrap skipRest semantics; deny reason cites program | **Shipped.** `packages/cli/src/remainder.ts`; OpenCode MCP-drop still denies (`opencode-drop.ts`) |
+| S1 write-inclusive transparency | Approve-time checkbox + `EDEN_TRANSPARENT_WRITES=1` gate | **Shipped.** Wave 10 |
+| S2 skill auto-refresh | Approve regenerates SKILL.md atomically when present | **Shipped.** `packages/cli/src/drain.ts` / `manifest.ts` |
+| S2 when_to_use synthesis | island-generated one-liners rendered into manifest/skill entries | **Shipped.** `islandWhenToUse` + `whenToUseOf`; silent island → description |
+| S3 injection-rate guards | max injections/episode; auto-demote to S0 on poor conversion | **Shipped.** `EDEN_JIT_MAX` (default 4). Default surface stays `all` — Wave 19 soak remeasure printed FAIL (`precision=0.789 n=38`) |
+| S4 hosted dispatch endpoint | POST transcript → ≤1 schema or empty; tenancy-isolated | **Shipped.** `tools/dispatch` + `POST /v1/dispatch`; `tools/list` empty; W=100 dups=0 |
+| S4 deferred-loading compatibility | manifest entries carry `defer_loading` metadata so S4 catalogs light up under Anthropic Tool Search without dual maintenance | **Shipped.** Wave 9.4 |
 
 ---
 
@@ -177,26 +176,26 @@ Why first: every other arc claims numbers; this arc makes claims cheap and hones
 
 | Item | Deliverables | Facts / research anchor | UI/UX integration | Done when |
 |---|---|---|---|---|
-| Token attribution per run | Receipt fields tagging each turn `compiled`/`memoized`/`transparent`/`steered-skip`/`frontier` | Manus KV-cache spread makes attribution the difference between real and imagined savings | Metric strip gains "deterministic share"; drill-in colors steps by class | Ledger sums exactly to provider-reported usage |
-| **Certified go-live pipeline** *(new)* | Wrap `usage.ts` scraper feeds per-run provider tokens into traces; shadow accepts scraped usage, retiring the extrapolated-token objection; UNCERTIFIED badge retires with it | Campaign finding: island programs were INCERTIFIABLE offline; prod integrations already scrape usage (`usage.ts`) — plumb it through | Workshop approval card shows "certified: measured" vs "uncertified" honestly | Campaign `assumeProviderUsage` flag deleted; certification rate ≥95% on campaign worlds without the flag |
-| DC% per workspace/day + trend | Nightly aggregation; frozen definition; sparkline | North-star §0 | Metric-strip tile | Reproduces from raw runs by independent script |
-| Skip ledger as accounted events | Every steer/suppression/serving/memo-hit/breaker-trip = counted row | Transparency is invisible in-transcript; the ledger is its only witness | Drill-in lists skips inline | Every S1 serving produces a row |
-| Novelty feed | Rank uncompiled frequent patterns by wasted tokens | Popularity admission exists; novelty closes the loop | "Needs attention" panel | Top item compiles into a WIN-ing candidate |
-| `cached_tokens` parsing | Parse provider cache fields in both dialects | Breakpoints (shipped) make these nonzero | Ledger line "provider cache hit %" | Reconciles with provider console |
-| Activation funnel instrumentation | Redacted stage counters install→record→mine→knock→approve→first serving | Silent breakage killed funnels before | Internal | Each stage names its fix |
+| Token attribution per run | Receipt fields tagging each turn `compiled`/`memoized`/`transparent`/`steered-skip`/`frontier` | Manus KV-cache spread makes attribution the difference between real and imagined savings | Metric strip gains "deterministic share"; drill-in colors steps by class | **Shipped (Wave 12).** Recorded window billed=prompt+completion; canvas `data-token-class` + summing ledger. `benchmarks/campaign/provider-window.ts` |
+| **Certified go-live pipeline** *(new)* | Wrap `usage.ts` scraper feeds per-run provider tokens into traces; shadow accepts scraped usage, retiring the extrapolated-token objection; UNCERTIFIED badge retires with it | Campaign finding: island programs were INCERTIFIABLE offline; prod integrations already scrape usage (`usage.ts`) — plumb it through | Workshop approval card shows "certified: measured" vs "uncertified" honestly | **Shipped (Wave 2).** Campaign `assumeProviderUsage` retired from the go-live path; silent-host stays uncertified |
+| DC% per workspace/day + trend | Nightly aggregation; frozen definition; sparkline | North-star §0 | Metric-strip tile | **Shipped.** `packages/measure/src/dc-day.ts` + `scripts/dc-from-runs.ts` |
+| Skip ledger as accounted events | Every steer/suppression/serving/memo-hit/breaker-trip = counted row | Transparency is invisible in-transcript; the ledger is its only witness | Drill-in lists skips inline | **Shipped.** Wrap `{eden:"steered"}` + S1/S1b hook ledger |
+| Novelty feed | Rank uncompiled frequent patterns by wasted tokens | Popularity admission exists; novelty closes the loop | "Needs attention" panel | **Shipped (Wave 12).** Waste desc, then named-miss, then recency. Unique-work `[]`. Top desk PASS compiles certified. `packages/measure/src/novelty.ts` |
+| `cached_tokens` parsing | Parse provider cache fields in both dialects | Breakpoints (shipped) make these nonzero | Ledger line "provider cache hit %" | **Shipped (Wave 12).** Both dialects on receipts; SSE; POST/GET round-trip write+denom; DC% excludes cache. `providerCacheHitPct` |
+| Activation funnel instrumentation | Redacted stage counters install→record→mine→knock→approve→first serving | Silent breakage killed funnels before | Internal | **Shipped (Wave 12).** Doctor `install → record → mine → knock → approve → serving` with counts + fix sentences. `packages/cli/src/doctor.ts` |
 
 ### Arc 2 — Zero-friction onboarding *(P0)*
 
-Unchanged from v3.1 (single supervised daemon, first-stretch knock focus, honesty loop, doctor expansion, lane discipline, in-terminal approvals, `eden explain`, approval diff cards). New input from the campaign: the **honesty loop gains a "why didn't anything compile?" diagnosis set drawn from measured refusal causes** — sequence entropy too high (noise-world parity proves nothing was lost), repeats below support 3 (micro-world), width classes split (orders-world lesson: same-shape support needs ≥3), envelope coverage gaps (drift-world lesson). Each diagnosis names the exact count that fell short, because every one of those thresholds is now pinned by a campaign fixture.
+Unchanged from v3.1 except **Wave 9 shipped** the terminal path: `eden explain` (honesty-loop diagnoses with exact counts), `eden approve` (diff card + `--yes`), supervised `eden hookd` (pid + `--stop`), and doctor funnel stages. In-browser Workshop remains a place a tool turns On. New input from the campaign: the **honesty loop names "why didn't anything compile?"** from measured refusal causes — sequence entropy too high (noise-world parity proves nothing was lost), repeats below support 3 (micro-world), width classes split (orders-world lesson: same-shape support needs ≥3), envelope coverage gaps (drift-world lesson). Each diagnosis names the exact count that fell short, because every one of those thresholds is now pinned by a campaign fixture.
 
 ### Arc 3 — Trajectory memoization & cache intelligence
 
-Foundation shipped (ETag envelopes, public pool, scored warming). Remaining from v3.1: exact-key run cache, parameterized memoization, admission control, compression at rest, run single-flight, self-tuning TTLs. **New candidates from this edition's research:**
+Foundation shipped (ETag envelopes, public pool, scored warming). Wave 6 shipped exact-key run cache, admission, compression at rest, single-flight, ETag TTLs. Cache-guard and PTC-complement shipped Wave 9. Attribution-adjacent cache tokens closed in Wave 12. **Nothing in this arc is unscheduled.**
 
 | Item | Deliverables | Facts / anchor | Done when |
 |---|---|---|---|
-| Cache-guard mode *(new)* | Proxy-path normalization of volatile prefix blocks (skill listings, timestamps) on Eden-managed sessions; opt-in | Community interceptors sustain 98.3% cache-hit on resumed sessions by relocating reordered blocks; upstream bugs re-bill ~3.8K tokens/turn | Measured hit-rate delta on replayed sessions; upstream fix ships → retire gracefully |
-| PTC-complement emission *(new)* | When a host exposes code execution, emit compiled programs as callable functions (`allowed_callers`) so approved routines compose into PTC scripts | PTC cuts 38% billed input on fan-out shapes but costs 8% more on sequential reasoning — exactly where Eden's linear programs win; composition covers both | Fixture: approved program invoked from PTC script; receipts identical |
+| Cache-guard mode *(new)* | Proxy-path normalization of volatile prefix blocks (skill listings, timestamps) on Eden-managed sessions; opt-in | Community interceptors sustain 98.3% cache-hit on resumed sessions by relocating reordered blocks; upstream bugs re-bill ~3.8K tokens/turn | **Shipped (Wave 9).** `EDEN_CACHE_GUARD=1` |
+| PTC-complement emission *(new)* | When a host exposes code execution, emit compiled programs as callable functions (`allowed_callers`) so approved routines compose into PTC scripts | PTC cuts 38% billed input on fan-out shapes but costs 8% more on sequential reasoning — exactly where Eden's linear programs win; composition covers both | **Shipped (Wave 9).** `codingRegistry.allowed_callers` |
 
 ### Arc 4 — Envelope & island graduation
 
@@ -206,35 +205,35 @@ Thesis unchanged: convert fail-closed refusals from a wall into a gradient. **Ne
 |---|---|---|---|
 | Witness-efficiency pipeline *(new)* | Go-live today needs ~13 witnesses (≥3 same-shape in training + 3 held out inside the envelope; sloppy variants dilute clusters below support). Deliverables: variant-tolerant clustering (variants vote for sequence but not envelope), rolling shadow (hold-out refreshes as receipts arrive instead of a fixed split), width-class envelope inheritance (a certified width-class extends its envelope to sibling widths after K clean live receipts) | Campaign: go-live SKIP/INCONCLUSIVE in 3/14 soak rounds and multiple campaign cells traced to exactly these three mechanisms | Campaign worlds certify at ≤8 witnesses with zero UNCERTIFIED inflation; soak certification ≥95% |
 | Width-class envelope generalization *(new)* | Fan-out widths legitimately vary per entity; a program mined at width 10 should serve width 7 after supervised confirmation rather than falling back raw | orders/drift worlds: novel-width goals fall back raw despite identical shape | Drift scenario turns WIN at higher margin; OOD scenario narrows |
-| Integration guidance: read-set exposure *(new)* | Documented pattern for SDK integrations: tools whose result includes the exact array a later loop will iterate (grepCode lesson: 12 hits returned, 6 read → loop unbindable) | research world compile failure reproduced and fixed in fixture | Guide published in SDK docs; miner warns on near-miss binding failures |
-| Remaining v3.1 items | Witness-seeded islands · stability scoring · graduation proposals · zero-LLM badge · soft-match tier · refusal analytics · envelope editor · graduated rollout | unchanged | unchanged |
+| Integration guidance: read-set exposure *(new)* | Documented pattern for SDK integrations: tools whose result includes the exact array a later loop will iterate (grepCode lesson: 12 hits returned, 6 read → loop unbindable) | research world compile failure reproduced and fixed in fixture | **Shipped.** `docs/compile-refusals.md` `read_set_mismatch`; miner warns |
+| Remaining v3.1 items | Witness-seeded islands · stability scoring · graduation proposals · zero-LLM badge · soft-match tier · refusal analytics · envelope editor · graduated rollout | **Wave 10 shipped.** Canvas/Home/CLI. SOC2 stays uncertified. | Canvas contract strip + canary Approve; `packages/ir/src/graduate.ts` |
 
 ### Arc 5 — Governance, trust, compliance
 
-Pieces shipped: drift fingerprints, deopt ledger, shadow measure. **Struggle probes are the first installment of the failsafe suite**: five pass/fail correctness probes covering eviction pressure, slack overflow, mid-run timeouts, dead islands, version churn — all born red, now green, kept forever. Remaining v3.1 items stand (fuzz suite scales the probes to property-tested fault seeds; drift auto-refresh; read-your-writes; canary deploys; bit-exact replay; audit export; retention surfaces; data-isolation page; SOC2 groundwork). New regulatory anchors (see §5.3): EU AI Act high-risk obligations enforceable since Aug 2, 2026 put the tool-calling layer squarely in scope for logging/human-oversight; NIST AI-agent interoperability profile expected Q4 2026; OWASP MCP Top 10 published. Consequence: the immutable audit export and data-isolation page move from Later toward Now — they are becoming compliance checkboxes buyers literally tick, and Eden's human-gate architecture is already the harder half.
+Pieces shipped: drift fingerprints, deopt ledger, shadow measure, struggle probes, fuzz 10k, drift auto-refresh, read-your-writes, canary, bit-exact replay, audit export, retention, isolation page, **SOC2 evidence pack (aligned, not certified)**, access-review exports, pool allowlist cadence, `EDEN_NET_ALLOW` in doctor, ZDR guidance, unpublished marketplace draft. **Wave 17 shipped** S1b path-identity, HMAC-only webhooks, hookd ownership, and installer `EDEN_HOME`. **Wave 18 shipped** workbench live-review (account → onboarding, route regression, in-tree 15–52). **Wave 19 shipped** the limits board: retired live-invoice, wrap-path oblivious-long as a limit, JIT soak FAIL pin, replica host-drop. **Wave 20 shipped** the tree close: origin `KaiavN/Eden`, catchers for every Wave 16–19 row, §15 grep-complete including `EDEN_AUTO_APPROVE`, leftover Open for Wave 16–20 is empty. Wave 19 shorts that are not Limits (cited file, isolation Kind/Source, board comment, next soak remeasure) sit in Wave 21. A live invoice and an `EDEN_SURFACE=jit` flip sit in Wave 22 and stay unstarted until a file or a PASS exists.
 
 ### Arc 6 — Runtime depth
 
-All v3.1 items stand (turn-boundary speculation, connection amortization, watch-time warming, first-wave streaming, island-miss batching, negative-space compilation, loop-breaker upgrades, budget forecasting, densify v2, scheduled programs, webhook invalidation, fork mining completion, program composition). **New from this edition:**
+Wave 4 shipped concurrency matrix, multi-tenant arming, timeout-regime, idle-path. Loop-breaker and think-time are covered by campaign fixtures. **Wave 13 shipped** densify v2, turn-boundary speculation, first-wave streaming, connection amortization. **Wave 14 shipped** watch-time warming, island-miss batching, negative-space compilation, fork-mining completion. **Wave 15 shipped** program composition, budget forecasting, scheduled programs, webhook invalidation, PostToolBatch remainder. **New from this edition (shipped):**
 
 | Item | Deliverables | Anchor | Done when |
 |---|---|---|---|
-| Multi-tenant arming story *(new)* | The suppression map is bounded per wrapped surface (64 entries; capacity gate fails new stretches open beyond it — correct for single agents, a throughput ceiling for hosted multi-tenant dispatch). Deliverables: shared-memory or partitioned arming store keyed by session, load-tested at W≥100 concurrent stretches | Struggle P1: correctness now provable at 80; hosted dispatch needs it at 10× | Zero duplicate writes at W=100 on the probe harness; p50 steering latency flat |
-| Concurrent-regime regression gate *(new)* | The interleaved-stretch scenario graduates from campaign to CI gate (it caught A1–A4) | concurrent scenario: 6.67× turns, zero duplicates | Runs on every wrap change; any violation blocks merge |
+| Multi-tenant arming story *(new)* | The suppression map is bounded per wrapped surface (64 entries; capacity gate fails new stretches open beyond it — correct for single agents, a throughput ceiling for hosted multi-tenant dispatch). Deliverables: shared-memory or partitioned arming store keyed by session, load-tested at W≥100 concurrent stretches | Struggle P1: correctness now provable at 80; hosted dispatch needs it at 10× | **Shipped (Wave 4/7).** P1c W=100 |
+| Concurrent-regime regression gate *(new)* | The interleaved-stretch scenario graduates from campaign to CI gate (it caught A1–A4) | concurrent scenario: 6.67× turns, zero duplicates | **Shipped.** `concurrency-matrix.test.ts` |
 
-### Arc 7 — Multi-agent (W15)
+### Arc 7 — Multi-agent
 
-v3.1 items stand (parent/child runs, shared-fetch dedupe, handoff compilation, org view, regional deployment, protocol negotiation, archival tiers). New evidence this edition: the concurrent-regime probes prove the suppression machinery survives overlapping goals on ONE surface — which is the primitive cross-agent dedupe needs. Sequencing note: Arc 7's shared-fetch dedupe should reuse the matched-calls budget semantics shipped in A4, not invent parallel machinery.
+**Wave 7 shipped** parent/child runs, shared-fetch dedupe (A4 matched-calls on read-only fleet claims), handoff compilation (approve-gated), org/fleet view on Home, regional labels, MCP protocol negotiation, and archival tiers. The concurrent-regime probes remain the one-surface primitive. Mutating suppressions stay session-scoped.
 
 ### Arc 8 — Proof to the market
 
-v3.1 items stand (production A/B, whitepaper, case studies, digest). **Addition: the negative-control table publishes alongside the wins.** In a market where 88% of agent projects die before production and vendor ceilings (92.8%, 98.7%) are the default marketing language, publishing "here are the eight regimes where we measurably do nothing, and here is what our recording costs per call" is the cheapest trust available anywhere in this category. The whitepaper gets a parity section with the same rigor as the win section.
+**Wave 8 shipped** production A/B (with retired live-invoice), whitepaper, case studies (customer-approved count 0), weekly digest. The negative-control table publishes alongside the wins.
 
 ---
 
 ## 4. Execution waves — benchmarking, testing, optimization, debugging
 
-**Eight waves, 32 phases. The invariant: within a wave, every phase is fully parallel — zero inter-phase dependencies, zero shared merge points that gate execution, disjoint surfaces or an explicit ownership split.** Where two pieces of work were sequentially coupled (attribution→certification, cache→compression, dedupe→attribution), they are merged into one phase with one owner rather than left as a hidden chain. Cross-wave gates exist and are shown in §4.10; inside a wave, work never waits.
+**Twenty-two waves.** Waves 1–20 shipped. Wave 21 is **Now**. Wave 22 is **Later**. The invariant: within a wave, every phase is fully parallel — zero inter-phase dependencies, zero shared merge points that gate execution, disjoint surfaces or an explicit ownership split. **Wave 18 was the exception** and is closed: `apps/web/REBUILD.md` rows 7–14 are live; 18.2 route tests are green; 15–52 stayed an in-tree review. Where two pieces of work were sequentially coupled (attribution→certification, cache→compression, dedupe→attribution), they are merged into one phase with one owner rather than left as a hidden chain. Cross-wave gates exist and are shown in §4.10; inside a wave, work never waits.
 
 Arcs say *what*; waves say *in what order and what runs in parallel*. Every wave closes with the three-tier method of §0/§8: positive gates, negative gates, struggle probes. Every wave also carries one **rotation obligation** (see §4.9) so no phase ever tunes twice against the same fixture set. Wave-close acceptance may *use* artifacts built during the wave (e.g., the corpus from 3.1); it may not block their execution.
 
@@ -299,20 +298,20 @@ Parallelism: fully parallel — 4.1 exercises existing code paths, 4.2/4.3 touch
 | Phase | Type | Deliverables | Done when |
 |---|---|---|---|
 | 5.1 S1 shape table + degrade path | T+D | Native result shapes for Read/WebFetch/Glob/Grep/Write; unknown tools degrade to `additionalContext`; transcript-diff verification harness proves the sentinel reaches the model | Harness green on every built-in tool; degrade path verified under `decision:"block"` |
-| 5.2 S1b remainder suppression | B+T+O | hookd session state mirroring matched-calls budget semantics; PreToolUse deny cites program; ledger rows counted | Oblivious-regime scenario flips from measured −2.8% cents to ≥break-even through a real headless host; suppressions counted |
-| 5.3 S2 skill refresh + marketplace prep | T | Atomic SKILL.md regeneration on Approve; listing draft withheld until Arc 8 numbers publish | Refresh within one drain cycle; content-hash logged; no public listing yet |
-| 5.4 Negative-control rotation | B | Derive one NEW adversarial world from this wave's surface (e.g., a host that drops `updatedToolOutput` silently mid-session — R1 class) and add it to `bench-negative.ts` | New regime passes at parity; joins the permanent rotation |
+| 5.2 S1b remainder suppression | B+T+O | hookd session state mirroring matched-calls budget semantics; PreToolUse deny cites program; ledger rows counted | Headless-host oblivious cents ≥ break-even (wrap `oblivious-long` remains a documented wrap-path loss); suppressions counted. Wrap-path sign flip, if it ever happens, is Wave 8.1 |
+| 5.3 S2 skill refresh + marketplace prep | T | Atomic SKILL.md regeneration on Approve; listing draft withheld until Arc 8 numbers publish | **Shipped** refresh (Wave 9 drain). Listing draft from `PUBLIC_CLAIMS` only — Wave 16.4 unpublished |
+| 5.4 Negative-control rotation | B | Derive one NEW adversarial world from this wave's surface (e.g., a host that drops `updatedToolOutput` silently mid-session — R1 class) and add it to `bench-negative.ts` | **Done when:** unique-sequence **parity** ±1%; compilable stretch may WIN (Eden cheaper) while S1b deny still holds when the rewrite is dropped; joins the permanent rotation. Live-host ack of a correct drop is Wave 8.1 (replica-only is enough here) |
 
-Parallelism: fully parallel — 5.1/5.2 own different hook events (Post vs Pre) and coordinate only through the documented session-state shape, which is a typed contract, not a meeting; 5.3/5.4 independent.
+Parallelism: fully parallel — 5.1/5.2 own different hook events (Post vs Pre) and coordinate only through the documented session-state shape, which is a typed contract, not a meeting; 5.3/5.4 independent. Leftovers that must not be quoted as live Claude Code facts close in Wave 8.1.
 
 ### Wave 6 — Cache, memory & governance *(Arcs 3+5)*
 
 | Phase | Type | Deliverables | Done when |
 |---|---|---|---|
-| 6.1 Run cache: exact-key, admission, compressed envelopes | B+O | Envelope+params keyed read-cache; frequency-predicted writes; hit-rate telemetry day one; gzip+base64 envelope bodies >2KB (one envelope revision carries both) | Hit-rate reported from first run; write volume −X% with hit-rate loss <1pt on replays; size −30% with read-latency tax <10%; mutating steps disqualified (test-pinned) |
-| 6.2 Drift auto-refresh pipeline | B+D | Canary drift → re-mine → shadow-compare → approval card; forced-upstream-rename fixture | Card approvable with zero manual mining on fixture |
-| 6.3 Fuzz suite scale-up | T | Wave-1 seedling to 10k fault seeds × both schedulers; divergences = pinned bugs | 10k seeds, zero unexplained divergences |
-| 6.4 Audit export + isolation truth page | T | JSONL/CSV export (approvals, versions, executions, refusals), tamper-evident; isolation claims each linked to code/test | Round-trip parses; EU-AI-Act-aligned logging story documented truthfully |
+| 6.1 Run cache: exact-key, admission, compressed envelopes | B+O | Envelope+params keyed read-cache; frequency-predicted writes; hit-rate telemetry day one; gzip+base64 envelope bodies >2KB (one envelope revision carries both) | **Shipped.** Hit-rate on the receipt (`cache_hits / cache_lookups`, omitted at 0 lookups). Write volume −93.6% vs write-all on a unique-GET storm; replay hit-rate loss **0.000 pt**. Size **−92%** on >2KB JSON-ish bodies. Hit-path read tax **−14.5%** (decoded hot set; budget is <10%). Mutating POST/PUT/PATCH/DELETE refused. `apps/site/src/cache-bench.ts` |
+| 6.2 Drift auto-refresh pipeline | B+D | Canary drift → re-mine → shadow-compare → approval card; forced-upstream-rename fixture | **Shipped.** Site ingest wires real `compileTraces`+`shadowProgram`. Control plane queues `rc:<tool>` after two hard deopts; live stays live; auto-approve skips it. Fixture `benchmarks/campaign/upstream-rename.ts` (`state→conclusion`). Copy: “The outside world renamed a field. A replacement is waiting. The live tool is unchanged until you Approve.” |
+| 6.3 Fuzz suite scale-up | T | Wave-1 seedling to 10k fault seeds × both schedulers; divergences = pinned bugs | **Shipped.** Wrap n=10000 divergences=0 seed `0xF5A1`; sched n=10000 divergences=0 waves vs ready. `failsafe-fuzz.test.ts` + `failsafe-fuzz-sched.test.ts` |
+| 6.4 Audit export + isolation truth page | T | JSONL/CSV export (approvals, versions, executions, refusals), tamper-evident; isolation claims each linked to code/test | **Shipped.** `eden audit export` / `verify`; `GET /v1/audit`. Hash chain. Isolation page `/isolation` + `docs/isolation.md`. Article 12 *aligned*, not certified. OWASP MCP01–MCP10 mapped. |
 
 Parallelism: fully parallel — four disjoint surfaces (cache/playback, drift pipeline, probes, site export).
 
@@ -320,9 +319,9 @@ Parallelism: fully parallel — four disjoint surfaces (cache/playback, drift pi
 
 | Phase | Type | Deliverables | Done when |
 |---|---|---|---|
-| 7.1 Fleet runs: cross-agent dedupe + parent/child attribution | B+T | Memo-store backed cross-agent claims reusing matched-calls semantics; trace tree with per-agent attribution; fleet-wide DC%; public pool already ships the unauthenticated slice | Duplicate fetches vanish under concurrent-agent replay ("shared across N agents" in ledger); attribution matches orchestrator spans on fixtures |
-| 7.2 Hosted dispatch load-probe extension & anomaly forensics | T+D | Struggle probes against the multi-tenant store at W≥100 (from Wave 4) plus protocol-negotiation skew cases; any anomaly traced to root cause with pinned repro before the next probe round | Probes green at target tenancy; skew handled gracefully; zero unpinned anomalies open |
-| 7.3 Handoff compilation spike | B | Repeated agent→agent patterns → composed program candidates; approve-gated | One composed handoff approved on fixtures |
+| 7.1 Fleet runs: cross-agent dedupe + parent/child attribution | B+T | Memo-store backed cross-agent claims reusing matched-calls semantics; trace tree with per-agent attribution; fleet-wide DC%; public pool already ships the unauthenticated slice | **Shipped.** Two agents, one fleet, one GET: executes **1** (was 2). Ledger exact `shared across N agents`. `tracesMatchSpans` vs orchestrator `invoke_workflow` / `invoke_agent`. Mutating stays session-isolated. `benchmarks/campaign/fleet-dedupe.ts` |
+| 7.2 Hosted dispatch load-probe extension & anomaly forensics | T+D | Struggle probes against the multi-tenant store at W≥100 (from Wave 4) plus protocol-negotiation skew cases; any anomaly traced to root cause with pinned repro before the next probe round | **Shipped.** W=100 hosted connections: duplicateWrites=0, admits=100. MCP initialize echoes supported versions, degrades garbage, never 500. Eden future `x-eden-version` still 426. `benchmarks/campaign/hosted-dispatch.ts` |
+| 7.3 Handoff compilation spike | B | Repeated agent→agent patterns → composed program candidates; approve-gated | **Shipped.** Intake→billing composes; `manifest` null until `POST /v1/tools/:id/approve`. `packages/compile/src/handoff.ts` |
 
 Parallelism: fully parallel — 7.1 is runtime+site, 7.2 is probe harness, 7.3 is compile-side.
 
@@ -330,10 +329,210 @@ Parallelism: fully parallel — 7.1 is runtime+site, 7.2 is probe harness, 7.3 i
 
 | Phase | Type | Deliverables | Done when |
 |---|---|---|---|
-| 8.1 Production A/B | B | The budgeted paired live study; every public claim cites it; claims that fail get retired publicly | Study published or claim retired — both count as done |
-| 8.2 Whitepaper incl. negative results | B | Methodology, win table, **parity table**, limits section (OOD, oblivious agents, certification bounds) | Nothing public without methodology behind it |
-| 8.3 Case studies | B | Customer-approved measured numbers only, one per vertical | Each links methodology |
-| 8.4 Weekly digest | T | DC trend + savings + novelty items; mirrors dashboard exactly; opt-in | Honest zeros preserved in email |
+| 8.1 Production A/B | B | The budgeted paired live study; every public claim cites it; claims that fail get retired publicly. Closes the Wave 5 leftovers that the replica/analogue path cannot: (1) at least one S1b cell billed from a live Claude Code invoice, not `TURN_CENTS`/`ISLAND_CENTS`; (2) live host-drop of a *correct* native rewrite is either observed and receipt-classed, or recorded as a permanent host limit (replica-only `host-drop`); (3) wrap `oblivious-long` is WIN on the path under test or retired from the win table into the published limits (it is still +2.8% cents / +3.2% wall); (4) Home/canvas names the whole stretch (served + skipped tails + any drop), not only the latest receipt word — a finished 3-call session must not read as merely Skipped when a drop also happened | **Shipped.** Study published with retired live-invoice cell (`LIVE-AB.md`). Replica host-drop is a permanent host limit (`HOST-DROP.md`). oblivious-long is a **limit**, not a win. Home/canvas 3-call stretch reads `Live · Served · Skipped · Degraded` (`stretch-drop.ts`). Analogue cents and replica host-drop cannot be quoted as live Claude Code facts |
+| 8.2 Whitepaper incl. negative results | B | Methodology, win table, **parity table**, limits section (OOD, oblivious agents, certification bounds) | **Shipped.** `/proof` + `docs/whitepaper.md`. Every row from `PUBLIC_CLAIMS` with a file path. Parity equal weight with wins. |
+| 8.3 Case studies | B | Customer-approved measured numbers only, one per vertical | **Shipped.** Campaign fixture verticals (support, desk, orders, etl, incident) on `/proof` and `docs/cases.md`, each linking methodology. Customer-approved count **0**. No invented companies. |
+| 8.4 Weekly digest | T | DC trend + savings + novelty items; mirrors dashboard exactly; opt-in | **Shipped.** Opt-in (`EDEN_DIGEST` / config `digest`, default off). Empty workspace prints zeros; fetch fail-open; never emails. `packages/cli/src/digest.ts`; GET `/v1/digest` |
+
+### Wave 9 — Zero-friction onboarding *(Arc 2 close-out)*
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 9.1 Honesty loop + `eden explain` | T+D | Diagnoses from measured refusal causes (entropy, support &lt;3, width-class split, envelope gaps). Each names the exact count. Same words as Home. | **Shipped.** `eden explain`. Empty = `0 stretches`. Micro: `Too short · 16 stretches of 2 calls (need 3)`. `packages/ir/src/honesty.ts`; `packages/cli/src/explain.ts` |
+| 9.2 In-terminal approvals + diff cards | T | `eden approve [id]` prints a one-screen card; `--yes` POSTs the existing approve route. Human gate unchanged. Dual write gate. | **Shipped.** Without `--yes` nothing ships (exit 2). FAIL cannot ship. `packages/cli/src/approve.ts` |
+| 9.3 Supervised daemon + doctor funnel | T | `eden hookd` pid file; `--stop`; init starts hookd when down. Doctor names install → record → mine → knock → approve → serving. Lanes: wrap / site / hookd. | **Shipped.** Stale pid is `!!`. Funnel checks in `doctor.ts`. |
+| 9.4 Cache-guard + PTC-complement + S4 `defer_loading` | T+O | Opt-in `EDEN_CACHE_GUARD=1` moves volatile prefix after stable. `allowed_callers` on coding + compiled schemas (guidance, not a wall). MCP/manifest `defer_loading: true`. | **Shipped.** `anthropic.test.ts` reorder; `codingRegistry.allowed_callers`; MCP list entries. |
+
+Parallelism: 9.1–9.3 are the CLI onboarding path (one owner); 9.4 is wrap + MCP catalog metadata.
+
+Rotation: honesty letter on unique-work / micro shapes (`benchmarks/campaign/honesty.test.ts`) — class+count, not a retune of negative-control cents.
+
+### Wave 10 — Envelope & island graduation *(Arc 4 close-out)*
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 10.1 Witness-efficiency | B+O | 8-witness certified go-live; sibling-width inherit after K=3; rolling shadow `rollEnvelope` | **Shipped.** `bench-8-witness` PASS/total=4/4 uncertified=0. Width-7 stays OOD until 3 clean receipts. Identity-stable `rollEnvelope` (no version bump on no-op). `packages/compile/src/width-inherit.ts`; `packages/shadow/src/roll.ts`; live stitch `apps/control/src/inherit-live.ts`. |
+| 10.2 Island graduation + Zero-LLM | T | Stability score; pin on Approve (memo-only, miss deopts); badge only when no unpinned island | **Shipped.** `islandStability` ready at 4 agreeing / 0 disagreements. Home/canvas `Zero-LLM` / `Island remains`. |
+| 10.3 Envelope inspect + canary | T | Contract strip shows envelope counts; drop tightens, cannot invent; Approve ships canary 10%; Promote → 100%; auto-pause still fires | **Shipped.** `Envelope · N keys · M values`. `POST /v1/tools/:id/promote`. `eden promote`. Empty session is the operator canary. Drain/hook keep `rollout` so S1 cannot silently promote. |
+| 10.4 Stragglers | T+O | Soft-match opt-in; JIT max/episode then S0; read-your-writes after mutating head; dual write gate unchanged | **Shipped.** `EDEN_JIT_MAX` default 4; `EDEN_CANARY_PCT` default 10. Rotation `width-inherit`. SOC2 stays an honest gap-pin. |
+
+Parallelism: 10.1 compile/shadow; 10.2–10.3 canvas+control (one visual language); 10.4 wrap.
+
+Rotation: sibling-width inherit (`benchmarks/campaign/width-inherit.ts`) — not a retune of orders cents.
+
+### Wave 11 — Ladder leftovers *(S1 hosts · S2 copy · S3 soak · S4 dispatch)*
+
+Everything on Claude Code's S1/S1b/S2 path that had a done-when in §2.3 is shipped. This wave is the rest of the ladder: other hosts, the JIT catalog endpoint, island-written skill lines, and the last one-language miss on empty Home.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 11.1 S4 POST-transcript dispatch | T+B | `POST` a transcript → ≤1 schema or empty; tenancy-isolated; shadow precision matches local JIT | **Shipped.** `tools/dispatch` + `POST /v1/dispatch`. `tools/list` empty. Hit 1 / miss `[]`. W=100 dups=0. No 6-tool starve. |
+| 11.2 S1 on OpenCode / Codex / Gemini | T | Same `TOOL_SHAPES` + `additionalContext` degrade as Claude Code; installer owns one rewriter per matcher | **Shipped.** OpenCode native `output.output`; Codex post_tool JSON; Gemini additionalContext-only (honest). Cursor/Windsurf/Cline skills-only. |
+| 11.3 Island `when_to_use` | T | Islands emit the one-liner; drain/manifest/SKILL.md use it (not `description` as a stand-in) | **Shipped.** `islandWhenToUse`; silent island → description via `whenToUseOf`. |
+| 11.4 S3 soak + empty inventory title | B+T | JIT default (`EDEN_SURFACE=jit`) only after §7 soak; empty Home/nav title is not `Live tools` at count 0 | **Shipped.** Empty is `0 programs`. Soak FAIL `precision=0.789 n=38` — JIT stays opt-in. |
+
+Parallelism: site MCP endpoint / host installers / island+drain copy / Home title. Disjoint files.
+
+Rotation: one NEW host-drop class from OpenCode or Codex (not a retune of `silent-drop`).
+
+### Wave 12 — Measurement leftovers *(Arc 1 pins → covered)*
+
+Classes, DC%, skip ledger, and certified go-live shipped. This wave flipped attribution, cache tokens, novelty, and funnel from **pinned** to **covered**.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 12.1 Token-class ledger | T+B | Every receipt's `compiled`/`memoized`/`transparent`/`steered-skip`/`frontier` sums to provider-reported usage | **Shipped.** Recorded window billed **2584** = prompt+completion; independent class labels; canvas summing ledger + mismatch. `benchmarks/campaign/provider-window.ts` |
+| 12.2 `cached_tokens` on receipts | T | Both dialects land on the receipt; DC% still excludes them | **Shipped.** SSE + POST/GET write+denom; OpenAI 1920/2006 → 96%; Anthropic 40/50/10 → 40% not 80%; DC% excludes cache. `providerCacheHitPct` |
+| 12.3 Novelty feed | T+B | Rank uncompiled frequent patterns by wasted tokens; the top item compiles into a WIN-ing candidate | **Shipped.** Waste desc; unique-work `[]`; #1 Ready desk waste 4000 compiles certified PASS. `packages/measure/src/novelty.ts` / `packages/compile/src/waste-compile.test.ts` |
+| 12.4 Funnel counters | T | Redacted counters install→record→mine→knock→approve→first serving | **Shipped.** Six stages with counts + fix sentences; wrap-down `unknown · wrap is down`; no fake `record=1`. `packages/cli/src/doctor.ts` |
+
+Parallelism: wrap receipts / usage parse / compile novelty / cli doctor. Disjoint files.
+
+Rotation: a recorded provider window (not a campaign world) is the attribution fixture — never a retune of cert-rate. **Landed.** `benchmarks/campaign/provider-window.ts`
+
+### Wave 13 — Runtime depth A *(site + wrap hot path)*
+
+Prefetch and SSE were substrate. This wave shipped the product behavior.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 13.1 Densify v2 | O | Next densify revision with a gated ratio table; never inflates | **Shipped.** Intern table + line-fold. uniform50 3992→1764; invoice 602→179; ANSI 1411→44; never inflates; `{keys,rows,total,page}` and all-zero `d` survive. `packages/core/src/densify-bench.test.ts` |
+| 13.2 Turn-boundary speculation | O+B | Lossless read-only eagerness at the turn boundary (PASTE-class); mutating stays unspeculated | **Shipped.** GitHub-like getIssue/getComments/getChecks wall WIN −33% (n=8, p=0.0078); unique-work/creative parity ±1%; mutating never started. `benchmarks/campaign/speculate.ts` |
+| 13.3 First-wave streaming | O | First playback wave streams while later waves bind | **Shipped.** Wave-1 bind before last wave-0 member; fixture `server_ms` 183 vs barrier 303; wrap SSE green. `apps/site/src/playback-stream.test.ts` |
+| 13.4 Connection amortization | O | Reuse egress connections across steps of one stretch | **Shipped.** Pin-keyed keep-alive; 32 GETs → 1 TCP; p50 drops vs `agent:false`; github pin to 127.0.0.1 still refused. `apps/site/src/ssrf.ts` / `egress-pool.test.ts` |
+
+Parallelism: core densify / wrap speculate / site playback stream / site egress pool.
+
+Rotation: speculation fixture derived from a read-only production shape, not fastdesk. **Landed.** `benchmarks/campaign/speculate.ts`
+
+### Wave 14 — Runtime depth B *(compile + islands)*
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 14.1 Watch-time warming | O | Warm the next likely compiled tool while the current stretch runs | **Shipped.** First-wave read-only cache while current stretch runs; follows witnessed successors. Hit-rate 0/12 → 12/12 (n=6). Mutating execute **0**. `EDEN_WATCH_WARM=0`. `packages/wrap/src/warm.ts`; `benchmarks/campaign/watch-warm.ts` |
+| 14.2 Island-miss batching | O | Island misses that can wait go through the batch API (provider −50%) | **Shipped.** Independent islands share a wave (wall < 70ms vs ~80ms serial; peak inflight 2). When CREATE returns results, or retrieve ends inside the island timeout, cents 2.0 → **1.0** (tokens unchanged). Public OpenAI / Anthropic hosts: **no** batch POST (404 / 24h SLA). Stuck `in_progress` fail-opens to sync in <500ms, never 24h. Pinned fetch **0**. Memo hit cents **0**. Lone miss stays sync. `EDEN_ISLAND_BATCH=0`. `packages/wrap/src/island-batch.ts` |
+| 14.3 Negative-space compilation | B+T | Compile the *absence* of a call (the agent used to poll; the program does not) | **Shipped.** poll-world raw_polls=24 compiled_polls=0 seq=`get_job→merge→notify`; unique-work programs=0. Not thrash-enforce. `packages/compile/src/negative.ts`; `benchmarks/campaign/poll-world.ts` |
+| 14.4 Fork mining completion | B | Fork groups that already detect still have to pass the same honesty gates as linear programs (min-3, under-determined, empty output) | **Shipped.** CI-gate 1 branch; `underdetermined_write` on unbound mutating arm; cap `programs=24 max_programs≥1`. `packages/compile/src/fork.test.ts`; `benchmarks/campaign/fork-gate.ts` |
+
+Parallelism: wrap warming / wrap islands / compile negative-space / compile forks.
+
+Rotation: a polling world (not a retune of thrash-enforce). **Landed.** `benchmarks/campaign/poll-world.ts`
+
+### Wave 15 — Runtime depth C *(ops · schedules · webhooks · composition)*
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 15.1 Budget forecasting | T+B | Predicted `llm_calls` / `ms` / `cents` on the program vs remaining budget; halt is a choice | **Shipped.** Halt compares predicted vs actual on the in-flight program (sequence head included). Observe never forecast-halts. Unique-work `budget_halt=0`. `EDEN_KILL_AFTER_WARNING` still the override. `packages/wrap/src/forecast.ts`; `packages/measure/src/forecast.ts`; `benchmarks/campaign/budget-forecast.ts` |
+| 15.2 Scheduled programs | T | Operator-scheduled compiled runs (cron-class) with the same Approve gate | **Shipped.** Nothing schedules itself; paused never fires; receipts are wrap-run columns. Wrap ticks every minute; `EDEN_SCHEDULE_CLOCK=0` is POST `/v1/schedule/tick` only. `apps/control/src/schedule.ts`; `eden schedule` |
+| 15.3 Webhook invalidation | T | External change invalidates cache/envelope the way drift auto-refresh already knocks | **Shipped.** Named GET keys drop (hot set too); live stays On. HMAC of the body (`x-eden-webhook-signature`); empty secret fail-closed. Replacement card only after recompile PASS — not a clone of live steps. Rotation `benchmarks/campaign/webhook-get.ts` — not `upstream-rename`. |
+| 15.4 PostToolBatch remainder + program composition | T | `PostToolBatch` is a suppression point for parallel tails; compose two approved programs into one when the join is witnessed | **Shipped.** Parallel siblings mutate **1**; installer one PostToolBatch entry, no matcher. Default `compileTraces` compose_n≥1, `manifest` null until Approve. `packages/compile/src/compose.ts`; `benchmarks/campaign/post-batch.ts` |
+
+Parallelism: measure/wrap budgets / control schedules / site webhooks / wrap batch + compile compose.
+
+Rotation: a webhook-invalidated GET (not a retune of `upstream-rename`). **Landed.** `benchmarks/campaign/webhook-get.ts`
+
+### Wave 16 — Trust leftovers *(Arc 5 gap-pins · never a cert claim)*
+
+SOC2 / EU certification claims stay out (§7, Wave 10). This wave ships the **evidence pack** auditors ask for and the leftover threat-model rows. Isolation tests remain the shipped truth.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 16.1 SOC2 evidence pack | T | Binder of isolation tests, audit export, human-gate, kill switches — labeled **aligned, not certified** | **Shipped.** `/isolation` + `docs/isolation.md` + `docs/evidence-pack.md`. Landing and `/proof` never say SOC2. |
+| 16.2 Access-review exports | T | Who approved what, when, which version — from the existing hash chain | **Shipped.** Tenant-bound `GET /v1/audit/review` / `eden audit review`. Wrong org 403. Tamper still fails verify. `apps/control/src/access-review.ts` |
+| 16.3 Doctor `EDEN_NET_ALLOW` + pool cadence | T | Doctor names the allowlist and whether it is empty; pool allowlist has a review note in isolation docs | **Shipped.** Empty is `EDEN_NET_ALLOW empty · piped network binaries stay refused`. Pool cadence in `docs/isolation.md`. |
+| 16.4 ZDR guidance + marketplace draft | T | ZDR guidance for PTC/island paths; skills marketplace listing is a draft from `PUBLIC_CLAIMS` only | **Shipped.** `docs/zdr.md`. `docs/marketplace-draft.md` unpublished; `customerStudies()` = 0. Determinism Index stays pruned. |
+
+Parallelism: docs pack / control export / cli doctor / docs+manifest draft.
+
+Rotation: none from campaign worlds — this wave does not tune a fixture. **Landed.** Pack + export; no campaign tune.
+
+### Wave 17 — Remainder & daemon close *(S1b honesty · webhook auth)*
+
+Closes the live-hop leftovers that Wave 15 shipped around. Does **not** put bun back on PreToolUse (that 1s fail-open stays). Does **not** quote a live Claude Code invoice (Wave 8.1 retired that cell).
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 17.1 Path identity | T | Remainder matches `file_path`/`path` after joining relative paths against the hook `cwd`; remainder-local hint includes the path; wrap `hintIdOf` still does not invent ticket ids | **Shipped.** `./a.ts` and the absolute form of the same file claim; a disagreeing `id`/`issue` still refuses; mixed-file batches still take the program head. `packages/cli/src/remainder.ts` / `remainder.test.ts` (cwd-join); rotation `benchmarks/campaign/cwd-hop.ts` / `cwd-hop.test.ts`. Wrap `hintIdOf` still ignores `file_path`/`path`. |
+| 17.2 HMAC-only webhooks | T | Raw `x-eden-webhook` / Bearer / raw `Authorization` no longer authenticate. HMAC of the body (`x-eden-webhook-signature` / `x-hub-signature-256`) is the only path. Empty `EDEN_WEBHOOK_SECRET` still 401. `EDEN_WEBHOOK_RAW=1` restores the old header for one release | **Shipped.** HMAC 200; raw header 401 unless `EDEN_WEBHOOK_RAW=1`; empty secret 401; live stays On; GET 1→0 still holds. `apps/site/src/webhook.ts` / `webhook.test.ts`; `benchmarks/campaign/webhook-get.ts` request headers HMAC (EXPECT unchanged). |
+| 17.3 Hookd ownership | T | `--stop` kills the process that answers `/health` even when `hookd.pid` is stale. `eden wrap` already starts hookd; `apps/control` local does too. Doctor names a live orphan. PreToolUse stays 1s curl / `echo '{}'` | **Shipped.** Stale pid + live listener: `--stop` stops; `EDEN_HOOKD=0` still no-ops; doctor names a live orphan. PreToolUse stays 1s curl / `echo '{}'` (Limit — never cold-spawns bun). `packages/cli/src/hookd.ts` / `hook.test.ts`; `packages/cli/src/doctor.ts` / `doctor.test.ts`; `apps/control/src/local.ts`. |
+| 17.4 Installer home | T | Gemini / Codex / OpenCode bake `EDEN_HOME` the way Claude's warm command already does | **Shipped.** Custom home: bun fallback and spawned hookd share the remainder store; setup tests still refuse Cursor/Windsurf/Cline invented hooks. `packages/cli/src/setup.ts` / `setup.test.ts`. |
+
+Parallelism: remainder matching / site webhook / hookd stop / installer strings — four filesets.
+
+Rotation: a cwd-relative remainder hop (`benchmarks/campaign/cwd-hop.ts`), not a retune of `post-batch`. **Landed.**
+
+### Wave 18 — Workbench live *(Arc 2 UI · gated)* **Shipped.**
+
+Landing **1–6 stay locked.** Do not restore deleted dashboard chrome. 18.1 landed Clerk sign-up / sign-in / workspace / routing / tour / setup / strip keys. 18.2 is the route-regression suite (`apps/web/app/account/route.test.ts`). 18.3–18.4 were in-tree reviews, not a rebuild.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 18.1 Account → onboarding | T | REBUILD rows **7–14** (Clerk sign up / sign in / workspace / routing / tour / setup prompt / strip keys) | **Shipped.** Auth does not dump a logged-in user on marketing; logged-out `/home` is HTTP 307 to `/` |
+| 18.2 Route regression | T | Tests for logged-out → landing, logged-in → onboarding or dashboard, sign-up/sign-in return path — no new chrome | **Shipped.** Suite green; fake proof still absent on `/` and `/proof` |
+| 18.3 In-tree workbench review | T | Rows **15–32** already in the tree: live pass, not a rebuild | **Shipped.** Dashboard, canvas, Approve, Pause, mobile, a11y, polish hold. No Hub, no Reach, no second inspect product |
+| 18.4 Waste-layer review | T | Rows **33–52** already in wrap/compile/control/web: live pass | **Shipped.** Honest zeros until proven; no fake token counts; Approve never an `×` LLM-call ratio |
+
+Parallelism: 18.1 was the gate. 18.2 landed tests without pixels. 18.3–18.4 were review, not autonomous loops.
+
+Rotation: none — no campaign tune. **Landed.**
+
+### Wave 19 — Limits board *(Arc 8 honesty · no new wins invented)* **Shipped.**
+
+Closes the published limits by pinning them, not by reversing them. A later WIN may move a row; this wave did not require one.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 19.1 Live-invoice cell | T | Grep landing, `/proof`, whitepaper, digest copy: no live Claude Code invoice claim. `LIVE-AB.md` retired cell stays retired | **Shipped.** Zero billed S1b invoice quotes. Analogue −9.1% labeled analogue. `LIVE-AB.md` retired. `limits-board.test.ts` |
+| 19.2 oblivious-long | T | Wrap-path +2.8% cents / +3.2% wall stays a **limit**, not a win table row. `PUBLIC_CLAIMS` / isolation copy name it | **Shipped.** Win tables omit it; isolation + `eden claims` print the deltas |
+| 19.3 JIT soak | B | Re-run `bench:jit-soak` measurement-only. PASS → default `EDEN_SURFACE` may change in a later wave. FAIL → default stays `all` and the FAIL number is the pin | **Shipped.** FAIL `precision=0.789 n=38`; default `all`; `JIT-SOAK.md`. Not a retune |
+| 19.4 Replica host-drop | T | `HOST-DROP.md` remains the close. Live Claude Code is not claimed to ack always-drop of a correct rewrite | **Shipped.** Landing/`/proof` never say live host-drop; replica class stays replica |
+
+Parallelism: copy grep / claims file / soak remeasure / host-drop docs.
+
+Rotation: JIT remeasure is measurement-only (not a retune of the soak fixture's expect). **Landed.**
+
+### Wave 20 — Close the tree *(Wave 16–20 inventory empty)* **Shipped.**
+
+When this wave's done-when holds, every **Wave 16–20** leftover in §4.12 is **Shipped** or **Limit**. Wave 21–22 Open rows stay Open until those waves run.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 20.1 Branch | T | Remaining Wave 15–19 work is committed and pushed on `KaiavN/Eden` (never a personal fork). Secrets stay out | **Shipped.** `feat/compiled-tools-horizon` on `KaiavN/Eden`; secrets out of the commit |
+| 20.2 Catchers | T | §14 + `ARC-REGRESSION.md` name a fixture or gap-pin for every Wave 16–19 row. `arc-catchers.test.ts` still 0 unnamed | **Shipped.** Map row count matches; backtick paths exist; Wave 16–19 marks in `WAVE_16_19_CATCHERS` |
+| 20.3 Kill-switch inventory | T | Every new `EDEN_*` from 16–19 has a §15 row. Doctor names `EDEN_NET_ALLOW` (16.3) and hookd orphan (17.3) | **Shipped.** Grep-verifiable (`packages/cli/src/switches.test.ts`); `EDEN_AUTO_APPROVE` named off-by-default |
+| 20.4 Inventory sweep | T | §4.12 every **Wave 16–20** row is Shipped or Limit. Wave 21–22 Open rows do not block this close. Case studies customer-approved count stays **0** until a real n. Determinism Index stays pruned. Cursor/Windsurf/Cline stay skills-only unless the host grows a hook API | **Shipped.** Wave 16–20 leftover rows have no Open. `eden doctor --tree` |
+
+Parallelism: git / catcher map / §15 / this table — four owners.
+
+Rotation: none. **Landed.**
+
+### Wave 21 — Honesty files *(Wave 19 shorts · no new wins invented)* **Now.**
+
+Pins the leftovers Wave 19 named and did not close. Does **not** invent a live invoice. Does **not** flip `EDEN_SURFACE` on FAIL. Landing 1–6 stay locked.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 21.1 oblivious-long cited file | T | `PUBLIC_CLAIMS` `oblivious-long` `file` is a measurement close, not `docs/ROADMAP.md`. Isolation / `/proof` / `eden claims` / marketplace draft cite that file. `packages/measure/src/claims.ts` header is current, not “Wave 8” | Grep: that id’s `file` exists and is not ROADMAP; listing test still byte-matches the draft |
+| 21.2 Isolation limits class | T | Isolation “Published limits” names Kind (and Source, or analogue / retired in their own lists matching `/proof`). Analogue and retired are not skimmable as the same class as wrap-path / soak FAIL. Still not a SOC 2 badge | Live `/isolation` shows class; graphite; no ship CTA |
+| 21.3 Proof fixture columns | T | `/proof` case-studies rows carry Kind + Source (or an equally unskimmable campaign-not-customer tag on the same chrome as the wins table). Names stay fixture verticals. Customer n stays 0 | Live `/proof` cases cannot be read as a second unlabeled win board |
+| 21.4 JIT soak remeasure | B | `bun run bench:jit-soak` measurement-only. Do not retune the soak fixture’s expect. FAIL → pin the printed `precision=` / `n=` and default stays `all`. PASS → print n; do **not** flip `EDEN_SURFACE` here (that is 22.2) | Pin file updated; `JIT-SOAK.md` matches the print; default `all` |
+
+Parallelism: claims file / isolation copy / proof cases / soak pin — four owners. `claims.ts` `file` field is 21.1 only; 21.3 does not edit `PUBLIC_CLAIMS`.
+
+Rotation: soak remeasure is measurement-only (same rule as Wave 19.3).
+
+### Wave 22 — Un-retire only when evidence exists *(Later)*
+
+Do not start this wave to fill a cell. Start it when a file or a PASS already exists.
+
+| Phase | Type | Deliverables | Done when |
+|---|---|---|---|
+| 22.1 Live invoice cell | B | If a live Claude Code invoice file is in the tree, parse it. Un-retire or keep retired with the parse result. **Do not invent a bill** | `LIVE-AB.md` live-S1b is live-invoice or still retired for a named parse miss |
+| 22.2 `EDEN_SURFACE=jit` | T | Flip the default only after a soak prints PASS at the registered bar (`precision≥0.95`). FAIL keeps `all`. Doctor and §15 match the flip | Unset `surfaceMode()` is `jit` only on a PASS pin; otherwise this phase is not started |
+
+Parallelism: invoice file vs soak default — two owners, only if both have evidence; otherwise run the one that does.
+
+Rotation: invoice parse is not a campaign retune; soak PASS is not a bar move.
 
 ### 4.9 Anti-overfit machinery (applies to every wave)
 
@@ -347,13 +546,19 @@ Parallelism: fully parallel — 7.1 is runtime+site, 7.2 is probe harness, 7.3 i
 ### 4.10 Dependency sketch (cross-wave only — inside a wave, nothing waits)
 
 ```
-W1 ──► W2 ──► W5 ──► W8
+W1 ──► W2 ──► W5 ──► W8 ──► W9 ──► W10
  │      ▲
  │      └──► W6 ──► W8
  └──► W3 ──► W4 ──► W7 ──► W8
+
+W10 ──► W11 ──► W12
+              └──► W13 ──► W14 ──► W15
+W10 ──► W16 ──► W17 ──► W19 ──► W20
+              └──► W18 ──► W20
+W19 ──► W21 ──► W22
 ```
 
-W1 gates everything (an uncalibrated instrument invalidates all claims). W2/W3 start in parallel after W1 (different surfaces: wrap/site vs compile). W4 consumes W3's corpus findings; W5 consumes W2's attribution (S1b's business case is measured in cents); W6 is independent of W3–W5 after W1; W7 consumes W4's multi-tenant store; W8 last. Two lanes persist throughout: a **wrap/runtime lane** (W2→W5→W7) and a **compile/mining lane** (W3→W4), so two teams never touch the same files in the same wave.
+W1–W20 shipped. W21 (honesty files) can run now. W22 is Later (only if an invoice file or a soak PASS exists).
 
 ### 4.11 Modeled timeline *(labeled MODELED — sensitivity ±40% for staffing)*
 
@@ -361,15 +566,47 @@ Assumes two persistent lanes (wrap/runtime, compile/mining) plus one shared site
 
 | Wave | Modeled duration | Wall-clock if lanes run concurrently |
 |---|---|---|
-| W1 calibration & coverage | 2 wks | 2 wks (all phases parallel) |
-| W2 measurement spine ∥ W3 compiler depth | 3 wks each | 3 wks total (lanes overlap) |
-| W4 capacity ∥ W5 ladder hardening | 3 wks each | 3 wks total |
-| W6 cache/governance ∥ W7 multi-agent | 4 wks each | 4 wks total |
-| W8 proof to market | 4 wks | 4 wks (A/B needs live traffic time regardless) |
-| **Total modeled** | | **~16 weeks** |
+| W1–W15 | shipped | — |
+| W16 trust pack | shipped | — |
+| W17 remainder/daemon/HMAC | shipped | — |
+| W18 workbench live-review | shipped | gated UI review closed |
+| W19 limits board | shipped | retired claims pinned; soak FAIL `precision=0.789 n=38` |
+| W20 close the tree | shipped | **Shipped.** Wave 16–20 leftover Open = 0 |
+| W21 honesty files | 2 d | **Now** — Wave 19 shorts |
+| W22 un-retire | 1 d | **Later** — only if an invoice file or a soak PASS exists |
+| **Total remaining (modeled)** | | **~2 days Now** (W21). W22 is not on the clock until evidence exists. |
 
-Critical path: W1 → W2 → W5 → W8 (the wrap lane carries S1b, whose business case is measured). The compile lane (W3→W4→W7) has ~3 weeks of slack against it — slack absorbs the debugging phases, which historically run over exactly once per wave (the struggle probes found four bugs on first firing; budget one such round per wave).
+Critical path after W20: W21. W22 does not start until evidence exists.
 
+### 4.12 Leftover inventory *(Wave 16–20 empty — W20 shipped)*
+
+Every Open row below is assigned. **Limit** means the close is a pin, not a reversal. Wave 20.4 closed: every **Wave 16–20** row is Shipped or Limit. Wave 21–22 Open rows are Now/Later.
+
+| Leftover | Close | Status |
+|---|---|---|
+| SOC2 evidence pack (never a cert claim) | 16.1 | Shipped |
+| Access-review exports | 16.2 | Shipped |
+| Doctor `EDEN_NET_ALLOW` + pool cadence | 16.3 | Shipped |
+| ZDR guidance + marketplace draft (unpublished; Index pruned) | 16.4 | Shipped |
+| Relative vs absolute remainder paths; path hint | 17.1 | Shipped |
+| Raw webhook secret / Bearer still authenticates | 17.2 | Shipped |
+| Orphan hookd; local wrap doesn't start daemon; PreToolUse bun | 17.3 | Shipped — Pre stays 1s curl (Limit); orphan/`--stop`/local start are Shipped |
+| Gemini/Codex/OpenCode `EDEN_HOME` split-brain | 17.4 | Shipped |
+| Cursor/Windsurf/Cline hooks | 20.4 | Limit — skills-only until the host grows a hook API |
+| Account / onboarding live (REBUILD 7–14) | 18.1 | Shipped |
+| Dashboard/canvas/Approve already in tree (15–32) | 18.3 | Shipped |
+| Waste/observability already in tree (33–52) | 18.4 | Shipped |
+| Live Claude Code invoice / billed S1b cell | 19.1 · 22.1 | Limit — retired (`LIVE-AB.md`) until a file exists; 22.1 parses it, never invents one |
+| wrap `oblivious-long` +2.8% cents / +3.2% wall | 19.2 | Limit |
+| oblivious-long cited file is `docs/ROADMAP.md` | 21.1 | Open |
+| Isolation Published limits mixed class (no Kind/Source) | 21.2 | Open |
+| `/proof` case-studies unlabeled vs wins table | 21.3 | Open |
+| `claims.ts` header still says Wave 8 | 21.1 | Open |
+| JIT soak FAIL; default `EDEN_SURFACE=all` | 19.3 · 21.4 · 22.2 | Limit unless 21.4 prints PASS, then 22.2 may flip. 21.4 is measurement-only |
+| Replica host-drop of a correct rewrite | 19.4 | Limit (`HOST-DROP.md`) |
+| Case studies customer-approved count 0 | 20.4 | Limit until a real n |
+| Uncommitted Wave 15+ tree; origin not clean | 20.1 | Shipped |
+| Catchers / §15 rows for 16–19 | 20.2 · 20.3 | Shipped |
 
 ---
 
@@ -384,8 +621,8 @@ Critical path: W1 → W2 → W5 → W8 (the wrap lane carries S1b, whose busines
 | `additionalContext` appends reliably; survives `decision:"block"` | Docs + issues | Guaranteed-delivery degrade path (R3) |
 | Concurrent rewriting hooks race | Issue reports | One managed entry per matcher |
 | Timeouts: 600 s defaults; timed-out hooks discarded; PostToolUse timeout keeps result | Reference | Self-cap 1 s/8 s |
-| `PostToolBatch` fires after parallel batch resolves | SDK reference | Batch-level suppression point (Arc 6) |
-| Skills: SKILL.md open spec, ~40 products, progressive disclosure; marketplace indexers now grade skills | Ecosystem scan | S2 SKILL.md; marketplace distribution channel post-Arc 8 |
+| `PostToolBatch` fires after parallel batch resolves | SDK reference | **Shipped.** One installer entry, no matcher; remainder armed from the batch (`packages/cli/src/remainder.ts`) |
+| Skills: SKILL.md open spec, ~40 products, progressive disclosure; skills marketplaces are now indexing and grading community skills (SkillHub et al.) | Ecosystem scan | S2 SKILL.md shipped; marketplace listing is a Wave 16 draft from `PUBLIC_CLAIMS` only (unpublished) |
 | Advanced tool use GA (Feb 2026): Tool Search (−85% schema tokens, accuracy UP), Programmatic Tool Calling (−38% billed input on 75-tool bench; 20–40% typical at 10–49 tools; +8% COST on strictly sequential single-call shapes), Tool Use Examples (parameter accuracy 72→90%) | Provider docs + engineering blog | Ladder positioning §2; PTC-complement emission (Arc 3); sequential-stretch strength is Eden's differentiated ground |
 
 ### 5.2 Provider & macro economics (current as of Aug 2026)
@@ -441,7 +678,7 @@ Adapter markets · credential vaults · SSO-as-SKU governance · chat-replay exp
 ## 8. Verification method (how everything above stays honest)
 
 1. **WIN gates.** Paired, counterbalanced, replicated, A/A-checked (`packages/measure`). LOSS = fix or roll back.
-2. **NEGATIVE gates (new).** Eight adversarial regimes assert parity-within-materiality (+1%). Any regime where Eden claims harmlessness must carry a negative control, or the claim doesn't ship. Losses inside the band are printed as measured overhead, never silently dropped.
+2. **NEGATIVE gates (new).** Nine adversarial regimes assert parity-within-materiality (+1%). Any regime where Eden claims harmlessness must carry a negative control, or the claim doesn't ship. Losses inside the band are printed as measured overhead, never silently dropped.
 3. **STRUGGLE probes (new).** Five pass/fail correctness probes over capacity bounds and degradation paths (eviction pressure, slack overflow, timeouts, dead islands, churn). Born red, kept forever; new suppression-state code requires a new probe.
 4. **Failsafe rules.** Prime directive enforced in code: default observe, fail-open everywhere, kill switches for every aggressive behavior.
 5. **Soak gates for defaults.** Opt-in flags flip to default only after shadow traffic meets explicit criteria.
@@ -480,13 +717,13 @@ Registered budgets — a phase that regresses one needs an explicit trade-off no
 
 | Component | Budget | Current (measured this edition) | Enforced by |
 |---|---|---|---|
-| Wrapped idle call overhead | ≤12 µs/call | ~31–37 µs → Wave 2.4 | idle micro-bench (Wave 2) |
-| Steering decision p99 | <1 ms | not yet instrumented → Wave 4.3 | concurrency matrix |
-| `compileTraces` on 500 traces | ≤2 s | not yet measured → Wave 3.2 | corpus CI job |
+| Wrapped idle call overhead | ≤12 µs/call | 3.40 µs (0 armings); **8.94 µs with 64 live armings** (`packages/wrap/src/idle.bench.ts`) | idle micro-bench (Wave 4.3) |
+| Steering decision p99 | <1 ms | **0.028 ms** p99 at W=100 hosted; p50 W=100/W=10 = 1.51× (`packages/wrap/src/steer-profile.ts`) | concurrency matrix + steer-profile |
+| `compileTraces` on 500 traces | ≤2 s | 121 ms median (`packages/compile/src/time-500.ts`) | corpus CI job |
 | Transparent serving added latency | ≤6 s ceiling, falls open on breach (harness keeps original output) | capped in code (`EDEN_TRANSPARENT_MS`) | S1 verification harness |
 | Receipt `server_ms` | no regression wave-over-wave | playback benches | site suite |
 | Soak heap drift | flat under forced GC (±15% band mid→late) | −33% observed (improving) | `soak.ts` exit code |
-| Cache read-latency tax from compression | <10% vs uncompressed | n/a yet → Wave 6.1 | cache tests |
+| Cache read-latency tax from compression | <10% vs uncompressed | **−14.52%** hit path (decoded hot set); cold gunzip once per hot-set miss (`apps/site/src/cache-bench.ts`) | cache tests + cache-bench |
 | Suite wall time | <5 min full suite (flake-audit runs may exceed) | ~184s | flake audit |
 
 ---
@@ -497,12 +734,14 @@ STRIDE-lite over Eden's four surfaces. Existing mitigations cite their tests; pl
 
 | Surface | Threat | Existing control (+test) | Planned |
 |---|---|---|---|
-| Hook channel (agent ↔ hookd) | Injection via crafted tool output into sentinel/facts blocks; oversized payloads corrupting merges | 9,500-char cap; native-shape merging; hostile-payload tests (unicode, nesting, prototype pollution) | Facts rendered through a single escaping builder (S1 hardening); fuzz seeds include adversarial outputs |
-| Control plane API | Cross-tenant reads/writes; auth bypass | Tenant-bound writes, auth UX, migration tests in site suite; ETag envelopes tenant-keyed | Immutable audit export (6.5); access-review exports |
-| Public result pool | Cross-tenant contamination; cache poisoning via shared keys | Triple gate: host allowlist AND credential-free AND GET-ok; isolation tests provable | Pool allowlist review cadence; poisoning probes added to struggle tier |
-| Island caller | Prompt injection through witnessed inputs; secret exfiltration via drafted text | Memo key covers input; witness-memo requires two agreeing outputs; redaction at record time (`redact.ts`, redact-regression tests) | Island stability scoring flags divergent glue (Arc 4); ZDR guidance doc for PTC/island paths |
-| Egress (fetch steps) | SSRF via bound URLs; credential leakage to third parties | SSRF egress checks (site suite); credential-free gating for public pool | `EDEN_NET_ALLOW` allowlist audit in doctor; OWASP MCP Top 10 mapping page |
-| Suppression state | Duplicate/dropped mutations under concurrency or failure | Struggle probes P1–P5; oblivious tests; partial-match + matched-calls semantics | Concurrency matrix as CI gate (Wave 4.1) |
+| Hook channel (agent ↔ hookd) | Injection via crafted tool output into sentinel/facts blocks; oversized payloads corrupting merges; drive-by Origin; split-brain home; stale pid orphan | 9,500-char cap; native-shape merging; hostile-payload tests; `escapeFacts` builder; OpenCode/Codex/Gemini adapters; Origin/Host refusal; pid-after-bind; `--stop` via `/health`; local wrap start; installer `EDEN_HOME` | Wave 17.3 `--stop` via `/health` + local wrap start **Shipped**; Wave 17.4 installer `EDEN_HOME` **Shipped** |
+| Control plane API | Cross-tenant reads/writes; auth bypass | Tenant-bound writes, auth UX, migration tests in site suite; ETag envelopes tenant-keyed; **tamper-evident audit export** (`GET /v1/audit`, `eden audit export`); **access-review** (`GET /v1/audit/review`, `eden audit review`) tenant-bound | Wave 16.2 **Shipped** |
+| Public result pool | Cross-tenant contamination; cache poisoning via shared keys | Triple gate: host allowlist AND credential-free AND GET-ok; isolation tests provable; mutating methods refused even when the sketch loves the key; **review cadence** in `docs/isolation.md` | Wave 16.3 **Shipped** |
+| Island caller | Prompt injection through witnessed inputs; secret exfiltration via drafted text | Memo key covers input; witness-memo requires two agreeing outputs; redaction at record time (`redact.ts`, redact-regression tests); island stability scoring (Wave 10); **ZDR guidance** `docs/zdr.md` | Wave 16.4 **Shipped** |
+| Egress (fetch steps) | SSRF via bound URLs; credential leakage to third parties | SSRF egress checks (site suite); credential-free gating for public pool; `EDEN_NET_ALLOW` named in doctor | Wave 16.3 **Shipped** |
+| Webhook invalidation | Raw shared-secret header in logs / Referer | HMAC of the body; HMAC-only (raw header no longer accepted unless `EDEN_WEBHOOK_RAW=1`); empty secret fail-closed; live stays On | Wave 17.2 HMAC-only **Shipped**; `EDEN_WEBHOOK_RAW=1` restores |
+| Suppression state | Duplicate/dropped mutations under concurrency or failure; relative vs absolute path miss | Struggle probes P1–P5; oblivious tests; partial-match + matched-calls semantics; concurrency matrix as CI gate; **PostToolBatch remainder** (`packages/cli/src/remainder.ts`, `benchmarks/campaign/post-batch.test.ts`); cwd-join path identity | Wave 17.1 cwd-join path identity **Shipped** |
+| Isolation / MCP | Auditor-facing claims; MCP08 lack of audit | `/isolation` + `docs/isolation.md` + `docs/owasp-mcp.md` map MCP01–MCP10 honestly; **evidence pack** `docs/evidence-pack.md` aligned, **not certified** | Wave 16.1 **Shipped** |
 
 Non-goal reminder: credential vaults remain out (§7); the public pool's credential-free gate exists precisely so no credentials ever touch shared infrastructure.
 
@@ -512,12 +751,12 @@ Non-goal reminder: credential vaults remain out (§7); the public pool's credent
 
 | Host / integration | Install (recording) | S0 silent | S1 transparent | S1b suppression | S2 skills | S3 JIT | S4 MCP | Notes |
 |---|---|---|---|---|---|---|---|---|
-| Claude Code | ✓ managed hooks | ✓ | ✓ shipped (read-only) | next (PreToolUse) | ✓ SKILL.md | wiring shipped | ✓ stdio | Reference host; every ladder rung proves here first |
-| OpenCode | ✓ plugin module | ✓ | partial* | via plugins when events exist | ✓ | gated | ✓ | *plugin event surface differs; degrade path applies |
-| Codex CLI | ✓ TOML section | ✓ | partial* | — | ✓ | gated | ✓ | marker-based idempotent installer |
-| Gemini CLI | ✓ settings write | ✓ | partial* | — | ✓ | gated | ✓ | as above |
-| Cursor / Windsurf / Cline | manual skills copy | — | — | — | ✓ | — | ✓ | skills-only tier until hook surfaces exist |
-| Generic MCP hosts | — | — | — | — | — | — | ✓ hosted dispatch | permanent adapter tier; deferred-loading metadata planned (§2.3) |
+| Claude Code | ✓ managed hooks | ✓ | ✓ shipped (read-only; Write dual-gated) | ✓ PreToolUse remainder + PostToolBatch | ✓ SKILL.md | wiring shipped | ✓ stdio | Reference host |
+| OpenCode | ✓ plugin module | ✓ | ✓ native `output.output` (MCP path host-drop classed) | ✓ before-hook remainder | ✓ | gated (`all` default) | ✓ `tools/dispatch` | one rewriter plugin; MCP-shaped after is `opencode-drop` |
+| Codex CLI | ✓ TOML section | ✓ | ✓ post_tool JSON rewrite | ✓ pre_tool remainder | ✓ | gated | ✓ | one managed TOML section |
+| Gemini CLI | ✓ settings write | ✓ | additionalContext degrade (no native rewrite field) | ✓ AfterToolUse remainder | ✓ | gated | ✓ | honest degrade; transcript-diff green on drop |
+| Cursor / Windsurf / Cline | manual skills copy | — | — | — | ✓ | — | ✓ | skills-only — Wave 11 did not invent hooks |
+| Generic MCP hosts | — | — | — | — | — | POST transcript ≤1 | ✓ hosted dispatch | `tools/list` empty; `tools/dispatch` / `POST /v1/dispatch` |
 | SDK: TypeScript | ✓ wrap | ✓ | n/a (in-process steering) | built-in skipRest | manifest emit | — | — | usage scraper feeds certification (Wave 2) |
 | SDK: Python (stdlib-only) | ✓ wrap | ✓ | n/a | built-in | manifest emit | — | — | parity contract tested |
 
@@ -571,10 +810,53 @@ The complete fixture inventory. Rotation obligations draw from the "derives next
 | high-card-ids | coverage | unique ids, identical shape | steer miss / parity, no corruption | `bench-coverage.ts` |
 | pagination-loop | coverage | cursor pages then per-item mutate | honest NO_PROGRAM (no bindable foreach) | `bench-coverage.ts` |
 | pagination-bindable | coverage | full array then per-item mutate | compile mines foreach | `coverage.test.ts` / `coverage-worlds.ts` |
-| failsafe-fuzz | probe | 1,000 generated programs × faults | Eden-absent-equivalent mutations | `failsafe-fuzz.test.ts` |
+| failsafe-fuzz | probe | 10,000 generated programs × faults × wrap + both playback schedulers | Eden-absent-equivalent mutations; POST never cached | `failsafe-fuzz.test.ts` + `failsafe-fuzz-sched.test.ts` |
 | P1b W=100 | probe | 100 concurrent distinct inputs | fail-open past 64; zero duplicate writes | `struggle.test.ts` |
+| P1c hosted W=100 | probe | 100 sessions × 1 stretch on shared store | all armed; zero dups; Wave 4.2 | `struggle.test.ts` |
+| concurrency-matrix | probe | stretches {1..200} × tails {2..40} × think {0,120} × ≤64/>64 | exactly-once; red cell = pinned repro | `concurrency-matrix.test.ts` |
+| session-crosstalk | probe | same entity id, two sessions, shared store | no cross-session claim (Wave 4 rotation) | `session-crosstalk.test.ts` |
+| timeout-regime | bench | slowJudge vs wrap timeout sweep | deopt-claim exactly-once; default 60s justified | `bench-timeout.ts` / `TIMEOUT.md` |
 | noise-floor | calibration | A/A wall_ms per scenario | MDE @ n=8/12/16 + stability | `calibrate.ts` / `NOISE-FLOOR.md` |
 | flake-audit | calibration | shuffled suite + clock jump ±30% + load | 20 consecutive green | `scripts/flake-audit.sh` |
+| silent-drop | negative (Wave 5.4) | host always drops `updatedToolOutput` (R1) | remainder deny still holds; unique-sequence cents parity ±1%; compilable may WIN; suppressions counted. Live-host ack of a correct drop is Wave 8.1 | `silent-drop.ts` / `bench-negative.ts` n9 |
+| upstream-rename | rotation (Wave 6.2) | forced field rename `state→conclusion` | canary/control queues draft+knock; live stays On; zero manual mining | `upstream-rename.ts` / `upstream-rename.test.ts` |
+| cache-admission | bench (Wave 6.1) | unique-GET storm vs repeating replay | write volume down; hit-rate loss <1pt on replay; gzip −30%+; mutating disqualified | `apps/site/src/cache-bench.ts` / `cache-redteam.test.ts` |
+| audit-export | probe (Wave 6.4) | JSONL/CSV hash chain | round-trip parse; splice/flip fails verify | `packages/cli/src/audit.test.ts` |
+| fleet-dedupe | rotation (Wave 7.1) | two agents, one fleet, same read-only GET | duplicate fetches 2→1; `shared across 2 agents`; mutating still 1 write/session | `fleet-dedupe.ts` / `fleet-dedupe.test.ts` |
+| hosted-dispatch | probe (Wave 7.2) | W=100 hosted connections + MCP initialize skew | zero duplicate writes; initialize never 500; future Eden version still 426 | `hosted-dispatch.ts` / `hosted-dispatch.test.ts` |
+| handoff | bench (Wave 7.3) | repeated intake→billing traces | composed parent, `manifest` null until Approve | `packages/compile/src/handoff.ts` / `handoff.test.ts` |
+| archive-tiers | probe (Wave 7 Arc leftover) | hot / warm / cold | compact drops events; live hot kept; empty status zeros | `packages/cli/src/archive.ts` / `archive.test.ts` |
+| stretch-drop | rotation (Wave 8) | 3-call stretch: serve + remainder skip + host-drop | Home/canvas names Served · Skipped · Degraded; a drop cannot hide behind Skipped | `stretch-drop.ts` / `stretch-drop.test.ts` |
+| live-ab | bench (Wave 8.1) | paired live study or retired claims | missing invoice → retired live-S1b; replica host-drop is a host limit; oblivious-long is a limit | `live-ab.ts` / `LIVE-AB.md` / `HOST-DROP.md` |
+| digest | probe (Wave 8.4) | weekly letter mirrors Home tiles | opt-in (`EDEN_DIGEST` default off); empty zeros; fail-open; never emails | `packages/cli/src/digest.ts` |
+| honesty-explain | rotation (Wave 9) | unique-work / micro class+count in `eden explain` | named class and the count that fell short; empty is 0 stretches | `benchmarks/campaign/honesty.ts` / `honesty.test.ts` |
+| width-inherit | rotation (Wave 10) | mined at width 10, sibling width 7 | 2 receipts stay OOD; 3rd inherits; 4th width-7 inDistribution; bad receipt does not inherit | `benchmarks/campaign/width-inherit.ts` / `width-inherit.test.ts` |
+| opencode-drop | rotation (Wave 11) | OpenCode MCP-shaped after hook drops `output.output` | native rewrite lands; MCP drop classed; remainder deny still holds; not `silent-drop` | `opencode-drop.ts` / `opencode-drop.test.ts` |
+| jit-soak | soak (Wave 11.4 · Wave 19 remeasure · Wave 21.4 next) | jit-shadow precision vs unique-work empty catalog | PASS only at ≥0.95; FAIL keeps `EDEN_SURFACE=all`. Wave 19 printed FAIL `precision=0.789 n=38`. Wave 21.4 remeasures; Wave 22.2 is the only flip | `jit-soak.ts` / `JIT-SOAK.md` / `bun run bench:jit-soak` |
+| provider-window | rotation (Wave 12) | recorded OpenAI + Anthropic usage JSON (not a campaign world) | five classes = prompt+completion; cache excluded; Anthropic 40/50/10 hit % = 40 not 80; unique-work novelty empty | `provider-window.ts` / `provider-window.test.ts` |
+| github-review speculate | rotation (Wave 13) | read-only getIssue → getComments → getChecks (80ms tools, THINK_MS=120); not fastdesk | wall WIN by overlapping think-time; unique-work/creative parity ±1%; mutating never started | `speculate.ts` / `speculate.test.ts` |
+| watch-warm | rotation (Wave 14.1) | next compiled read-only first-wave while current stretch runs; not turnBoundary | hit-rate 0→100% (12/12); mutating execute 0 | `watch-warm.ts` / `watch-warm.test.ts` |
+| poll-world | rotation (Wave 14.3) | CI/job wait `get_status` × N pending→done then merge+notify; not thrash-enforce | compiled sequence poll-count 0; unique-work programs 0 | `poll-world.ts` / `poll-world.test.ts` |
+| fork-gate | rotation (Wave 14.4) | CI-gate fork + honesty gates | 1 branched program; min-3 / empty_output / underdetermined_write / max_programs named | `fork-gate.ts` / `fork-gate.test.ts` |
+| webhook-get | rotation (Wave 15.3) | named GET, then `POST /v1/webhook` drop | hits 1→0; live stays On; bad secret leaves cache; not `upstream-rename` | `webhook-get.ts` / `webhook-get.test.ts` |
+| schedule | bench (Wave 15.2) | operator cron on an already-live tool | paused fires 0; Approve/compile insert 0 schedule rows; receipts share wrap-run columns | `apps/control/src/schedule.ts` / `schedule.test.ts` |
+| budget-forecast | rotation (Wave 15.1) | predicted vs actual llm/ms/cents on the in-flight program | unique-work halt 0; enforce head spent-halt; observe compiles | `budget-forecast.ts` / `budget-forecast.test.ts` |
+| post-batch | rotation (Wave 15.4) | PostToolBatch remainder after parallel tails | mutating execute 1; garbage `{}`; compose Approve-gated | `post-batch.ts` / `post-batch.test.ts` |
+| cwd-hop | rotation (Wave 17.1) | cwd-relative remainder hop | relative `./a.ts` and abs of the same file claim; disagreeing id refuses; mixed-file takes head; not `post-batch` | `benchmarks/campaign/cwd-hop.ts` / `cwd-hop.test.ts` |
+| evidence-pack | probe (Wave 16.1) | binder index; aligned not certified | landing/`/proof` SOC2 hits 0; pack paths exist | `docs/evidence-pack.md` · `apps/web/app/(notes)/isolation/copy.test.ts` |
+| access-review | probe (Wave 16.2) | who/what/when/version; tenant-bound | foreign org 403; splice/flip fails verify | `apps/control/src/access-review.ts` / `access-review.test.ts` |
+| doctor-net-allow | probe (Wave 16.3) | `EDEN_NET_ALLOW` named including empty | empty count 0; refuse sentence | `packages/cli/src/doctor.ts` / `doctor.test.ts` |
+| zdr-listing | probe (Wave 16.4) | ZDR guidance + unpublished `PUBLIC_CLAIMS` listing | customers 0; Index pruned | `docs/zdr.md` · `docs/marketplace-draft.md` · `packages/measure/src/listing.ts` |
+| hmac-only | probe (Wave 17.2) | HMAC-only webhook auth | HMAC 200; raw header 401 unless `EDEN_WEBHOOK_RAW=1`; empty secret 401 | `apps/site/src/webhook.ts` / `webhook.test.ts` |
+| hookd-ownership | probe (Wave 17.3) | `--stop` via `/health`; doctor names a live orphan | stale pid + live listener stops; `EDEN_HOOKD=0` no-op; PreToolUse stays 1s curl | `packages/cli/src/hookd.ts` / `hook.test.ts` · `packages/cli/src/doctor.ts` |
+| installer-home | probe (Wave 17.4) | Gemini/Codex/OpenCode bake `EDEN_HOME` | custom home shares remainder store; Cursor/Windsurf/Cline stay skills-only | `packages/cli/src/setup.ts` / `setup.test.ts` |
+| account-onboarding | probe (Wave 18.1) | REBUILD 7–14 live | logged-in not dumped on marketing; logged-out `/home` is 307 to `/` | `apps/web/app/account/route.ts` / `route.test.ts` |
+| route-regression | probe (Wave 18.2) | logged-out → landing; in-product never stays on marketing | `apps/web/app/account/route.test.ts` |
+| workbench-review | gap-pin (Wave 18.3) | rows 15–32 already in tree | Approve crimson; no Hub/Reach | `apps/web/app/canvas/workbench.test.ts` |
+| waste-layer | gap-pin (Wave 18.4) | 33–52 already in wrap | first-warning cursor on the run | `packages/wrap/src/wrap-tools.ts` / `packages/wrap/src/forecast.test.ts` |
+| limits-board | probe (Wave 19.1) | no live invoice quote; analogue labeled | landing/`/proof`/whitepaper/digest grep 0 | `benchmarks/campaign/limits-board.test.ts` / `LIVE-AB.md` |
+| oblivious-long | probe (Wave 19.2) | wrap-path +2.8% / +3.2% is a limit | win tables omit it | `packages/measure/src/claims.ts` / `docs/isolation.md` |
+| replica-host-drop | probe (Wave 19.4) | replica class; live ack never claimed | `HOST-DROP.md`; landing/`/proof` never live host-drop | `benchmarks/campaign/HOST-DROP.md` / `limits-board.test.ts` |
 
 Rotation draws: production trace shapes, harness behavior classes, customer failure reports — never another campaign fixture.
 
@@ -595,7 +877,31 @@ Defaults are the safety posture; flipping any default requires the §7 soak gate
 | `EDEN_SCHED=ready` | off | ready scheduler | flip-gate soak: 2 weeks clean shadow |
 | `EDEN_MAX_STEPS` (default 150) | 150 | executed-call ceiling in enforce mode | env-tunable; ceiling never fires in observe |
 | `EDEN_KILL_AFTER_WARNING` | off | post-warning spend refusal | operator override only |
-| `EDEN_TIMEOUT_MS` (60s) / `EDEN_TRANSPARENT_MS` (6s) | as stated | compiled-run / serving ceilings | timeout defaults justified by Wave 4.4 data |
+| `EDEN_TIMEOUT_MS` (60s) / `EDEN_TRANSPARENT_MS` (6s) | as stated | compiled-run / serving ceilings | timeout default justified by Wave 4.4 (`benchmarks/campaign/TIMEOUT.md`); 60s stays |
+| `EDEN_ARM_MAX` | 64 | per-session arming cap; bursts fail open | hosted dispatch raises only with a probe; never live-evict |
+| `EDEN_ARM_GLOBAL` | 4096 | process-wide arming cap across sessions | fail-open at the ceiling; never steal another session's live arming |
+| `EDEN_SESSION` | empty (single-tenant bucket) | session partition key for the shared store | set per hosted agent; default keeps one-wrap isolation |
+| `EDEN_FLEET` | empty (no sharing) | read-only cross-agent claims; mutating stays session-scoped | set per hosted fleet; empty keeps Wave 4 isolation |
+| `EDEN_AGENT` | empty (falls back to session) | attribution id on traces/receipts | set per agent; never a tenancy boundary |
+| `EDEN_REGION` | empty | region label on traces/receipts/DC% slice | label only; cache keys stay workspace-scoped |
+| `EDEN_RETAIN_DAYS` | 14 | sweep of un-uploaded `~/.eden/runs` logs (hot tier) | env-tunable; operational ceiling, not a legal hold |
+| `EDEN_WARM_DAYS` | 90 | compacted receipts in `~/.eden/archive/warm` | env-tunable; `eden archive compact` |
+| `EDEN_COLD_MONTHS` | 24 | monthly DC+counts in `~/.eden/archive/cold` | env-tunable; not a legal hold |
+| `EDEN_DIGEST` / config `digest` | off | weekly digest CLI + GET `/v1/digest` | operator opt-in; never default; never emails from the API; fail-open zeros |
+| `EDEN_CACHE_GUARD` | off | reorder volatile Anthropic prefix blocks (timestamps, skill listings) so the cache breakpoint stays on stable text | opt-in; `EDEN_PROMPT_CACHE=0` still wins; retire if upstream prefix bugs are gone |
+| `EDEN_CANARY_PCT` | 10 | fraction of hosted sessions that see a canary-approved tool | env-tunable 0–100; unpartitioned wrap (empty session) is the operator and always sees canary |
+| `EDEN_JIT_MAX` | 4 | max JIT schema injections per episode; unused injections demote to S0 (`none`) | only applies when `EDEN_SURFACE=jit`; default surface stays `all` (Wave 19 soak printed FAIL) |
+| `EDEN_SURFACE` | `all` | schema advertisement policy | Wave 19 remeasure printed FAIL `precision=0.789 n=38`. Wave 21.4 remeasures measurement-only. Default stays `all` until Wave 22.2, which starts only after a soak prints PASS at ≥0.95 |
+| `EDEN_SPECULATE` | on | turn-boundary start of the next compiled **read-only** stretch; mutating never starts | `0` disables within one call; miss discards; fail-open |
+| `EDEN_WATCH_WARM` | on | while the current stretch runs, fill first-wave read-only cache of the next likely compiled tool; mutating never pre-executed | `0` disables within one call; miss discards; fail-open |
+| `EDEN_ISLAND_BATCH` | on | waitable independent island misses go through the provider Message Batches path (billed cents 50% when results return in-band or via retrieve inside the island timeout); public OpenAI/Anthropic hosts skip the POST; pinned/memo never join; lone miss stays sync | `0` restores one sync call per miss; batch errors and stuck `in_progress` fail-open to sync — never a 24h stall |
+| `EDEN_EGRESS_POOL` | on | keep-alive reuse of pin-keyed egress sockets across a stretch | `0` is the Wave-10 `agent:false` path; SSRF pin still applies |
+| `EDEN_WEBHOOK_SECRET` | empty (refuse all drops) | `POST /v1/webhook` / `/v1/hooks/invalidate` cache-key drop | HMAC-only: HMAC-SHA256 of the raw body via `x-eden-webhook-signature` / `x-hub-signature-256` (`sha256=<hex>`); raw header / Bearer / raw `Authorization` no longer accepted unless `EDEN_WEBHOOK_RAW=1`; missing/empty secret 401; wrong or malformed HMAC 403; keys left intact; never pauses live |
+| `EDEN_WEBHOOK_RAW` | off (HMAC-only) | restore `x-eden-webhook` / Bearer as aliases of the HMAC path | **Shipped** hatch: unset/0 is HMAC-only; `1` is the one-release compat hatch; empty secret still 401 |
+| `EDEN_HOOKD` | unset (spawn) | detached hookd from `eden wrap` / control local | `0` = do not spawn; already-healthy is a no-op; doctor names a live orphan |
+| `EDEN_SCHEDULE_CLOCK` | on | wrap process ticks due operator crons every minute | `0` is POST `/v1/schedule/tick` only; does not invent schedule rows; paused still never fires |
+| `EDEN_NET_ALLOW` | empty | piped network binaries (`curl`, `wget`, `nc`, …) receiving a pipe in compiled Bash | empty refuses; comma-separated names are the hatch; `eden doctor` names the list or the empty sentence; never “all hosts” |
+| `EDEN_AUTO_APPROVE` | off | local-dev hatch that ships PASS candidates without a human click | **never a product default.** Unset/0 is Approve required. `1` is a named bypass; doctor prints `!!  approve-gate`; managed installs (`isManagedDeployment()` without `EDEN_DEV=1`) scrub it. Wave 20.3. |
 | failOpen | true | every internal error degrades to raw | never flipped in production installs |
 
 Inventory is grep-verifiable (`process.env.EDEN_*`); a new switch without a row here is a review blocker.
@@ -618,6 +924,7 @@ Context → decision → consequence, for the choices most likely to be relitiga
 | 008 | Shadow punished flakes the recording also contains | Env-flake deopts count unvalidatable, not miss | Requires ≥minN surviving hold-outs; flaky environments certify slower — honestly |
 | 009 | Offline simulation cannot measure island tokens | `assumeProviderUsage` installs manifests explicitly labeled UNCERTIFIED | Uncertified rate is published; flag dies when Arc 1 attribution ships |
 | 010 | Sign tests flagged ±0.1% overheads on quiet machines | Registered materiality band (±1%) for negative controls | Sub-band costs are reported but do not fail runs; threshold never moves post-hoc |
+| 011 | Cross-agent GET dedupe vs session isolation for writes | Fleet scan only for read-only programs when `fleetId` is set; mutating `scan(session)` unchanged; A4 matched-calls reused | Empty `EDEN_FLEET` shares nothing; same-entity writes still once per session |
 
 ---
 

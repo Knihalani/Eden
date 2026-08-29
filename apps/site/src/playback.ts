@@ -19,6 +19,7 @@ import { handleForge } from "./forge";
 import { safeFetch } from "./ssrf";
 import { recordDeopt } from "./db";
 import {
+  cacheHitRateFields,
   joinInflight,
   prefetchCounters,
   readEntry,
@@ -43,6 +44,42 @@ type ToolRef = { id: string; steps: string; name: string; workspace_id?: string 
  */
 const WAVE_MEMO_CAP = 64;
 const waveMemo = new Map<string, DagNode[][]>();
+
+/**
+ * Test-only stream probe. Production never installs one. Timestamps are
+ * `performance.now()` so a fixture can prove wave-N+1 bind/prefetch started
+ * before the last wave-N sibling finished — the overlap the Promise.all
+ * barrier used to hide.
+ */
+export type PlaybackStreamMark = { id: string; t: number };
+export type PlaybackStreamProbe = {
+  stepStart: PlaybackStreamMark[];
+  stepDone: PlaybackStreamMark[];
+  bindPrefetch: PlaybackStreamMark[];
+};
+
+let streamProbe: PlaybackStreamProbe | undefined;
+
+export function installPlaybackStreamProbe(): PlaybackStreamProbe {
+  streamProbe = { stepStart: [], stepDone: [], bindPrefetch: [] };
+  return streamProbe;
+}
+
+export function clearPlaybackStreamProbe(): void {
+  streamProbe = undefined;
+}
+
+/**
+ * Test-only delay injected inside liveLoad (hot path and prefetch share it).
+ * Undefined in production — a missing gate is a no-op, not a hang.
+ */
+export type PlaybackFetchGate = (info: { id: string; url: string }) => Promise<void> | void;
+
+let playbackFetchGate: PlaybackFetchGate | undefined;
+
+export function setPlaybackFetchGate(gate: PlaybackFetchGate | undefined): void {
+  playbackFetchGate = gate;
+}
 
 function wavesFor(stepsJson: string, steps: CompiledStep[]): DagNode[][] {
   const hit = waveMemo.get(stepsJson);
@@ -95,13 +132,14 @@ function resolveBound(
  * pays the request and everyone with the same key rides along.
  */
 function liveLoad(
-  ctx: { db: EdenDb },
+  ctx: { db: EdenDb; workspaceId?: string },
   cacheKey: string,
   publicKey: string | undefined,
   step: CompiledStep,
   url: string,
 ): () => Promise<{ parsed: unknown; ok: boolean; rawBytes: number }> {
   return async (): Promise<{ parsed: unknown; ok: boolean; rawBytes: number }> => {
+    if (playbackFetchGate) await playbackFetchGate({ id: step.id, url });
     const parsedUrl = new URL(url);
     // The forge is an in-process fixture: it never leaves the process, so
     // it is exempt from the egress rules rather than checked against them.
@@ -118,15 +156,18 @@ function liveLoad(
       // durable — the next caller needs it *eventually*, and writeResult is
       // already best-effort by contract (a failed fill is a miss next time).
       // Awaiting it here put one database round trip on the critical path of
-      // every uncached step.
+      // every uncached step. Admission lives inside writeResult (frequency
+      // sketch + mutating refuse); passing method is the hook that keeps a
+      // future caller from caching a POST even if this GET guard moves.
       const etag = res.headers.get("etag") ?? undefined;
-      void writeResult(ctx.db, cacheKey, parsed, RESULT_CACHE_TTL_MS, etag);
+      const writeOpts = { method: step.method || "GET", workspaceId: ctx.workspaceId };
+      void writeResult(ctx.db, cacheKey, parsed, RESULT_CACHE_TTL_MS, etag, writeOpts);
       // Public-host, credential-free responses are byte-identical for every
       // workspace, so they land in the shared public pool too. Anything that
       // carried credentials — or any host not on the allowlist — stays
       // tenant-scoped only.
       if (publicKey && !requestHeaders(url).Authorization && isPublicPoolCandidate(url)) {
-        void writeResult(ctx.db, publicKey, parsed, RESULT_CACHE_TTL_MS, etag);
+        void writeResult(ctx.db, publicKey, parsed, RESULT_CACHE_TTL_MS, etag, writeOpts);
       }
     }
     return { parsed, ok: res.ok, rawBytes: Buffer.byteLength(text, "utf8") };
@@ -167,7 +208,7 @@ async function tryRevalidate(
       headers: { ...requestHeaders(url), "if-none-match": stale.etag },
     });
     if (res.status === 304) {
-      void writeResult(db, key, stale.value, RESULT_CACHE_TTL_MS, stale.etag);
+      void writeResult(db, key, stale.value, RESULT_CACHE_TTL_MS, stale.etag, { method: "GET", force: true });
       return stale.value;
     }
   } catch {
@@ -270,6 +311,7 @@ async function playOne(
   let attempted = 0;
   let ok = 0;
   let cacheHits = 0;
+  let cacheLookups = 0;
   let runnerMs = 0;
   let failed: number | undefined;
   // raw_bytes accounting: bytes actually received from upstream this run,
@@ -281,124 +323,149 @@ async function playOne(
   // Keys already handed to prefetch this run, so two waves can never double-
   // fire the same speculative load.
   const prefetched = new Set<string>();
+  // Step ids whose bind was already kicked this run. Distinct from cache-key
+  // `prefetched`: this set is written synchronously the instant deps land, so
+  // a later sibling cannot launch a second IIFE before the first computes its key.
+  const prefetchKicked = new Set<string>();
 
   /**
-   * Speculative execution of an all-read-only next wave, kicked the moment the
-   * current wave completes. Fire-and-forget by contract: nothing here is ever
-   * awaited on the response path. When prefetch wins the race, the wave's own
-   * execution joins the in-flight single-flight promise — a counted cache hit
-   * with no network wait; when it loses, the wave simply fetches as before.
+   * Speculative bind+load of one next-wave step. Fire-and-forget: never
+   * awaited on the response path. Kicked the moment this step's templates can
+   * resolve (its DAG deps are already in `results`), not when the slowest
+   * sibling of the current wave finishes. Mutating steps are never started
+   * here — they wait for official wave execution. When prefetch wins, the
+   * wave's own execution joins the in-flight single-flight promise.
    */
-  const maybePrefetch = (nextLayer: DagNode[]): void => {
-    if (!nextLayer.every(stepIsReadOnly)) return;
-    for (const step of nextLayer.slice(0, MAX_PREFETCH_PER_RUN)) {
-      void (async () => {
-        try {
-          const bound = resolveBound(step, params, results);
-          const url = resolveTemplate(step.url || "", bound, results);
-          if (!url) return;
-          const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
-          const pubKey = publicResultKey({ toolId: tool.id, step, url, bound });
-          if (prefetched.has(cacheKey)) return;
-          prefetched.add(cacheKey);
-          // Already cached (either pool) from an earlier run or prefetch: nothing to warm.
-          if ((await readEntry(db, cacheKey)) !== undefined) return;
-          if ((await readEntry(db, pubKey)) !== undefined) return;
-          trackPrefetch(() => singleFlight(cacheKey, liveLoad({ db }, cacheKey, pubKey, step, url)));
-        } catch {
-          // Synchronous setup failures count exactly like async ones:
-          // swallowed, tallied, invisible to the run.
-          prefetchCounters.errors++;
-        }
-      })();
-    }
+  const maybePrefetchStep = (step: DagNode): void => {
+    if (!stepIsReadOnly(step)) return;
+    if (!step.deps.every((d) => Object.prototype.hasOwnProperty.call(results, d))) return;
+    if (prefetchKicked.has(step.id)) return;
+    prefetchKicked.add(step.id);
+    // Bind timestamp is taken here, on the completing sibling's stack, before
+    // any cache await — that is the overlap the barrier used to hide.
+    streamProbe?.bindPrefetch.push({ id: step.id, t: performance.now() });
+    void (async () => {
+      try {
+        const bound = resolveBound(step, params, results);
+        const url = resolveTemplate(step.url || "", bound, results);
+        if (!url) return;
+        const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
+        const pubKey = publicResultKey({ toolId: tool.id, step, url, bound });
+        if (prefetched.has(cacheKey)) return;
+        prefetched.add(cacheKey);
+        // Already cached (either pool) from an earlier run or prefetch: nothing to warm.
+        if ((await readEntry(db, cacheKey)) !== undefined) return;
+        if ((await readEntry(db, pubKey)) !== undefined) return;
+        trackPrefetch(() => singleFlight(cacheKey, liveLoad({ db, workspaceId }, cacheKey, pubKey, step, url)));
+      } catch {
+        // Synchronous setup failures count exactly like async ones:
+        // swallowed, tallied, invisible to the run.
+        prefetchCounters.errors++;
+      }
+    })();
+  };
+
+  const prefetchReadyFrom = (nextLayer: DagNode[]): void => {
+    for (const step of nextLayer.slice(0, MAX_PREFETCH_PER_RUN)) maybePrefetchStep(step);
   };
 
   for (let wi = 0; wi < waves.length; wi++) {
     const layer = waves[wi]!;
+    const nextLayer = wi + 1 < waves.length ? waves[wi + 1]! : undefined;
     const layerOut = await Promise.all(
       layer.map(async (step): Promise<StepOutcome> => {
+        streamProbe?.stepStart.push({ id: step.id, t: performance.now() });
         attempted++;
-        if (step.kind === "runner") {
-          runnerMs += 1;
-          return { id: step.id, value: { skipped: "runner_unbound", name: step.name }, fail: true };
-        }
-        const bound = resolveBound(step, params, results);
-        const url = resolveTemplate(step.url || "", bound, results);
-        if (!url) return { id: step.id, value: { error: "no_url" }, fail: true };
-        // Dry-run (G9): mutating steps report what they WOULD call and touch
-        // nothing. Reads still execute, so the rehearsal exercises the real
-        // data flow — templates, binds, cache — without performing writes.
-        if (opts.dryRun && !stepIsReadOnly(step)) {
-          return { id: step.id, value: { skipped: "dry_run", method: step.method || "GET", url }, fail: false };
-        }
-        const isGet = (step.method || "GET") === "GET";
-        const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
-        const pubKey = isGet
-          ? publicResultKey({ toolId: tool.id, step, url, bound })
-          : undefined;
-        if (isGet) {
-          // A prefetch already fetching this exact resource: ride along rather
-          // than duplicate the request. A rejected speculative load surfaces
-          // here as undefined — a miss we fall through from.
-          const joined = await joinInflight<unknown>(cacheKey);
-          if (joined !== undefined) {
-            cacheHits++;
-            hitValues.push(joined);
-            return { id: step.id, value: joined, fail: false };
+        const run = async (): Promise<StepOutcome> => {
+          if (step.kind === "runner") {
+            runnerMs += 1;
+            return { id: step.id, value: { skipped: "runner_unbound", name: step.name }, fail: true };
           }
-          // Tenant pool first (strict isolation), then the shared public
-          // pool (credential-free GETs only ever land there).
-          const tenantHit = await readEntry(db, cacheKey);
-          if (tenantHit !== undefined) {
-            cacheHits++;
-            hitValues.push(tenantHit.value);
-            return { id: step.id, value: tenantHit.value, fail: false };
+          const bound = resolveBound(step, params, results);
+          const url = resolveTemplate(step.url || "", bound, results);
+          if (!url) return { id: step.id, value: { error: "no_url" }, fail: true };
+          // Dry-run (G9): mutating steps report what they WOULD call and touch
+          // nothing. Reads still execute, so the rehearsal exercises the real
+          // data flow — templates, binds, cache — without performing writes.
+          if (opts.dryRun && !stepIsReadOnly(step)) {
+            return { id: step.id, value: { skipped: "dry_run", method: step.method || "GET", url }, fail: false };
           }
-          const pubHit = pubKey !== undefined ? await readEntry(db, pubKey) : undefined;
-          if (pubHit !== undefined) {
-            cacheHits++;
-            hitValues.push(pubHit.value);
-            return { id: step.id, value: pubHit.value, fail: false };
-          }
-          // Expired-but-tagged entries: one conditional round trip either
-          // proves them current (~free hit) or we fall through to a full fetch.
-          const revalidated = await tryRevalidate(db, cacheKey, url).catch(() => undefined);
-          if (revalidated !== undefined) {
-            cacheHits++;
-            hitValues.push(revalidated);
-            return { id: step.id, value: revalidated, fail: false };
-          }
-          if (pubKey !== undefined) {
-            const revalidatedPub = await tryRevalidate(db, pubKey, url).catch(() => undefined);
-            if (revalidatedPub !== undefined) {
+          const isGet = (step.method || "GET") === "GET";
+          const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
+          const pubKey = isGet
+            ? publicResultKey({ toolId: tool.id, step, url, bound })
+            : undefined;
+          if (isGet) {
+            // One logical lookup per GET step (join / tenant / public / revalidate
+            // are probes of the same key, not four lookups).
+            cacheLookups++;
+            // A prefetch already fetching this exact resource: ride along rather
+            // than duplicate the request. A rejected speculative load surfaces
+            // here as undefined — a miss we fall through from.
+            const joined = await joinInflight<unknown>(cacheKey);
+            if (joined !== undefined) {
               cacheHits++;
-              hitValues.push(revalidatedPub);
-              return { id: step.id, value: revalidatedPub, fail: false };
+              hitValues.push(joined);
+              return { id: step.id, value: joined, fail: false };
+            }
+            // Tenant pool first (strict isolation), then the shared public
+            // pool (credential-free GETs only ever land there).
+            const tenantHit = await readEntry(db, cacheKey);
+            if (tenantHit !== undefined) {
+              cacheHits++;
+              hitValues.push(tenantHit.value);
+              return { id: step.id, value: tenantHit.value, fail: false };
+            }
+            const pubHit = pubKey !== undefined ? await readEntry(db, pubKey) : undefined;
+            if (pubHit !== undefined) {
+              cacheHits++;
+              hitValues.push(pubHit.value);
+              return { id: step.id, value: pubHit.value, fail: false };
+            }
+            // Expired-but-tagged entries: one conditional round trip either
+            // proves them current (~free hit) or we fall through to a full fetch.
+            const revalidated = await tryRevalidate(db, cacheKey, url).catch(() => undefined);
+            if (revalidated !== undefined) {
+              cacheHits++;
+              hitValues.push(revalidated);
+              return { id: step.id, value: revalidated, fail: false };
+            }
+            if (pubKey !== undefined) {
+              const revalidatedPub = await tryRevalidate(db, pubKey, url).catch(() => undefined);
+              if (revalidatedPub !== undefined) {
+                cacheHits++;
+                hitValues.push(revalidatedPub);
+                return { id: step.id, value: revalidatedPub, fail: false };
+              }
             }
           }
-        }
-        let parsed: unknown;
-        let stepOk = false;
-        let stepRawBytes = 0;
-        try {
-          const load = liveLoad({ db }, cacheKey, pubKey, step, url);
-          // GETs dedupe through singleFlight so prefetch and hot path share one
-          // request; mutating methods must each execute, so they never do.
-          const out = isGet ? await singleFlight(cacheKey, load) : await load();
-          parsed = out.parsed;
-          stepOk = out.ok;
-          stepRawBytes = out.rawBytes;
-        } catch (err) {
-          return { id: step.id, value: { error: String(err) }, fail: true };
-        }
-        liveBytes += stepRawBytes;
-        return { id: step.id, value: parsed, fail: !stepOk };
+          let parsed: unknown;
+          let stepOk = false;
+          let stepRawBytes = 0;
+          try {
+            const load = liveLoad({ db, workspaceId }, cacheKey, pubKey, step, url);
+            // GETs dedupe through singleFlight so prefetch and hot path share one
+            // request; mutating methods must each execute, so they never do.
+            const out = isGet ? await singleFlight(cacheKey, load) : await load();
+            parsed = out.parsed;
+            stepOk = out.ok;
+            stepRawBytes = out.rawBytes;
+          } catch (err) {
+            return { id: step.id, value: { error: String(err) }, fail: true };
+          }
+          liveBytes += stepRawBytes;
+          return { id: step.id, value: parsed, fail: !stepOk };
+        };
+        const outcome = await run();
+        // Write as this member lands, not after the wave barrier: a next-wave
+        // template that only needs this result can bind while slower siblings
+        // are still in flight.
+        results[outcome.id] = outcome.value;
+        streamProbe?.stepDone.push({ id: outcome.id, t: performance.now() });
+        if (!outcome.fail && nextLayer) prefetchReadyFrom(nextLayer);
+        return outcome;
       }),
     );
-    for (const r of layerOut) {
-      results[r.id] = r.value;
-    }
     for (const r of layerOut) {
       if (r.fail) {
         failed = attempted;
@@ -406,7 +473,10 @@ async function playOne(
       }
       ok++;
     }
-    if (!failed && wi + 1 < waves.length) maybePrefetch(waves[wi + 1]!);
+    // Safety net: any next-wave read whose deps all landed, in case a kick
+    // raced a sibling write. Official execution of this next layer still
+    // waits for the wave (and is skipped on failure).
+    if (!failed && nextLayer) prefetchReadyFrom(nextLayer);
     if (failed) break;
   }
 
@@ -425,6 +495,7 @@ async function playOne(
     densified_bytes: packed.densified_bytes,
     billable_ms: billableMs({ server_ms, steps_attempted: attempted, densified_bytes: packed.densified_bytes }),
     cache_hits: cacheHits,
+    ...cacheHitRateFields(cacheHits, cacheLookups),
     result: packed.densified,
     facts: facing.facts,
     failed_step: failed,
@@ -552,6 +623,10 @@ async function playOne0(
     densified_bytes: receipts.reduce((a, r) => a + r.densified_bytes, 0),
     billable_ms: receipts.reduce((a, r) => a + r.billable_ms, 0),
     cache_hits: receipts.reduce((a, r) => a + r.cache_hits, 0),
+    ...cacheHitRateFields(
+      receipts.reduce((a, r) => a + r.cache_hits, 0),
+      receipts.reduce((a, r) => a + (r.cache_lookups ?? 0), 0),
+    ),
     result: table,
     facts: { rows: receipts.map((r) => r.facts) },
     table,
@@ -564,11 +639,11 @@ const warming = new Map<string, number>();
 /**
  * Ready-node execution mode (EDEN_SCHED=ready).
  *
- * The default wave executor runs Kahn layers through Promise.all, so every
- * wave waits for its slowest member and the next-wave prefetch usually cannot
- * fire (its templates reference same-wave results). This mode schedules any
- * node the moment its DAG dependencies have resolved — same edges, same
- * safety, no barriers:
+ * The default wave executor still groups Kahn layers, but each member writes
+ * its result as it lands and bind/prefetches read-only next-wave steps whose
+ * templates already resolve — later-wave bind no longer waits for the slowest
+ * sibling. This mode goes further: it schedules any node the moment its DAG
+ * dependencies have resolved — same edges, same safety, no wave wait at all:
  *
  *   - data deps and the non-commuting sequential chain are respected exactly
  *     as buildDag encodes them, so two writes can never overlap;
@@ -618,6 +693,7 @@ export async function playOneReady(
   let attempted = 0;
   let okCount = 0;
   let cacheHits = 0;
+  let cacheLookups = 0;
   let runnerMs = 0;
   let liveBytes = 0;
   const hitValues: unknown[] = [];
@@ -652,6 +728,7 @@ export async function playOneReady(
       const cacheKey = resultCacheKey({ workspaceId, toolId: tool.id, step, url, bound });
       const pubKey = isGet ? publicResultKey({ toolId: tool.id, step, url, bound }) : undefined;
       if (isGet) {
+        cacheLookups++;
         const joined = await joinInflight<unknown>(cacheKey);
         if (joined !== undefined) {
           cacheHits++;
@@ -689,7 +766,7 @@ export async function playOneReady(
       let stepOk = false;
       let stepRawBytes = 0;
       try {
-        const load = liveLoad({ db }, cacheKey, pubKey, step, url);
+        const load = liveLoad({ db, workspaceId }, cacheKey, pubKey, step, url);
         const out = isGet ? await singleFlight(cacheKey, load) : await load();
         parsed = out.parsed;
         stepOk = out.ok;
@@ -767,6 +844,7 @@ export async function playOneReady(
     densified_bytes: packed.densified_bytes,
     billable_ms: billableMs({ server_ms, steps_attempted: attempted, densified_bytes: packed.densified_bytes }),
     cache_hits: cacheHits,
+    ...cacheHitRateFields(cacheHits, cacheLookups),
     result: packed.densified,
     facts: facing.facts,
     ...(failedOutcome !== undefined ? { failed_step: attempted } : {}),

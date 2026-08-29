@@ -65,7 +65,7 @@ async function main() {
     for (let i = 0; i < nWitness; i++) {
       await s.stretch(worldName, pool[i % pool.length]!, blockSeed(`soak-${round}`, i));
     }
-    const r = await s.goLive(worldName, { compile: 9, holdout: 3, sandbox: factory, maxGram: 26, assumeProviderUsage: true });
+    const r = await s.goLive(worldName, { compile: 9, holdout: 3, sandbox: factory, maxGram: 26 });
     goLives++;
     if (r.program) goLivePass++;
     const g = goLiveByWorld.get(worldName) ?? { pass: 0, total: 0 };

@@ -868,6 +868,7 @@ describe("TicketShip golden", () => {
     );
     expect(approved.status).toBe(200);
     expect(store.tool(program.id)?.state).toBe("live");
+    expect(store.tool(program.id)?.rollout).toBe("canary");
   });
 
   test("name-only edit ships without a registry", async () => {

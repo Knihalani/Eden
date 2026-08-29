@@ -1,5 +1,5 @@
 import type { Binding, BranchStep, StretchProgram, Step, StretchTrace } from "@eden/ir";
-import { canonicalize } from "@eden/ir";
+import { isMutating } from "@eden/ir";
 import { effectiveEventName } from "./mine";
 
 /**
@@ -20,6 +20,14 @@ import { effectiveEventName } from "./mine";
  *      free-form predicates.
  */
 
+/** Why `assembleForkProgram` returned null — compile.ts stamps this code. */
+export interface ForkRefuse {
+  code: "underdetermined_write" | "unbound_branch";
+  reason: string;
+  hint: string;
+  slot?: string;
+}
+
 export interface ForkCandidate {
   /** Shared event-name prefix before the divergence point. */
   prefixNames: string[];
@@ -33,6 +41,8 @@ export interface ForkCandidate {
   field: string;
   /** Value that selects the THEN arm. */
   thenValue: string;
+  /** Set when assembleForkProgram returns null, so the fork pass can name the class. */
+  assembleRefuse?: ForkRefuse;
 }
 
 /** Tokenize a command into whitespace-separated words for shape comparison. */
@@ -145,6 +155,29 @@ export function findForkedGroups(
   return candidates;
 }
 
+function unboundBranchRefuse(slot?: string): ForkRefuse {
+  return {
+    code: "unbound_branch",
+    reason: "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
+    hint: "Bind every branch arm from recorded witnesses. Eden will not guess.",
+    slot,
+  };
+}
+
+function underdeterminedWriteRefuse(tool: string, key?: string): ForkRefuse {
+  const slot = key ? `${tool}.${key}` : tool;
+  return {
+    code: "underdetermined_write",
+    reason: key
+      ? `${tool}.${key}: under-determined mutating argument`
+      : `${tool} mutating call has no bound arguments`,
+    hint: key
+      ? `${tool}.${key} could not be bound from input or a prior step. Name the path — Eden will not guess.`
+      : `${tool} is a write with no bound arguments. Pass IDs or payloads from input or a prior step.`,
+    slot,
+  };
+}
+
 /**
  * Assemble an executable branched program from a fork candidate.
  *
@@ -153,7 +186,8 @@ export function findForkedGroups(
  * predicate is the synthesized guard (`field == "thenValue"`).
  *
  * Returns null when any step's arguments cannot be bound — honesty over
- * guessing.
+ * guessing. A mutating arm that cannot bind sets `candidate.assembleRefuse`
+ * to `underdetermined_write` so compile.ts stamps the same code as linear.
  */
 export function assembleForkProgram(
   candidate: ForkCandidate,
@@ -161,13 +195,18 @@ export function assembleForkProgram(
   name: string,
 ): StretchProgram | null {
   const { prefixNames, thenSuffix, thenTraces, elseSuffix, elseTraces, field, thenValue } = candidate;
+  candidate.assembleRefuse = undefined;
+  const fail = (refuse: ForkRefuse): null => {
+    candidate.assembleRefuse = refuse;
+    return null;
+  };
   // Predicate safety: the expr is interpolated into the assert grammar, so a
   // field that is not a plain identifier path or a value carrying quotes or
   // escapes would produce a program that cannot tokenize (or worse, tokenizes
   // into something never witnessed). Refuse at compile time — honesty over
   // guessing.
-  if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(field)) return null;
-  if (!/^[^"\\\r\n]*$/.test(thenValue)) return null;
+  if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(field)) return fail(unboundBranchRefuse(field));
+  if (!/^[^"\\\r\n]*$/.test(thenValue)) return fail(unboundBranchRefuse(field));
   const used = new Set<string>();
   const steps: Step[] = [];
   const inputPaths = new Set<string>();
@@ -178,7 +217,7 @@ export function assembleForkProgram(
     traces: StretchTrace[],
     startOffset: number,
     isShared: boolean,
-  ): { ids: string[]; ok: boolean } => {
+  ): { ids: string[]; ok: boolean; refuse?: ForkRefuse } => {
     const ids: string[] = [];
     for (let pos = 0; pos < suffixNames.length; pos++) {
       const eventName = suffixNames[pos]!;
@@ -187,7 +226,9 @@ export function assembleForkProgram(
       const alignedEvents = traces
         .map((t) => t.events[evIdx])
         .filter((e): e is NonNullable<typeof e> => !!e && e.ok);
-      if (!alignedEvents.length || alignedEvents.length < traces.length) return { ids, ok: false };
+      if (!alignedEvents.length || alignedEvents.length < traces.length) {
+        return { ids, ok: false, refuse: unboundBranchRefuse(eventName) };
+      }
 
       const realTool = alignedEvents[0]!.name;
       const sid = `${eventName.replace(/[^A-Za-z0-9]/g, "_")}_${used.size}`;
@@ -200,7 +241,7 @@ export function assembleForkProgram(
         for (const k of Object.keys(ev.args ?? {})) argKeysSet.add(k);
       }
 
-      let allBound = true;
+      let failKey: string | undefined;
       for (const key of argKeysSet) {
         const vals = alignedEvents.map((ev) => (ev.args as Record<string, unknown>)?.[key]);
         // Check if constant → literal.
@@ -229,9 +270,21 @@ export function assembleForkProgram(
             break;
           }
         }
-        if (!bound) { allBound = false; break; }
+        if (!bound) {
+          failKey = key;
+          break;
+        }
       }
-      if (!allBound) return { ids, ok: false };
+      if (failKey !== undefined) {
+        return {
+          ids,
+          ok: false,
+          refuse: isMutating(realTool) ? underdeterminedWriteRefuse(realTool, failKey) : unboundBranchRefuse(`${realTool}.${failKey}`),
+        };
+      }
+      if (isMutating(realTool) && !Object.keys(args).length) {
+        return { ids, ok: false, refuse: underdeterminedWriteRefuse(realTool) };
+      }
       steps.push({ id: sid, kind: "tool", tool: realTool, args });
       ids.push(sid);
     }
@@ -241,17 +294,17 @@ export function assembleForkProgram(
   // Build shared prefix steps (from ALL traces).
   const allTraces = [...thenTraces, ...elseTraces];
   const prefixResult = buildArmOrPrefix(prefixNames, allTraces, 0, true);
-  if (!prefixResult.ok && prefixNames.length > 0) return null;
+  if (!prefixResult.ok && prefixNames.length > 0) return fail(prefixResult.refuse ?? unboundBranchRefuse());
 
   // Build then-arm steps.
   const thenStart = cp;
   const thenResult = buildArmOrPrefix(thenSuffix, thenTraces, thenStart, false);
-  if (!thenResult.ok || !thenResult.ids.length) return null;
+  if (!thenResult.ok || !thenResult.ids.length) return fail(thenResult.refuse ?? unboundBranchRefuse());
 
   // Build else-arm steps.
   const elseStart = cp;
   const elseResult = buildArmOrPrefix(elseSuffix, elseTraces, elseStart, false);
-  if (!elseResult.ok || !elseResult.ids.length) return null;
+  if (!elseResult.ok || !elseResult.ids.length) return fail(elseResult.refuse ?? unboundBranchRefuse());
 
   // Create BranchStep.
   const branchId = `branch_${field}`;

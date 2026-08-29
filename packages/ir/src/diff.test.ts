@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { diffPrograms, withVersion } from "../src/index";
+import { diffPrograms, formatDiffCard, withVersion } from "../src/index";
 import type { Binding, StretchProgram } from "../src/index";
 
 const program = (over: Partial<StretchProgram> = {}): StretchProgram =>
@@ -178,5 +178,30 @@ describe("diffPrograms", () => {
     expect(d.steps_removed).toEqual([{ id: "a" }]);
     expect(d.steps_added).toEqual([{ id: "a", kind: "tool", tool: "x" }]);
     expect(d.bindings_changed).toEqual([]);
+  });
+
+  test("formatDiffCard is one screen: name, steps, vs live, witnesses", () => {
+    const first = formatDiffCard(null, { name: "desk_close", sequence: ["search", "close"], witnesses: 3, first: true });
+    expect(first).toContain("desk_close");
+    expect(first).toContain("search → close");
+    expect(first).toContain("first version");
+    expect(first).toContain("witnesses: 3");
+    expect(first).toContain("eden approve desk_close --yes");
+    const withId = formatDiffCard(null, {
+      name: "desk_close",
+      id: "c1",
+      sequence: ["search", "close"],
+      witnesses: 3,
+      first: true,
+    });
+    expect(withId).toContain("desk_close");
+    expect(withId).toContain("eden approve c1 --yes");
+    expect(withId).not.toContain("eden approve desk_close --yes");
+    const d = diffPrograms(
+      program(),
+      program({ steps: [{ id: "a", kind: "tool", tool: "x", args: { id: { kind: "literal", value: "T" } } }] }),
+    );
+    const card = formatDiffCard(d, { name: "t", sequence: ["x"] });
+    expect(card).toMatch(/literal baked in/);
   });
 });

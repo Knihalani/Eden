@@ -47,7 +47,6 @@ async function prelive(
     holdout: 3,
     sandbox: factory,
     maxGram: 26,
-    assumeProviderUsage: true,
   });
   if (r.program == null) notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
   else notes.push(`prelive PASS: ${r.program.sequence.join("→")}`);
@@ -96,7 +95,6 @@ async function main() {
             holdout: 3,
             sandbox: createSlowTool,
             maxGram: 16,
-            assumeProviderUsage: true,
           });
           if (r.program == null) notes.push(`goLive ${r.verdict}: ${r.reasons.join("; ") || "no candidate"}`);
           else notes.push(`goLive PASS: ${r.program.sequence.join("→")}`);
@@ -143,10 +141,9 @@ async function main() {
           holdout: 3,
           sandbox: createLongSession,
           maxGram: 16,
-          assumeProviderUsage: true,
         });
         if (r.program == null) notes.push(`goLive ${r.verdict}: ${r.reasons.join("; ") || "no candidate"}`);
-        else notes.push(`goLive PASS (certified path w/ assumeProviderUsage): ${r.program.sequence.join("→")}`);
+        else notes.push(`goLive PASS: ${r.program.sequence.join("→")}`);
       }
       for (let i = 0; i < nLive; i++) {
         await s.stretch("long-session", pool[i % pool.length]!, blockSeed(`long-l-${repeat}-${i}`, 200 + i));

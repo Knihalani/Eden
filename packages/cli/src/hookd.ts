@@ -1,5 +1,98 @@
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { respondToHook, type HookIn } from "./hook";
-import { withFileLockAsync } from "./home";
+import { edenHome, ensureHome, withFileLockAsync } from "./home";
+
+export function hookdPidPath(): string {
+  return join(edenHome(), "hookd.pid");
+}
+
+export function writeHookdPid(pid = process.pid): void {
+  ensureHome();
+  writeFileSync(hookdPidPath(), `${pid}\n`);
+}
+
+export function readHookdPid(): number | null {
+  try {
+    const n = Number(readFileSync(hookdPidPath(), "utf8").trim());
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hookdPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearHookdPid(): void {
+  try {
+    if (existsSync(hookdPidPath())) unlinkSync(hookdPidPath());
+  } catch {
+    /* best-effort */
+  }
+}
+
+export function parseHookdHealthPid(j: unknown): number | null {
+  if (!j || typeof j !== "object") return null;
+  const n = Number((j as { pid?: unknown }).pid);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** GET loopback `/health`. Never throws. `ok` means this is eden-hookd. */
+export async function fetchHookdHealth(timeoutMs = 200): Promise<{ ok: boolean; pid: number | null }> {
+  const port = process.env.EDEN_HOOKD_PORT || "8794";
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!r.ok) return { ok: false, pid: null };
+    const j = (await r.json()) as { service?: string; pid?: unknown };
+    if (j.service !== "eden-hookd") return { ok: false, pid: null };
+    return { ok: true, pid: parseHookdHealthPid(j) };
+  } catch {
+    return { ok: false, pid: null };
+  }
+}
+
+/**
+ * SIGTERM the process that answers `/health`, even when `hookd.pid` is stale.
+ * No listener and no pid file: quiet 0, "not running".
+ */
+export async function stopHookd(): Promise<number> {
+  const recorded = readHookdPid();
+  const live = (await fetchHookdHealth(400)).pid;
+  const target = live ?? recorded;
+  if (!target) {
+    console.error("eden hookd: not running");
+    return 0;
+  }
+  if (!live && recorded && !hookdPidAlive(recorded)) {
+    clearHookdPid();
+    console.error("eden hookd: not running");
+    return 0;
+  }
+  try {
+    process.kill(target, "SIGTERM");
+  } catch {
+    /* already gone */
+  }
+  clearHookdPid();
+  if (live) {
+    const extra = recorded && recorded !== live ? `; pid file was ${recorded}` : "";
+    console.error(`eden hookd: stopped ${live} (live /health pid${extra})`);
+    for (let i = 0; i < 40; i++) {
+      if (!(await hookdHealthy(80))) break;
+      await Bun.sleep(25);
+    }
+  } else {
+    console.error(`eden hookd: stopped ${recorded} (pid file)`);
+  }
+  return 0;
+}
 
 export function hookdTimeoutMs(): number {
   const n = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
@@ -48,7 +141,7 @@ function hostIsLoopback(req: Request): boolean {
 export async function handleHookd(req: Request): Promise<Response> {
   const path = new URL(req.url).pathname;
   if (req.method === "GET" && path === "/health") {
-    return Response.json({ ok: true, service: "eden-hookd" });
+    return Response.json({ ok: true, service: "eden-hookd", pid: process.pid });
   }
   if (req.method !== "POST") {
     return Response.json({});
@@ -67,12 +160,11 @@ export async function handleHookd(req: Request): Promise<Response> {
   } catch {
     return Response.json({});
   }
-  // Serialized, not raced-then-abandoned: the old Promise.race returned to the
-  // client on timeout while the losing respondToHook KEPT RUNNING holding the
-  // session-file lock, so every hook during that window contended for up to
-  // LOCK_WAIT_MS and then failed open — recording silently lost under load.
-  // A queue bounds total latency (timeout per request) and makes lock
-  // contention structurally impossible.
+  // Serialized: the HTTP timeout does not abandon `respondToHook`. The old
+  // Promise.race lived *inside* the queue job, so a timeout resolved the
+  // client while work kept running and `tail` advanced — concurrent handlers
+  // and lock contention, the bug the queue was meant to kill. Timeout now
+  // races only the returned promise; `tail` waits for the work itself.
   const done = enqueue(input);
   try {
     const out = await done;
@@ -85,40 +177,103 @@ export async function handleHookd(req: Request): Promise<Response> {
   }
 }
 
-/** Serializes /hook handling; each entry is bounded by hookdTimeoutMs. */
+/** Serializes /hook handling. The client is bounded by hookdTimeoutMs; work is not. */
 let tail: Promise<unknown> = Promise.resolve();
 function enqueue(input: HookIn): Promise<Record<string, unknown>> {
-  const job = tail.then(
-    () => Promise.race([
-      Promise.resolve(respondToHook(input, withFileLockAsync)),
-      new Promise<Record<string, never>>((_, reject) => {
-        const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
-        t.unref?.();
-      }),
-    ]),
-    // A previous failure must not poison the chain.
-    () =>
-      Promise.race([
-        Promise.resolve(respondToHook(input, withFileLockAsync)),
-        new Promise<Record<string, never>>((_, reject) => {
-          const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
-          t.unref?.();
-        }),
-      ]),
+  const work = tail.then(
+    () => Promise.resolve(respondToHook(input, withFileLockAsync)),
+    () => Promise.resolve(respondToHook(input, withFileLockAsync)),
   );
-  // Keep the chain alive regardless of this job's outcome.
-  tail = job.catch(() => undefined);
-  return job;
+  tail = work.catch(() => undefined);
+  return Promise.race([
+    work,
+    new Promise<Record<string, never>>((_, reject) => {
+      const t = setTimeout(() => reject(new Error("hookd timeout")), hookdTimeoutMs());
+      t.unref?.();
+    }),
+  ]);
 }
 
-export async function runHookd(): Promise<void> {
+export async function hookdHealthy(timeoutMs = 200): Promise<boolean> {
+  return (await fetchHookdHealth(timeoutMs)).ok;
+}
+
+/** Poll loopback `/health` until hookd answers, or give up. Never throws. */
+export async function waitForHookdHealth(attempts = 15): Promise<boolean> {
+  for (let i = 0; i < attempts; i++) {
+    if (await hookdHealthy()) return true;
+    if (i + 1 < attempts) await Bun.sleep(50);
+  }
+  return false;
+}
+
+/**
+ * Detached hookd. No-op if already healthy or EDEN_HOOKD=0.
+ * Returns true only when this call spawned a child that answered /health.
+ * Never throws.
+ */
+export async function startHookdBackground(): Promise<boolean> {
+  if (process.env.EDEN_HOOKD === "0") return false;
+  try {
+    if (await hookdHealthy()) return false;
+    ensureHome();
+    return await withFileLockAsync(`${hookdPidPath()}.lock`, async () => {
+      if (await hookdHealthy()) return false;
+      const existing = readHookdPid();
+      if (existing && !hookdPidAlive(existing)) clearHookdPid();
+      const child = Bun.spawn(hookdSpawnCmd(), {
+        stdout: "ignore",
+        stderr: "ignore",
+        stdin: "ignore",
+        env: { ...process.env },
+      });
+      const spawned = child.pid;
+      if (spawned) writeHookdPid(spawned);
+      child.unref();
+      const ok = await waitForHookdHealth();
+      if (!ok) {
+        if (spawned && readHookdPid() === spawned) clearHookdPid();
+        try {
+          if (spawned) process.kill(spawned, "SIGTERM");
+        } catch {
+          /* already gone */
+        }
+        return false;
+      }
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer this module so `local.ts` (not `cli.ts`) can start hookd without a package cycle. */
+function hookdSpawnCmd(): string[] {
+  const sibling = join(import.meta.dir, "hookd.ts");
+  if (existsSync(sibling)) return [process.execPath, sibling];
+  const argv1 = process.argv[1];
+  if (argv1) return [process.execPath, argv1, "hookd"];
+  return [process.execPath, join(import.meta.dir, "cli.ts"), "hookd"];
+}
+
+export async function runHookd(args: string[] = []): Promise<void> {
+  if (args.includes("--stop")) {
+    process.exit(await stopHookd());
+  }
   const port = Number(process.env.EDEN_HOOKD_PORT || 8794);
   const hostname = process.env.EDEN_HOOKD_HOST || "127.0.0.1";
-  const server = Bun.serve({
-    port,
-    hostname,
-    fetch: handleHookd,
-  });
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = Bun.serve({
+      port,
+      hostname,
+      fetch: handleHookd,
+    });
+  } catch (err) {
+    process.stderr.write(`eden hookd: ${(err as Error)?.message ?? String(err)}\n`);
+    process.exit(1);
+  }
+  writeHookdPid();
   console.error(`eden hookd ${server.url}`);
   // Graceful shutdown: stop accepting, let the in-flight queue drain (each
   // entry bounded by its own timeout), then exit 0. SIGKILL remains the
@@ -128,6 +283,7 @@ export async function runHookd(): Promise<void> {
     if (closing) return;
     closing = true;
     server.stop(false); // stop accepting new connections
+    clearHookdPid();
     void tail.then(() => process.exit(0));
     // If draining somehow wedges, the unref'd timers below still let the
     // process die naturally rather than hanging forever.
@@ -138,4 +294,4 @@ export async function runHookd(): Promise<void> {
   await new Promise(() => undefined);
 }
 
-if (import.meta.main) await runHookd();
+if (import.meta.main) await runHookd(process.argv.slice(2));

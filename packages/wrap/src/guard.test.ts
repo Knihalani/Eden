@@ -137,6 +137,7 @@ describe("guard budget branch", () => {
     const run = emptyRun();
     run.firstWarningAt = 1;
     run.t0 = performance.now() - ms;
+    run.events.push({ name: "get_issue", args: {}, ok: true });
     return run;
   }
 
@@ -154,8 +155,8 @@ describe("guard budget branch", () => {
       manifest: manifestOf("small_bundle"),
     });
     const d = decideGuard({
-      name: "anything",
-      run: agedRun(30_000),
+      name: "list_comments",
+      run: agedRun(10_000),
       live: [tooBig, fits],
       opts: { timeoutMs: 60_000 },
       now: performance.now(),
@@ -171,8 +172,8 @@ describe("guard budget branch", () => {
       manifest: manifestOf("big_bundle"),
     });
     const d = decideGuard({
-      name: "anything",
-      run: agedRun(30_000),
+      name: "list_comments",
+      run: agedRun(10_000),
       live: [tooBig],
       opts: { timeoutMs: 60_000 },
       now: performance.now(),
@@ -190,6 +191,50 @@ describe("guard budget branch", () => {
       manifest: manifestOf("big_bundle"),
     });
     expect(decideGuard({ name: "x", run, live: [big], opts: {}, now: performance.now() })).toBeNull();
+  });
+
+  test("unwarned matching spent (llmCalls) still budget-halts", () => {
+    const run = emptyRun();
+    run.t0 = 0;
+    run.llmCalls = 2;
+    run.events.push({ name: "get_issue", args: {}, ok: true });
+    expect(run.firstWarningAt).toBeUndefined();
+    const on = tinyProgram({
+      id: "p_on",
+      name: "on_bundle",
+      budget: { ms: 80_000, llmCalls: 2, cents: 8 },
+      manifest: manifestOf("on_bundle"),
+    });
+    const d = decideGuard({
+      name: "list_comments",
+      run,
+      live: [on],
+      opts: { timeoutMs: 60_000 },
+      now: 1_000,
+    });
+    expect(d).toMatchObject({ action: "halt", reason: "budget", detail: "predicted llmCalls=2 actual=2" });
+  });
+
+  test("unwarned matching timeout-pressure still requires a warning", () => {
+    const run = emptyRun();
+    run.t0 = 0;
+    run.events.push({ name: "get_issue", args: {}, ok: true });
+    expect(run.firstWarningAt).toBeUndefined();
+    const tooBig = tinyProgram({
+      id: "p_big",
+      name: "big_bundle",
+      budget: { ms: 120_000, llmCalls: 8, cents: 8 },
+      manifest: manifestOf("big_bundle"),
+    });
+    expect(
+      decideGuard({
+        name: "list_comments",
+        run,
+        live: [tooBig],
+        opts: { timeoutMs: 60_000 },
+        now: 10_000,
+      }),
+    ).toBeNull();
   });
 });
 

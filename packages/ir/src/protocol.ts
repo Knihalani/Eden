@@ -26,6 +26,9 @@ export type ProtocolGate =
   | { ok: true }
   | { ok: false; status: 426; reason: string };
 
+/** Optional response header when a known-older integer client is still allowed. */
+export const PROTOCOL_SKEW_HEADER = "x-eden-protocol-skew";
+
 /**
  * Server-side gate on an incoming protocol version.
  *
@@ -33,6 +36,11 @@ export type ProtocolGate =
  * Mismatched → refuse with 426 and a message that names both versions, so a
  * skewed CLI tells its user exactly what happened instead of failing obscurely
  * downstream.
+ *
+ * Unknown *future* integers stay 426. Absent / malformed still allow. A
+ * known-older integer (1 ≤ n < EDEN_PROTOCOL_VERSION) currently also 426s
+ * through this gate — use {@link protocolSkewHeader} if a caller wants to
+ * *warn* on that case without relaxing the future-mismatch refuse.
  */
 export function protocolCheck(version: string | null | undefined): ProtocolGate {
   if (!version) return { ok: true };
@@ -46,4 +54,19 @@ export function protocolCheck(version: string | null | undefined): ProtocolGate 
       `Eden protocol mismatch: client speaks ${n}, server speaks ${EDEN_PROTOCOL_VERSION}. ` +
       "Upgrade the older side (`npm i -g eden` / redeploy) so both speak the same protocol.",
   };
+}
+
+/**
+ * Warn header for a *known-older* integer client. Returns undefined for
+ * absent, malformed, current, and unknown-future versions — those stay on
+ * {@link protocolCheck} (allow / 426). Never used to allow a future version.
+ */
+export function protocolSkewHeader(version: string | null | undefined): string | undefined {
+  if (!version) return undefined;
+  const n = Number(version);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return undefined;
+  if (n >= 1 && n < EDEN_PROTOCOL_VERSION) {
+    return `client=${n}; server=${EDEN_PROTOCOL_VERSION}`;
+  }
+  return undefined;
 }

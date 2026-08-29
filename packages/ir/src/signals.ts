@@ -105,8 +105,36 @@ function withBudget(
 }
 
 /** Cheap Jaccard-like similarity of two JSON-ish values. 1 = identical. */
+function primitiveRecordOverlap(a: object, b: object): number | null {
+  if (Array.isArray(a) || Array.isArray(b)) return null;
+  if (Object.getPrototypeOf(a) !== Object.prototype && Object.getPrototypeOf(a) !== null) return null;
+  if (Object.getPrototypeOf(b) !== Object.prototype && Object.getPrototypeOf(b) !== null) return null;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return null;
+  const recA = a as Record<string, unknown>;
+  const recB = b as Record<string, unknown>;
+  for (const k of ka) {
+    if (!(k in recB)) return null;
+    const va = recA[k];
+    const vb = recB[k];
+    if (va === vb) continue;
+    if (typeof va === "object" && va != null) return null;
+    if (typeof vb === "object" && vb != null) return null;
+    if (typeof va === "bigint" || typeof vb === "bigint") return null;
+    if (va !== vb) return null;
+  }
+  return 1;
+}
+
+/** Cheap Jaccard-like similarity of two JSON-ish values. 1 = identical. */
 export function valueOverlap(a: unknown, b: unknown): number {
+  if (a === b) return a === undefined ? 0 : 1;
   if (a === undefined && b === undefined) return 0;
+  if (a != null && b != null && typeof a === "object" && typeof b === "object") {
+    const fast = primitiveRecordOverlap(a, b);
+    if (fast != null) return fast;
+  }
   try {
     const ca = canonicalize(a);
     const cb = canonicalize(b);
@@ -177,8 +205,7 @@ function priorOccurrence(names: string[], gram: string[], start: number): number
   return -1;
 }
 
-function lowGainHit(events: TraceEvent[]): { at: number; n: number; gain: number } | null {
-  const live = liveEvents(events);
+function lowGainHit(events: TraceEvent[], live = liveEvents(events)): { at: number; n: number; gain: number } | null {
   if (live.length < 2) return null;
   let streak = 0;
   let gain = 1;
@@ -318,6 +345,9 @@ export function takeSignals(
 ): OnlineWarning[] {
   const at = events.length - 1;
   if (at < 0) return [];
+  // Nothing below can fire with a single event and no required checks
+  // (fail streak and n-grams need 2; visits need 3; evidence_gap needs required).
+  if (events.length < FAIL_STREAK_AT && required.length === 0) return [];
   const fresh: OnlineWarning[] = [];
 
   const streak = failStreakFromEnd(events);
@@ -331,6 +361,10 @@ export function takeSignals(
 
   const live = liveEvents(events);
   const names = live.map((x) => x.e.name);
+  // A 2-gram repeated twice needs 3 names ([A,A] overlapping, or [A,B,A,B]
+  // non-overlapping). NGRAM_MIN * NGRAM_REPEAT_AT would be 4 and miss
+  // three-in-a-row. Reads need one extra cycle; the loop still no-ops until then.
+  if (names.length >= NGRAM_MIN + NGRAM_REPEAT_AT - 1) {
   const maxN = Math.min(NGRAM_MAX, names.length);
   for (let n = maxN; n >= NGRAM_MIN; n--) {
     const start = names.length - n;
@@ -362,8 +396,9 @@ export function takeSignals(
     fresh.push(withBudget("repeat_ngram", at, `repeated ${ngram.join(" → ")}`, budget, { n: ngram.length, ngram }));
     break;
   }
+  }
 
-  const gain = lowGainHit(events);
+  const gain = lowGainHit(events, live);
   if (gain) {
     const key = `low_gain:${gain.at}`;
     if (!seen.has(key)) {
@@ -390,6 +425,7 @@ export function takeSignals(
   // lands on traces, feeds failureModeOf → failure-cluster mining, and is
   // honoured by killAfterWarning.
   const visits = new Map<string, TraceEvent[]>();
+  if (live.length >= VISIT_STALL_RUN) {
   for (const { e } of live) {
     if (!e.ok || e.result === undefined) continue;
     const list = visits.get(e.name);
@@ -414,8 +450,9 @@ export function takeSignals(
       }),
     );
   }
+  }
 
-  const book = ledger ?? evidenceLedger(events, required);
+  const book = required.length || ledger ? (ledger ?? evidenceLedger(events, required)) : { required: [], present: [], absent: [], failed: [] };
   if (book.absent.length) {
     const key = `evidence_gap:${book.absent.join(",")}`;
     if (!seen.has(key)) {

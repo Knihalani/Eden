@@ -63,6 +63,14 @@ describe("densify", () => {
     expect(densified).toBe("hellored\n\nworld");
   });
 
+  test("v2 folds consecutive duplicate CLI lines into a readable multiplier", () => {
+    const text = "ok\n".repeat(50);
+    const { densified, raw_bytes, densified_bytes } = densifyPayload(text);
+    expect(typeof densified).toBe("string");
+    expect(densified).toBe("ok ×50");
+    expect(densified_bytes).toBeLessThan(raw_bytes);
+  });
+
   test("invoice uses smaller densified bytes", () => {
     const fat = Array.from({ length: 20 }, (_, i) => ({
       login: "octocat",
@@ -70,8 +78,10 @@ describe("densify", () => {
       type: "User",
       site_admin: false,
     }));
+    const packed = densifyValue(fat);
     const { raw_bytes, densified_bytes } = densifyPayload(fat);
     expect(densified_bytes).toBeLessThan(raw_bytes);
+    expect(cellsEqual(undensifyValue(packed), fat)).toBe(true);
   });
 
   test("parameterizeUrl turns ids into params", () => {

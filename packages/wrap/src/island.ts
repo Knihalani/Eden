@@ -1,4 +1,10 @@
 import type { IslandCaller } from "@eden/ir";
+import { IslandReply, unwrapIsland } from "@eden/ir";
+import { withIslandBatch } from "./island-batch";
+import { parseCacheTokens, parseUsage } from "./usage";
+
+export { canUseProviderBatch, islandBatchEnabled, islandBatchUrl, PROVIDER_BATCH_CENTS, withIslandBatch } from "./island-batch";
+export type { IslandBatchOpts } from "./island-batch";
 
 export function islandUpstreamUrl(upstream?: string | null): string {
   const raw = (upstream || process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
@@ -9,7 +15,10 @@ export function islandUpstreamUrl(upstream?: string | null): string {
 export function wrapIsland(opts: { apiKey?: string; upstream?: string; fetch?: typeof fetch } = {}): IslandCaller | undefined {
   const key = opts.apiKey || process.env.OPENAI_API_KEY;
   if (!key) return undefined;
-  return withWitnessMemo(openaiIsland({ apiKey: key, baseURL: islandUpstreamUrl(opts.upstream), fetch: opts.fetch }));
+  const baseURL = islandUpstreamUrl(opts.upstream);
+  const sync = openaiIsland({ apiKey: key, baseURL, fetch: opts.fetch });
+  // Memo first (hits and pinned never reach the transport), then batch, then sync.
+  return withWitnessMemo(withIslandBatch(sync, { apiKey: key, baseURL, fetch: opts.fetch }));
 }
 
 /**
@@ -58,16 +67,34 @@ export function islandMemoKey(req: { system: string; input: unknown; outputSchem
   return `${req.system}\u0000${JSON.stringify(req.input)}\u0000${JSON.stringify(req.outputSchema)}`;
 }
 
-export function withWitnessMemo(base: IslandCaller): IslandCaller {
-  const table = createWitnessTable();
+export function withWitnessMemo(
+  base: IslandCaller,
+  table: ReturnType<typeof createWitnessTable> = createWitnessTable(),
+): IslandCaller {
   return async (req) => {
     const key = islandMemoKey(req as never);
     const hit = table.lookup(key);
-    if (hit !== undefined) return hit;
+    if (hit !== undefined) return new IslandReply(hit, { prompt_tokens: 0, completion_tokens: 0, memoized: true });
+    // Pinned islands are memo-only. A miss deopts — never a silent model call.
+    if (req.pinned === true) throw new Error("pinned island miss");
     const out = await base(req);
-    table.observe(key, out);
+    const { value } = unwrapIsland(out);
+    table.observe(key, value);
     return out;
   };
+}
+
+/**
+ * Lookup-only island: every request is treated as pinned. Miss deopts to raw.
+ * Share `table` with an earlier withWitnessMemo so Approve-pin serves the
+ * same witnesses the unpinned island already recorded.
+ */
+export function withPinnedIsland(
+  base: IslandCaller,
+  table: ReturnType<typeof createWitnessTable> = createWitnessTable(),
+): IslandCaller {
+  const inner = withWitnessMemo(base, table);
+  return async (req) => inner({ ...req, pinned: true });
 }
 
 /**
@@ -157,10 +184,29 @@ export function openaiIsland(opts: {
           }
           throw new Error(`island llm ${res.status}`);
         }
-        const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const json = (await res.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+          usage?: unknown;
+        };
         const content = json.choices?.[0]?.message?.content || "{}";
         try {
-          return JSON.parse(content);
+          const parsed = JSON.parse(content);
+          const u = parseUsage(json.usage);
+          const cache = parseCacheTokens(json.usage);
+          const usage = u
+            ? {
+                prompt_tokens: u.prompt,
+                completion_tokens: u.completion,
+                ...(cache
+                  ? {
+                      cached_tokens: cache.cached,
+                      ...(cache.cacheWrite != null ? { cache_write_tokens: cache.cacheWrite } : {}),
+                      ...(cache.denom != null ? { cache_input_tokens: cache.denom } : {}),
+                    }
+                  : {}),
+              }
+            : undefined;
+          return new IslandReply(parsed, usage);
         } catch {
           throw new NonJsonReply();
         }

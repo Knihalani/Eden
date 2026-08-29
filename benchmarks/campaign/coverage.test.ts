@@ -10,12 +10,15 @@ import {
   HIGH_CARD_SEQUENCE,
   LONG_SESSION_IDS,
   PAGE_ITEMS,
+  PARTIAL_HITS,
+  PARTIAL_READS,
   armSlowToolLive,
   collectSequence,
   createHighCard,
   createLongSession,
   createPagination,
   createPaginationBindable,
+  createPartialIteration,
   createSlowTool,
 } from "./coverage-worlds";
 import { blockSeed, type CallResult, type World } from "./worlds";
@@ -200,7 +203,6 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
         holdout: 3,
         sandbox: createLongSession,
         maxGram: 16,
-        assumeProviderUsage: true,
       });
       expect(r.program).not.toBeNull();
       for (let i = 0; i < 100; i++) {
@@ -243,7 +245,7 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
         { name: "sealBatch", args: { batch: `B${i}` }, result: { sealed: true }, ok: true },
       ],
     }));
-    const bound = compileTraces(bindable, { maxGram: 26 });
+    const bound = compileTraces(bindable);
     expect(bound.refusals.filter((r) => r.reason.includes("without a bindable foreach"))).toEqual([]);
     expect(bound.programs[0]?.steps.some((s) => s.kind === "loop")).toBe(true);
 
@@ -265,9 +267,45 @@ describe("coverage worlds: 100-stretch + bindable pagination", () => {
         { name: "sealBatch", args: { batch: `C${i}` }, result: { sealed: true }, ok: true },
       ],
     }));
-    const refused = compileTraces(cursor, { maxGram: 26 });
+    const refused = compileTraces(cursor);
     expect(refused.refusals.some((r) => r.reason.includes("listPage") && r.reason.includes("without a bindable foreach"))).toBe(
       true,
     );
+    expect(refused.refusals.some((r) => r.code === "unbound_foreach")).toBe(true);
+  });
+
+  test("partial-iteration (Wave 3 rotation): 12 hits / 6 reads is a named read-set miss", async () => {
+    const w = createPartialIteration();
+    const seq = await collectSequence(w, { topic: "auth-flow" }, 1);
+    expect(seq.filter((t) => t === "readFile").length).toBe(PARTIAL_READS);
+    expect(seq.filter((t) => t === "grepCode").length).toBe(1);
+    const traces = Array.from({ length: 3 }, (_, i) => {
+      const hits = Array.from({ length: PARTIAL_HITS }, (_, j) => `src/m${j}/t${i}.ts`);
+      return {
+        id: `pi${i}`,
+        llmCalls: 8,
+        duration_ms: 80,
+        cost_cents: 4,
+        complete: true as const,
+        input: { topic: `t${i}` },
+        events: [
+          { name: "grepCode", args: { pattern: `t${i}` }, result: { hits }, ok: true },
+          ...hits.slice(0, PARTIAL_READS).map((path) => ({
+            name: "readFile",
+            args: { path },
+            result: { path, lines: ["ok"] },
+            ok: true,
+          })),
+          { name: "writeNotes", args: { topic: `t${i}` }, result: { notesWritten: true }, ok: true },
+        ],
+      };
+    });
+    const r = compileTraces(traces);
+    const miss = r.refusals.find((x) => x.code === "read_set_mismatch");
+    expect(miss).toBeTruthy();
+    expect(miss!.readSet).toBe(PARTIAL_HITS);
+    expect(miss!.repeats).toBe(PARTIAL_READS);
+    expect(miss!.reason).toMatch(/without a bindable foreach/);
+    expect(r.programs.filter((p) => p.steps.some((s) => s.kind === "loop"))).toEqual([]);
   });
 });

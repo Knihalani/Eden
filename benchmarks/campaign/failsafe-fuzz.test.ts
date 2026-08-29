@@ -1,19 +1,21 @@
 /**
- * Wave 1.4 — Failsafe property-fuzz seedling.
+ * Wave 1.4 / 6.3 — Failsafe property-fuzz.
  *
  * Generated programs × injected faults, asserting Eden-absent-equivalent
  * mutation outcomes (never more writes than raw; at most one per stretch).
  *
  * Fast inner loop: `failsafe fuzz: seed subset (50 cases)`
- * CI: `failsafe fuzz: 1000 generated programs × faults`
+ * Scale-up: `failsafe fuzz: 10000 generated programs × faults`
  *
  * Seed: 0xF5A1 (see failsafe-gen.ts). Do not use Math.random.
+ * Scheduler matrix lives in failsafe-fuzz-sched.test.ts (playback, not wrap).
  */
 import { describe, expect, test } from "bun:test";
 import { mulberry32 } from "@eden/measure";
 import { createState, wrapTools, type ToolDef } from "@eden/wrap";
 import {
   FUZZ_SEED,
+  FUZZ_CONCURRENCY,
   N_CASES,
   N_FAST,
   MUTATING_TOOLS,
@@ -27,12 +29,14 @@ import {
   generateCase,
   generateSuite,
   makeIsland,
+  mapPool,
   type FuzzCase,
   type MutationMap,
 } from "./failsafe-gen";
 
 process.env.CAMPAIGN_THINK_MS = "1";
 const TIMEOUT = 120_000;
+const TIMEOUT_10K = 180_000;
 
 async function runRaw(spec: FuzzCase): Promise<MutationMap> {
   const mutations: MutationMap = {};
@@ -58,8 +62,7 @@ async function runWrapped(spec: FuzzCase): Promise<MutationMap> {
 }
 
 async function runCase(spec: FuzzCase): Promise<{ raw: MutationMap; wrapped: MutationMap }> {
-  const raw = await runRaw(spec);
-  const wrapped = await runWrapped(spec);
+  const [raw, wrapped] = await Promise.all([runRaw(spec), runWrapped(spec)]);
   assertEdenAbsentEquivalent(spec, raw, wrapped);
   return { raw, wrapped };
 }
@@ -105,29 +108,34 @@ describe("failsafe fuzz", () => {
   );
 
   test(
-    "failsafe fuzz: 1000 generated programs × faults",
+    "failsafe fuzz: 10000 generated programs × faults",
     async () => {
       const t0 = performance.now();
       const cases = generateSuite(FUZZ_SEED, N_CASES);
       let divergences = 0;
       let timeouts = 0;
+      const firstErr: unknown[] = [];
       for (const spec of cases) {
         if (spec.fault === "timeout") timeouts++;
+      }
+      await mapPool(cases, FUZZ_CONCURRENCY, async (spec) => {
         try {
           await runCase(spec);
         } catch (err) {
           divergences++;
-          throw err;
+          if (firstErr.length < 8) firstErr.push(err);
         }
-      }
+      });
       const ms = Math.round(performance.now() - t0);
       console.log(
         `failsafe-fuzz n=${N_CASES} divergences=${divergences} seed=0x${FUZZ_SEED.toString(16).toUpperCase()} timeouts=${timeouts} ms=${ms}`,
       );
+      if (firstErr[0] instanceof Error) throw firstErr[0];
+      if (firstErr[0] !== undefined) throw new Error(String(firstErr[0]));
       expect(divergences).toBe(0);
       expect(timeouts).toBeLessThanOrEqual(50);
     },
-    TIMEOUT,
+    TIMEOUT_10K,
   );
 
   test(

@@ -9,8 +9,8 @@ export function CanvasMiss({
   href: string;
   error?: boolean;
 }) {
-  const label = list === "requests" ? "Requests" : "Live tools";
-  const noun = list === "requests" ? "request" : "live tool";
+  const label = list === "requests" ? "Requests" : "Tools";
+  const noun = list === "requests" ? "request" : "tool";
   return (
     <section className="canvas">
       <header className="canvas-bar">

@@ -13,15 +13,19 @@ import { countDeopts } from "./db";
  * `state = 'draft'` and never flips anything On — that invariant is the one
  * the workshop page states outright.
  *
- * Why dependency injection instead of imports: apps/site links only
- * @eden/core, and neither @eden/compile (compileTraces) nor @eden/shadow
- * (shadowProgram, with its registry/sandbox wiring) is reachable from these
- * modules without new package edges. So both arrive as structurally-typed
- * parameters — `compileTracesFn` and a `shadowProgram`-shaped
- * `shadowProgramFn`. A caller with the real wiring (the control app's store)
- * passes them straight through; a caller without one gets an honest
+ * Why dependency injection instead of imports: the library stays stubbable
+ * for tests. Production ingest (cluster.ts) must pass the real
+ * `compileTraces` / `shadowProgram` adapters from canary-bind.ts — omitting
+ * them is the `no-compiler` hole. A caller without wiring gets an honest
  * "cannot check" outcome rather than a silent pass.
  */
+
+/** Queued replacement copy. Same words as Home/canvas. Canary never Approves. */
+export const REFRESH_WAITING_COPY =
+  "The outside world renamed a field. A replacement is waiting. The live tool is unchanged until you Approve.";
+
+/** The only state this module writes onto a tool row. Never `on`. */
+const QUEUED_STATE = "draft" as const;
 
 export type CanaryVerdict = "PASS" | "FAIL" | "INCONCLUSIVE";
 
@@ -64,6 +68,8 @@ export type MaybeRecompileInput = {
   windowMs?: number;
   threshold?: number;
   traceLimit?: number;
+  /** Draft `when_to_use`. Drift keeps the field-rename sentence; webhook passes its own. */
+  waitingCopy?: string;
 };
 
 export type RecompileOutcome =
@@ -349,12 +355,13 @@ export async function maybeRecompile(db: EdenDb, input: MaybeRecompileInput): Pr
   const draftId = crypto.randomUUID();
   await db.run(
     `INSERT OR IGNORE INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k)
-     VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, 2)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 2)`,
     [
       draftId,
       input.workspace_id,
       name,
-      `Recompiled replacement for ${tool.name} after ${deopts} deopts in the last ${Math.round(windowMs / 3600_000)}h. Old version stays live until you approve this one.`,
+      input.waitingCopy ?? REFRESH_WAITING_COPY,
+      QUEUED_STATE,
       compiledSteps,
       JSON.stringify(seq),
       rcFingerprint,

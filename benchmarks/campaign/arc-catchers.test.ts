@@ -12,7 +12,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { dcShare } from "@eden/measure";
+import { dcShare, WAVE_16_19_CATCHERS } from "@eden/measure";
 import { compileTraces } from "@eden/compile";
 import { collectDoctor } from "../../packages/cli/src/doctor";
 import { codingRegistry } from "@eden/wrap";
@@ -97,6 +97,17 @@ describe("ARC-REGRESSION map (Wave 1.3 done-when)", () => {
     const missing = required.filter((s) => !md.toLowerCase().includes(s.toLowerCase()));
     expect(missing).toEqual([]);
   });
+
+  test("every Wave 16–19 phase names a fixture or gap-pin in §14 and this map", () => {
+    const roadmap = readFileSync(repoFile("docs/ROADMAP.md"), "utf8");
+    const section14 = roadmap.split("## 14. Scenario & probe registry")[1]?.split("\n## 15.")[0] ?? "";
+    expect(WAVE_16_19_CATCHERS).toHaveLength(16);
+    for (const { phase, mark } of WAVE_16_19_CATCHERS) {
+      expect(section14.toLowerCase()).toContain(mark.toLowerCase());
+      expect(md.toLowerCase()).toContain(mark.toLowerCase());
+      expect(md).toContain(phase);
+    }
+  });
 });
 
 describe("Arc 1 substrate pins", () => {
@@ -121,7 +132,7 @@ describe("Arc 1 substrate pins", () => {
       prompt_tokens_details: { cached_tokens: 40 },
     };
     expect(parseUsage(raw)).toEqual({ prompt: 50, completion: 5 });
-    expect(parseCacheTokens(raw)).toEqual({ cached: 40 });
+    expect(parseCacheTokens(raw)).toMatchObject({ cached: 40 });
   });
 });
 
@@ -141,7 +152,7 @@ describe("Arc 2 / 3 / 4 substrate pins", () => {
         fetch: (async () => new Response("no", { status: 503 })) as typeof fetch,
       });
       const names = checks.map((c) => c.name);
-      for (const need of ["config", "wrap", "hookd", "live-tools"]) {
+      for (const need of ["config", "wrap", "hookd", "live-tools", "mine", "knock", "serving", "install", "approve"]) {
         expect(names).toContain(need);
       }
     } finally {
@@ -151,20 +162,23 @@ describe("Arc 2 / 3 / 4 substrate pins", () => {
     }
   });
 
-  test("CLI help lists doctor/hookd and does not claim eden explain (gap-pin until Arc 2 ships it)", () => {
+  test("CLI help lists doctor/hookd and eden explain", () => {
     const cli = readFileSync(repoFile("packages/cli/src/cli.ts"), "utf8");
     expect(cli).toContain("eden doctor");
+    expect(cli).toContain("eden doctor --tree");
     expect(cli).toContain("eden hookd");
-    expect(cli).not.toMatch(/eden explain/);
+    expect(cli).toContain("eden explain");
+    expect(cli).toContain("eden approve");
+    expect(cli).toContain("eden promote");
   });
 
-  test("coding registry has no allowed_callers (PTC-complement gap-pin)", () => {
+  test("coding registry emits allowed_callers as PTC guidance (not a security wall)", () => {
     const reg = codingRegistry(process.cwd());
-    expect(reg).not.toHaveProperty("allowed_callers");
+    expect(reg.allowed_callers).toEqual(["direct", "code_execution_20260120"]);
     expect(typeof reg.execute).toBe("function");
   });
 
-  test("applyCacheBreakpoints marks cache_control; it does not reorder blocks (cache-guard gap-pin)", () => {
+  test("applyCacheBreakpoints preserves order by default; cache-guard reorders when opted in", () => {
     const body: Record<string, unknown> = {
       system: [
         { type: "text", text: "volatile-ts" },

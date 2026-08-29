@@ -61,7 +61,7 @@ async function prelive(
     const g = pool[i % pool.length]!;
     await s.stretch("w", g, blockSeed(`prelive-${i}-${JSON.stringify(g)}`, i));
   }
-  const r = await s.goLive("w", { compile: Math.max(3, count - 3), holdout: 3, sandbox: factory, maxGram: 26, assumeProviderUsage: true });
+  const r = await s.goLive("w", { compile: Math.max(3, count - 3), holdout: 3, sandbox: factory, maxGram: 26 });
   if (r.program == null) notes.push(`prelive did NOT go live (${r.verdict}): ${r.reasons.join("; ") || "no candidate"}`);
   return { program: r.program, notes };
 }
@@ -105,7 +105,7 @@ async function lifecycleRun(
   }
   const notes: string[] = [];
   if (opts.arm === "eden") {
-    const r = await s.goLive(worldName, { compile: opts.nWitness - 3, holdout: 3, sandbox: factory, maxGram: 26, assumeProviderUsage: true });
+    const r = await s.goLive(worldName, { compile: opts.nWitness - 3, holdout: 3, sandbox: factory, maxGram: 26 });
     if (r.program == null) notes.push(`goLive ${r.verdict}: ${r.reasons.join("; ") || "no candidate"}`);
     else notes.push(`goLive PASS: ${r.program.sequence.join("→")}`);
   }
@@ -126,6 +126,7 @@ async function main() {
   const nLive = FAST ? 3 : 6;
 
   /* --- 1. short-support ------------------------------------------------ */
+  // Locked public print: 6.67× fewer turns, 1.78× faster, 4.17× cheaper (p=0.0005, n=12).
   console.log("\n[1/9] short-support — does a live compiled tool help a SHORT agent?");
   {
     const pool = deskPool();
@@ -180,10 +181,10 @@ async function main() {
 
   /* --- 3..6. long lifecycle scenarios ---------------------------------- */
   const longDefs: Array<{ key: string; label: string; world: [string, WorldFactory]; pool: Array<Record<string, unknown>> }> = [
-    { key: "long-desk", label: "linear mutating stretch, sloppy-agent noise", world: ["desk", createDesk], pool: deskPool() },
-    { key: "long-orders", label: "fan-out inventory loop then refund pipeline", world: ["orders", createOrders], pool: ordersPool() },
-    { key: "long-etl", label: "read fan-out with fat payloads into one report", world: ["etl", () => createEtl(8)], pool: etlPool() },
-    { key: "long-incident", label: "flaky searches, retries, mutating tail", world: ["incident", () => createIncident(0.12)], pool: incidentPool() },
+    { key: "long-desk", label: "linear mutating stretch, sloppy-agent noise", world: ["desk", createDesk], pool: deskPool() }, // locked print: 1.36× turns, 1.16× wall, 1.31× cheaper (p=0.016)
+    { key: "long-orders", label: "fan-out inventory loop then refund pipeline", world: ["orders", createOrders], pool: ordersPool() }, // locked print: 1.19× turns, 1.12× wall, 1.19× cheaper (p=0.016)
+    { key: "long-etl", label: "read fan-out with fat payloads into one report", world: ["etl", () => createEtl(8)], pool: etlPool() }, // locked print: 1.43× turns, 1.28× wall, 1.36× cheaper (p=0.016)
+    { key: "long-incident", label: "flaky searches, retries, mutating tail", world: ["incident", () => createIncident(0.12)], pool: incidentPool() }, // locked print: 1.35× turns, 1.13× wall, 1.32× cheaper (p=0.016)
   ];
   for (let si = 0; si < longDefs.length; si++) {
     const d = longDefs[si]!;
@@ -256,6 +257,7 @@ async function main() {
   }
 
   /* --- 9. thrash-enforce ------------------------------------------------ */
+  // Locked public print: 5.14× less spend, 5.29× faster (p=0.002, n=10).
   console.log("\n[9/9] thrash-enforce — can enforcement stop a runaway restart loop?");
   {
     const cycles = FAST ? 8 : 12;

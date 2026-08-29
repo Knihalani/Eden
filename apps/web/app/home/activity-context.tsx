@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { EMPTY_ACTIVITY, failedActivity, type Activity } from "./activity";
+import { EMPTY_ACTIVITY, EMPTY_FLEET, failedActivity, type Activity, type FleetAgent, type FleetStrip } from "./activity";
 
 export type ActivityView = Activity & { ready: boolean };
 
-const ACTIVITY_CACHE = "eden:activity:v2";
+const ACTIVITY_CACHE = "eden:activity:v3";
 const ACTIVITY_EVENT = "eden:activity";
 
 type CachedActivity = { owner: string; etag: string; activity: Activity };
@@ -52,7 +52,25 @@ export function useActivity() {
   return useContext(ActivityContext);
 }
 
-function asView(activity: Activity, ready: boolean): ActivityView {
+function asFleet(raw: FleetStrip | undefined): FleetStrip {
+  if (!raw || !Array.isArray(raw.agents)) return EMPTY_FLEET;
+  const fleetDcPct = raw.fleetDcPct == null || !Number.isFinite(raw.fleetDcPct) ? null : raw.fleetDcPct;
+  return {
+    agents: raw.agents
+      .filter((agent): agent is FleetAgent => Boolean(agent && typeof agent.id === "string" && agent.id))
+      .map((agent) => ({
+        id: agent.id,
+        dcPct: agent.dcPct == null || !Number.isFinite(agent.dcPct) ? null : agent.dcPct,
+        ...(agent.parentRunId ? { parentRunId: agent.parentRunId } : {}),
+      })),
+    fleetDcPct,
+    sharedLine: typeof raw.sharedLine === "string" && raw.sharedLine ? raw.sharedLine : null,
+    ...(typeof raw.region === "string" && raw.region ? { region: raw.region } : {}),
+  };
+}
+
+/** Client view of inbox JSON. Must keep `fleet` — Home reads it, not a second fetch. */
+export function asView(activity: Activity, ready: boolean): ActivityView {
   return {
     runs: activity.runs ?? 0,
     compiled: activity.compiled ?? 0,
@@ -60,10 +78,13 @@ function asView(activity: Activity, ready: boolean): ActivityView {
     fails: activity.fails ?? 0,
     llmTimes: activity.llmTimes ?? 0,
     tokensSaved: activity.tokensSaved ?? 0,
+    dcPct: activity.dcPct == null || !Number.isFinite(activity.dcPct) ? null : activity.dcPct,
     failed: Boolean(activity.failed),
     series: Array.isArray(activity.series) ? [...activity.series] : [],
+    dcSeries: Array.isArray(activity.dcSeries) ? [...activity.dcSeries] : [],
     workflows: Array.isArray(activity.workflows) ? [...activity.workflows] : [],
     requests: Array.isArray(activity.requests) ? [...activity.requests] : [],
+    fleet: asFleet(activity.fleet),
     ready,
   };
 }

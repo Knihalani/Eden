@@ -1,4 +1,5 @@
 import type { EdenDb } from "./db";
+import { canaryWorkspaceDeps } from "./canary-bind";
 import { maybeRecompileWorkspace } from "./canary";
 import {
   compileStepUrl,
@@ -65,7 +66,7 @@ export async function ingest(
   // exactly what it was — the call is not awaited, and a synchronous throw
   // before the first await cannot escape either.
   try {
-    void maybeRecompileWorkspace(db, workspaceId).catch(() => undefined);
+    void maybeRecompileWorkspace(db, workspaceId, canaryWorkspaceDeps()).catch(() => undefined);
   } catch {
     /* ingest must never wait on the canary */
   }

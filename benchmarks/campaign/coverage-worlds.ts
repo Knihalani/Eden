@@ -9,6 +9,7 @@
  *   pagination     — list page1→page2→page3 then per-item mutate (read-set /
  *                    bindable loop lesson: cursor walk refuses foreach)
  *   pagination-bindable — one listAll array then per-item mutate (foreach mines)
+ *   partial-iteration — Wave 3 rotation: 12 hits returned, 6 read (named miss)
  *
  * Wave 1 does not change product behavior — benches and tests only.
  */
@@ -445,6 +446,71 @@ export function createPaginationBindable(): World {
         if (got > n) bad.push(`pagination-bindable:${id}: writeItem ran ${got}x across ${n} stretch(es) — duplicated`);
         if (got < n) bad.push(`pagination-bindable:${id}: writeItem ran ${got}x across ${n} stretch(es) — missing`);
       }
+      return bad;
+    },
+  };
+}
+
+/**
+ * Wave 3 rotation (not silent-host): a search returns 12 hits, the agent
+ * reads 6, then writes. The loop is unbindable — named `read_set_mismatch`,
+ * not a silent host or a guessed foreach over the unread tail.
+ */
+export const PARTIAL_HITS = 12;
+export const PARTIAL_READS = 6;
+
+export function createPartialIteration(): World {
+  const notes = new Map<string, number>();
+  return {
+    name: "partial-iteration",
+    island: () => async () => ({ ok: false }),
+    tools: () => ({
+      grepCode: {
+        description: "Grep the repo. Returns more hits than the agent will read.",
+        execute: async ({ pattern }) => {
+          await Bun.sleep(8);
+          const hits = Array.from({ length: PARTIAL_HITS }, (_, i) => `src/m${i}/${pattern}.ts:${40 + i}`);
+          return { hits, seq: nextOrd() };
+        },
+      },
+      readFile: {
+        description: "Read one file.",
+        execute: async ({ path }) => {
+          await Bun.sleep(6);
+          return { path, lines: [`line of ${path}`] };
+        },
+      },
+      writeNotes: {
+        description: "Append notes. Mutating.",
+        execute: async ({ topic }, ctx) => {
+          await Bun.sleep(8);
+          if (ctx?.signal?.aborted) throw new Error("aborted");
+          notes.set(String(topic), (notes.get(String(topic)) ?? 0) + 1);
+          return { notesWritten: true, topic };
+        },
+      },
+    }),
+    async *script(goal) {
+      const topic = String(goal.topic ?? "auth");
+      const hits = yield { tool: "grepCode", args: { pattern: topic, topic } };
+      const paths = ((hits.value as { hits?: string[] }).hits ?? []).slice(0, PARTIAL_READS);
+      for (const p of paths) {
+        yield { tool: "readFile", args: { path: p } };
+      }
+      const w = yield { tool: "writeNotes", args: { topic } };
+      void w;
+    },
+    done: (v) => Boolean((v as { notesWritten?: boolean })?.notesWritten),
+    terminal: "writeNotes",
+    check(doneGoals) {
+      const n = doneGoals.length;
+      const bad: string[] = [];
+      for (const g of doneGoals) {
+        const topic = String(g.topic);
+        const got = notes.get(topic) ?? 0;
+        if (got !== 1) bad.push(`partial-iteration:${topic}: writeNotes ran ${got}x (want 1)`);
+      }
+      if (doneGoals.length !== n) bad.push("partial-iteration: goal count drifted");
       return bad;
     },
   };

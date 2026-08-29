@@ -105,4 +105,16 @@ describe("coding registry", () => {
     await expect(reg.execute("Edit", { path, new_string: "tiny" })).rejects.toThrow(/old_string is required/);
     expect(readFileSync(path, "utf8")).toBe("important existing content\n");
   });
+
+  test("PTC complement: allowed_callers is guidance, execute still works direct", async () => {
+    const dir = join(import.meta.dir, "../../.tmp-coding");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "ptc.txt"), "ok");
+    const reg = codingRegistry(dir);
+    expect(reg.allowed_callers).toEqual(["direct", "code_execution_20260120"]);
+    const out = (await reg.execute("Read", { path: "ptc.txt" })) as { content: string };
+    expect(out.content).toBe("ok");
+    // Guidance only — execute does not inspect a caller field.
+    expect(JSON.stringify(reg)).not.toMatch(/forbidden|denied|unauthorized/i);
+  });
 });

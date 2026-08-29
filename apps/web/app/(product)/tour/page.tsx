@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { SEE_PENDING, WORKSPACE } from "../../account/home";
+import { SEE_PENDING } from "../../account/home";
+import { productGate } from "../../account/route";
 import { TourPanel } from "../../home/tour";
 
 export const metadata = {
@@ -8,8 +9,8 @@ export const metadata = {
 };
 
 export default async function TourPage() {
-  const { userId, orgId, sessionStatus } = await auth(SEE_PENDING);
-  if (!userId) redirect("/");
-  if (sessionStatus === "pending" || !orgId) redirect(WORKSPACE);
+  const session = await auth(SEE_PENDING);
+  const dest = productGate("/tour", session);
+  if (dest) redirect(dest);
   return <TourPanel />;
 }

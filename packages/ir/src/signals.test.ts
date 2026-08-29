@@ -200,6 +200,11 @@ describe("online signals", () => {
     expect(takeSignals([ev("lookup"), ev("write", false)], { duration_ms: 4, llmCalls: 0 }, seen)).toEqual([]);
   });
 
+  test("a single event cannot warn when no required checks exist", () => {
+    expect(takeSignals([ev("lookup")], { duration_ms: 1, llmCalls: 0 }, new Set())).toEqual([]);
+    expect(takeSignals([ev("lookup", false)], { duration_ms: 1, llmCalls: 0 }, new Set())).toEqual([]);
+  });
+
   test("two consecutive failures emit fail_streak plus a budget snapshot", () => {
     const seen = new Set<string>();
     const events = [ev("lookup", false), ev("write", false)];

@@ -1,11 +1,24 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Binding, IslandCaller, ProgramDiff, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
-import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, hashStretch, liveTimeSavedMs, diffPrograms, redact } from "@eden/ir";
-import { isDeopt, isReplaySafe, runProgram } from "@eden/runtime";
+import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, diffPrograms, redact, dropEnvelopeValue, whenToUseOf } from "@eden/ir";
 import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, type WrapState } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
+import { inheritLiveTool } from "./inherit-live";
 import { canApprove, registryCovers, replayRegistry, shadowProgram, uncoveredTools } from "@eden/shadow";
 import { pushPrev, Store, type Candidate } from "./store";
+import { exportAudit } from "./audit-export";
+import { actorOf, exportAccessReview } from "./access-review";
+import { EMPTY_DIGEST, renderDigestText, type DigestInput } from "@eden/measure";
+import { cacheHitPctFromReceipts } from "../../../packages/cli/src/digest";
+import { dcWindowFromReceipts, parseDayCount } from "./dc-window";
+import { isRefreshCandidate, maybeQueueRefresh, refreshCandidateId } from "./refresh";
+import {
+  executeLiveRun,
+  parseCron,
+  parseNow,
+  parseScheduleInput,
+  tickDueSchedules,
+} from "./schedule";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
@@ -194,12 +207,23 @@ function syncLiveTools(store: Store): void {
     writeFileSync(
       join(dir, "live-tools.json"),
       JSON.stringify(
-        store.livePrograms().map((p) => ({
-          name: p.name,
-          sequence: p.sequence ?? [],
-          id: p.id,
-          envelope: p.contract.envelope ?? null,
-        })),
+        store
+          .tools()
+          .filter((t) => t.state === "live")
+          .map((t) => {
+            const seq = t.program.sequence ?? [];
+            const write = seq.includes("Write");
+            return {
+              name: t.program.name,
+              sequence: seq,
+              id: t.id,
+              envelope: t.program.contract.envelope ?? null,
+              read_only: !write,
+              when_to_use: whenToUseOf(t.program),
+              ...(t.transparent_writes ? { transparent_writes: true } : {}),
+              ...(t.rollout === "canary" || t.rollout === "live" ? { rollout: t.rollout } : {}),
+            };
+          }),
       ),
     );
   } catch {
@@ -228,6 +252,7 @@ function shadowCandidate(ctx: ApiCtx, program: StretchProgram) {
 }
 
 async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: number }> {
+  const keepRefresh = ctx.store.candidates().filter((c) => isRefreshCandidate(c.id));
   ctx.store.clearCandidates();
   const compiled = compileTraces(ctx.store.traces(), { minLlmReduction: minLlmReductionOf(Number(process.env.EDEN_MIN_LLM_REDUCTION)) });
   for (const program of compiled.programs) {
@@ -269,6 +294,7 @@ async function runCompile(ctx: ApiCtx): Promise<{ programs: number; refusals: nu
       created_at: Date.now(),
     });
   }
+  for (const c of keepRefresh) ctx.store.putCandidate(c);
   return { programs: compiled.programs.length, refusals: compiled.refusals.length };
 }
 
@@ -324,10 +350,20 @@ function applyBindEdits(program: StretchProgram, binds: BindEdit[]): StretchProg
   return { ...program, steps };
 }
 
+type DropValue = { path: string; value: unknown };
+
 async function shipCandidate(
   ctx: ApiCtx,
   c: Candidate,
   edits?: Edits,
+  opts?: {
+    transparentWrites?: boolean;
+    rollout?: "canary" | "live";
+    dropValues?: DropValue[];
+    pinIslands?: boolean;
+    /** Org id from x-eden-org, or omitted → "operator". Never a person name. */
+    approvedBy?: string;
+  },
 ): Promise<{ ok: true; program: StretchProgram } | { ok: false; status: number; error: string; extra?: Record<string, unknown> }> {
   if (!c.program) return { ok: false, status: 409, error: c.refusal?.reason || "refused" };
   if (c.verdict !== "PASS") {
@@ -428,6 +464,29 @@ async function shipCandidate(
     if (sh.verdict !== "PASS") return { ok: false, status: 409, error: "re-shadow on approve did not pass", extra: { shadow: sh } };
     program = { ...program, manifest: sh.manifest };
   }
+  const drops = Array.isArray(opts?.dropValues) ? opts.dropValues : [];
+  if (drops.length) {
+    let envelope = program.contract.envelope;
+    if (!envelope?.inputs) return { ok: false, status: 409, error: "no envelope to tighten" };
+    for (const row of drops) {
+      if (!row || typeof row.path !== "string" || !row.path) {
+        return { ok: false, status: 409, error: "dropValues need a path" };
+      }
+      const next = dropEnvelopeValue(envelope, row.path, row.value);
+      if (!next.ok) return { ok: false, status: 409, error: next.error };
+      envelope = next.envelope;
+    }
+    program = { ...program, contract: { ...program.contract, envelope } };
+  }
+  if (opts?.pinIslands === true) {
+    program = {
+      ...program,
+      steps: program.steps.map((s) => (s.kind === "island" ? { ...s, pinned: true } : s)),
+    };
+  }
+  if (drops.length || opts?.pinIslands === true) {
+    program = withVersion({ ...program, version: undefined });
+  }
   const existing = ctx.store.tool(program.id);
   ctx.store.putTool({
     id: program.id,
@@ -438,6 +497,12 @@ async function shipCandidate(
     prev: pushPrev(existing),
     created_at: existing?.created_at ?? Date.now(),
     updated_at: Date.now(),
+    ...(opts?.transparentWrites === true || (opts?.transparentWrites !== false && existing?.transparent_writes)
+      ? { transparent_writes: true }
+      : {}),
+    rollout: opts?.rollout === "live" ? "live" : "canary",
+    approved_by: actorOf(opts?.approvedBy),
+    approved_at: Date.now(),
   });
   syncLiveTools(ctx.store);
   ctx.store.deleteCandidate(c.id);
@@ -454,10 +519,49 @@ async function maybeAutoApprove(ctx: ApiCtx): Promise<number> {
   if (process.env.EDEN_AUTO_APPROVE !== "1") return 0;
   let n = 0;
   for (const c of ctx.store.candidates()) {
+    // Drift replacements stay human-only even when auto-approve is on.
+    if (isRefreshCandidate(c.id)) continue;
     const r = await shipCandidate(ctx, c);
     if (r.ok) n++;
   }
   return n;
+}
+
+/** Same seed ids Home drops so digest tiles cannot count demo fixtures. */
+const SEED_IDS = new Set(["cand_resolve", "cand_pending", "cand_refused", "live_notify", "live_paused"]);
+
+function digestFromStore(store: Store): DigestInput {
+  const live = store.tools().filter((t) => t.state === "live" && !SEED_IDS.has(t.id));
+  const compiled = live.length;
+  const canary = live.filter((t) => t.rollout === "canary").length;
+  const runs = live.reduce((sum, t) => sum + store.receiptStats(t.id).n, 0);
+  const receiptFails = live.reduce((sum, t) => sum + store.receiptStats(t.id).fail, 0);
+  const candidates = store.candidates().filter((c) => !SEED_IDS.has(c.id));
+  const waiting = candidates.filter((c) => !c.refusal && c.verdict !== "FAIL").length;
+  const requestFails = candidates.filter((c) => Boolean(c.refusal) || c.verdict === "FAIL").length;
+  const receipts = store.receipts().filter((r) => !SEED_IDS.has(r.tool_id));
+  const dc = dcWindowFromReceipts(receipts, 7);
+  const cacheHitPct = cacheHitPctFromReceipts(receipts.map(expandReceipt));
+  let tok = 0;
+  let withTok = 0;
+  for (const t of live) {
+    const m = t.program.manifest;
+    if (m?.tokensMeasured && m.tokensSaved != null && Number.isFinite(m.tokensSaved)) {
+      tok += m.tokensSaved;
+      withTok++;
+    }
+  }
+  return {
+    ...EMPTY_DIGEST,
+    compiled,
+    runs,
+    waiting,
+    fails: requestFails + receiptFails,
+    tokensSaved: withTok ? Math.max(0, Math.round(tok / withTok)) : 0,
+    dcPct: dc.current.measured ? dc.current.dcPct : null,
+    cacheHitPct,
+    ...(canary ? { canary } : {}),
+  };
 }
 
 export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Response | null> {
@@ -625,9 +729,41 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
                 }
               : null,
             canRollback: stack.length > 0,
+            ...(t.rollout === "canary" || t.rollout === "live" ? { rollout: t.rollout } : {}),
           };
         }),
       savings: ctx.store.savings(),
+    });
+  }
+
+  /**
+   * Weekly digest payload. Auth same as /v1/inbox. Opt-in (EDEN_DIGEST=1).
+   * Returns 404 `{off:true}` when not opted in. Never sends mail.
+   * Compiled/runs follow Home: live tools minus seed ids, not savings.live.
+   */
+  if (p === "/v1/digest" && req.method === "GET") {
+    if (process.env.EDEN_DIGEST !== "1") return json({ off: true }, 404, req);
+    const input = digestFromStore(ctx.store);
+    const empty =
+      input.compiled === 0 &&
+      input.runs === 0 &&
+      input.waiting === 0 &&
+      input.fails === 0 &&
+      input.tokensSaved === 0 &&
+      input.dcPct == null &&
+      input.cacheHitPct == null;
+    const letter = empty ? EMPTY_DIGEST : input;
+    return json({
+      off: false,
+      mailed: false,
+      compiled: letter.compiled,
+      runs: letter.runs,
+      waiting: letter.waiting,
+      fails: letter.fails,
+      tokensSaved: letter.tokensSaved,
+      dcPct: letter.dcPct,
+      cacheHitPct: letter.cacheHitPct ?? null,
+      text: renderDigestText(letter),
     });
   }
 
@@ -680,56 +816,119 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     if (found.state === "paused") return json({ error: "paused", program: found.name }, 409);
     if (found.state !== "live") return json({ error: "not live", state: found.state }, 409);
     const live = found;
-    if (!ctx.registry) return json({ error: "no registry" }, 409);
+    const registry = ctx.registry;
+    if (!registry) return json({ error: "no registry" }, 409);
     const q = Number(url.searchParams.get("timeout"));
     const timeoutMs = wrapTimeoutMs(Number.isFinite(q) && q > 0 ? q : body.timeoutMs ?? body.timeout);
-    try {
-      const run = await runProgram(live.program, body.input ?? {}, {
-        registry: ctx.registry,
+    const ran = await executeLiveRun({
+      store: ctx.store,
+      tool: live,
+      input: body.input,
+      registry,
+      island: ctx.island,
+      timeoutMs,
+    });
+    if (ran.status === "ok") {
+      inheritLiveTool(ctx.store, live.id);
+      return json({ ok: true, value: ran.value, stats: ran.stats });
+    }
+    if (ran.status === "deopt") {
+      void maybeQueueRefresh(ctx, live.id).catch(() => undefined);
+      return json(
+        { error: "deopt", reason: ran.reason, deopt: true, early: ran.early, stepsRun: ran.stepsRun, program: live.name },
+        409,
+      );
+    }
+    return json({ error: ran.error }, 500);
+  }
+
+  const sched = p.match(/^\/v1\/tools\/([^/]+)\/schedule$/);
+  if (sched && req.method === "GET") {
+    const t = ctx.store.tool(sched[1]!);
+    if (!t) return json({ error: "not found" }, 404);
+    const row = ctx.store.scheduleFor(t.id);
+    return json({
+      schedule: row
+        ? {
+            id: row.id,
+            tool_id: row.tool_id,
+            cron: row.cron,
+            input: parseScheduleInput(row.input) ?? null,
+            last_tick: row.last_tick,
+            created_at: row.created_at,
+          }
+        : null,
+    });
+  }
+  if (sched && req.method === "POST") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
+    const t = ctx.store.tool(sched[1]!);
+    if (!t) return json({ error: "not live" }, 409);
+    if (t.state === "paused") return json({ error: "paused", program: t.name }, 409);
+    if (t.state !== "live") return json({ error: "not live", state: t.state }, 409);
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as { cron?: string; input?: unknown };
+    const cron = typeof body.cron === "string" ? body.cron.trim() : "";
+    if (!parseCron(cron)) return json({ error: "bad cron" }, 400);
+    if (body.input != null && (typeof body.input !== "object" || Array.isArray(body.input))) {
+      return json({ error: "input must be an object" }, 400);
+    }
+    const existing = ctx.store.scheduleFor(t.id);
+    const inputJson =
+      body.input && typeof body.input === "object" && !Array.isArray(body.input) ? JSON.stringify(body.input) : existing?.input ?? null;
+    ctx.store.putSchedule({
+      id: existing?.id ?? crypto.randomUUID(),
+      tool_id: t.id,
+      cron,
+      input: body.input === undefined ? (existing?.input ?? null) : inputJson,
+      last_tick: existing?.last_tick ?? null,
+      created_at: existing?.created_at ?? Date.now(),
+    });
+    const row = ctx.store.scheduleFor(t.id)!;
+    return json({
+      ok: true,
+      id: row.id,
+      tool_id: row.tool_id,
+      cron: row.cron,
+      input: parseScheduleInput(row.input) ?? null,
+      state: t.state,
+    });
+  }
+  if (sched && req.method === "DELETE") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
+    if (!ctx.store.deleteSchedule(sched[1]!)) return json({ error: "not found" }, 404);
+    return json({ ok: true });
+  }
+
+  if (p === "/v1/schedule/tick" && req.method === "POST") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value as { now?: unknown; toolId?: string; timeoutMs?: number; timeout?: number };
+    const now = parseNow(body.now ?? Date.now());
+    if (!now) return json({ error: "bad now" }, 400);
+    const registry = ctx.registry;
+    if (!registry) return json({ error: "no registry" }, 409);
+    const timeoutMs = wrapTimeoutMs(body.timeoutMs ?? body.timeout);
+    return ctx.store.enqueue(async () => {
+      const out = await tickDueSchedules({
+        store: ctx.store,
+        registry,
         island: ctx.island,
         timeoutMs,
+        now,
+        toolId: typeof body.toolId === "string" ? body.toolId : undefined,
+        onOk: (id) => inheritLiveTool(ctx.store, id),
+        onDeopt: (id) => {
+          void maybeQueueRefresh(ctx, id).catch(() => undefined);
+        },
       });
-      ctx.store.putReceipt({
-        tool_id: live.id,
-        version: live.version,
-        ms: run.stats.ms,
-        llm_calls: run.stats.llmCalls,
-        cents: run.stats.cents,
-        ok: 1,
-        payload: JSON.stringify({
-          outcome: "ok",
-          stepsRun: run.stats.stepsRun,
-          early: false,
-          skipped: run.stats.skipped,
-          fingerprint: hashStretch(live.program),
-          timeSavedMs: liveTimeSavedMs(live.program, run.stats.ms, true),
-        }),
-      });
-      return json({ ok: true, value: run.value, stats: run.stats });
-    } catch (err) {
-      if (isDeopt(err)) {
-        ctx.store.putReceipt({
-          tool_id: live.id,
-          version: live.version,
-          ms: err.ms,
-          llm_calls: err.llmCalls,
-          cents: err.cents,
-          ok: 0,
-          payload: JSON.stringify({
-            outcome: "deopt",
-            deoptReason: err.reason,
-            early: isReplaySafe(err),
-            stepsRun: err.stepsRun,
-            fingerprint: hashStretch(live.program),
-          }),
-        });
-        return json(
-          { error: "deopt", reason: err.reason, deopt: true, early: isReplaySafe(err), stepsRun: err.stepsRun, program: live.name },
-          409,
-        );
-      }
-      return json({ error: String(err) }, 500);
-    }
+      return json({ ok: true, fired: out.fired, paused: out.paused, skipped: out.skipped, now: now.toISOString() });
+    });
   }
 
   const approve = p.match(/^\/v1\/tools\/([^/]+)\/approve$/);
@@ -741,10 +940,42 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     // Computed before the ship so the response records exactly what the
     // approver was able to see — live vs candidate, not live vs edited.
     const diff = candidateDiff(ctx.store, c.program);
-    const body = (await req.json().catch(() => ({}))) as { edits?: Edits };
-    const shipped = await shipCandidate(ctx, c, body.edits);
+    const body = (await req.json().catch(() => ({}))) as {
+      edits?: Edits;
+      transparent_writes?: boolean;
+      rollout?: string;
+      dropValues?: DropValue[];
+      pinIslands?: boolean;
+    };
+    const shipped = await shipCandidate(ctx, c, body.edits, {
+      transparentWrites: body.transparent_writes === true,
+      rollout: body.rollout === "live" ? "live" : "canary",
+      dropValues: Array.isArray(body.dropValues) ? body.dropValues : undefined,
+      pinIslands: body.pinIslands === true,
+      approvedBy: req.headers.get(ORG_HEADER),
+    });
     if (!shipped.ok) return json({ error: shipped.error, ...shipped.extra }, shipped.status);
-    return json({ ok: true, id: shipped.program.id, name: shipped.program.name, program: shipped.program, diff });
+    return json({
+      ok: true,
+      id: shipped.program.id,
+      name: shipped.program.name,
+      program: shipped.program,
+      diff,
+      rollout: body.rollout === "live" ? "live" : "canary",
+    });
+  }
+
+  const promote = p.match(/^\/v1\/tools\/([^/]+)\/promote$/);
+  if (promote && req.method === "POST") {
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
+    const t = ctx.store.tool(promote[1]!);
+    if (!t) return json({ error: "not found" }, 404);
+    t.rollout = "live";
+    t.updated_at = Date.now();
+    ctx.store.putTool(t);
+    syncLiveTools(ctx.store);
+    return json({ ok: true, id: t.id, rollout: t.rollout });
   }
 
   const pause = p.match(/^\/v1\/tools\/([^/]+)\/(pause|rollback|resume)$/);
@@ -786,7 +1017,10 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     // Review surface: the queued candidate for this stretch (if any) diffed
     // against what is live, plus the superseded compilations this tool still
     // remembers. Both are null/empty for a stretch that was never replaced.
-    const candidate = ctx.store.candidates().find((c) => c.program?.id === t.id) ?? null;
+    const candidate =
+      ctx.store.candidate(refreshCandidateId(t.id)) ??
+      ctx.store.candidates().find((c) => c.program?.id === t.id) ??
+      null;
     return json({
       ...t,
       versions: ctx.store.programVersions(t.id).map((v) => ({ version: v.version, created_at: v.created_at })),
@@ -806,6 +1040,64 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     const limit = listLimitOf(url);
     const rows = toolId ? ctx.store.receiptsFor(toolId) : ctx.store.receipts();
     return json({ receipts: rows.slice(0, limit).map(expandReceipt) });
+  }
+
+  if (p === "/v1/dc" && req.method === "GET") {
+    const days = parseDayCount(url.searchParams.get("days"), 7);
+    return json(dcWindowFromReceipts(ctx.store.receipts(), days));
+  }
+
+  /**
+   * Access-review export: who approved what, when, which version.
+   * Org-gated (unlike the full dump). Wrong org → 403. A workspace query
+   * that is not this install yields 0 records. A throw is 500 JSON, never wrap.
+   */
+  if (p === "/v1/audit/review" && req.method === "GET") {
+    try {
+      const denied = orgGate(req, ctx);
+      if (denied) return denied;
+      const format = (url.searchParams.get("format") || "jsonl").toLowerCase();
+      if (format !== "jsonl" && format !== "csv") return json({ error: "format must be jsonl or csv" }, 400, req);
+      const body = exportAccessReview(ctx.store, format, url.searchParams.get("workspace"));
+      const filename = format === "csv" ? "eden-access-review.csv" : "eden-access-review.jsonl";
+      const type = format === "csv" ? "text/csv; charset=utf-8" : "application/x-ndjson; charset=utf-8";
+      return new Response(body, {
+        status: 200,
+        headers: {
+          ...corsFor(req),
+          "cache-control": "private, no-store",
+          "content-type": type,
+          "content-disposition": `attachment; filename="${filename}"`,
+        },
+      });
+    } catch {
+      return json({ error: "export failed" }, 500, req);
+    }
+  }
+
+  /**
+   * Tamper-evident audit export. Key-gated like the other reads. A throw here
+   * must not take down wrap — catch and 500, never unhandled.
+   */
+  if (p === "/v1/audit" && req.method === "GET") {
+    try {
+      const format = (url.searchParams.get("format") || "jsonl").toLowerCase();
+      if (format !== "jsonl" && format !== "csv") return json({ error: "format must be jsonl or csv" }, 400, req);
+      const body = exportAudit(ctx.store, format);
+      const filename = format === "csv" ? "eden-audit.csv" : "eden-audit.jsonl";
+      const type = format === "csv" ? "text/csv; charset=utf-8" : "application/x-ndjson; charset=utf-8";
+      return new Response(body, {
+        status: 200,
+        headers: {
+          ...corsFor(req),
+          "cache-control": "private, no-store",
+          "content-type": type,
+          "content-disposition": `attachment; filename="${filename}"`,
+        },
+      });
+    } catch {
+      return json({ error: "export failed" }, 500, req);
+    }
   }
 
   const delCand = p.match(/^\/v1\/candidates\/([^/]+)$/);
@@ -833,6 +1125,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       ok?: boolean;
       early?: boolean;
       deoptReason?: string;
+      reason?: string;
       stepsRun?: number;
       skipped?: string[];
       outcome?: string;
@@ -840,6 +1133,14 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       tokensSaved?: number | null;
       timeSavedMs?: number | null;
       fingerprint?: string;
+      tokenClass?: string;
+      tokenClasses?: unknown;
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      cached_tokens?: number;
+      cache_write_tokens?: number;
+      cache_input_tokens?: number;
+      certified?: boolean;
     };
     if (!b.toolId) return json({ error: "toolId required" }, 400);
     ctx.store.putReceipt({
@@ -852,6 +1153,7 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       payload: JSON.stringify({
         early: b.early,
         deoptReason: b.deoptReason,
+        reason: b.reason,
         stepsRun: b.stepsRun,
         skipped: b.skipped,
         outcome: b.outcome,
@@ -859,6 +1161,14 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
         tokensSaved: b.tokensSaved,
         timeSavedMs: b.timeSavedMs,
         fingerprint: b.fingerprint,
+        tokenClass: b.tokenClass,
+        tokenClasses: b.tokenClasses,
+        prompt_tokens: b.prompt_tokens,
+        completion_tokens: b.completion_tokens,
+        cached_tokens: b.cached_tokens,
+        cache_write_tokens: b.cache_write_tokens,
+        cache_input_tokens: b.cache_input_tokens,
+        certified: b.certified,
       }),
     });
     return json({ ok: true });

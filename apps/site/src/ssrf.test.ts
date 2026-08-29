@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { createServer } from "node:http";
-import { checkEgressUrl, EGRESS_TIMEOUT_MS, isBlockedHost, parseIpv4, parseIpv6, pinnedFetch, safeFetch } from "./ssrf";
+import {
+  checkEgressUrl,
+  destroyEgressAgents,
+  EGRESS_TIMEOUT_MS,
+  isBlockedHost,
+  parseIpv4,
+  parseIpv6,
+  pinnedFetch,
+  safeFetch,
+} from "./ssrf";
 
 describe("isBlockedHost", () => {
   test("blocks loopback and private ranges the old guard let through", () => {
@@ -235,14 +244,15 @@ describe("egress connects only where the check cleared", () => {
       expect(seen).toHaveLength(3);
       expect(seen.every((h) => h.startsWith("example.com"))).toBe(true);
     } finally {
+      destroyEgressAgents();
       srv.close();
     }
   });
 
   test("a pinned address that does not serve is refused, not silently re-resolved", async () => {
-    // This is the test that fails if connection pooling is ever reintroduced:
-    // a reused keep-alive socket is keyed by hostname and skips lookup
-    // entirely, which silently un-pins the request.
+    // Hostname-keyed keep-alive skips lookup on reuse and would silently
+    // un-pin this. Pooling is keyed by the pinned address, so a pin at
+    // 127.0.0.1 still cannot land on GitHub's real IP.
     const f = pinnedFetch([{ address: "127.0.0.1", family: 4 }]);
     await expect(f("https://api.github.com/")).rejects.toThrow();
   });
@@ -260,6 +270,7 @@ describe("egress connects only where the check cleared", () => {
       const f = pinnedFetch([{ address: "127.0.0.1", family: 4 }]);
       await expect(f(`http://example.com:${port}/big`)).rejects.toThrow(/exceeded/);
     } finally {
+      destroyEgressAgents();
       srv.close();
     }
   });
@@ -281,6 +292,7 @@ describe("egress connects only where the check cleared", () => {
       ).rejects.toThrow(/timeout/);
       expect(Date.now() - started).toBeLessThan(EGRESS_TIMEOUT_MS + 5_000);
     } finally {
+      destroyEgressAgents();
       srv.close();
     }
   }, 30_000);
