@@ -2,24 +2,32 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { homePath } from "../account/home";
+import { canvasBackTitle, homePath } from "../account/home";
 import { useMemo, useRef, useState, useTransition } from "react";
 import type { Binding, Step, StretchProgram } from "@eden/ir/types";
 import { isCheckName, isMutating } from "@eden/ir/names";
-import { approveTool, dismissRequest, pauseTool, resumeTool, type BindEdit } from "./actions";
+import { eq } from "@eden/ir";
+import { approveTool, dismissRequest, pauseTool, promoteTool, resumeTool, type BindEdit } from "./actions";
+import { tokensCertLine } from "./cert";
+import { approveContractLines, envelopeValueRows, liveCanaryLine, liveStretchLine, pinIslandsOffer, tipLine } from "./contract";
 import { DISMISS_CONFIRM_MS, confirmExpired, dismissButtonLabel } from "./dismiss";
-import { failLabel, originLine, receiptPostmortem } from "./fail";
+import { emptyPanelCopy, failLabel, handoffContractLine, originLine, receiptPostmortem } from "./fail";
 import {
   NODE_H,
   NODE_W,
   bindingFaults,
   dependentsOf,
+  graphSteps,
   layoutProgram,
-  methodSteps,
+  stepAccessLine,
   strippedFromMethod,
+  nodeProviderCacheHitLine,
+  tokenClassLedgerReconcileLine,
+  witnessLines,
 } from "./layout-program";
 import { pokeActivity } from "../home/activity-context";
 import type { CanvasModel } from "./model";
+import type { TokenClasses } from "@eden/ir";
 
 function metric(measured: boolean | undefined, value: number | null | undefined, unit: string) {
   if (!measured || value == null || !Number.isFinite(value)) return "Not measured";
@@ -80,16 +88,6 @@ function describe(b: Binding): string {
   return `${b.fn}(${describe(b.of)})`;
 }
 
-function accessLine(step: Step): string {
-  if (step.kind === "island") return "Model call. Auth declared on wrap — not stored here.";
-  if (step.kind === "loop") return "Loop. Body stays inside this step.";
-  if (step.kind === "assert") return "Check. Pinned — cannot drop.";
-  if (step.kind === "branch") return "Branch. Both arms witnessed before shipping.";
-  if (step.kind !== "tool") return "Model step. Auth declared on wrap — not stored here.";
-  if (isMutating(step.tool)) return "Write. Auth declared on wrap — not stored here.";
-  return "Read. Auth declared on wrap — not stored here.";
-}
-
 function isPinnedCheck(step: Step): boolean {
   return step.kind === "assert" || (step.kind === "tool" && isCheckName(step.tool));
 }
@@ -102,28 +100,9 @@ function kindLabel(step: Step): string {
   return isMutating(step.tool) ? "write" : "read";
 }
 
-function tipLine(model: CanvasModel): string {
-  if (model.mode === "live") {
-    const state = model.state === "live" ? "Live" : model.state === "paused" ? "Paused" : "Rolled back";
-    const pin = model.pinnedVersion ? ` · pinned ${model.pinnedVersion.slice(0, 10)}` : "";
-    const live =
-      model.liveVersion && model.pinnedVersion && model.liveVersion !== model.pinnedVersion
-        ? ` · live ${model.liveVersion.slice(0, 10)}`
-        : "";
-    return `${state}${pin}${live}`;
-  }
-  const origin = originLine(model.origin);
-  if (origin) return origin;
-  if (model.verdict === "PASS") return "Ready to inspect";
-  if (model.verdict === "FAIL") return "Refused";
-  if (model.verdict === "INCONCLUSIVE") return "Not measured";
-  if (model.verdict === "pending") return "Waiting";
-  return model.verdict ?? "Waiting";
-}
-
 function collectBind(program: StretchProgram, paths: Record<string, string>, sources: Record<string, string>): BindEdit[] {
   const out: BindEdit[] = [];
-  for (const step of methodSteps(program)) {
+  for (const step of graphSteps(program)) {
     for (const row of bindLines(step)) {
       const key = `${step.id}.${row.field}`;
       const path = paths[key];
@@ -148,7 +127,18 @@ export function CanvasView({ model }: { model: CanvasModel }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const program = model.program;
-  const layout = useMemo(() => (program ? layoutProgram(program) : null), [program]);
+  const layout = useMemo(
+    () =>
+      program
+        ? layoutProgram(program, {
+            skipped: model.receipt?.skipped,
+            memoized: model.receipt?.tokenClass === "memoized",
+            transparent: model.receipt?.tokenClass === "transparent",
+            compiledRan: model.mode === "live" && model.receipt?.tokenClass !== "transparent" && model.receipt?.tokenClass !== "frontier",
+          })
+        : null,
+    [program, model.receipt?.skipped, model.receipt?.tokenClass, model.mode],
+  );
   const faults = useMemo(() => {
     const base = program ? bindingFaults(program) : [];
     const extra = Object.entries(paths)
@@ -158,16 +148,21 @@ export function CanvasView({ model }: { model: CanvasModel }) {
   }, [program, paths]);
   const stripped = program ? strippedFromMethod(program) : [];
   const selectedStep = program && selected ? stepById(program, selected) : undefined;
+  const selectedClass = selected && layout ? layout.nodes.find((n) => n.id === selected)?.tokenClass : undefined;
   const blocked = program && selected ? dependentsOf(program, selected) : [];
   const failedDeps = program && model.fail?.step ? dependentsOf(program, model.fail.step) : [];
   const hold = shipHold(model, faults);
   const ship = !hold && canShip(model);
   const origin = originLine(model.origin);
 
-  const onApprove = () => {
+  const onApprove = (opts: {
+    transparentWrites: boolean;
+    dropValues?: Array<{ path: string; value: unknown }>;
+    pinIslands?: boolean;
+  }) => {
     start(async () => {
       const bind = program ? collectBind(program, paths, sources) : [];
-      const out = await approveTool(model.id, drop, bind);
+      const out = await approveTool(model.id, drop, bind, opts);
       setNotice(out.ok ? "Approved." : out.error || "Could not approve.");
       pokeActivity();
       if (out.ok) router.push(`/live/${encodeURIComponent(model.id)}`);
@@ -179,13 +174,11 @@ export function CanvasView({ model }: { model: CanvasModel }) {
     <section className="canvas">
       <header className="canvas-bar">
         <Link href={model.mode === "live" ? homePath("workflows") : homePath("requests")} className="home-go">
-          {model.mode === "live" ? "Live tools" : "Requests"}
+          {canvasBackTitle(model)}
         </Link>
         <h1>{model.name}</h1>
         <p className="canvas-tip">{tipLine(model)}</p>
-        <p className="canvas-hint" aria-hidden="true">
-          Scroll to see the whole graph.
-        </p>
+        <p className="canvas-hint">Scroll to see the whole graph.</p>
       </header>
 
       <div className="canvas-stage">
@@ -210,7 +203,14 @@ export function CanvasView({ model }: { model: CanvasModel }) {
           {selectedStep && program ? (
             <NodeDetail
               step={selectedStep}
-              fromIds={methodSteps(program).map((s) => s.id)}
+              tokenClass={selectedClass}
+              tokenClasses={model.receipt?.tokenClasses}
+              promptTokens={model.receipt?.prompt_tokens}
+              completionTokens={model.receipt?.completion_tokens}
+              cachedTokens={model.receipt?.cached_tokens}
+              cacheWriteTokens={model.receipt?.cache_write_tokens}
+              cacheInputTokens={model.receipt?.cache_input_tokens}
+              fromIds={graphSteps(program).map((s) => s.id)}
               version={model.version}
               stripped={stripped}
               blocked={blocked}
@@ -226,7 +226,7 @@ export function CanvasView({ model }: { model: CanvasModel }) {
               }
             />
           ) : (
-            <p className="canvas-panel-empty">Select a step to inspect bindings, reads, and writes.</p>
+            <p className="canvas-panel-empty">{emptyPanelCopy({ program, refusal: model.refusal })}</p>
           )}
         </aside>
       </div>
@@ -279,6 +279,14 @@ export function CanvasView({ model }: { model: CanvasModel }) {
               router.refresh();
             })
           }
+          onPromote={() =>
+            start(async () => {
+              const out = await promoteTool(model.id);
+              setNotice(out.ok ? "Live · 100% of sessions." : out.error || "Could not promote.");
+              pokeActivity();
+              router.refresh();
+            })
+          }
         />
       )}
     </section>
@@ -308,7 +316,7 @@ function Graph({
   const w = layout.width + pad * 2;
   const h = layout.height + pad * 2;
   return (
-    <ul className="canvas-graph">
+    <ul className="canvas-graph" aria-label="Method">
       <svg className="canvas-wires" viewBox={`0 0 ${w} ${h}`} width={w} height={h} aria-hidden="true">
         {layout.edges.map((e) => {
           const a = layout.nodes.find((n) => n.id === e.from)!;
@@ -338,6 +346,7 @@ function Graph({
             className="canvas-node"
             draggable
             data-kind={n.kind}
+            data-token-class={n.tokenClass}
             data-write={n.write ? "true" : undefined}
             data-on={selected === n.id ? "true" : undefined}
             data-drop={drop.includes(n.id) ? "true" : undefined}
@@ -345,7 +354,24 @@ function Graph({
             data-blocked={held ? "true" : undefined}
             data-drag={drag === n.id ? "true" : undefined}
             aria-pressed={selected === n.id}
+            aria-label={`${n.label}, ${n.kind === "tool" ? (n.write ? "write" : "read") : n.kind}${failed ? ", failed" : held ? ", blocked" : drop.includes(n.id) ? ", removed" : ""}`}
             onClick={() => onSelect(n.id)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+                return;
+              }
+              event.preventDefault();
+              const ids = layout.nodes.map((node) => node.id);
+              const index = ids.indexOf(n.id);
+              const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+              const next = ids[(index + delta + ids.length) % ids.length];
+              if (!next) return;
+              onSelect(next);
+              const root = event.currentTarget.closest(".canvas-graph");
+              const target = root?.querySelector(`[data-step="${next}"]`);
+              if (target instanceof HTMLElement) target.focus();
+            }}
+            data-step={n.id}
             onDragStart={(ev) => {
               ev.dataTransfer.setData("text/eden-step", n.id);
               ev.dataTransfer.effectAllowed = "link";
@@ -354,7 +380,7 @@ function Graph({
             onDragEnd={() => onDrag(null)}
           >
             <span className="canvas-node-kind">
-              {n.kind === "assert" ? "check" : n.write ? "write" : n.kind === "tool" ? "read" : n.kind === "island" ? "model" : n.kind}
+              {n.kind === "tool" ? (n.write ? "write" : "read") : n.label}
               {failed ? " · failed" : held ? " · blocked" : drop.includes(n.id) ? " · removed" : ""}
             </span>
             <span className="canvas-node-name">{n.label}</span>
@@ -368,6 +394,13 @@ function Graph({
 
 function NodeDetail({
   step,
+  tokenClass,
+  tokenClasses,
+  promptTokens,
+  completionTokens,
+  cachedTokens,
+  cacheWriteTokens,
+  cacheInputTokens,
   fromIds,
   version,
   stripped,
@@ -382,6 +415,13 @@ function NodeDetail({
   onDrop,
 }: {
   step: Step;
+  tokenClass?: string;
+  tokenClasses?: TokenClasses;
+  promptTokens?: number;
+  completionTokens?: number;
+  cachedTokens?: number;
+  cacheWriteTokens?: number;
+  cacheInputTokens?: number;
   fromIds: string[];
   version: string;
   stripped: string[];
@@ -396,13 +436,44 @@ function NodeDetail({
   onDrop: (on: boolean) => void;
 }) {
   const lines = bindLines(step);
+  const witnessed = witnessLines(step);
   const check = isPinnedCheck(step);
+  const provider =
+    promptTokens != null && completionTokens != null && Number.isFinite(promptTokens) && Number.isFinite(completionTokens)
+      ? { prompt: promptTokens, completion: completionTokens }
+      : undefined;
+  const ledger = tokenClasses ? tokenClassLedgerReconcileLine(tokenClasses, provider) : null;
+  const cacheLine = nodeProviderCacheHitLine({
+    cached_tokens: cachedTokens,
+    prompt_tokens: promptTokens,
+    cache_write_tokens: cacheWriteTokens,
+    cache_input_tokens: cacheInputTokens,
+  });
   return (
     <>
       <h2>{step.id}</h2>
-      <p className="canvas-k">{kindLabel(step)} · {accessLine(step)}</p>
+      <p className="canvas-k">
+        {kindLabel(step)}
+        {tokenClass ? ` · ${tokenClass}` : ""} · {stepAccessLine(step)}
+      </p>
+      {ledger ? (
+        <p className="canvas-k canvas-ledger" data-token-ledger="">
+          {ledger}
+        </p>
+      ) : null}
+      {cacheLine ? (
+        <p className="canvas-k canvas-ledger" data-provider-cache-hit="">
+          {cacheLine}
+        </p>
+      ) : null}
       <p className="canvas-k">Version {version.slice(0, 12) || "—"}</p>
       <ul className="canvas-binds">
+        {witnessed.map((row) => (
+          <li key={row.field}>
+            <span>{row.field}</span>
+            <code>{row.text}</code>
+          </li>
+        ))}
         {lines.length ? (
           lines.map((row) => {
             const key = `${step.id}.${row.field}`;
@@ -467,7 +538,7 @@ function NodeDetail({
               </li>
             );
           })
-        ) : (
+        ) : witnessed.length ? null : (
           <li>No bindings on this step.</li>
         )}
       </ul>
@@ -510,12 +581,19 @@ function ApproveStrip({
   hold: string | null;
   pending: boolean;
   notice: string | null;
-  onApprove: () => void;
+  onApprove: (opts: {
+    transparentWrites: boolean;
+    dropValues?: Array<{ path: string; value: unknown }>;
+    pinIslands?: boolean;
+  }) => void;
   onDismiss: () => void;
 }) {
   // Dismiss deletes permanently, so it arms into "Confirm dismiss" for a short
   // window; Esc or moving focus away reverts it before anything is deleted.
   const [armedAt, setArmedAt] = useState<number | null>(null);
+  const [serveWrites, setServeWrites] = useState(false);
+  const [dropValues, setDropValues] = useState<Array<{ path: string; value: unknown }>>([]);
+  const [pinIslands, setPinIslands] = useState(false);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const confirming = armedAt != null && !confirmExpired(armedAt, Date.now());
 
@@ -542,43 +620,108 @@ function ApproveStrip({
 
   const m = model.manifest;
   const writes = model.program
-    ? methodSteps(model.program).filter((s) => s.kind === "tool" && isMutating(s.tool))
+    ? graphSteps(model.program).filter((s) => s.kind === "tool" && isMutating(s.tool))
     : [];
-  const reads = model.program
-    ? methodSteps(model.program).filter((s) => s.kind === "tool" && !isMutating(s.tool))
-    : [];
+  const contract = approveContractLines(model);
+  const envRows = envelopeValueRows(model.program?.contract.envelope, dropValues);
+  const pin = pinIslandsOffer(model.program);
   return (
     <footer className="canvas-ship">
       <div className="canvas-contract">
+        {contract.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+        {envRows.length ? (
+          <ul className="canvas-env">
+            <li className="canvas-env-lead">Witnessed values. Drop extras to tighten. The last value of a key stays.</li>
+            {envRows.map((row, i) => (
+                <li key={`${row.path}:${i}`}>
+                  <span>{row.text}</span>
+                  {row.canDrop ? (
+                    <button
+                      type="button"
+                      className="canvas-quiet canvas-env-drop"
+                      disabled={pending}
+                      onClick={() =>
+                        setDropValues((cur) =>
+                          row.dropped
+                            ? cur.filter((d) => !(d.path === row.path && eq(d.value, row.value)))
+                            : [...cur, { path: row.path, value: row.value }],
+                        )
+                      }
+                    >
+                      {row.dropped ? "Keep" : "Drop"}
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+          </ul>
+        ) : null}
         <p>
-          Reads {reads.length || "none"} · Writes {writes.length || "none"}
-          {writes.length ? ` (${writes.map((s) => (s.kind === "tool" ? s.tool : s.id)).join(", ")})` : ""}
-          {model.version ? ` · ${model.version.slice(0, 10)}` : ""}
-        </p>
-        <p>
-          {metric(m?.tokensMeasured, m?.tokensSaved ?? null, "tokens saved")}
+          {tokensCertLine(m)}
           {" · "}
           {metric(m?.timeMeasured, m?.timeSavedMs ?? null, "ms")}
           {" · "}
           {qualityLine(model)}
         </p>
-        {hold ? <p>{hold}</p> : null}
+        {handoffContractLine(model.program, model.origin?.mode) ? (
+          <p>{handoffContractLine(model.program, model.origin?.mode)}</p>
+        ) : null}
+        {hold ? (
+          <p id="canvas-hold" role="status">
+            {hold}
+          </p>
+        ) : null}
       </div>
+      {writes.length || (model.program?.sequence ?? []).includes("Write") ? (
+        <label className="canvas-write-gate">
+          <input
+            type="checkbox"
+            checked={serveWrites}
+            disabled={pending}
+            onChange={(event) => setServeWrites(event.target.checked)}
+          />
+          <span>Serve Write results into the last tool output. Off unless you check this — and the host env allows it.</span>
+        </label>
+      ) : null}
+      {pin.show ? (
+        <label className="canvas-write-gate">
+          <input
+            type="checkbox"
+            checked={pinIslands}
+            disabled={pending}
+            onChange={(event) => setPinIslands(event.target.checked)}
+          />
+          <span>
+            Pin stable islands
+            {pin.ready === true ? " — ready" : pin.ready === false ? " — not yet stable" : ""}
+          </span>
+        </label>
+      ) : null}
       {model.siblings.length ? (
         <ul className="canvas-sibs">
           {model.siblings.map((s) => (
             <li key={s.id}>
               <Link href={`/request/${s.id}`}>{s.name}</Link>
-              <span>
-                {s.verdict === "PASS" ? "Ready" : s.verdict === "FAIL" ? "Refused" : s.verdict === "INCONCLUSIVE" ? "Not measured" : s.verdict}
-                {s.reason ? ` · ${s.reason}` : ""}
-              </span>
+              <span>{s.status}</span>
             </li>
           ))}
         </ul>
       ) : null}
       <div className="canvas-ship-actions">
-        <button type="button" className="signup signup-compact" disabled={!ship || pending} onClick={onApprove}>
+        <button
+          type="button"
+          className="signup signup-compact"
+          disabled={!ship || pending}
+          aria-describedby={hold ? "canvas-hold" : undefined}
+          onClick={() =>
+            onApprove({
+              transparentWrites: serveWrites,
+              ...(dropValues.length ? { dropValues } : {}),
+              ...(pinIslands ? { pinIslands: true } : {}),
+            })
+          }
+        >
           {pending ? "Shipping…" : "Approve"}
         </button>
         <button
@@ -609,18 +752,23 @@ function LiveStrip({
   notice,
   onPause,
   onResume,
+  onPromote,
 }: {
   model: CanvasModel;
   pending: boolean;
   notice: string | null;
   onPause: () => void;
   onResume: () => void;
+  onPromote: () => void;
 }) {
   const live = model.state === "live";
   const rec = model.receipt;
+  const words = model.fail?.stretchWords ?? [];
+  const stretch = liveStretchLine(model, words);
   const postmortem = rec
-    ? receiptPostmortem(rec, { budgetMs: model.program?.budget?.ms, drift: model.drift })
-    : "";
+    ? receiptPostmortem(rec, { budgetMs: model.program?.budget?.ms, drift: model.drift, stretchWords: words })
+    : model.fail?.stretch ?? "";
+  const canary = liveCanaryLine(model);
   return (
     <footer className="canvas-ship">
       <div className="canvas-contract">
@@ -629,18 +777,31 @@ function LiveStrip({
             ? "Running the pinned method."
             : "Paused. Resume continues from incomplete work — completed steps stay done."}
         </p>
+        {canary ? <p>{canary}</p> : null}
+        {stretch ? <p className="canvas-k">{stretch}</p> : null}
         {postmortem ? <p className="canvas-k">{postmortem}</p> : null}
       </div>
       <div className="canvas-ship-actions">
         {live ? (
-          <button type="button" className="canvas-quiet" disabled={pending} onClick={onPause}>
+          <button type="button" className="canvas-quiet" disabled={pending} onClick={onPause} aria-label="Pause this live tool">
             {pending ? "Working…" : "Pause"}
           </button>
         ) : (
-          <button type="button" className="canvas-quiet" disabled={pending} onClick={onResume}>
+          <button
+            type="button"
+            className="canvas-quiet"
+            disabled={pending}
+            onClick={onResume}
+            aria-label="Resume from incomplete work. Completed steps stay done."
+          >
             {pending ? "Working…" : "Resume"}
           </button>
         )}
+        {canary ? (
+          <button type="button" className="canvas-quiet" disabled={pending} onClick={onPromote}>
+            {pending ? "Working…" : "Promote"}
+          </button>
+        ) : null}
       </div>
       {notice ? <p className="canvas-note">{notice}</p> : null}
     </footer>

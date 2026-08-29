@@ -1,4 +1,4 @@
-import type { Binding, Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
+import type { Binding, IslandUsage, Manifest, StretchProgram, StretchTrace, ToolRegistry, IslandCaller } from "@eden/ir";
 import { canonicalize, inDistribution, isCheckName, isIslandName, isReadName, isUsableOutput, minLlmReductionOf, redact } from "@eden/ir";
 import { isDeopt, runProgram } from "@eden/runtime";
 import { isUnrecordedCall } from "./replay";
@@ -84,6 +84,29 @@ export function mutatingSteps(program: StretchProgram): string[] {
   ];
 }
 
+function islandUsageFromStats(stats: {
+  islandUsageMeasured?: boolean;
+  islandPromptTokens?: number;
+  islandCompletionTokens?: number;
+  islandCachedTokens?: number;
+  islandCacheWriteTokens?: number;
+  islandCacheInputTokens?: number;
+  islandMemoized?: boolean;
+}): IslandUsage | null {
+  if (!stats.islandUsageMeasured) return null;
+  const p = stats.islandPromptTokens;
+  const c = stats.islandCompletionTokens;
+  if (!Number.isFinite(p) || !Number.isFinite(c)) return null;
+  return {
+    prompt_tokens: p,
+    completion_tokens: c,
+    cached_tokens: stats.islandCachedTokens,
+    ...(stats.islandCacheWriteTokens != null ? { cache_write_tokens: stats.islandCacheWriteTokens } : {}),
+    ...(stats.islandCacheInputTokens != null ? { cache_input_tokens: stats.islandCacheInputTokens } : {}),
+    memoized: stats.islandMemoized,
+  };
+}
+
 function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }
@@ -119,9 +142,14 @@ function envFlakedTool(err: unknown, t: StretchTrace, program: StretchProgram): 
   const msg = err instanceof Error ? err.message : "";
   if (!msg.includes("step failed")) return null;
   const failedNames = new Set(t.events.filter((e) => e.ok === false).map((e) => e.name));
-  if (!failedNames.size) return null;
+  const succeededNames = new Set(t.events.filter((e) => e.ok !== false).map((e) => e.name));
   for (const s of program.steps) {
-    if (s.kind === "tool" && failedNames.has(s.tool)) return s.tool;
+    if (s.kind !== "tool") continue;
+    if (failedNames.has(s.tool)) return s.tool;
+    // Fresh-sandbox first-attempt flake: this stretch's recording got through
+    // the tool (a prior stretch may have warmed a shared attempts counter),
+    // but the throwaway world starts cold. A timeout here is the environment.
+    if (succeededNames.has(s.tool) && /upstream timeout|ECONNRESET|ETIMEDOUT|503|429/i.test(msg)) return s.tool;
   }
   return null;
 }
@@ -217,12 +245,13 @@ export async function shadowProgram(
       compiledLlm.push(run.stats.llmCalls);
       compiledCents.push(run.stats.cents);
       const naiveT = traceTokens(t);
-      const compiledT = compiledTokens(t, run.stats.llmCalls, hasIsland);
+      const islandUsage = islandUsageFromStats(run.stats);
+      const compiledT = compiledTokens(t, run.stats.llmCalls, hasIsland, islandUsage);
       if (naiveT == null || compiledT == null) tokensMeasured = false;
       else {
         naiveTok.push(naiveT);
         compiledTok.push(compiledT);
-        if (tokensExtrapolated(run.stats.llmCalls, hasIsland)) tokensEstimated = true;
+        if (tokensExtrapolated(run.stats.llmCalls, hasIsland, islandUsage)) tokensEstimated = true;
       }
       const toolsMs = compiledToolMs(t, run.stats.toolCalls);
       const naiveTools = naiveToolMs(t);
@@ -363,6 +392,7 @@ export async function shadowProgram(
     );
     return { verdict: "INCONCLUSIVE", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
   }
+  manifest.certified = tokensOk || timeOk;
   return { verdict: "PASS", manifest, reasons, n, minLlmReduction: minR, tokensEstimated };
 }
 

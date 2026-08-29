@@ -8,10 +8,11 @@ import { AccountCopy } from "../account/frame";
 import { useContinueIfAuthed } from "../account/gate";
 import { GoogleButton } from "../account/google";
 import { destAfterAuth, fieldMessage, globalMessage, GOOGLE_SSO, goDecorated } from "../account/home";
+import { PasswordField } from "../account/password-field";
 
 export function SignInForm() {
   const { signIn, errors, fetchStatus } = useSignIn();
-  const { isLoaded, isSignedIn } = useContinueIfAuthed();
+  const { isLoaded, isSignedIn } = useContinueIfAuthed("in");
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
@@ -200,20 +201,17 @@ export function SignInForm() {
         <AccountCopy title="Choose a new password." lead="Then you’ll be in." />
         <div className="account-door" id="account-door">
           <form className="account-form" onSubmit={onResetPassword}>
-            <label className="account-field" htmlFor="signin-next-password">
-              <span>New password</span>
-              <input
-                id="signin-next-password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                value={nextPassword}
-                onChange={(event) => setNextPassword(event.target.value)}
-                required
-              />
-            </label>
+            <PasswordField
+              id="signin-next-password"
+              label="New password"
+              autoComplete="new-password"
+              value={nextPassword}
+              onChange={setNextPassword}
+              invalid={Boolean(passwordError)}
+              describedBy={passwordError ? "signin-next-password-error" : undefined}
+            />
             {passwordError ? (
-              <p className="account-error" role="alert">
+              <p className="account-error" id="signin-next-password-error" role="alert">
                 {passwordError}
               </p>
             ) : null}
@@ -289,20 +287,15 @@ export function SignInForm() {
               {emailError}
             </p>
           ) : null}
-          <label className="account-field" htmlFor="signin-password">
-            <span>Password</span>
-            <input
-              id="signin-password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={Boolean(passwordError)}
-              aria-describedby={passwordError ? "signin-password-error" : undefined}
-              required
-            />
-          </label>
+          <PasswordField
+            id="signin-password"
+            label="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={setPassword}
+            invalid={Boolean(passwordError)}
+            describedBy={passwordError ? "signin-password-error" : undefined}
+          />
           {passwordError ? (
             <p className="account-error" id="signin-password-error" role="alert">
               {passwordError}

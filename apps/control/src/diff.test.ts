@@ -232,4 +232,107 @@ describe("candidate review surface", () => {
     expect(body.candidate).toMatchObject({ id: "t", verdict: "pending" });
     expect(body.candidate_diff?.literals_introduced).toHaveLength(1);
   });
+
+  test("putTool round-trips transparent_writes", () => {
+    const store = new Store(":memory:");
+    const live = program();
+    store.putTool({
+      id: live.id,
+      name: live.name,
+      version: live.version,
+      program: live,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      transparent_writes: true,
+    });
+    expect(store.tool(live.id)?.transparent_writes).toBe(true);
+    const paused = store.tool(live.id)!;
+    paused.state = "paused";
+    store.putTool(paused);
+    expect(store.tool(live.id)?.transparent_writes).toBe(true);
+  });
+
+  test("putTool writes rollout alongside transparent_writes and pause keeps both", () => {
+    const store = new Store(":memory:");
+    const live = program();
+    store.putTool({
+      id: live.id,
+      name: live.name,
+      version: live.version,
+      program: live,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      transparent_writes: true,
+      rollout: "canary",
+    });
+    expect(store.tool(live.id)?.transparent_writes).toBe(true);
+    expect(store.tool(live.id)?.rollout).toBe("canary");
+    const paused = store.tool(live.id)!;
+    paused.state = "paused";
+    store.putTool(paused);
+    expect(store.tool(live.id)?.transparent_writes).toBe(true);
+    expect(store.tool(live.id)?.rollout).toBe("canary");
+  });
+
+  test("existing tools with no rollout flag stay live 100%", () => {
+    const store = new Store(":memory:");
+    const live = program();
+    store.putTool({
+      id: live.id,
+      name: live.name,
+      version: live.version,
+      program: live,
+      state: "live",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    expect(store.tool(live.id)?.rollout).toBeUndefined();
+  });
+
+  test("approve defaults to canary and GET includes rollout", async () => {
+    const { store, fetchHandler } = handler();
+    const candidate = program({ id: "can", name: "can" });
+    store.putCandidate({
+      id: "can",
+      sequence: [],
+      program: candidate,
+      refusal: null,
+      verdict: "PASS",
+      manifest: passManifest,
+      created_at: Date.now(),
+    });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/can/approve", { method: "POST", headers: auth, body: "{}" }),
+    );
+    expect(approved.status).toBe(200);
+    expect(store.tool(candidate.id)?.rollout).toBe("canary");
+    expect(((await approved.json()) as { rollout?: string }).rollout).toBe("canary");
+    const got = await fetchHandler(new Request("http://x/v1/tools/can", { headers: auth }));
+    expect(((await got.json()) as { rollout?: string }).rollout).toBe("canary");
+  });
+
+  test("approve persists transparent_writes from the checkbox body", async () => {
+    const { store, fetchHandler } = handler();
+    const candidate = program({ id: "tw", name: "tw" });
+    store.putCandidate({
+      id: "tw",
+      sequence: [],
+      program: candidate,
+      refusal: null,
+      verdict: "PASS",
+      manifest: passManifest,
+      created_at: Date.now(),
+    });
+    const approved = await fetchHandler(
+      new Request("http://x/v1/tools/tw/approve", {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({ transparent_writes: true }),
+      }),
+    );
+    expect(approved.status).toBe(200);
+    expect(store.tool(candidate.id)?.transparent_writes).toBe(true);
+  });
 });

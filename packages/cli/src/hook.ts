@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { edenHome, ensureHome, appendJsonl, eventsPath, readConfig, readJson, withFileLock, withFileLockAsync, outboxPath, wrapPlaneUrl, writeFileAtomic } from "./home";
 import { redact, isStretchEnd, inDistribution, protocolHeaders } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { eligibleForTransparent, executeTransparent, postToolUseReplacement, type LiveTool } from "./transparent";
+import { eligibleForTransparent, executeTransparent, inSessionBucket, postToolUseReplacement, type LiveTool } from "./transparent";
+import { applyHookOutput } from "./transcript-diff";
+import { appendLedgerRow, armRemainder, armRemainderFromBatch, claimRemainder, parseToolCalls, remainderDenyReason } from "./remainder";
+import { mapHostToolName } from "./shapes";
 
 export type HookIn = {
   hook_event_name?: string;
@@ -12,7 +15,108 @@ export type HookIn = {
   tool_input?: Record<string, unknown>;
   tool_response?: unknown;
   tool_output?: unknown;
+  /** PostToolBatch: one entry per resolved call. Absent/garbage → fail-open `{}`. */
+  tool_calls?: unknown;
+  /** Claude Code project cwd. Remainder joins relative `file_path`/`path` against this. */
+  cwd?: string;
 };
+
+export type HookHost = "claude" | "gemini" | "opencode" | "codex" | "unknown";
+
+const EVENT_ALIASES: Record<string, string> = {
+  PostToolUse: "PostToolUse",
+  AfterToolUse: "PostToolUse",
+  AfterTool: "PostToolUse",
+  post_tool: "PostToolUse",
+  "tool.execute.after": "PostToolUse",
+  PostToolBatch: "PostToolBatch",
+  AfterToolBatch: "PostToolBatch",
+  post_tool_batch: "PostToolBatch",
+  PreToolUse: "PreToolUse",
+  BeforeToolUse: "PreToolUse",
+  BeforeTool: "PreToolUse",
+  pre_tool: "PreToolUse",
+  "tool.execute.before": "PreToolUse",
+  Stop: "Stop",
+  SessionEnd: "Stop",
+  session_stop: "Stop",
+  SessionStart: "SessionStart",
+  session_start: "SessionStart",
+};
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+function detectHookHost(r: Record<string, unknown>, eventRaw: string): HookHost {
+  if (
+    eventRaw === "AfterTool" ||
+    eventRaw === "BeforeTool" ||
+    eventRaw === "AfterToolUse" ||
+    eventRaw === "BeforeToolUse"
+  ) {
+    return "gemini";
+  }
+  if (
+    eventRaw === "post_tool" ||
+    eventRaw === "pre_tool" ||
+    eventRaw === "tool.execute.after" ||
+    eventRaw === "tool.execute.before" ||
+    typeof r.sessionID === "string"
+  ) {
+    return "opencode";
+  }
+  const tr = asRecord(r.tool_response);
+  if (typeof tr.llmContent === "string") return "gemini";
+  if (
+    eventRaw === "PostToolUse" ||
+    eventRaw === "PreToolUse" ||
+    eventRaw === "Stop" ||
+    eventRaw === "SessionStart" ||
+    eventRaw === "PostToolBatch"
+  ) {
+    return "claude";
+  }
+  return "unknown";
+}
+
+/**
+ * Map host-native hook payloads onto Claude-shaped {@link HookIn}.
+ * Gemini `tool_response.llmContent` becomes the original text; OpenCode
+ * `tool`/`args`/`sessionID` become `tool_name`/`tool_input`/`session_id`.
+ */
+export function normalizeHookIn(raw: unknown): { hook: HookIn; host: HookHost } {
+  const r = asRecord(raw);
+  const eventRaw = String(r.hook_event_name ?? r.hookEventName ?? r.event ?? "");
+  const hook_event_name = EVENT_ALIASES[eventRaw] ?? (eventRaw || undefined);
+  let host = detectHookHost(r, eventRaw);
+  const toolRaw = r.tool_name ?? r.tool ?? r.toolName;
+  const tool_name = typeof toolRaw === "string" && toolRaw ? mapHostToolName(toolRaw) : undefined;
+  const sessionRaw = r.session_id ?? r.sessionID ?? r.sessionId;
+  const session_id = typeof sessionRaw === "string" && sessionRaw ? sessionRaw : undefined;
+  const tool_input = asRecord(r.tool_input ?? r.args ?? r.parameters);
+  let tool_response: unknown = r.tool_response ?? r.tool_output ?? r.result;
+  if (tool_response === undefined && typeof r.output === "string") tool_response = r.output;
+  const tr = asRecord(tool_response);
+  if (typeof tr.llmContent === "string") {
+    if (host === "unknown") host = "gemini";
+    tool_response = tr.llmContent;
+  }
+  const cwdRaw = r.cwd;
+  const cwd = typeof cwdRaw === "string" && cwdRaw ? cwdRaw : undefined;
+  return {
+    host,
+    hook: {
+      ...r,
+      hook_event_name,
+      session_id,
+      tool_name,
+      tool_input,
+      tool_response,
+      cwd,
+    },
+  };
+}
 
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
@@ -233,12 +337,14 @@ export function recordAppendedEvent(path: string, append: () => void): number {
 }
 
 export async function respondToHook(
-  body: HookIn,
+  raw: HookIn,
   locker: HookLocker = withFileLock,
 ): Promise<Record<string, unknown>> {
+  const { hook: body, host } = normalizeHookIn(raw);
   ensureHome();
   const session = body.session_id || "local";
   const name = body.tool_name;
+  const cwd = typeof body.cwd === "string" && body.cwd ? body.cwd : undefined;
   if (body.hook_event_name === "PostToolUse" && name) {
     const event = redact({
       id: crypto.randomUUID(),
@@ -269,18 +375,73 @@ export async function respondToHook(
       const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
       const live = (Array.isArray(liveRaw) ? liveRaw : []) as LiveTool[];
       const entry = live.find(
-        (t) => (t.sequence ?? [])[0] === name && eligibleForTransparent(t, body.tool_input ?? {}),
+        (t) =>
+          (t.sequence ?? [])[0] === name &&
+          inSessionBucket(t, body.session_id) &&
+          eligibleForTransparent(t, body.tool_input ?? {}),
       );
       if (entry) {
         const receiptText = await executeTransparent(entry, body.tool_input ?? {});
         if (receiptText !== null) {
           // `name` (the real tool, e.g. Bash) selects the native result shape;
           // the program name appears in the appended sentinel.
-          return postToolUseReplacement(name, body.tool_response ?? body.tool_output ?? "", receiptText, entry.name);
+          const replacement = postToolUseReplacement(
+            name,
+            body.tool_response ?? body.tool_output ?? "",
+            receiptText,
+            entry.name,
+          );
+          try {
+            await armRemainder(session, entry, body.tool_input ?? {}, locker, cwd);
+            appendLedgerRow({ session, class: "transparent", program: entry.name, programId: entry.id });
+            const original = body.tool_response ?? body.tool_output ?? "";
+            const applied = applyHookOutput(name, original, replacement);
+            if (applied.droppedRewrite) {
+              appendLedgerRow({ session, class: "host-drop", program: entry.name, programId: entry.id, tool: name });
+            }
+          } catch {
+            /* serve stands even if remainder/ledger fail */
+          }
+          return replacement;
         }
       }
     } catch {
       /* fall open */
+    }
+  }
+  // PostToolBatch fires once after a parallel batch resolves, before the next
+  // model call. Remainder is armed from the full set so sibling tails do not
+  // double-execute on the next PreToolUse. Never decision:block — that would
+  // halt the agentic loop; suppression is PreToolUse deny (already shipped).
+  if (body.hook_event_name === "PostToolBatch") {
+    try {
+      const parsed = parseToolCalls(body.tool_calls);
+      if (!parsed) return {};
+      const calls = parsed.map((c) => ({
+        tool_name: mapHostToolName(c.tool_name),
+        tool_input: c.tool_input,
+      }));
+      const liveRaw = readJson<unknown>(join(edenHome(), "live-tools.json"), []);
+      const live = (Array.isArray(liveRaw) ? liveRaw : []) as Array<{
+        name?: string;
+        id?: string;
+        sequence?: string[];
+        envelope?: { inputs?: Record<string, unknown[]> } | null;
+      }>;
+      const events = readJsonl(eventsPath(session));
+      const servedHeads = new Set(events.map((e) => mapHostToolName(String(e.name ?? ""))));
+      const covered = await armRemainderFromBatch(session, calls, live, locker, { servedHeads, cwd });
+      if (!covered.length) return {};
+      const programs = [...new Set(covered)].join(", ");
+      const restNames = [...new Set(calls.map((c) => c.tool_name))].join(", ");
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PostToolBatch",
+          additionalContext: remainderDenyReason(programs, restNames),
+        },
+      };
+    } catch {
+      return {};
     }
   }
   if (body.hook_event_name === "Stop" || body.hook_event_name === "SessionEnd") {
@@ -303,17 +464,52 @@ export async function respondToHook(
   // stop the hook from answering (an answer of "allow" is always available).
   const cfg = readConfigSafely();
   if (body.hook_event_name === "PreToolUse" && name) {
+    // S1b remainder deny: already-served tail. Independent of MCP steer
+    // (EDEN_STEER_HOOKS stays default off). Fail-open on any throw.
+    try {
+      const claimed = await claimRemainder(session, name, body.tool_input ?? {}, locker, undefined, cwd);
+      if (claimed) {
+        try {
+          appendLedgerRow({
+            session,
+            class: "steered-skip",
+            program: claimed.program,
+            programId: claimed.programId,
+            tool: name,
+          });
+        } catch {
+          /* deny still stands */
+        }
+        const reason = remainderDenyReason(claimed.program, name);
+        const deny: Record<string, unknown> = {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reason,
+          },
+        };
+        // Gemini BeforeTool reads top-level decision/reason. Claude uses
+        // permissionDecision only — extra decision on Claude Pre is omitted.
+        if (host === "gemini") {
+          deny.decision = "deny";
+          deny.reason = reason;
+        }
+        return deny;
+      }
+    } catch {
+      /* fall open */
+    }
     if (live.some((t) => t.name === name)) return { ok: true };
     // Steering a raw call to the MCP tool is opt-in (steer_hooks in config, or
     // EDEN_STEER_HOOKS=1). Default is observe: Eden records the pattern but
     // never denies the agent's own call — if the MCP server is down, mid-restart,
     // or the compiled tool deopts, a deny here would leave the agent stranded
-    // with no way to do the work at all.
+    // with no way to do the work at all. Remainder deny above is not this.
     const steerHooks =
       process.env.EDEN_STEER_HOOKS === "1" || cfg?.steer_hooks === true;
     if (!steerHooks) return { ok: true };
     const hits = live
-      .filter((t) => (t.sequence ?? [])[0] === name)
+      .filter((t) => (t.sequence ?? [])[0] === name && inSessionBucket(t, body.session_id))
       .sort((a, b) => (b.sequence?.length ?? 0) - (a.sequence?.length ?? 0));
     const hit = hits[0];
     // Never deny in favour of a tool we cannot name. drain writes

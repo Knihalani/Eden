@@ -39,6 +39,8 @@ export type World = {
   /** The final tool of the scripted stretch; completing it means the goal was
    * reached even when the agent does not early-stop (oblivious mode). */
   terminal: string;
+  /** Optional: reset per-stretch world state (e.g. first-attempt flakes). */
+  beginStretch?: () => void;
   /** Optional full-fidelity predicate: true when this trace is a complete,
    * non-degraded witness of the stretch (no skipped steps, no retries).
    * Defaults to "all traces qualify". Used to pick compile/hold-out splits —
@@ -427,8 +429,11 @@ export function createIncident(flakeP = 0.12): World {
           attempts.set(key, (attempts.get(key) ?? 0) + 1);
           await Bun.sleep(75);
           const n = attempts.get(key)!;
-          // Deterministic flake: fails on the first attempt for keys whose
-          // hash lands in the flake band, succeeds on any retry.
+          // Deterministic flake: fails on the first attempt *of this stretch*
+          // for keys whose hash lands in the flake band, succeeds on retry.
+          // Attempts reset via beginStretch so a later stretch of the same key
+          // cannot look clean after a prior retry warmed the counter — a fresh
+          // shadow sandbox would then timeout on first call.
           if (n === 1 && hashStr(key) % 100 < flakeP * 100) throw new Error("upstream timeout");
           const seq = nextOrd();
           return { events: Array.from({ length: 24 }, (_, i) => ({ lvl: i % 5 ? "info" : "error", msg: `${key} event ${i}`, ts: seq * 7 + i })) };
@@ -495,6 +500,9 @@ export function createIncident(flakeP = 0.12): World {
     done: (v) => Boolean((v as { paged?: boolean })?.paged),
     terminal: "pageOnCall",
     fidelity: (events) => events.every((e) => e.ok),
+    beginStretch() {
+      attempts.clear();
+    },
     check(doneGoals) {
       return dupCheck("incident", doneGoals, "key", [
         { name: "fileIncident", get: (id) => filed.get(id) ?? 0 },

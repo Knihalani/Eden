@@ -1,11 +1,12 @@
 import { openDb, workspaceForKey, isManagedDeployment, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
-import { handleMcp } from "./mcp";
+import { handleMcp, liveTools, dispatchResult } from "./mcp";
 import { playTool } from "./playback";
 import { handleForge } from "./forge";
 import { copyBtn, escapeHtml, layout, nav } from "./html";
 import { findOnTool, wrapPlay, toolHasPlayback } from "./wrap";
 import { buildLedger, ensureLedgerSchema, sanitizeManifest, type LedgerFigure } from "./ledger";
+import { handleWebhook } from "./webhook";
 import { detectAndParse } from "@eden/core";
 import { protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER, redact } from "@eden/ir";
 import type { ToolEvent } from "@eden/core";
@@ -527,7 +528,7 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
 </div>
 <div class="stat-row">
   ${stat(String(drafts.c), "Drafts waiting to be approved", drafts.c === 0)}
-  ${stat(String(on.c), "Live tools", on.c === 0)}
+  ${stat(String(on.c), on.c === 0 ? "0 programs" : on.c === 1 ? "1 program" : "programs", on.c === 0)}
 </div>`
       + (usage.runs > 0
         ? `<div class="panel"><h2>This month</h2><p class="muted">${month.runs} runs · ${(month.server_ms / 1000).toFixed(1)}s server compute · ${(month.raw_bytes / 1e6).toFixed(2)}MB raw compressed to ${(month.densified_bytes / 1000).toFixed(0)}KB sent to the model</p></div>`
@@ -1017,6 +1018,13 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
     return Response.json(receipt);
   }
 
+  if ((url.pathname === "/v1/webhook" || url.pathname === "/v1/hooks/invalidate") && req.method === "POST") {
+    // Shared-secret invalidation. Own auth (EDEN_WEBHOOK_SECRET); missing or
+    // wrong secret is 401/403 and keys stay. Empty keys are a no-op, not a wipe.
+    // Never pauses the live tool — drop is cache-only.
+    return handleWebhook(d, req);
+  }
+
   if (url.pathname === "/v1/wrap" && req.method === "POST") {
     if (!wsId) return new Response("unauthorized", { status: 401 });
     const parsed = readJsonObject(await readJson(req));
@@ -1041,6 +1049,20 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
       return Response.json({ error: `tool execution failed: ${(err as Error).message}` }, { status: 500 });
     }
     return Response.json(played);
+  }
+
+  if (url.pathname === "/v1/dispatch" && req.method === "POST") {
+    if (!wsId) return new Response("unauthorized", { status: 401 });
+    const parsed = readJsonObject(await readJson(req));
+    if (!parsed.ok) return parsed.res;
+    let tools: unknown[] = [];
+    try {
+      tools = dispatchResult(await liveTools(d, wsId), parsed.value as Record<string, unknown>).tools;
+    } catch {
+      tools = [];
+    }
+    if (tools.length > 1) tools = tools.slice(0, 1);
+    return Response.json({ tools });
   }
 
   if (url.pathname === "/mcp") {

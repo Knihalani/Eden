@@ -1,6 +1,7 @@
 import type { StretchTrace } from "@eden/ir";
 import { CHECK_MIN_SUPPORT, isCheckName } from "@eden/ir";
 import { commandShapeCached, abstractShellGroup } from "../../core/src/shapes";
+import { witnessHadFailedAttempt } from "./normalize";
 
 /**
  * The identity an event contributes to a mined sequence.
@@ -120,6 +121,61 @@ export type Cluster = {
   cutAt?: number[];
 };
 
+/** Floor used when the length distribution is short (desk / TicketShip). */
+export const DEFAULT_MAX_GRAM = 12;
+/** Ceiling so a pathological 200-call stretch cannot explode n-gram work. */
+export const MAX_GRAM_CAP = 64;
+
+function okEventCount(t: StretchTrace): number {
+  let n = 0;
+  for (const e of t.events) if (e.ok && !e.skipped) n++;
+  return n;
+}
+
+/**
+ * Window per input length distribution. A homogeneous ETL batch of 20-call
+ * stretches gets 20, not 12; a desk-class batch of 8-call stretches stays at
+ * the 12 floor so short programs are not over-windowed. Callers who pass
+ * `maxGram` skip this.
+ */
+export function autoMaxGram(traces: StretchTrace[], minSupport = 3): number {
+  const lens: number[] = [];
+  const freq = new Map<number, number>();
+  for (const t of traces) {
+    const n = okEventCount(t);
+    if (n < 3) continue;
+    lens.push(n);
+    freq.set(n, (freq.get(n) ?? 0) + 1);
+  }
+  if (!lens.length) return DEFAULT_MAX_GRAM;
+  let supported = DEFAULT_MAX_GRAM;
+  for (const [L, c] of freq) if (c >= minSupport && L > supported) supported = L;
+  lens.sort((a, b) => a - b);
+  const p90 = lens[Math.min(lens.length - 1, Math.floor((lens.length - 1) * 0.9))]!;
+  return Math.min(MAX_GRAM_CAP, Math.max(DEFAULT_MAX_GRAM, supported, p90));
+}
+
+/**
+ * Collapsed tool identity: consecutive repeats fold. Width-4 and width-5
+ * fan-outs share a shape; a skipped audit line does not.
+ */
+export function shapeSignature(seq: string[]): string {
+  const out: string[] = [];
+  for (const n of seq) if (out.at(-1) !== n) out.push(n);
+  return out.join("\0");
+}
+
+/** Traces whose collapsed tool order matches the cluster — envelope, not sloppy votes. */
+export function envelopeTraces(cluster: Cluster): StretchTrace[] {
+  const want = shapeSignature(cluster.sequence);
+  const shaped = cluster.traces.filter((t) => shapeSignature(names(t)) === want);
+  // Failed attempts (retries) vote for shape but must not poison envelope values.
+  // Normalize strips `ok: false` events, so the mark is kept on the trace object.
+  const clean = shaped.filter((t) => !witnessHadFailedAttempt(t));
+  if (clean.length) return clean;
+  return shaped.length ? shaped : cluster.traces;
+}
+
 /**
  * The tool names of a trace, in order.
  *
@@ -168,7 +224,9 @@ export function oneSubstitute(a: string[], b: string[]): boolean {
 }
 
 function nearSeq(a: string[], b: string[]): boolean {
-  return oneInsert(a, b) || oneSubstitute(a, b);
+  // Width variants and sloppy skips are one insert. A substitute is a
+  // different shape (hostile vote) — it must not join the cluster.
+  return oneInsert(a, b);
 }
 
 function medianIndex(traces: StretchTrace[], name: string): number {
@@ -207,7 +265,7 @@ export function isSubsequence(sub: string[], full: string[]): boolean {
   return i === sub.length;
 }
 
-export function majoritySequence(traces: StretchTrace[], minFrac = 0.8): string[] {
+export function majoritySequence(traces: StretchTrace[], minFrac = 0.8, maxLen = DEFAULT_MAX_GRAM): string[] {
   const freq = new Map<string, number>();
   for (const t of traces) for (const n of new Set(names(t))) freq.set(n, (freq.get(n) ?? 0) + 1);
   const kept = new Set(
@@ -215,7 +273,7 @@ export function majoritySequence(traces: StretchTrace[], minFrac = 0.8): string[
   );
   const ranked = [...traces].sort((a, b) => names(b).length - names(a).length || a.id.localeCompare(b.id));
   const expanded = (ranked[0] ? names(ranked[0]) : []).filter((n) => kept.has(n));
-  if (expanded.length >= 3) return expanded.slice(0, 12);
+  if (expanded.length >= 3) return expanded.slice(0, maxLen);
   const unique = [...kept];
   // Decorate, sort, undecorate. medianIndex maps over every trace, does an
   // indexOf and sorts a fresh array, and calling it from inside a comparator
@@ -269,18 +327,58 @@ export function clusterFailureTraces(traces: StretchTrace[], minSupport = 3): Cl
   return clusters.sort((a, b) => b.traces.length - a.traces.length || b.sequence.length - a.sequence.length);
 }
 
-export function clusterTraces(traces: StretchTrace[], minSupport = 3, maxLen = 12): Cluster[] {
+function matchesGram(seq: string[], full: string[]): boolean {
+  if (isContiguous(seq, full)) return true;
+  // Sloppy / width votes: one insert against the *whole* gram, not a short
+  // window (oneInsert already requires |Δlen| === 1).
+  return oneInsert(seq, full);
+}
+
+function clusterByShape(traces: StretchTrace[], minSupport: number, maxLen: number): Cluster[] {
+  const byShape = new Map<string, StretchTrace[]>();
+  for (const t of traces) {
+    const arr = names(t);
+    if (arr.length < 3) continue;
+    const k = shapeSignature(arr);
+    const g = byShape.get(k);
+    if (g) g.push(t);
+    else byShape.set(k, [t]);
+  }
+  const clusters: Cluster[] = [];
+  for (const g of byShape.values()) {
+    if (g.length < minSupport) continue;
+    const sequence = majoritySequence(g, 0.8, maxLen);
+    if (sequence.length < 3 || sequence.length > maxLen) continue;
+    clusters.push({ sequence, traces: g });
+  }
+  clusters.sort((a, b) => b.sequence.length - a.sequence.length || b.traces.length - a.traces.length);
+  const kept: Cluster[] = [];
+  for (const c of clusters) {
+    if (kept.some((k) => isSubsequence(c.sequence, k.sequence))) continue;
+    kept.push(c);
+  }
+  return kept;
+}
+
+export function clusterTraces(traces: StretchTrace[], minSupport = 3, maxLen = DEFAULT_MAX_GRAM): Cluster[] {
+  // Fan-out widths share a collapsed shape but not a contiguous n-gram of the
+  // tail: findOrder + 8 checks is a window of a 10-wide stretch, and the
+  // report/refund suffix never follows those 8 checks. Shape clustering keeps
+  // the whole stretch; per-trace loop binding still respects each width.
+  const fromShape = clusterByShape(traces, minSupport, maxLen);
   const grams = ngrams(traces, minSupport, 3, maxLen);
   const fromNgrams: Cluster[] = [];
   for (const seq of grams) {
+    if (fromShape.some((c) => isSubsequence(seq, c.sequence))) continue;
     if (fromNgrams.some((c) => isSubsequence(seq, c.sequence))) continue;
-    const matching = traces.filter((t) => isContiguous(seq, names(t)));
+    const matching = traces.filter((t) => matchesGram(seq, names(t)));
     if (matching.length < minSupport) continue;
     fromNgrams.push({ sequence: seq, traces: matching });
   }
-  if (fromNgrams.length) {
-    return fromNgrams.sort((a, b) => b.sequence.length - a.sequence.length || b.traces.length - a.traces.length);
-  }
+  const merged = [...fromShape, ...fromNgrams].sort(
+    (a, b) => b.sequence.length - a.sequence.length || b.traces.length - a.traces.length,
+  );
+  if (merged.length) return merged;
 
   const bySeq = new Map<string, { arr: string[]; traces: StretchTrace[] }>();
   for (const t of traces) {
@@ -313,24 +411,34 @@ export function clusterTraces(traces: StretchTrace[], minSupport = 3, maxLen = 1
   const clusters: Cluster[] = [];
   for (const g of groups.values()) {
     if (g.length < minSupport) continue;
-    const sequence = majoritySequence(g);
-    if (sequence.length < 3 || sequence.length > 12) continue;
+    const sequence = majoritySequence(g, 0.8, maxLen);
+    if (sequence.length < 3 || sequence.length > maxLen) continue;
     clusters.push({ sequence, traces: g });
   }
   clusters.sort((a, b) => b.traces.length - a.traces.length || b.sequence.length - a.sequence.length);
   return clusters;
 }
 
-export function ngrams(traces: StretchTrace[], minSupport = 3, minLen = 3, maxLen = 12): string[][] {
-  const counts = new Map<string, { seq: string[]; n: Set<string> }>();
+export function ngrams(traces: StretchTrace[], minSupport = 3, minLen = 3, maxLen = DEFAULT_MAX_GRAM): string[][] {
+  // Homogeneous batches share one name sequence (ids differ). Walk each
+  // unique sequence once and credit every trace id — 500 identical ETL
+  // stretches used to recompute the same windows 500 times.
+  const bySeq = new Map<string, { arr: string[]; ids: string[] }>();
   for (const t of traces) {
     const arr = names(t);
+    const key = arr.join("\0");
+    const row = bySeq.get(key);
+    if (row) row.ids.push(t.id);
+    else bySeq.set(key, { arr, ids: [t.id] });
+  }
+  const counts = new Map<string, { seq: string[]; n: Set<string> }>();
+  for (const { arr, ids } of bySeq.values()) {
     for (let len = minLen; len <= Math.min(maxLen, arr.length); len++) {
       for (let i = 0; i + len <= arr.length; i++) {
         const seq = arr.slice(i, i + len);
         const key = seq.join("\0");
         const row = counts.get(key) ?? { seq, n: new Set() };
-        row.n.add(t.id);
+        for (const id of ids) row.n.add(id);
         counts.set(key, row);
       }
     }

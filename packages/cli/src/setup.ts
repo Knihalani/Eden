@@ -42,14 +42,25 @@ export function hookCommand(
   const bunHook = `bun ${shq(cliPath)} hook`;
   const ms = Number(process.env.EDEN_HOOKD_TIMEOUT_MS || 8000);
   const sec = Math.min(60, Math.max(2, Math.ceil((Number.isFinite(ms) ? ms : 8000) / 1000)));
-  const core = `curl -sS --max-time ${sec} -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook}`;
+  // Bake home into the bun fallback (and the spawned hookd it warms). Curl
+  // itself ignores EDEN_HOME; without this, wrap/hookd on a custom home and
+  // Claude's bun path on ~/.eden split the remainder store.
+  const core = `${edenHomeExport()}; curl -sS --max-time ${sec} -H 'content-type: application/json' --data-binary @- ${hookd} || ${bunHook}`;
   return opts.failOpen === false ? core : `${core} || echo '{}'`;
+}
+
+/** Install-time home, POSIX-quoted. Same token Claude, Gemini, Codex, and OpenCode bake. */
+function edenHomeExport(): string {
+  return `export EDEN_HOME=${shq(edenHome())}`;
 }
 
 export function installedHooks(hookCmd: string, preCmd: string = preHookCommand()) {
   return {
     PreToolUse: [{ hooks: [{ type: "command" as const, command: preCmd }] }],
     PostToolUse: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
+    // Host has no matcher for PostToolBatch. One Eden command, same warm chain
+    // as PostToolUse. Remainder arms from the full parallel set here (R2).
+    PostToolBatch: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     Stop: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
     SessionStart: [{ hooks: [{ type: "command" as const, command: hookCmd }] }],
   };
@@ -66,27 +77,55 @@ export function wrapMcpServer(cliPath: string): { command: string; args: string[
 // house rules: merge idempotently, never clobber user config, back up what we
 // cannot parse, and answer "allow" when Eden itself is down.
 
-/** Gemini CLI (v0.26+ hooks): BeforeToolUse/AfterToolUse command entries. */
+/**
+ * Gemini CLI hooks: BeforeTool/AfterTool (native) plus BeforeToolUse/AfterToolUse
+ * (the names this installer has always written). One Eden command per key.
+ * Re-running setup replaces our entry and keeps the user's.
+ */
+function isEdenGeminiEntry(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object") return false;
+  const e = entry as { command?: string; hooks?: Array<{ command?: string }> };
+  const cmds = [e.command, ...(e.hooks ?? []).map((h) => h.command)];
+  return cmds.some((c) => {
+    const s = String(c ?? "");
+    return /127\.0\.0\.1:\d+\/hook\b/.test(s) || /\bcli\.ts'?"?\s+hook\b/.test(s);
+  });
+}
+
+function mergeGeminiEvent(existing: unknown, ours: { command: string }): Array<{ command: string } | Record<string, unknown>> {
+  const prev = Array.isArray(existing)
+    ? existing.filter((e) => !isEdenGeminiEntry(e) && (e as { command?: string }).command !== ours.command)
+    : [];
+  return [...prev, ours];
+}
+
 export function geminiHookConfig(existing: unknown, preCmd: string, hookCmd: string): Record<string, unknown> {
   const prev = (existing && typeof existing === "object" ? existing : {}) as Record<string, unknown>;
-  const hooks = (prev.hooks as Record<string, unknown[]> | undefined) ?? {};
+  const hooks = (prev.hooks as Record<string, unknown> | undefined) ?? {};
   return {
     ...prev,
     hooks: {
       ...hooks,
-      BeforeToolUse: [{ command: preCmd }],
-      AfterToolUse: [{ command: hookCmd }],
+      BeforeToolUse: mergeGeminiEvent(hooks.BeforeToolUse, { command: preCmd }),
+      AfterToolUse: mergeGeminiEvent(hooks.AfterToolUse, { command: hookCmd }),
+      BeforeTool: mergeGeminiEvent(hooks.BeforeTool, { command: preCmd }),
+      AfterTool: mergeGeminiEvent(hooks.AfterTool, { command: hookCmd }),
     },
   };
 }
 
 /**
- * Codex CLI (experimental hooks engine): SessionStart/SessionStop only today —
- * session-boundary recording is honest coverage; per-call steering arrives
- * when OpenAI ships PreToolUse. TOML is appended between markers so re-running
- * setup replaces our section and nothing else.
+ * Codex CLI hooks: one managed TOML section. `post_tool` stdin is the tool
+ * event (piped to hookd); stdout is Claude-like PostToolUse JSON
+ * (`postToolUseReplacement`) so the host can apply the rewrite. `pre_tool`
+ * is the fast fail-open remainder probe. Re-running setup replaces this
+ * section and nothing else.
  */
-export function codexTomlSection(hookCmd: string): string {
+export function codexTomlSection(hookCmd: string, preCmd: string = preHookCommand()): string {
+  const port = Number(process.env.EDEN_HOOKD_PORT || 8794);
+  const home = edenHomeExport();
+  const start = `${home}; curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_start"}' http://127.0.0.1:${port}/hook || true`;
+  const stop = `${home}; curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_stop"}' http://127.0.0.1:${port}/hook || true`;
   return [
     "",
     "# --- eden-recorder (managed; re-run `eden setup` to refresh) ---",
@@ -94,52 +133,138 @@ export function codexTomlSection(hookCmd: string): string {
     "codex_hooks = true",
     "",
     "[hooks.eden]",
-    `session_start = ["sh", "-c", ${JSON.stringify(`curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_start"}' http://127.0.0.1:${Number(process.env.EDEN_HOOKD_PORT || 8794)}/hook || true`)}]`,
-    `session_stop = ["sh", "-c", ${JSON.stringify(`curl -sS --max-time 1 -X POST -H 'content-type: application/json' --data-binary '{"event":"session_stop"}' http://127.0.0.1:${Number(process.env.EDEN_HOOKD_PORT || 8794)}/hook || true`)}]`,
+    `session_start = ["sh", "-c", ${JSON.stringify(start)}]`,
+    `session_stop = ["sh", "-c", ${JSON.stringify(stop)}]`,
+    `pre_tool = ["sh", "-c", ${JSON.stringify(preCmd)}]`,
     `post_tool = ["sh", "-c", ${JSON.stringify(hookCmd)}]`,
     "# --- end eden-recorder ---",
     "",
   ].join("\n");
 }
 
-export function applyCodexToml(existing: string, hookCmd: string): string {
+export function applyCodexToml(existing: string, hookCmd: string, preCmd: string = preHookCommand()): string {
   const start = existing.indexOf("# --- eden-recorder");
   if (start >= 0) {
     const end = existing.indexOf("# --- end eden-recorder ---", start);
     if (end >= 0) {
-      return existing.slice(0, start) + codexTomlSection(hookCmd).trimStart() + existing.slice(existing.indexOf("\n", end) + 1);
+      return existing.slice(0, start) + codexTomlSection(hookCmd, preCmd).trimStart() + existing.slice(existing.indexOf("\n", end) + 1);
     }
   }
-  return existing.replace(/\n*$/, "\n") + codexTomlSection(hookCmd);
+  return existing.replace(/\n*$/, "\n") + codexTomlSection(hookCmd, preCmd);
 }
 
-/** OpenCode: a plugin module forwarding lifecycle events to hookd, fail-open. */
-export function opencodePluginSource(): string {
+/** OpenCode: one plugin module — the rewriter. Recording still goes to hookd. */
+export function opencodePluginSource(cliPath = join(import.meta.dir, "cli.ts")): string {
   const port = Number(process.env.EDEN_HOOKD_PORT || 8794);
   return [
-    "// Managed by `eden setup` — records tool events to the local hookd.",
+    "// Managed by `eden setup` — one rewriter. Re-running setup overwrites this file.",
     "// Fail-open by contract: a dead recorder never blocks a tool call.",
-    `const HOOKD = "http://127.0.0.1:${port}/hook"`,
+    // Same bake as Claude's `export EDEN_HOME=...; curl || bun hook` so a custom
+    // home's bun fallback and the hookd it warms share remainder.json.
+    `const EDEN_HOME = ${JSON.stringify(edenHome())}`,
+    `const CLI = ${JSON.stringify(cliPath)}`,
+    `const HOOKD = ${JSON.stringify(`http://127.0.0.1:${port}/hook`)}`,
+    "const ALIAS = { bash: \"Bash\", shell: \"Bash\", read: \"Read\", write: \"Write\", grep: \"Grep\", glob: \"Glob\", webfetch: \"WebFetch\" }",
+    "const pending = new Map()",
     "",
-    "async function send(event, payload) {",
+    "function mapTool(name) {",
+    "  if (!name) return name",
+    "  return ALIAS[String(name).toLowerCase()] || name",
+    "}",
+    "",
+    "function mcpShaped(v) {",
+    "  return !!(v && typeof v === \"object\" && Array.isArray(v.content) && v.content.length && typeof v.content[0]?.type === \"string\")",
+    "}",
+    "",
+    "async function bunHook(payload) {",
     "  try {",
-    "    await fetch(HOOKD, {",
+    "    const { spawnSync } = await import(\"node:child_process\")",
+    "    const r = spawnSync(\"bun\", [CLI, \"hook\"], {",
+    "      input: JSON.stringify(payload),",
+    "      encoding: \"utf8\",",
+    "      timeout: 8000,",
+    "      env: { ...process.env, EDEN_HOME },",
+    "    })",
+    "    if (!r.stdout) return null",
+    "    try { return JSON.parse(r.stdout) } catch { return null }",
+    "  } catch {",
+    "    return null",
+    "  }",
+    "}",
+    "",
+    "async function send(payload, bunFallback) {",
+    "  try {",
+    "    const res = await fetch(HOOKD, {",
     "      method: \"POST\",",
     "      headers: { \"content-type\": \"application/json\" },",
-    "      body: JSON.stringify({ event, ...payload }),",
-    "      signal: AbortSignal.timeout(1000),",
+    "      body: JSON.stringify(payload),",
+    "      signal: AbortSignal.timeout(bunFallback ? 8000 : 1000),",
     "    })",
+    "    return await res.json()",
     "  } catch {",
-    "    // swallow: recording is best-effort",
+    "    if (bunFallback) return await bunHook(payload)",
+    "    return null",
+    "  }",
+    "}",
+    "",
+    "function applyAfter(output, hook) {",
+    "  if (!hook || !output) return",
+    "  const extra = hook.hookSpecificOutput?.additionalContext",
+    "  const original = output.output",
+    "  if (mcpShaped(original) || mcpShaped(output)) {",
+    "    if (typeof extra === \"string\" && extra && Object.prototype.hasOwnProperty.call(output, \"inject\")) {",
+    "      output.inject = extra",
+    "    }",
+    "    return",
+    "  }",
+    "  const u = hook.hookSpecificOutput?.updatedToolOutput",
+    "  let text = typeof u === \"string\" ? u : \"\"",
+    "  if (!text && u && typeof u === \"object\") {",
+    "    text = u.stdout || u.file?.content || u.result || (typeof u.content === \"string\" ? u.content : \"\") || \"\"",
+    "  }",
+    "  if (!text && typeof extra === \"string\") text = extra",
+    "  if (typeof output.output === \"string\" && text) {",
+    "    output.output = text.includes(\"[eden:\") ? text : output.output + \"\\n\" + (extra || text)",
+    "  } else if (typeof output.output === \"string\" && typeof extra === \"string\" && extra && !output.output.includes(\"[eden:\")) {",
+    "    output.output = output.output + \"\\n\" + extra",
     "  }",
     "}",
     "",
     "export const EdenRecorderPlugin = async ({ project }) => ({",
     "  \"tool.execute.before\": async (input, output) => {",
-    "    await send(\"pre_tool\", { tool: input?.tool, args: output?.args })",
+    "    try { pending.set(input?.callID, output?.args) } catch { /* fail-open */ }",
+    "    let hook = null",
+    "    try {",
+    "      hook = await send({",
+    "        hook_event_name: \"PreToolUse\",",
+    "        session_id: input?.sessionID,",
+    "        tool_name: mapTool(input?.tool),",
+    "        tool_input: output?.args ?? {},",
+    "        cwd: project?.directory,",
+    "      })",
+    "    } catch {",
+    "      return",
+    "    }",
+    "    if (hook?.hookSpecificOutput?.permissionDecision === \"deny\") {",
+    "      throw new Error(hook.hookSpecificOutput.permissionDecisionReason || \"Already served by Eden.\")",
+    "    }",
     "  },",
     "  \"tool.execute.after\": async (input, output) => {",
-    "    await send(\"post_tool\", { tool: input?.tool, ok: !output?.error })",
+    "    try {",
+    "      const args = pending.get(input?.callID) || output?.args || {}",
+    "      try { pending.delete(input?.callID) } catch { /* ignore */ }",
+    "      const hook = await send({",
+    "        hook_event_name: \"PostToolUse\",",
+    "        session_id: input?.sessionID,",
+    "        tool_name: mapTool(input?.tool),",
+    "        tool_input: args,",
+    "        tool_response: output?.output,",
+    "        cwd: project?.directory,",
+    "      }, true)",
+    "      applyAfter(output, hook)",
+    "    } catch {",
+    "      // swallow: a broken plugin never blocks the tool",
+    "    }",
     "  },",
     "})",
     "",
@@ -166,7 +291,7 @@ function isEdenHook(entry: HookEntry): boolean {
  * Add Eden's hooks alongside whatever is already installed.
  *
  * This was a shallow spread of one object over another, so Eden's
- * PreToolUse/PostToolUse/Stop/SessionStart arrays *replaced* the user's
+ * PreToolUse/PostToolUse/PostToolBatch/Stop/SessionStart arrays *replaced* the user's
  * entries for those events outright. Anyone who had their own PreToolUse hook
  * — a command allowlist, an audit log, a secret scanner — silently lost it the
  * first time they ran `eden setup`, and Eden is not entitled to disarm
@@ -293,8 +418,8 @@ export async function setup(args: string[]): Promise<void> {
       mkdirSync(codexHome, { recursive: true });
       const cPath = join(codexHome, "config.toml");
       const existingToml = existsSync(cPath) ? readFileSync(cPath, "utf8") : "";
-      writeFileAtomic(cPath, applyCodexToml(existingToml, hookCmd));
-      agents.push(`codex → ${cPath} (session-boundary recording)`);
+      writeFileAtomic(cPath, applyCodexToml(existingToml, hookCmd, preCmd));
+      agents.push(`codex → ${cPath}`);
     } catch {
       /* best-effort */
     }
@@ -304,7 +429,7 @@ export async function setup(args: string[]): Promise<void> {
     try {
       mkdirSync(ocDir, { recursive: true });
       const oPath = join(ocDir, "eden-recorder.js");
-      writeFileAtomic(oPath, opencodePluginSource());
+      writeFileAtomic(oPath, opencodePluginSource(cliPath));
       agents.push(`opencode → ${oPath}`);
     } catch {
       /* best-effort */
@@ -320,5 +445,5 @@ export async function setup(args: string[]): Promise<void> {
   if (!agents.length) {
     console.log("  other agents: none detected (re-run with --all-agents to install anyway)");
   }
-  console.log(`  run \`eden hookd\` (or \`bun "${cliPath}" hookd\`) so Pre/Post/Stop stay warm.`);
+  console.log(`  \`eden wrap\` (or \`eden hookd\`) keeps PreToolUse remainder warm; Stop with \`eden hookd --stop\`.`);
 }

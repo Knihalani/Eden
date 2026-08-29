@@ -15,6 +15,7 @@
       "dependencies": {
         "@eden/compile": "workspace:*",
         "@eden/ir": "workspace:*",
+        "@eden/measure": "workspace:*",
         "@eden/runtime": "workspace:*",
         "@eden/shadow": "workspace:*",
         "@eden/wrap": "workspace:*",
@@ -24,8 +25,11 @@
       "name": "@eden/site",
       "version": "0.1.0",
       "dependencies": {
+        "@eden/compile": "workspace:*",
         "@eden/core": "workspace:*",
         "@eden/ir": "workspace:*",
+        "@eden/shadow": "workspace:*",
+        "@eden/wrap": "workspace:*",
         "@neondatabase/serverless": "^1.0.2",
         "next": "^15.5.9",
         "react": "^19.2.1",
@@ -45,6 +49,7 @@
         "@clerk/nextjs": "^7.7.8",
         "@eden/control": "workspace:*",
         "@eden/ir": "workspace:*",
+        "@eden/measure": "workspace:*",
         "next": "^15.5.9",
         "react": "^19.2.1",
         "react-dom": "^19.2.1",
@@ -74,6 +79,10 @@
       "bin": {
         "eden": "./dist/eden.js",
       },
+      "dependencies": {
+        "@eden/know": "workspace:*",
+        "@eden/measure": "workspace:*",
+      },
     },
     "packages/compile": {
       "name": "@eden/compile",
@@ -92,9 +101,16 @@
       "name": "@eden/ir",
       "version": "0.1.0",
     },
+    "packages/know": {
+      "name": "@eden/know",
+      "version": "0.1.0",
+    },
     "packages/measure": {
       "name": "@eden/measure",
       "version": "0.1.0",
+      "dependencies": {
+        "@eden/ir": "workspace:*",
+      },
     },
     "packages/runtime": {
       "name": "@eden/runtime",
@@ -122,6 +138,7 @@
       "dependencies": {
         "@eden/compile": "workspace:*",
         "@eden/ir": "workspace:*",
+        "@eden/measure": "workspace:*",
         "@eden/runtime": "workspace:*",
       },
     },
@@ -144,6 +161,8 @@
     "@eden/core": ["@eden/core@workspace:packages/core"],
 
     "@eden/ir": ["@eden/ir@workspace:packages/ir"],
+
+    "@eden/know": ["@eden/know@workspace:packages/know"],
 
     "@eden/measure": ["@eden/measure@workspace:packages/measure"],
 

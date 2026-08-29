@@ -276,7 +276,102 @@ function stripCredentials(headers: HeaderSource | undefined): Record<string, str
 export const EGRESS_TIMEOUT_MS = 15_000;
 export const EGRESS_MAX_BYTES = 8 * 1024 * 1024;
 
-export function pinnedFetch(pinned: PinnedAddress[]): typeof fetch {
+/**
+ * Node's Agent keys free sockets by host:port and, on reuse, skips `lookup`
+ * entirely. Hostname-keyed keep-alive would therefore un-pin SSRF: a socket
+ * opened to api.github.com's real address would be handed to a later request
+ * pinned at 127.0.0.1. We keep a keep-alive Agent *per pin* (and fold the pin
+ * into getName) so reuse only happens for the same destination addresses.
+ * `pooled: false` is the Wave-10 baseline, kept for A/B.
+ */
+const AGENT_OPTS = {
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  scheduling: "lifo" as const,
+};
+
+function pinKey(pinned: PinnedAddress[]): string {
+  return pinned
+    .map((p) => `${p.family}:${p.address}`)
+    .sort()
+    .join(",");
+}
+
+class PinnedHttpAgent extends http.Agent {
+  constructor(
+    private readonly pin: string,
+    opts: http.AgentOptions,
+  ) {
+    super(opts);
+  }
+  getName(options: http.ClientRequestArgs = {}): string {
+    return `${super.getName(options)}:pin=${this.pin}`;
+  }
+}
+
+class PinnedHttpsAgent extends https.Agent {
+  constructor(
+    private readonly pin: string,
+    opts: https.AgentOptions,
+  ) {
+    super(opts);
+  }
+  getName(options: http.ClientRequestArgs = {}): string {
+    return `${super.getName(options)}:pin=${this.pin}`;
+  }
+}
+
+const httpAgents = new Map<string, http.Agent>();
+const httpsAgents = new Map<string, https.Agent>();
+
+function agentFor(pinned: PinnedAddress[], isTls: boolean): http.Agent | https.Agent {
+  const key = pinKey(pinned);
+  if (isTls) {
+    let agent = httpsAgents.get(key);
+    if (!agent) {
+      agent = new PinnedHttpsAgent(key, AGENT_OPTS);
+      httpsAgents.set(key, agent);
+    }
+    return agent;
+  }
+  let agent = httpAgents.get(key);
+  if (!agent) {
+    agent = new PinnedHttpAgent(key, AGENT_OPTS);
+    httpAgents.set(key, agent);
+  }
+  return agent;
+}
+
+/** Drop idle keep-alive sockets. Tests call this so a server close() is not held open. */
+export function destroyEgressAgents(): void {
+  for (const agent of httpAgents.values()) agent.destroy();
+  for (const agent of httpsAgents.values()) agent.destroy();
+  httpAgents.clear();
+  httpsAgents.clear();
+}
+
+function pinLookup(pinned: PinnedAddress[]) {
+  return ((_h: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
+    // A fresh array of fresh objects every call: Bun takes ownership of
+    // the one it is handed, and reusing it makes every request after
+    // the first fail with ENOTFOUND. Always returning the pin — even if
+    // a given runtime still invokes lookup on reuse — means a reused
+    // socket cannot silently re-resolve.
+    const copy = pinned.map((p) => ({ address: p.address, family: p.family }));
+    if (opts && opts.all) cb(null, copy);
+    else cb(null, copy[0]!.address, copy[0]!.family);
+  }) as never;
+}
+
+export type PinnedFetchOptions = {
+  /** Default true. `false` is a new TCP per request, for a fair in-process A/B. */
+  pooled?: boolean;
+};
+
+export function pinnedFetch(pinned: PinnedAddress[], opts?: PinnedFetchOptions): typeof fetch {
+  const pooled = opts?.pooled !== false && process.env.EDEN_EGRESS_POOL !== "0";
   return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const req = new Request(input as never, init as never);
     const url = new URL(req.url);
@@ -319,17 +414,8 @@ export function pinnedFetch(pinned: PinnedAddress[]): typeof fetch {
           method: req.method,
           headers,
           ...(isTls ? { servername: host } : {}),
-          // No pooling: a reused keep-alive socket is keyed by hostname and
-          // skips `lookup` entirely, which would silently un-pin the request.
-          agent: false,
-          lookup: ((_h: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) => {
-            // A fresh array of fresh objects every call: Bun takes ownership of
-            // the one it is handed, and reusing it makes every request after
-            // the first fail with ENOTFOUND.
-            const copy = pinned.map((p) => ({ address: p.address, family: p.family }));
-            if (opts && opts.all) cb(null, copy);
-            else cb(null, copy[0]!.address, copy[0]!.family);
-          }) as never,
+          agent: pooled ? agentFor(pinned, isTls) : false,
+          lookup: pinLookup(pinned),
         },
         (res) => {
           const chunks: Buffer[] = [];
@@ -346,6 +432,9 @@ export function pinnedFetch(pinned: PinnedAddress[]): typeof fetch {
           });
           res.on("error", (e: Error) => reject(e));
           res.on("end", () => {
+            // Drop the request timeout so it cannot fire later and destroy a
+            // socket the keep-alive agent has already handed to the next step.
+            cr.setTimeout(0);
             const status = res.statusCode ?? 502;
             const out = new Headers();
             for (const [key, value] of Object.entries(res.headers)) {

@@ -1,4 +1,4 @@
-import type { StretchTrace, TraceEvent } from "@eden/ir";
+import type { IslandUsage, StretchTrace, TraceEvent } from "@eden/ir";
 
 /** Fixture clock used by TicketShip traces: `duration_ms: 200 * llmCalls`. */
 export const SYNTHETIC_MS_PER_LLM = 200;
@@ -50,16 +50,25 @@ export function compiledToolMs(t: StretchTrace, toolCalls: string[]): number | n
   return sum;
 }
 
+export function islandUsageScraped(u?: IslandUsage | null): boolean {
+  return !!u && Number.isFinite(u.prompt_tokens) && Number.isFinite(u.completion_tokens);
+}
+
 /**
- * Island tokens are not scraped today. Scale naive tokens by remaining LLM
- * calls so an island program can still report a measured delta instead of
- * inventing a second agent run.
+ * Compiled-side tokens. Scraped island usage (IslandReply) is MEASURED.
+ * Otherwise scale naive tokens by remaining LLM calls (EXTRAPOLATED).
  */
-export function compiledTokens(t: StretchTrace, compiledLlm: number, hasIsland: boolean): number | null {
+export function compiledTokens(
+  t: StretchTrace,
+  compiledLlm: number,
+  hasIsland: boolean,
+  islandUsage?: IslandUsage | null,
+): number | null {
   void hasIsland; // kept for signature stability; see tokensExtrapolated
   const naive = traceTokens(t);
   if (naive == null) return null;
   if (compiledLlm <= 0) return 0;
+  if (islandUsageScraped(islandUsage)) return islandUsage!.prompt_tokens + islandUsage!.completion_tokens;
   if (!(t.llmCalls > 0)) return null;
   return naive * (compiledLlm / t.llmCalls);
 }
@@ -70,12 +79,19 @@ export function compiledTokens(t: StretchTrace, compiledLlm: number, hasIsland: 
  * absent, because "honest numbers or absent" does not have an "honest-ish"
  * tier.
  *
- * Keyed on compiledLlm alone, not hasIsland: a program with no DIRECT island
+ * False when compiledLlm<=0 (no provider work) OR island usage was scraped.
+ * Keyed on compiledLlm, not hasIsland: a program with no DIRECT island
  * step can still burn provider tokens through composed sub-programs, and the
  * old hasIsland-only check let such runs report a measured-looking ZERO.
  */
-export function tokensExtrapolated(compiledLlm: number, _hasIsland: boolean): boolean {
-  return compiledLlm > 0;
+export function tokensExtrapolated(
+  compiledLlm: number,
+  _hasIsland: boolean,
+  islandUsage?: IslandUsage | null,
+): boolean {
+  if (compiledLlm <= 0) return false;
+  if (islandUsageScraped(islandUsage)) return false;
+  return true;
 }
 
 function nthEvent(events: TraceEvent[], name: string, n: number): number {

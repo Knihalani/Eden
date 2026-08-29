@@ -1,7 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import type { StretchTrace } from "@eden/ir";
-import { compileTraces, inferSchema, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute } from "../src/index";
+import { compileTraces, inferSchema, isCheckName, isIslandName, isMutating, majoritySequence, tryTemplateForTest, oneInsert, oneSubstitute, islandWhenToUse } from "../src/index";
+import type { StretchProgram, StretchTrace } from "@eden/ir";
+import { whenToUseOf } from "@eden/ir";
 import { createTicketShip, runNaive, ticketShipProgram, underdeterminedSiblingTraces, WITNESS_IDS } from "../../runtime/src/ticketship";
+
+/** A list/get/fetch is the world: it must compile as a tool, never an island. */
+function expectToolNotIsland(p: StretchProgram, tool: string) {
+  expect(p.steps.some((s) => s.kind === "tool" && s.tool === tool)).toBe(true);
+  expect(
+    p.steps.some(
+      (s) =>
+        s.kind === "island" &&
+        (s.id === tool || s.id.startsWith(`${tool}_`) || s.system.includes(`Perform the ${tool} step`)),
+    ),
+  ).toBe(false);
+}
 
 async function ticketTraces(n = 10): Promise<StretchTrace[]> {
   const traces: StretchTrace[] = [];
@@ -38,6 +51,14 @@ describe("compile", () => {
     expect(p.steps.some((s) => s.kind === "tool" && s.tool === "writeRecord")).toBe(true);
     expect(p.steps.some((s) => s.kind === "assert")).toBe(true);
     expect(p.sequence).toContain("draftReply");
+    const draft = p.steps.find((s) => s.kind === "island");
+    expect(draft?.kind === "island" && draft.when_to_use).toBe(
+      islandWhenToUse("draftReply", (p.sequence ?? []).slice(0, (p.sequence ?? []).indexOf("draftReply"))),
+    );
+    expect(p.when_to_use).toBe(draft && draft.kind === "island" ? draft.when_to_use : undefined);
+    expect(whenToUseOf(p)).toBe(p.when_to_use);
+    expect(p.when_to_use).not.toMatch(/Run the repeating stretch as one tool/);
+    expect(p.description).toMatch(/Run the repeating stretch as one tool/);
     expect(p.contract.envelope?.inputs.id?.sort()).toEqual([...WITNESS_IDS].sort());
     const hand = ticketShipProgram();
     const compiledTools = p.steps.filter((s) => s.kind === "tool").map((s) => s.tool);
@@ -371,6 +392,9 @@ describe("compile", () => {
     const p = programs[0]!;
     const loop = p.steps.find((s) => s.kind === "loop");
     expect(loop && loop.kind === "loop" && loop.body.length).toBe(2);
+    // Constant `{q:"open"}` still returns different ids per witness — that is
+    // the world, not a model hop. Islanding listItems here is the bug.
+    expectToolNotIsland(p, "listItems");
   });
 
   test("mines a nested loop when a period body itself repeats", () => {
@@ -405,6 +429,9 @@ describe("compile", () => {
     expect(outer && outer.kind === "loop").toBe(true);
     const inner = p.steps.find((s) => s.kind === "loop" && s.id !== (outer && "id" in outer ? outer.id : ""));
     expect(inner && inner.kind === "loop" && inner.body.length).toBe(1);
+    expect(outer && outer.kind === "loop" && inner && outer.body.includes(inner.id)).toBe(true);
+    expectToolNotIsland(p, "listOrgs");
+    expectToolNotIsland(p, "listItems");
   });
 
   test("keeps two sibling stretches that share a first tool", () => {
@@ -664,6 +691,46 @@ describe("compile from waste (45–49)", () => {
     const p = programs[0];
     expect(p).toBeTruthy();
     expect(p!.steps.filter((s) => s.kind === "island").length).toBeGreaterThanOrEqual(2);
+    const firstIsland = p!.steps.find((s) => s.kind === "island");
+    expect(firstIsland?.kind === "island" && firstIsland.when_to_use).toBe(
+      "When the next step is a draftReply judgment after lookupTicket — one call, do not re-run the loop.",
+    );
+    expect(p!.when_to_use).toBe(
+      "When the next step is a draftReply judgment after lookupTicket — one call, do not re-run the loop.",
+    );
+  });
+});
+
+describe("island when_to_use (Wave 11.3)", () => {
+  test("islands emit a scannable one-liner, not the stretch dump", () => {
+    const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `w${i}`,
+      llmCalls: 3,
+      duration_ms: 40,
+      cost_cents: 1,
+      input: { id: `T-${i}` },
+      output: { text: "ok" },
+      events: [
+        { name: "lookupTicket", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+        { name: "fetchDetails", args: { id: `T-${i}` }, result: { body: "x" }, ok: true },
+        { name: "draftReply", args: { id: `T-${i}` }, result: { text: "a" }, ok: true },
+        { name: "notify", args: { id: `T-${i}` }, result: { ok: true }, ok: true },
+      ],
+    }));
+    const { programs } = compileTraces(traces);
+    const p = programs[0];
+    expect(p).toBeTruthy();
+    const island = p!.steps.find((s) => s.kind === "island");
+    const line =
+      "When the next step is a draftReply judgment after lookupTicket → fetchDetails — one call, do not re-run the loop.";
+    expect(island?.kind === "island" && island.when_to_use).toBe(line);
+    expect(p!.when_to_use).toBe(line);
+    expect(whenToUseOf(p!)).toBe(line);
+    expect(p!.description).toContain("Run the repeating stretch as one tool:");
+    expect(p!.when_to_use).not.toContain("Run the repeating stretch as one tool");
+    expect(islandWhenToUse("draftReply", [])).toBe(
+      "When the next step is a draftReply judgment — one call, do not re-run the loop.",
+    );
   });
 });
 

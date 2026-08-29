@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useLayoutEffect, useState } from "react";
-import { SETUP, homePath, navCurrent, parseHomeView } from "../account/home";
-import { formatCount } from "./activity";
+import { SETUP, homePath, homeViewTitle, navCurrent, parseHomeView } from "../account/home";
+import { formatCount, workflowServing } from "./activity";
 import { useActivity } from "./activity-context";
 
 const NAV_KEY = "eden_nav";
@@ -43,6 +43,7 @@ export function AppNav({
   const current = navCurrent(path, view);
   const requestN = requests?.length ?? 0;
   const workflowN = workflows?.length ?? 0;
+  const toolsTitle = homeViewTitle("workflows", workflowServing(workflows ?? []));
 
   return (
     <nav className="app-nav" aria-label="Workspace">
@@ -66,7 +67,7 @@ export function AppNav({
           mark="workflows"
           collapsed={collapsed}
         >
-          Live tools
+          {toolsTitle}
         </NavItem>
       </div>
       <div className="app-nav-foot">

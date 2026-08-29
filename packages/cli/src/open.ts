@@ -40,15 +40,27 @@ export function openBrowser(url: string): void {
   }
 }
 
-export async function rejectTool(): Promise<void> {
+export async function rejectTool(): Promise<number> {
   const cfg = readConfig();
-  const base = sitePlaneUrl(cfg?.base_url);
+  if (!cfg) {
+    console.log("reject: no config · run eden login --dev");
+    return 1;
+  }
+  const base = sitePlaneUrl(cfg.base_url);
   const key = resolveApiKey();
-  await fetch(`${base}/v1/knock/reject`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-  });
+  let down = false;
+  try {
+    const r = await fetch(`${base}/v1/knock/reject`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8_000),
+    });
+    down = !r.ok;
+  } catch {
+    down = true;
+  }
   const knock = join(edenHome(), "knock.json");
   if (existsSync(knock)) unlinkSync(knock);
-  console.log("rejected");
+  console.log(down ? "reject: site is down · start eden wrap" : "rejected");
+  return 0;
 }

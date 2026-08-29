@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { applyFlushTruncate, dropConsumedLines } from "./hook";
 import { eventsPath, liveToolsPath, outboxPath, readConfig, ensureHome, edenHome, readJson, resolveApiKey, withFileLock, wrapPlaneUrl, sitePlaneUrl, writeFileAtomic } from "./home";
-import { protocolHeaders } from "@eden/ir";
+import { protocolHeaders, whenToUseOf } from "@eden/ir";
+import { refreshOptedInSurfaces, type ManifestTool } from "./manifest";
 
 function ingestible(row: Record<string, unknown>): boolean {
   const hook = String(row.hook || "");
@@ -51,7 +52,9 @@ export function rewriteOutbox(text: string, dropRunIds: Set<string>): string {
     .join("");
 }
 
-export async function drain(): Promise<void> {
+export type DrainOpts = { workspace?: string };
+
+export async function drain(opts: DrainOpts = {}): Promise<void> {
   ensureHome();
   const cfg = readConfig();
   const site = sitePlaneUrl(cfg?.base_url);
@@ -143,7 +146,7 @@ export async function drain(): Promise<void> {
   // between the ingest loop and the outbox rewrite, so an unreachable wrap or
   // site plane threw straight past the rewrite and drain never drained.
   try {
-    await refreshLiveTools(site, wrap, key);
+    await refreshLiveTools(site, wrap, key, opts.workspace);
   } catch {
     /* keep the tool list we already have */
   }
@@ -157,34 +160,109 @@ export async function drain(): Promise<void> {
   }
 }
 
+type PlaneTool = {
+  id?: string;
+  name?: string;
+  sequence?: unknown;
+  read_only?: unknown;
+  transparent_writes?: unknown;
+  rollout?: unknown;
+  when_to_use?: unknown;
+  description?: unknown;
+  envelope?: unknown;
+  program?: {
+    name?: string;
+    sequence?: unknown;
+    description?: unknown;
+    when_to_use?: unknown;
+    read_only?: unknown;
+    transparent_writes?: unknown;
+    rollout?: unknown;
+    steps?: unknown;
+    contract?: { envelope?: unknown };
+  };
+};
 
-async function refreshLiveTools(site: string, wrap: string, key: string): Promise<void> {
+function nonEmptyString(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t ? t : undefined;
+}
+
+function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
+function whenFromProgram(program: NonNullable<PlaneTool["program"]>): string | undefined {
+  const description = typeof program.description === "string" ? program.description : "";
+  const steps = Array.isArray(program.steps)
+    ? program.steps.map((raw) => {
+        const s = raw && typeof raw === "object" ? (raw as { kind?: unknown; when_to_use?: unknown }) : {};
+        return {
+          kind: typeof s.kind === "string" ? s.kind : "",
+          when_to_use: typeof s.when_to_use === "string" ? s.when_to_use : undefined,
+        };
+      })
+    : undefined;
+  return nonEmptyString(
+    whenToUseOf({
+      description,
+      when_to_use: typeof program.when_to_use === "string" ? program.when_to_use : undefined,
+      steps,
+    }),
+  );
+}
+
+/**
+ * Keep name / sequence / read_only / when_to_use from wrap or site payloads.
+ * Drain used to drop when_to_use, so SKILL.md had no one-liners after Approve.
+ * Prefer the island line via whenToUseOf; silent islands fall back to description.
+ */
+export function projectLiveTools(tools: unknown): ManifestTool[] {
+  if (!Array.isArray(tools)) return [];
+  return tools.map((raw) => {
+    const t = (raw && typeof raw === "object" ? raw : {}) as PlaneTool;
+    const program = t.program;
+    const name = nonEmptyString(program?.name) ?? nonEmptyString(t.name);
+    const sequence = stringList(program?.sequence ?? t.sequence);
+    const when =
+      nonEmptyString(t.when_to_use) ??
+      (program ? whenFromProgram(program) : undefined) ??
+      nonEmptyString(t.description);
+    const readOnly =
+      typeof t.read_only === "boolean" ? t.read_only : typeof program?.read_only === "boolean" ? program.read_only : undefined;
+    const envelope = program?.contract?.envelope ?? t.envelope ?? null;
+    const writes =
+      t.transparent_writes === true || program?.transparent_writes === true;
+    const rawRollout = t.rollout ?? program?.rollout;
+    const rollout = rawRollout === "canary" || rawRollout === "live" ? rawRollout : undefined;
+    return {
+      ...(name ? { name } : {}),
+      sequence,
+      ...(typeof t.id === "string" ? { id: t.id } : {}),
+      envelope,
+      ...(typeof readOnly === "boolean" ? { read_only: readOnly } : {}),
+      ...(when ? { when_to_use: when } : {}),
+      ...(writes ? { transparent_writes: true } : {}),
+      ...(rollout ? { rollout } : {}),
+    };
+  });
+}
+
+function persistLiveTools(tools: ManifestTool[], workspace?: string): void {
+  writeFileAtomic(liveToolsPath(), JSON.stringify(tools, null, 2) + "\n");
+  try {
+    refreshOptedInSurfaces(tools, { workspace });
+  } catch {
+    /* SKILL.md / eden.tools.md are best-effort; live-tools already landed */
+  }
+}
+
+async function refreshLiveTools(site: string, wrap: string, key: string, workspace?: string): Promise<void> {
   const wrapLive = await fetch(`${wrap}/v1/tools?state=live`, { headers: { Authorization: `Bearer ${key}` } });
   if (wrapLive.ok) {
-    const json = (await wrapLive.json()) as {
-      tools?: Array<{
-        id?: string;
-        name?: string;
-        sequence?: string[];
-        read_only?: boolean;
-        program?: { name?: string; sequence?: string[]; contract?: { envelope?: unknown } };
-      }>;
-    };
-    writeFileSync(
-      liveToolsPath(),
-      JSON.stringify(
-        (json.tools ?? []).map((t) => ({
-          name: t.program?.name ?? t.name,
-          sequence: t.program?.sequence ?? t.sequence ?? [],
-          id: t.id,
-          envelope: t.program?.contract?.envelope ?? null,
-          // Absent = unknown = ineligible for transparent execution (fail closed).
-          ...(typeof t.read_only === "boolean" ? { read_only: t.read_only } : {}),
-        })),
-        null,
-        2,
-      ),
-    );
+    const json = (await wrapLive.json()) as { tools?: unknown };
+    persistLiveTools(projectLiveTools(json.tools), workspace);
   } else {
     const live = await fetch(`${site}/v1/live-tools`, { headers: { Authorization: `Bearer ${key}` } });
     if (live.ok) {
@@ -196,7 +274,7 @@ async function refreshLiveTools(site: string, wrap: string, key: string): Promis
       // `tools` key — a proxy error page, a version skew — and the hook then
       // threw on every PreToolUse trying to iterate it. The reader guards this
       // too now; writing something unusable in the first place is the bug.
-      writeFileSync(liveToolsPath(), JSON.stringify(Array.isArray(json.tools) ? json.tools : [], null, 2));
+      persistLiveTools(projectLiveTools(json.tools), workspace);
       const knockPath = `${edenHome()}/knock.json`;
       const knock = json.knock;
       if (knock) {

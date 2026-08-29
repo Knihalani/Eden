@@ -37,7 +37,7 @@ export default function SsoCallbackPage() {
       signInRef.current!.finalize({
         navigate: ({ session: next, decorateUrl }) => {
           settled = true;
-          goDecorated(decorateUrl, router.replace, destAfterAuth(next));
+          goDecorated(decorateUrl, router.replace, destAfterAuth(next, "in"));
         },
       });
 
@@ -45,7 +45,7 @@ export default function SsoCallbackPage() {
       signUpRef.current!.finalize({
         navigate: ({ session: next, decorateUrl }) => {
           settled = true;
-          goDecorated(decorateUrl, router.replace, destAfterAuth(next));
+          goDecorated(decorateUrl, router.replace, destAfterAuth(next, "up"));
         },
       });
 
@@ -77,7 +77,7 @@ export default function SsoCallbackPage() {
       try {
         switch (step) {
           case "session":
-            leave(destAfterAuth(sess));
+            leave(destAfterAuth(sess, upAttempt.status === "complete" ? "up" : "in"));
             return true;
           case "finalize-in":
             await finishIn();

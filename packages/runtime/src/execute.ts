@@ -1,5 +1,5 @@
 import type { Binding, IslandCaller, Step, StretchProgram, ToolRegistry } from "@eden/ir";
-import { asArray, assertValid, inDistribution, isBarrierName, isReadName } from "@eden/ir";
+import { asArray, assertValid, inDistribution, isBarrierName, isReadName, unwrapIsland } from "@eden/ir";
 import { ChildScope, evalArgs, evalBinding, type BindScope } from "./bind";
 
 import { DeoptError } from "./deopt";
@@ -26,6 +26,16 @@ export type RunStats = {
   stepsRun: number;
   /** True when a deopt happened before any tool call. */
   early: boolean;
+  /** Scraped island prompt tokens (sum). Meaningful when islandUsageMeasured. */
+  islandPromptTokens: number;
+  islandCompletionTokens: number;
+  islandCachedTokens: number;
+  islandCacheWriteTokens: number;
+  islandCacheInputTokens: number;
+  /** True if every island call that ran was a witness-memo hit. */
+  islandMemoized: boolean;
+  /** True when every completed island call reported finite prompt+completion. */
+  islandUsageMeasured: boolean;
 };
 
 export type RunResult = {
@@ -66,7 +76,9 @@ function stepDeps(step: Step): string[] {
 }
 
 function isBarrier(step: Step): boolean {
-  if (step.kind === "assert" || step.kind === "loop" || step.kind === "island" || step.kind === "branch") return true;
+  // Islands are not barriers: independent island misses in one program wave
+  // may run together so wrap can coalesce them onto the batch transport.
+  if (step.kind === "assert" || step.kind === "loop" || step.kind === "branch") return true;
   if (step.kind === "tool") return isBarrierName(step.tool);
   return false;
 }
@@ -160,7 +172,27 @@ export async function runProgram(
 ): Promise<RunResult> {
   assertValid(program);
   const t0 = performance.now();
-  const stats: RunStats = { llmCalls: 0, toolCalls: [], ms: 0, islandMs: 0, cents: 0, deopt: false, skipped: [], stepsRun: 0, early: false };
+  const stats: RunStats = {
+    llmCalls: 0,
+    toolCalls: [],
+    ms: 0,
+    islandMs: 0,
+    cents: 0,
+    deopt: false,
+    skipped: [],
+    stepsRun: 0,
+    early: false,
+    islandPromptTokens: 0,
+    islandCompletionTokens: 0,
+    islandCachedTokens: 0,
+    islandCacheWriteTokens: 0,
+    islandCacheInputTokens: 0,
+    islandMemoized: false,
+    islandUsageMeasured: false,
+  };
+  let islandCompleted = 0;
+  let islandUsageOk = true;
+  let islandAllMemo = true;
   if (opts.checkEnvelope !== false && !inDistribution(program, input)) {
     const keys = Object.keys(program.contract.envelope?.inputs ?? {});
     throw new DeoptError(`input not in witness envelope${keys.length ? ` (${keys.join(",")})` : ""}`);
@@ -198,6 +230,7 @@ export async function runProgram(
     scope: BindScope,
     touchLast = true,
     last: { value: unknown } = topLast,
+    wait = false,
   ): Promise<unknown> => {
     if (signal.aborted) throw new DeoptError("aborted");
     if (step.kind === "tool") {
@@ -218,11 +251,44 @@ export async function runProgram(
       if (signal.aborted) throw new DeoptError("aborted");
       const islandInput = evalBinding(step.input, scope);
       stats.llmCalls += 1;
-      stats.cents += opts.llmCents ?? 1;
+      const unit = opts.llmCents ?? 1;
+      // Charge sync price up front so a throw still accounts the attempt.
+      // Batched misses rebate to the provider Message Batches price (half).
+      stats.cents += unit;
       const islandT0 = performance.now();
-      const value = await opts.island({ system: step.system, input: islandInput, outputSchema: step.outputSchema, signal });
+      const out = await opts.island({
+        system: step.system,
+        input: islandInput,
+        outputSchema: step.outputSchema,
+        signal,
+        ...(step.pinned === true ? { pinned: true } : {}),
+        ...(wait ? { wait: true } : {}),
+      });
       stats.islandMs += performance.now() - islandT0;
       if (signal.aborted) throw new DeoptError("aborted");
+      const { value, usage } = unwrapIsland(out);
+      islandCompleted++;
+      const prompt = usage?.prompt_tokens;
+      const completion = usage?.completion_tokens;
+      if (usage && Number.isFinite(prompt) && Number.isFinite(completion)) {
+        stats.islandPromptTokens += prompt;
+        stats.islandCompletionTokens += completion;
+        stats.islandCachedTokens += usage.cached_tokens ?? 0;
+        stats.islandCacheWriteTokens += usage.cache_write_tokens ?? 0;
+        stats.islandCacheInputTokens += usage.cache_input_tokens ?? 0;
+        if (usage.memoized === true) {
+          // Witness lookup is not a billed island call.
+          stats.cents -= unit;
+        } else {
+          islandAllMemo = false;
+          // Provider Message Batches contract: billed cents are half of sync.
+          // Token counts stay the full provider report.
+          if (usage.batched === true) stats.cents -= unit * 0.5;
+        }
+      } else {
+        islandUsageOk = false;
+        islandAllMemo = false;
+      }
       scope.results.set(step.id, value);
       if (touchLast) last.value = value;
       return value;
@@ -379,7 +445,10 @@ export async function runProgram(
         // finishes — the winner would be nondeterministic. Assign it afterwards
         // from the last step in program order, which is what a sequential run
         // would have left behind for a following bare-path assert to read.
-        await Promise.all(wave.map((s) => execStep(s, signal, scope, false)));
+        // Independent islands in this wave may wait for each other (batch path).
+        // A lone island in the wave stays sync — n=1 after coalesce is also sync.
+        const waitIslands = wave.filter((s) => s.kind === "island").length >= 2;
+        await Promise.all(wave.map((s) => execStep(s, signal, scope, false, topLast, waitIslands)));
         topLast.value = results.get(wave[wave.length - 1]!.id);
       }
       for (const s of wave) if (s.kind === "tool") stats.toolCalls.push(s.tool);
@@ -388,6 +457,8 @@ export async function runProgram(
     stats.ms = performance.now() - t0;
     stats.stepsRun = toolCallsIssued;
     stats.early = false;
+    stats.islandMemoized = islandCompleted > 0 && islandAllMemo;
+    stats.islandUsageMeasured = islandCompleted > 0 && islandCompleted === stats.llmCalls && islandUsageOk;
     return { value, stats };
   };
 

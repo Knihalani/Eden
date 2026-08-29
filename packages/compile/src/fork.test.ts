@@ -161,6 +161,22 @@ describe("fork mining", () => {
     expect(res.stats.deopt).toBe(false);
   });
 
+  test("compileTraces prefers the fork over its linear arms", () => {
+    const traces = [
+      variedTrace("g0", "green", ["merge_pr", "notify"], 10),
+      variedTrace("g1", "green", ["merge_pr", "notify"], 11),
+      variedTrace("g2", "green", ["merge_pr", "notify"], 12),
+      variedTrace("r0", "red", ["comment_pr", "notify"], 20),
+      variedTrace("r1", "red", ["comment_pr", "notify"], 21),
+      variedTrace("r2", "red", ["comment_pr", "notify"], 22),
+    ];
+    const mined = compileTraces(traces);
+    const branches = mined.programs.filter((p) => p.steps?.some((s) => s.kind === "branch"));
+    expect(branches).toHaveLength(1);
+    expect(mined.programs).toHaveLength(1);
+    expect(mined.programs[0]!.name).toMatch(/forked_state_gate/);
+  });
+
   test("compileTraces emits ONE stable branched program across repeated compiles", () => {
     // Stable identity regression: the old positional fork_0/fork_1 ids changed
     // meaning whenever a different candidate set mined first.
@@ -179,6 +195,113 @@ describe("fork mining", () => {
     const mined = compileTraces(traces);
     const branches = mined.programs.filter((p) => p.steps?.some((s) => s.kind === "branch"));
     expect(branches).toHaveLength(0);
-    expect(mined.refusals.some((r) => /empty or identical output/i.test(r.reason))).toBe(true);
+    expect(mined.refusals.some((r) => r.code === "empty_output" || /empty or identical output/i.test(r.reason))).toBe(true);
+  });
+
+  test("compileTraces does not mine a fork when an arm has fewer than 3 witnesses", () => {
+    const traces = [
+      variedTrace("t1", "failure", ["fix_build", "notify"], 101),
+      variedTrace("t2", "failure", ["fix_build", "notify"], 102),
+      variedTrace("t4", "success", ["notify"], 201),
+      variedTrace("t5", "success", ["notify"], 202),
+      variedTrace("t6", "success", ["notify"], 203),
+    ];
+    const mined = compileTraces(traces);
+    const branches = mined.programs.filter((p) => p.steps?.some((s) => s.kind === "branch"));
+    expect(branches).toHaveLength(0);
+  });
+
+  function unboundWriteArmTraces(): StretchTrace[] {
+    return [
+      ...[101, 102, 103].map((pr, i) => ({
+        id: `fail-${i}`,
+        events: [
+          { name: "get_ci", args: { pr }, result: { state: "failure", pr }, ok: true },
+          { name: "writeRecord", args: { id: `OTHER-${pr}` }, result: { wrote: true }, ok: true },
+          { name: "notify", args: { pr }, result: { done: true, pr }, ok: true },
+        ],
+        input: { pr },
+        output: { done: true },
+        llmCalls: 4,
+        duration_ms: 4000,
+        cost_cents: 4,
+        complete: true,
+      })),
+      ...[201, 202, 203].map((pr, i) => ({
+        id: `ok-${i}`,
+        events: [
+          { name: "get_ci", args: { pr }, result: { state: "success", pr }, ok: true },
+          { name: "merge_pr", args: { pr }, result: { done: true, pr }, ok: true },
+          { name: "notify", args: { pr }, result: { done: true, pr }, ok: true },
+        ],
+        input: { pr },
+        output: { done: true },
+        llmCalls: 4,
+        duration_ms: 4000,
+        cost_cents: 4,
+        complete: true,
+      })),
+    ];
+  }
+
+  test("mutating unbound arm refuses as underdetermined_write, not a guessed bind", () => {
+    const traces = unboundWriteArmTraces();
+    const forks = findForkedGroups(traces, 3);
+    expect(forks.length).toBe(1);
+    const prog = assembleForkProgram(forks[0]!, "t", "ci_gate");
+    expect(prog).toBeNull();
+    expect(forks[0]!.assembleRefuse?.code).toBe("underdetermined_write");
+    expect(forks[0]!.assembleRefuse?.slot).toMatch(/writeRecord/);
+
+    const mined = compileTraces(traces);
+    const branches = mined.programs.filter((p) => p.steps?.some((s) => s.kind === "branch"));
+    expect(branches).toHaveLength(0);
+    const forkWrite = mined.refusals.find(
+      (r) => r.code === "underdetermined_write" && r.sequence.some((s) => s.startsWith("branch_")),
+    );
+    expect(forkWrite).toBeDefined();
+    expect(forkWrite!.reason.toLowerCase()).toMatch(/under-determined|mutating/);
+    // No guessed literal bind of OTHER-* onto writeRecord.id.
+    for (const p of mined.programs) {
+      for (const s of p.steps) {
+        if (s.kind !== "tool" || s.tool !== "writeRecord") continue;
+        const idBind = s.args?.id;
+        expect(idBind).not.toEqual({ kind: "literal", value: "OTHER-101" });
+      }
+    }
+  });
+
+  test("MAX_PROGRAMS=24: extras are max_programs refusals; a fork cannot sneak past the cap", () => {
+    const traces: StretchTrace[] = [];
+    for (let k = 0; k < 24; k++) {
+      for (let i = 0; i < 3; i++) {
+        const id = `C${k}-${i}`;
+        traces.push({
+          id: `lin-${k}-${i}`,
+          events: [
+            { name: `getCluster${k}`, args: { id }, result: { id, ok: true }, ok: true },
+            { name: `writeCluster${k}`, args: { id }, result: { wrote: true, id }, ok: true },
+            { name: `notifyCluster${k}`, args: { id }, result: { done: true, id }, ok: true },
+          ],
+          input: { id },
+          output: { done: true, k, i },
+          llmCalls: 3,
+          duration_ms: 30,
+          cost_cents: 3,
+          complete: true,
+        });
+      }
+    }
+    traces.push(...failingFixture());
+    const mined = compileTraces(traces);
+    expect(mined.programs.length).toBeLessThanOrEqual(24);
+    expect(mined.programs.length).toBe(24);
+    expect(mined.refusals.some((r) => r.code === "max_programs")).toBe(true);
+    const forkInPrograms = mined.programs.some((p) => p.steps?.some((s) => s.kind === "branch"));
+    const forkCapped = mined.refusals.some(
+      (r) => r.code === "max_programs" && r.sequence.some((s) => s.startsWith("branch_")),
+    );
+    expect(forkInPrograms || forkCapped).toBe(true);
+    expect(mined.programs.length + mined.refusals.filter((r) => r.code === "max_programs").length).toBeGreaterThanOrEqual(25);
   });
 });

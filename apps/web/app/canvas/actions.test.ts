@@ -16,6 +16,8 @@ const authState: { userId: string | null; orgId: string | null; sessionStatus: s
 
 let wrapCalls = 0;
 const lastHeaders: Record<string, string> = {};
+let lastBody = "";
+let lastUrl = "";
 
 mock.module("@clerk/nextjs/server", () => ({
   auth: async () => ({
@@ -30,16 +32,18 @@ mock.module("next/cache", () => ({
 }));
 
 mock.module("@/lib/wrap", () => ({
-  wrapFetch: () => (req: Request) => {
+  wrapFetch: () => async (req: Request) => {
     wrapCalls++;
+    lastUrl = req.url;
     req.headers.forEach((v, k) => {
       lastHeaders[k] = v;
     });
-    return Promise.resolve(Response.json({ ok: true }));
+    lastBody = await req.text();
+    return Response.json({ ok: true });
   },
 }));
 
-const { approveTool, pauseTool, resumeTool, dismissRequest, bindWorkspaceOrg } = await import("./actions");
+const { approveTool, pauseTool, promoteTool, resumeTool, dismissRequest, bindWorkspaceOrg } = await import("./actions");
 
 /**
  * The credential helper reads the environment at call time, so pin it for the
@@ -76,6 +80,8 @@ describe("canvas server actions auth gate", () => {
   // must start from a known counter (absolute expects, not suite order).
   function resetCalls() {
     wrapCalls = 0;
+    lastBody = "";
+    lastUrl = "";
     for (const k of Object.keys(lastHeaders)) delete lastHeaders[k];
   }
 
@@ -117,6 +123,14 @@ describe("canvas server actions auth gate", () => {
     expect(wrapCalls).toBe(1);
   });
 
+  test("approve can carry the Write-serve checkbox", async () => {
+    resetCalls();
+    signedIn();
+    const out = await approveTool("tool_1", [], [], { transparentWrites: true });
+    expect(out.ok).toBe(true);
+    expect(JSON.parse(lastBody)).toEqual({ transparent_writes: true });
+  });
+
   test("the action carries the caller's org id as x-eden-org", async () => {
     resetCalls();
     signedIn();
@@ -133,6 +147,28 @@ describe("canvas server actions auth gate", () => {
     const out = await bindWorkspaceOrg();
     expect(out.ok).toBe(true);
     expect(lastHeaders["x-eden-org"]).toBe("org_7");
+  });
+
+  test("promote posts /v1/tools/:id/promote", async () => {
+    resetCalls();
+    signedIn();
+    const out = await promoteTool("tool_1");
+    expect(out.ok).toBe(true);
+    expect(lastUrl).toMatch(/\/v1\/tools\/tool_1\/promote$/);
+  });
+
+  test("approve can carry dropValues and pinIslands", async () => {
+    resetCalls();
+    signedIn();
+    const out = await approveTool("tool_1", [], [], {
+      dropValues: [{ path: "id", value: "T-2" }],
+      pinIslands: true,
+    });
+    expect(out.ok).toBe(true);
+    expect(JSON.parse(lastBody)).toEqual({
+      dropValues: [{ path: "id", value: "T-2" }],
+      pinIslands: true,
+    });
   });
 
   test("no eden_dev fallback on a managed install without EDEN_API_KEY", async () => {

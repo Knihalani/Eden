@@ -228,4 +228,13 @@ describe("densifyValue terminates on cycles and runaway depth", () => {
     const out = JSON.stringify(densifyValue(deep));
     expect(out).toContain("[TRUNCATED]");
   });
+
+  test("a value shared between siblings is densified under both parents", () => {
+    const shared = { n: 1, title: "same" };
+    const root = { left: shared, right: shared };
+    const out = densifyValue(root) as Record<string, unknown>;
+    expect(out.left).toEqual({ n: 1, title: "same" });
+    expect(out.right).toEqual({ n: 1, title: "same" });
+    expect(JSON.stringify(out)).not.toContain("[CYCLE]");
+  });
 });

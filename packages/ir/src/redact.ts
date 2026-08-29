@@ -331,7 +331,34 @@ export function setKey(out: Record<string, unknown>, k: string, v: unknown): voi
 // legitimate repeated data with the "[CYCLE]" sentinel — silent corruption
 // that then gets baked into compiled programs as a literal.
 export function redact(value: unknown, stack?: WeakSet<object>): unknown {
+  if (typeof value === "string") return redactString(value);
+  if (typeof value === "bigint") return String(value);
+  if (typeof value === "function") return `[Function:${value.name || "anonymous"}]`;
+  if (typeof value === "symbol") return String(value);
+  if (value == null || typeof value !== "object") return value;
+  // Hot path: a plain {flag: true} / {n: 1} snapshot without walking a WeakSet.
+  // Anything with a string, nested object, or secret key falls through.
+  if (!stack && isPlain(value) && !Array.isArray(value)) {
+    const fast = redactPlainPrimitives(value);
+    if (fast) return fast;
+  }
   return walk(value, { nodes: 0, path: stack ?? new WeakSet<object>() }, 0);
+}
+
+const EMPTY_SNAPSHOT: Record<string, unknown> = Object.freeze({});
+
+function redactPlainPrimitives(value: object): Record<string, unknown> | null {
+  const keys = ownKeys(value);
+  if (keys.length === 0) return EMPTY_SNAPSHOT;
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    if (isSecretKey(k)) return null;
+    const v = readProp(value, k);
+    if (typeof v === "string" || typeof v === "bigint" || typeof v === "function" || typeof v === "symbol") return null;
+    if (v != null && typeof v === "object") return null;
+    setKey(out, k, v);
+  }
+  return out;
 }
 
 function walk(value: unknown, w: Walk, depth: number): unknown {

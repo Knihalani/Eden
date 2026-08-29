@@ -1,9 +1,9 @@
 import type { StretchProgram } from "@eden/ir";
 import { redact } from "@eden/ir";
 import { compiledSchema, steerToolCalls } from "./steer";
-import { selectForRequest } from "./intent";
+import { noteJitUsed, selectForRequest } from "./intent";
 import { killAfterWarningEnabled } from "./guard";
-import type { WrapState } from "./wrap-tools";
+import { filterCanary, type WrapState } from "./wrap-tools";
 
 /**
  * Anthropic Messages API dialect (G7).
@@ -67,9 +67,43 @@ interface AnthropicRequest {
  * Sessions that reorder their tool array churn the prefix and pay full price
  * regardless; nothing here can help that (and alphabetical emission is the
  * MCP surface's job). Opt out with EDEN_PROMPT_CACHE=0.
+ *
+ * Cache-guard (`EDEN_CACHE_GUARD=1`): volatile prefix blocks (timestamps,
+ * skill listings) move after the stable prefix so the breakpoint stays on
+ * stable text. Kill switch `EDEN_PROMPT_CACHE=0` still wins.
  */
+const VOLATILE_TEXT = /(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2})|(?:available skills)|(?:skill(?:s)?\s+(?:list|index|listing))/i;
+
+export function isVolatilePrefixText(text: string): boolean {
+  return VOLATILE_TEXT.test(text);
+}
+
+type SystemBlock = { type: string; text?: string; cache_control?: { type: "ephemeral" } };
+
+export function applyCacheGuard(body: { system?: string | SystemBlock[] }): void {
+  if (!Array.isArray(body.system) || body.system.length < 2) return;
+  const stable: SystemBlock[] = [];
+  const volatile: SystemBlock[] = [];
+  for (const b of body.system) {
+    const copy = { ...b };
+    delete copy.cache_control;
+    if (isVolatilePrefixText(copy.text ?? "")) volatile.push(copy);
+    else stable.push(copy);
+  }
+  if (!volatile.length || !stable.length) return;
+  body.system = [...stable, ...volatile];
+}
+
+function lastStableSystemIndex(blocks: SystemBlock[]): number {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (!isVolatilePrefixText(blocks[i]!.text ?? "")) return i;
+  }
+  return blocks.length - 1;
+}
+
 export function applyCacheBreakpoints(body: AnthropicRequest): void {
   if (process.env.EDEN_PROMPT_CACHE === "0") return;
+  if (process.env.EDEN_CACHE_GUARD === "1") applyCacheGuard(body);
   if (Array.isArray(body.tools) && body.tools.length > 0) {
     const last = body.tools[body.tools.length - 1]!;
     last.cache_control = { type: "ephemeral" };
@@ -77,7 +111,8 @@ export function applyCacheBreakpoints(body: AnthropicRequest): void {
   if (typeof body.system === "string") {
     body.system = [{ type: "text", text: body.system, cache_control: { type: "ephemeral" } }];
   } else if (Array.isArray(body.system) && body.system.length > 0) {
-    const last = body.system[body.system.length - 1]!;
+    const idx = lastStableSystemIndex(body.system);
+    const last = body.system[idx]!;
     last.cache_control = { type: "ephemeral" };
   }
   const msgs = body.messages;
@@ -118,6 +153,8 @@ function anthropicToolDef(program: StretchProgram) {
     name: fn?.name ?? program.name,
     description: fn?.description ?? "",
     input_schema: fn?.parameters ?? program.inputSchema,
+    allowed_callers: openai.allowed_callers,
+    defer_loading: openai.defer_loading,
   };
 }
 
@@ -273,14 +310,14 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
     );
   }
 
-  const live = opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest);
+  const live = filterCanary(opts.getPrograms?.() ?? opts.state.programs.filter((p) => p.manifest), opts.state.sessionId);
   // A tripped kill switch must never take the user's traffic down (prime
   // directive). It only loses Eden its privilege to steer.
   const steerable = !killAfterWarningEnabled(opts.state.opts) || opts.state.run.firstWarningAt == null;
   // Opt-in means the client sent a tools ARRAY — an empty array has opted into
   // function calling (see injectTools). A missing tools field has not.
   const shouldSteer = steerable && live.length > 0 && Array.isArray(body.tools);
-  if (shouldSteer) body.tools = injectAnthropicTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined));
+  if (shouldSteer) body.tools = injectAnthropicTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit));
 
   const wantsStream = Boolean(body.stream);
   if (shouldSteer && wantsStream) body.stream = false; // re-framed below after steering
@@ -337,7 +374,15 @@ export async function handleAnthropicMessages(req: Request, opts: AnthropicProxy
   // actually steerable; an unsteered passthrough must return the model's own
   // tool choices untouched.
   if (shouldSteer && msg.stop_reason === "tool_use" && Array.isArray(msg.content)) {
-    msg.content = steerAnthropicToolUses(msg.content, live);
+    try {
+      msg.content = steerAnthropicToolUses(msg.content, live);
+      noteJitUsed(
+        opts.state.jit,
+        msg.content.filter((b) => b.type === "tool_use" && b.name).map((b) => b.name!),
+      );
+    } catch {
+      /* steering is a bonus; the model's own tool_use blocks still go back */
+    }
   }
 
   if (wantsStream) {

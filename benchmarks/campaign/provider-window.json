@@ -1,0 +1,105 @@
+{
+  "recordedAt": "2026-08-28T16:00:00.000Z",
+  "purpose": "Wave 12.1 token-class ledger vs a recorded provider-usage window. Not a campaign world. Not a retune of cert-rate.",
+  "notes": [
+    "OpenAI: cached_tokens is a subset of prompt_tokens. Do not add it on top. Five classes = prompt_tokens + completion_tokens.",
+    "Anthropic: cache_read_input_tokens + cache_creation_input_tokens + input_tokens = processed input. Eden billed prompt is input_tokens (parseUsage); cache_read is a separate line, never extra billed tokens.",
+    "tokenClasses on each turn are independently labeled expected classes — not derived from parseUsage. A wrong class label must fail."
+  ],
+  "tokenClasses": {
+    "compiled": 2306,
+    "memoized": 0,
+    "transparent": 100,
+    "steeredSkip": 0,
+    "frontier": 178,
+    "providerCache": 101920
+  },
+  "turns": [
+    {
+      "id": "openai-compiled-island",
+      "provider": "openai",
+      "tokenClass": "compiled",
+      "tokenClasses": {
+        "compiled": 2306,
+        "memoized": 0,
+        "transparent": 0,
+        "steeredSkip": 0,
+        "frontier": 0,
+        "providerCache": 1920
+      },
+      "response": {
+        "id": "chatcmpl-eden-window-compiled",
+        "object": "chat.completion",
+        "model": "gpt-4o",
+        "usage": {
+          "prompt_tokens": 2006,
+          "completion_tokens": 300,
+          "total_tokens": 2306,
+          "prompt_tokens_details": {
+            "cached_tokens": 1920,
+            "cache_write_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "openai-memoized-hit",
+      "provider": "none",
+      "tokenClass": "memoized",
+      "note": "Witness-memo hit: no provider usage. Omit tokenClasses — unmeasured, never invent a share."
+    },
+    {
+      "id": "anthropic-frontier-agent",
+      "provider": "anthropic",
+      "tokenClass": "frontier",
+      "tokenClasses": {
+        "compiled": 0,
+        "memoized": 0,
+        "transparent": 0,
+        "steeredSkip": 0,
+        "frontier": 178,
+        "providerCache": 100000
+      },
+      "response": {
+        "id": "msg_eden_window_frontier",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-sonnet-4-5",
+        "usage": {
+          "input_tokens": 50,
+          "output_tokens": 128,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 100000
+        }
+      }
+    },
+    {
+      "id": "openai-transparent-head",
+      "provider": "openai",
+      "tokenClass": "transparent",
+      "tokenClasses": {
+        "compiled": 0,
+        "memoized": 0,
+        "transparent": 100,
+        "steeredSkip": 0,
+        "frontier": 0
+      },
+      "response": {
+        "id": "chatcmpl-eden-window-transparent",
+        "object": "chat.completion",
+        "model": "gpt-4o-mini",
+        "usage": {
+          "prompt_tokens": 80,
+          "completion_tokens": 20,
+          "total_tokens": 100
+        }
+      }
+    },
+    {
+      "id": "steered-skip-remainder",
+      "provider": "none",
+      "tokenClass": "steered-skip",
+      "note": "Remainder deny: no provider tokens. Omit tokenClasses — unmeasured, not an invented frontier."
+    }
+  ]
+}

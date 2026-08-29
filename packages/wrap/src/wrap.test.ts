@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { redact } from "@eden/ir";
+import { inCanary, redact } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, pendingPosts, flushOutbox } from "../src/index";
+import { eden, extractInput, injectTools, steerToolCalls, wrapTools, createState, handleChatCompletions, wrapTimeoutMs, DEFAULT_WRAP_TIMEOUT_MS, pendingPosts, flushOutbox } from "../src/index";
 import type { OpenAiHandle } from "../src/eden";
 import { createTicketShip, ticketShipProgram, OOD_ID, WITNESS_IDS } from "../../runtime/src/ticketship";
 
@@ -74,6 +74,22 @@ describe("steer + inject", () => {
       [p],
     );
     expect(out[0]!.function?.name).toBe("lookupTicket");
+  });
+
+  test("softMatch serves a novel same-type id; OOD and default-strict still skip", () => {
+    const novel = "T-NOVEL";
+    const strict = liveProgram();
+    const soft = {
+      ...liveProgram(),
+      id: "soft",
+      contract: { ...liveProgram().contract, softMatch: true },
+    };
+    const call = (id: unknown) => [
+      { function: { name: "lookupTicket", arguments: JSON.stringify({ id }) } },
+    ];
+    expect(steerToolCalls(call(novel), [strict])[0]!.function?.name).toBe("lookupTicket");
+    expect(steerToolCalls(call(novel), [soft])[0]!.function?.name).toBe(soft.name);
+    expect(steerToolCalls(call(123), [soft])[0]!.function?.name).toBe("lookupTicket");
   });
 
   test("prefers the longest matching sequence", () => {
@@ -225,6 +241,8 @@ describe("steer + inject", () => {
       function: { name: string };
     }>;
     expect(tools[0]!.function.name).toBe("resolve_ticket");
+    expect((tools[0] as { allowed_callers?: string[] }).allowed_callers).toEqual(["direct", "code_execution_20260120"]);
+    expect((tools[0] as { defer_loading?: boolean }).defer_loading).toBe(true);
     expect(tools.some((t) => t.function.name === "lookupTicket")).toBe(true);
   });
 });
@@ -241,6 +259,9 @@ describe("wrapTools", () => {
     expect(state.receipts[0]?.llmCalls).toBe(1);
     expect(state.receipts[0]?.ok).toBe(true);
     expect(state.receipts[0]?.tokensSaved).toBeUndefined();
+    expect(state.receipts[0]?.tokenClass).toBe("compiled");
+    expect(state.receipts[0]?.tokenClasses).toBeUndefined();
+    expect(state.receipts[0]?.prompt_tokens).toBeUndefined();
   });
 
   test("a live receipt confirms time against the tape, not the shadow estimate", async () => {
@@ -274,6 +295,17 @@ describe("wrapTools", () => {
     expect(rec!.outcome).toBe("deopt");
   });
 
+  test("softMatch compiled execute serves a novel same-type id; without it deopts to raw", async () => {
+    const world = createTicketShip({ llmMs: 0 });
+    const soft = {
+      ...liveProgram(),
+      contract: { ...liveProgram().contract, softMatch: true },
+    };
+    const tools = wrapTools(world.tools, createState({ programs: [soft], island: world.island }));
+    const out = await tools.lookupTicket.execute({ id: OOD_ID });
+    expect(out).toEqual({ notified: true, id: OOD_ID });
+  });
+
   test("steer: first old tool collapses to the compiled program", async () => {
     const world = createTicketShip({ llmMs: 0 });
     const program = liveProgram();
@@ -284,6 +316,39 @@ describe("wrapTools", () => {
     const second = await tools.fetchDetails.execute({ id: "T-101" });
     expect(second).toEqual({ eden: "steered", skipped: "fetchDetails" });
     expect(world.verified.has("T-101")).toBe(true);
+    const rec = state.receipts.find((r) => r.ok && r.skipped?.includes("fetchDetails"));
+    expect(rec).toBeTruthy();
+    expect(rec!.reason).toMatch(/Already served by resolve_ticket/);
+    expect(rec!.reason).toMatch(/Do not re-run fetchDetails/);
+    expect(rec!.reason).toMatch(/facts are in the last tool output or attached as context/);
+  });
+
+  test("canary rollout serves only the hashed bucket; empty session stays live-compat", async () => {
+    let inId = "";
+    let outId = "";
+    for (let i = 0; i < 400 && (!inId || !outId); i++) {
+      const s = `sess-${i}`;
+      if (inCanary(s) && !inId) inId = s;
+      if (!inCanary(s) && !outId) outId = s;
+    }
+    expect(inId && outId).toBeTruthy();
+    const canary = { ...liveProgram(), rollout: "canary" as const };
+    const worldIn = createTicketShip({ llmMs: 0 });
+    const worldOut = createTicketShip({ llmMs: 0 });
+    const worldEmpty = createTicketShip({ llmMs: 0 });
+    const toolsIn = wrapTools(worldIn.tools, createState({ programs: [canary], island: worldIn.island, sessionId: inId }));
+    const toolsOut = wrapTools(worldOut.tools, createState({ programs: [canary], island: worldOut.island, sessionId: outId }));
+    const toolsEmpty = wrapTools(
+      worldEmpty.tools,
+      createState({ programs: [canary], island: worldEmpty.island, sessionId: "" }),
+    );
+    const inHit = await toolsIn.lookupTicket.execute({ id: "T-100" });
+    const outHit = await toolsOut.lookupTicket.execute({ id: "T-100" });
+    const emptyHit = await toolsEmpty.lookupTicket.execute({ id: "T-100" });
+    expect(inHit).toEqual({ notified: true, id: "T-100" });
+    expect(outHit).not.toEqual({ notified: true, id: "T-100" });
+    // Unpartitioned wrap is the operator: Approve canary must still serve.
+    expect(emptyHit).toEqual({ notified: true, id: "T-100" });
   });
 
   test("two sequential tickets both compile (skip rest is per stretch)", async () => {
@@ -586,6 +651,7 @@ describe("wrapTimeoutMs", () => {
     const prev = process.env.EDEN_TIMEOUT_MS;
     delete process.env.EDEN_TIMEOUT_MS;
     expect(wrapTimeoutMs()).toBe(60_000);
+    expect(DEFAULT_WRAP_TIMEOUT_MS).toBe(60_000);
     expect(wrapTimeoutMs(12_000)).toBe(12_000);
     expect(wrapTimeoutMs(999_999)).toBe(300_000);
     process.env.EDEN_TIMEOUT_MS = "999999";

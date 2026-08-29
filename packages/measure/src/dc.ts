@@ -7,15 +7,10 @@
  *   DC% = (compiled + memoized + transparent + steeredSkip) / total
  *   total = those four + frontier
  */
-export type TokenClasses = {
-  compiled: number;
-  memoized: number;
-  transparent: number;
-  steeredSkip: number;
-  frontier: number;
-  /** Provider cache hits — never added into the DC% numerator or denominator. */
-  providerCache?: number;
-};
+import type { TokenClasses } from "@eden/ir";
+
+export type { TokenClasses } from "@eden/ir";
+export { billedTokens, emptyTokenClasses, reconcileTokenClasses } from "@eden/ir";
 
 export function dcShare(c: TokenClasses): number {
   const det = c.compiled + c.memoized + c.transparent + c.steeredSkip;

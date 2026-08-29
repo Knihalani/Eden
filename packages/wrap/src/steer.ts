@@ -1,5 +1,5 @@
 import type { StretchProgram, ToolStep } from "@eden/ir";
-import { inDistribution, asRecord, getPath, interpolateSlots, setKey } from "@eden/ir";
+import { inDistribution, mayServe, asRecord, getPath, interpolateSlots, setKey, PTC_CALLERS } from "@eden/ir";
 // Core helpers via relative paths (the same pattern the tests use); wrap does
 // not declare a workspace dependency on core.
 import { parameterizeUrl, extractCommandUrls } from "../../core/src/urls";
@@ -58,6 +58,15 @@ export function extractInput(program: StretchProgram, args: Record<string, unkno
   }
   if (!Object.keys(out).length) return args;
   return out;
+}
+
+/**
+ * Default gate is envelope-exact (inDistribution). Soft (same keys/types,
+ * novel value) serves only when the contract opted in. OOD never.
+ */
+function inputServes(program: StretchProgram, input: Record<string, unknown>): boolean {
+  if (inDistribution(program, input)) return true;
+  return mayServe(program, input);
 }
 
 /**
@@ -280,7 +289,7 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
     const seq = p.sequence ?? [];
     if (!seq.length || seq[0] !== name) continue;
     const input = extractInput(p, callArgs(first));
-    if (!inDistribution(p, input)) continue;
+    if (!inputServes(p, input)) continue;
     hits.push({ p, input, by: "name" });
   }
   // Gate two: argument shape, only when no name matched. Conservative on
@@ -306,7 +315,7 @@ export function steerToolCalls(calls: OpenAiToolCall[], programs: StretchProgram
           if (!psig.every((s, i) => s === sig[i])) continue;
           input = extractInput(p, callArgs(first));
         }
-        if (!input || !inDistribution(p, input)) continue;
+        if (!input || !inputServes(p, input)) continue;
         hits.push({ p, input, by: "argshape" });
       }
     }
@@ -338,6 +347,10 @@ export function compiledSchema(program: StretchProgram) {
       description: program.description,
       parameters: program.inputSchema,
     },
+    /** PTC guidance — not a security wall. */
+    allowed_callers: [...PTC_CALLERS],
+    /** Tool Search: catalog tools stay out of the initial prefix. */
+    defer_loading: true as const,
   };
 }
 

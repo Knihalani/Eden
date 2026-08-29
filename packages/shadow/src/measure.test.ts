@@ -44,4 +44,19 @@ describe("L6: token extrapolation keyed on compiled LLM use, not direct island s
     expect(compiledTokens(t, 2, false)).not.toBe(0);
     expect(tokensExtrapolated(0, true)).toBe(false); // genuinely no provider work
   });
+
+  test("scraped island usage is MEASURED, not extrapolated", () => {
+    const usage = { prompt_tokens: 80, completion_tokens: 20 };
+    expect(compiledTokens(t({ prompt_tokens: 80, completion_tokens: 0 }), 1, true, usage)).toBe(100);
+    expect(tokensExtrapolated(1, true, usage)).toBe(false);
+    expect(tokensExtrapolated(1, true)).toBe(true);
+    expect(tokensExtrapolated(1, true, null)).toBe(true);
+    expect(tokensExtrapolated(0, true, usage)).toBe(false);
+  });
+
+  test("non-finite island usage still extrapolates", () => {
+    const usage = { prompt_tokens: Number.NaN, completion_tokens: 20 };
+    expect(compiledTokens(t({ prompt_tokens: 80, completion_tokens: 0 }), 1, true, usage)).toBe(20);
+    expect(tokensExtrapolated(1, true, usage)).toBe(true);
+  });
 });

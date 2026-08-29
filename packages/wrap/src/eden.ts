@@ -1,6 +1,6 @@
 import { createState, wrapTools, type WrapState } from "./wrap-tools";
 import type { EdenOpts, ToolsIn } from "./types";
-import { openaiIsland } from "./island";
+import { wrapIsland } from "./island";
 
 export type OpenAiHandle = {
   model: string;
@@ -24,7 +24,7 @@ async function wrapUp(base: string): Promise<boolean> {
 export function eden(opts: EdenOpts = {}) {
   const state: WrapState = createState({
     ...opts,
-    island: opts.island ?? (process.env.OPENAI_API_KEY || opts.apiKey ? openaiIsland({ apiKey: opts.apiKey, fetch: opts.fetch }) : undefined),
+    island: opts.island ?? (process.env.OPENAI_API_KEY || opts.apiKey ? wrapIsland({ apiKey: opts.apiKey, fetch: opts.fetch }) : undefined),
   });
   const proxy = process.env.EDEN_WRAP_URL || "http://127.0.0.1:8788/v1";
   return {

@@ -1,4 +1,5 @@
-import type { EvidenceLedger, IslandCaller, OnlineWarning, SignalBudget, StretchProgram, StretchTrace, TraceEvent } from "@eden/ir";
+import type { EvidenceLedger, IslandCaller, OnlineWarning, SignalBudget, StretchProgram, StretchTrace, TokenClass, TokenClasses, TraceEvent } from "@eden/ir";
+import type { ArmingStore } from "./arming";
 
 export type Receipt = {
   toolId: string;
@@ -12,10 +13,33 @@ export type Receipt = {
   stepsRun?: number;
   skipped?: string[];
   outcome?: "ok" | "deopt" | "failed" | "skipped" | "degraded";
+  /** Product copy for canvas (capacity fail-open, etc.). Not a deopt. */
+  reason?: string;
   tokens?: number;
   tokensSaved?: number | null;
   timeSavedMs?: number | null;
   fingerprint?: string;
+  /** Token class for this compiled/skipped/raw serving. */
+  tokenClass?: TokenClass;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  cached_tokens?: number;
+  /** Provider cache-write tokens. 0 is measured Anthropic write. */
+  cache_write_tokens?: number;
+  /** Hit-% denominator stamped at parse. OpenAI prompt; Anthropic read+write+input. */
+  cache_input_tokens?: number;
+  tokenClasses?: TokenClasses;
+  certified?: boolean;
+  /** Agent that produced this receipt. Absent = single-agent wrap. */
+  agentId?: string;
+  parentRunId?: string;
+  fleetId?: string;
+  region?: string;
+  /**
+   * Agents that shared this serving (Wave 7.1). Omitted at 1.
+   * Product copy: `shared across ${sharedAcross} agents`.
+   */
+  sharedAcross?: number;
 };
 
 export type ToolDef = {
@@ -40,6 +64,32 @@ export type EdenOpts = {
   onReceipt?: (r: Receipt) => void;
   shadow?: boolean;
   timeoutMs?: number;
+  /**
+   * Hosted-dispatch session key. Armings are partitioned by this id so two
+   * agents on one process cannot claim each other's tails. Default: `EDEN_SESSION`
+   * or the single-tenant bucket.
+   */
+  sessionId?: string;
+  /** Shared suppression store. Omit for an isolated per-wrap map. */
+  arming?: ArmingStore;
+  /** Per-session arming cap (default 64). Bursts fail open. */
+  armMax?: number;
+  /** Process-wide arming cap across sessions (default 4096). */
+  armGlobal?: number;
+  /**
+   * Fleet key for read-only cross-agent claims (Wave 7.1). Distinct sessions
+   * in the same fleet may claim each other's *read-only* fetches. Mutating
+   * tails stay session-scoped. Default: `EDEN_FLEET` or empty (no sharing).
+   */
+  fleetId?: string;
+  /** Stable agent identity for attribution. Default: `EDEN_AGENT` or sessionId. */
+  agentId?: string;
+  /** Parent orchestrator run id. Child traces stamp `parentRunId`. */
+  parentRunId?: string;
+  /** Orchestrator span id this wrap's traces must carry. */
+  spanId?: string;
+  /** Region label on traces/receipts. Default: `EDEN_REGION`. */
+  region?: string;
   /** Operator override (43): after the first warning, further LLM/tool spend is refused. */
   killAfterWarning?: boolean;
   /**
@@ -59,6 +109,20 @@ export type RunRecorder = {
   prompt_tokens: number;
   completion_tokens: number;
   measured: boolean;
+  /** Provider cache-read tokens. Separate from billed prompt+completion. */
+  cached_tokens: number;
+  /** Provider cache-write tokens. Separate line; 0 is measured. */
+  cache_write_tokens: number;
+  /** Hit-% denominator stamped from the usage object (not inferred later). */
+  cache_input_tokens: number;
+  /** Island scrape accumulated from compiled runs this window. */
+  island_prompt_tokens: number;
+  island_completion_tokens: number;
+  island_cached_tokens: number;
+  island_cache_write_tokens: number;
+  island_cache_input_tokens: number;
+  island_memoized: boolean;
+  island_measured: boolean;
   output?: unknown;
   warnings: OnlineWarning[];
   seenSignals: Set<string>;
@@ -79,6 +143,16 @@ export function emptyRun(): RunRecorder {
     prompt_tokens: 0,
     completion_tokens: 0,
     measured: false,
+    cached_tokens: 0,
+    cache_write_tokens: 0,
+    cache_input_tokens: 0,
+    island_prompt_tokens: 0,
+    island_completion_tokens: 0,
+    island_cached_tokens: 0,
+    island_cache_write_tokens: 0,
+    island_cache_input_tokens: 0,
+    island_memoized: false,
+    island_measured: false,
     warnings: [],
     seenSignals: new Set(),
     /** Executed (non-skipped) raw calls this run. Unconditional ceiling input. */

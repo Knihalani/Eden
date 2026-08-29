@@ -140,6 +140,11 @@ export type Config = {
    * set false (or EDEN_TRANSPARENT=0) to disable entirely.
    */
   transparent_exec?: boolean;
+  /**
+   * Weekly digest letter. Default OFF. EDEN_DIGEST=1 also enables.
+   * A broken digest never breaks the agent (fail-open zeros). Never emails.
+   */
+  digest?: boolean;
 };
 
 export function readConfig(): Config | null {

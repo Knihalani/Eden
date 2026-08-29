@@ -14,6 +14,7 @@ export function hashProgram(program: Pick<StretchProgram, "name" | "description"
       minLlmReduction: program.contract.minLlmReduction,
       allowExact: program.contract.allowExact,
       envelope: program.contract.envelope ?? null,
+      softMatch: program.contract.softMatch === true,
     },
     sequence: program.sequence ?? [],
   };

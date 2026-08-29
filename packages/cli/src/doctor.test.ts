@@ -1,7 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { collectDoctor, formatDoctor } from "./doctor";
+import {
+  autoApproveCheck,
+  collectDoctor,
+  doctor,
+  doctorHelp,
+  doctorPayload,
+  formatDoctor,
+  FUNNEL_STAGES,
+  funnelCheck,
+  funnelSnapshot,
+  hookdOrphanDetail,
+  liveToolsDetail,
+  netAllowCheck,
+  parseNetAllow,
+  recordState,
+  surfaceCheck,
+  surfaceModeOf,
+  treeCheck,
+} from "./doctor";
+import { renderTreeLetter } from "@eden/measure";
+
+function funnelOf(checks: Awaited<ReturnType<typeof collectDoctor>>) {
+  return FUNNEL_STAGES.map((name) => checks.find((c) => c.name === name));
+}
 
 describe("doctor", () => {
   test("reports wrap, hookd, config, and live-tools from a fake home", async () => {
@@ -23,9 +46,32 @@ describe("doctor", () => {
       expect(checks.find((c) => c.name === "config")?.ok).toBe(true);
       expect(checks.find((c) => c.name === "wrap")?.ok).toBe(true);
       expect(checks.find((c) => c.name === "wrap")?.detail).toContain("traces 2");
-      expect(checks.find((c) => c.name === "hookd")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "hookd")?.ok).toBe(false);
       expect(checks.find((c) => c.name === "live-tools")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "live-tools")?.detail).toBe("0 programs");
+      expect(checks.find((c) => c.name === "mine")?.detail).toMatch(/^0 · /);
+      expect(checks.find((c) => c.name === "mine")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "mine")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "lanes")?.detail).toMatch(/wrap/);
+      expect(checks.find((c) => c.name === "knock")?.name).toBe("knock");
+      expect(checks.find((c) => c.name === "knock")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "knock")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "serving")?.detail).toMatch(/^0 · /);
+      expect(checks.find((c) => c.name === "serving")?.detail).toMatch(/first serving after Approve/);
+      expect(checks.find((c) => c.name === "serving")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "approve")?.detail).toMatch(/eden approve/);
+      expect(checks.find((c) => c.name === "approve")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "approve")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "install")?.name).toBe("install");
+      expect(checks.find((c) => c.name === "record")?.name).toBe("record");
+      expect(checks.find((c) => c.name === "record")?.count).toBe(2);
+      expect(checks.find((c) => c.name === "record")?.ok).toBe(true);
       expect(formatDoctor(checks)).toContain("ok  wrap:");
+      expect(checks.find((c) => c.name === "net-allow")?.ok).toBe(true);
+      expect(formatDoctor(checks)).toMatch(/ok {2}net-allow: EDEN_NET_ALLOW /);
+      expect(formatDoctor(checks)).toMatch(/!! {2}mine: 0 ·/);
+      expect(formatDoctor(checks)).toMatch(/!! {2}approve: 0 ·/);
+      expect(formatDoctor(checks)).toMatch(/!! {2}serving: 0 ·/);
     } finally {
       if (prev === undefined) delete process.env.EDEN_HOME;
       else process.env.EDEN_HOME = prev;
@@ -57,6 +103,605 @@ describe("doctor", () => {
       if (prev === undefined) delete process.env.EDEN_HOME;
       else process.env.EDEN_HOME = prev;
       rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("wrap down does not tell you to wrap more runs", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-down");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async () => {
+          throw new Error("down");
+        }) as typeof fetch,
+      });
+      expect(checks.find((c) => c.name === "wrap")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "mine")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "mine")?.detail).toMatch(/unknown · wrap is down/);
+      expect(checks.find((c) => c.name === "serving")?.detail).toMatch(/unknown · wrap is down/);
+      expect(checks.find((c) => c.name === "approve")?.detail).toMatch(/unknown · wrap is down/);
+      expect(formatDoctor(checks)).not.toMatch(/wrap more runs/);
+      expect(checks.filter((c) => c.name === "config" || c.name === "wrap").every((c) => c.ok)).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("live orphan names /health pid, stale pid file, and eden hookd --stop", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-orphan");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    const { writeHookdPid, clearHookdPid } = await import("./hookd");
+    writeHookdPid(99999999);
+    try {
+      expect(hookdOrphanDetail(4242, 99999999)).toBe(
+        "orphan · /health pid 4242 · pid file 99999999 · eden hookd --stop",
+      );
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (String(input).includes(":8794/health")) {
+            return new Response(JSON.stringify({ ok: true, service: "eden-hookd", pid: 4242 }));
+          }
+          return new Response("no", { status: 404 });
+        }) as typeof fetch,
+      });
+      const row = checks.find((c) => c.name === "hookd");
+      expect(row?.ok).toBe(false);
+      expect(row?.detail).toBe("orphan · /health pid 4242 · pid file 99999999 · eden hookd --stop");
+      expect(row?.detail).toContain("eden hookd --stop");
+      expect(formatDoctor(checks)).toContain("!!  hookd: orphan");
+    } finally {
+      clearHookdPid();
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("owned hookd matching /health pid stays up · record", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-owned");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    const { writeHookdPid, clearHookdPid } = await import("./hookd");
+    writeHookdPid(process.pid);
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (String(input).includes(":8794/health")) {
+            return new Response(JSON.stringify({ ok: true, service: "eden-hookd", pid: process.pid }));
+          }
+          return new Response("no", { status: 404 });
+        }) as typeof fetch,
+      });
+      expect(checks.find((c) => c.name === "hookd")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "hookd")?.detail).toBe("up · record");
+      expect(formatDoctor(checks)).toContain("ok  hookd: up · record");
+    } finally {
+      clearHookdPid();
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("stale hookd pid is named with a start sentence", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-stale");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    const { writeHookdPid, clearHookdPid } = await import("./hookd");
+    writeHookdPid(99999999);
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          if (String(input).includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          throw new Error("hookd down");
+        }) as typeof fetch,
+      });
+      expect(checks.find((c) => c.name === "hookd")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "hookd")?.detail).toMatch(/stale pid 99999999 · start with eden hookd/);
+    } finally {
+      clearHookdPid();
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("live-tools names Canary vs Live in the same words as Home", () => {
+    expect(liveToolsDetail([])).toBe("0 programs");
+    expect(liveToolsDetail([{ name: "old" }])).toBe("1 programs");
+    expect(
+      liveToolsDetail([
+        { name: "a", rollout: "canary" },
+        { name: "b", rollout: "canary" },
+        { name: "c" },
+      ]),
+    ).toBe("3 programs · 2 Canary · 1 Live");
+    expect(liveToolsDetail([{ name: "a", rollout: "canary" }, { name: "b", rollout: "canary" }])).toBe(
+      "2 programs · 2 Canary",
+    );
+  });
+
+  test("funnel stages are named in install → record → mine → knock → approve → serving with counts", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-funnel");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          const url = String(input);
+          if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 4, live: 0 }));
+          if (url.includes(":8794/health")) return new Response(JSON.stringify({ ok: true, service: "eden-hookd" }));
+          if (url.includes("/v1/inbox")) {
+            return new Response(
+              JSON.stringify({
+                candidates: [
+                  { verdict: "PASS" },
+                  { verdict: "FAIL" },
+                  { verdict: "pending", refusal: { reason: "uncovered-envelope" } },
+                ],
+                live: [{ stats: { n: 3 } }, { stats: { n: 0 } }],
+              }),
+            );
+          }
+          return new Response("no", { status: 404 });
+        }) as typeof fetch,
+      });
+      const names = funnelOf(checks).map((c) => c?.name);
+      expect(names).toEqual([...FUNNEL_STAGES]);
+      expect(checks.find((c) => c.name === "record")?.count).toBe(4);
+      expect(checks.find((c) => c.name === "mine")?.count).toBe(3);
+      expect(checks.find((c) => c.name === "approve")?.count).toBe(1);
+      expect(checks.find((c) => c.name === "serving")?.count).toBe(1);
+      expect(checks.find((c) => c.name === "knock")?.count).toBe(0);
+      expect(typeof checks.find((c) => c.name === "install")?.count).toBe("number");
+      for (const stage of FUNNEL_STAGES) {
+        const c = checks.find((x) => x.name === stage);
+        expect(c?.detail).toMatch(/^\d+ · \S/);
+        expect(typeof c?.count).toBe("number");
+      }
+      const printed = formatDoctor(checks);
+      const idx = FUNNEL_STAGES.map((n) => printed.indexOf(`  ${n}:`));
+      for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1]);
+      expect(checks.find((c) => c.name === "record")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "mine")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "approve")?.ok).toBe(true);
+      expect(checks.find((c) => c.name === "serving")?.ok).toBe(true);
+      expect(printed).toMatch(/ok {2}mine: 3 · /);
+      expect(printed).toMatch(/ok {2}approve: 1 · eden approve/);
+      expect(printed).toMatch(/ok {2}serving: 1 · live with receipts/);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("wrap down funnel: install/record/knock stay counted; mine/approve/serving stay unknown", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-funnel-down");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    writeFileSync(join(home, "knock.json"), JSON.stringify({ tool_id: "desk" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async () => {
+          throw new Error("down");
+        }) as typeof fetch,
+      });
+      expect(checks.find((c) => c.name === "install")?.detail).toMatch(/^\d+ · /);
+      expect(checks.find((c) => c.name === "record")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "record")?.detail).toMatch(/^0 · start with eden hookd/);
+      expect(checks.find((c) => c.name === "knock")?.count).toBe(1);
+      expect(checks.find((c) => c.name === "knock")?.detail).toMatch(/^1 · eden open or eden approve/);
+      expect(checks.find((c) => c.name === "mine")?.count).toBeNull();
+      expect(checks.find((c) => c.name === "approve")?.count).toBeNull();
+      expect(checks.find((c) => c.name === "serving")?.count).toBeNull();
+      expect(checks.find((c) => c.name === "mine")?.detail).toBe("unknown · wrap is down");
+      expect(formatDoctor(checks)).not.toMatch(/wrap more runs/);
+      const snap = funnelSnapshot(checks);
+      expect(snap.map((s) => s.name)).toEqual([...FUNNEL_STAGES]);
+      expect(snap.find((s) => s.name === "mine")?.count).toBeNull();
+      expect(Object.keys(snap[0] ?? {}).sort()).toEqual(["count", "name"]);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("wrap-up empty mine/approve/serving/record are !! with integer 0, not a healthy ok", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-zeros");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          const url = String(input);
+          if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (url.includes(":8794/health")) return new Response(JSON.stringify({ ok: true, service: "eden-hookd" }));
+          if (url.includes("/v1/inbox")) return new Response(JSON.stringify({ candidates: [], live: [] }));
+          return new Response("no", { status: 404 });
+        }) as typeof fetch,
+      });
+      for (const stage of FUNNEL_STAGES) {
+        expect(typeof checks.find((c) => c.name === stage)?.count).toBe("number");
+      }
+      expect(checks.find((c) => c.name === "record")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "record")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "mine")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "mine")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "approve")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "approve")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "serving")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "serving")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "knock")?.count).toBe(0);
+      expect(checks.find((c) => c.name === "knock")?.ok).toBe(true);
+      const printed = formatDoctor(checks);
+      expect(printed).toMatch(/!! {2}record: 0 · wrap more runs/);
+      expect(printed).toMatch(/!! {2}mine: 0 · wrap more runs/);
+      expect(printed).toMatch(/!! {2}approve: 0 ·/);
+      expect(printed).toMatch(/!! {2}serving: 0 ·/);
+      expect(printed).toMatch(/ok {2}knock: 0 · none waiting/);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("hookd up and wrap down does not invent record=1", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-fake-record");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          if (String(input).includes(":8794/health")) return new Response(JSON.stringify({ ok: true, service: "eden-hookd" }));
+          throw new Error("wrap down");
+        }) as typeof fetch,
+      });
+      expect(checks.find((c) => c.name === "hookd")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "wrap")?.ok).toBe(false);
+      expect(checks.find((c) => c.name === "record")?.count).not.toBe(1);
+      expect(checks.find((c) => c.name === "record")?.detail).not.toMatch(/^1 /);
+      const n = checks.find((c) => c.name === "record")?.count;
+      expect(n === 0 || n === null).toBe(true);
+      expect(checks.find((c) => c.name === "record")?.detail).toBe("unknown · wrap is down");
+      expect(checks.find((c) => c.name === "mine")?.detail).toBe("unknown · wrap is down");
+      expect(checks.find((c) => c.name === "approve")?.detail).toBe("unknown · wrap is down");
+      expect(checks.find((c) => c.name === "serving")?.detail).toBe("unknown · wrap is down");
+      expect(formatDoctor(checks)).not.toMatch(/wrap more runs/);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("recordState never invents 1 when traces are unknown", () => {
+    expect(recordState(undefined, false, true)).toEqual({ count: null, fix: "unknown · wrap is down" });
+    expect(recordState(undefined, false, false)).toEqual({ count: 0, fix: "start with eden hookd" });
+    expect(recordState(0, true, true).count).toBe(0);
+    expect(recordState(4, true, false).count).toBe(4);
+    expect(recordState(undefined, true, true).count).toBe(0);
+  });
+
+  test("empty stages print 0, never blank; --json is names and counts only on funnel", () => {
+    const row = funnelCheck("serving", true, 0, "first serving after Approve");
+    expect(row.detail).toBe("0 · first serving after Approve");
+    expect(row.count).toBe(0);
+    const unknown = funnelCheck("mine", false, null, "wrap more runs");
+    expect(unknown.detail).toBe("unknown · wrap is down");
+    expect(unknown.count).toBeNull();
+    const payload = doctorPayload([
+      { name: "config", ok: true, detail: "http://127.0.0.1:8788 · key abc" },
+      funnelCheck("install", true, 1, "hooks installed"),
+      funnelCheck("record", true, 2, "recording"),
+      funnelCheck("mine", true, 0, "wrap more runs"),
+      funnelCheck("knock", true, 0, "none waiting"),
+      funnelCheck("approve", true, 0, "eden approve after a PASS card"),
+      funnelCheck("serving", true, 0, "first serving after Approve"),
+    ]);
+    expect(payload.funnel).toEqual([
+      { name: "install", count: 1 },
+      { name: "record", count: 2 },
+      { name: "mine", count: 0 },
+      { name: "knock", count: 0 },
+      { name: "approve", count: 0 },
+      { name: "serving", count: 0 },
+    ]);
+    expect(JSON.stringify(payload.funnel)).not.toMatch(/key |tool_|args/);
+  });
+
+  test("parseNetAllow trims, drops empties, keeps hostile names as data", () => {
+    expect(parseNetAllow(undefined)).toEqual([]);
+    expect(parseNetAllow("")).toEqual([]);
+    expect(parseNetAllow("  ")).toEqual([]);
+    expect(parseNetAllow(",,")).toEqual([]);
+    expect(parseNetAllow("curl")).toEqual(["curl"]);
+    expect(parseNetAllow("curl, wget")).toEqual(["curl", "wget"]);
+    expect(parseNetAllow(" curl, , wget ")).toEqual(["curl", "wget"]);
+    expect(parseNetAllow("__proto__, constructor")).toEqual(["__proto__", "constructor"]);
+  });
+
+  test("net-allow empty is an honest refuse sentence, not allow-all", () => {
+    for (const raw of [undefined, "", "  ", ",,"] as const) {
+      const c = netAllowCheck(raw);
+      expect(c.name).toBe("net-allow");
+      expect(c.ok).toBe(true);
+      expect(c.count).toBe(0);
+      expect(c.detail).toBe("EDEN_NET_ALLOW empty · piped network binaries stay refused");
+      expect(c.detail.toLowerCase()).not.toMatch(/all hosts|allow all|not configured/);
+    }
+  });
+
+  test("net-allow lists trimmed comma-separated names", () => {
+    expect(netAllowCheck("curl")).toEqual({
+      name: "net-allow",
+      ok: true,
+      count: 1,
+      detail: "EDEN_NET_ALLOW curl",
+    });
+    expect(netAllowCheck("curl, wget")).toEqual({
+      name: "net-allow",
+      ok: true,
+      count: 2,
+      detail: "EDEN_NET_ALLOW curl, wget",
+    });
+    expect(netAllowCheck(" curl, , wget ")).toEqual({
+      name: "net-allow",
+      ok: true,
+      count: 2,
+      detail: "EDEN_NET_ALLOW curl, wget",
+    });
+  });
+
+  test("net-allow keeps hostile __proto__ as a listed name", () => {
+    const c = netAllowCheck("__proto__, constructor");
+    expect(c.count).toBe(2);
+    expect(c.detail).toBe("EDEN_NET_ALLOW __proto__, constructor");
+    expect(JSON.stringify(c)).toContain("__proto__");
+  });
+
+  test("formatDoctor prints net-allow in health; --json includes count, not funnel", () => {
+    const empty = netAllowCheck("");
+    const printed = formatDoctor([
+      { name: "config", ok: true, detail: "http://127.0.0.1:8788 · key abc" },
+      empty,
+      funnelCheck("install", true, 1, "hooks installed"),
+      funnelCheck("record", true, 0, "wrap more runs"),
+      funnelCheck("mine", true, 0, "wrap more runs"),
+      funnelCheck("knock", true, 0, "none waiting"),
+      funnelCheck("approve", true, 0, "eden approve after a PASS card"),
+      funnelCheck("serving", true, 0, "first serving after Approve"),
+    ]);
+    expect(printed).toContain("ok  net-allow: EDEN_NET_ALLOW empty · piped network binaries stay refused");
+    expect(printed.indexOf("net-allow:")).toBeLessThan(printed.indexOf("  install:"));
+    const payload = doctorPayload([
+      { name: "config", ok: true, detail: "x" },
+      empty,
+      funnelCheck("install", true, 1, "hooks installed"),
+      funnelCheck("record", true, 2, "recording"),
+      funnelCheck("mine", true, 0, "wrap more runs"),
+      funnelCheck("knock", true, 0, "none waiting"),
+      funnelCheck("approve", true, 0, "eden approve after a PASS card"),
+      funnelCheck("serving", true, 0, "first serving after Approve"),
+    ]);
+    expect(payload.checks.find((c) => c.name === "net-allow")).toEqual(empty);
+    expect(payload.funnel.map((s) => s.name)).toEqual([...FUNNEL_STAGES]);
+    expect(JSON.stringify(payload, null, 2)).toContain('"name": "net-allow"');
+    expect(JSON.stringify(payload.funnel)).not.toContain("net-allow");
+  });
+
+  test("collectDoctor empty EDEN_NET_ALLOW is ok with count 0 and does not sit in funnel", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-net-empty");
+    mkdirSync(home, { recursive: true });
+    const prevHome = process.env.EDEN_HOME;
+    const prevAllow = process.env.EDEN_NET_ALLOW;
+    process.env.EDEN_HOME = home;
+    delete process.env.EDEN_NET_ALLOW;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          const url = String(input);
+          if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 2, live: 1 }));
+          if (url.includes(":8794/health")) return new Response(JSON.stringify({ ok: true, service: "eden-hookd" }));
+          return new Response("no", { status: 404 });
+        }) as typeof fetch,
+      });
+      const row = checks.find((c) => c.name === "net-allow");
+      expect(row?.ok).toBe(true);
+      expect(row?.count).toBe(0);
+      expect(row?.detail).toBe("EDEN_NET_ALLOW empty · piped network binaries stay refused");
+      const printed = formatDoctor(checks);
+      expect(printed).toContain("ok  net-allow: EDEN_NET_ALLOW empty · piped network binaries stay refused");
+      expect(printed.toLowerCase()).not.toMatch(/all hosts|allow all/);
+      expect(FUNNEL_STAGES).not.toContain("net-allow");
+      expect(funnelSnapshot(checks).some((s) => (s as { name: string }).name === "net-allow")).toBe(false);
+      const payload = doctorPayload(checks);
+      expect(payload.checks.find((c) => c.name === "net-allow")?.count).toBe(0);
+      expect(checks.filter((c) => c.name === "config" || c.name === "wrap").every((c) => c.ok)).toBe(true);
+    } finally {
+      if (prevHome === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prevHome;
+      if (prevAllow === undefined) delete process.env.EDEN_NET_ALLOW;
+      else process.env.EDEN_NET_ALLOW = prevAllow;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("collectDoctor names EDEN_NET_ALLOW=curl and curl, wget", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-net-curl");
+    mkdirSync(home, { recursive: true });
+    const prevHome = process.env.EDEN_HOME;
+    const prevAllow = process.env.EDEN_NET_ALLOW;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    const fakeFetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+      if (url.includes(":8794/health")) return new Response(JSON.stringify({ ok: true }));
+      return new Response("no", { status: 404 });
+    }) as typeof fetch;
+    try {
+      process.env.EDEN_NET_ALLOW = "curl";
+      const one = await collectDoctor({ fetch: fakeFetch });
+      expect(one.find((c) => c.name === "net-allow")).toEqual({
+        name: "net-allow",
+        ok: true,
+        count: 1,
+        detail: "EDEN_NET_ALLOW curl",
+      });
+      expect(formatDoctor(one)).toContain("ok  net-allow: EDEN_NET_ALLOW curl");
+      expect(doctorPayload(one).checks.find((c) => c.name === "net-allow")?.count).toBe(1);
+
+      process.env.EDEN_NET_ALLOW = "curl, wget";
+      const two = await collectDoctor({ fetch: fakeFetch });
+      expect(two.find((c) => c.name === "net-allow")).toEqual({
+        name: "net-allow",
+        ok: true,
+        count: 2,
+        detail: "EDEN_NET_ALLOW curl, wget",
+      });
+      expect(formatDoctor(two)).toContain("ok  net-allow: EDEN_NET_ALLOW curl, wget");
+    } finally {
+      if (prevHome === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prevHome;
+      if (prevAllow === undefined) delete process.env.EDEN_NET_ALLOW;
+      else process.env.EDEN_NET_ALLOW = prevAllow;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("surface check names jit-soak FAIL pin; unknown/empty is all, never a silent jit flip", () => {
+    expect(surfaceModeOf(undefined)).toBe("all");
+    expect(surfaceModeOf("")).toBe("all");
+    expect(surfaceModeOf("JIT")).toBe("jit");
+    expect(surfaceModeOf("shadow")).toBe("jit-shadow");
+    expect(surfaceCheck(undefined).detail).toBe(
+      "EDEN_SURFACE all · jit-soak FAIL precision=0.789 n=38 · default stays all",
+    );
+    expect(surfaceCheck("jit").ok).toBe(true);
+    expect(surfaceCheck("jit").detail).toMatch(/opt-in · default all until soak PASS/);
+    expect(surfaceCheck("jit").name).toBe("surface");
+  });
+
+  test("tree check is health, not funnel; letter is closed with Wave 21 still Next", async () => {
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-tree");
+    mkdirSync(home, { recursive: true });
+    const prev = process.env.EDEN_HOME;
+    process.env.EDEN_HOME = home;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    try {
+      const checks = await collectDoctor({
+        fetch: (async (input: string | URL | Request) => {
+          const url = String(input);
+          if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+          if (url.includes(":8794/health")) return new Response(JSON.stringify({ ok: true }));
+          return new Response("no", { status: 404 });
+        }) as typeof fetch,
+      });
+      const tree = checks.find((c) => c.name === "tree");
+      expect(tree?.ok).toBe(true);
+      expect(tree?.count).toBe(0);
+      expect(tree?.detail).toMatch(/Wave 16–20 0 open/);
+      expect(tree?.detail).toMatch(/Wave 21–22 stay Next\/Later/);
+      expect(FUNNEL_STAGES).not.toContain("tree");
+      expect(funnelSnapshot(checks).some((s) => (s as { name: string }).name === "tree")).toBe(false);
+      const printed = formatDoctor(checks);
+      expect(printed).toContain("ok  tree:");
+      expect(printed.indexOf("tree:")).toBeLessThan(printed.indexOf("  install:"));
+      expect(treeCheck().ok).toBe(true);
+      expect(renderTreeLetter()).toMatch(/^Tree closed — Wave 16–20/);
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("approve-gate names EDEN_AUTO_APPROVE off; =1 is !! and not a funnel stage", async () => {
+    expect(autoApproveCheck(undefined).ok).toBe(true);
+    expect(autoApproveCheck("1").ok).toBe(false);
+    const home = join(import.meta.dir, "../../.tmp-eden-doctor-approve");
+    mkdirSync(home, { recursive: true });
+    const prevHome = process.env.EDEN_HOME;
+    const prev = process.env.EDEN_AUTO_APPROVE;
+    process.env.EDEN_HOME = home;
+    delete process.env.EDEN_AUTO_APPROVE;
+    writeFileSync(join(home, "config.json"), JSON.stringify({ api_key: "eden_dev", base_url: "http://127.0.0.1:8788" }));
+    const fakeFetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes(":8788/health")) return new Response(JSON.stringify({ ok: true, traces: 0, live: 0 }));
+      if (url.includes(":8794/health")) return new Response(JSON.stringify({ ok: true }));
+      return new Response("no", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const off = await collectDoctor({ fetch: fakeFetch });
+      expect(off.find((c) => c.name === "approve-gate")).toEqual({
+        name: "approve-gate",
+        ok: true,
+        detail: "human Approve required · EDEN_AUTO_APPROVE off",
+      });
+      expect(formatDoctor(off)).toContain("ok  approve-gate: human Approve required · EDEN_AUTO_APPROVE off");
+      expect(FUNNEL_STAGES).not.toContain("approve-gate");
+      process.env.EDEN_AUTO_APPROVE = "1";
+      const on = await collectDoctor({ fetch: fakeFetch });
+      expect(on.find((c) => c.name === "approve-gate")?.ok).toBe(false);
+      expect(formatDoctor(on)).toContain("!!  approve-gate: EDEN_AUTO_APPROVE on · human gate bypassed");
+    } finally {
+      if (prevHome === undefined) delete process.env.EDEN_HOME;
+      else process.env.EDEN_HOME = prevHome;
+      if (prev === undefined) delete process.env.EDEN_AUTO_APPROVE;
+      else process.env.EDEN_AUTO_APPROVE = prev;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test("doctor --tree prints the letter without needing wrap; --help names NET_ALLOW and orphan", async () => {
+    const logs: string[] = [];
+    const log = console.log;
+    console.log = (msg?: unknown) => {
+      logs.push(String(msg ?? ""));
+    };
+    try {
+      expect(await doctor(["--help"])).toBe(0);
+      expect(logs.join("\n")).toMatch(/eden doctor/);
+      expect(logs.join("\n")).toMatch(/EDEN_AUTO_APPROVE/);
+      expect(doctorHelp()).toMatch(/Wave 16–20 leftover letter/);
+      logs.length = 0;
+      expect(await doctor(["--tree"])).toBe(0);
+      expect(logs.join("\n")).toBe(renderTreeLetter());
+      logs.length = 0;
+      expect(await doctor(["--tree", "--json"])).toBe(0);
+      const snap = JSON.parse(logs.join("\n")) as { closed: boolean; open16_20: number; customers: number };
+      expect(snap.closed).toBe(true);
+      expect(snap.open16_20).toBe(0);
+      expect(snap.customers).toBe(0);
+    } finally {
+      console.log = log;
     }
   });
 });

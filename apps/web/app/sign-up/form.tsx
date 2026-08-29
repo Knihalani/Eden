@@ -8,10 +8,11 @@ import { AccountCopy } from "../account/frame";
 import { useContinueIfAuthed } from "../account/gate";
 import { GoogleButton } from "../account/google";
 import { destAfterAuth, fieldMessage, globalMessage, GOOGLE_SSO, goDecorated } from "../account/home";
+import { PasswordField } from "../account/password-field";
 
 export function SignUpForm() {
   const { signUp, errors, fetchStatus } = useSignUp();
-  const { isLoaded, isSignedIn } = useContinueIfAuthed();
+  const { isLoaded, isSignedIn } = useContinueIfAuthed("up");
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,7 +64,7 @@ export function SignUpForm() {
     if (signUp.status !== "complete") return;
     await signUp.finalize({
       navigate: ({ session, decorateUrl }) =>
-        goDecorated(decorateUrl, router.replace, destAfterAuth(session)),
+        goDecorated(decorateUrl, router.replace, destAfterAuth(session, "up")),
     });
   };
 
@@ -171,20 +172,15 @@ export function SignUpForm() {
               {emailError}
             </p>
           ) : null}
-          <label className="account-field" htmlFor="signup-password">
-            <span>Password</span>
-            <input
-              id="signup-password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={Boolean(passwordError)}
-              aria-describedby={passwordError ? "signup-password-error" : undefined}
-              required
-            />
-          </label>
+          <PasswordField
+            id="signup-password"
+            label="Password"
+            autoComplete="new-password"
+            value={password}
+            onChange={setPassword}
+            invalid={Boolean(passwordError)}
+            describedBy={passwordError ? "signup-password-error" : undefined}
+          />
           {passwordError ? (
             <p className="account-error" id="signup-password-error" role="alert">
               {passwordError}

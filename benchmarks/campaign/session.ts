@@ -15,12 +15,14 @@
  *     violated invariant is reported even when the speed numbers look great.
  */
 import type { IslandCaller, StretchProgram, StretchTrace } from "@eden/ir";
+import { IslandReply } from "@eden/ir";
 import { compileTraces } from "@eden/compile";
 import { registryFrom } from "@eden/runtime";
 import { shadowProgram } from "@eden/shadow";
 import { createState, wrapTools, type ToolDef, type ToolsIn, type WrapState } from "@eden/wrap";
 import { mulberry32 } from "@eden/measure";
 import type { CallResult, World } from "./worlds";
+import { tagGoLive } from "./witness-econ";
 
 /** Seed derivation for concurrent stretches: distinct per slot, stable per arm. */
 function blockSeed2(base: number, slot: number): number {
@@ -48,6 +50,11 @@ export type SessionStats = {
 export type SessionOpts = {
   /** Stop issuing calls once a result satisfies the goal. Default true. */
   aware?: boolean;
+  /**
+   * When false, traces omit prompt/completion tokens and island calls are
+   * not wrapped with scraped usage — an unscrapable host. Default true.
+   */
+  scrapeUsage?: boolean;
 };
 
 export type WorldFactory = () => World;
@@ -68,13 +75,26 @@ type WorldSlot = {
   goals: Array<Record<string, unknown>>;
 };
 
+const SCRAPED_ISLAND = { prompt_tokens: 80, completion_tokens: 20 } as const;
+
+/** Campaign analogue of wrap's provider scraper (island usage on IslandReply). */
+function scrapeIsland(island: IslandCaller): IslandCaller {
+  return async (p) => {
+    const out = await island(p);
+    if (out instanceof IslandReply) return out;
+    return new IslandReply(out, { ...SCRAPED_ISLAND });
+  };
+}
+
 export class Session {
   private slots = new Map<string, WorldSlot>();
   private aware: boolean;
+  private scrapeUsage: boolean;
   total: SessionStats = emptyStats();
 
   constructor(factories: Array<[string, WorldFactory]>, useEden: boolean, opts: SessionOpts = {}) {
     this.aware = opts.aware ?? true;
+    this.scrapeUsage = opts.scrapeUsage !== false;
     for (const [name, factory] of factories) {
       const world = factory();
       // Counting proxy UNDER the wrap, so both arms count identically and a
@@ -99,7 +119,10 @@ export class Session {
           this.slot(name).stats.cents += ISLAND_CENTS;
           return world.island()(p);
         };
-        state = createState({ island: countedIsland, llmCents: ISLAND_CENTS });
+        state = createState({
+          island: this.scrapeUsage ? scrapeIsland(countedIsland) : countedIsland,
+          llmCents: ISLAND_CENTS,
+        });
         const wrapped = wrapTools(counted as ToolsIn, state);
         call = async (n, a) => {
           const t = (wrapped as Record<string, ToolDef | undefined>)[n];
@@ -134,6 +157,7 @@ export class Session {
   /** Run one stretch of one world against this session's tools. */
   async stretch(worldName: string, goal: Record<string, unknown>, seed: number): Promise<void> {
     const slot = this.slot(worldName);
+    slot.world.beginStretch?.();
     const beforeExecs = slot.counters.execs;
     const rng = mulberry32(seed >>> 0);
     const t0 = performance.now();
@@ -190,12 +214,11 @@ export class Session {
       input: goal,
       output: lastValue,
       llmCalls: turns,
-      duration_ms: Math.round(wall),
+      duration_ms: this.scrapeUsage ? Math.round(wall) : 200 * turns,
       cost_cents: cents,
       skipped: [],
       complete: completed,
-      prompt_tokens: 40 * turns,
-      completion_tokens: 10 * turns,
+      ...(this.scrapeUsage ? { prompt_tokens: 40 * turns, completion_tokens: 10 * turns } : {}),
     });
     slot.goals.push(goal);
     slot.stats.turns += turns;
@@ -246,21 +269,19 @@ export class Session {
       holdout: number;
       sandbox: WorldFactory;
       maxGram?: number;
-      /**
-       * Simulate a prod integration that POSTs provider-reported token usage
-       * (wrap's usage.ts scrapes it from real completions). Shadow still runs
-       * and still gates quality; when its ONLY objection is extrapolated
-       * tokens, install the manifest but say so loudly in the notes. Never
-       * silently: uncertified go-lives are a reported number of their own.
-       */
-      assumeProviderUsage?: boolean;
     },
-  ): Promise<{ program: StretchProgram | null; verdict: string; reasons: string[]; uncertified?: boolean }> {
+  ): Promise<{
+    program: StretchProgram | null;
+    verdict: string;
+    reasons: string[];
+    uncertified?: boolean;
+    mechanism?: string;
+  }> {
     const slot = this.slot(worldName);
     if (!slot.state) throw new Error("goLive on a raw session");
     const usable = slot.traces.filter((t) => t.complete);
     if (usable.length < o.compile + o.holdout) {
-      return { program: null, verdict: "SKIP", reasons: [`only ${usable.length} complete traces`] };
+      return tagGoLive({ program: null, verdict: "SKIP", reasons: [`only ${usable.length} complete traces`] });
     }
     // "Clean" = full-fidelity traces per the world's own definition (desk:
     // the audit line was not skipped; incident: no retried searches; worlds
@@ -271,24 +292,40 @@ export class Session {
     const variants = usable.filter((t) => !fidelityOf(t.events));
     const need = { train: Math.max(o.compile, 3), holdout: o.holdout };
     if (clean.length < need.holdout + 3) {
-      return { program: null, verdict: "SKIP", reasons: [`only ${clean.length} clean traces of ${usable.length}`] };
+      return tagGoLive({
+        program: null,
+        verdict: "SKIP",
+        reasons: [`only ${clean.length} clean traces of ${usable.length}`],
+      });
     }
-    // Split by SHAPE CLASS. Shadow needs >=3 hold-out traces inside the
-    // compiled envelope, and a fan-out world legitimately has several widths;
-    // a program compiled from one width-class only witnesses that class's
-    // inputs. Hold out from the dominant clean width (so the held traces share
-    // the program's envelope), keep >=1 rep of every held id in training, and
-    // let everything else train.
-    const byWidth = new Map<number, StretchTrace[]>();
+    // Split by SHAPE CLASS (collapsed tool order). Event length is the wrong
+    // proxy for fan-out worlds: width-7 and width-10 are the same stretch, and
+    // splitting them made 8-witness go-live SKIP on orders. Hold out from the
+    // dominant clean shape so held traces share the program's envelope, keep
+    // ≥1 rep of every held id in training, and let everything else train.
+    const shapeKey = (t: StretchTrace) => {
+      const names: string[] = [];
+      for (const e of t.events) {
+        if (!e.ok || e.skipped) continue;
+        if (names.at(-1) !== e.name) names.push(e.name);
+      }
+      return names.join("\0");
+    };
+    const byShape = new Map<string, StretchTrace[]>();
     for (const t of clean) {
-      const arr = byWidth.get(t.events.length);
+      const k = shapeKey(t);
+      const arr = byShape.get(k);
       if (arr) arr.push(t);
-      else byWidth.set(t.events.length, [t]);
+      else byShape.set(k, [t]);
     }
     let dominant: StretchTrace[] = [];
-    for (const arr of byWidth.values()) if (arr.length > dominant.length) dominant = arr;
+    for (const arr of byShape.values()) if (arr.length > dominant.length) dominant = arr;
     if (dominant.length < need.holdout + 3) {
-      return { program: null, verdict: "SKIP", reasons: [`dominant shape has only ${dominant.length} clean traces`] };
+      return tagGoLive({
+        program: null,
+        verdict: "SKIP",
+        reasons: [`dominant shape has only ${dominant.length} clean traces`],
+      });
     }
     const holdout: StretchTrace[] = [];
     const idKey = (t: StretchTrace) => JSON.stringify(t.input ?? {});
@@ -303,45 +340,51 @@ export class Session {
     }
     const heldSet = new Set(holdout);
     const train: StretchTrace[] = clean.filter((t) => !heldSet.has(t));
-    for (const v of variants) {
-      if (train.length >= need.train) break;
-      train.push(v);
-    }
-    const res = compileTraces(train, { maxGram: o.maxGram ?? 12 });
+    // Variants vote for sequence shape (Wave 3.5). Envelope values come only
+    // from shape-compatible traces inside compileTraces — sloppy inputs do
+    // not poison the witnessed set.
+    train.push(...variants);
+    const res = compileTraces(train, o.maxGram != null ? { maxGram: o.maxGram } : {});
     // Try candidates most-complete-first and take the first that PASSES: a
     // mined fragment that ends mid-stretch can never reproduce the recorded
     // output, and burning its replays just to say no helps nobody.
     const candidates = [...res.programs].sort((a, b) => b.sequence.length - a.sequence.length);
     let lastVerdict = candidates.length ? "INCONCLUSIVE" : "NO_PROGRAM";
     let lastReasons: string[] = candidates.length ? [] : res.refusals.map((r) => r.reason).slice(0, 4);
+    let usageBlocked = false;
     for (const candidate of candidates.slice(0, 3)) {
       const sandboxWorld = o.sandbox();
       const sandboxExecs: Record<string, ToolDef["execute"]> = {};
       for (const [k, d] of Object.entries(sandboxWorld.tools())) sandboxExecs[k] = d.execute;
+      const sandboxIsland = sandboxWorld.island();
       const shadow = await shadowProgram(candidate, holdout, {
         registry: registryFrom(sandboxExecs),
-        island: sandboxWorld.island(),
+        island: this.scrapeUsage ? scrapeIsland(sandboxIsland) : sandboxIsland,
         allowSideEffects: true,
       });
       lastVerdict = shadow.verdict;
       lastReasons = shadow.reasons;
-      const onlyTokensObjection =
+      const usageOnly =
         shadow.verdict === "INCONCLUSIVE" &&
         shadow.manifest != null &&
-        shadow.reasons.some((r) => r.includes("extrapolated")) &&
-        o.assumeProviderUsage === true;
-      if ((shadow.verdict === "PASS" && shadow.manifest) || onlyTokensObjection) {
-        const manifest = onlyTokensObjection ? { ...shadow.manifest!, tokensEstimated: false } : shadow.manifest!;
-        const live: StretchProgram = { ...candidate, manifest };
+        shadow.reasons.some((r) => r.includes("extrapolated") || r.includes("not measured"));
+      if (usageOnly) usageBlocked = true;
+      if (shadow.verdict === "PASS" && shadow.manifest) {
+        const live: StretchProgram = { ...candidate, manifest: shadow.manifest };
         slot.state.programs.push(live);
-        return {
+        return tagGoLive({
           program: live,
           verdict: "PASS",
-          reasons: onlyTokensObjection ? ["UNCERTIFIED: provider-usage simulated; shadow said " + shadow.reasons.join(" ")] : shadow.reasons,
-          uncertified: onlyTokensObjection,
-        };
+          reasons: shadow.reasons,
+          uncertified: false,
+        });
       }
     }
-    return { program: null, verdict: lastVerdict, reasons: lastReasons };
+    return tagGoLive({
+      program: null,
+      verdict: lastVerdict,
+      reasons: lastReasons,
+      uncertified: lastVerdict === "INCONCLUSIVE" && usageBlocked,
+    });
   }
 }

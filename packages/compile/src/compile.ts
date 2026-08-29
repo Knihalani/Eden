@@ -1,8 +1,10 @@
 import type { Refusal, Step, StretchProgram, StretchTrace, TraceEvent, Binding, FromBinding } from "@eden/ir";
-import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf, failureModeOf, isUsableOutput } from "@eden/ir";
-import { argKeys, bindContext, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, keyJaccard, remapBinding } from "./bind";
-import { clusterFailureTraces, clusterTraces, effectiveEventName, buildShellNames, setActiveShellNames } from "./mine";
+import { CHECK_MIN_SUPPORT, assertValid, canonicalize, eq, getPath, hashStretch, hashTrace, withVersion, minLlmReductionOf, failureModeOf, isUsableOutput, whenToUseOf } from "@eden/ir";
+import { argKeys, bindContext, bindSlot, inferSchema, isCheckName, isIslandName, isMutating, isReadName, keyJaccard, remapBinding } from "./bind";
+import { clusterFailureTraces, clusterTraces, effectiveEventName, buildShellNames, setActiveShellNames, autoMaxGram, envelopeTraces } from "./mine";
 import { findForkedGroups, assembleForkProgram } from "./fork";
+import { findHandoffGroups, assembleHandoffProgram, matchChildProgram } from "./handoff";
+import { findComposeJoins, assembleComposeProgram, findWitnessedComposeSplits, sliceTracesToSeq, matchProgramBySequence } from "./compose";
 import { normalizeTraces } from "./normalize";
 
 export type CompileOpts = {
@@ -10,11 +12,9 @@ export type CompileOpts = {
   allowExact?: boolean;
   minLlmReduction?: number;
   /**
-   * Longest n-gram window the miner considers. Stretches longer than this are
-   * fragmented into overlapping windows, which still compile but bind
-   * positionally and cannot see the stretch's own head — so a period loop
-   * that starts before the window never gets an `over` binding. Callers who
-   * know their stretches run long (ETL chunks of 20+ calls) raise it.
+   * Longest n-gram window the miner considers. Omitted (the default): chosen
+   * from the input length distribution so ETL-class stretches compile whole
+   * and desk-class stays at the 12 floor. An explicit value always wins.
    */
   maxGram?: number;
 };
@@ -64,6 +64,32 @@ function divergeSameArgs(evs: TraceEvent[]): boolean {
     seen.set(k, r);
   }
   return false;
+}
+
+/**
+ * Whether this aligned tool is a model island, not a world step.
+ *
+ * Same-args / varying-results is how the world looks (`listItems` with `{q:"open"}`
+ * returning different ids per witness). A list is not a model step. Islands stay
+ * `isIslandName` (draft/reply/summarize/…) or non-read, non-mutating, non-check
+ * glue that actually diverges. `isIslandName` wins so TicketShip `draftReply`
+ * stays an island.
+ */
+function emitIsland(tool: string, evs: TraceEvent[]): boolean {
+  if (isIslandName(tool)) return true;
+  if (isReadName(tool) || isMutating(tool) || isCheckName(tool)) return false;
+  return divergeSameArgs(evs);
+}
+
+/**
+ * Scannable SKILL.md one-liner: when to call this island, not the sequence dump.
+ * Deterministic from the judgment tool name and the tools it sits after.
+ */
+export function islandWhenToUse(tool: string, prior: readonly string[]): string {
+  const after = prior.filter((n) => n.length > 0);
+  const shown = after.length > 4 ? after.slice(-4) : after;
+  const afterBit = shown.length ? ` after ${shown.join(" → ")}` : "";
+  return `When the next step is a ${tool} judgment${afterBit} — one call, do not re-run the loop.`;
 }
 
 function aligned(traces: StretchTrace[], tool: string, nth = 0, cutAt?: number[]): { traces: StretchTrace[]; events: TraceEvent[] } {
@@ -132,6 +158,65 @@ function traceRepeatRun(t: StretchTrace, tool: string, priorTool: string): numbe
   return n;
 }
 
+/** Path to the array on `priorTool`'s result whose length is exactly `need`. */
+function collectResultArrays(result: unknown): Array<{ path: string; arr: unknown[] }> {
+  if (Array.isArray(result)) return [{ path: "", arr: result }];
+  if (result && typeof result === "object") {
+    const out: Array<{ path: string; arr: unknown[] }> = [];
+    for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
+      if (Array.isArray(v)) out.push({ path: k, arr: v });
+    }
+    return out;
+  }
+  return [];
+}
+
+function itemsMatchLoop(arr: unknown[], loopEvs: TraceEvent[]): boolean {
+  const n = Math.min(arr.length, loopEvs.length);
+  if (n < 2) return false;
+  for (let i = 0; i < n; i++) {
+    const item = arr[i];
+    const args = loopEvs[i]!.args ?? {};
+    const hit = Object.values(args).some(
+      (v) => eq(v, item) || (item != null && typeof item === "object" && eq(v, (item as Record<string, unknown>).id)),
+    );
+    if (!hit) return false;
+  }
+  return true;
+}
+
+function loopRunEvents(t: StretchTrace, tool: string, priorTool: string): TraceEvent[] {
+  const okEvs = t.events.filter((e) => e.ok && !e.skipped);
+  const p = okEvs.findIndex((e) => effectiveEventName(e) === priorTool);
+  if (p < 0) return [];
+  const run: TraceEvent[] = [];
+  for (let i = p + 1; i < okEvs.length && effectiveEventName(okEvs[i]!) === tool; i++) run.push(okEvs[i]!);
+  return run;
+}
+
+type ArrayBind = { path: string } | { miss: { path: string; readSet: number; repeats: number } };
+
+/**
+ * Exact-width bind, with an item-aligned near-miss: if the loop args match a
+ * prefix of a longer array (grepCode returned 12, agent read 6), refuse that
+ * bind rather than attaching a coincidental same-length sibling array.
+ */
+function findArrayBinding(t: StretchTrace, priorTool: string, need: number, loopEvs?: TraceEvent[]): ArrayBind | null {
+  const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
+  const arrays = collectResultArrays(prior?.result);
+  if (loopEvs && loopEvs.length >= 2) {
+    for (const { path, arr } of arrays) {
+      if (!itemsMatchLoop(arr, loopEvs)) continue;
+      if (arr.length === need) return { path };
+      return { miss: { path, readSet: arr.length, repeats: need } };
+    }
+  }
+  for (const { path, arr } of arrays) {
+    if (arr.length === need) return { path };
+  }
+  return null;
+}
+
 function inferLoopOver(
   traces: StretchTrace[],
   priorTool: string | undefined,
@@ -142,13 +227,72 @@ function inferLoopOver(
   for (const t of traces) {
     const need = traceRepeatRun(t, tool, priorTool);
     if (need < 2) return null;
-    const hit = findArrayBinding(t, priorTool, need);
-    if (hit == null) return null;
-    paths.push(hit);
+    const hit = findArrayBinding(t, priorTool, need, loopRunEvents(t, tool, priorTool));
+    if (hit == null || "miss" in hit) return null;
+    paths.push(hit.path);
   }
   const path = paths[0]!;
   if (!paths.every((p) => p === path)) return null;
   return { kind: "from", step: priorTool, path };
+}
+
+function diagnoseUnboundForeach(
+  traces: StretchTrace[],
+  sequence: string[],
+  priorTool: string | undefined,
+  tool: string,
+  times: number,
+): Refusal {
+  const reason = `${tool} repeats ${times}x without a bindable foreach`;
+  if (!priorTool) {
+    return {
+      sequence,
+      reason,
+      slot: tool,
+      code: "unbound_foreach",
+      repeats: times,
+      hint: `${tool} repeated ${times} times with no prior read to bind as the loop source. Return one array of the items the loop will walk.`,
+    };
+  }
+  for (const t of traces) {
+    const need = traceRepeatRun(t, tool, priorTool);
+    if (need < 2) continue;
+    const hit = findArrayBinding(t, priorTool, need, loopRunEvents(t, tool, priorTool));
+    if (hit && "miss" in hit) {
+      const { readSet, repeats } = hit.miss;
+      return {
+        sequence,
+        reason,
+        slot: tool,
+        code: "read_set_mismatch",
+        readSet,
+        repeats,
+        hint: `${priorTool} returned ${readSet}; ${tool} ran ${repeats} times. Expose the full array the loop iterates, or iterate once per item.`,
+      };
+    }
+    const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
+    const arrays = collectResultArrays(prior?.result);
+    const other = arrays.find((a) => a.arr.length !== need && a.arr.length > 0);
+    if (other) {
+      return {
+        sequence,
+        reason,
+        slot: tool,
+        code: "read_set_mismatch",
+        readSet: other.arr.length,
+        repeats: need,
+        hint: `${priorTool} returned ${other.arr.length}; ${tool} ran ${need} times. Expose the full array the loop iterates, or iterate once per item.`,
+      };
+    }
+  }
+  return {
+    sequence,
+    reason,
+    slot: tool,
+    code: "unbound_foreach",
+    repeats: times,
+    hint: `${tool} repeated ${times} times but no prior step returned an array of that length. Return one array of the items the loop will walk.`,
+  };
 }
 
 /**
@@ -165,26 +309,13 @@ function inferLoopOverExact(
   const paths: string[] = [];
   for (const t of traces) {
     const hit = findArrayBinding(t, priorTool, times);
-    if (hit == null) return null;
-    paths.push(hit);
+    if (hit == null || "miss" in hit) return null;
+    paths.push(hit.path);
   }
   const path = paths[0]!;
   if (!paths.every((p) => p === path)) return null;
   return { kind: "from", step: priorTool, path };
 }
-
-/** Path to the array on `priorTool`'s result whose length is exactly `need`. */
-function findArrayBinding(t: StretchTrace, priorTool: string, need: number): string | null {
-  const prior = t.events.find((e) => effectiveEventName(e) === priorTool && e.ok);
-  const r = prior?.result;
-  if (Array.isArray(r) && r.length === need) return "";
-  if (r && typeof r === "object") {
-    const hit = Object.entries(r as Record<string, unknown>).find(([, v]) => Array.isArray(v) && v.length === need);
-    if (hit) return hit[0];
-  }
-  return null;
-}
-
 
 /**
  * The registry name a cluster identity actually executes against.
@@ -306,6 +437,30 @@ function originOf(traces: StretchTrace[]): StretchProgram["origin"] {
   return { mode: mode === "happy" ? "loop" : mode, ...(firstWarningAt != null ? { firstWarningAt } : {}) };
 }
 
+/** Provider prompt+completion on a cluster. 0 if unmeasured — do not invent. */
+function providerWaste(traces: readonly StretchTrace[]): number {
+  let sum = 0;
+  let measured = false;
+  for (const t of traces) {
+    const p = t.prompt_tokens;
+    const c = t.completion_tokens;
+    const hasP = typeof p === "number" && Number.isFinite(p);
+    const hasC = typeof c === "number" && Number.isFinite(c);
+    if (!hasP && !hasC) continue;
+    measured = true;
+    sum += (hasP ? p : 0) + (hasC ? c : 0);
+  }
+  return measured ? sum : 0;
+}
+
+function stampWaste(row: Refusal, traces: readonly StretchTrace[]): Refusal {
+  return { ...row, wastedTokens: providerWaste(traces) };
+}
+
+function stampProgramWaste(program: StretchProgram, traces: readonly StretchTrace[]): StretchProgram {
+  return { ...program, wastedTokens: providerWaste(traces) };
+}
+
 export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): CompileResult {
   const minSupport = opts.minSupport ?? 3;
   const allowExact = opts.allowExact ?? false;
@@ -318,7 +473,8 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
   // or a cluster mined under skeletons would fail to align its own events.
   setActiveShellNames(buildShellNames(traces));
   try {
-    return compileAll(traces, { minSupport, allowExact, minLlmReduction, maxGram: opts.maxGram ?? 12 }, programs, refusals, seenSeq);
+    const maxGram = opts.maxGram ?? autoMaxGram(traces, minSupport);
+    return compileAll(traces, { minSupport, allowExact, minLlmReduction, maxGram }, programs, refusals, seenSeq);
   } finally {
     setActiveShellNames(undefined);
   }
@@ -326,7 +482,7 @@ export function compileTraces(raw: StretchTrace[], opts: CompileOpts = {}): Comp
 
 function compileAll(
   traces: StretchTrace[],
-  opts: { minSupport: number; allowExact: boolean; minLlmReduction: number; maxGram: number },
+  opts: { minSupport: number; allowExact: boolean; minLlmReduction: number; maxGram: number; skipCompose?: boolean },
   programs: StretchProgram[],
   refusals: Refusal[],
   seenSeq: Set<string>,
@@ -440,7 +596,7 @@ function compileAll(
           nameToId.set(tool, loopId);
           continue;
         }
-        refused = { sequence, reason: `${tool} repeats ${times}x without a bindable foreach`, slot: tool };
+        refused = diagnoseUnboundForeach(cluster.traces, sequence, priorTool, tool, times);
         break;
       }
       const nth = sequence.slice(0, i).filter((n) => n === tool).length;
@@ -468,7 +624,13 @@ function compileAll(
         const cmds = evs.map((e) => String((e.args as Record<string, unknown> | undefined)?.command ?? ""));
         const bound = bindSlot(cmds, ctx, { mutating: false, allowExact });
         if (!bound.ok) {
-          refused = { sequence, reason: `${tool} commands are under-determined`, slot: tool };
+          refused = {
+            sequence,
+            reason: `${tool} commands are under-determined`,
+            slot: tool,
+            code: "underdetermined_command",
+            hint: `${tool} command strings could not be bound from witnessed inputs. Eden will not guess a shell command.`,
+          };
           break;
         }
         steps.push({
@@ -481,7 +643,7 @@ function compileAll(
         continue;
       }
 
-      if (isIslandName(tool) || (!isMutating(tool) && !isCheckName(tool) && divergeSameArgs(evs))) {
+      if (emitIsland(tool, evs)) {
         const argNames = argKeys(evs);
         let islandInput: Binding = { kind: "input", path: "" };
         if (argNames.length) {
@@ -498,13 +660,20 @@ function compileAll(
           input: islandInput,
           system: `Perform the ${tool} step. Return JSON matching the schema. Do not call tools.`,
           outputSchema: inferSchema(evs.map((e) => e.result)),
+          when_to_use: islandWhenToUse(tool, sequence.slice(0, i)),
         });
         nameToId.set(tool, id);
         continue;
       }
 
       if (isMutating(tool) && keyJaccard(evs, 0.8) < 0.8) {
-        refused = { sequence, reason: `${tool} arguments are under-determined`, slot: tool };
+        refused = {
+          sequence,
+          reason: `${tool} arguments are under-determined`,
+          slot: tool,
+          code: "underdetermined_write",
+          hint: `${tool} arguments could not be bound from input or a prior step. Pass the write arguments explicitly — Eden will not guess.`,
+        };
         break;
       }
 
@@ -517,7 +686,13 @@ function compileAll(
         );
         if (!bound.ok) {
           if (isMutating(tool) || bound.trap92) {
-            refused = { sequence, reason: `${tool}.${key}: ${bound.reason}`, slot: `${tool}.${key}` };
+            refused = {
+              sequence,
+              reason: `${tool}.${key}: ${bound.reason}`,
+              slot: `${tool}.${key}`,
+              code: "underdetermined_write",
+              hint: `${tool}.${key} could not be bound (${bound.reason}). Name the path from input or a prior step.`,
+            };
             break;
           }
           continue;
@@ -528,7 +703,13 @@ function compileAll(
       if (refused) break;
 
       if (isMutating(tool) && !Object.keys(args).length) {
-        refused = { sequence, reason: `${tool} mutating call has no bound arguments`, slot: tool };
+        refused = {
+          sequence,
+          reason: `${tool} mutating call has no bound arguments`,
+          slot: tool,
+          code: "underdetermined_write",
+          hint: `${tool} is a write with no bound arguments. Pass IDs or payloads from input or a prior step.`,
+        };
         break;
       }
 
@@ -542,22 +723,38 @@ function compileAll(
     }
 
     if (refused) {
-      refusals.push(refused);
+      refusals.push(stampWaste(refused, cluster.traces));
       continue;
     }
     const recorded = cluster.traces.filter((t) => t.output !== undefined);
     if (recorded.length && recorded.every((t) => !isUsableOutput(t.output))) {
-      refusals.push({ sequence, reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding." });
+      refusals.push(stampWaste({
+        sequence,
+        reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results — check that your agent's tool calls are succeeding.",
+        code: "empty_output",
+        hint: "Check that the agent's tool calls succeed and return a useful result.",
+      }, cluster.traces));
       continue;
     }
     if (steps.length < 3) {
-      refusals.push({ sequence, reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation." });
+      refusals.push(stampWaste({
+        sequence,
+        reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
+        code: "too_short",
+        hint: "Wrap a stretch of at least three steps.",
+      }, cluster.traces));
       continue;
     }
 
-    const env = envelopeFrom(cluster.traces, inputPaths);
+    const envTraces = envelopeTraces(cluster);
+    const env = envelopeFrom(envTraces, inputPaths);
     if (!allowExact && !env) {
-      refusals.push({ sequence, reason: "No witnessed input values found. Eden needs at least one recorded input parameter across your traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, queries) rather than calling tools with no arguments." });
+      refusals.push(stampWaste({
+        sequence,
+        reason: "No witnessed input values found. Eden needs at least one recorded input parameter across your traces to know what values are valid. Make sure your agent passes arguments (IDs, paths, queries) rather than calling tools with no arguments.",
+        code: "no_envelope",
+        hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
+      }, cluster.traces));
       continue;
     }
     // The last *top-level* step, not the last step in the array. A loop is
@@ -575,30 +772,32 @@ function compileAll(
       .reverse()
       .find((s) => !inLoopBody.has(s.id) && (s.kind === "tool" || s.kind === "island" || s.kind === "loop"));
     const label = stretchName(sequence);
-    const propKeys = env ? Object.keys(env.inputs) : Object.keys(cluster.traces[0]?.input ?? { id: true });
+    const propKeys = env ? Object.keys(env.inputs) : Object.keys(envTraces[0]?.input ?? cluster.traces[0]?.input ?? { id: true });
     const props = Object.fromEntries(
       propKeys.map((k) => {
-        const sample = env?.inputs[k]?.[0] ?? cluster.traces[0]?.input?.[k];
+        const sample = env?.inputs[k]?.[0] ?? envTraces[0]?.input?.[k] ?? cluster.traces[0]?.input?.[k];
         const t = typeof sample === "number" ? "number" : typeof sample === "boolean" ? "boolean" : "string";
         return [k, { type: t }];
       }),
     );
+    const description = `Run the repeating stretch as one tool: ${sequence.join(" → ")}. Prefer this over calling those tools one at a time.`;
     const drafted = withVersion({
         id: `cand_${programs.length + refusals.length + 1}`,
         name: label,
-        description: `Run the repeating stretch as one tool: ${sequence.join(" → ")}. Prefer this over calling those tools one at a time.`,
+        description,
+        when_to_use: whenToUseOf({ description, steps }),
         inputSchema: { type: "object", properties: props, required: propKeys },
         sequence,
         steps,
         returns: last ? { kind: "from", step: last.id, path: "" } : { kind: "literal", value: null },
         contract: {
-          witnesses: cluster.traces.length,
+          witnesses: envTraces.length,
           minLlmReduction,
           allowExact,
           envelope: env,
         },
         manifest: null,
-        budget: budgetOf(cluster.traces),
+        budget: budgetOf(envTraces),
         origin: originOf(cluster.traces),
       });
     // id identifies the stretch, version identifies this compilation of it.
@@ -607,16 +806,18 @@ function compileAll(
     const program = { ...drafted, id: `p_${hashStretch(drafted).slice(0, 16)}` };
     try {
       assertValid(program);
-      programs.push(program);
+      programs.push(stampProgramWaste(program, cluster.traces));
     } catch (err) {
-      refusals.push({ sequence, reason: `invalid program: ${(err as Error).message}` });
+      refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, cluster.traces));
     }
   }
 
   // Fork mining pass: detect divergent workflows that linear clustering
-  // misses. Runs AFTER the linear pass so linear programs are preferred when
-  // both fire on the same traces, and BEFORE the program cap so fork programs
-  // share the same MAX_PROGRAMS accounting instead of silently overflowing it.
+  // misses. Runs AFTER the linear pass, then DROPS linear arms of a
+  // successfully assembled fork so Needs attention is one method, not three.
+  // BEFORE the program cap so fork programs share the same MAX_PROGRAMS
+  // accounting instead of silently overflowing it.
+  const forkArmKeys = new Set<string>();
   if (traces.length >= opts.minSupport * 2) {
     const forks = findForkedGroups(traces, opts.minSupport);
     for (const fork of forks) {
@@ -625,24 +826,49 @@ function compileAll(
       seenSeq.add(seqKey);
       const sequence = [...fork.prefixNames, `branch_${fork.field}`];
       const drafted = assembleForkProgram(fork, "pending", `forked_${fork.field}_gate`);
+      const allForkTraces = [...fork.thenTraces, ...fork.elseTraces];
       if (!drafted) {
-        refusals.push({ sequence, reason: "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess." });
+        // Mutating unbound arm is the same class as linear: underdetermined_write,
+        // never a guessed bind and never a fork-only synonym.
+        const refuse = fork.assembleRefuse;
+        refusals.push(stampWaste({
+          sequence,
+          reason: refuse?.reason ?? "This workflow branches, but some step's arguments could not be bound from the recorded witnesses. Eden refuses to guess.",
+          code: refuse?.code ?? "unbound_branch",
+          hint: refuse?.hint ?? "Bind every branch arm from recorded witnesses. Eden will not guess.",
+          slot: refuse?.slot,
+        }, allForkTraces));
         continue;
       }
-      const allForkTraces = [...fork.thenTraces, ...fork.elseTraces];
       // Honesty gates mirroring the linear pass.
       if ((drafted.steps?.length ?? 0) < 3) {
-        refusals.push({ sequence, reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation." });
+        refusals.push(stampWaste({
+          sequence,
+          reason: "This stretch has fewer than 3 steps. Eden looks for multi-step patterns to compile into single calls — single tool calls don't benefit from compilation.",
+          code: "too_short",
+          hint: "Wrap a stretch of at least three steps.",
+        }, allForkTraces));
         continue;
       }
       const envInputs = (drafted.contract as { envelope?: { inputs?: Record<string, unknown[]> } | null }).envelope?.inputs;
       const allowExact = (drafted.contract as { allowExact?: boolean }).allowExact === true;
       if (!envInputs && !allowExact) {
-        refusals.push({ sequence, reason: "No witnessed input values found across the branched traces. Eden needs at least one recorded input parameter to know what values are valid." });
+        refusals.push(stampWaste({
+          sequence,
+          reason: "No witnessed input values found across the branched traces. Eden needs at least one recorded input parameter to know what values are valid.",
+          code: "no_envelope",
+          hint: "Pass arguments (IDs, paths, queries) so Eden can witness valid values.",
+        }, allForkTraces));
         continue;
       }
-      if (allForkTraces.every((t) => !t.output || typeof t.output !== "object" || Object.keys(t.output as object).length === 0)) {
-        refusals.push({ sequence, reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results." });
+      const recorded = allForkTraces.filter((t) => t.output !== undefined);
+      if (recorded.length && recorded.every((t) => !isUsableOutput(t.output))) {
+        refusals.push(stampWaste({
+          sequence,
+          reason: "All witnesses produced empty or identical output. Eden compiles stretches that produce useful results.",
+          code: "empty_output",
+          hint: "Check that the agent's tool calls succeed and return a useful result.",
+        }, allForkTraces));
         continue;
       }
       // Stable identity, same scheme as linear programs: id identifies the
@@ -654,16 +880,182 @@ function compileAll(
       const program = withVersion(withId);
       try {
         assertValid(program);
-        programs.push(program);
+        programs.push(stampProgramWaste(program, allForkTraces));
+        forkArmKeys.add([...fork.prefixNames, ...fork.thenSuffix].join("\0"));
+        forkArmKeys.add([...fork.prefixNames, ...fork.elseSuffix].join("\0"));
       } catch (err) {
-        refusals.push({ sequence, reason: `invalid program: ${(err as Error).message}` });
+        refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, allForkTraces));
+      }
+    }
+  }
+
+  if (forkArmKeys.size) {
+    for (let i = programs.length - 1; i >= 0; i--) {
+      const p = programs[i]!;
+      if (p.steps.some((s) => s.kind === "branch")) continue;
+      if (forkArmKeys.has((p.sequence ?? []).join("\0"))) programs.splice(i, 1);
+    }
+  }
+
+  // Handoff mining pass: repeated parent→child agent sequences. AFTER fork
+  // so a branched same-agent workflow is not re-read as a compose, BEFORE
+  // MAX_PROGRAMS so composed parents share the cap.
+  if (traces.length >= opts.minSupport * 2) {
+    const handoffs = findHandoffGroups(traces, opts.minSupport);
+    for (const group of handoffs) {
+      const seqKey = `handoff:${group.uniqueAgents.join("\0")}`;
+      if (seenSeq.has(seqKey)) continue;
+      seenSeq.add(seqKey);
+      const sequence = group.uniqueAgents;
+      const handoffTraces = [...group.tracesByAgent.values()].flat();
+      const children: StretchProgram[] = [];
+      let refused: (typeof refusals)[number] | null = null;
+      for (const agent of group.uniqueAgents) {
+        const agentTraces = group.tracesByAgent.get(agent) ?? [];
+        const child = matchChildProgram(programs, agentTraces);
+        if (!child) {
+          const agentSeq = agentTraces[0]
+            ? agentTraces[0].events.filter((e) => e.ok && !e.skipped).map((e) => e.name)
+            : sequence;
+          const prior = refusals.find((r) => r.sequence.join("\0") === agentSeq.join("\0"));
+          refused = prior
+            ? {
+                ...prior,
+                sequence,
+                reason: `Handoff refused: ${prior.reason}`,
+              }
+            : {
+                sequence,
+                reason: `Agent ${agent} stretch did not compile. Eden will not guess a composed handoff.`,
+                code: "invalid_program",
+                hint: `Compile the ${agent} stretch on its own witnesses first. A mutating step that cannot bind will refuse rather than compose.`,
+              };
+          break;
+        }
+        children.push(child);
+      }
+      if (refused) {
+        refusals.push(stampWaste(refused, handoffTraces));
+        continue;
+      }
+      const drafted = assembleHandoffProgram(group, children, {
+        minLlmReduction: opts.minLlmReduction,
+        allowExact: opts.allowExact,
+      });
+      if (!drafted) {
+        refusals.push(stampWaste({
+          sequence,
+          reason: "This handoff's child programs need inputs that were not witnessed on the orchestrator run. Eden will not guess.",
+          code: "no_envelope",
+          hint: "Pass the child programs' arguments on the parent/intake input.",
+        }, handoffTraces));
+        continue;
+      }
+      const withId = { ...drafted, id: `p_${hashStretch(drafted).slice(0, 16)}` };
+      const program = withVersion(withId);
+      try {
+        assertValid(program);
+        programs.push(stampProgramWaste(program, handoffTraces));
+      } catch (err) {
+        refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, handoffTraces));
+      }
+    }
+  }
+
+  // Same-agent program composition: two linear programs whose concatenation
+  // appears on ≥ minSupport traces. AFTER handoff so agent→agent stays
+  // origin.mode handoff, AFTER fork so branched same-agent is not re-read
+  // as compose. BEFORE MAX_PROGRAMS so composed parents share the cap.
+  //
+  // Linear clustering drops subsequence n-grams, so a 6-step concat can eat
+  // A and B. Recover those blocks from traces, bind them as children if
+  // missing, then join. Nested child compiles skip this pass.
+  if (!opts.skipCompose) {
+    const splits = findWitnessedComposeSplits(traces, programs, opts.minSupport);
+    for (const split of splits) {
+      const fresh: StretchProgram[] = [];
+      let missing = false;
+      for (const seq of [split.aSeq, split.bSeq]) {
+        if (matchProgramBySequence([...programs, ...fresh], seq)) continue;
+        const sliced = sliceTracesToSeq(split.traces, seq);
+        if (sliced.length < opts.minSupport) {
+          missing = true;
+          break;
+        }
+        const recovered: StretchProgram[] = [];
+        compileAll(
+          sliced,
+          { ...opts, maxGram: Math.max(seq.length, 3), skipCompose: true },
+          recovered,
+          [],
+          new Set(),
+        );
+        const child = matchProgramBySequence(recovered, seq) ?? recovered[0];
+        if (!child) {
+          missing = true;
+          break;
+        }
+        fresh.push(child);
+      }
+      if (missing) continue;
+      for (const p of fresh) {
+        if (!programs.some((x) => x.id === p.id)) programs.push(p);
+      }
+    }
+
+    const joins = findComposeJoins(traces, programs, opts.minSupport);
+    const composedJoins: string[] = [];
+    for (const pair of joins) {
+      const seqKey = `compose:${pair.a.id}\0${pair.b.id}`;
+      if (seenSeq.has(seqKey)) continue;
+      seenSeq.add(seqKey);
+      const sequence = [pair.a.name, pair.b.name];
+      const drafted = assembleComposeProgram(pair, {
+        minLlmReduction: opts.minLlmReduction,
+        allowExact: opts.allowExact,
+      });
+      if (drafted.refuse || !drafted.program) {
+        const refuse = drafted.refuse ?? {
+          code: "no_envelope" as const,
+          reason: "This join could not be bound. Eden will not guess.",
+          hint: "Pass the child programs' arguments on the composed run's input.",
+        };
+        refusals.push(stampWaste({
+          sequence,
+          reason: refuse.reason,
+          code: refuse.code,
+          hint: refuse.hint,
+        }, pair.traces));
+        continue;
+      }
+      const withId = { ...drafted.program, id: `p_${hashStretch(drafted.program).slice(0, 16)}` };
+      const program = withVersion(withId);
+      try {
+        assertValid(program);
+        programs.push(stampProgramWaste(program, pair.traces));
+        composedJoins.push([...(pair.a.sequence ?? []), ...(pair.b.sequence ?? [])].join("\0"));
+      } catch (err) {
+        refusals.push(stampWaste({ sequence, reason: `invalid program: ${(err as Error).message}`, code: "invalid_program" }, pair.traces));
+      }
+    }
+
+    // Concatenation may remain as the compose parent, not a separate happy
+    // linear with the same tool sequence.
+    if (composedJoins.length) {
+      const drop = new Set(composedJoins);
+      for (let i = programs.length - 1; i >= 0; i--) {
+        const p = programs[i]!;
+        if (p.origin?.mode === "compose" || p.origin?.mode === "handoff" || p.composedOf?.length) continue;
+        if (drop.has((p.sequence ?? []).join("\0"))) programs.splice(i, 1);
       }
     }
   }
 
   const MAX_PROGRAMS = 24;
   const extra = programs.slice(MAX_PROGRAMS);
-  for (const p of extra) refusals.push({ sequence: p.sequence ?? [], reason: "max programs cap" });
+  for (const p of extra) {
+    refusals.push(stampWaste({ sequence: p.sequence ?? [], reason: "max programs cap", code: "max_programs" }, []));
+  }
 
   if (process.env.EDEN_DEBUG_FORK === "1") {
     const forks = findForkedGroups(traces, opts.minSupport);

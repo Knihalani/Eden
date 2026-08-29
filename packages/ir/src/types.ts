@@ -1,3 +1,5 @@
+import type { TokenClass, TokenClasses } from "./tokens";
+
 export const IR_VERSION = 1;
 export const DEFAULT_MIN_LLM_REDUCTION = 2;
 
@@ -40,6 +42,16 @@ export type IslandStep = {
   input: Binding;
   system: string;
   outputSchema: object;
+  /**
+   * Graduation pin (Wave 10). Memo hits only; a miss deopts. Never a silent
+   * swap — Approve sets this. Absent/false means the island may still call a model.
+   */
+  pinned?: boolean;
+  /**
+   * Wave 11. One-liner for SKILL.md / drain. Absent or blank → callers fall
+   * back to the program description. Never invent copy at drain time.
+   */
+  when_to_use?: string;
 };
 
 export type LoopStep = {
@@ -96,6 +108,12 @@ export type Contract = {
   minLlmReduction: number;
   allowExact: boolean;
   envelope?: { inputs: Record<string, unknown[]> };
+  /**
+   * Soft-match tier (Wave 10). Same keys and types, novel value. Serves only
+   * when true AND the session is canary or the tool is live-promoted.
+   * Default (absent/false) stays envelope-strict.
+   */
+  softMatch?: boolean;
 };
 
 export type Manifest = {
@@ -113,6 +131,13 @@ export type Manifest = {
   timeSavedMs?: number | null;
   tokensMeasured?: boolean;
   timeMeasured?: boolean;
+  /** True when compiled tokens were scaled, not scraped. Ship gate treats as absent. */
+  tokensEstimated?: boolean;
+  /**
+   * True when savings rest on provider-scraped usage (or measured time).
+   * False/absent + tokensEstimated → show UNCERTIFIED, never quote the number.
+   */
+  certified?: boolean;
 };
 
 export type ProgramBudget = {
@@ -122,7 +147,7 @@ export type ProgramBudget = {
 };
 
 export type ProgramOrigin = {
-  mode: "happy" | "loop" | "fail_streak" | "low_gain" | "evidence";
+  mode: "happy" | "loop" | "fail_streak" | "low_gain" | "evidence" | "handoff" | "compose";
   firstWarningAt?: number;
 };
 
@@ -131,6 +156,11 @@ export type StretchProgram = {
   version: string;
   name: string;
   description: string;
+  /**
+   * Wave 11. Island-written one-liner for manifests. Absent → `whenToUseOf`
+   * walks island steps, then `description`.
+   */
+  when_to_use?: string;
   inputSchema: object;
   steps: Step[];
   returns: Binding;
@@ -142,6 +172,24 @@ export type StretchProgram = {
   budget?: ProgramBudget;
   /** Set when this program was mined from a warned/failing cluster (45, 50). */
   origin?: ProgramOrigin;
+  /**
+   * Child program ids when this is a composed agent→agent handoff (Wave 7.3).
+   * Absent on linear/fork programs. Approve still required — this is identity,
+   * not a live gate.
+   */
+  composedOf?: string[];
+  /**
+   * Serving stamp from the live tool (Wave 10). Not part of program identity.
+   * `canary` = 10% of sessions; absent/`live` = 100%. Already-shipped tools
+   * without this field stay live.
+   */
+  rollout?: "canary" | "live";
+  /**
+   * Provider prompt+completion on the mined cluster. Waiting PASS candidates
+   * carry this so Needs attention can rank uncompiled frequent patterns by
+   * waste, not recency. 0 when unmeasured — never estimated.
+   */
+  wastedTokens?: number;
 };
 
 export type TraceEvent = {
@@ -151,6 +199,15 @@ export type TraceEvent = {
   ok: boolean;
   duration_ms?: number;
   skipped?: boolean;
+  /** How this event's provider tokens were earned. Absent = unattributed. */
+  tokenClass?: TokenClass;
+  /** Agent that issued this event. Absent = single-agent wrap. */
+  agentId?: string;
+  /**
+   * How many agents in the fleet claimed this fetch (Wave 7.1). Omitted at 1.
+   * Never set on mutating events.
+   */
+  sharedAcross?: number;
 };
 
 export const SIGNAL_KINDS = ["repeat_ngram", "fail_streak", "budget", "low_gain", "evidence_gap", "repeat_visits"] as const;
@@ -184,12 +241,32 @@ export type EvidenceLedger = {
 export type StretchTrace = {
   id: string;
   events: TraceEvent[];
+  /** Agent that produced this stretch. Absent = single-agent wrap. */
+  agentId?: string;
+  /** Parent run id when this stretch is a child of an orchestrator. */
+  parentRunId?: string;
+  /** Orchestrator span id this stretch must match on fixtures (Wave 7.1). */
+  spanId?: string;
+  /** `invoke_workflow` (parent) or `invoke_agent` (child). Stamped when spanId is set. */
+  spanName?: string;
+  /** Shared fleet key for read-only cross-agent claims. Not a tenancy boundary. */
+  fleetId?: string;
+  /** Deployment region label. Isolation stays workspace-keyed. */
+  region?: string;
   input?: Record<string, unknown>;
   output?: unknown;
   llmCalls: number;
   /** Present only when the wrap scraped provider `usage`. Absent = not measured. */
   prompt_tokens?: number;
   completion_tokens?: number;
+  /** Provider cache-read tokens. Separate line — never blended into DC%. */
+  cached_tokens?: number;
+  /** Provider cache-write tokens. 0 is measured. */
+  cache_write_tokens?: number;
+  /** Hit-% denominator stamped at parse time. */
+  cache_input_tokens?: number;
+  /** Per-run class ledger. Sum of five classes must equal prompt+completion when measured. */
+  tokenClasses?: TokenClasses;
   duration_ms: number;
   cost_cents: number;
   skipped?: string[];
@@ -211,10 +288,35 @@ export type StretchTrace = {
   metrics_estimated?: true;
 };
 
+export type RefusalCode =
+  | "unbound_foreach"
+  | "read_set_mismatch"
+  | "underdetermined_write"
+  | "underdetermined_command"
+  | "empty_output"
+  | "too_short"
+  | "no_envelope"
+  | "invalid_program"
+  | "unbound_branch"
+  | "max_programs";
+
 export type Refusal = {
   sequence: string[];
   reason: string;
   slot?: string;
+  /** Named class for the novelty feed and canvas. Additive; older rows omit it. */
+  code?: RefusalCode;
+  /** Near-miss: length of the array a prior read returned. */
+  readSet?: number;
+  /** Near-miss: how many times the repeating tool actually ran. */
+  repeats?: number;
+  /** What to change. Canvas and Home show this; `reason` stays the pin string. */
+  hint?: string;
+  /**
+   * Provider prompt+completion summed over the refused cluster.
+   * 0 when unmeasured — never estimated from llmCalls or duration.
+   */
+  wastedTokens?: number;
 };
 
 export type IslandCaller = (args: {
@@ -222,13 +324,32 @@ export type IslandCaller = (args: {
   input: unknown;
   outputSchema: object;
   signal?: AbortSignal;
+  /**
+   * Graduation pin (Wave 10). Lookup-only: a memo hit serves, a miss deopts.
+   * Absent/false means the island may still call a model.
+   */
+  pinned?: boolean;
+  /**
+   * Wave 14. True when this miss can wait for sibling islands in the same
+   * program wave (batch transport). Absent/false → the agent is blocked on
+   * this call and it stays on the sync path.
+   */
+  wait?: boolean;
 }) => Promise<unknown>;
 
 export type ToolRunCtx = { signal?: AbortSignal };
 
 export type ToolExecute = (args: Record<string, unknown>, ctx?: ToolRunCtx) => Promise<unknown> | unknown;
 
+/** PTC guidance, not a security wall. Direct + code-execution callers. */
+export const PTC_CALLERS = ["direct", "code_execution_20260120"] as const;
+
 export type ToolRegistry = {
   execute: (name: string, args: Record<string, unknown>, ctx?: ToolRunCtx) => Promise<unknown>;
   has?: (name: string) => boolean;
+  /**
+   * Hosts with code execution may call these tools from a PTC script.
+   * Guidance only — not a hard block (Anthropic's own contract).
+   */
+  allowed_callers?: string[];
 };

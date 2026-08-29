@@ -16,7 +16,8 @@ import {
 } from "react";
 import { ActivityProvider, forgetActivity } from "./activity-context";
 import type { Activity } from "./activity";
-import { HOME, SEE_PENDING, TOUR, WORKSPACE } from "../account/home";
+import { HOME, SEE_PENDING, WORKSPACE } from "../account/home";
+import { isSlimPath } from "../account/route";
 import { AppNav, useNavCollapsed } from "./nav";
 import { BrandMark } from "../brand-mark";
 import { forgetAvatar, readCachedAvatar, rememberAvatar, sizedAvatar, type Portrait } from "./portrait";
@@ -34,11 +35,9 @@ export function AppChrome({
   const path = usePathname();
   const { orgId, userId } = useAuth(SEE_PENDING);
   const owner = [userId, orgId].filter(Boolean).join(":");
-  const workspace = path === WORKSPACE || path.startsWith(`${WORKSPACE}/`);
-  const tour = path === TOUR || path.startsWith(`${TOUR}/`);
+  const slim = isSlimPath(path);
   const home = path === HOME;
   const canvas = path.startsWith("/live/") || path.startsWith("/request/");
-  const slim = workspace || tour;
   const { collapsed, ready, onToggle } = useNavCollapsed();
 
   useEffect(() => {

@@ -26,7 +26,7 @@ export function TourPanel() {
 
   return (
     <section className="account-stage" aria-labelledby="tour-title">
-      <p className="tour-count">
+      <p className="tour-count" aria-live="polite" aria-atomic="true">
         {beat + 1} of {BEATS.length}
       </p>
       <div className="account-copy account-copy-wide">

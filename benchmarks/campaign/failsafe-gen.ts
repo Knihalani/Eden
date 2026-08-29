@@ -14,10 +14,12 @@ import { withVersion, type Step, type StretchProgram } from "@eden/ir";
 import type { ToolDef } from "@eden/wrap";
 
 export const FUZZ_SEED = 0xF5A1;
-export const N_CASES = 1000;
+export const N_CASES = 10000;
 export const N_FAST = 50;
-/** Cap timeout-fault cases so the suite stays well under 2 minutes. */
+/** Cap timeout-fault cases so the 10k suite stays well under the wall budget. */
 export const MAX_TIMEOUT_CASES = 50;
+/** Cheap wrap cases fan out; keep this under wrap's per-state arming cap. */
+export const FUZZ_CONCURRENCY = 32;
 
 export const TOOL_POOL = ["lookup", "fetch", "writeA", "writeB", "audit", "notify"] as const;
 export type ToolName = (typeof TOOL_POOL)[number];
@@ -150,6 +152,26 @@ export function generateSuite(seed = FUZZ_SEED, n = N_CASES): FuzzCase[] {
   const out: FuzzCase[] = [];
   for (let i = 0; i < n; i++) out.push(generateCase(rng, i, timeoutLeft));
   return out;
+}
+
+/** Bounded worker pool. Single-threaded increment; no Math.random. */
+export async function mapPool<T>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  let next = 0;
+  const n = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(
+    Array.from({ length: n }, async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        await fn(items[i]!, i);
+      }
+    }),
+  );
 }
 
 /** Unique step id when the same tool appears more than once. */

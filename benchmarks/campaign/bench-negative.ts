@@ -13,6 +13,8 @@
  *   n5 drift           goals walk away from the witnessed distribution
  *   n6 chaos-observe   failure-dominant workload, observe mode (default)
  *   n7 concurrent      three stretches interleaved on one wrapped surface
+ *   n8 chaos-enforce   enforcement on a failure-dominant workload
+ *   n9 silent-drop     host always drops updatedToolOutput (R1); S1b deny must still hold
  *
  * Expectations are printed with each result; a LOSS or a correctness
  * violation fails the exit code. INDISTINGUISHABLE is the honest answer for
@@ -26,6 +28,7 @@ import {
   createDesk,
 } from "./worlds";
 import { createNoise, createCreative, createMicro, createFastDesk, createChaos } from "./negative-worlds";
+import { N9_EXPECT, n9Scenario } from "./silent-drop";
 
 const FAST = process.argv.includes("--fast");
 process.env.CAMPAIGN_THINK_MS = "120";
@@ -34,7 +37,7 @@ process.env.CAMPAIGN_THINK_MS = "120";
 async function prelive(factory: () => ReturnType<typeof createDesk> | (() => unknown), pool: Array<Record<string, unknown>>, count = 13) {
   const s = new Session([["w", factory as never]], true);
   for (let i = 0; i < count; i++) await s.stretch("w", pool[i % pool.length]!, blockSeed(`neg-pre-${i}`, i));
-  return await s.goLive("w", { compile: count - 3, holdout: 3, sandbox: factory as never, maxGram: 26, assumeProviderUsage: true });
+  return await s.goLive("w", { compile: count - 3, holdout: 3, sandbox: factory as never, maxGram: 26 });
 }
 
 /** Try to compile against a world; returns null when nothing can go live. */
@@ -239,6 +242,15 @@ async function main() {
         run: (arm) => run(arm),
       }),
     );
+  }
+
+  /* --- n9 silent-drop ----------------------------------------------------- */
+  // Pre-registered before the run (Wave 5.4). Do not retune after seeing numbers.
+  console.log("\n[n9] silent-drop — host always drops updatedToolOutput (R1 class)");
+  console.log(`  expect: ${N9_EXPECT}`);
+  {
+    // Cell is cheap (hook I/O). n≥6 required for a cents WIN/LOSS; keep 8 even in --fast.
+    outs.push(await n9Scenario(8));
   }
 
   // Negative controls: parity is the bar. Losses under 1% are the measured

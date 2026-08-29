@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { continuePath, SEE_PENDING } from "./home";
 
-export function useContinueIfAuthed() {
+export function useContinueIfAuthed(intent: "in" | "up" = "in") {
   const { isLoaded, isSignedIn, orgId } = useAuth(SEE_PENDING);
   const { session } = useSession();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
-    router.replace(continuePath(session?.status, orgId));
-  }, [isLoaded, isSignedIn, orgId, session?.status, router]);
+    router.replace(continuePath(session?.status, orgId, intent));
+  }, [isLoaded, isSignedIn, orgId, session?.status, router, intent]);
 
   return { isLoaded, isSignedIn };
 }

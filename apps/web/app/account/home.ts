@@ -1,3 +1,5 @@
+import { toolsListTitle } from "@eden/ir";
+
 export const LANDING = "/";
 export const HOME = "/home";
 export const SETUP = "/setup";
@@ -18,10 +20,23 @@ export function homePath(view: HomeView = "overview") {
   return `${HOME}?view=${view}`;
 }
 
-export function homeViewTitle(view: HomeView) {
+export function homeViewTitle(view: HomeView, serving?: { canary: number; live: number }) {
   if (view === "requests") return "Requests";
-  if (view === "workflows") return "Live tools";
+  if (view === "workflows") return toolsListTitle(serving ?? { canary: 0, live: 0 });
   return "Home";
+}
+
+/** Canvas back-link. Live with nothing to count is `0 programs`, not Live tools. */
+export function canvasBackTitle(model: {
+  mode: "request" | "live";
+  rollout?: "canary" | "live" | null;
+  program?: unknown;
+}) {
+  if (model.mode !== "live") return "Requests";
+  const canary = model.rollout === "canary" ? 1 : 0;
+  const counted = Boolean(model.program) || model.rollout === "live";
+  const live = canary ? 0 : counted ? 1 : 0;
+  return toolsListTitle({ canary, live });
 }
 
 export function homeStatus(activity: { requests?: unknown[]; workflows?: unknown[] }) {
@@ -34,9 +49,9 @@ export function homeStatus(activity: { requests?: unknown[]; workflows?: unknown
 
 export function homeEmptyLine(view: HomeView, failed = false) {
   if (failed) return "Couldn’t load activity.";
-  if (view === "requests") return "Nothing waiting. New compile requests land here.";
-  if (view === "workflows") return "No live tools yet. Approve a request and it shows up here.";
-  return "Requests and live tools land here after you wrap.";
+  if (view === "requests") return "Nothing waiting. If nothing compiled: eden explain.";
+  if (view === "workflows") return "0 programs. Approve a request and it shows up here.";
+  return "Requests land here after you wrap. Empty is 0 programs.";
 }
 
 export function navCurrent(path: string, view: HomeView = "overview"): HomeView | "setup" | "tour" | null {
@@ -56,15 +71,28 @@ export const GOOGLE_SSO = {
 
 export function destAfterAuth(
   session?: { currentTask?: { key?: string } | null; status?: string } | null,
+  intent: "in" | "up" = "in",
 ) {
   if (session?.currentTask?.key === "choose-organization") return WORKSPACE;
   if (session?.status === "pending") return WORKSPACE;
+  return intent === "up" ? TOUR : HOME;
+}
+
+/** After a workspace choice. Create and first invite → tour; returning member → home. */
+export type WorkspaceChoice = "create" | "select" | "invite" | "continue";
+
+export function destAfterWorkspace(choice: WorkspaceChoice) {
+  if (choice === "create" || choice === "invite") return TOUR;
   return HOME;
 }
 
-export function continuePath(sessionStatus?: string | null, orgId?: string | null) {
+export function continuePath(
+  sessionStatus?: string | null,
+  orgId?: string | null,
+  intent: "in" | "up" = "in",
+) {
   if (sessionStatus === "pending" || !orgId) return WORKSPACE;
-  return HOME;
+  return intent === "up" ? TOUR : HOME;
 }
 
 export function signedInDest(input: {

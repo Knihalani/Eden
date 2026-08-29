@@ -1,13 +1,13 @@
-import { ensureHome, readConfig, resolveApiKey } from "./home";
 import { doctor } from "./doctor";
 import { setup } from "./setup";
+import { startHookdBackground } from "./hookd";
 
 /**
  * eden init: one command that goes from zero to running.
  *
- * Calls setup (config + hooks + MCP), then runs doctor to verify everything
- * is healthy. Prints what to do next. Does NOT start long-lived services —
- * the user runs `eden wrap` in a separate terminal (or uses a process manager).
+ * Calls setup (config + hooks + MCP), starts the recording daemon when it is
+ * down, then runs doctor. Does NOT start `eden wrap` — that stays the other
+ * process. Stop the daemon with `eden hookd --stop`.
  */
 export async function init(args: string[]): Promise<void> {
   console.log("eden init: setting up…\n");
@@ -19,6 +19,10 @@ export async function init(args: string[]): Promise<void> {
     const isDev = process.env.EDEN_DEV === "1" || args.includes("--dev");
     if (!isDev) throw err;
     console.log("⚠ auth skipped (dev mode)\n");
+  }
+
+  if (await startHookdBackground()) {
+    console.log("Recording daemon starting (`eden hookd`). Stop with `eden hookd --stop`.\n");
   }
 
   console.log("Running health check…\n");
@@ -33,7 +37,9 @@ Next steps:
   2. Point your agent at:       OPENAI_BASE_URL=http://127.0.0.1:8788/v1
   3. Or use Claude Code hooks (already installed by this command)
   4. Run your agent — Eden records tool calls automatically
-  5. After a few runs, visit http://127.0.0.1:8788 to approve compiled tools
+  5. After a few runs:          eden explain
+  6. Approve a candidate:       eden approve <id> --yes
+     (or visit http://127.0.0.1:8788 — same human gate)
 
 Import existing traces:
   eden import --file langsmith-export.jsonl

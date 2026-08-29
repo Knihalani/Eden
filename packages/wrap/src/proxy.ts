@@ -1,9 +1,10 @@
 import type { StretchProgram } from "@eden/ir";
 import { compiledSchema, injectTools, steerToolCalls } from "./steer";
-import { selectForRequest } from "./intent";
+import { noteJitUsed, selectForRequest } from "./intent";
 import { recordCompletion, tapSseUsage, withStreamUsage } from "./usage";
-import type { WrapState } from "./wrap-tools";
+import { filterCanary, type WrapState } from "./wrap-tools";
 import { killAfterWarningEnabled } from "./guard";
+import { turnBoundary } from "./speculate";
 
 export type ProxyOpts = {
   state: WrapState;
@@ -55,7 +56,13 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
   } catch {
     return Response.json({ error: { message: "invalid json" } }, { status: 400 });
   }
-  const live = programs(opts);
+  const live = filterCanary(programs(opts), opts.state.sessionId);
+  // Think-time of this request: start a read-only stretch from the last turn
+  // so tool latency overlaps generation. Fail-open; mutating never starts.
+  safely(() => {
+    const last = opts.state.run.events.at(-1);
+    turnBoundary(opts.state, { lastTool: last?.name, lastArgs: last?.args, input: last?.args });
+  }, undefined);
   // A tripped kill switch must never take the user's traffic down with it
   // (prime directive: Eden never blocks the agent). It only loses its privilege
   // to steer: requests pass straight through, untouched, while the condition
@@ -88,7 +95,7 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     }
   }
   const injected = safely(
-    () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined)) : body.tools),
+    () => (shouldSteer ? injectTools(body.tools, selectForRequest(live, body.messages as unknown[] | undefined, opts.state.jit)) : body.tools),
     body.tools,
   );
   const steeredBody = { ...body, stream: false, tools: injected };
@@ -135,6 +142,10 @@ export async function handleChatCompletions(req: Request, opts: ProxyOpts): Prom
     safely(
       () => {
         choice.tool_calls = steerToolCalls(choice.tool_calls as never, live);
+        const names = (choice.tool_calls as Array<{ function?: { name?: string }; name?: string }>).map(
+          (c) => c.function?.name || c.name || "",
+        );
+        noteJitUsed(opts.state.jit, names);
       },
       undefined,
     );

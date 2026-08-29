@@ -72,17 +72,43 @@ export async function bindWorkspaceOrg(): Promise<{ ok: boolean; error?: string 
   return { ok: false, error: body.error || `HTTP ${res.status}` };
 }
 
-export async function approveTool(id: string, drop: string[] = [], bind: BindEdit[] = []) {
+export async function approveTool(
+  id: string,
+  drop: string[] = [],
+  bind: BindEdit[] = [],
+  opts?: {
+    transparentWrites?: boolean;
+    dropValues?: Array<{ path: string; value: unknown }>;
+    pinIslands?: boolean;
+  },
+) {
+  const body: {
+    edits?: { drop?: string[]; bind?: BindEdit[] };
+    transparent_writes?: boolean;
+    dropValues?: Array<{ path: string; value: unknown }>;
+    pinIslands?: boolean;
+  } = {};
   const edits: { drop?: string[]; bind?: BindEdit[] } = {};
   if (drop.length) edits.drop = drop;
   if (bind.length) edits.bind = bind;
+  if (Object.keys(edits).length) body.edits = edits;
+  if (opts?.transparentWrites) body.transparent_writes = true;
+  if (opts?.dropValues?.length) body.dropValues = opts.dropValues;
+  if (opts?.pinIslands) body.pinIslands = true;
   const out = await plane(`/v1/tools/${encodeURIComponent(id)}/approve`, {
     method: "POST",
-    body: JSON.stringify(Object.keys(edits).length ? { edits } : {}),
+    body: JSON.stringify(Object.keys(body).length ? body : {}),
   });
   revalidatePath("/home");
   revalidatePath(`/request/${id}`);
   revalidatePath(`/live/${id}`);
+  return out;
+}
+
+export async function promoteTool(id: string) {
+  const out = await plane(`/v1/tools/${encodeURIComponent(id)}/promote`, { method: "POST", body: "{}" });
+  revalidatePath(`/live/${id}`);
+  revalidatePath("/home");
   return out;
 }
 

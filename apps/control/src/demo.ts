@@ -40,6 +40,7 @@ const fetchHandler = createHandler({
   // its writes — same wiring as `eden wrap`.
   sandboxFor: (t) => replayRegistry(registryFrom(world.tools), t),
   island: world.island,
+  scheduleClock: true,
 });
 
 async function naiveTraces(n: number): Promise<StretchTrace[]> {

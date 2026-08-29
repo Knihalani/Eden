@@ -1,4 +1,5 @@
 import type { Candidate, LiveTool, Store } from "./store";
+import { rolloutPartition, toolsListTitle } from "@eden/ir";
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -23,7 +24,19 @@ function verdictBadge(verdict: string): string {
   return `<span class="badge ${cls}">${esc(verdict)}</span>`;
 }
 
-export function layout(title: string, body: string, path: string, token = "eden_dev", sig = ""): string {
+function servingOf(tools: LiveTool[]) {
+  return rolloutPartition(tools.filter((t) => t.state === "live").map((t) => ({ rollout: t.rollout })));
+}
+
+export function layout(
+  title: string,
+  body: string,
+  path: string,
+  token = "eden_dev",
+  sig = "",
+  serving?: { canary: number; live: number },
+): string {
+  const toolsNav = esc(toolsListTitle(serving ?? { canary: 0, live: 0 }));
   return `<!doctype html>
 <html lang="en">
 <meta charset="utf-8"/>
@@ -77,7 +90,7 @@ export function layout(title: string, body: string, path: string, token = "eden_
 <header>
   <strong>Eden</strong>
   <a href="/" ${path === "/" ? 'aria-current="page"' : ""}>Inbox</a>
-  <a href="/live" ${path === "/live" ? 'aria-current="page"' : ""}>Live tools</a>
+  <a href="/live" ${path === "/live" ? 'aria-current="page"' : ""}>${toolsNav}</a>
 </header>
 <main>${body}</main>
 <script>
@@ -146,7 +159,7 @@ export function inboxPage(store: Store, token?: string): string {
       <button onclick="post('/v1/compile')">Compile traces</button>
     </div>
     <div class="grid">${cards}</div>`;
-  return layout("Inbox", body, "/", token, store.inboxSig());
+  return layout("Inbox", body, "/", token, store.inboxSig(), servingOf(store.tools()));
 }
 
 function candidateCard(c: Candidate): string {
@@ -193,7 +206,7 @@ export function toolPage(store: Store, id: string, token?: string): string {
   const c = store.candidate(id);
   const live = store.tool(id);
   const program = live?.program || c?.program;
-  if (!program && !c?.refusal) return layout("Tool", `<p class="empty">Unknown tool.</p>`, "/live", token);
+  if (!program && !c?.refusal) return layout("Tool", `<p class="empty">Unknown tool.</p>`, "/live", token, "", servingOf(store.tools()));
   const steps = (program?.steps ?? [])
     .map((s) => {
       if (s.kind === "tool") return `<div class="step">${esc(s.id)} · ${esc(s.tool)}</div>`;
@@ -218,7 +231,7 @@ export function toolPage(store: Store, id: string, token?: string): string {
       ${live && live.state !== "live" ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/resume')">Resume</button>` : ""}
       ${live ? `<button class="ghost" onclick="post('/v1/tools/${esc(id)}/rollback')">Rollback</button>` : ""}
     </div>`;
-  return layout(program?.name || "Tool", body, "/live", token);
+  return layout(program?.name || "Tool", body, "/live", token, "", servingOf(store.tools()));
 }
 
 export function livePage(store: Store, token?: string): string {
@@ -239,12 +252,14 @@ export function livePage(store: Store, token?: string): string {
     </article>`;
         })
         .join("")
-    : `<p class="empty">No live compiled tools. Approve one from the inbox.</p>`;
+    : `<p class="empty">0 programs. Approve one from the inbox.</p>`;
   const strip = `<div class="strip">
     <span>live ${save.live}</span>
     <span>${save.runs} runs</span>
     <span>${save.fail} failed</span>
     <span>${save.tokensSavedMean ? Math.round(save.tokensSavedMean) + " tokens saved" : save.timeSavedMsMean ? Math.round(save.timeSavedMsMean) + " ms saved" : "not measured"}</span>
   </div>`;
-  return layout("Live tools", `<h1>Live tools</h1>${strip}<div class="grid">${cards}</div>`, "/live", token);
+  const serving = servingOf(tools);
+  const title = toolsListTitle(serving);
+  return layout(title, `<h1>${esc(title)}</h1>${strip}<div class="grid">${cards}</div>`, "/live", token, "", serving);
 }

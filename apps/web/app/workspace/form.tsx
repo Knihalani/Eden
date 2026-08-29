@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { AccountCopy } from "../account/frame";
-import { HOME, SEE_PENDING, TOUR } from "../account/home";
+import { destAfterWorkspace, SEE_PENDING } from "../account/home";
 import { inviteToWorkspace } from "./actions";
 
 export function WorkspaceForm() {
@@ -49,7 +49,7 @@ export function WorkspaceForm() {
     try {
       const created = await createOrganization({ name: trimmed });
       if (created) await setActive({ organization: created.id });
-      router.replace(TOUR);
+      router.replace(destAfterWorkspace("create"));
     } catch {
       setError("Couldn’t create that workspace. Try another name.");
     } finally {
@@ -63,7 +63,7 @@ export function WorkspaceForm() {
     setError("");
     try {
       await setActive({ organization: organizationId });
-      router.refresh();
+      router.replace(destAfterWorkspace("select"));
     } catch {
       setError("Couldn’t open that workspace.");
     } finally {
@@ -79,7 +79,7 @@ export function WorkspaceForm() {
       await invitation.accept();
       const id = invitation.publicOrganizationData?.id;
       if (id) await setActive({ organization: id });
-      router.refresh();
+      router.replace(destAfterWorkspace("invite"));
     } catch {
       setError("Couldn’t accept that invite. Try again.");
     } finally {
@@ -122,7 +122,7 @@ export function WorkspaceForm() {
           wide
         />
         <div className="account-door" id="account-door">
-          <Link href={HOME} className="account-enter">
+          <Link href={destAfterWorkspace("continue")} className="account-enter">
             Continue
           </Link>
           <p className="account-or">
@@ -153,6 +153,13 @@ export function WorkspaceForm() {
             </button>
           </form>
         </div>
+        <p className="iso-foot">
+          <Link href="/isolation">Isolation notes</Link>
+          {" · "}
+          <Link href="/pack">Evidence pack</Link>
+          {" · "}
+          <Link href="/proof">Proof notes</Link>
+        </p>
       </section>
     );
   }
@@ -222,6 +229,13 @@ export function WorkspaceForm() {
           </button>
         </form>
       </div>
+      <p className="iso-foot">
+        <Link href="/isolation">Isolation notes</Link>
+        {" · "}
+        <Link href="/pack">Evidence pack</Link>
+        {" · "}
+        <Link href="/proof">Proof notes</Link>
+      </p>
     </section>
   );
 }

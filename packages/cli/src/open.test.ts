@@ -37,10 +37,37 @@ describe("approvals: open / reject (Arc 2 catcher)", () => {
     writeFileSync(knock, JSON.stringify({ tool_id: "t_gone" }));
     const prevFetch = globalThis.fetch;
     globalThis.fetch = (async () => new Response("no", { status: 503 })) as typeof fetch;
+    const logs: string[] = [];
+    const orig = console.log;
+    console.log = (m?: unknown) => {
+      logs.push(String(m ?? ""));
+    };
     try {
-      await rejectTool();
+      const code = await rejectTool();
+      expect(code).toBe(0);
       expect(existsSync(knock)).toBe(false);
+      expect(logs.join("\n")).toMatch(/site is down/);
     } finally {
+      console.log = orig;
+      globalThis.fetch = prevFetch;
+    }
+  });
+
+  test("rejectTool does not throw when fetch refuses the connection", async () => {
+    const prevFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("Unable to connect");
+    }) as typeof fetch;
+    const logs: string[] = [];
+    const orig = console.log;
+    console.log = (m?: unknown) => {
+      logs.push(String(m ?? ""));
+    };
+    try {
+      expect(await rejectTool()).toBe(0);
+      expect(logs.join("\n")).toMatch(/site is down/);
+    } finally {
+      console.log = orig;
       globalThis.fetch = prevFetch;
     }
   });

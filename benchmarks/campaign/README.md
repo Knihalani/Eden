@@ -11,15 +11,26 @@ workloads — short and long running — without ever corrupting state?**
 | `worlds.ts` | Six agent domains with different waste shapes: billing desk (linear mutating stretch, sloppy-agent noise), orders (fan-out inventory loop → refund), etl (read fan-out, fat payloads, one report), incident triage (flaky reads + retries + mutating tail), code research (many reads + island summary + write), and a thrash loop (failing probe→restart→verify). |
 | `session.ts` | Session driver: charges an LLM turn for every call the agent decides to make (even ones Eden suppresses), records compilable traces, and performs the real go-live path: `compileTraces` → `shadowProgram` on a sandbox world → manifest on PASS. |
 | `bench-campaign.ts` | Nine gated scenarios. Every scenario is paired by `(task, repeat)` blocks, counterbalanced via `@eden/measure`'s `runPlan`, and decided by `decide()` (bootstrap CI + permutation p). A LOSS or any correctness violation fails the exit code. |
-| `bench-negative.ts` | **Negative controls** — eight regimes where Eden should NOT help: non-repeating work, all-judgment stretches, sub-minimum sequences, instant tools, distribution drift, failure-dominant workloads (observe + enforce), and concurrent interleaved goals. Parity here is the success criterion; a LOSS fails the exit code. |
+| `bench-negative.ts` | **Negative controls** — nine regimes where Eden should NOT help dishonestly: non-repeating work, all-judgment stretches, sub-minimum sequences, instant tools, distribution drift, failure-dominant workloads (observe + enforce), concurrent interleaved goals, and a **silent-drop host** (R1: always drops `updatedToolOutput`). Parity here is the success criterion; a LOSS fails the exit code. |
 | `gates.ts` | Shared paired/counterbalanced gating machinery used by both campaigns. |
 | `edge.test.ts` | End-to-end correctness angles: steering serves a full stretch in one call, out-of-envelope goals fall back raw, exactly-once mutations under flaky tools, oblivious agents are never corrupted. Wired into `scripts/test.sh`. |
+| `concurrency-matrix.ts` | Wave 4.1 grid: stretches × tails × think × ≤64/>64. `bun run bench:matrix`. CI: `concurrency-matrix.test.ts`. |
+| `session-crosstalk.test.ts` | Wave 4 rotation: identical entity ids on two sessions of a shared store. |
+| `fleet-dedupe.ts` | Wave 7.1 rotation: two agents, one fleet, same read-only GET. Duplicate fetches vanish; mutating stays per-session. CI: `fleet-dedupe.test.ts`. |
+| `hosted-dispatch.ts` | Wave 7.2: W=100 hosted connections on the shared arming store + MCP initialize skew. CI: `hosted-dispatch.test.ts`. |
+| `bench-timeout.ts` | Wave 4.4 timeout sweep → `TIMEOUT.md`. `bun run bench:timeout`. |
+| `silent-drop.ts` | Wave 5.4 R1 host: **always drops** `updatedToolOutput`; S1b remainder deny still fires. Oblivious-cents meter → `SILENT-DROP.md`. `bun run benchmarks/campaign/silent-drop.ts --fast`. CI: `silent-drop.test.ts` (n9 in `bench-negative.ts`). |
+| `live-ab.ts` | Wave 8.1 paired live-invoice protocol. Missing `EDEN_LIVE_INVOICE` retires live-S1b. Publication: `LIVE-AB.md`. CI: `live-ab.test.ts`. |
+| `HOST-DROP.md` | Wave 8.1 leftover 2: live Claude Code cannot ack always-drop of a correct rewrite. Replica host-drop is a permanent host limit. Receipt class `host-drop` stays. |
+| `stretch-drop.ts` | Wave 8 rotation (other builder): 3-call serve + remainder skip + host-drop. Home/canvas must name all three. |
 | `soak.ts` | Long-run volume: repeated record→compile→steer lifecycles across all worlds with heap-drift checks. `bun run benchmarks/campaign/soak.ts --minutes 5`. |
 | `coverage-worlds.ts` | Wave 1.3 missing regimes: slow-tool (>wrap timeout), long-session (100+ stretch fixture), high-cardinality (unique ids / same shape), provider-pagination (paged list → per-item mutate) plus bindable `listAll` counterpart. |
 | `bench-coverage.ts` | Gated coverage scenarios for those regimes. |
-| `coverage.test.ts` | CI smoke: world scripts, check() dups/missing, **100-stretch** long-session, bindable-vs-cursor compile pin. |
+| `coverage.test.ts` | CI smoke: world scripts, check() dups/missing, **100-stretch** long-session, bindable-vs-cursor compile pin, Wave 3 partial-iteration named miss. |
+| `bench-8-witness.ts` | Wave 3.5: go-live at 8 witnesses. `bun run bench:8-witness`. Prints PASS/total and uncertified count. |
 | `arc-catchers.test.ts` | Wave 1.3 done-when: every ROADMAP §3 Arc item names a running fixture (`ARC-REGRESSION.md`). |
-| `failsafe-fuzz.test.ts` | Wave 1.4: 1,000 generated programs × faults; Eden-absent-equivalent. |
+| `failsafe-fuzz.test.ts` | Wave 6.3: 10,000 generated programs × faults; Eden-absent-equivalent. Both playback schedulers: `failsafe-fuzz-sched.test.ts`. |
+| `upstream-rename.ts` | Wave 6.2 rotation: forced `state→conclusion`; canary/control queues a replacement; live stays On. |
 | `calibrate.ts` | Wave 1.1: A/A noise-floor → MDE @ n=8/12/16, stability, false-loss rates → `NOISE-FLOOR.md`. |
 | `ARC-REGRESSION.md` | Every ROADMAP §3 Arc item → scenario that would catch its regression. |
 | `CI-RUNNER.md` | Runner requirements for trustworthy wall_ms gates. |
@@ -49,16 +60,27 @@ bun run benchmarks/campaign/calibrate.ts               # full noise floor (not -
 1. **short-support** — single-stretch agent, compiled tool already live. Does a short agent benefit?
 2. **short-overhead** — cold Eden, no programs. Does wrapping *hurt* when nothing compiles?
 3–6. **long-desk / long-orders / long-etl / long-incident** — full lifecycle: record N witnesses, compile+shadow mid-session, then live stretches. Different fan-out/flake/mutation shapes per domain.
-7. **ood-long** — every goal out-of-envelope against a live program. Steering must simply miss: parity expected, corruption fails.
-8. **oblivious-long** — the model never early-stops. Measures Eden's value when the integration cannot cooperate (honest lower bound).
+7. **ood-long** — every goal out-of-envelope against a live program. Steering must simply miss: parity expected, corruption fails. **Limit**, not a win.
+8. **oblivious-long** — LIMIT, not a win. The model never early-stops. Wrap skipRest is +2.8% cents / +3.2% wall (island spend, no turn savings). See Limits.
 9. **thrash-enforce** — enforcement mode vs a runaway restart loop.
+
+## Limits (not wins)
+
+These stay in the campaign as measurement fixtures. They are not quoted as wins.
+
+| Scenario | Result | File |
+| --- | --- | --- |
+| oblivious-long | +2.8% cents / +3.2% wall on wrap skipRest when the model never early-stops. Retired from the win table. | `docs/ROADMAP.md`, `LIVE-AB.md` |
+| ood-long | Steering misses; parity expected; corruption fails. | `bench-campaign.ts` |
+| replica host-drop | Live Claude Code cannot ack always-drop of a correct rewrite. Replica host-drop is a permanent host limit. | `HOST-DROP.md` |
+| S1b live invoice | No live Claude Code invoice in the tree. Retired until `parseInvoice` returns live-invoice. | `LIVE-AB.md` |
 
 ## Honesty rules
 
 - Turn cost is charged per *decision*, so suppressed calls still bill their turn in oblivious mode.
 - Correctness (exactly-once mutations) is checked against world state after every session; it overrides any performance number.
 - A/A self-checks police wall-clock noise; deterministic simulator metrics (turns) are exact arithmetic, not statistics, and are labeled as such.
-- Go-lives that pass only because provider token usage is simulated (`assumeProviderUsage`) are counted and printed as UNCERTIFIED — Eden's own shadow gate demands measured tokens or time, which offline simulators cannot provide. That gate behavior is itself a finding: see the report.
+- Go-live installs only on a shadow PASS with scraped (or zero-island) usage. Missing provider tokens stay UNCERTIFIED / not installed — there is no simulated-usage bypass. Silent-host is the rotation world for that case.
 - Verdicts may be INDISTINGUISHABLE. Only losses and corrupted state fail.
 
 ## Run
@@ -66,6 +88,10 @@ bun run benchmarks/campaign/calibrate.ts               # full noise floor (not -
 ```bash
 bun run benchmarks/campaign/bench-campaign.ts          # full (~40 min)
 bun run benchmarks/campaign/bench-campaign.ts --fast   # smoke (~10 min)
+bun run benchmarks/campaign/silent-drop.ts --fast      # Wave 5.4 n9 + oblivious cents
+bun test benchmarks/campaign/silent-drop.test.ts       # 3-call loop through forced-drop host
+bun run benchmarks/campaign/live-ab.ts                 # Wave 8.1: retire or measure live-S1b
+bun test benchmarks/campaign/live-ab.test.ts           # retired invoice + host-limit pins
 bun run benchmarks/campaign/soak.ts --minutes 5        # volume soak
 bun test benchmarks                                    # edge suite
 ```

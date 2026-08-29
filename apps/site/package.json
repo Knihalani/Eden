@@ -8,12 +8,15 @@
     "build": "next build"
   },
   "dependencies": {
+    "@eden/compile": "workspace:*",
     "@eden/core": "workspace:*",
+    "@eden/shadow": "workspace:*",
     "@neondatabase/serverless": "^1.0.2",
     "next": "^15.5.9",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "@eden/ir": "workspace:*"
+    "@eden/ir": "workspace:*",
+    "@eden/wrap": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

@@ -3,6 +3,7 @@ import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { ToolRegistry, ToolRunCtx } from "@eden/ir";
+import { PTC_CALLERS } from "@eden/ir";
 import { DeoptError } from "@eden/runtime";
 
 /** Binaries that move data over the network when they are on the receiving end of a pipe. */
@@ -114,6 +115,7 @@ export function codingRegistry(cwd = process.cwd()): ToolRegistry {
   ]);
   return {
     has: (name) => names.has(name),
+    allowed_callers: [...PTC_CALLERS],
     execute: async (name, args, ctx?: ToolRunCtx) => {
       if (ctx?.signal?.aborted) throw new DeoptError("aborted");
       if (name === "Bash" || name === "bash") {

@@ -37,5 +37,6 @@ describe("inDistribution with an empty envelope", () => {
     });
     expect(inDistribution(p, { id: "T-1" })).toBe(true);
     expect(inDistribution(p, { id: "T-100" })).toBe(false);
+    expect(inDistribution(p, { id: "T-1", role: "admin" })).toBe(false);
   });
 });

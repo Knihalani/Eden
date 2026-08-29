@@ -22,6 +22,20 @@ export type LiveTool = {
   prev?: StretchProgram[] | StretchProgram | null;
   created_at: number;
   updated_at: number;
+  /** Approve-time checkbox. Required (with EDEN_TRANSPARENT_WRITES) to serve Write. */
+  transparent_writes?: boolean;
+  /**
+   * Serving stamp. Missing = live 100% (already-shipped tools stay fully on).
+   * New Approve writes canary unless the body asked for live.
+   */
+  rollout?: "canary" | "live";
+  /**
+   * Who Approved this version: `x-eden-org` when the request carried one,
+   * otherwise `"operator"`. Never a person name or email we invented.
+   */
+  approved_by?: string;
+  /** Unix ms of Approve. Pause / promote must not rewrite this. */
+  approved_at?: number;
 };
 
 export type StoredReceipt = {
@@ -41,6 +55,16 @@ export type StoredProgramVersion = {
   tool_id: string;
   version: string;
   program: StretchProgram;
+  created_at: number;
+};
+
+/** Operator cron. Never inserted by Approve / compile / wrap-run. */
+export type StoredSchedule = {
+  id: string;
+  tool_id: string;
+  cron: string;
+  input: string | null;
+  last_tick: string | null;
   created_at: number;
 };
 
@@ -85,7 +109,8 @@ export class Store {
         state TEXT NOT NULL,
         prev TEXT,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        flags TEXT
       );
       CREATE TABLE IF NOT EXISTS receipts (
         id TEXT PRIMARY KEY,
@@ -114,6 +139,19 @@ export class Store {
         created_at INTEGER NOT NULL,
         PRIMARY KEY (tool_id, version)
       );
+      CREATE TABLE IF NOT EXISTS schedules (
+        id TEXT PRIMARY KEY,
+        tool_id TEXT NOT NULL UNIQUE,
+        cron TEXT NOT NULL,
+        input TEXT,
+        last_tick TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS schedule_ticks (
+        tool_id TEXT NOT NULL,
+        tick TEXT NOT NULL,
+        PRIMARY KEY (tool_id, tick)
+      );
       CREATE INDEX IF NOT EXISTS traces_created ON traces(created_at);
       CREATE INDEX IF NOT EXISTS receipts_tool ON receipts(tool_id, created_at);
       CREATE INDEX IF NOT EXISTS tools_state ON tools(state);
@@ -127,6 +165,11 @@ export class Store {
     }
     try {
       this.db.exec(`ALTER TABLE receipts ADD COLUMN payload TEXT`);
+    } catch {
+      /* already present */
+    }
+    try {
+      this.db.exec(`ALTER TABLE tools ADD COLUMN flags TEXT`);
     } catch {
       /* already present */
     }
@@ -238,6 +281,10 @@ export class Store {
     return (this.db.query(`SELECT COUNT(*) as n FROM receipts`).get() as { n: number }).n;
   }
 
+  schedulesCount(): number {
+    return (this.db.query(`SELECT COUNT(*) as n FROM schedules`).get() as { n: number }).n;
+  }
+
   failsCount(): number {
     return (this.db.query(`SELECT COUNT(*) as n FROM receipts WHERE ok = 0`).get() as { n: number }).n;
   }
@@ -273,26 +320,47 @@ export class Store {
     // compilation would be gone and reviewers could not be shown what a new
     // candidate changes. Rows are scoped by tool_id, so two stretches never
     // see each other's versions.
-    const existing = this.db.query(`SELECT version, program FROM tools WHERE id = ?`).get(t.id) as
-      | { version: string; program: string }
+    const existing = this.db.query(`SELECT version, program, updated_at FROM tools WHERE id = ?`).get(t.id) as
+      | { version: string; program: string; updated_at: number }
       | null;
     if (existing && existing.version !== t.version) {
-      this.recordProgramVersion(t.id, existing.version, existing.program);
+      this.recordProgramVersion(t.id, existing.version, existing.program, Number(existing.updated_at));
     }
     this.db.run(
-      `INSERT OR REPLACE INTO tools (id, name, version, program, state, prev, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
-      [t.id, t.name, t.version, JSON.stringify(t.program), t.state, t.prev ? JSON.stringify(t.prev) : null, t.created_at, t.updated_at],
+      `INSERT OR REPLACE INTO tools (id, name, version, program, state, prev, created_at, updated_at, flags) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [
+        t.id,
+        t.name,
+        t.version,
+        JSON.stringify(t.program),
+        t.state,
+        t.prev ? JSON.stringify(t.prev) : null,
+        t.created_at,
+        t.updated_at,
+        toolFlagsJson(t),
+      ],
     );
   }
 
   /** How many superseded compilations to keep per tool id. */
   static PROGRAM_VERSION_HISTORY = 5;
 
-  private recordProgramVersion(toolId: string, version: string, programJson: string): void {
+  private recordProgramVersion(toolId: string, version: string, programJson: string, at?: number): void {
     try {
+      const prev = this.db.query(`SELECT created_at FROM program_versions WHERE tool_id = ? AND version = ?`).get(toolId, version) as
+        | { created_at: number }
+        | null;
+      const kept = Number(prev?.created_at);
+      const stamped = Number(at);
+      const created =
+        Number.isFinite(kept) && kept > 0
+          ? Math.round(kept)
+          : Number.isFinite(stamped) && stamped > 0
+            ? Math.round(stamped)
+            : Date.now();
       this.db.run(
         `INSERT OR REPLACE INTO program_versions (tool_id, version, program, created_at) VALUES (?,?,?,?)`,
-        [toolId, version, programJson, Date.now()],
+        [toolId, version, programJson, created],
       );
       const keep = Store.PROGRAM_VERSION_HISTORY;
       this.db.run(
@@ -354,10 +422,11 @@ export class Store {
     return true;
   }
 
-  putReceipt(r: Omit<StoredReceipt, "id" | "created_at"> & { id?: string }): void {
+  putReceipt(r: Omit<StoredReceipt, "id" | "created_at"> & { id?: string; created_at?: number }): void {
+    const created = Number.isFinite(r.created_at) && (r.created_at as number) > 0 ? Math.round(r.created_at as number) : Date.now();
     this.db.run(
       `INSERT INTO receipts (id, tool_id, version, ms, llm_calls, cents, ok, created_at, payload) VALUES (?,?,?,?,?,?,?,?,?)`,
-      [r.id ?? crypto.randomUUID(), r.tool_id, r.version, r.ms, r.llm_calls, r.cents, r.ok, Date.now(), r.payload ?? null],
+      [r.id ?? crypto.randomUUID(), r.tool_id, r.version, r.ms, r.llm_calls, r.cents, r.ok, created, r.payload ?? null],
     );
     const n = (this.db.query(`SELECT COUNT(*) as n FROM receipts`).get() as { n: number }).n;
     if (n > 5000) {
@@ -385,6 +454,42 @@ export class Store {
 
   receiptsFor(toolId: string): StoredReceipt[] {
     return this.db.query(`SELECT * FROM receipts WHERE tool_id = ? ORDER BY created_at DESC`).all(toolId) as StoredReceipt[];
+  }
+
+  putSchedule(s: StoredSchedule): void {
+    this.db.run(
+      `INSERT OR REPLACE INTO schedules (id, tool_id, cron, input, last_tick, created_at) VALUES (?,?,?,?,?,?)`,
+      [s.id, s.tool_id, s.cron, s.input, s.last_tick, s.created_at],
+    );
+  }
+
+  scheduleFor(toolId: string): StoredSchedule | undefined {
+    const row = this.db.query(`SELECT * FROM schedules WHERE tool_id = ?`).get(toolId) as StoredSchedule | null;
+    return row ? rowToSchedule(row) : undefined;
+  }
+
+  schedules(): StoredSchedule[] {
+    return this.db.query(`SELECT * FROM schedules ORDER BY created_at`).all().map(rowToSchedule);
+  }
+
+  deleteSchedule(toolId: string): boolean {
+    const before = this.db.query(`SELECT id FROM schedules WHERE tool_id = ?`).get(toolId);
+    if (!before) return false;
+    this.db.run(`DELETE FROM schedules WHERE tool_id = ?`, [toolId]);
+    this.db.run(`DELETE FROM schedule_ticks WHERE tool_id = ?`, [toolId]);
+    return true;
+  }
+
+  /**
+   * Claim one UTC-minute window for a tool. INSERT OR IGNORE on the primary
+   * key: a second tick in the same window returns false and writes nothing.
+   * Paused skips must not call this — resume can still fire that minute.
+   */
+  claimScheduleTick(toolId: string, tick: string): boolean {
+    const claimed = this.db.run(`INSERT OR IGNORE INTO schedule_ticks (tool_id, tick) VALUES (?, ?)`, [toolId, tick]);
+    if (claimed.changes === 0) return false;
+    this.db.run(`UPDATE schedules SET last_tick = ? WHERE tool_id = ?`, [tick, toolId]);
+    return true;
   }
 
   receiptStats(toolId: string): { n: number; ms: number; llm: number; cents: number; fail: number } {
@@ -506,6 +611,18 @@ export class Store {
   }
 }
 
+function rowToSchedule(row: unknown): StoredSchedule {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id),
+    tool_id: String(r.tool_id),
+    cron: String(r.cron),
+    input: r.input == null ? null : String(r.input),
+    last_tick: r.last_tick == null ? null : String(r.last_tick),
+    created_at: Number(r.created_at),
+  };
+}
+
 function rowToCandidate(row: unknown): Candidate {
   const r = row as Record<string, string | number | null>;
   const parse = <T>(raw: string | number | null | undefined, fallback: T): T => {
@@ -563,6 +680,14 @@ function rowToTool(row: unknown): LiveTool {
       manifest: null,
     };
   }
+  let flags: { transparent_writes?: boolean; rollout?: string; approved_by?: string; approved_at?: number } = {};
+  try {
+    if (r.flags) flags = JSON.parse(String(r.flags)) as { transparent_writes?: boolean; rollout?: string; approved_by?: string; approved_at?: number };
+  } catch {
+    flags = {};
+  }
+  const approvedBy = typeof flags.approved_by === "string" ? flags.approved_by.trim() : "";
+  const approvedAt = Number(flags.approved_at);
   return {
     id: String(r.id),
     name: String(r.name),
@@ -572,5 +697,21 @@ function rowToTool(row: unknown): LiveTool {
     prev: parsePrev(r.prev),
     created_at: Number(r.created_at),
     updated_at: Number(r.updated_at),
+    ...(flags.transparent_writes === true ? { transparent_writes: true } : {}),
+    ...(flags.rollout === "canary" || flags.rollout === "live" ? { rollout: flags.rollout } : {}),
+    ...(approvedBy ? { approved_by: approvedBy } : {}),
+    ...(Number.isFinite(approvedAt) && approvedAt > 0 ? { approved_at: Math.round(approvedAt) } : {}),
   };
+}
+
+/** Persist serving flags together — writing one must not wipe the others. */
+export function toolFlagsJson(t: Pick<LiveTool, "transparent_writes" | "rollout" | "approved_by" | "approved_at">): string | null {
+  const flags: { transparent_writes?: boolean; rollout?: "canary" | "live"; approved_by?: string; approved_at?: number } = {};
+  if (t.transparent_writes === true) flags.transparent_writes = true;
+  if (t.rollout === "canary" || t.rollout === "live") flags.rollout = t.rollout;
+  const who = typeof t.approved_by === "string" ? t.approved_by.trim() : "";
+  if (who) flags.approved_by = who;
+  const at = Number(t.approved_at);
+  if (Number.isFinite(at) && at > 0) flags.approved_at = Math.round(at);
+  return Object.keys(flags).length ? JSON.stringify(flags) : null;
 }

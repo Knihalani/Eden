@@ -26,5 +26,9 @@
     "openai",
     "mcp"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@eden/measure": "workspace:*",
+    "@eden/know": "workspace:*"
+  }
 }

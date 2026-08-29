@@ -4,7 +4,7 @@ import { canApprove, mutatingSteps, outputDerivesFromIsland, replayRegistry, sha
 import { createTicketShip, ticketShipProgram, toNaiveTrace, WITNESS_IDS } from "../../runtime/src/ticketship";
 import { compileTraces } from "../../compile/src/index";
 import { runNaive } from "../../runtime/src/ticketship";
-import type { StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
+import { withVersion, type StretchProgram, type StretchTrace, type ToolRegistry } from "@eden/ir";
 
 async function traces(n: number, skip = 0.2): Promise<StretchTrace[]> {
   const out: StretchTrace[] = [];
@@ -88,6 +88,25 @@ describe("shadow", () => {
     expect(result.manifest?.timeMeasured).toBe(false);
     expect(canApprove(result)).toBe(false);
     expect(result.reasons.join(" ")).toMatch(/extrapolated/);
+  });
+
+  test("scraped island usage PASSes on tokens without extrapolation", async () => {
+    const { IslandReply } = await import("@eden/ir");
+    const held = await traces(6, 0);
+    const world = createTicketShip({ llmMs: 0 });
+    const result = await shadowProgram(ticketShipProgram(), held, {
+      registry: registryFrom(world.tools),
+      registryFor: () => registryFrom(createTicketShip({ llmMs: 0 }).tools),
+      island: async (p) => new IslandReply(await world.island(p), { prompt_tokens: 80, completion_tokens: 20 }),
+      allowSideEffects: true,
+    });
+    expect(result.verdict).toBe("PASS");
+    expect(result.manifest?.tokensEstimated).toBe(false);
+    expect(result.manifest?.tokensMeasured).toBe(true);
+    expect(result.manifest?.certified).toBe(true);
+    expect(result.manifest?.tokensSaved ?? 0).toBeGreaterThan(0);
+    expect(result.tokensEstimated).toBe(false);
+    expect(canApprove(result)).toBe(true);
   });
 
   test("INCONCLUSIVE does not approve", async () => {
@@ -630,5 +649,58 @@ describe("island-derived output comparison", () => {
     // A reference to a step that does not exist proves nothing.
     const ghost = { ...ticketShipProgram(), returns: { kind: "from", step: "ghost", path: "" } } as unknown as StretchProgram;
     expect(outputDerivesFromIsland(ghost)).toBe(false);
+  });
+});
+
+describe("env flake vs program miss", () => {
+  test("cold-sandbox upstream timeout on a tool the recording completed is set aside", async () => {
+    const program = withVersion({
+      id: "inc",
+      name: "inc",
+      description: "inc",
+      inputSchema: { type: "object" },
+      sequence: ["searchLogs", "fileIncident"],
+      steps: [
+        { id: "a", kind: "tool", tool: "searchLogs", args: { q: { kind: "input", path: "key" } } },
+        { id: "b", kind: "tool", tool: "fileIncident", args: { key: { kind: "input", path: "key" } } },
+      ],
+      returns: { kind: "from", step: "b", path: "" },
+      contract: {
+        witnesses: 3,
+        minLlmReduction: 2,
+        allowExact: false,
+        envelope: { inputs: { key: ["checkout-5xx"] } },
+      },
+      manifest: null,
+    });
+    const held: StretchTrace[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `h${i}`,
+      input: { key: "checkout-5xx" },
+      events: [
+        { name: "searchLogs", args: { q: "checkout-5xx" }, result: { events: [] }, ok: true, duration_ms: 10 },
+        { name: "fileIncident", args: { key: "checkout-5xx" }, result: { filed: true }, ok: true, duration_ms: 10 },
+      ],
+      output: { filed: true },
+      llmCalls: 2,
+      duration_ms: 20,
+      cost_cents: 2,
+      complete: true,
+      prompt_tokens: 10,
+      completion_tokens: 4,
+    }));
+    const result = await shadowProgram(program, held, {
+      registry: {
+        has: () => true,
+        execute: async (name) => {
+          if (name === "searchLogs") throw new Error("upstream timeout");
+          return { filed: true };
+        },
+      },
+      allowSideEffects: true,
+      minN: 3,
+    });
+    expect(result.reasons.join(" ")).toMatch(/searchLogs failure the recording also contains/);
+    expect(result.reasons.join(" ")).not.toMatch(/deopt on in-distribution input/);
+    expect(result.verdict).toBe("INCONCLUSIVE");
   });
 });
