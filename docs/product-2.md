@@ -1,5 +1,7 @@
 # Eden Know
 
+Public source of this product is **[KaiavN/eden-know](https://github.com/KaiavN/eden-know)** (MIT). Wrap stays in this private repo. Do not copy this interview/gauntlet document into the public tree.
+
 We present Eden Know, a prototype knowledge graph for agents. It collects public text, discards bloat, and stores entities, relations, and short evidence. At query time a retriever pulls a subgraph and a grounded writer formats one fact card. An agent calls `know("capital of Kenya")` and receives that card — fact, as-of, ttl, confidence — or unknown. Sources stay off the wire.
 
 The prototype we operate this sitting is a **continuous, keyless scraper**: newest Common Crawl WET over HTTPS plus a robots-ok live frontier (`Edenbot/0.1`), written onto a SQLite graph. Wikipedia is **out** of ingest (skip wikipedia/wikimedia/wikidata/wiktionary). English Wikipedia’s **7,228,519** articles (22 August 2026, `.gauntlet/refs/product2/wiki-size.md`) remain **their** corpus, not Know’s. A prior bake-off used Wikipedia + DuckDuckGo Instant Answers only as a writer probe (`results.json` `live.queryTimeCards.kenyaWire`); that is not the store.
