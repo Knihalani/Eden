@@ -60,7 +60,7 @@ export async function knowCli(argv: string[]): Promise<number> {
     const pub = await compactAndPublish(store);
     const c = store.count();
     store.close();
-    console.log(JSON.stringify({ dir: knowDir(), ...pub, ...c }, null, 2));
+    console.log(JSON.stringify({ dir: knowDir(), publish: pub, ...c }, null, 2));
     return pub.compacted ? 0 : 1;
   }
   if (cmd === "dump") {
