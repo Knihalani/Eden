@@ -283,6 +283,7 @@ export async function ingestWetSlice(
       for (const b of bands) bandHit.add(b);
       pool.push(rec);
     }
+    if (stats.scanned % 32 === 0) await new Promise((r) => setTimeout(r, 0));
     if (done) break;
   }
   try {
