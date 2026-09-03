@@ -770,7 +770,19 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
     store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
     store.expire();
-    if (store.count().wal_nodes >= 16) await compactAndPublish(store);
+    if (store.count().wal_nodes >= 16) {
+      const pub = await compactAndPublish(store);
+      console.log(
+        JSON.stringify({
+          compact: {
+            uploaded: pub.uploaded,
+            bytes: pub.bytes,
+            skipped: pub.skipped,
+            sha256: pub.sha256,
+          },
+        }),
+      );
+    }
     const counts = store.count();
     const extraLive = iana.live + spdx.live + whatwg.live + uni.live + lang.live + scripts.live;
     const extraNodes = iana.nodes + spdx.nodes + whatwg.nodes + uni.nodes + lang.nodes + scripts.nodes;
