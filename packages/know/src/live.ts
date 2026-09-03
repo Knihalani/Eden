@@ -271,3 +271,24 @@ export async function liveWikiApiBatch(
     return [];
   }
 }
+
+/** Random English Wikipedia main-namespace pages with section-0 wikitext. Fail-open. */
+export async function liveWikiRandomBatch(n: number): Promise<{ url: string; title: string; wikitext: string }[]> {
+  const take = Math.max(1, Math.min(50, n | 0));
+  const api =
+    `https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2` +
+    `&generator=random&grnnamespace=0&grnlimit=${take}` +
+    `&prop=revisions&rvprop=content&rvslots=main&rvsection=0`;
+  try {
+    const got = await liveGet(api, { accept: "application/json", timeoutMs: 20_000 });
+    if (!got.ok || !got.html) return [];
+    const pages = wikiRevisionPages(JSON.parse(got.html) as unknown);
+    return pages.map((p) => ({
+      url: `https://en.wikipedia.org/wiki/${p.title.replace(/ /g, "_")}`,
+      title: p.title,
+      wikitext: p.wikitext,
+    }));
+  } catch {
+    return [];
+  }
+}

@@ -17,9 +17,9 @@ import {
 } from "./extract";
 import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
 import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum } from "./defaults";
-import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, sitemapFrontier } from "./live";
+import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
-import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
+import { FEED_URLS, SEED_URLS, WIKI_TOPIC_URLS } from "./seed";
 import { cheapSkip } from "./gate";
 import { englishTrigram } from "./lang";
 import { cdxHits, CDX_HOSTS, rangeWarc } from "./cdx";
@@ -580,7 +580,7 @@ export async function tickScripts(store: KnowStore): Promise<TickStats> {
 
 export async function tickWikiGrow(store: KnowStore, n = 24): Promise<TickStats> {
   seedIfEmpty(store);
-  const all = wikiCountryUrls();
+  const all = WIKI_TOPIC_URLS;
   if (!all.length) return emptyTick();
   const idx = Number(store.getMeta("wiki_grow_idx") || 0) % all.length;
   const batch: string[] = [];
@@ -594,25 +594,40 @@ export async function tickWikiGrow(store: KnowStore, n = 24): Promise<TickStats>
   return emptyTick();
 }
 
-/** Action API batch: up to 50 unseen country articles in one robots-ok request. */
+/** Random main-namespace Wikipedia articles, then leftover topic seeds. Not a country table. */
 export async function tickWikiBatch(store: KnowStore, n = envNum("EDEN_KNOW_WIKI", DEFAULT_WIKI)): Promise<TickStats> {
+  seedIfEmpty(store);
   const want = Math.max(0, Math.min(200, n | 0));
   const acc = emptyTick();
-  for (let done = 0; done < want; ) {
-    const take = Math.min(50, want - done);
-    const one = await wikiBatchOnce(store, take);
-    acc.live += one.live;
-    acc.nodes += one.nodes;
-    acc.skipped += one.skipped;
-    done += take;
-    if (!one.live && !one.nodes && !one.skipped) break;
+  let got = 0;
+  while (got < want) {
+    const take = Math.min(50, want - got);
+    const pages = await liveWikiRandomBatch(take);
+    if (!pages.length) break;
+    for (const p of pages) {
+      const html = `<html><title>${p.title}</title>\n${p.wikitext}\n</html>`;
+      const { text, scan } = htmlText(html);
+      const r = commitPage(store, p.url, text.length >= 80 ? text : html, html, "wiki-random", true, scan);
+      acc.nodes += r.nodes;
+      acc.skipped += r.skipped;
+      if (!r.skipped) acc.live++;
+      enqueueRanked(store, wikiGrowUrls(p.url, html), p.url);
+    }
+    got += pages.length;
+    if (pages.length < take) break;
+  }
+  if (got < want) {
+    const fill = await wikiBatchOnce(store, want - got);
+    acc.live += fill.live;
+    acc.nodes += fill.nodes;
+    acc.skipped += fill.skipped;
   }
   return acc;
 }
 
 async function wikiBatchOnce(store: KnowStore, n: number): Promise<TickStats> {
   seedIfEmpty(store);
-  const all = wikiCountryUrls();
+  const all = WIKI_TOPIC_URLS;
   const todo: string[] = [];
   for (const url of all) {
     if (store.pageDigest(url)) continue;
@@ -624,7 +639,7 @@ async function wikiBatchOnce(store: KnowStore, n: number): Promise<TickStats> {
   let live = 0;
   let skipped = 0;
   let nodes = 0;
-  const got = new Set(pages.map((p) => p.url));
+  const seen = new Set(pages.map((p) => p.url));
   for (const p of pages) {
     const html = `<html><title>${p.title}</title>\n${p.wikitext}\n</html>`;
     const { text, scan } = htmlText(html);
@@ -632,10 +647,11 @@ async function wikiBatchOnce(store: KnowStore, n: number): Promise<TickStats> {
     nodes += r.nodes;
     skipped += r.skipped;
     if (!r.skipped) live++;
+    enqueueRanked(store, wikiGrowUrls(p.url, html), p.url);
   }
   enqueueRanked(
     store,
-    todo.filter((u) => !got.has(u)),
+    todo.filter((u) => !seen.has(u)),
     "wiki-batch",
   );
   return { cc: 0, news: 0, live, feeds: 0, cdx: 0, nodes, skipped };

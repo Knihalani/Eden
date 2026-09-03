@@ -2837,7 +2837,7 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
 const LINK_PREFER =
   /wikipedia\.org|wikidata\.org|rfc-editor\.org|ietf\.org|w3\.org|iana\.org|httpwg\.org/i;
 
-/** Country / capital article URLs from a wiki page so the frontier keeps growing. */
+/** Wiki article and list URLs from HTML hrefs and `[[wikilinks]]` so random pages fan out. */
 export function wikiGrowUrls(base: string, html: string): string[] {
   if (!/wikipedia\.org/i.test(base)) return [];
   let host = "en.wikipedia.org";
@@ -2846,27 +2846,31 @@ export function wikiGrowUrls(base: string, html: string): string[] {
   } catch {
     /* keep en */
   }
-  const listPage = /\/wiki\/List_of_/i.test(base);
-  const cap = listPage ? 400 : 48;
+  const listPage = /\/wiki\/(?:List_of_|Outline_of_)/i.test(base);
+  const cap = listPage ? 400 : 160;
   const out: string[] = [];
   const seen = new Set<string>();
-  const re = /href=["'](?:https?:\/\/[a-z]+\.wikipedia\.org)?\/wiki\/([^"'#?]+)["']/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) && out.length < cap) {
-    const slug = m[1]!;
-    if (WIKI_LINK_SKIP.test(`/wiki/${slug}`)) continue;
+  const addSlug = (raw: string) => {
+    if (out.length >= cap) return;
+    const slug = raw.replace(/ /g, "_");
+    if (WIKI_LINK_SKIP.test(`/wiki/${slug}`)) return;
     let title = slug.replace(/_/g, " ");
     try {
       title = decodeURIComponent(title);
     } catch {
       /* keep */
     }
-    if (/^List of /i.test(title) || wikiNsSkip(title)) continue;
-    const url = canonicalUrl(`https://${host}/wiki/${slug.replace(/ /g, "_")}`);
-    if (seen.has(url) || skipHost(url)) continue;
+    if (wikiNsSkip(title) || !title.trim()) return;
+    const url = canonicalUrl(`https://${host}/wiki/${slug}`);
+    if (seen.has(url) || skipHost(url)) return;
     seen.add(url);
     out.push(url);
-  }
+  };
+  const re = /href=["'](?:https?:\/\/[a-z]+\.wikipedia\.org)?\/wiki\/([^"'#?]+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && out.length < cap) addSlug(m[1]!);
+  const wt = /\[\[([^\]|#\n]{1,200})(?:[|#][^\]]*)?\]\]/g;
+  while ((m = wt.exec(html)) && out.length < cap) addSlug(m[1]!.trim());
   return out;
 }
 const WIKI_LINK_SKIP = /\/wiki\/(?:File|Special|Help|Talk|User|Template|Wikipedia|Category|Portal|Draft|Module):/i;
@@ -2913,7 +2917,8 @@ export function ttlDaysFor(url: string, text: string): number {
   const t = text.toLowerCase();
   if (/news|blog|press|post\//.test(u) || /\b(today|yesterday|hours ago)\b/.test(t)) return 7;
   if (/rfc|standard|ietf|w3\.org|iana\.org/.test(u)) return 365 * 5;
-  if (/wikipedia\.org|wikidata\.org/.test(u)) return 90;
+  if (/arxiv\.org|pubmed|ncbi\.nlm|openalex|doi\.org|semanticscholar|doaj\.org/.test(u)) return 180;
+  if (/wikipedia\.org|wikidata\.org|wiktionary\.org/.test(u)) return 90;
   if (/docs\.|developer\.|api\./.test(u)) return 90;
   return 365;
 }

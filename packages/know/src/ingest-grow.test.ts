@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { adaptCapitalLabel, noteCapitalLabel, resetAdaptForTest } from "./adapt";
-import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApiBatchUrl, wikiRevisionPages } from "./extract";
+import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApiBatchUrl, wikiRevisionPages, ttlDaysFor } from "./extract";
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
@@ -59,8 +59,16 @@ describe("wiki grow", () => {
     const html = `<a href="/wiki/France">France</a><a href="/wiki/File:Flag.svg">x</a><a href="/wiki/List_of_foo">list</a>`;
     const urls = wikiGrowUrls(LIST, html);
     expect(urls).toContain("https://en.wikipedia.org/wiki/France");
+    expect(urls).toContain("https://en.wikipedia.org/wiki/List_of_foo");
     expect(urls.some((u) => /File:/i.test(u))).toBe(false);
-    expect(urls.some((u) => /List_of_foo/i.test(u))).toBe(false);
+  });
+
+  test("wikitext links fan out across topics, not only countries", () => {
+    const wt = `Physics is a science. See also [[Quantum mechanics]], [[Chemistry]], and [[File:Atom.svg]].`;
+    const urls = wikiGrowUrls("https://en.wikipedia.org/wiki/Physics", wt);
+    expect(urls).toContain("https://en.wikipedia.org/wiki/Quantum_mechanics");
+    expect(urls).toContain("https://en.wikipedia.org/wiki/Chemistry");
+    expect(urls.some((u) => /File:/i.test(u))).toBe(false);
   });
 });
 
@@ -70,8 +78,8 @@ describe("feeds", () => {
     expect(FEED_URLS.some((u) => /nist|nasa|news|blog/i.test(u))).toBe(false);
   });
 
-  test("seeds include wikipedia and open academia", () => {
-    expect(SEED_URLS.some((u) => u.includes("wikipedia.org"))).toBe(true);
+  test("seeds include wikipedia topics and open academia", () => {
+    expect(SEED_URLS.some((u) => u.includes("wikipedia.org") && /Science|Mathematics|Computer_science/.test(u))).toBe(true);
     expect(SEED_URLS.some((u) => u.includes("arxiv.org"))).toBe(true);
     expect(SEED_URLS.some((u) => u.includes("pubmed"))).toBe(true);
     expect(SEED_URLS.some((u) => u.includes("openalex.org"))).toBe(true);
@@ -107,12 +115,12 @@ describe("ingest overlay", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("wiki grow enqueues unseen country articles", async () => {
+  test("wiki grow enqueues unseen topic articles", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-grow-"));
     const s = openStore(dir);
     await tickWikiGrow(s, 8);
     const queued = (s.db.query(`SELECT url FROM frontier`).all() as { url: string }[]).map((r) => r.url);
-    expect(queued.some((u) => /Ivory_Coast|Madagascar|Andorra|Yemen/.test(u))).toBe(true);
+    expect(queued.some((u) => /Science|Mathematics|Physics|Computer_science|Medicine/i.test(u))).toBe(true);
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -141,6 +149,14 @@ describe("ingest overlay", () => {
     expect(compactDue(16, 1, 1_000)).toBe(false);
     expect(compactDue(16, 1, 200_000)).toBe(true);
     expect(compactDue(900, 199_000, 200_000)).toBe(false);
+  });
+
+  test("ttlDaysFor is host-class, not a crawl budget", () => {
+    expect(ttlDaysFor("https://www.rfc-editor.org/rfc/rfc3986.html", "URI Generic Syntax")).toBe(365 * 5);
+    expect(ttlDaysFor("https://en.wikipedia.org/wiki/Quantum_mechanics", "operators on Hilbert space")).toBe(90);
+    expect(ttlDaysFor("https://arxiv.org/abs/1706.03762", "attention is all you need")).toBe(180);
+    expect(ttlDaysFor("https://blog.example/post/today", "published today")).toBe(7);
+    expect(ttlDaysFor("https://notes.example/stable-note", "a long enough english page about widgets")).toBe(365);
   });
 
   test("pageFresh is true only with a fetched digest still in TTL", () => {

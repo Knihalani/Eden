@@ -145,12 +145,11 @@ const WIKI_NS_SKIP = /\/wiki\/(?:File|Special|Help|Talk|User|Template|Wikipedia|
 export function rankFrontier(url: string): number {
   if (skipHost(url) || junkFrontier(url)) return 90;
   const u = url.toLowerCase();
-  if (/wikipedia\.org\/wiki\/list_of_[^/?#]*capital/i.test(u)) return 0;
-  if (/wikipedia\.org\/wiki\/list_of_/i.test(u)) return 1;
+  if (/wikipedia\.org\/wiki\/(?:list_of_|outline_of_)/i.test(u)) return 1;
   if (/rfc[-/_]?\d{3,5}/i.test(u) && (catalogRegistry(url) || qualityHost(url))) return 2;
   if (catalogRegistry(url)) return 3;
   if (/wikipedia\.org\/wiki\//i.test(u) && !WIKI_NS_SKIP.test(u)) return 4;
-  if (/(?:wikidata|wiktionary|wikimedia)\.org/i.test(u) && qualityHost(url)) return 5;
+  if (/(?:wikidata|wiktionary|wikimedia|wikibooks|wikisource)\.org/i.test(u) && qualityHost(url)) return 5;
   if (qualityHost(url)) return 6;
   if (/rfc[-/_]?\d{3,5}/i.test(u) || /\/wiki\//i.test(u)) return 7;
   return 8;
@@ -181,13 +180,14 @@ export function catalogRegistry(url: string): boolean {
   }
 }
 
+const TOPICAL_WET =
+  /(?:wikipedia|wikidata|wiktionary|wikibooks|wikisource)\.org|arxiv\.org|pubmed|ncbi\.nlm|europepmc\.org|openalex\.org|semanticscholar\.org|doaj\.org|doi\.org/i;
+
 /**
  * FineWeb meter is *slice* yield: kept / scanned on a WET window.
- * Catalog *registries* (IANA, RFC Editor, IETF, W3C, SPDX, Unicode, WHATWG): length ≥ 80.
- * Wikipedia / other qualityHost: same as non-catalog — junk/paywall/casino out, then
- * Gopher quality + English, then fact-bearing (capital-of, RFC, media type, SPDX, IANA,
- * ISO 3166) — not first-800 “capital of ” only.
- * MinHash 14×8 near-dup is applied per slice in ingestWetSlice, not here (no corpus).
+ * Catalog registries: length ≥ 80.
+ * Wikipedia / arXiv / PubMed / OpenAlex: English Gopher-quality, any topic.
+ * Other hosts still need a typed-fact signal so casino/spam English does not fill the slice.
  */
 export function keepWet(rec: WetRecord): boolean {
   if (skipHost(rec.uri)) return false;
@@ -196,8 +196,8 @@ export function keepWet(rec: WetRecord): boolean {
   if (cheapSkip(rec.uri, rec.text)) return false;
   if (wetSpam(rec.text)) return false;
   if (gopherSkip(rec.text)) return false;
-  if (qualityHost(rec.uri) && wetFactBearing(rec.text)) return true;
   if (!englishEnough(rec.text) || !englishTrigram(rec.text)) return false;
+  if (TOPICAL_WET.test(rec.uri)) return true;
   return wetFactBearing(rec.text);
 }
 

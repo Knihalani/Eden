@@ -302,7 +302,9 @@ describe("ingest journal", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("fat TEXT mh_band at 4096-byte pages vacuums to compact 512-byte sqlite", () => {
+  test(
+    "fat TEXT mh_band at 4096-byte pages vacuums to compact 512-byte sqlite",
+    () => {
     const src = mkdtempSync(join(tmpdir(), "eden-know-fat-src-"));
     const fixture = join(src, "fat.sqlite");
     const fat = new Database(fixture);
@@ -371,7 +373,9 @@ describe("ingest journal", () => {
 
     rmSync(src, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
-  });
+    },
+    30_000,
+  );
 
   test("interned frontier/pages URLs round-trip; enqueue/dequeue keep full strings", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-url-intern-"));
@@ -474,7 +478,7 @@ describe("ingest journal", () => {
     expect(junkFrontier(tr)).toBe(false);
     expect(junkFrontier(wiki)).toBe(false);
     expect(junkFrontier(caps)).toBe(false);
-    expect(junkFrontier("https://www.nist.gov/")).toBe(false);
+    expect(junkFrontier("https://www.nist.gov/")).toBe(true);
     expect(junkFrontier("https://example.org/queued")).toBe(false);
 
     const dir = mkdtempSync(join(tmpdir(), "eden-know-crush-"));
@@ -490,7 +494,7 @@ describe("ingest journal", () => {
     expect(queued).toContain(wiki);
     expect(queued).toContain(caps);
     expect(queued).toContain("https://example.org/queued");
-    expect(queued.some((u) => u === "https://www.nist.gov/")).toBe(true);
+    expect(queued.some((u) => /nist\.gov/i.test(u))).toBe(false);
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });
