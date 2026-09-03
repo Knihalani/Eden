@@ -176,16 +176,18 @@ function commitCcRecords(
   crawlId?: string,
   url?: string,
 ): TickStats {
-  if (crawlId) store.setMeta("cc_crawl", crawlId);
-  if (url) store.setMeta("cc_wet", url);
-  let skipped = 0;
-  let nodes = 0;
-  for (const rec of recs) {
-    const r = commitPage(store, rec.uri, rec.text, rec.text, "cc", false);
-    nodes += r.nodes;
-    skipped += r.skipped;
-  }
-  return { cc: recs.length, news: 0, live: 0, feeds: 0, cdx: 0, nodes, skipped, crawlId };
+  return store.crawlBatch(() => {
+    if (crawlId) store.setMeta("cc_crawl", crawlId);
+    if (url) store.setMeta("cc_wet", url);
+    let skipped = 0;
+    let nodes = 0;
+    for (const rec of recs) {
+      const r = commitPage(store, rec.uri, rec.text, rec.text, "cc", false);
+      nodes += r.nodes;
+      skipped += r.skipped;
+    }
+    return { cc: recs.length, news: 0, live: 0, feeds: 0, cdx: 0, nodes, skipped, crawlId };
+  });
 }
 
 /** One or more WET files from the latest crawl. `slices` walks consecutive wet.paths entries. Fetches in parallel; commits serially. */
@@ -224,19 +226,21 @@ async function collectNewsRecords(
 }
 
 function commitNewsRecords(store: KnowStore, recs: Awaited<ReturnType<typeof ingestWetSlice>>, url?: string): TickStats {
-  if (url) store.setMeta("cc_news", url);
-  let skipped = 0;
-  let nodes = 0;
-  for (const rec of recs) {
-    const body = httpBody(rec.text);
-    const isHtml = body.includes("<");
-    const scan = isHtml ? scanHtml(body) : undefined;
-    const text = scan ? scan.text : body;
-    const r = commitPage(store, rec.uri, text, body, "cc-news", isHtml, scan);
-    nodes += r.nodes;
-    skipped += r.skipped;
-  }
-  return { cc: 0, news: recs.length, live: 0, feeds: 0, cdx: 0, nodes, skipped };
+  return store.crawlBatch(() => {
+    if (url) store.setMeta("cc_news", url);
+    let skipped = 0;
+    let nodes = 0;
+    for (const rec of recs) {
+      const body = httpBody(rec.text);
+      const isHtml = body.includes("<");
+      const scan = isHtml ? scanHtml(body) : undefined;
+      const text = scan ? scan.text : body;
+      const r = commitPage(store, rec.uri, text, body, "cc-news", isHtml, scan);
+      nodes += r.nodes;
+      skipped += r.skipped;
+    }
+    return { cc: 0, news: recs.length, live: 0, feeds: 0, cdx: 0, nodes, skipped };
+  });
 }
 
 export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): Promise<TickStats> {
@@ -246,13 +250,12 @@ export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): 
 
 export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise<TickStats> {
   const idx = Number(store.getMeta("feed_idx") || 0);
+  const urls = Array.from({ length: n }, (_, i) => FEED_URLS[(idx + i) % FEED_URLS.length]).filter(Boolean);
+  const got = await mapPool(urls, Math.min(4, urls.length), async (url) => ({ url, got: await liveGet(url) }));
   let feeds = 0;
-  for (let i = 0; i < n; i++) {
-    const url = FEED_URLS[(idx + i) % FEED_URLS.length];
-    if (!url) continue;
-    const got = await liveGet(url);
-    if (!got.ok) continue;
-    const links = feedLinks(got.html).filter((u) => !skipHost(u) && u !== url);
+  for (const { url, got: r } of got) {
+    if (!r.ok) continue;
+    const links = feedLinks(r.html).filter((u) => !skipHost(u) && u !== url);
     enqueueRanked(store, links, url);
     feeds++;
   }
@@ -859,8 +862,8 @@ async function collectCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_
       const hits = await cdxHits(crawlId, host, 4);
       const recs: Array<{ rec: NonNullable<Awaited<ReturnType<typeof rangeWarc>>> }> = [];
       let miss = 0;
-      for (const hit of hits.slice(0, 3)) {
-        const rec = await rangeWarc(hit);
+      const warcs = await Promise.all(hits.slice(0, 3).map((hit) => rangeWarc(hit)));
+      for (const rec of warcs) {
         if (!rec) miss++;
         else recs.push({ rec });
       }
@@ -873,24 +876,26 @@ async function collectCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_
 }
 
 function commitCdx(store: KnowStore, bundle: CdxBundle): TickStats {
-  let cdx = 0;
-  let nodes = 0;
-  let skipped = 0;
-  for (const got of bundle.fetched) {
-    skipped += got.miss;
-    for (const { rec } of got.recs) {
-      store.setMeta("cdx_ok", "1");
-      const isHtml = rec.text.includes("<");
-      const scan = isHtml ? scanHtml(rec.text) : undefined;
-      const text = scan ? scan.text : rec.text;
-      const r = commitPage(store, rec.uri, text, rec.text, "cdx", isHtml, scan);
-      nodes += r.nodes;
-      skipped += r.skipped;
-      cdx++;
+  return store.crawlBatch(() => {
+    let cdx = 0;
+    let nodes = 0;
+    let skipped = 0;
+    for (const got of bundle.fetched) {
+      skipped += got.miss;
+      for (const { rec } of got.recs) {
+        store.setMeta("cdx_ok", "1");
+        const isHtml = rec.text.includes("<");
+        const scan = isHtml ? scanHtml(rec.text) : undefined;
+        const text = scan ? scan.text : rec.text;
+        const r = commitPage(store, rec.uri, text, rec.text, "cdx", isHtml, scan);
+        nodes += r.nodes;
+        skipped += r.skipped;
+        cdx++;
+      }
     }
-  }
-  store.setMeta("cdx_host_idx", String((bundle.idx + bundle.take) % CDX_HOSTS.length));
-  return { cc: 0, news: 0, live: 0, feeds: 0, cdx, nodes, skipped };
+    store.setMeta("cdx_host_idx", String((bundle.idx + bundle.take) % CDX_HOSTS.length));
+    return { cc: 0, news: 0, live: 0, feeds: 0, cdx, nodes, skipped };
+  });
 }
 
 export async function tickCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_CDX)): Promise<TickStats> {
