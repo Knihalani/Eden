@@ -215,6 +215,28 @@ export function wetScanCap(maxRecords: number): number {
   return Math.max(2_000, maxRecords * WET_SCAN_MULT);
 }
 
+async function fetchWet(wetUrl: string, budgetMs: number): Promise<Response> {
+  let wait = 400;
+  let lastErr = "wet fetch";
+  const timeout = Math.max(5_000, budgetMs);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT }, signal: AbortSignal.timeout(timeout) });
+      if (r.ok) return r;
+      lastErr = `wet ${r.status}`;
+      if (r.status !== 429 && r.status < 500) throw new Error(lastErr);
+    } catch (e) {
+      lastErr = String(e).slice(0, 80);
+      if (/wet 4\d\d/.test(lastErr) && !/wet 429/.test(lastErr)) throw e;
+    }
+    if (attempt < 2) {
+      await new Promise((res) => setTimeout(res, wait + Math.floor(Math.random() * wait)));
+      wait = Math.min(wait * 2, 8_000);
+    }
+  }
+  throw new Error(lastErr);
+}
+
 export async function ingestWetSlice(
   wetUrl: string,
   maxRecords: number,
@@ -223,8 +245,7 @@ export async function ingestWetSlice(
 ): Promise<WetRecord[]> {
   const t0 = Date.now();
   const budget = envNum("EDEN_KNOW_WET_MS", 45_000);
-  const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT }, signal: AbortSignal.timeout(budget) });
-  if (!r.ok) throw new Error(`wet ${r.status}`);
+  const r = await fetchWet(wetUrl, budget);
   if (!r.body) throw new Error("no body");
   const ds = r.body.pipeThrough(new DecompressionStream("gzip"));
   const reader = ds.getReader();
