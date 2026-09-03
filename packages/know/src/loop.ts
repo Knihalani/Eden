@@ -18,7 +18,7 @@ import {
   type HtmlScan,
 } from "./extract";
 import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
-import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum, shardOwns } from "./defaults";
+import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum, expensiveLaneDue, shardCount, shardOwns } from "./defaults";
 import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
 import { FEED_URLS, SEED_URLS, WIKI_TOPIC_URLS } from "./seed";
@@ -664,7 +664,7 @@ export async function tickWikiBatch(store: KnowStore, n = envNum("EDEN_KNOW_WIKI
   const acc = emptyTick();
   let got = 0;
   while (got < want) {
-    const take = Math.min(50, want - got);
+    const take = Math.min(50, Math.max(1, (want - got) * (shardCount() > 1 ? shardCount() : 1)));
     const pages = await liveWikiRandomBatch(take);
     if (!pages.length) break;
     for (const p of pages) {
@@ -895,16 +895,26 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const tickN = Number(store.getMeta("tick_n") || "0") + 1;
     store.setMeta("tick_n", String(tickN));
     const every = Math.max(1, envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY) | 0);
-    const doWet = tickN % every === 0;
-    const doNews = (tickN + 1) % every === 0;
-    const doCdx = (tickN + 2) % every === 0;
+    const lastWet = Number(store.getMeta("wet_kept") ?? "1");
+    const lastNews = Number(store.getMeta("news_kept") ?? "1");
+    const lastCdx = Number(store.getMeta("cdx_kept") ?? "1");
+    const doWet = expensiveLaneDue(tickN, every, lastWet);
+    const doNews = expensiveLaneDue(tickN + 1, every, lastNews);
+    const doCdx = expensiveLaneDue(tickN + 2, every, lastCdx);
     const x = doCdx ? await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : emptyTick();
     const slices = envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES);
     const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
     const a = doWet ? await tickCc(store, opts?.cc ?? DEFAULT_CC, ccIdx, slices) : emptyTick();
     const news = doNews ? await tickNews(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0)) : emptyTick();
-    if (doWet) store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
-    if (doNews) store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
+    if (doWet) {
+      store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
+      store.setMeta("wet_kept", String(a.nodes));
+    }
+    if (doNews) {
+      store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
+      store.setMeta("news_kept", String(news.nodes));
+    }
+    if (doCdx) store.setMeta("cdx_kept", String(x.nodes));
     store.expire();
     const wal = store.count().wal_nodes;
     if (compactDue(wal, Number(store.getMeta("compact_at") || 0))) {

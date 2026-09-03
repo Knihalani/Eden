@@ -23,6 +23,17 @@ export const DEFAULT_COMPACT_MS = 900_000;
 /** Run a full WET gunzip every N ticks when the last slice kept nothing. */
 export const DEFAULT_WET_EVERY = 3;
 
+/**
+ * Expensive gzip/range lanes: cadence `every`, but if the last run kept 0
+ * skip until `every * retryMul` so a dry WET does not tax the 1 GB box every third tick.
+ */
+export function expensiveLaneDue(tickN: number, every: number, lastKept: number, retryMul = 3): boolean {
+  const e = Math.max(1, every | 0);
+  if (tickN % e !== 0) return false;
+  if (lastKept > 0) return true;
+  return tickN % (e * Math.max(1, retryMul | 0)) === 0;
+}
+
 export function shardIndex(): number {
   return envNum("EDEN_KNOW_SHARD", 0);
 }

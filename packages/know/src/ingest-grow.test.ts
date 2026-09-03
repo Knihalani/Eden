@@ -7,7 +7,7 @@ import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApi
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
-import { compactDue, DEFAULT_WIKI, DEFAULT_WET_EVERY, shardOwns } from "./defaults";
+import { compactDue, DEFAULT_WIKI, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -159,6 +159,10 @@ describe("ingest overlay", () => {
     expect(a.some((u) => b.includes(u))).toBe(false);
     expect(urls.every((u) => shardOwns(u, 0, 1))).toBe(true);
     expect(DEFAULT_WET_EVERY).toBe(3);
+    expect(expensiveLaneDue(3, 3, 1)).toBe(true);
+    expect(expensiveLaneDue(1, 3, 1)).toBe(false);
+    expect(expensiveLaneDue(3, 3, 0)).toBe(false);
+    expect(expensiveLaneDue(9, 3, 0)).toBe(true);
   });
 
   test("ttlDaysFor is host-class, not a crawl budget", () => {
