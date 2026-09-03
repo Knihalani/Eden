@@ -2,8 +2,8 @@
   "name": "eden-know-ingest",
   "description": "Always-on Know crawler. Compact publishes graph.kpk to Impossible Cloud.",
   "billing": {
-    "deploymentPlan": "nf-compute-20",
-    "buildPlan": "nf-compute-100-2"
+    "deploymentPlan": "nf-compute-50",
+    "buildPlan": "nf-compute-400-16"
   },
   "deployment": {
     "instances": 1,
@@ -32,20 +32,19 @@
       "dockerWorkDir": "/packages/know"
     }
   },
+  "buildConfiguration": {
+    "pathIgnoreRules": ["packages/know/**"],
+    "isAllowList": true
+  },
   "runtimeEnvironment": {
     "EDEN_KNOW_DIR": "/data/know",
     "PORT": "8080",
-    "EDEN_KNOW_INTERVAL": "30",
-    "EDEN_KNOW_CC": "80",
-    "EDEN_KNOW_LIVE": "48",
-    "EDEN_KNOW_NEWS": "8",
-    "EDEN_KNOW_CC_SLICES": "2",
-    "EDEN_KNOW_LIVE_CONC": "12",
-    "EDEN_KNOW_S3_ENDPOINT": "https://us-east-1.storage.impossibleapi.net",
-    "EDEN_KNOW_S3_REGION": "us-east-1",
-    "EDEN_KNOW_S3_BUCKET": "eden-know",
-    "EDEN_KNOW_S3_KEY": "graph.kpk",
-    "AWS_DEFAULT_REGION": "us-east-1",
+    "EDEN_KNOW_INTERVAL": "45",
+    "EDEN_KNOW_CC": "0",
+    "EDEN_KNOW_LIVE": "24",
+    "EDEN_KNOW_NEWS": "0",
+    "EDEN_KNOW_CC_SLICES": "1",
+    "EDEN_KNOW_LIVE_CONC": "6",
     "AWS_EC2_METADATA_DISABLED": "true"
   },
   "healthChecks": [
