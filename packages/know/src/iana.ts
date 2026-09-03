@@ -71,9 +71,8 @@ export function parseIanaRecord(block: string, kind: (typeof IANA_REGISTRIES)[nu
   if (kind === "protocol") {
     const value = xmlField(block, "value");
     const name = xmlField(block, "name");
-    const desc = xmlField(block, "description");
     if (!/^\d+$/.test(value) || !name || SKIP_NAME.test(name)) return undefined;
-    return { s: `IANA protocol ${value}`, p: "is", o: name.slice(0, 72), e: desc.slice(0, 120) };
+    return { s: `IANA protocol ${value}`, p: "is", o: name.slice(0, 72), e: "" };
   }
   if (kind === "media") {
     const template = (xmlAttrField(block, "file", "type", "template") || xmlField(block, "file")).toLowerCase();
@@ -141,17 +140,21 @@ export function parseIanaRecord(block: string, kind: (typeof IANA_REGISTRIES)[nu
     const status = xmlField(block, "status");
     const desc = xmlField(block, "description") || xmlField(block, "remarks");
     if (!/^[A-Za-z][A-Za-z0-9-]{1,40}$/.test(value) || /obsolete|deprecated/i.test(status)) return undefined;
-    const o = (desc || status || value).slice(0, 72);
+    const xref = xmlAttr(block, "xref", "data");
+    const rfc = /^rfc(\d{1,5})$/i.exec(xref);
+    const xrefText = xmlField(block, "xref");
+    const rfcText = /rfc\s*(\d{1,5})/i.exec(xrefText);
+    const useful = desc && !/^(permanent|provisional|deprecated)$/i.test(desc) && desc.length >= 3;
+    const o = (
+      useful ? desc : rfc ? `RFC ${rfc[1]}` : rfcText ? `RFC ${rfcText[1]}` : "HTTP field"
+    ).slice(0, 72);
     if (o.length < 3) return undefined;
-    if (/^(permanent|provisional|deprecated)$/i.test(o)) {
-      return { s: `IANA header ${value}`, p: "is", o: `HTTP field ${value}`, e: "" };
-    }
     return { s: `IANA header ${value}`, p: "is", o, e: "" };
   }
   if (kind === "dns") {
     const typ = (xmlField(block, "type") || xmlField(block, "name")).toUpperCase();
     const meaning = xmlField(block, "meaning") || xmlField(block, "description");
-    if (!/^[A-Z][A-Z0-9-]{1,15}$/.test(typ) || SKIP_NAME.test(typ) || SKIP_NAME.test(meaning)) return undefined;
+    if (!/^[A-Z][A-Z0-9-]{0,15}$/.test(typ) || SKIP_NAME.test(typ) || SKIP_NAME.test(meaning)) return undefined;
     const o = (meaning || typ).slice(0, 72);
     if (o.length < 3) return undefined;
     return { s: `IANA dns ${typ}`, p: "is", o, e: "" };

@@ -2,6 +2,7 @@ node_modules/
 .eden/
 *.sqlite
 *.kpk
+!src/fixtures/*.kpk
 .env
 .env.*
 *.pem

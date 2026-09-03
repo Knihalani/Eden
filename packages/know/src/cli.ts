@@ -3,7 +3,8 @@ import { knowDir, openStore } from "./store";
 import { runLoop } from "./loop";
 import { knowQuery } from "./query";
 import { latestCrawlId } from "./cc";
-import { DEFAULT_CC, DEFAULT_INTERVAL_SEC, DEFAULT_LIVE } from "./defaults";
+import { DEFAULT_CC, DEFAULT_INTERVAL_SEC, DEFAULT_LIVE, DEFAULT_NEWS } from "./defaults";
+import { compactAndPublish, PUBLIC_DUMP_URL, s3Configured, s3PublicUrl } from "./s3";
 
 function binName(): string {
   return import.meta.main ? "eden-know" : "eden know";
@@ -24,7 +25,8 @@ export async function knowCli(argv: string[]): Promise<number> {
     const interval = flagNum(argv, "--interval", DEFAULT_INTERVAL_SEC);
     const cc = flagNum(argv, "--cc", DEFAULT_CC);
     const live = flagNum(argv, "--live", DEFAULT_LIVE);
-    await runLoop({ intervalSec: interval, once, cc, live });
+    const news = flagNum(argv, "--news", DEFAULT_NEWS);
+    await runLoop({ intervalSec: interval, once, cc, live, news });
     return 0;
   }
   if (cmd === "status") {
@@ -55,11 +57,44 @@ export async function knowCli(argv: string[]): Promise<number> {
   }
   if (cmd === "compact") {
     const store = openStore();
-    store.compact();
+    const pub = await compactAndPublish(store);
     const c = store.count();
     store.close();
-    console.log(JSON.stringify({ dir: knowDir(), compacted: true, ...c }, null, 2));
-    return 0;
+    console.log(JSON.stringify({ dir: knowDir(), ...pub, ...c }, null, 2));
+    return pub.compacted ? 0 : 1;
+  }
+  if (cmd === "dump") {
+    const { createHash } = await import("node:crypto");
+    const { statSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const store = openStore();
+    const pub = await compactAndPublish(store, { dated: true });
+    store.close();
+    const pack = join(knowDir(), "graph.kpk");
+    try {
+      const bytes = statSync(pack).size;
+      const sha256 = pub.sha256 || createHash("sha256").update(readFileSync(pack)).digest("hex");
+      console.log(
+        JSON.stringify(
+          {
+            pack,
+            bytes,
+            sha256,
+            uploaded: pub.uploaded,
+            replica: pub.url || (s3Configured() ? s3PublicUrl() : undefined),
+            url: PUBLIC_DUMP_URL,
+            skipped: pub.skipped,
+            note: "query reads this pack only. WAL ingest is invisible until compact. source stays private.",
+          },
+          null,
+          2,
+        ),
+      );
+      return 0;
+    } catch {
+      console.log(JSON.stringify({ error: "no pack; ingest then compact" }, null, 2));
+      return 1;
+    }
   }
   if (cmd === "query") {
     const q = argv.slice(1).join(" ").trim();
@@ -71,16 +106,23 @@ export async function knowCli(argv: string[]): Promise<number> {
     console.log(JSON.stringify(knowQuery(q), null, 2));
     return 0;
   }
-  console.log(`${bin} — continuous public ingest onto a graph (robots-honoring, no Wikipedia)
+  console.log(`${bin} — robots-ok public ingest onto a graph (paywalls skipped)
 
-  ${bin} run [--once] [--interval ${DEFAULT_INTERVAL_SEC}] [--cc ${DEFAULT_CC}] [--live ${DEFAULT_LIVE}]
+  ${bin} run [--once] [--interval ${DEFAULT_INTERVAL_SEC}] [--cc ${DEFAULT_CC}] [--live ${DEFAULT_LIVE}] [--news ${DEFAULT_NEWS}]
   ${bin} status
   ${bin} compact
+  ${bin} dump
   ${bin} query <question>
 
-Volume: newest Common Crawl WET over HTTPS (no key). Delta: live fetch of
-frontier URLs after RFC 9309 robots.txt. JS-heavy pages: JSON-LD / Open Graph /
-noscript in the first HTML — no Playwright, no paid render API.
+query reads ~/.eden/know/graph.kpk only (or EDEN_KNOW_DIR). Ingest writes an
+overlay journal (graph.jnl) plus crawl.bin; those facts do not appear in query
+or wrap until compact. compact is a full in-RAM rewrite: fetch the published
+object, merge WAL, write, upload (If-Match).
+dump does that and prints path, bytes, SHA-256, public URL.
+
+Volume: Common Crawl WET over HTTPS plus a wide live frontier after RFC 9309
+robots.txt. Wikipedia and other robots-ok hosts are in. Listed paywalls are
+out. No Playwright, no paid render API.
 `);
   return cmd === "help" || !cmd ? 0 : 1;
 }

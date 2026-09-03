@@ -1,41 +1,17 @@
-# @eden/know
+# @eden/know (private)
 
-MIT. Public-web ingest onto a compact knowledge graph. Agents get a fact card or `{ "unknown": true }`.
+Ingest and retrieval **source is closed**. The **graph dumps** are open — see [docs/data.md](docs/data.md). This tree **encodes KPK9/KG12** as **one file**: 8,299 facts (hot RFC titles, IETF area column, edges, catalogs, capitals) inside `graph.kpk`. The public Get on GitHub is still the **KPK8 15,317 B** freeze until operators compact. Impossible Cloud holds the operator replica (no anonymous GetObject).
 
-This repository is **only Know**. It does not contain Eden wrap/compile, control, or the product website.
+Know crawls **robots-ok** public pages (RFC 9309, `Edenbot/0.1`), including Wikipedia, plus catalogs and Common Crawl WET. Listed paywalls are skipped. The live frontier starts from known seeds and expands to every allowed URL it finds.
+
+The agent SDK does not bundle the graph. Wrap looks at the prompt / chain-of-thought and injects **one** grounded fact card (≤48 tokens) as a system note, or stays silent. `Eden.know(q)` is the explicit, fail-open call. Query does not open SQLite.
 
 ```
-bun add github:KaiavN/eden-know
-# or clone and:
-bun test
-bun src/cli.ts status
-bun src/cli.ts query "RFC 3986"
-bun src/cli.ts run --once
-bun src/cli.ts compact
+bun packages/know/src/cli.ts run --once
+bun packages/know/src/cli.ts dump
+bun packages/know/src/cli.ts query "RFC 3986"
 ```
 
-Binary: `eden-know`.
+`query` reads `graph.kpk` only. Ingest is invisible until `compact`.
 
-## Docs
-
-| | |
-|---|---|
-| [Architecture](docs/architecture.md) | WAL vs pack, query contract |
-| [Ingest](docs/ingest.md) | Robots, catalogs, what is out |
-| [CLI](docs/cli.md) | Commands, flags, env |
-| [Contributing](CONTRIBUTING.md) | How to send a patch |
-| [Security](SECURITY.md) | Advisories, robots, no local DB in issues |
-
-## What this is
-
-Know crawls **allowed** public pages (RFC 9309 robots, User-Agent `Edenbot/0.1`), plus catalog feeds (RFC index, W3C, IANA, SPDX, Unicode, Common Crawl WET over HTTPS). It stores entities and relations in SQLite while ingesting, then freezes them into a small pack (`graph.kpk`). Query time writes **one grounded card** (≤48 tokens) or unknown. Sources stay off the wire.
-
-Paywalled and Wikipedia-family hosts are skipped. There is no search UI.
-
-## Data on disk
-
-Default dir: `~/.eden/know` (`EDEN_KNOW_DIR` or `EDEN_HOME` override). That directory is yours; it is not this repo. Do not commit `*.sqlite` or `*.kpk`.
-
-## License
-
-MIT. See `LICENSE`.
+Default dir: `~/.eden/know`. Do not commit `*.sqlite` / `*.kpk`.

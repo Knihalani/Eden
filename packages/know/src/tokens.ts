@@ -2,6 +2,7 @@ import type { Triple } from "./extract";
 import {
   aliasableMediaSubtype,
   catalogSubject,
+  TITLE_ALIAS_POISON,
   ianaCharset,
   ianaDns,
   ianaHeader,
@@ -37,13 +38,40 @@ export function postTokens(s: string): string[] {
   return tokens(s).filter((t) => !STOP_POST.has(t));
 }
 
+const QUERY_STOP = new Set(["of", "or", "an", "as", "at", "by", "be", "if", "it", "do", "we"]);
+export const KEEP_SHORT = new Set(["get", "put", "en", "ws", "tcp", "udp", "mit", "css", "xml", "pdf", "png"]);
+
+/** Catalog/RFC identifiers. DF prune must not drop these or token recall dies at scale. */
+const KEEP_POST = new Set([
+  ...KEEP_SHORT,
+  "json",
+  "html",
+  "http",
+  "https",
+  "iana",
+  "rfc",
+  "w3c",
+  "spdx",
+  "dns",
+]);
+
+/**
+ * High-DF generic terms only. Identifiers and RFC numbers stay even when they
+ * appear in a large fraction of rows (every IANA catalog row mentions `iana`).
+ */
+export function noisyPostTerm(t: string, df: number, nTrip: number): boolean {
+  if (nTrip < 256) return false;
+  if (KEEP_POST.has(t) || /^\d+$/.test(t)) return false;
+  return df > nTrip * 0.2;
+}
+
 /** Query tokens keep short identifiers (`GET`, `en`) that `postTokens` would drop as stop/short. */
 export function queryTokens(s: string): string[] {
   return s
     .toLowerCase()
     .split(/[^a-z0-9+.-]+/)
     .filter((t) => t.length > 1)
-    .filter((t) => t.length <= 3 || !STOP_POST.has(t));
+    .filter((t) => KEEP_SHORT.has(t) || (!STOP_POST.has(t) && !QUERY_STOP.has(t)));
 }
 
 /** Catalog subjects: subject + alias tokens only. Object titles poison AND rank. */
@@ -149,4 +177,21 @@ export function catalogAliasKeys(t: Triple): string[] {
   const dns = ianaDns(t.s);
   if (dns && t.p === "is") return aliasLex([dns]);
   return [];
+}
+
+/** Bloom + synth postings. Catalog rows: aliases only. RFC titles extra; RFC number is typed. */
+export function factIndexTokens(t: Triple): string[] {
+  const extra = /^RFC\s+\d/i.test(t.s) && t.p === "is" ? postTokens(t.o) : [];
+  const own = t.s.match(/^RFC\s+(\d+)/i)?.[1];
+  const base = catalogSubject(t.s) ? catalogAliasKeys(t) : indexTokens(t);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const w of [...base, ...extra]) {
+    if (own && w === own) continue;
+    if (TITLE_ALIAS_POISON.has(w)) continue;
+    if (seen.has(w)) continue;
+    seen.add(w);
+    out.push(w);
+  }
+  return out;
 }
