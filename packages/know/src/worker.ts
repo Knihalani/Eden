@@ -37,7 +37,7 @@ const cc = envNum("EDEN_KNOW_CC", DEFAULT_CC);
 const live = envNum("EDEN_KNOW_LIVE", DEFAULT_LIVE);
 const news = envNum("EDEN_KNOW_NEWS", DEFAULT_NEWS);
 
-function remember(s: TickStats & { ms?: number; err?: string }) {
+function remember(s: TickStats & { ms?: number; err?: string; counts?: { pack?: number; wal_nodes?: number; frontier?: number } }) {
   last = {
     ok: !s.err,
     s3: s3Configured(),
@@ -48,6 +48,9 @@ function remember(s: TickStats & { ms?: number; err?: string }) {
     cdx: s.cdx,
     nodes: s.nodes,
     skipped: s.skipped,
+    pack: s.counts?.pack,
+    wal: s.counts?.wal_nodes,
+    frontier: s.counts?.frontier,
     ms: s.ms,
     err: s.err,
   };
@@ -60,7 +63,7 @@ async function loop() {
     const line = args[0];
     if (typeof line === "string" && line.startsWith("{")) {
       try {
-        const j = JSON.parse(line) as TickStats & { ms?: number; err?: string };
+        const j = JSON.parse(line) as TickStats & { ms?: number; err?: string; counts?: { pack?: number; wal_nodes?: number; frontier?: number } };
         if ("cc" in j || "err" in j) remember(j);
       } catch {
         /* not tick JSON */

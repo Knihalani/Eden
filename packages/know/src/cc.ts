@@ -217,6 +217,7 @@ export async function ingestWetSlice(
   wetUrl: string,
   maxRecords: number,
   seen?: (uri: string) => boolean,
+  scanLimit?: number,
 ): Promise<WetRecord[]> {
   const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT } });
   if (!r.ok) throw new Error(`wet ${r.status}`);
@@ -227,7 +228,7 @@ export async function ingestWetSlice(
   const pool: WetRecord[] = [];
   const bandHit = new Set<string>();
   let scanned = 0;
-  const scanCap = wetScanCap(maxRecords);
+  const scanCap = scanLimit && scanLimit > 0 ? scanLimit : wetScanCap(maxRecords);
   const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
   while (scanned < scanCap && pool.length < poolCap) {
     const { done, value } = await reader.read();

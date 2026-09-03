@@ -11,6 +11,20 @@ export const DEFAULT_INTERVAL_SEC = 20;
 export const DEFAULT_CC = 120;
 export const DEFAULT_LIVE = 96;
 export const DEFAULT_NEWS = 16;
+/** CDX Range hits per tick (cheap RAM vs a full WET). */
+export const DEFAULT_CDX = 16;
+/** Compact-publish when WAL is at least this and the last upload is old enough. */
+export const COMPACT_WAL_MIN = 16;
+/** Compact immediately once the overlay is this large, even if the timer has not elapsed. */
+export const COMPACT_WAL_FORCE = 512;
+export const DEFAULT_COMPACT_MS = 180_000;
+
+/** True when ingest should rewrite and upload the single `graph.kpk`. */
+export function compactDue(wal: number, lastMs: number, now = Date.now()): boolean {
+  if (wal < COMPACT_WAL_MIN) return false;
+  if (wal >= COMPACT_WAL_FORCE) return true;
+  return now - lastMs >= envNum("EDEN_KNOW_COMPACT_MS", DEFAULT_COMPACT_MS);
+}
 /** Consecutive latest-crawl WET files per tick (worker sets 2). */
 export const DEFAULT_CC_SLICES = 1;
 /** Parallel live fetches per tick (sqlite writes stay serial). */
