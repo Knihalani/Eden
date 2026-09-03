@@ -1,4 +1,5 @@
 import { gunzipSync } from "node:zlib";
+import { wetHeaderSkip } from "./cc";
 import { EDENBOT } from "./ua";
 import { pushWarcBytes, type WetRecord } from "./warc";
 import { httpBody } from "./extract";
@@ -141,7 +142,7 @@ export async function rangeWarc(hit: CdxHit): Promise<WetRecord | undefined> {
         /* already a WARC record */
       }
       const recs: WetRecord[] = [];
-      pushWarcBytes(new Uint8Array(buf), recs, 1);
+      pushWarcBytes(new Uint8Array(buf), recs, 1, (uri, _type, len) => wetHeaderSkip(uri, undefined, len));
       const rec = recs[0];
       if (rec) return { uri: rec.uri || hit.url, text: httpBody(rec.text) };
     } catch {

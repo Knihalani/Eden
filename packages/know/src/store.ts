@@ -3357,11 +3357,24 @@ export function openStore(dir = knowDir()) {
   snapshotJournal();
 
   let walHint = !!(mem.query(`SELECT 1 AS x FROM nodes LIMIT 1`).get());
+  let crawlHold = 0;
+  function crawlPersist(force = false) {
+    if (!crawlHold) crawl.maybePersist(dir, force);
+  }
 
   return {
     db: db as unknown as Database,
     dir,
     intern,
+    crawlBatch<T>(fn: () => T): T {
+      crawlHold++;
+      try {
+        return fn();
+      } finally {
+        crawlHold = Math.max(0, crawlHold - 1);
+        crawl.maybePersist(dir, true);
+      }
+    },
     pageDigest(url: string): string | undefined {
       const h = urlHash(url);
       const hit = seen.get(h);
@@ -3387,11 +3400,11 @@ export function openStore(dir = knowDir()) {
     },
     bumpHost(url: string, kept: boolean) {
       crawl.bumpHost(url, kept);
-      crawl.maybePersist(dir);
+      crawlPersist();
     },
     nearDup(url: string, text: string): boolean {
       const hit = crawl.nearDup(url, text);
-      crawl.maybePersist(dir);
+      crawlPersist();
       return hit;
     },
     putPage(row: {
@@ -3419,7 +3432,7 @@ export function openStore(dir = knowDir()) {
       }
       if (row.skip) return;
       crawl.putPage(row);
-      crawl.maybePersist(dir);
+      crawlPersist();
     },
     putNodes(url: string, triples: Triple[], ttl_days: number) {
       const now = Date.now();
