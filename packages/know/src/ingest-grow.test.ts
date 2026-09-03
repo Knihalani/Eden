@@ -157,6 +157,8 @@ describe("ingest overlay", () => {
     expect(ttlDaysFor("https://arxiv.org/abs/1706.03762", "attention is all you need")).toBe(180);
     expect(ttlDaysFor("https://blog.example/post/today", "published today")).toBe(7);
     expect(ttlDaysFor("https://notes.example/stable-note", "a long enough english page about widgets")).toBe(365);
+    expect(ttlDaysFor("https://www.reuters.com/world/asia/story")).toBe(1);
+    expect(ttlDaysFor("https://en.wikipedia.org/wiki/Newspaper", "A newspaper is a periodical publication.")).toBe(90);
   });
 
   test("pageFresh is true only with a fetched digest still in TTL", () => {

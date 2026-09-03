@@ -2912,13 +2912,4 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
   return [...prefer, ...rest].slice(0, cap);
 }
 
-export function ttlDaysFor(url: string, text: string): number {
-  const u = url.toLowerCase();
-  const t = text.toLowerCase();
-  if (/news|blog|press|post\//.test(u) || /\b(today|yesterday|hours ago)\b/.test(t)) return 7;
-  if (/rfc|standard|ietf|w3\.org|iana\.org/.test(u)) return 365 * 5;
-  if (/arxiv\.org|pubmed|ncbi\.nlm|openalex|doi\.org|semanticscholar|doaj\.org/.test(u)) return 180;
-  if (/wikipedia\.org|wikidata\.org|wiktionary\.org/.test(u)) return 90;
-  if (/docs\.|developer\.|api\./.test(u)) return 90;
-  return 365;
-}
+export { ttlDaysFor, pageTtl, ttlDaysOnSkip } from "./ttl";

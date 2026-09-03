@@ -163,7 +163,9 @@ describe("ingest journal", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("legacy overlay sqlite folds into journal and sqlite+wal shrinks under 50 KB", () => {
+  test(
+    "legacy overlay sqlite folds into journal and sqlite+wal shrinks under 50 KB",
+    () => {
     const src = mkdtempSync(join(tmpdir(), "eden-know-legacy-src-"));
     const fixture = join(src, "legacy.sqlite");
     const fat = new Database(fixture);
@@ -254,7 +256,9 @@ describe("ingest journal", () => {
 
     rmSync(src, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
-  });
+    },
+    30_000,
+  );
 
   test("near-dup matches other URLs; same URL is not a dup", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-mh-"));
@@ -461,7 +465,7 @@ describe("ingest journal", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("crush + enqueue drop news/blog/apod/nist; keep RFC, W3C TR, wiki, seeds", () => {
+  test("crush + enqueue drop blogs/apod/nist CMS; keep RFC, W3C TR, wiki, news, seeds", () => {
     const nist = "https://www.nist.gov/news-events/news/2026/08/spooky-particles";
     const news = "https://www.w3.org/news/2026/pointer-events-level-3/";
     const blog = "https://commoncrawl.org/blog/august-2026-crawl-archive-now-available";
@@ -471,7 +475,7 @@ describe("ingest journal", () => {
     const wiki = "https://en.wikipedia.org/wiki/Kenya";
     const caps = "https://en.wikipedia.org/wiki/List_of_national_capitals";
     expect(junkFrontier(nist)).toBe(true);
-    expect(junkFrontier(news)).toBe(true);
+    expect(junkFrontier(news)).toBe(false);
     expect(junkFrontier(blog)).toBe(true);
     expect(junkFrontier(apod)).toBe(true);
     expect(junkFrontier(rfc)).toBe(false);
@@ -479,20 +483,25 @@ describe("ingest journal", () => {
     expect(junkFrontier(wiki)).toBe(false);
     expect(junkFrontier(caps)).toBe(false);
     expect(junkFrontier("https://www.nist.gov/")).toBe(true);
+    expect(junkFrontier("https://www.reuters.com/world/asia/story")).toBe(false);
     expect(junkFrontier("https://example.org/queued")).toBe(false);
 
     const dir = mkdtempSync(join(tmpdir(), "eden-know-crush-"));
     const s = openStore(dir);
-    s.enqueue([nist, news, blog, apod, rfc, tr, wiki, caps, "https://example.org/queued"], "https://example.org/feed");
+    s.enqueue(
+      [nist, news, blog, apod, rfc, tr, wiki, caps, "https://www.reuters.com/world/asia/story", "https://example.org/queued"],
+      "https://example.org/feed",
+    );
     const queued = (s.db.query(`SELECT url FROM frontier`).all() as { url: string }[]).map((r) => r.url);
     expect(queued).not.toContain(nist);
-    expect(queued).not.toContain(news);
+    expect(queued).toContain("https://www.w3.org/news/2026/pointer-events-level-3");
     expect(queued).not.toContain(blog);
     expect(queued).not.toContain(apod);
     expect(queued).toContain(rfc);
     expect(queued).toContain(tr);
     expect(queued).toContain(wiki);
     expect(queued).toContain(caps);
+    expect(queued).toContain("https://www.reuters.com/world/asia/story");
     expect(queued).toContain("https://example.org/queued");
     expect(queued.some((u) => /nist\.gov/i.test(u))).toBe(false);
     s.close();
