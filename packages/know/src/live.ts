@@ -142,12 +142,14 @@ export async function liveGetStream(
 
 export async function liveGet(
   url: string,
-  opts?: { timeoutMs?: number; accept?: string },
+  opts?: { timeoutMs?: number; accept?: string; ifModifiedSinceMs?: number },
 ): Promise<{
   ok: boolean;
   status: number;
   html: string;
   skip?: string;
+  cacheControl?: string;
+  lastModified?: string;
 }> {
   const pre = await prepareLive(url, opts);
   if (!pre.ok) return { ok: false, status: pre.status, html: "", skip: pre.skip };
@@ -155,17 +157,24 @@ export async function liveGet(
   const headers = { ...pre.headers };
   if (cached?.etag) headers["If-None-Match"] = cached.etag;
   if (cached?.lastMod) headers["If-Modified-Since"] = cached.lastMod;
+  else if (opts?.ifModifiedSinceMs && opts.ifModifiedSinceMs > 1e12) {
+    headers["If-Modified-Since"] = new Date(opts.ifModifiedSinceMs).toUTCString();
+  }
   try {
     const r = await fetch(url, {
       headers,
       signal: AbortSignal.timeout(pre.timeoutMs),
       redirect: "follow",
     });
-    if (r.status === 304 && cached) return { ok: true, status: 304, html: cached.html };
+    const cacheControl = r.headers.get("cache-control") || undefined;
+    const lastModified = r.headers.get("last-modified") || undefined;
+    if (r.status === 304) {
+      return { ok: true, status: 304, html: cached?.html || "", cacheControl, lastModified };
+    }
     const html = foldLinkTags(httpLinkHrefs(`Link: ${r.headers.get("link") || ""}`), await r.text());
-    if (!r.ok) return { ok: false, status: r.status, html: "", skip: `http-${r.status}` };
+    if (!r.ok) return { ok: false, status: r.status, html: "", skip: `http-${r.status}`, cacheControl, lastModified };
     rememberEtag(url, r.headers.get("etag"), r.headers.get("last-modified"), html);
-    return { ok: true, status: r.status, html };
+    return { ok: true, status: r.status, html, cacheControl, lastModified };
   } catch (e) {
     return { ok: false, status: 0, html: "", skip: String(e).slice(0, 80) };
   }

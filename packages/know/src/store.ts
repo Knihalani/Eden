@@ -2726,6 +2726,16 @@ class Crawl {
     return row?.digest || undefined;
   }
 
+  pageTtlDays(url: string): number | undefined {
+    const row = this.pageRow(url);
+    return row ? row.ttl : undefined;
+  }
+
+  pageFetched(url: string): number | undefined {
+    const row = this.pageRow(url);
+    return row?.fetched || undefined;
+  }
+
   pageFresh(url: string, now = Date.now()): boolean {
     const row = this.pageRow(url);
     if (!row?.digest) return false;
@@ -3359,6 +3369,12 @@ export function openStore(dir = knowDir()) {
       const page = crawl.pageDigest(url);
       if (page) return page;
       return slotDigest(seenSlots, h);
+    },
+    pageTtlDays(url: string): number | undefined {
+      return crawl.pageTtlDays(url);
+    },
+    pageFetched(url: string): number | undefined {
+      return crawl.pageFetched(url);
     },
     pageFresh(url: string, now = Date.now()): boolean {
       return crawl.pageFresh(url, now);

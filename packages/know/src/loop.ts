@@ -12,12 +12,13 @@ import {
   triplesFromPage,
   ttlDaysFor,
   ttlDaysOnSkip,
+  type TtlHints,
   wikiActionApiUrl,
   wikiNeedsApiFallback,
   type HtmlScan,
 } from "./extract";
 import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
-import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum } from "./defaults";
+import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum, shardOwns } from "./defaults";
 import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
 import { FEED_URLS, SEED_URLS, WIKI_TOPIC_URLS } from "./seed";
@@ -73,18 +74,26 @@ function commitPage(
   source: string,
   isHtml: boolean,
   scan?: HtmlScan,
+  hints?: TtlHints,
 ): { nodes: number; skipped: number } {
   const why = admitText(url, text, store);
   const d = digest(htmlOrText);
+  const ttlArg: TtlHints = { source, ...hints };
   if (why) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, source), skip: why });
+    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, ttlArg), skip: why });
     return { nodes: 0, skipped: 1 };
   }
   if (store.pageDigest(url) === d) {
     const have = (store.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url = ?`).get(url) as { n: number }).n;
     if (have > 0) {
-      store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysFor(url, text, source) });
+      store.putPage({
+        url,
+        digest: d,
+        chars: text.length,
+        source,
+        ttl_days: ttlDaysFor(url, text, { ...ttlArg, unchanged: true, prevTtl: store.pageTtlDays(url) }),
+      });
       return { nodes: 0, skipped: 0 };
     }
   }
@@ -95,7 +104,7 @@ function commitPage(
       digest: d,
       chars: text.length,
       source,
-      ttl_days: Math.min(ttlDaysFor(url, text, source), 30),
+      ttl_days: Math.min(ttlDaysFor(url, text, ttlArg), 30),
       skip: "near-dup",
     });
     return { nodes: 0, skipped: 1 };
@@ -103,10 +112,10 @@ function commitPage(
   const triples = triplesFromPage(url, isHtml ? htmlOrText : text, isHtml, scan);
   if (!triples.length) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, source), skip: "no-hot" });
+    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, ttlArg), skip: "no-hot" });
     return { nodes: 0, skipped: 1 };
   }
-  const ttl = ttlDaysFor(url, text, source);
+  const ttl = ttlDaysFor(url, text, ttlArg);
   store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttl });
   store.bumpHost(url, true);
   store.putNodes(url, triples, ttl);
@@ -119,7 +128,7 @@ async function htmlForExtract(url: string, html: string): Promise<string> {
 }
 
 function enqueueRanked(store: KnowStore, urls: string[], from: string) {
-  const ranked = rankFrontierUrls(urls);
+  const ranked = rankFrontierUrls(urls.filter((u) => shardOwns(u)));
   if (ranked.length) store.enqueue(ranked, from);
 }
 
@@ -217,32 +226,62 @@ export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise
   return { cc: 0, news: 0, live: 0, feeds, cdx: 0, nodes: 0, skipped: 0 };
 }
 
+async function ingestWikiApiPages(store: KnowStore, urls: string[], source: string): Promise<TickStats> {
+  const acc = emptyTick();
+  const due = urls.filter((u) => shardOwns(u) && !store.pageFresh(u) && wikiActionApiUrl(u));
+  for (let i = 0; i < due.length; ) {
+    const chunk = due.slice(i, i + 50);
+    i += chunk.length;
+    const pages = await liveWikiApiBatch(chunk);
+    const seen = new Set(pages.map((p) => p.url));
+    for (const p of pages) {
+      const html = `<html><title>${p.title}</title>\n${p.wikitext}\n</html>`;
+      const { text, scan } = htmlText(html);
+      const r = commitPage(store, p.url, text.length >= 80 ? text : html, html, source, true, scan);
+      acc.nodes += r.nodes;
+      acc.skipped += r.skipped;
+      if (!r.skipped) acc.live++;
+      enqueueRanked(store, wikiGrowUrls(p.url, html), p.url);
+    }
+    enqueueRanked(
+      store,
+      chunk.filter((u) => !seen.has(u)),
+      source,
+    );
+  }
+  return acc;
+}
+
 export async function tickLive(store: KnowStore, limit: number): Promise<TickStats> {
   seedIfEmpty(store);
-  const urls = rankFrontierUrls(store.takeFrontier(limit));
+  const taken = rankFrontierUrls(store.takeFrontier(Math.max(limit, 1)));
+  const due = taken.filter((u) => shardOwns(u) && !store.pageFresh(u));
+  const wiki = due.filter((u) => wikiActionApiUrl(u));
+  const rest = due.filter((u) => !wikiActionApiUrl(u));
+  const fromWiki = await ingestWikiApiPages(store, wiki, "live-wiki");
   const hostN = new Map<string, number>();
   const waiters: Array<() => void> = [];
-  const fetched = await mapPool(urls, LIVE_CONCURRENCY, async (url) => {
+  const fetched = await mapPool(rest, LIVE_CONCURRENCY, async (url) => {
     let host = "";
     try {
       host = new URL(url).host;
     } catch {
-      return { url, got: await liveGet(url) };
+      return { url, got: await liveGet(url, { ifModifiedSinceMs: store.pageFetched(url) }) };
     }
     while ((hostN.get(host) ?? 0) >= LIVE_PER_HOST) {
       await new Promise<void>((r) => waiters.push(r));
     }
     hostN.set(host, (hostN.get(host) ?? 0) + 1);
     try {
-      return { url, got: await liveGet(url) };
+      return { url, got: await liveGet(url, { ifModifiedSinceMs: store.pageFetched(url) }) };
     } finally {
       hostN.set(host, Math.max(0, (hostN.get(host) ?? 1) - 1));
       waiters.shift()?.();
     }
   });
-  let live = 0;
-  let skipped = 0;
-  let nodes = 0;
+  let live = fromWiki.live;
+  let skipped = fromWiki.skipped;
+  let nodes = fromWiki.nodes;
   const sitemapHosts = new Set<string>();
   for (const { url, got } of fetched) {
     if (!got.ok) {
@@ -250,9 +289,25 @@ export async function tickLive(store: KnowStore, limit: number): Promise<TickSta
       skipped++;
       continue;
     }
+    if (got.status === 304) {
+      const ttl = ttlDaysFor(url, "", {
+        source: "live",
+        status: 304,
+        unchanged: true,
+        prevTtl: store.pageTtlDays(url),
+        cacheControl: got.cacheControl,
+        lastModified: got.lastModified,
+      });
+      store.putPage({ url, digest: store.pageDigest(url) || "304", chars: 0, source: "live", ttl_days: ttl });
+      live++;
+      continue;
+    }
     const html = await htmlForExtract(url, got.html);
     const { text, scan } = htmlText(html);
-    const r = commitPage(store, url, text.length >= 80 ? text : html, html, "live", true, scan);
+    const r = commitPage(store, url, text.length >= 80 ? text : html, html, "live", true, scan, {
+      cacheControl: got.cacheControl,
+      lastModified: got.lastModified,
+    });
     nodes += r.nodes;
     skipped += r.skipped;
     if (!r.skipped) live++;
@@ -613,6 +668,7 @@ export async function tickWikiBatch(store: KnowStore, n = envNum("EDEN_KNOW_WIKI
     const pages = await liveWikiRandomBatch(take);
     if (!pages.length) break;
     for (const p of pages) {
+      if (store.pageFresh(p.url) || !shardOwns(p.url)) continue;
       const html = `<html><title>${p.title}</title>\n${p.wikitext}\n</html>`;
       const { text, scan } = htmlText(html);
       const r = commitPage(store, p.url, text.length >= 80 ? text : html, html, "wiki-random", true, scan);
@@ -642,8 +698,9 @@ async function wikiBatchOnce(store: KnowStore, n: number): Promise<TickStats> {
     todo.push(url);
     if (todo.length >= n) break;
   }
-  if (!todo.length) return emptyTick();
-  const pages = await liveWikiApiBatch(todo);
+  const due = todo.filter((u) => shardOwns(u) && !store.pageFresh(u));
+  if (!due.length) return emptyTick();
+  const pages = await liveWikiApiBatch(due);
   let live = 0;
   let skipped = 0;
   let nodes = 0;
@@ -659,7 +716,7 @@ async function wikiBatchOnce(store: KnowStore, n: number): Promise<TickStats> {
   }
   enqueueRanked(
     store,
-    todo.filter((u) => !seen.has(u)),
+    due.filter((u) => !seen.has(u)),
     "wiki-batch",
   );
   return { cc: 0, news: 0, live, feeds: 0, cdx: 0, nodes, skipped };
@@ -687,6 +744,7 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
   const todo: string[] = [];
   for (const url of ordered) {
     if (todo.length >= n) break;
+    if (!shardOwns(url) || store.pageFresh(url)) continue;
     const rfc = url.match(/rfc[-/_]?(\d{3,5})/i);
     if (rfc) {
       const row = store.db
@@ -702,8 +760,14 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
     }
     todo.push(url);
   }
-  const fetchedPages = await mapPool(todo, Math.min(LIVE_CONCURRENCY, Math.max(1, todo.length)), async (url) => {
-    const got = await liveGet(url);
+  const wikiTodo = todo.filter((u) => wikiActionApiUrl(u));
+  const restTodo = todo.filter((u) => !wikiActionApiUrl(u));
+  const fromWiki = await ingestWikiApiPages(store, wikiTodo, "seed");
+  live += fromWiki.live;
+  skipped += fromWiki.skipped;
+  nodes += fromWiki.nodes;
+  const fetchedPages = await mapPool(restTodo, Math.min(LIVE_CONCURRENCY, Math.max(1, restTodo.length)), async (url) => {
+    const got = await liveGet(url, { ifModifiedSinceMs: store.pageFetched(url) });
     return { url, got };
   });
   for (const { url, got } of fetchedPages) {
@@ -711,9 +775,25 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
       skipped++;
       continue;
     }
+    if (got.status === 304) {
+      const ttl = ttlDaysFor(url, "", {
+        source: "seed",
+        status: 304,
+        unchanged: true,
+        prevTtl: store.pageTtlDays(url),
+        cacheControl: got.cacheControl,
+        lastModified: got.lastModified,
+      });
+      store.putPage({ url, digest: store.pageDigest(url) || "304", chars: 0, source: "seed", ttl_days: ttl });
+      live++;
+      continue;
+    }
     const html = await htmlForExtract(url, got.html);
     const { text, scan } = htmlText(html);
-    const r = commitPage(store, url, text.length >= 80 ? text : html, html, "seed", true, scan);
+    const r = commitPage(store, url, text.length >= 80 ? text : html, html, "seed", true, scan, {
+      cacheControl: got.cacheControl,
+      lastModified: got.lastModified,
+    });
     nodes += r.nodes;
     skipped += r.skipped;
     if (!r.skipped) {
@@ -812,13 +892,19 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const f = await tickFeeds(store);
     const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
     console.log(JSON.stringify({ cc: 0, news: 0, live: b.live, feeds: f.feeds, cdx: 0, nodes: b.nodes, skipped: b.skipped, phase: "live" }));
-    const x = await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX));
+    const tickN = Number(store.getMeta("tick_n") || "0") + 1;
+    store.setMeta("tick_n", String(tickN));
+    const every = Math.max(1, envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY) | 0);
+    const doWet = tickN % every === 0;
+    const doNews = (tickN + 1) % every === 0;
+    const doCdx = (tickN + 2) % every === 0;
+    const x = doCdx ? await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : emptyTick();
     const slices = envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES);
     const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
-    const a = await tickCc(store, opts?.cc ?? DEFAULT_CC, ccIdx, slices);
-    const news = await tickNews(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0));
-    store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
-    store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
+    const a = doWet ? await tickCc(store, opts?.cc ?? DEFAULT_CC, ccIdx, slices) : emptyTick();
+    const news = doNews ? await tickNews(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0)) : emptyTick();
+    if (doWet) store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
+    if (doNews) store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
     store.expire();
     const wal = store.count().wal_nodes;
     if (compactDue(wal, Number(store.getMeta("compact_at") || 0))) {

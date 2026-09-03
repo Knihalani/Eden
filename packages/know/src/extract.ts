@@ -2912,4 +2912,4 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
   return [...prefer, ...rest].slice(0, cap);
 }
 
-export { ttlDaysFor, pageTtl, ttlDaysOnSkip } from "./ttl";
+export { ttlDaysFor, pageTtl, ttlDaysOnSkip, type TtlHints } from "./ttl";

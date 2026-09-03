@@ -1,4 +1,4 @@
-/** Recrawl class for a fetched page. Not a crawl budget. Host/path/source beat URL substrings. */
+/** Recrawl class. Host/path/source/headers/unchanged beat URL substrings. */
 
 export type PageTtlClass = "news" | "blog" | "wiki" | "academia" | "registry" | "docs" | "stable";
 
@@ -10,6 +10,27 @@ export const TTL_DAYS: Record<PageTtlClass, number> = {
   registry: 365 * 5,
   docs: 90,
   stable: 365,
+};
+
+/** Class cap: backoff and heuristics never exceed this. */
+export const TTL_CAP: Record<PageTtlClass, number> = {
+  news: 7,
+  blog: 30,
+  wiki: 180,
+  academia: 365,
+  registry: 365 * 5,
+  docs: 180,
+  stable: 365 * 2,
+};
+
+export type TtlHints = {
+  source?: string;
+  status?: number;
+  cacheControl?: string;
+  lastModified?: string;
+  unchanged?: boolean;
+  prevTtl?: number;
+  now?: number;
 };
 
 const NEWS_HOSTS = new Set([
@@ -142,29 +163,86 @@ function isNewsSource(source: string): boolean {
   return /^(cc-news|news)$/i.test(source);
 }
 
-/** Named recrawl class. Wikipedia / catalogs never inherit a “news” substring. */
-export function pageTtl(url: string, text = "", source = ""): { class: PageTtlClass; days: number } {
+function hintsOf(x?: string | TtlHints): TtlHints {
+  if (!x) return {};
+  if (typeof x === "string") return { source: x };
+  return x;
+}
+
+/** Named class only — no header/backoff yet. */
+export function pageClass(url: string, text = "", source = ""): PageTtlClass {
   const host = hostOf(url);
   const path = pathOf(url);
-  const cls = (c: PageTtlClass) => ({ class: c, days: TTL_DAYS[c] });
-
-  if (wikiHost(host)) return cls("wiki");
-  if (academiaHost(host)) return cls("academia");
+  if (wikiHost(host)) return "wiki";
+  if (academiaHost(host)) return "academia";
   if (registryHost(host)) {
-    if (suffixHost(host, "w3.org") && newsPath(path)) return cls("news");
-    return cls("registry");
+    if (suffixHost(host, "w3.org") && newsPath(path)) return "news";
+    return "registry";
   }
-  if (docsHost(host)) return cls("docs");
-  if (isNewsSource(source) || newsHost(host) || newsPath(path) || newsMarkup(text)) return cls("news");
-  if (/^blog\.|(^|\.)blogs?\./i.test(host) || /\/blog\//i.test(path) || /\/post\//i.test(path)) return cls("blog");
-  return cls("stable");
+  if (docsHost(host)) return "docs";
+  if (isNewsSource(source) || newsHost(host) || newsPath(path) || newsMarkup(text)) return "news";
+  if (/^blog\.|(^|\.)blogs?\./i.test(host) || /\/blog\//i.test(path) || /\/post\//i.test(path)) return "blog";
+  return "stable";
 }
 
-export function ttlDaysFor(url: string, text = "", source = ""): number {
-  return pageTtl(url, text, source).days;
+function parseMaxAgeSec(cacheControl: string): number | undefined {
+  const m = cacheControl.match(/(?:^|[,;\s])max-age\s*=\s*(\d+)/i);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
-/** Skip / failed extract: retry soon, but news still uses the 1-day clock. */
-export function ttlDaysOnSkip(url: string, text = "", source = ""): number {
-  return Math.min(ttlDaysFor(url, text, source), 7);
+function lastModifiedAgeDays(lastModified: string, now: number): number | undefined {
+  const t = Date.parse(lastModified);
+  if (!Number.isFinite(t) || t <= 0 || t > now) return undefined;
+  return (now - t) / 86_400_000;
+}
+
+function clampDays(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n) || n < lo) return lo;
+  if (n > hi) return hi;
+  return Math.round(n);
+}
+
+/**
+ * Recrawl days. Class first, then RFC 9111 hints, then unchanged backoff.
+ * Heuristics and max-age never drop news below 1 day or exceed TTL_CAP.
+ */
+export function pageTtl(url: string, text = "", sourceOrHints: string | TtlHints = ""): { class: PageTtlClass; days: number } {
+  const h = hintsOf(sourceOrHints);
+  const cls = pageClass(url, text, h.source || "");
+  const floor = TTL_DAYS[cls];
+  const cap = TTL_CAP[cls];
+  let days = floor;
+  const cc = (h.cacheControl || "").toLowerCase();
+  if (/\bimmutable\b/.test(cc) && cls !== "news") days = cap;
+  const maxAge = cc ? parseMaxAgeSec(cc) : undefined;
+  if (maxAge != null && !/\bno-store\b/.test(cc)) {
+    const fromAge = clampDays(maxAge / 86_400, floor, cap);
+    days = Math.max(days, fromAge);
+  }
+  if (h.lastModified && !maxAge && !/\bno-store\b/.test(cc)) {
+    const age = lastModifiedAgeDays(h.lastModified, h.now ?? Date.now());
+    if (age != null && age >= 10 && cls !== "news") {
+      const heuristic = clampDays(age * 0.1, floor, cap);
+      days = Math.max(days, heuristic);
+    }
+  }
+  const unchanged = h.unchanged || h.status === 304;
+  if (unchanged) {
+    const prev = h.prevTtl && h.prevTtl > 0 ? h.prevTtl : days;
+    days = clampDays(Math.max(days, prev * 2), floor, cap);
+  }
+  return { class: cls, days };
+}
+
+export function ttlDaysFor(url: string, text = "", sourceOrHints: string | TtlHints = ""): number {
+  return pageTtl(url, text, sourceOrHints).days;
+}
+
+/** Skip / failed extract: retry soon, but news stays on its clock (1, or backoff if unchanged). */
+export function ttlDaysOnSkip(url: string, text = "", sourceOrHints: string | TtlHints = ""): number {
+  const h = hintsOf(sourceOrHints);
+  if (h.unchanged || h.status === 304) return ttlDaysFor(url, text, sourceOrHints);
+  return Math.min(ttlDaysFor(url, text, sourceOrHints), 7);
 }
