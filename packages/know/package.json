@@ -1,8 +1,9 @@
 {
   "name": "@eden/know",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "main": "src/index.ts",
   "bin": {
     "eden-know": "./src/cli.ts"
@@ -10,25 +11,18 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "files": [
-    "src",
-    "docs",
-    "LICENSE",
-    "README.md",
-    "CONTRIBUTING.md",
-    "SECURITY.md"
-  ],
   "scripts": {
     "test": "bun test src"
   },
-  "description": "Robots-honoring public ingest onto a knowledge graph. Query-time fact cards. Not wrap.",
+  "description": "Robots-honoring public ingest onto a knowledge graph. Query-time fact cards. Not wrap. Source closed; graph dumps open.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/KaiavN/eden-know.git"
+    "url": "git+https://github.com/KaiavN/Eden.git",
+    "directory": "packages/know"
   },
-  "homepage": "https://github.com/KaiavN/eden-know",
+  "homepage": "https://github.com/Knihalani/eden-know-data",
   "bugs": {
-    "url": "https://github.com/KaiavN/eden-know/issues"
+    "url": "https://github.com/KaiavN/Eden/issues"
   },
   "keywords": [
     "knowledge-graph",

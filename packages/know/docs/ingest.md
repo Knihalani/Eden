@@ -1,24 +1,9 @@
 # Ingest
 
-User-Agent: `Edenbot/0.1 (+https://github.com/KaiavN/eden-know; know-ingest)` (`src/ua.ts`).
+User-Agent: `Edenbot/0.1` (`src/ua.ts`). **Code is private.** Dumps: [data.md](data.md).
 
-## Allowed sources
+Start from known seeds (catalogs, Wikipedia, arXiv, PubMed/PMC, OpenAlex, DOAJ, Semantic Scholar), then expand to **every robots-ok URL** (RFC 9309, including `*` and `$` path patterns). Live fetch is parallel (default 96 URLs/tick, 64 in flight, 3 per host). The always-on worker takes two latest-crawl WET files per tick. Outlinks from a fetched page join the frontier if they are not listed paywalls and not news/blog junk — catalog hosts are not required. Each tick also batches Wikipedia country articles (Action API, up to 50 titles), re-queues pages past TTL, and re-polls origin sitemaps daily (lastmod-first, sitemapindex children). Common Crawl WET fills volume (default 120 kept records; each file is scanned 40× deeper than the keep cap, skipping URIs already digested). CC-NEWS runs from `tick()` (`--news`). Wikipedia-family hosts are in. Listed paywalls are out. News/blog feeds are not — they starve the catalog frontier.
 
-- Newest Common Crawl WET over HTTPS (no key)
-- Live frontier URLs after RFC 9309 `robots.txt`
-- Catalog XML/JSON: RFC index, W3C, IETF related, IANA registries, SPDX, WHATWG, Unicode blocks/scripts, IANA language (2-letter)
+JS-heavy pages use JSON-LD / Open Graph / `<noscript>` in the first HTML. No Playwright. No generic RDF/XML, Turtle, or RFC PDF extract. Wikipedia infoboxes accept table rows **and** `infobox-label`/`infobox-data` divs. Overlay RFC `is` objects may be 96 characters (same as persistable).
 
-JS-heavy pages use JSON-LD / Open Graph / `<noscript>` in the first HTML. There is no Playwright and no paid render API.
-
-IANA catalog fetches may run in parallel over HTTP. SQLite `commitCatalog` is sequential.
-
-## Explicitly out
-
-- Wikipedia, Wikimedia, Wikidata, Wiktionary
-- Listed paywall hosts (`src/extract.ts`)
-- IANA ports (too many, low query value)
-- Country/capital tables (Kenya and friends stay unknown unless a persistable page said so)
-
-## Disk
-
-Default dir `~/.eden/know`, overridable with `EDEN_KNOW_DIR` or `EDEN_HOME`. Auto-compact when `wal_nodes >= 1024`.
+Catalog XML/JSON still runs (RFC, W3C, IANA, SPDX, Unicode) as high-rank seeds, not as an allowlist. They are not re-downloaded every 20s: a successful catalog fetch is remembered for six hours, and `If-None-Match` is sent on the stream path. Catalog fetches run in parallel with a Wikipedia Action API batch (up to 50 titles). Stream catalogs enqueue HTTP `Link` targets; they do not fold HTML into XML. Compact publishes the overlay into `graph.kpk` at 16 WAL nodes so new facts become queryable. After compact, crawl.bin keeps up to 8,000 frontier URLs and 8,000 page rows (catalog/wiki first) so a restart does not forget the crawl.

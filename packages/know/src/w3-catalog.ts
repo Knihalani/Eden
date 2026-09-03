@@ -1,6 +1,7 @@
 /** W3C TR catalog → typed `W3C <shortname> is <title>` facts. Two JSON pages, no HTML dump. */
 
 import { shortTitle, type Triple } from "./extract";
+import { W3C_KEEP } from "./names";
 
 export const W3_CATALOG_URL = "https://api.w3.org/specifications";
 
@@ -28,7 +29,7 @@ export function parseW3Catalog(pages: unknown[]): Triple[] {
     for (const item of list) {
       const href = item.href || "";
       const slug = shortnameOf(href);
-      if (!slug || seen.has(slug)) continue;
+      if (!slug || seen.has(slug) || !W3C_KEEP.has(slug)) continue;
       const o = shortTitle((item.title || slug.replace(/-/g, " ")).replace(/\s+/g, " ").trim());
       if (o.length < 8) continue;
       seen.add(slug);

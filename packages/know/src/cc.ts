@@ -2,8 +2,12 @@ import { gunzipSync } from "node:zlib";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EDENBOT } from "./ua";
-import { knowDir } from "./store";
-import { qualityHost } from "./extract";
+import { junkFrontier, knowDir } from "./store";
+import { englishEnough, hostOf, qualityHost, skipHost } from "./extract";
+import { cheapSkip, gopherSkip, wetFactBearing, wetSpam } from "./gate";
+import { englishTrigram } from "./lang";
+import { minhashBands } from "./minhash";
+import { WET_SCAN_MULT } from "./defaults";
 import { pushWarcBytes, type WetRecord } from "./warc";
 
 const CC = "https://data.commoncrawl.org/";
@@ -130,24 +134,102 @@ export async function newsWarcPath(index = 0, at = new Date()): Promise<string> 
   return `${CC}${line}`;
 }
 
-const QUALITY_URI = /rfc|ietf|nist|nasa|w3|python|nodejs/i;
+/** Catalog registries: hostname match, never a URI substring. Wikipedia is not a registry. */
+const REGISTRY_HOST = /(?:^|\.)(iana|rfc-editor|ietf|w3|spdx|unicode|whatwg)\.org$/i;
+const WIKI_NS_SKIP = /\/wiki\/(?:File|Special|Help|Talk|User|Template|Wikipedia|Category|Portal|Draft|Module):/i;
 
-function keepWet(rec: WetRecord): boolean {
-  if (qualityHost(rec.uri) || QUALITY_URI.test(rec.uri)) return true;
-  return /capital of /i.test(rec.text.slice(0, 400));
+/**
+ * Lower fetches first. Dense wiki lists beat RFC HTML beat other registries
+ * beat wiki articles beat other catalog hosts. Paywalls are 90 (also skipHost).
+ */
+export function rankFrontier(url: string): number {
+  if (skipHost(url) || junkFrontier(url)) return 90;
+  const u = url.toLowerCase();
+  if (/wikipedia\.org\/wiki\/list_of_[^/?#]*capital/i.test(u)) return 0;
+  if (/wikipedia\.org\/wiki\/list_of_/i.test(u)) return 1;
+  if (/rfc[-/_]?\d{3,5}/i.test(u) && (catalogRegistry(url) || qualityHost(url))) return 2;
+  if (catalogRegistry(url)) return 3;
+  if (/wikipedia\.org\/wiki\//i.test(u) && !WIKI_NS_SKIP.test(u)) return 4;
+  if (/(?:wikidata|wiktionary|wikimedia)\.org/i.test(u) && qualityHost(url)) return 5;
+  if (qualityHost(url)) return 6;
+  if (/rfc[-/_]?\d{3,5}/i.test(u) || /\/wiki\//i.test(u)) return 7;
+  return 8;
 }
 
-export async function ingestWetSlice(wetUrl: string, maxRecords: number): Promise<WetRecord[]> {
+export function rankFrontierUrls(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of urls) {
+    if (skipHost(u) || junkFrontier(u) || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+  }
+  out.sort((a, b) => rankFrontier(a) - rankFrontier(b) || (a < b ? -1 : a > b ? 1 : 0));
+  return out;
+}
+
+export function catalogRegistry(url: string): boolean {
+  const host = hostOf(url);
+  if (!host) return false;
+  if (REGISTRY_HOST.test(host)) return true;
+  if (host !== "github.com") return false;
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    return path === "/whatwg" || path.startsWith("/whatwg/");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * FineWeb meter is *slice* yield: kept / scanned on a WET window.
+ * Catalog *registries* (IANA, RFC Editor, IETF, W3C, SPDX, Unicode, WHATWG): length ≥ 80.
+ * Wikipedia / other qualityHost: same as non-catalog — junk/paywall/casino out, then
+ * Gopher quality + English, then fact-bearing (capital-of, RFC, media type, SPDX, IANA,
+ * ISO 3166) — not first-800 “capital of ” only.
+ * MinHash 14×8 near-dup is applied per slice in ingestWetSlice, not here (no corpus).
+ */
+export function keepWet(rec: WetRecord): boolean {
+  if (skipHost(rec.uri)) return false;
+  if (rec.text.length < 80) return false;
+  if (catalogRegistry(rec.uri)) return true;
+  if (cheapSkip(rec.uri, rec.text)) return false;
+  if (wetSpam(rec.text)) return false;
+  if (gopherSkip(rec.text)) return false;
+  if (qualityHost(rec.uri) && wetFactBearing(rec.text)) return true;
+  if (!englishEnough(rec.text) || !englishTrigram(rec.text)) return false;
+  return wetFactBearing(rec.text);
+}
+
+function keepWetRanked(pool: WetRecord[], maxRecords: number): WetRecord[] {
+  return pool
+    .map((rec, i) => ({ rec, rk: rankFrontier(rec.uri), i }))
+    .sort((a, b) => a.rk - b.rk || a.i - b.i)
+    .slice(0, maxRecords)
+    .map((x) => x.rec);
+}
+
+export function wetScanCap(maxRecords: number): number {
+  return Math.max(2_000, maxRecords * WET_SCAN_MULT);
+}
+
+export async function ingestWetSlice(
+  wetUrl: string,
+  maxRecords: number,
+  seen?: (uri: string) => boolean,
+): Promise<WetRecord[]> {
   const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT } });
   if (!r.ok) throw new Error(`wet ${r.status}`);
   if (!r.body) throw new Error("no body");
   const ds = r.body.pipeThrough(new DecompressionStream("gzip"));
   const reader = ds.getReader();
   let buf = new Uint8Array(0);
-  const raw: WetRecord[] = [];
-  const records: WetRecord[] = [];
-  const scanCap = Math.max(40, maxRecords * 8);
-  while (raw.length < scanCap && records.length < maxRecords) {
+  const pool: WetRecord[] = [];
+  const bandHit = new Set<string>();
+  let scanned = 0;
+  const scanCap = wetScanCap(maxRecords);
+  const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
+  while (scanned < scanCap && pool.length < poolCap) {
     const { done, value } = await reader.read();
     if (value) {
       const next = new Uint8Array(buf.length + value.length);
@@ -155,9 +237,18 @@ export async function ingestWetSlice(wetUrl: string, maxRecords: number): Promis
       next.set(value, buf.length);
       buf = next;
     }
-    buf = pushWarcBytes(buf, raw, scanCap);
-    records.length = 0;
-    for (const rec of raw) if (keepWet(rec)) records.push(rec);
+    const chunk: WetRecord[] = [];
+    buf = pushWarcBytes(buf, chunk, scanCap - scanned);
+    for (const rec of chunk) {
+      scanned++;
+      if (scanned > scanCap || pool.length >= poolCap) break;
+      if (seen?.(rec.uri)) continue;
+      if (!keepWet(rec)) continue;
+      const bands = minhashBands(rec.text);
+      if (bands.some((b) => bandHit.has(b))) continue;
+      for (const b of bands) bandHit.add(b);
+      pool.push(rec);
+    }
     if (done) break;
   }
   try {
@@ -165,5 +256,5 @@ export async function ingestWetSlice(wetUrl: string, maxRecords: number): Promis
   } catch {
     /* ignore */
   }
-  return records.slice(0, maxRecords);
+  return keepWetRanked(pool, maxRecords);
 }

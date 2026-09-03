@@ -4,13 +4,24 @@ const WARC10 = Buffer.from("WARC/1.0");
 const WARC11 = Buffer.from("WARC/1.1");
 
 function indexOfSub(buf: Uint8Array, start: number, needle: Uint8Array): number {
-  outer: for (let i = start; i <= buf.length - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
+  const first = needle[0]!;
+  const nlen = needle.length;
+  outer: for (let i = start; i <= buf.length - nlen; i++) {
+    if (buf[i] !== first) continue;
+    for (let j = 1; j < nlen; j++) {
       if (buf[i + j] !== needle[j]) continue outer;
     }
     return i;
   }
   return -1;
+}
+
+function indexOfWarc(buf: Uint8Array, start: number): number {
+  const a = indexOfSub(buf, start, WARC10);
+  const b = indexOfSub(buf, start, WARC11);
+  if (a < 0) return b;
+  if (b < 0) return a;
+  return a < b ? a : b;
 }
 
 function headerEnd(buf: Uint8Array, start: number): { end: number; sep: number } | undefined {
@@ -31,9 +42,7 @@ function headerText(buf: Uint8Array, start: number, end: number): string {
 export function pushWarcBytes(buf: Uint8Array, records: WetRecord[], max: number): Uint8Array {
   let offset = 0;
   while (records.length < max) {
-    let start = indexOfSub(buf, offset, WARC10);
-    const start11 = indexOfSub(buf, offset, WARC11);
-    if (start < 0 || (start11 >= 0 && start11 < start)) start = start11;
+    const start = indexOfWarc(buf, offset);
     if (start < 0) {
       const keep = Math.min(buf.length, 4096);
       return buf.subarray(buf.length - keep);

@@ -1,0 +1,64 @@
+{
+  "name": "eden-know-ingest",
+  "description": "Always-on Know crawler. Compact publishes graph.kpk to Impossible Cloud.",
+  "billing": {
+    "deploymentPlan": "nf-compute-20",
+    "buildPlan": "nf-compute-100-2"
+  },
+  "deployment": {
+    "instances": 1,
+    "docker": { "configType": "default" },
+    "storage": { "ephemeralStorage": { "storageSize": 2048 } }
+  },
+  "ports": [
+    {
+      "name": "health",
+      "internalPort": 8080,
+      "protocol": "HTTP",
+      "public": true
+    }
+  ],
+  "buildSource": "git",
+  "vcsData": {
+    "projectUrl": "https://github.com/KaiavN/Eden",
+    "projectType": "github",
+    "accountLogin": "KaiavN",
+    "projectBranch": "feat/compiled-tools-horizon"
+  },
+  "buildSettings": {
+    "dockerfile": {
+      "buildEngine": "buildkit",
+      "dockerFilePath": "/packages/know/Dockerfile",
+      "dockerWorkDir": "/packages/know"
+    }
+  },
+  "runtimeEnvironment": {
+    "EDEN_KNOW_DIR": "/data/know",
+    "PORT": "8080",
+    "EDEN_KNOW_INTERVAL": "30",
+    "EDEN_KNOW_CC": "80",
+    "EDEN_KNOW_LIVE": "48",
+    "EDEN_KNOW_NEWS": "8",
+    "EDEN_KNOW_CC_SLICES": "2",
+    "EDEN_KNOW_LIVE_CONC": "12",
+    "EDEN_KNOW_S3_ENDPOINT": "https://us-east-1.storage.impossibleapi.net",
+    "EDEN_KNOW_S3_REGION": "us-east-1",
+    "EDEN_KNOW_S3_BUCKET": "eden-know",
+    "EDEN_KNOW_S3_KEY": "graph.kpk",
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "AWS_EC2_METADATA_DISABLED": "true"
+  },
+  "healthChecks": [
+    {
+      "protocol": "HTTP",
+      "type": "readinessProbe",
+      "path": "/health",
+      "port": 8080,
+      "initialDelaySeconds": 90,
+      "periodSeconds": 60,
+      "timeoutSeconds": 15,
+      "failureThreshold": 10,
+      "successThreshold": 1
+    }
+  ]
+}
