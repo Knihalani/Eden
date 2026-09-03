@@ -5,7 +5,7 @@ import { EDENBOT } from "./ua";
 import { junkFrontier, knowDir } from "./store";
 import { englishEnough, hostOf, qualityHost, skipHost } from "./extract";
 import { pageTtl } from "./ttl";
-import { cheapSkip, cheapSkipHost, gopherSkip, wetFactBearing, wetSpam } from "./gate";
+import { cheapSkip, gopherSkip, headerSkipHost, wetFactBearing, wetSpam } from "./gate";
 import { englishTrigram } from "./lang";
 import { minhashBands } from "./minhash";
 import { WET_SCAN_MULT, envNum, shardWetIndex } from "./defaults";
@@ -218,9 +218,8 @@ export function wetScanCap(maxRecords: number): number {
 /** Header-only reject (warcio no_record_parse / FineWeb URLFilter). */
 export function wetHeaderSkip(uri: string, seen?: (uri: string) => boolean, len?: number): boolean {
   if (len != null && len < 80) return true;
-  if (skipHost(uri)) return true;
+  if (headerSkipHost(uri)) return true;
   if (seen?.(uri)) return true;
-  if (cheapSkipHost(uri)) return true;
   return false;
 }
 
@@ -230,7 +229,10 @@ async function fetchWet(wetUrl: string, budgetMs: number): Promise<Response> {
   const timeout = Math.max(5_000, budgetMs);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT }, signal: AbortSignal.timeout(timeout) });
+      const r = await fetch(wetUrl, {
+        headers: { "User-Agent": EDENBOT, "Accept-Encoding": "identity" },
+        signal: AbortSignal.timeout(timeout),
+      });
       if (r.ok) return r;
       lastErr = `wet ${r.status}`;
       if (r.status !== 429 && r.status < 500) throw new Error(lastErr);
@@ -266,6 +268,7 @@ export async function ingestWetSlice(
   const scanCap = scanLimit && scanLimit > 0 ? scanLimit : wetScanCap(maxRecords);
   const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
   const skip = (uri: string, _type: string, len: number) => wetHeaderSkip(uri, seen, len);
+  let lastYield = t0;
   while (scanned < scanCap && pool.length < poolCap) {
     if (Date.now() - t0 > budget) break;
     const { done, value } = await reader.read();
@@ -283,7 +286,11 @@ export async function ingestWetSlice(
       for (const b of bands) bandHit.add(b);
       pool.push(rec);
     }
-    if (stats.scanned % 32 === 0) await new Promise((r) => setTimeout(r, 0));
+    const now = Date.now();
+    if (now - lastYield >= 100) {
+      await new Promise((r) => setTimeout(r, 0));
+      lastYield = now;
+    }
     if (done) break;
   }
   try {

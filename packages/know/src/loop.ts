@@ -19,7 +19,7 @@ import {
 } from "./extract";
 import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
 import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum, expensiveLaneDue, shardCount, shardOwns } from "./defaults";
-import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
+import { fetchRobots, liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
 import { FEED_URLS, SEED_URLS, WIKI_TOPIC_URLS } from "./seed";
 import { cheapSkip } from "./gate";
@@ -296,6 +296,17 @@ export async function tickLive(store: KnowStore, limit: number): Promise<TickSta
   const wiki = due.filter((u) => wikiActionApiUrl(u));
   const rest = due.filter((u) => !wikiActionApiUrl(u));
   const fromWiki = await ingestWikiApiPages(store, wiki, "live-wiki");
+  const origins = new Set<string>();
+  for (const url of rest) {
+    try {
+      origins.add(new URL(url).origin);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (origins.size) {
+    await mapPool([...origins], Math.min(8, origins.size), (origin) => fetchRobots(origin));
+  }
   const hostN = new Map<string, number>();
   const waiters: Array<() => void> = [];
   const fetched = await mapPool(rest, LIVE_CONCURRENCY, async (url) => {

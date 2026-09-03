@@ -2,6 +2,41 @@ import { hostOf } from "./extract";
 
 const JUNK_TLD = /\.(xyz|top|click|loan|win|gq|cf|tk|ml|ga|icu|buzz|work|rest)$/i;
 const JUNK_HOST = /(googleusercontent\.com|\.onion$|^[\d.]+$)/i;
+const PAYWALL_HOST =
+  /(^|\.)(wsj|ft|economist|nytimes|washingtonpost|bloomberg|wired|theathletic)\.com$/i;
+
+/** Hostname without `www.` — same class as `hostOf`, no URL() on the WET skip path. */
+export function fastHost(url: string): string {
+  if (url.includes("@") || url.includes("[")) return hostOf(url);
+  const scheme = url.indexOf("://");
+  if (scheme < 0) return "";
+  const s = scheme + 3;
+  const n = url.length;
+  let e = s;
+  while (e < n) {
+    const c = url.charCodeAt(e);
+    if (c === 47 || c === 63 || c === 35 || c === 58) break;
+    e++;
+  }
+  let h = url.slice(s, e).toLowerCase();
+  if (h.startsWith("www.")) h = h.slice(4);
+  return h;
+}
+
+/** URI-only junk (FineWeb URLFilter). Safe before body decode. */
+export function cheapSkipHost(url: string): string | undefined {
+  const h = fastHost(url);
+  if (JUNK_TLD.test(h) || JUNK_HOST.test(h)) return "junk-host";
+  return undefined;
+}
+
+/** Paywall + junk + bad host without constructing URL on the common path. */
+export function headerSkipHost(url: string): boolean {
+  const h = fastHost(url);
+  if (!h) return true;
+  if (PAYWALL_HOST.test(h) || JUNK_TLD.test(h) || JUNK_HOST.test(h)) return true;
+  return false;
+}
 
 /** Gopher / MassiveText stop-word probe (no fastText). ≥2 hits ⇒ English-like. */
 const GOPHER_STOP = new Set([
@@ -41,13 +76,6 @@ const GOPHER_STOP = new Set([
   "an",
   "it",
 ]);
-
-/** URI-only junk (FineWeb URLFilter). Safe before body decode. */
-export function cheapSkipHost(url: string): string | undefined {
-  const h = hostOf(url);
-  if (JUNK_TLD.test(h) || JUNK_HOST.test(h)) return "junk-host";
-  return undefined;
-}
 
 export function cheapSkip(url: string, text: string): string | undefined {
   const hostSkip = cheapSkipHost(url);

@@ -12,7 +12,7 @@ export function emptyWarcStats(): WarcStats {
 const latin1 = new TextDecoder("latin1");
 const utf8 = new TextDecoder("utf-8", { fatal: false });
 
-/** WARC/1.0 or WARC/1.1 — one pass, not two full scans. */
+/** WARC/1.0 or WARC/1.1 — one pass over the view length only (not the backing allocation). */
 function indexOfWarc(buf: Uint8Array, start: number): number {
   const last = buf.length - 8;
   for (let i = start; i <= last; i++) {
@@ -42,8 +42,76 @@ function headerEnd(buf: Uint8Array, start: number): { end: number; sep: number }
   return undefined;
 }
 
-function headerText(buf: Uint8Array, start: number, end: number): string {
-  return latin1.decode(buf.subarray(start, end));
+function nameIs(buf: Uint8Array, i: number, n: number, want: string): boolean {
+  if (n !== want.length) return false;
+  for (let k = 0; k < n; k++) {
+    let c = buf[i + k]!;
+    if (c >= 65 && c <= 90) c += 32;
+    if (c !== want.charCodeAt(k)) return false;
+  }
+  return true;
+}
+
+function tokenEnd(buf: Uint8Array, v: number, lineEnd: number): number {
+  let e = v;
+  while (e < lineEnd && buf[e]! > 32) e++;
+  return e;
+}
+
+function parseDec(buf: Uint8Array, v: number, lineEnd: number): number {
+  let n = 0;
+  let any = false;
+  for (let i = v; i < lineEnd; i++) {
+    const c = buf[i]!;
+    if (c < 48 || c > 57) break;
+    any = true;
+    n = n * 10 + (c - 48);
+    if (n > 5_000_000) return n;
+  }
+  return any ? n : 0;
+}
+
+function ciToken(buf: Uint8Array, v: number, e: number, want: string): boolean {
+  if (e - v !== want.length) return false;
+  for (let k = 0; k < want.length; k++) {
+    let c = buf[v + k]!;
+    if (c >= 65 && c <= 90) c += 32;
+    if (c !== want.charCodeAt(k)) return false;
+  }
+  return true;
+}
+
+function parseWarcHeader(buf: Uint8Array, start: number, end: number): { len: number; type: string; uri: string } {
+  let len = 0;
+  let type = "";
+  let uri = "";
+  let i = start;
+  while (i < end) {
+    let eol = i;
+    while (eol < end && buf[eol] !== 10) eol++;
+    let lineEnd = eol;
+    if (lineEnd > i && buf[lineEnd - 1] === 13) lineEnd--;
+    let col = i;
+    while (col < lineEnd && buf[col] !== 58) col++;
+    if (col < lineEnd) {
+      const nameLen = col - i;
+      let v = col + 1;
+      while (v < lineEnd && (buf[v] === 32 || buf[v] === 9)) v++;
+      const te = tokenEnd(buf, v, lineEnd);
+      if (nameIs(buf, i, nameLen, "content-length")) len = parseDec(buf, v, lineEnd);
+      else if (nameIs(buf, i, nameLen, "warc-type")) {
+        if (ciToken(buf, v, te, "conversion")) type = "conversion";
+        else if (ciToken(buf, v, te, "response")) type = "response";
+        else type = "";
+      } else if (nameIs(buf, i, nameLen, "warc-target-uri")) uri = latin1.decode(buf.subarray(v, te));
+      if (len > 0 && type && uri) {
+        i = end;
+        break;
+      }
+    }
+    i = eol + 1;
+  }
+  return { len, type, uri };
 }
 
 /**
@@ -68,12 +136,8 @@ export function pushWarcBytes(
     }
     const head = headerEnd(buf, start);
     if (!head) return buf.subarray(start);
-    const header = headerText(buf, start, head.end);
     const restAt = head.end + head.sep;
-    const lenM = header.match(/Content-Length:\s*(\d+)/i);
-    const typeM = header.match(/WARC-Type:\s*(\S+)/i);
-    const uriM = header.match(/WARC-Target-URI:\s*(\S+)/i);
-    const len = lenM ? Number(lenM[1]) : 0;
+    const { len, type, uri } = parseWarcHeader(buf, start, head.end);
     if (!Number.isFinite(len) || len < 0 || len > 5_000_000) {
       offset = restAt;
       continue;
@@ -81,8 +145,6 @@ export function pushWarcBytes(
     if (buf.length < restAt + len) return buf.subarray(start);
     offset = restAt + len;
     if (stats) stats.scanned++;
-    const type = (typeM?.[1] || "").toLowerCase();
-    const uri = uriM?.[1] || "";
     const useful = type === "conversion" || type === "response";
     if (!useful || !uri.startsWith("http") || skip?.(uri, type, len)) {
       if (stats) stats.skippedBodies++;
@@ -105,7 +167,7 @@ export class BytePipe {
   private end = 0;
   copies = 0;
 
-  constructor(cap = 65_536) {
+  constructor(cap = 131_072) {
     this.raw = new Uint8Array(Math.max(4096, cap));
   }
 

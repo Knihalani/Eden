@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cheapSkipHost } from "./gate";
+import { cheapSkipHost, headerSkipHost } from "./gate";
 import { skipHost } from "./extract";
 import { BytePipe, emptyWarcStats, pushWarcBytes, type WetRecord } from "./warc";
 import { keepWet, wetHeaderSkip } from "./cc";
@@ -19,7 +19,8 @@ function rec(uri: string, text: string): Uint8Array {
 
 describe("ingest scale", () => {
   test("header skip matches skipHost and junk TLD without decoding", () => {
-    expect(skipHost("https://www.nytimes.com/a")).toBeTruthy();
+    expect(headerSkipHost("https://www.nytimes.com/a")).toBe(true);
+    expect(headerSkipHost("https://www.rfc-editor.org/rfc/rfc3986.html")).toBe(false);
     expect(wetHeaderSkip("https://www.nytimes.com/a")).toBe(true);
     expect(cheapSkipHost("https://casino-offer.xyz/x")).toBe("junk-host");
     expect(wetHeaderSkip("https://casino-offer.xyz/x")).toBe(true);
@@ -84,8 +85,32 @@ describe("ingest scale", () => {
     expect(a.size + b.size).toBe(100);
   });
 
-  test("tick skips SPARQL and overlaps WET/NEWS/CDX fetches", () => {
+  test("lowercase WARC header fields still parse and skip", () => {
+    const body = `${FACT.repeat(6)}\n`;
+    const keep = Buffer.concat([
+      Buffer.from(
+        `WARC/1.0\r\nwarc-type: conversion\r\nwarc-target-uri: https://www.rfc-editor.org/rfc/rfc9110.html\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n`,
+      ),
+      Buffer.from(body, "utf8"),
+    ]);
+    const drop = Buffer.concat([
+      Buffer.from(
+        `WARC/1.0\r\nwarc-type: conversion\r\nwarc-target-uri: https://www.nytimes.com/x\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n`,
+      ),
+      Buffer.from(body, "utf8"),
+    ]);
+    const blob = Buffer.concat([keep, drop]);
+    const recs: WetRecord[] = [];
+    const stats = emptyWarcStats();
+    pushWarcBytes(new Uint8Array(blob), recs, 10, (uri, _t, len) => wetHeaderSkip(uri, undefined, len), stats);
+    expect(recs.map((r) => r.uri)).toEqual(["https://www.rfc-editor.org/rfc/rfc9110.html"]);
+    expect(stats.decoded).toBe(1);
+    expect(stats.skippedBodies).toBe(1);
+  });
+
+  test("tick prefetches robots for live origins", () => {
     const loop = readFileSync(join(import.meta.dir, "loop.ts"), "utf8");
+    expect(loop).toContain("fetchRobots");
     expect(loop).toContain("skipGather(WIKIDATA_SPARQL_URL");
     expect(loop.includes("due(WIKIDATA_SPARQL_URL) ? gather")).toBe(false);
     expect(loop).toContain("await Promise.all([");

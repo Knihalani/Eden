@@ -14,13 +14,19 @@ for (const g of [
   if (x.length === 3) EN.add(x);
 }
 
+const EN3 = new Set<number>();
+for (const g of EN) {
+  if (g.length === 3) EN3.add((g.charCodeAt(0) << 16) | (g.charCodeAt(1) << 8) | g.charCodeAt(2));
+}
+
 export function englishTrigram(text: string): boolean {
   const t = text.toLowerCase().replace(/[^a-z]/g, "");
   if (t.length < 48) return false;
   let hit = 0;
   const n = t.length - 2;
   for (let i = 0; i < n; i++) {
-    if (EN.has(t.slice(i, i + 3))) hit++;
+    const k = (t.charCodeAt(i) << 16) | (t.charCodeAt(i + 1) << 8) | t.charCodeAt(i + 2);
+    if (EN3.has(k)) hit++;
   }
   return hit / n > 0.07;
 }
