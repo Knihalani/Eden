@@ -34,7 +34,7 @@ eden know dump
 
 `query` reads the pack only. Ingest writes SQLite WAL; those facts are **invisible** to `eden know query` and wrap until compact. Ingest then query without compact looks empty — that is the contract, not a bug.
 
-`compact` is a **full rewrite** in RAM on the compact host (not a delta). One object there; serving at TB scale uses a hot catalog shard plus a remote cold index (`EDEN_KNOW_URL`), not GetObject of the whole dump. Compact fetches the published `graph.kpk` first, merges this host’s local pack + WAL on top, writes, then uploads with **If-Match** (or If-None-Match `*` when the object is new). A 412 retries. If fetch fails, compact stays local and **does not upload** (never clobber a graph we did not merge). `dump` does the same and prints local path, bytes, SHA-256, and the public URL. With credentials it also writes a dated copy `graph-YYYYMMDD.kpk`.
+`compact` is a **full rewrite** in RAM on the compact host (not a delta). One object there; serving at TB scale uses a hot catalog shard plus a remote cold index (`EDEN_KNOW_URL`), not GetObject of the whole dump. Compact fetches the published `graph.kpk` first, merges this host’s local pack + WAL on top, writes, then uploads with **If-Match** (or If-None-Match `*` when the object is new). A 412 retries. If fetch fails, compact stays local and **does not upload** (never clobber a graph we did not merge). `dump` does the same and prints local path, bytes, SHA-256, and the public URL. It overwrites `graph.kpk` only — no dated copies.
 
 Credentials (never commit):
 
@@ -49,7 +49,7 @@ Credentials (never commit):
 | `EDEN_KNOW_S3=0` | compact/dump stay local |
 | `EDEN_KNOW_URL` | optional remote cold-shard query (`POST {q,k}` → `{hits}`); fail-open. Query never GetObject of the dump. |
 
-Always-on crawler: Northflank service `eden-know-ingest` (`nf-compute-20`, ~$5.40/mo + ~8 GB disk ~$1.20). Persistent `EDEN_KNOW_DIR=/data/know`. Each tick ingests Common Crawl WET (two files), CDX range hits, Wikipedia, open academia seeds, and any robots-ok outlink that is not a listed paywall or news/blog junk, then compact-publishes `graph.kpk` when the overlay has ≥16 nodes. Health: `GET /health`. Secrets: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (never in git). Spec: `packages/know/deploy/northflank-service.json`.
+Always-on crawler: Northflank service `eden-know-ingest` (`nf-compute-50`, 0.5 vCPU / 1 GB, ~$12/mo + disk). Persistent `EDEN_KNOW_DIR=/data/know`. Each tick ingests a small Common Crawl WET window, CDX range hits, Wikipedia, open academia seeds, and any robots-ok outlink that is not a listed paywall or news/blog junk, then compact-publishes the single `graph.kpk` when the overlay is due (every ~3 minutes, or immediately at 512 WAL nodes). Health: `GET /health`. Secrets: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (never in git). Spec: `packages/know/deploy/northflank-service.json`.
 
 Manual copy if you are not using the CLI upload:
 

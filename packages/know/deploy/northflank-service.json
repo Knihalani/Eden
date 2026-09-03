@@ -39,25 +39,26 @@
   "runtimeEnvironment": {
     "EDEN_KNOW_DIR": "/data/know",
     "PORT": "8080",
-    "EDEN_KNOW_INTERVAL": "45",
-    "EDEN_KNOW_CC": "0",
-    "EDEN_KNOW_LIVE": "24",
+    "EDEN_KNOW_INTERVAL": "5",
+    "EDEN_KNOW_CC": "8",
+    "EDEN_KNOW_LIVE": "48",
     "EDEN_KNOW_NEWS": "0",
     "EDEN_KNOW_CC_SLICES": "1",
-    "EDEN_KNOW_LIVE_CONC": "6",
+    "EDEN_KNOW_LIVE_CONC": "12",
+    "EDEN_KNOW_CDX": "16",
+    "EDEN_KNOW_WET_SCAN": "320",
+    "EDEN_KNOW_COMPACT_MS": "180000",
     "AWS_EC2_METADATA_DISABLED": "true"
   },
   "healthChecks": [
     {
-      "protocol": "HTTP",
-      "type": "readinessProbe",
-      "path": "/health",
-      "port": 8080,
-      "initialDelaySeconds": 90,
-      "periodSeconds": 60,
-      "timeoutSeconds": 15,
-      "failureThreshold": 10,
-      "successThreshold": 1
+      "protocol": "CMD",
+      "type": "livenessProbe",
+      "cmd": "/bin/true",
+      "initialDelaySeconds": 20,
+      "periodSeconds": 30,
+      "timeoutSeconds": 5,
+      "failureThreshold": 5
     }
   ]
 }

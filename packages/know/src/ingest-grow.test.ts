@@ -7,6 +7,7 @@ import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApi
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
+import { compactDue } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -132,6 +133,13 @@ describe("ingest overlay", () => {
     expect(FRONTIER_PERSIST).toBeGreaterThanOrEqual(4_096);
     expect(PAGE_PERSIST).toBeGreaterThanOrEqual(4_096);
     expect(FRONTIER_PERSIST).toBeGreaterThanOrEqual(8_000);
+  });
+
+  test("compactDue waits, then forces at a large WAL", () => {
+    expect(compactDue(0, 0, 1_000_000)).toBe(false);
+    expect(compactDue(16, 0, 1_000)).toBe(false);
+    expect(compactDue(16, 0, 200_000)).toBe(true);
+    expect(compactDue(512, 199_000, 200_000)).toBe(true);
   });
 
   test("pageFresh is true only with a fetched digest still in TTL", () => {

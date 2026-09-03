@@ -1,6 +1,6 @@
 /**
  * Published pack on Impossible Cloud (S3 API). aws CLI only.
- * Fetch-before-merge, If-Match / If-None-Match put, dated dump copy.
+ * Fetch-before-merge, If-Match / If-None-Match put of one object (`graph.kpk`).
  * Credentials from env. Never log secrets.
  */
 import { spawnSync } from "node:child_process";
@@ -184,7 +184,7 @@ export type PublishResult = {
  * Query/inject never call this. If S3 fetch fails, compact locally and do not upload
  * (never clobber a graph we did not merge).
  */
-export async function compactAndPublish(store: KnowStore, opts?: { dated?: boolean }): Promise<PublishResult> {
+export async function compactAndPublish(store: KnowStore): Promise<PublishResult> {
   let remote: RemotePack | null = null;
   if (s3Configured()) {
     try {
@@ -213,10 +213,6 @@ export async function compactAndPublish(store: KnowStore, opts?: { dated?: boole
   for (let i = 0; i < 4; i++) {
     const put = putRemotePack(bytes, etag);
     if (put.ok) {
-      if (opts?.dated) {
-        const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-        putRemotePack(bytes, null, `graph-${day}.kpk`);
-      }
       return {
         compacted: true,
         uploaded: true,

@@ -68,7 +68,7 @@ export async function knowCli(argv: string[]): Promise<number> {
     const { statSync, readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const store = openStore();
-    const pub = await compactAndPublish(store, { dated: true });
+    const pub = await compactAndPublish(store);
     store.close();
     const pack = join(knowDir(), "graph.kpk");
     try {

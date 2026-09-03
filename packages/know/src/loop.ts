@@ -16,7 +16,7 @@ import {
   type HtmlScan,
 } from "./extract";
 import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
-import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_LIVE, DEFAULT_NEWS, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, envNum } from "./defaults";
+import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum } from "./defaults";
 import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
@@ -140,7 +140,7 @@ async function tickCcSlice(store: KnowStore, limit: number, pathIndex: number): 
     const url = await wetPath(crawlId, pathIndex);
     store.setMeta("cc_crawl", crawlId);
     store.setMeta("cc_wet", url);
-    const recs = await ingestWetSlice(url, limit, (uri) => !!store.pageDigest(uri));
+    const recs = await ingestWetSlice(url, limit, (uri) => !!store.pageDigest(uri), envNum("EDEN_KNOW_WET_SCAN", 0) || undefined);
     let skipped = 0;
     let nodes = 0;
     for (const rec of recs) {
@@ -176,7 +176,7 @@ export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): 
   try {
     const url = await newsWarcPath(pathIndex);
     store.setMeta("cc_news", url);
-    const recs = await ingestWetSlice(url, limit, (uri) => !!store.pageDigest(uri));
+    const recs = await ingestWetSlice(url, limit, (uri) => !!store.pageDigest(uri), envNum("EDEN_KNOW_WET_SCAN", 0) || undefined);
     news = recs.length;
     for (const rec of recs) {
       const body = httpBody(rec.text);
@@ -685,42 +685,52 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
   return { cc: 0, news: 0, live, feeds: 0, cdx: 0, nodes, skipped };
 }
 
-export async function tickCdx(store: KnowStore, n = 2): Promise<TickStats> {
+export async function tickCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_CDX)): Promise<TickStats> {
   const crawlId = store.getMeta("cc_crawl") || (await latestCrawlId().catch(() => ""));
   let cdx = 0;
   let nodes = 0;
   let skipped = 0;
-  if (!crawlId) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+  const take = Math.max(0, Math.min(32, n | 0));
+  if (!crawlId || !take) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
   const idx = Number(store.getMeta("cdx_host_idx") || 0);
-  for (let i = 0; i < n; i++) {
+  const hosts: string[] = [];
+  for (let i = 0; i < take; i++) {
     const host = CDX_HOSTS[(idx + i) % CDX_HOSTS.length];
-    if (!host) continue;
+    if (host) hosts.push(host);
+  }
+  const fetched = await mapPool(hosts, Math.min(8, hosts.length), async (host) => {
     try {
-      const hits = await cdxHits(crawlId, host, 3);
-      for (const hit of hits.slice(0, 2)) {
+      const hits = await cdxHits(crawlId, host, 4);
+      const recs: Array<{ rec: NonNullable<Awaited<ReturnType<typeof rangeWarc>>> }> = [];
+      let miss = 0;
+      for (const hit of hits.slice(0, 3)) {
         const rec = await rangeWarc(hit);
-        if (!rec) {
-          skipped++;
-          continue;
-        }
-        store.setMeta("cdx_ok", "1");
-        const isHtml = rec.text.includes("<");
-        const scan = isHtml ? scanHtml(rec.text) : undefined;
-        const text = scan ? scan.text : rec.text;
-        const r = commitPage(store, rec.uri, text, rec.text, "cdx", isHtml, scan);
-        nodes += r.nodes;
-        skipped += r.skipped;
-        cdx++;
+        if (!rec) miss++;
+        else recs.push({ rec });
       }
+      return { recs, miss };
     } catch {
-      /* index 503 */
+      return { recs: [], miss: 0 };
+    }
+  });
+  for (const got of fetched) {
+    skipped += got.miss;
+    for (const { rec } of got.recs) {
+      store.setMeta("cdx_ok", "1");
+      const isHtml = rec.text.includes("<");
+      const scan = isHtml ? scanHtml(rec.text) : undefined;
+      const text = scan ? scan.text : rec.text;
+      const r = commitPage(store, rec.uri, text, rec.text, "cdx", isHtml, scan);
+      nodes += r.nodes;
+      skipped += r.skipped;
+      cdx++;
     }
   }
-  store.setMeta("cdx_host_idx", String((idx + n) % CDX_HOSTS.length));
+  store.setMeta("cdx_host_idx", String((idx + take) % CDX_HOSTS.length));
   return { cc: 0, news: 0, live: 0, feeds: 0, cdx, nodes, skipped };
 }
 
-export async function tick(opts?: { cc?: number; news?: number; live?: number; pathIndex?: number }) {
+export async function tick(opts?: { cc?: number; news?: number; live?: number; pathIndex?: number; cdx?: number }) {
   const store = openStore();
   try {
     seedIfEmpty(store);
@@ -764,14 +774,16 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
     const a = await tickCc(store, opts?.cc ?? DEFAULT_CC, ccIdx, slices);
     const news = await tickNews(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0));
-    const x = await tickCdx(store, 2);
+    const x = await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX));
     const f = await tickFeeds(store);
     const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
     store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
     store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
     store.expire();
-    if (store.count().wal_nodes >= 16) {
+    const wal = store.count().wal_nodes;
+    if (compactDue(wal, Number(store.getMeta("compact_at") || 0))) {
       const pub = await compactAndPublish(store);
+      store.setMeta("compact_at", String(Date.now()));
       console.log(
         JSON.stringify({
           compact: {
@@ -813,6 +825,6 @@ export async function runLoop(opts: { intervalSec: number; once?: boolean; cc?: 
       console.log(JSON.stringify({ at: new Date().toISOString(), ms: Date.now() - t0, err: String(e).slice(0, 200) }));
       if (opts.once) throw e;
     }
-    await new Promise((r) => setTimeout(r, Math.max(5_000, opts.intervalSec * 1000 - (Date.now() - t0))));
+    await new Promise((r) => setTimeout(r, Math.max(1_000, opts.intervalSec * 1000 - (Date.now() - t0))));
   } while (true);
 }
