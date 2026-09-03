@@ -194,6 +194,7 @@ describe("wikipedia batch API", () => {
   test("health caps include shard and wetEvery", () => {
     const src = readFileSync(join(import.meta.dir, "worker.ts"), "utf8");
     expect(src).toContain("wetEvery");
+    expect(src).toContain("wetScan");
     expect(src).toMatch(/shard:\s*shardIndex/);
     expect(src).toMatch(/shards:\s*shardCount/);
   });
