@@ -72,6 +72,8 @@ async function fetchCdxIndex(url: string): Promise<CdxHit[]> {
 
 /** collinfo `cdx-api` is often `${IDX}${id}-index`. Resolve once per crawl. */
 const cdxApiByCrawl = new Map<string, string>();
+/** Last CDX query suffix that returned hits for a host. */
+const cdxVariantByHost = new Map<string, string>();
 
 async function cdxApi(crawlId: string): Promise<string> {
   const hit = cdxApiByCrawl.get(crawlId);
@@ -104,9 +106,14 @@ export async function cdxHits(crawlId: string, host: string, limit = 4): Promise
     `url=${encodeURIComponent("https://" + host + "/")}&output=json&limit=${limit}&matchType=prefix`,
     `url=${encodeURIComponent(host)}/*&output=json&limit=${limit}&fl=url,filename,offset,length`,
   ];
-  for (const q of variants) {
+  const cached = cdxVariantByHost.get(host);
+  const ordered = cached ? [cached, ...variants.filter((v) => v !== cached)] : variants;
+  for (const q of ordered) {
     const hits = await fetchCdxIndex(`${base}?${q}`);
-    if (hits.length) return hits;
+    if (hits.length) {
+      cdxVariantByHost.set(host, q);
+      return hits;
+    }
   }
   return [];
 }

@@ -3379,6 +3379,9 @@ export function openStore(dir = knowDir()) {
     pageFresh(url: string, now = Date.now()): boolean {
       return crawl.pageFresh(url, now);
     },
+    hasWalNodes(url: string): boolean {
+      return !!(mem.query(`SELECT 1 AS x FROM nodes WHERE url = ? LIMIT 1`).get(url));
+    },
     hostBlocked(url: string): string | undefined {
       return crawl.hostBlocked(url);
     },

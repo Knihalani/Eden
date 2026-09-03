@@ -42,9 +42,16 @@ const GOPHER_STOP = new Set([
   "it",
 ]);
 
-export function cheapSkip(url: string, text: string): string | undefined {
+/** URI-only junk (FineWeb URLFilter). Safe before body decode. */
+export function cheapSkipHost(url: string): string | undefined {
   const h = hostOf(url);
   if (JUNK_TLD.test(h) || JUNK_HOST.test(h)) return "junk-host";
+  return undefined;
+}
+
+export function cheapSkip(url: string, text: string): string | undefined {
+  const hostSkip = cheapSkipHost(url);
+  if (hostSkip) return hostSkip;
   if (text.length < 80) return "thin";
   const toks = text
     .toLowerCase()

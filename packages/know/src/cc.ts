@@ -5,11 +5,11 @@ import { EDENBOT } from "./ua";
 import { junkFrontier, knowDir } from "./store";
 import { englishEnough, hostOf, qualityHost, skipHost } from "./extract";
 import { pageTtl } from "./ttl";
-import { cheapSkip, gopherSkip, wetFactBearing, wetSpam } from "./gate";
+import { cheapSkip, cheapSkipHost, gopherSkip, wetFactBearing, wetSpam } from "./gate";
 import { englishTrigram } from "./lang";
 import { minhashBands } from "./minhash";
-import { WET_SCAN_MULT, envNum } from "./defaults";
-import { pushWarcBytes, type WetRecord } from "./warc";
+import { WET_SCAN_MULT, envNum, shardWetIndex } from "./defaults";
+import { BytePipe, emptyWarcStats, pushWarcBytes, type WetRecord } from "./warc";
 
 const CC = "https://data.commoncrawl.org/";
 const COLLINFO = "https://index.commoncrawl.org/collinfo.json";
@@ -80,7 +80,7 @@ export async function listWetPaths(crawlId: string): Promise<string[]> {
 
 export async function wetPath(crawlId: string, index = 0): Promise<string> {
   const lines = await listWetPaths(crawlId);
-  const line = lines[index % lines.length];
+  const line = lines[shardWetIndex(index) % lines.length];
   if (!line) throw new Error("empty wet.paths");
   return `${CC}${line}`;
 }
@@ -130,7 +130,7 @@ export async function newsWarcPath(index = 0, at = new Date()): Promise<string> 
     }
   }
   if (!lines.length) throw new Error("no CC-NEWS warc.paths");
-  const line = lines[lines.length - 1 - (index % lines.length)];
+  const line = lines[lines.length - 1 - (shardWetIndex(index) % lines.length)];
   if (!line) throw new Error("empty CC-NEWS paths");
   return `${CC}${line}`;
 }
@@ -215,6 +215,15 @@ export function wetScanCap(maxRecords: number): number {
   return Math.max(2_000, maxRecords * WET_SCAN_MULT);
 }
 
+/** Header-only reject (warcio no_record_parse / FineWeb URLFilter). */
+export function wetHeaderSkip(uri: string, seen?: (uri: string) => boolean, len?: number): boolean {
+  if (len != null && len < 80) return true;
+  if (skipHost(uri)) return true;
+  if (seen?.(uri)) return true;
+  if (cheapSkipHost(uri)) return true;
+  return false;
+}
+
 async function fetchWet(wetUrl: string, budgetMs: number): Promise<Response> {
   let wait = 400;
   let lastErr = "wet fetch";
@@ -249,26 +258,24 @@ export async function ingestWetSlice(
   if (!r.body) throw new Error("no body");
   const ds = r.body.pipeThrough(new DecompressionStream("gzip"));
   const reader = ds.getReader();
-  let buf = new Uint8Array(0);
+  const pipe = new BytePipe();
   const pool: WetRecord[] = [];
   const bandHit = new Set<string>();
   let scanned = 0;
+  const stats = emptyWarcStats();
   const scanCap = scanLimit && scanLimit > 0 ? scanLimit : wetScanCap(maxRecords);
   const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
+  const skip = (uri: string, _type: string, len: number) => wetHeaderSkip(uri, seen, len);
   while (scanned < scanCap && pool.length < poolCap) {
     if (Date.now() - t0 > budget) break;
     const { done, value } = await reader.read();
-    if (value) {
-      const next = new Uint8Array(buf.length + value.length);
-      next.set(buf);
-      next.set(value, buf.length);
-      buf = next;
-    }
+    if (value) pipe.append(value);
     const chunk: WetRecord[] = [];
-    buf = pushWarcBytes(buf, chunk, scanCap - scanned);
+    const leftover = pushWarcBytes(pipe.view(), chunk, scanCap - stats.scanned, skip, stats);
+    pipe.setLeftover(leftover);
+    scanned = stats.scanned;
     for (const rec of chunk) {
-      scanned++;
-      if (scanned > scanCap || pool.length >= poolCap) break;
+      if (pool.length >= poolCap) break;
       if (seen?.(rec.uri)) continue;
       if (!keepWet(rec)) continue;
       const bands = minhashBands(rec.text);
