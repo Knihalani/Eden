@@ -23,6 +23,7 @@ const caps = {
   shard: shardIndex(),
   shards: shardCount(),
   wetEvery: envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY),
+  wetScan: envNum("EDEN_KNOW_WET_SCAN", 0),
 };
 let last: Record<string, unknown> = { ok: true, starting: true, s3: s3Configured(), caps };
 
