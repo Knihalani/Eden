@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cheapSkipHost } from "./gate";
 import { skipHost } from "./extract";
 import { BytePipe, emptyWarcStats, pushWarcBytes, type WetRecord } from "./warc";
@@ -79,5 +81,20 @@ describe("ingest scale", () => {
     const b = new Set(Array.from({ length: 50 }, (_, s) => shardWetIndex(s, 1, 2)));
     expect([...a].some((x) => b.has(x))).toBe(false);
     expect(a.size + b.size).toBe(100);
+  });
+
+  test("tick skips SPARQL and overlaps WET/NEWS/CDX fetches", () => {
+    const loop = readFileSync(join(import.meta.dir, "loop.ts"), "utf8");
+    expect(loop).toContain("skipGather(WIKIDATA_SPARQL_URL");
+    expect(loop.includes("due(WIKIDATA_SPARQL_URL) ? gather")).toBe(false);
+    expect(loop).toContain("await Promise.all([");
+    expect(loop).toContain("collectCdx(store");
+    expect(loop).toContain("collectCcSlice");
+    expect(loop).toContain("collectNewsRecords");
+    expect(loop).toContain("commitCdx(store");
+    expect(loop).toContain("commitCcRecords");
+    expect(loop).toContain("commitNewsRecords");
+    const cdx = readFileSync(join(import.meta.dir, "cdx.ts"), "utf8");
+    expect(cdx).toContain("cdxVariantByHost");
   });
 });
