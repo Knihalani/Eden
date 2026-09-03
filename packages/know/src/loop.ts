@@ -770,13 +770,14 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     await tickWikiGrow(store, 48);
     await tickRecrawl(store, 32);
     const q = await tickQuality(store, 8);
+    const f = await tickFeeds(store);
+    const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
+    console.log(JSON.stringify({ cc: 0, news: 0, live: b.live, feeds: f.feeds, cdx: 0, nodes: b.nodes, skipped: b.skipped, phase: "live" }));
+    const x = await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX));
     const slices = envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES);
     const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
     const a = await tickCc(store, opts?.cc ?? DEFAULT_CC, ccIdx, slices);
     const news = await tickNews(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0));
-    const x = await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX));
-    const f = await tickFeeds(store);
-    const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
     store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
     store.setMeta("news_idx", String((Number(store.getMeta("news_idx") || 0) + 1) % 10_000));
     store.expire();

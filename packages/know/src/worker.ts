@@ -32,6 +32,10 @@ console.log(
 
 await new Promise((r) => setTimeout(r, 3_000));
 
+setInterval(() => {
+  last = { ...last, starting: false, pulse: new Date().toISOString() };
+}, 5_000).unref();
+
 const intervalSec = envNum("EDEN_KNOW_INTERVAL", DEFAULT_INTERVAL_SEC);
 const cc = envNum("EDEN_KNOW_CC", DEFAULT_CC);
 const live = envNum("EDEN_KNOW_LIVE", DEFAULT_LIVE);
