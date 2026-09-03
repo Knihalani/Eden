@@ -49,7 +49,7 @@ Credentials (never commit):
 | `EDEN_KNOW_S3=0` | compact/dump stay local |
 | `EDEN_KNOW_URL` | optional remote cold-shard query (`POST {q,k}` → `{hits}`); fail-open. Query never GetObject of the dump. |
 
-Always-on crawler: Northflank service `eden-know-ingest` (`nf-compute-50`, 0.5 vCPU / 1 GB, ~$12/mo + disk). Persistent `EDEN_KNOW_DIR=/data/know`. Each tick ingests a small Common Crawl WET window, CDX range hits, Wikipedia, open academia seeds, and any robots-ok outlink that is not a listed paywall or news/blog junk, then compact-publishes the single `graph.kpk` when the overlay is due (every ~3 minutes, or immediately at 512 WAL nodes). Health: `GET /health`. Secrets: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (never in git). Spec: `packages/know/deploy/northflank-service.json`.
+Always-on crawler: Northflank service `eden-know-ingest` (`nf-compute-50`, 0.5 vCPU / 1 GB, ~$12/mo + disk). Persistent `EDEN_KNOW_DIR=/data/know`. Each tick ingests a small Common Crawl WET window, CDX range hits, Wikipedia, open academia seeds, and any robots-ok outlink that is not a listed paywall or news/blog junk, then compact-publishes the single `graph.kpk` when the overlay is due (every ~3 minutes, or immediately at 512 WAL nodes). Health: `GET /health` on a parent process (the tick runs in a child so probes are not starved by WET CPU). Secrets: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (never in git). Spec: `packages/know/deploy/northflank-service.json`.
 
 Manual copy if you are not using the CLI upload:
 

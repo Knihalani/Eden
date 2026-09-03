@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cheapSkipHost } from "./gate";
 import { skipHost } from "./extract";
@@ -96,5 +97,43 @@ describe("ingest scale", () => {
     expect(loop).toContain("commitNewsRecords");
     const cdx = readFileSync(join(import.meta.dir, "cdx.ts"), "utf8");
     expect(cdx).toContain("cdxVariantByHost");
+    const worker = readFileSync(join(import.meta.dir, "worker.ts"), "utf8");
+    expect(worker).toContain("EDEN_KNOW_INGEST_CHILD");
+    expect(worker).toContain("Bun.spawn");
+  });
+
+  test("health HTTP answers in the parent while the ingest child starts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-know-health-"));
+    const port = 18000 + (process.pid % 4000) + 17;
+    const proc = Bun.spawn([process.execPath, join(import.meta.dir, "worker.ts")], {
+      env: {
+        ...process.env,
+        PORT: String(port),
+        EDEN_KNOW_DIR: dir,
+        EDEN_KNOW_CC: "0",
+        EDEN_KNOW_LIVE: "0",
+        EDEN_KNOW_NEWS: "0",
+        EDEN_KNOW_INTERVAL: "3600",
+        EDEN_KNOW_S3: "0",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 500));
+      const t0 = performance.now();
+      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) });
+      const ms = performance.now() - t0;
+      const j = (await r.json()) as { ok?: boolean; caps?: { cc?: number; shards?: number } };
+      expect(r.ok).toBe(true);
+      expect(j.ok).toBe(true);
+      expect(j.caps?.cc).toBe(0);
+      expect(j.caps?.shards).toBe(1);
+      expect(ms).toBeLessThan(200);
+    } finally {
+      proc.kill();
+      await Promise.race([proc.exited, new Promise((r) => setTimeout(r, 2000))]);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
