@@ -434,7 +434,7 @@ describe("keepWet FineWeb meter", () => {
     const casino = `Best casino slots bahis win now! The capital of luck is winning tonight. ${"bahis casino slot ".repeat(20)}`;
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: kenya })).toBe(true);
     expect(keepWet({ uri: "https://www.wikidata.org/wiki/Q114", text: kenya })).toBe(true);
-    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Travel", text: long })).toBe(false);
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Travel", text: long })).toBe(true);
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Online_casino", text: casino })).toBe(false);
     expect(keepWet({ uri: "https://www.wikimedia.org/wiki/Casino", text: casino })).toBe(false);
   });
@@ -481,6 +481,8 @@ describe("keepWet FineWeb meter", () => {
     expect(keepWet({ uri: "https://www.nytimes.com/world/kenya", text: paywall })).toBe(false);
     expect(keepWet({ uri: "https://noticias.example/paris", text: spanish })).toBe(false);
     expect(keepWet({ uri: "https://example.org/x", text: "short" })).toBe(false);
+    const physics = `Quantum mechanics describes nature at atomic and subatomic scales with operators on Hilbert space. ${filler.repeat(3)}`;
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Quantum_mechanics", text: physics })).toBe(true);
     const countryOnly = `Kenya is a country in East Africa and the highlands run the length of the nation. ${filler.repeat(3)}`;
     expect(wetFactBearing(countryOnly)).toBe(true);
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: countryOnly })).toBe(true);
@@ -917,25 +919,30 @@ RFC 3986                   URI Generic Syntax               January 2005
 });
 
 describe("frontier rank + one-pass scan", () => {
-  test("wiki capital lists and RFC beat blogs; nytimes dropped; wiki File: last among kept", () => {
+  test("wiki lists and RFC beat blogs; nytimes dropped; wiki File: last among kept", () => {
     const ranked = rankFrontierUrls([
       "https://blog.example/essay",
       "https://en.wikipedia.org/wiki/Kenya",
       "https://www.nytimes.com/2026/01/01/x",
       "https://www.rfc-editor.org/rfc/rfc3986.html",
+      "https://en.wikipedia.org/wiki/List_of_academic_disciplines",
       "https://en.wikipedia.org/wiki/List_of_national_capitals",
       "https://en.wikipedia.org/wiki/File:Flag.svg",
       "https://www.iana.org/assignments/media-types/application/json",
     ]);
-    expect(ranked[0]).toBe("https://en.wikipedia.org/wiki/List_of_national_capitals");
-    expect(ranked[1]).toBe("https://www.rfc-editor.org/rfc/rfc3986.html");
+    expect(ranked[0]).toBe("https://en.wikipedia.org/wiki/List_of_academic_disciplines");
+    expect(ranked).toContain("https://en.wikipedia.org/wiki/List_of_national_capitals");
+    expect(rankFrontier("https://en.wikipedia.org/wiki/List_of_academic_disciplines")).toBe(
+      rankFrontier("https://en.wikipedia.org/wiki/List_of_national_capitals"),
+    );
+    expect(ranked).toContain("https://www.rfc-editor.org/rfc/rfc3986.html");
     expect(ranked).toContain("https://en.wikipedia.org/wiki/Kenya");
     expect(ranked).toContain("https://www.iana.org/assignments/media-types/application/json");
     expect(ranked.some((u) => /blog.example/.test(u))).toBe(false);
     expect(ranked.some((u) => /nytimes/.test(u))).toBe(false);
     expect(skipHost("https://www.nytimes.com/2026/01/01/x")).toBe("paywall-host");
     expect(skipHost(KENYA)).toBeUndefined();
-    expect(rankFrontier("https://en.wikipedia.org/wiki/List_of_national_capitals")).toBeLessThan(
+    expect(rankFrontier("https://en.wikipedia.org/wiki/List_of_academic_disciplines")).toBeLessThan(
       rankFrontier("https://www.rfc-editor.org/rfc/rfc3986.html"),
     );
     expect(rankFrontier(KENYA)).toBeLessThan(rankFrontier("https://blog.example/essay"));

@@ -161,4 +161,7 @@ export const CDX_HOSTS = [
   "openalex.org",
   "doaj.org",
   "www.semanticscholar.org",
+  "en.wiktionary.org",
+  "en.wikibooks.org",
+  "en.wikisource.org",
 ];
