@@ -11,6 +11,7 @@ import {
   skipHost,
   triplesFromPage,
   ttlDaysFor,
+  ttlDaysOnSkip,
   wikiActionApiUrl,
   wikiNeedsApiFallback,
   type HtmlScan,
@@ -77,28 +78,35 @@ function commitPage(
   const d = digest(htmlOrText);
   if (why) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: 7, skip: why });
+    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, source), skip: why });
     return { nodes: 0, skipped: 1 };
   }
   if (store.pageDigest(url) === d) {
     const have = (store.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url = ?`).get(url) as { n: number }).n;
     if (have > 0) {
-      store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysFor(url, text) });
+      store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysFor(url, text, source) });
       return { nodes: 0, skipped: 0 };
     }
   }
   if (!qualityHost(url) && store.nearDup(url, text)) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: 30, skip: "near-dup" });
+    store.putPage({
+      url,
+      digest: d,
+      chars: text.length,
+      source,
+      ttl_days: Math.min(ttlDaysFor(url, text, source), 30),
+      skip: "near-dup",
+    });
     return { nodes: 0, skipped: 1 };
   }
   const triples = triplesFromPage(url, isHtml ? htmlOrText : text, isHtml, scan);
   if (!triples.length) {
     store.bumpHost(url, false);
-    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: 7, skip: "no-hot" });
+    store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttlDaysOnSkip(url, text, source), skip: "no-hot" });
     return { nodes: 0, skipped: 1 };
   }
-  const ttl = ttlDaysFor(url, text);
+  const ttl = ttlDaysFor(url, text, source);
   store.putPage({ url, digest: d, chars: text.length, source, ttl_days: ttl });
   store.bumpHost(url, true);
   store.putNodes(url, triples, ttl);
@@ -846,9 +854,17 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
   }
 }
 
-export async function runLoop(opts: { intervalSec: number; once?: boolean; cc?: number; live?: number; news?: number }) {
+export async function runLoop(opts: {
+  intervalSec: number;
+  once?: boolean;
+  cc?: number;
+  live?: number;
+  news?: number;
+  onStart?: () => void;
+}) {
   do {
     const t0 = Date.now();
+    opts.onStart?.();
     try {
       const s = await tick({ cc: opts.cc, live: opts.live, news: opts.news });
       console.log(JSON.stringify({ at: new Date().toISOString(), ms: Date.now() - t0, ...s }));

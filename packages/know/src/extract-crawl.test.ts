@@ -421,6 +421,11 @@ describe("keepWet FineWeb meter", () => {
     expect(keepWet({ uri: "https://whatwg.org/", text: long })).toBe(true);
     expect(keepWet({ uri: "https://github.com/whatwg/html", text: long })).toBe(true);
     expect(keepWet({ uri: "https://www.nist.gov/pml/", text: long })).toBe(false);
+    const reuters =
+      "Reuters staff report that the city council voted after midnight on a budget amendment covering transit. ".repeat(
+        4,
+      );
+    expect(keepWet({ uri: "https://www.reuters.com/world/city-council-vote", text: reuters })).toBe(true);
   });
 
   test("wikipedia Kenya capital keeps; wikipedia junk and casino wiki-mirrors drop", () => {

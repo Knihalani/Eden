@@ -42,7 +42,7 @@
     "EDEN_KNOW_INTERVAL": "1",
     "EDEN_KNOW_CC": "8",
     "EDEN_KNOW_LIVE": "96",
-    "EDEN_KNOW_NEWS": "0",
+    "EDEN_KNOW_NEWS": "8",
     "EDEN_KNOW_CC_SLICES": "1",
     "EDEN_KNOW_LIVE_CONC": "20",
     "EDEN_KNOW_CDX": "8",

@@ -8,7 +8,12 @@ import { runLoop, type TickStats } from "./loop";
 import { s3Configured } from "./s3";
 
 const port = envNum("PORT", 8080);
-let last: Record<string, unknown> = { ok: true, starting: true, s3: s3Configured() };
+const intervalSec = envNum("EDEN_KNOW_INTERVAL", DEFAULT_INTERVAL_SEC);
+const cc = envNum("EDEN_KNOW_CC", DEFAULT_CC);
+const live = envNum("EDEN_KNOW_LIVE", DEFAULT_LIVE);
+const news = envNum("EDEN_KNOW_NEWS", DEFAULT_NEWS);
+const caps = { cc, live, news, intervalSec };
+let last: Record<string, unknown> = { ok: true, starting: true, s3: s3Configured(), caps };
 
 const server = Bun.serve({
   port,
@@ -36,15 +41,11 @@ setInterval(() => {
   last = { ...last, starting: false, pulse: new Date().toISOString() };
 }, 5_000).unref();
 
-const intervalSec = envNum("EDEN_KNOW_INTERVAL", DEFAULT_INTERVAL_SEC);
-const cc = envNum("EDEN_KNOW_CC", DEFAULT_CC);
-const live = envNum("EDEN_KNOW_LIVE", DEFAULT_LIVE);
-const news = envNum("EDEN_KNOW_NEWS", DEFAULT_NEWS);
-
 function remember(s: TickStats & { ms?: number; err?: string; counts?: { pack?: number; wal_nodes?: number; frontier?: number } }) {
   last = {
     ok: !s.err,
     s3: s3Configured(),
+    caps,
     at: new Date().toISOString(),
     cc: s.cc,
     live: s.live,
@@ -57,6 +58,7 @@ function remember(s: TickStats & { ms?: number; err?: string; counts?: { pack?: 
     frontier: s.counts?.frontier,
     ms: s.ms,
     err: s.err,
+    tick_started: last.tick_started,
   };
 }
 
@@ -74,7 +76,15 @@ async function loop() {
       }
     }
   };
-  await runLoop({ intervalSec, cc, live, news });
+  await runLoop({
+    intervalSec,
+    cc,
+    live,
+    news,
+    onStart: () => {
+      last = { ...last, starting: false, tick_started: new Date().toISOString() };
+    },
+  });
 }
 
 loop().catch((e) => {

@@ -46,14 +46,12 @@ const SEED_SET = new Set(SEED_URLS);
 const TTL_ENUM = [0, 7, 30, 365, 1825] as const;
 const FRONTIER_KEEP_HOST = /(?:^|\.)(rfc-editor|iana|ietf|httpwg|spdx|unicode|whatwg)\.org$/i;
 const WIKI_NS_SKIP = /\/wiki\/(?:File|Special|Help|Talk|User|Template|Wikipedia|Category|Portal|Draft|Module):/i;
-const FRONTIER_JUNK_PATH =
-  /image-article|\bapod\b|\/blog\/|\/news(?:-|$|\/)|\/news-events\/|\/news-release\/|\/\d{4}\/\d{2}\/\d{2}\//i;
+const FRONTIER_JUNK_PATH = /image-article|\bapod\b|\/blog\/|\/news-events\/|\/news-release\//i;
 
 /**
- * News / blog / image-article / APOD / NIST CMS / dated slugs do not belong on
- * the packed frontier. Catalog hosts for the graph stay: RFC Editor, IANA,
- * IETF, W3C TR (not news), SPDX, Unicode, WHATWG, Wikipedia articles + capital
- * lists, and seeds.
+ * Paywall-adjacent CMS, APOD, and blog indexes do not belong on the packed
+ * frontier. News article paths stay (1-day TTL). Catalog hosts stay: RFC,
+ * IANA, IETF, W3C TR, SPDX, Unicode, WHATWG, Wikipedia.
  */
 export function junkFrontier(url: string): boolean {
   if (!url || SEED_SET.has(url)) return false;
@@ -62,7 +60,8 @@ export function junkFrontier(url: string): boolean {
   if (/^blog\.|(^|\.)blogs?\./i.test(host)) return true;
   if (FRONTIER_KEEP_HOST.test(host)) return FRONTIER_JUNK_PATH.test(u);
   if (host === "w3.org" || host.endsWith(".w3.org")) {
-    if (/\/news\/|\/blog\//i.test(u)) return true;
+    if (/\/blog\//i.test(u)) return true;
+    if (/\/news\//i.test(u)) return false;
     return !/\/tr\//i.test(u);
   }
   if (host === "wikipedia.org" || host.endsWith(".wikipedia.org")) {
@@ -2577,16 +2576,16 @@ class Crawl {
   }
 
   stale(n: number, now = Date.now()): string[] {
-    const out: string[] = [];
+    const due: { url: string; ttl: number; fetched: number }[] = [];
     for (const e of this.pages.values()) {
       if (e.fetched + e.ttl * 86_400_000 > now) continue;
       const url = this.assemble(e.k);
       if (!url) continue;
       if (junkFrontier(url) && !SEED_SET.has(url)) continue;
-      out.push(url);
-      if (out.length >= n) break;
+      due.push({ url, ttl: e.ttl, fetched: e.fetched });
     }
-    return out;
+    due.sort((a, b) => a.ttl - b.ttl || a.fetched - b.fetched);
+    return due.slice(0, n).map((r) => r.url);
   }
 
   requeueSeeds() {

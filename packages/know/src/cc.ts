@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { EDENBOT } from "./ua";
 import { junkFrontier, knowDir } from "./store";
 import { englishEnough, hostOf, qualityHost, skipHost } from "./extract";
+import { pageTtl } from "./ttl";
 import { cheapSkip, gopherSkip, wetFactBearing, wetSpam } from "./gate";
 import { englishTrigram } from "./lang";
 import { minhashBands } from "./minhash";
@@ -198,6 +199,7 @@ export function keepWet(rec: WetRecord): boolean {
   if (gopherSkip(rec.text)) return false;
   if (!englishEnough(rec.text) || !englishTrigram(rec.text)) return false;
   if (TOPICAL_WET.test(rec.uri)) return true;
+  if (pageTtl(rec.uri, rec.text).class === "news") return true;
   return wetFactBearing(rec.text);
 }
 
