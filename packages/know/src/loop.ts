@@ -16,7 +16,7 @@ import {
   type HtmlScan,
 } from "./extract";
 import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
-import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum } from "./defaults";
+import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum } from "./defaults";
 import { liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
@@ -595,7 +595,22 @@ export async function tickWikiGrow(store: KnowStore, n = 24): Promise<TickStats>
 }
 
 /** Action API batch: up to 50 unseen country articles in one robots-ok request. */
-export async function tickWikiBatch(store: KnowStore, n = 50): Promise<TickStats> {
+export async function tickWikiBatch(store: KnowStore, n = envNum("EDEN_KNOW_WIKI", DEFAULT_WIKI)): Promise<TickStats> {
+  const want = Math.max(0, Math.min(200, n | 0));
+  const acc = emptyTick();
+  for (let done = 0; done < want; ) {
+    const take = Math.min(50, want - done);
+    const one = await wikiBatchOnce(store, take);
+    acc.live += one.live;
+    acc.nodes += one.nodes;
+    acc.skipped += one.skipped;
+    done += take;
+    if (!one.live && !one.nodes && !one.skipped) break;
+  }
+  return acc;
+}
+
+async function wikiBatchOnce(store: KnowStore, n: number): Promise<TickStats> {
   seedIfEmpty(store);
   const all = wikiCountryUrls();
   const todo: string[] = [];
@@ -748,7 +763,7 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
       due(LANG_SUBTAG_URL) ? gatherTextCatalog(LANG_SUBTAG_URL, "langtags", parseLangSubtags, 45_000) : skipGather(LANG_SUBTAG_URL, "langtags"),
       due(UNICODE_SCRIPTS_URL) ? gatherTextCatalog(UNICODE_SCRIPTS_URL, "scripts", parseUnicodeScripts) : skipGather(UNICODE_SCRIPTS_URL, "scripts"),
       due(WIKIDATA_SPARQL_URL) ? gatherJsonCatalog(WIKIDATA_SPARQL_URL, "wikidata", parseWikidataCapitals, 45_000) : skipGather(WIKIDATA_SPARQL_URL, "wikidata"),
-      tickWikiBatch(store, 50),
+      tickWikiBatch(store, envNum("EDEN_KNOW_WIKI", DEFAULT_WIKI)),
     ]);
     const idx = applyGather(store, rfcG);
     const w3 = applyGather(store, w3G);
@@ -767,9 +782,9 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const lang = applyGather(store, langG);
     const scripts = applyGather(store, scriptsG);
     const wd = applyGather(store, wdG);
-    await tickWikiGrow(store, 48);
-    await tickRecrawl(store, 32);
-    const q = await tickQuality(store, 8);
+    await tickWikiGrow(store, envNum("EDEN_KNOW_WIKI_GROW", DEFAULT_WIKI_GROW));
+    await tickRecrawl(store, envNum("EDEN_KNOW_RECRAWL", DEFAULT_RECRAWL));
+    const q = await tickQuality(store, envNum("EDEN_KNOW_QUALITY", DEFAULT_QUALITY));
     const f = await tickFeeds(store);
     const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
     console.log(JSON.stringify({ cc: 0, news: 0, live: b.live, feeds: f.feeds, cdx: 0, nodes: b.nodes, skipped: b.skipped, phase: "live" }));
