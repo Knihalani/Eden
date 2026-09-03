@@ -133,6 +133,7 @@ function htmlText(html: string): { text: string; scan: HtmlScan } {
 }
 
 async function tickCcSlice(store: KnowStore, limit: number, pathIndex: number): Promise<TickStats> {
+  if (limit <= 0) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
   try {
     const crawlId = (await latestCrawlId().catch(() => store.getMeta("cc_crawl"))) || "";
     if (!crawlId) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
@@ -171,6 +172,7 @@ export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): 
   let skipped = 0;
   let nodes = 0;
   let news = 0;
+  if (limit <= 0) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
   try {
     const url = await newsWarcPath(pathIndex);
     store.setMeta("cc_news", url);
