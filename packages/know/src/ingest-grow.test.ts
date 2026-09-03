@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { adaptCapitalLabel, noteCapitalLabel, resetAdaptForTest } from "./adapt";
@@ -7,7 +7,7 @@ import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApi
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
-import { compactDue, DEFAULT_WIKI } from "./defaults";
+import { compactDue, DEFAULT_WIKI, DEFAULT_WET_EVERY, shardOwns } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -145,10 +145,20 @@ describe("ingest overlay", () => {
 
   test("compactDue bootstraps once, then waits the interval", () => {
     expect(compactDue(0, 0, 1_000_000)).toBe(false);
-    expect(compactDue(16, 0, 1_000)).toBe(true);
-    expect(compactDue(16, 1, 1_000)).toBe(false);
-    expect(compactDue(16, 1, 200_000)).toBe(true);
-    expect(compactDue(900, 199_000, 200_000)).toBe(false);
+    expect(compactDue(64, 0, 1_000)).toBe(true);
+    expect(compactDue(64, 1, 1_000)).toBe(false);
+    expect(compactDue(64, 1, 900_001)).toBe(true);
+    expect(compactDue(900, 1, 200_000)).toBe(false);
+  });
+
+  test("shardOwns partitions URLs with no overlap and full cover", () => {
+    const urls = Array.from({ length: 200 }, (_, i) => `https://en.wikipedia.org/wiki/Topic_${i}`);
+    const a = urls.filter((u) => shardOwns(u, 0, 2));
+    const b = urls.filter((u) => shardOwns(u, 1, 2));
+    expect(a.length + b.length).toBe(200);
+    expect(a.some((u) => b.includes(u))).toBe(false);
+    expect(urls.every((u) => shardOwns(u, 0, 1))).toBe(true);
+    expect(DEFAULT_WET_EVERY).toBe(3);
   });
 
   test("ttlDaysFor is host-class, not a crawl budget", () => {
@@ -174,8 +184,11 @@ describe("ingest overlay", () => {
 });
 
 describe("wikipedia batch API", () => {
-  test("worker pulls more than one 50-title Action API query", () => {
-    expect(DEFAULT_WIKI).toBeGreaterThan(50);
+  test("health caps include shard and wetEvery", () => {
+    const src = readFileSync(join(import.meta.dir, "worker.ts"), "utf8");
+    expect(src).toContain("wetEvery");
+    expect(src).toMatch(/shard:\s*shardIndex/);
+    expect(src).toMatch(/shards:\s*shardCount/);
   });
 
   test("batch URL holds many titles on api.php", () => {

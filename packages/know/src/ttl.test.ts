@@ -53,3 +53,84 @@ describe("pageTtl host/path/source, not URL substrings", () => {
     expect(TTL_DAYS.news).toBe(1);
   });
 });
+
+describe("RFC 9111 hints and unchanged backoff", () => {
+  const now = Date.parse("2026-09-03T12:00:00Z");
+
+  test("304 / unchanged doubles TTL up to the class cap; news caps at 7", () => {
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", status: 304, prevTtl: 1 }),
+    ).toBe(2);
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 2 }),
+    ).toBe(4);
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 4 }),
+    ).toBe(7);
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news", unchanged: true, prevTtl: 7 }),
+    ).toBe(7);
+    expect(ttlDaysFor("https://www.reuters.com/world/x", "", { source: "cc-news" })).toBe(1);
+    expect(
+      ttlDaysFor("https://en.wikipedia.org/wiki/Newspaper", "A newspaper is a periodical.", {
+        unchanged: true,
+        prevTtl: 90,
+      }),
+    ).toBe(180);
+  });
+
+  test("Cache-Control max-age and immutable only lengthen within the class cap", () => {
+    expect(
+      ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", {
+        cacheControl: "public, max-age=10368000",
+      }),
+    ).toBe(120);
+    expect(
+      ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", { cacheControl: "public, immutable" }),
+    ).toBe(180);
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", {
+        source: "cc-news",
+        cacheControl: "max-age=259200",
+      }),
+    ).toBe(3);
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", {
+        source: "cc-news",
+        cacheControl: "public, immutable, max-age=31536000",
+      }),
+    ).toBe(7);
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", {
+        source: "cc-news",
+        cacheControl: "no-store, max-age=0",
+      }),
+    ).toBe(1);
+  });
+
+  test("Last-Modified 10% heuristic lengthens non-news when older than 10 days and no max-age", () => {
+    const lmOld = new Date(now - 2000 * 86_400_000).toUTCString();
+    expect(
+      ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", { lastModified: lmOld, now }),
+    ).toBe(180);
+    const lmNews = new Date(now - 2000 * 86_400_000).toUTCString();
+    expect(
+      ttlDaysFor("https://www.reuters.com/world/x", "", {
+        source: "cc-news",
+        lastModified: lmNews,
+        now,
+      }),
+    ).toBe(1);
+    const lmNew = new Date(now - 5 * 86_400_000).toUTCString();
+    expect(
+      ttlDaysFor("https://notes.example/stable-note", "widgets ".repeat(20), { lastModified: lmNew, now }),
+    ).toBe(365);
+    expect(
+      ttlDaysFor("https://en.wikipedia.org/wiki/Physics", "operators", {
+        cacheControl: "max-age=7776000",
+        lastModified: lmOld,
+        now,
+      }),
+    ).toBe(90);
+  });
+});

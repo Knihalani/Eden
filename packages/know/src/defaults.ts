@@ -18,8 +18,30 @@ export const DEFAULT_WIKI_GROW = 80;
 export const DEFAULT_RECRAWL = 48;
 export const DEFAULT_QUALITY = 16;
 /** Compact-publish when WAL is at least this and the last upload is old enough. */
-export const COMPACT_WAL_MIN = 16;
-export const DEFAULT_COMPACT_MS = 180_000;
+export const COMPACT_WAL_MIN = 64;
+export const DEFAULT_COMPACT_MS = 900_000;
+/** Run a full WET gunzip every N ticks when the last slice kept nothing. */
+export const DEFAULT_WET_EVERY = 3;
+
+export function shardIndex(): number {
+  return envNum("EDEN_KNOW_SHARD", 0);
+}
+
+export function shardCount(): number {
+  return Math.max(1, envNum("EDEN_KNOW_SHARDS", 1) | 0);
+}
+
+/** Hash-partition a URL so N ingest boxes do not fetch the same page. */
+export function shardOwns(url: string, i = shardIndex(), n = shardCount()): boolean {
+  if (n <= 1) return true;
+  const shard = ((i % n) + n) % n;
+  let h = 2166136261;
+  for (let k = 0; k < url.length; k++) {
+    h ^= url.charCodeAt(k);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % n === shard;
+}
 
 /** True when ingest should rewrite and upload the single `graph.kpk`. */
 export function compactDue(wal: number, lastMs: number, now = Date.now()): boolean {

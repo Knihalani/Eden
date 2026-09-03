@@ -3,7 +3,7 @@
  * Always-on ingest: health HTTP + tick loop that compact-publishes to S3.
  * Northflank (and similar) probe GET /health. Crawl state lives in EDEN_KNOW_DIR.
  */
-import { DEFAULT_CC, DEFAULT_INTERVAL_SEC, DEFAULT_LIVE, DEFAULT_NEWS, envNum } from "./defaults";
+import { DEFAULT_CC, DEFAULT_INTERVAL_SEC, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_WET_EVERY, envNum, shardCount, shardIndex } from "./defaults";
 import { runLoop, type TickStats } from "./loop";
 import { s3Configured } from "./s3";
 
@@ -12,7 +12,15 @@ const intervalSec = envNum("EDEN_KNOW_INTERVAL", DEFAULT_INTERVAL_SEC);
 const cc = envNum("EDEN_KNOW_CC", DEFAULT_CC);
 const live = envNum("EDEN_KNOW_LIVE", DEFAULT_LIVE);
 const news = envNum("EDEN_KNOW_NEWS", DEFAULT_NEWS);
-const caps = { cc, live, news, intervalSec };
+const caps = {
+  cc,
+  live,
+  news,
+  intervalSec,
+  shard: shardIndex(),
+  shards: shardCount(),
+  wetEvery: envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY),
+};
 let last: Record<string, unknown> = { ok: true, starting: true, s3: s3Configured(), caps };
 
 const server = Bun.serve({
@@ -38,7 +46,14 @@ console.log(
 await new Promise((r) => setTimeout(r, 3_000));
 
 setInterval(() => {
-  last = { ...last, starting: false, pulse: new Date().toISOString() };
+  const started = typeof last.tick_started === "string" ? Date.parse(String(last.tick_started)) : 0;
+  const elapsed = started > 1e12 && last.ms == null ? Date.now() - started : undefined;
+  last = {
+    ...last,
+    starting: false,
+    pulse: new Date().toISOString(),
+    ...(elapsed != null ? { ms: elapsed } : {}),
+  };
 }, 5_000).unref();
 
 function remember(s: TickStats & { ms?: number; err?: string; counts?: { pack?: number; wal_nodes?: number; frontier?: number } }) {
@@ -82,7 +97,7 @@ async function loop() {
     live,
     news,
     onStart: () => {
-      last = { ...last, starting: false, tick_started: new Date().toISOString() };
+      last = { ...last, starting: false, tick_started: new Date().toISOString(), ms: undefined };
     },
   });
 }
