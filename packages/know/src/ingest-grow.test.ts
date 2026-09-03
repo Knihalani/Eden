@@ -135,11 +135,12 @@ describe("ingest overlay", () => {
     expect(FRONTIER_PERSIST).toBeGreaterThanOrEqual(8_000);
   });
 
-  test("compactDue waits, then forces at a large WAL", () => {
+  test("compactDue bootstraps once, then waits the interval", () => {
     expect(compactDue(0, 0, 1_000_000)).toBe(false);
-    expect(compactDue(16, 0, 1_000)).toBe(false);
-    expect(compactDue(16, 0, 200_000)).toBe(true);
-    expect(compactDue(512, 199_000, 200_000)).toBe(true);
+    expect(compactDue(16, 0, 1_000)).toBe(true);
+    expect(compactDue(16, 1, 1_000)).toBe(false);
+    expect(compactDue(16, 1, 200_000)).toBe(true);
+    expect(compactDue(900, 199_000, 200_000)).toBe(false);
   });
 
   test("pageFresh is true only with a fetched digest still in TTL", () => {
