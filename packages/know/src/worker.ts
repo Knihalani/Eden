@@ -30,6 +30,8 @@ console.log(
   }),
 );
 
+await new Promise((r) => setTimeout(r, 3_000));
+
 const intervalSec = envNum("EDEN_KNOW_INTERVAL", DEFAULT_INTERVAL_SEC);
 const cc = envNum("EDEN_KNOW_CC", DEFAULT_CC);
 const live = envNum("EDEN_KNOW_LIVE", DEFAULT_LIVE);
