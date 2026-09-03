@@ -7,7 +7,7 @@ import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApi
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
-import { compactDue } from "./defaults";
+import { compactDue, DEFAULT_WIKI } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -156,6 +156,10 @@ describe("ingest overlay", () => {
 });
 
 describe("wikipedia batch API", () => {
+  test("worker pulls more than one 50-title Action API query", () => {
+    expect(DEFAULT_WIKI).toBeGreaterThan(50);
+  });
+
   test("batch URL holds many titles on api.php", () => {
     const url = wikiActionApiBatchUrl([
       "https://en.wikipedia.org/wiki/Kenya",
