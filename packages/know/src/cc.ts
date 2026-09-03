@@ -7,7 +7,7 @@ import { englishEnough, hostOf, qualityHost, skipHost } from "./extract";
 import { cheapSkip, gopherSkip, wetFactBearing, wetSpam } from "./gate";
 import { englishTrigram } from "./lang";
 import { minhashBands } from "./minhash";
-import { WET_SCAN_MULT } from "./defaults";
+import { WET_SCAN_MULT, envNum } from "./defaults";
 import { pushWarcBytes, type WetRecord } from "./warc";
 
 const CC = "https://data.commoncrawl.org/";
@@ -219,7 +219,9 @@ export async function ingestWetSlice(
   seen?: (uri: string) => boolean,
   scanLimit?: number,
 ): Promise<WetRecord[]> {
-  const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT } });
+  const t0 = Date.now();
+  const budget = envNum("EDEN_KNOW_WET_MS", 45_000);
+  const r = await fetch(wetUrl, { headers: { "User-Agent": EDENBOT }, signal: AbortSignal.timeout(budget) });
   if (!r.ok) throw new Error(`wet ${r.status}`);
   if (!r.body) throw new Error("no body");
   const ds = r.body.pipeThrough(new DecompressionStream("gzip"));
@@ -231,6 +233,7 @@ export async function ingestWetSlice(
   const scanCap = scanLimit && scanLimit > 0 ? scanLimit : wetScanCap(maxRecords);
   const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
   while (scanned < scanCap && pool.length < poolCap) {
+    if (Date.now() - t0 > budget) break;
     const { done, value } = await reader.read();
     if (value) {
       const next = new Uint8Array(buf.length + value.length);

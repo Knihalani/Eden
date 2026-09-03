@@ -57,7 +57,7 @@ function sleep(ms: number): Promise<void> {
 async function fetchCdxIndex(url: string): Promise<CdxHit[]> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const r = await fetch(url, { headers: { "User-Agent": EDENBOT }, signal: AbortSignal.timeout(20_000) });
+      const r = await fetch(url, { headers: { "User-Agent": EDENBOT }, signal: AbortSignal.timeout(8_000) });
       if (r.ok) {
         const hits = parseCdxBody(await r.text());
         if (hits.length) return hits;
