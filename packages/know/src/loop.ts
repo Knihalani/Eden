@@ -85,8 +85,7 @@ function commitPage(
     return { nodes: 0, skipped: 1 };
   }
   if (store.pageDigest(url) === d) {
-    const have = (store.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url = ?`).get(url) as { n: number }).n;
-    if (have > 0) {
+    if (store.hasWalNodes(url)) {
       store.putPage({
         url,
         digest: d,
@@ -149,65 +148,100 @@ function htmlText(html: string): { text: string; scan: HtmlScan } {
   return { text: scan.text, scan };
 }
 
-async function tickCcSlice(store: KnowStore, limit: number, pathIndex: number): Promise<TickStats> {
-  if (limit <= 0) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+async function collectCcSlice(
+  store: KnowStore,
+  limit: number,
+  pathIndex: number,
+): Promise<{ recs: Awaited<ReturnType<typeof ingestWetSlice>>; crawlId?: string; url?: string }> {
+  if (limit <= 0) return { recs: [] };
   try {
     const crawlId = (await latestCrawlId().catch(() => store.getMeta("cc_crawl"))) || "";
-    if (!crawlId) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+    if (!crawlId) return { recs: [] };
     const url = await wetPath(crawlId, pathIndex);
-    store.setMeta("cc_crawl", crawlId);
-    store.setMeta("cc_wet", url);
-    const recs = await ingestWetSlice(url, limit, (uri) => !!store.pageDigest(uri), envNum("EDEN_KNOW_WET_SCAN", 0) || undefined);
-    let skipped = 0;
-    let nodes = 0;
-    for (const rec of recs) {
-      const r = commitPage(store, rec.uri, rec.text, rec.text, "cc", false);
-      nodes += r.nodes;
-      skipped += r.skipped;
-    }
-    return { cc: recs.length, news: 0, live: 0, feeds: 0, cdx: 0, nodes, skipped, crawlId };
+    const recs = await ingestWetSlice(
+      url,
+      limit,
+      (uri) => !!store.pageDigest(uri),
+      envNum("EDEN_KNOW_WET_SCAN", 0) || undefined,
+    );
+    return { recs, crawlId, url };
   } catch {
-    return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0, crawlId: store.getMeta("cc_crawl") };
+    return { recs: [], crawlId: store.getMeta("cc_crawl") };
   }
 }
 
-/** One or more WET files from the latest crawl. `slices` walks consecutive wet.paths entries. */
+function commitCcRecords(
+  store: KnowStore,
+  recs: Awaited<ReturnType<typeof ingestWetSlice>>,
+  crawlId?: string,
+  url?: string,
+): TickStats {
+  if (crawlId) store.setMeta("cc_crawl", crawlId);
+  if (url) store.setMeta("cc_wet", url);
+  let skipped = 0;
+  let nodes = 0;
+  for (const rec of recs) {
+    const r = commitPage(store, rec.uri, rec.text, rec.text, "cc", false);
+    nodes += r.nodes;
+    skipped += r.skipped;
+  }
+  return { cc: recs.length, news: 0, live: 0, feeds: 0, cdx: 0, nodes, skipped, crawlId };
+}
+
+/** One or more WET files from the latest crawl. `slices` walks consecutive wet.paths entries. Fetches in parallel; commits serially. */
 export async function tickCc(store: KnowStore, limit: number, pathIndex = 0, slices = DEFAULT_CC_SLICES): Promise<TickStats> {
   const n = Math.max(1, Math.min(6, slices | 0));
+  const got = await Promise.all(Array.from({ length: n }, (_, i) => collectCcSlice(store, limit, pathIndex + i)));
   const acc: TickStats = { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
-  for (let i = 0; i < n; i++) {
-    const one = await tickCcSlice(store, limit, pathIndex + i);
-    acc.cc += one.cc;
-    acc.nodes += one.nodes;
-    acc.skipped += one.skipped;
-    if (one.crawlId) acc.crawlId = one.crawlId;
+  for (const one of got) {
+    const r = commitCcRecords(store, one.recs, one.crawlId, one.url);
+    acc.cc += r.cc;
+    acc.nodes += r.nodes;
+    acc.skipped += r.skipped;
+    if (r.crawlId) acc.crawlId = r.crawlId;
   }
   return acc;
 }
 
-export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): Promise<TickStats> {
-  let skipped = 0;
-  let nodes = 0;
-  let news = 0;
-  if (limit <= 0) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+async function collectNewsRecords(
+  store: KnowStore,
+  limit: number,
+  pathIndex: number,
+): Promise<{ recs: Awaited<ReturnType<typeof ingestWetSlice>>; url?: string }> {
+  if (limit <= 0) return { recs: [] };
   try {
     const url = await newsWarcPath(pathIndex);
-    store.setMeta("cc_news", url);
-    const recs = await ingestWetSlice(url, limit, (uri) => !!store.pageDigest(uri), envNum("EDEN_KNOW_WET_SCAN", 0) || undefined);
-    news = recs.length;
-    for (const rec of recs) {
-      const body = httpBody(rec.text);
-      const isHtml = body.includes("<");
-      const scan = isHtml ? scanHtml(body) : undefined;
-      const text = scan ? scan.text : body;
-      const r = commitPage(store, rec.uri, text, body, "cc-news", isHtml, scan);
-      nodes += r.nodes;
-      skipped += r.skipped;
-    }
+    const recs = await ingestWetSlice(
+      url,
+      limit,
+      (uri) => !!store.pageDigest(uri),
+      envNum("EDEN_KNOW_WET_SCAN", 0) || undefined,
+    );
+    return { recs, url };
   } catch {
-    /* month listing can 404; CC-MAIN still runs */
+    return { recs: [] };
   }
-  return { cc: 0, news, live: 0, feeds: 0, cdx: 0, nodes, skipped };
+}
+
+function commitNewsRecords(store: KnowStore, recs: Awaited<ReturnType<typeof ingestWetSlice>>, url?: string): TickStats {
+  if (url) store.setMeta("cc_news", url);
+  let skipped = 0;
+  let nodes = 0;
+  for (const rec of recs) {
+    const body = httpBody(rec.text);
+    const isHtml = body.includes("<");
+    const scan = isHtml ? scanHtml(body) : undefined;
+    const text = scan ? scan.text : body;
+    const r = commitPage(store, rec.uri, text, body, "cc-news", isHtml, scan);
+    nodes += r.nodes;
+    skipped += r.skipped;
+  }
+  return { cc: 0, news: recs.length, live: 0, feeds: 0, cdx: 0, nodes, skipped };
+}
+
+export async function tickNews(store: KnowStore, limit: number, pathIndex = 0): Promise<TickStats> {
+  const got = await collectNewsRecords(store, limit, pathIndex);
+  return commitNewsRecords(store, got.recs, got.url);
 }
 
 export async function tickFeeds(store: KnowStore, n = FEED_URLS.length): Promise<TickStats> {
@@ -755,7 +789,7 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
         .get(`RFC ${rfc[1]}`) as { eid: number } | null;
       if (row && row.eid !== 0) continue;
     } else {
-      const have = (store.db.query(`SELECT COUNT(*) AS n FROM nodes WHERE url = ?`).get(url) as { n: number }).n;
+      const have = store.hasWalNodes(url);
       if (have > 0) continue;
     }
     todo.push(url);
@@ -804,13 +838,16 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
   return { cc: 0, news: 0, live, feeds: 0, cdx: 0, nodes, skipped };
 }
 
-export async function tickCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_CDX)): Promise<TickStats> {
+type CdxBundle = {
+  fetched: Array<{ recs: Array<{ rec: NonNullable<Awaited<ReturnType<typeof rangeWarc>>> }>; miss: number }>;
+  idx: number;
+  take: number;
+};
+
+async function collectCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_CDX)): Promise<CdxBundle | null> {
   const crawlId = store.getMeta("cc_crawl") || (await latestCrawlId().catch(() => ""));
-  let cdx = 0;
-  let nodes = 0;
-  let skipped = 0;
   const take = Math.max(0, Math.min(32, n | 0));
-  if (!crawlId || !take) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+  if (!crawlId || !take) return null;
   const idx = Number(store.getMeta("cdx_host_idx") || 0);
   const hosts: string[] = [];
   for (let i = 0; i < take; i++) {
@@ -832,7 +869,14 @@ export async function tickCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFA
       return { recs: [], miss: 0 };
     }
   });
-  for (const got of fetched) {
+  return { fetched, idx, take };
+}
+
+function commitCdx(store: KnowStore, bundle: CdxBundle): TickStats {
+  let cdx = 0;
+  let nodes = 0;
+  let skipped = 0;
+  for (const got of bundle.fetched) {
     skipped += got.miss;
     for (const { rec } of got.recs) {
       store.setMeta("cdx_ok", "1");
@@ -845,8 +889,14 @@ export async function tickCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFA
       cdx++;
     }
   }
-  store.setMeta("cdx_host_idx", String((idx + take) % CDX_HOSTS.length));
+  store.setMeta("cdx_host_idx", String((bundle.idx + bundle.take) % CDX_HOSTS.length));
   return { cc: 0, news: 0, live: 0, feeds: 0, cdx, nodes, skipped };
+}
+
+export async function tickCdx(store: KnowStore, n = envNum("EDEN_KNOW_CDX", DEFAULT_CDX)): Promise<TickStats> {
+  const got = await collectCdx(store, n);
+  if (!got) return { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+  return commitCdx(store, got);
 }
 
 export async function tick(opts?: { cc?: number; news?: number; live?: number; pathIndex?: number; cdx?: number }) {
@@ -866,7 +916,7 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
       due(UNICODE_BLOCKS_URL) ? gatherTextCatalog(UNICODE_BLOCKS_URL, "unicode", parseUnicodeBlocks) : skipGather(UNICODE_BLOCKS_URL, "unicode"),
       due(LANG_SUBTAG_URL) ? gatherTextCatalog(LANG_SUBTAG_URL, "langtags", parseLangSubtags, 45_000) : skipGather(LANG_SUBTAG_URL, "langtags"),
       due(UNICODE_SCRIPTS_URL) ? gatherTextCatalog(UNICODE_SCRIPTS_URL, "scripts", parseUnicodeScripts) : skipGather(UNICODE_SCRIPTS_URL, "scripts"),
-      due(WIKIDATA_SPARQL_URL) ? gatherJsonCatalog(WIKIDATA_SPARQL_URL, "wikidata", parseWikidataCapitals, 45_000) : skipGather(WIKIDATA_SPARQL_URL, "wikidata"),
+      skipGather(WIKIDATA_SPARQL_URL, "wikidata"),
       tickWikiBatch(store, envNum("EDEN_KNOW_WIKI", DEFAULT_WIKI)),
     ]);
     const idx = applyGather(store, rfcG);
@@ -901,11 +951,28 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const doWet = expensiveLaneDue(tickN, every, lastWet);
     const doNews = expensiveLaneDue(tickN + 1, every, lastNews);
     const doCdx = expensiveLaneDue(tickN + 2, every, lastCdx);
-    const x = doCdx ? await tickCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : emptyTick();
     const slices = envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES);
     const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
-    const a = doWet ? await tickCc(store, opts?.cc ?? DEFAULT_CC, ccIdx, slices) : emptyTick();
-    const news = doNews ? await tickNews(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0)) : emptyTick();
+    const sliceN = Math.max(1, Math.min(6, slices | 0));
+    const [cdxGot, wetGot, newsGot] = await Promise.all([
+      doCdx ? collectCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : Promise.resolve(null),
+      doWet
+        ? Promise.all(Array.from({ length: sliceN }, (_, i) => collectCcSlice(store, opts?.cc ?? DEFAULT_CC, ccIdx + i)))
+        : Promise.resolve([]),
+      doNews
+        ? collectNewsRecords(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0))
+        : Promise.resolve({ recs: [] as Awaited<ReturnType<typeof ingestWetSlice>>, url: undefined as string | undefined }),
+    ]);
+    const x = cdxGot ? commitCdx(store, cdxGot) : emptyTick();
+    const a: TickStats = { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
+    for (const one of wetGot) {
+      const r = commitCcRecords(store, one.recs, one.crawlId, one.url);
+      a.cc += r.cc;
+      a.nodes += r.nodes;
+      a.skipped += r.skipped;
+      if (r.crawlId) a.crawlId = r.crawlId;
+    }
+    const news = commitNewsRecords(store, newsGot.recs, newsGot.url);
     if (doWet) {
       store.setMeta("cc_idx", String((ccIdx + slices) % 10_000));
       store.setMeta("wet_kept", String(a.nodes));

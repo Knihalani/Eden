@@ -185,15 +185,15 @@ export async function sitemapFrontier(origin: string): Promise<string[]> {
   const maps = robotsSitemaps(robots).slice(0, 8);
   const pages: { loc: string; lastmod?: string }[] = [];
   const children: string[] = [];
-  for (const sm of maps) {
-    const got = await liveGet(sm);
+  const mapBodies = await Promise.all(maps.map((sm) => liveGet(sm)));
+  for (const got of mapBodies) {
     if (!got.ok) continue;
     const p = parseSitemap(got.html, 500);
     if (p.kind === "index") children.push(...p.children.slice(0, 8));
     else pages.push(...p.urls);
   }
-  for (const sm of children.slice(0, 8)) {
-    const got = await liveGet(sm);
+  const childBodies = await Promise.all(children.slice(0, 8).map((sm) => liveGet(sm)));
+  for (const got of childBodies) {
     if (!got.ok) continue;
     pages.push(...parseSitemap(got.html, 500).urls);
   }

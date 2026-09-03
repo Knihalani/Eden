@@ -50,9 +50,9 @@ Fair agent-load is `graph.kpk`. Flash query may still intern RFC titles from `rf
 
 - No Playwright. JS-rendered JSON-LD never arrives.
 - No generic RDF/XML, Turtle, or RFC PDF extract (xml2rfc HTML/XML titles only).
-- Wikidata SPARQL is robots-disallowed; tick fail-opens. Q-ids with no name are skipped. Capitals mostly come from `synth.ts`, not live Wikidata.
+- CC WET is plaintext: no infobox, JSON-LD, or microdata on that path. Each WET file is scanned `max(2000, kept×40)` records; already-digested URIs, paywall hosts, junk TLDs, and Content-Length < 80 skip UTF-8 decode (header-only reject). Gzip leftover grows geometrically. `wet.paths` slots are shard-exclusive (`shardWetIndex`). WET, CC-NEWS, and CDX fetch in parallel then commit serially. `tickNews` (CC-NEWS) runs from `tick()`.
+- Wikidata SPARQL is robots-disallowed; tick does not fetch it. Q-ids with no name are skipped. Capitals come from `synth.ts`, not live Wikidata.
 - `liveGetStream` (rfc-index + IANA) enqueues HTTP `Link` targets onto the frontier. It does not inject HTML into the XML body. `liveGet` and WARC bodies still fold `Link` into HTML. Stream fetches send `If-None-Match` when an ETag is cached.
-- CC WET is plaintext: no infobox, JSON-LD, or microdata on that path. Each WET file is scanned `max(2000, kept×40)` records; already-digested URIs are skipped. `tickNews` (CC-NEWS) runs from `tick()`.
 - `parseRfcIndex` drops obsoleted / historic / not-issued RFCs. History only from current entries’ obsoletes/updates; index objects capped at 72 chars. Live RFC HTML `is` objects may be 96 chars in the overlay.
 - Each tick batches unseen Wikipedia country articles (Action API, ≤50 titles), re-queues TTL-stale allowed pages (not only catalog hosts), and re-polls origin sitemaps every 24h (lastmod order, sitemapindex children).
 - Live outlinks join the frontier when they pass `skipHost` + `junkFrontier` (RFC 9309 on fetch). Catalog hostname is **not** required to enqueue.

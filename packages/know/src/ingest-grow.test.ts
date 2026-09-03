@@ -7,7 +7,7 @@ import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApi
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
-import { compactDue, DEFAULT_WIKI, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns } from "./defaults";
+import { compactDue, DEFAULT_WIKI, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns, shardWetIndex } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -158,6 +158,9 @@ describe("ingest overlay", () => {
     expect(a.length + b.length).toBe(200);
     expect(a.some((u) => b.includes(u))).toBe(false);
     expect(urls.every((u) => shardOwns(u, 0, 1))).toBe(true);
+    expect(new Set([0, 1, 2, 3, 4, 5].map((s) => shardWetIndex(s, 0, 2)))).toEqual(new Set([0, 2, 4, 6, 8, 10]));
+    expect(new Set([0, 1, 2, 3, 4, 5].map((s) => shardWetIndex(s, 1, 2)))).toEqual(new Set([1, 3, 5, 7, 9, 11]));
+    expect([0, 1, 2].map((s) => shardWetIndex(s, 0, 1))).toEqual([0, 1, 2]);
     expect(DEFAULT_WET_EVERY).toBe(3);
     expect(expensiveLaneDue(3, 3, 1)).toBe(true);
     expect(expensiveLaneDue(1, 3, 1)).toBe(false);

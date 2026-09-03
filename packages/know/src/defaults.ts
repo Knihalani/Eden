@@ -35,7 +35,14 @@ export function expensiveLaneDue(tickN: number, every: number, lastKept: number,
 }
 
 export function shardIndex(): number {
-  return envNum("EDEN_KNOW_SHARD", 0);
+  const raw = process.env.EDEN_KNOW_SHARD;
+  if (raw != null && raw !== "") return envNum("EDEN_KNOW_SHARD", 0);
+  const n = shardCount();
+  if (n <= 1) return 0;
+  const host = process.env.HOSTNAME || process.env.NF_POD_NAME || "";
+  const m = host.match(/(\d+)(?:-[a-z0-9]+)?$/i);
+  if (m) return Number(m[1]) % n;
+  return 0;
 }
 
 export function shardCount(): number {
@@ -52,6 +59,15 @@ export function shardOwns(url: string, i = shardIndex(), n = shardCount()): bool
     h = Math.imul(h, 16777619);
   }
   return (h >>> 0) % n === shard;
+}
+
+/** Exclusive wet.paths slot for this box: shard 0 → 0,2,4… when n=2. */
+export function shardWetIndex(seq: number, i = shardIndex(), n = shardCount()): number {
+  const shards = Math.max(1, n | 0);
+  const shard = ((i % shards) + shards) % shards;
+  const s = Math.max(0, seq | 0);
+  if (shards <= 1) return s;
+  return shard + s * shards;
 }
 
 /** True when ingest should rewrite and upload the single `graph.kpk`. */
