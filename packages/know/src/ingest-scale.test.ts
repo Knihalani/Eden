@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { cheapSkipHost, headerSkipHost } from "./gate";
 import { skipHost } from "./extract";
 import { BytePipe, emptyWarcStats, pushWarcBytes, type WetRecord } from "./warc";
-import { keepWet, wetHeaderSkip } from "./cc";
-import { shardWetIndex } from "./defaults";
+import { gzipSync } from "node:zlib";
+import { ingestWetGzip, ingestWetSlice, lastWetFetch, keepWet, wetHeaderSkip, wetRangeHeader } from "./cc";
+import { compactLeader, LIVE_PER_HOST, shardOwns, shardWetIndex, wetByteCap } from "./defaults";
+import { EDENBOT } from "./ua";
 
 const FACT =
   "RFC 3986 Uniform Resource Identifier Generic Syntax. Kenya is a country in East Africa whose capital is Nairobi. ";
@@ -15,6 +17,14 @@ function rec(uri: string, text: string): Uint8Array {
   const body = `${text}\n`;
   const hdr = `WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: ${uri}\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n`;
   return Buffer.concat([Buffer.from(hdr, "utf8"), Buffer.from(body, "utf8")]);
+}
+
+function mixBlob(): Buffer {
+  const mix: Uint8Array[] = [];
+  for (let i = 0; i < 80; i++) mix.push(rec(`https://www.rfc-editor.org/rfc/rfc${2000 + i}.html`, FACT.repeat(6)));
+  for (let i = 0; i < 200; i++) mix.push(rec(`https://www.nytimes.com/story-${i}`, FACT.repeat(8)));
+  for (let i = 0; i < 200; i++) mix.push(rec(`https://spam.xyz/p/${i}`, FACT.repeat(8)));
+  return Buffer.concat(mix);
 }
 
 describe("ingest scale", () => {
@@ -125,6 +135,12 @@ describe("ingest scale", () => {
     const worker = readFileSync(join(import.meta.dir, "worker.ts"), "utf8");
     expect(worker).toContain("EDEN_KNOW_INGEST_CHILD");
     expect(worker).toContain("Bun.spawn");
+    expect(worker).toContain("wetBytes");
+    const cc = readFileSync(join(import.meta.dir, "cc.ts"), "utf8");
+    expect(cc).toContain("wetRangeHeader");
+    expect(cc).toContain("Range:");
+    expect(LIVE_PER_HOST).toBe(3);
+    expect(EDENBOT).toMatch(/Edenbot\/0\.1/);
   });
 
   test("health HTTP answers in the parent while the ingest child starts", async () => {
@@ -134,6 +150,7 @@ describe("ingest scale", () => {
       env: {
         ...process.env,
         PORT: String(port),
+        EDEN_KNOW_LISTEN: "127.0.0.1",
         EDEN_KNOW_DIR: dir,
         EDEN_KNOW_CC: "0",
         EDEN_KNOW_LIVE: "0",
@@ -145,20 +162,122 @@ describe("ingest scale", () => {
       stderr: "pipe",
     });
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      const url = `http://127.0.0.1:${port}/health`;
+      let r: Response | undefined;
+      const tWait = performance.now();
+      while (performance.now() - tWait < 8000) {
+        try {
+          r = await fetch(url, { signal: AbortSignal.timeout(500) });
+          if (r.ok) break;
+        } catch {
+          /* parent not listening yet */
+        }
+        await new Promise((res) => setTimeout(res, 100));
+      }
+      expect(r).toBeDefined();
       const t0 = performance.now();
-      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) });
+      const hot = await fetch(url, { signal: AbortSignal.timeout(1000) });
       const ms = performance.now() - t0;
-      const j = (await r.json()) as { ok?: boolean; caps?: { cc?: number; shards?: number } };
-      expect(r.ok).toBe(true);
+      const j = (await hot.json()) as { ok?: boolean; caps?: { cc?: number; shards?: number; wetBytes?: number } };
+      expect(hot.ok).toBe(true);
       expect(j.ok).toBe(true);
       expect(j.caps?.cc).toBe(0);
       expect(j.caps?.shards).toBe(1);
+      expect(j.caps?.wetBytes).toBe(wetByteCap());
       expect(ms).toBeLessThan(200);
     } finally {
       proc.kill();
-      await Promise.race([proc.exited, new Promise((r) => setTimeout(r, 2000))]);
+      await Promise.race([proc.exited, new Promise((res) => setTimeout(res, 2000))]);
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("gzip prefix keep set matches a scan-cap abort from the start", () => {
+    const gz = gzipSync(mixBlob());
+    const cap = Math.max(2048, Math.floor(gz.length * 0.55));
+    const prefix = gz.subarray(0, cap);
+    const fromPrefix = ingestWetGzip(prefix, 80, undefined, 10_000);
+    const fromAbort = ingestWetGzip(gz, 80, undefined, fromPrefix.stats.scanned || 1);
+    const a = fromPrefix.recs.map((r) => r.uri).sort();
+    const b = fromAbort.recs.map((r) => r.uri).sort();
+    expect(a).toEqual(b);
+    expect(fromPrefix.gzipFetchedBytes).toBe(prefix.byteLength);
+    expect(fromPrefix.gzipFetchedBytes).toBeLessThan(gz.byteLength);
+  });
+
+  test("empty gzip slice keeps nothing", () => {
+    const gz = gzipSync(Buffer.from("WARC/1.0\r\nWARC-Type: warcinfo\r\nContent-Length: 0\r\n\r\n"));
+    const got = ingestWetGzip(gz, 40, undefined, 100);
+    expect(got.recs).toEqual([]);
+    expect(got.stats.decoded).toBe(0);
+  });
+
+  test("Range 206 fetches a prefix; 416 falls back without changing keep set", async () => {
+    const gz = gzipSync(mixBlob());
+    const keepAll = ingestWetGzip(gz, 80, undefined, 10_000).recs.map((r) => r.uri).sort();
+    const cap = Math.min(wetByteCap(), gz.byteLength);
+    const port206 = 19000 + (process.pid % 3000);
+    const srv206 = Bun.serve({
+      port: port206,
+      hostname: "127.0.0.1",
+      fetch(req) {
+        const range = req.headers.get("range");
+        expect(req.headers.get("user-agent")).toMatch(/Edenbot\/0\.1/);
+        if (range) {
+          expect(range).toBe(wetRangeHeader(wetByteCap()));
+          const end = Math.min(cap, gz.byteLength) - 1;
+          return new Response(gz.subarray(0, end + 1), {
+            status: 206,
+            headers: { "Content-Range": `bytes 0-${end}/${gz.byteLength}` },
+          });
+        }
+        return new Response(gz);
+      },
+    });
+    try {
+      const recs = await ingestWetSlice(`http://127.0.0.1:${srv206.port}/wet.gz`, 80, undefined, 10_000);
+      const meter = lastWetFetch();
+      expect(meter.rangePrefix).toBe(true);
+      expect(meter.status).toBe(206);
+      expect(meter.gzipFetchedBytes).toBeLessThanOrEqual(cap);
+      expect(recs.map((r) => r.uri).sort()).toEqual(keepAll);
+    } finally {
+      srv206.stop(true);
+    }
+
+    const port416 = port206 + 1;
+    const srv416 = Bun.serve({
+      port: port416,
+      hostname: "127.0.0.1",
+      fetch(req) {
+        if (req.headers.get("range")) return new Response(null, { status: 416 });
+        return new Response(gz);
+      },
+    });
+    try {
+      const recs = await ingestWetSlice(`http://127.0.0.1:${srv416.port}/wet.gz`, 80, undefined, 10_000);
+      const meter = lastWetFetch();
+      expect(meter.rangePrefix).toBe(false);
+      expect(meter.status).toBe(200);
+      expect(meter.gzipFetchedBytes).toBeLessThanOrEqual(wetByteCap());
+      expect(recs.map((r) => r.uri).sort()).toEqual(keepAll);
+    } finally {
+      srv416.stop(true);
+    }
+  });
+
+  test("live URLs have one owner; only one compact publisher across shards", () => {
+    const urls = [
+      "https://en.wikipedia.org/wiki/Kenya",
+      "https://www.rfc-editor.org/rfc/rfc3986.html",
+      "https://arxiv.org/abs/2401.00001",
+    ];
+    for (const u of urls) {
+      const owners = [0, 1, 2, 3].filter((i) => shardOwns(u, i, 4));
+      expect(owners.length).toBe(1);
+    }
+    expect(compactLeader(0, 2)).toBe(true);
+    expect(compactLeader(1, 2)).toBe(false);
+    expect(compactLeader(0, 1)).toBe(true);
   });
 });

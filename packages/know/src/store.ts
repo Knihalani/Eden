@@ -3442,6 +3442,9 @@ export function openStore(dir = knowDir()) {
       if (jnlPuts >= 32) snapshotJournal();
       walHint = true;
     },
+    walFacts(): PackFact[] {
+      return overlayRows().map((r) => ({ s: r.s, p: r.p, o: r.o, e: r.e, url: r.url }));
+    },
     enqueue(urls: string[], from: string) {
       crawl.enqueue(urls, from);
       crawl.maybePersist(dir, true);

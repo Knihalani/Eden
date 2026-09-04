@@ -8,8 +8,9 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { allFacts, decodePack, type PackFact } from "./pack";
+import { allFacts, decodePack, encodePack, mergeFactLists, type PackFact } from "./pack";
 import type { KnowStore } from "./store";
+import { compactLeader, shardIndex } from "./defaults";
 
 export const S3_ENDPOINT = "https://us-east-1.storage.impossibleapi.net";
 export const S3_REGION = "us-east-1";
@@ -60,7 +61,8 @@ function awsEnv(): NodeJS.ProcessEnv {
 }
 
 function aws(args: string[], timeoutMs = 60_000): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync("aws", args, {
+  const bin = process.env.EDEN_KNOW_AWS_BIN || "aws";
+  const r = spawnSync(bin, args, {
     env: awsEnv(),
     encoding: "utf8",
     timeout: timeoutMs,
@@ -136,7 +138,11 @@ export function putRemotePack(
   const src = join(dir, "graph.kpk");
   try {
     writeFileSync(src, bytes);
-    const cond = etag ? ["--if-match", etag] : ["--if-none-match", "*"];
+    const cond = key.startsWith("overlay/")
+      ? []
+      : etag
+        ? ["--if-match", etag]
+        : ["--if-none-match", "*"];
     const put = aws([
       "s3api",
       "put-object",
@@ -168,6 +174,86 @@ export function putRemotePack(
   }
 }
 
+export function overlayKey(shard = shardIndex()): string {
+  return `overlay/${shard}/graph.kpk`;
+}
+
+export function overlayPrefix(): string {
+  return "overlay/";
+}
+
+function listRemoteKeys(prefix: string): string[] {
+  const listed = aws([
+    "s3api",
+    "list-objects-v2",
+    "--bucket",
+    s3Bucket(),
+    "--prefix",
+    prefix,
+    ...commonArgs(),
+  ]);
+  if (listed.status !== 0) return [];
+  try {
+    const j = JSON.parse(listed.stdout) as { Contents?: { Key?: string }[] };
+    return (j.Contents || []).map((c) => c.Key).filter((k): k is string => !!k);
+  } catch {
+    return [];
+  }
+}
+
+function fetchRemoteObject(key: string): Uint8Array | null {
+  const dir = mkdtempSync(join(tmpdir(), "eden-know-s3ov-"));
+  const dest = join(dir, "obj");
+  try {
+    const got = aws([
+      "s3api",
+      "get-object",
+      "--bucket",
+      s3Bucket(),
+      "--key",
+      key,
+      ...commonArgs(),
+      dest,
+    ]);
+    if (got.status !== 0) return null;
+    return new Uint8Array(readFileSync(dest));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Follower overlay packs (not the published graph.kpk). */
+export function fetchRemoteOverlays(): PackFact[] {
+  const keys = listRemoteKeys(overlayPrefix()).filter((k) => k !== s3Key() && k.endsWith("graph.kpk"));
+  const facts: PackFact[] = [];
+  for (const key of keys) {
+    const bytes = fetchRemoteObject(key);
+    if (!bytes?.byteLength) continue;
+    try {
+      facts.push(...allFacts(decodePack(bytes)));
+    } catch {
+      /* skip a bad shard blob */
+    }
+  }
+  return facts;
+}
+
+function shipFollowerOverlay(store: KnowStore): PublishResult {
+  const facts = store.walFacts();
+  let uploaded = false;
+  if (s3Configured() && facts.length) {
+    const bytes = encodePack(facts);
+    uploaded = putRemotePack(bytes, null, overlayKey()).ok;
+  }
+  const local = store.compact();
+  return {
+    compacted: true,
+    uploaded: false,
+    bytes: local?.byteLength ?? 0,
+    skipped: uploaded ? "follower" : "follower-no-overlay",
+  };
+}
+
 export type PublishResult = {
   compacted: boolean;
   uploaded: boolean;
@@ -185,6 +271,7 @@ export type PublishResult = {
  * (never clobber a graph we did not merge).
  */
 export async function compactAndPublish(store: KnowStore): Promise<PublishResult> {
+  if (!compactLeader()) return shipFollowerOverlay(store);
   let remote: RemotePack | null = null;
   if (s3Configured()) {
     try {
@@ -202,6 +289,11 @@ export async function compactAndPublish(store: KnowStore): Promise<PublishResult
       store.compact();
       return { compacted: true, uploaded: false, bytes: 0, skipped: `decode-failed:${String(e).slice(0, 80)}` };
     }
+  }
+  try {
+    base = mergeFactLists(base, fetchRemoteOverlays());
+  } catch {
+    /* overlays are fail-open so a missing prefix cannot block compact */
   }
   let bytes = store.compact(base);
   if (!bytes) return { compacted: true, uploaded: false, bytes: 0, skipped: "empty" };
@@ -230,7 +322,7 @@ export async function compactAndPublish(store: KnowStore): Promise<PublishResult
     } catch (e) {
       return { compacted: true, uploaded: false, bytes: bytes.byteLength, sha256, skipped: `refetch-failed:${String(e).slice(0, 80)}` };
     }
-    base = remote ? allFacts(decodePack(remote.bytes)) : [];
+    base = mergeFactLists(remote ? allFacts(decodePack(remote.bytes)) : [], fetchRemoteOverlays());
     const next = store.compact(base);
     if (next) bytes = next;
     etag = remote?.etag || null;
