@@ -84,8 +84,8 @@ export function compactLeader(i = shardIndex(), n = shardCount()): boolean {
   if (n <= 1) return true;
   return (((i % n) + n) % n) === 0;
 }
-/** Consecutive latest-crawl WET files per tick (worker sets 2). */
-export const DEFAULT_CC_SLICES = 1;
+/** Consecutive latest-crawl WET files per tick (abort-early makes 2 cheap). */
+export const DEFAULT_CC_SLICES = 2;
 /** Parallel live fetches per tick (sqlite writes stay serial). */
 export const LIVE_CONCURRENCY = envNum("EDEN_KNOW_LIVE_CONC", 64);
 /** Cap concurrent fetches to one origin so RFC 9309 crawl-delay still means something. */

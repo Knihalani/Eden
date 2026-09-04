@@ -268,6 +268,55 @@ describe("ingest scale", () => {
     }
   });
 
+  test("stream inflate aborts the GET when the scan window is full", async () => {
+    const fat: Uint8Array[] = [];
+    for (let i = 0; i < 80; i++) fat.push(rec(`https://www.rfc-editor.org/rfc/rfc${2000 + i}.html`, FACT.repeat(6)));
+    for (let i = 0; i < 2_000; i++) fat.push(rec(`https://www.nytimes.com/story-${i}`, FACT.repeat(8)));
+    const blob = Buffer.concat(fat);
+    const gz = gzipSync(blob);
+    expect(gz.byteLength).toBeGreaterThan(16_384);
+    const keepAll = ingestWetGzip(gz, 80, undefined, 80).recs.map((r) => r.uri).sort();
+    let pulled = 0;
+    const port = 19100 + (process.pid % 3000);
+    const srv = Bun.serve({
+      port,
+      hostname: "127.0.0.1",
+      fetch() {
+        let sent = 0;
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent >= gz.byteLength) {
+              controller.close();
+              return;
+            }
+            const n = Math.min(2048, gz.byteLength - sent);
+            controller.enqueue(gz.subarray(sent, sent + n));
+            sent += n;
+            pulled = sent;
+          },
+        });
+        return new Response(body, {
+          status: 206,
+          headers: {
+            "Content-Range": `bytes 0-${gz.byteLength - 1}/${gz.byteLength}`,
+            "Content-Type": "application/gzip",
+          },
+        });
+      },
+    });
+    try {
+      const recs = await ingestWetSlice(`http://127.0.0.1:${srv.port}/wet.gz`, 80, undefined, 80);
+      const meter = lastWetFetch();
+      expect(recs.map((r) => r.uri).sort()).toEqual(keepAll);
+      expect(meter.gzipFetchedBytes).toBeGreaterThan(0);
+      expect(meter.gzipFetchedBytes).toBeLessThan(gz.byteLength);
+      expect(meter.gzipFetchedBytes).toBeLessThan(8_388_608);
+      expect(pulled).toBeGreaterThanOrEqual(meter.gzipFetchedBytes);
+    } finally {
+      srv.stop(true);
+    }
+  });
+
   test("live URLs have one owner; only one compact publisher across shards", () => {
     const urls = [
       "https://en.wikipedia.org/wiki/Kenya",
