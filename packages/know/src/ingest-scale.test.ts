@@ -136,6 +136,8 @@ describe("ingest scale", () => {
     expect(worker).toContain("EDEN_KNOW_INGEST_CHILD");
     expect(worker).toContain("Bun.spawn");
     expect(worker).toContain("wetBytes");
+    expect(worker).toContain("wet:");
+    expect(loop).toContain("lastWetFetch");
     const cc = readFileSync(join(import.meta.dir, "cc.ts"), "utf8");
     expect(cc).toContain("wetRangeHeader");
     expect(cc).toContain("Range:");

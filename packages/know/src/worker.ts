@@ -52,6 +52,7 @@ function remember(s: TickLine) {
     pack: s.counts?.pack,
     wal: s.counts?.wal_nodes,
     frontier: s.counts?.frontier,
+    wet: s.wet ?? last.wet,
     ms: s.ms,
     err: s.err,
     tick_started: s.tick_started ?? last.tick_started,
