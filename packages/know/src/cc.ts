@@ -1,4 +1,4 @@
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, constants as zconst } from "node:zlib";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EDENBOT } from "./ua";
@@ -8,7 +8,7 @@ import { pageTtl } from "./ttl";
 import { cheapSkip, gopherSkip, headerSkipHost, wetFactBearing, wetSpam } from "./gate";
 import { englishTrigram } from "./lang";
 import { minhashBands } from "./minhash";
-import { WET_SCAN_MULT, envNum, shardWetIndex } from "./defaults";
+import { WET_SCAN_MULT, envNum, shardWetIndex, wetByteCap } from "./defaults";
 import { BytePipe, emptyWarcStats, pushWarcBytes, type WetRecord } from "./warc";
 
 const CC = "https://data.commoncrawl.org/";
@@ -223,22 +223,96 @@ export function wetHeaderSkip(uri: string, seen?: (uri: string) => boolean, len?
   return false;
 }
 
-async function fetchWet(wetUrl: string, budgetMs: number): Promise<Response> {
+/** Range first prefix of a WET gzip. Inclusive end index. */
+export function wetRangeHeader(bytes: number): string {
+  const n = Math.max(1, bytes | 0);
+  return `bytes=0-${n - 1}`;
+}
+
+/** Inflate a gzip WET prefix; truncated members are OK (`Z_SYNC_FLUSH`). Raw WARC bytes pass through. */
+export function inflateWetPrefix(gzip: Uint8Array): Uint8Array {
+  if (gzip.length < 2 || gzip[0] !== 0x1f || gzip[1] !== 0x8b) return gzip;
+  try {
+    return new Uint8Array(gunzipSync(gzip, { finishFlush: zconst.Z_SYNC_FLUSH }));
+  } catch {
+    try {
+      return new Uint8Array(gunzipSync(gzip));
+    } catch {
+      return new Uint8Array(0);
+    }
+  }
+}
+
+export async function readCappedBody(body: ReadableStream<Uint8Array>, cap: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  const reader = body.getReader();
+  try {
+    while (n < cap) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.length) continue;
+      const take = n + value.length <= cap ? value : value.subarray(0, cap - n);
+      chunks.push(take);
+      n += take.length;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+
+export type WetFetchMeter = {
+  gzipFetchedBytes: number;
+  rangePrefix: boolean;
+  status: number;
+};
+
+let lastWetMeter: WetFetchMeter = { gzipFetchedBytes: 0, rangePrefix: false, status: 0 };
+
+export function lastWetFetch(): WetFetchMeter {
+  return lastWetMeter;
+}
+
+async function fetchWetGzip(wetUrl: string, budgetMs: number, byteCap: number): Promise<WetFetchMeter & { gzip: Uint8Array }> {
   let wait = 400;
   let lastErr = "wet fetch";
   const timeout = Math.max(5_000, budgetMs);
+  const headersBase = { "User-Agent": EDENBOT, "Accept-Encoding": "identity" };
+  const tryOnce = async (range: boolean) => {
+    const headers = range
+      ? { ...headersBase, Range: wetRangeHeader(byteCap) }
+      : headersBase;
+    return fetch(wetUrl, { headers, signal: AbortSignal.timeout(timeout) });
+  };
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const r = await fetch(wetUrl, {
-        headers: { "User-Agent": EDENBOT, "Accept-Encoding": "identity" },
-        signal: AbortSignal.timeout(timeout),
-      });
-      if (r.ok) return r;
+      let r = await tryOnce(true);
+      let rangePrefix = r.status === 206;
+      if (r.status === 416) {
+        r = await tryOnce(false);
+        rangePrefix = false;
+      }
+      if (r.status === 200 || r.status === 206) {
+        if (!r.body) throw new Error("no body");
+        const gzip = await readCappedBody(r.body, byteCap);
+        return { gzip, gzipFetchedBytes: gzip.byteLength, rangePrefix, status: r.status };
+      }
       lastErr = `wet ${r.status}`;
       if (r.status !== 429 && r.status < 500) throw new Error(lastErr);
     } catch (e) {
       lastErr = String(e).slice(0, 80);
-      if (/wet 4\d\d/.test(lastErr) && !/wet 429/.test(lastErr)) throw e;
+      if (/wet 4\d\d/.test(lastErr) && !/wet 416/.test(lastErr) && !/wet 429/.test(lastErr)) throw e;
     }
     if (attempt < 2) {
       await new Promise((res) => setTimeout(res, wait + Math.floor(Math.random() * wait)));
@@ -246,6 +320,62 @@ async function fetchWet(wetUrl: string, budgetMs: number): Promise<Response> {
     }
   }
   throw new Error(lastErr);
+}
+
+function keepFromChunk(
+  chunk: WetRecord[],
+  pool: WetRecord[],
+  poolCap: number,
+  bandHit: Set<string>,
+  seen?: (uri: string) => boolean,
+) {
+  for (const rec of chunk) {
+    if (pool.length >= poolCap) break;
+    if (seen?.(rec.uri)) continue;
+    if (!keepWet(rec)) continue;
+    const bands = minhashBands(rec.text);
+    if (bands.some((b) => bandHit.has(b))) continue;
+    for (const b of bands) bandHit.add(b);
+    pool.push(rec);
+  }
+}
+
+/** Parse inflated WARC/WET bytes with the same keepWet + MinHash path as a live slice. */
+export function ingestWetPlain(
+  plain: Uint8Array,
+  maxRecords: number,
+  seen?: (uri: string) => boolean,
+  scanLimit?: number,
+): { recs: WetRecord[]; stats: ReturnType<typeof emptyWarcStats> } {
+  const pipe = new BytePipe();
+  const pool: WetRecord[] = [];
+  const bandHit = new Set<string>();
+  const stats = emptyWarcStats();
+  const scanCap = scanLimit && scanLimit > 0 ? scanLimit : wetScanCap(maxRecords);
+  const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
+  const skip = (uri: string, _type: string, len: number) => wetHeaderSkip(uri, seen, len);
+  let off = 0;
+  while (off < plain.length && stats.scanned < scanCap && pool.length < poolCap) {
+    const n = Math.min(65_536, plain.length - off);
+    pipe.append(plain.subarray(off, off + n));
+    off += n;
+    const chunk: WetRecord[] = [];
+    pipe.setLeftover(pushWarcBytes(pipe.view(), chunk, scanCap - stats.scanned, skip, stats));
+    keepFromChunk(chunk, pool, poolCap, bandHit, seen);
+  }
+  return { recs: keepWetRanked(pool, maxRecords), stats };
+}
+
+/** Gzip (or raw) WET window: inflate prefix, then the same scan-cap keep path. */
+export function ingestWetGzip(
+  gzip: Uint8Array,
+  maxRecords: number,
+  seen?: (uri: string) => boolean,
+  scanLimit?: number,
+): { recs: WetRecord[]; gzipFetchedBytes: number; stats: ReturnType<typeof emptyWarcStats> } {
+  const plain = inflateWetPrefix(gzip);
+  const got = ingestWetPlain(plain, maxRecords, seen, scanLimit);
+  return { ...got, gzipFetchedBytes: gzip.byteLength };
 }
 
 export async function ingestWetSlice(
@@ -256,47 +386,36 @@ export async function ingestWetSlice(
 ): Promise<WetRecord[]> {
   const t0 = Date.now();
   const budget = envNum("EDEN_KNOW_WET_MS", 45_000);
-  const r = await fetchWet(wetUrl, budget);
-  if (!r.body) throw new Error("no body");
-  const ds = r.body.pipeThrough(new DecompressionStream("gzip"));
-  const reader = ds.getReader();
+  const byteCap = wetByteCap();
+  const fetched = await fetchWetGzip(wetUrl, budget, byteCap);
+  lastWetMeter = {
+    gzipFetchedBytes: fetched.gzipFetchedBytes,
+    rangePrefix: fetched.rangePrefix,
+    status: fetched.status,
+  };
   const pipe = new BytePipe();
   const pool: WetRecord[] = [];
   const bandHit = new Set<string>();
-  let scanned = 0;
   const stats = emptyWarcStats();
   const scanCap = scanLimit && scanLimit > 0 ? scanLimit : wetScanCap(maxRecords);
   const poolCap = Math.max(maxRecords * 4, Math.min(scanCap, maxRecords * 8));
   const skip = (uri: string, _type: string, len: number) => wetHeaderSkip(uri, seen, len);
+  const plain = inflateWetPrefix(fetched.gzip);
+  let off = 0;
   let lastYield = t0;
-  while (scanned < scanCap && pool.length < poolCap) {
+  while (off < plain.length && stats.scanned < scanCap && pool.length < poolCap) {
     if (Date.now() - t0 > budget) break;
-    const { done, value } = await reader.read();
-    if (value) pipe.append(value);
+    const n = Math.min(65_536, plain.length - off);
+    pipe.append(plain.subarray(off, off + n));
+    off += n;
     const chunk: WetRecord[] = [];
-    const leftover = pushWarcBytes(pipe.view(), chunk, scanCap - stats.scanned, skip, stats);
-    pipe.setLeftover(leftover);
-    scanned = stats.scanned;
-    for (const rec of chunk) {
-      if (pool.length >= poolCap) break;
-      if (seen?.(rec.uri)) continue;
-      if (!keepWet(rec)) continue;
-      const bands = minhashBands(rec.text);
-      if (bands.some((b) => bandHit.has(b))) continue;
-      for (const b of bands) bandHit.add(b);
-      pool.push(rec);
-    }
+    pipe.setLeftover(pushWarcBytes(pipe.view(), chunk, scanCap - stats.scanned, skip, stats));
+    keepFromChunk(chunk, pool, poolCap, bandHit, seen);
     const now = Date.now();
     if (now - lastYield >= 100) {
       await new Promise((r) => setTimeout(r, 0));
       lastYield = now;
     }
-    if (done) break;
-  }
-  try {
-    await reader.cancel();
-  } catch {
-    /* ignore */
   }
   return keepWetRanked(pool, maxRecords);
 }

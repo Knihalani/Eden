@@ -76,6 +76,14 @@ export function compactDue(wal: number, lastMs: number, now = Date.now()): boole
   if (!lastMs) return true;
   return now - lastMs >= envNum("EDEN_KNOW_COMPACT_MS", DEFAULT_COMPACT_MS);
 }
+
+/** Only shard 0 publishes `graph.kpk`. Followers ship overlay bytes instead. Does not touch WET_BYTES. */
+export function compactLeader(i = shardIndex(), n = shardCount()): boolean {
+  if (process.env.EDEN_KNOW_COMPACT === "0") return false;
+  if (process.env.EDEN_KNOW_COMPACT === "1") return true;
+  if (n <= 1) return true;
+  return (((i % n) + n) % n) === 0;
+}
 /** Consecutive latest-crawl WET files per tick (worker sets 2). */
 export const DEFAULT_CC_SLICES = 1;
 /** Parallel live fetches per tick (sqlite writes stay serial). */
@@ -86,3 +94,14 @@ export const LIVE_PER_HOST = 3;
 export const CATALOG_REFRESH_MS = 6 * 3600_000;
 /** WET records scanned per kept record (was 8). */
 export const WET_SCAN_MULT = 40;
+/**
+ * Compressed WET prefix to fetch (HTTP Range bytes=0..n-1).
+ * Live CC-MAIN-2026-34 first WET is 63,890,507 bytes; 8 MiB covers a 2000-record scan window.
+ * Piece 2 compact/overlay must not change this cap.
+ */
+export const DEFAULT_WET_BYTES = 8_388_608;
+export const BASELINE_WET_FILE_BYTES = 63_890_507;
+
+export function wetByteCap(): number {
+  return Math.max(65_536, envNum("EDEN_KNOW_WET_BYTES", DEFAULT_WET_BYTES) | 0);
+}
