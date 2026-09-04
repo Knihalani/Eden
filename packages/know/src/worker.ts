@@ -4,7 +4,7 @@
  * GET /health stays answerable while WET gunzip/parse owns the child's CPU.
  * Crawl state lives in EDEN_KNOW_DIR.
  */
-import { DEFAULT_CC, DEFAULT_INTERVAL_SEC, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_WET_EVERY, compactLeader, envNum, shardCount, shardIndex, wetByteCap } from "./defaults";
+import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_INTERVAL_SEC, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_WET_EVERY, compactLeader, envNum, shardCount, shardIndex, wetByteCap } from "./defaults";
 import { runLoop, type TickStats } from "./loop";
 import { s3Configured } from "./s3";
 import { fileURLToPath } from "node:url";
@@ -25,6 +25,7 @@ const caps = {
   wetEvery: envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY),
   wetScan: envNum("EDEN_KNOW_WET_SCAN", 0),
   wetBytes: wetByteCap(),
+  ccSlices: envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES),
   compactLeader: compactLeader(),
 };
 let last: Record<string, unknown> = { ok: true, starting: true, s3: s3Configured(), caps };
