@@ -196,6 +196,7 @@ describe("wikipedia batch API", () => {
     expect(src).toContain("wetEvery");
     expect(src).toContain("wetScan");
     expect(src).toContain("wetBytes");
+    expect(src).toContain("ccSlices");
     expect(src).toContain("compactLeader");
     expect(src).toContain("wet:");
     expect(src).toMatch(/shard:\s*shardIndex/);

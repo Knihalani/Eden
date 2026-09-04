@@ -7,7 +7,7 @@ import { skipHost } from "./extract";
 import { BytePipe, emptyWarcStats, pushWarcBytes, type WetRecord } from "./warc";
 import { gzipSync } from "node:zlib";
 import { ingestWetGzip, ingestWetSlice, lastWetFetch, keepWet, wetHeaderSkip, wetRangeHeader } from "./cc";
-import { compactLeader, LIVE_PER_HOST, shardOwns, shardWetIndex, wetByteCap } from "./defaults";
+import { compactLeader, DEFAULT_CC_SLICES, LIVE_PER_HOST, shardOwns, shardWetIndex, wetByteCap } from "./defaults";
 import { EDENBOT } from "./ua";
 
 const FACT =
@@ -136,6 +136,7 @@ describe("ingest scale", () => {
     expect(worker).toContain("EDEN_KNOW_INGEST_CHILD");
     expect(worker).toContain("Bun.spawn");
     expect(worker).toContain("wetBytes");
+    expect(worker).toContain("ccSlices");
     expect(worker).toContain("wet:");
     expect(loop).toContain("lastWetFetch");
     const cc = readFileSync(join(import.meta.dir, "cc.ts"), "utf8");
@@ -180,12 +181,13 @@ describe("ingest scale", () => {
       const t0 = performance.now();
       const hot = await fetch(url, { signal: AbortSignal.timeout(1000) });
       const ms = performance.now() - t0;
-      const j = (await hot.json()) as { ok?: boolean; caps?: { cc?: number; shards?: number; wetBytes?: number } };
+      const j = (await hot.json()) as { ok?: boolean; caps?: { cc?: number; shards?: number; wetBytes?: number; ccSlices?: number } };
       expect(hot.ok).toBe(true);
       expect(j.ok).toBe(true);
       expect(j.caps?.cc).toBe(0);
       expect(j.caps?.shards).toBe(1);
       expect(j.caps?.wetBytes).toBe(wetByteCap());
+      expect(j.caps?.ccSlices).toBe(DEFAULT_CC_SLICES);
       expect(ms).toBeLessThan(200);
     } finally {
       proc.kill();
