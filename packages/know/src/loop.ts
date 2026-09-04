@@ -17,7 +17,7 @@ import {
   wikiNeedsApiFallback,
   type HtmlScan,
 } from "./extract";
-import { ingestWetSlice, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath } from "./cc";
+import { ingestWetSlice, lastWetFetch, latestCrawlId, newsWarcPath, rankFrontierUrls, wetPath, type WetFetchMeter } from "./cc";
 import { DEFAULT_CC, DEFAULT_CC_SLICES, DEFAULT_CDX, DEFAULT_LIVE, DEFAULT_NEWS, DEFAULT_QUALITY, DEFAULT_RECRAWL, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, LIVE_CONCURRENCY, LIVE_PER_HOST, CATALOG_REFRESH_MS, compactDue, envNum, expensiveLaneDue, shardCount, shardOwns } from "./defaults";
 import { fetchRobots, liveGet, liveGetStream, liveWikiApi, liveWikiApiBatch, liveWikiRandomBatch, sitemapFrontier } from "./live";
 import { feedLinks } from "./feeds";
@@ -49,6 +49,7 @@ export type TickStats = {
   nodes: number;
   skipped: number;
   crawlId?: string;
+  wet?: WetFetchMeter;
 };
 
 function digest(s: string): string {
@@ -1020,6 +1021,7 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const extraSkip = iana.skipped + spdx.skipped + whatwg.skipped + uni.skipped + lang.skipped + scripts.skipped;
     return {
       ...a,
+      wet: lastWetFetch(),
       news: news.news,
       live: b.live + q.live + wikiB.live + idx.live + w3.live + rel.live + extraLive + wd.live + caps.live,
       feeds: f.feeds,
