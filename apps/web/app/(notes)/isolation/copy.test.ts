@@ -17,13 +17,14 @@ test("every isolation claim points at a test file that exists", () => {
   }
 });
 
-test("published limits name oblivious-long, analogue, retired invoice, replica host-drop, jit-soak", () => {
+test("published limits name every PUBLIC_CLAIMS limit, plus analogue and retired on their own lists", () => {
   expect(LIMIT_CLAIMS.map((r) => r.id)).toEqual([
     "oblivious-long",
     "s1b-analogue",
     "s1b-live-invoice",
     "replica-host-drop",
-    "jit-soak",
+    "ood-long",
+    "cert-bounds",
   ]);
   for (const row of LIMIT_CLAIMS) {
     expect(row.claim.endsWith(".")).toBe(true);
@@ -31,13 +32,32 @@ test("published limits name oblivious-long, analogue, retired invoice, replica h
     expect(row.test).toBe(claimById(row.id)?.file);
   }
   expect(LIMIT_CLAIMS[0]?.claim).toMatch(/\+2\.8% cents and \+3\.2% wall/);
+  expect(LIMIT_CLAIMS[0]?.kind).toBe("limit");
+  expect(LIMIT_CLAIMS[0]?.source).toBe("campaign");
+  expect(LIMIT_CLAIMS.find((r) => r.id === "s1b-analogue")?.kind).toBe("analogue");
+  expect(LIMIT_CLAIMS.find((r) => r.id === "s1b-live-invoice")?.kind).toBe("retired");
   expect(PAGE).toContain("iso-limits");
-  expect(PAGE).toContain("{LIMIT_CLAIMS.map");
+  expect(PAGE).toContain("iso-limits-analogue");
+  expect(PAGE).toContain("iso-limits-retired");
+  expect(PAGE).toContain("ClaimTable");
+  expect(PAGE).toContain("LIMIT_KEY");
+  expect(PAGE.indexOf("iso-limits")).toBeLessThan(PAGE.indexOf("iso-pack"));
+  expect(PAGE).not.toContain("{LIMIT_CLAIMS.map");
   const iso = readFileSync(join(ROOT, "docs/isolation.md"), "utf8");
   expect(iso).toMatch(/oblivious-long/);
   expect(iso).toMatch(/\+2\.8% cents/);
   expect(iso).toMatch(/−9\.1% cents \(analogue\)/);
   expect(iso).toMatch(/HOST-DROP\.md/);
+  expect(iso).toMatch(/OBLIVIOUS-LONG\.md/);
+  expect(iso).toMatch(/ood-long/);
+  expect(iso).toMatch(/WITNESS-ECON\.md/);
+  expect(iso).not.toMatch(/\| `docs\/ROADMAP\.md` \|/);
+  expect(iso).toMatch(/\| Name \| Kind \| Source \|/);
+  expect(iso.indexOf("### Limits")).toBeLessThan(iso.indexOf("### Analogue"));
+  expect(iso.indexOf("### Analogue")).toBeLessThan(iso.indexOf("### Retired"));
+  expect(LIMIT_CLAIMS.find((r) => r.id === "oblivious-long")?.test).toBe(
+    "benchmarks/campaign/OBLIVIOUS-LONG.md",
+  );
   expect(LIMIT_CLAIMS.find((r) => r.id === "replica-host-drop")?.test).toBe(
     "benchmarks/campaign/HOST-DROP.md",
   );

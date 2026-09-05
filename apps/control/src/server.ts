@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { handleChatCompletions, createState } from "@eden/wrap";
 import { handleAnthropicMessages } from "@eden/wrap";
 import { minLlmReductionOf, protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER } from "@eden/ir";
-import { handleApi, isManagedDeployment, type ApiCtx } from "./api";
+import { handleApi, isManagedDeployment, playCompiled, type ApiCtx } from "./api";
 import { scheduleClockEnabled, startScheduleClock } from "./schedule-clock";
 import type { Store } from "./store";
 
@@ -58,13 +58,31 @@ function corsHeaders(req: Request): Record<string, string> {
   };
 }
 
+function bearerToken(req: Request): string | null {
+  const m = /^Bearer\s+(.*)$/i.exec(req.headers.get("authorization") || "");
+  return m ? m[1]! : null;
+}
+
 function authorized(req: Request, token?: string): boolean {
   if (!token) return false;
-  const m = /^Bearer\s+(.*)$/i.exec(req.headers.get("authorization") || "");
-  if (!m) return false;
-  const a = Buffer.from(m[1]!, "utf8");
+  const got = bearerToken(req);
+  if (got == null) return false;
+  const a = Buffer.from(got, "utf8");
   const b = Buffer.from(token, "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Local two-line enable: agent keeps OPENAI_API_KEY and only changes BASE_URL. */
+function isProviderKey(key: string): boolean {
+  return key.startsWith("sk-") && key.length >= 12;
+}
+
+function chatAuthorized(req: Request, token?: string): boolean {
+  if (authorized(req, token)) return true;
+  const allowProvider = isManagedDeployment() ? process.env.EDEN_DEV === "1" : process.env.EDEN_DEV !== "0";
+  if (!allowProvider) return false;
+  const got = bearerToken(req);
+  return Boolean(got && isProviderKey(got));
 }
 
 export function createHandler(opts: ServerOpts) {
@@ -151,7 +169,7 @@ export function createHandler(opts: ServerOpts) {
       // where the /v1/ gate lives. Unauthenticated, it was free inference on
       // the operator's upstream key for anyone who could reach the port — and
       // a text/plain POST is CORS-simple, so it needed no preflight to allow.
-      if (!authorized(req, token)) {
+      if (!chatAuthorized(req, token)) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401, headers: corsHeaders(req) });
       }
       return handleChatCompletions(req, {
@@ -159,11 +177,12 @@ export function createHandler(opts: ServerOpts) {
         upstream: opts.upstream,
         upstreamKey: opts.upstreamKey,
         getPrograms: () => opts.store.livePrograms(),
+        play: (name, args) => playCompiled(ctx, name, args),
       });
     }
     if (url.pathname === "/v1/messages" && req.method === "POST") {
       // Anthropic Messages API dialect (G7): same auth gate as chat/completions.
-      if (!authorized(req, token)) {
+      if (!chatAuthorized(req, token)) {
         return Response.json({ error: { message: "unauthorized" } }, { status: 401 });
       }
       return handleAnthropicMessages(req, {
@@ -173,6 +192,12 @@ export function createHandler(opts: ServerOpts) {
     }
     const api = await handleApi(req, url, ctx);
     if (api) return withCors(api, req);
+    if (url.pathname.startsWith("/v1/") || url.pathname === "/v1") {
+      return Response.json(
+        { error: "not found" },
+        { status: 404, headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION), ...corsHeaders(req) } },
+      );
+    }
     return new Response("Not found", { status: 404, headers: corsHeaders(req) });
   };
 }

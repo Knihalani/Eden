@@ -121,11 +121,11 @@ describe("s3 publish", () => {
     expect(s3Configured()).toBe(false);
     const dir = mkdtempSync(join(tmpdir(), "eden-know-s3off-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "", url: "" }], 30);
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }], 30);
     const r = await compactAndPublish(s);
     expect(r.compacted).toBe(true);
     expect(r.uploaded).toBe(false);
-    expect(s.search("France")[0]?.o).toBe("Paris");
+    expect(s.search("jq")[0]?.s).toBe("jq");
     s.close();
     rmSync(dir, { recursive: true, force: true });
     for (const [k, v] of Object.entries(saved)) {
@@ -153,7 +153,7 @@ describe("s3 publish", () => {
     process.env.AWS_SECRET_ACCESS_KEY = "test";
     try {
       const s = openStore(join(dir, "g"));
-      s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "", url: "" }], 30);
+      s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }], 30);
       const r = await compactAndPublish(s);
       expect(r.uploaded).toBe(true);
       expect(r.bytes).toBeGreaterThan(4);
@@ -190,10 +190,10 @@ describe("s3 publish", () => {
     process.env.AWS_SECRET_ACCESS_KEY = "test";
     try {
       const s = openStore(join(dir, "g"));
-      s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "", url: "" }], 30);
+      s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }], 30);
       const r = await compactAndPublish(s);
       expect(r.uploaded).toBe(true);
-      expect(s.search("France")[0]?.o).toBe("Paris");
+      expect(s.search("jq")[0]?.s).toBe("jq");
       s.close();
     } finally {
       process.env.PATH = prevPath;
@@ -232,22 +232,22 @@ describe("s3 publish", () => {
       expect(compactLeader(1, 2)).toBe(false);
       process.env.EDEN_KNOW_SHARD = "1";
       const follow = openStore(join(dir, "follow"));
-      follow.putNodes("https://example.org/fr", [{ s: "France", p: "capital", o: "Paris", e: "", url: "" }], 30);
+      follow.putNodes("https://example.org/fr", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "", url: "" }], 30);
       const fr = await compactAndPublish(follow);
       expect(fr.uploaded).toBe(false);
       expect(fr.skipped).toBe("follower");
-      expect(follow.search("France")[0]?.o).toBe("Paris");
+      expect(follow.search("jq")[0]?.s).toBe("jq");
       follow.close();
       expect(readdirSync(mock).some((f) => f.startsWith("ov-"))).toBe(true);
-      expect(fetchRemoteOverlays().some((f) => f.s === "France" && f.o === "Paris")).toBe(true);
+      expect(fetchRemoteOverlays().some((f) => f.s === "jq")).toBe(true);
 
       process.env.EDEN_KNOW_SHARD = "0";
       const lead = openStore(join(dir, "lead"));
-      lead.putNodes("https://example.org/ke", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "", url: "" }], 30);
+      lead.putNodes("https://example.org/ke", [{ s: "Bun", p: "is", o: "used for running TypeScript", e: "", url: "" }], 30);
       const r = await compactAndPublish(lead);
       expect(r.uploaded).toBe(true);
-      expect(lead.search("Kenya")[0]?.o).toBe("Nairobi");
-      expect(lead.search("France")[0]?.o).toBe("Paris");
+      expect(lead.search("Bun")[0]?.s).toBe("Bun");
+      expect(lead.search("jq")[0]?.s).toBe("jq");
       lead.close();
       expect(overlayKey(1)).toBe("overlay/1/graph.kpk");
     } finally {

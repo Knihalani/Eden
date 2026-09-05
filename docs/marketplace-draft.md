@@ -15,6 +15,7 @@ Every multiplier and percent below is a row in `packages/measure/src/claims.ts` 
 - **long-incident** (`1.35× turns`) — Flaky reads and retries: 1.35× turns, 1.13× wall, 1.32× cheaper (p=0.016). File: `benchmarks/campaign/bench-campaign.ts`.
 - **thrash-enforce** (`5.14× spend`) — Runaway loop halted: 5.14× less spend, 5.29× faster (p=0.002, n=10). File: `benchmarks/campaign/bench-campaign.ts`.
 - **fastdesk-live** (`7.0× turns`) — Instant tools, program live: 7.0× turns / 6.4× wall — think-time, not tool time. File: `benchmarks/campaign/bench-negative.ts`.
+- **JIT soak default** (`PASS precision=1.000 n=38`) — Wave 22.2 bun run bench:jit-soak printed PASS precision=1.000 n=38 (gh 18/18, kubectl 12/12, name-only 4/4, campaign 4/4). Hold-outs jit-id / jit-cli / jit-url each printed PASS precision=1.000. Unique-work empty-catalog held. Default EDEN_SURFACE is jit. EDEN_SURFACE=all is the opt-out. File: `benchmarks/campaign/JIT-SOAK.md`.
 
 ## Parity
 
@@ -29,17 +30,16 @@ Every multiplier and percent below is a row in `packages/measure/src/claims.ts` 
 
 ## Limits
 
-- **oblivious-long** (`+2.8% cents / +3.2% wall`) — Wrap skipRest when the model never early-stops: +2.8% cents and +3.2% wall. Retired from the win table. Island spend with no turn savings. File: `docs/ROADMAP.md`.
+- **oblivious-long** (`+2.8% cents / +3.2% wall`) — Wrap skipRest when the model never early-stops: +2.8% cents and +3.2% wall. Retired from the win table. Island spend with no turn savings. File: `benchmarks/campaign/OBLIVIOUS-LONG.md`.
 - **ood-long** (`parity (miss)`) — Every goal out of envelope against a live program: steering misses; parity expected; corruption fails. File: `benchmarks/campaign/bench-campaign.ts`.
-- **certification bounds** (`11/14 soak certified`) — Soak go-live 11/14 rounds. The 3 misses are witness-efficiency, not quoted as certified savings. UNCERTIFIED is never a win. File: `docs/ROADMAP.md`.
+- **certification bounds** (`11/14 soak certified`) — Soak go-live 11/14 rounds. The 3 misses are witness-efficiency, not quoted as certified savings. UNCERTIFIED is never a win. File: `benchmarks/campaign/WITNESS-ECON.md`.
 - **replica host-drop** (`host limit (replica-only)`) — Live Claude Code does not ack an always-drop of a correct native rewrite. Replica host-drop is a permanent host limit, not a live ack. File: `benchmarks/campaign/HOST-DROP.md`.
-- **JIT soak default** (`FAIL precision=0.789 n=38`) — Wave 19 remeasure of bun run bench:jit-soak printed FAIL precision=0.789 n=38 (shape 30/30; name-only/campaign 0/8). Unique-work empty-catalog held. Default EDEN_SURFACE stays all. Not a win. File: `benchmarks/campaign/JIT-SOAK.md`.
 
 ## Retired
 
 - **S1b live Claude Code invoice** (`retired`) — No live Claude Code invoice file is in the tree. The analogue −9.1% cell is not a live bill. This quote is retired until an invoice parses as live-invoice. File: `benchmarks/campaign/LIVE-AB.md`.
 
-## Case studies
+## Fixture verticals
 
 Customer-approved measured studies: 0. Fixture verticals (support, desk, orders, etl, incident) are campaign measurements, not customers. Do not invent a company.
 

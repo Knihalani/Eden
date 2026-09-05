@@ -9,6 +9,8 @@ import {
   rfcTitleFromHtml,
   scanHtml,
   skipHost,
+  softwareLeadIs,
+  techniquesFromProse,
   triplesFromPage,
   wikiActionApiUrl,
   wikiApiBodyToText,
@@ -93,7 +95,7 @@ describe("infobox capital yield", () => {
       o: "Nairobi",
       e: "capital of Kenya is Nairobi",
     });
-    expect(persistable(KENYA, t!)).toBe(true);
+    expect(persistable(KENYA, t!)).toBe(false);
   });
 
   test("does not invert country/capital from a Country row", () => {
@@ -105,7 +107,7 @@ describe("infobox capital yield", () => {
   test("ISO 3166-1 alpha-2 from infobox is persistable id", () => {
     const id = wikiIso(KENYA, KENYA_INFOBOX);
     expect(id).toEqual({ s: "Kenya", p: "id", o: "KE", e: "Kenya ISO 3166-1 alpha-2 KE" });
-    expect(persistable(KENYA, id!)).toBe(true);
+    expect(persistable(KENYA, id!)).toBe(false);
     const t = triplesFromPage(KENYA, KENYA_INFOBOX, true);
     expect(t.some((x) => x.p === "id" && x.s === "Kenya" && x.o === "KE")).toBe(true);
     expect(t.some((x) => x.s === "KE" && x.p === "is" && /ISO 3166-1 alpha-2 of Kenya/i.test(x.o))).toBe(true);
@@ -222,7 +224,7 @@ describe("national capitals table yield", () => {
     expect(countries.has("Germany")).toBe(true);
     expect(countries.has("Australia")).toBe(true);
     expect(caps.length).toBeGreaterThanOrEqual(6);
-    expect(page.every((x) => persistable(LIST, x))).toBe(true);
+    expect(page.every((x) => persistable(LIST, x))).toBe(false);
   });
 
   test("Parsoid rowspan: Australia still extracted when continent td is omitted", () => {
@@ -330,7 +332,7 @@ When servers process a request they must validate the URI.
     expect(t.some((x) => x.s === "RFC 2396" && x.p === "is" && /obsoleted by RFC 3986/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "RFC 1738" && x.p === "is" && /updated by RFC 3986/i.test(x.o))).toBe(true);
     expect(t.some((x) => /when server|status of this memo|this document specifies/i.test(x.o))).toBe(false);
-    expect(t.every((x) => persistable("https://www.rfc-editor.org/rfc/rfc3986.html", x))).toBe(true);
+    expect(t.every((x) => persistable("https://www.rfc-editor.org/rfc/rfc3986.html", x) === (x.p === "obsoletes" || x.p === "updates" || x.p === "id" || /^(obsoleted|updated) by\b/i.test(x.o)))).toBe(true);
   });
 });
 
@@ -363,7 +365,7 @@ describe("Wikidata SPARQL parse", () => {
         o: "KE",
         e: "Kenya ISO 3166-1 alpha-2 KE",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
@@ -420,6 +422,14 @@ describe("keepWet FineWeb meter", () => {
     expect(keepWet({ uri: "https://www.unicode.org/Public/UCD/latest/ucd/Blocks.txt", text: long })).toBe(true);
     expect(keepWet({ uri: "https://whatwg.org/", text: long })).toBe(true);
     expect(keepWet({ uri: "https://github.com/whatwg/html", text: long })).toBe(true);
+    const bun =
+      "Bun is a fast JavaScript runtime, bundler, test runner, and package manager. " +
+      "Agents use it to run TypeScript without a separate compile step on everyday services. " +
+      "The project documents install, test, and package commands for application teams.";
+    expect(keepWet({ uri: "https://github.com/oven-sh/bun", text: bun })).toBe(true);
+    expect(keepWet({ uri: "https://github.com/random-user/hello", text: bun })).toBe(false);
+    expect(keepWet({ uri: "https://github.com/oven-sh/bun/issues/1", text: bun })).toBe(true);
+    expect(keepWet({ uri: "https://docs.python.org/3/", text: bun })).toBe(true);
     expect(keepWet({ uri: "https://www.nist.gov/pml/", text: long })).toBe(false);
     const reuters =
       "Reuters staff report that the city council voted after midnight on a budget amendment covering transit. ".repeat(
@@ -428,7 +438,7 @@ describe("keepWet FineWeb meter", () => {
     expect(keepWet({ uri: "https://www.reuters.com/world/city-council-vote", text: reuters })).toBe(true);
   });
 
-  test("wikipedia Kenya capital keeps; wikipedia junk and casino wiki-mirrors drop", () => {
+  test("wikipedia encyclopedia drops; casino wiki-mirrors still drop", () => {
     const filler =
       "The protocol is used by agents and origin servers around the world for everyday work. ";
     const kenya = `The capital of Kenya is Nairobi and the city hosts the government. ${filler.repeat(3)}`;
@@ -437,9 +447,9 @@ describe("keepWet FineWeb meter", () => {
         4,
       );
     const casino = `Best casino slots bahis win now! The capital of luck is winning tonight. ${"bahis casino slot ".repeat(20)}`;
-    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: kenya })).toBe(true);
-    expect(keepWet({ uri: "https://www.wikidata.org/wiki/Q114", text: kenya })).toBe(true);
-    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Travel", text: long })).toBe(true);
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: kenya })).toBe(false);
+    expect(keepWet({ uri: "https://www.wikidata.org/wiki/Q114", text: kenya })).toBe(false);
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Travel", text: long })).toBe(false);
     expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Online_casino", text: casino })).toBe(false);
     expect(keepWet({ uri: "https://www.wikimedia.org/wiki/Casino", text: casino })).toBe(false);
   });
@@ -487,10 +497,10 @@ describe("keepWet FineWeb meter", () => {
     expect(keepWet({ uri: "https://noticias.example/paris", text: spanish })).toBe(false);
     expect(keepWet({ uri: "https://example.org/x", text: "short" })).toBe(false);
     const physics = `Quantum mechanics describes nature at atomic and subatomic scales with operators on Hilbert space. ${filler.repeat(3)}`;
-    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Quantum_mechanics", text: physics })).toBe(true);
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Quantum_mechanics", text: physics })).toBe(false);
     const countryOnly = `Kenya is a country in East Africa and the highlands run the length of the nation. ${filler.repeat(3)}`;
     expect(wetFactBearing(countryOnly)).toBe(true);
-    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: countryOnly })).toBe(true);
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Kenya", text: countryOnly })).toBe(false);
     const arxiv = `We present a method. arXiv:1706.03762 Attention is all you need. ${filler.repeat(3)}`;
     expect(wetFactBearing(arxiv)).toBe(true);
     expect(keepWet({ uri: "https://arxiv.org/abs/1706.03762", text: arxiv })).toBe(true);
@@ -498,7 +508,7 @@ describe("keepWet FineWeb meter", () => {
     const city = `Nairobi is a city in Kenya and the highlands run the length of the nation around it. ${filler.repeat(3)}`;
     expect(wetFactBearing(company)).toBe(true);
     expect(wetFactBearing(city)).toBe(true);
-    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Acme", text: company })).toBe(true);
+    expect(keepWet({ uri: "https://en.wikipedia.org/wiki/Acme", text: company })).toBe(false);
   });
 
   test("bench WET_SAMPLES kept/scanned plus extras: catalog in, junk out, fact pages in", () => {
@@ -513,10 +523,9 @@ describe("keepWet FineWeb meter", () => {
     const keptBench = wetSamples.filter((r) => keepWet(r));
     expect(keptBench.map((r) => r.uri)).toEqual([
       "https://www.rfc-editor.org/rfc/rfc3986.html",
-      "https://en.wikipedia.org/wiki/Kenya",
       "https://www.iana.org/assignments/media-types/application/json",
     ]);
-    expect(keptBench.length / wetSamples.length).toBe(0.5);
+    expect(keptBench.length / wetSamples.length).toBeCloseTo(1 / 3);
 
     const filler = "Agents and origin servers use this every day when they speak HTTP. ";
     const extra = [
@@ -677,7 +686,7 @@ describe("infobox extras, definition lists, WET harvest", () => {
     expect(extras.some((x) => x.s === "English" && x.p === "is" && /official language of Kenya/i.test(x.o))).toBe(true);
     expect(extras.some((x) => x.s === "Swahili" && /official language of Kenya/i.test(x.o))).toBe(true);
     expect(extras.some((x) => x.s === "Kenyan shilling" && /currency of Kenya/i.test(x.o))).toBe(true);
-    expect(extras.every((x) => persistable(KENYA, x))).toBe(true);
+    expect(extras.every((x) => persistable(KENYA, x))).toBe(false);
     const t = triplesFromPage(KENYA, html, true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "capital" && x.o === "Nairobi")).toBe(true);
     expect(t.some((x) => x.s === "English" && /official language of Kenya/i.test(x.o))).toBe(true);
@@ -701,8 +710,102 @@ describe("infobox extras, definition lists, WET harvest", () => {
       o: "a country in East Africa",
       e: "a country in East Africa",
     });
-    expect(persistable(KENYA, lead!)).toBe(true);
+    expect(persistable(KENYA, lead!)).toBe(false);
     expect(wikiLeadIs(LIST, FIXTURE, "List of national capitals is a Wikipedia list.")).toBeUndefined();
+  });
+
+  test("GitHub README and tool docs yield a persistable software is-fact", () => {
+    const bun = "https://github.com/oven-sh/bun";
+    const html = `<meta property="og:description" content="Incredibly fast JavaScript runtime, bundler, test runner, and package manager.">
+      <p>Bun is a fast JavaScript runtime. SPDX-License-Identifier: MIT</p>`;
+    const t = triplesFromPage(bun, html, true);
+    expect(t.some((x) => x.s === "Bun" && x.p === "is" && /runtime/i.test(x.o))).toBe(true);
+    expect(t.filter((x) => x.s === "Bun" && /runtime/i.test(x.o)).every((x) => persistable(bun, x))).toBe(false);
+    const lead = softwareLeadIs(bun, html, "Bun is a fast JavaScript runtime.");
+    expect(lead).toBeUndefined();
+    expect(softwareLeadIs("https://github.com/random-user/hello", html, "Hello world this is a long enough english page.")).toBeUndefined();
+    const py = triplesFromPage(
+      "https://docs.python.org/3/",
+      "Python is a programming language. The standard library covers http and json.",
+      false,
+    );
+    expect(py.some((x) => x.s === "Python" && /programming language/i.test(x.o))).toBe(true);
+  });
+
+  test("prose techniques pack as used-for is-facts, not tautological is-a", () => {
+    const url = "https://jqlang.github.io/jq/";
+    const text =
+      "jq is used for filtering JSON on the command line. Use Bun to run TypeScript services. " +
+      "Cargo is the recommended way to build Rust packages from a crate.";
+    const t = triplesFromPage(url, text, false);
+    expect(techniquesFromProse(text).some((x) => x.s === "jq" && x.o === "used for filtering JSON on the command line")).toBe(
+      true,
+    );
+    expect(t.some((x) => x.s === "jq" && x.p === "is" && x.o === "used for filtering JSON on the command line")).toBe(
+      true,
+    );
+    expect(t.some((x) => x.s === "Bun" && x.p === "is" && /used for run TypeScript/i.test(x.o))).toBe(true);
+    expect(t.some((x) => x.s === "Cargo" && x.p === "is" && /used for build Rust/i.test(x.o))).toBe(true);
+    expect(t.filter((x) => x.p === "is" && x.o.startsWith("used for ")).every((x) => persistable(url, x))).toBe(true);
+    expect(wetFactBearing(text)).toBe(true);
+  });
+
+  test("wiki template pipes, official-name echoes, and URL objects are not persistable", () => {
+    const wiki = "https://en.wikipedia.org/wiki/Hop_Bottom,_Pennsylvania";
+    expect(
+      persistable(wiki, { s: "Hop Bottom, Pennsylvania", p: "is", o: "a |leader_title =", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, { s: "Hop Bottom", p: "is", o: "the official name of Hop Bottom, Pennsylvania", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, { s: "| image_skyline =", p: "is", o: "the motto of Myangad, Khovd", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, {
+        s: "Edward Tsang",
+        p: "is",
+        o: "the Director (and co-founder) of [http://www",
+        e: "",
+      }),
+    ).toBe(false);
+    expect(
+      persistable(KENYA, { s: "Republic of Kenya", p: "is", o: "the official name of Kenya", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, { s: "Unincorporated community", p: "is", o: "the official name of Coalton, Kentucky", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, { s: "Latin", p: "is", o: "the motto of HMS Achates (H12)", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, { s: "Platanoussa", p: "is", o: "situated on the eastern slope of the [[Xerovouni]] mountain", e: "" }),
+    ).toBe(false);
+    expect(
+      persistable(wiki, { s: "{{Unbulleted list", p: "is", o: "the currency of France", e: "" }),
+    ).toBe(false);
+    const html = `<table class="infobox"><tr><th>Official name</th><td>Hop Bottom, Pennsylvania</td></tr>
+      <tr><th>Motto</th><td>|leader_title = Mayor</td></tr>
+      <tr><th>Motto language</th><td>Latin</td></tr>
+      <tr><th>Official name</th><td>Unincorporated community</td></tr></table>`;
+    const t = triplesFromPage("https://en.wikipedia.org/wiki/Hop_Bottom,_Pennsylvania", html, true);
+    expect(t.some((x) => /\|/.test(x.s) || /\|/.test(x.o))).toBe(false);
+    expect(t.some((x) => x.s === "Hop Bottom" && /official name of Hop Bottom/i.test(x.o))).toBe(false);
+    expect(t.some((x) => x.s === "Latin" && /motto of/i.test(x.o))).toBe(false);
+    expect(t.some((x) => x.s === "Unincorporated community")).toBe(false);
+  });
+
+  test("wiki lead strips wikilinks and drops leftover templates", () => {
+    const linked = wikiLeadIs(
+      "https://en.wikipedia.org/wiki/Platanoussa",
+      "",
+      "Platanoussa is situated on the eastern slope of the [[Xerovouni]] mountain.",
+    );
+    expect(linked?.o).toBe("situated on the eastern slope of the Xerovouni mountain");
+    expect(linked?.o.includes("[")).toBe(false);
+    expect(
+      wikiLeadIs("https://en.wikipedia.org/wiki/France", "", "France is {{Unbulleted list|the euro}}."),
+    ).toBeUndefined();
   });
 
   test("WET plaintext harvests RFC, media type, SPDX; Kenya/Nairobi stays", () => {
@@ -715,7 +818,7 @@ describe("infobox extras, definition lists, WET harvest", () => {
     expect(t.some((x) => x.s === "RFC 3986" && x.p === "is" && /URI|Identifier/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "IANA media application/json" && x.p === "is" && x.o === "JSON")).toBe(true);
     expect(t.some((x) => x.s === "SPDX MIT" && x.p === "is")).toBe(true);
-    expect(t.every((x) => persistable("https://en.wikipedia.org/wiki/Kenya", x))).toBe(true);
+    expect(t.every((x) => persistable("https://en.wikipedia.org/wiki/Kenya", x))).toBe(false);
   });
 
   test("national capitals fragment: continent is-facts and West Germany; no inverted cities", () => {
@@ -757,7 +860,7 @@ describe("infobox extras, definition lists, WET harvest", () => {
     expect(t.some((x) => x.s === "Republic of Kenya" && /official name of Kenya/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "Harambee" && /motto of Kenya/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "id" && x.o === "KES")).toBe(true);
-    expect(t.every((x) => persistable(KENYA, x))).toBe(true);
+    expect(t.every((x) => persistable(KENYA, x))).toBe(false);
   });
 
   test("RFC HTML titles still win; extra RFC lines do not replace them", () => {
@@ -815,7 +918,7 @@ RFC 3986                   URI Generic Syntax               January 2005
     expect(t.some((x) => x.s === "RFC 9110" && /Semantics/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "IANA media application/json" && x.p === "is")).toBe(true);
     expect(t.some((x) => x.s === "Nairobi" && x.p === "capital")).toBe(false);
-    expect(t.every((x) => persistable("https://en.wikipedia.org/wiki/Kenya", x))).toBe(true);
+    expect(t.every((x) => persistable("https://en.wikipedia.org/wiki/Kenya", x))).toBe(false);
   });
 });
 
@@ -836,7 +939,7 @@ describe("one-pass yield: infobox extras, entities, thin HTML", () => {
     expect(t.some((x) => x.s === "Parliament of Kenya" && /legislature of Kenya/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "is" && /presidential republic/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "is" && /country in East Africa/i.test(x.o))).toBe(true);
-    expect(t.every((x) => persistable(KENYA, x))).toBe(true);
+    expect(t.every((x) => persistable(KENYA, x))).toBe(false);
   });
 
   test("JSON-LD ItemList + description + population", () => {
@@ -897,7 +1000,7 @@ describe("one-pass yield: infobox extras, entities, thin HTML", () => {
     expect(t.some((x) => x.s === "Nairobi" && x.p === "is" && /capital of Kenya/i.test(x.o))).toBe(true);
     expect(t.some((x) => x.s === "Kenya" && x.p === "is" && /country in East Africa/i.test(x.o))).toBe(true);
     expect(t.some((x) => /&#/.test(x.s) || /&#/.test(x.o))).toBe(false);
-    expect(t.every((x) => persistable(KENYA, x))).toBe(true);
+    expect(t.every((x) => persistable(KENYA, x))).toBe(false);
     expect(t.length).toBeGreaterThanOrEqual(10);
   });
 
@@ -924,7 +1027,7 @@ RFC 3986                   URI Generic Syntax               January 2005
 });
 
 describe("frontier rank + one-pass scan", () => {
-  test("wiki lists and RFC beat blogs; nytimes dropped; wiki File: last among kept", () => {
+  test("talk and RFC beat blogs; wiki encyclopedia dropped; nytimes dropped", () => {
     const ranked = rankFrontierUrls([
       "https://blog.example/essay",
       "https://en.wikipedia.org/wiki/Kenya",
@@ -934,23 +1037,22 @@ describe("frontier rank + one-pass scan", () => {
       "https://en.wikipedia.org/wiki/List_of_national_capitals",
       "https://en.wikipedia.org/wiki/File:Flag.svg",
       "https://www.iana.org/assignments/media-types/application/json",
+      "https://old.reddit.com/r/commandline/comments/x/jq/",
+      "https://docs.python.org/3/",
     ]);
-    expect(ranked[0]).toBe("https://en.wikipedia.org/wiki/List_of_academic_disciplines");
-    expect(ranked).toContain("https://en.wikipedia.org/wiki/List_of_national_capitals");
-    expect(rankFrontier("https://en.wikipedia.org/wiki/List_of_academic_disciplines")).toBe(
-      rankFrontier("https://en.wikipedia.org/wiki/List_of_national_capitals"),
-    );
+    expect(ranked[0]).toBe("https://old.reddit.com/r/commandline/comments/x/jq/");
+    expect(ranked).toContain("https://docs.python.org/3/");
     expect(ranked).toContain("https://www.rfc-editor.org/rfc/rfc3986.html");
-    expect(ranked).toContain("https://en.wikipedia.org/wiki/Kenya");
     expect(ranked).toContain("https://www.iana.org/assignments/media-types/application/json");
+    expect(ranked.some((u) => /wikipedia\.org/.test(u))).toBe(false);
     expect(ranked.some((u) => /blog.example/.test(u))).toBe(false);
     expect(ranked.some((u) => /nytimes/.test(u))).toBe(false);
     expect(skipHost("https://www.nytimes.com/2026/01/01/x")).toBe("paywall-host");
     expect(skipHost(KENYA)).toBeUndefined();
-    expect(rankFrontier("https://en.wikipedia.org/wiki/List_of_academic_disciplines")).toBeLessThan(
+    expect(rankFrontier("https://old.reddit.com/r/commandline/comments/x/jq/")).toBeLessThan(
       rankFrontier("https://www.rfc-editor.org/rfc/rfc3986.html"),
     );
-    expect(rankFrontier(KENYA)).toBeLessThan(rankFrontier("https://blog.example/essay"));
+    expect(rankFrontier("https://docs.python.org/3/")).toBeLessThan(rankFrontier("https://blog.example/essay"));
   });
 
   test("reused scanHtml matches a fresh extract on Kenya stub and list fixture", () => {

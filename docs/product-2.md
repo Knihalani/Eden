@@ -1,10 +1,10 @@
 # Eden Know
 
-Public source of this product is **[KaiavN/eden-know](https://github.com/KaiavN/eden-know)** (MIT). Wrap stays in this private repo. Do not copy this interview/gauntlet document into the public tree.
+**Code is closed.** Open artifacts are **graph dumps** (see `packages/know/docs/data.md` and [Knihalani/eden-know-data](https://github.com/Knihalani/eden-know-data)). Wrap stays in this private repo.
 
-We present Eden Know, a prototype knowledge graph for agents. It collects public text, discards bloat, and stores entities, relations, and short evidence. At query time a retriever pulls a subgraph and a grounded writer formats one fact card. An agent calls `know("capital of Kenya")` and receives that card — fact, as-of, ttl, confidence — or unknown. Sources stay off the wire.
+We present Eden Know, a prototype knowledge graph for agents. It collects public text that robots allow, discards bloat, and stores entities, relations, and short evidence. At query time a retriever pulls a subgraph and a grounded writer formats one fact card — or wrap injects that card by reading the prompt / chain-of-thought. An agent can also call `Eden.know("…")`. Sources stay off the wire. The SDK download does not include the graph.
 
-The prototype we operate this sitting is a **continuous, keyless scraper**: newest Common Crawl WET over HTTPS plus a robots-ok live frontier (`Edenbot/0.1`), written onto a SQLite graph. Wikipedia is **out** of ingest (skip wikipedia/wikimedia/wikidata/wiktionary). English Wikipedia’s **7,228,519** articles (22 August 2026, `.gauntlet/refs/product2/wiki-size.md`) remain **their** corpus, not Know’s. A prior bake-off used Wikipedia + DuckDuckGo Instant Answers only as a writer probe (`results.json` `live.queryTimeCards.kenyaWire`); that is not the store.
+The prototype we operate is a **continuous, keyless crawler**: newest Common Crawl WET over HTTPS plus a robots-ok live frontier (`Edenbot/0.1`) that **starts from known sites and expands**. Wikipedia is **in**. Listed paywalls are out. English Wikipedia’s **7,228,519** articles (22 August 2026, `.gauntlet/refs/product2/wiki-size.md`) are in-scope when robots allow, not “someone else’s corpus.”
 
 To engineer a store that survives the rest of the Web is a different task. Common Crawl’s March 2026 crawl is **1.97 billion pages**, 75.53 TiB compressed (`.gauntlet/refs/product2/cc-scale.md`) — the collection’s size, not our index. Search engines answer tens of millions of queries a day (Brin & Page 1998, `.gauntlet/refs/product2/07-anatomy.md`). Know is built for **one fact per agent turn**.
 
@@ -12,7 +12,7 @@ Uncontrolled collections remain the hard case. Anyone can publish spam, sermons,
 
 ## What we build first
 
-Common Crawl WET (HTTPS, no key) + robots-ok live fetch → graph. `Eden.know` on the existing SDK. Retriever + grounded writer → one card, or unknown. Wikipedia APIs are not the ingest.
+Common Crawl WET (HTTPS, no key) + robots-ok live fetch of **every allowed URL** (seeds first, then expand). `Eden.know` on the SDK; wrap injects one card from prompt/CoT. Retriever → one card, or unknown. Wikipedia is in when robots allow.
 
 ---
 
@@ -20,7 +20,7 @@ Common Crawl WET (HTTPS, no key) + robots-ok live fetch → graph. `Eden.know` o
 
 - Not product 1. Product 1 compiles repeating tool stretches so the model never sees them. Know injects **world facts**. Mixing them into a bigger tool catalog would tax the S0/S1 thesis (`docs/ROADMAP.md` §0).
 - Not a human search engine. No SERP, no workbench “knowledge explorer,” no hijack of the gated UI rebuild.
-- Not “scrape everything reachable.” Robots.txt, ToS, and no-paywall are load-bearing. Blocked hosts are a published hole, not a bug.
+- Not “ignore robots / smash paywalls.” RFC 9309 and listed paywall hosts are load-bearing. Everything else robots allow is in-scope.
 - Not an in-RAM vector database of pages. That is how storage balloons and queries get priced like RAM (turbopuffer’s reason to exist: `.gauntlet/refs/product2/02-turbopuffer.md`).
 
 ---
@@ -236,7 +236,7 @@ Year zero (user lock, 2026-08-28, Wikipedia withdrawn the same day): **no paid c
 
 Common Crawl **WET** is the laptop **volume** path (still keyless). FineWeb measured Trafilatura on **WARC** beating WET for quality — WET is a bandwidth option, not a quality claim. Incremental live recrawl for high-value allowed hosts, rate-limited. Do not claim a 2-billion-URL frontier from one machine.
 
-**Robots are operational, not a slogan.** RFC 9309 (`.gauntlet/refs/product2/rfc9309.md`): parse `/robots.txt` for a documented product token (`Edenbot`; public bot page). Longest Allow/Disallow wins. Cache robots.txt; back off on 5xx. `Crawl-delay` is not in the RFC ABNF; Common Crawl still honors it — so do we. `Disallow: /` is a skip. This sitting’s bake-off parses those groups rather than only flipping a boolean.
+**Robots are operational, not a slogan.** RFC 9309 (`.gauntlet/refs/product2/rfc9309.md`): parse `/robots.txt` for a documented product token (`Edenbot`; public bot/data page [Knihalani/eden-know-data](https://github.com/Knihalani/eden-know-data), not source). Longest Allow/Disallow wins. Cache robots.txt; back off on 5xx. `Crawl-delay` is not in the RFC ABNF; Common Crawl still honors it — so do we. `Disallow: /` is a skip. This sitting’s bake-off parses those groups rather than only flipping a boolean.
 
 **Common Crawl is not a waiver.** Their ToU (`.gauntlet/refs/product2/cc-tos.md`, updated 7 Mar 2024) says crawled content may still be under the **origin site’s** terms, recommends counsel before commercial use, and indemnity explicitly mentions AI/LLMs. Historical WARCs can contain pages whose **today’s** robots/ToS forbid us. Re-check before serving; publish the recall hole.
 

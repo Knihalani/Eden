@@ -52,7 +52,7 @@ export function protocolCheck(version: string | null | undefined): ProtocolGate 
     status: 426,
     reason:
       `Eden protocol mismatch: client speaks ${n}, server speaks ${EDEN_PROTOCOL_VERSION}. ` +
-      "Upgrade the older side (`npm i -g eden` / redeploy) so both speak the same protocol.",
+      "Upgrade the older side (`npm i -g @kaiavn/eden` / redeploy) so both speak the same protocol.",
   };
 }
 

@@ -49,8 +49,9 @@ Roadmap item: go-live needs ~13 witnesses today. The three named product gaps:
 - **envelope_gap** — hold-out not in the compiled envelope.
 
 Done when campaign worlds certify at ≤8 witnesses with zero UNCERTIFIED
-inflation and soak certification ≥95%. This file does not implement those;
-it names every miss so Arc 4 is not guessing.
+inflation and soak certification ≥95%. Public pin for the 11/14 soak certified
+limit (Wave 21.1 file close): `PUBLIC_CLAIMS` id `cert-bounds` cites this file.
+This file does not implement those; it names every miss so Arc 4 is not guessing.
 
 ## Sweep result (Wave 2.4)
 

@@ -1,5 +1,7 @@
 /** Recrawl class. Host/path/source/headers/unchanged beat URL substrings. */
 
+import { toolDocsUrl, talkUrl } from "./tools";
+
 export type PageTtlClass = "news" | "blog" | "wiki" | "academia" | "registry" | "docs" | "stable";
 
 export const TTL_DAYS: Record<PageTtlClass, number> = {
@@ -174,12 +176,14 @@ export function pageClass(url: string, text = "", source = ""): PageTtlClass {
   const host = hostOf(url);
   const path = pathOf(url);
   if (wikiHost(host)) return "wiki";
+  if (talkUrl(url)) return "blog";
   if (academiaHost(host)) return "academia";
   if (registryHost(host)) {
     if (suffixHost(host, "w3.org") && newsPath(path)) return "news";
     return "registry";
   }
   if (docsHost(host)) return "docs";
+  if (toolDocsUrl(url)) return "docs";
   if (isNewsSource(source) || newsHost(host) || newsPath(path) || newsMarkup(text)) return "news";
   if (/^blog\.|(^|\.)blogs?\./i.test(host) || /\/blog\//i.test(path) || /\/post\//i.test(path)) return "blog";
   return "stable";

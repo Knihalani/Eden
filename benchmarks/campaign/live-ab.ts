@@ -121,9 +121,9 @@ Paired, counterbalanced, A/A-checked campaign cells live in \`benchmarks/campaig
 
 | Item | Printed | File |
 |---|---|---|
-| oblivious-long | +2.8% cents / +3.2% wall | \`docs/ROADMAP.md\` |
+| oblivious-long | +2.8% cents / +3.2% wall | \`benchmarks/campaign/OBLIVIOUS-LONG.md\` |
 | ood-long | parity (miss) | \`bench-campaign.ts\` |
-| certification bounds | 11/14 soak certified | \`docs/ROADMAP.md\` |
+| certification bounds | 11/14 soak certified | \`benchmarks/campaign/WITNESS-ECON.md\` |
 | replica host-drop | host limit (replica-only) | \`HOST-DROP.md\` |
 | S1b live Claude Code invoice | retired | this file |
 

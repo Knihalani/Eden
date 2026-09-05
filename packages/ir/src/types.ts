@@ -5,7 +5,23 @@ export const DEFAULT_MIN_LLM_REDUCTION = 2;
 
 export const BINDING_KINDS = ["literal", "input", "from", "transform"] as const;
 export const STEP_KINDS = ["tool", "island", "loop", "assert", "branch"] as const;
-export const TRANSFORM_FNS = ["identity", "jsonpath", "template"] as const;
+export const TRANSFORM_FNS = [
+  "identity",
+  "jsonpath",
+  "template",
+  "slice",
+  "except",
+  "flatten",
+  "filter",
+  "lookup",
+  "chunk",
+  "zip",
+  "group",
+  "unique",
+  "sort",
+  "reduce",
+  "add",
+] as const;
 export const ASSERT_ON_FAIL = ["deopt", "error"] as const;
 
 export type BindingKind = (typeof BINDING_KINDS)[number];
@@ -16,7 +32,16 @@ export type AssertOnFail = (typeof ASSERT_ON_FAIL)[number];
 export type Binding =
   | { kind: "literal"; value: unknown }
   | { kind: "input"; path: string }
-  | { kind: "from"; step: string; path: string }
+  | {
+      kind: "from";
+      step: string;
+      path: string;
+      /**
+       * Seed when `step` has not run yet (cursor page 0, optional prior).
+       * Once `step` is in scope, `or` is ignored — null nextCursor is a real value.
+       */
+      or?: Binding;
+    }
   | { kind: "transform"; fn: TransformFn; expr: string; of: Binding };
 
 /** The `from` variant, for producers that can only ever reference a prior step. */
@@ -66,15 +91,29 @@ export type LoopStep = {
    * lets the runtime decide, and it only parallelises a body it can prove safe.
    */
   parallel?: boolean;
+  /**
+   * Poll-until: repeat the body until this assert-style expression is truthy
+   * on the last body result. Not a foreach — same args, changing ready flag.
+   * Absent means ordinary iteration over `over`.
+   */
+  until?: string;
+  /** Witnessed max poll iterations. Runtime deopts if `until` is still false. */
+  maxIters?: number;
 };
 
 /**
  * A witnessed conditional (G2).
  *
  * `expr` is an assert-style expression evaluated against the prior step's
- * result (plus input and step results); truthy runs the `then` arm, falsy the
- * `else` arm. Arm ids reference flat steps elsewhere in `program.steps` —
- * the same shape loops use for bodies.
+ * result (plus input and step results). Truthy runs the `then` arm. If that
+ * misses, `cases` are tried in order — first matching `expr` wins — then
+ * `else`. Binary programs use `expr`/`then`/`else` with `cases` absent.
+ * n-way: first arm is `expr`/`then`; remaining non-else arms are `cases`;
+ * the final arm is `else`.
+ *
+ * Arm ids reference flat steps elsewhere in `program.steps` — the same shape
+ * loops use for bodies. Nested `branch` ids in `else` (old else-of-else
+ * programs) stay valid; the runtime executes that inner step as the arm.
  *
  * Admission discipline lives in the compiler, not here: every arm must be
  * covered by successful taped executions (one witness per arm plus the
@@ -88,6 +127,8 @@ export type BranchStep = {
   expr: string;
   then: string[];
   else?: string[];
+  /** Remaining non-else arms. Absent on binary programs. First matching expr wins, then else. */
+  cases?: Array<{ expr: string; steps: string[] }>;
 };
 
 export type AssertStep = {

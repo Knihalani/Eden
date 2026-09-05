@@ -1,11 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
-import type { Binding, IslandCaller, ProgramDiff, Refusal, StretchProgram, StretchTrace, ToolRegistry } from "@eden/ir";
-import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, diffPrograms, redact, dropEnvelopeValue, whenToUseOf } from "@eden/ir";
-import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, type WrapState } from "@eden/wrap";
+import type { Binding, IslandCaller, ProgramDiff, Refusal, StretchProgram, StretchTrace, TraceEvent, ToolRegistry } from "@eden/ir";
+import { withVersion, isCheckName, validateProgram, canonicalize, minLlmReductionOf, diffPrograms, redact, dropEnvelopeValue, whenToUseOf, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER } from "@eden/ir";
+import { wrapTimeoutMs, attachChatUsage, peekChatUsage, resetUsage, dispatchPrograms, dispatchMessages, compiledSchema, extractInput, type WrapState } from "@eden/wrap";
 import { compileTraces } from "@eden/compile";
 import { inheritLiveTool } from "./inherit-live";
 import { canApprove, registryCovers, replayRegistry, shadowProgram, uncoveredTools } from "@eden/shadow";
-import { pushPrev, Store, type Candidate } from "./store";
+import { pushPrev, Store, type Candidate, type LiveTool } from "./store";
 import { exportAudit } from "./audit-export";
 import { actorOf, exportAccessReview } from "./access-review";
 import { EMPTY_DIGEST, renderDigestText, type DigestInput } from "@eden/measure";
@@ -105,7 +105,14 @@ function corsFor(req?: Request): Record<string, string> {
 }
 
 function json(data: unknown, status = 200, req?: Request): Response {
-  return Response.json(data, { status, headers: { ...corsFor(req), "cache-control": "private, no-store" } });
+  return Response.json(data, {
+    status,
+    headers: {
+      ...corsFor(req),
+      "cache-control": "private, no-store",
+      [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION),
+    },
+  });
 }
 
 /**
@@ -564,6 +571,225 @@ function digestFromStore(store: Store): DigestInput {
   };
 }
 
+/**
+ * Persist traces and compile when the ≥3 threshold is crossed.
+ * Shared by POST /v1/traces and POST /v1/ingest so ingest cannot skip compile
+ * or Approve on its own — maybeAutoApprove still requires EDEN_AUTO_APPROVE=1.
+ */
+async function commitTraces(
+  ctx: ApiCtx,
+  list: StretchTrace[],
+): Promise<{ accepted: number; duplicates: number }> {
+  return ctx.store.enqueue(async () => {
+    let accepted = 0;
+    let duplicates = 0;
+    const usage = ctx.wrapState ? peekChatUsage(ctx.wrapState) : null;
+    let consumed = false;
+    for (const t of list) {
+      if (!t || !Array.isArray(t.events) || !t.events.length) continue;
+      const sealed = !consumed ? attachChatUsage(t, usage) : t;
+      if (ctx.store.putTrace(sealed)) {
+        accepted++;
+        if (!consumed && usage && ctx.wrapState && sealed !== t) {
+          resetUsage(ctx.wrapState.run);
+          consumed = true;
+        }
+      } else {
+        duplicates++;
+        if (!consumed && usage && ctx.wrapState && sealed !== t && ctx.store.sealUnmeasured(sealed)) {
+          resetUsage(ctx.wrapState.run);
+          consumed = true;
+        }
+      }
+    }
+    ctx.store.heartbeat();
+    const n = ctx.store.tracesCount();
+    if (n >= 3 && n !== ctx.store.compiledCount()) {
+      await runCompile(ctx);
+      ctx.store.setCompiledCount(n);
+      await maybeAutoApprove(ctx);
+    }
+    return { accepted, duplicates };
+  });
+}
+
+const INGEST_RUN_CAP = 256;
+const INGEST_EVENT_CAP = 500;
+
+type BufferedRun = { events: TraceEvent[]; agentId?: string; at: number };
+const ingestByStore = new WeakMap<object, Map<string, BufferedRun>>();
+
+function ingestRuns(store: object): Map<string, BufferedRun> {
+  let m = ingestByStore.get(store);
+  if (!m) {
+    m = new Map();
+    ingestByStore.set(store, m);
+  }
+  return m;
+}
+
+function bufferIngest(store: object, runId: string, events: TraceEvent[], agentId?: string): BufferedRun {
+  const buf = ingestRuns(store);
+  let row = buf.get(runId);
+  if (!row) {
+    if (buf.size >= INGEST_RUN_CAP) {
+      let oldestId: string | undefined;
+      let oldestAt = Infinity;
+      for (const [id, r] of buf) {
+        if (r.at < oldestAt) {
+          oldestAt = r.at;
+          oldestId = id;
+        }
+      }
+      if (oldestId) buf.delete(oldestId);
+    }
+    row = { events: [], at: Date.now(), agentId };
+    buf.set(runId, row);
+  }
+  if (agentId) row.agentId = agentId;
+  if (events.length) {
+    row.events.push(...events);
+    if (row.events.length > INGEST_EVENT_CAP) row.events = row.events.slice(-INGEST_EVENT_CAP);
+  }
+  row.at = Date.now();
+  return row;
+}
+
+function takeIngest(store: object, runId: string): BufferedRun | undefined {
+  const buf = ingestRuns(store);
+  const row = buf.get(runId);
+  buf.delete(runId);
+  return row;
+}
+
+function asTraceEvent(raw: Record<string, unknown>): TraceEvent {
+  const name =
+    typeof raw.name === "string" && raw.name
+      ? raw.name
+      : typeof raw.event_id === "string"
+        ? raw.event_id
+        : "";
+  const args =
+    raw.args && typeof raw.args === "object" && !Array.isArray(raw.args)
+      ? (redact(raw.args) as Record<string, unknown>)
+      : {};
+  const duration = Number(raw.duration_ms);
+  return {
+    name,
+    args,
+    ...(raw.result !== undefined ? { result: redact(raw.result) } : {}),
+    ok: raw.ok !== false,
+    ...(Number.isFinite(duration) ? { duration_ms: duration } : {}),
+  };
+}
+
+function stretchFromBuffer(runId: string, row: BufferedRun): StretchTrace | null {
+  if (!row.events.length) return null;
+  const duration = row.events.reduce((s, e) => s + (Number.isFinite(e.duration_ms) ? (e.duration_ms as number) : 0), 0);
+  return {
+    id: runId,
+    events: row.events,
+    ...(row.agentId ? { agentId: row.agentId } : {}),
+    llmCalls: Number.isFinite(row.events.length) ? row.events.length : 0,
+    duration_ms: Number.isFinite(duration) ? duration : 0,
+    cost_cents: 0,
+    complete: true,
+  };
+}
+
+function findToolByName(store: Store, name: string): LiveTool | undefined {
+  return (
+    store.tool(name) ??
+    store.tools().find((t) => t.id === name || t.name === name || t.program.name === name)
+  );
+}
+
+/**
+ * Wrap matches the compiled name (what Approve shipped) and the first original
+ * tool in the sequence (what the SDK posts). Ambiguous first-tool hits fail
+ * open rather than playing the wrong program.
+ */
+function findWrapTool(store: Store, name: string): LiveTool | undefined {
+  const exact = findToolByName(store, name);
+  if (exact) return exact;
+  const hits = store.tools().filter((t) => (t.program.sequence ?? [])[0] === name);
+  if (hits.length === 1) return hits[0];
+  if (hits.length > 1) {
+    hits.sort((a, b) => (b.program.sequence?.length ?? 0) - (a.program.sequence?.length ?? 0));
+    const top = hits[0]!.program.sequence?.length ?? 0;
+    const next = hits[1]!.program.sequence?.length ?? 0;
+    if (top !== next) return hits[0];
+  }
+  return undefined;
+}
+
+function objectArgs(value: unknown, field: string): Record<string, unknown> | { error: string } {
+  if (value == null) return {};
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return { error: `${field} must be an object` };
+    }
+  }
+  if (typeof value !== "object" || Array.isArray(value)) return { error: `${field} must be an object` };
+  return value as Record<string, unknown>;
+}
+
+async function runNamedLive(
+  ctx: ApiCtx,
+  live: LiveTool,
+  args: Record<string, unknown>,
+): Promise<Awaited<ReturnType<typeof executeLiveRun>>> {
+  const input = extractInput(live.program, args);
+  const ran = await executeLiveRun({
+    store: ctx.store,
+    tool: live,
+    input,
+    registry: ctx.registry!,
+    island: ctx.island,
+    timeoutMs: wrapTimeoutMs(),
+  });
+  if (ran.status === "ok") inheritLiveTool(ctx.store, live.id);
+  if (ran.status === "deopt") void maybeQueueRefresh(ctx, live.id).catch(() => undefined);
+  return ran;
+}
+
+/** Chat without a model key: play the compiled tool or fail-open. */
+export async function playCompiled(
+  ctx: ApiCtx,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const found = findWrapTool(ctx.store, name);
+  if (!found || !ctx.registry) return null;
+  const ran = await runNamedLive(ctx, found, args);
+  if (ran.status === "ok") return ran.value;
+  return null;
+}
+
+const AGENT_OPENAPI = {
+  openapi: "3.0.0",
+  info: { title: "Eden wrap", version: String(EDEN_PROTOCOL_VERSION) },
+  paths: {
+    "/health": { get: { summary: "Wrap facts (ok, traces, live). No auth." } },
+    "/v1/wrap": {
+      post: {
+        summary: "Ask if a compiled tool answers",
+        responses: { "200": { description: "{action:play,facts} or {action:original}" } },
+      },
+    },
+    "/v1/ingest": { post: { summary: "Record tool events; stretch_end compiles at ≥3 traces. 202 {ok,accepted}." } },
+    "/v1/dispatch": { post: { summary: "JIT: at most one compiled schema for this transcript. {tools}." } },
+    "/v1/play": { post: { summary: "Execute a live compiled tool by name. Miss is 404, not fail-open." } },
+    "/v1/wrap-run": { post: { summary: "Execute a live compiled tool by toolId/input." } },
+    "/v1/traces": { post: { summary: "Post StretchTrace(s); compiles at ≥3." }, get: { summary: "List traces." } },
+    "/v1/compile": { post: { summary: "Compile stored traces. Does not Approve." } },
+    "/v1/chat/completions": { post: { summary: "OpenAI-compatible chat; set OPENAI_BASE_URL here." } },
+    "/v1/messages": { post: { summary: "Anthropic Messages dialect." } },
+  },
+};
+
 export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Response | null> {
   const p = url.pathname;
   if (p === "/health" && req.method === "GET") {
@@ -590,6 +816,11 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
   if (p.startsWith("/v1/") && !auth(req, ctx)) {
     return json({ error: "unauthorized" }, 401, req);
   }
+
+  if ((p === "/v1" || p === "/v1/" || p === "/v1/openapi.json") && req.method === "GET") {
+    return json(AGENT_OPENAPI);
+  }
+
   if (p === "/v1/stats" && req.method === "GET") {
     return json({
       traces: ctx.store.tracesCount(),
@@ -648,37 +879,8 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
           }
         : t,
     );
-    return ctx.store.enqueue(async () => {
-      let accepted = 0;
-      let duplicates = 0;
-      const usage = ctx.wrapState ? peekChatUsage(ctx.wrapState) : null;
-      let consumed = false;
-      for (const t of cleanList) {
-        if (!t || !Array.isArray(t.events) || !t.events.length) continue;
-        const sealed = !consumed ? attachChatUsage(t, usage) : t;
-        if (ctx.store.putTrace(sealed)) {
-          accepted++;
-          if (!consumed && usage && ctx.wrapState && sealed !== t) {
-            resetUsage(ctx.wrapState.run);
-            consumed = true;
-          }
-        } else {
-          duplicates++;
-          if (!consumed && usage && ctx.wrapState && sealed !== t && ctx.store.sealUnmeasured(sealed)) {
-            resetUsage(ctx.wrapState.run);
-            consumed = true;
-          }
-        }
-      }
-      ctx.store.heartbeat();
-      const n = ctx.store.tracesCount();
-      if (n >= 3 && n !== ctx.store.compiledCount()) {
-        await runCompile(ctx);
-        ctx.store.setCompiledCount(n);
-        await maybeAutoApprove(ctx);
-      }
-      return json({ ok: true, n: list.length, accepted, duplicates });
-    });
+    const { accepted, duplicates } = await commitTraces(ctx, cleanList);
+    return json({ ok: true, n: list.length, accepted, duplicates });
   }
 
   if (p === "/v1/compile" && req.method === "POST") {
@@ -810,7 +1012,13 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
     const found =
       (body.toolId ? ctx.store.tool(body.toolId) : undefined) ??
       ctx.store.tools().find(
-        (t) => t.id === body.program?.id || t.name === body.program?.name || t.program.name === body.program?.name,
+        (t) =>
+          t.id === body.toolId ||
+          t.name === body.toolId ||
+          t.program.name === body.toolId ||
+          t.id === body.program?.id ||
+          t.name === body.program?.name ||
+          t.program.name === body.program?.name,
       );
     if (!found) return json({ error: "not live" }, 404);
     if (found.state === "paused") return json({ error: "paused", program: found.name }, 409);
@@ -840,6 +1048,129 @@ export async function handleApi(req: Request, url: URL, ctx: ApiCtx): Promise<Re
       );
     }
     return json({ error: ran.error }, 500);
+  }
+
+  if (p === "/v1/wrap" && req.method === "POST") {
+    // Same tenant gate as wrap-run: playing a program hits third-party APIs.
+    // A miss or any Eden fault is {action:original} — never 404/500 — so the
+    // SDK keeps the agent working. Org deny stays 403 (SDK treats non-ok as fallback).
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
+    try {
+      const parsed = await readJson(req);
+      if (!parsed.ok) return parsed.res;
+      const body = parsed.value;
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return json({ error: "body must be an object" }, 400);
+      }
+      const b = body as { name?: unknown; args?: unknown; input?: unknown; arguments?: unknown; run_id?: unknown };
+      if (typeof b.name !== "string" || !b.name) {
+        return json({ error: "name must be a non-empty string" }, 400);
+      }
+      const args = objectArgs(b.args ?? b.input ?? b.arguments, "args");
+      if ("error" in args) return json({ error: args.error }, 400);
+      if (b.run_id != null && typeof b.run_id !== "string") {
+        return json({ error: "run_id must be a string" }, 400);
+      }
+      const found = findWrapTool(ctx.store, b.name);
+      if (!found || found.state !== "live") return json({ action: "original" });
+      if (!ctx.registry) return json({ action: "original" });
+      const ran = await runNamedLive(ctx, found, args);
+      if (ran.status === "ok") return json({ action: "play", facts: ran.value });
+      return json({ action: "original" });
+    } catch {
+      return json({ action: "original" });
+    }
+  }
+
+  if (p === "/v1/play" && req.method === "POST") {
+    // Explicit execute — not fail-open. Live miss is 404 so a caller that
+    // asked to play knows the tool is not on.
+    const denied = orgGate(req, ctx);
+    if (denied) return denied;
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json({ error: "body must be an object" }, 400);
+    }
+    const b = body as { name?: unknown; args?: unknown; input?: unknown; arguments?: unknown };
+    if (typeof b.name !== "string" || !b.name) {
+      return json({ error: "name must be a non-empty string" }, 400);
+    }
+    const args = objectArgs(b.args ?? b.input ?? b.arguments, "args");
+    if ("error" in args) return json({ error: args.error }, 400);
+    const found = findToolByName(ctx.store, b.name);
+    if (!found) return json({ error: "not live" }, 404);
+    if (found.state === "paused") return json({ error: "paused", program: found.name }, 409);
+    if (found.state !== "live") return json({ error: "not live", state: found.state }, 409);
+    if (!ctx.registry) return json({ error: "no registry" }, 409);
+    const ran = await runNamedLive(ctx, found, args);
+    if (ran.status === "ok") return json({ ok: true, value: ran.value, stats: ran.stats });
+    if (ran.status === "deopt") {
+      return json(
+        { error: "deopt", reason: ran.reason, deopt: true, early: ran.early, stepsRun: ran.stepsRun, program: found.name },
+        409,
+      );
+    }
+    return json({ error: ran.error }, 500);
+  }
+
+  if (p === "/v1/ingest" && req.method === "POST") {
+    // Auth-only, same as traces. Recording must never Approve unless the
+    // existing maybeAutoApprove env is on.
+    const parsed = await readJson(req);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.value;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json({ error: "body must be an object" }, 400);
+    }
+    const b = body as { run_id?: unknown; events?: unknown; stretch_end?: unknown; agent_id?: unknown };
+    if (typeof b.run_id !== "string" || !b.run_id) {
+      return json({ error: "run_id must be a non-empty string" }, 400);
+    }
+    if (!Array.isArray(b.events)) {
+      return json({ error: "events must be an array" }, 400);
+    }
+    const bad = b.events.findIndex((e) => {
+      if (!e || typeof e !== "object" || Array.isArray(e)) return true;
+      const rec = e as Record<string, unknown>;
+      return typeof rec.event_id !== "string" && typeof rec.name !== "string";
+    });
+    if (bad >= 0) {
+      return json({ error: `events[${bad}] must be an object with a string event_id` }, 400);
+    }
+    const clean = (b.events as Record<string, unknown>[]).map(asTraceEvent);
+    const agentId = typeof b.agent_id === "string" && b.agent_id ? b.agent_id : undefined;
+    const stretchEnd = b.stretch_end === true;
+    const hadRun = ingestRuns(ctx.store).has(b.run_id);
+    const oneShot = !stretchEnd && clean.length >= 2 && !hadRun;
+    const row = bufferIngest(ctx.store, b.run_id, clean, agentId);
+    if (!stretchEnd && !oneShot) return json({ ok: true, accepted: 0 }, 202);
+    const sealed = takeIngest(ctx.store, b.run_id) ?? row;
+    const trace = stretchFromBuffer(b.run_id, sealed);
+    if (!trace) return json({ ok: true, accepted: 0 }, 202);
+    const { accepted } = await commitTraces(ctx, [trace]);
+    return json({ ok: true, accepted }, 202);
+  }
+
+  if (p === "/v1/dispatch" && req.method === "POST") {
+    try {
+      const parsed = await readJson(req);
+      if (!parsed.ok) return parsed.res;
+      const body = parsed.value;
+      const params =
+        body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+      const picked = dispatchPrograms(dispatchMessages(params), ctx.store.livePrograms()).slice(0, 1);
+      const tools = picked.map(compiledSchema).slice(0, 1);
+      return json({ tools });
+    } catch {
+      return json({ tools: [] });
+    }
+  }
+
+  if ((p === "/v1/openapi.json" || p === "/v1" || p === "/v1/") && req.method === "GET") {
+    return json(AGENT_OPENAPI);
   }
 
   const sched = p.match(/^\/v1\/tools\/([^/]+)\/schedule$/);

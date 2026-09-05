@@ -1,6 +1,8 @@
 /**
- * Frozen public claims for Wave 8. Proof page, case studies, and publish-check
- * read this table. A number that is not here must not be printed as a fact.
+ * Frozen public claims (Wave 21 honesty files). Proof page, case studies, and
+ * publish-check read this table. A number that is not here must not be printed
+ * as a fact. Every `file` is a measurement close a reader can open — not the
+ * roadmap.
  *
  * `source` is the honesty tag:
  *   campaign        — paired campaign / wrap path (not a Claude Code invoice)
@@ -149,7 +151,7 @@ export const PUBLIC_CLAIMS: PublicClaim[] = [
     statement:
       "Wrap skipRest when the model never early-stops: +2.8% cents and +3.2% wall. Retired from the win table. Island spend with no turn savings.",
     printed: "+2.8% cents / +3.2% wall",
-    file: "docs/ROADMAP.md",
+    file: "benchmarks/campaign/OBLIVIOUS-LONG.md",
     source: "campaign",
   },
   {
@@ -167,7 +169,7 @@ export const PUBLIC_CLAIMS: PublicClaim[] = [
     name: "certification bounds",
     statement: "Soak go-live 11/14 rounds. The 3 misses are witness-efficiency, not quoted as certified savings. UNCERTIFIED is never a win.",
     printed: "11/14 soak certified",
-    file: "docs/ROADMAP.md",
+    file: "benchmarks/campaign/WITNESS-ECON.md",
     source: "campaign",
   },
   {
@@ -192,11 +194,11 @@ export const PUBLIC_CLAIMS: PublicClaim[] = [
   },
   {
     id: "jit-soak",
-    kind: "limit",
+    kind: "win",
     name: "JIT soak default",
     statement:
-      "Wave 19 remeasure of bun run bench:jit-soak printed FAIL precision=0.789 n=38 (shape 30/30; name-only/campaign 0/8). Unique-work empty-catalog held. Default EDEN_SURFACE stays all. Not a win.",
-    printed: "FAIL precision=0.789 n=38",
+      "Wave 22.2 bun run bench:jit-soak printed PASS precision=1.000 n=38 (gh 18/18, kubectl 12/12, name-only 4/4, campaign 4/4). Hold-outs jit-id / jit-cli / jit-url each printed PASS precision=1.000. Unique-work empty-catalog held. Default EDEN_SURFACE is jit. EDEN_SURFACE=all is the opt-out.",
+    printed: "PASS precision=1.000 n=38",
     file: "benchmarks/campaign/JIT-SOAK.md",
     source: "campaign",
   },

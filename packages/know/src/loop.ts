@@ -35,7 +35,7 @@ import { parseUnicodeBlocks, UNICODE_BLOCKS_URL } from "./unicode";
 import { parseUnicodeScripts, UNICODE_SCRIPTS_URL } from "./scripts";
 import { parseLangSubtags, LANG_SUBTAG_URL } from "./langtags";
 import { parseWikidataCapitals, WIKIDATA_SPARQL_URL } from "./wikidata";
-import { capitalTriples } from "./synth";
+import { githubToolUrl, talkUrl, toolDocsUrl } from "./tools";
 import { openStore, type KnowStore } from "./store";
 import { compactAndPublish } from "./s3";
 import type { Triple } from "./extract";
@@ -523,10 +523,8 @@ async function gatherTextCatalog(
   };
 }
 
-export async function tickCapitals(store: KnowStore): Promise<TickStats> {
-  const triples = capitalTriples();
-  const blob = triples.map((t) => `${t.s}|${t.o}`).join("\n");
-  return commitCatalog(store, "eden:capitals", "capitals", digest(blob), blob.length, triples);
+export async function tickCapitals(_store: KnowStore): Promise<TickStats> {
+  return emptyTick();
 }
 
 export async function tickRfcIndex(store: KnowStore): Promise<TickStats> {
@@ -782,14 +780,11 @@ export async function tickQuality(store: KnowStore, n = 3): Promise<TickStats> {
   let skipped = 0;
   let nodes = 0;
   const want = (url: string) =>
-    /rfc[-/_]?\d{3,5}/i.test(url) || /\/TR\//i.test(url) || /wikipedia\.org\/wiki\//i.test(url);
-  const wiki = SEED_URLS.filter((u) => /wikipedia\.org\/wiki\//i.test(u));
-  const rest = SEED_URLS.filter((u) => want(u) && !/wikipedia\.org\/wiki\//i.test(u));
-  const ordered = [
-    ...wiki.filter((u) => wikiActionApiUrl(u)),
-    ...wiki.filter((u) => !wikiActionApiUrl(u)),
-    ...rest,
-  ];
+    talkUrl(url) || toolDocsUrl(url) || githubToolUrl(url) || /rfc[-/_]?\d{3,5}/i.test(url) || /\/TR\//i.test(url);
+  const talk = SEED_URLS.filter((u) => talkUrl(u));
+  const tools = SEED_URLS.filter((u) => toolDocsUrl(u) || githubToolUrl(u));
+  const rest = SEED_URLS.filter((u) => want(u) && !talkUrl(u) && !toolDocsUrl(u) && !githubToolUrl(u));
+  const ordered = [...talk, ...tools, ...rest];
   const todo: string[] = [];
   for (const url of ordered) {
     if (todo.length >= n) break;
@@ -920,6 +915,27 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
   const store = openStore();
   try {
     seedIfEmpty(store);
+    const tickN = Number(store.getMeta("tick_n") || "0") + 1;
+    store.setMeta("tick_n", String(tickN));
+    const every = Math.max(1, envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY) | 0);
+    const lastWet = Number(store.getMeta("wet_kept") ?? "1");
+    const lastNews = Number(store.getMeta("news_kept") ?? "1");
+    const lastCdx = Number(store.getMeta("cdx_kept") ?? "1");
+    const doWet = expensiveLaneDue(tickN, every, lastWet);
+    const doNews = expensiveLaneDue(tickN + 1, every, lastNews);
+    const doCdx = expensiveLaneDue(tickN + 2, every, lastCdx);
+    const slices = envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES);
+    const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
+    const sliceN = Math.max(1, Math.min(6, slices | 0));
+    const wetLane = Promise.all([
+      doCdx ? collectCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : Promise.resolve(null),
+      doWet
+        ? Promise.all(Array.from({ length: sliceN }, (_, i) => collectCcSlice(store, opts?.cc ?? DEFAULT_CC, ccIdx + i)))
+        : Promise.resolve([]),
+      doNews
+        ? collectNewsRecords(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0))
+        : Promise.resolve({ recs: [] as Awaited<ReturnType<typeof ingestWetSlice>>, url: undefined as string | undefined }),
+    ]);
     const caps = await tickCapitals(store);
     const due = (url: string) => catalogDue(store, url);
     const ianaDue = IANA_REGISTRIES.some((r) => due(r.url));
@@ -959,27 +975,7 @@ export async function tick(opts?: { cc?: number; news?: number; live?: number; p
     const f = await tickFeeds(store);
     const b = await tickLive(store, opts?.live ?? DEFAULT_LIVE);
     console.log(JSON.stringify({ cc: 0, news: 0, live: b.live, feeds: f.feeds, cdx: 0, nodes: b.nodes, skipped: b.skipped, phase: "live" }));
-    const tickN = Number(store.getMeta("tick_n") || "0") + 1;
-    store.setMeta("tick_n", String(tickN));
-    const every = Math.max(1, envNum("EDEN_KNOW_WET_EVERY", DEFAULT_WET_EVERY) | 0);
-    const lastWet = Number(store.getMeta("wet_kept") ?? "1");
-    const lastNews = Number(store.getMeta("news_kept") ?? "1");
-    const lastCdx = Number(store.getMeta("cdx_kept") ?? "1");
-    const doWet = expensiveLaneDue(tickN, every, lastWet);
-    const doNews = expensiveLaneDue(tickN + 1, every, lastNews);
-    const doCdx = expensiveLaneDue(tickN + 2, every, lastCdx);
-    const slices = envNum("EDEN_KNOW_CC_SLICES", DEFAULT_CC_SLICES);
-    const ccIdx = opts?.pathIndex ?? Number(store.getMeta("cc_idx") || 0);
-    const sliceN = Math.max(1, Math.min(6, slices | 0));
-    const [cdxGot, wetGot, newsGot] = await Promise.all([
-      doCdx ? collectCdx(store, opts?.cdx ?? envNum("EDEN_KNOW_CDX", DEFAULT_CDX)) : Promise.resolve(null),
-      doWet
-        ? Promise.all(Array.from({ length: sliceN }, (_, i) => collectCcSlice(store, opts?.cc ?? DEFAULT_CC, ccIdx + i)))
-        : Promise.resolve([]),
-      doNews
-        ? collectNewsRecords(store, opts?.news ?? DEFAULT_NEWS, Number(store.getMeta("news_idx") || 0))
-        : Promise.resolve({ recs: [] as Awaited<ReturnType<typeof ingestWetSlice>>, url: undefined as string | undefined }),
-    ]);
+    const [cdxGot, wetGot, newsGot] = await wetLane;
     const x = cdxGot ? commitCdx(store, cdxGot) : emptyTick();
     const a: TickStats = { cc: 0, news: 0, live: 0, feeds: 0, cdx: 0, nodes: 0, skipped: 0 };
     for (const one of wetGot) {

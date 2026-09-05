@@ -1,21 +1,22 @@
-import type { Binding, BranchStep, StretchProgram, Step, StretchTrace } from "@eden/ir";
+import type { Binding, StretchProgram, Step, StretchTrace } from "@eden/ir";
 import { isMutating } from "@eden/ir";
-import { effectiveEventName } from "./mine";
+import { argKeys, bindSlotWitnesses, remapBinding } from "./bind";
 
 /**
- * Fork mining: detect where witnesses share a prefix then split into two
+ * Fork mining: detect where witnesses share a prefix then split into
  * arms, and synthesize the guard predicate from logged data attributes.
  *
  * This is the compiler's answer to conditional workflows: an agent that
  * checks CI then either fixes or notifies has two linear suffixes after one
- * shared prefix. The n-gram clusterer sees three unrelated clusters; this
- * pass sees one workflow with a branch.
+ * shared prefix. Three witnessed arms compile to one n-way branch (then +
+ * cases + else), not nested binary else-of-else. The n-gram clusterer sees
+ * unrelated clusters; this pass sees one workflow with a branch.
  *
  * Three gates (plan §6):
- *   1. Both arms need ≥ minSupport witnesses.
+ *   1. Each arm needs ≥ minSupport witnesses.
  *   2. A result field of the LAST prefix step must cleanly separate the
- *      populations — every arm-A witness carries value vA, every arm-B
- *      witness vB ≠ vA. Without a clean separator the stretch refuses.
+ *      populations — every arm's witnesses carry a distinct value. Without a
+ *      clean separator the stretch refuses.
  *   3. The emitted expr uses only equality against witnessed values; no
  *      free-form predicates.
  */
@@ -26,6 +27,12 @@ export interface ForkRefuse {
   reason: string;
   hint: string;
   slot?: string;
+}
+
+export interface ForkArm {
+  value: string;
+  suffix: string[];
+  traces: StretchTrace[];
 }
 
 export interface ForkCandidate {
@@ -41,8 +48,26 @@ export interface ForkCandidate {
   field: string;
   /** Value that selects the THEN arm. */
   thenValue: string;
+  /**
+   * Extra arms beyond binary. Absent for two-arm forks so existing CI-gate
+   * tests stay one candidate / one branch / no cases. Assemble emits these as
+   * `cases` on a single n-way BranchStep (first matching expr wins, then else).
+   */
+  nestedArms?: ForkArm[];
   /** Set when assembleForkProgram returns null, so the fork pass can name the class. */
   assembleRefuse?: ForkRefuse;
+}
+
+/** Deduped traces covering every arm of a (possibly n-way) fork. */
+export function forkWitnessTraces(c: ForkCandidate): StretchTrace[] {
+  const seen = new Set<string>();
+  const out: StretchTrace[] = [];
+  for (const t of [...c.thenTraces, ...c.elseTraces, ...(c.nestedArms ?? []).flatMap((a) => a.traces)]) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    out.push(t);
+  }
+  return out;
 }
 
 /** Tokenize a command into whitespace-separated words for shape comparison. */
@@ -152,7 +177,65 @@ export function findForkedGroups(
       });
     }
   }
-  return candidates;
+  return mergeSharedPrefixForks(candidates);
+}
+
+/**
+ * Pairwise mining yields n(n-1)/2 candidates for n arms on the same
+ * prefix+field. Collapse those into one n-way fork so Needs attention is
+ * one method, not three pairwise gates.
+ */
+function mergeSharedPrefixForks(candidates: ForkCandidate[]): ForkCandidate[] {
+  if (candidates.length <= 1) return candidates;
+  const groups = new Map<string, ForkCandidate[]>();
+  for (const c of candidates) {
+    const k = `${c.prefixNames.join("\0")}\0\0${c.field}`;
+    const list = groups.get(k);
+    if (list) list.push(c);
+    else groups.set(k, [c]);
+  }
+  const out: ForkCandidate[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      out.push(group[0]!);
+      continue;
+    }
+    const arms = new Map<string, ForkArm>();
+    const add = (value: string, suffix: string[], traces: StretchTrace[]) => {
+      if (!arms.has(value)) arms.set(value, { value, suffix, traces });
+    };
+    for (const c of group) {
+      add(c.thenValue, c.thenSuffix, c.thenTraces);
+      const elseVal = armFieldValue(c.elseTraces, c.prefixNames.length - 1, c.field);
+      if (elseVal != null) add(elseVal, c.elseSuffix, c.elseTraces);
+    }
+    const list = [...arms.values()];
+    if (list.length < 2) {
+      out.push(group[0]!);
+      continue;
+    }
+    const head = list[0]!;
+    const rest = list.slice(1);
+    out.push({
+      prefixNames: group[0]!.prefixNames,
+      field: group[0]!.field,
+      thenSuffix: head.suffix,
+      thenTraces: head.traces,
+      thenValue: head.value,
+      elseSuffix: rest[0]!.suffix,
+      elseTraces: rest[0]!.traces,
+      nestedArms: rest.length >= 2 ? rest : undefined,
+    });
+  }
+  return out;
+}
+
+function armFieldValue(traces: StretchTrace[], prefixIdx: number, field: string): string | null {
+  const r = traces[0]?.events[prefixIdx]?.result;
+  if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+  const v = (r as Record<string, unknown>)[field];
+  if (v === undefined) return null;
+  return String(v);
 }
 
 function unboundBranchRefuse(slot?: string): ForkRefuse {
@@ -207,22 +290,27 @@ export function assembleForkProgram(
   // guessing.
   if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(field)) return fail(unboundBranchRefuse(field));
   if (!/^[^"\\\r\n]*$/.test(thenValue)) return fail(unboundBranchRefuse(field));
+  for (const arm of candidate.nestedArms ?? []) {
+    if (!/^[^"\\\r\n]*$/.test(arm.value)) return fail(unboundBranchRefuse(field));
+  }
   const used = new Set<string>();
   const steps: Step[] = [];
   const inputPaths = new Set<string>();
+  const nameToId = new Map<string, string>();
   const cp = prefixNames.length;
+  const allTraces = forkWitnessTraces(candidate);
 
   const buildArmOrPrefix = (
     suffixNames: string[],
     traces: StretchTrace[],
     startOffset: number,
-    isShared: boolean,
+    priorNames: string[],
   ): { ids: string[]; ok: boolean; refuse?: ForkRefuse } => {
     const ids: string[] = [];
+    const localMap = new Map(nameToId);
     for (let pos = 0; pos < suffixNames.length; pos++) {
       const eventName = suffixNames[pos]!;
       const evIdx = startOffset + pos;
-      // Align across this group's traces.
       const alignedEvents = traces
         .map((t) => t.events[evIdx])
         .filter((e): e is NonNullable<typeof e> => !!e && e.ok);
@@ -236,44 +324,21 @@ export function assembleForkProgram(
       used.add(sid);
 
       const args: Record<string, Binding> = {};
-      const argKeysSet = new Set<string>();
-      for (const ev of alignedEvents) {
-        for (const k of Object.keys(ev.args ?? {})) argKeysSet.add(k);
-      }
-
+      const keys = argKeys(alignedEvents);
+      const priorIds = [...priorNames, ...suffixNames.slice(0, pos)];
       let failKey: string | undefined;
-      for (const key of argKeysSet) {
+      for (const key of keys) {
         const vals = alignedEvents.map((ev) => (ev.args as Record<string, unknown>)?.[key]);
-        // Check if constant → literal.
-        const fp0 = fingerprint(vals[0]);
-        if (vals.every((v) => fingerprint(v) === fp0)) {
-          args[key] = { kind: "literal", value: vals[0] };
-          continue;
-        }
-        // Try input binding: key maps to input path ik when EVERY witness's
-        // arg equals ITS OWN input value at that path. The previous loop held
-        // one witness's value constant across all of them, which only ever
-        // matched cohorts sharing a single input — so varying inputs (the
-        // entire point of compilation) failed to bind and the fork refused.
-        let bound = false;
-        const inputPathsOfFirst = Object.keys(traces[0]?.input ?? {});
-        for (const ik of inputPathsOfFirst) {
-          const matches = vals.every((v, j) => {
-            const iv = (traces[j]?.input as Record<string, unknown> | undefined)?.[ik];
-            if (iv === undefined) return false;
-            return String(v) === String(iv) || JSON.stringify(v) === JSON.stringify(iv);
-          });
-          if (matches) {
-            args[key] = { kind: "input", path: ik };
-            inputPaths.add(ik);
-            bound = true;
-            break;
-          }
-        }
-        if (!bound) {
+        const bound = bindSlotWitnesses(vals, traces, priorIds, {
+          mutating: isMutating(realTool),
+          allowExact: false,
+        });
+        if (!bound.ok) {
           failKey = key;
           break;
         }
+        args[key] = remapBinding(bound.binding, localMap);
+        if (bound.binding.kind === "input" && bound.binding.path) inputPaths.add(bound.binding.path);
       }
       if (failKey !== undefined) {
         return {
@@ -287,36 +352,50 @@ export function assembleForkProgram(
       }
       steps.push({ id: sid, kind: "tool", tool: realTool, args });
       ids.push(sid);
+      localMap.set(eventName, sid);
+      nameToId.set(eventName, sid);
     }
     return { ids, ok: true };
   };
 
-  // Build shared prefix steps (from ALL traces).
-  const allTraces = [...thenTraces, ...elseTraces];
-  const prefixResult = buildArmOrPrefix(prefixNames, allTraces, 0, true);
+  const prefixResult = buildArmOrPrefix(prefixNames, allTraces, 0, []);
   if (!prefixResult.ok && prefixNames.length > 0) return fail(prefixResult.refuse ?? unboundBranchRefuse());
 
-  // Build then-arm steps.
-  const thenStart = cp;
-  const thenResult = buildArmOrPrefix(thenSuffix, thenTraces, thenStart, false);
-  if (!thenResult.ok || !thenResult.ids.length) return fail(thenResult.refuse ?? unboundBranchRefuse());
+  type Arm = { value: string; suffix: string[]; traces: StretchTrace[] };
+  const arms: Arm[] = [
+    { value: thenValue, suffix: thenSuffix, traces: thenTraces },
+    ...(candidate.nestedArms ?? [{ value: "", suffix: elseSuffix, traces: elseTraces }]),
+  ];
 
-  // Build else-arm steps.
-  const elseStart = cp;
-  const elseResult = buildArmOrPrefix(elseSuffix, elseTraces, elseStart, false);
-  if (!elseResult.ok || !elseResult.ids.length) return fail(elseResult.refuse ?? unboundBranchRefuse());
+  const built: Array<{ value: string; ids: string[] }> = [];
+  for (const arm of arms) {
+    const r = buildArmOrPrefix(arm.suffix, arm.traces, cp, prefixNames);
+    if (!r.ok || !r.ids.length) return fail(r.refuse ?? unboundBranchRefuse());
+    built.push({ value: arm.value, ids: r.ids });
+  }
+  if (!built.length) return fail(unboundBranchRefuse());
 
-  // Create BranchStep.
-  const branchId = `branch_${field}`;
+  const head = built[0]!;
+  const elseIds = built.length === 1 ? [] : built[built.length - 1]!.ids;
+  const extras = built.slice(1, -1);
+  // ≥3 arms → one branch with cases. Two-arm CI-gate stays expr/then/else, no cases.
+  const cases =
+    extras.length === 0
+      ? undefined
+      : extras.map((a) => ({ expr: `${field} == "${a.value}"`, steps: a.ids }));
+
+  let branchId = `branch_${field}`;
+  let n = 2;
+  while (used.has(branchId)) branchId = `branch_${field}_${n++}`;
   used.add(branchId);
-
   steps.push({
     id: branchId,
     kind: "branch",
-    expr: `${field} == "${thenValue}"`,
-    then: thenResult.ids,
-    else: elseResult.ids,
-  } as unknown as Step);
+    expr: `${field} == "${head.value}"`,
+    then: head.ids,
+    else: elseIds,
+    ...(cases ? { cases } : {}),
+  });
 
   // Program-level envelope from combined inputs.
   const envInputs: Record<string, unknown[]> = {};
@@ -333,23 +412,19 @@ export function assembleForkProgram(
     if (vals.length) envInputs[path] = vals;
   }
 
-  const lastThenStep = thenResult.ids.at(-1);
-  const lastElseStep = elseResult.ids.at(-1);
+  const lastThenStep = head.ids.at(-1);
   // The branch step itself stores the executed arm's last value in the scope
   // (execute.ts writes scope.results.set(branchId, armValue) whichever arm
   // ran), so binding `returns` to the BRANCH — not to one arm's last step —
   // is what makes both arms return their own result. The previous
   // then-preferred binding threw "unknown step" on every else-arm run.
   void lastThenStep;
-  void lastElseStep;
 
-  // Input schema types mirror the linear path: derive from a witnessed sample.
-  const allTracesForType = [...thenTraces, ...elseTraces];
   const propEntries = [...inputPaths].map((k) => {
-    const sample =
-      (thenTraces[0]?.input as Record<string, unknown> | undefined)?.[k] ??
-      (elseTraces[0]?.input as Record<string, unknown> | undefined)?.[k];
-    const t = typeof sample === "number" ? "number" : typeof sample === "boolean" ? "boolean" : "string";
+    const sample = allTraces.find((t) => (t.input as Record<string, unknown> | undefined)?.[k] !== undefined)
+      ?.input as Record<string, unknown> | undefined;
+    const val = sample?.[k];
+    const t = typeof val === "number" ? "number" : typeof val === "boolean" ? "boolean" : "string";
     return [k, { type: t }];
   });
 
@@ -363,7 +438,7 @@ export function assembleForkProgram(
     steps,
     returns: { kind: "from", step: branchId, path: "" },
     contract: {
-      witnesses: thenTraces.length + elseTraces.length,
+      witnesses: allTraces.length,
       minLlmReduction: 2,
       // The envelope lives INSIDE the contract — inDistribution() reads only
       // program.contract.envelope. A top-level key was invisible to it, so

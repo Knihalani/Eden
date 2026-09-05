@@ -30,16 +30,58 @@ export function wrapListen(args: string[]): { port: number; hostname: string } {
   };
 }
 
+export function wrapHelp(): string {
+  return `eden wrap — local proxy
+
+  eden wrap              Start the local proxy at 127.0.0.1:8788
+  eden wrap --help       This letter; does not start the proxy
+
+Point an agent at OPENAI_BASE_URL=http://127.0.0.1:8788/v1
+Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth for /v1/wrap, not OpenAI.
+A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 (model: eden), not 502.
+Wrap reaches the model at api.openai.com (override: OPENAI_API_BASE).
+SDK (JS/Python): POST /v1/wrap then POST /v1/ingest — miss is original, wrap down is original
+Does not Approve. Live tools stay 0 until a human Approve. T-100 is eden demo.
+`;
+}
+
+/** Printed after listen. Not the gated workbench. */
+export function wrapBootLetter(origin: string, live = 0): string {
+  const base = origin.replace(/\/$/, "");
+  return `Eden wrap ${base}
+OPENAI_BASE_URL=${base}/v1
+Keep OPENAI_API_KEY as the model key. An Eden key is wrap auth, not OpenAI.
+A compiled hit plays without a model key (model: eden). Miss without a key fail-opens as HTTP 200 (model: eden), not 502.
+SDK  POST ${base}/v1/wrap  then  POST ${base}/v1/ingest
+Does not Approve. Live tools: ${live} (0 until a human Approve). T-100 is eden demo.`;
+}
+
 export async function wrapCmd(args: string[]): Promise<void> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(wrapHelp());
+    return;
+  }
   ensureHome();
   if (await bootHookdFromWrap()) {
     console.log("Recording daemon starting (`eden hookd`). Stop with `eden hookd --stop`.");
   }
   const { port, hostname } = wrapListen(args);
+  // A laptop often has DATABASE_URL set for the hosted site. That trips
+  // isManagedDeployment() and then refuses eden_dev — while wrap is bound to
+  // loopback. Loopback wrap is a deliberate local install; Vercel is not.
+  if (
+    (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1") &&
+    !process.env.VERCEL &&
+    process.env.EDEN_DEV !== "0"
+  ) {
+    process.env.EDEN_DEV = process.env.EDEN_DEV || "1";
+  }
   const db = process.env.EDEN_DB || join(process.env.EDEN_HOME || join(homedir(), ".eden"), "control.sqlite");
   const store = new Store(db);
   const token = resolveApiKey(args);
-  const upstream = process.env.OPENAI_API_BASE || process.env.OPENAI_BASE_URL;
+  // OPENAI_BASE_URL is what the agent sets to this wrap. Using it as wrap's
+  // own upstream looped chat back into 8788. OPENAI_API_BASE is the model.
+  const upstream = process.env.OPENAI_API_BASE || "https://api.openai.com/v1";
   const registry = wrapRegistry(args);
   // A laptop registry executes runner steps (Bash/cwd/fs), so locally a
   // pure-CLI stretch — kubectl, aws, psql — may compile. Hosted MCP keeps
@@ -56,10 +98,7 @@ export async function wrapCmd(args: string[]): Promise<void> {
     scheduleClock: true,
   });
   const server = Bun.serve({ port, hostname, fetch: fetchHandler });
-  console.log(`Eden wrap ${server.url}`);
-  console.log(`OPENAI_BASE_URL=${new URL("/v1", server.url).href}`);
-  console.log("UI: bun run --cwd apps/web dev");
-  console.log("Ships when quality holds and tokens or time are measured");
+  console.log(wrapBootLetter(String(server.url), store.liveCount()));
   await new Promise(() => undefined);
 }
 

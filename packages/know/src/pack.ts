@@ -1423,6 +1423,8 @@ export function queryShapes(s: string): string[] {
   const compact = trimmed.replace(/\s+/g, "");
   const rfc = /^rfc(\d{1,5})$/i.exec(compact);
   if (rfc) out.push(`RFC ${rfc[1]}`);
+  const rfcEdge = /^RFC\s+(\d{1,5})\s+(obsoletes|updates|obsoleted by|updated by)\b/i.exec(trimmed);
+  if (rfcEdge) out.push(`RFC ${Number(rfcEdge[1])}`);
   const w3 = /^w3c(.+)$/i.exec(compact);
   if (w3) out.push(`W3C ${w3[1]!.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()}`);
   if (/^(get|post|put|patch|delete|head|options|connect|trace)$/i.test(trimmed)) {
@@ -9565,6 +9567,7 @@ function buildTypedFacts(facts: PackFact[]) {
   for (const f of kept) {
     take(f.s);
     if (!omittedCatalogObject(f.s, f.p, f.o)) take(f.o);
+    if (f.url && /^https?:\/\//i.test(f.url) && f.url.length <= 240 && !/[\s<>"'\\]/.test(f.url)) pfc.add(f.url);
   }
   const slugList = [...slugs].sort();
   const slugOf = new Map(slugList.map((s, i) => [s, i]));
@@ -10497,7 +10500,7 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     pid.push(p);
     oid.push(omittedCatalogObject(f.s, f.p, f.o) ? 0 : typed(f.o));
     evid.push(0);
-    urlid.push(0);
+    urlid.push(idOf.get(f.url) || 0);
   });
   const byPred = new Map<number, number[]>();
   for (let i = 0; i < sid.length; i++) {
@@ -10518,8 +10521,16 @@ export function encodePack(facts: PackFact[]): Uint8Array {
     trip.bytes(oo);
     trip.u8(0);
     const uids = origAll.map((i) => urlid[i]!);
-    trip.u8(0);
-    trip.vbyte(uids[0] ?? 0);
+    const same = uids.length <= 1 || uids.every((u) => u === uids[0]);
+    if (same) {
+      trip.u8(0);
+      trip.vbyte(uids[0] ?? 0);
+    } else {
+      trip.u8(1);
+      const uu = vbyteList(uids);
+      trip.u32(uu.length);
+      trip.bytes(uu);
+    }
   }
 
   const objOver = new Map<number, string>();

@@ -9,10 +9,13 @@ import {
   selectForRequest,
   selectSurfacePrograms,
   dispatchPrograms,
+  dispatchMessages,
   surfaceMode,
   createJitGuard,
   noteJitUsed,
   JIT_UNUSED_DEMOTE,
+  githubResourceKey,
+  githubBareUrls,
 } from "./intent";
 
 /**
@@ -75,10 +78,11 @@ function withEnv(v: string | undefined, fn: () => void): void {
 }
 
 describe("surface policy", () => {
-  test("default mode is all — an upgrade changes nothing", () => {
-    withEnv(undefined, () => expect(surfaceMode()).toBe("all"));
-    withEnv("", () => expect(surfaceMode()).toBe("all"));
+  test("default mode is jit — full catalog is EDEN_SURFACE=all", () => {
+    withEnv(undefined, () => expect(surfaceMode()).toBe("jit"));
+    withEnv("", () => expect(surfaceMode()).toBe("jit"));
     withEnv("bogus", () => expect(surfaceMode()).toBe("all"));
+    withEnv("all", () => expect(surfaceMode()).toBe("all"));
   });
 
   test("modes parse", () => {
@@ -97,16 +101,61 @@ describe("intent ranking", () => {
     expect(ranked[0]!.via).toBe("shape");
   });
 
-  test("a shell command surfaces the template program", () => {
-    const ranked = rankPrograms(KUBECTL_MESSAGE, [GH, KUBECTL, TICKET]);
-    expect(ranked.length).toBeGreaterThanOrEqual(1);
-    expect(ranked[0]!.program.name).toBe("kubectl_get_pods");
+  test("a different GitHub owner/repo still surfaces the same issue/PR resource kind", () => {
+    expect(githubResourceKey("api.github.com/repos/acme/app/pulls/{id}")).toBe(
+      githubResourceKey("github.com/KaiavN/Eden/pulls/{id}"),
+    );
+    expect(githubBareUrls("look at github.com/acme/app/issues/1")).toEqual([
+      "https://github.com/acme/app/issues/1",
+    ]);
+    const other = rankPrograms(
+      [{ role: "user", content: "https://github.com/KaiavN/Eden/pulls/12" }],
+      [GH, KUBECTL, TICKET],
+    );
+    expect(other[0]?.program.name).toBe("github_pr_bundle");
+    const bare = rankPrograms(
+      [{ role: "user", content: "look at github.com/acme/app/pulls/12" }],
+      [GH],
+    );
+    expect(bare[0]?.program.name).toBe("github_pr_bundle");
+  });
+
+  test("trailing English after a CLI still surfaces the template program", () => {
+    const psql = prog({ name: "psql_who", seq: ["Bash"], cmd: "psql -c 'select 1'" });
+    const ranked = rankPrograms(
+      [{ role: "user", content: "psql -c 'select 1' please" }],
+      [psql, GH, TICKET],
+    );
+    expect(ranked[0]?.program.name).toBe("psql_who");
+    expect(rankPrograms([{ role: "user", content: "please handle ticket 123" }], [psql])).toEqual([]);
   });
 
   test("word overlap alone never surfaces anything", () => {
     // "ticket" appears, but there is no URL or command structure anywhere.
     const ranked = rankPrograms(VAGUE_MESSAGE, [TICKET, GH]);
     expect(ranked.find((m) => m.program.name === "fetchTicketBundle")).toBeUndefined();
+  });
+
+  test("an envelope id in the conversation surfaces that program", () => {
+    const desk = prog({ name: "desk_lookup", seq: ["getAccount"] });
+    desk.contract.envelope = { inputs: { id: ["A-2001"] } };
+    const msg = [{ role: "user", content: "please handle account A-2001 requesting a refund" }];
+    const ranked = rankPrograms(msg, [desk, GH, TICKET]);
+    expect(ranked[0]?.program.name).toBe("desk_lookup");
+    expect(ranked[0]?.via).toBe("witness");
+  });
+
+  test("unique-work ids and ticket numbers stay silent without envelope membership", () => {
+    const desk = prog({ name: "desk_lookup", seq: ["getAccount"] });
+    desk.contract.envelope = { inputs: { id: ["A-2001"] } };
+    expect(rankPrograms([{ role: "user", content: "alpha for N-0 unique work" }], [desk])).toEqual([]);
+    expect(rankPrograms([{ role: "user", content: "please handle ticket 123" }], [desk])).toEqual([]);
+    expect(rankPrograms([{ role: "user", content: "what's crashing in staging" }], [desk])).toEqual([]);
+  });
+
+  test("kubectl envelope words are not dense witnesses", () => {
+    const ranked = rankPrograms([{ role: "user", content: "what's crashing in staging" }], [GH, KUBECTL, TICKET]);
+    expect(ranked.find((m) => m.program.name === "kubectl_get_pods")).toBeUndefined();
   });
 
   test("an unrelated conversation ranks nothing", () => {
@@ -189,13 +238,36 @@ describe("dispatchPrograms", () => {
     });
     expect(dispatchPrograms(GH_MESSAGE, [GH, twin]).length).toBeLessThanOrEqual(1);
   });
+
+  test("a string url is one user turn — same hit as messages", () => {
+    const live = [TICKET, GH, KUBECTL];
+    const url = "https://api.github.com/repos/acme/app/pulls/12";
+    expect(dispatchMessages({ url })).toEqual([{ role: "user", content: url }]);
+    expect(dispatchPrograms(dispatchMessages({ url }), live).map((p) => p.name)).toEqual(["github_pr_bundle"]);
+    expect(dispatchPrograms(dispatchMessages({ url: "   " }), live)).toEqual([]);
+  });
 });
 
 describe("injectTools under the surface policy", () => {
   const clientTool = { type: "function", function: { name: "lookupTicket", parameters: {} } };
 
-  test("default (env unset): historic behavior — every live program appended", () => {
+  test("default (env unset): jit — one schema on evidence, nothing on silence", () => {
     withEnv(undefined, () => {
+      const hit = injectTools(
+        [clientTool],
+        selectForRequest([GH, KUBECTL], GH_MESSAGE),
+      ) as Array<{ function?: { name?: string } }>;
+      expect(hit.map((t) => t.function?.name)).toEqual(["github_pr_bundle", "lookupTicket"]);
+      const miss = injectTools(
+        [clientTool],
+        selectForRequest([GH, KUBECTL], UNRELATED_MESSAGE),
+      ) as unknown[];
+      expect(miss).toEqual([clientTool]);
+    });
+  });
+
+  test("all: historic behavior — every live program appended", () => {
+    withEnv("all", () => {
       const out = injectTools([clientTool], [GH, KUBECTL]) as Array<{ function?: { name?: string } }>;
       expect(out.length).toBe(3);
       expect(out[0]!.function!.name).toBe("github_pr_bundle");
@@ -281,10 +353,11 @@ describe("proxy wiring (handleChatCompletions)", () => {
     return captured.tools ?? [];
   }
 
-  test("default surface: the upstream sees every live program's schema", async () => {
+  test("default surface: the upstream sees the one JIT schema, not the full catalog", async () => {
     const tools = await proxied(undefined);
     expect(tools.map((t) => t.function?.name)).toContain("github_pr_bundle");
     expect(tools.map((t) => t.function?.name)).toContain("lookupTicket");
+    expect(tools.filter((t) => t.function?.name === "github_pr_bundle").length).toBe(1);
   });
 
   test("jit surface: the upstream sees exactly one Eden schema, chosen from the conversation", async () => {
@@ -302,8 +375,8 @@ describe("proxy wiring (handleChatCompletions)", () => {
 });
 
 describe("JIT injection-rate guards", () => {
-  test("default surface mode stays all — jit caps do not fire", () => {
-    withEnv(undefined, () => {
+  test("all surface mode — jit caps do not fire", () => {
+    withEnv("all", () => {
       const jit = createJitGuard();
       for (let i = 0; i < 8; i++) {
         expect(selectForRequest([GH], GH_MESSAGE, jit).map((p) => p.name)).toEqual(["github_pr_bundle"]);

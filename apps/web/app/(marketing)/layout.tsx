@@ -1,5 +1,6 @@
 import { Source_Serif_4 } from "next/font/google";
 import type { ReactNode } from "react";
+import "../landing/landing.css";
 
 const display = Source_Serif_4({
   subsets: ["latin"],

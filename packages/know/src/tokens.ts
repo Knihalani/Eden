@@ -184,11 +184,12 @@ export function factIndexTokens(t: Triple): string[] {
   const extra = /^RFC\s+\d/i.test(t.s) && t.p === "is" ? postTokens(t.o) : [];
   const own = t.s.match(/^RFC\s+(\d+)/i)?.[1];
   const base = catalogSubject(t.s) ? catalogAliasKeys(t) : indexTokens(t);
+  const technique = t.p === "is" && /^used for /i.test(t.o);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const w of [...base, ...extra]) {
     if (own && w === own) continue;
-    if (TITLE_ALIAS_POISON.has(w)) continue;
+    if (!technique && TITLE_ALIAS_POISON.has(w)) continue;
     if (seen.has(w)) continue;
     seen.add(w);
     out.push(w);

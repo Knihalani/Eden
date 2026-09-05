@@ -43,6 +43,11 @@ class EdenTimeoutError(EdenError):
     """The runtime did not answer within the configured timeout."""
 
 
+def _is_loopback(base: str) -> bool:
+    host = (base.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]).lower()
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 def _resolve(base_url: str | None, api_key: str | None) -> tuple[str, str]:
     base = (
         base_url
@@ -50,7 +55,9 @@ def _resolve(base_url: str | None, api_key: str | None) -> tuple[str, str]:
         or os.environ.get("EDEN_BASE_URL")
         or DEFAULT_BASE_URL
     )
-    key = api_key or os.environ.get("EDEN_API_KEY") or DEFAULT_API_KEY
+    key = api_key or os.environ.get("EDEN_API_KEY")
+    if not key:
+        key = DEFAULT_API_KEY if _is_loopback(base) else ""
     return base.rstrip("/"), key
 
 

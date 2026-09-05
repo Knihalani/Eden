@@ -95,6 +95,33 @@ function splitWords(command: string): string[] {
   return out.filter(Boolean);
 }
 
+/**
+ * Dense witness: a token that can appear in a program envelope as a real
+ * entity (account id, UUID, email, ARN, Stripe/Twilio prefix, S3 URI, GID).
+ * Bare integers (`123`) and ordinary words (`staging`, `ticket`) are not dense
+ * — exact envelope membership is the only match, and those values must
+ * themselves pass this filter or they never enter the witness set.
+ */
+export function looksLikeDenseWitness(token: string): boolean {
+  const t = token.replace(/["'],?$/, "").replace(/[.,;:!?)]+$/g, "");
+  if (t.length < 4 || t.length > 256) return false;
+  if (/^\d+$/.test(t)) return false;
+  if (/^[A-Z]+-\d+$/.test(t)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return true;
+  if (/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(t)) return true;
+  if (/^s3:\/\//i.test(t)) return true;
+  if (/^arn:aws:/i.test(t)) return true;
+  if (/^gid:\/\//i.test(t)) return true;
+  if (/^\+[1-9]\d{6,14}$/.test(t)) return true;
+  if (/^[a-z]{2,8}_[A-Za-z0-9]{8,}$/.test(t)) return true;
+  if (/^SM[a-f0-9]{32}$/i.test(t)) return true;
+  if (/^U[A-Z0-9]{8,11}$/.test(t)) return true;
+  if (/^00[a-zA-Z0-9]{13,16}$/.test(t)) return true;
+  if (/^[a-f0-9]{24}$/i.test(t)) return true;
+  if (/^[a-z][a-z0-9]*-[a-z0-9]*\d[a-z0-9]*$/i.test(t) && t.length >= 6) return true;
+  return false;
+}
+
 /** Identifier-looking token: number, long hex, uuid, dotted count, slug-id. */
 export function looksLikeIdentifier(token: string): boolean {
   const t = token.replace(/["'],?$/, "");

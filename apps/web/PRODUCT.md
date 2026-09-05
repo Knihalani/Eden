@@ -10,7 +10,7 @@ Agent builders — solo or on a team. They sign up, wrap their agent, then use E
 
 ## Product Purpose
 
-Tagline: **Making your agents more deterministic.** Compiling repeating agent tools (with a human Approve before they go live) is the first product, not the whole story.
+Tagline: **Making your agent do less work.** Compiling repeating agent tools (with a human Approve before they go live) is the first product, not the whole story.
 
 Public site is a landing page whose job is Sign up. First session is a short onboarding panel that ends on a copy-paste setup prompt. After that they land on a **dashboard**, not a canvas: proof of activity (live tools, compiled runs, waiting, failed), the workflows they already have, and compile requests waiting. Opening a workflow or a request opens the **canvas**, where the graph is the editor. Click a node for a detail panel. Drag and edit, then Approve. **Approve** is where tokens saved, time saved, and measured quality appear — from the shadow counterfactual, never an `×` LLM-call ratio, never invented. A runtime key never turns a tool On.
 

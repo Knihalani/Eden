@@ -24,8 +24,8 @@ Execution proceeds in **waves** (§4): batches of benchmarking / testing / optim
 
 | Horizon | Items |
 |---|---|
-| **Now — Wave 21** | Honesty files (Wave 19 shorts) |
-| **Later — Wave 22** | Un-retire only when evidence exists |
+| **Now** | Wave 22.2 shipped (default `jit`) |
+| **Later — Wave 22.1** | Un-retire only when a live invoice file exists |
 
 ### Standing rules
 
@@ -158,7 +158,7 @@ Soak: flat heap under forced GC across thousands of executions; zero correctness
 | S1 write-inclusive transparency | Approve-time checkbox + `EDEN_TRANSPARENT_WRITES=1` gate | **Shipped.** Wave 10 |
 | S2 skill auto-refresh | Approve regenerates SKILL.md atomically when present | **Shipped.** `packages/cli/src/drain.ts` / `manifest.ts` |
 | S2 when_to_use synthesis | island-generated one-liners rendered into manifest/skill entries | **Shipped.** `islandWhenToUse` + `whenToUseOf`; silent island → description |
-| S3 injection-rate guards | max injections/episode; auto-demote to S0 on poor conversion | **Shipped.** `EDEN_JIT_MAX` (default 4). Default surface stays `all` — Wave 19 soak remeasure printed FAIL (`precision=0.789 n=38`) |
+| S3 injection-rate guards | max injections/episode; auto-demote to S0 on poor conversion | **Shipped.** `EDEN_JIT_MAX` (default 4). Default surface is `jit` — Wave 22.2 soak printed PASS (`precision=1.000 n=38`) |
 | S4 hosted dispatch endpoint | POST transcript → ≤1 schema or empty; tenancy-isolated | **Shipped.** `tools/dispatch` + `POST /v1/dispatch`; `tools/list` empty; W=100 dups=0 |
 | S4 deferred-loading compatibility | manifest entries carry `defer_loading` metadata so S4 catalogs light up under Anthropic Tool Search without dual maintenance | **Shipped.** Wave 9.4 |
 
@@ -210,7 +210,7 @@ Thesis unchanged: convert fail-closed refusals from a wall into a gradient. **Ne
 
 ### Arc 5 — Governance, trust, compliance
 
-Pieces shipped: drift fingerprints, deopt ledger, shadow measure, struggle probes, fuzz 10k, drift auto-refresh, read-your-writes, canary, bit-exact replay, audit export, retention, isolation page, **SOC2 evidence pack (aligned, not certified)**, access-review exports, pool allowlist cadence, `EDEN_NET_ALLOW` in doctor, ZDR guidance, unpublished marketplace draft. **Wave 17 shipped** S1b path-identity, HMAC-only webhooks, hookd ownership, and installer `EDEN_HOME`. **Wave 18 shipped** workbench live-review (account → onboarding, route regression, in-tree 15–52). **Wave 19 shipped** the limits board: retired live-invoice, wrap-path oblivious-long as a limit, JIT soak FAIL pin, replica host-drop. **Wave 20 shipped** the tree close: origin `KaiavN/Eden`, catchers for every Wave 16–19 row, §15 grep-complete including `EDEN_AUTO_APPROVE`, leftover Open for Wave 16–20 is empty. Wave 19 shorts that are not Limits (cited file, isolation Kind/Source, board comment, next soak remeasure) sit in Wave 21. A live invoice and an `EDEN_SURFACE=jit` flip sit in Wave 22 and stay unstarted until a file or a PASS exists.
+Pieces shipped: drift fingerprints, deopt ledger, shadow measure, struggle probes, fuzz 10k, drift auto-refresh, read-your-writes, canary, bit-exact replay, audit export, retention, isolation page, **SOC2 evidence pack (aligned, not certified)**, access-review exports, pool allowlist cadence, `EDEN_NET_ALLOW` in doctor, ZDR guidance, unpublished marketplace draft. **Wave 17 shipped** S1b path-identity, HMAC-only webhooks, hookd ownership, and installer `EDEN_HOME`. **Wave 18 shipped** workbench live-review (account → onboarding, route regression, in-tree 15–52). **Wave 19 shipped** the limits board: retired live-invoice, wrap-path oblivious-long as a limit, JIT soak FAIL pin, replica host-drop. **Wave 20 shipped** the tree close: origin `KaiavN/Eden`, catchers for every Wave 16–19 row, §15 grep-complete including `EDEN_AUTO_APPROVE`, leftover Open for Wave 16–20 is empty. **Wave 21 shipped** the honesty files: `OBLIVIOUS-LONG.md` as the cited close, isolation Kind/Source with analogue and retired in their own lists, `/proof` cases on the same table chrome as wins, JIT soak remeasure FAIL `precision=0.789 n=38` with default `all`. **Wave 22.2 shipped** the soak PASS `precision=1.000 n=38` and flipped `EDEN_SURFACE` to `jit`. Wave 22.1 (live invoice) stays Later until a file exists.
 
 ### Arc 6 — Runtime depth
 
@@ -233,7 +233,7 @@ Wave 4 shipped concurrency matrix, multi-tenant arming, timeout-regime, idle-pat
 
 ## 4. Execution waves — benchmarking, testing, optimization, debugging
 
-**Twenty-two waves.** Waves 1–20 shipped. Wave 21 is **Now**. Wave 22 is **Later**. The invariant: within a wave, every phase is fully parallel — zero inter-phase dependencies, zero shared merge points that gate execution, disjoint surfaces or an explicit ownership split. **Wave 18 was the exception** and is closed: `apps/web/REBUILD.md` rows 7–14 are live; 18.2 route tests are green; 15–52 stayed an in-tree review. Where two pieces of work were sequentially coupled (attribution→certification, cache→compression, dedupe→attribution), they are merged into one phase with one owner rather than left as a hidden chain. Cross-wave gates exist and are shown in §4.10; inside a wave, work never waits.
+**Twenty-two waves.** Waves 1–21 shipped. Wave 22 is **Later**. The invariant: within a wave, every phase is fully parallel — zero inter-phase dependencies, zero shared merge points that gate execution, disjoint surfaces or an explicit ownership split. **Wave 18 was the exception** and is closed: `apps/web/REBUILD.md` rows 7–14 are live; 18.2 route tests are green; 15–52 stayed an in-tree review. Where two pieces of work were sequentially coupled (attribution→certification, cache→compression, dedupe→attribution), they are merged into one phase with one owner rather than left as a hidden chain. Cross-wave gates exist and are shown in §4.10; inside a wave, work never waits.
 
 Arcs say *what*; waves say *in what order and what runs in parallel*. Every wave closes with the three-tier method of §0/§8: positive gates, negative gates, struggle probes. Every wave also carries one **rotation obligation** (see §4.9) so no phase ever tunes twice against the same fixture set. Wave-close acceptance may *use* artifacts built during the wave (e.g., the corpus from 3.1); it may not block their execution.
 
@@ -369,7 +369,7 @@ Everything on Claude Code's S1/S1b/S2 path that had a done-when in §2.3 is ship
 | 11.1 S4 POST-transcript dispatch | T+B | `POST` a transcript → ≤1 schema or empty; tenancy-isolated; shadow precision matches local JIT | **Shipped.** `tools/dispatch` + `POST /v1/dispatch`. `tools/list` empty. Hit 1 / miss `[]`. W=100 dups=0. No 6-tool starve. |
 | 11.2 S1 on OpenCode / Codex / Gemini | T | Same `TOOL_SHAPES` + `additionalContext` degrade as Claude Code; installer owns one rewriter per matcher | **Shipped.** OpenCode native `output.output`; Codex post_tool JSON; Gemini additionalContext-only (honest). Cursor/Windsurf/Cline skills-only. |
 | 11.3 Island `when_to_use` | T | Islands emit the one-liner; drain/manifest/SKILL.md use it (not `description` as a stand-in) | **Shipped.** `islandWhenToUse`; silent island → description via `whenToUseOf`. |
-| 11.4 S3 soak + empty inventory title | B+T | JIT default (`EDEN_SURFACE=jit`) only after §7 soak; empty Home/nav title is not `Live tools` at count 0 | **Shipped.** Empty is `0 programs`. Soak FAIL `precision=0.789 n=38` — JIT stays opt-in. |
+| 11.4 S3 soak + empty inventory title | B+T | JIT default (`EDEN_SURFACE=jit`) only after §7 soak; empty Home/nav title is not `Live tools` at count 0 | **Shipped.** Empty is `0 programs`. Wave 22.2 soak PASS `precision=1.000 n=38` — default `jit`. |
 
 Parallelism: site MCP endpoint / host installers / island+drain copy / Home title. Disjoint files.
 
@@ -506,29 +506,29 @@ Parallelism: git / catcher map / §15 / this table — four owners.
 
 Rotation: none. **Landed.**
 
-### Wave 21 — Honesty files *(Wave 19 shorts · no new wins invented)* **Now.**
+### Wave 21 — Honesty files *(Wave 19 shorts · no new wins invented)* **Shipped.**
 
 Pins the leftovers Wave 19 named and did not close. Does **not** invent a live invoice. Does **not** flip `EDEN_SURFACE` on FAIL. Landing 1–6 stay locked.
 
 | Phase | Type | Deliverables | Done when |
 |---|---|---|---|
-| 21.1 oblivious-long cited file | T | `PUBLIC_CLAIMS` `oblivious-long` `file` is a measurement close, not `docs/ROADMAP.md`. Isolation / `/proof` / `eden claims` / marketplace draft cite that file. `packages/measure/src/claims.ts` header is current, not “Wave 8” | Grep: that id’s `file` exists and is not ROADMAP; listing test still byte-matches the draft |
-| 21.2 Isolation limits class | T | Isolation “Published limits” names Kind (and Source, or analogue / retired in their own lists matching `/proof`). Analogue and retired are not skimmable as the same class as wrap-path / soak FAIL. Still not a SOC 2 badge | Live `/isolation` shows class; graphite; no ship CTA |
-| 21.3 Proof fixture columns | T | `/proof` case-studies rows carry Kind + Source (or an equally unskimmable campaign-not-customer tag on the same chrome as the wins table). Names stay fixture verticals. Customer n stays 0 | Live `/proof` cases cannot be read as a second unlabeled win board |
-| 21.4 JIT soak remeasure | B | `bun run bench:jit-soak` measurement-only. Do not retune the soak fixture’s expect. FAIL → pin the printed `precision=` / `n=` and default stays `all`. PASS → print n; do **not** flip `EDEN_SURFACE` here (that is 22.2) | Pin file updated; `JIT-SOAK.md` matches the print; default `all` |
+| 21.1 oblivious-long cited file | T | `PUBLIC_CLAIMS` `oblivious-long` `file` is a measurement close, not `docs/ROADMAP.md`. Isolation / `/proof` / `eden claims` / marketplace draft cite that file. `packages/measure/src/claims.ts` header is current, not “Wave 8” | **Shipped.** `file` is `benchmarks/campaign/OBLIVIOUS-LONG.md`. Listing byte-matches the draft. Header is Wave 21. |
+| 21.2 Isolation limits class | T | Isolation “Published limits” names Kind (and Source, or analogue / retired in their own lists matching `/proof`). Analogue and retired are not skimmable as the same class as wrap-path / soak FAIL. Still not a SOC 2 badge | **Shipped.** Live `/isolation` splits Limits / Analogue / Retired; Kind+Source on `iso-table`; graphite; no ship CTA |
+| 21.3 Proof fixture columns | T | `/proof` case-studies rows carry Kind + Source (or an equally unskimmable campaign-not-customer tag on the same chrome as the wins table). Names stay fixture verticals. Customer n stays 0 | **Shipped.** Cases use `ClaimTable` (Kind+Source). Customer n = 0 |
+| 21.4 JIT soak remeasure | B | `bun run bench:jit-soak` measurement-only. Do not retune the soak fixture’s expect. FAIL → pin the printed `precision=` / `n=` and default stays `all`. PASS → print n; do **not** flip `EDEN_SURFACE` here (that is 22.2) | **Shipped.** Remeasured 2026-08-30 FAIL `precision=0.789 n=38`. `JIT-SOAK.md` matches. Default `all`. |
 
 Parallelism: claims file / isolation copy / proof cases / soak pin — four owners. `claims.ts` `file` field is 21.1 only; 21.3 does not edit `PUBLIC_CLAIMS`.
 
-Rotation: soak remeasure is measurement-only (same rule as Wave 19.3).
+Rotation: soak remeasure is measurement-only (same rule as Wave 19.3). **Landed.**
 
-### Wave 22 — Un-retire only when evidence exists *(Later)*
+### Wave 22 — Un-retire only when evidence exists *(22.2 Shipped · 22.1 Later)*
 
-Do not start this wave to fill a cell. Start it when a file or a PASS already exists.
+22.2 started because a soak printed PASS. 22.1 stays Later until a live invoice file exists. Do not invent a bill.
 
 | Phase | Type | Deliverables | Done when |
 |---|---|---|---|
 | 22.1 Live invoice cell | B | If a live Claude Code invoice file is in the tree, parse it. Un-retire or keep retired with the parse result. **Do not invent a bill** | `LIVE-AB.md` live-S1b is live-invoice or still retired for a named parse miss |
-| 22.2 `EDEN_SURFACE=jit` | T | Flip the default only after a soak prints PASS at the registered bar (`precision≥0.95`). FAIL keeps `all`. Doctor and §15 match the flip | Unset `surfaceMode()` is `jit` only on a PASS pin; otherwise this phase is not started |
+| 22.2 `EDEN_SURFACE=jit` | T | Flip the default only after a soak prints PASS at the registered bar (`precision≥0.95`). FAIL keeps `all`. Doctor and §15 match the flip | **Shipped.** Unset `surfaceMode()` is `jit`. `bun run bench:jit-soak` PASS `precision=1.000 n=38`. Hold-outs id/cli/url PASS. Doctor and §15 match. |
 
 Parallelism: invoice file vs soak default — two owners, only if both have evidence; otherwise run the one that does.
 
@@ -558,7 +558,7 @@ W10 ──► W16 ──► W17 ──► W19 ──► W20
 W19 ──► W21 ──► W22
 ```
 
-W1–W20 shipped. W21 (honesty files) can run now. W22 is Later (only if an invoice file or a soak PASS exists).
+W1–W21 shipped. W22.2 shipped (default jit). W22.1 stays Later (no invoice file).
 
 ### 4.11 Modeled timeline *(labeled MODELED — sensitivity ±40% for staffing)*
 
@@ -572,15 +572,15 @@ Assumes two persistent lanes (wrap/runtime, compile/mining) plus one shared site
 | W18 workbench live-review | shipped | gated UI review closed |
 | W19 limits board | shipped | retired claims pinned; soak FAIL `precision=0.789 n=38` |
 | W20 close the tree | shipped | **Shipped.** Wave 16–20 leftover Open = 0 |
-| W21 honesty files | 2 d | **Now** — Wave 19 shorts |
-| W22 un-retire | 1 d | **Later** — only if an invoice file or a soak PASS exists |
-| **Total remaining (modeled)** | | **~2 days Now** (W21). W22 is not on the clock until evidence exists. |
+| W21 honesty files | 2 d | **Shipped.** Cited file, Kind/Source, cases chrome, soak FAIL `precision=0.789 n=38` |
+| W22 un-retire | 1 d | **22.2 Shipped** (default jit). **22.1 Later** — only if an invoice file exists |
+| **Total remaining (modeled)** | | **W22 not on the clock** until evidence exists. |
 
-Critical path after W20: W21. W22 does not start until evidence exists.
+Critical path after W21: W22.2 closed on soak PASS. W22.1 does not start until an invoice file exists.
 
-### 4.12 Leftover inventory *(Wave 16–20 empty — W20 shipped)*
+### 4.12 Leftover inventory *(Wave 16–21 empty Open — W21 shipped · W22.2 shipped)*
 
-Every Open row below is assigned. **Limit** means the close is a pin, not a reversal. Wave 20.4 closed: every **Wave 16–20** row is Shipped or Limit. Wave 21–22 Open rows are Now/Later.
+Every Open row below is assigned. **Limit** means the close is a pin, not a reversal. Wave 20.4 closed Wave 16–20. Wave 21 closed: cited file, isolation class, proof cases, claims header. Wave 22.2 closed the JIT default. Wave 22.1 stays Later.
 
 | Leftover | Close | Status |
 |---|---|---|
@@ -598,11 +598,13 @@ Every Open row below is assigned. **Limit** means the close is a pin, not a reve
 | Waste/observability already in tree (33–52) | 18.4 | Shipped |
 | Live Claude Code invoice / billed S1b cell | 19.1 · 22.1 | Limit — retired (`LIVE-AB.md`) until a file exists; 22.1 parses it, never invents one |
 | wrap `oblivious-long` +2.8% cents / +3.2% wall | 19.2 | Limit |
-| oblivious-long cited file is `docs/ROADMAP.md` | 21.1 | Open |
-| Isolation Published limits mixed class (no Kind/Source) | 21.2 | Open |
-| `/proof` case-studies unlabeled vs wins table | 21.3 | Open |
-| `claims.ts` header still says Wave 8 | 21.1 | Open |
-| JIT soak FAIL; default `EDEN_SURFACE=all` | 19.3 · 21.4 · 22.2 | Limit unless 21.4 prints PASS, then 22.2 may flip. 21.4 is measurement-only |
+| oblivious-long cited file is `docs/ROADMAP.md` | 21.1 | Shipped — `benchmarks/campaign/OBLIVIOUS-LONG.md` |
+| Isolation Published limits mixed class (no Kind/Source) | 21.2 | Shipped — Kind/Source; analogue and retired own lists |
+| `/proof` case-studies unlabeled vs wins table | 21.3 | Shipped — same `ClaimTable` chrome; customer n = 0 |
+| `claims.ts` header still says Wave 8 | 21.1 | Shipped — header is Wave 21 honesty files |
+| Wave 21.4 JIT soak remeasure pin | 21.4 | Shipped — FAIL `precision=0.789 n=38`; default stayed `all` |
+| JIT soak PASS; default `EDEN_SURFACE=jit` | 19.3 · 21.4 · 22.2 | Shipped — Wave 22.2 PASS `precision=1.000 n=38`; default `jit` |
+| `EDEN_SURFACE` default jit after soak PASS | 22.2 | Shipped — unset `surfaceMode()` is `jit`; hold-outs PASS |
 | Replica host-drop of a correct rewrite | 19.4 | Limit (`HOST-DROP.md`) |
 | Case studies customer-approved count 0 | 20.4 | Limit until a real n |
 | Uncommitted Wave 15+ tree; origin not clean | 20.1 | Shipped |
@@ -832,7 +834,7 @@ The complete fixture inventory. Rotation obligations draw from the "derives next
 | honesty-explain | rotation (Wave 9) | unique-work / micro class+count in `eden explain` | named class and the count that fell short; empty is 0 stretches | `benchmarks/campaign/honesty.ts` / `honesty.test.ts` |
 | width-inherit | rotation (Wave 10) | mined at width 10, sibling width 7 | 2 receipts stay OOD; 3rd inherits; 4th width-7 inDistribution; bad receipt does not inherit | `benchmarks/campaign/width-inherit.ts` / `width-inherit.test.ts` |
 | opencode-drop | rotation (Wave 11) | OpenCode MCP-shaped after hook drops `output.output` | native rewrite lands; MCP drop classed; remainder deny still holds; not `silent-drop` | `opencode-drop.ts` / `opencode-drop.test.ts` |
-| jit-soak | soak (Wave 11.4 · Wave 19 remeasure · Wave 21.4 next) | jit-shadow precision vs unique-work empty catalog | PASS only at ≥0.95; FAIL keeps `EDEN_SURFACE=all`. Wave 19 printed FAIL `precision=0.789 n=38`. Wave 21.4 remeasures; Wave 22.2 is the only flip | `jit-soak.ts` / `JIT-SOAK.md` / `bun run bench:jit-soak` |
+| jit-soak | soak (Wave 11.4 · Wave 19 remeasure · Wave 21.4 · Wave 22.2) | jit-shadow precision vs unique-work empty catalog | PASS only at ≥0.95. Wave 21.4 printed FAIL `precision=0.789 n=38`. Wave 22.2 printed PASS `precision=1.000 n=38` and flipped the default | `jit-soak.ts` / `JIT-SOAK.md` / `bun run bench:jit-soak` |
 | provider-window | rotation (Wave 12) | recorded OpenAI + Anthropic usage JSON (not a campaign world) | five classes = prompt+completion; cache excluded; Anthropic 40/50/10 hit % = 40 not 80; unique-work novelty empty | `provider-window.ts` / `provider-window.test.ts` |
 | github-review speculate | rotation (Wave 13) | read-only getIssue → getComments → getChecks (80ms tools, THINK_MS=120); not fastdesk | wall WIN by overlapping think-time; unique-work/creative parity ±1%; mutating never started | `speculate.ts` / `speculate.test.ts` |
 | watch-warm | rotation (Wave 14.1) | next compiled read-only first-wave while current stretch runs; not turnBoundary | hit-rate 0→100% (12/12); mutating execute 0 | `watch-warm.ts` / `watch-warm.test.ts` |
@@ -855,7 +857,7 @@ The complete fixture inventory. Rotation obligations draw from the "derives next
 | workbench-review | gap-pin (Wave 18.3) | rows 15–32 already in tree | Approve crimson; no Hub/Reach | `apps/web/app/canvas/workbench.test.ts` |
 | waste-layer | gap-pin (Wave 18.4) | 33–52 already in wrap | first-warning cursor on the run | `packages/wrap/src/wrap-tools.ts` / `packages/wrap/src/forecast.test.ts` |
 | limits-board | probe (Wave 19.1) | no live invoice quote; analogue labeled | landing/`/proof`/whitepaper/digest grep 0 | `benchmarks/campaign/limits-board.test.ts` / `LIVE-AB.md` |
-| oblivious-long | probe (Wave 19.2) | wrap-path +2.8% / +3.2% is a limit | win tables omit it | `packages/measure/src/claims.ts` / `docs/isolation.md` |
+| oblivious-long | probe (Wave 19.2 · Wave 21.1 file) | wrap-path +2.8% / +3.2% is a limit | win tables omit it; cited file is the measurement close | `benchmarks/campaign/OBLIVIOUS-LONG.md` / `packages/measure/src/claims.ts` |
 | replica-host-drop | probe (Wave 19.4) | replica class; live ack never claimed | `HOST-DROP.md`; landing/`/proof` never live host-drop | `benchmarks/campaign/HOST-DROP.md` / `limits-board.test.ts` |
 
 Rotation draws: production trace shapes, harness behavior classes, customer failure reports — never another campaign fixture.
@@ -890,8 +892,8 @@ Defaults are the safety posture; flipping any default requires the §7 soak gate
 | `EDEN_DIGEST` / config `digest` | off | weekly digest CLI + GET `/v1/digest` | operator opt-in; never default; never emails from the API; fail-open zeros |
 | `EDEN_CACHE_GUARD` | off | reorder volatile Anthropic prefix blocks (timestamps, skill listings) so the cache breakpoint stays on stable text | opt-in; `EDEN_PROMPT_CACHE=0` still wins; retire if upstream prefix bugs are gone |
 | `EDEN_CANARY_PCT` | 10 | fraction of hosted sessions that see a canary-approved tool | env-tunable 0–100; unpartitioned wrap (empty session) is the operator and always sees canary |
-| `EDEN_JIT_MAX` | 4 | max JIT schema injections per episode; unused injections demote to S0 (`none`) | only applies when `EDEN_SURFACE=jit`; default surface stays `all` (Wave 19 soak printed FAIL) |
-| `EDEN_SURFACE` | `all` | schema advertisement policy | Wave 19 remeasure printed FAIL `precision=0.789 n=38`. Wave 21.4 remeasures measurement-only. Default stays `all` until Wave 22.2, which starts only after a soak prints PASS at ≥0.95 |
+| `EDEN_JIT_MAX` | 4 | max JIT schema injections per episode; unused injections demote to S0 (`none`) | only applies when `EDEN_SURFACE=jit`; default surface is `jit` (Wave 22.2 soak printed PASS) |
+| `EDEN_SURFACE` | `jit` | schema advertisement policy | Wave 22.2 printed PASS `precision=1.000 n=38`. Default is `jit`. `EDEN_SURFACE=all` restores the historic full catalog |
 | `EDEN_SPECULATE` | on | turn-boundary start of the next compiled **read-only** stretch; mutating never starts | `0` disables within one call; miss discards; fail-open |
 | `EDEN_WATCH_WARM` | on | while the current stretch runs, fill first-wave read-only cache of the next likely compiled tool; mutating never pre-executed | `0` disables within one call; miss discards; fail-open |
 | `EDEN_ISLAND_BATCH` | on | waitable independent island misses go through the provider Message Batches path (billed cents 50% when results return in-band or via retrieve inside the island timeout); public OpenAI/Anthropic hosts skip the POST; pinned/memo never join; lone miss stays sync | `0` restores one sync call per miss; batch errors and stuck `in_progress` fail-open to sync — never a 24h stall |

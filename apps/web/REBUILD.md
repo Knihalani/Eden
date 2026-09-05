@@ -24,7 +24,7 @@ Do not skip ahead. Do not autonomous-loop the whole product.
 
 ## Honesty
 
-Allowed: tagline “Making your agents more deterministic.” Compiling repeating tools with a human Approve is the first product, not the whole story.
+Allowed: tagline “Making your agent do less work.” Compiling repeating tools with a human Approve is the first product, not the whole story.
 
 Forbidden: invented counts, fake customers, fake dashboards with fake numbers, feature dumps, architecture essays.
 
@@ -215,4 +215,4 @@ Eden already compiles repeating tool stretches and steers later calls onto that 
 - Phase 2 direction is **A** (locked)
 - Phases 4–5 add **no copy and no sections** — animation craft only
 - Next **systems** row **20a–20b** is done. Canvas **21–32** is in the tree. Signal bus **33–52** is in wrap/compile/control/web. The listed rebuild is complete.
-- **Roadmap Wave 20 shipped.** Landing **1–6 stay locked**. Rows **7–14** are live (account → onboarding). **15–52** stayed an in-tree review, not a second rebuild. Next product work is Wave 21 (honesty files). Wave 22 does not start until an invoice file or a soak PASS exists.
+- **Roadmap Wave 21 shipped.** Landing **1–6 stay locked**. Rows **7–14** are live (account → onboarding). **15–52** stayed an in-tree review, not a second rebuild. Wave 22 does not start until an invoice file or a soak PASS exists.

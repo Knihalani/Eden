@@ -5,6 +5,7 @@ import {
   commandShapeCached,
   commandShapeKeyCached,
   isNoiseCommand,
+  looksLikeDenseWitness,
   looksLikeIdentifier,
 } from "./shapes";
 
@@ -98,6 +99,28 @@ describe("shape memoization (hot-path cache)", () => {
       expect(commandShapeCached(c)).toEqual(commandShape(c));
       expect(commandShapeKeyCached(c)).toBe(commandShapeKey(c));
     }
+  });
+
+  test("dense witnesses are entity ids, not words or ticket numbers", () => {
+    expect(looksLikeDenseWitness("A-2001")).toBe(true);
+    expect(looksLikeDenseWitness("O-7001")).toBe(true);
+    expect(looksLikeDenseWitness("cus_8kQ2Lp0NaBcd")).toBe(true);
+    expect(looksLikeDenseWitness("s3://analytics-prod/reports/export.parquet")).toBe(true);
+    expect(looksLikeDenseWitness("arn:aws:lambda:us-east-1:123456789012:function:invoice-worker")).toBe(true);
+    expect(looksLikeDenseWitness("gid://shopify/Order/5988771123")).toBe(true);
+    expect(looksLikeDenseWitness("jordan@acme.io")).toBe(true);
+    expect(looksLikeDenseWitness("8f14e45f-ea09-48b1-9d4c-0123456789ab")).toBe(true);
+    expect(looksLikeDenseWitness("+14155552671")).toBe(true);
+    expect(looksLikeDenseWitness("SM4a3c2b1d0e9f8a7b6c5d4e3f2a1b0c9d")).toBe(true);
+    expect(looksLikeDenseWitness("0015g00000AbCdEFGH")).toBe(true);
+    expect(looksLikeDenseWitness("U0A1B2C3D")).toBe(true);
+    expect(looksLikeDenseWitness("checkout-5xx")).toBe(true);
+    expect(looksLikeDenseWitness("507f1f77bcf86cd799439011")).toBe(true);
+    expect(looksLikeDenseWitness("123")).toBe(false);
+    expect(looksLikeDenseWitness("ticket")).toBe(false);
+    expect(looksLikeDenseWitness("staging")).toBe(false);
+    expect(looksLikeDenseWitness("sonnet")).toBe(false);
+    expect(looksLikeDenseWitness("prod")).toBe(false);
   });
 
   test("memo is transparent under repetition and interleaving", () => {

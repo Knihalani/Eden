@@ -19,7 +19,7 @@ export const viewport = {
 
 export const metadata = {
   title: "Eden",
-  description: "Making your agents more deterministic.",
+  description: "Making your agent do less work.",
   icons: {
     icon: [
       { url: "/favicon.webp", sizes: "32x32", type: "image/webp" },

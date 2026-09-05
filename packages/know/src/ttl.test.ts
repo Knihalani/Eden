@@ -18,6 +18,8 @@ describe("pageTtl host/path/source, not URL substrings", () => {
     expect(ttlDaysFor("https://pubmed.ncbi.nlm.nih.gov/12345/", "pmid abstract")).toBe(180);
     expect(ttlDaysFor("https://docs.python.org/3/library/os.html", "os module")).toBe(90);
     expect(ttlDaysFor("https://developer.mozilla.org/en-US/docs/Web/HTTP", "http")).toBe(90);
+    expect(ttlDaysFor("https://bun.sh/docs", "Bun is a fast JavaScript runtime.")).toBe(90);
+    expect(ttlDaysFor("https://github.com/oven-sh/bun", "Bun is a fast JavaScript runtime.")).toBe(90);
   });
 
   test("known news hosts and dated/news paths recrawl daily", () => {

@@ -28,7 +28,7 @@ export const PROOF_NOT =
   "Nothing public without methodology. UNCERTIFIED is never a win. Analogue cents are labeled analogue, not a live Claude Code invoice. Limits and retired claims print with the same file path as the wins. This page is not a landing badge.";
 
 export const CASES_LEAD =
-  "These are campaign fixture verticals, not customers. Customer-approved measured studies: 0. Unpublished slots stay empty. No company names. Each row cites the campaign file.";
+  "These are campaign fixture verticals, not customers. Customer-approved measured studies: 0. Unpublished slots stay empty. No company names. Kind and Source use the same table chrome as the wins table so this cannot be read as a second unlabeled win board.";
 
 export const WINS_NOTE =
   "Campaign WINs from packages/measure. Replica analogue cents are not in this table.";
@@ -40,7 +40,7 @@ export const ANALOGUE_NOTE =
   "Headless replica TURN_CENTS. Not a live Claude Code invoice. Not a campaign WIN.";
 
 export const LIMITS_NOTE =
-  "OOD, oblivious agents, certification bounds, host limits, JIT default. Equal weight with the wins.";
+  "OOD, oblivious agents, certification bounds, host limits. Equal weight with the wins.";
 
 export const RETIRED_NOTE =
   "Claims withdrawn in public until a file parses. Retired is a result.";

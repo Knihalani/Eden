@@ -122,13 +122,170 @@ describe("signup", () => {
     );
     expect(land.status).toBe(200);
     const html = await land.text();
-    expect(html).toContain("should cost");
+    expect(html).toContain("do less work");
     expect(html).toContain("/signup");
+    expect(html).toContain("Making your agent do less work");
+    expect(html).not.toContain("Making your agents more deterministic");
+    expect(html).not.toContain("Compile repeating tools");
+    expect(html).toContain("Sign in");
+    expect(html).toContain("/logo.webp");
+    expect(html).toContain("class=\"stage\"");
+    expect(html).toContain("class=\"stage-hit\"");
+    expect(html).toContain("<canvas");
+    expect(html).not.toContain("room-desk");
+    expect(html).not.toContain("room-sky");
+    expect(html).not.toContain("class=\"abstract\"");
+    expect(html).not.toContain("hero-mark");
+    expect(html).not.toContain("hero-pin");
+    expect(html).not.toContain("How it works");
+    expect(html).not.toContain("I have a key");
+    expect(html).not.toContain("site-foot");
+    expect(html).not.toContain("If Eden is wrong");
+    expect(html).not.toContain("room-blot");
+    expect(html).not.toContain("0.12 18");
+    const logo = await siteFetch(new Request("http://127.0.0.1:8787/logo.webp"));
+    expect(logo.status).toBe(200);
+    expect(logo.headers.get("content-type")).toBe("image/webp");
+    expect(html).not.toContain("8×");
+    expect(html).not.toContain("7.7×");
+    expect(html).toContain("Copy failed");
+    expect(html).toContain("min-height:44px");
+    expect(html).not.toContain("href=\"/workshop\"");
+    expect(html).not.toContain("href=\"/dashboard\"");
+    expect(html).not.toContain("github.com/Knihalani");
+    expect(html).not.toContain(">Source<");
+    expect(html).not.toContain("(1-bind)*0.42");
 
     const page = await siteFetch(
       new Request("http://127.0.0.1:8787/signup", { headers: { host: "127.0.0.1:8787", accept: "text/html" } }),
     );
     expect(page.status).toBe(200);
+    const signupHtml = await page.text();
+    expect(signupHtml).toContain("OPENAI_BASE_URL=");
+    expect(signupHtml).toContain("x-eden-api-key");
+    expect(signupHtml).toContain("/dashboard");
+    expect(signupHtml).toContain("signupForm");
+    expect(signupHtml).toContain('id="donePanel"');
+    expect(signupHtml).toContain(".hidden{display:none");
+    expect(signupHtml).not.toContain("eden login --url");
+    expect(signupHtml).not.toContain("releases/latest/download");
+    expect(signupHtml).not.toContain("npm i -g eden\n");
+  });
+
+  test("signup sets a session cookie; paste-key onboarding has a Continue button", async () => {
+    const res = await signup(`${ipBase}9.9`, "session");
+    expect(res.status).toBe(200);
+    const set = res.headers.get("set-cookie") ?? "";
+    expect(set).toMatch(/eden_key=/);
+    expect(set).toMatch(/HttpOnly/i);
+    const j = (await res.json()) as { api_key: string };
+    const dash = await siteFetch(
+      new Request("http://127.0.0.1:8787/dashboard", {
+        headers: { host: "127.0.0.1:8787", accept: "text/html", cookie: `eden_key=${j.api_key}` },
+      }),
+    );
+    expect(dash.status).toBe(200);
+
+    const board = await siteFetch(
+      new Request("http://127.0.0.1:8787/onboarding", { headers: { host: "127.0.0.1:8787", accept: "text/html" } }),
+    );
+    expect(board.status).toBe(200);
+    const oh = await board.text();
+    expect(oh).toContain("signInBtn");
+    expect(oh).toContain("/v1/session");
+    expect(oh).toContain("signInForm");
+    expect(oh).not.toContain("dev=1");
+    expect(oh).toContain("/signup");
+  });
+
+  test("signed-in setup can skip to an empty desk; logout clears the cookie", async () => {
+    const res = await signup(`${ipBase}6.6`, "skip-desk");
+    expect(res.status).toBe(200);
+    const { api_key } = (await res.json()) as { api_key: string };
+    const cookie = `eden_key=${api_key}`;
+    const setup = await siteFetch(
+      new Request("http://127.0.0.1:8787/onboarding", {
+        headers: { host: "127.0.0.1:8787", accept: "text/html", cookie },
+      }),
+    );
+    expect(setup.status).toBe(200);
+    const setupHtml = await setup.text();
+    expect(setupHtml).toContain("Skip to dashboard");
+    expect(setupHtml).toContain("Sign out");
+    expect(setupHtml).toContain("Point the agent here");
+    expect(setupHtml).toContain("Waiting for the first run");
+    expect(setupHtml).not.toContain("Do this");
+
+    const desk = await siteFetch(
+      new Request("http://127.0.0.1:8787/dashboard", {
+        headers: { host: "127.0.0.1:8787", accept: "text/html", cookie },
+      }),
+    );
+    expect(desk.status).toBe(200);
+    const deskHtml = await desk.text();
+    expect(deskHtml).toContain("Your desk");
+    expect(deskHtml).not.toContain("8×");
+    expect((deskHtml.match(/class="brand"/g) || []).length).toBe(1);
+
+    const imported = await siteFetch(
+      new Request("http://127.0.0.1:8787/import", {
+        headers: { host: "127.0.0.1:8787", accept: "text/html", cookie },
+      }),
+    );
+    expect(imported.status).toBe(200);
+    const importHtml = await imported.text();
+    expect((importHtml.match(/class="brand"/g) || []).length).toBe(1);
+    expect(importHtml).toContain("textContent");
+    expect(importHtml).not.toContain("innerHTML");
+
+    const out = await siteFetch(
+      new Request("http://127.0.0.1:8787/v1/logout", {
+        method: "POST",
+        headers: { host: "127.0.0.1:8787", accept: "text/html", cookie, origin: "http://127.0.0.1:8787" },
+      }),
+    );
+    expect(out.status).toBe(303);
+    expect(out.headers.get("location")).toBe("/");
+    expect(out.headers.get("set-cookie") ?? "").toMatch(/Max-Age=0/i);
+
+    const after = await siteFetch(
+      new Request("http://127.0.0.1:8787/dashboard", {
+        headers: { host: "127.0.0.1:8787", accept: "text/html" },
+        redirect: "manual",
+      }),
+    );
+    expect(after.status).toBe(302);
+    expect(after.headers.get("location")).toContain("/onboarding");
+  });
+
+  test("x-eden-api-key authenticates when Authorization is a provider key", async () => {
+    const res = await signup(`${ipBase}7.7`, "dual-key");
+    expect(res.status).toBe(200);
+    const { api_key } = (await res.json()) as { api_key: string };
+    const tools = await siteFetch(
+      new Request("http://127.0.0.1:8787/v1/tools", {
+        headers: {
+          host: "127.0.0.1:8787",
+          authorization: "Bearer sk-not-an-eden-key",
+          "x-eden-api-key": api_key,
+        },
+      }),
+    );
+    expect(tools.status).toBe(200);
+  });
+
+  test("signup JSON base_url prefers EDEN_PUBLIC_URL over the request host", async () => {
+    const prev = process.env.EDEN_PUBLIC_URL;
+    process.env.EDEN_PUBLIC_URL = "https://useeden.vercel.app";
+    try {
+      const res = await signup(`${ipBase}8.8`, "public-url");
+      expect(res.status).toBe(200);
+      const j = (await res.json()) as { base_url?: string };
+      expect(j.base_url).toBe("https://useeden.vercel.app");
+    } finally {
+      if (prev === undefined) delete process.env.EDEN_PUBLIC_URL;
+      else process.env.EDEN_PUBLIC_URL = prev;
+    }
   });
 });
 
@@ -201,6 +358,35 @@ describe("/v1/traces intake (CLI recorder path)", () => {
     );
     expect(bad.status).toBe(202); // tolerated: nothing acceptable in the batch
     void api_key;
+  });
+
+  test("chat miss with a signup key fail-opens HTTP 200 and does not forward the key", async () => {
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      const res = await signup(`${ip}8.8`, "chat-miss");
+      expect(res.status).toBe(200);
+      const { api_key } = (await res.json()) as { api_key: string };
+      const chat = await siteFetch(
+        new Request("http://127.0.0.1:8787/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            host: "127.0.0.1:8787",
+            "content-type": "application/json",
+            authorization: `Bearer ${api_key}`,
+          },
+          body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: "hi" }] }),
+        }),
+      );
+      expect(chat.status).toBe(200);
+      const body = (await chat.json()) as { model?: string; fail_open?: boolean; error?: { message?: string } };
+      expect(body.model).toBe("eden");
+      expect(body.fail_open).toBe(true);
+      expect(JSON.stringify(body)).not.toMatch(/Incorrect API key/i);
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = prev;
+    }
   });
 });
 

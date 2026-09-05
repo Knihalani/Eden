@@ -42,6 +42,7 @@ def make_stub_server(routes: Routes) -> tuple[ThreadingHTTPServer, list[dict[str
                         "path": self.path,
                         "authorization": self.headers.get("Authorization"),
                         "content_type": self.headers.get("content-type"),
+                        "x_eden_version": self.headers.get("X-Eden-Version"),
                         "body": body,
                     }
                 )

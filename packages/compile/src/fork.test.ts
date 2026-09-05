@@ -77,6 +77,7 @@ describe("fork mining", () => {
     expect(f.thenValue).toBe("failure");
     expect(f.thenSuffix).toEqual(["fix_build", "notify"]);
     expect(f.elseTraces.length).toBe(3);
+    expect(f.nestedArms).toBeUndefined();
   });
 
   test("no fork when all traces share the same sequence", () => {
@@ -102,6 +103,8 @@ describe("fork mining", () => {
     const prog = assembleForkProgram(forks[0]!, "test_branch_prog", "ci_gate");
     expect(prog).not.toBeNull();
     expect(prog!.steps.some((s) => s.kind === "branch")).toBe(true);
+    const br = prog!.steps.find((s) => s.kind === "branch");
+    expect(br && br.kind === "branch" && br.cases).toBeUndefined();
     // C1 regression: the envelope must live at contract.envelope. The old
     // top-level placement was invisible to inDistribution(), so every fork
     // program deopted on every input.
@@ -175,6 +178,8 @@ describe("fork mining", () => {
     expect(branches).toHaveLength(1);
     expect(mined.programs).toHaveLength(1);
     expect(mined.programs[0]!.name).toMatch(/forked_state_gate/);
+    const br = branches[0]!.steps.find((s) => s.kind === "branch");
+    expect(br && br.kind === "branch" && br.cases).toBeUndefined();
   });
 
   test("compileTraces emits ONE stable branched program across repeated compiles", () => {
@@ -303,5 +308,89 @@ describe("fork mining", () => {
     );
     expect(forkInPrograms || forkCapped).toBe(true);
     expect(mined.programs.length + mined.refusals.filter((r) => r.code === "max_programs").length).toBeGreaterThanOrEqual(25);
+  });
+
+  function alertTrace(id: string, sev: string, arm: [string, string], alertId: number): StretchTrace {
+    const alert = `al-${alertId}`;
+    return {
+      id,
+      events: [
+        { name: "getAlert", args: { id: alertId }, result: { sev, alert }, ok: true },
+        { name: arm[0], args: { alert }, result: { acked: true, alert }, ok: true },
+        { name: arm[1], args: { alert }, result: { done: true, alert }, ok: true },
+      ],
+      input: { id: alertId },
+      output: { done: true },
+      llmCalls: 4,
+      duration_ms: 40,
+      cost_cents: 4,
+      complete: true,
+    };
+  }
+
+  function threeArmTraces(): StretchTrace[] {
+    return [
+      ...[10, 11, 12].map((id, i) => alertTrace(`p0-${i}`, "p0", ["createPage", "sendAckPage"], id)),
+      ...[20, 21, 22].map((id, i) => alertTrace(`p1-${i}`, "p1", ["createTicket", "sendAckTicket"], id)),
+      ...[30, 31, 32].map((id, i) => alertTrace(`p2-${i}`, "p2", ["writeLog", "sendAckLog"], id)),
+    ];
+  }
+
+  test("3-way fork is one program with one n-way branch (then + 1 case + else)", async () => {
+    const traces = threeArmTraces();
+    const forks = findForkedGroups(traces, 3);
+    expect(forks).toHaveLength(1);
+    expect(forks[0]!.nestedArms?.length).toBe(2);
+    const mined = compileTraces(traces);
+    const branches = mined.programs.filter((p) => p.steps.some((s) => s.kind === "branch"));
+    expect(branches).toHaveLength(1);
+    expect(mined.programs).toHaveLength(1);
+    const p = branches[0]!;
+    const brs = p.steps.filter((s) => s.kind === "branch");
+    expect(brs).toHaveLength(1);
+    const br = brs[0]!;
+    expect(br.kind).toBe("branch");
+    if (br.kind === "branch") {
+      expect(br.cases).toHaveLength(1);
+      expect(br.then.length).toBeGreaterThan(0);
+      expect((br.else ?? []).length).toBeGreaterThan(0);
+    }
+    const arms = {
+      p0: ["createPage", "sendAckPage"],
+      p1: ["createTicket", "sendAckTicket"],
+      p2: ["writeLog", "sendAckLog"],
+    };
+    for (const [sev, tools] of Object.entries(arms)) {
+      const calls: string[] = [];
+      const reg = registryFrom({
+        getAlert: async ({ id }) => ({ sev, alert: `al-${id}` }),
+        createPage: async () => {
+          calls.push("createPage");
+          return { acked: true };
+        },
+        sendAckPage: async () => {
+          calls.push("sendAckPage");
+          return { done: true };
+        },
+        createTicket: async () => {
+          calls.push("createTicket");
+          return { acked: true };
+        },
+        sendAckTicket: async () => {
+          calls.push("sendAckTicket");
+          return { done: true };
+        },
+        writeLog: async () => {
+          calls.push("writeLog");
+          return { acked: true };
+        },
+        sendAckLog: async () => {
+          calls.push("sendAckLog");
+          return { done: true };
+        },
+      });
+      await runProgram(p, { id: sev === "p0" ? 10 : sev === "p1" ? 20 : 30 }, { registry: reg });
+      expect(calls).toEqual(tools);
+    }
   });
 });

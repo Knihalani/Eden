@@ -1,15 +1,17 @@
 import { openDb, workspaceForKey, isManagedDeployment, hashApiKey, type EdenDb } from "./db";
 import { ingest } from "./cluster";
-import { handleMcp, liveTools, dispatchResult } from "./mcp";
+import { handleMcp, liveOnTools, wrapDispatchResult, toolRowToProgram } from "./mcp";
 import { playTool } from "./playback";
 import { handleForge } from "./forge";
-import { copyBtn, escapeHtml, layout, nav } from "./html";
+import { copyBtn, escapeHtml, landingLayout, layout, nav } from "./html";
+import { servePublic } from "./assets";
 import { findOnTool, wrapPlay, toolHasPlayback } from "./wrap";
 import { buildLedger, ensureLedgerSchema, sanitizeManifest, type LedgerFigure } from "./ledger";
 import { handleWebhook } from "./webhook";
 import { detectAndParse } from "@eden/core";
 import { protocolCheck, EDEN_PROTOCOL_VERSION, PROTOCOL_HEADER, redact } from "@eden/ir";
 import type { ToolEvent } from "@eden/core";
+import { createState, handleChatCompletions } from "@eden/wrap";
 
 /** A malformed PORT must fall back, not hand NaN to Bun.serve. */
 export function envPort(raw: string | undefined, fallback: number): number {
@@ -66,7 +68,7 @@ async function seedBundle(d: EdenDb) {
     "runs",
   ]);
   if (existing) {
-    await d.run(`UPDATE tool SET steps = ?, when_to_use = ?, seen = ?, required_k = 2 WHERE id = ?`, [
+    await d.run(`UPDATE tool SET steps = ?, when_to_use = ?, seen = ?, required_k = 2, published = 1 WHERE id = ?`, [
       JSON.stringify(steps),
       when,
       seen,
@@ -76,7 +78,7 @@ async function seedBundle(d: EdenDb) {
   }
   await d.run(
     `INSERT INTO tool (id, workspace_id, name, when_to_use, state, steps, seen, fingerprint, required_k, published)
-     VALUES (?, 'ws_local', 'fetch_issue_bundle', ?, 'on', ?, ?, 'seed_bundle', 2, 0)`,
+     VALUES (?, 'ws_local', 'fetch_issue_bundle', ?, 'on', ?, ?, 'seed_bundle', 2, 1)`,
     [crypto.randomUUID(), when, JSON.stringify(steps), seen],
   );
 }
@@ -159,9 +161,29 @@ function crossOriginWrite(req: Request, selfOrigin: string): boolean {
  * deliberately NOT trusted here: Bun derives req.url from the Host header,
  * so echoing it back would validate whatever name an attacker asked for.
  */
+function publicSiteOrigin(url: URL): string {
+  const env = (process.env.EDEN_PUBLIC_URL || "").trim().replace(/\/$/, "");
+  if (env) return env;
+  const prod = (process.env.VERCEL_PROJECT_PRODUCTION_URL || "").trim().replace(/\/$/, "");
+  if (prod) return prod.startsWith("http") ? prod : `https://${prod}`;
+  if (process.env.VERCEL_URL) {
+    const host = process.env.VERCEL_URL.replace(/^https?:\/\//, "");
+    return `https://${host}`;
+  }
+  return `http://127.0.0.1:${url.port || PORT}`;
+}
+
 function allowedHostNames(): Set<string> {
   const hosts = new Set(["127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"]);
-  const candidates = [process.env.EDEN_PUBLIC_URL, process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ""];
+  const candidates = [
+    process.env.EDEN_PUBLIC_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? process.env.VERCEL_PROJECT_PRODUCTION_URL.startsWith("http")
+        ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+        : `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "",
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "",
+  ];
   for (const candidate of candidates) {
     try {
       if (candidate) hosts.add(new URL(candidate).hostname.toLowerCase());
@@ -222,25 +244,118 @@ function savingsWord(f: LedgerFigure & { estimated?: boolean }): string {
   return "not measured";
 }
 
+const AGENT_OPENAPI = {
+  openapi: "3.0.0",
+  info: { title: "Eden wrap", version: String(EDEN_PROTOCOL_VERSION) },
+  paths: {
+    "/health": { get: { summary: "Wrap facts (ok, protocol, service, traces/live when keyed). No auth for ok." } },
+    "/v1/wrap": {
+      post: { summary: "Ask if a compiled tool answers. 200 {action:play,facts} or {action:original}." },
+    },
+    "/v1/ingest": { post: { summary: "Record tool events; stretch_end compiles. Does not Approve." } },
+    "/v1/dispatch": { post: { summary: "JIT: at most one compiled schema. {tools}." } },
+    "/v1/chat/completions": { post: { summary: "OpenAI-compatible chat; set OPENAI_BASE_URL here. Auth required." } },
+  },
+};
+
+function unauthorizedJson(): Response {
+  return Response.json(
+    { error: "unauthorized" },
+    { status: 401, headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
+  );
+}
+
+/** Wrap auth: x-eden-api-key, a wrap-shaped Bearer, or the HTML session cookie. */
+export function wrapTokenFromRequest(req: Request): string {
+  const named = (req.headers.get("x-eden-api-key") || req.headers.get("x-eden-key") || "").trim();
+  if (named) return named;
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+  if (bearer === "eden_dev" || bearer.startsWith("eden_")) return bearer;
+  const raw = req.headers.get("cookie") || "";
+  const m = raw.match(/(?:^|;\s*)eden_key=([^;]*)/);
+  if (!m) return "";
+  try {
+    return decodeURIComponent(m[1] ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function sessionCookie(token: string): string {
+  const parts = [`eden_key=${encodeURIComponent(token)}`, "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=2592000"];
+  if (isManagedDeployment()) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function clearSessionCookie(): string {
+  const parts = ["eden_key=", "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=0"];
+  if (isManagedDeployment()) parts.push("Secure");
+  return parts.join("; ");
+}
+
+const siteWrapState = createState({});
+
 export async function handleFetch(req: Request): Promise<Response> {
   // Same predicate as authentication uses: auto-approve must be impossible
   // anywhere a key is actually required, not only on Vercel.
   if (isManagedDeployment() && process.env.EDEN_DEV !== "1") {
     delete process.env.EDEN_AUTO_APPROVE;
   }
-  const d = await db();
   const url = new URL(req.url);
-  const origin = process.env.EDEN_PUBLIC_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${url.port || PORT}`);
+  const asset = await servePublic(url.pathname);
+  if (asset) return asset;
+  // Health must not open the database — Next collect-page-data and load
+  // balancers hit this path, and bun:sqlite is not on the hosted Node runtime.
+  if (url.pathname === "/health") {
+    const headers = { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) };
+    const base = {
+      ok: true as const,
+      protocol: EDEN_PROTOCOL_VERSION,
+      service: "eden-wrap",
+      wrap: true,
+      ingest: true,
+      dispatch: true,
+    };
+    if (process.env.NEXT_PHASE === "phase-production-build") {
+      return Response.json({ ok: true, protocol: EDEN_PROTOCOL_VERSION }, { headers });
+    }
+    try {
+      const healthDb = await db();
+      const wsId = await workspaceForKey(healthDb, req.headers.get("authorization"));
+      if (!wsId) return Response.json(base, { headers });
+      const traces = Number(
+        (
+          await healthDb.get<{ c: number }>(
+            `SELECT COUNT(*) as c FROM (
+               SELECT DISTINCT run_id FROM stretch WHERE workspace_id = ?
+               UNION
+               SELECT DISTINCT run_id FROM tool_event WHERE workspace_id = ?
+             )`,
+            [wsId, wsId],
+          )
+        )?.c ?? 0,
+      );
+      const live = Number(
+        (await healthDb.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId]))?.c ?? 0,
+      );
+      const candidates = Number(
+        (await healthDb.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [wsId]))?.c ?? 0,
+      );
+      return Response.json({ ...base, traces, live, candidates }, { headers });
+    } catch {
+      return Response.json({ ok: true, protocol: EDEN_PROTOCOL_VERSION, service: "eden-wrap" }, { headers });
+    }
+  }
+  // Next collect-page-data loads this catch-all during `next build`. Opening
+  // sqlite or Neon there either throws (no bun:sqlite) or needs secrets.
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return new Response(null, { status: 204 });
+  }
+  const d = await db();
+  const origin = publicSiteOrigin(url);
 
   const forge = handleForge(url);
   if (forge) return forge;
-
-  if (url.pathname === "/health") {
-    return Response.json(
-      { ok: true, protocol: EDEN_PROTOCOL_VERSION },
-      { headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
-    );
-  }
 
   // Protocol gate on the /v1/* API surface: a client speaking a different
   // wire version gets an explicit 426 instead of obscure shape failures.
@@ -266,7 +381,8 @@ export async function handleFetch(req: Request): Promise<Response> {
     return new Response("cross-origin write refused", { status: 403 });
   }
 
-  const wsId = await workspaceForKey(d, req.headers.get("authorization"));
+  const wrapToken = wrapTokenFromRequest(req);
+  const wsId = await workspaceForKey(d, wrapToken ? `Bearer ${wrapToken}` : null);
 
 /**
  * Auth gate for HTML pages: a signed-out browser is sent to onboarding
@@ -287,64 +403,69 @@ function pageAuth(req: Request, wsId: string | null): Response | null {
 
   if (url.pathname === "/onboarding") {
     if (!wsId) {
-      // On a managed deployment there is no dev mode to continue into — the
-      // only door is a real API key. On a laptop, dev mode is the fastest path.
-      const noDevMode = isManagedDeployment() && process.env.EDEN_DEV !== "1";
-      return html("Eden", `<div class="container" style="max-width:520px">
-<h1>Welcome to Eden</h1>
-<p class="sub">Repeated work becomes one call — measured, approved by you, and fail-safe by construction.</p>
-<div class="panel" style="padding:24px">
-  <h2>Sign in to your workspace</h2>
-  <p class="muted" style="margin-bottom:12px">Paste the API key from your Eden config${noDevMode ? "." : ", or continue in dev mode for local testing."}</p>
-  <input type="text" id="apiKey" placeholder="EDEN_API_KEY=…" style="margin-bottom:12px"/>
-  ${noDevMode ? `<p class="muted" style="margin-bottom:12px">No key yet? <a href="/signup" style="text-decoration:underline">Create a workspace — it takes thirty seconds.</a></p><p class="muted">Running locally? Start <code>eden wrap</code> and open its dashboard instead.</p>` : `<button class="btn" onclick="location.href='/onboarding?dev=1'">Continue in dev mode →</button>`}
-</div></div>`);
+      return html(
+        "Eden — Sign in",
+        nav("Sign in", false) +
+          `<h1>Sign in</h1>
+<p class="sub">Paste the key from signup. It stays in this browser.</p>
+<form id="signInForm">
+  <div class="field">
+    <label for="apiKey">API key</label>
+    <input type="text" id="apiKey" name="api_key" placeholder="eden_…" autocomplete="off" spellcheck="false" autofocus/>
+  </div>
+  <button type="submit" class="btn" id="signInBtn">Continue</button>
+  <p id="signInErr" class="error-text" role="status" style="margin-top:10px"></p>
+</form>
+<p class="muted" style="margin-top:1.5rem">No key? <a class="inline" href="/signup">Create a workspace</a>.</p>
+<script>
+document.getElementById("signInForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = document.getElementById("signInErr");
+  const btn = document.getElementById("signInBtn");
+  err.textContent = "";
+  btn.disabled = true;
+  const raw = document.getElementById("apiKey").value.trim().replace(/^EDEN_API_KEY=/, "");
+  try {
+    const res = await fetch("/v1/session", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ api_key: raw }) });
+    if (!res.ok) { err.textContent = "That key did not authenticate."; btn.disabled = false; return; }
+    const next = new URLSearchParams(location.search).get("next") || "/dashboard";
+    location.href = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  } catch {
+    err.textContent = "Could not reach Eden. Try again.";
+    btn.disabled = false;
+  }
+});
+</script>`,
+      );
     }
     const tc = Number((await d.get<{ c: number }>(`SELECT COUNT(DISTINCT run_id) as c FROM stretch WHERE workspace_id = ?`, [wsId]) ?? {c:0}).c);
     const cc = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM cluster WHERE workspace_id = ? AND count >= 2`, [wsId]) ?? {c:0}).c);
-    const lc = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId]) ?? {c:0}).c);
-    const st = (n:number,done:boolean,cur:boolean,title:string,body:string)=>`<div class="step ${done?"done":cur?"current":"pending"}"><div class="step-head"><span class="num">${done?"✓":n}</span><span class="step-title">${title}</span><span class="badge ${done?"ok":cur?"action":"todo"}">${done?"Done":cur?"Do this":"Waiting"}</span></div><div style="padding-left:34px">${body}</div></div>`;
+    const live = Number((await d.get<{ c: number }>(`SELECT COUNT(*) as c FROM tool WHERE workspace_id = ? AND state = 'on'`, [wsId]) ?? {c:0}).c);
     const setupPrompt = [
-      "OPENAI_BASE_URL=http://127.0.0.1:8788/v1",
-      "OPENAI_API_KEY=<your provider key — Eden forwards it upstream>",
+      `OPENAI_BASE_URL=${origin.replace(/\/$/, "")}/v1`,
+      "OPENAI_API_KEY=<your provider key — sent as Authorization>",
+      "EDEN_API_KEY=<your Eden key — sent as x-eden-api-key>",
     ].join("\n");
-    return html("Eden — Setup", nav("Setup")
-      + `<h1>Set up in three steps</h1><p class="sub">Point your agent at Eden, let it work normally, approve what Eden compiles. Nothing about your agent changes until you approve.</p>`
-      + st(1,true,false,"Connect your agent",`
-        <p style="margin-bottom:6px"><strong>Claude Code</strong> — run <code>eden init</code>. It installs recording hooks and wires up MCP.</p>
-        <p style="margin-bottom:6px"><strong>OpenAI-compatible agent or SDK</strong> — set one environment variable:</p>
-        <pre><code>${escapeHtml(setupPrompt)}</code>${copyBtn()}</pre>
-        <p class="muted">That's the whole integration. Your requests flow through Eden to your provider; Eden records the tool-call patterns it sees.</p>`)
-      + st(2,tc>0,tc===0,"Let your agent work — or import past traces",tc>0?`<p class="success">✓ ${tc} run${tc===1?"":"s"} recorded so far. The more repeats, the faster patterns compile.</p>`:`
-        <p><strong>Easiest:</strong> just use your agent as usual. After two runs of the same workflow, a compiled draft appears.</p>
-        <p><strong>No time to wait?</strong> Import history you already have (LangSmith, OpenTelemetry, OpenAI logs, JSONL):</p>
-        <a href="/import" class="btn secondary" style="margin-top:8px;display:inline-block">Import existing traces →</a>`)
-      + st(3,cc>0,cc===0&&tc>0,"Approve compiled tools",cc>0?`<p class="success">✓ ${cc} workflow pattern${cc===1?"":"s"} ready for review. Nothing goes live until you approve it.</p><a href="/workshop" class="btn" style="margin-top:8px;display:inline-block">Review & approve →</a>`:`<p class="muted">When a workflow repeats enough times, its draft shows up under <strong>Approve</strong>. You see exactly what will run before anything goes live.</p>`)
-      + `<h2 style="margin-top:32px;margin-bottom:4px">What you get — and what it costs</h2>
-         <div class="panel good"><h2>The upside</h2>
-           <ul>
-             <li><strong>Fewer LLM calls per repeated workflow</strong> — a stretch that took N calls becomes one compiled tool invocation.</li>
-             <li><strong>Lower latency and spend</strong> on everything your agent does more than once.</li>
-             <li><strong>Steps can't be skipped</strong> — a compiled tool runs the whole recorded sequence, checks included.</li>
-             <li><strong>Honest numbers</strong> — savings show only when receipts back them; otherwise the dashboard says "not measured".</li>
-           </ul>
-         </div>
-         <div class="panel warn"><h2>The trade-offs</h2>
-           <ul>
-             <li><strong>Compiled tools are only as general as their witnesses.</strong> Inputs outside the observed range are refused and fall back to your agent's normal path — safe, but no savings there.</li>
-             <li><strong>A mid-run failure on a mutating workflow returns a structured error instead of re-running raw</strong>, so a write is never duplicated — but that one call saves nothing.</li>
-             <li><strong>Recording adds a small local overhead</strong> per tool call (writes are batched and off the critical path).</li>
-             <li><strong>Hard guardrails are opt-in.</strong> By default Eden observes and steers but never halts; turn on enforcement if you want runaway-loop caps at the price of possible refusals.</li>
-           </ul>
-         </div>
-         <div class="panel safe"><h2>What Eden will never do</h2>
-           <ul>
-             <li>Never block, halt, or fail a call because Eden itself broke — every Eden failure falls back to passing your traffic through untouched.</li>
-             <li>Never change what your agent does without your approval — compiled tools go live only via the Approve page, by a human.</li>
-             <li>Never re-execute a write automatically after a partial compiled run.</li>
-             <li>Never report a savings number it didn't measure.</li>
-           </ul>
-         </div>`
+    const status =
+      live > 0
+        ? `<p class="status">A compiled tool is live. Matching calls use it. <a class="inline" href="/workshop">Review</a></p>`
+        : cc > 0
+          ? `<p class="status">${cc} draft${cc === 1 ? "" : "s"} waiting. Nothing is live until you Approve. <a class="inline" href="/workshop">Open Approve</a></p>`
+          : tc > 0
+            ? `<p class="status">${tc} run${tc === 1 ? "" : "s"} recorded. Repeats become drafts.</p>`
+            : `<p class="status">Waiting for the first run. <a class="inline" href="/import">Import traces</a> if you already have them.</p>`;
+    return html(
+      "Eden — Setup",
+      nav("Setup", true) +
+        `<div class="page-head"><h1>Point the agent here</h1><a href="/dashboard">Skip to dashboard</a></div>
+<p class="sub">Two keys. Nothing changes until you Approve.</p>
+<pre><code>${escapeHtml(setupPrompt)}</code>${copyBtn()}</pre>
+<p class="muted">The SDK <code>apiKey</code> is the provider key. Send the Eden key as <code>x-eden-api-key</code>.</p>
+${status}
+<details class="more">
+<summary>What this will not do</summary>
+<p>A key never flips a tool On. Out-of-range inputs fall back to the old path. If Eden breaks, traffic still goes through.</p>
+</details>`,
     );
   }
 
@@ -354,17 +475,17 @@ function pageAuth(req: Request, wsId: string | null): Response | null {
     const denied = pageAuth(req, wsId);
     if (denied) return denied;
     if (!wsId) return new Response("unauthorized", { status: 401 }); // unreachable; narrows for TS
-    const body = nav("Import") + `
-<h1>Import existing traces</h1>
-<p class="sub">Already have agent history in LangSmith, OpenTelemetry, or plain JSONL? Paste it below and Eden will mine it for repeatable workflows — no waiting for fresh runs.</p>
-<div class="panel">
+    const body = nav("Import", true) + `
+<h1>Import traces</h1>
+<p class="sub">LangSmith, OpenTelemetry, OpenAI, or JSONL. Repeats become drafts.</p>
 <form id="importForm">
-  <textarea id="traceContent" rows="12" placeholder='Paste a LangSmith / OTel / OpenAI / JSONL export here…'></textarea>
-  <div style="margin-top:10px;display:flex;align-items:center;gap:12px">
-    <button type="submit" class="btn">Import & analyze</button>
-    <span id="status" class="muted">Format is auto-detected.</span>
+  <label for="traceContent">Export</label>
+  <textarea id="traceContent" rows="12" placeholder="Paste an export…"></textarea>
+  <div class="row">
+    <button type="submit" class="btn secondary">Import</button>
+    <span id="status" class="muted"></span>
   </div>
-</form></div>
+</form>
 <div id="results"></div>
 <script>
 document.getElementById("importForm").addEventListener("submit", async (e) => {
@@ -374,6 +495,14 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
   const results = document.getElementById("results");
   if (!content.trim()) { status.textContent = "Paste some trace data first."; return; }
   status.textContent = "Importing…";
+  results.replaceChildren();
+  const mark = (el, text, cls) => {
+    el.textContent = "";
+    const span = document.createElement("span");
+    span.className = cls;
+    span.textContent = text;
+    el.appendChild(span);
+  };
   try {
     const res = await fetch("/v1/import", {
       method: "POST",
@@ -382,51 +511,65 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
     });
     const j = await res.json();
     if (res.ok) {
-      status.innerHTML = '<span class="success">✓ Imported</span>';
-      results.innerHTML = \`
-        <div class="panel good"><h2>Import complete</h2>
-        <div class="stat-row">
-          <div class="stat"><div class="stat-val">\${j.traces}</div><div class="stat-label">Traces imported</div></div>
-          <div class="stat"><div class="stat-val">\${j.events}</div><div class="stat-label">Tool calls captured</div></div>
-          <div class="stat"><div class="stat-val dim">\${j.format}</div><div class="stat-label">Detected format</div></div>
-        </div>
-        <a href="/onboarding" class="btn">Continue setup →</a></div>\`;
+      mark(status, "Imported", "success");
+      const p = document.createElement("p");
+      p.className = "status";
+      const n = Number(j.traces) || 0;
+      const fmt = typeof j.format === "string" ? j.format : "export";
+      p.append(document.createTextNode(n + " trace" + (n === 1 ? "" : "s") + " from " + fmt + ". "));
+      const next = document.createElement("a");
+      next.href = "/workshop";
+      next.className = "inline";
+      next.textContent = "Open Approve";
+      p.appendChild(next);
+      results.appendChild(p);
     } else {
-      status.innerHTML = '<span class="error-text">✗ Import failed</span>';
-      results.innerHTML = \`<div class="panel warn"><p>\${j.error || "Could not read that data."}</p><p class="muted">Try exporting as JSONL — one run per line, with tool name, arguments, and result.</p></div>\`;
+      mark(status, "Import failed", "error-text");
+      const p = document.createElement("p");
+      p.className = "status";
+      p.textContent = typeof j.error === "string" && j.error ? j.error : "Could not read that data. Try JSONL — one run per line.";
+      results.appendChild(p);
     }
   } catch (err) {
-    status.innerHTML = '<span class="error-text">✗ Import failed</span>';
+    mark(status, "Import failed", "error-text");
     results.textContent = String(err);
   }
 });
 </script>`;
-    return html("Import traces", nav("Import") + body);
+    return html("Import traces", body);
   }
 
   // The public front door: a proper landing for visitors, dashboard for users.
   if (url.pathname === "/" && !wsId) {
-    const body = nav("") + `
-<div style="padding:72px 0 32px;text-align:center">
-  <h1 style="font-size:36px;line-height:1.18;max-width:700px;margin:0 auto">The second time your agent does something,<br/>it should cost <span style="color:#c23434">less</span>.</h1>
-  <p class="sub" style="max-width:520px;margin:22px auto 30px;font-size:15px">Eden sits beside your agent and quietly collapses its repeated work into single calls. Measured. Approved by you. And it can never take your agent down.</p>
-  <a href="/signup" class="btn" style="font-size:15px;padding:12px 24px">Get your API key</a>
-  <p class="muted" style="margin-top:12px"><a href="https://github.com/Knihalani/Eden" style="text-decoration:underline">Source</a></p>
-</div>
-<div class="stat-row" style="max-width:720px;margin:0 auto 36px">
-  <div class="stat" style="text-align:center"><div class="stat-val">8×</div><div class="stat-label">fewer model calls</div></div>
-  <div class="stat" style="text-align:center"><div class="stat-val">7.7×</div><div class="stat-label">faster</div></div>
-  <div class="stat" style="text-align:center"><div class="stat-val">−84%</div><div class="stat-label">loop wall time</div></div>
-  <div class="stat" style="text-align:center"><div class="stat-val">−84%</div><div class="stat-label">runaway spend</div></div>
-</div>
-<div class="stat-row" style="max-width:760px">
-  <div class="stat"><div style="font-weight:600;margin-bottom:8px">It pays attention.</div><p class="muted">Work your agent has done before starts finishing in one call instead of a dozen.</p></div>
-  <div class="stat"><div style="font-weight:600;margin-bottom:8px">You decide.</div><p class="muted">Nothing changes until you approve it. One screen. Plain language. Reversible.</p></div>
-  <div class="stat"><div style="font-weight:600;margin-bottom:8px">It behaves.</div><p class="muted">If Eden is ever wrong, slow, or broken, your agent keeps working exactly as it did before. Pinned by tests.</p></div>
-</div>
-<p class="muted" style="text-align:center;margin-top:26px;font-size:13px">Every number above comes from a paired benchmark that must win or it does not ship.</p>
-<p style="text-align:center;margin-top:20px"><a href="/signup" class="btn">Create your workspace</a></p>`;
-    return html("Eden", body);
+    const till = `<span class="till"><span class="slab"><span class="work" aria-hidden="true"></span><span class="go">Approve</span></span></span>`;
+    const body = `
+<main id="content">
+  <div class="reel">
+    <section class="hero">
+      <header class="hero-header">
+        <a class="brand" href="/" aria-label="Eden"><img class="brand-mark" src="/logo.webp" alt="" width="40" height="38" decoding="sync" fetchpriority="high"/><span class="brand-name">Eden</span></a>
+        <a class="signin" href="/onboarding">Sign in</a>
+      </header>
+      <div class="hero-stage">
+        <div class="promise">
+          <h1>Making your agent do less work.</h1>
+          <a class="btn ship" href="/signup">Sign up</a>
+        </div>
+        <div class="stage-slot">
+          <button class="stage-hit" type="button" aria-pressed="false" aria-label="Repeated work. Move to turn. Scroll to keep one.">
+            <canvas class="stage" aria-hidden="true"></canvas>
+            <span class="deck" aria-hidden="true">${till}</span>
+          </button>
+          <span class="sr stage-live" aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+  <section class="hold"><span class="go">Approve</span></section>
+</main>`;
+    return new Response(landingLayout("Eden", body), {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
   }
   if (url.pathname === "/dashboard" || url.pathname === "/") {
     const denied = pageAuth(req, wsId);
@@ -506,43 +649,46 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
       if (s < 86400) return `${Math.round(s / 3600)}h ago`;
       return `${Math.round(s / 86400)}d ago`;
     };
-    const stat = (val: string, label: string, dim = false) =>
-      `<div class="stat"><div class="stat-val${dim ? " dim" : ""}">${escapeHtml(val)}</div><div class="stat-label">${label}</div></div>`;
     const activity = recent.length
-      ? `<h2 style="margin-top:28px">Recent compiled runs</h2>
+      ? `<h2>Recent runs</h2>
          <table class="activity">${recent
            .map(
              (r) =>
-               `<tr><td>${escapeHtml(r.name)}</td><td>${r.steps_ok}/${r.steps_attempted} steps</td><td class="num-cell">${r.server_ms} ms</td><td class="num-cell">${fmtWhen(Number(r.created_at))}</td></tr>`,
+               `<tr><td>${escapeHtml(r.name)}</td><td>${r.steps_ok}/${r.steps_attempted}</td><td class="num-cell">${fmtWhen(Number(r.created_at))}</td></tr>`,
            )
            .join("")}</table>`
-      : `<p class="muted" style="margin-top:28px">No compiled runs yet. Once you approve a tool and your agent uses it, each run lands here.</p>`;
-    const body = nav("Dashboard")
-      + `<h1>Dashboard</h1>
-<p class="sub">Eden is watching the agent work. Same stretch twice → a draft under Approve. Nothing goes live until you approve it.</p>
-<div class="stat-row">
-  ${stat(escapeHtml(savingsWord(ledger.tokens_saved_mean)), "Tokens saved per run")}
-  ${stat(escapeHtml(savingsWord(ledger.time_saved_ms_mean)), "Time saved per run")}
-  ${stat(String(ledger.runs), "Compiled runs")}
-  ${stat(`${ledger.fail}/${ledger.runs}`, "Failed runs / total", ledger.runs === 0)}
+      : "";
+    const emptyDesk = ledger.runs === 0 && Number(drafts.c) === 0 && Number(on.c) === 0 && recent.length === 0;
+    const fig = (label: string, val: string, dim = false) =>
+      `<div><dt>${label}</dt><dd${dim ? ` class="dim"` : ""}>${escapeHtml(val)}</dd></div>`;
+    const filled =
+      `<h1>Desk</h1>` +
+      (Number(drafts.c) > 0
+        ? `<p class="callout"><a class="inline" href="/workshop">${drafts.c} waiting for Approve</a></p>`
+        : `<p class="sub">Same stretch twice becomes a draft. Nothing goes live until you Approve.</p>`) +
+      `<dl class="figures">
+  ${fig("Tokens saved", savingsWord(ledger.tokens_saved_mean), !ledger.tokens_saved_mean.measured)}
+  ${fig("Time saved", savingsWord(ledger.time_saved_ms_mean), !ledger.time_saved_ms_mean.measured)}
+  ${fig("Compiled runs", ledger.runs === 0 ? "none yet" : String(ledger.runs), ledger.runs === 0)}
+  ${fig("Live", on.c === 0 ? "none yet" : String(on.c), on.c === 0)}
+</dl>` +
+      (month.runs > 0 ? `<p class="muted">${month.runs} compiled run${month.runs === 1 ? "" : "s"} this month.</p>` : "") +
+      activity +
+      `<div class="row">${
+        Number(drafts.c) > 0
+          ? `<a href="/workshop" class="btn">Go to Approve</a>`
+          : `<a href="/onboarding" class="btn secondary">Setup</a>`
+      }</div>`;
+    const empty = `<div class="empty">
+<h1>Your desk</h1>
+<p class="sub">Nothing compiled yet. Point the agent at this host. After the same stretch twice, a draft shows up under Approve.</p>
+<div class="row">
+  <a href="/onboarding" class="btn secondary">Copy setup</a>
+  <a href="/import" class="btn ghost">Import traces</a>
 </div>
-<div class="stat-row">
-  ${stat(String(drafts.c), "Drafts waiting to be approved", drafts.c === 0)}
-  ${stat(String(on.c), on.c === 0 ? "0 programs" : on.c === 1 ? "1 program" : "programs", on.c === 0)}
-</div>`
-      + (usage.runs > 0
-        ? `<div class="panel"><h2>This month</h2><p class="muted">${month.runs} runs · ${(month.server_ms / 1000).toFixed(1)}s server compute · ${(month.raw_bytes / 1e6).toFixed(2)}MB raw compressed to ${(month.densified_bytes / 1000).toFixed(0)}KB sent to the model</p></div>`
-        : "")
-      + activity
-      + `<div class="panel safe" style="margin-top:28px"><h2>How to read these numbers</h2>
-<ul>
-<li><strong>"measured"</strong> comes from shadow-run receipts — Eden executed the compiled version alongside the real one and compared.</li>
-<li><strong>"estimated"</strong> is labelled as such: projected from recorded traces, not proven by a paired run.</li>
-<li><strong>"not measured"</strong> means no evidence yet. It never silently reads as zero, and no number is shown without one of these labels.</li>
-<li>A failure here means the compiled run errored — your agent received a structured result it could recover from, never a broken call.</li>
-</ul></div>
-<p style="margin-top:20px"><a href="/onboarding" class="btn secondary">Setup guide →</a> &nbsp; <a href="/workshop" class="btn">Approve tools${drafts.c ? ` (${drafts.c} waiting)` : ""} →</a></p>`;
-    return html("Eden — Dashboard", body);
+</div>`;
+    const body = `<div class="desk">${nav("Desk", true)}${emptyDesk ? empty : filled}</div>`;
+    return html("Eden — Desk", body);
   }
 
   if (url.pathname === "/workshop") {
@@ -554,11 +700,24 @@ document.getElementById("importForm").addEventListener("submit", async (e) => {
       [wsId],
     );
     const rows = tools
-      .map((t) => `<div class="step"><div class="step-head"><span class="step-title"><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a></span><span class="badge ${t.state === "on" ? "ok" : "todo"}">${escapeHtml(t.state)}</span><span class="muted" style="margin-left:12px">${t.uses_count} uses</span></div></div>`)
+      .map(
+        (t) =>
+          `<li><a href="/workshop/${t.id}"><code>${escapeHtml(t.name)}</code></a><span class="state">${escapeHtml(t.state)}</span></li>`,
+      )
       .join("");
-    return html("Eden — Approve", nav("Approve") + `<h1>Approve compiled tools</h1>
-<p class="sub">This is the only place a tool goes live. Nothing runs in front of your agent until you approve it here — an API key can never flip a tool On.</p>
-${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">import traces</a> — repeatable workflows will appear here.</p>`}`);
+    return html(
+      "Eden — Approve",
+      nav("Approve", true) +
+        `<h1>Approve</h1>
+<p class="sub">This is the only place a tool goes live.</p>
+${
+  rows
+    ? `<ul class="tool-list">${rows}</ul>`
+    : `<div class="empty">
+<p class="sub">No drafts yet. Run the agent, or import traces.</p>
+<div class="row"><a href="/import" class="btn secondary">Import traces</a></div></div>`
+}`,
+    );
   }
 
   const ws = url.pathname.match(/^\/workshop\/([^/]+)$/);
@@ -573,32 +732,27 @@ ${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">
     if (!t) {
       return html(
         "Eden — Not found",
-        nav("Approve") +
-          `<h1>Tool not found</h1><p class="sub">This tool does not exist in your workspace (it may have been removed, or the link is from another workspace).</p>
-           <p><a href="/workshop" class="btn secondary">Back to Approve →</a></p>`,
+        nav("Approve", true) +
+          `<h1>Not found</h1><p class="sub">This tool is not in your workspace.</p>
+           <p class="row"><a href="/workshop" class="btn secondary">Back</a></p>`,
       );
     }
     const steps = jsonRows(t.steps) as Array<{ id: string; name: string; kind: string; url?: string }>;
     const list = steps.length
-      ? `<h2 style="margin-top:20px">What it runs</h2><table class="activity">${steps
-          .map((s, i) => `<tr><td>${i + 1}. ${escapeHtml(String(s.name))}</td><td>${escapeHtml(String(s.kind))}</td><td>${s.url ? escapeHtml(String(s.url)) : ""}</td></tr>`)
+      ? `<h2>What it runs</h2><table class="activity">${steps
+          .map((s, i) => `<tr><td>${i + 1}. ${escapeHtml(String(s.name))}</td><td>${escapeHtml(String(s.kind))}</td></tr>`)
           .join("")}</table>`
       : "";
     const approve =
       t.state !== "on"
-        ? `<div class="panel" style="margin-top:20px"><h2>Go live?</h2>
-           <p class="muted" style="margin-bottom:12px">Once approved, your agent's matching calls are served by this compiled tool — measured receipts land on the dashboard.</p>
-           <form method="post" action="/v1/tools/${t.id}/approve"><button class="btn">Approve tool</button></form></div>`
-        : t.published
-          ? `<div class="panel good" style="margin-top:20px"><p class="success">✓ Live</p><p class="muted">Published on MCP as <code>${escapeHtml(t.name)}</code>.</p></div>`
-          : `<div class="panel" style="margin-top:20px"><p>On for this workspace.</p>
-             <form method="post" action="/v1/tools/${t.id}/approve" style="margin-top:10px"><button class="btn secondary">Publish to MCP</button></form></div>`;
+        ? `<form method="post" action="/v1/tools/${t.id}/approve" class="row"><button type="submit" class="btn ship">Approve</button></form>
+           <p class="muted">Matching calls will use this compiled tool. Reversible from this page later.</p>`
+        : `<p class="status">Live. Matching calls in this workspace use this tool.</p>`;
     return html(
       `Eden — ${t.name}`,
-      nav("Approve") +
-        `<h1><code>${escapeHtml(t.name)}</code></h1>
+      nav("Approve", true) +
+        `<div class="page-head"><h1><code>${escapeHtml(t.name)}</code></h1><span class="muted">${escapeHtml(t.state)}</span></div>
          <p class="sub">${escapeHtml(t.when_to_use) || "No description recorded."}</p>
-         <span class="badge ${t.state === "on" ? "ok" : "todo"}">${escapeHtml(t.state)}</span>
          ${list}${approve}`,
     );
   }
@@ -628,8 +782,7 @@ ${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">
     if (hits >= RATE_LIMIT) {
       return Response.json(
         {
-          error:
-            "Too many workspaces created from this address this hour. Try again later, or run `eden wrap` locally — local use needs no key at all.",
+          error: "Too many workspaces created from this address this hour. Try again later.",
         },
         { status: 429 },
       );
@@ -660,54 +813,104 @@ ${rows || `<p class="muted">No drafts yet. Run your agent, or <a href="/import">
       hashApiKey(token),
       wsId,
     ]);
-    return Response.json({
-      api_key: token,
-      workspace_id: wsId,
-      base_url: origin,
-      note: "This key is shown once. Store it now.",
-    });
+    return Response.json(
+      {
+        api_key: token,
+        workspace_id: wsId,
+        base_url: origin,
+        note: "This key is shown once. Store it now.",
+      },
+      { headers: { "set-cookie": sessionCookie(token) } },
+    );
+  }
+
+  if (url.pathname === "/v1/session" && req.method === "POST") {
+    const parsed = readJsonObject(await readJson(req));
+    if (!parsed.ok) return parsed.res;
+    let key = typeof parsed.value.api_key === "string" ? parsed.value.api_key.trim() : "";
+    key = key.replace(/^EDEN_API_KEY=/, "");
+    if (!key) return unauthorizedJson();
+    const signed = await workspaceForKey(d, `Bearer ${key}`);
+    if (!signed) return unauthorizedJson();
+    return Response.json({ ok: true, workspace_id: signed }, { headers: { "set-cookie": sessionCookie(key) } });
+  }
+
+  if (url.pathname === "/v1/logout" && req.method === "POST") {
+    const cookie = { "set-cookie": clearSessionCookie() };
+    if ((req.headers.get("accept") ?? "").includes("application/json")) {
+      return Response.json({ ok: true }, { headers: cookie });
+    }
+    return new Response(null, { status: 303, headers: { ...cookie, location: "/" } });
   }
 
   // Signup page.
   if (url.pathname === "/signup" && req.method === "GET") {
-    const body = nav("") + `
-<h1>Get your API key</h1>
-<p class="sub">One workspace, one key, thirty seconds. No credit card, no email confirmation — the key below is your account.</p>
-<div class="panel" id="signupPanel">
-  <label for="wsName" style="display:block;margin-bottom:6px;font-weight:600">Workspace name <span class="muted">(optional)</span></label>
-  <input type="text" id="wsName" placeholder="my-agent-project" style="margin-bottom:14px;max-width:360px"/>
-  <button class="btn" id="signupBtn">Create my workspace</button>
-  <p id="signupErr" class="error-text" style="margin-top:10px"></p>
+    const envBlock = `export OPENAI_BASE_URL=${origin.replace(/\/$/, "")}/v1
+export OPENAI_API_KEY=<your provider key>
+export EDEN_API_KEY=<the key above>
+# Authorization is the provider key. Send the Eden key as header x-eden-api-key.`;
+    const body =
+      nav(wsId ? "Setup" : "Sign up", Boolean(wsId)) +
+      `
+<h1>Sign up</h1>
+<p class="sub">Thirty seconds. The key is the account, shown once.</p>
+<div id="signupPanel">
+  <form id="signupForm">
+    <div class="field">
+      <label for="wsName">Workspace name <span class="muted">(optional)</span></label>
+      <input type="text" id="wsName" name="name" placeholder="my-agent" autocomplete="organization"/>
+    </div>
+    <button type="submit" class="btn ship" id="signupBtn">Sign up</button>
+    <p id="signupErr" class="error-text" role="status" style="margin-top:10px"></p>
+  </form>
 </div>
-<div class="panel good hidden" id="donePanel">
-  <h2>✓ Your workspace is ready</h2>
-  <p class="muted" style="margin-bottom:10px">This key is shown <strong>once</strong>. Copy it somewhere safe now.</p>
-  <pre><code id="keyOut"></code><button class="copy" onclick="copyText(this.previousElementSibling)">Copy</button></pre>
-  <h2 style="margin-top:20px">Connect your agent</h2>
-  <p style="margin-bottom:6px">Install the CLI and log in:</p>
-  <pre><code>npm i -g eden
-eden login --url ${escapeHtml(origin)} --key &lt;your key&gt;
-eden wrap</code><button class="copy" onclick="copyText(this.previousElementSibling)">Copy</button></pre>
-  <p class="muted">Then point your agent's <code>OPENAI_BASE_URL</code> at the local proxy (<code>http://127.0.0.1:8788/v1</code>) and run it as usual. Full guide in <a href="/onboarding" style="text-decoration:underline">Setup</a>.</p>
-  <a href="/onboarding" class="btn secondary" style="margin-top:14px;display:inline-block">Open the setup guide →</a>
+<div class="hidden" id="donePanel">
+  <p class="muted" style="margin-bottom:0.75rem">Shown once. Copy it now.</p>
+  <pre><code id="keyOut"></code>${copyBtn()}</pre>
+  <div class="row">
+    <a href="/dashboard" class="btn">Open the desk</a>
+    <a href="/onboarding" class="btn ghost">Setup</a>
+  </div>
+  <details class="more">
+    <summary>Connect the agent</summary>
+    <p class="muted">Placeholders until you include the Eden key.</p>
+    <pre><code id="envOut">${escapeHtml(envBlock)}</code>${copyBtn()}</pre>
+    <label class="check"><input type="checkbox" id="includeKey"/> Include my Eden key in the copied env</label>
+    <p id="secretNote" class="secret-note hidden">The env block now contains a secret.</p>
+  </details>
 </div>
 <script>
-document.getElementById("signupBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("signupBtn");
-  btn.disabled = true; btn.textContent = "Creating…";
-  document.getElementById("signupErr").textContent = "";
-  try {
-    const res = await fetch("/v1/signup", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ name: document.getElementById("wsName").value }) });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.error || "Signup failed");
-    document.getElementById("signupPanel").classList.add("hidden");
-    document.getElementById("donePanel").classList.remove("hidden");
-    document.getElementById("keyOut").textContent = j.api_key;
-  } catch (err) {
-    document.getElementById("signupErr").textContent = String(err.message || err);
-    btn.disabled = false; btn.textContent = "Create my workspace";
+(function(){
+  const envTpl = ${JSON.stringify(envBlock)};
+  let minted = "";
+  function paintEnv(){
+    const include = document.getElementById("includeKey").checked;
+    document.getElementById("envOut").textContent = include && minted
+      ? envTpl.replace("<the key above>", minted)
+      : envTpl;
+    document.getElementById("secretNote").classList.toggle("hidden", !(include && minted));
   }
-});
+  document.getElementById("includeKey").addEventListener("change", paintEnv);
+  document.getElementById("signupForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("signupBtn");
+    btn.disabled = true; btn.textContent = "Creating…";
+    document.getElementById("signupErr").textContent = "";
+    try {
+      const res = await fetch("/v1/signup", { method: "POST", headers: {"content-type":"application/json"}, body: JSON.stringify({ name: document.getElementById("wsName").value }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Signup failed");
+      minted = j.api_key;
+      document.getElementById("signupPanel").classList.add("hidden");
+      document.getElementById("donePanel").classList.remove("hidden");
+      document.getElementById("keyOut").textContent = minted;
+      paintEnv();
+    } catch (err) {
+      document.getElementById("signupErr").textContent = String(err.message || err);
+      btn.disabled = false; btn.textContent = "Sign up";
+    }
+  });
+})();
 </script>`;
     return html("Eden — Sign up", body);
   }
@@ -801,44 +1004,51 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
   }
 
   if (url.pathname === "/v1/ingest" && req.method === "POST") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    if (!wsId) return unauthorizedJson();
     const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
     const body = parsed.value as { run_id?: unknown; events?: unknown; stretch_end?: unknown };
-    // The handler below maps over `events` and binds every field into SQL, so
-    // shape errors here would otherwise surface as a 500 after some rows of
-    // the batch had already committed.
     if (typeof body.run_id !== "string" || !body.run_id) {
       return Response.json({ error: "run_id must be a non-empty string" }, { status: 400 });
     }
     if (!Array.isArray(body.events)) {
       return Response.json({ error: "events must be an array" }, { status: 400 });
     }
-    const bad = body.events.findIndex(
-      (e) => !e || typeof e !== "object" || typeof (e as ToolEvent).event_id !== "string",
-    );
+    const bad = body.events.findIndex((e) => {
+      if (!e || typeof e !== "object" || Array.isArray(e)) return true;
+      const rec = e as { event_id?: unknown; name?: unknown };
+      return typeof rec.event_id !== "string" && typeof rec.name !== "string";
+    });
     if (bad >= 0) {
-      return Response.json({ error: `events[${bad}] must be an object with a string event_id` }, { status: 400 });
+      return Response.json({ error: `events[${bad}] must be an object with a string event_id or name` }, { status: 400 });
     }
-    // Redact credential-shaped values at the boundary. Clients vary — hooks
-    // redact locally, SDKs may not — so the plane itself is the guarantee
-    // that secrets never persist.
-    const cleanEvents = (body.events as ToolEvent[]).map((e) => ({
+    const cleanEvents = (body.events as ToolEvent[]).map((e, i) => ({
       ...e,
+      event_id: typeof e.event_id === "string" && e.event_id ? e.event_id : `${body.run_id}-${i}`,
       ...(e.args !== undefined ? { args: redact(e.args) as Record<string, unknown> } : {}),
       ...(e.result !== undefined ? { result: redact(e.result) } : {}),
       ...(typeof (e as { command?: string }).command === "string"
         ? { command: redact((e as { command: string }).command) }
         : {}),
     })) as ToolEvent[];
-    const result = await ingest(
-      d,
-      wsId,
-      body.run_id,
-      cleanEvents,
-      Boolean(body.stretch_end),
+    const stretchEnd = Boolean(body.stretch_end);
+    const oneShot = !stretchEnd && cleanEvents.length >= 2;
+    const fallback = { drafts: 0, islands: 0, stored: cleanEvents.length };
+    let result = fallback;
+    try {
+      result = await Promise.race([
+        ingest(d, wsId, body.run_id, cleanEvents, stretchEnd || oneShot),
+        new Promise<typeof fallback>((resolve) => setTimeout(() => resolve(fallback), 8_000)),
+      ]);
+    } catch {
+      result = fallback;
+    }
+    const sealed = stretchEnd || oneShot;
+    const accepted = sealed && (cleanEvents.length > 0 || Number(result.stored) > 0) ? 1 : 0;
+    return Response.json(
+      { ok: true, accepted, drafts: result.drafts ?? 0, islands: result.islands ?? 0 },
+      { status: 202, headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
     );
-    return Response.json(result, { status: 202 });
   }
 
   // Bulk import from observability exports. Accepts raw file content, sniffs
@@ -1025,44 +1235,88 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
     return handleWebhook(d, req);
   }
 
+  if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
+    if (!wsId) return unauthorizedJson();
+    let programs: ReturnType<typeof toolRowToProgram>[] = [];
+    try {
+      programs = (await liveOnTools(d, wsId)).map(toolRowToProgram);
+    } catch {
+      programs = [];
+    }
+    return handleChatCompletions(req, {
+      state: siteWrapState,
+      upstream: process.env.OPENAI_API_BASE || "https://api.openai.com/v1",
+      upstreamKey: process.env.OPENAI_API_KEY,
+      getPrograms: () => programs,
+      play: async (name, args) => {
+        const tool = await findOnTool(d, wsId, name);
+        if (!tool || !toolHasPlayback(tool)) return null;
+        const strArgs: Record<string, string> = {};
+        for (const [k, v] of Object.entries(args)) {
+          if (v == null) continue;
+          strArgs[k] = typeof v === "string" ? v : String(v);
+        }
+        const played = await wrapPlay(d, wsId, tool, strArgs, origin);
+        return played.facts;
+      },
+    });
+  }
+
   if (url.pathname === "/v1/wrap" && req.method === "POST") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    if (!wsId) return unauthorizedJson();
     const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
-    const body = parsed.value as { name?: unknown; args?: unknown; run_id?: unknown };
+    const body = parsed.value as { name?: unknown; args?: unknown; input?: unknown; arguments?: unknown; run_id?: unknown };
     if (typeof body.name !== "string" || !body.name) {
       return Response.json({ error: "name must be a non-empty string" }, { status: 400 });
     }
-    if (body.args != null && (typeof body.args !== "object" || Array.isArray(body.args))) {
+    let rawArgs: unknown = body.args ?? body.input ?? body.arguments;
+    if (typeof rawArgs === "string") {
+      try {
+        rawArgs = JSON.parse(rawArgs) as unknown;
+      } catch {
+        return Response.json({ error: "args must be an object" }, { status: 400 });
+      }
+    }
+    if (rawArgs != null && (typeof rawArgs !== "object" || Array.isArray(rawArgs))) {
       return Response.json({ error: "args must be an object" }, { status: 400 });
     }
     if (body.run_id != null && typeof body.run_id !== "string") {
       return Response.json({ error: "run_id must be a string" }, { status: 400 });
     }
     const tool = await findOnTool(d, wsId, body.name);
-    if (!tool || !toolHasPlayback(tool)) return Response.json({ action: "original" });
+    const proto = { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) };
+    if (!tool || !toolHasPlayback(tool)) return Response.json({ action: "original" }, { headers: proto });
     const runId = typeof body.run_id === "string" ? body.run_id : undefined;
     let played;
     try {
-      played = await wrapPlay(d, wsId, tool, (body.args ?? {}) as Record<string, string>, origin, runId);
-    } catch (err) {
-      return Response.json({ error: `tool execution failed: ${(err as Error).message}` }, { status: 500 });
+      played = await wrapPlay(d, wsId, tool, (rawArgs ?? {}) as Record<string, string>, origin, runId);
+    } catch {
+      // Fail-open: a broken play never 500s the agent. Same contract as local wrap.
+      return Response.json({ action: "original" }, { headers: proto });
     }
-    return Response.json(played);
+    return Response.json(played, { headers: proto });
+  }
+
+  if ((url.pathname === "/v1" || url.pathname === "/v1/" || url.pathname === "/v1/openapi.json") && req.method === "GET") {
+    if (!wsId) return unauthorizedJson();
+    return Response.json(AGENT_OPENAPI, {
+      headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) },
+    });
   }
 
   if (url.pathname === "/v1/dispatch" && req.method === "POST") {
-    if (!wsId) return new Response("unauthorized", { status: 401 });
+    if (!wsId) return unauthorizedJson();
     const parsed = readJsonObject(await readJson(req));
     if (!parsed.ok) return parsed.res;
     let tools: unknown[] = [];
     try {
-      tools = dispatchResult(await liveTools(d, wsId), parsed.value as Record<string, unknown>).tools;
+      tools = wrapDispatchResult(await liveOnTools(d, wsId), parsed.value as Record<string, unknown>).tools;
     } catch {
       tools = [];
     }
     if (tools.length > 1) tools = tools.slice(0, 1);
-    return Response.json({ tools });
+    return Response.json({ tools }, { headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } });
   }
 
   if (url.pathname === "/mcp") {
@@ -1096,6 +1350,13 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
     return Response.json(out);
   }
 
+  if (url.pathname.startsWith("/v1/") || url.pathname === "/v1") {
+    if (!wsId) return unauthorizedJson();
+    return Response.json(
+      { error: "not found" },
+      { status: 404, headers: { [PROTOCOL_HEADER]: String(EDEN_PROTOCOL_VERSION) } },
+    );
+  }
   return new Response("not found", { status: 404 });
 }
 

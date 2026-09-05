@@ -1,5 +1,5 @@
-import type { StretchTrace } from "./types";
-import { REFUSAL_LABELS, refusalStatus, type Refusal } from "./refusal";
+import type { StretchTrace, Refusal } from "./types";
+import { REFUSAL_LABELS, refusalStatus } from "./refusal";
 
 /** Campaign-named causes for “why didn’t anything compile?” — not per-candidate IR refusals. */
 export const HONESTY_CODES = [

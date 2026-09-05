@@ -8,11 +8,13 @@ export const EDEN_PROTOCOL_VERSION = 1;
 export type Opts = { baseUrl?: string; apiKey?: string; runId?: string };
 
 function cfg(opts?: Opts) {
+  const base = opts?.baseUrl || process.env.EDEN_BASE_URL || "http://127.0.0.1:8788";
+  const hosted = !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(base);
   return {
     // The wrap plane (`eden wrap`) defaults to 8788. 8787 is the dashboard —
     // pointing here sent SDK traffic at a UI server.
-    base: opts?.baseUrl || process.env.EDEN_BASE_URL || "http://127.0.0.1:8788",
-    key: opts?.apiKey || process.env.EDEN_API_KEY || "eden_dev",
+    base,
+    key: opts?.apiKey || process.env.EDEN_API_KEY || (hosted ? "" : "eden_dev"),
   };
 }
 
@@ -120,6 +122,25 @@ export class Eden {
   }
   runTool(name: string, args: Record<string, unknown>, original: Original) {
     return runTool(name, args, original, this.opts);
+  }
+  /**
+   * World fact for this turn. Lazy: does not load the graph until called.
+   * Fail-open `{ unknown: true }`. Not a model-picked tool.
+   */
+  async know(query: string): Promise<{ fact: string; confidence?: number } | { unknown: true }> {
+    try {
+      // Specifier is a variable so bun does not auto-install Know at load time.
+      // resolve() probes node_modules only; a missing package must not hit the registry.
+      const spec = "@eden/know";
+      const { createRequire } = await import("node:module");
+      createRequire(import.meta.url).resolve(spec);
+      const { knowQuery } = (await import(spec)) as {
+        knowQuery: (q: string) => Promise<{ fact: string; confidence?: number } | { unknown: true }>;
+      };
+      return knowQuery(query);
+    } catch {
+      return { unknown: true };
+    }
   }
   end() {
     return endStretch(this.opts.runId!, this.opts);

@@ -74,14 +74,10 @@
       },
     },
     "packages/cli": {
-      "name": "eden",
+      "name": "@kaiavn/eden",
       "version": "0.1.0",
       "bin": {
         "eden": "./dist/eden.js",
-      },
-      "dependencies": {
-        "@eden/know": "workspace:*",
-        "@eden/measure": "workspace:*",
       },
     },
     "packages/compile": {
@@ -104,6 +100,9 @@
     "packages/know": {
       "name": "@eden/know",
       "version": "0.1.0",
+      "bin": {
+        "eden-know": "./src/cli.ts",
+      },
     },
     "packages/measure": {
       "name": "@eden/measure",
@@ -121,7 +120,7 @@
       },
     },
     "packages/sdk-js": {
-      "name": "@eden/sdk",
+      "name": "@kaiavn/sdk",
       "version": "0.1.0",
     },
     "packages/shadow": {
@@ -138,6 +137,7 @@
       "dependencies": {
         "@eden/compile": "workspace:*",
         "@eden/ir": "workspace:*",
+        "@eden/know": "workspace:*",
         "@eden/measure": "workspace:*",
         "@eden/runtime": "workspace:*",
       },
@@ -167,8 +167,6 @@
     "@eden/measure": ["@eden/measure@workspace:packages/measure"],
 
     "@eden/runtime": ["@eden/runtime@workspace:packages/runtime"],
-
-    "@eden/sdk": ["@eden/sdk@workspace:packages/sdk-js"],
 
     "@eden/shadow": ["@eden/shadow@workspace:packages/shadow"],
 
@@ -230,6 +228,10 @@
 
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.34.5", "", { "os": "win32", "cpu": "x64" }, "sha512-+29YMsqY2/9eFEiW93eqWnuLcWcufowXewwSNIT6UwZdUUCrM3oFjMWH/Z6/TMmb4hlFenmfAVbpWeup2jryCw=="],
 
+    "@kaiavn/eden": ["@kaiavn/eden@workspace:packages/cli"],
+
+    "@kaiavn/sdk": ["@kaiavn/sdk@workspace:packages/sdk-js"],
+
     "@neondatabase/serverless": ["@neondatabase/serverless@1.1.0", "", {}, "sha512-r3ZZhRjEcfEdKIZnoB1RusNgvHuaBRqfCzV4Gi+5A9yUX0S4HTws/ASWqt13wL4y4I+0rqsWGdA2w7EQXHi3+Q=="],
 
     "@next/env": ["@next/env@15.5.23", "", {}, "sha512-Mv3Z9hVbFcPnoLevsZ6rnX1TBtyHb5E17yN7HTPDXSXxeNsGBjUFrdbjRXKKXIOhfth7/cg6Ay7PZ2UFawaWsQ=="],
@@ -275,8 +277,6 @@
     "dequal": ["dequal@2.0.3", "", {}, "sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA=="],
 
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
-
-    "eden": ["eden@workspace:packages/cli"],
 
     "fast-sha256": ["fast-sha256@1.3.0", "", {}, "sha512-n11RGP/lrWEFI/bWdygLxhI+pVeo1ZYIVwvvPkW7azl/rOy+F3HYRZ2K5zeE9mmkhQppyv9sQFx0JM9UabnpPQ=="],
 

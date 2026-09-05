@@ -123,7 +123,10 @@ describe("ingest scale", () => {
     expect(loop).toContain("fetchRobots");
     expect(loop).toContain("skipGather(WIKIDATA_SPARQL_URL");
     expect(loop.includes("due(WIKIDATA_SPARQL_URL) ? gather")).toBe(false);
-    expect(loop).toContain("await Promise.all([");
+    expect(loop).toContain("wetLane");
+    expect(loop.indexOf("const wetLane = Promise.all")).toBeGreaterThan(0);
+    expect(loop.indexOf("const wetLane")).toBeLessThan(loop.indexOf("await tickLive"));
+    expect(loop.indexOf("await wetLane")).toBeGreaterThan(loop.indexOf("await tickLive"));
     expect(loop).toContain("collectCdx(store");
     expect(loop).toContain("collectCcSlice");
     expect(loop).toContain("collectNewsRecords");

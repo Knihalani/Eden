@@ -3,6 +3,7 @@ import { wetHeaderSkip } from "./cc";
 import { EDENBOT } from "./ua";
 import { pushWarcBytes, type WetRecord } from "./warc";
 import { httpBody } from "./extract";
+import { GITHUB_HOST_NEEDLES } from "./tools";
 
 const IDX = "https://index.commoncrawl.org/";
 const CC = "https://data.commoncrawl.org/";
@@ -153,23 +154,35 @@ export async function rangeWarc(hit: CdxHit): Promise<WetRecord | undefined> {
 }
 
 export const CDX_HOSTS = [
+  "reddit.com",
+  "old.reddit.com",
+  "stackoverflow.com",
+  "unix.stackexchange.com",
+  "superuser.com",
+  "serverfault.com",
+  "askubuntu.com",
+  "news.ycombinator.com",
+  "lobste.rs",
+  "dev.to",
+  "users.rust-lang.org",
+  "discuss.python.org",
+  "discourse.nixos.org",
+  ...GITHUB_HOST_NEEDLES.filter((n) => n.startsWith("github.com")),
+  "docs.python.org",
+  "doc.rust-lang.org",
+  "go.dev",
+  "bun.sh",
+  "kubernetes.io",
+  "developer.mozilla.org",
+  "git-scm.com",
+  "docs.docker.com",
+  "docs.github.com",
+  "nodejs.org",
   "rfc-editor.org",
   "www.rfc-editor.org",
   "w3.org",
-  "en.wikipedia.org",
-  "wikipedia.org",
-  "arxiv.org",
-  "export.arxiv.org",
-  "pubmed.ncbi.nlm.nih.gov",
-  "www.ncbi.nlm.nih.gov",
-  "pmc.ncbi.nlm.nih.gov",
-  "docs.python.org",
   "ietf.org",
   "tools.ietf.org",
-  "openalex.org",
-  "doaj.org",
-  "www.semanticscholar.org",
-  "en.wiktionary.org",
-  "en.wikibooks.org",
-  "en.wikisource.org",
+  "arxiv.org",
+  "export.arxiv.org",
 ];

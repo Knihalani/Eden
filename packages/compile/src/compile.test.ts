@@ -236,6 +236,135 @@ describe("compile", () => {
     expect(tmpl && tmpl.kind === "transform" && tmpl.expr).toBe("hello {id}");
   });
 
+  test("templates bind nested JSON object bodies from input", () => {
+    const traces: StretchTrace[] = [
+      {
+        id: "a",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-0", email: "u0@co.com", name: "User 0" },
+        events: [],
+      },
+      {
+        id: "b",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-1", email: "u1@co.com", name: "User 1" },
+        events: [],
+      },
+    ];
+    const tmpl = tryTemplateForTest(
+      [
+        { user: { email: "u0@co.com", name: "User 0" }, orgId: "org-0" },
+        { user: { email: "u1@co.com", name: "User 1" }, orgId: "org-1" },
+      ],
+      traces,
+      [],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr.trim().startsWith("{")).toBe(true);
+      expect(tmpl.expr).toContain("{email}");
+      expect(tmpl.expr).toContain("{orgId}");
+    }
+  });
+
+  test("templates bind quoted SQL tokens when the token is 'value' not value", () => {
+    const traces: StretchTrace[] = [
+      { id: "a", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { report: "R-1" }, events: [] },
+      { id: "b", llmCalls: 1, duration_ms: 1, cost_cents: 1, input: { report: "R-2" }, events: [] },
+    ];
+    const tmpl = tryTemplateForTest(
+      ["SELECT * FROM events WHERE report = 'R-1'", "SELECT * FROM events WHERE report = 'R-2'"],
+      traces,
+      [],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr).toContain("{report}");
+      expect(tmpl.expr).toContain("'");
+      expect(tmpl.expr).not.toContain("R-1");
+    }
+  });
+
+  test("templates bind nested object bodies whose name is assembled from email", () => {
+    const traces: StretchTrace[] = [
+      {
+        id: "a",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-relay", email: "ada@horizon.example" },
+        events: [],
+      },
+      {
+        id: "b",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { orgId: "org-globex", email: "ben@horizon.example" },
+        events: [],
+      },
+    ];
+    const tmpl = tryTemplateForTest(
+      [
+        { user: { email: "ada@horizon.example", name: "User ada@horizon.example" }, orgId: "org-relay" },
+        { user: { email: "ben@horizon.example", name: "User ben@horizon.example" }, orgId: "org-globex" },
+      ],
+      traces,
+      [],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr.trim().startsWith("{")).toBe(true);
+      expect(tmpl.expr).toContain("{email}");
+      expect(tmpl.expr).toContain("{orgId}");
+      expect(tmpl.expr).toContain("User {email}");
+    }
+  });
+
+  test("templates bind mixed JSON from input email plus one prior orgId", () => {
+    const traces: StretchTrace[] = [
+      {
+        id: "a",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { email: "u0@co.com" },
+        events: [{ name: "getOrg", args: { email: "u0@co.com" }, result: { orgId: "org-0", plan: "pro" }, ok: true }],
+      },
+      {
+        id: "b",
+        llmCalls: 1,
+        duration_ms: 1,
+        cost_cents: 1,
+        input: { email: "u1@co.com" },
+        events: [{ name: "getOrg", args: { email: "u1@co.com" }, result: { orgId: "org-1", plan: "pro" }, ok: true }],
+      },
+    ];
+    const tmpl = tryTemplateForTest(
+      [
+        { user: { email: "u0@co.com", name: "User u0@co.com" }, orgId: "org-0" },
+        { user: { email: "u1@co.com", name: "User u1@co.com" }, orgId: "org-1" },
+      ],
+      traces,
+      ["getOrg"],
+    );
+    expect(tmpl?.kind).toBe("transform");
+    if (tmpl && tmpl.kind === "transform") {
+      expect(tmpl.fn).toBe("template");
+      expect(tmpl.expr.trim().startsWith("{")).toBe(true);
+      expect(tmpl.expr).toContain("{email}");
+      expect(tmpl.expr).toContain("{orgId}");
+      expect(tmpl.of).toEqual({ kind: "from", step: "getOrg", path: "" });
+    }
+  });
+
   test("envelope treats key-reordered objects as one witness", () => {
     const traces: StretchTrace[] = Array.from({ length: 3 }, (_, i) => ({
       id: `e${i}`,
@@ -764,5 +893,59 @@ describe("failure-cluster name decoration (H2)", () => {
     // The emitted sequence carries DECORATED names (alignable), while the
     // steps call the registry's real tool.
     expect(withShell.some((p) => (p.sequence ?? []).some((n) => n.startsWith("Bash:kubectl.")))).toBe(true);
+  });
+});
+
+describe("map-reduce after foreach", () => {
+  test("refuses an unbound merge after a bound foreach — fail closed", () => {
+    const traces: StretchTrace[] = Array.from({ length: 4 }, (_, i) => {
+      const rows = [
+        { id: `r${i}-0` },
+        { id: `r${i}-1` },
+        { id: `r${i}-2` },
+      ];
+      return {
+        id: `u${i}`,
+        llmCalls: 5,
+        duration_ms: 40,
+        cost_cents: 5,
+        complete: true,
+        input: { batch: `B${i}` },
+        output: { merged: true },
+        events: [
+          { name: "listRows", args: { batch: `B${i}` }, result: { rows }, ok: true },
+          ...rows.map((r) => ({ name: "mapRow", args: { id: r.id }, result: { id: r.id, out: `m-${r.id}` }, ok: true })),
+          { name: "writeRows", args: { dest: `OTHER-${i}` }, result: { merged: true }, ok: true },
+        ],
+      };
+    });
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs.filter((p) => p.steps.some((s) => s.kind === "tool" && s.tool === "writeRows"))).toEqual([]);
+    expect(refusals.some((r) => r.code === "underdetermined_write")).toBe(true);
+  });
+
+  test("n>32: a write bind that holds on the first 32 witnesses but not the tail still refuses", () => {
+    const traces: StretchTrace[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `tail-${i}`,
+      llmCalls: 3,
+      duration_ms: 20,
+      cost_cents: 3,
+      complete: true,
+      input: { id: `I-${i}` },
+      output: { ok: true },
+      events: [
+        { name: "lookup", args: { id: `I-${i}` }, result: { id: `I-${i}` }, ok: true },
+        { name: "fetchDetails", args: { id: `I-${i}` }, result: { id: `I-${i}` }, ok: true },
+        {
+          name: "writeRecord",
+          args: { dest: i < 32 ? `I-${i}` : `OTHER-${i}` },
+          result: { ok: true },
+          ok: true,
+        },
+      ],
+    }));
+    const { programs, refusals } = compileTraces(traces);
+    expect(programs.filter((p) => p.steps.some((s) => s.kind === "tool" && s.tool === "writeRecord"))).toEqual([]);
+    expect(refusals.some((r) => r.code === "underdetermined_write")).toBe(true);
   });
 });

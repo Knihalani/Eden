@@ -78,6 +78,28 @@ describe("request validation", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error?: string };
     expect(body.error).toContain("events[1]");
+    expect(body.error).toMatch(/event_id|name/);
+  });
+
+  test("stretch_end with named events is accepted 1 even when nothing compiles", async () => {
+    const res = await siteFetch(
+      new Request("http://127.0.0.1/v1/ingest", {
+        method: "POST",
+        headers: AUTH,
+        body: JSON.stringify({
+          run_id: "judge-1",
+          stretch_end: true,
+          events: [{ name: "lookupTicket", args: { id: "T-100" }, ok: true }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { ok?: boolean; accepted?: number; drafts?: number };
+    expect(body.ok).toBe(true);
+    expect(body.accepted).toBe(1);
+    const health = await siteFetch(new Request("http://127.0.0.1/health", { headers: AUTH }));
+    const h = (await health.json()) as { traces?: number };
+    expect(h.traces).toBeGreaterThanOrEqual(1);
   });
 
   test("missing run_id is 400", async () => {
@@ -112,6 +134,18 @@ describe("request validation", () => {
       new Request("http://127.0.0.1/v1/play", { method: "POST", headers: AUTH, body: JSON.stringify({ name: "nope" }) }),
     );
     expect(unknown.status).toBe(404);
+  });
+});
+
+describe("unknown /v1 is JSON, same contract as local wrap", () => {
+  test("keyed unknown route is 404 JSON with protocol header", async () => {
+    const { PROTOCOL_HEADER, EDEN_PROTOCOL_VERSION } = await import("@eden/ir");
+    const keyed = await siteFetch(
+      new Request("http://127.0.0.1/v1/no-such-route", { headers: { authorization: "Bearer eden_dev" } }),
+    );
+    expect(keyed.status).toBe(404);
+    expect(await keyed.json()).toEqual({ error: "not found" });
+    expect(keyed.headers.get(PROTOCOL_HEADER)).toBe(String(EDEN_PROTOCOL_VERSION));
   });
 });
 

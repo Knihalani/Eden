@@ -69,6 +69,7 @@ describe("setup hookd", () => {
     expect(sitePlaneUrl("http://127.0.0.1:8788")).toBe("http://127.0.0.1:8787");
     expect(wrapPlaneUrl("https://wrap.example.com")).toBe("https://wrap.example.com");
     expect(wrapMcpServer("/abs/cli.ts")).toEqual({ command: "bun", args: ["/abs/cli.ts", "mcp"] });
+    expect(setup.installedCliPath()).toMatch(/cli\.ts|eden\.js|\/eden$/);
   });
 });
 

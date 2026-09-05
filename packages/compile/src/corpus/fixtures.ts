@@ -19,12 +19,36 @@ export type CorpusExpect =
       loopOverPath?: string;
       /** String values that must appear in the program envelope (flattened). */
       envelopeHas?: string[];
+      /** Envelope input keys that must all be present (two-key tenant, …). */
+      envelopeKeys?: string[];
       /** String values that must not appear — the pin a poison check can fail. */
       envelopeNot?: string[];
+      /** Foreach body tool args that must bind from the loop item. */
+      loopArgKeys?: string[];
+      /** A step after a foreach whose arg binds from the loop's collected results. */
+      bindFromLoop?: { tool: string; arg: string };
+      /** Foreach `over` is a flatten of page arrays (cursor walk). */
+      loopOverFlatten?: boolean;
+      /** Foreach `over` is a filter transform. */
+      loopOverFilter?: boolean;
+      /** Foreach `over` is a zip of two prior arrays. */
+      loopOverZip?: boolean;
+      /** Foreach `over` is a chunk transform. */
+      loopOverChunk?: boolean;
+      /** Foreach `over` is a group-by transform. */
+      loopOverGroup?: boolean;
+      /** Foreach `over` is a slice of a prior array. */
+      loopOverSlice?: boolean;
+      /** Foreach body has a lookup transform arg (join). */
+      loopArgLookup?: boolean;
+      /** Poll loop with `until` on the last body result. */
+      hasUntil?: boolean;
       /** Child program count on a composed handoff parent (Wave 7.3). */
       composedOf?: number;
       originMode?: "handoff";
       manifestNull?: boolean;
+      /** Exact compiled program count — optional-middle must not mint a sibling. */
+      programCount?: number;
     }
   | {
       kind: "refusal";
@@ -32,6 +56,10 @@ export type CorpusExpect =
       reasonIncludes?: string[];
       readSet?: number;
       repeats?: number;
+    }
+  | {
+      /** Unique-work: nothing repeats, so compileTraces returns no program and no refusal. */
+      kind: "empty";
     };
 
 export type CorpusFixture = {
@@ -251,7 +279,7 @@ export const CORPUS: CorpusFixture[] = [
     },
   },
   {
-    name: "pagination-cursor-refuse",
+    name: "pagination-cursor-pages",
     traces: nTraces(3, (i) => [
       { name: "listPage", args: { cursor: null, batch: `C${i}` }, result: { items: ["P-a", "P-b"], nextCursor: "1" }, ok: true },
       { name: "listPage", args: { cursor: "1", batch: `C${i}` }, result: { items: ["P-c", "P-d"], nextCursor: "2" }, ok: true },
@@ -262,7 +290,32 @@ export const CORPUS: CorpusFixture[] = [
       ]),
       { name: "sealBatch", args: { batch: `C${i}` }, result: { sealed: true }, ok: true },
     ], { input: { batch: "C" } }),
-    expect: { kind: "refusal", code: "unbound_foreach", reasonIncludes: ["listPage", "without a bindable foreach"] },
+    expect: { kind: "program", hasLoop: true, hasUntil: true, loopOverFlatten: true },
+  },
+  {
+    name: "pagination-offset-pages",
+    traces: nTraces(3, (i) => [
+      { name: "listPage", args: { page: 0, q: `Q${i}` }, result: { items: ["O-a", "O-b"], nextPage: 1, page: 0 }, ok: true },
+      { name: "listPage", args: { page: 1, q: `Q${i}` }, result: { items: ["O-c", "O-d"], nextPage: 2, page: 1 }, ok: true },
+      { name: "listPage", args: { page: 2, q: `Q${i}` }, result: { items: ["O-e"], nextPage: null, page: 2 }, ok: true },
+      ...["O-a", "O-b", "O-c", "O-d", "O-e"].map((id) => (
+        { name: "indexDoc", args: { id }, result: { indexed: true, id }, ok: true }
+      )),
+      { name: "flushIndex", args: { q: `Q${i}` }, result: { flushed: true }, ok: true },
+    ], (i) => ({ input: { q: `Q${i}` } })),
+    expect: { kind: "program", hasLoop: true, hasUntil: true, loopOverFlatten: true },
+  },
+  {
+    name: "pagination-random-pages-refuse",
+    traces: nTraces(3, (i) => [
+      { name: "listPage", args: { cursor: "2", batch: `C${i}` }, result: { items: ["P-e", "P-f"], nextCursor: "0" }, ok: true },
+      { name: "listPage", args: { cursor: "0", batch: `C${i}` }, result: { items: ["P-a", "P-b"], nextCursor: "1" }, ok: true },
+      { name: "listPage", args: { cursor: "1", batch: `C${i}` }, result: { items: ["P-c", "P-d"], nextCursor: null }, ok: true },
+      ...["P-a", "P-b", "P-c", "P-d", "P-e", "P-f"].map((id) => (
+        { name: "writeItem", args: { id }, result: { written: true, id }, ok: true }
+      )),
+    ], { input: { batch: "C" } }),
+    expect: { kind: "refusal", code: "unbound_foreach", reasonIncludes: ["listPage"] },
   },
   {
     name: "pagination-bindable-foreach",
@@ -283,9 +336,9 @@ export const CORPUS: CorpusFixture[] = [
     name: "read-set-mismatch",
     traces: nTraces(3, (i) => {
       const hits = Array.from({ length: 12 }, (_, j) => `src/m${j}/impl.ts`);
-      const read = hits.slice(0, 6);
+      const read = [1, 3, 5, 7, 9, 11].map((j) => hits[j]!);
       return [
-        { name: "grepCode", args: { pattern: `p${i}` }, result: { hits, more: hits.slice(6) }, ok: true },
+        { name: "grepCode", args: { pattern: `p${i}` }, result: { hits }, ok: true },
         ...read.map((path) => ({ name: "readFile", args: { path }, result: { path, lines: ["ok"] }, ok: true })),
         { name: "writeNotes", args: { topic: `p${i}` }, result: { notesWritten: true }, ok: true },
       ];
@@ -322,6 +375,524 @@ export const CORPUS: CorpusFixture[] = [
     name: "handoff-intake-billing",
     traces: intakeBillingHandoffTraces(3),
     expect: { kind: "program", composedOf: 2, originMode: "handoff", manifestNull: true },
+  },
+  {
+    name: "crm-pipeline",
+    traces: nTraces(4, (i) => {
+      const lead = `L-${i}`;
+      return [
+        { name: "getLead", args: { leadId: lead }, result: { leadId: lead, email: `a${i}@co.com`, company: `Co${i}` }, ok: true },
+        { name: "enrichCompany", args: { company: `Co${i}` }, result: { company: `Co${i}`, domain: `co${i}.com` }, ok: true },
+        { name: "createDeal", args: { leadId: lead, company: `Co${i}` }, result: { dealId: `D-${i}` }, ok: true },
+        { name: "assignOwner", args: { dealId: `D-${i}`, owner: "ae-7" }, result: { assigned: true }, ok: true },
+        { name: "notifySlack", args: { dealId: `D-${i}` }, result: { posted: true }, ok: true },
+      ];
+    }, (i) => ({ input: { leadId: `L-${i}` } })),
+    expect: { kind: "program", seqLen: 5, toolsNotIslands: ["getLead", "createDeal"] },
+  },
+  {
+    name: "calendar-rsvp",
+    traces: nTraces(4, (i) => {
+      const when = `2026-09-0${i + 1}T15:00:00Z`;
+      return [
+        { name: "listBusy", args: { cal: "team", day: when.slice(0, 10) }, result: { busy: [] }, ok: true },
+        { name: "createEvent", args: { title: "standup", when }, result: { eventId: `E-${i}`, when }, ok: true },
+        { name: "sendInvite", args: { eventId: `E-${i}`, to: "eng@" }, result: { sent: true }, ok: true },
+        { name: "addReminder", args: { eventId: `E-${i}`, minutes: 10 }, result: { reminded: true }, ok: true },
+      ];
+    }, (i) => ({ input: { when: `2026-09-0${i + 1}T15:00:00Z`, title: "standup" } })),
+    expect: { kind: "program", minSeqLen: 4 },
+  },
+  {
+    name: "payments-nested-json",
+    traces: nTraces(4, (i) => {
+      const cid = `cus_${i}`;
+      return [
+        { name: "getCustomer", args: { email: `u${i}@x.com` }, result: { customer: { billing: { id: cid }, email: `u${i}@x.com` } }, ok: true },
+        { name: "createInvoice", args: { customerId: cid, cents: 1999 }, result: { invoiceId: `in_${i}`, customerId: cid }, ok: true },
+        { name: "createCharge", args: { invoiceId: `in_${i}`, customerId: cid }, result: { charged: true }, ok: true },
+        { name: "sendReceipt", args: { invoiceId: `in_${i}` }, result: { emailed: true }, ok: true },
+      ];
+    }, (i) => ({ input: { email: `u${i}@x.com` } })),
+    expect: { kind: "program", minSeqLen: 4 },
+  },
+  {
+    name: "two-phase-reserve-confirm",
+    traces: nTraces(4, (i) => {
+      const seat = `S-${i}`;
+      return [
+        { name: "lookupSeat", args: { seat }, result: { seat, free: true }, ok: true },
+        { name: "reserveSeat", args: { seat }, result: { reservationId: `R-${i}`, seat }, ok: true },
+        { name: "confirmSeat", args: { reservationId: `R-${i}` }, result: { confirmed: true }, ok: true },
+        { name: "emailGuest", args: { reservationId: `R-${i}` }, result: { emailed: true }, ok: true },
+      ];
+    }, (i) => ({ input: { seat: `S-${i}` } })),
+    expect: { kind: "program", minSeqLen: 4 },
+  },
+  {
+    name: "array-of-objects-foreach",
+    traces: nTraces(4, (i) => {
+      const items = [
+        { sku: `a${i}`, qty: 1 },
+        { sku: `b${i}`, qty: 2 },
+        { sku: `c${i}`, qty: 1 },
+      ];
+      return [
+        { name: "listCart", args: { cart: `CART-${i}` }, result: { items, cart: `CART-${i}` }, ok: true },
+        ...items.map((it) => ({ name: "reserveSku", args: { sku: it.sku }, result: { reserved: it.sku }, ok: true })),
+        { name: "checkoutCart", args: { cart: `CART-${i}` }, result: { paid: true }, ok: true },
+      ];
+    }, (i) => ({ input: { cart: `CART-${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverPath: "items" },
+  },
+  {
+    name: "unique-work-crm",
+    traces: [
+      {
+        id: "u0",
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        complete: true,
+        input: { id: "U-0" },
+        events: [
+          { name: "alpha", args: { id: "U-0" }, result: { ok: true }, ok: true },
+          { name: "bravo", args: { id: "U-0" }, result: { ok: true }, ok: true },
+          { name: "charlie", args: { id: "U-0" }, result: { ok: true }, ok: true },
+        ],
+      },
+      {
+        id: "u1",
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        complete: true,
+        input: { id: "U-1" },
+        events: [
+          { name: "delta", args: { id: "U-1" }, result: { ok: true }, ok: true },
+          { name: "echo", args: { id: "U-1" }, result: { ok: true }, ok: true },
+          { name: "foxtrot", args: { id: "U-1" }, result: { ok: true }, ok: true },
+        ],
+      },
+      {
+        id: "u2",
+        llmCalls: 3,
+        duration_ms: 30,
+        cost_cents: 3,
+        complete: true,
+        input: { id: "U-2" },
+        events: [
+          { name: "golf", args: { id: "U-2" }, result: { ok: true }, ok: true },
+          { name: "hotel", args: { id: "U-2" }, result: { ok: true }, ok: true },
+          { name: "india", args: { id: "U-2" }, result: { ok: true }, ok: true },
+        ],
+      },
+    ],
+    expect: { kind: "empty" },
+  },
+  {
+    name: "underdetermined-charge",
+    traces: nTraces(3, (i) => [
+      { name: "getCustomer", args: { email: `u${i}@x.com` }, result: { customerId: `cus_${i}` }, ok: true },
+      { name: "createCharge", args: { customerId: `OTHER_${i}`, cents: 500 }, result: { charged: true }, ok: true },
+      { name: "sendReceipt", args: { email: `u${i}@x.com` }, result: { emailed: true }, ok: true },
+    ], (i) => ({ input: { email: `u${i}@x.com` } })),
+    expect: { kind: "refusal", code: "underdetermined_write" },
+  },
+  {
+    name: "optional-enrich-majority",
+    traces: [
+      ...nTraces(4, (i) => [
+        { name: "getLead", args: { leadId: `L-${i}` }, result: { leadId: `L-${i}` }, ok: true },
+        { name: "enrichCompany", args: { leadId: `L-${i}` }, result: { domain: `c${i}.com` }, ok: true },
+        { name: "createDeal", args: { leadId: `L-${i}` }, result: { dealId: `D-${i}` }, ok: true },
+        { name: "notifySlack", args: { dealId: `D-${i}` }, result: { posted: true }, ok: true },
+      ], (i) => ({ input: { leadId: `L-${i}` } })),
+      ...nTraces(2, (i) => [
+        { name: "getLead", args: { leadId: `L-s${i}` }, result: { leadId: `L-s${i}` }, ok: true },
+        { name: "createDeal", args: { leadId: `L-s${i}` }, result: { dealId: `D-s${i}` }, ok: true },
+        { name: "notifySlack", args: { dealId: `D-s${i}` }, result: { posted: true }, ok: true },
+      ], (i) => ({ id: `skip${i}`, input: { leadId: `L-s${i}` } })),
+    ],
+    expect: { kind: "program", programCount: 1, toolsNotIslands: ["enrichCompany"] },
+  },
+  {
+    name: "two-key-tenant",
+    traces: nTraces(4, (i) => {
+      const orgId = `org-${i}`;
+      const plan = i % 2 === 0 ? "pro" : "team";
+      return [
+        { name: "getOrg", args: { orgId }, result: { orgId, name: orgId }, ok: true },
+        { name: "getPlan", args: { plan }, result: { plan, seats: 8 }, ok: true },
+        { name: "createSeat", args: { orgId, plan }, result: { granted: true, orgId, plan }, ok: true },
+      ];
+    }, (i) => ({ input: { orgId: `org-${i}`, plan: i % 2 === 0 ? "pro" : "team" } })),
+    expect: {
+      kind: "program",
+      minSeqLen: 3,
+      envelopeKeys: ["orgId", "plan"],
+      envelopeHas: ["org-0", "org-1", "pro", "team"],
+    },
+  },
+  {
+    name: "inventory-three-field",
+    traces: nTraces(4, (i) => {
+      const items = [
+        { sku: `sku-${i}-a`, qty: 2, warehouse: "east" },
+        { sku: `sku-${i}-b`, qty: 5, warehouse: "west" },
+        { sku: `sku-${i}-c`, qty: 3, warehouse: "east" },
+      ];
+      return [
+        { name: "listStock", args: { loc: `LOC-${i}` }, result: { items }, ok: true },
+        ...items.map((it) => ({
+          name: "insertStock",
+          args: { sku: it.sku, qty: it.qty, warehouse: it.warehouse },
+          result: { allocated: it.sku, qty: it.qty },
+          ok: true,
+        })),
+        { name: "commitStock", args: { loc: `LOC-${i}` }, result: { committed: true }, ok: true },
+      ];
+    }, (i) => ({ input: { loc: `LOC-${i}` } })),
+    expect: {
+      kind: "program",
+      hasLoop: true,
+      loopOverPath: "items",
+      loopArgKeys: ["sku", "qty", "warehouse"],
+    },
+  },
+  {
+    name: "map-reduce-merge",
+    traces: nTraces(4, (i) => {
+      const rows = [
+        { id: `r${i}-0`, src: `s${i}-0` },
+        { id: `r${i}-1`, src: `s${i}-1` },
+        { id: `r${i}-2`, src: `s${i}-2` },
+      ];
+      const mapped = rows.map((r) => ({ id: r.id, out: `m-${r.id}` }));
+      return [
+        { name: "listRows", args: { batch: `B${i}` }, result: { rows }, ok: true },
+        ...rows.map((r, j) => ({ name: "mapRow", args: { id: r.id }, result: mapped[j], ok: true })),
+        { name: "writeRows", args: { rows: mapped }, result: { merged: true, n: mapped.length }, ok: true },
+      ];
+    }, (i) => ({ input: { batch: `B${i}` } })),
+    expect: {
+      kind: "program",
+      hasLoop: true,
+      loopOverPath: "rows",
+      bindFromLoop: { tool: "writeRows", arg: "rows" },
+    },
+  },
+  {
+    name: "graphql-relay-edges",
+    traces: nTraces(4, (i) => {
+      const edges = [0, 1, 2].map((j) => ({
+        node: { id: `ISSUE-${i}-${j}`, title: `t-${i}-${j}`, number: j + 1 },
+      }));
+      return [
+        { name: "listIssues", args: { repo: `r-${i}` }, result: { edges }, ok: true },
+        ...edges.map((e) => ({
+          name: "updateIssue",
+          args: { id: e.node.id, title: e.node.title },
+          result: { id: e.node.id, updated: true },
+          ok: true,
+        })),
+        { name: "publishDigest", args: { repo: `r-${i}` }, result: { published: true }, ok: true },
+      ];
+    }, (i) => ({ input: { repo: `r-${i}` } })),
+    expect: {
+      kind: "program",
+      hasLoop: true,
+      loopOverPath: "edges",
+      loopArgKeys: ["id", "title"],
+    },
+  },
+  {
+    name: "json-post-sso",
+    traces: nTraces(4, (i) => {
+      const orgId = `org-${i}`;
+      const email = `u${i}@co.com`;
+      const name = `User ${i}`;
+      return [
+        { name: "getOrg", args: { orgId }, result: { orgId, name: `Org ${i}` }, ok: true },
+        {
+          name: "createUser",
+          args: { body: { user: { email, name }, orgId } },
+          result: { userId: `U-${i}` },
+          ok: true,
+        },
+        { name: "grantRole", args: { userId: `U-${i}`, role: "member" }, result: { granted: true }, ok: true },
+        { name: "sendInvite", args: { userId: `U-${i}`, email }, result: { sent: true }, ok: true },
+      ];
+    }, (i) => ({ input: { orgId: `org-${i}`, email: `u${i}@co.com`, name: `User ${i}` } })),
+    expect: {
+      kind: "program",
+      minSeqLen: 4,
+      envelopeHas: ["org-0", "u0@co.com"],
+    },
+  },
+  {
+    name: "search-topk-prefix",
+    traces: nTraces(4, (i) => {
+      const hits = Array.from({ length: 10 }, (_, j) => ({ id: `h${i}-${j}`, score: 10 - j }));
+      const top = hits.slice(0, 3);
+      return [
+        { name: "searchHits", args: { q: `q${i}` }, result: { hits }, ok: true },
+        ...top.map((h) => ({ name: "takeHit", args: { id: h.id }, result: { id: h.id, took: true }, ok: true })),
+        { name: "writeDigest", args: { q: `q${i}` }, result: { wrote: true }, ok: true },
+      ];
+    }, (i) => ({ input: { q: `q${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverSlice: true },
+  },
+  {
+    name: "search-random-subset",
+    traces: nTraces(4, (i) => {
+      const hits = Array.from({ length: 10 }, (_, j) => ({ id: `h${i}-${j}` }));
+      const picked = [hits[1], hits[4], hits[7]];
+      return [
+        { name: "searchHits", args: { q: `q${i}` }, result: { hits }, ok: true },
+        ...picked.map((h) => ({ name: "takeHit", args: { id: h!.id }, result: { took: true }, ok: true })),
+        { name: "writeDigest", args: { q: `q${i}` }, result: { wrote: true }, ok: true },
+      ];
+    }, (i) => ({ input: { q: `q${i}` } })),
+    expect: { kind: "refusal", code: "read_set_mismatch" },
+  },
+  {
+    name: "k8s-poll-ready",
+    traces: nTraces(4, (i) => {
+      const deploy = `d-${i}`;
+      return [
+        { name: "getRollout", args: { deploy }, result: { deploy, ready: false }, ok: true },
+        { name: "getRollout", args: { deploy }, result: { deploy, ready: false }, ok: true },
+        { name: "getRollout", args: { deploy }, result: { deploy, ready: true }, ok: true },
+        { name: "verifyRollout", args: { deploy }, result: { verified: true }, ok: true },
+      ];
+    }, (i) => ({ input: { deploy: `d-${i}` } })),
+    expect: { kind: "program", hasLoop: true, hasUntil: true },
+  },
+  {
+    name: "k8s-poll-never-ready",
+    traces: nTraces(3, (i) => {
+      const deploy = `d-${i}`;
+      return [
+        { name: "getRollout", args: { deploy }, result: { deploy, ready: false }, ok: true },
+        { name: "getRollout", args: { deploy }, result: { deploy, ready: false }, ok: true },
+        { name: "getRollout", args: { deploy }, result: { deploy, ready: false }, ok: true },
+        { name: "verifyRollout", args: { deploy }, result: { verified: true }, ok: true },
+      ];
+    }, (i) => ({ input: { deploy: `d-${i}` } })),
+    expect: { kind: "refusal", code: "unbound_foreach" },
+  },
+  {
+    name: "saga-hold-compensate",
+    traces: [
+      ...nTraces(3, (i) => [
+        { name: "getHold", args: { hold: `H-${i}` }, result: { state: "ok", hold: `H-${i}` }, ok: true },
+        { name: "captureFunds", args: { hold: `H-${i}` }, result: { captured: true }, ok: true },
+        { name: "notifyLedger", args: { hold: `H-${i}` }, result: { notified: true }, ok: true },
+      ], (i) => ({ input: { hold: `H-${i}` } })),
+      ...nTraces(3, (i) => [
+        { name: "getHold", args: { hold: `H-f${i}` }, result: { state: "fail", hold: `H-f${i}` }, ok: true },
+        { name: "cancelHold", args: { hold: `H-f${i}` }, result: { cancelled: true }, ok: true },
+        { name: "notifyLedger", args: { hold: `H-f${i}` }, result: { notified: true }, ok: true },
+      ], (i) => ({ id: `fail${i}`, input: { hold: `H-f${i}` } })),
+    ],
+    expect: { kind: "program", hasBranch: true },
+  },
+  {
+    name: "sentry-filter-level",
+    traces: nTraces(3, (i) => {
+      const events = [
+        { id: `e${i}-0`, level: "info" },
+        { id: `e${i}-1`, level: "error" },
+        { id: `e${i}-2`, level: "warn" },
+        { id: `e${i}-3`, level: "error" },
+        { id: `e${i}-4`, level: "debug" },
+      ];
+      const taken = events.filter((e) => e.level === "error");
+      return [
+        { name: "listEvents", args: { q: `svc-${i}` }, result: { events }, ok: true },
+        ...taken.map((e) => ({ name: "pageOncall", args: { id: e.id }, result: { paged: true, id: e.id }, ok: true })),
+        { name: "writeDigest", args: { q: `svc-${i}` }, result: { wrote: true }, ok: true },
+      ];
+    }, (i) => ({ input: { q: `svc-${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverFilter: true },
+  },
+  {
+    name: "hris-lookup-join",
+    traces: nTraces(3, (i) => {
+      const teams = [
+        { id: `t${i}-eng`, name: "Eng" },
+        { id: `t${i}-sales`, name: "Sales" },
+      ];
+      const people = [
+        { id: `p${i}-a`, deptId: teams[0]!.id },
+        { id: `p${i}-b`, deptId: teams[1]!.id },
+        { id: `p${i}-c`, deptId: teams[0]!.id },
+      ];
+      return [
+        { name: "listPeople", args: { org: `org-${i}` }, result: { people }, ok: true },
+        { name: "listTeams", args: { org: `org-${i}` }, result: { teams }, ok: true },
+        ...people.map((p) => {
+          const team = teams.find((t) => t.id === p.deptId)!;
+          return { name: "assignSeat", args: { person: p.id, teamName: team.name }, result: { assigned: true }, ok: true };
+        }),
+        { name: "ackHris", args: { org: `org-${i}` }, result: { ok: true }, ok: true },
+      ];
+    }, (i) => ({ input: { org: `org-${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopArgKeys: ["person"], loopArgLookup: true },
+  },
+  {
+    name: "oauth-token-carry",
+    traces: nTraces(4, (i) => {
+      const u = i % 2;
+      const token = `tok-${u}`;
+      return [
+        { name: "login", args: { user: `u${u}` }, result: { token, seq: 1000 + i * 17 }, ok: true },
+        { name: "getProfile", args: { token }, result: { user: `u${u}` }, ok: true },
+        { name: "getBilling", args: { token }, result: { plan: "pro" }, ok: true },
+        { name: "getUsage", args: { token }, result: { calls: 9 }, ok: true },
+        { name: "revokeToken", args: { token }, result: { revoked: true }, ok: true },
+      ];
+    }, (i) => ({ input: { user: `u${i % 2}` } })),
+    expect: { kind: "program", minSeqLen: 5, toolsNotIslands: ["login"] },
+  },
+  {
+    name: "transcode-chunk",
+    traces: nTraces(3, (i) => {
+      const files = Array.from({ length: 8 }, (_, j) => `f${i}-${j}.mov`);
+      const chunks = [files.slice(0, 4), files.slice(4, 8)];
+      return [
+        { name: "listAssets", args: { job: `job-${i}` }, result: { files }, ok: true },
+        ...chunks.map((items) => ({ name: "processBatch", args: { items }, result: { n: items.length }, ok: true })),
+        { name: "publishJob", args: { job: `job-${i}` }, result: { ok: true }, ok: true },
+      ];
+    }, (i) => ({ input: { job: `job-${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverChunk: true },
+  },
+  {
+    name: "catalog-zip",
+    traces: nTraces(3, (i) => {
+      const skus = [{ sku: `s${i}-a` }, { sku: `s${i}-b` }, { sku: `s${i}-c` }];
+      const prices = [{ cents: 100 + i }, { cents: 200 + i }, { cents: 300 + i }];
+      return [
+        { name: "listSkus", args: { cat: `c${i}` }, result: { skus }, ok: true },
+        { name: "listPrices", args: { cat: `c${i}` }, result: { prices }, ok: true },
+        ...skus.map((s, j) => ({
+          name: "setPrice",
+          args: { sku: s.sku, cents: prices[j]!.cents },
+          result: { ok: true },
+          ok: true,
+        })),
+        { name: "ackCatalog", args: { cat: `c${i}` }, result: { ok: true }, ok: true },
+      ];
+    }, (i) => ({ input: { cat: `c${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverZip: true, loopArgKeys: ["sku", "cents"] },
+  },
+  {
+    name: "cms-flatten-blocks",
+    traces: nTraces(3, (i) => {
+      const sections = [
+        { blocks: [{ id: `b${i}-0` }, { id: `b${i}-1` }] },
+        { blocks: [{ id: `b${i}-2` }] },
+      ];
+      const blocks = sections.flatMap((s) => s.blocks);
+      return [
+        { name: "listPage", args: { site: `s${i}` }, result: { sections }, ok: true },
+        ...blocks.map((b) => ({ name: "publishBlock", args: { id: b.id }, result: { ok: true, id: b.id }, ok: true })),
+        { name: "ackSite", args: { site: `s${i}` }, result: { ok: true }, ok: true },
+      ];
+    }, (i) => ({ input: { site: `s${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverFlatten: true },
+  },
+  {
+    name: "logs-group-by-level",
+    traces: nTraces(3, (i) => {
+      const events = [
+        { id: `e${i}-0`, level: "info" },
+        { id: `e${i}-1`, level: "error" },
+        { id: `e${i}-2`, level: "info" },
+        { id: `e${i}-3`, level: "error" },
+        { id: `e${i}-4`, level: "info" },
+        { id: `e${i}-5`, level: "error" },
+      ];
+      const groups = [
+        { items: events.filter((e) => e.level === "info") },
+        { items: events.filter((e) => e.level === "error") },
+      ];
+      return [
+        { name: "listLogs", args: { svc: `svc-${i}` }, result: { events }, ok: true },
+        ...groups.map((g) => ({
+          name: "flushLevel",
+          args: { items: g.items, level: g.items[0]!.level },
+          result: { flushed: true, n: g.items.length },
+          ok: true,
+        })),
+        { name: "ackLogs", args: { svc: `svc-${i}` }, result: { acked: true }, ok: true },
+      ];
+    }, (i) => ({ input: { svc: `svc-${i}` } })),
+    expect: { kind: "program", hasLoop: true, loopOverGroup: true, loopArgKeys: ["items", "level"] },
+  },
+  {
+    name: "unique-work-horizon",
+    traces: [
+      {
+        id: "h0",
+        llmCalls: 5,
+        duration_ms: 40,
+        cost_cents: 5,
+        complete: true,
+        input: { id: "H-0" },
+        events: [
+          { name: "scanInbox", args: { id: "H-0" }, result: { ok: true }, ok: true },
+          { name: "triageTicket", args: { id: "H-0" }, result: { ok: true }, ok: true },
+          { name: "pageOwner", args: { id: "H-0" }, result: { ok: true }, ok: true },
+          { name: "closeTicket", args: { id: "H-0" }, result: { ok: true }, ok: true },
+        ],
+      },
+      {
+        id: "h1",
+        llmCalls: 5,
+        duration_ms: 40,
+        cost_cents: 5,
+        complete: true,
+        input: { id: "H-1" },
+        events: [
+          { name: "pullMetrics", args: { id: "H-1" }, result: { ok: true }, ok: true },
+          { name: "plotChart", args: { id: "H-1" }, result: { ok: true }, ok: true },
+          { name: "writeMemo", args: { id: "H-1" }, result: { ok: true }, ok: true },
+          { name: "shareDeck", args: { id: "H-1" }, result: { ok: true }, ok: true },
+        ],
+      },
+      {
+        id: "h2",
+        llmCalls: 5,
+        duration_ms: 40,
+        cost_cents: 5,
+        complete: true,
+        input: { id: "H-2" },
+        events: [
+          { name: "cloneRepo", args: { id: "H-2" }, result: { ok: true }, ok: true },
+          { name: "runTests", args: { id: "H-2" }, result: { ok: true }, ok: true },
+          { name: "openPr", args: { id: "H-2" }, result: { ok: true }, ok: true },
+          { name: "mergePr", args: { id: "H-2" }, result: { ok: true }, ok: true },
+        ],
+      },
+      {
+        id: "h3",
+        llmCalls: 5,
+        duration_ms: 40,
+        cost_cents: 5,
+        complete: true,
+        input: { id: "H-3" },
+        events: [
+          { name: "bookRoom", args: { id: "H-3" }, result: { ok: true }, ok: true },
+          { name: "inviteGuests", args: { id: "H-3" }, result: { ok: true }, ok: true },
+          { name: "orderCatering", args: { id: "H-3" }, result: { ok: true }, ok: true },
+          { name: "sendAgenda", args: { id: "H-3" }, result: { ok: true }, ok: true },
+        ],
+      },
+    ],
+    expect: { kind: "empty" },
   },
 ];
 

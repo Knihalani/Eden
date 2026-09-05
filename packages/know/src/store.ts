@@ -19,12 +19,13 @@ import {
   zstdDecompressSync,
 } from "node:zlib";
 import type { Triple } from "./extract";
-import { canonicalUrl, hostOf, persistable } from "./extract";
+import { canonicalUrl, encyclopediaUrl, frozenEncyclopedia, hostOf, junkGraphFact, persistable } from "./extract";
 import { minhashBands } from "./minhash";
 import { allFacts, decodePack, encodePack, mergeFactLists, PACK_FILE, queryShapes, type KnowPack, type PackFact } from "./pack";
 import { catalogAliasKeys, indexTokens, queryTokens } from "./tokens";
 import { catalogSubject } from "./names";
 import { SEED_URLS } from "./seed";
+import { githubFrontierJunk, githubToolUrl, talkFrontierJunk, talkUrl, toolDocsUrl } from "./tools";
 
 /** Append-only ingest overlay. Query never opens this or sqlite. */
 export const JNL_FILE = "graph.jnl";
@@ -45,13 +46,12 @@ const JNL_SNAP5 = 5;
 const SEED_SET = new Set(SEED_URLS);
 const TTL_ENUM = [0, 7, 30, 365, 1825] as const;
 const FRONTIER_KEEP_HOST = /(?:^|\.)(rfc-editor|iana|ietf|httpwg|spdx|unicode|whatwg)\.org$/i;
-const WIKI_NS_SKIP = /\/wiki\/(?:File|Special|Help|Talk|User|Template|Wikipedia|Category|Portal|Draft|Module):/i;
 const FRONTIER_JUNK_PATH = /image-article|\bapod\b|\/blog\/|\/news-events\/|\/news-release\//i;
 
 /**
  * Paywall-adjacent CMS, APOD, and blog indexes do not belong on the packed
  * frontier. News article paths stay (1-day TTL). Catalog hosts stay: RFC,
- * IANA, IETF, W3C TR, SPDX, Unicode, WHATWG, Wikipedia.
+ * IANA, IETF, W3C TR, SPDX, Unicode, WHATWG. Encyclopedia wiki is junk.
  */
 export function junkFrontier(url: string): boolean {
   if (!url || SEED_SET.has(url)) return false;
@@ -64,12 +64,7 @@ export function junkFrontier(url: string): boolean {
     if (/\/news\//i.test(u)) return false;
     return !/\/tr\//i.test(u);
   }
-  if (host === "wikipedia.org" || host.endsWith(".wikipedia.org")) {
-    return !/\/wiki\//i.test(u) || WIKI_NS_SKIP.test(u);
-  }
-  if (host === "wikidata.org" || host.endsWith(".wikidata.org")) {
-    return !/\/wiki\//i.test(u);
-  }
+  if (encyclopediaUrl(url)) return true;
   if (
     host === "nist.gov" ||
     host.endsWith(".nist.gov") ||
@@ -80,6 +75,8 @@ export function junkFrontier(url: string): boolean {
   )
     return true;
   if (FRONTIER_JUNK_PATH.test(u) || /[?&]post_type=press-release/i.test(u)) return true;
+  if (githubFrontierJunk(url)) return true;
+  if (talkFrontierJunk(url)) return true;
   return false;
 }
 
@@ -2617,6 +2614,8 @@ class Crawl {
   rank(url: string, fid: number): number {
     if (fid === 0) return 0;
     const u = url.toLowerCase();
+    if (talkUrl(url)) return 0;
+    if (toolDocsUrl(url) || githubToolUrl(url)) return 1;
     if (
       u.startsWith("https://www.rfc-editor.org/rfc/") ||
       u.startsWith("https://rfc-editor.org/rfc/") ||
@@ -2625,7 +2624,7 @@ class Crawl {
       u.startsWith("https://httpwg.org/specs/") ||
       u.startsWith("https://www.httpwg.org/specs/")
     )
-      return 1;
+      return 2;
     if (
       u.startsWith("https://www.w3.org/tr/") ||
       u.startsWith("https://w3.org/tr/") ||
@@ -2634,16 +2633,8 @@ class Crawl {
       u.startsWith("https://www.iana.org/") ||
       u.startsWith("https://iana.org/")
     )
-      return 2;
-    const host = hostOf(url);
-    if (
-      host === "wikipedia.org" ||
-      host.endsWith(".wikipedia.org") ||
-      host === "wikidata.org" ||
-      host.endsWith(".wikidata.org") ||
-      host.endsWith(".wiktionary.org")
-    )
       return 3;
+    if (encyclopediaUrl(url)) return 9;
     const from = this.tok.get(fid).toLowerCase();
     if (from.includes("rss") || from.includes("feed") || from.includes("atom") || from.includes("sitemap")) return 4;
     return 5;
@@ -3100,6 +3091,7 @@ export function openStore(dir = knowDir()) {
     seenPuts = 0;
   }
   if (hadSqlite) dropSqlite(dir);
+  crawl.crush();
   crawl.requeueSeeds();
   crawl.trim();
   if (!hadCrawl && hadSqlite) crawl.persist(dir);
@@ -3506,6 +3498,7 @@ export function openStore(dir = knowDir()) {
         const localFacts = pack ? allFacts(pack) : [];
         const packTriple = new Set(localFacts.map((f) => `${f.s}\0${f.p}\0${f.o}`));
         const facts = mergeFactLists(mergeFactLists(base, localFacts), overlay).filter((f) => {
+          if (junkGraphFact(f) || frozenEncyclopedia(f)) return false;
           if (packTriple.has(`${f.s}\0${f.p}\0${f.o}`)) return true;
           if (f.p !== "capital") return true;
           if (f.s.toLowerCase() === f.o.toLowerCase()) return false;
@@ -3520,6 +3513,13 @@ export function openStore(dir = knowDir()) {
           renameSync(tmp, packPath);
           pack = decoded;
           written = bytes;
+        } else if (pack || existsSync(packPath)) {
+          try {
+            unlinkSync(packPath);
+          } catch {
+            /* already gone */
+          }
+          pack = undefined;
         }
         clearOverlay();
         crawl.mh.clear();

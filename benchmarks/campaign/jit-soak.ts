@@ -6,9 +6,8 @@
  * top-1 is that program. Unique-work and no-evidence transcripts must surface
  * zero schemas. PASS only if precision ≥ 0.95 AND unique-work empty-catalog.
  *
- * Does not retune unique-work cents. Does not flip EDEN_SURFACE itself —
- * surfaceMode() stays `all` until this script prints PASS and a human (or a
- * follow-up edit) matches that verdict.
+ * Does not retune unique-work cents. After a PASS at the registered bar,
+ * surfaceMode() defaults to `jit`; EDEN_SURFACE=all is the opt-out.
  *
  *   bun run bench:jit-soak
  */
@@ -79,6 +78,7 @@ const KUBECTL = soakProg({
   envelope: { namespace: ["prod", "staging", "dev", "canary"] },
 });
 const NAME_ONLY = linearProgram("p_desk_lookup", ["getAccount", "listInvoices", "emailCustomer"], { text: true });
+NAME_ONLY.contract.envelope = { inputs: { id: [...DESK_IDS] } };
 
 function call(name: string, args: Record<string, unknown>): OpenAiToolCall {
   return { type: "function", function: { name, arguments: JSON.stringify(args) } };

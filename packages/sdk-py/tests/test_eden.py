@@ -13,9 +13,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_here = Path(__file__).resolve().parent
+sys.path.insert(0, str(_here))
+sys.path.insert(0, str(_here.parent))
 
-from eden import EdenClient, EdenError, run_tool, wrap_tools  # noqa: E402
+from eden import DEFAULT_BASE_URL, EdenClient, EdenError, run_tool, wrap_tools  # noqa: E402
+from eden.client import EDEN_PROTOCOL_VERSION  # noqa: E402
 from stub import make_stub_server  # noqa: E402
 
 
@@ -90,14 +93,40 @@ class WrapToolsTests(StubTestCase):
         return {"source": "original", "name": name, **args}
 
     def test_compiled_tool_answers_without_running_original(self) -> None:
-        routes = {"/v1/wrap": {"code": 200, "body": {"action": "play", "facts": {"refunded": True}}}}
+        routes = {"/v1/wrap": {"code": 200, "body": {"action": "play", "facts": {"ok": True}}}}
         client, seen = self.start(routes)
-        wrapped = wrap_tools({"refund": self.original}, client)
+        called: list[str] = []
+
+        def original(name: str, args: dict[str, Any]) -> Any:
+            called.append("original")
+            return {"source": "original", "name": name, **args}
+
+        wrapped = wrap_tools({"refund": original}, client)
 
         result = wrapped["refund"]("refund", {"order": "T-1"})
 
-        self.assertEqual(result, {"refunded": True})
-        self.assertEqual([r["path"] for r in seen], ["/v1/wrap"])  # no original call
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(called, [])  # original is NEVER called on play
+        self.assertEqual([r["path"] for r in seen], ["/v1/wrap"])
+        self.assertEqual(seen[0]["x_eden_version"], "1")
+
+    def test_protocol_defaults(self) -> None:
+        self.assertEqual(EDEN_PROTOCOL_VERSION, 1)
+        self.assertEqual(DEFAULT_BASE_URL, "http://127.0.0.1:8788")
+
+    def test_hosted_origin_does_not_default_eden_dev(self) -> None:
+        import os
+        from eden.client import _resolve
+
+        old_key = os.environ.pop("EDEN_API_KEY", None)
+        try:
+            _, loop_key = _resolve("http://127.0.0.1:8788", None)
+            self.assertEqual(loop_key, "eden_dev")
+            _, hosted_key = _resolve("https://useeden.vercel.app", None)
+            self.assertEqual(hosted_key, "")
+        finally:
+            if old_key is not None:
+                os.environ["EDEN_API_KEY"] = old_key
 
     def test_action_original_runs_the_real_callable(self) -> None:
         routes = {
@@ -132,6 +161,19 @@ class WrapToolsTests(StubTestCase):
 
         self.assertEqual(result["source"], "original")
         self.assertLess(time.time() - started, 1.0)
+
+    def test_unreachable_runtime_runs_original(self) -> None:
+        client = EdenClient(base_url="http://127.0.0.1:1", api_key="k", timeout=0.25)
+        called: list[str] = []
+
+        def original(name: str, args: dict[str, Any]) -> Any:
+            called.append("original")
+            return {"source": "original"}
+
+        wrapped = wrap_tools({"refund": original}, client)
+        result = wrapped["refund"]("refund", {})
+        self.assertEqual(result["source"], "original")
+        self.assertEqual(called, ["original"])
 
     def test_timeout_falls_back_quickly(self) -> None:
         routes = {"/v1/wrap": {"code": 200, "body": {"action": "play"}, "delay": 5.0}}

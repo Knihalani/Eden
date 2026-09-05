@@ -5,7 +5,19 @@ import { createHandler } from "./server";
 import { registryFrom } from "@eden/runtime";
 import { replayRegistry } from "@eden/shadow";
 import { createTicketShip, runNaive, underdeterminedSiblingTraces, WITNESS_IDS } from "../../../packages/runtime/src/ticketship";
+import { parseInbox, parseLiveTools, pickPlayTool, demoPortBusyMessage, demoChildEnv, demoListenLines, demoListenFooter } from "../../../packages/cli/src/demo";
 import type { StretchTrace } from "@eden/ir";
+
+// Same as `eden demo`: a clone sitting uses the local key unless the operator
+// already set one. bun run demo used to skip this and then fail inbox auth on
+// a managed-looking env (DATABASE_URL / VERCEL).
+{
+  const env = demoChildEnv(process.env);
+  if (!process.env.EDEN_API_KEY) {
+    process.env.EDEN_DEV = env.EDEN_DEV;
+    process.env.EDEN_API_KEY = env.EDEN_API_KEY;
+  }
+}
 
 const PORT = Number(process.env.PORT || 8788);
 const token = process.env.EDEN_API_KEY || "eden_dev";
@@ -81,27 +93,51 @@ function auth(path: string, init: RequestInit = {}): Request {
   });
 }
 
-type InboxCand = {
-  id: string;
-  verdict: string;
-  refusal?: { reason: string };
-  program?: { name: string; sequence?: string[] };
-  manifest?: { llmReduction?: number; latencyReduction?: number; costReduction?: number };
-};
+async function readInbox(): Promise<ReturnType<typeof parseInbox>> {
+  try {
+    return parseInbox(await (await fetchHandler(auth("/v1/inbox"))).json());
+  } catch {
+    return parseInbox(undefined);
+  }
+}
+
+let server: ReturnType<typeof Bun.serve>;
+try {
+  const hosts = [`http://127.0.0.1:${PORT}/health`, `http://localhost:${PORT}/health`];
+  let taken = false;
+  for (const url of hosts) {
+    const prior = await fetch(url, { signal: AbortSignal.timeout(400) }).catch(() => null);
+    if (prior) {
+      taken = true;
+      break;
+    }
+  }
+  if (taken) {
+    console.error(demoPortBusyMessage(PORT));
+    process.exit(1);
+  }
+  server = Bun.serve({ port: PORT, hostname: "127.0.0.1", fetch: fetchHandler });
+} catch {
+  console.error(demoPortBusyMessage(PORT));
+  process.exit(1);
+}
 
 const traces = await naiveTraces(10);
-const server = Bun.serve({ port: PORT, hostname: "127.0.0.1", fetch: fetchHandler });
-
 await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces }) }));
 await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
 
-const inbox = (await (await fetchHandler(auth("/v1/inbox"))).json()) as { candidates: InboxCand[] };
+const inbox = await readInbox();
+if (inbox.notice) console.error(inbox.notice);
 const pass = inbox.candidates.find((c) => c.verdict === "PASS" && c.program);
 
-let shipped: { name?: string; id?: string } | null = null;
+let shipped: { name?: string; id?: string; reused?: boolean } | null = null;
 if (pass) {
   const approved = await fetchHandler(auth(`/v1/tools/${pass.id}/approve`, { method: "POST", body: "{}" }));
-  shipped = (await approved.json()) as { name?: string; id?: string };
+  shipped = { ...((await approved.json()) as { name?: string; id?: string }), reused: false };
+} else {
+  const listed = parseLiveTools(await (await fetchHandler(auth("/v1/tools?state=live"))).json());
+  const play = pickPlayTool(undefined, listed);
+  if (play) shipped = { id: play.id, name: play.name, reused: true };
 }
 
 const runOk = shipped?.id
@@ -115,7 +151,8 @@ const oodBody = runOod ? ((await runOod.json()) as { error?: string; reason?: st
 
 await fetchHandler(auth("/v1/traces", { method: "POST", body: JSON.stringify({ traces: underdeterminedSiblingTraces(3) }) }));
 await fetchHandler(auth("/v1/compile", { method: "POST", body: "{}" }));
-const after = (await (await fetchHandler(auth("/v1/inbox"))).json()) as { candidates: InboxCand[] };
+const after = await readInbox();
+if (after.notice) console.error(after.notice);
 const refused = after.candidates.find((c) => c.refusal);
 
 const savings = (await (await fetchHandler(auth("/v1/savings"))).json()) as {
@@ -126,16 +163,13 @@ const savings = (await (await fetchHandler(auth("/v1/savings"))).json()) as {
 };
 
 console.log(`
-Eden demo is up
-  Inbox     ${server.url}
-  Live      ${new URL("/live", server.url).href}
-  OpenAI    ${new URL("/v1", server.url).href}
+${demoListenLines(String(server.url), token)}
 
 What just happened
   10 TicketShip agent runs: lookupTicket → fetchDetails → parseFields → validate → draftReply → writeRecord → verifyWrite → notify.
-  Compile mined ${pass ? pass.program?.name : "nothing"}${pass?.manifest?.llmReduction ? ` · ${pass.manifest.llmReduction.toFixed(1)}× LLM (ships from 2×)` : ""}.
+  Compile mined ${pass ? pass.program?.name : "nothing"}${pass?.manifest?.llmReduction ? ` · ${pass.manifest.llmReduction.toFixed(1)}× LLM (ships from 2×)` : ""}${shipped?.reused ? " this sitting (a live TicketShip tool was already shipped)" : ""}.
   Sequence: ${(pass?.program?.sequence ?? []).join(" → ")}
-  ${shipped?.name ? `Approved and shipped ${shipped.name}.` : "No PASS candidate to ship."}
+  ${shipped?.reused ? `Playing T-100 on already-shipped ${shipped.name ?? shipped.id}.` : shipped?.name ? `Approved and shipped ${shipped.name}.` : "No PASS candidate to ship."}
   Then a sibling stretch with an unbound writeRecord.id was refused${refused ? ` · ${refused.refusal?.reason}` : ""}.
 
 Compiled run T-100 (in witness envelope)
@@ -147,8 +181,7 @@ Unseen ticket T-999 (out of distribution)
 Savings
   live ${savings.live ?? 0} · runs ${savings.runs ?? 0} · fails ${savings.fail ?? 0} · ${savings.llmReductionMean ? savings.llmReductionMean.toFixed(1) + "× LLM mean" : "n/a"}
 
-Point an agent at OPENAI_BASE_URL=${new URL("/v1", server.url).href}
-Token ${token}  ·  press c in the inbox to recompile
+${demoListenFooter(String(server.url), token)}
 `);
 
 await new Promise(() => undefined);

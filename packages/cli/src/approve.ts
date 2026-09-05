@@ -1,10 +1,10 @@
 import { canaryPct, envelopeLine, formatDiffCard, llmBadge, type ProgramDiff, type Refusal, type StretchProgram } from "@eden/ir";
-import { readConfig, resolveApiKey, wrapPlaneUrl } from "./home";
+import { readConfig, resolveApiKey, wrapBase } from "./home";
 
 export function approveHelp(): string {
   return `eden approve — ship a compiled tool from the terminal
 
-  eden approve              List PASS candidates with a one-screen card
+  eden approve              List PASS cards; if none, FAIL / INCONCLUSIVE / pending rows (cannot ship)
   eden approve <id>         Print the card; does not ship
   eden approve <id> --yes   POST /v1/tools/:id/approve (canary, 10% of sessions)
   eden approve <id> --yes --live   Ship 100% (still human; not the default)
@@ -61,6 +61,15 @@ function cardFor(c: CandidateRow): string {
   return `${card}\n${envelopeLine(c.program.contract?.envelope)}\n${llmBadge({ steps: c.program.steps ?? [] })}\nCanary · ${canaryPct()}% of sessions until promote.`;
 }
 
+function nonPassRows(all: CandidateRow[]): CandidateRow[] {
+  return all.filter((c) => c.verdict === "FAIL" || c.verdict === "INCONCLUSIVE" || c.verdict === "pending");
+}
+
+function rowLine(c: CandidateRow): string {
+  const reason = c.refusal?.reason ?? "";
+  return reason ? `${c.id}  ${c.verdict}  ${reason}` : `${c.id}  ${c.verdict}`;
+}
+
 export async function approveCli(
   args: string[] = [],
   opts?: { fetch?: typeof fetch },
@@ -74,7 +83,7 @@ export async function approveCli(
     console.log("approve: no config · run eden login --dev");
     return 1;
   }
-  const base = wrapPlaneUrl(cfg.base_url);
+  const base = wrapBase(cfg);
   const key = resolveApiKey();
   const fetchFn = opts?.fetch ?? fetch;
   const headers = { authorization: `Bearer ${key}`, "content-type": "application/json" };
@@ -88,11 +97,16 @@ export async function approveCli(
       console.log("approve: wrap is down · start eden wrap");
       return listed.status === 0 ? 0 : 1;
     }
-    const rows = ((listed.body as { candidates?: CandidateRow[] }).candidates ?? []).filter(
-      (c) => c.verdict === "PASS" && c.program,
-    );
+    const all = (listed.body as { candidates?: CandidateRow[] }).candidates ?? [];
+    const rows = all.filter((c) => c.verdict === "PASS" && c.program);
     if (!rows.length) {
-      console.log("approve: 0 PASS candidates\neden explain");
+      const shown = nonPassRows(all);
+      if (!shown.length) {
+        console.log("approve: 0 PASS candidates\neden explain");
+        return 0;
+      }
+      console.log("approve: 0 PASS candidates · cannot ship FAIL / INCONCLUSIVE");
+      for (const c of shown) console.log(rowLine(c));
       return 0;
     }
     for (const c of rows) {
@@ -164,7 +178,7 @@ export async function promoteCli(
     console.log("promote: id required\neden promote <id>");
     return 1;
   }
-  const base = wrapPlaneUrl(cfg.base_url);
+  const base = wrapBase(cfg);
   const key = resolveApiKey();
   const fetchFn = opts?.fetch ?? fetch;
   const headers = { authorization: `Bearer ${key}`, "content-type": "application/json" };

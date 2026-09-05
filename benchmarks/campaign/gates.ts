@@ -124,6 +124,7 @@ export function summarize(outs: ScenarioOut[], opts: { /** Losses worse than thi
   const tol = (opts.lossTolerancePct ?? 0) / 100;
   console.log("\n==================== CAMPAIGN SUMMARY ====================");
   let failures = 0;
+  let subMaterial = false;
   for (const o of outs) {
     console.log(`\n■ ${o.name} — ${o.question}`);
     console.log(`  expected: ${o.expect}`);
@@ -156,10 +157,16 @@ export function summarize(outs: ScenarioOut[], opts: { /** Losses worse than thi
       return d?.verdict === "LOSS" && d.controlMean > 0 && d.delta.point / d.controlMean < -tol;
     });
     if (materialLoss) failures++;
-    else if (!o.ok && !o.violations.length) console.log("  (sub-material losses only — recorded as measured overhead)");
+    else if (!o.ok && !o.violations.length) {
+      subMaterial = true;
+      console.log("  (sub-material losses only — recorded as measured overhead)");
+    }
     for (const n of o.notes.slice(0, 6)) console.log(`  note: ${n}`);
   }
   console.log("\n==========================================================");
-  console.log(failures === 0 ? "CAMPAIGN OK — no losses, no violations" : `CAMPAIGN FAILURES: ${failures} scenario(s) not clean`);
+  const okLine = subMaterial
+    ? "CAMPAIGN OK — no material losses, no violations"
+    : "CAMPAIGN OK — no losses, no violations";
+  console.log(failures === 0 ? okLine : `CAMPAIGN FAILURES: ${failures} scenario(s) not clean`);
   process.exitCode = failures === 0 ? 0 : 1;
 }

@@ -199,21 +199,38 @@ Every phase row names a fixture or gap-pin. `WAVE_16_19_CATCHERS` in `packages/m
 | **19.3** | `benchmarks/campaign/jit-soak.ts` / `JIT-SOAK.md` | covered |
 | **19.4** | `benchmarks/campaign/HOST-DROP.md` (`replica-host-drop`) | covered |
 
+## Wave 21 catchers
+
+Every honesty-file phase names a fixture or gap-pin. `WAVE_21_CATCHERS` in `packages/measure/src/tree.ts` is the CI list.
+
+| Phase | Catcher | Status |
+|---|---|---|
+| **21.1** | `benchmarks/campaign/OBLIVIOUS-LONG.md` (`oblivious-long` file ≠ ROADMAP) | covered |
+| **21.2** | `apps/web/app/(notes)/isolation/copy.ts` Kind/Source + Limits / Analogue / Retired split | covered |
+| **21.3** | `apps/web/app/(notes)/proof/page.tsx` cases `ClaimTable` + fixture tag; customer n = 0 | covered |
+| **21.4** | `benchmarks/campaign/jit-soak.ts` / `JIT-SOAK.md` (`precision=0.789 n=38`; default `all`) | covered |
+
+## Wave 22 catchers
+
+| Phase | Catcher | Status |
+|---|---|---|
+| **22.2** | `benchmarks/campaign/JIT-SOAK.md` (`surfaceMode_unset=jit`; PASS `precision=1.000 n=38`) | covered |
+
 ## Wave 17 (landed)
 
 | Wave | Rotation (must not retune an old fixture) |
 |---|---|
 | 17 | cwd-relative remainder hop (`benchmarks/campaign/cwd-hop.ts` / `benchmarks/campaign/cwd-hop.test.ts`) — not a retune of `post-batch` |
 
-## Wave 18 *(landed)* · Wave 19 *(landed)* · Wave 20 *(landed)* · Wave 21 (scheduled) · Wave 22 (scheduled)
+## Wave 18 *(landed)* · Wave 19 *(landed)* · Wave 20 *(landed)* · Wave 21 *(landed)* · Wave 22.2 *(landed)* · Wave 22.1 (scheduled)
 
 | Wave | Rotation (must not retune an old fixture) |
 |---|---|
 | 18 | None — gated UI review. **Landed.** Account route suite + in-tree 15–52 |
 | 19 | JIT soak remeasure is measurement-only. **Landed.** FAIL `precision=0.789 n=38`; `JIT-SOAK.md`; default `all` |
 | 20 | None — Wave 16–20 inventory empty. **Landed.** `eden doctor --tree`; catchers 16–19; §15 grep-complete |
-| 21 | JIT soak remeasure is measurement-only (same as 19). **Scheduled.** oblivious-long cited file; isolation Kind/Source; proof cases chrome |
-| 22 | None until evidence. **Scheduled.** Live invoice parse if a file exists; `EDEN_SURFACE=jit` only on soak PASS |
+| 21 | JIT soak remeasure is measurement-only (same as 19). **Landed.** FAIL `precision=0.789 n=38`; `OBLIVIOUS-LONG.md`; isolation Kind/Source; proof cases chrome |
+| 22 | Hold-out soaks (id/cli/url) plus original soak PASS. **Landed 22.2.** `EDEN_SURFACE=jit`. 22.1 stays scheduled until an invoice file exists |
 
 ## Counts
 

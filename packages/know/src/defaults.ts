@@ -13,8 +13,8 @@ export const DEFAULT_LIVE = 96;
 export const DEFAULT_NEWS = 16;
 /** CDX Range hits per tick (cheap RAM vs a full WET). */
 export const DEFAULT_CDX = 8;
-export const DEFAULT_WIKI = 100;
-export const DEFAULT_WIKI_GROW = 80;
+export const DEFAULT_WIKI = 0;
+export const DEFAULT_WIKI_GROW = 0;
 export const DEFAULT_RECRAWL = 48;
 export const DEFAULT_QUALITY = 16;
 /** Compact-publish when WAL is at least this and the last upload is old enough. */

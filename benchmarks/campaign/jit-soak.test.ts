@@ -19,7 +19,7 @@ describe("Wave 11.4 JIT soak", () => {
       expect(r.uniqueWorkCents).toBe("n/a");
       if (!r.pass) {
         expect(r.lines.some((l) => l === "JIT_DEFAULT=all (soak not green)")).toBe(true);
-        expect(surfaceMode()).toBe("all");
+        expect(surfaceMode()).toBe("jit");
       }
     } finally {
       if (prev === undefined) delete process.env.EDEN_SURFACE;
@@ -27,21 +27,21 @@ describe("Wave 11.4 JIT soak", () => {
     }
   }, TIMEOUT);
 
-  test("Wave 19 remeasure pins FAIL 0.789 n=38 and does not flip default", async () => {
+  test("Wave 22.2 pins PASS 1.000 n=38 and defaults to jit", async () => {
     const prev = process.env.EDEN_SURFACE;
     delete process.env.EDEN_SURFACE;
     try {
       const r = await runJitSoak({ compileCampaign: true });
       expect(r.uniqueWorkSchemas).toBe(0);
       expect(r.vagueSchemas).toBe(0);
-      expect(r.pass).toBe(false);
+      expect(r.pass).toBe(true);
       expect(r.n).toBe(38);
-      expect(r.precision.toFixed(3)).toBe("0.789");
-      expect(r.lines).toContain("verdict=FAIL");
-      expect(r.lines).toContain("JIT_DEFAULT=all (soak not green)");
-      expect(r.lines).toContain("surfaceMode_unset=all");
-      expect(surfaceMode()).toBe("all");
-      expect(r.defaultMayFlip).toBe(false);
+      expect(r.precision.toFixed(3)).toBe("1.000");
+      expect(r.lines).toContain("verdict=PASS");
+      expect(r.lines).toContain("JIT_DEFAULT=jit (soak green)");
+      expect(r.lines).toContain("surfaceMode_unset=jit");
+      expect(surfaceMode()).toBe("jit");
+      expect(r.defaultMayFlip).toBe(true);
     } finally {
       if (prev === undefined) delete process.env.EDEN_SURFACE;
       else process.env.EDEN_SURFACE = prev;

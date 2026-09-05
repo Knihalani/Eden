@@ -7,7 +7,7 @@ import { canonicalUrl, persistable, triplesFromPage, wikiGrowUrls, wikiActionApi
 import { FEED_URLS, SEED_URLS, wikiCountryUrls } from "./seed";
 import { openStore, FRONTIER_PERSIST, PAGE_PERSIST } from "./store";
 import { tickRecrawl, tickWikiGrow } from "./loop";
-import { compactDue, DEFAULT_WIKI, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns, shardWetIndex } from "./defaults";
+import { compactDue, DEFAULT_WIKI, DEFAULT_WIKI_GROW, DEFAULT_WET_EVERY, expensiveLaneDue, shardOwns, shardWetIndex } from "./defaults";
 
 const KENYA = "https://en.wikipedia.org/wiki/Kenya";
 const LIST = "https://en.wikipedia.org/wiki/List_of_national_capitals";
@@ -78,34 +78,49 @@ describe("feeds", () => {
     expect(FEED_URLS.some((u) => /nist|nasa|news|blog/i.test(u))).toBe(false);
   });
 
-  test("seeds include wikipedia topics and open academia", () => {
-    expect(SEED_URLS.some((u) => u.includes("wikipedia.org") && /Science|Mathematics|Computer_science/.test(u))).toBe(true);
+  test("seeds are talk, tool docs, and RFC — not encyclopedia wiki", () => {
+    expect(SEED_URLS.some((u) => u.includes("wikipedia.org"))).toBe(false);
+    expect(SEED_URLS.some((u) => u.includes("pubmed"))).toBe(false);
+    expect(SEED_URLS.some((u) => u.includes("openalex.org"))).toBe(false);
     expect(SEED_URLS.some((u) => u.includes("arxiv.org"))).toBe(true);
-    expect(SEED_URLS.some((u) => u.includes("pubmed"))).toBe(true);
-    expect(SEED_URLS.some((u) => u.includes("openalex.org"))).toBe(true);
+    expect(SEED_URLS).toContain("https://github.com/oven-sh/bun");
+    expect(SEED_URLS).toContain("https://old.reddit.com/r/commandline/");
+    expect(SEED_URLS).toContain("https://github.com/oven-sh/bun/issues");
+    expect(SEED_URLS).toContain("https://users.rust-lang.org/c/help");
+    expect(SEED_URLS).toContain("https://dev.to/t/python");
+    expect(SEED_URLS).toContain("https://lobste.rs/t/programming");
+    expect(SEED_URLS).toContain("https://docs.python.org/3/");
+    expect(SEED_URLS.some((u) => u.includes("doc.rust-lang.org"))).toBe(true);
+    expect(SEED_URLS.some((u) => u.includes("developer.mozilla.org"))).toBe(true);
+    expect(DEFAULT_WIKI).toBe(0);
+    expect(DEFAULT_WIKI_GROW).toBe(0);
   });
 });
 
 describe("ingest overlay", () => {
-  test("RFC is object up to 96 chars survives put", () => {
+  test("RFC obsoletes survive put; frozen titles do not", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-rfc96-"));
     const s = openStore(dir);
-    const o = "The JavaScript Object Notation JSON Data Interchange Format extra title words";
-    expect(o.length).toBeGreaterThan(72);
-    expect(o.length).toBeLessThanOrEqual(96);
     const url = "https://www.rfc-editor.org/rfc/rfc8259.html";
-    const t = { s: "RFC 8259", p: "is" as const, o, e: o };
+    const frozen = {
+      s: "RFC 8259",
+      p: "is" as const,
+      o: "The JavaScript Object Notation JSON Data Interchange Format extra title words",
+      e: "",
+    };
+    expect(persistable(url, frozen)).toBe(false);
+    const t = { s: "RFC 8259", p: "obsoletes" as const, o: "RFC 4627", e: "" };
     expect(persistable(url, t)).toBe(true);
-    s.putNodes(url, [t], 365);
-    expect(s.search("RFC 8259")[0]?.o).toBe(o);
+    s.putNodes(url, [frozen, t], 365);
+    expect(s.search("RFC 8259")[0]?.p).toBe("obsoletes");
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("stale catalog pages requeue", async () => {
+  test("stale talk pages requeue", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-stale-"));
     const s = openStore(dir);
-    const url = "https://en.wikipedia.org/wiki/Paraguay";
+    const url = "https://stackoverflow.com/questions/12345/how-to-parse-json-with-jq";
     s.putPage({ url, digest: "abc", chars: 100, source: "live", ttl_days: 0 });
     expect(s.staleUrls(8)).toContain(url);
     await tickRecrawl(s, 8);
@@ -115,12 +130,13 @@ describe("ingest overlay", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("wiki grow enqueues unseen topic articles", async () => {
+  test("wiki grow is idle without encyclopedia seeds", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-grow-"));
     const s = openStore(dir);
     await tickWikiGrow(s, 8);
     const queued = (s.db.query(`SELECT url FROM frontier`).all() as { url: string }[]).map((r) => r.url);
-    expect(queued.some((u) => /Science|Mathematics|Physics|Computer_science|Medicine/i.test(u))).toBe(true);
+    expect(queued.some((u) => /wikipedia\.org/i.test(u))).toBe(false);
+    expect(queued.some((u) => /reddit\.com|stackoverflow\.com|github\.com/i.test(u))).toBe(true);
     s.close();
     rmSync(dir, { recursive: true, force: true });
   });

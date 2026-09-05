@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { respondToHook, applyFlushTruncate, hookTraceBody } from "./hook";
 import { handleHookd, hookdTimeoutMs } from "./hookd";
-import { handleMcp, McpAuthError } from "./mcp";
+import { handleMcp, McpAuthError, mcpHelp, runMcp } from "./mcp";
 import { join } from "node:path";
 import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 
@@ -716,6 +716,23 @@ describe("hook", () => {
 });
 
 describe("mcp", () => {
+  test("--help is a letter and does not start stdio", async () => {
+    expect(mcpHelp()).toMatch(/^eden mcp —/);
+    expect(mcpHelp()).toMatch(/does not start stdio/);
+    expect(mcpHelp()).toMatch(/Does not Approve/);
+    const logs: string[] = [];
+    const log = console.log;
+    console.log = (msg?: unknown) => {
+      logs.push(String(msg ?? ""));
+    };
+    try {
+      await runMcp(["--help"]);
+    } finally {
+      console.log = log;
+    }
+    expect(logs.join("\n")).toBe(mcpHelp());
+  });
+
   test("initialize returns server info", async () => {
     let sent: unknown;
     await handleMcp(

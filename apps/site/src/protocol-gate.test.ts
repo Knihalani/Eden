@@ -41,9 +41,11 @@ describe("/v1 protocol gate", () => {
 
   test("health reports the protocol version", async () => {
     const res = await handleFetch(new Request("http://127.0.0.1:8787/health"));
-    const j = (await res.json()) as { protocol?: number };
+    const j = (await res.json()) as { protocol?: number; service?: string; wrap?: boolean };
     expect(j.protocol).toBe(EDEN_PROTOCOL_VERSION);
     expect(res.headers.get(PROTOCOL_HEADER)).toBe(String(EDEN_PROTOCOL_VERSION));
+    expect(j.service).toBe("eden-wrap");
+    expect(j.wrap).toBe(true);
   });
 
   test("mismatched client version is refused with 426 and both numbers named — before auth even runs", async () => {

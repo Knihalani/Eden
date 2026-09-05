@@ -1,25 +1,14 @@
 /** HTML → text + structured slots. No Playwright: JSON-LD / OG / noscript live in the first bytes. */
 
 import {
-  catalogSubject,
-  ianaMedia,
-  ianaScheme,
-  ianaRel,
-  ianaWellKnown,
   MEDIA_SUBTYPE_OBJECT,
   SPDX_KEEP,
-  WELLKNOWN_KEEP,
 } from "./names";
 import { mediaTypeNames } from "./media-type-tab";
-import { schemeNames } from "./scheme-tab";
-import { relNames } from "./rel-tab";
-import { wellknownNames } from "./wellknown-tab";
 import { adaptCapitalLabel, noteCapitalLabel } from "./adapt";
+import { TOOL_DOC_HOSTS, githubToolUrl, talkUrl, toolDocsUrl } from "./tools";
 
 const MEDIA_TAB = new Set(mediaTypeNames());
-const SCHEME_TAB = new Set(schemeNames());
-const REL_TAB = new Set(relNames());
-const WK_TAB = new Set(wellknownNames());
 
 const PAYWALL_HOST =
   /(^|\.)(wsj|ft|economist|nytimes|washingtonpost|bloomberg|wired|theathletic)\.com$/i;
@@ -37,6 +26,36 @@ export function skipHost(url: string): string | undefined {
   if (!h) return "bad-url";
   if (PAYWALL_HOST.test(h)) return "paywall-host";
   return undefined;
+}
+
+/** Wikipedia / Wikidata / PubMed-style catalogs. Not how-to talk the model would look up. */
+export function encyclopediaUrl(url: string): boolean {
+  const host = hostOf(url);
+  if (!host) return false;
+  if (
+    host === "wikipedia.org" ||
+    host.endsWith(".wikipedia.org") ||
+    host === "wikidata.org" ||
+    host.endsWith(".wikidata.org") ||
+    host.endsWith(".wiktionary.org") ||
+    host.endsWith(".wikibooks.org") ||
+    host.endsWith(".wikisource.org") ||
+    host.endsWith(".wikimedia.org")
+  )
+    return true;
+  if (
+    host === "ncbi.nlm.nih.gov" ||
+    host.endsWith(".ncbi.nlm.nih.gov") ||
+    host === "europepmc.org" ||
+    host.endsWith(".europepmc.org") ||
+    host === "openalex.org" ||
+    host.endsWith(".openalex.org") ||
+    host === "semanticscholar.org" ||
+    host.endsWith(".semanticscholar.org") ||
+    host === "doaj.org"
+  )
+    return true;
+  return false;
 }
 
 /** Decode named + numeric HTML entities. Cards must never ship `&#x2F;`. */
@@ -534,6 +553,7 @@ export const CATALOG_URL_NEEDLES = [
   "unicode.org",
   "whatwg.org",
   "github.com/whatwg",
+  ...TOOL_DOC_HOSTS,
   "wikipedia.org",
   "wikidata.org",
   "query.wikidata.org",
@@ -562,8 +582,32 @@ export function qualityUrlSql(col = "url"): string {
   return `(${parts.join(" OR ")})`;
 }
 
+/**
+ * Surface facts LLMs already know and that do not change agent action:
+ * capitals, IANA/RFC/SPDX titles, “X is a runtime”, country ISO.
+ * Techniques (`used for`) and RFC obsoletes/updates still occupy the graph.
+ */
+export function frozenEncyclopedia(t: { s: string; p: string; o: string; e?: string }): boolean {
+  if (t.p === "capital") return true;
+  if (t.p === "obsoletes" || t.p === "updates") return false;
+  if (t.p === "version") return false;
+  if (t.p === "id") {
+    const o = t.o.trim();
+    if (/^[A-Z]{2}$/.test(o)) return true;
+    if (/^\+\d{1,4}$/.test(o) || /^\.[A-Za-z]{2,8}$/.test(o)) return true;
+    if (/^-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?$/.test(o)) return true;
+    if (/\b(ISO 3166|calling code|population | area |geo )/i.test(t.e || "")) return true;
+    return false;
+  }
+  if (t.p !== "is") return false;
+  if (/^used for /i.test(t.o)) return false;
+  if (/^(obsoleted|updated) by\b/i.test(t.o)) return false;
+  return true;
+}
+
 /** Catalog origin: hostname (or subdomain) of a needle, not a URI substring. `github.com/whatwg` also checks path. */
 export function qualityHost(url: string): boolean {
+  if (githubToolUrl(url) || talkUrl(url)) return true;
   const host = hostOf(url);
   if (!host) return false;
   let path = "";
@@ -584,23 +628,11 @@ export function qualityHost(url: string): boolean {
   return false;
 }
 
-/** What occupies the on-disk graph. Dates stay out. Catalog objects may be short (`TCP`). */
+/** What occupies the on-disk graph. Frozen encyclopedia stays out. */
 export function persistable(url: string, t: Triple): boolean {
+  if (junkGraphFact(t) || frozenEncyclopedia(t)) return false;
   if (!HOT_PRED.has(t.p) || looksLikeCode(`${t.o} ${t.e}`)) return false;
-  if (t.p === "capital") return true;
   if (t.p === "is") {
-    const media = ianaMedia(t.s);
-    if (media) return MEDIA_TAB.has(media) && t.o.length >= 2 && t.o.length <= 72;
-    const sch = ianaScheme(t.s);
-    if (sch) return SCHEME_TAB.has(sch) && t.o.length >= 2 && t.o.length <= 72;
-    if (catalogSubject(t.s)) {
-      const rel = ianaRel(t.s);
-      if (rel) return REL_TAB.has(rel) && t.o.length >= 2 && t.o.length <= 72;
-      const wk = ianaWellKnown(t.s);
-      if (wk) return (WELLKNOWN_KEEP.has(wk) || WK_TAB.has(wk)) && t.o.length >= 2 && t.o.length <= 72;
-      const cap = /^RFC\s+\d/i.test(t.s) && t.p === "is" ? 96 : 72;
-      return t.o.length >= 2 && t.o.length <= cap;
-    }
     return t.s.length >= 2 && t.s.length <= 96 && t.o.length >= 8 && t.o.length <= 72 && t.s.toLowerCase() !== t.o.toLowerCase();
   }
   if (t.p === "obsoletes" && /^RFC\s+\d/i.test(t.s) && /RFC\s+\d/i.test(t.o)) return true;
@@ -749,8 +781,11 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
     }
   } else {
     const desc = ldText(o.description ?? o.abstract);
-    if (name && desc && desc.length >= 8 && desc.length <= 120 && !looksLikeCode(desc) && name.toLowerCase() !== desc.toLowerCase()) {
-      into.push({ s: name, p: "is", o: desc.slice(0, 120), e: desc.slice(0, 280) });
+    if (name && desc && desc.length >= 8 && !looksLikeCode(desc) && name.toLowerCase() !== desc.toLowerCase()) {
+      const oDesc = desc.length <= 72 ? desc : desc.slice(0, 72).replace(/\s+\S*$/, "").trim();
+      if (oDesc.length >= 8 && oDesc.length <= 72) {
+        into.push({ s: name, p: "is", o: oDesc, e: desc.slice(0, 280) });
+      }
     }
   }
   const ident = o.identifier ?? o.isbn ?? o.issn;
@@ -771,6 +806,47 @@ function walkLd(node: unknown, into: Triple[], evidence: string, depth = 0): voi
 export function looksLikeCode(s: string): boolean {
   if ((s.match(/[{};=<>]/g) || []).length >= 6) return true;
   return /\b(function|cssRules|const |let |var |=>|addMetadata)\b/.test(s);
+}
+
+const WIKI_PIPE_FIELD = /\b(?:leader_title|image_skyline|image_map|image_flag|flag_link|coat_of_arms|infobox)\s*=/i;
+const WIKI_LEFTOVER = /\[\[|\{\{|]]|<!--|<[^>]+>|\|{2,}/;
+const GENERIC_SETTLEMENT =
+  /^(unincorporated community|census-designated place|human settlement|municipality|township|village|town|city)$/i;
+const MOTTO_NOT_MOTTO =
+  /^(latin|english|french|german|spanish|italian|portuguese|dutch|greek|arabic|chinese|japanese|russian|yoruba|catalan|hebrew|hindi|swahili|municipality|town|city)('*)?$/i;
+
+function wikiNoise(s: string): boolean {
+  return WIKI_LEFTOVER.test(s) || /'{2,}/.test(s) || /^\d+px\b/i.test(s) || /^[\s}'"]+$/.test(s);
+}
+
+function junkMotto(s: string): boolean {
+  if (wikiNoise(s) || MOTTO_NOT_MOTTO.test(s.trim())) return true;
+  return /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(s.trim());
+}
+
+/**
+ * Unparsed wikitext / URL fragments that must never occupy the packed graph.
+ * URL-independent so compact can drop leftover dump rows.
+ */
+export function junkGraphFact(t: { s: string; p: string; o: string; e?: string }): boolean {
+  const s = t.s.trim();
+  const o = t.o.trim();
+  if (!s || !o) return true;
+  if (/[|]/.test(s) || /[|]/.test(o)) return true;
+  if (WIKI_PIPE_FIELD.test(`${s} ${o}`)) return true;
+  if (wikiNoise(s) || wikiNoise(o)) return true;
+  if (/\[https?:/i.test(o) || /^https?:\/\//i.test(o) || /\[https?:/i.test(s)) return true;
+  if (t.p === "is") {
+    if (/^the motto of /i.test(o) && junkMotto(s)) return true;
+    const named = o.match(/^the official name of (.+)$/i)?.[1]?.trim();
+    if (named) {
+      if (GENERIC_SETTLEMENT.test(s)) return true;
+      const sl = s.toLowerCase();
+      const nl = named.toLowerCase();
+      if (nl === sl || nl.startsWith(`${sl},`) || nl.startsWith(`${sl} `)) return true;
+    }
+  }
+  return false;
 }
 
 function wikiPageName(url: string): string | undefined {
@@ -1060,6 +1136,7 @@ function stripMarkup(raw: string): string {
   return decodeEntities(stripCellChrome(raw).replace(/<[^>]+>/g, " "))
     .replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, "$1")
     .replace(/\{\{[^}]*\}\}/g, " ")
+    .replace(/'{2,}/g, "")
     .replace(/\[[0-9]+\]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -1256,7 +1333,7 @@ function isAnthemLabel(label: string): boolean {
 
 function isMottoLabel(label: string): boolean {
   const t = label.replace(/\s+/g, " ").trim().toLowerCase();
-  return /^(motto|national motto)\b/.test(t);
+  return /^(national\s+)?motto$/.test(t);
 }
 
 function isOfficialNameLabel(label: string): boolean {
@@ -1295,7 +1372,7 @@ function tidyProper(raw: string): string | undefined {
   const m = t.match(PROPER_HEAD_RE);
   const o = (m?.[1] || t).trim();
   if (o.length < 2 || o.length > 40) return undefined;
-  if (/^\[/.test(o) || /^\d+$/.test(o) || junkName(o)) return undefined;
+  if (/[|={}<\[\]]/.test(o) || wikiNoise(o) || /^\d+$/.test(o) || junkName(o)) return undefined;
   if (/^(official|language|languages|currency|country|city|none|n\/a|capital)$/i.test(o)) return undefined;
   if (CONTINENT.test(o)) return undefined;
   return o;
@@ -1841,13 +1918,13 @@ function extrasFromPairs(name: string, pairs: { label: string; data: string }[])
       }
     } else if (isMottoLabel(label)) {
       const motto = namedEntities(data)[0] || tidyProper(data);
-      if (motto) {
+      if (motto && !junkMotto(motto)) {
         const o = `the motto of ${name}`;
         if (o.length >= 8 && o.length <= 72) out.push({ s: motto, p: "is", o, e: o.slice(0, 280) });
       }
     } else if (isOfficialNameLabel(label)) {
       const official = tidyProper(data) || namedEntities(data)[0];
-      if (official && official.toLowerCase() !== name.toLowerCase()) {
+      if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) {
         const o = `the official name of ${name}`;
         if (o.length >= 8 && o.length <= 72) out.push({ s: official, p: "is", o, e: o.slice(0, 280) });
       }
@@ -1982,7 +2059,7 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
   if (!out.some((t) => /official name of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:conventional_long_name|official_name)\s*=\s*([^\n]+)/i)?.[1];
     const official = wt ? tidyProper(wt) || namedEntities(wt)[0] : undefined;
-    if (official && official.toLowerCase() !== name.toLowerCase()) {
+    if (official && official.toLowerCase() !== name.toLowerCase() && !GENERIC_SETTLEMENT.test(official)) {
       const o = `the official name of ${name}`;
       if (o.length >= 8 && o.length <= 72) out.push({ s: official, p: "is", o, e: o.slice(0, 280) });
     }
@@ -1990,7 +2067,7 @@ export function wikiInfoboxExtras(url: string, html: string, scan?: HtmlScan): T
   if (!out.some((t) => /motto of/i.test(t.o))) {
     const wt = html.match(/\|\s*(?:national_motto|motto)\s*=\s*([^\n]+)/i)?.[1];
     const motto = wt ? namedEntities(wt)[0] || tidyProper(wt) : undefined;
-    if (motto) {
+    if (motto && !junkMotto(motto)) {
       const o = `the motto of ${name}`;
       if (o.length >= 8 && o.length <= 72) out.push({ s: motto, p: "is", o, e: o.slice(0, 280) });
     }
@@ -2056,13 +2133,13 @@ export function wikiLeadIs(url: string, html: string, text: string, scan?: HtmlS
   const name = wikiSubject(url, html, scan);
   if (!name || wikiNsSkip(name) || /^List of /i.test(name)) return undefined;
   const tryObj = (oRaw: string): Triple | undefined => {
-    const o = oRaw.replace(/\s+/g, " ").trim();
-    if (o.length < 8 || o.length > 72 || looksLikeCode(o)) return undefined;
+    const o = stripMarkup(oRaw).replace(/\s+/g, " ").trim();
+    if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return undefined;
     if (/^the capital\b|^capital of\b|^official language/i.test(o)) return undefined;
     if (/^(and largest city|ISO |Official |Currency|Capital)\b/i.test(o)) return undefined;
     if (name.toLowerCase() === o.toLowerCase()) return undefined;
     const t: Triple = { s: name, p: "is", o, e: o.slice(0, 280) };
-    return persistable(url, t) ? t : undefined;
+    return t;
   };
   const short = scan?.shortDescription || (html ? wikiShortDescription(html) : undefined);
   if (short) {
@@ -2259,6 +2336,16 @@ function extrasFromProse(text: string): Triple[] {
       if (o.length >= 8 && o.length <= 72) add({ s: lang, p: "is", o, e: cut.slice(0, 280) });
     }
   }
+  const TOOL_IS =
+    /\b([A-Z][\w.+-]{1,40})\s+is an?\s+((?:incredibly\s+|fast\s+|open[- ]source\s+|high[- ]level\s+|general[- ]purpose\s+){0,3}(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework))\b/gi;
+  for (const m of head.matchAll(TOOL_IS)) {
+    const s = tidyProper(m[1]!);
+    if (!s || /^(this|it|there|what|github|the)$/i.test(s)) continue;
+    const kind = m[2]!.replace(/\s+/g, " ").trim().toLowerCase();
+    const o = /^[aeiou]/i.test(kind) ? `an ${kind}` : `a ${kind}`;
+    if (o.length >= 8 && o.length <= 72) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  for (const t of techniquesFromProse(head)) add(t);
   return out;
 }
 
@@ -2657,7 +2744,198 @@ export function rfcEdgesFromText(num: string, text: string): Triple[] {
   return out;
 }
 
-/** Inverse edges: RFC 2396 is obsoleted by RFC 3986. Same facts, other subject — persistable `is`. */
+function softwareName(url: string, scan?: HtmlScan): string | undefined {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "github.com" || host === "raw.githubusercontent.com") {
+      const repo = u.pathname.split("/").filter(Boolean)[1];
+      if (!repo) return undefined;
+      const decoded = decodeURIComponent(repo);
+      if (/[A-Z.]/.test(decoded) || decoded.includes("-")) return decoded;
+      return decoded.charAt(0).toUpperCase() + decoded.slice(1);
+    }
+  } catch {
+    /* fall through */
+  }
+  const title = (scan?.og.title || scan?.title || "").replace(/\s+/g, " ").trim();
+  const h1 = scan?.h1[0] ? innerText(scan.h1[0]!) : "";
+  const raw = (h1 || title).replace(/\s*[-–|].*$/, "").trim();
+  return tidyProper(raw);
+}
+
+const TOOL_SKIP =
+  /^(this|it|there|what|which|that|and|github|the|a|an|you|we|they|use|used|using|cookie|cookies|here|only|data|system|software|example|project|plugin|service|information|program)$/i;
+
+function tidyToolName(raw: string): string | undefined {
+  const proper = tidyProper(raw);
+  if (proper && !TOOL_SKIP.test(proper)) return proper;
+  const t = stripMarkup(raw).replace(/\s+/g, " ").trim();
+  if (!/^[A-Za-z][\w.+-]{1,24}$/.test(t) || TOOL_SKIP.test(t)) return undefined;
+  return t;
+}
+
+function tidyTechniqueObject(raw: string): string | undefined {
+  let rest = stripMarkup(raw).replace(/\s+/g, " ").trim();
+  rest = (rest.split(/(?<=\w)[.!](?:\s|$)/)[0] || rest).trim();
+  rest = rest.replace(/^(to|for)\s+/i, "").replace(/[,;:\s]+$/g, "").trim();
+  if (rest.length > 56) rest = rest.slice(0, 56).replace(/\s+\S*$/, "").trim();
+  if (rest.length < 4 || /^(this|it|that|them|you|your|their)\b/i.test(rest)) return undefined;
+  const o = `used for ${rest}`;
+  if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return undefined;
+  return o;
+}
+
+/** Tool/docs + forum techniques. Packed as `is` / `used for`. */
+export function techniquesFromProse(text: string): Triple[] {
+  const out: Triple[] = [];
+  const seen = new Set<string>();
+  const add = (t: Triple) => {
+    if (out.length >= 16) return;
+    const k = `${t.s}\0${t.p}\0${t.o}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(t);
+  };
+  const head = text.slice(0, 12_000);
+  const USED =
+    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(USED)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const USE_X = /\b[Uu]se\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/g;
+  for (const m of head.matchAll(USE_X)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const REC =
+    /\b([A-Za-z][\w.+-]{1,40})\s+is\s+(?:the\s+)?(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(REC)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const INSTEAD =
+    /\binstead of\s+[A-Za-z][\w.+-]{0,40}.{0,40}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(INSTEAD)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const DONT =
+    /\bdon(?:['’])?t use\s+[A-Za-z][\w.+-]{0,40}.{0,48}?\buse\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(DONT)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const I_USED =
+    /\b(?:I|we|you)\s+(?:just\s+)?used\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(I_USED)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const FIXED =
+    /\b(?:fixed|solved|resolved)\b[\s\S]{0,48}?\busing\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(FIXED)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const TRY =
+    /\btry(?:ing)?\s+(?:using\s+)?([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(TRY)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const SWITCH =
+    /\bswitch(?:ed)? to\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(SWITCH)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const REPLACE =
+    /\breplace(?:d)?\s+[A-Za-z][\w.+-]{0,40}.{0,24}?with\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(REPLACE)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const ANSWER =
+    /\b(?:the )?(?:answer|fix|workaround) is (?:to )?use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(ANSWER)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const WORKS =
+    /\b([A-Za-z][\w.+-]{1,40})\s+works(?:\s+(?:great|well|fine))?\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(WORKS)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  const SHOULD =
+    /\byou (?:should|can|want to)\s+use\s+([A-Za-z][\w.+-]{1,40})\s+(?:to|for)\s+([^.!?\n]{4,80})/gi;
+  for (const m of head.matchAll(SHOULD)) {
+    const s = tidyToolName(m[1]!);
+    if (!s) continue;
+    const o = tidyTechniqueObject(m[2]!);
+    if (o) add({ s, p: "is", o, e: m[0]!.slice(0, 280) });
+  }
+  return out;
+}
+
+function tidySoftwareObject(raw: string): string | undefined {
+  let o = stripMarkup(raw).replace(/\s+/g, " ").trim();
+  if (!o) return undefined;
+  o = (o.split(/(?<=\w)[.!](?:\s|$)/)[0] || o).trim();
+  if (o.length > 72) o = o.slice(0, 72).replace(/\s+\S*$/, "").trim();
+  o = o.replace(/[,;:\s]+$/g, "").trim();
+  if (o.length < 8 || o.length > 72 || looksLikeCode(o) || wikiNoise(o) || /[{}<>\[\]]/.test(o)) return undefined;
+  if (!/^(a|an|the)\s/i.test(o) && /^(runtime|compiler|bundler|framework|library|language)\b/i.test(o)) {
+    o = `${/^[aeiou]/i.test(o) ? "an" : "a"} ${o}`;
+  }
+  return o;
+}
+
+/** GitHub README / tool docs `is` from OG description or the first “X is a runtime” sentence. */
+export function softwareLeadIs(url: string, html: string, text: string, scan?: HtmlScan): Triple | undefined {
+  if (!toolDocsUrl(url)) return undefined;
+  const name = softwareName(url, scan);
+  if (!name || name.length < 2 || name.length > 40) return undefined;
+  const metas = scan?.metas ?? (html ? namedMeta(html, ["description", "og:description"]) : {});
+  const og = scan?.og ?? (html ? openGraph(html) : {});
+  const candidates = [og.description, metas["og:description"], metas.description, text].filter(
+    (s): s is string => typeof s === "string" && s.length >= 8,
+  );
+  for (const c of candidates) {
+    const o = tidySoftwareObject(c);
+    if (!o || o.toLowerCase() === name.toLowerCase()) continue;
+    const t: Triple = { s: name, p: "is", o, e: o.slice(0, 280) };
+    if (persistable(url, t)) return t;
+  }
+  return undefined;
+}
+
 function rfcEdgeInverses(edges: Triple[]): Triple[] {
   const out: Triple[] = [];
   const seen = new Set<string>();
@@ -2752,6 +3030,8 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
     const leadIs = wikiLeadIs(url, html, text, scan);
     if (leadIs) out.push(leadIs);
   }
+  const toolIs = softwareLeadIs(url, html, text, scan);
+  if (toolIs) out.push(toolIs);
   const rfcUrl = url.match(/rfc[-/_]?(\d{3,5})/i);
   const xmlNum = isHtml ? rfcXmlNumber(html) : undefined;
   const rfcNum = rfcUrl?.[1] || xmlNum;
@@ -2821,7 +3101,7 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
   const seen = new Set<string>();
   const kept = out
     .map(cleanTriple)
-    .filter((t): t is Triple => !!t && persistable(url, t))
+    .filter((t): t is Triple => !!t && !junkGraphFact(t) && HOT_PRED.has(t.p))
     .filter((t) => {
       const k = t.p === "capital" ? `${t.s}\0${t.p}` : `${t.s}\0${t.p}\0${t.o}`;
       if (seen.has(k)) return false;
@@ -2835,7 +3115,7 @@ export function triplesFromPage(url: string, htmlOrText: string, isHtml: boolean
 }
 
 const LINK_PREFER =
-  /wikipedia\.org|wikidata\.org|rfc-editor\.org|ietf\.org|w3\.org|iana\.org|httpwg\.org/i;
+  /wikipedia\.org|wikidata\.org|rfc-editor\.org|ietf\.org|w3\.org|iana\.org|httpwg\.org|github\.com\/(?:whatwg|oven-sh|denoland|rust-lang|golang|python|nodejs|kubernetes|jqlang)|raw\.githubusercontent\.com|docs\.python\.org|nodejs\.org|doc\.rust-lang\.org|go\.dev|bun\.sh|kubernetes\.io|developer\.mozilla\.org|git-scm\.com|docs\.github\.com|docs\.docker\.com|react\.dev|nextjs\.org|typescriptlang\.org|reddit\.com\/r\/|stackoverflow\.com\/questions|news\.ycombinator\.com\/item/i;
 
 /** Wiki article and list URLs from HTML hrefs and `[[wikilinks]]` so random pages fan out. */
 export function wikiGrowUrls(base: string, html: string): string[] {
@@ -2906,9 +3186,10 @@ export function extractLinks(base: string, htmlOrText: string): string[] {
   while ((m = href.exec(htmlOrText))) add(m[1]!);
   const prefer: string[] = [];
   const rest: string[] = [];
-  for (const u of urls) (LINK_PREFER.test(u) ? prefer : rest).push(u);
+  for (const u of urls) (talkUrl(u) || githubToolUrl(u) || LINK_PREFER.test(u) ? prefer : rest).push(u);
   const listPage = /\/wiki\/List_of_/i.test(base);
-  const cap = listPage ? 400 : 160;
+  const talkIndex = talkUrl(base) || /\/(?:issues|discussions|questions\/tagged)(?:\/|$)/i.test(base);
+  const cap = listPage || talkIndex ? 400 : 160;
   return [...prefer, ...rest].slice(0, cap);
 }
 

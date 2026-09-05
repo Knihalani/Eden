@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { login, formatStatus } from "./login";
-import { wrapRegistry, wrapListen } from "./wrap-cmd";
+import { wrapCmd, wrapHelp, wrapBootLetter, wrapRegistry, wrapListen } from "./wrap-cmd";
 import { resolveApiKey } from "./home";
 
 describe("login", () => {
@@ -79,5 +79,44 @@ describe("wrap cmd", () => {
     expect(wrapRegistry([])?.has?.("Grep")).toBe(true);
     expect(wrapListen(["--host", "0.0.0.0", "--port", "9000"])).toEqual({ port: 9000, hostname: "0.0.0.0" });
     expect(wrapListen([]).hostname).toBe("127.0.0.1");
+  });
+
+  test("--help is a letter and does not start the proxy", async () => {
+    const letter = wrapHelp();
+    expect(letter).toMatch(/^eden wrap —/);
+    expect(letter).toMatch(/does not start the proxy/);
+    expect(letter).toMatch(/Does not Approve/);
+    expect(letter).toMatch(/OPENAI_BASE_URL=http:\/\/127\.0\.0\.1:8788\/v1/);
+    expect(letter).toMatch(/OPENAI_API_KEY/);
+    expect(letter).toMatch(/OPENAI_API_BASE/);
+    expect(letter).toMatch(/compiled hit/);
+    expect(letter).toMatch(/HTTP 200/);
+    expect(letter).toMatch(/\/v1\/wrap/);
+    expect(letter).toMatch(/\/v1\/ingest/);
+    expect(letter).toMatch(/T-100 is eden demo/);
+    expect(letter).not.toMatch(/apps\/web/);
+    const logs: string[] = [];
+    const log = console.log;
+    console.log = (msg?: unknown) => {
+      logs.push(String(msg ?? ""));
+    };
+    try {
+      await wrapCmd(["--help"]);
+    } finally {
+      console.log = log;
+    }
+    expect(logs.join("\n")).toBe(letter);
+  });
+
+  test("boot letter is two-line enable, not the gated workbench", () => {
+    const letter = wrapBootLetter("http://127.0.0.1:8788/", 0);
+    expect(letter).toMatch(/OPENAI_BASE_URL=http:\/\/127\.0\.0\.1:8788\/v1/);
+    expect(letter).toMatch(/compiled hit/);
+    expect(letter).toMatch(/HTTP 200/);
+    expect(letter).toMatch(/\/v1\/wrap/);
+    expect(letter).toMatch(/\/v1\/ingest/);
+    expect(letter).toMatch(/Live tools: 0/);
+    expect(letter).toMatch(/T-100 is eden demo/);
+    expect(letter).not.toMatch(/apps\/web/);
   });
 });

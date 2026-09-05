@@ -177,14 +177,14 @@ export async function runNaive(
   let llmCalls = 0;
 
   const call = async (name: TicketToolName, args: Record<string, unknown>) => {
-    await world.mockLlm();
     llmCalls++;
+    // Think + tool is one recorded turn. Timing only the execute left event
+    // durations at ~0ms while mockLlm slept outside the clock — shadow then
+    // saw no time savings and the demo sitting could not PASS T-100.
     const c0 = performance.now();
+    await world.mockLlm();
     const result = await world.tools[name].execute(args);
     tools.push(name);
-    // Real per-call wall clock. The shadow gates treat a trace without event
-    // durations as time-unmeasured ("do not mix clocks"), so a fixture that
-    // wants to prove latency savings has to carry them.
     events.push({ name, args, result, ok: true, duration_ms: performance.now() - c0 });
     return result as Record<string, unknown>;
   };

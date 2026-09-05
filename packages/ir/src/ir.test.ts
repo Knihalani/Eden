@@ -390,6 +390,48 @@ describe("ir", () => {
     expect(issues.some((i) => i.message.includes("array"))).toBe(true);
     expect(inDistribution({ ...p, contract: { ...p.contract, envelope: { inputs: { id: "T-1" as unknown as unknown[] } } } }, { id: "T-1" })).toBe(false);
   });
+
+  test("branch cases ids must exist; binary branch has no cases", () => {
+    const binary = mini();
+    (binary as { steps: object[] }).steps = [
+      { id: "br", kind: "branch", expr: 'x == "a"', then: ["a"], else: ["b"] },
+      { id: "a", kind: "tool", tool: "ta", args: {} },
+      { id: "b", kind: "tool", tool: "tb", args: {} },
+    ];
+    expect(validateProgram(binary)).toEqual([]);
+
+    const nary = mini();
+    (nary as { steps: object[] }).steps = [
+      {
+        id: "br",
+        kind: "branch",
+        expr: 'x == "a"',
+        then: ["a"],
+        cases: [{ expr: 'x == "b"', steps: ["b"] }],
+        else: ["c"],
+      },
+      { id: "a", kind: "tool", tool: "ta", args: {} },
+      { id: "b", kind: "tool", tool: "tb", args: {} },
+      { id: "c", kind: "tool", tool: "tc", args: {} },
+    ];
+    expect(validateProgram(nary)).toEqual([]);
+
+    const missing = mini();
+    (missing as { steps: object[] }).steps = [
+      {
+        id: "br",
+        kind: "branch",
+        expr: 'x == "a"',
+        then: ["a"],
+        cases: [{ expr: 'x == "b"', steps: ["ghost"] }],
+        else: ["c"],
+      },
+      { id: "a", kind: "tool", tool: "ta", args: {} },
+      { id: "c", kind: "tool", tool: "tc", args: {} },
+    ];
+    const issues = validateProgram(missing);
+    expect(issues.some((i) => i.path.includes("cases") && i.message.includes("unknown arm step ghost"))).toBe(true);
+  });
 });
 
 describe("canonicalize agrees with eq about what is different", () => {
@@ -532,5 +574,11 @@ describe("a write is a write even when its name mentions a check", () => {
     expect(isCheckName("checkout")).toBe(false);
     expect(isCheckName("checkpoint")).toBe(false);
     expect(isCheckName("delete_check_run")).toBe(false);
+  });
+
+  test("campaign write verbs are mutating", () => {
+    for (const n of ["applyCredit", "reserveSku", "assignOwner", "setRollout", "mergeRows", "restockLine", "applyChange"]) {
+      expect(isMutating(n), n).toBe(true);
+    }
   });
 });

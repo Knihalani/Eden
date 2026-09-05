@@ -168,6 +168,26 @@ export function wetSpam(text: string): boolean {
   return /\b(bahis|casino|slot gacor|crypto pump)\b/.test(head);
 }
 
+/** Forum/how-to signal: problem + solution, not encyclopedia. */
+export function wetTalkBearing(text: string): boolean {
+  const head = text.slice(0, 12_000);
+  return (
+    /\bhow (?:do i|does one|can i|to|should i)\b/i.test(head) ||
+    /\bwhat(?:'s| is) the (?:best|right|proper|correct|usual) way\b/i.test(head) ||
+    /\bis there a (?:way|tool)\b/i.test(head) ||
+    /\blooking for a (?:way|tool) to\b/i.test(head) ||
+    /\banyone know how to\b/i.test(head) ||
+    /\binstead of\b.{0,40}\buse\b/i.test(head) ||
+    /\bdon(?:['’])?t use\b.{0,48}\buse\b/i.test(head) ||
+    /\b(?:I|we)\s+used\s+[A-Za-z][\w.+-]{1,40}\s+(?:to|for)\b/i.test(head) ||
+    /\b(?:fixed|solved|resolved)\b[\s\S]{0,48}\busing\b/i.test(head) ||
+    /\b(?:workaround|this (?:fixed|solved|worked)|the (?:fix|solution|workaround) (?:is|was))\b/i.test(head) ||
+    /\btry (?:using |to use )?[A-Za-z][\w.+-]{1,40}\s+(?:to|for)\b/i.test(head) ||
+    /\byou (?:should|can|want to) use\b/i.test(head) ||
+    /\brecommended way to\b|\bbest tool for\b/i.test(head)
+  );
+}
+
 /** Typed-fact pages worth a WET keep: not “any long English”, not first-800 “capital of ” only. */
 export function wetFactBearing(text: string): boolean {
   const head = text.slice(0, 12_000);
@@ -180,6 +200,22 @@ export function wetFactBearing(text: string): boolean {
   }
   if (/\bis a country in\b|\bnational capitals?\b|\bISO\s*3166(?:-1)?\b/i.test(head)) return true;
   if (/\bis a (?:city|company|university|protocol|standard|language)\b/i.test(head)) return true;
+  if (
+    /\bis an?\s+(?:incredibly\s+|fast\s+|open[- ]source\s+|high[- ]level\s+)*(?:javascript\s+|python\s+|rust\s+|go\s+|ruby\s+|java\s+|typescript\s+|web\s+)?(?:runtime|compiler|bundler|package manager|programming language|web framework|testing framework|container runtime|version control system|build tool|command-line tool|cli(?:\s+tool)?|library|framework)\b/i.test(
+      head,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\bis\s+(?:(?:also|often|commonly|typically|primarily|mainly|widely)\s+)?(?:used|designed|meant|intended)\s+(?:to|for)\b/i.test(
+      head,
+    ) ||
+    /\bis\s+(?:the\s+)?(?:recommended|standard|usual|preferred|common)\s+(?:way|tool|method)\s+(?:to|for)\b/i.test(head)
+  ) {
+    return true;
+  }
+  if (wetTalkBearing(head)) return true;
   if (/\bheadquarters\b|\bfounded in\b|\bwas founded\b/i.test(head)) return true;
   if (/\bRFC\s*\d{3,5}\b/i.test(head)) return true;
   if (/\b(?:application|text|image|audio|video|font)\/[a-z0-9][a-z0-9!#$&^_.+-]*/i.test(head)) return true;

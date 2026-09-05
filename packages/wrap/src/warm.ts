@@ -117,6 +117,7 @@ function bodyOwned(program: StretchProgram): Set<string> {
     if (s.kind === "branch") {
       for (const id of s.then) owned.add(id);
       for (const id of s.else ?? []) owned.add(id);
+      for (const c of s.cases ?? []) for (const id of c.steps) owned.add(id);
     }
   }
   return owned;

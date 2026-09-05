@@ -11,7 +11,7 @@ import {
 } from "@eden/core";
 import { negotiateMcpProtocolVersion, readMcpProtocolVersion } from "@eden/ir";
 import type { StretchProgram } from "@eden/ir";
-import { dispatchMessages, dispatchPrograms } from "@eden/wrap";
+import { compiledSchema, dispatchMessages, dispatchPrograms } from "@eden/wrap";
 import { playTool, warmWorkspaceBundle } from "./playback";
 
 // Warming is fire-and-forget: it touches the database and the network long
@@ -81,11 +81,24 @@ function mcpToolSchema(t: ToolRow) {
  */
 export function toolRowToProgram(row: ToolRow): StretchProgram {
   const siteSteps = parseSiteSteps(row.steps);
-  const url = siteSteps.map((s) => s.url).find((u) => typeof u === "string" && u);
+  const urls = siteSteps.map((s) => s.url).filter((u): u is string => typeof u === "string" && u.length > 0);
+  const url = urls[0];
   const command = siteSteps.map((s) => s.command).find((c) => typeof c === "string" && c);
   const args: Record<string, { kind: "literal"; value: string } | { kind: "transform"; fn: "template"; expr: string }> =
     {};
   if (url) args.u = { kind: "literal", value: url };
+  // Seeded forge URLs are `{origin}/forge/repos/…`. JIT scores concrete hosts,
+  // so map that prefix to api.github.com — the same shape the MCP fixtures use —
+  // without adding a playback step that would fetch GitHub.
+  for (let i = 0; i < urls.length; i++) {
+    const gh = urls[i]!.replace("{origin}/forge", "https://api.github.com");
+    if (gh !== urls[i]) {
+      args[`gh${i}`] = { kind: "literal", value: gh };
+      const web = gh.replace("https://api.github.com/repos/", "https://github.com/");
+      args[`web${i}`] = { kind: "literal", value: web };
+      if (web.includes("/pulls/")) args[`html${i}`] = { kind: "literal", value: web.replace("/pulls/", "/pull/") };
+    }
+  }
   if (command) args.command = { kind: "transform", fn: "template", expr: command };
   return {
     id: row.id,
@@ -115,12 +128,34 @@ export async function liveTools(db: EdenDb, workspaceId: string): Promise<ToolRo
   );
 }
 
+/** Same On set wrap play uses. Dispatch must not hide a tool wrap can play. */
+export async function liveOnTools(db: EdenDb, workspaceId: string): Promise<ToolRow[]> {
+  return db.all<ToolRow>(
+    `SELECT id, name, when_to_use, steps, uses_count FROM tool WHERE workspace_id = ? AND state = 'on'`,
+    [workspaceId],
+  );
+}
+
+function pickDispatchRow(rows: ToolRow[], params?: Record<string, unknown>): ToolRow | undefined {
+  const messages = dispatchMessages(params);
+  const picked = dispatchPrograms(messages, rows.map(toolRowToProgram));
+  return picked[0] ? rows.find((r) => r.name === picked[0]!.name || r.id === picked[0]!.id) : undefined;
+}
+
 export function dispatchResult(rows: ToolRow[], params?: Record<string, unknown>): { tools: ReturnType<typeof mcpToolSchema>[] } {
   try {
-    const messages = dispatchMessages(params);
-    const picked = dispatchPrograms(messages, rows.map(toolRowToProgram));
-    const hit = picked[0] ? rows.find((r) => r.name === picked[0]!.name || r.id === picked[0]!.id) : undefined;
+    const hit = pickDispatchRow(rows, params);
     return { tools: hit ? [mcpToolSchema(hit)] : [] };
+  } catch {
+    return { tools: [] };
+  }
+}
+
+/** Same OpenAI function schema local wrap POST /v1/dispatch returns. MCP keeps inputSchema. */
+export function wrapDispatchResult(rows: ToolRow[], params?: Record<string, unknown>): { tools: ReturnType<typeof compiledSchema>[] } {
+  try {
+    const hit = pickDispatchRow(rows, params);
+    return { tools: hit ? [compiledSchema(toolRowToProgram(hit))] : [] };
   } catch {
     return { tools: [] };
   }
@@ -166,7 +201,7 @@ export async function handleMcp(db: EdenDb, workspaceId: string, body: Rpc, orig
   if (method === "tools/dispatch") {
     let tools: ReturnType<typeof mcpToolSchema>[] = [];
     try {
-      tools = dispatchResult(await liveTools(db, workspaceId), params).tools;
+      tools = dispatchResult(await liveOnTools(db, workspaceId), params).tools;
     } catch {
       tools = [];
     }

@@ -248,6 +248,9 @@ export function redactString(s: string): string {
 
 /** True if `s` looks like it carries a credential. */
 function stringHasSecret(s: string): boolean {
+  // Shortest token pattern is `Bearer a` (8). Assignment scan needs `=` or `:`.
+  // Plain short strings (synth ids, tags) cannot match either.
+  if (s.length < 8 && s.indexOf("=") < 0 && s.indexOf(":") < 0) return false;
   return SECRET_ANY.test(s) || scanAssignments(s, null);
 }
 

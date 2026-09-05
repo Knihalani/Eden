@@ -1,6 +1,7 @@
 import type { StretchProgram } from "@eden/ir";
 import { jitMax } from "@eden/ir";
 import { argShapes, firstCommandTemplate, programFirstStepShapes, templateFits } from "./steer";
+import { looksLikeDenseWitness } from "../../core/src/shapes";
 
 /**
  * Dispatch surface policy (docs/dispatch.md).
@@ -9,22 +10,22 @@ import { argShapes, firstCommandTemplate, programFirstStepShapes, templateFits }
  * picks how much of it a request may see:
  *
  *   all        every live program's schema is appended to the client's tools
- *              (the pre-Dispatch behavior, and still the default).
+ *              (the pre-Dispatch behavior). Opt in with EDEN_SURFACE=all.
  *   none       nothing is injected. Routing is purely reactive steering: the
  *              model writes its natural raw call and the proxy rewrites it.
  *              Zero Eden tokens in context, zero catalog churn.
  *   jit        at most ONE program's schema is injected, chosen per-request
  *              by the deterministic intent scorer below, only when concrete
  *              structural evidence (a URL shape, a CLI shape, a command
- *              template fit) appears in the conversation. Silence otherwise.
+ *              template fit, or an envelope witness id) appears in the
+ *              conversation. Silence otherwise.
  *   jit-shadow behaves exactly like `none` but logs which single program the
  *              scorer WOULD have surfaced. This is how precision is measured
  *              on real traffic before jit is allowed anywhere near it.
  *
- * The default is "all" so an upgrade changes nothing until an operator opts
- * in — the same observe-mode doctrine as steering itself. Wave 19 remeasured
- * `benchmarks/campaign/jit-soak.ts` as FAIL (`precision=0.789 n=38`); the
- * default stays `all` until a later soak prints PASS.
+ * The default is "jit" after the Wave 22.2 soak printed PASS at the
+ * registered bar (precision ≥ 0.95, unique-work empty catalog). Set
+ * EDEN_SURFACE=all to restore the historic full catalog.
  */
 export type SurfaceMode = "all" | "none" | "jit" | "jit-shadow";
 
@@ -33,8 +34,10 @@ export function surfaceMode(): SurfaceMode {
     .trim()
     .toLowerCase();
   if (v === "none") return "none";
-  if (v === "jit") return "jit";
+  if (v === "all") return "all";
   if (v === "jit-shadow" || v === "shadow") return "jit-shadow";
+  if (v === "jit") return "jit";
+  if (!v) return "jit";
   return "all";
 }
 
@@ -50,25 +53,30 @@ export function surfaceMode(): SurfaceMode {
  *   +3  template fit   the program's shell command template structurally fits
  *                      a command-looking string in the messages (same binary,
  *                      same arity, same flags — slot positions may differ).
+ *   +3  envelope hit   a dense token in the messages equals a dense string in
+ *                      that program's envelope.inputs (account id, UUID, email,
+ *                      ARN, Stripe id, S3 URI, GID). Exact membership only.
  *   +1  token overlap  distinct informative words shared between the program's
  *                      name/sequence and the message text, capped at +2 total.
  *
  * MIN_SCORE = 3 means token overlap alone can NEVER surface anything: a
- * mention of the word "ticket" is not evidence. This gate is what keeps
- * routing precision measurable and the fail-closed story intact — a wrong
- * route must be refused by the envelope, and the cheapest way to be right is
- * to only speak when there is structure to match.
+ * mention of the word "ticket" is not evidence. Envelope hits require the
+ * exact id to have been witnessed on that program — `N-0` and `ticket 123`
+ * stay silent unless those values are in the envelope.
  */
 const SCORE_SHAPE = 4;
 const SCORE_TEMPLATE = 3;
+const SCORE_WITNESS = 3;
 export const INTENT_MIN_SCORE = 3;
 
 export type RankedMatch = {
   program: StretchProgram;
   score: number;
-  /** Which evidence fired: "shape" | "template" | "tokens". Best first. */
-  via: "shape" | "template" | "tokens";
+  /** Which evidence fired: "shape" | "template" | "witness" | "tokens". Best first. */
+  via: "shape" | "template" | "witness" | "tokens";
 };
+
+type RankedInternal = RankedMatch & { idx: number };
 
 /** Words too generic to count as evidence on their own. */
 const STOP_TOKENS = new Set([
@@ -139,6 +147,92 @@ function programTokens(p: StretchProgram): Set<string> {
   return out;
 }
 
+const DENSE_EXTRACT =
+  /[^\s]+@[^\s]+|s3:\/\/[^\s]+|arn:aws:[^\s]+|gid:\/\/[^\s]+|\+[1-9]\d{6,14}|[A-Za-z0-9_.:/-]{4,}/g;
+
+/** Dense tokens in conversation text. One pass per rankPrograms call. */
+export function denseTokensFromText(text: string): Set<string> {
+  const out = new Set<string>();
+  const matches = text.match(DENSE_EXTRACT) ?? [];
+  for (const raw of matches) {
+    const t = raw.replace(/[.,;:!?)]+$/g, "");
+    if (looksLikeDenseWitness(t)) out.add(t);
+  }
+  return out;
+}
+
+/** Envelope values that are themselves dense witnesses. */
+export function envelopeDenseWitnesses(p: StretchProgram): string[] {
+  const out: string[] = [];
+  for (const vals of Object.values(p.contract.envelope?.inputs ?? {})) {
+    if (!Array.isArray(vals)) continue;
+    for (const v of vals) {
+      if (typeof v === "string" && looksLikeDenseWitness(v)) out.push(v);
+    }
+  }
+  return out;
+}
+
+/**
+ * Drop trailing English so `psql -c 'select 1' please` still has shape
+ * `cli:psql` and still template-fits. The cut requires a space before the
+ * conjunction, so `please handle ticket 123` is unchanged.
+ */
+function commandCandidateLines(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    out.push(trimmed);
+    const cut = trimmed.search(/\s+(and|please|then|tell|for me)\b/i);
+    if (cut > 0) out.push(trimmed.slice(0, cut).trim());
+  }
+  return out;
+}
+
+/**
+ * `github.com/o/r/issues/1` without a scheme is still a GitHub URL.
+ * `api.github.com/repos/o/r/issues/{id}` and `github.com/o/r/issues/{id}`
+ * are the same resource kind so a forge seed compiled from acme/app still
+ * JIT-matches a stranger's KaiavN/Eden link.
+ */
+export function githubBareUrls(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const re = /(?:https?:\/\/)?(?:www\.)?(github\.com|api\.github\.com)\/[^\s"'<>]+/gi;
+  for (const m of text.matchAll(re)) {
+    const raw = m[0].replace(/[.,;:!?)]+$/g, "");
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
+/** Resource kind after owner/repo: issues/{id} vs pulls/{id}, host-agnostic. */
+export function githubResourceKey(shape: string): string | null {
+  const s = shape.replace(/^https?:\/\//i, "");
+  const m = s.match(/^(?:api\.)?github\.com(?:\/repos)?\/[^/]+\/[^/]+\/(issues|pulls|pull)(\/\{id\}.*)$/i);
+  if (!m) return null;
+  const kind = m[1]!.toLowerCase() === "pull" ? "pulls" : m[1]!.toLowerCase();
+  return `gh:${kind}${m[2]!.replaceAll("{issue}", "{id}")}`;
+}
+
+function githubShapeHit(msgShapes: Set<string>, progShapes: string[]): boolean {
+  if (progShapes.some((s) => msgShapes.has(s))) return true;
+  const msgGh = new Set<string>();
+  for (const s of msgShapes) {
+    const k = githubResourceKey(s);
+    if (k) msgGh.add(k);
+  }
+  if (!msgGh.size) return false;
+  return progShapes.some((s) => {
+    const k = githubResourceKey(s);
+    return Boolean(k && msgGh.has(k));
+  });
+}
+
 /**
  * Rank programs against a conversation. Returns ALL candidates that clear the
  * evidence bar, best first; callers decide how many may be surfaced (Dispatch
@@ -150,34 +244,43 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
   if (!text) return [];
   const msgShapes = new Set<string>();
   try {
-    // Reuse steer's extractor: each message string goes through the same
-    // argShapes pipeline a raw call's arguments go through, so both sides of
-    // the comparison land on one spelling.
-    for (const s of text.split("\n")) {
+    for (const s of commandCandidateLines(text)) {
       for (const sh of argShapes({ v: s })) msgShapes.add(sh);
+    }
+    for (const u of githubBareUrls(text)) {
+      for (const sh of argShapes({ v: u })) msgShapes.add(sh);
     }
   } catch {
     /* no shapes is fine; scoring continues on text alone */
   }
-  const ranked: RankedMatch[] = [];
-  for (const p of programs) {
+  const msgWitnesses = denseTokensFromText(text);
+  const ranked: RankedInternal[] = [];
+  for (let i = 0; i < programs.length; i++) {
+    const p = programs[i]!;
     if (!p.manifest) continue;
     let score = 0;
     let via: RankedMatch["via"] = "tokens";
     try {
       const progShapes = programFirstStepShapes(p);
-      if (msgShapes.size && progShapes.some((s) => msgShapes.has(s))) {
+      if (msgShapes.size && githubShapeHit(msgShapes, progShapes)) {
         score += SCORE_SHAPE;
         via = "shape";
       }
       const tmpl = firstCommandTemplate(p);
       if (!score && tmpl) {
-        for (const line of text.split("\n")) {
-          if (templateFits(tmpl, line.trim())) {
+        for (const line of commandCandidateLines(text)) {
+          if (templateFits(tmpl, line)) {
             score += SCORE_TEMPLATE;
             via = "template";
             break;
           }
+        }
+      }
+      if (!score) {
+        const env = envelopeDenseWitnesses(p);
+        if (env.some((w) => msgWitnesses.has(w))) {
+          score += SCORE_WITNESS;
+          via = "witness";
         }
       }
     } catch {
@@ -192,15 +295,15 @@ export function rankPrograms(messages: readonly unknown[], programs: StretchProg
       }
     }
     score += Math.min(hits, 2);
-    if (score >= INTENT_MIN_SCORE) ranked.push({ program: p, score, via });
+    if (score >= INTENT_MIN_SCORE) ranked.push({ program: p, score, via, idx: i });
   }
   ranked.sort(
     (a, b) =>
       b.score - a.score ||
       (b.program.sequence?.length ?? 0) - (a.program.sequence?.length ?? 0) ||
-      a.program.name.localeCompare(b.program.name),
+      a.idx - b.idx,
   );
-  return ranked;
+  return ranked.map(({ idx: _idx, ...rest }) => rest);
 }
 
 export type SurfaceSelection = {
@@ -260,11 +363,15 @@ export function dispatchPrograms(
   }
 }
 
-/** JSON-RPC params: `{ messages }` or alias `{ transcript }`. Non-arrays are missing. */
+/** JSON-RPC params: `{ messages }` or alias `{ transcript }`. A string `url` is one user turn. Non-arrays are missing. */
 export function dispatchMessages(params?: Record<string, unknown> | null): unknown[] | undefined {
   if (!params || typeof params !== "object") return undefined;
   const raw = params.messages ?? params.transcript;
-  return Array.isArray(raw) ? raw : undefined;
+  if (Array.isArray(raw)) return raw;
+  if (typeof params.url === "string" && params.url.trim()) {
+    return [{ role: "user", content: params.url.trim() }];
+  }
+  return undefined;
 }
 
 /** Consecutive unused JIT injections before the episode demotes to S0 (none). */

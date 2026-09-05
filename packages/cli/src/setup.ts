@@ -70,6 +70,27 @@ export function wrapMcpServer(cliPath: string): { command: string; args: string[
   return { command: "bun", args: [cliPath, "mcp"] };
 }
 
+/**
+ * Path hooks and MCP should invoke. After `npm i -g` that is dist/eden.js
+ * (process.argv[1]), not a sibling cli.ts that does not ship.
+ */
+export function installedCliPath(): string {
+  const sibling = join(import.meta.dir, "cli.ts");
+  const dist = join(import.meta.dir, "eden.js");
+  const argv1 = process.argv[1];
+  if (
+    argv1 &&
+    existsSync(argv1) &&
+    (argv1.endsWith("cli.ts") || argv1.endsWith("eden.js") || /(?:^|\/)eden$/.test(argv1))
+  ) {
+    return argv1;
+  }
+  if (existsSync(sibling)) return sibling;
+  if (existsSync(dist)) return dist;
+  if (argv1 && existsSync(argv1)) return argv1;
+  return sibling;
+}
+
 // ── Multi-agent recording (Gemini CLI / OpenCode / Codex) ───────────────────
 //
 // Claude Code is the reference integration; the same fail-open probe now
@@ -360,7 +381,7 @@ export async function setup(args: string[]): Promise<void> {
   ensureHome();
   writeConfig({ api_key: apiKey, base_url: wrap });
 
-  const cliPath = join(import.meta.dir, "cli.ts");
+  const cliPath = installedCliPath();
   const hookCmd = hookCommand(cliPath);
   const preCmd = preHookCommand();
   const headersCmd = `bun "${cliPath}" mcp-headers`;

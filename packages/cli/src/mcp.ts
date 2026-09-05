@@ -183,7 +183,22 @@ export async function handleMcp(msg: Rpc, ctx: {
   if (msg.id != null) fail(msg.id, -32601, `method not found: ${msg.method ?? ""}`);
 }
 
+export function mcpHelp(): string {
+  return `eden mcp — stdio MCP in front of wrap
+
+  eden mcp               Start stdio JSON-RPC (needs wrap up)
+  eden mcp --help        This letter; does not start stdio
+
+tools/list is an empty catalog. Dispatch at most one schema when a live
+program matches. Wrap down is original. Does not Approve.
+`;
+}
+
 export async function runMcp(args: string[] = process.argv.slice(2)): Promise<void> {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(mcpHelp());
+    return;
+  }
   const cfg = readConfig();
   const base = wrapPlaneUrl(cfg?.base_url || process.env.EDEN_BASE_URL);
   const key = resolveApiKey(args);

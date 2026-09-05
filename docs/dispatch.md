@@ -1,6 +1,6 @@
 # Dispatch — many tools, zero catalog
 
-**Status:** Wave 11 shipped the JIT catalog endpoint: `tools/list` and wrap `resources/list` are empty; `tools/dispatch` / `POST /v1/dispatch` return ≤1 schema or `[]`. Same scorer as local JIT (`dispatchPrograms`). Hosted load-probe still W=100 zero dups (`benchmarks/campaign/hosted-dispatch.ts`). `EDEN_SURFACE` default stays `all` — Wave 19 remeasured `bun run bench:jit-soak` as FAIL (`precision=0.789 n=38`). MCP is the adapter. A known `resources/read` URI still serves the program JSON; listing does not enumerate it.
+**Status:** Wave 11 shipped the JIT catalog endpoint: `tools/list` and wrap `resources/list` are empty; `tools/dispatch` / `POST /v1/dispatch` return ≤1 schema or `[]`. Same scorer as local JIT (`dispatchPrograms`). Hosted load-probe still W=100 zero dups (`benchmarks/campaign/hosted-dispatch.ts`). `EDEN_SURFACE` default is `jit` — Wave 22.2 `bun run bench:jit-soak` printed PASS (`precision=1.000 n=38`). MCP is the adapter. A known `resources/read` URI still serves the program JSON; listing does not enumerate it.
 
 ---
 
@@ -19,7 +19,7 @@ Putting a tool catalog in front of a model degrades along two axes at once:
 Eden had the same disease in two places:
 
 - `apps/site/src/mcp.ts` used to cap `tools/list` at **6** (`MCP_LIST_LIMIT`) — a hard ceiling that starved the library. Wave 11 emptied `tools/list` and scores the **whole** live set on `tools/dispatch` (still ≤1 schema out).
-- `packages/wrap/src/steer.ts :: injectTools()` appends **every live program** when `EDEN_SURFACE=all` (still the default after jit-soak FAIL). Ten approved programs are fine; two hundred are the 15k-token tax. Opt into `jit` / `none` to stop paying it.
+- `packages/wrap/src/steer.ts :: injectTools()` appends **every live program** when `EDEN_SURFACE=all` (the opt-out after Wave 22.2). Ten approved programs are fine; two hundred are the 15k-token tax. Default `jit` / opt into `none` to stop paying it.
 
 So today Eden must choose: serve few tools (starve the library) or many tools (pay the tax). Both halves of that trade are wrong, because both assume **the model must be able to see a tool to call it**.
 
@@ -118,7 +118,7 @@ Demoted to an **adapter**, kept for three legitimate audiences: third-party agen
 
 ## 7. Rollout & failsafes
 
-**Implementation status:** Tier 0, the Tier 1 scorer, both proxy wirings, injection-rate guards (`EDEN_JIT_MAX`), and hosted POST-transcript dispatch are shipped. Default remains `all` because Wave 19 jit-soak printed FAIL (`precision=0.789 n=38`). Unique-work empty-catalog held. Remaining: live shadow-precision aggregation on production traffic (stderr + soak fixture exist; two-week live window is still the flip gate).
+**Implementation status:** Tier 0, the Tier 1 scorer, both proxy wirings, injection-rate guards (`EDEN_JIT_MAX`), and hosted POST-transcript dispatch are shipped. Default is `jit` because Wave 22.2 jit-soak printed PASS (`precision=1.000 n=38`). Unique-work empty-catalog held. Remaining: live shadow-precision aggregation on production traffic (stderr + soak fixture exist).
 
 1. **Ship Tier 0 as default-off flag** (`EDEN_SURFACE=none`) — done; observe-mode doctrine intact: with the flag off, nothing changes for existing users.
 2. Shadow the intent scorer for two weeks against live traffic: log what it *would* surface; precision target ≥ 95% before Tier 1 enables anywhere. The scorer is deterministic and test-pinned; the LLM classifier (1.5) is opt-in per workspace and only ever *adds* candidates that the envelope still gates.

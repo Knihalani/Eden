@@ -41,14 +41,14 @@ describe("ingest journal", () => {
 
     const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-q-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi." }], 30);
-    expect(s.search("Kenya")[0]?.o).toBe("Nairobi");
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
+    expect(s.search("jq")[0]?.s).toBe("jq");
     const q = openQueryStore(dir);
-    expect(q.search("Kenya").length).toBe(0);
+    expect(q.search("jq").length).toBe(0);
     q.close?.();
     s.compact();
     const q2 = openQueryStore(dir);
-    expect(q2.search("Kenya")[0]?.o).toBe("Nairobi");
+    expect(q2.search("jq")[0]?.s).toBe("jq");
     q2.close?.();
     s.close();
     expect(existsSync(join(dir, "graph.sqlite"))).toBe(false);
@@ -75,8 +75,8 @@ describe("ingest journal", () => {
       30,
     );
     s.compact();
-    expect(s.search("Singapore")[0]?.o).toBe("Singapore");
-    expect(s.search("Germany")[0]?.o).toBe("Berlin");
+    expect(s.search("Singapore").length).toBe(0);
+    expect(s.search("Germany").length).toBe(0);
     expect(s.search("Berlin").some((h) => h.p === "capital" && h.s === "Berlin")).toBe(false);
     expect(s.search("Vatican City").some((h) => h.p === "capital" && h.s === "Vatican City" && h.o === "Vatican City")).toBe(
       false,
@@ -85,23 +85,51 @@ describe("ingest journal", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test("compact drops wiki-template is-rows even if they were already packed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-wikijunk-"));
+    writeFileSync(
+      join(dir, "graph.kpk"),
+      encodePack([
+        { s: "Kenya", p: "capital", o: "Nairobi", e: "", url: "https://en.wikipedia.org/wiki/Kenya" },
+        { s: "Hop Bottom, Pennsylvania", p: "is", o: "a |leader_title =", e: "", url: "" },
+        { s: "Hop Bottom", p: "is", o: "the official name of Hop Bottom, Pennsylvania", e: "", url: "" },
+        { s: "Platanoussa", p: "is", o: "situated on the eastern slope of the [[Xerovouni]] mountain", e: "", url: "" },
+        { s: "Latin", p: "is", o: "the motto of HMS Achates (H12)", e: "", url: "" },
+        { s: "Unincorporated community", p: "is", o: "the official name of Coalton, Kentucky", e: "", url: "" },
+        { s: "RFC 3986", p: "is", o: "URI Generic Syntax", e: "", url: "" },
+      ]),
+    );
+    const s = openStore(dir);
+    s.compact();
+    expect(s.search("Kenya").length).toBe(0);
+    expect(s.search("RFC 3986").length).toBe(0);
+    expect(s.search("Hop Bottom").some((h) => /leader_title|official name of Hop Bottom/i.test(`${h.s} ${h.o}`))).toBe(
+      false,
+    );
+    expect(s.search("Platanoussa").some((h) => /\[\[/.test(h.o))).toBe(false);
+    expect(s.search("Latin").some((h) => /motto of/i.test(h.o))).toBe(false);
+    expect(s.search("Unincorporated community").length).toBe(0);
+    s.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test("journal round-trips overlay across reopen; compact merges into pack", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-rt-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "France", p: "capital", o: "Paris", e: "The capital of France is Paris." }], 30);
+    s.putNodes("https://example.org/a", [{ s: "jq", p: "is", o: "used for filtering JSON", e: "jq is used for filtering JSON on the command line." }], 30);
     s.close();
     const s2 = openStore(dir);
-    expect(s2.search("France")[0]?.o).toBe("Paris");
+    expect(s2.search("jq")[0]?.s).toBe("jq");
     expect(s2.count().wal_nodes).toBeGreaterThanOrEqual(1);
     const q = openQueryStore(dir);
-    expect(q.search("France").length).toBe(0);
+    expect(q.search("jq").length).toBe(0);
     q.close?.();
     s2.compact();
     expect(s2.count().wal_nodes).toBe(0);
-    expect(s2.search("France")[0]?.o).toBe("Paris");
+    expect(s2.search("jq")[0]?.s).toBe("jq");
     s2.close();
     const q2 = openQueryStore(dir);
-    expect(q2.search("France")[0]?.o).toBe("Paris");
+    expect(q2.search("jq")[0]?.s).toBe("jq");
     q2.close?.();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -145,10 +173,10 @@ describe("ingest journal", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-sz-"));
     const s = openStore(dir);
     const triples = Array.from({ length: 200 }, (_, i) => ({
-      s: `C${i}`,
-      p: "capital" as const,
-      o: `X${i}`,
-      e: `The capital of C${i} is X${i}.`,
+      s: `Tool${i}`,
+      p: "is" as const,
+      o: `used for task number ${i} work`,
+      e: `Tool${i} is used for task number ${i} work`,
     }));
     s.putNodes("https://example.org/caps", triples, 30);
     s.compact();
@@ -207,11 +235,11 @@ describe("ingest journal", () => {
     };
     const pad = "z".repeat(800);
     for (let i = 0; i < 400; i++) intern(`pad ${i} ${pad}`);
-    const cap = intern("capital");
+    const used = intern("is");
     const now = Date.now();
     const insN = fat.prepare(`INSERT INTO nodes(sid,pid,oid,eid,url,as_of,ttl_days) VALUES (?,?,?,?,?,?,?)`);
     for (let i = 0; i < 200; i++) {
-      insN.run(intern(`Country${i}`), cap, intern(`X${i}`), 0, "https://example.org/caps", now, 30);
+      insN.run(intern(`Tool${i}`), used, intern(`used for task ${i} work`), intern(`Tool${i} is used for task ${i} work.`), "https://example.org/tools", now, 30);
     }
     fat.run(
       `INSERT INTO pages(url,digest,chars,source,fetched_at,ttl_days) VALUES (?,?,?,?,?,?)`,
@@ -231,7 +259,7 @@ describe("ingest journal", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-legacy-dst-"));
     copyFileSync(fixture, join(dir, "graph.sqlite"));
     const s = openStore(dir);
-    expect(s.search("Country0")[0]?.o).toBe("X0");
+    expect(s.search("Tool0")[0]?.o).toContain("used for task 0");
     expect(s.count().wal_nodes).toBeGreaterThanOrEqual(200);
     expect(s.pageDigest("https://example.org/kept")).toBe("keep-digest");
     expect(s.pageDigest("https://spam.example/x")).toBe("skip-digest");
@@ -331,14 +359,14 @@ describe("ingest journal", () => {
       `INSERT INTO pages(url,digest,chars,source,fetched_at,ttl_days) VALUES (?,?,?,?,?,?)`,
     );
     for (let i = 0; i < 72; i++) {
-      insP.run(`https://en.wikipedia.org/wiki/Page_${i}`, `digest${i}`, 1200, "cc", now, 30);
+      insP.run(`https://stackoverflow.com/questions/${i}/how-to-parse-json-with-jq`, `digest${i}`, 1200, "cc", now, 30);
     }
     const insF = fat.prepare(`INSERT INTO frontier(url, next_fetch, from_url) VALUES (?,?,?)`);
     for (let i = 0; i < 400; i++) {
       insF.run(
-        `https://en.wikipedia.org/wiki/Frontier_${i}_title`,
+        `https://old.reddit.com/r/commandline/comments/${i}/jq_filter_title`,
         now,
-        i % 4 === 0 ? "seed" : "https://en.wikipedia.org/wiki/Wikipedia:Contents",
+        i % 4 === 0 ? "seed" : "https://old.reddit.com/r/commandline/",
       );
     }
     const insH = fat.prepare(`INSERT INTO host_prior(host, kept, skipped) VALUES (?,?,?)`);
@@ -347,7 +375,7 @@ describe("ingest journal", () => {
     for (let i = 0; i < 1500; i++) {
       insM.run(
         Array.from({ length: 8 }, (_, j) => (i * 8 + j) * 1_000_003).join("."),
-        `https://en.wikipedia.org/wiki/Article_${i}_with_a_reasonably_long_title_for_payload_bytes`,
+        `https://stackoverflow.com/questions/${i}/how-to-parse-json-with-jq-on-the-command-line-without-loading`,
       );
     }
     fat.exec(`PRAGMA user_version = 11`);
@@ -384,7 +412,7 @@ describe("ingest journal", () => {
   test("interned frontier/pages URLs round-trip; enqueue/dequeue keep full strings", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-url-intern-"));
     const s = openStore(dir);
-    const long = "https://en.wikipedia.org/wiki/List_of_national_capitals_and_largest_cities_by_country";
+    const long = "https://stackoverflow.com/questions/12345678/how-to-parse-json-with-jq-on-the-command-line-without-loading-the-entire-file";
     const httpSlash = "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd";
     const qhash = "https://example.org/path/page?format=json&limit=200#frag";
     s.enqueue([long, httpSlash, qhash, "https://example.org/queued"], "https://example.org/feed");
@@ -422,11 +450,18 @@ describe("ingest journal", () => {
   test("leftover sqlite overlay is not copied; pack-duplicate SNAP journal becomes magic-only", () => {
     const dir = mkdtempSync(join(tmpdir(), "eden-know-jnl-leftover-"));
     const s = openStore(dir);
-    s.putNodes("https://example.org/a", [{ s: "Kenya", p: "capital", o: "Nairobi", e: "The capital of Kenya is Nairobi." }], 30);
+    const jq = {
+      s: "jq",
+      p: "is" as const,
+      o: "used for filtering JSON",
+      e: "jq is used for filtering JSON on the command line.",
+      url: "",
+    };
+    s.putNodes("https://example.org/a", [jq], 30);
     s.enqueue(["https://example.org/queued"], "https://example.org/feed");
     s.close();
     expect(statSync(join(dir, JNL_FILE)).size).toBeGreaterThan(4);
-    writeFileSync(join(dir, "graph.kpk"), encodePack([{ s: "Kenya", p: "capital", o: "Nairobi", e: "", url: "" }]));
+    writeFileSync(join(dir, "graph.kpk"), encodePack([jq]));
     if (!existsSync(join(dir, "seen.bin"))) writeFileSync(join(dir, "seen.bin"), Buffer.from("KNS1", "ascii"));
 
     const leftover = new Database(join(dir, "graph.sqlite"));
@@ -455,7 +490,7 @@ describe("ingest journal", () => {
     leftover.close();
 
     const s2 = openStore(dir);
-    expect(s2.search("Kenya")[0]?.o).toBe("Nairobi");
+    expect(s2.search("jq")[0]?.o).toContain("filtering JSON");
     expect(s2.count().wal_nodes).toBe(0);
     expect(s2.search("ExtraCountry").length).toBe(0);
     expect((s2.db.query(`SELECT COUNT(*) AS n FROM frontier WHERE url = 'https://example.org/queued'`).get() as { n: number }).n).toBe(1);
@@ -465,7 +500,7 @@ describe("ingest journal", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("crush + enqueue drop blogs/apod/nist CMS; keep RFC, W3C TR, wiki, news, seeds", () => {
+  test("crush + enqueue drop blogs/apod/nist CMS/wiki; keep RFC, W3C TR, talk, news, seeds", () => {
     const nist = "https://www.nist.gov/news-events/news/2026/08/spooky-particles";
     const news = "https://www.w3.org/news/2026/pointer-events-level-3/";
     const blog = "https://commoncrawl.org/blog/august-2026-crawl-archive-now-available";
@@ -474,22 +509,44 @@ describe("ingest journal", () => {
     const tr = "https://www.w3.org/TR/web-share/";
     const wiki = "https://en.wikipedia.org/wiki/Kenya";
     const caps = "https://en.wikipedia.org/wiki/List_of_national_capitals";
+    const talk = "https://old.reddit.com/r/commandline/comments/x/jq";
     expect(junkFrontier(nist)).toBe(true);
     expect(junkFrontier(news)).toBe(false);
     expect(junkFrontier(blog)).toBe(true);
     expect(junkFrontier(apod)).toBe(true);
     expect(junkFrontier(rfc)).toBe(false);
     expect(junkFrontier(tr)).toBe(false);
-    expect(junkFrontier(wiki)).toBe(false);
-    expect(junkFrontier(caps)).toBe(false);
+    expect(junkFrontier(wiki)).toBe(true);
+    expect(junkFrontier(caps)).toBe(true);
+    expect(junkFrontier(talk)).toBe(false);
     expect(junkFrontier("https://www.nist.gov/")).toBe(true);
     expect(junkFrontier("https://www.reuters.com/world/asia/story")).toBe(false);
     expect(junkFrontier("https://example.org/queued")).toBe(false);
+    expect(junkFrontier("https://github.com/oven-sh/bun")).toBe(false);
+    expect(junkFrontier("https://github.com/random-user/hello")).toBe(true);
+    expect(junkFrontier("https://github.com/oven-sh/bun/issues/1")).toBe(false);
+    expect(junkFrontier("https://docs.python.org/3/")).toBe(false);
 
     const dir = mkdtempSync(join(tmpdir(), "eden-know-crush-"));
     const s = openStore(dir);
     s.enqueue(
-      [nist, news, blog, apod, rfc, tr, wiki, caps, "https://www.reuters.com/world/asia/story", "https://example.org/queued"],
+      [
+        nist,
+        news,
+        blog,
+        apod,
+        rfc,
+        tr,
+        wiki,
+        caps,
+        talk,
+        "https://www.reuters.com/world/asia/story",
+        "https://example.org/queued",
+        "https://github.com/oven-sh/bun",
+        "https://github.com/random-user/hello",
+        "https://github.com/oven-sh/bun/issues/1",
+        "https://docs.python.org/3/",
+      ],
       "https://example.org/feed",
     );
     const queued = (s.db.query(`SELECT url FROM frontier`).all() as { url: string }[]).map((r) => r.url);
@@ -499,10 +556,15 @@ describe("ingest journal", () => {
     expect(queued).not.toContain(apod);
     expect(queued).toContain(rfc);
     expect(queued).toContain(tr);
-    expect(queued).toContain(wiki);
-    expect(queued).toContain(caps);
+    expect(queued).not.toContain(wiki);
+    expect(queued).not.toContain(caps);
+    expect(queued).toContain(talk);
     expect(queued).toContain("https://www.reuters.com/world/asia/story");
     expect(queued).toContain("https://example.org/queued");
+    expect(queued).toContain("https://github.com/oven-sh/bun");
+    expect(queued).toContain("https://docs.python.org/3");
+    expect(queued).not.toContain("https://github.com/random-user/hello");
+    expect(queued.some((u) => /\/issues\//.test(u))).toBe(true);
     expect(queued.some((u) => /nist\.gov/i.test(u))).toBe(false);
     s.close();
     rmSync(dir, { recursive: true, force: true });

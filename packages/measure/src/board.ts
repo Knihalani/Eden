@@ -1,5 +1,5 @@
 /**
- * Terminal / notes board for PUBLIC_CLAIMS (Wave 19).
+ * Terminal / notes board for PUBLIC_CLAIMS (Wave 21 honesty files).
  *
  * Limits, analogue, and retired print with the same file path as wins.
  * A number that is not on PUBLIC_CLAIMS must not be invented here.
