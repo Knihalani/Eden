@@ -900,9 +900,8 @@ export function jsonToolArgs(args: string): boolean {
 
 export function pythonInstallNeed(text: string): boolean {
   if (PIP_LIKE.test(text)) return !/\b(?:freeze|list|show|uninstall|outdated)\b/i.test(text);
-  if (/\binstall(?:ing)?\b/i.test(text) && /\bpython\b/i.test(text) && !JS_PKG.test(text)) return true;
-  if (/\bpython\b/i.test(text) && /\b(?:pypi|python packages|python deps)\b/i.test(text) && !JS_PKG.test(text)) return true;
-  return false;
+  if (!/\bpython\b/i.test(text) || JS_PKG.test(text)) return false;
+  return /\binstall(?:ing)?\b/i.test(text) || /\b(?:pypi|python packages|python deps)\b/i.test(text);
 }
 
 export function typescriptRunNeed(text: string): boolean {
