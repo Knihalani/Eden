@@ -996,10 +996,43 @@ export function implicitTechniqueTask(text: string): string | undefined {
   const t = text.replace(/\s+/g, " ");
   if (t.length < 8) return undefined;
   if (jsonCliNeed(t) && !jsonTechniqueBlockedByRfc(t)) return "JSON";
+  if (
+    jsonTaskToken(t) &&
+    !jsonTechniqueBlockedByRfc(t) &&
+    JSON_STRUCT.test(t) &&
+    /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line)\b/i.test(t)
+  ) {
+    return "JSON";
+  }
   if (pythonInstallNeed(t)) return "Python";
+  if (
+    /\bpython\b/i.test(t) &&
+    /\b(?:pypi|python packages|python deps)\b/i.test(t) &&
+    !JS_PKG.test(t)
+  ) {
+    return "Python";
+  }
   if (typescriptRunNeed(t)) return "TypeScript";
+  if (
+    /\btypescript\b/i.test(t) &&
+    /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(t)
+  ) {
+    return "TypeScript";
+  }
   if (findFilesNeed(t)) return "files";
+  if (/\bfile named\b/i.test(t) || (/\bglob\b/i.test(t) && /\b(?:tree|tsconfig)\b/i.test(t))) {
+    return "files";
+  }
   if (repoSearchNeed(t)) return "search";
+  if (
+    /\b(?:repo|codebase)\b/i.test(t) &&
+    /\b(?:todo|symbol)\b/i.test(t) &&
+    /\b(?:hunt|find|look|search|grep)\b/i.test(t) &&
+    !/\.(jsonl?|ndjson)\b/i.test(t)
+  ) {
+    return "search";
+  }
+  if (/\brust\b/i.test(t) && /\b(?:crate|binary)\b/i.test(t)) return "Rust";
   const m = TASK_FWD.exec(t) || TASK_REV.exec(t);
   if (!m) return undefined;
   const obj = m[1]!.trim();
