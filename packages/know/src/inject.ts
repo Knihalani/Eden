@@ -17,19 +17,13 @@ export function usefulInjectFact(fact: string): boolean {
   const f = fact.trim();
   if (!f) return false;
   if (/ is used for /i.test(f)) return true;
-  if (/\bRFC\s+\d{1,5}\s+obsoletes\s+RFC\s+\d/i.test(f)) return true;
-  if (/\bRFC\s+\d{1,5}\s+updates\s+RFC\s+\d/i.test(f)) return true;
-  if (/\bRFC\s+\d{1,5}\s+is obsoleted by\s+RFC\s+\d/i.test(f)) return true;
-  if (/\bRFC\s+\d{1,5}\s+is updated by\s+RFC\s+\d/i.test(f)) return true;
-  return false;
+  return /\bRFC\s+\d{1,5}\s+(?:obsoletes|updates|is obsoleted by|is updated by)\s+RFC\s+\d/i.test(f);
 }
 
 /** Queries that can produce a wrap card. Catalog flash is never worth a pack open. */
 export function injectWorthQuery(q: string): boolean {
   const ql = q.trim().toLowerCase();
-  if (ql.startsWith("used for ")) return true;
-  if (/\bobsolet/.test(ql) || /\bupdates\b/.test(ql) || /\bupdated by\b/.test(ql)) return true;
-  return false;
+  return ql.startsWith("used for ") || /\bobsolet|\bupdates?\b/.test(ql);
 }
 
 export type InjectCard = { fact: string; url?: string };
