@@ -888,6 +888,9 @@ export function jsonToolArgs(args: string): boolean {
 }
 
 export function pythonInstallNeed(text: string): boolean {
+  if (text.indexOf("pip") < 0 && text.indexOf("python") < 0 && text.indexOf("Python") < 0 && text.indexOf("easy_install") < 0) {
+    return false;
+  }
   if (PIP_LIKE.test(text)) return !/\b(?:freeze|list|show|uninstall|outdated)\b/i.test(text);
   if (!/\bpython\b/i.test(text) || JS_PKG.test(text)) return false;
   return /\binstall(?:ing)?\b/i.test(text) || /\b(?:pypi|python packages|python deps)\b/i.test(text);
@@ -938,7 +941,6 @@ function cleanTask(raw: string): string | undefined {
   return task;
 }
 
-/** Task remainder from “best way to …” / “need to …” / “what to use for …”. */
 export function techniqueTaskFromText(text: string): string | undefined {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length < 12) return undefined;
@@ -1020,10 +1022,6 @@ function bitsNeedle(task: string): string | undefined {
   return q.length >= 10 && q.length <= 80 ? q : undefined;
 }
 
-/**
- * Shorter `used for` queries when AND-postings of every leftover token miss.
- * “used for JSON command line” → “used for JSON”.
- */
 export function techniqueQueryFallbacks(q: string): string[] {
   const t = q.trim();
   if (t.length < 12 || !/^used for /i.test(t)) return [];
