@@ -870,22 +870,13 @@ export function jsonCliNeed(text: string): boolean {
     return false;
   }
   if (GREP_LINE.test(text)) return true;
-  if (
-    /\.(jsonl?|ndjson)\b/i.test(text) &&
-    JSON_STRUCT.test(text) &&
-    /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)
-  ) {
+  const struct = JSON_STRUCT.test(text);
+  if (struct && /\.(jsonl?|ndjson)\b/i.test(text) && /\b(?:pull|pluck|grep|cat|sed|awk|extract|parse|get|read|print)\b/i.test(text)) {
     return true;
   }
   const stripped = text.replace(/application\/json/gi, " ");
   if (/\bjson\b/i.test(stripped) && /\bcli\b/i.test(text)) return true;
-  if (
-    JSON_STRUCT.test(text) &&
-    /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line|pipeline)\b/i.test(text)
-  ) {
-    return true;
-  }
-  return false;
+  return struct && /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line|pipeline)\b/i.test(text);
 }
 
 /** Tool-call args: a JSON *file* or JSONPath, not `.items[]` on a TypeScript path. */
