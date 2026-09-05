@@ -905,12 +905,11 @@ export function typescriptRunNeed(text: string): boolean {
 }
 
 export function findFilesNeed(text: string): boolean {
-  if (/\bfile named\b/i.test(text)) return true;
-  if (/\bglob\b/i.test(text) && /\b(?:tree|tsconfig)\b/i.test(text)) return true;
+  if (text.indexOf("file") < 0 && text.indexOf("glob") < 0 && text.indexOf("find") < 0 && text.indexOf("locate") < 0) return false;
+  if (/\bfile named\b/i.test(text) || (/\bglob\b/i.test(text) && /\b(?:tree|tsconfig)\b/i.test(text))) return true;
   if (/\bfind\b/i.test(text) && /\s-i?name\b/.test(text)) return true;
   if (!/\b(?:find|locate)\b/i.test(text)) return false;
-  if (/\b(?:file named|files named|files? by name|by filename|filenames?)\b/i.test(text)) return true;
-  return /\bfiles?\b/i.test(text) && /\bglob\b/i.test(text);
+  return /\b(?:files named|files? by name|by filename|filenames?)\b/i.test(text) || (/\bfiles?\b/i.test(text) && /\bglob\b/i.test(text));
 }
 
 export function repoSearchNeed(text: string): boolean {
