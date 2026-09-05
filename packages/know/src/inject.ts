@@ -1,4 +1,4 @@
-import { detectNeed, isHotStaleRfc, isHotSuccessorRfc, type NeedInput } from "./need";
+import { detectNeed, isHotStaleRfc, isHotSuccessorRfc, hotStaleQuery, type NeedInput } from "./need";
 import { citeableUrl, knowQuery } from "./query";
 
 type KnowSearch = {
@@ -59,6 +59,19 @@ function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
 }
 
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
+
+/** "The old JSON RFC is 4627" — copula, not RFC-4627 adjacency. Hot map, no pack. */
+function rfcCopulaQueries(text: string): string[] {
+  if (text.length < 12 || (text.indexOf("RFC") < 0 && text.indexOf("rfc") < 0)) return [];
+  const out: string[] = [];
+  const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const q = hotStaleQuery(m[1]!);
+    if (q && !out.includes(q)) out.push(q);
+  }
+  return out;
+}
 
 /** Packed successor when the hot stale map does not list this RFC. Store only — wrap stays off the pack. */
 function successorQueries(text: string, store: KnowSearch, already: string[]): string[] {
@@ -150,6 +163,13 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
   if (process.env.EDEN_KNOW === "0") return undefined;
   try {
     const text = input.text || "";
+    const copula = rfcCopulaQueries(text);
+    if (copula.length) {
+      for (let i = 0; i < copula.length; i++) {
+        const card = factFor(copula[i]!, store);
+        if (card && !subjectMentioned(text, card.fact)) return card;
+      }
+    }
     const need = detectNeed(input, { skipIdent: true });
     const queries =
       store && /\bRFC[\s#:-]*\d/i.test(text)
