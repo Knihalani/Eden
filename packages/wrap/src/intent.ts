@@ -131,12 +131,21 @@ export function messageText(messages: readonly unknown[], maxMessages = 8): stri
       const o = v as Record<string, unknown>;
       // Content blocks: {type:"text", text}, tool results, etc. Read the
       // usual text-bearing fields; ignore ids, roles, schemas.
-      for (const key of ["content", "text", "command", "url"]) {
+      for (const key of ["content", "text", "command", "url", "thinking"]) {
         if (key in o) walk(o[key], depth + 1);
       }
     }
   };
-  for (const m of msgs) walk(m, 0);
+  for (const m of msgs) {
+    walk(m, 0);
+    if (m && typeof m === "object") {
+      const o = m as Record<string, unknown>;
+      const rc = o.reasoning_content;
+      if (typeof rc === "string" && rc.length) parts.push(rc.slice(0, 2000));
+      const rs = o.reasoning;
+      if (typeof rs === "string" && rs.length) parts.push(rs.slice(0, 2000));
+    }
+  }
   return parts.join("\n").slice(0, 16_000);
 }
 

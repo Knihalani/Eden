@@ -43,8 +43,22 @@ function cardFromKnow(q: string, store?: KnowSearch): InjectCard | undefined {
 
 function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
   if (!injectWorthQuery(q)) return;
+  if (store) {
+    let m = FACT_MEMO.get(store);
+    if (!m) {
+      m = new Map();
+      FACT_MEMO.set(store, m);
+    }
+    const k = q.toLowerCase();
+    if (m.has(k)) return m.get(k);
+    const card = cardFromKnow(q, store);
+    m.set(k, card);
+    return card;
+  }
   return cardFromKnow(q, store);
 }
+
+const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
 
 /** Packed successor when the hot stale map does not list this RFC. Store only — wrap stays off the pack. */
 function successorQueries(text: string, store: KnowSearch, already: string[]): string[] {
@@ -137,7 +151,10 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
   try {
     const text = input.text || "";
     const need = detectNeed(input, { skipIdent: true });
-    const queries = store ? [...need.queries, ...successorQueries(text, store, need.queries)] : need.queries;
+    const queries =
+      store && /\bRFC[\s#:-]*\d/i.test(text)
+        ? [...need.queries, ...successorQueries(text, store, need.queries)]
+        : need.queries;
     const n = Math.min(queries.length, 8);
     for (let i = 0; i < n; i++) {
       const q = queries[i]!;
