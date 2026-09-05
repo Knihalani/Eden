@@ -71,15 +71,17 @@ function successorQueries(text: string, store: KnowSearch, already: string[]): s
     n++;
     try {
       const hits = store.search(`RFC ${num}`, 8);
+      const subj = new RegExp(`^RFC\\s*${num}$`, "i");
+      const inObj = new RegExp(`RFC\\s*${num}\\b`, "i");
       for (const h of hits) {
         let q = "";
-        if (h.p === "is" && new RegExp(`^RFC\\s*${num}$`, "i").test(h.s.trim())) {
+        if (h.p === "is" && subj.test(h.s.trim())) {
           const dest = /(?:obsoleted|updated) by RFC\s*(\d{1,5})/i.exec(h.o);
           if (dest) q = /updated/i.test(h.o) ? `RFC ${dest[1]} updates` : `RFC ${dest[1]} obsoletes`;
-        } else if (h.p === "obsoletes" && new RegExp(`RFC\\s*${num}\\b`, "i").test(h.o)) {
+        } else if (h.p === "obsoletes" && inObj.test(h.o)) {
           const src = /^RFC\s+(\d{1,5})/i.exec(h.s);
           if (src) q = `RFC ${src[1]} obsoletes`;
-        } else if (h.p === "updates" && new RegExp(`RFC\\s*${num}\\b`, "i").test(h.o)) {
+        } else if (h.p === "updates" && inObj.test(h.o)) {
           const src = /^RFC\s+(\d{1,5})/i.exec(h.s);
           if (src) q = `RFC ${src[1]} updates`;
         }
@@ -130,11 +132,7 @@ export function subjectMentioned(text: string, fact: string): boolean {
     return new RegExp(`\\brfc[\\s#:-]*${n}\\b`, "i").test(text);
   }
   const key = subject.toLowerCase();
-  const aliases = TOOL_ALIASES[key] || [subject];
-  for (const a of aliases) {
-    if (boundMention(text, a)) return true;
-  }
-  return false;
+  return (TOOL_ALIASES[key] || [subject]).some((a) => boundMention(text, a));
 }
 
 export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectCard | undefined {
@@ -143,11 +141,9 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
     const text = input.text || "";
     const hasRfc = text.indexOf("RFC") >= 0 || text.indexOf("rfc") >= 0;
     const copula = hasRfc ? rfcCopulaQueries(text) : [];
-    if (copula.length) {
-      for (let i = 0; i < copula.length; i++) {
-        const card = factFor(copula[i]!, store);
-        if (card && !subjectMentioned(text, card.fact)) return card;
-      }
+    for (const cq of copula) {
+      const card = factFor(cq, store);
+      if (card && !subjectMentioned(text, card.fact)) return card;
     }
     const need = detectNeed(input, { skipIdent: true });
     const queries =
