@@ -920,11 +920,9 @@ export function repoSearchNeed(text: string): boolean {
 }
 
 function jsonTechniqueBlockedByRfc(text: string): boolean {
+  if (text.indexOf("RFC") < 0 && text.indexOf("rfc") < 0) return false;
   if (!/\bRFC[\s#:-]*\d{1,5}\b/i.test(text)) return false;
-  if (GREP_LINE.test(text)) return false;
-  if (/\b(?:cli|command[ -]?line|bash|shell)\b/i.test(text)) return false;
-  if (/\.(jsonl?|ndjson)\b/i.test(text)) return false;
-  return true;
+  return !GREP_LINE.test(text) && !/\b(?:cli|command[ -]?line|bash|shell)\b/i.test(text) && !/\.(jsonl?|ndjson)\b/i.test(text);
 }
 
 function canonTaskObj(obj: string): string {
@@ -986,8 +984,8 @@ const TASK_REV = new RegExp(
 );
 
 export function implicitTechniqueTask(text: string): string | undefined {
+  if (text.length < 8) return undefined;
   const t = text.replace(/\s+/g, " ");
-  if (t.length < 8) return undefined;
   if (jsonCliNeed(t) && !jsonTechniqueBlockedByRfc(t)) return "JSON";
   if (pythonInstallNeed(t)) return "Python";
   if (typescriptRunNeed(t)) return "TypeScript";
