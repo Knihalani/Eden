@@ -70,7 +70,7 @@ function successorQueries(text: string, store: KnowSearch, already: string[]): s
     if (isHotStaleRfc(num) || isHotSuccessorRfc(num)) continue;
     n++;
     try {
-      const hits = store.search(`RFC ${num}`, 8);
+      const hits = store.search(`RFC ${num}`, 3);
       const subj = new RegExp(`^RFC\\s*${num}$`, "i");
       const inObj = new RegExp(`RFC\\s*${num}\\b`, "i");
       for (const h of hits) {
@@ -90,9 +90,7 @@ function successorQueries(text: string, store: KnowSearch, already: string[]): s
           break;
         }
       }
-    } catch {
-      /* fail-open */
-    }
+    } catch {}
   }
   return out;
 }
@@ -150,8 +148,7 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
       store && hasRfc
         ? [...need.queries, ...successorQueries(text, store, need.queries)]
         : need.queries;
-    const n = Math.min(queries.length, 8);
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < queries.length && i < 8; i++) {
       const q = queries[i]!;
       if (!injectWorthQuery(q)) continue;
       const card = factFor(q, store);
