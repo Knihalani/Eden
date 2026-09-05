@@ -878,7 +878,6 @@ export function jsonCliNeed(text: string): boolean {
   return struct && /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line|pipeline)\b/i.test(text);
 }
 
-/** Tool-call args: a JSON *file* or JSONPath, not `.items[]` on a TypeScript path. */
 export function jsonToolArgs(args: string): boolean {
   if (configJsonPath(args) && !/\b(?:jsonpath|ndjson|jsonl)\b/i.test(args) && !JSON_STRUCT.test(args)) {
     return false;
@@ -895,11 +894,11 @@ export function pythonInstallNeed(text: string): boolean {
 }
 
 export function typescriptRunNeed(text: string): boolean {
+  if (text.indexOf("tsc") < 0 && text.indexOf("tsx") < 0 && text.indexOf("typescript") < 0 && text.indexOf("TypeScript") < 0 && text.indexOf("ts-node") < 0) {
+    return false;
+  }
   if (/\b(?:tsc|ts-node|(?:npx\s+)?tsx)\b/i.test(text)) return true;
-  return (
-    /\btypescript\b/i.test(text) &&
-    /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(text)
-  );
+  return /\btypescript\b/i.test(text) && /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(text);
 }
 
 export function findFilesNeed(text: string): boolean {
@@ -985,7 +984,6 @@ const TASK_REV = new RegExp(
   "i",
 );
 
-/** Verb+object without “best way”: “parse this CLI JSON”, “run TypeScript”. */
 export function implicitTechniqueTask(text: string): string | undefined {
   const t = text.replace(/\s+/g, " ");
   if (t.length < 8) return undefined;
