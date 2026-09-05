@@ -932,16 +932,13 @@ function canonTaskObj(obj: string): string {
 }
 
 function cleanTask(raw: string): string | undefined {
-  let task = raw.replace(/\s+/g, " ").trim().replace(/^(to|for|a|an|the)\s+/i, "").replace(/[?!.]+$/, "").trim();
-  task = task.replace(LEAD_VERB, "").trim();
-  if (task.length < 2 || task.length > 60) return undefined;
-  return task;
+  const task = raw.replace(/\s+/g, " ").trim().replace(/^(to|for|a|an|the)\s+/i, "").replace(/[?!.]+$/, "").trim().replace(LEAD_VERB, "").trim();
+  return task.length < 2 || task.length > 60 ? undefined : task;
 }
 
 export function techniqueTaskFromText(text: string): string | undefined {
+  if (text.length < 12 || !TASK_OBJ_HIT.test(text)) return undefined;
   const t = text.replace(/\s+/g, " ").trim();
-  if (t.length < 12) return undefined;
-  if (!TASK_OBJ_HIT.test(t)) return undefined;
   const m = TECHNIQUE_CUE.exec(t) || INTENT_CUE.exec(t);
   if (!m) return undefined;
   return cleanTask(m[1]!);
