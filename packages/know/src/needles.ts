@@ -881,15 +881,7 @@ export function jsonCliNeed(text: string): boolean {
   if (/\bjson\b/i.test(stripped) && /\bcli\b/i.test(text)) return true;
   if (
     JSON_STRUCT.test(text) &&
-    /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line)\b/i.test(text)
-  ) {
-    return true;
-  }
-  if (
-    /\bjson\b/i.test(stripped) &&
-    /\bnested\b/i.test(text) &&
-    /\b(?:keys?|ids?|fields?)\b/i.test(text) &&
-    /\b(?:pipeline|cli|command[ -]?line|bash|shell|\.jsonl?\b)/i.test(text)
+    /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line|pipeline)\b/i.test(text)
   ) {
     return true;
   }
