@@ -993,7 +993,9 @@ export function implicitTechniqueTask(text: string): string | undefined {
   if (typescriptRunNeed(t)) return "TypeScript";
   if (findFilesNeed(t)) return "files";
   if (repoSearchNeed(t)) return "search";
-  if (/\brust\b/i.test(t) && /\b(?:crate|binary)\b/i.test(t)) return "Rust";
+  if ((t.indexOf("rust") >= 0 || t.indexOf("Rust") >= 0) && (t.indexOf("crate") >= 0 || t.indexOf("binary") >= 0) && /\brust\b/i.test(t) && /\b(?:crate|binary)\b/i.test(t)) {
+    return "Rust";
+  }
   const m = TASK_FWD.exec(t) || TASK_REV.exec(t);
   if (!m) return undefined;
   const obj = m[1]!.trim();
@@ -1001,11 +1003,7 @@ export function implicitTechniqueTask(text: string): string | undefined {
   if (/^JSON$/i.test(canon) && jsonTechniqueBlockedByRfc(t)) return undefined;
   if (/^JSON$/i.test(canon) && !jsonTaskToken(t) && !jsonCliNeed(t)) return undefined;
   if (/^Python$/i.test(canon) && !pythonInstallNeed(t)) return undefined;
-  if (
-    /^TypeScript$/i.test(canon) &&
-    !typescriptRunNeed(t) &&
-    !/\b(?:run|execute|running|executing)s?\b/i.test(t)
-  ) {
+  if (/^TypeScript$/i.test(canon) && !typescriptRunNeed(t) && !/\b(?:run|execute|running|executing)s?\b/i.test(t)) {
     return undefined;
   }
   return canon.length >= 2 && canon.length <= 24 ? canon : undefined;
