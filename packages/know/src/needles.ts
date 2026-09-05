@@ -880,6 +880,12 @@ export function jsonCliNeed(text: string): boolean {
   const stripped = text.replace(/application\/json/gi, " ");
   if (/\bjson\b/i.test(stripped) && /\bcli\b/i.test(text)) return true;
   if (
+    JSON_STRUCT.test(text) &&
+    /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line)\b/i.test(text)
+  ) {
+    return true;
+  }
+  if (
     /\bjson\b/i.test(stripped) &&
     /\bnested\b/i.test(text) &&
     /\b(?:keys?|ids?|fields?)\b/i.test(text) &&
@@ -903,14 +909,21 @@ export function jsonToolArgs(args: string): boolean {
 export function pythonInstallNeed(text: string): boolean {
   if (PIP_LIKE.test(text)) return !/\b(?:freeze|list|show|uninstall|outdated)\b/i.test(text);
   if (/\binstall(?:ing)?\b/i.test(text) && /\bpython\b/i.test(text) && !JS_PKG.test(text)) return true;
+  if (/\bpython\b/i.test(text) && /\b(?:pypi|python packages|python deps)\b/i.test(text) && !JS_PKG.test(text)) return true;
   return false;
 }
 
 export function typescriptRunNeed(text: string): boolean {
-  return /\b(?:tsc|ts-node|(?:npx\s+)?tsx)\b/i.test(text);
+  if (/\b(?:tsc|ts-node|(?:npx\s+)?tsx)\b/i.test(text)) return true;
+  return (
+    /\btypescript\b/i.test(text) &&
+    /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(text)
+  );
 }
 
 export function findFilesNeed(text: string): boolean {
+  if (/\bfile named\b/i.test(text)) return true;
+  if (/\bglob\b/i.test(text) && /\b(?:tree|tsconfig)\b/i.test(text)) return true;
   if (/\bfind\b/i.test(text) && /\s-i?name\b/.test(text)) return true;
   if (!/\b(?:find|locate)\b/i.test(text)) return false;
   if (/\b(?:file named|files named|files? by name|by filename|filenames?)\b/i.test(text)) return true;
@@ -918,10 +931,10 @@ export function findFilesNeed(text: string): boolean {
 }
 
 export function repoSearchNeed(text: string): boolean {
-  if (!/\b(?:search|grep|ripgrep|rg)\b/i.test(text)) return false;
-  if (!/\b(?:repo|codebase|source tree)\b/i.test(text)) return false;
   if (/\.(jsonl?|ndjson)\b/i.test(text) || /\bndjson\b|\bjsonl\b/i.test(text)) return false;
-  return true;
+  if (!/\b(?:repo|codebase|source tree)\b/i.test(text)) return false;
+  if (/\b(?:search|grep|ripgrep|rg)\b/i.test(text)) return true;
+  return /\b(?:todo|symbol)\b/i.test(text) && /\b(?:hunt|find|look|search|grep)\b/i.test(text);
 }
 
 function jsonTechniqueBlockedByRfc(text: string): boolean {
@@ -996,42 +1009,10 @@ export function implicitTechniqueTask(text: string): string | undefined {
   const t = text.replace(/\s+/g, " ");
   if (t.length < 8) return undefined;
   if (jsonCliNeed(t) && !jsonTechniqueBlockedByRfc(t)) return "JSON";
-  if (
-    jsonTaskToken(t) &&
-    !jsonTechniqueBlockedByRfc(t) &&
-    JSON_STRUCT.test(t) &&
-    /\b(?:bash|shell|cli|terminal|stdout|command[ -]?line)\b/i.test(t)
-  ) {
-    return "JSON";
-  }
   if (pythonInstallNeed(t)) return "Python";
-  if (
-    /\bpython\b/i.test(t) &&
-    /\b(?:pypi|python packages|python deps)\b/i.test(t) &&
-    !JS_PKG.test(t)
-  ) {
-    return "Python";
-  }
   if (typescriptRunNeed(t)) return "TypeScript";
-  if (
-    /\btypescript\b/i.test(t) &&
-    /\b(?:compile step|without a compile|skip(?:ping)? (?:the )?compile|as-is|just start)\b/i.test(t)
-  ) {
-    return "TypeScript";
-  }
   if (findFilesNeed(t)) return "files";
-  if (/\bfile named\b/i.test(t) || (/\bglob\b/i.test(t) && /\b(?:tree|tsconfig)\b/i.test(t))) {
-    return "files";
-  }
   if (repoSearchNeed(t)) return "search";
-  if (
-    /\b(?:repo|codebase)\b/i.test(t) &&
-    /\b(?:todo|symbol)\b/i.test(t) &&
-    /\b(?:hunt|find|look|search|grep)\b/i.test(t) &&
-    !/\.(jsonl?|ndjson)\b/i.test(t)
-  ) {
-    return "search";
-  }
   if (/\brust\b/i.test(t) && /\b(?:crate|binary)\b/i.test(t)) return "Rust";
   const m = TASK_FWD.exec(t) || TASK_REV.exec(t);
   if (!m) return undefined;
