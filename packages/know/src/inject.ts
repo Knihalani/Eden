@@ -8,11 +8,6 @@ type KnowSearch = {
 
 export const KNOW_INJECT_MARK = "Eden Know:";
 
-/**
- * Wrap inject is for cards that change what the agent does: techniques
- * (`X is used for Y`) and protocol edges (`RFC A obsoletes RFC B`).
- * Capitals, RFC titles, IANA tautologies, licenses stay out — models already know those.
- */
 export function usefulInjectFact(fact: string): boolean {
   const f = fact.trim();
   if (!f) return false;
@@ -20,7 +15,6 @@ export function usefulInjectFact(fact: string): boolean {
   return /\bRFC\s+\d{1,5}\s+(?:obsoletes|updates|is obsoleted by|is updated by)\s+RFC\s+\d/i.test(f);
 }
 
-/** Queries that can produce a wrap card. Catalog flash is never worth a pack open. */
 export function injectWorthQuery(q: string): boolean {
   const ql = q.trim().toLowerCase();
   return ql.startsWith("used for ") || /\bobsolet|\bupdates?\b/.test(ql);
@@ -55,7 +49,6 @@ function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
 
 function rfcCopulaQueries(text: string): string[] {
-  if (text.length < 12 || (text.indexOf("RFC") < 0 && text.indexOf("rfc") < 0)) return [];
   const out: string[] = [];
   const re = /\bRFC\s+is\s+(\d{1,5})\b/gi;
   let m: RegExpExecArray | null;
@@ -125,7 +118,6 @@ function rfcRelationQuestion(text: string): boolean {
   );
 }
 
-/** True when the card's tool / successor RFC is already in the prompt. */
 export function subjectMentioned(text: string, fact: string): boolean {
   const f = fact.trim();
   const used = /^(.+?) is used for /i.exec(f);
@@ -149,7 +141,8 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
   if (process.env.EDEN_KNOW === "0") return undefined;
   try {
     const text = input.text || "";
-    const copula = rfcCopulaQueries(text);
+    const hasRfc = text.indexOf("RFC") >= 0 || text.indexOf("rfc") >= 0;
+    const copula = hasRfc ? rfcCopulaQueries(text) : [];
     if (copula.length) {
       for (let i = 0; i < copula.length; i++) {
         const card = factFor(copula[i]!, store);
@@ -158,7 +151,7 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
     }
     const need = detectNeed(input, { skipIdent: true });
     const queries =
-      store && (text.indexOf("RFC") >= 0 || text.indexOf("rfc") >= 0)
+      store && hasRfc
         ? [...need.queries, ...successorQueries(text, store, need.queries)]
         : need.queries;
     const n = Math.min(queries.length, 8);
@@ -176,12 +169,10 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
   }
 }
 
-/** Pull grounded needles from prompt/CoT; return one card or nothing. Fail-open. */
 export function injectFromText(text: string, store?: KnowSearch): InjectCard | undefined {
   return injectFromRequest({ text }, store);
 }
 
-/** System note the model can cite. Fact sentence stays URL-free; source is a separate field. */
 export function injectNote(card: InjectCard): string {
   const fact = card.fact.trim();
   const url = citeableUrl(card.url);
