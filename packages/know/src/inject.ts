@@ -54,7 +54,6 @@ function factFor(q: string, store?: KnowSearch): InjectCard | undefined {
 
 const FACT_MEMO = new WeakMap<object, Map<string, InjectCard | undefined>>();
 
-/** "The old JSON RFC is 4627" — copula, not RFC-4627 adjacency. Hot map, no pack. */
 function rfcCopulaQueries(text: string): string[] {
   if (text.length < 12 || (text.indexOf("RFC") < 0 && text.indexOf("rfc") < 0)) return [];
   const out: string[] = [];
@@ -67,7 +66,6 @@ function rfcCopulaQueries(text: string): string[] {
   return out;
 }
 
-/** Packed successor when the hot stale map does not list this RFC. Store only — wrap stays off the pack. */
 function successorQueries(text: string, store: KnowSearch, already: string[]): string[] {
   const have = new Set(already.map((q) => q.toLowerCase()));
   const out: string[] = [];
@@ -147,12 +145,6 @@ export function subjectMentioned(text: string, fact: string): boolean {
   return false;
 }
 
-/**
- * Technique / wrong-way / stale first. Frozen catalog flash never ships.
- * Coverage-over-silence only among *useful* grounded cards.
- * SkipIdent: wrap never scans RFC/IANA/capital needles.
- * Already-known: if the tool or successor RFC is in the prompt, try the next card.
- */
 export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectCard | undefined {
   if (process.env.EDEN_KNOW === "0") return undefined;
   try {
@@ -166,7 +158,7 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
     }
     const need = detectNeed(input, { skipIdent: true });
     const queries =
-      store && /\bRFC[\s#:-]*\d/i.test(text)
+      store && (text.indexOf("RFC") >= 0 || text.indexOf("rfc") >= 0)
         ? [...need.queries, ...successorQueries(text, store, need.queries)]
         : need.queries;
     const n = Math.min(queries.length, 8);
