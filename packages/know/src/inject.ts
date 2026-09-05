@@ -8,52 +8,6 @@ type KnowSearch = {
 
 export const KNOW_INJECT_MARK = "Eden Know:";
 
-const GAP_STOP = new Set(["the", "of", "is", "a", "an", "on", "to", "and", "in", "or", "for"]);
-
-function fillGapToks(s: string, into: Set<string>) {
-  let w = "";
-  const n = s.length;
-  for (let i = 0; i <= n; i++) {
-    let d = i < n ? s.charCodeAt(i) : 32;
-    if (d >= 65 && d <= 90) d += 32;
-    if ((d >= 97 && d <= 122) || (d >= 48 && d <= 57) || d === 43 || d === 46 || d === 45) {
-      w += String.fromCharCode(d);
-    } else if (w.length) {
-      if (w.length > 1 && !GAP_STOP.has(w)) into.add(w);
-      w = "";
-    }
-  }
-}
-
-function infoGap(fact: string, prompt: Set<string>): number {
-  const seen = new Set<string>();
-  fillGapToks(fact, seen);
-  let n = 0;
-  for (const t of seen) if (!prompt.has(t)) n++;
-  return n;
-}
-
-/** Prefer implementer docs over encyclopedia hosts when two cards are otherwise tied. */
-function sourceBump(url?: string): number {
-  const u = citeableUrl(url);
-  if (!u) return 0;
-  try {
-    const h = new URL(u).hostname.toLowerCase();
-    if (h === "www.rfc-editor.org" || h === "datatracker.ietf.org" || h.endsWith(".ietf.org")) return 1;
-    if (h.endsWith(".github.io") || h.endsWith(".readthedocs.io")) return 2;
-    if (h === "github.com") return 1;
-    if (h === "bun.sh" || h === "jqlang.github.io" || h === "docs.python.org" || h === "go.dev" || h === "doc.rust-lang.org" || h === "docs.astral.sh") return 2;
-  } catch {
-    return 0;
-  }
-  return 0;
-}
-
-function pickScore(card: InjectCard, prompt: Set<string>): number {
-  const stale = /\bRFC\s+\d{1,5}\s+(?:obsoletes|updates|is obsoleted by|is updated by)\b/i.test(card.fact) ? 100 : 0;
-  return stale + infoGap(card.fact, prompt) * 4 + sourceBump(card.url);
-}
-
 /**
  * Wrap inject is for cards that change what the agent does: techniques
  * (`X is used for Y`) and protocol edges (`RFC A obsoletes RFC B`).
@@ -184,10 +138,6 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
     const text = input.text || "";
     const need = detectNeed(input, { skipIdent: true });
     const queries = store ? [...need.queries, ...successorQueries(text, store, need.queries)] : need.queries;
-    const prompt = new Set<string>();
-    fillGapToks(text, prompt);
-    let best: InjectCard | undefined;
-    let bestScore = -1;
     const n = Math.min(queries.length, 8);
     for (let i = 0; i < n; i++) {
       const q = queries[i]!;
@@ -195,13 +145,9 @@ export function injectFromRequest(input: NeedInput, store?: KnowSearch): InjectC
       const card = factFor(q, store);
       if (!card) continue;
       if (subjectMentioned(text, card.fact)) continue;
-      const g = pickScore(card, prompt);
-      if (g > bestScore) {
-        bestScore = g;
-        best = card;
-      }
+      return card;
     }
-    return best;
+    return undefined;
   } catch {
     return undefined;
   }
